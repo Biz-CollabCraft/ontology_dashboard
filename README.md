@@ -11,19 +11,19 @@ CodeMap 프로젝트의 온톨로지 기반 설비 예지보전(PdM) 및 실시�
 ```text
 USER
  ↕
-Front (React)          → 세부 내용은 .agents/project/frontend.md 참조
+Front (React)
  ↕
-Back (FastAPI)         → 세부 내용은 .agents/project/backend.md 참조
+Back (FastAPI)
  ↑ file read
 Result (json)
  ↑ file write
 ┌───────────────────────┐
-│      Auto PdM         │ → 세부 내용은 .agents/project/autopdm.md 참조
+│      Auto PdM         │
 │         ↑             │
 │    센서 데이터(file)   │
 └───────────────────────┘
          ↑
-  Azure PdM 데이터 증강기   → 세부 내용은 .agents/project/augmenter.md 참조
+  Azure PdM 데이터 증강기   → 별도의 repo로 분리
 ```
 
 ### 핵심 연동 원칙
