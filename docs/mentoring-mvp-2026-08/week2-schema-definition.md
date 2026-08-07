@@ -196,11 +196,11 @@
 | 계층 | 관리자 역할 | 현장 역할 |
 |---|---|---|
 | API/Auth enum | `manager` | `engineer` |
-| 현재 로그인 표시 | 관리자·임원 | 실무 엔지니어 |
-| 업무 관점 후보 | 생산 관리자 | 현장 담당자 |
+| Week 2 UI 표시 | 매니저 | 엔지니어 |
+| 업무 관점 | 생산 관리·의사결정 | 현장 점검·근거 확인 |
 
-내부 enum은 권한 계약과 연결되므로 유지한다. 최종 제품 표시 명칭은 팀 합의 후 한
-쌍으로 통일하며, 표시 명칭을 API enum으로 사용하지 않는다.
+내부 enum은 권한 계약과 연결되므로 유지한다. Week 2 UI는 `매니저`, `엔지니어`를
+사용하되 표시 매핑을 분리해 후속 사용자 검증 후 변경할 수 있게 한다.
 
 ### 5.1 AssetPredictionSummary
 
@@ -243,7 +243,7 @@ Overview와 Objects 목록의 공통 행이다.
 | 필드 | 타입 | 필수 | 설명 | 상태 |
 |---|---|:---:|---|---|
 | `source` | enum | Y | `canonical`, `fallback` 후보 | 제안 |
-| `is_stale` | boolean | Y | stale 기준은 팀원3 합의 필요 | 제안 |
+| `is_stale` | boolean | Y | Week 2는 프론트 observed_at 24시간 MVP 정책 | 현행 |
 | `is_data_quality_hold` | boolean | Y | ViewModel 품질 보류; Artifact 등급과 별도 | 제안 |
 | `last_updated_at` | datetime | N | 응답 생성 또는 적재 기준시각 | 제안 |
 | `warnings` | string[] | Y | 데이터 누락·fallback·신선도 경고 | 제안 |

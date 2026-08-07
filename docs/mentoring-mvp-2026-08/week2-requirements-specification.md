@@ -8,11 +8,13 @@
 
 ## 사용자
 
+Week 2 UI 표시명은 `매니저`, `엔지니어`를 사용하고 내부 enum
+`manager`, `engineer`와 매핑한다. 아래 명칭은 업무 관점 설명이다.
+
 - 현장 담당자: 위험 설비와 센서·예측 근거를 확인하고 점검 대상을 판단한다.
 - 생산 관리자: 설비 위험과 생산·정비 현황을 함께 보고 대응 우선순위를 판단한다.
 
-프로토타입의 `실무 엔지니어`, `관리자·임원` 역할과 최종 대응 관계는 팀 합의가
-필요하다.
+UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후 변경할 수 있게 한다.
 
 ## MVP 화면
 
@@ -84,7 +86,7 @@
 
 동일 조건의 Overview, Objects, Operations와 수치가 일치해야 한다.
 
-## 제외 또는 합의 필요
+## 제외와 결정 결과
 
 ### 유지할 제외 범위
 
@@ -93,15 +95,15 @@
 - 자동 생산계획 변경
 - 평가 truth의 운영 노출
 
-### 팀 합의 필요
+### Week 2 결정
 
-- 역할의 최종 명칭과 Decision/Note 권한
-- 로그인·RBAC의 MVP 포함 여부
-- Operations에서 생산·정비와 Event Activity의 우선순위
-- 위험등급 임계값과 산출 책임
-- API pagination·stale 기준·결합 필드
-- LLM 입출력 JSON과 금지 표현
-- Gold Fixture fallback 허용 정책
+- UI 표시명은 매니저·엔지니어로 하고 내부 enum·권한과 매핑한다.
+- 로그인·RBAC와 Decision·Note를 유지한다.
+- Operations는 Event Activity를 Current로 유지하고 생산·정비 중심 구성은 Target이다.
+- 위험등급은 Artifact 값을 그대로 사용하고 데이터 품질 상태와 분리한다.
+- 현행 pagination과 프론트 24시간 stale 정책을 유지한다.
+- Event Evidence 기반 deterministic Report를 우선하고 기간 집계형은 Target이다.
+- Gold Fixture fallback은 source와 warning을 항상 표시한다.
 
 ## 대표 흐름
 
