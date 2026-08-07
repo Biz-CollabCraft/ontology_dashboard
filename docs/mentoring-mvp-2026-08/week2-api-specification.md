@@ -41,6 +41,9 @@ Canonical base path:
 
 아래 Query는 현행 설명이 아닌 변경 제안이다.
 
+Week 2 Objects는 검색·라인·상태·담당자 필터와 현행 URL 상태를 유지한다. 아래
+site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니다.
+
 | Parameter | 타입 | 설명 |
 |---|---|---|
 | `site_id` | string | 사이트 필터 |
@@ -184,6 +187,10 @@ deterministic 출력 계약부터 검증한다.
 - `site_id`, `cell_id`는 Asset 결합 필드다.
 - fallback 사용 시 `source=fallback`과 warning을 반환한다.
 - evaluation truth를 반환하지 않는다.
+- Week 2 stale은 timezone을 포함한 `observed_at` 기준 프론트 24시간 판정을
+  유지한다. 이는 도메인 불변값이 아니라 현재 MVP freshness 정책이다.
+- provenance는 구조화해 보존하되 `source_field`는 현행 Evidence 호환 형식을
+  사용한다. JSON Pointer는 구현 비교 후 Target으로 검토한다.
 
 ## 7. 확인 필요
 

@@ -42,16 +42,16 @@ sections, actions, citations, limitations, generated_at
 
 ## 2. 사용자와 목적
 
-### 생산 관리자
+### 매니저
 
 - 전체 설비의 위험 분포를 확인한다.
 - 우선 확인할 설비와 생산·정비 관련 현황을 파악한다.
 - 현장 확인 및 운영 검토의 우선순위를 판단한다.
 
-### 임원 또는 의사결정자
+### 엔지니어
 
-- 상세 센서 전체가 아닌 핵심 수치와 주의사항을 확인한다.
-- 보고 기간, 데이터 출처와 예측의 한계를 함께 확인한다.
+- 센서·예측 근거와 현장 확인 대상을 확인한다.
+- 입력 근거, 데이터 출처와 예측의 한계를 함께 확인한다.
 
 리포트는 예측 결과를 의사결정 자료로 요약하며 고장 발생, 원인 또는 자동 실행을
 확정하지 않는다.
@@ -75,8 +75,10 @@ Canonical V3.1
 → Executive Report 화면
 ```
 
-우선 `mock ReportInput → deterministic ReportOutput`을 검증한다. LLM은 이후에도
-입력 데이터를 수정하지 않고 검증된 사실을 문장으로 변환하는 역할만 수행한다.
+Week 2는 Event Evidence 기반 `mock ReportInput → deterministic ReportOutput`을
+우선 검증한다. 기간 기반 Executive Report는 Target으로 유지하고 추가 집계 API가
+필요하면 후속 처리한다. LLM은 이후에도 입력 데이터를 수정하지 않고 검증된 사실을
+문장으로 변환하는 역할만 수행한다.
 
 ## 4. 보고서 생성 요청
 
@@ -271,7 +273,7 @@ scored_asset_count + data_quality_hold_count = total_asset_count
 | `reference_id` | string | Y | 보고서 내부 근거 ID |
 | `asset_id` | string | N | 관련 설비 |
 | `prediction_id` | string | N | Artifact provenance의 예측 ID |
-| `source_field` | string | Y | 근거가 된 JSON path 또는 집계 필드 |
+| `source_field` | string | Y | 현행 Evidence 호환 근거 필드; JSON Pointer는 Target 후보 |
 | `source_value` | string/number | Y | 실제 입력값 |
 
 리포트 문장은 `evidence_reference_ids`를 통해 입력값으로 역추적할 수 있어야 한다.

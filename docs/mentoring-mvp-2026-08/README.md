@@ -22,10 +22,10 @@
 | 문서 | 상태 | 용도 |
 |---|---|---|
 | `v3.1-field-validation.md` | 검증 완료 | 공식 V3.1과 기존 V1.1/V1.3 초안의 필드 차이 근거 |
-| `prototype-mvp-gap-analysis.md` | 팀 합의 필요 | 프로토타입을 유지·수정·제외할 항목 결정 |
+| `prototype-mvp-gap-analysis.md` | Current/Target 정리 | 현행·목표·Gap과 Week 2 반영 여부 판단 |
 | `week2-requirements-specification.md` | 초안 | 검증된 범위로 작성한 MVP 요구사항 |
 | `week2-schema-definition.md` | 일부 확정·일부 제안 | 화면·API·LLM 공통 필드명의 단일 기준 |
-| `week2-contract-review-checklist.md` | 팀 답변 필요 | 담당자별 선택안·결정·근거 기록 |
+| `week2-contract-review-checklist.md` | 결정 반영 | Week 2 결정과 후속 Target 기록 |
 | `current-mvp-implementation-baseline.md` | 코드 확인 | 현행 실행 코드의 역할·API·화면·fallback 기준선 |
 | `week2-report-specification.md` | 초안 | LLM 보고서 입력·출력·근거·문장·fallback 계약 |
 | `week2-functional-specification.md` | 초안 | 화면별 기능·처리·오류·완료 조건 |
@@ -53,8 +53,7 @@ Git 기준 브랜치가 아니다.
 
 ## 다음 산출물
 
-필수 Week 2 문서 초안과 현행 구현 기준선은 작성됐다. 팀 합의 후 `현행 구현 계약`,
-`용어·표현 합의`, `부분 일치`, `구현 변경 필요` 항목을 확정한다. 현행 API를
-제안 경로로 교체할 경우 호환·전환 계획과 실제 테스트 이름을 함께 기록한다.
+필수 Week 2 문서와 현행 구현 기준선은 작성됐고 제품·리포트 계약 결정을 반영했다.
+남은 저장소 통합 방식과 실제 구현 결과는 후속 결정 및 테스트 이름과 함께 기록한다.
 
 공통 필드명의 최종 단일 기준은 `week2-schema-definition.md`로 한다.

@@ -3,7 +3,7 @@
 ## 1. 기준
 
 - 내부 역할: `manager`, `engineer`
-- 표시 명칭: 관리자·임원/실무 엔지니어와 생산 관리자/현장 담당자 중 팀 합의 필요
+- Week 2 표시 명칭: `매니저`, `엔지니어`; 내부 enum과 분리해 후속 변경 가능
 - 화면: Overview, Objects, Operations, Executive Report
 - 공통 필드: [스키마 정의서](./week2-schema-definition.md)
 - 현행 기준: [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)
@@ -40,6 +40,8 @@
 
 현행 구현: 검색·라인·상태·담당자 필터, 선택 설비 Inspector, 센서·요인·provenance.
 
+Week 2는 현행 필터를 유지한다. site/cell/유형/기간 필터는 Target으로 남긴다.
+
 아래 표의 site/cell/유형/기간 필터와 전용 history·maintenance 조회는
 `V2 변경 제안`이다.
 
@@ -74,8 +76,9 @@ Decision·Note는 이미 권한 기반 저장과 Activity 감사 이력으로 �
 
 현행 구현: 선택 Event 단위 `ReportRequest`와 역할별 grounded report.
 
-아래 표는 기간·필터 집계 기반 `ReportInput`/`ReportOutput`을 검증하는
-`V2 변경 제안`이다. 이번 단계는 mock 입력과 deterministic 출력 검증만 수행한다.
+Week 2는 Event Evidence 기반 deterministic 기준선을 먼저 완성한다. 아래 표의
+기간·필터 집계 기반 `ReportInput`/`ReportOutput`은 Target이며 추가 집계 API가
+필요하면 후속 처리한다.
 
 | ID | 기능 | 입력/처리 | 출력 | 오류·완료 기준 |
 |---|---|---|---|---|

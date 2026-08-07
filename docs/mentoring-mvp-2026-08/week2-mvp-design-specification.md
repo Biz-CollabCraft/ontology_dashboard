@@ -2,7 +2,7 @@
 
 ## 1. 목표
 
-Canonical V3.1과 Result Artifact를 사용해 생산 관리자와 현장 담당자가 위험 설비를
+Canonical V3.1과 Result Artifact를 사용해 매니저와 엔지니어가 위험 설비를
 찾고, 근거와 생산·정비 현황을 확인하고, 같은 데이터로 Executive Report를 보는
 조회 중심 MVP를 구성한다.
 

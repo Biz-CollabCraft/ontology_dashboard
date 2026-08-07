@@ -17,7 +17,7 @@
 | 영역 | 현행 구현 |
 |---|---|
 | 인증 역할 | `manager`, `engineer` |
-| UI 역할 | 관리자·임원, 실무 엔지니어 |
+| Week 2 UI 역할 | 매니저, 엔지니어; 내부 enum과 표시 매핑 분리 |
 | 권한 | 관리자 `events.decision`, 엔지니어 `events.note` |
 | 쓰기 기능 | Decision·Note 실제 저장, Activity 감사 이력 제공 |
 | Operations | Event Queue, Evidence, Recommendation, Decision, Note, Activity 중심 |
@@ -60,7 +60,7 @@ Canonical Predictive Maintenance base path:
 | Pagination | offset/limit | page/size | API 계약 변경 |
 | Report JSON | ReportRequest와 report schema | ReportInput/ReportOutput | API·LLM·UI 계약 변경 |
 | Objects 필터 | 검색·라인·상태·담당자 | 사이트·셀·유형·상태·기간 | UI·조회 계약 변경 |
-| 역할 명칭 | 관리자·임원/실무 엔지니어 | 생산 관리자/현장 담당자 | 표시 용어 합의 |
+| 역할 명칭 | 내부 `manager`/`engineer` | UI 매니저/엔지니어 | 매핑 분리, 후속 변경 가능 |
 
 ## 5. 사용 원칙
 
