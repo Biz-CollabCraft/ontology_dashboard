@@ -10,6 +10,11 @@
 3. [Week 2 요구사항 명세 초안](./week2-requirements-specification.md)
 4. [Week 2 공통 스키마 정의서](./week2-schema-definition.md)
 5. [Week 2 계약 검토 체크리스트](./week2-contract-review-checklist.md)
+6. [Week 2 리포트 정의서](./week2-report-specification.md)
+7. [Week 2 기능 명세서](./week2-functional-specification.md)
+8. [Week 2 API 명세서](./week2-api-specification.md)
+9. [Week 2 MVP 설계 명세서](./week2-mvp-design-specification.md)
+10. [Week 2 추적성 매트릭스](./week2-traceability-matrix.md)
 
 ## 문서 상태
 
@@ -20,6 +25,11 @@
 | `week2-requirements-specification.md` | 초안 | 검증된 범위로 작성한 MVP 요구사항 |
 | `week2-schema-definition.md` | 일부 확정·일부 제안 | 화면·API·LLM 공통 필드명의 단일 기준 |
 | `week2-contract-review-checklist.md` | 팀 답변 필요 | 담당자별 선택안·결정·근거 기록 |
+| `week2-report-specification.md` | 초안 | LLM 보고서 입력·출력·근거·문장·fallback 계약 |
+| `week2-functional-specification.md` | 초안 | 화면별 기능·처리·오류·완료 조건 |
+| `week2-api-specification.md` | 초안 | 조회·보고서 API 요청·응답·오류 계약 |
+| `week2-mvp-design-specification.md` | 초안 | 시스템·데이터·화면·역할·구현 흐름 |
+| `week2-traceability-matrix.md` | 초안 | 요구사항부터 테스트까지 연결 |
 
 ## 기준 자료
 
@@ -41,12 +51,7 @@ Git 기준 브랜치가 아니다.
 
 ## 다음 산출물
 
-팀 합의 후 이 폴더에 다음 문서를 추가한다.
-
-- `week2-functional-specification.md`
-- `week2-api-specification.md`
-- `week2-report-specification.md`
-- `week2-mvp-design-specification.md`
-- `week2-traceability-matrix.md`
+필수 Week 2 문서 초안은 모두 작성됐다. 팀 합의 후 각 문서의 `제안`과
+`확인 필요` 항목을 확정하고 실제 API 경로·테스트 이름으로 교체한다.
 
 공통 필드명의 최종 단일 기준은 `week2-schema-definition.md`로 한다.
