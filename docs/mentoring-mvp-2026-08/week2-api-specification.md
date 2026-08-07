@@ -2,13 +2,37 @@
 
 ## 1. 기준과 상태
 
-이 문서는 화면과 LLM이 사용하는 REST 계약안이다. 실제 구현 담당자 확인 전 경로와
-pagination은 `제안` 상태다. JSON key는 [스키마 정의서](./week2-schema-definition.md)를
-따른다.
+이 문서는 목표 REST 계약안이다. 현행 API는
+[현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을 따르며, 아래
+`/overview`, `/objects`, `/operations`와 page/size 계약은 모두 `변경 제안`이다.
+JSON key 목표안은 [스키마 정의서](./week2-schema-definition.md)를 따른다.
 
-Base path 제안: `/api`
+## 1.1 현행 API 계약
+
+Canonical base path:
+
+```text
+/api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance
+```
+
+| Method | Path | 상태 |
+|---|---|---|
+| GET | `/dashboard` | 현행 구현 |
+| GET | `/results/latest` | 현행 구현 |
+| GET | `/api/events/{event_id}/evidence` | 현행 구현 |
+| POST | `/api/events/{event_id}/report` | 현행 구현 |
+| POST | `/api/events/{event_id}/decision` | 현행 구현 |
+| POST | `/api/events/{event_id}/notes` | 현행 구현 |
+| GET | `/api/events/{event_id}/activity` | 현행 구현 |
+
+`/results/latest`는 `offset`, `limit`, `total`을 사용하며 `limit` 기본값은 100,
+최대값은 500이다.
+
+변경 제안 base path: `/api`
 
 ## 2. 공통 Query
+
+아래 Query는 현행 설명이 아닌 변경 제안이다.
 
 | Parameter | 타입 | 설명 |
 |---|---|---|
@@ -23,6 +47,8 @@ Base path 제안: `/api`
 
 ## 3. Endpoint
 
+아래 Endpoint는 현행 경로 대체 또는 호환 계층이 필요한 변경 제안이다.
+
 | Method | Path | 목적 | 화면 |
 |---|---|---|---|
 | GET | `/overview` | 전체 설비·위험·운영 요약 | Overview |
@@ -35,7 +61,8 @@ Base path 제안: `/api`
 | GET | `/operations/maintenance` | 정비 이력 목록 | Operations |
 | POST | `/reports/executive` | 보고서 생성 | Executive Report |
 
-기존 구현 API가 있으면 위 경로를 강제하지 않고 동일 책임·응답 계약을 매핑한다.
+채택 전에는 현행 API를 유지한다. 채택 시 호환 계층·호출부·테스트 전환 계획을
+함께 정의한다.
 
 ## 4. 응답 계약
 
@@ -142,8 +169,8 @@ ReportRequest/ReportOutput을 따른다. LLM 실패 시에도 성공한 fallback
 
 ## 7. 확인 필요
 
-- 실제 Base path와 기존 구현 경로 매핑
-- page/cursor 방식 및 최대 크기
+- 현행 API 유지 또는 목표 경로로 전환할지
+- offset/limit 유지 또는 page/size로 전환할지
 - status grade 임계값 산출 주체
 - latest snapshot과 stale 기준
 - 인증·권한 포함 여부

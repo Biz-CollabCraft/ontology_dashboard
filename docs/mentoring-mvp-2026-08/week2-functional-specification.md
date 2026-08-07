@@ -5,7 +5,11 @@
 - 사용자: 생산 관리자, 현장 담당자
 - 화면: Overview, Objects, Operations, Executive Report
 - 공통 필드: [스키마 정의서](./week2-schema-definition.md)
-- 상태: `초안 — 화면·API 계약 검토 필요`
+- 현행 기준: [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)
+- 상태: `초안 — 현행 기능과 변경 제안 분리`
+
+현행 Operations는 Event Queue, Evidence, Recommendation, Decision, Note와 Activity
+중심이다. 아래 생산·정비 조회 기능은 현행 설명이 아니라 제품 흐름 변경 제안이다.
 
 ## 2. 공통 기능
 
@@ -43,6 +47,8 @@
 
 ## 5. Operations
 
+상태: `변경 제안`. 채택하면 현행 Event 업무 흐름과 병합하거나 교체해야 한다.
+
 | ID | 기능 | 입력/처리 | 출력 | 완료 기준 |
 |---|---|---|---|---|
 | FEAT-OP-001 | 생산 요약 | 기간·위치별 cycle 집계 | 작업·완료 건수 | 목록 합계와 일치 |
@@ -52,7 +58,8 @@
 | FEAT-OP-005 | 운영 영향 | 확인 가능한 자산·작업 관계만 집계 | 관련 건수 | 비용·인과 임의 생성 금지 |
 | FEAT-OP-006 | 상세 이동 | 자산 선택 | Objects 상세 | `asset_id` 유지 |
 
-Decision/Note, 점검 요청과 정비 승인은 팀 합의 전 필수 기능에서 제외한다.
+Decision·Note는 이미 권한 기반 저장과 Activity 감사 이력으로 구현돼 있다. 이를
+제외하려면 API·UI·권한·테스트 변경 항목으로 결정한다.
 
 ## 6. Executive Report
 
