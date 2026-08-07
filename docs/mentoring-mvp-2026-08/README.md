@@ -29,7 +29,7 @@
 | `current-mvp-implementation-baseline.md` | 코드 확인 | 현행 실행 코드의 역할·API·화면·fallback 기준선 |
 | `week2-report-specification.md` | 초안 | LLM 보고서 입력·출력·근거·문장·fallback 계약 |
 | `week2-functional-specification.md` | 초안 | 화면별 기능·처리·오류·완료 조건 |
-| `week2-api-specification.md` | 초안 | 조회·보고서 API 요청·응답·오류 계약 |
+| `week2-api-specification.md` | 초안 | 팀원3 조회·집계 API와 팀원4 리포트 API 계약 |
 | `week2-mvp-design-specification.md` | 초안 | 시스템·데이터·화면·역할·구현 흐름 |
 | `week2-traceability-matrix.md` | 초안 | 요구사항부터 테스트까지 연결 |
 

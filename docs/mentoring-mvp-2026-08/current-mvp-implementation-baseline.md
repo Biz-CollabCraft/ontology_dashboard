@@ -21,7 +21,8 @@
 | 권한 | 관리자 `events.decision`, 엔지니어 `events.note` |
 | 쓰기 기능 | Decision·Note 실제 저장, Activity 감사 이력 제공 |
 | Operations | Event Queue, Evidence, Recommendation, Decision, Note, Activity 중심 |
-| 상태 enum | `normal`, `attention`, `warning`, `critical`, `data_quality_hold` |
+| Artifact 위험 enum | `normal`, `attention`, `warning`, `critical` |
+| ViewModel 품질 상태 | `data_quality_hold`; Artifact `status_grade`와 별도 |
 | 상태 표시 | 정상, 주의, 경고, 위험, 데이터 확인 |
 | Objects 필터 | 검색, 라인, 상태, 담당자 |
 | URL 상태 | `view`, `asset_id`, `event_id`, `role`, `workspace_id` |

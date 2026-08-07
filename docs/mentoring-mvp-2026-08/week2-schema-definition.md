@@ -191,6 +191,17 @@
 이 절의 객체는 제품 계층 계약안이며 상태는 `제안`이다. 팀원1·3 합의 후 API
 명세와 TypeScript/Pydantic 타입에 동일하게 반영한다.
 
+### 5.0 역할 매핑
+
+| 계층 | 관리자 역할 | 현장 역할 |
+|---|---|---|
+| API/Auth enum | `manager` | `engineer` |
+| 현재 로그인 표시 | 관리자·임원 | 실무 엔지니어 |
+| 업무 관점 후보 | 생산 관리자 | 현장 담당자 |
+
+내부 enum은 권한 계약과 연결되므로 유지한다. 최종 제품 표시 명칭은 팀 합의 후 한
+쌍으로 통일하며, 표시 명칭을 API enum으로 사용하지 않는다.
+
 ### 5.1 AssetPredictionSummary
 
 Overview와 Objects 목록의 공통 행이다.
@@ -233,8 +244,13 @@ Overview와 Objects 목록의 공통 행이다.
 |---|---|:---:|---|---|
 | `source` | enum | Y | `canonical`, `fallback` 후보 | 제안 |
 | `is_stale` | boolean | Y | stale 기준은 팀원3 합의 필요 | 제안 |
+| `is_data_quality_hold` | boolean | Y | ViewModel 품질 보류; Artifact 등급과 별도 | 제안 |
 | `last_updated_at` | datetime | N | 응답 생성 또는 적재 기준시각 | 제안 |
 | `warnings` | string[] | Y | 데이터 누락·fallback·신선도 경고 | 제안 |
+
+`data_quality_hold`는 Result Artifact의 `status_grade`가 아니다. 데이터 품질 때문에
+위험등급 표시를 보류하는 ViewModel 상태이며 `DataStatus` 또는 별도 품질 필드에서
+표현한다. 화면은 이를 위험등급보다 우선해 `데이터 확인`으로 표시할 수 있다.
 
 ### 5.4 OverviewSummary
 
@@ -244,7 +260,8 @@ Overview와 Objects 목록의 공통 행이다.
 | `total_asset_count` | integer | Y | Asset 수 | 파생 |
 | `operating_asset_count` | integer | Y | 최신 Observation 가동값 | 파생 |
 | `non_operating_asset_count` | integer | Y | 전체-가동 | 파생 |
-| `status_counts` | object | Y | 네 위험 등급별 자산 수 | 파생 |
+| `status_counts` | object | Y | Artifact 네 위험 등급별 자산 수 | 파생 |
+| `data_quality_hold_count` | integer | Y | 위험등급 표시가 보류된 자산 수 | 파생 |
 | `asset_type_counts` | object | Y | Compressor/CNC별 자산 수 | 파생 |
 | `top_risk_assets` | AssetPredictionSummary[] | Y | 등급 우선, 확률 내림차순 | 파생 |
 | `production_cycle_count` | integer | Y | 요청 기간 내 작업 수 | 파생 |
@@ -256,9 +273,10 @@ Overview와 Objects 목록의 공통 행이다.
 | 원본 값 | 한국어 표시 | 비고 |
 |---|---|---|
 | `normal` | 정상 | 색상만으로 표현하지 않음 |
-| `attention` | 관심 | `주의`와 혼용하지 않음 |
+| `attention` | 주의 | `관심`과 혼용하지 않음 |
 | `warning` | 경고 | enum 원문 보존 |
-| `critical` | 심각 | `위험`과 혼용하지 않음 |
+| `critical` | 위험 | `심각`과 혼용하지 않음 |
+| `data_quality_hold` | 데이터 확인 | ViewModel 품질 상태; Artifact enum 아님 |
 | `risk_up` | 위험 증가 요인 | 확정 원인 표현 금지 |
 | `risk_down` | 위험 감소 요인 | 보호 효과 단정 금지 |
 
@@ -275,8 +293,8 @@ Overview와 Objects 목록의 공통 행이다.
 - 자동 Work Order와 설비 제어
 - 모델 재학습 요청
 
-프로토타입의 Decision/Note를 MVP에 유지할지는 팀 합의 전까지 별도 계약으로
-보류한다.
+현행 프로토타입의 Decision/Note는 저장·권한·감사 이력이 구현돼 있다. 제외하려면
+별도 제품 변경 결정과 코드 영향 분석이 필요하다.
 
 ## 8. 담당자 합의 필요 사항
 
@@ -288,6 +306,6 @@ Overview와 Objects 목록의 공통 행이다.
 | SCH-DEC-04 | 팀원3 | latest snapshot 기준시각과 stale 판정 기준 |
 | SCH-DEC-05 | 팀원3 | Canonical 장애 시 fallback 허용 여부와 표시 |
 | SCH-DEC-06 | 팀원3 | API 응답에서 provenance를 중첩 유지할지 평탄화할지 |
-| SCH-DEC-07 | 팀원4 | LLM 입력에 전달할 Summary/Detail 범위 |
-| SCH-DEC-08 | 팀원4 | 보고서 출력 JSON과 근거 참조 방식 |
+| SCH-DEC-07 | 팀원4 | Report API 입력에 전달할 Summary/Detail 범위 |
+| SCH-DEC-08 | 팀원4 | Report API 출력 JSON, 근거 참조와 fallback 방식 |
 
