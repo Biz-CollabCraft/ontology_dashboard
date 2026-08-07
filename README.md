@@ -39,3 +39,8 @@ Result (json)
 - 에이전트 운영 매뉴얼: [.agents/AGENTS.md](file:///.agents/AGENTS.md)
 - 시스템 아키텍처: [.agents/project/architecture.md](file:///.agents/project/architecture.md)
 - 코딩 및 주석 표준: `.agents/standards/` 참조
+
+## 3. 프로젝트 문서
+
+- [문서 인덱스](./docs/README.md)
+- [2026년 8월 멘토링 MVP 문서](./docs/mentoring-mvp-2026-08/README.md)
