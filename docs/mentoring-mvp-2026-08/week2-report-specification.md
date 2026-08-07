@@ -5,12 +5,41 @@
 이 문서는 Executive Report 화면과 LLM 리포트 생성 API가 사용하는 입력,
 출력, 문장 규칙, 근거와 실패 대체 계약을 정의한다.
 
-- 문서 상태: `초안 — 팀원4 계약 검토 필요`
+- 문서 상태: `초안 — 현행 Report 계약과 V2 변경 제안 분리`
 - 기준 Dataset: `canonical-ai4i-physics-v3.1`
 - 기준 Model: `independent-logreg-v3.1`
 - 기준 Result Artifact: `result-artifact-v1.0`
 
 공통 필드명은 [공통 스키마 정의서](./week2-schema-definition.md)를 따른다.
+
+현행 구현은 `ReportRequest(role, locale, use_llm)`과
+`schemas/report.schema.json`의 role-aware grounded report를 사용한다. 이 문서의
+기간·필터 기반 `ReportInput`과 `ReportOutput`은 현행 계약을 설명하지 않는
+`V2 변경 제안`이다. 기준은
+[현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을 따른다.
+
+### 1.1 현행 Report 계약
+
+요청:
+
+```json
+{
+  "role": "manager",
+  "locale": "ko-KR",
+  "use_llm": true
+}
+```
+
+출력 필수 필드:
+
+```text
+schema_version, report_id, event_id, role, locale, mode,
+headline, summary, status, confidence, recommended_decision,
+sections, actions, citations, limitations, generated_at
+```
+
+현행 `mode`는 `deterministic`, `llm`, `deterministic_fallback`을 사용한다. 최종
+template fallback의 화면 표시와 schema mode 명칭은 팀원4가 일치 여부를 확인한다.
 
 ## 2. 사용자와 목적
 
@@ -45,7 +74,7 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
 
 ## 4. 보고서 생성 요청
 
-상태: `제안`
+상태: `V2 변경 제안`
 
 ```json
 {
@@ -77,7 +106,7 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
 
 ## 5. LLM 입력 계약
 
-객체명: `ReportInput` · 상태: `제안`
+객체명: `ReportInput` · 상태: `V2 변경 제안`
 
 ```json
 {
@@ -171,7 +200,7 @@ normal + attention + warning + critical = total_asset_count
 
 ## 6. LLM 출력 계약
 
-객체명: `ReportOutput` · 상태: `제안`
+객체명: `ReportOutput` · 상태: `V2 변경 제안`
 
 ```json
 {

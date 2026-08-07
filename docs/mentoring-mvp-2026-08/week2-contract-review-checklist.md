@@ -1,374 +1,193 @@
 # Week 2 계약 검토 체크리스트
 
-## 1. 목적
+## 1. 목적과 판정 기준
 
-이 문서는 화면, 데이터·API와 LLM 담당자가 공통 계약의 미확정 항목을 같은
-형식으로 검토하고 결정하기 위한 체크리스트다.
+이 문서는 현행 실행 코드와 Week 2 설계안을 비교해 팀 결정을 기록한다. 모든 항목을
+미결정으로 간주하지 않으며, [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을
+코드 사실의 기준으로 사용한다.
 
-검토 기준:
-
-- [요구사항 명세 초안](./week2-requirements-specification.md)
-- [공통 스키마 정의서](./week2-schema-definition.md)
-- [Canonical V3.1 필드 검증표](./v3.1-field-validation.md)
-- [프로토타입 Gap 분석](./prototype-mvp-gap-analysis.md)
-
-## 2. 답변 방법
-
-각 항목에 다음 정보를 기록한다.
-
-| 항목 | 작성 내용 |
+| 분류 | 의미 |
 |---|---|
-| 선택 | 권장안 수락 또는 대안 |
-| 변경 내용 | 필드·enum·화면·API가 달라지면 구체적으로 작성 |
-| 근거 | 구현 제약, 사용자 요구 또는 데이터 계약 |
-| 결정자 | 합의한 팀원 이름 |
-| 결정일 | `YYYY-MM-DD` |
+| `현행 구현 계약` | 코드·schema·테스트에서 확인된 값 |
+| `용어·표현 합의` | 내부 계약은 유지하고 제품 표시를 통일할 항목 |
+| `부분 일치` | 방향은 같지만 필드·경로·책임이 일부 다름 |
+| `구현 변경 필요` | 채택하면 코드·API·UI·테스트 변경이 필요한 요구사항 |
 
-미응답 항목은 확정 계약으로 선언하지 않는다.
+각 결정에는 `선택`, `변경 내용`, `코드 영향`, `근거`, `결정자`, `결정일`을 기록한다.
+
+## 2. 현황 요약
+
+| ID | 주제 | 분류 | 현재 상태 |
+|---|---|---|---|
+| DEC-COM-01 | 기준 저장소 | 부분 일치 | 문서와 실행 코드 저장소 분리 확인 |
+| DEC-COM-02 | 사용자 명칭 | 용어·표현 합의 | 권한 역할은 구현 완료 |
+| DEC-COM-03 | Decision·Note 범위 | 구현 변경 필요 | 둘 다 저장 기능으로 구현 |
+| SCR-01 | 화면별 실제 필드 | 부분 일치 | 네 화면 구현, 제안 필드와 차이 |
+| SCR-02 | 상태 명칭 | 용어·표현 합의 | 5개 enum 구현 |
+| SCR-03 | 필터·정렬·이동 | 구현 변경 필요 | 현행 필터·URL 계약과 제안이 다름 |
+| SCR-04 | 화면 상태 | 부분 일치 | loading·empty·error·stale·permission 구현 |
+| API-01 | API 구조 | 구현 변경 필요 | 현행 API와 제안 경로가 다름 |
+| API-02 | pagination | 구현 변경 필요 | offset/limit 구현 |
+| API-03 | 위험등급 책임 | 현행 구현 계약 | Artifact status 사용 |
+| API-04 | snapshot·stale | 부분 일치 | 프론트 24시간 기준 구현 |
+| API-05 | 결합 필드·provenance | 부분 일치 | API/ViewModel 확장 존재 |
+| API-06 | fallback | 현행 구현 계약 | Gold Fixture와 warning 구현 |
+| RPT-01 | LLM 입력 JSON | 구현 변경 필요 | 현행 ReportRequest 존재 |
+| RPT-02 | LLM 출력 JSON | 구현 변경 필요 | 현행 report schema 존재 |
+| RPT-03 | 문장 안전 규칙 | 현행 구현 계약 | prompt·schema·평가 규칙 존재 |
+| RPT-04 | 실패 대체 | 현행 구현 계약 | LLM→deterministic→template 구현 |
+
+이 분류는 팀 결정의 대체물이 아니다. `현행 구현 계약`은 코드 사실을 확정하며,
+그 계약을 제품 기준으로 계속 유지할지는 팀이 결정한다.
 
 ## 3. 공통 결정
 
-### DEC-COM-01 — 개발 기준 저장소
+### DEC-COM-01 — 기준 저장소
 
-- 권장안: `Biz-CollabCraft/ontology_dashboard`를 제품 문서와 구현의 기준
-  저장소로 사용한다.
-- 비교 프로토타입은 참고 구현으로만 사용한다.
-- 영향 문서: 전체
-- 상태: `결정 필요`
-
-결정:
-
-```text
-선택:
-변경 내용:
-근거:
-결정자:
-결정일:
-```
+- 현행: 제품·계약 문서는 `Biz-CollabCraft/ontology_dashboard`, 실행 코드는
+  `oosuhada/agentic-ontology-dashboard` 정리 브랜치에 있다.
+- 결정: 실행 코드를 팀 저장소로 이전·병합할 시점과 방법.
+- 분류: `부분 일치`
 
 ### DEC-COM-02 — MVP 사용자 명칭
 
-- 권장안: 제품 계약은 `현장 담당자`, `생산 관리자`를 사용한다.
-- 프로토타입의 엔지니어·관리자·임원 명칭은 최종 역할에 매핑한다.
-- 영향 문서: 요구사항, 기능, 화면, API, 보고서
-- 상태: `결정 필요`
+- 현행 권한: `manager`, `engineer`.
+- 현행 UI: 관리자·임원, 실무 엔지니어.
+- 문서 제안: 생산 관리자, 현장 담당자.
+- 결정: 내부 role enum을 유지한 채 표시 명칭을 매핑할지.
+- 분류: `용어·표현 합의`
 
-결정:
+### DEC-COM-03 — Decision·Note 범위
 
-```text
-선택:
-역할 매핑:
-근거:
-결정자:
-결정일:
-```
-
-### DEC-COM-03 — 쓰기 기능 범위
-
-- 권장안: Week 2 필수 흐름은 조회 중심으로 제한한다.
-- Decision/Note는 구현 자산이 있더라도 `MVP 데모 Action` 또는 후속 범위로
-  표시하고 자동 Work Order와 설비 제어는 제외한다.
-- 영향 문서: 요구사항, 기능, API, 화면
-- 상태: `결정 필요`
-
-결정:
-
-```text
-선택: 조회 전용 / Decision 유지 / Note 유지 / 둘 다 유지
-저장 여부:
-권한:
-결정자:
-결정일:
-```
+- 현행: Decision과 Note 모두 실제 저장 기능이다. 관리자는 `events.decision`,
+  엔지니어는 `events.note` 권한을 사용하며 Activity 감사 이력과 테스트가 있다.
+- 결정: 현행 유지 또는 기능 제외. 제외하면 API·UI·권한·테스트 변경이 필요하다.
+- 분류: `구현 변경 필요`
 
 ## 4. 팀원1 — 화면 계약
 
 ### SCR-01 — 화면별 실제 필드
 
-- 권장안: `AssetPredictionSummary`, `AssetDetail`, `OverviewSummary`를 화면
-  공통 입력으로 사용한다.
-- 확인 요청:
-  - Overview 카드와 Top N 필드
-  - Objects 목록·상세 필드
-  - Operations 생산·정비 필드
-  - Executive Report 필드
-- 반영 위치: 스키마, 기능, API, MVP 설계
-- 상태: `확인 필요`
-
-답변:
-
-```text
-누락 필드:
-제외 필드:
-화면 전용 계산값:
-담당자:
-결정일:
-```
+- 현행: Overview, Objects, Operations, Executive Report가 구현돼 있다.
+- 차이: Operations는 생산 Cycle·정비 목록이 아니라 Event Queue, Evidence,
+  Decision, Note, Activity 중심이다.
+- 결정: 현행 Event 흐름 유지 또는 생산·정비 중심 재설계.
+- 분류: `부분 일치`
 
 ### SCR-02 — 상태 명칭과 표현
 
-- 권장안:
-  - `normal` → 정상
-  - `attention` → 관심
-  - `warning` → 경고
-  - `critical` → 심각
-- `주의`, `위험`을 같은 enum의 다른 이름으로 혼용하지 않는다.
-- 색상과 텍스트를 함께 사용한다.
-- 반영 위치: 스키마, 기능, MVP 설계
-- 상태: `확인 필요`
-
-답변:
-
-```text
-선택: 권장안 수락 / 대안
-대안 문구·색상:
-담당자:
-결정일:
-```
+- 현행 enum: `normal`, `attention`, `warning`, `critical`, `data_quality_hold`.
+- 현행 표시: 정상, 주의, 경고, 위험, 데이터 확인.
+- 문서 제안: 정상, 관심, 경고, 심각이며 `data_quality_hold`가 누락돼 있었다.
+- 결정: enum은 유지하고 한국어 표시만 통일할지.
+- 분류: `용어·표현 합의`
 
 ### SCR-03 — 필터·정렬·이동
 
-- 권장안:
-  - 필터: `site_id`, `cell_id`, `asset_type`, `status_grade`, 기간
-  - 위험 목록: 등급 우선 후 `failure_probability` 내림차순
-  - 화면 이동: `asset_id`와 필터 조건 유지
-- 반영 위치: 기능, API, MVP 설계
-- 상태: `확인 필요`
-
-답변:
-
-```text
-추가·삭제 필터:
-정렬 기준:
-URL/상태 유지 방식:
-담당자:
-결정일:
-```
+- 현행 Objects 필터: 검색, 라인, 상태, 담당자.
+- 현행 URL: `view`, `asset_id`, `event_id`, `role`, `workspace_id`.
+- 문서 제안: 사이트, 셀, 설비 유형, 상태, 기간과 필터 URL 유지.
+- 결정: 현행 유지, 필터 추가 또는 URL 계약 확장.
+- 분류: `구현 변경 필요`
 
 ### SCR-04 — 화면 상태
 
-- 권장안: `loading`, `empty`, `error`, `stale`, `permission`을 구분한다.
-- fallback 사용 시 정상 Canonical 결과처럼 보이지 않도록 경고한다.
-- 반영 위치: 기능, API, MVP 설계
-- 상태: `확인 필요`
-
-답변:
-
-```text
-상태별 문구:
-재시도 동작:
-fallback 표시:
-담당자:
-결정일:
-```
+- 현행: loading, empty, error, stale, permission과 fallback warning을 사용한다.
+- 결정: 화면별 문구·재시도 동작·접근성 완료조건 보강.
+- 분류: `부분 일치`
 
 ## 5. 팀원3 — 데이터·API 계약
 
 ### API-01 — API 구조
 
-- 권장안: 화면마다 중복 API를 새로 만들기 전에 목록·상세·집계 책임을 다음과
-  같이 고정한다.
-  - 전체/필터 목록
-  - 자산 상세
-  - 센서 history
-  - Operations 생산·정비 목록
-  - Executive Report용 검증 집계
-- 기존 구현 API가 있으면 경로를 유지하고 응답 계약만 보강한다.
-- 반영 위치: API, 기능, MVP 설계
-- 상태: `확인 필요`
-
-답변:
-
-```text
-목록 경로:
-상세 경로:
-History 경로:
-Operations 경로:
-Report 입력 경로:
-담당자:
-결정일:
-```
+- 현행 Canonical base path:
+  `/api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance`.
+- 현행 핵심: `GET /dashboard`, `GET /results/latest`.
+- 현행 Event: `/api/events/{event_id}/evidence|report|decision|notes|activity`.
+- 문서의 `/overview`, `/objects`, `/operations`는 `변경 제안`이다.
+- 결정: 현행 경로 보강 또는 화면별 API 재설계.
+- 분류: `구현 변경 필요`
 
 ### API-02 — 목록 pagination
 
-- 권장안: `page`, `size`와 `total`을 사용하는 page 방식으로 시작한다.
-- 최대 `size`와 기본 정렬을 API 명세에 고정한다.
-- 반영 위치: 스키마, API
-- 상태: `확인 필요`
-
-답변:
-
-```text
-방식: page / cursor
-기본 크기:
-최대 크기:
-기본 정렬:
-담당자:
-결정일:
-```
+- 현행 `/results/latest`: `offset`, `limit`, `total`; 기본 100, 최대 500.
+- 문서의 `page`, `size`: `변경 제안`.
+- 결정: 현행 유지 또는 호환·마이그레이션 계획을 포함한 변경.
+- 분류: `구현 변경 필요`
 
 ### API-03 — 위험등급 산출 책임
 
-- 권장안: API가 임계값을 재계산하지 않고 Result Artifact의 `status_grade`를
-  그대로 소비한다.
-- 임계값 비교 기능은 별도 Analysis 화면 없이 후속 모델링 계약으로 관리한다.
-- 반영 위치: 스키마, API, 기능
-- 상태: `확인 필요`
-
-답변:
-
-```text
-산출 주체:
-현재 임계값:
-버전 표기 방식:
-담당자:
-결정일:
-```
+- 현행: Canonical Result Artifact의 상태를 API와 ViewModel이 정규화해 사용한다.
+- 결정: 임계값 재계산을 API에 추가하지 않고 현행 책임을 유지할지.
+- 분류: `현행 구현 계약`
 
 ### API-04 — 기준시각과 stale
 
-- 권장안:
-  - 목록과 집계는 하나의 latest Artifact snapshot을 기준으로 한다.
-  - 자산별 센서는 `observed_at <= snapshot as_of`인 최신 관측을 사용한다.
-  - stale 허용 시간은 관측 주기와 replay 정책을 기준으로 팀원3이 확정한다.
-- 반영 위치: 스키마, API, 기능
-- 상태: `확인 필요`
-
-답변:
-
-```text
-snapshot 기준:
-센서 결합 기준:
-stale 임계시간:
-시간대:
-담당자:
-결정일:
-```
+- 현행: 프론트가 최신 `observedAt` 기준 24시간 초과를 stale로 판단한다.
+- 결정: 24시간을 제품 계약으로 채택할지, 백엔드 산출로 이동할지와 시간대 기준.
+- 분류: `부분 일치`
 
 ### API-05 — 결합 필드와 provenance
 
-- 권장안:
-  - `site_id`, `cell_id`는 Asset 결합값으로 표시한다.
-  - `dataset_version`, `model_version`은 Artifact provenance에서 가져온다.
-  - 원본 `provenance`는 상세·보고서 입력에서 보존한다.
-- 반영 위치: 스키마, API, 보고서
-- 상태: `확인 필요`
-
-답변:
-
-```text
-중첩/평탄화 방식:
-목록 provenance 범위:
-상세 provenance 범위:
-담당자:
-결정일:
-```
+- 현행: Result Artifact, Event/Evidence와 Asset/ViewModel 확장 필드가 함께 사용된다.
+- 결정: 원천·결합·파생 필드를 응답에서 어떻게 구분하고 provenance를 어디까지
+  노출할지.
+- 분류: `부분 일치`
 
 ### API-06 — fallback
 
-- 권장안: Canonical을 기본으로 사용하며 fallback은 데모 복구 상황에만
-  허용한다. 응답에 source와 warning을 반드시 포함한다.
-- 반영 위치: 스키마, API, 기능, 보고서
-- 상태: `확인 필요`
-
-답변:
-
-```text
-fallback 허용 여부:
-발동 조건:
-응답 필드:
-화면 경고:
-담당자:
-결정일:
-```
+- 현행: Canonical Runtime 실패 시 Gold Fixture를 사용하고 warning과 fallback
+  표시를 제공한다.
+- 결정: 발동 조건, 허용 환경, 응답 필드와 사용자 문구를 최종 고정.
+- 분류: `현행 구현 계약`
 
 ## 6. 팀원4 — LLM 보고서 계약
 
 ### RPT-01 — 입력 JSON
 
-- 권장안: LLM에는 검증된 집계, 상위 위험 설비, 관련 Result Artifact와
-  provenance만 전달한다.
-- Canonical 원천 전체와 evaluation truth는 입력하지 않는다.
-- 반영 위치: 스키마, 보고서, API
-- 상태: `확인 필요`
-
-답변:
-
-```text
-입력 객체명:
-필수 필드:
-선택 필드:
-최대 설비 수:
-담당자:
-결정일:
-```
+- 현행: `ReportRequest(role, locale, use_llm)`.
+- 문서의 기간·필터·집계를 포함한 `ReportInput`: `변경 제안`.
+- 결정: 현행 Event 단위 요청 유지 또는 Executive 집계 요청 V2 추가.
+- 분류: `구현 변경 필요`
 
 ### RPT-02 — 출력 JSON
 
-- 권장안: 자유 문자열 하나가 아니라 섹션별 구조화 JSON을 반환한다.
-- 최소 섹션 후보:
-  - 보고 기준
-  - 전체 상태 요약
-  - 상위 위험 설비
-  - 주요 위험 요인
-  - 생산·정비 영향
-  - 권장 조치
-  - 주의사항과 한계
-- 반영 위치: 스키마, 보고서, API, 화면
-- 상태: `확인 필요`
-
-답변:
-
-```text
-출력 schema:
-필수 섹션:
-근거 참조 필드:
-담당자:
-결정일:
-```
+- 현행: `schemas/report.schema.json`의 role-aware grounded report.
+- 문서의 `ReportOutput`: `변경 제안`.
+- 결정: 현행 schema 유지·확장 또는 새 버전과 전환 계획 정의.
+- 분류: `구현 변경 필요`
 
 ### RPT-03 — 문장 규칙
 
-- 권장안:
-  - 고장 확정, 인과 확정, 자동 실행을 표현하지 않는다.
-  - `근거`, `후보`, `가설`, `점검 필요` 표현을 사용한다.
-  - 입력에 없는 비용, 손실, 절감액과 수치를 생성하지 않는다.
-  - 상태·확률·버전을 변경하거나 반올림으로 왜곡하지 않는다.
-- 반영 위치: 보고서, 기능, 테스트
-- 상태: `확인 필요`
-
-답변:
-
-```text
-추가 금지 표현:
-필수 고지 문구:
-수치 표시 규칙:
-담당자:
-결정일:
-```
+- 현행: 고장·인과·자동 실행을 확정하지 않고 근거·한계·citation을 보존하는
+  prompt, schema와 평가 규칙이 있다.
+- 결정: 추가 금지 표현과 한국어 수치 표시 규칙.
+- 분류: `현행 구현 계약`
 
 ### RPT-04 — 실패 대체 응답
 
-- 권장안: `LLM → deterministic summary → template` 순서로 fallback한다.
-- fallback 결과도 입력 provenance와 생성 방식을 표시한다.
-- 반영 위치: 스키마, 보고서, API, 화면
-- 상태: `확인 필요`
+- 현행: LLM 실패 시 deterministic report, 최종 template fallback과 경고 표시를
+  사용한다.
+- 결정: timeout·retry·오류 공개 범위와 각 단계의 mode 명칭.
+- 분류: `현행 구현 계약`
 
-답변:
+## 7. 결정 기록 양식
+
+각 항목 아래에 다음 형식으로 기록한다.
 
 ```text
-fallback 단계:
-오류 응답:
-화면 표시:
-담당자:
+선택:
+변경 내용:
+코드 영향:
+근거:
+결정자:
 결정일:
 ```
 
-## 7. 검토 완료 조건
+## 8. 검토 완료 조건
 
-- 모든 `확인 필요` 항목에 결정자와 결정일이 있다.
-- 변경된 필드가 `week2-schema-definition.md`에 반영된다.
-- 화면 필드와 API JSON key가 일치한다.
-- API와 LLM이 같은 Result Artifact 의미를 사용한다.
-- 결정 결과가 기능·API·보고서·MVP 설계 명세의 입력으로 연결된다.
-
+- 17개 항목의 현행값과 변경 제안이 구분된다.
+- 구현 변경 항목에는 영향 범위와 전환 방법이 기록된다.
+- 합의 결과가 스키마·기능·API·리포트·MVP 설계에 반영된다.
+- 실제 API 경로와 JSON schema를 추적성 매트릭스에 연결한다.
+- 모든 최종 결정에 결정자와 결정일이 있다.

@@ -6,12 +6,23 @@ Canonical V3.1과 Result Artifact를 사용해 생산 관리자와 현장 담당
 찾고, 근거와 생산·정비 현황을 확인하고, 같은 데이터로 Executive Report를 보는
 조회 중심 MVP를 구성한다.
 
+## 1.1 현재 저장소와 실행 기준
+
+- 제품·계약 문서: `Biz-CollabCraft/ontology_dashboard`
+- 현행 실행 코드: `oosuhada/agentic-ontology-dashboard`의
+  `codex/current-mvp-repository-convergence-20260806` 브랜치
+- 목표: 팀 결정 후 실행 코드를 팀 저장소로 이전 또는 병합
+
+현행 역할·API·Operations·Report 계약은
+[현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을 따른다.
+
 ## 2. 범위
 
 - 화면: Overview, Objects, Operations, Executive Report
 - 데이터: Canonical V3.1 원천 6종
 - 예측: `result-artifact-v1.0`
 - 보고서: 근거 기반 LLM과 deterministic/template fallback
+- 현행 포함: Event Queue, Decision·Note 저장, Activity 감사 이력
 - 제외: Analysis, Admin, 모델 재학습, 자동 정지·발주·생산계획 변경, truth 노출
 
 ## 3. 구성

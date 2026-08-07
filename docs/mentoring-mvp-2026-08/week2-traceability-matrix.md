@@ -5,6 +5,11 @@
 요구사항이 기능, 화면, API, 스키마와 테스트까지 연결되는지 확인한다. API 경로와
 테스트 파일명은 구현 담당자 합의 전 제안 상태다.
 
+표의 `/overview`, `/objects`, `/operations`, `/reports/executive`는 목표 설계 경로다.
+현행 경로는 [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)의
+`/dashboard`, `/results/latest`와 Event API이며, 최종 결정 후 두 계약의 매핑을
+추가해야 한다.
+
 | 요구사항 | 기능 | 화면 | API | 스키마 | 테스트 |
 |---|---|---|---|---|---|
 | CM-01 동일 자산·시각 | FEAT-CM-002/003 | 전체 | 전체 응답 `as_of` | DataStatus, provenance | TC-CM-001 화면 간 동일성 |
