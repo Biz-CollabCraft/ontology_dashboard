@@ -22,7 +22,7 @@
 |---|---|---|---|---|
 | 개발 기반 | 새 `ontology_dashboard` | FastAPI·React 통합 MVP가 이미 구현됨 | 유지 | 해당 브랜치를 공식 개발 기준으로 채택할지 |
 | 사용자 | 현장 담당자, 생산 관리자 | 실무 엔지니어, 관리자·임원 | 수정 | 역할명과 실제 업무 권한 대응 |
-| 화면 | Overview, Objects, Operations, Executive Report | 동일한 네 화면 구현 | 유지 | 화면별 필수 필드와 완료조건 |
+| 화면 | 기간·가동·생산·정비 집계 기반 네 화면 | 위험 KPI·Event·Inspector 기반 네 화면 | 수정 | 화면별 현행과 V2 기능 분리 |
 | Analysis/Admin | MVP 제외 | 현재 진입점에서는 제외 | 유지 | 종료된 기능을 재활성화하지 않음 |
 | Operations | 생산·정비 현황 조회 | Event Queue, Decision, Note Activity 중심 | 변경 제안 | 현행 유지 또는 생산·정비 중심으로 제품 흐름 재설계 |
 | 쓰기 기능 | 점검 입력·정비 요청은 MVP 이후 | Decision과 Note 저장·권한·감사 구현 | 변경 제안 | 현행 유지 또는 기존 기능 제거 |
@@ -31,7 +31,7 @@
 | Canonical | V3.1 사용 | PostgreSQL Canonical V3.1 Runtime | 유지 | 공식 ZIP 적재 및 버전 표시 검증 |
 | Fallback | 미정 | Canonical 장애 시 Gold Fixture와 warning | 현행 확인 | 발동 조건·표시 문구를 공통 계약으로 채택할지 |
 | Result Artifact | 공통 예측 계약 | 최신 결과 조회와 Event/Evidence로 확장 | 수정 | 공식 Artifact와 API 확장 필드 경계 |
-| 보고서 | LLM Executive Report | LLM → deterministic → template fallback | 유지 | 입력·출력 JSON과 금지 표현 |
+| 보고서 | 기간 기반 V2 Executive Report | 선택 Event 역할별 report와 fallback | 수정 | 현행 유지, mock V2 계약 우선 검증 |
 | 자동 실행 | 설비 자동 정지·자동 발주 제외 | 권고와 사람 판단 분리 | 유지 | 자동 실행 금지 테스트 유지 |
 | 평가 truth | 일반 화면 비노출 | 비노출 계약 존재 | 유지 | 운영 API 노출 금지 유지 |
 
@@ -89,7 +89,7 @@ Gold Fixture는 화면 흐름 검증에는 유용하지만 실제 Canonical 조�
 - 검색·필터·정렬·상세 이동
 - 상태 문구·색상과 loading/empty/error/stale/permission 화면
 
-### 팀원3 — 데이터·API
+### 팀원3 — 데이터·조회·집계 API
 
 - 공식 V3.1 패키지 적재 결과와 최신 Artifact 조회
 - 위험등급 enum과 임계값 산출 책임
@@ -97,7 +97,7 @@ Gold Fixture는 화면 흐름 검증에는 유용하지만 실제 Canonical 조�
 - 목록 pagination, 기준시각, stale 기준
 - Event/Evidence와 Artifact의 ID 연결 방식
 
-### 팀원4 — LLM 보고서
+### 팀원4 — 리포트 API·생성
 
 - 보고서 입력 JSON과 Result Artifact 연결
 - 출력 JSON과 화면 표시 필드

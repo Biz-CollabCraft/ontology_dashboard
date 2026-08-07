@@ -23,7 +23,7 @@
 | DEC-COM-02 | 사용자 명칭 | 용어·표현 합의 | 권한 역할은 구현 완료 |
 | DEC-COM-03 | Decision·Note 범위 | 구현 변경 필요 | 둘 다 저장 기능으로 구현 |
 | SCR-01 | 화면별 실제 필드 | 부분 일치 | 네 화면 구현, 제안 필드와 차이 |
-| SCR-02 | 상태 명칭 | 용어·표현 합의 | 5개 enum 구현 |
+| SCR-02 | 상태 명칭 | 용어·표현 합의 | Artifact 4등급과 ViewModel 품질 상태 분리 필요 |
 | SCR-03 | 필터·정렬·이동 | 구현 변경 필요 | 현행 필터·URL 계약과 제안이 다름 |
 | SCR-04 | 화면 상태 | 부분 일치 | loading·empty·error·stale·permission 구현 |
 | API-01 | API 구조 | 구현 변경 필요 | 현행 API와 제안 경로가 다름 |
@@ -57,6 +57,14 @@
 - 결정: 내부 role enum을 유지한 채 표시 명칭을 매핑할지.
 - 분류: `용어·표현 합의`
 
+```text
+내부 enum: manager / engineer 유지
+API/Auth 역할: manager / engineer
+현재 로그인 표시: 관리자·임원 / 실무 엔지니어
+업무 관점 후보: 생산 관리자 / 현장 담당자
+최종 표시 명칭: 팀 합의 필요
+```
+
 ### DEC-COM-03 — Decision·Note 범위
 
 - 현행: Decision과 Note 모두 실제 저장 기능이다. 관리자는 `events.decision`,
@@ -68,18 +76,20 @@
 
 ### SCR-01 — 화면별 실제 필드
 
-- 현행: Overview, Objects, Operations, Executive Report가 구현돼 있다.
-- 차이: Operations는 생산 Cycle·정비 목록이 아니라 Event Queue, Evidence,
-  Decision, Note, Activity 중심이다.
-- 결정: 현행 Event 흐름 유지 또는 생산·정비 중심 재설계.
+- 현행 Overview: 위험 KPI·Downtime·판단 대기 Event 중심.
+- 현행 Objects: 검색·라인·상태·담당자 필터와 설비 Inspector 중심.
+- 현행 Operations: Event Queue, Evidence, Decision, Note, Activity 중심.
+- 현행 Executive Report: 선택 Event 단위 역할별 보고서.
+- V2 제안: 가동·생산·정비 기간 집계, site/cell/기간 필터와 기간 기반 보고서.
+- 결정: 화면별 현행 유지·보강 또는 V2 전환 범위.
 - 분류: `부분 일치`
 
 ### SCR-02 — 상태 명칭과 표현
 
-- 현행 enum: `normal`, `attention`, `warning`, `critical`, `data_quality_hold`.
+- Artifact `status_grade`: `normal`, `attention`, `warning`, `critical`.
+- ViewModel 데이터 품질 상태: `data_quality_hold`; Artifact enum이 아니다.
 - 현행 표시: 정상, 주의, 경고, 위험, 데이터 확인.
-- 문서 제안: 정상, 관심, 경고, 심각이며 `data_quality_hold`가 누락돼 있었다.
-- 결정: enum은 유지하고 한국어 표시만 통일할지.
+- 결정: API 원본 상태와 화면 합성 상태를 분리하고 현행 표시 명칭으로 통일할지.
 - 분류: `용어·표현 합의`
 
 ### SCR-03 — 필터·정렬·이동
@@ -96,7 +106,7 @@
 - 결정: 화면별 문구·재시도 동작·접근성 완료조건 보강.
 - 분류: `부분 일치`
 
-## 5. 팀원3 — 데이터·API 계약
+## 5. 팀원3 — 데이터·조회·집계 API 계약
 
 ### API-01 — API 구조
 
@@ -117,8 +127,9 @@
 
 ### API-03 — 위험등급 산출 책임
 
-- 현행: Canonical Result Artifact의 상태를 API와 ViewModel이 정규화해 사용한다.
-- 결정: 임계값 재계산을 API에 추가하지 않고 현행 책임을 유지할지.
+- 현행: API는 Artifact의 4등급 `status_grade`를 사용하고 ViewModel은 데이터 품질
+  보류를 `data_quality_hold`로 별도 표현한다.
+- 결정: 두 상태를 분리하고 임계값 재계산을 API에 추가하지 않을지.
 - 분류: `현행 구현 계약`
 
 ### API-04 — 기준시각과 stale
@@ -141,34 +152,44 @@
 - 결정: 발동 조건, 허용 환경, 응답 필드와 사용자 문구를 최종 고정.
 - 분류: `현행 구현 계약`
 
-## 6. 팀원4 — LLM 보고서 계약
+## 6. 팀원4 — 리포트 API·생성 계약
 
 ### RPT-01 — 입력 JSON
 
 - 현행: `ReportRequest(role, locale, use_llm)`.
 - 문서의 기간·필터·집계를 포함한 `ReportInput`: `변경 제안`.
-- 결정: 현행 Event 단위 요청 유지 또는 Executive 집계 요청 V2 추가.
+- 검토안: V2 `ReportInput`을 변경 제안으로 유지하고 현행 `ReportRequest`를
+  대체하지 않는다. mock 입력으로 deterministic 생성 가능성을 먼저 검증한다.
+- 담당: 팀원4가 mock 계약 검증과 향후 리포트 API 구현을 맡는다.
+- 코드 영향: 이번 단계는 API 변경 없음.
 - 분류: `구현 변경 필요`
 
 ### RPT-02 — 출력 JSON
 
 - 현행: `schemas/report.schema.json`의 role-aware grounded report.
 - 문서의 `ReportOutput`: `변경 제안`.
-- 결정: 현행 schema 유지·확장 또는 새 버전과 전환 계획 정의.
+- 검토안: `executive-report-v1.0`을 V2 후보로 검증하고 현행 grounded report
+  schema와 분리한다.
+- 담당: 팀원4.
+- 코드 영향: 실제 적용 시 schema·UI·테스트 변경 필요.
 - 분류: `구현 변경 필요`
 
 ### RPT-03 — 문장 규칙
 
 - 현행: 고장·인과·자동 실행을 확정하지 않고 근거·한계·citation을 보존하는
   prompt, schema와 평가 규칙이 있다.
-- 결정: 추가 금지 표현과 한국어 수치 표시 규칙.
+- 검토안: 권장안 수락. 고장·원인 확정, 자동 정지·정비 지시, 비용 절감·생산
+  손실 단정을 금지한다. 입력 수치와 enum을 변경하지 않고 없는 값은 추론하지 않는다.
 - 분류: `현행 구현 계약`
 
 ### RPT-04 — 실패 대체 응답
 
 - 현행: LLM 실패 시 deterministic report, 최종 template fallback과 경고 표시를
   사용한다.
-- 결정: timeout·retry·오류 공개 범위와 각 단계의 mode 명칭.
+- 검토안: LLM → deterministic → template 흐름을 유지하고 V2 명칭을 별도로
+  정의한다. 현행 `deterministic_fallback`은 V2의 `generation_method=deterministic`,
+  `fallback_reason=llm_failed`로 매핑한다.
+- 담당: 팀원4 Report API.
 - 분류: `현행 구현 계약`
 
 ## 7. 결정 기록 양식

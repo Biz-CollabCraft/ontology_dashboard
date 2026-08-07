@@ -10,6 +10,19 @@
 `/dashboard`, `/results/latest`와 Event API이며, 최종 결정 후 두 계약의 매핑을
 추가해야 한다.
 
+### 1.1 현행 구현 추적
+
+| 화면 | 현행 입력/API | 주요 기능 | 상태 |
+|---|---|---|---|
+| Overview | `GET /dashboard` | 위험 KPI·Downtime·판단 대기 Event | 현행 |
+| Objects | `GET /results/latest` | 검색·라인·상태·담당자와 Inspector | 현행 |
+| Operations | Event evidence/decision/notes/activity API | Event 업무·판단·메모·감사 | 현행 |
+| Executive Report | `POST /api/events/{event_id}/report` | 선택 Event 역할별 grounded report | 현행 |
+
+### 1.2 V2 변경 제안 추적
+
+조회·집계 API는 팀원3, 아래 Executive Report API와 RPT 테스트는 팀원4가 담당한다.
+
 | 요구사항 | 기능 | 화면 | API | 스키마 | 테스트 |
 |---|---|---|---|---|---|
 | CM-01 동일 자산·시각 | FEAT-CM-002/003 | 전체 | 전체 응답 `as_of` | DataStatus, provenance | TC-CM-001 화면 간 동일성 |

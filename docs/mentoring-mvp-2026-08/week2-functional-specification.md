@@ -2,14 +2,14 @@
 
 ## 1. 기준
 
-- 사용자: 생산 관리자, 현장 담당자
+- 내부 역할: `manager`, `engineer`
+- 표시 명칭: 관리자·임원/실무 엔지니어와 생산 관리자/현장 담당자 중 팀 합의 필요
 - 화면: Overview, Objects, Operations, Executive Report
 - 공통 필드: [스키마 정의서](./week2-schema-definition.md)
 - 현행 기준: [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)
 - 상태: `초안 — 현행 기능과 변경 제안 분리`
 
-현행 Operations는 Event Queue, Evidence, Recommendation, Decision, Note와 Activity
-중심이다. 아래 생산·정비 조회 기능은 현행 설명이 아니라 제품 흐름 변경 제안이다.
+각 화면은 `현행 구현`과 `V2 변경 제안`을 구분한다.
 
 ## 2. 공통 기능
 
@@ -23,16 +23,25 @@
 
 ## 3. Overview
 
+현행 구현: 위험 KPI, 라인별 위험 분포, Downtime, 판단 대기 Event와 데이터 신선도.
+
+아래 표는 가동·유형·생산·정비 집계를 추가하는 `V2 변경 제안`이다.
+
 | ID | 기능 | 입력/처리 | 출력 | 완료 기준 |
 |---|---|---|---|---|
 | FEAT-OV-001 | 설비 현황 | 최신 관측과 자산 집계 | 전체·가동·비가동 수 | 가동+비가동=전체 |
-| FEAT-OV-002 | 위험 현황 | 같은 Artifact snapshot 집계 | 등급별 수 | 네 등급 합=전체 |
+| FEAT-OV-002 | 위험 현황 | 같은 Artifact snapshot 집계 | 등급별 수 | 4등급과 품질 보류를 분리 |
 | FEAT-OV-003 | 유형 요약 | `asset_type` 집계 | Compressor/CNC 수 | 유형 합=전체 |
 | FEAT-OV-004 | 상위 위험 설비 | 등급 우선, 확률 내림차순 | Top N 목록 | 중복 자산 없음 |
 | FEAT-OV-005 | 운영 요약 | 기간 내 생산·정비 집계 | 작업·정비 건수 | Operations와 일치 |
 | FEAT-OV-006 | 상세 이동 | 위험 설비 선택 | Objects 상세 | 선택 `asset_id` 유지 |
 
 ## 4. Objects
+
+현행 구현: 검색·라인·상태·담당자 필터, 선택 설비 Inspector, 센서·요인·provenance.
+
+아래 표의 site/cell/유형/기간 필터와 전용 history·maintenance 조회는
+`V2 변경 제안`이다.
 
 | ID | 기능 | 입력/처리 | 출력 | 오류·완료 기준 |
 |---|---|---|---|---|
@@ -62,6 +71,11 @@ Decision·Note는 이미 권한 기반 저장과 Activity 감사 이력으로 �
 제외하려면 API·UI·권한·테스트 변경 항목으로 결정한다.
 
 ## 6. Executive Report
+
+현행 구현: 선택 Event 단위 `ReportRequest`와 역할별 grounded report.
+
+아래 표는 기간·필터 집계 기반 `ReportInput`/`ReportOutput`을 검증하는
+`V2 변경 제안`이다. 이번 단계는 mock 입력과 deterministic 출력 검증만 수행한다.
 
 | ID | 기능 | 입력/처리 | 출력 | 오류·완료 기준 |
 |---|---|---|---|---|

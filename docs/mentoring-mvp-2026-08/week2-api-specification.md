@@ -7,6 +7,13 @@
 `/overview`, `/objects`, `/operations`와 page/size 계약은 모두 `변경 제안`이다.
 JSON key 목표안은 [스키마 정의서](./week2-schema-definition.md)를 따른다.
 
+책임 분리:
+
+- 팀원3: `/overview`, `/objects`, `/operations` 등 조회·집계 API와 ReportInput에
+  필요한 원천·집계 필드 제공
+- 팀원4: 현행 Event Report 및 V2 `/reports/executive` 리포트 API 계약·구현
+- 팀원2: API·스키마·리포트 계약 문서화와 추적성 관리
+
 ## 1.1 현행 API 계약
 
 Canonical base path:
@@ -40,6 +47,7 @@ Canonical base path:
 | `cell_id` | string | 셀 필터 |
 | `asset_type` | enum | `compressor`, `cnc` |
 | `status_grade` | enum | 네 위험 등급 |
+| `data_quality_hold` | boolean | ViewModel 품질 보류 필터; 위험 enum과 별도 |
 | `from` | datetime | 기간 시작 |
 | `to` | datetime | 기간 종료 |
 | `page` | integer | 기본 1 |
@@ -88,11 +96,17 @@ Canonical base path:
 
 응답: `OverviewSummary`. 등급 합과 가동 합 불변식을 만족해야 한다.
 
+현행 Overview는 `/dashboard` 응답으로 위험 KPI·Downtime·판단 대기 Event를
+구성한다. `/overview`와 가동·생산·정비 집계는 V2 변경 제안이다.
+
 ### 4.3 `GET /objects`
 
 응답 items: `AssetPredictionSummary[]`.
 
 기본 정렬: 위험 등급 우선 후 `failure_probability desc`, `asset_id asc`.
+
+현행 Objects는 `/results/latest`의 offset/limit 결과를 검색·라인·상태·담당자로
+클라이언트 필터링한다. site/cell/유형/기간 Query는 V2 변경 제안이다.
 
 ### 4.4 `GET /objects/{asset_id}`
 
@@ -134,9 +148,13 @@ Canonical base path:
 
 ### 4.7 `POST /reports/executive`
 
-요청과 응답은 [리포트 정의서](./week2-report-specification.md)의
-ReportRequest/ReportOutput을 따른다. LLM 실패 시에도 성공한 fallback 결과는 200과
-`generation_method`를 반환한다.
+현행은 `POST /api/events/{event_id}/report`에서
+`ReportRequest(role, locale, use_llm)`와 role-aware grounded report를 사용한다.
+
+`POST /reports/executive`는 [리포트 정의서](./week2-report-specification.md)의 V2
+`ReportInput`/`ReportOutput` 후보이며 현행 API를 대체하지 않는다. 이번 단계에서는
+팀원4가 담당하며, 이번 단계에서는 endpoint를 수정·구현하지 않고 mock 입력과
+deterministic 출력 계약부터 검증한다.
 
 ## 5. 오류 envelope
 

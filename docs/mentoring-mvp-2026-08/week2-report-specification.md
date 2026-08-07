@@ -38,8 +38,7 @@ headline, summary, status, confidence, recommended_decision,
 sections, actions, citations, limitations, generated_at
 ```
 
-현행 `mode`는 `deterministic`, `llm`, `deterministic_fallback`을 사용한다. 최종
-template fallback의 화면 표시와 schema mode 명칭은 팀원4가 일치 여부를 확인한다.
+현행 `mode`는 `deterministic`, `llm`, `deterministic_fallback`을 사용한다.
 
 ## 2. 사용자와 목적
 
@@ -57,20 +56,27 @@ template fallback의 화면 표시와 schema mode 명칭은 팀원4가 일치 �
 리포트는 예측 결과를 의사결정 자료로 요약하며 고장 발생, 원인 또는 자동 실행을
 확정하지 않는다.
 
-## 3. 생성 흐름
+## 3. V2 검증 범위와 생성 흐름
+
+이번 단계는 현행 API·React·LLM provider를 변경하지 않는다. `pdm-mvp`는 최종
+구현체가 아니라 Evidence-to-Report 변환 레퍼런스로만 사용하며 전용 필드를 공식
+ReportInput에 그대로 복사하지 않는다.
+
+리포트 관련 API의 계약 검증과 향후 구현은 팀원4가 담당한다. 팀원3의 조회·집계
+API는 ReportInput 구성에 필요한 원천 필드를 제공하고 팀원2는 계약을 문서화한다.
 
 ```text
 Canonical V3.1
 → Result Artifact
 → 검증된 API 집계
 → ReportInput
-→ LLM 또는 deterministic generator
+→ LLM / deterministic / template generator
 → ReportOutput 검증
 → Executive Report 화면
 ```
 
-LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로 변환하는 역할만
-수행한다.
+우선 `mock ReportInput → deterministic ReportOutput`을 검증한다. LLM은 이후에도
+입력 데이터를 수정하지 않고 검증된 사실을 문장으로 변환하는 역할만 수행한다.
 
 ## 4. 보고서 생성 요청
 
@@ -104,7 +110,7 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
 
 `as_of`, 기간과 필터의 최종 기본값은 API 명세에서 확정한다.
 
-## 5. LLM 입력 계약
+## 5. Report 생성 입력 계약
 
 객체명: `ReportInput` · 상태: `V2 변경 제안`
 
@@ -112,8 +118,10 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
 {
   "report_context": {
     "as_of": "2026-08-29T23:00:00+09:00",
-    "period_from": "2026-08-23T00:00:00+09:00",
-    "period_to": "2026-08-29T23:00:00+09:00",
+    "period": {
+      "from": "2026-08-23T00:00:00+09:00",
+      "to": "2026-08-29T23:00:00+09:00"
+    },
     "generated_at": "2026-08-30T09:00:00+09:00",
     "locale": "ko-KR"
   },
@@ -121,12 +129,14 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
     "total_asset_count": 100,
     "operating_asset_count": 96,
     "non_operating_asset_count": 4,
+    "scored_asset_count": 99,
     "status_counts": {
       "normal": 42,
-      "attention": 39,
+      "attention": 38,
       "warning": 17,
       "critical": 2
     },
+    "data_quality_hold_count": 1,
     "production_cycle_count": 0,
     "maintenance_event_count": 0
   },
@@ -153,8 +163,8 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
 | 필드 | 타입 | 필수 | 출처 |
 |---|---|:---:|---|
 | `as_of` | datetime | Y | Artifact snapshot |
-| `period_from` | datetime | Y | 요청 |
-| `period_to` | datetime | Y | 요청 |
+| `period.from` | datetime | Y | 요청 |
+| `period.to` | datetime | Y | 요청 |
 | `generated_at` | datetime | Y | Report API |
 | `locale` | string | Y | 요청 |
 
@@ -165,10 +175,12 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
 | `total_asset_count` | integer | Y | Asset 집계 |
 | `operating_asset_count` | integer | Y | 최신 Observation 집계 |
 | `non_operating_asset_count` | integer | Y | 전체-가동 |
+| `scored_asset_count` | integer | Y | Artifact 4등급이 유효한 자산 수 |
 | `status_counts.normal` | integer | Y | Artifact 집계 |
 | `status_counts.attention` | integer | Y | Artifact 집계 |
 | `status_counts.warning` | integer | Y | Artifact 집계 |
 | `status_counts.critical` | integer | Y | Artifact 집계 |
+| `data_quality_hold_count` | integer | Y | ViewModel 품질 보류 집계 |
 | `production_cycle_count` | integer | Y | 기간 내 생산 작업 집계 |
 | `maintenance_event_count` | integer | Y | 기간 내 정비 집계 |
 
@@ -176,8 +188,11 @@ LLM은 입력 데이터를 수정하지 않고, 검증된 사실을 문장으로
 
 ```text
 operating_asset_count + non_operating_asset_count = total_asset_count
-normal + attention + warning + critical = total_asset_count
+normal + attention + warning + critical = scored_asset_count
+scored_asset_count + data_quality_hold_count = total_asset_count
 ```
+
+`data_quality_hold`는 Artifact `status_grade`가 아니므로 `status_counts` 안에 넣지 않는다.
 
 ### 5.3 ReportRiskAsset
 
@@ -208,6 +223,7 @@ normal + attention + warning + critical = total_asset_count
   "report_id": "REPORT#2026-08-29T23:00:00+09:00",
   "generated_at": "2026-08-30T09:00:00+09:00",
   "generation_method": "llm",
+  "fallback_reason": null,
   "title": "설비 예지보전 주간 요약",
   "executive_summary": "...",
   "risk_overview": "...",
@@ -226,6 +242,7 @@ normal + attention + warning + critical = total_asset_count
 | `report_id` | string | Y | 보고서 고유 ID |
 | `generated_at` | datetime | Y | 생성 시각 |
 | `generation_method` | enum | Y | `llm`, `deterministic`, `template` |
+| `fallback_reason` | string/null | Y | 대체 생성 원인; 정상 생성은 null |
 | `title` | string | Y | 보고서 제목 |
 | `executive_summary` | string | Y | 전체 핵심 요약 |
 | `risk_overview` | string | Y | 위험 분포 설명 |
@@ -310,7 +327,7 @@ normal + attention + warning + critical = total_asset_count
 
 ### attention
 
-> 일부 지표가 위험 증가 방향에 기여해 관심 단계로 분류되었습니다. 확정적인
+> 일부 지표가 위험 증가 방향에 기여해 주의 단계로 분류되었습니다. 확정적인
 > 고장 신호는 아니며 대상 요인을 중심으로 진단 점검을 계획할 필요가 있습니다.
 
 ### warning
@@ -320,7 +337,7 @@ normal + attention + warning + critical = total_asset_count
 
 ### critical
 
-> 우선 점검이 필요한 심각 단계입니다. 설비 상태와 안전 조건을 확인한 뒤 정지
+> 우선 점검이 필요한 위험 단계입니다. 설비 상태와 안전 조건을 확인한 뒤 정지
 > 검토 여부를 사람이 결정해야 하며 시스템이 자동으로 설비를 정지하지 않습니다.
 
 ## 10. 실패 대체 계약
@@ -343,6 +360,13 @@ LLM
 
 fallback이 사용돼도 `ReportOutput` 구조를 유지하고 `generation_method`에 생성
 방식을 기록한다.
+
+| 현행 `mode` | V2 `generation_method` | V2 `fallback_reason` |
+|---|---|---|
+| `llm` | `llm` | null |
+| `deterministic` | `deterministic` | null |
+| `deterministic_fallback` | `deterministic` | `llm_failed` |
+| 최종 template | `template` | `deterministic_failed` |
 
 ## 11. API 오류 계약 제안
 
@@ -370,8 +394,20 @@ fallback이 사용돼도 `ReportOutput` 구조를 유지하고 `generation_metho
 | RPT-TC-008 | stale/fallback/low confidence 경고가 보존된다. |
 | RPT-TC-009 | evaluation truth가 입력·출력에 노출되지 않는다. |
 | RPT-TC-010 | `generation_method`와 provenance가 항상 존재한다. |
+| RPT-TC-011 | 모든 `source_field`가 mock ReportInput의 실제 경로를 가리킨다. |
+| RPT-TC-012 | Artifact 4등급과 `data_quality_hold`가 분리 집계된다. |
+| RPT-TC-013 | 입력·출력의 모든 중첩 경로에 `evaluation_truth`가 없다. |
 
-## 13. 팀원4 확인 사항
+### 12.1 이번 단계 산출물
+
+- mock ReportInput 샘플
+- deterministic ReportOutput 샘플
+- `evidence_references.source_field` 매핑 예시
+- 금지 표현 검증 목록
+- 팀원2가 계약으로 정리하고 팀원3 조회·집계 API가 제공할 필요 필드 목록
+- `evaluation_truth` 미사용 확인 결과
+
+## 13. 리포트 API 담당 확인 사항
 
 | ID | 확인할 결정 |
 |---|---|
