@@ -8,6 +8,8 @@
 1. [Canonical V3.1 필드 검증표](./v3.1-field-validation.md)
 2. [프로토타입과 멘토링 MVP 차이 분석](./prototype-mvp-gap-analysis.md)
 3. [Week 2 요구사항 명세 초안](./week2-requirements-specification.md)
+4. [Week 2 공통 스키마 정의서](./week2-schema-definition.md)
+5. [Week 2 계약 검토 체크리스트](./week2-contract-review-checklist.md)
 
 ## 문서 상태
 
@@ -16,6 +18,8 @@
 | `v3.1-field-validation.md` | 검증 완료 | 공식 V3.1과 기존 V1.1/V1.3 초안의 필드 차이 근거 |
 | `prototype-mvp-gap-analysis.md` | 팀 합의 필요 | 프로토타입을 유지·수정·제외할 항목 결정 |
 | `week2-requirements-specification.md` | 초안 | 검증된 범위로 작성한 MVP 요구사항 |
+| `week2-schema-definition.md` | 일부 확정·일부 제안 | 화면·API·LLM 공통 필드명의 단일 기준 |
+| `week2-contract-review-checklist.md` | 팀 답변 필요 | 담당자별 선택안·결정·근거 기록 |
 
 ## 기준 자료
 
@@ -39,7 +43,6 @@ Git 기준 브랜치가 아니다.
 
 팀 합의 후 이 폴더에 다음 문서를 추가한다.
 
-- `week2-schema-definition.md`
 - `week2-functional-specification.md`
 - `week2-api-specification.md`
 - `week2-report-specification.md`
