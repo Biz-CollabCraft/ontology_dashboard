@@ -1,0 +1,293 @@
+# Week 2 공통 스키마 정의서
+
+## 1. 목적과 상태
+
+이 문서는 화면, API와 LLM 보고서가 사용하는 공통 필드명의 단일 기준이다.
+공식 Canonical V3.1 패키지에서 확인한 계약과 제품 계층에서 추가하는 계약을
+분리한다.
+
+| 상태 | 의미 |
+|---|---|
+| `확정` | 공식 V3.1 파일 또는 계약에서 검증됨 |
+| `파생` | 확정 필드를 결합하거나 계산함 |
+| `제안` | MVP 구현을 위한 계약안이며 담당자 합의가 필요함 |
+| `제외` | MVP 계약으로 사용하지 않음 |
+
+기준 버전:
+
+- Dataset: `canonical-ai4i-physics-v3.1`
+- Model: `independent-logreg-v3.1`
+- Result Artifact: `result-artifact-v1.0`
+
+상세 검증 근거는 [Canonical V3.1 필드 검증표](./v3.1-field-validation.md)를
+따른다.
+
+## 2. 공통 표현 규칙
+
+- 날짜시간은 시간대가 포함된 ISO-8601 문자열을 사용한다.
+- 확률과 confidence는 `0` 이상 `1` 이하의 number다.
+- 원천 CSV 필드명과 Result Artifact JSON key는 변경하지 않는다.
+- 한국어 이름과 설명은 별도 표시 계층에서 관리한다.
+- API 결합·계산 필드를 Canonical 또는 Result Artifact 원문으로 표현하지 않는다.
+- null을 정상값, 0 또는 고장 확정으로 변환하지 않는다.
+- evaluation truth는 제품 스키마와 일반 조회 API에서 제외한다.
+
+## 3. Canonical 원천 스키마
+
+### 3.1 Asset
+
+출처: `canonical/dataset/asset_master.csv` · 상태: `확정`
+
+| 필드 | 타입 | 필수 | 설명 | 사용 화면 |
+|---|---|:---:|---|---|
+| `asset_id` | string | Y | 설비 고유 ID | 전체 |
+| `asset_type` | enum | Y | `compressor`, `cnc` | 전체 |
+| `site_id` | string | Y | 사이트 ID | 전체 |
+| `cell_id` | string | Y | 생산 셀 ID | 전체 |
+
+`display_name`, `is_active`, `assigned_engineer`는 원천 필드가 아니다.
+
+### 3.2 AssetRelation
+
+출처: `canonical/dataset/asset_relation.csv` · 상태: `확정`
+
+| 필드 | 타입 | 필수 | 설명 | 사용 화면 |
+|---|---|:---:|---|---|
+| `from_asset_id` | string | Y | 연결 시작 설비 | Objects |
+| `relation_type` | string | Y | 현재 `SUPPLIES_AIR_TO` 관계 | Objects |
+| `to_asset_id` | string | Y | 연결 대상 설비 | Objects |
+
+이 관계는 topology이며 고장 인과관계나 모델 feature가 아니다.
+
+### 3.3 CompressorObservation
+
+출처: `canonical/dataset/compressor_sensor_observation.csv` · 상태: `확정`
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `observed_at` | datetime | Y | 관측 시각 |
+| `asset_id` | string | Y | 압축기 ID |
+| `site_id` | string | Y | 사이트 ID |
+| `cell_id` | string | Y | 생산 셀 ID |
+| `is_operating` | boolean | Y | 가동 여부 |
+| `operating_state` | string | Y | 운전 상태 |
+| `voltage_raw` | number | Y | 전압 관측값 |
+| `rotation_raw` | number | Y | 회전 관측값 |
+| `pressure_raw` | number | Y | 압력 관측값 |
+| `vibration_raw` | number | Y | 진동 관측값 |
+| `relative_vibration_z` | number | Y | 자산 기준 상대 진동 Z 값 |
+| `relative_vibration_zone` | string | Y | 상대 진동 구간 |
+| `generator_version` | string | Y | 데이터 생성기 버전 |
+
+### 3.4 CncObservation
+
+출처: `canonical/dataset/cnc_sensor_observation.csv` · 상태: `확정`
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `observed_at` | datetime | Y | 관측 시각 |
+| `asset_id` | string | Y | CNC ID |
+| `site_id` | string | Y | 사이트 ID |
+| `cell_id` | string | Y | 생산 셀 ID |
+| `is_operating` | boolean | Y | 가동 여부 |
+| `operating_state` | string | Y | 운전 상태 |
+| `product_type` | string | Y | 가공 제품 유형 |
+| `air_temperature_k` | number | Y | 공기 온도(K) |
+| `process_temperature_k` | number | Y | 공정 온도(K) |
+| `rotational_speed_rpm` | number | Y | 회전 속도(RPM) |
+| `torque_nm` | number | Y | 토크(Nm) |
+| `tool_wear_min` | number | Y | 공구 누적 사용시간(분) |
+| `generator_version` | string | Y | 데이터 생성기 버전 |
+
+### 3.5 ProductionCycle
+
+출처: `canonical/dataset/cnc_production_cycle.csv` · 상태: `확정`
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `product_id` | string | Y | 제품 또는 작업 ID |
+| `cnc_asset_id` | string | Y | 작업 CNC ID |
+| `cycle_started_at` | datetime | Y | 작업 시작 시각 |
+| `cycle_completed_at` | datetime | Y | 작업 완료 시각 |
+| `product_type` | string | Y | 제품 유형 |
+| `cutting_minutes` | number | Y | 가공 시간(분) |
+| `tool_wear_increment_min` | number | Y | 공구 사용 증가량(분) |
+
+### 3.6 MaintenanceEvent
+
+출처: `canonical/dataset/maintenance_event.csv` · 상태: `확정`
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `maintenance_id` | string | Y | 정비 이벤트 ID |
+| `asset_id` | string | Y | 정비 대상 설비 ID |
+| `maintenance_type` | string | Y | 정비 종류 |
+| `started_at` | datetime | Y | 정비 시작 시각 |
+| `completed_at` | datetime | Y | 정비 완료 시각 |
+| `tool_replaced` | boolean | Y | 공구 교체 여부 |
+| `source_event_id` | string | N | 생성 근거 이벤트의 내부 추적 ID |
+
+`source_event_id`를 이용해 evaluation truth의 상세 내용을 일반 화면에 노출하지
+않는다.
+
+## 4. Result Artifact 스키마
+
+출처: `canonical/model_outputs/result_artifact.jsonl` · 상태: `확정`
+
+한 행은 자산 한 대의 최신 예측 결과다.
+
+| 필드 | 타입 | 필수 | 제약/설명 | 사용 화면 |
+|---|---|:---:|---|---|
+| `artifact_id` | string | Y | 결과 고유 ID | 내부 추적 |
+| `artifact_type` | string | Y | `predictive_maintenance_result` | 내부 추적 |
+| `schema_version` | string | Y | `result-artifact-v1.0` | 전체 |
+| `asset_id` | string | Y | 예측 대상 설비 | 전체 |
+| `asset_type` | enum | Y | `compressor`, `cnc` | 전체 |
+| `observed_at` | datetime | Y | 예측 기준 관측시각 | 전체 |
+| `prediction_horizon_hours` | integer | Y | 현재 24 | Objects, Report |
+| `prediction_task` | string | Y | `binary_failure_within_horizon` | Objects, Report |
+| `failure_probability` | number | Y | 0~1 | 전체 |
+| `predicted_failure_type` | enum | Y | `failure_risk`, `no_significant_risk` | 전체 |
+| `status_grade` | enum | Y | `normal`, `attention`, `warning`, `critical` | 전체 |
+| `confidence` | number | Y | 0~1 | Objects, Report |
+| `top_factors` | array | Y | 정확히 3개 | Objects, Report |
+| `recommended_action` | object | Y | 정책 권고 | 전체 |
+| `provenance` | object | Y | 데이터·모델·결과 출처 | 전체 |
+
+`predicted_failure_type`은 PWF, HDF, OSF, TWF 등의 고장 모드 분류 결과가 아니다.
+
+### 4.1 TopFactor
+
+| 필드 | 타입 | 필수 | 제약/설명 |
+|---|---|:---:|---|
+| `rank` | integer | Y | 1~3 |
+| `feature` | string | Y | 모델 파생 feature 이름 |
+| `feature_value` | number | Y | 자산 내부 정규화 값 |
+| `signed_contribution` | number | Y | 모델 logit에 대한 부호 있는 기여 |
+| `direction` | enum | Y | `risk_up`, `risk_down` |
+| `explanation_method` | string | Y | 현재 `linear_logit_contribution` |
+
+### 4.2 RecommendedAction
+
+| 필드 | 타입 | 필수 | 값 |
+|---|---|:---:|---|
+| `action` | enum | Y | `continue_monitoring`, `schedule_targeted_diagnostic_check`, `inspect_within_current_shift`, `immediate_inspection_and_stop_review` |
+| `priority` | enum | Y | `routine`, `medium`, `high`, `urgent` |
+
+권고는 자동 설비 정지 또는 자동 Work Order 실행 명령이 아니다.
+
+### 4.3 Provenance
+
+| 필드 | 타입 | 필수 | 제약/설명 |
+|---|---|:---:|---|
+| `dataset_version` | string | Y | `canonical-ai4i-physics-v3.1` |
+| `model_version` | string | Y | `independent-logreg-v3.1` |
+| `prediction_id` | string | Y | 내부 예측 결과 연결 ID |
+| `source_type` | string | Y | `derived_result_artifact` |
+| `canonical_source_mutated` | boolean | Y | 항상 `false` |
+
+## 5. API/ViewModel 공통 스키마
+
+이 절의 객체는 제품 계층 계약안이며 상태는 `제안`이다. 팀원1·3 합의 후 API
+명세와 TypeScript/Pydantic 타입에 동일하게 반영한다.
+
+### 5.1 AssetPredictionSummary
+
+Overview와 Objects 목록의 공통 행이다.
+
+| 필드 | 타입 | 필수 | 출처 | 상태 |
+|---|---|:---:|---|---|
+| `asset_id` | string | Y | Asset/Artifact | 확정 |
+| `asset_type` | enum | Y | Asset/Artifact | 확정 |
+| `site_id` | string | Y | Asset 결합 | 파생 |
+| `cell_id` | string | Y | Asset 결합 | 파생 |
+| `observed_at` | datetime | Y | Artifact | 확정 |
+| `is_operating` | boolean | Y | 최신 Observation | 파생 |
+| `operating_state` | string | Y | 최신 Observation | 파생 |
+| `failure_probability` | number | Y | Artifact | 확정 |
+| `predicted_failure_type` | enum | Y | Artifact | 확정 |
+| `status_grade` | enum | Y | Artifact | 확정 |
+| `confidence` | number | Y | Artifact | 확정 |
+| `recommended_action` | RecommendedAction | Y | Artifact | 확정 |
+| `dataset_version` | string | Y | Artifact provenance | 파생 |
+| `model_version` | string | Y | Artifact provenance | 파생 |
+| `artifact_schema_version` | string | Y | Artifact | 파생 |
+
+### 5.2 AssetDetail
+
+| 필드 | 타입 | 필수 | 출처 | 상태 |
+|---|---|:---:|---|---|
+| `asset` | Asset | Y | Canonical | 확정 |
+| `latest_observation` | CompressorObservation 또는 CncObservation | N | Canonical 최신행 | 파생 |
+| `prediction` | ResultArtifact | N | 최신 Artifact | 파생 |
+| `relations` | AssetRelation[] | Y | Canonical | 확정 |
+| `maintenance_events` | MaintenanceEvent[] | Y | Canonical | 확정 |
+| `data_status` | DataStatus | Y | API | 제안 |
+
+예측 또는 관측이 없으면 객체를 임의 값으로 채우지 않고 null과 `data_status`로
+이유를 전달한다.
+
+### 5.3 DataStatus
+
+| 필드 | 타입 | 필수 | 설명 | 상태 |
+|---|---|:---:|---|---|
+| `source` | enum | Y | `canonical`, `fallback` 후보 | 제안 |
+| `is_stale` | boolean | Y | stale 기준은 팀원3 합의 필요 | 제안 |
+| `last_updated_at` | datetime | N | 응답 생성 또는 적재 기준시각 | 제안 |
+| `warnings` | string[] | Y | 데이터 누락·fallback·신선도 경고 | 제안 |
+
+### 5.4 OverviewSummary
+
+| 필드 | 타입 | 필수 | 계산 기준 | 상태 |
+|---|---|:---:|---|---|
+| `as_of` | datetime | Y | 동일 Artifact snapshot 기준시각 | 제안 |
+| `total_asset_count` | integer | Y | Asset 수 | 파생 |
+| `operating_asset_count` | integer | Y | 최신 Observation 가동값 | 파생 |
+| `non_operating_asset_count` | integer | Y | 전체-가동 | 파생 |
+| `status_counts` | object | Y | 네 위험 등급별 자산 수 | 파생 |
+| `asset_type_counts` | object | Y | Compressor/CNC별 자산 수 | 파생 |
+| `top_risk_assets` | AssetPredictionSummary[] | Y | 등급 우선, 확률 내림차순 | 파생 |
+| `production_cycle_count` | integer | Y | 요청 기간 내 작업 수 | 파생 |
+| `maintenance_event_count` | integer | Y | 요청 기간 내 정비 수 | 파생 |
+| `data_status` | DataStatus | Y | API 상태 | 제안 |
+
+## 6. 화면 표시 매핑
+
+| 원본 값 | 한국어 표시 | 비고 |
+|---|---|---|
+| `normal` | 정상 | 색상만으로 표현하지 않음 |
+| `attention` | 관심 | `주의`와 혼용하지 않음 |
+| `warning` | 경고 | enum 원문 보존 |
+| `critical` | 심각 | `위험`과 혼용하지 않음 |
+| `risk_up` | 위험 증가 요인 | 확정 원인 표현 금지 |
+| `risk_down` | 위험 감소 요인 | 보호 효과 단정 금지 |
+
+표시 문구가 바뀌더라도 API enum은 변경하지 않는다.
+
+## 7. MVP 제외 스키마
+
+다음은 현재 Canonical에 없고 멘토링 기준상 MVP 이후 범위다.
+
+- 사용자·로그인·권한·담당 범위
+- 알림
+- 점검 요청과 점검 결과 입력
+- 정비 요청·승인·예정 일정
+- 자동 Work Order와 설비 제어
+- 모델 재학습 요청
+
+프로토타입의 Decision/Note를 MVP에 유지할지는 팀 합의 전까지 별도 계약으로
+보류한다.
+
+## 8. 담당자 합의 필요 사항
+
+| ID | 담당 | 결정 사항 |
+|---|---|---|
+| SCH-DEC-01 | 팀원1 | 화면의 최종 한국어 필드명과 상태 문구 |
+| SCH-DEC-02 | 팀원1·3 | 목록 pagination과 필터 응답 구조 |
+| SCH-DEC-03 | 팀원3 | 위험등급 임계값과 산출 책임 |
+| SCH-DEC-04 | 팀원3 | latest snapshot 기준시각과 stale 판정 기준 |
+| SCH-DEC-05 | 팀원3 | Canonical 장애 시 fallback 허용 여부와 표시 |
+| SCH-DEC-06 | 팀원3 | API 응답에서 provenance를 중첩 유지할지 평탄화할지 |
+| SCH-DEC-07 | 팀원4 | LLM 입력에 전달할 Summary/Detail 범위 |
+| SCH-DEC-08 | 팀원4 | 보고서 출력 JSON과 근거 참조 방식 |
+
