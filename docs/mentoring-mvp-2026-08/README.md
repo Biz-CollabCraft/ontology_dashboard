@@ -18,6 +18,7 @@
 11. [Week 2 MVP 설계 명세서](./week2-mvp-design-specification.md)
 12. [Week 2 추적성 매트릭스](./week2-traceability-matrix.md)
 13. [개인 프로토타입 문서 이관 매핑](./week2-prototype-doc-migration-map.md)
+14. [개인 프로토타입 원문 보존본](./prototype-source/)
 
 ## 문서 상태
 
@@ -36,6 +37,7 @@
 | `week2-mvp-design-specification.md` | 초안 | 시스템·데이터·화면·역할·구현 흐름 |
 | `week2-traceability-matrix.md` | 초안 | 요구사항부터 테스트까지 연결 |
 | `week2-prototype-doc-migration-map.md` | 이관 기록 | 개인 프로토타입 상세 문서와 팀 기준 문서의 대응 관계 |
+| `prototype-source/` | 원문 보존 | 개인 레포의 Week 2 상세 문서 4종을 내용 변경 없이 보존 |
 
 ## 기준 자료
 
