@@ -16,6 +16,7 @@
 9. [Week 2 API 명세서](./week2-api-specification.md)
 10. [Week 2 MVP 설계 명세서](./week2-mvp-design-specification.md)
 11. [Week 2 추적성 매트릭스](./week2-traceability-matrix.md)
+12. [Week 2 MVP 실행 소스 이관 기록](./week2-frontend-implementation-import.md)
 
 ## 문서 상태
 
@@ -32,6 +33,7 @@
 | `week2-api-specification.md` | 초안 | 팀원3 조회·집계 API와 팀원4 리포트 API 계약 |
 | `week2-mvp-design-specification.md` | 초안 | 시스템·데이터·화면·역할·구현 흐름 |
 | `week2-traceability-matrix.md` | 초안 | 요구사항부터 테스트까지 연결 |
+| `week2-frontend-implementation-import.md` | 이관 기준 | 개인 프로토타입에서 팀 저장소로 승격한 실행 소스와 화면 캡처의 provenance |
 
 ## 기준 자료
 
@@ -39,10 +41,11 @@
 - Model: `independent-logreg-v3.1`
 - Result Artifact: `result-artifact-v1.0`
 - 제품 문서 저장소: `Biz-CollabCraft/ontology_dashboard`
-- 비교 프로토타입: `oosuhada/agentic-ontology-dashboard`
+- 원본 프로토타입: `oosuhada/agentic-ontology-dashboard`
+- 팀 실행 소스 기준: 원본 프로토타입 커밋 `37c1251`을 이 저장소로 이관한 버전
 
-비교 프로토타입은 기능과 계약의 참고 구현이며 이 저장소의 확정 요구사항 또는
-Git 기준 브랜치가 아니다.
+원본 프로토타입은 이관 provenance와 선행 실험 참고용으로 유지한다. Week 2 팀 단위
+프론트엔드/API 수정은 이 저장소의 이관된 실행 소스를 기준으로 진행한다.
 
 ## 공유하지 않는 자료
 

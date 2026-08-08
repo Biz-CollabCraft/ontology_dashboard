@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/ontology-core.schema.json",
+  "title": "Ontology Dashboard Core Contracts",
+  "$defs": {
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "object_type", "workspace_id", "properties", "source_refs", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "object_type": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string", "minLength": 1 },
+        "properties": { "type": "object" },
+        "source_refs": { "type": "array", "items": { "type": "string" } },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "link_type", "source_object_id", "target_object_id", "workspace_id", "properties", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "link_type": { "type": "string", "minLength": 1 },
+        "source_object_id": { "type": "string", "minLength": 1 },
+        "target_object_id": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string", "minLength": 1 },
+        "properties": { "type": "object" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "actionInvocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_type", "object_id", "workspace_id", "parameters", "idempotency_key"],
+      "properties": {
+        "action_type": { "type": "string", "minLength": 1 },
+        "object_id": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string", "minLength": 1 },
+        "parameters": { "type": "object" },
+        "idempotency_key": { "type": "string", "minLength": 8, "maxLength": 200 }
+      }
+    },
+    "actionExecutionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invocation_id", "action_type", "object_id", "workspace_id", "state", "replayed", "result", "audit_id", "created_at", "completed_at"],
+      "properties": {
+        "invocation_id": { "type": "string", "minLength": 1 },
+        "action_type": { "type": "string", "minLength": 1 },
+        "object_id": { "type": "string", "minLength": 1 },
+        "workspace_id": { "type": "string", "minLength": 1 },
+        "state": { "const": "succeeded" },
+        "replayed": { "type": "boolean" },
+        "result": { "type": "object" },
+        "audit_id": { "type": "string", "minLength": 1 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "traversal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "nodes", "edges", "direction", "depth"],
+      "properties": {
+        "root": { "$ref": "#/$defs/object" },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/object" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/link" } },
+        "direction": { "enum": ["outgoing", "incoming", "both"] },
+        "depth": { "type": "integer", "minimum": 1, "maximum": 5 }
+      }
+    },
+    "evidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "evidence_type", "object_id", "source_refs", "generated_at", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "evidence_type": { "type": "string", "minLength": 1 },
+        "object_id": { "type": "string", "minLength": 1 },
+        "source_refs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/object" },
+    { "$ref": "#/$defs/link" },
+    { "$ref": "#/$defs/actionInvocation" },
+    { "$ref": "#/$defs/actionExecutionResult" },
+    { "$ref": "#/$defs/traversal" },
+    { "$ref": "#/$defs/evidenceReference" }
+  ]
+}
