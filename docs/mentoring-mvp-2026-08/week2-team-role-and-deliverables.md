@@ -53,7 +53,7 @@ Result Artifact / Evidence
 
 | 담당 | 역할 | Week 2 핵심 책임 | 완료 산출물 |
 |---|---|---|---|
-| 우수 | 팀원1 · Frontend | MVP 화면과 공통 결과 계약 연결 | Overview·Objects·Operations·Executive Report 화면, 캡처, 데모 흐름, API 연결 상태 |
+| 우수 | 팀원1 · Frontend | MVP 화면과 공통 결과 계약 연결 | Overview·Objects·Operations·Event Executive Brief 화면, 캡처, 데모 흐름, API 연결 상태 |
 | 광우 | 팀원2 · Contract/Docs | 요구사항·기능·스키마·API·리포트 계약 고정 | 요구사항·기능·API·스키마·리포트·MVP 설계 문서 |
 | 성민 | 팀원3 · Prediction/Data | 결과 조회 API와 데이터·예측 파이프라인 재현성 | Predictions 목록/상세 조회, Result Artifact 생성, manifest/checksum, 재현성 확인 |
 | 호범 | 팀원4 · Report/LLM | 검증된 결과를 근거 기반 보고서로 변환 | Event Report 입력/출력, deterministic 우선, LLM 보조, 예시 결과 |
@@ -98,7 +98,9 @@ Result Artifact / Evidence
 1. Overview
 2. Objects
 3. Operations
-4. Executive Report
+4. Event Executive Brief
+
+기간·필터 집계 기반 `Executive Report`는 현행 화면이 아니라 V2 Target으로 둔다.
 
 ### 최소 완료 조건
 
