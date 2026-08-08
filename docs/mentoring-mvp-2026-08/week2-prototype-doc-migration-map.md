@@ -73,4 +73,3 @@ docs/mentoring-mvp-2026-08/prototype-source/
 - 개인 프로토타입 상세 명세가 어느 팀 문서로 수렴했는지 매핑 기록
 - 개인 프로토타입 Week 2 상세 문서 4종은 `prototype-source/`에 원문 그대로 보존
 - 데이터 생성 코드는 `Biz-CollabCraft/gen_data`가 담당하되 계약 원본은 이 저장소에 유지
-

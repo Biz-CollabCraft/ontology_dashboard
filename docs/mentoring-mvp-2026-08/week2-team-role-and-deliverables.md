@@ -251,4 +251,3 @@ Pipeline
 
 같은 계약 문서를 두 저장소에 복제하지 않는다. `gen_data`는
 `ontology_dashboard`의 공통 계약을 참조하고 실제 생성 코드와 결과 예시만 관리한다.
-
