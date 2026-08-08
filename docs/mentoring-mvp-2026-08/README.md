@@ -5,22 +5,25 @@
 
 ## 읽는 순서
 
-1. [Canonical V3.1 필드 검증표](./v3.1-field-validation.md)
-2. [프로토타입과 멘토링 MVP 차이 분석](./prototype-mvp-gap-analysis.md)
-3. [Week 2 요구사항 명세 초안](./week2-requirements-specification.md)
-4. [Week 2 공통 스키마 정의서](./week2-schema-definition.md)
-5. [Week 2 계약 검토 체크리스트](./week2-contract-review-checklist.md)
-6. [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)
-7. [Week 2 리포트 정의서](./week2-report-specification.md)
-8. [Week 2 기능 명세서](./week2-functional-specification.md)
-9. [Week 2 API 명세서](./week2-api-specification.md)
-10. [Week 2 MVP 설계 명세서](./week2-mvp-design-specification.md)
-11. [Week 2 추적성 매트릭스](./week2-traceability-matrix.md)
+1. [Week 2 역할 분담 및 산출물 정의](./week2-team-role-and-deliverables.md)
+2. [Canonical V3.1 필드 검증표](./v3.1-field-validation.md)
+3. [프로토타입과 멘토링 MVP 차이 분석](./prototype-mvp-gap-analysis.md)
+4. [Week 2 요구사항 명세 초안](./week2-requirements-specification.md)
+5. [Week 2 공통 스키마 정의서](./week2-schema-definition.md)
+6. [Week 2 계약 검토 체크리스트](./week2-contract-review-checklist.md)
+7. [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)
+8. [Week 2 리포트 정의서](./week2-report-specification.md)
+9. [Week 2 기능 명세서](./week2-functional-specification.md)
+10. [Week 2 API 명세서](./week2-api-specification.md)
+11. [Week 2 MVP 설계 명세서](./week2-mvp-design-specification.md)
+12. [Week 2 추적성 매트릭스](./week2-traceability-matrix.md)
+13. [개인 프로토타입 문서 이관 매핑](./week2-prototype-doc-migration-map.md)
 
 ## 문서 상태
 
 | 문서 | 상태 | 용도 |
 |---|---|---|
+| `week2-team-role-and-deliverables.md` | 실행 기준 | 팀원별 책임·완료조건·병렬 작업 원칙 |
 | `v3.1-field-validation.md` | 검증 완료 | 공식 V3.1과 기존 V1.1/V1.3 초안의 필드 차이 근거 |
 | `prototype-mvp-gap-analysis.md` | Current/Target 정리 | 현행·목표·Gap과 Week 2 반영 여부 판단 |
 | `week2-requirements-specification.md` | 초안 | 검증된 범위로 작성한 MVP 요구사항 |
@@ -32,6 +35,7 @@
 | `week2-api-specification.md` | 초안 | 팀원3 조회·집계 API와 팀원4 리포트 API 계약 |
 | `week2-mvp-design-specification.md` | 초안 | 시스템·데이터·화면·역할·구현 흐름 |
 | `week2-traceability-matrix.md` | 초안 | 요구사항부터 테스트까지 연결 |
+| `week2-prototype-doc-migration-map.md` | 이관 기록 | 개인 프로토타입 상세 문서와 팀 기준 문서의 대응 관계 |
 
 ## 기준 자료
 
