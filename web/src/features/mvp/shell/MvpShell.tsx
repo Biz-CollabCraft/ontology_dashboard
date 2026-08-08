@@ -15,7 +15,7 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
   { id: "overview", label: "Overview", description: "위험 현황과 우선순위", icon: LayoutDashboard },
   { id: "objects", label: "Objects", description: "설비 목록과 근거", icon: Boxes },
   { id: "operations", label: "Operations", description: "점검·판단 업무", icon: ClipboardCheck },
-  { id: "executive-report", label: "Executive Report", description: "임원 보고와 출력", icon: FileText },
+  { id: "executive-report", label: "Event Executive Brief", description: "선택 Event 보고와 출력", icon: FileText },
 ];
 
 export function MvpShell({

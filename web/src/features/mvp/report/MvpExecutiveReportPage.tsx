@@ -32,7 +32,7 @@ export function MvpExecutiveReportPage({
   if (!selectedEvent) {
     return <div className="mvp-page" data-testid="mvp-executive-report"><MvpState kind="empty" title="보고 대상 Event를 선택하세요" detail="Overview 또는 Operations에서 Event를 선택하면 동일 수치와 대응 상태로 보고서를 구성합니다." /></div>;
   }
-  if (detailLoading) return <div className="mvp-page" data-testid="mvp-executive-report"><MvpState kind="loading" title="Executive Report 준비 중" detail="LLM Report와 검증된 Template Fallback을 동시에 확인하고 있습니다." /></div>;
+  if (detailLoading) return <div className="mvp-page" data-testid="mvp-executive-report"><MvpState kind="loading" title="Event Executive Brief 준비 중" detail="선택 Event의 LLM Report와 검증된 Template Fallback을 동시에 확인하고 있습니다." /></div>;
   if (detailError) return <div className="mvp-page" data-testid="mvp-executive-report"><MvpState kind="error" title="보고서를 준비하지 못했습니다" detail={detailError} onRetry={onRetryDetail} /></div>;
   if (!detail) return <div className="mvp-page" data-testid="mvp-executive-report"><MvpState kind="empty" title="보고서 데이터가 없습니다" detail="선택 Event의 Evidence와 Fallback Template을 확인할 수 없습니다." /></div>;
 
@@ -55,7 +55,7 @@ export function MvpExecutiveReportPage({
       <article className="mvp-report-document">
         <header className="mvp-report-cover">
           <div className="mvp-report-cover-brand"><span>ONTOLOGY DASHBOARD</span><strong>Predictive Maintenance Executive Brief</strong></div>
-          <div className="mvp-report-cover-title"><span>MANUFACTURING RELIABILITY · EXECUTIVE REPORT</span><h1>{report.headline}</h1><p>{report.summary}</p></div>
+          <div className="mvp-report-cover-title"><span>MANUFACTURING RELIABILITY · EVENT EXECUTIVE BRIEF</span><h1>{report.headline}</h1><p>{report.summary}</p></div>
           <dl className="mvp-report-document-meta">
             <div><dt>문서 번호</dt><dd>{report.reportId}</dd></div>
             <div><dt>Revision</dt><dd>{report.revision || "Generated baseline"}</dd></div>

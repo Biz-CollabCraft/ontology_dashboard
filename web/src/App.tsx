@@ -13,8 +13,10 @@ import {
   matchOntologyPath,
   matchProjectDashboardPath,
   matchProjectHomePath,
+  mvpProjectPath,
   navigate,
   loginPath,
+  week2MvpRedirectPath,
   usePathname,
 } from "./routing";
 import { ApiError, getProject, getProjectWorkspaces } from "./api";
@@ -24,8 +26,8 @@ import { PendingPage } from "./features/auth/PendingPage";
 import { RegisterPage } from "./features/auth/RegisterPage";
 import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
-import { FoundryAppShell } from "./ui/foundry/FoundryAppShell";
 import { WorkbenchState } from "./ui/foundry/WorkbenchState";
+import { featureFlags } from "./featureFlags";
 
 const AdminApp = lazy(() =>
   import("./features/admin/AdminApp").then((module) => ({ default: module.AdminApp })),
@@ -46,6 +48,9 @@ const CommercialV4App = lazy(() =>
   import("./features/commercial-v4/CommercialV4App").then((module) => ({ default: module.CommercialV4App })),
 );
 const MvpApplication = lazy(() => import("./features/mvp/MvpApplication"));
+const FoundryAppShell = lazy(() =>
+  import("./ui/foundry/FoundryAppShell").then((module) => ({ default: module.FoundryAppShell })),
+);
 const ProjectHomePage = lazy(() =>
   import("./features/projects/ProjectHomePage").then((module) => ({ default: module.ProjectHomePage })),
 );
@@ -223,6 +228,24 @@ function AppRouter() {
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
 
+  const mvpProjectRoute = matchMvpProjectPath(pathname);
+  if (mvpProjectRoute) {
+    return (
+      <ProjectPreviewRoute projectId={mvpProjectRoute.projectId}>
+        <MvpApplication projectId={mvpProjectRoute.projectId} />
+      </ProjectPreviewRoute>
+    );
+  }
+
+  const defaultProjectId = user.active_project_id ?? user.project_scopes[0] ?? null;
+  const defaultPath = featureFlags.week2MvpOnly && defaultProjectId
+    ? mvpProjectPath(defaultProjectId)
+    : user.default_path;
+  if (featureFlags.week2MvpOnly) {
+    const mvpRedirect = week2MvpRedirectPath(pathname, defaultProjectId);
+    if (mvpRedirect) return <Redirect to={mvpRedirect} />;
+  }
+
   const analysisId = matchAnalysisPath(pathname);
   if (analysisId) return <ManufacturingApp initialWorkspaceView="analysis" analysisId={analysisId} />;
 
@@ -258,15 +281,6 @@ function AppRouter() {
     return (
       <ProjectPreviewRoute projectId={blueprintV4ProjectRoute.projectId}>
         <CommercialV4App projectId={blueprintV4ProjectRoute.projectId} />
-      </ProjectPreviewRoute>
-    );
-  }
-
-  const mvpProjectRoute = matchMvpProjectPath(pathname);
-  if (mvpProjectRoute) {
-    return (
-      <ProjectPreviewRoute projectId={mvpProjectRoute.projectId}>
-        <MvpApplication projectId={mvpProjectRoute.projectId} />
       </ProjectPreviewRoute>
     );
   }
@@ -379,10 +393,7 @@ function AppRouter() {
   }
 
   if (pathname === "/app" || pathname.startsWith("/app/")) return <ManufacturingApp />;
-  if (pathname === "/login" || pathname === "/register" || pathname === "/pending" || pathname === "/") {
-    return <Redirect to={user.default_path} />;
-  }
-  return <Redirect to={user.default_path} />;
+  return <Redirect to={defaultPath} />;
 }
 
 export default function App() {

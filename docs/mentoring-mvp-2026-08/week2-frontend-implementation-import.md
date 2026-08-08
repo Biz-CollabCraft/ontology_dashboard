@@ -15,7 +15,7 @@
 
 ## 이관한 실행 소스
 
-- `web/`: React/Vite 프론트엔드, Overview·Objects·Operations·Executive Report 포함
+- `web/`: React/Vite 프론트엔드, Overview·Objects·Operations·Event Executive Brief 포함
 - `api/`: FastAPI 백엔드, predictive-maintenance runtime과 Event/Report API 포함
 - `ml/`: 모델링/예측 보조 코드
 - `schemas/`: Result Artifact, Evidence, Dashboard 등 공통 계약
@@ -36,7 +36,7 @@ PR에서 수렴한다.
 1. [Overview desktop](./assets/week2-mvp-frontend-convergence/01-overview-desktop.png)
 2. [Objects inspector desktop](./assets/week2-mvp-frontend-convergence/02-objects-inspector-desktop.png)
 3. [Operations desktop](./assets/week2-mvp-frontend-convergence/03-operations-desktop.png)
-4. [Executive Report A4](./assets/week2-mvp-frontend-convergence/04-executive-report-a4.png)
+4. [Event Executive Brief A4](./assets/week2-mvp-frontend-convergence/04-executive-report-a4.png)
 5. [Overview mobile](./assets/week2-mvp-frontend-convergence/05-overview-mobile.png)
 
 ## 코드상 주요 화면 위치
@@ -61,3 +61,14 @@ Canonical V3.1의 원본/생성 데이터와 대용량 산출물은 역할상
 이관 이후 Week 2 MVP 프론트엔드/API 수정은 팀 저장소에서 브랜치를 생성해 PR로
 반영한다. 개인 프로토타입에 추가된 변경이 필요하면 커밋 단위로 비교한 뒤 선택적으로
 포팅하고, 두 저장소를 동시에 독립적으로 수정해 서로 다른 최신본을 만들지 않는다.
+
+### 공식 Week 2 제품 Surface
+
+- 공식 진입점: `/app/projects/{project_id}/mvp`
+- 공식 화면: Overview, Objects, Operations, Event Executive Brief
+- 기본 설정: `VITE_WEEK2_MVP_ONLY=true`
+- Dataset, Governance, Modeling, Agent, Analysis, Ontology 전체 Workbench와
+  Blueprint/Commercial 화면은 import 자산으로 보존하되 Week 2 공식 Surface에서는
+  노출하지 않는다.
+- 후속 개발이나 비교 검증이 필요할 때만 `VITE_WEEK2_MVP_ONLY=false`로 기존 route를
+  명시적으로 다시 활성화한다.

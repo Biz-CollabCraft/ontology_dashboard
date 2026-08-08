@@ -32,6 +32,9 @@
 | Report 요청 | `ReportRequest(role, locale, use_llm)` |
 | Report 출력 | `schemas/report.schema.json`의 role-aware grounded report |
 | Report fallback | LLM → deterministic → 최종 template 표시 흐름 |
+| 공식 Week 2 진입점 | `/app/projects/{project_id}/mvp` |
+| 확장 화면 노출 | 기본 비노출. `VITE_WEEK2_MVP_ONLY=false`일 때만 기존 Workbench route 사용 |
+| 현행 보고서 단위 | 선택 Event 단위 `Event Executive Brief`; 기간 집계형 Executive Report는 V2 Target |
 
 ## 3. 현행 핵심 API
 
@@ -68,3 +71,6 @@ Canonical Predictive Maintenance base path:
 - 현행과 다른 내용에는 `변경 제안`을 표시한다.
 - 변경 제안을 채택하기 전에는 실제 API 경로와 JSON schema를 대체하지 않는다.
 - 팀 결정에는 결정자, 결정일, 코드 영향과 전환 방법을 기록한다.
+- Week 2 기준선에서는 `/mvp` 외 Dataset, Governance, Modeling, Agent, Analysis,
+  Blueprint/Commercial 화면을 공식 제품 Surface로 취급하지 않는다. 코드는 후속 개발을
+  위해 보존하되 기본 런타임에서는 `/mvp`로 수렴시킨다.

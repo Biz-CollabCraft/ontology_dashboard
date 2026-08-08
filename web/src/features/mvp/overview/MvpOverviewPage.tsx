@@ -43,7 +43,7 @@ export function MvpOverviewPage({
       <section className="mvp-overview-actions" aria-label="주요 이동">
         <button type="button" className="mvp-button primary" onClick={() => topAssets[0] && onOpenAsset(topAssets[0].assetId, topAssets[0].eventId)} disabled={!topAssets.length}><Boxes size={15} />우선 설비 열기</button>
         <button type="button" className="mvp-button secondary" onClick={() => pendingEvents[0] && onOpenEvent(pendingEvents[0].eventId, pendingEvents[0].assetId)} disabled={!pendingEvents.length}><ClipboardCheck size={15} />판단 업무 열기</button>
-        <button type="button" className="mvp-button secondary" onClick={() => onOpenReport(pendingEvents[0]?.eventId ?? null, pendingEvents[0]?.assetId ?? null)}><FileText size={15} />Executive Report</button>
+        <button type="button" className="mvp-button secondary" onClick={() => onOpenReport(pendingEvents[0]?.eventId ?? null, pendingEvents[0]?.assetId ?? null)}><FileText size={15} />Event Executive Brief</button>
         <button type="button" className="mvp-button ghost" onClick={onRefresh}><RefreshCw size={15} />새로고침</button>
       </section>
 

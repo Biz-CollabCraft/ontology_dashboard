@@ -5,6 +5,7 @@ function envFlag(name: string, defaultValue: boolean): boolean {
 }
 
 export const featureFlags = {
+  week2MvpOnly: envFlag("VITE_WEEK2_MVP_ONLY", true),
   ontologyWorkbench: envFlag("VITE_FEATURE_ONTOLOGY_WORKBENCH", true),
   datasetCatalog: envFlag("VITE_FEATURE_DATASET_CATALOG", true),
   governanceWorkbench: envFlag("VITE_FEATURE_GOVERNANCE_WORKBENCH", true),

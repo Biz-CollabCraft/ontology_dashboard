@@ -2,7 +2,7 @@
 
 ## 1. 목적과 상태
 
-이 문서는 Executive Report 화면과 LLM 리포트 생성 API가 사용하는 입력,
+이 문서는 현행 `Event Executive Brief` 화면과 LLM 리포트 생성 API가 사용하는 입력,
 출력, 문장 규칙, 근거와 실패 대체 계약을 정의한다.
 
 - 문서 상태: `초안 — 현행 Report 계약과 V2 변경 제안 분리`
@@ -72,11 +72,12 @@ Canonical V3.1
 → ReportInput
 → LLM / deterministic / template generator
 → ReportOutput 검증
-→ Executive Report 화면
+→ Event Executive Brief 화면
 ```
 
 Week 2는 Event Evidence 기반 `mock ReportInput → deterministic ReportOutput`을
-우선 검증한다. 기간 기반 Executive Report는 Target으로 유지하고 추가 집계 API가
+우선 검증한다. 현행 화면 명칭은 계약 단위를 드러내도록 `Event Executive Brief`로
+고정한다. 기간 기반 Executive Report는 Target으로 유지하고 추가 집계 API가
 필요하면 후속 처리한다. LLM은 이후에도 입력 데이터를 수정하지 않고 검증된 사실을
 문장으로 변환하는 역할만 수행한다.
 

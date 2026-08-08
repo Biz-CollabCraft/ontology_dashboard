@@ -108,6 +108,13 @@ export function matchMvpProjectPath(pathname: string): { projectId: string } | n
   return match ? { projectId: decodeURIComponent(match[1]) } : null;
 }
 
+export function week2MvpRedirectPath(pathname: string, fallbackProjectId?: string | null): string | null {
+  if (matchMvpProjectPath(pathname) || !pathname.startsWith("/app")) return null;
+  const projectMatch = pathname.match(/^\/app\/projects\/([^/]+)/);
+  const projectId = projectMatch ? decodeURIComponent(projectMatch[1]) : fallbackProjectId;
+  return projectId ? mvpProjectPath(projectId) : null;
+}
+
 export function loginPath(returnTo?: string) {
   if (!returnTo) return "/login";
   const params = new URLSearchParams({ returnTo });

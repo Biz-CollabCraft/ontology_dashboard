@@ -154,7 +154,7 @@ export function MvpOperationsPage({
                 </>
               ) : null}
               {message ? <div className={`mvp-action-message is-${message.kind}`} role="status"><strong>{message.kind === "success" ? "저장 완료" : "저장 실패"}</strong><span>{message.text}</span></div> : null}
-              <button type="button" className="mvp-report-bridge" onClick={() => onOpenReport(selectedEvent)}><div><FileText size={18} /><span>Executive Report 반영</span><strong>동일 Event의 최신 위험·대응 상태로 보고서를 확인합니다.</strong></div><ArrowRight size={17} /></button>
+              <button type="button" className="mvp-report-bridge" onClick={() => onOpenReport(selectedEvent)}><div><FileText size={18} /><span>Event Executive Brief 반영</span><strong>동일 Event의 최신 위험·대응 상태로 보고서를 확인합니다.</strong></div><ArrowRight size={17} /></button>
             </>
           )}
         </section>
