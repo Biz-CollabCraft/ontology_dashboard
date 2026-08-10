@@ -13,7 +13,7 @@ from app.report import router as report_router
 from app.dashboard import router as dashboard_router
 
 app = FastAPI(
-    title="CodeMap Backend API",
+    title="Ontology Dashboard Backend API",
     description="PdM 설비 예지보전 백엔드 API 서비스",
     version="1.0.0",
 )
