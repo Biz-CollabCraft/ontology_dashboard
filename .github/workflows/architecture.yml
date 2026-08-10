@@ -39,12 +39,16 @@ jobs:
           uvicorn app.main:app --host 127.0.0.1 --port 18000 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
+          success=0
           for attempt in {1..20}; do
-            if curl --fail --silent http://127.0.0.1:18000/health | tee /tmp/health.json; then
+            if curl --fail --silent --output /tmp/health.json http://127.0.0.1:18000/health; then
+              cat /tmp/health.json
+              success=1
               break
             fi
             sleep 0.5
           done
+          test "$success" -eq 1
           python -c "import json; payload=json.load(open('/tmp/health.json')); assert payload['status'] == 'ok', payload"
 
       - name: Set up Node
