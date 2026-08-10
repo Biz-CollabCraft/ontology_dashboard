@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/model-artifact.schema.json",
+  "title": "Ontology Dashboard Versioned Model Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_type",
+    "artifact_schema_version",
+    "model_id",
+    "model_version",
+    "dataset_version",
+    "feature_schema_version",
+    "created_at",
+    "training_config",
+    "metrics",
+    "checksum",
+    "provenance",
+    "compatibility",
+    "artifact_files"
+  ],
+  "properties": {
+    "artifact_type": {"const": "predictive_maintenance_model"},
+    "artifact_schema_version": {"const": "model-artifact-v1.0"},
+    "model_id": {"type": "string", "minLength": 1},
+    "model_version": {"type": "string", "minLength": 1},
+    "dataset_version": {"type": "string", "minLength": 1},
+    "feature_schema_version": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "training_config": {"type": "object"},
+    "metrics": {"type": "object"},
+    "checksum": {
+      "type": "object",
+      "required": ["algorithm", "files"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "files": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "provenance": {"type": "object"},
+    "compatibility": {"type": "object"},
+    "artifact_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "path", "sha256"],
+        "properties": {
+          "role": {"type": "string"},
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}

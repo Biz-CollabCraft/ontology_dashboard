@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from ontology_dashboard_manufacturing_ml.evidence import FixtureContextProvider
+from systems.backend.diagnosis.evidence import FixtureContextProvider
 
 
 class Project3HttpContextProvider:

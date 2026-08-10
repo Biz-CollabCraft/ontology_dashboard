@@ -7,8 +7,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from ontology_dashboard_manufacturing_ml import build_evidence_package, load_fixture
-from ontology_dashboard_manufacturing_ml.evidence import FixtureContextProvider
+from systems.backend.diagnosis import (
+    build_evidence_package,
+    build_product_result_artifact,
+    load_fixture,
+)
+from systems.backend.diagnosis.evidence import FixtureContextProvider
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.settings import database_location
 
@@ -94,7 +98,9 @@ class ManufacturingPredictiveMaintenanceService:
     def evidence_snapshot(self, event_id: str) -> dict[str, Any]:
         fixture = self._fixture(event_id)
         package = build_evidence_package(fixture, context_provider=self._context_provider(fixture))
+        result_artifact = build_product_result_artifact(fixture)
         package["lineage"]["project_id"] = self._fixture_project_id(fixture)
+        package["lineage"]["product_result_artifact"] = result_artifact
         if fixture.get("dataset_version"):
             package["lineage"]["dataset_version"] = str(fixture["dataset_version"])
         return package

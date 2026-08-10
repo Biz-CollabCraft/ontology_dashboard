@@ -32,7 +32,7 @@ if [[ ! -d web/node_modules ]]; then
   npm --prefix web install --no-audit --no-fund
 fi
 
-export PYTHONPATH="${ROOT_DIR}/api:${ROOT_DIR}/ml/src"
+export PYTHONPATH="${ROOT_DIR}:${ROOT_DIR}/api:${ROOT_DIR}/ml/src"
 export ONTOLOGY_DASHBOARD_DB="${ONTOLOGY_DASHBOARD_DB:-${FACTORY_SIGNAL_DB:-${ROOT_DIR}/data/local/ontology_dashboard.db}}"
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-http://${API_HOST}:${API_PORT}}"
 

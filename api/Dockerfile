@@ -31,6 +31,8 @@ RUN groupadd --gid 10001 ontology \
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
+COPY --chown=10001:10001 systems/__init__.py /app/systems/__init__.py
+COPY --chown=10001:10001 systems/backend /app/systems/backend
 COPY --chown=10001:10001 schemas /app/schemas
 COPY --chown=10001:10001 prompts /app/prompts
 COPY --chown=10001:10001 data/fixtures /app/data/fixtures
