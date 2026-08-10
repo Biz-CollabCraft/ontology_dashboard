@@ -2,24 +2,27 @@
 model_registry.py
 
 담당 기능:
-- 학습이 완료된 모델 아티팩트를 `model_store/` 디렉토리에 버전(version) 단위로 등록하고 명세를 관리한다.
-  independent-logreg-v3.1, lightgbm-v1 등의 모델 디렉토리 구조를 생성하고,
-  backend 시스템이 읽기 전용으로 바로 불러와 실시간 추론을 수행할 수 있도록 산출물 파일을 물리적으로 배치/보관한다.
+- 학습이 완료된 모델을 **versioned Model Artifact**로 publish하고 immutable 버전과 manifest를 관리한다.
+- publish manifest는 최소 `artifact_type`, `artifact_schema_version`, `model_id`, `model_version`,
+  `dataset_version`, `feature_schema_version`, `created_at`, `training_config`, `metrics`, `checksum`,
+  `provenance`, `compatibility`, `artifact_files` 메타데이터를 갖는 계약을 따른다.
+- `model_store/`는 local filesystem adapter의 예시일 뿐이며 Backend와의 시스템 경계 계약은 물리 경로가 아니라 manifest다.
 
 입력:
 - `TrainedModelArtifact` 및 모델 이름/버전 식별자 (`str`).
 
 출력:
-- `model_store/` 디렉토리 내에 등록 완료된 모델 저장 경로 (`Path`) 및 Registry 메타데이터.
+- publish 완료된 immutable Model Artifact 식별자/URI 및 manifest 메타데이터.
 
 의존 모듈:
 - model_training.py (학습 결과물 전달받음)
 
 예외/경계 상황:
-- 동일한 버전 명칭의 기존 모델 저장소를 부적절하게 덮어쓰려 하거나 디렉토리 생성이 불가하면 `ModelRegistryError`를 발생시킨다.
+- 동일 immutable version을 덮어쓰려 하거나 checksum/manifest 생성이 실패하거나 publish target에 기록할 수 없으면 `ModelRegistryError`를 발생시킨다.
+- incomplete artifact가 consumer에 노출되지 않도록 atomic publish 또는 동등한 보장을 사용한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md 3장 및 4장의 'model_store 디커플링' 핵심 원칙을 구현한다.
+- docs/architecture.md의 versioned Model Artifact contract와 path-independent publish 원칙을 구현한다.
 """
 
 

@@ -1,0 +1,71 @@
+name: architecture
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feat/systems-scaffolding
+
+jobs:
+  architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Static architecture rules
+        run: python systems/verify_architecture.py
+
+      - name: Generator import smoke
+        working-directory: systems/generator
+        run: python -c "import extraction; import ontology_mapping; import topology; import feature; import model; import common"
+
+      - name: Install backend dependencies
+        working-directory: systems/backend
+        run: pip install -r requirements.txt
+
+      - name: Backend import and health
+        working-directory: systems/backend
+        run: |
+          python -c "from app.main import app; assert any(getattr(route, 'path', None) == '/health' for route in app.routes)"
+          uvicorn app.main:app --host 127.0.0.1 --port 18000 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:18000/health | tee /tmp/health.json; then
+              break
+            fi
+            sleep 0.5
+          done
+          python -c "import json; payload=json.load(open('/tmp/health.json')); assert payload['status'] == 'ok', payload"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        working-directory: systems/frontend
+        run: npm install --no-audit --no-fund
+
+      - name: Frontend production build
+        working-directory: systems/frontend
+        run: npm run build
+
+      - name: Diff whitespace check
+        shell: bash
+        run: |
+          if [[ -n "${{ github.base_ref }}" ]]; then
+            base="$(git merge-base HEAD "origin/${{ github.base_ref }}")"
+            git diff --check "$base"...HEAD
+          else
+            git show --check --oneline --no-renames HEAD
+          fi

@@ -12,14 +12,14 @@ dashboard_router.py
 - DashboardSummaryResponse (조합된 대시보드 현황 데이터).
 
 의존 모듈:
-- dashboard_service.py (다른 도메인 서비스들의 결과를 조합/호출)
+- dashboard_service.py (공개 application/query/read-model 결과를 조합)
 - dashboard_schema.py
 
 예외/경계 상황:
 - 단독 실행 비대상 라우터 파일이다.
 
 설계 원칙과의 연결:
-- docs/architecture.md 4장의 '다른 도메인 서비스를 조합/호출하는 조합 도메인' 스펙을 지킨다.
+- docs/architecture.md의 application/read-model composition 및 domain dependency rule을 지킨다.
 """
 
 import sys
