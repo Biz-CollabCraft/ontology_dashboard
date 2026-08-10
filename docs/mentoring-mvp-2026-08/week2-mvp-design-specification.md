@@ -66,8 +66,8 @@ Overview 위험 현황
 
 | 영역 | 책임 |
 |---|---|
-| gen_data/팀원3 | Canonical, manifest, pipeline, Artifact, 재현성 |
-| Query API/팀원3 | 목록·상세·집계 API와 버전·오류 계약; ReportInput 원천 필드 제공 |
+| gen_data/팀원3 | raw/simulation/synthetic sensor data, Canonical V3.1 물리·생성 기준, source/reference fixture, 원천 생성 재현성 |
+| ontology_dashboard Semantic/ML·Query API/팀원3 | Extraction/Parsing, Ontology Mapping, Topology, Feature, Model Training/Artifact, Prediction, Result Artifact/Evidence, 목록·상세·집계 API와 provenance |
 | Frontend/팀원1 | 네 화면, ViewModel, 상태·이동·접근성 |
 | Report API/팀원4 | 리포트 endpoint, ReportInput/Output, deterministic·LLM·template, 근거 추적 |
 | 문서/팀원2 | 요구사항·스키마·기능·API·보고서·추적성 |

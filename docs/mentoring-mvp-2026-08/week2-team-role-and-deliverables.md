@@ -2,8 +2,8 @@
 
 - 문서 상태: `Week 2 execution baseline`
 - 기준일: `2026-08-08`
-- 제품·계약 기준 저장소: `Biz-CollabCraft/ontology_dashboard`
-- 데이터·파이프라인 기준 저장소: `Biz-CollabCraft/gen_data`
+- 원천 데이터 생성 기준 저장소: `Biz-CollabCraft/gen_data`
+- 제품·계약·Semantic/ML·Result Artifact 기준 저장소: `Biz-CollabCraft/ontology_dashboard`
 - 비교 프로토타입: `oosuhada/agentic-ontology-dashboard`
 - 기준 데이터: Canonical V3.1
 
@@ -23,9 +23,9 @@ Week 2의 목표는 기능을 계속 확장하는 것이 아니라, 멘토링에
 방향에서 검증하는 병렬 작업으로 해석한다.
 
 ```text
-Canonical V3.1
+gen_data raw/simulation/synthetic sensor data
       ↓
-데이터·예측 파이프라인
+ontology_dashboard semantic/ML pipeline
       ↓
 Result Artifact / Evidence
       ├────────→ Prediction API
@@ -55,7 +55,7 @@ Result Artifact / Evidence
 |---|---|---|---|
 | 우수 | 팀원1 · Frontend | MVP 화면과 공통 결과 계약 연결 | Overview·Objects·Operations·Event Executive Brief 화면, 캡처, 데모 흐름, API 연결 상태 |
 | 광우 | 팀원2 · Contract/Docs | 요구사항·기능·스키마·API·리포트 계약 고정 | 요구사항·기능·API·스키마·리포트·MVP 설계 문서 |
-| 성민 | 팀원3 · Prediction/Data | 결과 조회 API와 데이터·예측 파이프라인 재현성 | Predictions 목록/상세 조회, Result Artifact 생성, manifest/checksum, 재현성 확인 |
+| 성민 | 팀원3 · Prediction/Data | `gen_data`의 raw/simulation/synthetic sensor data 생성·재현성과 `ontology_dashboard`의 semantic/ML·Prediction·Result Artifact 연결 | 원천 데이터 생성/검증, Predictions 목록/상세 조회, Result Artifact/Evidence 생성, provenance·재현성 확인 |
 | 호범 | 팀원4 · Report/LLM | 검증된 결과를 근거 기반 보고서로 변환 | Event Report 입력/출력, deterministic 우선, LLM 보조, 예시 결과 |
 
 팀원 번호보다 담당자 이름과 역할명을 우선 사용한다. 역할 재조정 이후 문서와
@@ -141,23 +141,36 @@ Result Artifact / Evidence
 
 ### 역할 목적
 
-Canonical V3.1을 입력으로 제품이 소비할 Result Artifact를 안정적으로 생성하고,
-그 결과를 조회 API로 제공한다.
+`gen_data`가 raw/simulation/synthetic sensor data와 Canonical V3.1 물리·생성 기준을
+제공하고, `ontology_dashboard`가 이를 해석해 semantic/ML·Prediction 파이프라인과
+Result Artifact/Evidence를 제품 기능으로 연결한다.
 
 ### 최소 완료 조건
 
 ```text
-Canonical input
-→ pipeline function/command
-→ Result Artifact
-→ predictions list/detail
+gen_data
+Raw / Simulation / Synthetic Sensor Data
+      ↓
+ontology_dashboard
+Extraction / Parsing
+→ Ontology Mapping
+→ Topology
+→ Feature
+→ Model Training / Model Artifact
+→ Prediction
+→ Result Artifact / Evidence
+→ Predictions list/detail
 ```
 
-- 한 함수 또는 명령으로 결과를 생성할 수 있다.
-- 동일 입력과 동일 설정의 반복 실행 결과가 재현된다.
-- 데이터 버전과 모델/Artifact 버전을 추적할 수 있다.
+- `gen_data`는 원천 데이터 생성과 동일 seed/설정 기반 재현성을 검증한다.
+- `ontology_dashboard`는 semantic/ML·Prediction 실행과 결과 생성을 재현할 수 있다.
+- 원천 데이터 버전과 모델/Result Artifact 버전 및 provenance를 추적할 수 있다.
 - 목록 조회와 설비 단건 조회가 가능하다.
 - Frontend/Report가 사용할 샘플 응답을 제공한다.
+
+`ontology_dashboard` 내부의 `systems/generator`가 어느 단계까지 담당할지와 Backend가
+runtime inference 및 Result Artifact를 어느 경계에서 담당할지는 PR #10 아키텍처에서
+최종 확정한다. 이 문서는 저장소 수준 소유권만 고정한다.
 
 현재 팀 서비스가 project/workspace scope를 사용한다면 멘토 PPT의
 `GET /predictions`, `GET /predictions/{설비ID}`는 실제 서비스 경로에 맞춰
@@ -221,8 +234,9 @@ mock Result Artifact를 먼저 공유하고, 실제 결과가 나오면 데이�
 대표 설비 한 대를 기준으로 아래 흐름이 이어지면 Week 2 최소 통합이 성립한다.
 
 ```text
-Pipeline
-→ Result Artifact 생성
+gen_data Raw Sensor Data
+→ ontology_dashboard Semantic/ML Pipeline
+→ Result Artifact / Evidence
 → Prediction API 조회
 → Dashboard에서 같은 설비/확률/상태 확인
 → Report에서 같은 근거를 사용한 상태 요약 확인
@@ -239,15 +253,31 @@ Pipeline
 ### `Biz-CollabCraft/ontology_dashboard`
 
 - 요구사항·기능·API·리포트·공통 스키마 계약
-- MVP UI와 서비스 통합 코드
-- 화면 캡처와 발표 문서
+- Extraction/Parsing, Ontology Mapping, Topology, Feature
+- Model Training / Model Artifact
+- Prediction / Result Artifact / Evidence 및 provenance
+- MVP UI와 서비스 통합
+- 발표 문서
 
 ### `Biz-CollabCraft/gen_data`
 
-- Canonical 데이터 생성·갱신
-- 예측/결과 추출 파이프라인
-- Result Artifact 실제 생성
-- 재현성 검증과 샘플 결과
+- raw / simulation / synthetic sensor data 생성 및 갱신
+- Canonical V3.1 물리/생성 기준 및 source/reference fixture
+- 원천 데이터 sample/protocol/file output
+- 원천 데이터 생성 seed/reproducibility 검증
 
-같은 계약 문서를 두 저장소에 복제하지 않는다. `gen_data`는
-`ontology_dashboard`의 공통 계약을 참조하고 실제 생성 코드와 결과 예시만 관리한다.
+저장소 수준 경계는 `gen_data = Source Data Producer`,
+`ontology_dashboard = Semantic/ML + Prediction + Result Artifact/Evidence + Product`로
+고정한다. 같은 계약 문서를 두 저장소에 복제하지 않으며, `gen_data`는 원천 데이터
+생성 기준과 source/reference 자산을 관리하고 제품 계약의 원본은 `ontology_dashboard`에
+둔다.
+
+### `gen_data` PR #2 전환 원칙
+
+- Canonical V3.1 데이터와 원천 생성/검증 자산은 `gen_data`의
+  reference/source baseline으로 유지할 수 있다.
+- `prediction_pipeline.py`, prediction/model outputs, Result Artifact 등 제품
+  semantic/ML·Prediction 책임에 해당하는 자산은 `ontology_dashboard`로 이관·통합할
+  후속 작업 대상으로 둔다.
+- 실제 파일 이동과 `systems/generator`/Backend 내부 배치는 PR #10 아키텍처 확정 및
+  PR #9 재배치 작업에서 처리한다.
