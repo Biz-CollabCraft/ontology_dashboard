@@ -208,4 +208,3 @@ diff/context만으로 증명할 수 없는 항목을 명확하게 분리한다.
 - Critical architecture invariant에 FAIL이 있거나 P0/P1 finding이 있으면 `Not Ready`.
 - 중요한 항목이 `NOT PROVEN`이면 기본적으로 `Conditional`.
 - 모든 critical invariant가 PASS이고 P0/P1이 없을 때만 `Ready to Merge`를 사용할 수 있다.
-
