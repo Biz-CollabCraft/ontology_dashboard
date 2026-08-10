@@ -87,7 +87,7 @@ Raw Data
 
 ## 4. systems/backend — 사용자와 맞닿는 부분
 
-**책임**: 사용자 요청에 실제로 응답한다. `systems/generator/model/model_store`에 보관된 모델과 Feature를 가져다 써서 실시간 예측·리포트·대시보드 API를 제공한다. **학습 로직은 이 시스템에 존재하지 않는다.**
+**책임**: 사용자 요청에 실제로 응답한다. `systems/generator/model/model_store`에 보관된 Versioned Model Artifact와 현재 센서 관측값을 가져다 써서 **실시간 Runtime Inference를 수행하고, 제품용 Result Artifact / Evidence의 최종 Producer 역할**을 전담하여 예측·리포트·대시보드 API를 제공한다. **학습 로직은 이 시스템에 존재하지 않는다.**
 
 ```text
 systems/backend/
@@ -98,12 +98,12 @@ systems/backend/
 │   │   ├── equipment_repository.py
 │   │   ├── equipment_schema.py
 │   │   └── equipment_exception.py
-│   ├── diagnosis/                 # generator/model/model_store를 참조해 실시간 추론만 실행
+│   ├── diagnosis/                 # model_store Model Artifact 참조 ➔ Runtime Inference ➔ Result Artifact/Evidence 생성
 │   │   ├── diagnosis_router.py
 │   │   ├── diagnosis_service.py
 │   │   ├── diagnosis_schema.py
 │   │   └── diagnosis_exception.py
-│   ├── report/                     # 예측 결과 기반 리포트 생성
+│   ├── report/                     # Result Artifact/Evidence 기반 리포트 생성
 │   │   ├── report_router.py
 │   │   ├── report_service.py
 │   │   ├── report_generator.py     # 리포트 문서/텍스트 산출 — 최상위 "generator"와 별개
@@ -152,19 +152,19 @@ systems/frontend/
 
 ## 7. 전체 데이터 흐름 요약
 
-```
-[systems/generator]                        [systems/backend]              [systems/frontend]
-Raw Data
-  → extraction
-  → ontology_mapping
-  → topology
-  → feature
-  → model (학습) → model_store  ──파일──▶  diagnosis (추론 실행)
-                                          → report
-                                          → dashboard (조합)  ──API──▶   화면 표시
+```text
+[gen_data]                      [systems/generator]                 [systems/backend/diagnosis]           [systems/frontend & report]
+Raw/Simulation Data ──파일──▶  extraction                        Model Artifacts                        Result Artifact / Evidence
+                                 → ontology_mapping               ──파일(읽기전용)──▶ Runtime Inference ──API──▶  UI 화면 표시 & Report 생성
+                                 → topology                                            (Result/Evidence Producer)
+                                 → feature
+                                 → model training ➔ model_store
 ```
 
-`generator`는 "데이터가 준비되고 모델이 만들어지는 곳", `backend`는 "그 모델을 갖다 쓰는 곳"으로 책임이 명확히 나뉜다.
+- **`gen_data`**: Source Data Producer (Raw / Simulation / Synthetic 센서 데이터 생성 및 Test Fixture 제공)
+- **`systems/generator`**: Semantic / ML Pipeline (원본 파싱 ➔ 온톨로지 ➔ 위상 ➔ Feature ➔ 모델 학습 및 Versioned Model Artifact 생성)
+- **`systems/backend/diagnosis`**: Runtime Inference & Result Producer (Model Artifact 기반 실시간 추론 연산 및 Result Artifact/Evidence 최종 생성)
+- **`systems/frontend & report`**: Consumer (Result Artifact / Evidence 소비 및 화면 표시 / 보고서 생성)
 
 ---
 
