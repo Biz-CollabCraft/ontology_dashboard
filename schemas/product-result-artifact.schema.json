@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/product-result-artifact.schema.json",
+  "title": "Ontology Dashboard Product Runtime Result Artifact",
+  "type": "object",
+  "required": [
+    "artifact_id",
+    "artifact_type",
+    "schema_version",
+    "asset_id",
+    "asset_type",
+    "observed_at",
+    "prediction_horizon_hours",
+    "prediction_task",
+    "failure_probability",
+    "predicted_failure_type",
+    "status_grade",
+    "confidence",
+    "top_factors",
+    "recommended_action",
+    "provenance"
+  ],
+  "properties": {
+    "artifact_id": {"type": "string"},
+    "artifact_type": {"const": "predictive_maintenance_result"},
+    "schema_version": {"const": "result-artifact-v1.0"},
+    "asset_id": {"type": "string"},
+    "asset_type": {"type": "string"},
+    "observed_at": {"type": "string"},
+    "prediction_horizon_hours": {"type": "integer", "minimum": 1},
+    "prediction_task": {"const": "binary_failure_within_horizon"},
+    "failure_probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "predicted_failure_type": {"type": "string"},
+    "status_grade": {"enum": ["normal", "attention", "warning", "critical", "data_quality_hold"]},
+    "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "top_factors": {"type": "array", "items": {"type": "object"}},
+    "recommended_action": {"type": "object"},
+    "provenance": {
+      "type": "object",
+      "required": ["dataset_version", "model_version", "prediction_id", "source_type", "canonical_source_mutated"],
+      "properties": {
+        "dataset_version": {"type": "string"},
+        "model_version": {"type": "string"},
+        "prediction_id": {"type": "string"},
+        "source_type": {"const": "product_runtime_inference"},
+        "canonical_source_mutated": {"const": false},
+        "model_artifact": {"type": ["object", "null"]}
+      }
+    }
+  }
+}

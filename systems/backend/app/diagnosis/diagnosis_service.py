@@ -27,9 +27,27 @@ diagnosis_service.py
 
 
 class DiagnosisService:
-    """설비 실시간 진단 서비스 클래스 스켈레톤"""
+    """설비 실시간 진단 서비스.
 
-    pass
+    ML/runtime dependencies are imported lazily so the PR #10 backend scaffold
+    can still run its lightweight architecture/import smoke before optional
+    model dependencies are installed.
+    """
+
+    def predict_fixture(self, fixture: dict) -> dict:
+        from .predictor import configured_predictor
+
+        return configured_predictor().predict(fixture).to_dict()
+
+    def result_artifact(self, fixture: dict) -> dict:
+        from .evidence import build_product_result_artifact
+
+        return build_product_result_artifact(fixture)
+
+    def evidence(self, fixture: dict, *, context_provider=None) -> dict:
+        from .evidence import build_evidence_package
+
+        return build_evidence_package(fixture, context_provider=context_provider)
 
 
 def _self_test() -> None:
@@ -37,7 +55,11 @@ def _self_test() -> None:
     이 모듈을 단독 실행했을 때 수행되는 기능 테스트.
     실제 검증 로직은 이 모듈의 실제 구현 작업에서 채운다.
     """
-    print("[SELF-TEST] diagnosis_service.py - 아직 테스트 로직이 구현되지 않았습니다.")
+    service = DiagnosisService()
+    assert callable(service.predict_fixture)
+    assert callable(service.result_artifact)
+    assert callable(service.evidence)
+    print("[SELF-TEST] diagnosis_service.py - runtime facade 준비 완료")
 
 
 if __name__ == "__main__":

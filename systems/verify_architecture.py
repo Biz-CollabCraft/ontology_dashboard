@@ -1,7 +1,8 @@
-"""Static architecture checks for the systems/ scaffold.
+"""Static architecture checks for the merged PR #8/#10 system contract.
 
-This script intentionally uses only the Python standard library so it can run
-before installing system-specific dependencies.
+This verifier uses only the Python standard library so it can run before
+system-specific dependencies are installed. PR #9 additionally checks that the
+imported MVP code is a compatibility host rather than a second ML/runtime owner.
 """
 
 from __future__ import annotations
@@ -14,14 +15,24 @@ ROOT = Path(__file__).resolve().parents[1]
 SYSTEMS = ROOT / "systems"
 
 REQUIRED_PATHS = (
-    SYSTEMS / "generator" / "extraction",
-    SYSTEMS / "generator" / "ontology_mapping",
-    SYSTEMS / "generator" / "topology",
-    SYSTEMS / "generator" / "feature",
+    SYSTEMS / "generator" / "extraction" / "extraction_service.py",
+    SYSTEMS / "generator" / "ontology_mapping" / "mapping_service.py",
+    SYSTEMS / "generator" / "ontology_mapping" / "workbench.py",
+    SYSTEMS / "generator" / "topology" / "topology_service.py",
+    SYSTEMS / "generator" / "feature" / "dataset.py",
+    SYSTEMS / "generator" / "feature" / "workbench.py",
+    SYSTEMS / "generator" / "model" / "model_training.py",
+    SYSTEMS / "generator" / "model" / "experiments.py",
     SYSTEMS / "generator" / "model" / "model_registry.py",
     SYSTEMS / "backend" / "app" / "diagnosis" / "diagnosis_service.py",
+    SYSTEMS / "backend" / "app" / "diagnosis" / "artifact_provider.py",
+    SYSTEMS / "backend" / "app" / "diagnosis" / "model_registry.py",
+    SYSTEMS / "backend" / "app" / "diagnosis" / "predictor.py",
+    SYSTEMS / "backend" / "app" / "diagnosis" / "evidence.py",
     SYSTEMS / "backend" / "app" / "main.py",
     SYSTEMS / "frontend" / "src",
+    ROOT / "api" / "ontology_dashboard" / "main.py",
+    ROOT / "web" / "src",
 )
 
 
@@ -45,8 +56,7 @@ def check_cross_system_imports(errors: list[str]) -> None:
         "backend": ("systems.generator", "generator"),
     }
     for system_name, forbidden_prefixes in boundaries.items():
-        system_root = SYSTEMS / system_name
-        for path in system_root.rglob("*.py"):
+        for path in (SYSTEMS / system_name).rglob("*.py"):
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             except SyntaxError as exc:
@@ -54,14 +64,8 @@ def check_cross_system_imports(errors: list[str]) -> None:
                 continue
             for node in ast.walk(tree):
                 for module in _module_names(node):
-                    if any(
-                        module == prefix or module.startswith(f"{prefix}.")
-                        for prefix in forbidden_prefixes
-                    ):
-                        errors.append(
-                            "cross-system direct import: "
-                            f"{path.relative_to(ROOT)} imports {module}"
-                        )
+                    if any(module == prefix or module.startswith(f"{prefix}.") for prefix in forbidden_prefixes):
+                        errors.append(f"cross-system direct import: {path.relative_to(ROOT)} imports {module}")
 
 
 def check_backend_domain_dependencies(errors: list[str]) -> None:
@@ -83,9 +87,21 @@ def check_backend_domain_dependencies(errors: list[str]) -> None:
                     continue
                 if parts[-1].endswith(implementation_suffixes):
                     errors.append(
-                        "backend domain implementation import: "
-                        f"{path.relative_to(ROOT)} imports {module}"
+                        f"backend domain implementation import: {path.relative_to(ROOT)} imports {module}"
                     )
+
+
+def check_product_api_dependency(errors: list[str]) -> None:
+    api_root = ROOT / "api" / "ontology_dashboard"
+    for path in api_root.rglob("*.py"):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            for module in _module_names(node):
+                if module == "systems.generator" or module.startswith("systems.generator."):
+                    errors.append(f"product API imports generator implementation: {path.relative_to(ROOT)} imports {module}")
 
 
 def check_artifact_injection(errors: list[str]) -> None:
@@ -103,28 +119,48 @@ def check_artifact_injection(errors: list[str]) -> None:
             continue
         for fragment in forbidden_fragments:
             if fragment in text:
-                errors.append(
-                    f"hard-coded sibling artifact path in {path.relative_to(ROOT)}: {fragment}"
-                )
+                errors.append(f"hard-coded sibling artifact path in {path.relative_to(ROOT)}: {fragment}")
 
-    env_example = backend_root / ".env.example"
-    env_text = env_example.read_text(encoding="utf-8")
+    env_text = (backend_root / ".env.example").read_text(encoding="utf-8")
     if "MODEL_ARTIFACT_URI=" not in env_text:
         errors.append("systems/backend/.env.example must define MODEL_ARTIFACT_URI")
     if "MODEL_STORE_DIR=" in env_text:
         errors.append("systems/backend/.env.example must not define MODEL_STORE_DIR")
 
 
+def check_legacy_ml_is_compatibility_only(errors: list[str]) -> None:
+    legacy = ROOT / "ml" / "src" / "factory_signal_ml"
+    forbidden = ("joblib.dump", ".fit(", "predict_proba(")
+    for name in ("training.py", "predictor.py", "evidence.py", "dataset.py"):
+        text = (legacy / name).read_text(encoding="utf-8")
+        for fragment in forbidden:
+            if fragment in text:
+                errors.append(f"legacy ML compatibility module still owns implementation: ml/src/factory_signal_ml/{name}")
+
+
+def check_api_modeling_is_port_only(errors: list[str]) -> None:
+    modeling = ROOT / "api" / "ontology_dashboard" / "modeling"
+    forbidden = ("joblib.dump", ".fit(", "predict_proba(")
+    for name in ("mapping.py", "features.py", "experiments.py", "registry.py"):
+        text = (modeling / name).read_text(encoding="utf-8")
+        for fragment in forbidden:
+            if fragment in text:
+                errors.append(
+                    f"API modeling compatibility port still owns algorithmic implementation: "
+                    f"api/ontology_dashboard/modeling/{name} contains {fragment}"
+                )
+
+
 def check_git_conflict_markers(errors: list[str]) -> None:
     conflict_prefixes = ("<<<<<<<", "=======", ">>>>>>>")
-    search_dirs = (ROOT / "docs", SYSTEMS)
-    for search_dir in search_dirs:
+    ignored_parts = {"node_modules", "dist", ".venv", "__pycache__", ".git"}
+    for search_dir in (ROOT / "docs", SYSTEMS):
         if not search_dir.exists():
             continue
         for path in search_dir.rglob("*"):
-            if not path.is_file():
+            if any(part in ignored_parts for part in path.relative_to(ROOT).parts):
                 continue
-            if path.suffix in (".pyc", ".png", ".jpg", ".zip", ".tar", ".gz"):
+            if not path.is_file() or path.suffix in (".pyc", ".png", ".jpg", ".zip", ".tar", ".gz"):
                 continue
             try:
                 content = path.read_text(encoding="utf-8")
@@ -142,7 +178,10 @@ def main() -> int:
     check_required_structure(errors)
     check_cross_system_imports(errors)
     check_backend_domain_dependencies(errors)
+    check_product_api_dependency(errors)
     check_artifact_injection(errors)
+    check_legacy_ml_is_compatibility_only(errors)
+    check_api_modeling_is_port_only(errors)
     check_git_conflict_markers(errors)
 
     if errors:
@@ -152,10 +191,14 @@ def main() -> int:
         return 1
 
     print("[ARCHITECTURE-CHECK] PASS")
-    print("- required systems/domain scaffold exists")
+    print("- PR #10 required systems/domain scaffold exists")
+    print("- generator owns semantic/feature/training and Model Artifact publication")
+    print("- backend diagnosis owns runtime inference and Result Artifact/Evidence")
     print("- generator/backend direct Python imports are absent")
-    print("- backend domains do not import other domains' service/repository/adapter implementations")
-    print("- backend artifact location is injected through MODEL_ARTIFACT_URI")
+    print("- backend domains do not import other domains' implementation modules")
+    print("- product API has no static generator implementation import")
+    print("- legacy ML/API modeling paths are compatibility ports, not ML owners")
+    print("- Model Artifact location is injected through MODEL_ARTIFACT_URI")
     return 0
 
 

@@ -19,6 +19,8 @@
 12. [Week 2 추적성 매트릭스](./week2-traceability-matrix.md)
 13. [개인 프로토타입 문서 이관 매핑](./week2-prototype-doc-migration-map.md)
 14. [개인 프로토타입 원문 보존본](./prototype-source/)
+15. [Week 2 MVP 실행 소스 이관 기록](./week2-frontend-implementation-import.md)
+16. [Week 2 실행 코드 책임 재배치 기록](./week2-runtime-ownership-integration.md)
 
 ## 문서 상태
 
@@ -38,6 +40,8 @@
 | `week2-traceability-matrix.md` | 초안 | 요구사항부터 테스트까지 연결 |
 | `week2-prototype-doc-migration-map.md` | 이관 기록 | 개인 프로토타입 상세 문서와 팀 기준 문서의 대응 관계 |
 | `prototype-source/` | 원문 보존 | 개인 레포의 Week 2 상세 문서 4종을 내용 변경 없이 보존 |
+| `week2-frontend-implementation-import.md` | 이관 기준 | 개인 프로토타입에서 팀 저장소로 승격한 실행 소스와 화면 캡처의 provenance |
+| `week2-runtime-ownership-integration.md` | 구현 반영 | PR #8/#10/gen_data #2 책임 계약을 실행 코드에 적용한 기록 |
 
 ## 기준 자료
 
@@ -46,9 +50,9 @@
 - Result Artifact: `result-artifact-v1.0`
 - 제품 문서 저장소: `Biz-CollabCraft/ontology_dashboard`
 - 비교 프로토타입: `oosuhada/agentic-ontology-dashboard`
+- 팀 실행 소스 기준: 원본 프로토타입 커밋 `37c1251`을 이 저장소로 이관한 뒤 PR #8/#10 책임 계약에 맞게 재배치한 버전
 
-비교 프로토타입은 기능과 계약의 참고 구현이며 이 저장소의 확정 요구사항 또는
-Git 기준 브랜치가 아니다.
+비교 프로토타입은 기능과 계약의 참고 구현이며 팀 저장소의 확정 요구사항 또는 Git 기준 브랜치가 아니다. Week 2 팀 단위 프론트엔드/API 수정은 이 저장소의 이관된 실행 소스를 기준으로 진행한다.
 
 ## 공유하지 않는 자료
 

@@ -23,11 +23,25 @@ extraction_service.py
 - docs/architecture.md 1장 컨벤션에 따라 파일명은 {도메인}_{계층}.py 규칙을 따른다.
 """
 
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
 
 class ExtractionService:
     """데이터 추출 서비스 클래스 스켈레톤"""
 
     pass
+
+
+def extract_observation(row: Mapping[str, Any], required_fields: tuple[str, ...]) -> dict[str, Any]:
+    """Normalize already-produced source data without generating or mutating it."""
+
+    missing = [field for field in required_fields if field not in row]
+    if missing:
+        raise ValueError(f"source observation is missing required fields: {missing}")
+    return {field: row[field] for field in required_fields}
 
 
 def _self_test() -> None:

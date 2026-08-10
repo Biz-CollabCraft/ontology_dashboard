@@ -23,11 +23,28 @@ topology_service.py
 - docs/architecture.md 1장 컨벤션에 따라 {도메인}_{계층}.py 규칙을 지킨다.
 """
 
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+
+REQUIRED_RELATION_FIELDS = ("source_asset_id", "relationship_type", "target_asset_id")
+
 
 class TopologyService:
     """위상 데이터 구성 서비스 클래스 스켈레톤"""
 
     pass
+
+
+def normalize_relation(relation: Mapping[str, Any]) -> dict[str, str]:
+    """Validate source-provided relations without promoting topology to causal truth."""
+
+    missing = [field for field in REQUIRED_RELATION_FIELDS if not relation.get(field)]
+    if missing:
+        raise ValueError(f"asset relation is missing required fields: {missing}")
+    return {field: str(relation[field]) for field in REQUIRED_RELATION_FIELDS}
 
 
 def _self_test() -> None:

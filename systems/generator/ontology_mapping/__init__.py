@@ -1,13 +1,7 @@
-"""
-ontology_mapping 패키지 초기화 파일
-"""
+"""Semantic ontology mapping package owned by the generator system."""
 
 from .mapping_agent import MappingAgent
-from .mapping_service import MappingService
 from .mapping_cache import MappingCache
+from .mapping_service import MappingService, map_observation
 
-__all__ = [
-    "MappingAgent",
-    "MappingService",
-    "MappingCache",
-]
+__all__ = ["MappingAgent", "MappingCache", "MappingService", "map_observation"]

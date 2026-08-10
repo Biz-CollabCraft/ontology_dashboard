@@ -22,11 +22,25 @@ mapping_service.py
 - docs/architecture.md 1장 컨벤션에 따라 {도메인}_{계층}.py 명명 방식을 적용한다.
 """
 
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
 
 class MappingService:
     """온톨로지 매핑 서비스 클래스 스켈레톤"""
 
     pass
+
+
+def map_observation(observation: Mapping[str, Any], mapping: Mapping[str, str]) -> dict[str, Any]:
+    """Map source fields to stable semantic property names without changing values."""
+
+    unknown = [field for field in observation if field not in mapping]
+    if unknown:
+        raise ValueError(f"semantic mapping is missing source fields: {unknown}")
+    return {mapping[field]: value for field, value in observation.items()}
 
 
 def _self_test() -> None:

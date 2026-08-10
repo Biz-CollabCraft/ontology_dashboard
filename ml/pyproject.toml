@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ontology-dashboard-manufacturing-ml"
+version = "0.1.0"
+description = "Compatibility CLI delegating model production to systems/generator and runtime inference to systems/backend/app/diagnosis"
+requires-python = ">=3.11"
+dependencies = [
+  "joblib>=1.4",
+  "jsonschema>=4.23",
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "pydantic>=2.9",
+  "PyYAML>=6.0",
+  "scikit-learn>=1.5"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[project.scripts]
+ontology-dashboard-manufacturing-ml = "ontology_dashboard_manufacturing_ml.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["../tests", "tests"]

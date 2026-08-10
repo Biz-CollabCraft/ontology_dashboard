@@ -1,0 +1,63 @@
+"""Typed Project 3 integration boundary."""
+
+from .client import (
+    Project3Client,
+    Project3ContractError,
+    Project3Error,
+    Project3Unavailable,
+    parse_project_mapping,
+)
+from .models import (
+    Project3AgentRun,
+    Project3GraphProjectionRequest,
+    Project3GraphProjectionResponse,
+    Project3GraphSchema,
+    Project3GovernanceArtifactReference,
+    Project3Health,
+    Project3IntegrationSnapshot,
+    Project3NodeSearch,
+    Project3ProjectionCounts,
+    Project3ProjectionError,
+    Project3ProjectionIdentity,
+    Project3ProjectionNode,
+    Project3ProjectionRelationship,
+    Project3ResultProjectionContract,
+    Project3Query,
+    Project3RagResult,
+    Project3Readiness,
+    Project3Subgraph,
+    Project3TopologyProjectionContract,
+)
+from .projection import (
+    PredictiveMaintenanceProject3ProjectionHandler,
+    Project3ProjectionDeliveryError,
+)
+
+__all__ = [
+    "Project3AgentRun",
+    "Project3Client",
+    "Project3ContractError",
+    "Project3Error",
+    "Project3GraphProjectionRequest",
+    "Project3GraphProjectionResponse",
+    "Project3GraphSchema",
+    "Project3GovernanceArtifactReference",
+    "Project3Health",
+    "Project3IntegrationSnapshot",
+    "Project3NodeSearch",
+    "Project3ProjectionCounts",
+    "Project3ProjectionError",
+    "Project3ProjectionIdentity",
+    "Project3ProjectionNode",
+    "Project3ProjectionRelationship",
+    "Project3ResultProjectionContract",
+    "Project3Query",
+    "Project3RagResult",
+    "Project3Readiness",
+    "Project3Subgraph",
+    "Project3TopologyProjectionContract",
+    "Project3Unavailable",
+    "PredictiveMaintenanceProject3ProjectionHandler",
+    "Project3ProjectionDeliveryError",
+    "parse_project_mapping",
+]

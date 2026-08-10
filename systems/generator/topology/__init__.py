@@ -1,13 +1,7 @@
-"""
-topology 패키지 초기화 파일
-"""
+"""Topology preparation package owned by the generator system."""
 
 from .topology_agent import TopologyAgent
-from .topology_service import TopologyService
 from .topology_cache import TopologyCache
+from .topology_service import TopologyService, normalize_relation
 
-__all__ = [
-    "TopologyAgent",
-    "TopologyService",
-    "TopologyCache",
-]
+__all__ = ["TopologyAgent", "TopologyCache", "TopologyService", "normalize_relation"]
