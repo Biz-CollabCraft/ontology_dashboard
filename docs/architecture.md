@@ -76,7 +76,6 @@ project-root/
 **책임 끝점은 versioned Model Artifact publish까지다.** 사용자 요청 기반 runtime inference, 제품 Result Artifact 생성, 최종 Evidence 생성은 이 시스템의 책임이 아니다.
 
 ```text
-<<<<<<< HEAD
 systems/generator/
 ├── extraction/
 │   ├── extraction_agent.py       # 원본 구조 판별 → 추출 계획 (LLM 호출)

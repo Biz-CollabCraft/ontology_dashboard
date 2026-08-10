@@ -10,7 +10,6 @@
 
 ```text
 ontology_dashboard/
-├── .agents/              ← 에이전트 작업 규칙 및 설계 지침
 ├── docs/                  ← 팀 공유 지식 문서 (docs/architecture.md 포함)
 ├── README.md              ← 프로젝트 개요, 실행 방법 (본 문서)
 └── systems/                ← 실행 가능한 코드 격리 그루핑 디렉토리
