@@ -56,7 +56,7 @@ Result Artifact / Evidence consumer
 - `systems/generator`, `systems/backend`, `systems/frontend`는 배치·API·UI라는 서로 다른 **독립 실행/배포 단위**다.
 - 시스템 간 Python/TypeScript 코드 direct import로 결합하지 않는다. 시스템 경계는 안정된 API 또는 versioned Artifact contract로 연결한다.
 - 각 시스템 내부는 계층 우선이 아니라 도메인 우선으로 구성한다. 계층 파일은 `{도메인}_{계층}.py` 형식을 따른다.
-- `common/` 이동은 사용 개수로 결정하지 않는다. **도메인 의미가 없고 안정된 cross-cutting concern 또는 infrastructure/common contract인지**를 먼저 판단한다. 성급한 공용화와 서로 다른 도메인 개념의 우연한 통합을 모두 피한다.
+- `common/` 이동은 사용 개수("3개 이상" 등)로 결정하지 않는다. **도메인 의미가 없고 안정된 cross-cutting concern 또는 infrastructure/common contract인지**를 먼저 판단한다. 성급한 공용화와 서로 다른 도메인 개념의 우연한 통합을 모두 피한다.
 - 물리 디렉터리 경로, sibling checkout 배치, 특정 로컬 파일명은 시스템 간 계약이 아니다.
 
 ```text
@@ -77,154 +77,51 @@ project-root/
 
 ```text
 systems/generator/
-├── extraction/
-│   ├── extraction_agent.py       # 원본 구조 판별 → 추출 계획 (LLM 호출)
-│   ├── extraction_service.py     # 계획대로 실제 추출 실행
-│   └── extraction_cache.py       # 판별 결과 캐싱 (재실행 시 재호출 방지)
-├── ontology_mapping/
-│   ├── mapping_agent.py          # 컬럼 → 온톨로지 노드 의미 매핑
+├── extraction/               # 1. 원본 구조 판별 → 추출 계획 (LLM) 및 추출 실행
+│   ├── extraction_agent.py
+│   ├── extraction_service.py
+│   └── extraction_cache.py
+├── ontology_mapping/         # 2. 컬럼 → 온톨로지 노드 의미 매핑
+│   ├── mapping_agent.py
 │   ├── mapping_service.py
 │   └── mapping_cache.py
-├── topology/
-│   ├── topology_agent.py         # 설비 간 관계(위상) 추론
+├── topology/                 # 3. 설비 간 관계(위상) 추론
+│   ├── topology_agent.py
 │   ├── topology_service.py
 │   └── topology_cache.py
-├── feature/
-│   ├── feature_builder.py        # Feature 생성(.npy)
+├── feature/                  # 4. Feature 생성 및 카탈로그 관리
+│   ├── feature_builder.py
 │   └── feature_catalog.py
-├── model/
-│   ├── model_training.py         # 모델 학습
-│   ├── model_registry.py         # 등록/버전 관리
-│   └── model_store/              # 최종 산출물 — backend가 읽기 전용으로 참조하는 지점
-│       ├── independent-logreg-v3.1/
-│       ├── lightgbm-v1/
-│       ├── xgboost-v1/
-│       └── randomforest-v1/
-├── common/                        # 3개 이상 하위 도메인이 공유하는 것만
-│   ├── agent_base.py              # "판단 단위 분리" 원칙(한 번 호출 = 한 판단)을 강제하는 공통 베이스
-│   └── cache_base.py              # 3종 캐시(추출계획/매핑/위상)의 공통 fingerprint→결과 캐시 로직
-├── .env
+├── model/                    # 5. 모델 학습 및 Registry/Store 보관
+│   ├── model_training.py
+│   ├── model_registry.py
+│   └── model_store/          # local publish 구현 예시 (계약 상위 개념은 MODEL_ARTIFACT_URI)
+├── common/                   # 도메인 중립적 공통 베이스 (agent_base, cache_base)
+├── .env.example
 └── requirements.txt
 ```
 
 ### generator 내부 파이프라인 순서
 
-```
-Raw Data
-  → extraction        (구조 판별 → 추출)
-  → ontology_mapping   (컬럼 의미 매핑)
-  → topology            (설비 간 관계 구성)
-  → feature              (Feature 생성)
-  → model                (학습 → model_store에 보관)
-```
-
-각 단계는 "판단 단위 분리" 원칙을 따른다 — 하나의 LLM 호출은 하나의 판단만 담당하며, 여러 판단을 한 프롬프트에 섞지 않는다.
-
----
-
-## 4. systems/backend — 사용자와 맞닿는 부분
-
-**책임**: 사용자 요청에 실제로 응답한다. `systems/generator/model/model_store`에 보관된 Versioned Model Artifact와 현재 센서 관측값을 가져다 써서 **실시간 Runtime Inference를 수행하고, 제품용 Result Artifact / Evidence의 최종 Producer 역할**을 전담하여 예측·리포트·대시보드 API를 제공한다. **학습 로직은 이 시스템에 존재하지 않는다.**
-
 ```text
-systems/backend/
-├── app/
-│   ├── equipment/
-│   │   ├── equipment_router.py
-│   │   ├── equipment_service.py
-│   │   ├── equipment_repository.py
-│   │   ├── equipment_schema.py
-│   │   └── equipment_exception.py
-│   ├── diagnosis/                 # model_store Model Artifact 참조 ➔ Runtime Inference ➔ Result Artifact/Evidence 생성
-│   │   ├── diagnosis_router.py
-│   │   ├── diagnosis_service.py
-│   │   ├── diagnosis_schema.py
-│   │   └── diagnosis_exception.py
-│   ├── report/                     # Result Artifact/Evidence 기반 리포트 생성
-│   │   ├── report_router.py
-│   │   ├── report_service.py
-│   │   ├── report_generator.py     # 리포트 문서/텍스트 산출 — 최상위 "generator"와 별개
-│   │   └── report_schema.py
-│   └── dashboard/                   # 다른 도메인 서비스를 조합/호출하는 조합 도메인
-│       └── (동일 계층 패턴)
-├── .env
-├── requirements.txt
-└── Dockerfile
+Raw / Canonical Observation
+  → extraction
+  → ontology_mapping
+  → topology
+  → feature
+  → model training
+  → versioned Model Artifact publish
 ```
 
-### generator ↔ backend 연결 방식
+각 파이프라인 단계는 "판단 단위 분리" 원칙을 따른다 — 하나의 LLM 호출은 하나의 판단만 담당하며, 여러 판단을 한 프롬프트에 섞지 않는다.
 
-파일 매개 디커플링을 원칙으로 한다. `backend`는 `systems/generator/model/model_store` 경로를 **읽기 전용**으로 참조하며, `generator`의 내부 구현(Agent 로직, 캐시 파일 등)을 몰라도 model_store 산출물만으로 동작할 수 있어야 한다. 코드 레벨의 직접 import는 하지 않는다. 이 원칙은 이전에도 AutoPdM↔Backend, gen_data↔ontology_dashboard 관계에서 반복적으로 적용해온 것과 동일하다.
-
----
-
-## 5. systems/frontend — 사용자 화면
-
-```text
-systems/frontend/
-├── src/
-│   ├── equipment/
-│   ├── diagnosis/
-│   ├── report/
-│   ├── dashboard/
-│   └── common/          # 3개 이상 도메인에서 공용으로 쓰이는 컴포넌트/훅/API 모듈
-├── .env
-└── package.json
-```
-
-도메인 이름은 `backend`의 도메인 이름과 동일하게 맞춘다 — API 계약과 폴더명이 일치하면 유지보수에 유리하기 때문이다.
-
----
-
-## 6. 세 시스템이 대등한 이유
-
-`generator`를 `backend` 하위에 종속시키지 않고 `systems/` 아래 대등한 축으로 둔 이유:
-
-1. **일관성**: AutoPdM↔Backend, gen_data↔ontology_dashboard와 마찬가지로 이 프로젝트는 성격이 다른 컴포넌트를 항상 파일 디커플링으로 대등하게 연결해왔다. 여기서만 하위 종속 구조로 바꾸면 이 원칙이 깨진다.
-2. **배포 독립성**: `backend`는 상시 API 서버, `generator`는 배치/주기적 재학습이다. 하위 폴더로 묶으면 재학습(무거운 연산, 리소스 사용)이 API 서버 배포·재시작과 얽히기 쉽다.
-3. **팀 소유 경계와의 일치**: 파이프라인/모델 담당자와 backend API 담당자가 이미 분리되어 있다. 폴더 구조가 이 소유 경계와 일치해야 탐색과 책임 소재가 명확하다.
-4. **"backend"의 의미 보존**: backend 하위에 학습 로직까지 들어가면 "사용자와 맞닿는 부분"이라는 정의가 흐려진다.
-
----
-
-## 7. 전체 데이터 흐름 요약
-
-```text
-[gen_data]                      [systems/generator]                 [systems/backend/diagnosis]           [systems/frontend & report]
-Raw/Simulation Data ──파일──▶  extraction                        Model Artifacts                        Result Artifact / Evidence
-                                 → ontology_mapping               ──파일(읽기전용)──▶ Runtime Inference ──API──▶  UI 화면 표시 & Report 생성
-                                 → topology                                            (Result/Evidence Producer)
-                                 → feature
-                                 → model training ➔ model_store
-```
-
-- **`gen_data`**: Source Data Producer (Raw / Simulation / Synthetic 센서 데이터 생성 및 Test Fixture 제공)
-- **`systems/generator`**: Semantic / ML Pipeline (원본 파싱 ➔ 온톨로지 ➔ 위상 ➔ Feature ➔ 모델 학습 및 Versioned Model Artifact 생성)
-- **`systems/backend/diagnosis`**: Runtime Inference & Result Producer (Model Artifact 기반 실시간 추론 연산 및 Result Artifact/Evidence 최종 생성)
-- **`systems/frontend & report`**: Consumer (Result Artifact / Evidence 소비 및 화면 표시 / 보고서 생성)
-
-```text
-systems/generator/
-├── extraction/
-├── ontology_mapping/
-├── topology/
-├── feature/
-├── model/
-│   ├── model_training.py
-│   ├── model_registry.py
-│   └── model_store/          # 로컬 개발용 publish 구현 예시. 계약 자체가 아님.
-├── common/
-├── .env.example
-└── requirements.txt
-```
-
-`model_store/`는 local filesystem 구현 예시일 뿐이다. 운영 환경에서는 mounted volume, externally provisioned path, object storage, artifact registry 등으로 교체될 수 있다.
+`model_store/`는 local filesystem publish 구현 예시일 뿐이다. 운영 환경에서는 mounted volume, externally provisioned path, object storage, artifact registry 등으로 교체될 수 있다.
 
 ---
 
 ## 4. Versioned Model Artifact contract
 
-Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`라는 **경로**가 아니라 versioned Model Artifact의 **형식과 식별자**다.
+Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`라는 **로컬 물리 경로**가 아니라 versioned Model Artifact의 **형식과 식별자 및 `MODEL_ARTIFACT_URI` 주입 방식**이다.
 
 ### 4.1 필수 manifest 메타데이터
 
@@ -284,7 +181,7 @@ MODEL_ARTIFACT_URI=registry://pdm/production
 
 ## 5. systems/backend — Product Runtime
 
-Backend는 모델을 **학습하지 않는다**. `diagnosis`가 versioned Model Artifact와 현재 observation을 입력으로 runtime inference를 수행하고, 제품이 실제 소비하는 Result Artifact/Evidence를 생성한다.
+Backend는 모델을 **학습하지 않는다**. `diagnosis`가 versioned Model Artifact와 현재 observation을 입력으로 runtime inference를 수행하고, 제품이 실제 소비하는 **Result Artifact/Evidence를 최종 생성**한다.
 
 ```text
 Model Artifact
@@ -369,9 +266,10 @@ Backend의 내부 도메인 재구성은 API contract가 유지되는 한 Fronte
 4. Generator ↔ Backend Python direct import 금지
 5. 문서가 요구하는 필수 시스템/도메인 구조 존재
 6. Backend의 sibling `../generator/model/model_store` 하드코딩 부재
-7. `git diff --check`
+7. git conflict marker (`<<<<<<<`, `=======`, `>>>>>>>`) 부재 검사
+8. `git diff --check`
 
-이 저장소의 `systems/verify_architecture.py`는 4~6번의 정적 구조 검사를 담당한다. 런타임 import/build 검증은 각 시스템의 dependency 환경에서 별도로 실행한다.
+이 저장소의 `systems/verify_architecture.py`는 4~7번의 정적 구조 검사(git conflict marker 검사 포함)를 담당한다. 런타임 import/build 검증은 각 시스템의 dependency 환경에서 별도로 실행한다.
 
 ---
 

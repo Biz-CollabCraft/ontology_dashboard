@@ -115,12 +115,35 @@ def check_artifact_injection(errors: list[str]) -> None:
         errors.append("systems/backend/.env.example must not define MODEL_STORE_DIR")
 
 
+def check_git_conflict_markers(errors: list[str]) -> None:
+    conflict_prefixes = ("<<<<<<<", "=======", ">>>>>>>")
+    search_dirs = (ROOT / "docs", SYSTEMS)
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+        for path in search_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.suffix in (".pyc", ".png", ".jpg", ".zip", ".tar", ".gz"):
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for line_idx, line in enumerate(content.splitlines(), start=1):
+                if line.startswith(conflict_prefixes):
+                    errors.append(
+                        f"git conflict marker found in {path.relative_to(ROOT)}:{line_idx}: {line.strip()}"
+                    )
+
+
 def main() -> int:
     errors: list[str] = []
     check_required_structure(errors)
     check_cross_system_imports(errors)
     check_backend_domain_dependencies(errors)
     check_artifact_injection(errors)
+    check_git_conflict_markers(errors)
 
     if errors:
         print("[ARCHITECTURE-CHECK] FAIL")
