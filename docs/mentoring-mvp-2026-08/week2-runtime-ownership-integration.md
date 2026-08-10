@@ -35,7 +35,7 @@ raw/simulation/synthetic sensor data, Canonical V3.1 물리·생성 기준, sour
 - model training/evaluation
 - immutable versioned Model Artifact publish
 
-기존 확장 ML Validator/workbench가 `api/ontology_dashboard/modeling` 아래에서 직접 수행하던 semantic mapping, feature materialization, sklearn experiment/training 구현도 각각 `systems/generator/ontology_mapping`, `systems/generator/feature`, `systems/generator/model`로 이동했다. API에는 기존 화면·계약을 깨지 않기 위한 lazy compatibility port만 남겼다.
+기존 확장 ML Validator/workbench가 `systems/backend/ontology_dashboard/modeling` 아래에서 직접 수행하던 semantic mapping, feature materialization, sklearn experiment/training 구현도 각각 `systems/generator/ontology_mapping`, `systems/generator/feature`, `systems/generator/model`로 이동했다. API에는 기존 화면·계약을 깨지 않기 위한 lazy compatibility port만 남겼다.
 
 Model Artifact는 `model-artifact-v1.0` manifest로 publish하며 artifact type/schema, model/dataset/feature version, created time, training config, metrics, checksum, provenance, compatibility, artifact file 목록을 포함한다.
 
@@ -46,7 +46,7 @@ Model Artifact는 `model-artifact-v1.0` manifest로 publish하며 artifact type/
 - `result-artifact-v1.0` 의미와 호환되는 Product Result Artifact 생성
 - 제품 Evidence 생성
 
-기존 `api/ontology_dashboard/modeling/registry.py`가 수행하던 active model load/scoring/explanation 구현도 `systems/backend/app/diagnosis/model_registry.py`로 이동했고 API 경로에는 compatibility adapter만 남겼다.
+기존 `systems/backend/ontology_dashboard/modeling/registry.py`가 수행하던 active model load/scoring/explanation 구현도 `systems/backend/app/diagnosis/model_registry.py`로 이동했고 API 경로에는 compatibility adapter만 남겼다.
 
 Backend는 generator Python 구현이나 sibling `model_store` 경로를 import/탐색하지 않는다. Week 2 로컬 데모에서 Artifact가 주입되지 않은 경우에만 기존 deterministic heuristic을 명시적 compatibility fallback으로 유지한다.
 
@@ -54,7 +54,7 @@ ML authoring compatibility port는 generator-capable 개발/통합 배포에서�
 
 ### API / Frontend / Report
 
-기존 `api/`와 `web/`은 이번 PR의 대규모 import에서 안정화된 실행 host로 유지한다. Backend API의 실제 MVP Evidence 경로는 PR #10의 물리 구조인 `systems/backend/app/diagnosis`를 호출하며, Frontend는 backend 도메인 폴더 구조와 1:1 재배치하지 않는다.
+PR #11에서 기존 root `api/`와 `web/` 실행 host를 각각 `systems/backend`와 `systems/frontend`로 수렴시켰다. Backend API의 실제 MVP Evidence 경로는 `systems/backend/app/diagnosis`를 호출하며, Frontend는 backend 도메인 폴더 구조와 1:1 재배치하지 않고 사용자 workflow 중심 구조를 유지한다.
 
 ## 기존 `ml/` 처리
 

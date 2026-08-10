@@ -1,8 +1,9 @@
 """Static architecture checks for the merged PR #8/#10 system contract.
 
 This verifier uses only the Python standard library so it can run before
-system-specific dependencies are installed. PR #9 additionally checks that the
-imported MVP code is a compatibility host rather than a second ML/runtime owner.
+system-specific dependencies are installed. PR #11 additionally verifies that
+the imported PR #9 runtime has converged into systems/backend and
+systems/frontend instead of remaining in root api/web hosts.
 """
 
 from __future__ import annotations
@@ -30,9 +31,12 @@ REQUIRED_PATHS = (
     SYSTEMS / "backend" / "app" / "diagnosis" / "predictor.py",
     SYSTEMS / "backend" / "app" / "diagnosis" / "evidence.py",
     SYSTEMS / "backend" / "app" / "main.py",
+    SYSTEMS / "backend" / "ontology_dashboard" / "main.py",
+    SYSTEMS / "backend" / "migrations",
+    SYSTEMS / "backend" / "pyproject.toml",
     SYSTEMS / "frontend" / "src",
-    ROOT / "api" / "ontology_dashboard" / "main.py",
-    ROOT / "web" / "src",
+    SYSTEMS / "frontend" / "package.json",
+    SYSTEMS / "frontend" / "vite.config.ts",
 )
 
 
@@ -92,7 +96,7 @@ def check_backend_domain_dependencies(errors: list[str]) -> None:
 
 
 def check_product_api_dependency(errors: list[str]) -> None:
-    api_root = ROOT / "api" / "ontology_dashboard"
+    api_root = SYSTEMS / "backend" / "ontology_dashboard"
     for path in api_root.rglob("*.py"):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -139,16 +143,24 @@ def check_legacy_ml_is_compatibility_only(errors: list[str]) -> None:
 
 
 def check_api_modeling_is_port_only(errors: list[str]) -> None:
-    modeling = ROOT / "api" / "ontology_dashboard" / "modeling"
+    modeling = SYSTEMS / "backend" / "ontology_dashboard" / "modeling"
     forbidden = ("joblib.dump", ".fit(", "predict_proba(")
     for name in ("mapping.py", "features.py", "experiments.py", "registry.py"):
         text = (modeling / name).read_text(encoding="utf-8")
         for fragment in forbidden:
             if fragment in text:
                 errors.append(
-                    f"API modeling compatibility port still owns algorithmic implementation: "
-                    f"api/ontology_dashboard/modeling/{name} contains {fragment}"
+                    f"Backend modeling compatibility port still owns algorithmic implementation: "
+                    f"systems/backend/ontology_dashboard/modeling/{name} contains {fragment}"
                 )
+
+
+def check_runtime_hosts_converged(errors: list[str]) -> None:
+    for legacy_root in (ROOT / "api", ROOT / "web"):
+        if legacy_root.exists():
+            errors.append(
+                f"legacy root runtime host still exists after systems convergence: {legacy_root.relative_to(ROOT)}"
+            )
 
 
 def check_git_conflict_markers(errors: list[str]) -> None:
@@ -182,6 +194,7 @@ def main() -> int:
     check_artifact_injection(errors)
     check_legacy_ml_is_compatibility_only(errors)
     check_api_modeling_is_port_only(errors)
+    check_runtime_hosts_converged(errors)
     check_git_conflict_markers(errors)
 
     if errors:
@@ -191,13 +204,14 @@ def main() -> int:
         return 1
 
     print("[ARCHITECTURE-CHECK] PASS")
-    print("- PR #10 required systems/domain scaffold exists")
+    print("- PR #10 required systems/domain structure exists")
+    print("- PR #11 API/frontend runtime hosts are physically converged under systems/")
     print("- generator owns semantic/feature/training and Model Artifact publication")
     print("- backend diagnosis owns runtime inference and Result Artifact/Evidence")
     print("- generator/backend direct Python imports are absent")
     print("- backend domains do not import other domains' implementation modules")
     print("- product API has no static generator implementation import")
-    print("- legacy ML/API modeling paths are compatibility ports, not ML owners")
+    print("- legacy ML/backend modeling compatibility paths are ports, not ML owners")
     print("- Model Artifact location is injected through MODEL_ARTIFACT_URI")
     return 0
 
