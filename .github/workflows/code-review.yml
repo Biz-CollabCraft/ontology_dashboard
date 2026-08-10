@@ -316,7 +316,10 @@ jobs:
               ],
               "generationConfig": {
                   "temperature": 0.1,
-                  "maxOutputTokens": 12000,
+                  "maxOutputTokens": 32768,
+                  "thinkingConfig": {
+                      "thinkingLevel": "MEDIUM",
+                  },
               },
           }
           Path("/tmp/vertex-request.json").write_text(
@@ -343,17 +346,43 @@ jobs:
           if "error" in payload:
               raise SystemExit(json.dumps(payload["error"], ensure_ascii=False))
 
+          candidates = payload.get("candidates", [])
+          if not candidates:
+              raise SystemExit("Vertex AI returned no candidates")
+
+          candidate = candidates[0]
+          finish_reason = candidate.get("finishReason")
+          if finish_reason != "STOP":
+              raise SystemExit(
+                  f"Vertex AI review is incomplete: finishReason={finish_reason!r}. "
+                  "Refusing to publish a partial review."
+              )
+
           parts = []
-          for candidate in payload.get("candidates", []):
-              for part in candidate.get("content", {}).get("parts", []):
-                  if part.get("thought"):
-                      continue
-                  text = part.get("text")
-                  if text:
-                      parts.append(text)
+          for part in candidate.get("content", {}).get("parts", []):
+              if part.get("thought"):
+                  continue
+              text = part.get("text")
+              if text:
+                  parts.append(text)
           review = "\n".join(parts).strip()
           if not review:
               raise SystemExit("Vertex AI returned no review text")
+
+          required_sections = (
+              "### Review Scope & Evidence",
+              "### Architecture Contract Matrix",
+              "### MVP Regression Matrix",
+              "### Actionable Findings",
+              "### Risk / Unknowns",
+              "### Merge Readiness",
+          )
+          missing_sections = [section for section in required_sections if section not in review]
+          if missing_sections:
+              raise SystemExit(
+                  "Vertex AI review is structurally incomplete; missing sections: "
+                  + ", ".join(missing_sections)
+              )
 
           usage = payload.get("usageMetadata", {})
           header = (
@@ -366,6 +395,7 @@ jobs:
           Path("/tmp/code-review.md").write_text(header + review + "\n", encoding="utf-8")
           print(
               "Vertex usage:",
+              f"finish_reason={finish_reason}",
               f"prompt={usage.get('promptTokenCount')}",
               f"output={usage.get('candidatesTokenCount')}",
               f"thoughts={usage.get('thoughtsTokenCount')}",
