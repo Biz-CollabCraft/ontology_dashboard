@@ -6,13 +6,9 @@ from pathlib import Path
 import pandas as pd
 from jsonschema import Draft202012Validator
 
-from systems.backend.diagnosis import (
-    ArtifactPredictor,
-    HeuristicPredictor,
-    build_evidence_package,
-    build_product_result_artifact,
-    load_fixture,
-)
+from systems.backend.app.diagnosis.contracts import load_fixture
+from systems.backend.app.diagnosis.evidence import build_evidence_package, build_product_result_artifact
+from systems.backend.app.diagnosis.predictor import ArtifactPredictor, HeuristicPredictor
 from systems.generator.model import train_and_publish_model
 
 
@@ -90,6 +86,5 @@ def test_legacy_ml_namespace_is_compatibility_adapter() -> None:
     from ontology_dashboard_manufacturing_ml import HeuristicPredictor as LegacyPredictor
     from ontology_dashboard_manufacturing_ml import build_evidence_package as legacy_evidence
 
-    assert LegacyPredictor.__module__ == "systems.backend.diagnosis.predictor"
-    assert legacy_evidence.__module__ == "systems.backend.diagnosis.evidence"
-
+    assert LegacyPredictor.__module__ == "systems.backend.app.diagnosis.predictor"
+    assert legacy_evidence.__module__ == "systems.backend.app.diagnosis.evidence"

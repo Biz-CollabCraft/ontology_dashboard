@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from systems.backend.diagnosis.evidence import FixtureContextProvider
+from systems.backend.app.diagnosis.evidence import FixtureContextProvider
 
 
 class Project3HttpContextProvider:

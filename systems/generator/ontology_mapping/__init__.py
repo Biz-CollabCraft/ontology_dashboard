@@ -1,6 +1,7 @@
-"""Semantic mapping owned by the generator system."""
+"""Semantic ontology mapping package owned by the generator system."""
 
-from .service import map_observation
+from .mapping_agent import MappingAgent
+from .mapping_cache import MappingCache
+from .mapping_service import MappingService, map_observation
 
-__all__ = ["map_observation"]
-
+__all__ = ["MappingAgent", "MappingCache", "MappingService", "map_observation"]

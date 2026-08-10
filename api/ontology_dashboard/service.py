@@ -7,12 +7,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from systems.backend.diagnosis import (
+from systems.backend.app.diagnosis.contracts import load_fixture
+from systems.backend.app.diagnosis.evidence import (
+    FixtureContextProvider,
     build_evidence_package,
     build_product_result_artifact,
-    load_fixture,
 )
-from systems.backend.diagnosis.evidence import FixtureContextProvider
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.settings import database_location
 

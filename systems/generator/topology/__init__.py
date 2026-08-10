@@ -1,6 +1,7 @@
-"""Topology preparation owned by the generator system."""
+"""Topology preparation package owned by the generator system."""
 
-from .service import normalize_relation
+from .topology_agent import TopologyAgent
+from .topology_cache import TopologyCache
+from .topology_service import TopologyService, normalize_relation
 
-__all__ = ["normalize_relation"]
-
+__all__ = ["TopologyAgent", "TopologyCache", "TopologyService", "normalize_relation"]

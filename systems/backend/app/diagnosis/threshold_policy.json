@@ -28,7 +28,7 @@
     "data_quality_hold": "hold_for_data_check"
   },
   "notes": [
-    "Runtime decision policy is owned by systems/backend/diagnosis.",
+    "Runtime decision policy is owned by systems/backend/app/diagnosis.",
     "Model probability and operational status are separate contracts.",
     "High-criticality equipment lowers attention and warning boundaries only; it does not authorize automatic control.",
     "Final deployment thresholds require customer-specific cost validation."

@@ -14,7 +14,7 @@ systems/generator
 extraction → ontology mapping → topology → feature → training/evaluation
 → versioned Model Artifact publish
         ↓ MODEL_ARTIFACT_URI
-systems/backend/diagnosis
+systems/backend/app/diagnosis
 current observation + Model Artifact
 → runtime inference
 → Product Result Artifact / Evidence
@@ -39,14 +39,14 @@ raw/simulation/synthetic sensor data, Canonical V3.1 물리·생성 기준, sour
 
 Model Artifact는 `model-artifact-v1.0` manifest로 publish하며 artifact type/schema, model/dataset/feature version, created time, training config, metrics, checksum, provenance, compatibility, artifact file 목록을 포함한다.
 
-### `systems/backend/diagnosis`
+### `systems/backend/app/diagnosis`
 
 - `MODEL_ARTIFACT_URI`로 주입된 Model Artifact의 manifest/checksum/compatibility 검증
 - current observation runtime inference
 - `result-artifact-v1.0` 의미와 호환되는 Product Result Artifact 생성
 - 제품 Evidence 생성
 
-기존 `api/ontology_dashboard/modeling/registry.py`가 수행하던 active model load/scoring/explanation 구현도 `systems/backend/diagnosis/model_registry.py`로 이동했고 API 경로에는 compatibility adapter만 남겼다.
+기존 `api/ontology_dashboard/modeling/registry.py`가 수행하던 active model load/scoring/explanation 구현도 `systems/backend/app/diagnosis/model_registry.py`로 이동했고 API 경로에는 compatibility adapter만 남겼다.
 
 Backend는 generator Python 구현이나 sibling `model_store` 경로를 import/탐색하지 않는다. Week 2 로컬 데모에서 Artifact가 주입되지 않은 경우에만 기존 deterministic heuristic을 명시적 compatibility fallback으로 유지한다.
 
@@ -54,11 +54,11 @@ ML authoring compatibility port는 generator-capable 개발/통합 배포에서�
 
 ### API / Frontend / Report
 
-기존 `api/`와 `web/`은 이번 PR의 대규모 import에서 안정화된 실행 host로 유지한다. Backend API의 실제 MVP Evidence 경로는 `systems/backend/diagnosis`를 호출하며, Frontend는 backend 도메인 폴더 구조와 1:1 재배치하지 않는다.
+기존 `api/`와 `web/`은 이번 PR의 대규모 import에서 안정화된 실행 host로 유지한다. Backend API의 실제 MVP Evidence 경로는 PR #10의 물리 구조인 `systems/backend/app/diagnosis`를 호출하며, Frontend는 backend 도메인 폴더 구조와 1:1 재배치하지 않는다.
 
 ## 기존 `ml/` 처리
 
-기존 `ml/src/factory_signal_ml`에는 training과 runtime prediction/Evidence가 한 패키지에 섞여 있었다. 구현은 각각 `systems/generator`와 `systems/backend/diagnosis`로 이동했고, 기존 import와 CLI를 깨지 않기 위한 compatibility adapter만 남겼다.
+기존 `ml/src/factory_signal_ml`에는 training과 runtime prediction/Evidence가 한 패키지에 섞여 있었다. 구현은 각각 `systems/generator`와 `systems/backend/app/diagnosis`로 이동했고, 기존 import와 CLI를 깨지 않기 위한 compatibility adapter만 남겼다.
 
 ## 이번 PR에서 의도적으로 유지한 것
 
@@ -74,4 +74,3 @@ ML authoring compatibility port는 generator-capable 개발/통합 배포에서�
 ## 회귀 기준
 
 `gen_data` PR #2의 Canonical V3.1 `model_outputs/*`는 운영 입력이 아니라 비교 기준이다. 새 runtime Result Artifact는 binary `failure_within_horizon` 의미, model/dataset provenance, factor 방향과 같은 의미 계약을 비교할 수 있지만 제품 실행이 해당 fixture JSONL을 최신 결과처럼 직접 읽지는 않는다.
-

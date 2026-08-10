@@ -1,7 +1,7 @@
 """Generator-local source/feature contract helpers.
 
 These constants describe model-development inputs only. Runtime observation
-validation lives under ``systems.backend.diagnosis`` so the generator and
+validation lives under ``systems.backend.app.diagnosis`` so the generator and
 backend do not import each other's implementation code.
 """
 
@@ -39,4 +39,3 @@ def file_sha256(path: str | Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-

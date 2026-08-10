@@ -1,4 +1,9 @@
-"""Immutable versioned Model Artifact publication for the generator system."""
+"""Immutable versioned Model Artifact publication for the generator system.
+
+The physical ``model_store/`` directory from the PR #10 scaffold is only a
+local adapter example. The Generator/Backend boundary is the versioned manifest
+and injected artifact URI, not a sibling filesystem path.
+"""
 
 from __future__ import annotations
 
@@ -10,9 +15,6 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-from .training import ALL_FEATURES, train_and_evaluate
-
 
 ARTIFACT_TYPE = "predictive_maintenance_model"
 ARTIFACT_SCHEMA_VERSION = "model-artifact-v1.0"
@@ -166,6 +168,8 @@ def train_and_publish_model(
 ) -> Path:
     """Train/evaluate and publish the result as one versioned Model Artifact."""
 
+    from .model_training import ALL_FEATURES, train_and_evaluate
+
     with tempfile.TemporaryDirectory(prefix="ontology-dashboard-model-training-") as work:
         work_dir = Path(work)
         metadata = train_and_evaluate(
@@ -219,3 +223,12 @@ def train_and_publish_model(
             extra_files={"threshold_curve": work_dir / "threshold_curve.json"},
         )
 
+
+class ModelRegistry:
+    """PR #10 public facade for immutable Model Artifact publication."""
+
+    def __init__(self, artifact_uri: str | Path) -> None:
+        self.artifact_uri = artifact_uri
+
+    def publish(self, **kwargs: Any) -> Path:
+        return publish_model_artifact(artifact_uri=self.artifact_uri, **kwargs)

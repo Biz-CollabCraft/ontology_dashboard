@@ -106,4 +106,3 @@ class LocalModelArtifactProvider:
             model=joblib.load(model_path),
             feature_schema=json.loads(feature_schema_path.read_text(encoding="utf-8")),
         )
-

@@ -1,10 +1,10 @@
 """Compatibility imports for the pre-systems ML package.
 
 Operational ownership has moved to ``systems/generator`` for model development
-and ``systems/backend/diagnosis`` for runtime inference/Evidence.
+and ``systems/backend/app/diagnosis`` for runtime inference/Evidence.
 """
 
-from systems.backend.diagnosis.contracts import (  # noqa: F401
+from systems.backend.app.diagnosis.contracts import (  # noqa: F401
     DERIVED_COLUMNS,
     DISPLAY_NAMES,
     SENSOR_RANGES,
