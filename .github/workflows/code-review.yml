@@ -157,6 +157,34 @@ jobs:
               critical_chars += len(block)
           critical_context = "\n".join(critical_chunks)
 
+          deployment_sensitive_paths = {
+              "infra/docker-compose.yml",
+              "systems/backend/Dockerfile",
+              "systems/frontend/Dockerfile",
+              "systems/frontend/nginx.conf",
+          }
+          deployment_sensitive = bool(changed_paths & deployment_sensitive_paths)
+          # This review job runs the architecture verifier but intentionally
+          # does not build/start Docker images. A deployment-sensitive PR must
+          # therefore not receive an unconditional Ready verdict from this
+          # review alone.
+          docker_runtime_verified_in_review = False
+          readiness_ceiling = (
+              "Conditional"
+              if deployment_sensitive and not docker_runtime_verified_in_review
+              else "Ready to Merge"
+          )
+          Path("/tmp/review-policy.json").write_text(
+              __import__("json").dumps(
+                  {
+                      "deployment_sensitive": deployment_sensitive,
+                      "docker_runtime_verified_in_review": docker_runtime_verified_in_review,
+                      "merge_readiness_ceiling": readiness_ceiling,
+                  }
+              ),
+              encoding="utf-8",
+          )
+
           architecture_check = subprocess.run(
               ["python3", "systems/verify_architecture.py"],
               check=False,
@@ -195,6 +223,7 @@ jobs:
                   "- A matrix item may be PASS only when supplied diff/critical-file context or PR_CHECK_OUTPUT contains concrete evidence that directly supports that item.",
                   "- If evidence only shows static configuration but not runtime behavior, say what is statically proven and mark the runtime portion NOT PROVEN.",
                   "- Do not cite tests/builds as executed unless their output is actually present in PR_CHECK_OUTPUT or other supplied execution evidence.",
+                  "- A command being present in a workflow file proves only that the check is configured; it does not prove that command executed or passed for this SHA.",
                   "- Inspect path calculations, import/runtime boundaries, Docker build/runtime assumptions, migration lookup, optional dependencies, and frontend route/assets after moves.",
                   "- A pure rename is not a defect; look for semantic breakage caused by the move.",
                   "- Prefer NOT PROVEN over inventing a PASS or a finding when evidence is insufficient.",
@@ -240,6 +269,9 @@ jobs:
                   f"HEAD_SHA={head}",
                   f"DIFF_TRUNCATED={str(truncated).lower()}",
                   f"CRITICAL_CONTEXT_CHARS={len(critical_context)}",
+                  f"DEPLOYMENT_SENSITIVE={str(deployment_sensitive).lower()}",
+                  f"DOCKER_RUNTIME_VERIFIED_IN_REVIEW={str(docker_runtime_verified_in_review).lower()}",
+                  f"MERGE_READINESS_CEILING={readiness_ceiling}",
                   "---",
                   trusted_contract,
                   "---",
@@ -343,6 +375,7 @@ jobs:
           from pathlib import Path
 
           payload = json.loads(Path("/tmp/vertex-response.json").read_text(encoding="utf-8"))
+          policy = json.loads(Path("/tmp/review-policy.json").read_text(encoding="utf-8"))
           if "error" in payload:
               raise SystemExit(json.dumps(payload["error"], ensure_ascii=False))
 
@@ -383,6 +416,21 @@ jobs:
                   "Vertex AI review is structurally incomplete; missing sections: "
                   + ", ".join(missing_sections)
               )
+
+          readiness_ceiling = policy["merge_readiness_ceiling"]
+          if readiness_ceiling == "Conditional":
+              prefix, marker, merge_section = review.partition("### Merge Readiness")
+              if marker and "Not Ready" not in merge_section and "Conditional" not in merge_section:
+                  review = (
+                      prefix
+                      + marker
+                      + "\n\n- **Conditional**\n"
+                      + "- **Deterministic evidence guard**: 이 PR은 Docker/Compose/Nginx 배포 경로를 변경하지만 "
+                      + "이 Code Review job 자체에는 image build/container runtime smoke 증거가 없습니다. "
+                      + "따라서 정적 검토가 PASS여도 이 자동 리뷰의 최종 verdict는 Conditional을 넘을 수 없습니다.\n\n"
+                      + "#### Model rationale (참고용)\n\n"
+                      + merge_section.strip()
+                  )
 
           usage = payload.get("usageMetadata", {})
           header = (
