@@ -1,0 +1,79 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # The repository-scoped WIF identity must never be exposed to forked code.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Review pull request with Gemini 3.6 Flash on Vertex AI
+        id: gemini_review
+        uses: google-github-actions/run-gemini-cli@f77273f4c914e4bf38440cf36a0369cb64a37489 # v0.1.22
+        env:
+          GEMINI_CLI_TRUST_WORKSPACE: "true"
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          gcp_workload_identity_provider: projects/932697090428/locations/global/workloadIdentityPools/github-actions/providers/ontology-dashboard
+          gcp_service_account: ontology-gh-review@flai-oosuhada-20260506.iam.gserviceaccount.com
+          gcp_project_id: flai-oosuhada-20260506
+          gcp_location: global
+          use_vertex_ai: "true"
+          gemini_cli_version: latest
+          gemini_model: gemini-3.6-flash
+          workflow_name: code-review
+          github_pr_number: ${{ github.event.pull_request.number }}
+          settings: |-
+            {
+              "model": {
+                "maxSessionTurns": 25
+              },
+              "mcpServers": {
+                "github": {
+                  "command": "docker",
+                  "args": [
+                    "run",
+                    "-i",
+                    "--rm",
+                    "-e",
+                    "GITHUB_PERSONAL_ACCESS_TOKEN",
+                    "ghcr.io/github/github-mcp-server:v0.27.0"
+                  ],
+                  "includeTools": [
+                    "add_comment_to_pending_review",
+                    "pull_request_read",
+                    "pull_request_review_write"
+                  ],
+                  "env": {
+                    "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+                  }
+                }
+              },
+              "tools": {
+                "core": []
+              }
+            }
+          extensions: |-
+            [
+              "https://github.com/gemini-cli-extensions/code-review"
+            ]
+          prompt: /pr-code-review

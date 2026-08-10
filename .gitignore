@@ -386,3 +386,7 @@ data/result/*
 !data/result/.gitkeep
 front/.next/
 front/node_modules/
+
+# Gemini CLI / GitHub Actions local artifacts
+.gemini/
+gha-creds-*.json
