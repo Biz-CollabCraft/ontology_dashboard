@@ -17,7 +17,7 @@ def require_psycopg_pool():
         from psycopg_pool import ConnectionPool
     except ImportError as exc:
         raise RuntimeError(
-            "PostgreSQL pooling requires api[postgres] with psycopg_pool installed"
+            "PostgreSQL pooling requires the systems/backend postgres extra with psycopg_pool installed"
         ) from exc
     return ConnectionPool, dict_row
 

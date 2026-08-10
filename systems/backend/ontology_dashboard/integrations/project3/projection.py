@@ -8,9 +8,6 @@ import re
 from typing import Any
 import uuid
 
-from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
-
 from ...outbox import OutboxMessage
 from .client import (
     Project3Client,
@@ -62,11 +59,13 @@ class Project3ProjectionDeliveryError(RuntimeError):
 def _require_psycopg():
     try:
         import psycopg
+        from psycopg.rows import dict_row
+        from psycopg.types.json import Jsonb
     except ImportError as exc:
         raise RuntimeError(
-            "Project 3 graph projection requires api[postgres]"
+            "Project 3 graph projection requires the systems/backend postgres extra"
         ) from exc
-    return psycopg
+    return psycopg, dict_row, Jsonb
 
 
 def _payload(value: Any) -> dict[str, Any]:
@@ -202,7 +201,7 @@ class PredictiveMaintenanceProject3ProjectionHandler:
         message: OutboxMessage,
     ) -> Project3GraphProjectionRequest:
         payload = self._validate_message(message)
-        psycopg = _require_psycopg()
+        psycopg, dict_row, _ = _require_psycopg()
         with psycopg.connect(
             self.database_url,
             row_factory=dict_row,
@@ -448,7 +447,7 @@ class PredictiveMaintenanceProject3ProjectionHandler:
         self,
         request: Project3GraphProjectionRequest,
     ) -> None:
-        psycopg = _require_psycopg()
+        psycopg, dict_row, Jsonb = _require_psycopg()
         with psycopg.connect(
             self.database_url,
             row_factory=dict_row,
@@ -514,7 +513,7 @@ class PredictiveMaintenanceProject3ProjectionHandler:
                 "Project 3 graph count reconciliation failed",
                 retryable=False,
             )
-        psycopg = _require_psycopg()
+        psycopg, dict_row, Jsonb = _require_psycopg()
         with psycopg.connect(
             self.database_url,
             row_factory=dict_row,
@@ -565,7 +564,7 @@ class PredictiveMaintenanceProject3ProjectionHandler:
         request: Project3GraphProjectionRequest,
         error: Exception,
     ) -> None:
-        psycopg = _require_psycopg()
+        psycopg, dict_row, Jsonb = _require_psycopg()
         with psycopg.connect(
             self.database_url,
             row_factory=dict_row,
