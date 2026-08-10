@@ -14,6 +14,8 @@ from .contracts import audit_fixture, derive_features
 
 
 DEFAULT_POLICY_PATH = Path(__file__).with_name("threshold_policy.json")
+_TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+_HEURISTIC_DEFAULT_ENVIRONMENTS = {"local", "demo", "test"}
 
 
 def _sigmoid(value: float) -> float:
@@ -284,7 +286,18 @@ def configured_predictor() -> Predictor:
     artifact_uri = os.getenv("MODEL_ARTIFACT_URI", "").strip()
     if artifact_uri:
         return ArtifactPredictor(artifact_uri)
-    fallback = os.getenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", "1").strip().lower()
-    if fallback not in {"1", "true", "yes", "on"}:
-        raise RuntimeError("MODEL_ARTIFACT_URI is required when heuristic fallback is disabled")
+
+    configured_fallback = os.getenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", "").strip().lower()
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    fallback_enabled = (
+        configured_fallback in _TRUTHY_ENV_VALUES
+        if configured_fallback
+        else app_env in _HEURISTIC_DEFAULT_ENVIRONMENTS
+    )
+    if not fallback_enabled:
+        raise RuntimeError(
+            "MODEL_ARTIFACT_URI is required because heuristic fallback is disabled "
+            f"for APP_ENV={app_env!r}; set "
+            "ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK=1 only when an explicit fallback is intended"
+        )
     return HeuristicPredictor()

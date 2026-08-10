@@ -4,11 +4,12 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from jsonschema import Draft202012Validator
 
 from systems.backend.app.diagnosis.contracts import load_fixture
 from systems.backend.app.diagnosis.evidence import build_evidence_package, build_product_result_artifact
-from systems.backend.app.diagnosis.predictor import ArtifactPredictor, HeuristicPredictor
+from systems.backend.app.diagnosis.predictor import ArtifactPredictor, HeuristicPredictor, configured_predictor
 from systems.generator.model import train_and_publish_model
 
 
@@ -80,6 +81,42 @@ def test_week2_fixture_fallback_remains_backend_owned(monkeypatch) -> None:
     assert result["prediction_task"] == "binary_failure_within_horizon"
     assert result["provenance"]["source_type"] == "product_runtime_inference"
     assert result["provenance"]["canonical_source_mutated"] is False
+
+
+@pytest.mark.parametrize("app_env", ["local", "demo", "test"])
+def test_heuristic_fallback_defaults_on_only_for_local_demo_test(monkeypatch, app_env: str) -> None:
+    monkeypatch.delenv("MODEL_ARTIFACT_URI", raising=False)
+    monkeypatch.delenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", raising=False)
+    monkeypatch.setenv("APP_ENV", app_env)
+
+    assert isinstance(configured_predictor(), HeuristicPredictor)
+
+
+@pytest.mark.parametrize("app_env", ["development", "dev", "deploy", "staging", "production"])
+def test_heuristic_fallback_defaults_off_for_nonlocal_environments(monkeypatch, app_env: str) -> None:
+    monkeypatch.delenv("MODEL_ARTIFACT_URI", raising=False)
+    monkeypatch.delenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", raising=False)
+    monkeypatch.setenv("APP_ENV", app_env)
+
+    with pytest.raises(RuntimeError, match="MODEL_ARTIFACT_URI is required"):
+        configured_predictor()
+
+
+def test_explicit_heuristic_fallback_override_is_honored(monkeypatch) -> None:
+    monkeypatch.delenv("MODEL_ARTIFACT_URI", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", "1")
+
+    assert isinstance(configured_predictor(), HeuristicPredictor)
+
+
+def test_explicit_heuristic_fallback_disable_is_honored(monkeypatch) -> None:
+    monkeypatch.delenv("MODEL_ARTIFACT_URI", raising=False)
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", "0")
+
+    with pytest.raises(RuntimeError, match="MODEL_ARTIFACT_URI is required"):
+        configured_predictor()
 
 
 def test_legacy_ml_namespace_is_compatibility_adapter() -> None:
