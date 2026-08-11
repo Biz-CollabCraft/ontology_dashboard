@@ -10,6 +10,8 @@ on:
 jobs:
   architecture:
     runs-on: ubuntu-latest
+    outputs:
+      docker_runtime_verified: ${{ steps.docker_runtime.outputs.verified }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -98,6 +100,7 @@ jobs:
         run: npm run build
 
       - name: Docker Compose runtime smoke
+        id: docker_runtime
         shell: bash
         run: |
           docker version
@@ -153,6 +156,7 @@ jobs:
           print(f"artifact_storage_root={root}")
           print("artifact_storage_write_read_delete=ok")
           PY
+          echo "verified=true" >> "$GITHUB_OUTPUT"
 
       - name: Docker Compose diagnostics
         if: failure()
@@ -171,3 +175,23 @@ jobs:
           else
             git show --check --oneline --no-renames HEAD
           fi
+
+  review:
+    needs: architecture
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.architecture.result == 'success' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/code-review.yml
+    with:
+      architecture_result: ${{ needs.architecture.result }}
+      docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}
+      pr_number: ${{ github.event.pull_request.number }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      pr_title: ${{ github.event.pull_request.title }}
+      pr_body: ${{ github.event.pull_request.body }}

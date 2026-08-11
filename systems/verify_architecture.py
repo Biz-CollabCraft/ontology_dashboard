@@ -251,6 +251,9 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "architecture.yml").read_text(
         encoding="utf-8"
     )
+    review_workflow_text = (ROOT / ".github" / "workflows" / "code-review.yml").read_text(
+        encoding="utf-8"
+    )
     required_fragments = (
         "docker compose -f infra/docker-compose.yml build api web",
         "docker compose -f infra/docker-compose.yml up -d api web",
@@ -260,11 +263,38 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'assert os.getuid() == 10001',
         'probe_key = "ci/docker-runtime/artifact-storage-smoke.txt"',
         'assert service.backend.get(probe_key) == payload',
+        'id: docker_runtime',
+        'echo "verified=true" >> "$GITHUB_OUTPUT"',
+        'docker_runtime_verified: ${{ steps.docker_runtime.outputs.verified }}',
+        'needs: architecture',
+        'uses: ./.github/workflows/code-review.yml',
+        'docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}',
         "docker compose -f infra/docker-compose.yml down --volumes --remove-orphans",
     )
     for fragment in required_fragments:
         if fragment not in workflow_text:
             errors.append(f"architecture CI is missing Docker runtime smoke coverage: {fragment}")
+
+    review_required_fragments = (
+        "workflow_call:",
+        'ARCHITECTURE_JOB_RESULT: ${{ inputs.architecture_result }}',
+        'DOCKER_RUNTIME_VERIFIED: ${{ inputs.docker_runtime_verified }}',
+        'docker_runtime_verified_in_review = os.environ["DOCKER_RUNTIME_VERIFIED"].lower() == "true"',
+        'if architecture_job_result != "success":',
+        "The prerequisite `architecture` job for this exact pull request head completed successfully",
+    )
+    for fragment in review_required_fragments:
+        if fragment not in review_workflow_text:
+            errors.append(
+                "Gemini review must consume completed architecture/Docker evidence before starting: "
+                f"missing {fragment}"
+            )
+
+    if "pull_request:" in review_workflow_text.split("jobs:", 1)[0]:
+        errors.append(
+            ".github/workflows/code-review.yml must not run directly on pull_request; "
+            "it must be called after the architecture job succeeds"
+        )
 
 
 def check_git_conflict_markers(errors: list[str]) -> None:
