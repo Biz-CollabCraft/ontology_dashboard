@@ -143,3 +143,11 @@ test("redirects a legacy project surface to the official Week 2 MVP", async ({ p
   await expect(page).toHaveURL(new RegExp(`${MVP_PATH}$`));
   await expect(page.getByTestId("mvp-overview")).toBeVisible({ timeout: 15_000 });
 });
+
+test("logs out from the official MVP shell", async ({ page }) => {
+  await login(page);
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
+  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
+});

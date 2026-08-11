@@ -3,6 +3,7 @@ import {
   ClipboardCheck,
   FileText,
   LayoutDashboard,
+  LogOut,
   Menu,
   RefreshCw,
   X,
@@ -26,6 +27,7 @@ export function MvpShell({
   onRoleChange,
   onRefresh,
   refreshing,
+  onLogout,
   children,
 }: {
   context: MvpContextModel;
@@ -35,6 +37,7 @@ export function MvpShell({
   onRoleChange: (role: MvpRoleLens) => void;
   onRefresh: () => void;
   refreshing: boolean;
+  onLogout: () => void | Promise<void>;
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -54,6 +57,7 @@ export function MvpShell({
         <div className="mvp-header-actions">
           <label><span>역할</span><select value={role} onChange={(event) => onRoleChange(event.target.value as MvpRoleLens)}><option value="process_manager">생산 관리자</option><option value="field_operator">현장 담당자</option></select></label>
           <button type="button" className="mvp-icon-button" onClick={onRefresh} aria-label="데이터 새로고침" disabled={refreshing}><RefreshCw size={17} className={refreshing ? "is-spinning" : ""} /></button>
+          <button type="button" className="mvp-icon-button" onClick={() => void onLogout()} aria-label="로그아웃" title="로그아웃"><LogOut size={17} /></button>
           <button type="button" className="mvp-icon-button mvp-mobile-menu" onClick={() => setMobileOpen((current) => !current)} aria-label="메뉴 열기">{mobileOpen ? <X size={19} /> : <Menu size={19} />}</button>
         </div>
       </header>
