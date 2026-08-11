@@ -2,7 +2,7 @@
 
 작성일: 2026-08-10
 상태: 제안
-범위: `ontology-dashboard`의 현행 fixture 기반 dashboard Evidence Package를 `pdm-mvp` Evidence Package를 source contract로 하는 Event Evidence v2로 대체하고, `map-report-ui-prototype`에서 출발한 상태 요약, 점검 요청, 요약 보고서, 확장 예정 report UI를 제품 화면 묶음으로 이식하기 위한 구현 계획이다.
+범위: `ontology-dashboard`의 현행 fixture 기반 dashboard Evidence Package를 `pdm-mvp` Evidence Package를 source contract로 하는 Event Evidence v2로 대체하고, `map-report-ui-prototype`에서 확인한 화면 필드 중 2주차 MVP에 필요한 근거 추적과 점검 요청 액션만 최소 이식하기 위한 구현 계획이다.
 
 여기서 "대체"는 `pdm-mvp` 원본 payload를 dashboard evidence 루트에 그대로 덮어쓴다는 뜻이 아니다. 원천 Evidence와 화면/리포트 projection을 분리해 `source_evidence`, `assessment`, `report_projection`, `provenance` 같은 명시적 계층으로 재구성한다.
 
@@ -18,7 +18,7 @@
   - `POST /api/events/{event_id}/report`
 - 현행 dashboard evidence schema는 fixture 중심 구조다. 주요 필드는 `equipment`, `observation`, `history`, `top_factors`, `maintenance_context`, `lineage`다.
 - `pdm-mvp` Evidence Package는 Result Artifact 중심 구조다. 주요 필드는 `asset_id`, `sensor_evidence`, `model_prediction`, `top_factors`, `maintenance_context`, `recommended_actions`, `status_flags`, `lineage`다.
-- `map-report-ui-prototype`은 정적 React 프로토타입이다. 상태 맵, 점검 요청 보고서, 요약 보고서, 근거 추적 UI 블록은 활용 가능하지만, 하드코딩된 데이터 생성 로직은 제품 데이터 소스가 될 수 없다.
+- `map-report-ui-prototype`은 정적 React 프로토타입이다. 2주차에는 화면별 필요 필드 후보를 역추적하는 참고 자료로만 사용하고, 하드코딩된 데이터 생성 로직은 제품 데이터 소스가 될 수 없다.
 
 ## 2. 목표 방향
 
@@ -26,14 +26,28 @@
 
 프론트엔드는 raw JSONL이나 producer 원본 payload를 직접 파싱하지 않는다. 기존 API/service 계층이 안정적인 Event Evidence v2, 현행 GroundedReport, Report UI ViewModel을 만들어 제공한다.
 
-Report 생성은 단일 화면에 바로 붙는 구조가 아니라 다음 계층을 분리한다.
+Report 생성은 단일 화면에 바로 붙는 구조가 아니라 다음 계층을 분리한다. 2주차 구현 범위는 1~3번까지다.
 
 1. `pdm-mvp` Evidence Package를 `source_evidence`로 보존한다.
 2. `source_evidence`에서 dashboard Event Evidence v2의 `assessment`와 `report_projection`을 만든다.
-3. Event Evidence v2에서 현행 `GroundedReport`와 V2 정적 Report Output 후보를 파생한다.
-4. 정적 Report Output 후보를 기준으로 상태 요약, 점검 요청, 요약 보고서, 이후 확장 report UI output으로 분기한다.
+3. Event Evidence v2에서 현행 `GroundedReport`, 점검 요청 ViewModel, Evidence trace ViewModel을 파생한다.
+4. 상태 요약, 기간 요약 보고서, 확장 report UI output은 V2 Target으로 보류한다.
 
-따라서 Event Evidence v2가 우선 안정화 대상이며, 정적 Report Output 후보는 downstream report views를 확장할 때 쓰는 파생 산출물이다.
+따라서 Event Evidence v2가 우선 안정화 대상이며, 정적 Report Output 후보와 기간 기반 report views는 downstream 확장 후보로만 둔다.
+
+### 2.1 도메인 분리와 채택 상태
+
+이번 통합은 모든 dashboard 도메인 계약을 새로 정의하지 않는다. 기존 dashboard 문서의 Current/V2 분리를 따르고, `pdm-mvp`는 Prediction/Evidence 도메인의 source contract로만 사용한다.
+
+| 도메인 | Source of truth | 이번 계획의 처리 | 상태 |
+|---|---|---|---|
+| Prediction / Evidence | `pdm-mvp` Result Artifact와 Evidence Package | Event Evidence v2의 `source_evidence`, `assessment`, `report_projection`으로 변환 | 1차 구현 대상 |
+| Asset / Object | dashboard ontology/runtime 조회 | `asset_id`, 표시명, line, 담당자 같은 결합 필드는 있으면 연결하고 없으면 임의 생성하지 않음 | 현행 API와 결합 |
+| Overview / Aggregate | dashboard 조회·집계 API | 2주차 계획에서 새로 설계하지 않음. 상태 분포, 전체 설비 수, top risk list는 V2 `ReportInput` 후보로 보류 | V2 Target |
+| Operations | 현행 Event action/note/activity, 이후 production/maintenance API | 2주차에는 `정비이력 추가`를 별도 Operations 도메인 API가 아니라 Event action/note/activity에 연결하는 최소 액션 초안으로만 정의 | 최소 액션 초안 |
+| Report | 현행 `GroundedReport`, V2 `ReportInput`/`ReportOutput` 후보 | Event Evidence v2는 현행 Event Report로 변환하고, 기간 기반 ReportOutput은 검증된 집계 입력이 있을 때만 파생 | Current + V2 Target 분리 |
+
+따라서 Operations 도메인의 `production_cycle_count`, `maintenance_event_count`, 기간별 정비 목록, 운영 영향 집계는 이번 주 설계하지 않는다. 화면에 정비 문맥이 필요하면 `pdm-mvp.maintenance_context`를 근거로 표시하고, 사용자가 남기는 정비 기록은 현행 Event action/note/activity 흐름에 연결한다. 숫자를 0이나 추정값으로 채우지 않는다.
 
 ```mermaid
 flowchart LR
@@ -43,17 +57,14 @@ flowchart LR
   C --> C2["assessment"]
   C --> C3["report_projection"]
   C --> D["Current GroundedReport"]
-  C --> E["Static Report Output Candidate"]
-  E --> F["Summary Report Output"]
-  E --> G["Inspection Request Output"]
-  E --> H["Status Summary Output"]
-  E --> L["Future Report Outputs"]
+  C -. "V2 Target" .-> E["Static Report Output Candidate"]
+  E -. "V2 Target" .-> F["Summary Report Output"]
+  C --> G["Inspection Request Output"]
+  E -. "V2 Target" .-> H["Status Summary Output"]
+  E -. "V2 Target" .-> L["Future Report Outputs"]
   C --> I["GET /api/events/{event_id}/evidence"]
   D --> J["POST /api/events/{event_id}/report"]
-  F --> K["Report UI Suite"]
-  G --> K
-  H --> K
-  L --> K
+  G --> K["2주차 최소 Report UI"]
 ```
 
 ## 3. 반드시 지킬 경계
@@ -62,6 +73,7 @@ flowchart LR
 - `review_shutdown`은 자동 설비 정지가 아니다. 사람의 정지 검토 요청으로만 표현한다.
 - 리포트 추천으로 Work Order를 자동 생성하지 않는다.
 - 단일 Evidence Package를 기간 기반 Executive Report로 취급하지 않는다. 기간 합계, 운영/비운영 설비 수, 정비 건수, site/cell 집계는 별도 집계 소스가 필요하다.
+- 2주차에는 Operations 도메인의 생산·정비 기간 집계 계약을 새로 정의하지 않는다. Event Evidence v2 adapter가 `production_cycle_count`, `maintenance_event_count`, 운영 영향 수치를 만들지 않는다.
 - 이 작업에서 현행 Event Report 계약을 V2 기간 기반 Executive Report 계약으로 대체하지 않는다.
 - `pdm-mvp`가 `근거 부족`으로 남기는 optional context를 dashboard adapter가 임의 수치나 정상 상태로 보정하지 않는다.
 - `failure_type_candidates`는 측정값에 대한 규칙 기반 조건 판정이며 모델 출력이 아니다. `predicted_failure_type` 또는 root cause처럼 취급하지 않는다.
@@ -145,21 +157,21 @@ Event Evidence v2는 다음 계층을 분리한다.
 
 - 현행 Event Report: `schema_version=1.0`, `GroundedReport`, `sections/actions/citations/limitations` 중심
 - V2 정적 Report Output: `executive-report-v1.0`, `generation_method`, `evidence_references`, `provenance` 중심
-- 화면별 Report UI Output: 상태 요약, 점검 요청, 요약 보고서, 향후 추가 report view에 맞춘 ViewModel
+- 2주차 최소 화면 output: 점검 요청과 evidence trace에 필요한 Event Evidence v2 기반 ViewModel
+- V2 화면별 Report UI Output: 상태 요약, 요약 보고서, 향후 추가 report view에 맞춘 ViewModel
 
-통합 작업에서는 Event Evidence v2를 먼저 안정화한 뒤, 현행 `GroundedReport` 호환 경로와 V2 정적 Report Output 후보를 분리해 파생한다.
+통합 작업에서는 Event Evidence v2를 먼저 안정화한 뒤, 현행 `GroundedReport` 호환 경로를 우선 연결한다. V2 정적 Report Output 후보는 문서상 후보로만 유지하고 2주차 구현 범위에 넣지 않는다.
 
 ```text
 Event Evidence v2
 → Current GroundedReport
-→ Static Report Output Candidate
-→ Summary Report ViewModel
 → Inspection Request ViewModel
-→ Status Summary ViewModel
-→ Future Report ViewModel
+→ Evidence Trace ViewModel
+→ Static Report Output Candidate (V2 Target)
+→ Summary / Status Report ViewModel (V2 Target)
 ```
 
-이 구조를 사용하면 이후 report 화면이 늘어나도 Event Evidence v2의 source/projection 경계를 다시 흔들지 않고 ViewModel만 추가할 수 있다.
+이 구조를 사용하면 2주차에는 Event Evidence v2와 현행 Event Report만 안정화하고, 이후 report 화면이 늘어날 때 source/projection 경계를 다시 흔들지 않고 ViewModel만 추가할 수 있다.
 
 ## 5. 백엔드 구현 계획
 
@@ -210,6 +222,7 @@ def role_blocks_to_grounded_report(blocks: list[dict], evidence: dict, role: str
 def event_evidence_v2_to_report_view_model(evidence: dict, report: GroundedReport | None = None) -> dict:
     ...
 
+# V2 Target. 2주차 구현 범위에서는 호출하지 않는다.
 def static_report_output_candidate_to_report_view_models(output: dict, evidence: dict) -> dict:
     ...
 ```
@@ -241,31 +254,49 @@ def static_report_output_candidate_to_report_view_models(output: dict, evidence:
 
 LLM은 bounded renderer 또는 fallback으로만 둔다. 숫자 위험 판단이나 추천 실행의 주체가 되면 안 된다.
 
-### 5.5 Report Output 분기
+### 5.5 2주차 최소 Report/ViewModel 분기
 
-Event Evidence v2의 `report_projection`을 기준으로 현행 `GroundedReport`, V2 정적 Report Output 후보, 화면별 ViewModel을 파생하는 mapper를 둔다.
+Event Evidence v2의 `report_projection`을 기준으로 현행 `GroundedReport`, 점검 요청 ViewModel, Evidence trace ViewModel을 파생하는 mapper를 둔다.
 
 ```text
 Event Evidence v2.report_projection
 -> Current GroundedReport
--> Static Report Output Candidate
--> Report UI ViewModel
+-> Inspection Request ViewModel
+-> Evidence Trace ViewModel
 ```
 
-- 상태 요약 output: KPI, status distribution, priority asset list
 - 점검 요청 output: 대상 설비, top factor 기반 점검 target, sensor evidence, human approval 문구
-- 요약 보고서 output: executive summary, risk overview, recommended next steps, limitations
-- 확장 report output: 이후 추가되는 report type별 ViewModel
+- Evidence trace output: report section, evidence field ID, source path, lineage reference
+- 상태 요약/요약 보고서 output: 2주차 구현 범위가 아니라 V2 Target으로 유지
 
 분기 mapper는 새 수치를 계산하지 않는다. 이미 검증된 Event Evidence v2 값을 표시 목적에 맞게 재배열한다. `probability_label`, `status_label`, `sensor_window_label`처럼 표시 형식만 바꾸는 값은 허용하되, 확률·등급·z-score·집계 count를 새로 추정하지 않는다.
 
-특히 상태 요약/요약 보고서에서 집계 수치가 필요하면 단일 Evidence Package에서 만들지 않는다. 별도 조회·집계 API가 제공한 값만 사용한다.
+특히 상태 요약/요약 보고서에서 집계 수치가 필요하면 단일 Evidence Package에서 만들지 않는다. 별도 조회·집계 API 또는 V2 mock `ReportInput`이 제공한 값만 사용한다. 2주차에는 해당 집계 화면을 필수 dependency로 두지 않는다.
+
+### 5.6 정비이력 추가 최소 액션
+
+2주차에는 별도 Operations 도메인 API를 설계하지 않는다. `정비이력 추가`는 Inspection Request 또는 Event Detail 화면에서 현행 Event action/note/activity 흐름에 연결하는 최소 액션 초안으로만 정의한다.
+
+```json
+{
+  "action_id": "add_maintenance_note",
+  "label": "정비이력 추가",
+  "kind": "maintenance_note",
+  "requires_human_approval": true,
+  "source_refs": [
+    "evidence.sensor_evidence.sensors.rotation_raw",
+    "evidence.top_factors[0]"
+  ]
+}
+```
+
+이 액션은 정비 건수 집계, 기간별 정비 이력 API, Work Order 생성을 의미하지 않는다. 사용자가 남기는 기록은 Event activity와 note로 감사 가능하게 남기고, 이후 정식 maintenance record API가 확정되면 연결 대상을 교체한다.
 
 ## 6. 프론트엔드 구현 계획
 
 ### 6.1 ViewModel 생성
 
-프론트엔드 ViewModel builder를 추가한다.
+프론트엔드 ViewModel builder를 추가한다. 2주차에는 점검 요청과 evidence trace 화면에 필요한 최소 필드만 대상으로 한다.
 
 1차 대상 경로는 실제 MVP 화면이 있는 `web/src/features/mvp/report/` 또는 `web/src/features/mvp/api/mvpAdapters.ts`다. `web/src/features/predictive-maintenance/`는 replay panel 성격이 강하므로 report UI 이식의 기본 위치로 삼지 않는다.
 
@@ -273,37 +304,31 @@ Event Evidence v2.report_projection
 
 - `Event Evidence v2`
 - 현행 `GroundedReport`, 필요한 경우
-- `EventSummary[]`, 상태 요약/집계 화면에서만 사용
 
 출력은 다음과 같다.
 
-- 상태 요약 KPI
-- 우선 점검 대상
-- line/cell 그룹
 - 선택 설비 상세
 - 점검 target
 - sensor evidence card
 - evidence trace card
 - limitation
-- report type별 표시 상태
+- 정비이력 추가 action descriptor
 
 ### 6.2 UI 컴포넌트 이식
 
-`map-report-ui-prototype`에서 유용한 UI 블록을 report UI 묶음의 typed component로 옮긴다.
+`map-report-ui-prototype`에서 유용한 UI 블록을 2주차 MVP에 필요한 typed component로만 옮긴다.
 
-- `MapReportView.tsx`
 - `InspectionRequestView.tsx`
-- `SummaryReportView.tsx`
 - `EvidenceTracePanel.tsx`
-- `StatusMap.tsx`
 - `SensorEvidencePanel.tsx`
-- 이후 확장 report view는 같은 ViewModel 계약 위에 추가한다.
+- 이후 `MapReportView`, `StatusMap`, `SummaryReportView`는 V2 Target으로 보류한다.
 
 이식하지 않을 항목은 다음과 같다.
 
 - 정적 mock asset 생성 로직
 - 하드코딩된 report text를 source data로 쓰는 방식
 - prototype 전용 navigation state
+- 기간/전체 설비 집계 표시 로직
 
 ### 6.3 기존 MVP 화면과 통합
 
@@ -312,8 +337,9 @@ Event Evidence v2.report_projection
 초기 통합 방식은 다음을 권장한다.
 
 - 기존 Event Executive Brief는 feature flag 또는 tab 뒤에 유지한다.
-- adapter 테스트가 통과하면 상태 요약/점검 요청/요약 보고서를 제품-facing primary report views로 승격한다.
-- Operations decision과 note는 기존 인증된 API 경계에 남긴다.
+- adapter 테스트가 통과하면 점검 요청과 evidence trace를 현행 Event 화면에 연결한다.
+- 정비이력 추가 액션은 기존 인증된 Event action/note/activity API 경계에 남긴다.
+- 상태 요약, 요약 보고서, Operations 집계 화면은 V2 Target으로 보류한다.
 
 ## 7. 검증 계획
 
@@ -330,24 +356,23 @@ Event Evidence v2.report_projection
 - lineage에 dataset version, model version, prediction ID, artifact reference가 포함된다.
 - mock `z_score=-2.9` 같은 표시값을 사용하지 않고, `sensor_evidence.sensors.*.z_score`와 `basis.baseline_*`가 있으면 그 값을 사용한다.
 - Event Evidence v2가 현행 `GroundedReport`로 변환된다.
+- 정비이력 추가 액션 descriptor가 Event action/note/activity 경계로만 표현되고 Work Order나 기간 집계 생성으로 해석되지 않는다.
+- `production_cycle_count`, `maintenance_event_count` 같은 Operations 집계값을 Event Evidence v2 adapter가 만들지 않는다.
 
 ### 7.2 프론트엔드 테스트
 
-- status map이 critical, warning, attention, normal, data_quality_hold 상태를 렌더링한다.
-- priority list가 고위험 설비를 먼저 정렬한다.
 - inspection view가 top factor를 점검 target으로 표시한다.
-- summary report view가 같은 Event Evidence v2/GroundedReport 입력으로 요약 블록을 표시한다.
 - evidence trace가 source field label과 description을 표시한다.
+- 정비이력 추가 버튼 또는 action row가 `requires_human_approval=true`와 source refs를 표시한다.
 - 한국어 텍스트가 card, button, compact panel 밖으로 넘치지 않는다.
 
 ### 7.3 E2E 테스트
 
 - MVP route를 연다.
 - Event를 선택한다.
-- 상태 요약 report를 확인한다.
 - Inspection Request view를 연다.
-- 요약 보고서 view를 연다.
 - Evidence trace를 확장한다.
+- 정비이력 추가 액션이 보이고 기존 Event action/note/activity 경계로 연결되는지 확인한다.
 - limitation과 human approval 문구가 보이는지 확인한다.
 
 ## 8. 권장 작업 순서
@@ -358,11 +383,12 @@ Event Evidence v2.report_projection
 4. `api/ontology_dashboard/service.py`의 fixture evidence/report 경로가 adapter를 사용하도록 연결한다.
 5. runtime `_dashboard_detail`이 adapter를 사용하도록 refactor한다.
 6. Event Evidence v2를 현행 `GroundedReport`로 변환하는 경로를 추가한다.
-7. frontend Report UI ViewModel builder를 `web/src/features/mvp/` 아래에 추가한다.
-8. map-report prototype UI를 report UI typed component 묶음으로 옮긴다.
-9. component를 API data에 연결한다.
-10. report UI flow에 Playwright coverage를 추가한다.
-11. 구현 검증 후 API/schema 문서를 갱신한다.
+7. 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다.
+8. frontend 점검 요청/Evidence trace ViewModel builder를 `web/src/features/mvp/` 아래에 추가한다.
+9. map-report prototype에서 Inspection Request, Evidence Trace, Sensor Evidence 블록만 typed component로 옮긴다.
+10. component를 API data에 연결한다.
+11. 최소 report UI flow에 Playwright coverage를 추가한다.
+12. 구현 검증 후 API/schema 문서를 갱신한다.
 
 ## 9. 완료 기준
 
@@ -373,4 +399,6 @@ Event Evidence v2.report_projection
 - report section과 evidence trace가 source field ID에 grounded 되어 있다.
 - `evaluation_truth`와 `hidden_truth`가 runtime surface에 없다.
 - `review_shutdown`은 automatic control이 아니라 human review임이 명확하다.
-- 상태 요약, 점검 요청, 요약 보고서 UI가 live 또는 fixture-backed Event Evidence v2로 동작한다.
+- 점검 요청과 evidence trace UI가 live 또는 fixture-backed Event Evidence v2로 동작한다.
+- 정비이력 추가는 최소 action descriptor로만 제공되며 Work Order 생성이나 Operations 기간 집계를 만들지 않는다.
+- 상태 요약, 요약 보고서, Operations 기간 집계는 V2 Target으로 남아 있다.
