@@ -174,6 +174,7 @@ Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 - `evidence_payload.maintenance_context`: 단일 설비 정비 문맥. 기간 정비 집계가 아님
 - `evidence_payload.recommended_actions[].basis`: action 문구의 출처
 - `evidence_payload.source_fields`: report/evidence trace에서 참조할 source field ID
+- `evidence_payload.evidence_gaps[]`: producer가 산출할 수 없는 값의 명시적 결손 기록
 - `provenance.evidence_payload_reference`: 근거 산출 기준과 reference fixture 비교 기준
 
 공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다.
@@ -209,6 +210,19 @@ flowchart TD
   G --> I
   H --> I
 ```
+
+`evidence_payload.evidence_gaps[]`의 최소 필드는 다음과 같다.
+
+| 필드 | 의미 |
+|---|---|
+| `gap_id` | 안정적인 결손 식별자 |
+| `field` | 산출하지 못한 후보 필드 또는 화면 요구 |
+| `reason` | `missing_source`, `not_producer_owned`, `not_in_week2_scope`, `insufficient_context` 중 하나 |
+| `required_source` | 필요한 원천 데이터 또는 API |
+| `owner_domain` | `diagnosis`, `dashboard`, `operations`, `maintenance`, `aggregate`, `unknown` 중 하나 |
+| `display_policy` | `show_as_unavailable`, `hide_section`, `show_limitation` 중 하나 |
+
+Event Evidence projection은 `evidence_payload.evidence_gaps[]`를 `limitations`와 evidence trace의 `근거 부족` 표시로 파생한다. `evidence_gaps[]`는 numeric fact, 정상 상태, 기본 집계값을 대신하지 않는다.
 
 구현 시 검증해야 할 조건은 다음과 같다.
 
@@ -324,7 +338,14 @@ dashboard 테스트 fixture 영역에 현행 dashboard fixture, Product Result A
 
 Producer target은 다음 경계다.
 
-`systems/backend/app/diagnosis/evidence_enrichment.py` (후보)
+`systems/backend/app/diagnosis/evidence.py` 또는 `systems/backend/app/diagnosis/evidence_enrichment.py` (후보)
+
+기존 `systems/backend/app/diagnosis/evidence.py`에는 이미 `build_product_result_artifact()`와 `build_evidence_package()`가 있다. 다음 구현은 이 관계를 다음처럼 고정한다.
+
+- `build_product_result_artifact()`는 계속 Product Result Artifact의 공식 producer entrypoint다.
+- `build_product_result_evidence_payload()`는 `build_product_result_artifact()` 내부 또는 같은 diagnosis producer 흐름에서 호출되는 내부 helper로 둔다.
+- `build_evidence_package()`는 legacy/dashboard compatibility package 생성 경로로 해석하고, Product Result Artifact source of truth로 승격하지 않는다.
+- 신규 `evidence_enrichment.py`를 만들 경우에도 `app/diagnosis` 내부 helper 모듈일 뿐이며, dashboard projection이나 reference package adapter를 포함하지 않는다.
 
 책임은 다음과 같다.
 
@@ -350,7 +371,7 @@ Dashboard projection target은 다음 경계다.
 - 원본 numeric confidence는 보존하고, 화면 표시용 confidence는 별도로 정규화한다.
 - projection layer는 `pdm-mvp` reference package를 runtime-like 운영 입력으로 사용하지 않는다.
 
-후보 함수는 다음과 같다.
+Producer 후보 함수는 다음과 같다.
 
 ```python
 def classify_dashboard_evidence_fields(dashboard_payload: dict, reference_payload: dict) -> dict:
@@ -367,13 +388,21 @@ def derive_component_hypotheses(top_factors: list[dict]) -> list[dict]:
 
 def build_source_fields(result: GovernedProductResult, evidence_payload: dict) -> list[dict]:
     ...
+```
 
+Dashboard projection 후보 함수는 다음과 같다.
+
+```python
 def product_result_artifact_to_event_evidence_projection(artifact: dict) -> dict:
     ...
 
 def event_evidence_projection_to_legacy_evidence(evidence: dict) -> dict:
     ...
+```
 
+Report/ViewModel 후보 함수는 다음과 같다.
+
+```python
 def event_evidence_projection_to_grounded_report(evidence: dict, role: str, locale: str) -> GroundedReport:
     ...
 
@@ -616,15 +645,15 @@ Status 값은 다음만 사용한다.
 - runtime inference와 Product Result Artifact/Evidence 최종 생성 책임은 `systems/backend/app/diagnosis`에 유지된다.
 - API contract regression이 legacy/canonical 응답을 모두 검증한다.
 
-### 8.4 4차 PR: Report Projection Integration
+### 8.4 후속 PR: Report Projection Integration
 
-목표는 Event Evidence projection을 현행 `GroundedReport`와 점검 요청용 report input으로 연결하는 것이다. 이 PR은 frontend component 이식 전 backend/report contract를 먼저 안정화한다.
+목표는 Event Evidence projection을 현행 `GroundedReport`와 점검 요청용 report input으로 연결하는 것이다. 이 단계는 2주차 producer-side enrichment의 필수 완료 조건이 아니며, endpoint/runtime 연결이 안정화된 뒤 후속 PR로 진행한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 16 | Todo | Event Evidence projection을 현행 `GroundedReport`로 변환하는 경로를 추가한다. | projection-to-report mapper | report unit test 결과 |
-| 17 | Todo | 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다. | `add_maintenance_note` descriptor | fixture/test 경로 |
-| 18 | Todo | report section, citation, evidence trace가 `source_fields`에 grounded 되는지 검증한다. | grounded report regression test | test 결과 |
+| 16 | Deferred | Event Evidence projection을 현행 `GroundedReport`로 변환하는 경로를 추가한다. | projection-to-report mapper | 후속 PR test 결과 |
+| 17 | Deferred | 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다. | `add_maintenance_note` descriptor | 후속 PR fixture/test 경로 |
+| 18 | Deferred | report section, citation, evidence trace가 `source_fields`에 grounded 되는지 검증한다. | grounded report regression test | 후속 PR test 결과 |
 
 4차 PR 완료 조건은 다음과 같다.
 
@@ -632,16 +661,16 @@ Status 값은 다음만 사용한다.
 - report mapper는 새 위험 수치나 집계 count를 만들지 않는다.
 - `review_shutdown`은 automatic control이 아니라 human review로만 표현된다.
 
-### 8.5 5차 PR: Frontend ViewModel and UI
+### 8.5 후속 PR: Frontend ViewModel and UI
 
-목표는 점검 요청과 evidence trace 화면을 typed ViewModel으로 연결하는 것이다. 상태 요약, 요약 보고서, Operations 기간 집계 화면은 포함하지 않는다.
+목표는 점검 요청과 evidence trace 화면을 typed ViewModel으로 연결하는 것이다. 이 단계는 2주차 producer-side enrichment의 필수 완료 조건이 아니며, report projection contract가 안정화된 뒤 후속 PR로 진행한다. 상태 요약, 요약 보고서, Operations 기간 집계 화면은 포함하지 않는다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 19 | Todo | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | Vitest 결과 |
-| 20 | Todo | map-report prototype에서 Inspection Request, Evidence Trace, Sensor Evidence 블록만 typed component로 옮긴다. | MVP report components | screenshot/test 결과 |
-| 21 | Todo | component를 API data에 연결한다. | fixture 또는 live-backed UI flow | browser 확인 결과 |
-| 22 | Todo | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | Playwright 결과 |
+| 19 | Deferred | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | 후속 PR Vitest 결과 |
+| 20 | Deferred | map-report prototype에서 Inspection Request, Evidence Trace, Sensor Evidence 블록만 typed component로 옮긴다. | MVP report components | 후속 PR screenshot/test 결과 |
+| 21 | Deferred | component를 API data에 연결한다. | fixture 또는 live-backed UI flow | 후속 PR browser 확인 결과 |
+| 22 | Deferred | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | 후속 PR Playwright 결과 |
 
 5차 PR 완료 조건은 다음과 같다.
 
