@@ -146,7 +146,7 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "${WEB_PORT:-3100}:3100"
+      - "${WEB_PORT:-3100}:8080"
 
 volumes:
   factory_signal_data:

@@ -163,6 +163,43 @@ def check_runtime_hosts_converged(errors: list[str]) -> None:
             )
 
 
+def check_frontend_container_converged(errors: list[str]) -> None:
+    dockerignore_lines = {
+        line.strip()
+        for line in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    required_ignored_paths = {
+        "systems/frontend/node_modules",
+        "systems/frontend/dist",
+        "systems/frontend/test-results",
+        "systems/frontend/playwright-report",
+    }
+    for path in sorted(required_ignored_paths - dockerignore_lines):
+        errors.append(f"frontend Docker build artifact is not ignored: {path}")
+
+    stale_ignored_paths = {
+        "web/node_modules",
+        "web/dist",
+        "web/test-results",
+        "web/playwright-report",
+    }
+    for path in sorted(stale_ignored_paths & dockerignore_lines):
+        errors.append(f"legacy frontend Docker ignore path remains after systems convergence: {path}")
+
+    compose_text = (ROOT / "infra" / "docker-compose.yml").read_text(encoding="utf-8")
+    if '${WEB_PORT:-3100}:8080' not in compose_text:
+        errors.append("infra/docker-compose.yml web service must publish host WEB_PORT to container port 8080")
+
+    dockerfile_text = (SYSTEMS / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    if "EXPOSE 8080" not in dockerfile_text:
+        errors.append("systems/frontend/Dockerfile must expose nginx runtime port 8080")
+
+    nginx_text = (SYSTEMS / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+    if "listen 8080;" not in nginx_text:
+        errors.append("systems/frontend/nginx.conf must listen on container port 8080")
+
+
 def check_git_conflict_markers(errors: list[str]) -> None:
     conflict_prefixes = ("<<<<<<<", "=======", ">>>>>>>")
     ignored_parts = {"node_modules", "dist", ".venv", "__pycache__", ".git"}
@@ -195,6 +232,7 @@ def main() -> int:
     check_legacy_ml_is_compatibility_only(errors)
     check_api_modeling_is_port_only(errors)
     check_runtime_hosts_converged(errors)
+    check_frontend_container_converged(errors)
     check_git_conflict_markers(errors)
 
     if errors:
@@ -206,6 +244,7 @@ def main() -> int:
     print("[ARCHITECTURE-CHECK] PASS")
     print("- PR #10 required systems/domain structure exists")
     print("- PR #11 API/frontend runtime hosts are physically converged under systems/")
+    print("- frontend Docker context ignores and Compose/nginx runtime port are converged")
     print("- generator owns semantic/feature/training and Model Artifact publication")
     print("- backend diagnosis owns runtime inference and Result Artifact/Evidence")
     print("- generator/backend direct Python imports are absent")
