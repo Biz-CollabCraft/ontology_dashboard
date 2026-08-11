@@ -35,15 +35,15 @@ Generator와 Backend 사이의 계약은 sibling `model_store` 경로가 아니�
 ```text
 systems/
 ├── generator/                 # semantic/feature/training + Model Artifact publish
-├── backend/app/diagnosis/     # runtime inference + Result Artifact/Evidence
-└── frontend/                  # PR #10 frontend scaffold
+├── backend/                   # FastAPI application + diagnosis runtime + migrations
+│   ├── ontology_dashboard/    # 공식 Backend application package
+│   └── app/diagnosis/         # runtime inference + Result Artifact/Evidence
+└── frontend/                  # 공식 React/Vite Week 2 MVP application
 
-api/                           # PR #9 기존 FastAPI MVP 실행 host / compatibility composition
-web/                           # PR #9 기존 React MVP 실행 host
 ml/                            # 이전 ML import/CLI compatibility adapter
 ```
 
-PR #9의 기존 `api/`와 `web/`은 Week 2 MVP를 깨지 않기 위해 이번 통합에서 즉시 대량 이동하지 않습니다. 대신 실제 semantic mapping, feature materialization, model training은 `systems/generator`로, runtime scoring/Evidence는 `systems/backend/app/diagnosis`로 옮겼습니다. `api/ontology_dashboard/modeling`에는 기존 ML Validator/workbench 계약을 보존하는 compatibility port만 남습니다.
+PR #11에서 PR #9의 root `api/`와 `web/` 실행 host를 각각 `systems/backend`와 `systems/frontend`로 물리적으로 수렴시켰습니다. semantic mapping, feature materialization, model training은 `systems/generator`가 소유하고, runtime scoring/Evidence는 `systems/backend/app/diagnosis`가 소유합니다. `systems/backend/ontology_dashboard/modeling`에는 기존 ML Validator/workbench 계약을 보존하는 compatibility port만 남습니다.
 
 Frontend는 backend domain 폴더명과 1:1로 맞추지 않고 Dashboard, Report, Evidence, Decision, Activity 등 사용자 workflow 단위 구조를 유지할 수 있습니다.
 
@@ -58,7 +58,7 @@ bash scripts/run_local.sh
 프론트엔드만 검증하려면:
 
 ```bash
-cd web
+cd systems/frontend
 npm ci
 npm test
 npm run build
@@ -66,13 +66,13 @@ npm run build
 
 운영/통합 runtime에서는 `.env.example`을 참고해 `MODEL_ARTIFACT_URI`를 주입합니다. Week 2 deterministic heuristic fallback은 로컬 호환 용도이며 `ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK=0`으로 비활성화할 수 있습니다.
 
-PR #10의 독립 scaffold 자체는 다음 경로에서 확인할 수 있습니다.
+수렴된 독립 실행 구조는 다음 경로에서 확인할 수 있습니다.
 
 ```bash
 python3 systems/verify_architecture.py
 
 cd systems/backend
-pip install -r requirements.txt
+pip install -e .
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 cd ../frontend

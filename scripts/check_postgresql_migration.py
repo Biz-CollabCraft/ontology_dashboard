@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION_DIR = ROOT / "api" / "migrations" / "postgresql"
+MIGRATION_DIR = ROOT / "systems" / "backend" / "migrations" / "postgresql"
 REQUIRED_BINARIES = ("initdb", "pg_ctl", "createdb", "psql")
 
 

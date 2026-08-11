@@ -73,7 +73,7 @@ def main() -> None:
 
     root = Path(args.root).resolve()
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = os.pathsep.join([str(root / "api"), str(root / "ml" / "src")])
+    environment["PYTHONPATH"] = os.pathsep.join([str(root / "systems" / "backend"), str(root / "ml" / "src")])
     environment["PYTHONPYCACHEPREFIX"] = tempfile.mkdtemp(prefix="factory-signal-pycache-")
     environment["ONTOLOGY_DASHBOARD_DB"] = str(Path(tempfile.mkdtemp(prefix="ontology-dashboard-db-")) / "release.db")
     environment["APP_ENV"] = "test"
@@ -88,14 +88,22 @@ def main() -> None:
     checks.append(run([sys.executable, "-m", "ontology_dashboard_manufacturing_ml.cli", "validate-fixtures", "--root", str(root)], cwd=root, env=environment))
     checks.append(run([sys.executable, "-m", "pytest", "-q", "tests"], cwd=root, env=environment))
     checks.append(run([sys.executable, "scripts/evaluate_gold.py", "--root", str(root)], cwd=root, env=environment))
-    checks.append(run([sys.executable, "-m", "compileall", "-q", "api", "ml/src", "scripts"], cwd=root, env=environment))
+    checks.append(
+        run(
+            [sys.executable, "-m", "compileall", "-q", "systems/backend", "ml/src", "scripts"],
+            cwd=root,
+            env=environment,
+        )
+    )
 
     node_available = shutil.which("npm") is not None
     frontend_temp: Path | None = None
     if node_available:
-        frontend_temp = Path(tempfile.mkdtemp(prefix="factory-signal-web-")) / "web"
+        temp_root = Path(tempfile.mkdtemp(prefix="ontology-dashboard-release-"))
+        frontend_temp = temp_root / "systems" / "frontend"
+        frontend_temp.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(
-            root / "web",
+            root / "systems" / "frontend",
             frontend_temp,
             ignore=shutil.ignore_patterns(
                 "node_modules",
@@ -109,7 +117,7 @@ def main() -> None:
         if docs_source.is_dir():
             shutil.copytree(
                 docs_source,
-                frontend_temp.parent / "docs",
+                temp_root / "docs",
             )
         checks.append(run(["npm", "install", "--no-audit", "--no-fund"], cwd=frontend_temp, timeout=600))
         if checks[-1]["pass"]:
@@ -329,7 +337,7 @@ def main() -> None:
             ).stdout.strip(),
             "playwright": subprocess.run(
                 ["npx", "playwright", "--version"],
-                cwd=frontend_temp if frontend_temp is not None else root / "web",
+                cwd=frontend_temp if frontend_temp is not None else root / "systems" / "frontend",
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,

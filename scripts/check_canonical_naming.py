@@ -17,9 +17,9 @@ TEXT_EXTENSIONS = {
 
 SCAN_PATHS = (
     ROOT / "README.md",
-    ROOT / "api" / "README.md",
-    ROOT / "api" / "ontology_dashboard",
-    ROOT / "web" / "src",
+    ROOT / "systems" / "backend" / "README.md",
+    ROOT / "systems" / "backend" / "ontology_dashboard",
+    ROOT / "systems" / "frontend" / "src",
     ROOT / "schemas",
     ROOT / "infra",
     ROOT / ".github" / "workflows",
