@@ -21,7 +21,10 @@ from .bundle_models import (
 from .bundle_file_adapter import BundleFileAdapter
 from .file_adapter import FileAdapter, IngestionResult
 from .models import DatasetManifest, PredictionResult
-from .predictive_maintenance_v2 import PredictiveMaintenanceCanonicalV2Adapter
+from .predictive_maintenance_v2 import (
+    PredictiveMaintenanceCanonicalV2Adapter,
+    PredictiveMaintenanceCanonicalV3SourceAdapter,
+)
 from .postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from .registry import AdapterRegistry, default_adapter_registry
 
@@ -47,6 +50,7 @@ __all__ = [
     "PostgreSQLPredictiveMaintenanceBundleIngestor",
     "PredictionResult",
     "PredictiveMaintenanceCanonicalV2Adapter",
+    "PredictiveMaintenanceCanonicalV3SourceAdapter",
     "PredictiveMaintenanceSourceContract",
     "canonical_bundle_checksum_payload",
     "compute_bundle_checksum",

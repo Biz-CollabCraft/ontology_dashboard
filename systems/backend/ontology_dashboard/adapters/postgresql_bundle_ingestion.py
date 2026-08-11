@@ -761,30 +761,35 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
                 WHERE a.asset_id IS NULL LIMIT 1
                 """,
             ),
-            (
-                "prediction snapshot references unknown asset",
-                """
-                SELECT 1 FROM stg_pm_prediction_snapshots p
-                LEFT JOIN stg_pm_assets a ON a.asset_id=p.asset_id
-                WHERE a.asset_id IS NULL LIMIT 1
-                """,
-            ),
-            (
-                "prediction factor references unknown snapshot",
-                """
-                SELECT 1 FROM stg_pm_prediction_factors f
-                LEFT JOIN stg_pm_prediction_snapshots p ON p.prediction_id=f.prediction_id
-                WHERE p.prediction_id IS NULL LIMIT 1
-                """,
-            ),
-            (
-                "duplicate timeline prediction_id",
-                """
-                SELECT 1 FROM stg_pm_prediction_timeline
-                GROUP BY prediction_id HAVING COUNT(*)>1 LIMIT 1
-                """,
-            ),
         ]
+        if "prediction_snapshot" in summaries:
+            checks.extend(
+                [
+                    (
+                        "prediction snapshot references unknown asset",
+                        """
+                        SELECT 1 FROM stg_pm_prediction_snapshots p
+                        LEFT JOIN stg_pm_assets a ON a.asset_id=p.asset_id
+                        WHERE a.asset_id IS NULL LIMIT 1
+                        """,
+                    ),
+                    (
+                        "prediction factor references unknown snapshot",
+                        """
+                        SELECT 1 FROM stg_pm_prediction_factors f
+                        LEFT JOIN stg_pm_prediction_snapshots p ON p.prediction_id=f.prediction_id
+                        WHERE p.prediction_id IS NULL LIMIT 1
+                        """,
+                    ),
+                    (
+                        "duplicate timeline prediction_id",
+                        """
+                        SELECT 1 FROM stg_pm_prediction_timeline
+                        GROUP BY prediction_id HAVING COUNT(*)>1 LIMIT 1
+                        """,
+                    ),
+                ]
+            )
         if "result_artifact" in summaries:
             checks.extend(
                 [
@@ -824,9 +829,14 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
             "cnc_sensor_observation": ("stg_pm_cnc_observations", "observed_at"),
             "cnc_production_cycle": ("stg_pm_production_cycles", "cycle_completed_at"),
             "maintenance_event": ("stg_pm_maintenance_events", "started_at"),
-            "prediction_snapshot": ("stg_pm_prediction_snapshots", "observed_at"),
-            "prediction_timeline": ("stg_pm_prediction_timeline", "observed_at"),
         }
+        if "prediction_snapshot" in summaries:
+            timestamp_checks.update(
+                {
+                    "prediction_snapshot": ("stg_pm_prediction_snapshots", "observed_at"),
+                    "prediction_timeline": ("stg_pm_prediction_timeline", "observed_at"),
+                }
+            )
         if "result_artifact" in summaries:
             timestamp_checks["result_artifact"] = ("stg_pm_result_artifacts", "observed_at")
         for role, (table, field) in timestamp_checks.items():
@@ -934,6 +944,12 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
             """,
             (*scope, checksums["maintenance_event"]),
         )
+
+        # Source-only Canonical V3.1 ingestion intentionally stops here.
+        # Prediction/Result Artifact rows that may exist in gen_data are
+        # compatibility fixtures; product runtime materializes its own results.
+        if "prediction_snapshot" not in checksums:
+            return
 
         connection.execute(
             """
