@@ -4,13 +4,37 @@
 
 이 문서는 Week 2 문서의 제안과 이미 구현된 제품 계약을 구분하기 위한 기준선이다.
 
-- 제품·계약 문서 기준: `Biz-CollabCraft/ontology_dashboard`
-- 현행 실행 코드 기준: `oosuhada/agentic-ontology-dashboard`의
-  `codex/current-mvp-repository-convergence-20260806` 브랜치
-- 저장소 통합: 실행 코드를 팀 저장소로 이전하거나 병합하는 별도 결정이 필요하다.
+- 제품·계약·실행 코드 기준: `Biz-CollabCraft/ontology_dashboard`
+- 통합 기준: PR #9 병합 커밋 `7e7b9c4` (2026-08-10)
+- 실행 책임 기준: PR #10 시스템 아키텍처를 반영한 PR #9 재배치 결과
+- 비교 provenance: `oosuhada/agentic-ontology-dashboard`의
+  `codex/current-mvp-repository-convergence-20260806` 브랜치와 원본 커밋 `37c1251`
+
+개인 프로토타입은 더 이상 현행 실행 기준이 아니다. 이후 Week 2 코드·계약 변경은
+팀 저장소에서 수행하며, 개인 프로토타입은 이관 provenance와 회귀 비교에만 사용한다.
 
 현행 구현값은 제품 방향이 영구 확정됐다는 의미가 아니다. 이를 변경하는 항목은
 단순 확인이 아니라 코드·테스트·데이터 마이그레이션 영향을 검토하는 변경 결정이다.
+
+### 1.1 통합 후 실행 책임
+
+```text
+gen_data
+Source Data / Canonical V3.1 source-reference baseline
+      ↓
+systems/generator
+Ontology Mapping → Feature → Training/Evaluation → Model Artifact
+      ↓
+systems/backend/app/diagnosis
+Model Artifact 검증 → Runtime Inference → Result Artifact / Evidence
+      ↓
+api / web / report consumer
+```
+
+`gen_data`의 prediction/model output은 운영 최신 결과가 아니라 compatibility·regression
+fixture다. 운영 Product Result Artifact는 주입된 Model Artifact를 검증한 Backend
+runtime inference에서 생성한다. Model Artifact가 없는 로컬 데모에서는 명시적
+compatibility fallback을 허용하지만, 그 외 환경은 fail-closed를 따른다.
 
 ## 2. 확인된 현행 계약
 

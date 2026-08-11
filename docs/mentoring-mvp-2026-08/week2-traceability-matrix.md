@@ -2,22 +2,27 @@
 
 ## 1. 목적
 
-요구사항이 기능, 화면, API, 스키마와 테스트까지 연결되는지 확인한다. API 경로와
-테스트 파일명은 구현 담당자 합의 전 제안 상태다.
+요구사항이 기능, 화면, API, 스키마와 테스트까지 연결되는지 확인한다. PR #9 통합
+이후 현행 경로와 파일명은 팀 저장소의 실제 구현을 기준으로 기록하고, 구현되지 않은
+목표 경로와 테스트 ID는 `V2 제안`으로 구분한다.
 
 표의 `/overview`, `/objects`, `/operations`, `/reports/executive`는 목표 설계 경로다.
 현행 경로는 [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)의
-`/dashboard`, `/results/latest`와 Event API이며, 최종 결정 후 두 계약의 매핑을
-추가해야 한다.
+`/dashboard`, `/results/latest`와 Event API다. V2 목표 경로는 현행 계약을 대체하지
+않으며 아래 표에서 대응 관계만 유지한다.
 
 ### 1.1 현행 구현 추적
 
-| 화면 | 현행 입력/API | 주요 기능 | 상태 |
-|---|---|---|---|
-| Overview | `GET /dashboard` | 위험 KPI·Downtime·판단 대기 Event | 현행 |
-| Objects | `GET /results/latest` | 검색·라인·상태·담당자와 Inspector | 현행 |
-| Operations | Event evidence/decision/notes/activity API | Event 업무·판단·메모·감사 | 현행 |
-| Executive Report | `POST /api/events/{event_id}/report` | 선택 Event 역할별 grounded report | 현행 |
+| 화면 | 현행 입력/API | 구현 위치 | 검증 위치 | 상태 |
+|---|---|---|---|---|
+| Overview | `GET /dashboard` | `web/src/features/mvp/overview/MvpOverviewPage.tsx`, `api/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `web/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
+| Objects | `GET /results/latest` | `web/src/features/mvp/objects/MvpObjectsPage.tsx`, `api/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `web/src/features/mvp/api/mvpAdapters.test.ts`, `tests/test_predictive_maintenance_result_replay.py` | 현행 |
+| Operations | Event evidence/decision/notes/activity API | `web/src/features/mvp/operations/MvpOperationsPage.tsx`, `api/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `web/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
+| Executive Report | `POST /api/events/{event_id}/report` | `web/src/features/mvp/report/MvpExecutiveReportPage.tsx`, `api/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `web/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
+
+공식 `/app/projects/{project_id}/mvp` route 경계와 확장 Workbench 비노출은
+`web/src/routing.test.ts`에서 검증한다. 화면 간 선택 문맥과 deep link는
+`web/src/features/mvp/context/MvpSelectionContext.test.ts`에서 검증한다.
 
 ### 1.2 V2 변경 제안 추적
 
@@ -65,6 +70,7 @@
 
 - 모든 화면 요구사항에 기능 ID가 있다.
 - 모든 데이터 기능에 스키마가 있다.
-- 쓰기 기능은 미합의로 필수 추적표에서 제외했다.
-- 실제 API 경로와 테스트명이 확정되면 제안값을 교체해야 한다.
+- 현행 Decision·Note 쓰기 기능은 `tests/test_mvp.py`의 API 상태 변경 검증과 연결한다.
+- 1.2 표의 목표 API와 `TC-*`/`RPT-TC-*`는 V2 제안이며 실제 구현 완료를 의미하지 않는다.
+- V2를 채택할 때 호환 계층, 호출부와 실제 테스트 파일을 함께 확정한다.
 
