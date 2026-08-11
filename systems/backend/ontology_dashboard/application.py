@@ -10,7 +10,12 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .postgresql_pool import close_pools
-from .settings import allowed_origins, project_root, validate_runtime_environment
+from .settings import (
+    allowed_origin_regex,
+    allowed_origins,
+    project_root,
+    validate_runtime_environment,
+)
 
 ROOT = project_root()
 
@@ -38,7 +43,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins(),
-        allow_origin_regex=(
+        allow_origin_regex=allowed_origin_regex() or (
             r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
             if os.getenv("APP_ENV", "development").lower() in {"development", "demo", "test"}
             else None
