@@ -6,7 +6,30 @@ import pytest
 from starlette.requests import Request
 
 from ontology_dashboard.dependencies import client_ip
-from ontology_dashboard.settings import allowed_origins, database_location, validate_runtime_environment
+from ontology_dashboard.settings import (
+    allowed_origins,
+    database_location,
+    project_root,
+    validate_runtime_environment,
+)
+
+
+def test_project_root_prefers_explicit_runtime_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_PROJECT_ROOT", str(tmp_path))
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_ROOT", "/legacy/should-not-win")
+    assert project_root() == tmp_path.resolve()
+
+
+def test_project_root_accepts_legacy_runtime_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ONTOLOGY_DASHBOARD_PROJECT_ROOT", raising=False)
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_ROOT", str(tmp_path))
+    assert project_root() == tmp_path.resolve()
 
 
 def test_development_defaults_to_canonical_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

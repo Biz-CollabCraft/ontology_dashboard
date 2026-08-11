@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..dependencies import (
@@ -77,6 +75,7 @@ from ..automation_runtime import (
 from ..projects import ProjectService
 from ..persistence_readiness import persistence_readiness
 from ..observability import ObservabilityReadiness, observability_readiness
+from ..settings import project_root
 
 router = APIRouter(prefix="/api/platform", tags=["platform"])
 
@@ -133,7 +132,7 @@ def project_deployment_readiness(
     projects: ProjectService = Depends(get_project_service),
 ):
     projects.get_for_principal(principal, project_id)
-    return deployment_readiness(Path(__file__).resolve().parents[4]).model_dump(mode="json")
+    return deployment_readiness(project_root()).model_dump(mode="json")
 
 
 @router.get("/projects/{project_id}/distributed-runtime")

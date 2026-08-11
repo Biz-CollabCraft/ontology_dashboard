@@ -62,9 +62,9 @@ from .predictive_maintenance_runtime import (
 from .role_workflow_service import RoleWorkflowService
 from .security import InMemoryRateLimiter, RateLimiter, RedisRateLimiter
 from .service import ManufacturingPredictiveMaintenanceService
-from .settings import database_location, trust_proxy_headers, trusted_proxy_networks
+from .settings import database_location, project_root, trust_proxy_headers, trusted_proxy_networks
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = project_root()
 MANUFACTURING_WORKSPACE = "manufacturing-demo"
 _MIGRATION_LOCK = Lock()
 

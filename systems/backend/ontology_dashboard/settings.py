@@ -15,6 +15,37 @@ ALLOWED_ORIGINS_ENV = "ONTOLOGY_DASHBOARD_ALLOWED_ORIGINS"
 TRUSTED_PROXIES_ENV = "ONTOLOGY_DASHBOARD_TRUSTED_PROXIES"
 TRUST_PROXY_HEADERS_ENV = "ONTOLOGY_DASHBOARD_TRUST_PROXY_HEADERS"
 REDIS_URL_ENV = "ONTOLOGY_DASHBOARD_REDIS_URL"
+PROJECT_ROOT_ENV = "ONTOLOGY_DASHBOARD_PROJECT_ROOT"
+LEGACY_PROJECT_ROOT_ENV = "ONTOLOGY_DASHBOARD_ROOT"
+
+
+def _looks_like_project_root(path: Path) -> bool:
+    return (
+        (path / "schemas").is_dir()
+        and (path / "prompts").is_dir()
+        and (path / "data" / "fixtures").is_dir()
+    )
+
+
+def project_root() -> Path:
+    """Resolve runtime assets independently of package installation depth."""
+    for env_name in (PROJECT_ROOT_ENV, LEGACY_PROJECT_ROOT_ENV):
+        configured = os.getenv(env_name, "").strip()
+        if configured:
+            return Path(configured).expanduser().resolve()
+
+    for candidate in (Path.cwd().resolve(), Path("/app")):
+        if _looks_like_project_root(candidate):
+            return candidate
+
+    for parent in Path(__file__).resolve().parents:
+        if _looks_like_project_root(parent):
+            return parent
+
+    raise RuntimeError(
+        "cannot resolve ontology_dashboard project root; "
+        f"set {PROJECT_ROOT_ENV} explicitly"
+    )
 
 
 def app_environment() -> str:

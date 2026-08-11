@@ -1,15 +1,14 @@
 """System and contract endpoints."""
 
-from pathlib import Path
-
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ..deployment import process_probe, readiness_probe, startup_probe
 from ..polyglot import PolyglotHealthService, PolyglotSettings
+from ..settings import project_root
 
 router = APIRouter(tags=["system"])
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = project_root()
 
 
 @router.get("/health")

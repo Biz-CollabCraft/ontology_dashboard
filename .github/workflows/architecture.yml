@@ -51,6 +51,39 @@ jobs:
           test "$success" -eq 1
           python -c "import json; payload=json.load(open('/tmp/health.json')); assert payload['status'] == 'ok', payload"
 
+      - name: Backend non-editable runtime root smoke
+        working-directory: systems/backend
+        env:
+          APP_ENV: test
+          ONTOLOGY_DASHBOARD_PROJECT_ROOT: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/ontology-dashboard-site
+          python -m pip install --no-deps --target /tmp/ontology-dashboard-site .
+          cd /tmp
+          PYTHONPATH=/tmp/ontology-dashboard-site:"${GITHUB_WORKSPACE}/ml/src" python - <<'PY'
+          import os
+          from pathlib import Path
+
+          import ontology_dashboard
+          from ontology_dashboard.application import ROOT as application_root
+          from ontology_dashboard.dependencies import ROOT as dependencies_root
+          from ontology_dashboard.routers import platform, system
+          from ontology_dashboard.settings import project_root
+
+          expected = Path(os.environ["ONTOLOGY_DASHBOARD_PROJECT_ROOT"]).resolve()
+          installed_package = Path(ontology_dashboard.__file__).resolve()
+          installed_root = Path("/tmp/ontology-dashboard-site").resolve()
+          assert installed_package.is_relative_to(installed_root), installed_package
+          assert project_root() == expected
+          assert application_root == expected
+          assert dependencies_root == expected
+          assert system.ROOT == expected
+          assert platform.project_root() == expected
+          assert (expected / "schemas").is_dir()
+          assert (expected / "prompts").is_dir()
+          assert (expected / "data" / "fixtures").is_dir()
+          PY
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

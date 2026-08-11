@@ -24,6 +24,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOME=/home/ontology \
     TMPDIR=/tmp \
+    ONTOLOGY_DASHBOARD_PROJECT_ROOT=/app \
     ONTOLOGY_DASHBOARD_MIGRATION_ROOT=/app/systems/backend/migrations
 
 RUN groupadd --gid 10001 ontology \

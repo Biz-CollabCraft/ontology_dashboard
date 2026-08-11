@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .postgresql_pool import close_pools
-from .settings import allowed_origins, validate_runtime_environment
+from .settings import allowed_origins, project_root, validate_runtime_environment
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = project_root()
 
 
 @asynccontextmanager

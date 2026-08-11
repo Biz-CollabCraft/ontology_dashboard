@@ -200,6 +200,34 @@ def check_frontend_container_converged(errors: list[str]) -> None:
         errors.append("systems/frontend/nginx.conf must listen on container port 8080")
 
 
+def check_backend_runtime_root_converged(errors: list[str]) -> None:
+    dockerfile_text = (SYSTEMS / "backend" / "Dockerfile").read_text(encoding="utf-8")
+    if "ONTOLOGY_DASHBOARD_PROJECT_ROOT=/app" not in dockerfile_text:
+        errors.append(
+            "systems/backend/Dockerfile must pin ONTOLOGY_DASHBOARD_PROJECT_ROOT=/app "
+            "for non-editable package installs"
+        )
+
+    runtime_files = (
+        SYSTEMS / "backend" / "ontology_dashboard" / "dependencies.py",
+        SYSTEMS / "backend" / "ontology_dashboard" / "application.py",
+        SYSTEMS / "backend" / "ontology_dashboard" / "routers" / "system.py",
+        SYSTEMS / "backend" / "ontology_dashboard" / "routers" / "platform.py",
+    )
+    forbidden_fragments = (
+        "Path(__file__).resolve().parents[3]",
+        "Path(__file__).resolve().parents[4]",
+    )
+    for path in runtime_files:
+        text = path.read_text(encoding="utf-8")
+        for fragment in forbidden_fragments:
+            if fragment in text:
+                errors.append(
+                    "backend runtime asset lookup depends on installed package depth: "
+                    f"{path.relative_to(ROOT)} contains {fragment}"
+                )
+
+
 def check_git_conflict_markers(errors: list[str]) -> None:
     conflict_prefixes = ("<<<<<<<", "=======", ">>>>>>>")
     ignored_parts = {"node_modules", "dist", ".venv", "__pycache__", ".git"}
@@ -233,6 +261,7 @@ def main() -> int:
     check_api_modeling_is_port_only(errors)
     check_runtime_hosts_converged(errors)
     check_frontend_container_converged(errors)
+    check_backend_runtime_root_converged(errors)
     check_git_conflict_markers(errors)
 
     if errors:
@@ -245,6 +274,7 @@ def main() -> int:
     print("- PR #10 required systems/domain structure exists")
     print("- PR #11 API/frontend runtime hosts are physically converged under systems/")
     print("- frontend Docker context ignores and Compose/nginx runtime port are converged")
+    print("- backend runtime asset root is explicit and independent of site-packages depth")
     print("- generator owns semantic/feature/training and Model Artifact publication")
     print("- backend diagnosis owns runtime inference and Result Artifact/Evidence")
     print("- generator/backend direct Python imports are absent")

@@ -76,16 +76,23 @@ class QualityIssue:
 
 
 def project_root() -> Path:
-    configured = os.getenv("ONTOLOGY_DASHBOARD_ROOT", "").strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
+    for env_name in ("ONTOLOGY_DASHBOARD_PROJECT_ROOT", "ONTOLOGY_DASHBOARD_ROOT"):
+        configured = os.getenv(env_name, "").strip()
+        if configured:
+            return Path(configured).expanduser().resolve()
     cwd = Path.cwd().resolve()
     if (cwd / "schemas").is_dir() and (cwd / "data" / "fixtures").is_dir():
         return cwd
+    app_root = Path("/app")
+    if (app_root / "schemas").is_dir() and (app_root / "data" / "fixtures").is_dir():
+        return app_root
     for parent in Path(__file__).resolve().parents:
         if (parent / "schemas").is_dir() and (parent / "data" / "fixtures").is_dir():
             return parent
-    raise RuntimeError("cannot resolve ontology_dashboard runtime root; set ONTOLOGY_DASHBOARD_ROOT")
+    raise RuntimeError(
+        "cannot resolve ontology_dashboard runtime root; "
+        "set ONTOLOGY_DASHBOARD_PROJECT_ROOT"
+    )
 
 
 def schema_path() -> Path:
