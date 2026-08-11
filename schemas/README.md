@@ -13,5 +13,6 @@
 - `export.schema.json`: organization/project/workspace 범위의 export request, snapshot과 checkpoint 계약
 - `dataset-manifest.schema.json`: Project별 dataset source, checksum, schema alias와 quality rule 계약
 - `prediction-result.schema.json`: Prediction Module과 Dashboard 사이의 Evidence·Model·Action 포함 결과 계약
+- `preventive-what-if.schema.json`: 합성 예방조치 Producer의 위험 상승·선행 지표·조치 전후 효과·한계 계약
 
 스키마를 변경할 때는 fixture, Pydantic model, backend tests, Gold evaluator와 TypeScript type을 함께 변경해야 한다. LLM 출력은 스키마와 grounding 검사를 모두 통과하지 못하면 폐기하고 deterministic fallback을 사용한다.
