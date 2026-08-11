@@ -278,9 +278,15 @@ def _normalise_top_factors(raw_factors: list[dict[str, Any]]) -> list[dict[str, 
     for index, item in enumerate(raw_factors, start=1):
         feature = str(item.get("feature") or item.get("name") or f"factor_{index}")
         display_name, unit = SENSOR_DISPLAY.get(feature, (feature, ""))
+        raw_signed_contribution = item.get("signed_contribution")
         raw_contribution = item.get("contribution")
         if raw_contribution is None:
-            raw_contribution = abs(float(item.get("signed_contribution", 0.0) or 0.0)) / total_score
+            raw_contribution = abs(float(raw_signed_contribution or 0.0)) / total_score
+        default_direction = (
+            "risk_down"
+            if raw_signed_contribution is not None and float(raw_signed_contribution or 0.0) < 0
+            else "risk_up"
+        )
         value = item.get("value", item.get("feature_value", 0.0))
         factors.append(
             {
@@ -290,7 +296,7 @@ def _normalise_top_factors(raw_factors: list[dict[str, Any]]) -> list[dict[str, 
                 "value": float(value or 0.0),
                 "unit": item.get("unit") or unit,
                 "normal_range": item.get("normal_range") or "unavailable",
-                "direction": item.get("direction") or ("risk_up" if float(raw_contribution or 0.0) >= 0 else "risk_down"),
+                "direction": item.get("direction") or default_direction,
                 "contribution": round(abs(float(raw_contribution or 0.0)), 6),
                 "source_type": item.get("source_type") or "derived",
             }

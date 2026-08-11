@@ -190,6 +190,27 @@ def test_boolean_observation_values_are_not_treated_as_sensors() -> None:
     assert sensors["torque_nm"]["window_mean"] == 11.0
 
 
+def test_top_factor_direction_fallback_uses_signed_contribution_before_magnitude() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-004-power-overstrain-critical.json")
+    predictor = HeuristicPredictor()
+    result = build_product_result_artifact(fixture, predictor=predictor)
+    result["top_factors"] = [
+        {
+            "rank": 1,
+            "feature": "torque_nm",
+            "feature_value": 12.0,
+            "signed_contribution": -0.25,
+            "explanation_method": "deterministic_component_score",
+        }
+    ]
+
+    extended = extend_product_result_artifact(result)
+    factor = extended["evidence_payload"]["top_factors"][0]
+
+    assert factor["direction"] == "risk_down"
+    assert factor["contribution"] == 1.0
+
+
 def test_extended_artifact_to_event_evidence_projection_matches_expected_reference_slice() -> None:
     package = load_projection_fixture("pdm-reference-evidence-critical.json")
     expected = load_projection_fixture("expected-event-evidence-projection-critical.json")
