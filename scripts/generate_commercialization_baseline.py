@@ -121,8 +121,8 @@ def _line_count(paths: Iterable[Path]) -> int:
 
 
 def _package_lock_consistency(root: Path) -> dict[str, Any]:
-    package = json.loads((root / "web/package.json").read_text(encoding="utf-8"))
-    lock = json.loads((root / "web/package-lock.json").read_text(encoding="utf-8"))
+    package = json.loads((root / "systems/frontend/package.json").read_text(encoding="utf-8"))
+    lock = json.loads((root / "systems/frontend/package-lock.json").read_text(encoding="utf-8"))
     lock_root = lock.get("packages", {}).get("", {})
     mismatches: list[str] = []
     for section in ("dependencies", "devDependencies"):
@@ -144,7 +144,7 @@ def _package_lock_consistency(root: Path) -> dict[str, Any]:
 
 
 def _bundle_metrics(root: Path) -> dict[str, Any]:
-    assets = root / "web/dist/assets"
+    assets = root / "systems/frontend/dist/assets"
     js = sorted(assets.glob("*.js")) if assets.is_dir() else []
     css = sorted(assets.glob("*.css")) if assets.is_dir() else []
 
@@ -167,8 +167,8 @@ def _bundle_metrics(root: Path) -> dict[str, Any]:
 
 
 def _route_inventory(root: Path) -> list[dict[str, Any]]:
-    routing = (root / "web/src/routing.ts").read_text(encoding="utf-8")
-    app = (root / "web/src/App.tsx").read_text(encoding="utf-8")
+    routing = (root / "systems/frontend/src/routing.ts").read_text(encoding="utf-8")
+    app = (root / "systems/frontend/src/App.tsx").read_text(encoding="utf-8")
     result = []
     for version, path, matcher, identity in ROUTES:
         matcher_present = matcher in routing
@@ -207,7 +207,7 @@ def _document_registry(root: Path, branch: str, head: str) -> list[dict[str, Any
             reasons.append("missing")
         if branch_claim and branch_claim not in {branch, "main"}:
             reasons.append(f"branch claim {branch_claim!r} differs from {branch!r}")
-        if relative.endswith("current-state.md") and "api/factory_signal_board" in text:
+        if relative.endswith("current-state.md") and "systems/backend/factory_signal_board" in text:
             reasons.append("references removed compatibility namespace")
         if relative.endswith("current-state.md") and "SQLite Identity + Audit" in text:
             reasons.append("describes legacy SQLite composition as current")
@@ -230,7 +230,7 @@ def _production_capabilities(root: Path, include_environment: bool) -> list[dict
     if not include_environment:
         return []
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join([str(root / "api"), str(root / "ml/src")])
+    env["PYTHONPATH"] = os.pathsep.join([str(root / "systems" / "backend"), str(root / "ml/src")])
     result = subprocess.run(
         [sys.executable, "scripts/verify_production_environment.py"],
         cwd=root,
@@ -314,12 +314,13 @@ def build_baseline(root: Path, *, include_environment: bool = True) -> dict[str,
     )[:15]
     migrations = sorted(
         str(path.relative_to(root))
-        for path in (root / "api/migrations").rglob("*.sql")
+        for path in (root / "systems/backend/migrations").rglob("*.sql")
     )
     backend_tests = sorted(str(path.relative_to(root)) for path in (root / "tests").glob("test_*.py"))
-    frontend_unit = sorted(str(path.relative_to(root)) for path in (root / "web/src").rglob("*.test.*"))
-    frontend_e2e = sorted(str(path.relative_to(root)) for path in (root / "web/e2e").glob("*.spec.ts"))
-    legacy_files = sorted(str(path.relative_to(root)) for path in (root / "api/factory_signal_board").rglob("*.py")) if (root / "api/factory_signal_board").exists() else []
+    frontend_unit = sorted(str(path.relative_to(root)) for path in (root / "systems/frontend/src").rglob("*.test.*"))
+    frontend_e2e = sorted(str(path.relative_to(root)) for path in (root / "systems/frontend/e2e").glob("*.spec.ts"))
+    legacy_root = root / "systems/backend/factory_signal_board"
+    legacy_files = sorted(str(path.relative_to(root)) for path in legacy_root.rglob("*.py")) if legacy_root.exists() else []
     routes = _route_inventory(root)
     capabilities = _production_capabilities(root, include_environment)
     verification_path = root / "docs/50-operations/commercialization-phase17-verification.json"
@@ -368,7 +369,7 @@ def build_baseline(root: Path, *, include_environment: bool = True) -> dict[str,
         "production_capabilities": capabilities,
         "architecture_claims": [
             {
-                "claim": "api/factory_signal_board remains a runtime namespace",
+                "claim": "systems/backend/factory_signal_board remains a runtime namespace",
                 "state": "invalidated" if not legacy_files else "current",
                 "evidence": f"{len(legacy_files)} tracked Python files",
             },

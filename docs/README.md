@@ -6,6 +6,7 @@ API 계약과 팀 공유 문서를 관리한다.
 ## 문서 묶음
 
 - [2026년 8월 멘토링 MVP](./mentoring-mvp-2026-08/README.md)
+- [AI 코드 리뷰 컨텍스트](./ai-code-review-context.md)
 
 ## 관리 원칙
 

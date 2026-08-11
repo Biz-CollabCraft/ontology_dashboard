@@ -97,8 +97,8 @@ def test_compose_defines_reproducible_polyglot_profile_and_health_checks() -> No
 
 
 def test_api_package_discovery_and_runtime_dependencies_match_boundaries() -> None:
-    pyproject = (ROOT / "api" / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'include = ["ontology_dashboard*"]' in pyproject
+    pyproject = (ROOT / "systems" / "backend" / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'include = ["ontology_dashboard*", "app*"]' in pyproject
     assert "factory_signal_board" not in pyproject
     for dependency in (
         '"psycopg[binary]>=3.2"',

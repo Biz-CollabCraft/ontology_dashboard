@@ -24,8 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def runtime_checksum() -> str:
     digest = hashlib.sha256()
     for path in (
-        ROOT / "api/ontology_dashboard/distributed_runtime.py",
-        ROOT / "api/ontology_dashboard/distributed_handlers.py",
+        ROOT / "systems/backend/ontology_dashboard/distributed_runtime.py",
+        ROOT / "systems/backend/ontology_dashboard/distributed_handlers.py",
     ):
         digest.update(path.read_bytes())
     return digest.hexdigest()

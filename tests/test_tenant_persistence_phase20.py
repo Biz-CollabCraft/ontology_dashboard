@@ -82,7 +82,7 @@ def test_phase20_upgrades_legacy_action_table_before_creating_recovery_index(
             """
         )
 
-    migration = ROOT / "api/migrations/sqlite/0019_tenant_transaction_convergence.sql"
+    migration = ROOT / "systems/backend/migrations/sqlite/0019_tenant_transaction_convergence.sql"
     monkeypatch.setattr(
         migration_module,
         "_migration_files",

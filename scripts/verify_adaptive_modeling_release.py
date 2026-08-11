@@ -46,22 +46,22 @@ PHASE_FILES = [
 ]
 
 REQUIRED_FILES = [
-    "api/migrations/postgresql/0016_adaptive_modeling_foundation.sql",
-    "api/migrations/postgresql/0017_adaptive_model_registry.sql",
-    "api/migrations/sqlite/0011_adaptive_modeling_foundation.sql",
-    "api/migrations/sqlite/0012_adaptive_model_registry.sql",
-    "api/ontology_dashboard/adapters/governed_tabular.py",
-    "api/ontology_dashboard/modeling/artifacts.py",
-    "api/ontology_dashboard/modeling/experiments.py",
-    "api/ontology_dashboard/modeling/features.py",
-    "api/ontology_dashboard/modeling/intake.py",
-    "api/ontology_dashboard/modeling/mapping.py",
-    "api/ontology_dashboard/modeling/models.py",
-    "api/ontology_dashboard/modeling/registry.py",
-    "api/ontology_dashboard/modeling/repository.py",
-    "api/ontology_dashboard/modeling/schema.py",
-    "api/ontology_dashboard/modeling/service.py",
-    "api/ontology_dashboard/routers/modeling.py",
+    "systems/backend/migrations/postgresql/0016_adaptive_modeling_foundation.sql",
+    "systems/backend/migrations/postgresql/0017_adaptive_model_registry.sql",
+    "systems/backend/migrations/sqlite/0011_adaptive_modeling_foundation.sql",
+    "systems/backend/migrations/sqlite/0012_adaptive_model_registry.sql",
+    "systems/backend/ontology_dashboard/adapters/governed_tabular.py",
+    "systems/backend/ontology_dashboard/modeling/artifacts.py",
+    "systems/backend/ontology_dashboard/modeling/experiments.py",
+    "systems/backend/ontology_dashboard/modeling/features.py",
+    "systems/backend/ontology_dashboard/modeling/intake.py",
+    "systems/backend/ontology_dashboard/modeling/mapping.py",
+    "systems/backend/ontology_dashboard/modeling/models.py",
+    "systems/backend/ontology_dashboard/modeling/registry.py",
+    "systems/backend/ontology_dashboard/modeling/repository.py",
+    "systems/backend/ontology_dashboard/modeling/schema.py",
+    "systems/backend/ontology_dashboard/modeling/service.py",
+    "systems/backend/ontology_dashboard/routers/modeling.py",
     "schemas/adaptive-modeling.schema.json",
     "scripts/generate_adaptive_modeling_schema.py",
     "scripts/run_modeling_experiment_worker.py",
@@ -72,10 +72,10 @@ REQUIRED_FILES = [
     "tests/test_modeling_experiment_runner.py",
     "tests/test_model_registry_and_explanations.py",
     "tests/test_adaptive_modeling_e2e.py",
-    "web/src/features/modeling/MLValidatorWorkbench.tsx",
-    "web/src/features/modeling/modelingApi.ts",
-    "web/e2e/adaptive-modeling-validator.spec.ts",
-    "web/e2e/adaptive-modeling-validator.manifest.ts",
+    "systems/frontend/src/features/modeling/MLValidatorWorkbench.tsx",
+    "systems/frontend/src/features/modeling/modelingApi.ts",
+    "systems/frontend/e2e/adaptive-modeling-validator.spec.ts",
+    "systems/frontend/e2e/adaptive-modeling-validator.manifest.ts",
 ]
 
 TARGETED_TESTS = [
@@ -130,7 +130,7 @@ def run_command(
 
 
 def schema_parity_check(root: Path) -> Check:
-    sys.path.insert(0, str(root / "api"))
+    sys.path.insert(0, str(root / "systems" / "backend"))
     try:
         from ontology_dashboard.modeling.schema import adaptive_modeling_schema
 
@@ -151,7 +151,7 @@ def schema_parity_check(root: Path) -> Check:
     except Exception as exc:  # noqa: BLE001 - release report requires exact failure
         return Check("adaptive.schema.typed_parity", "fail", str(exc))
     finally:
-        if sys.path and sys.path[0] == str(root / "api"):
+        if sys.path and sys.path[0] == str(root / "systems" / "backend"):
             sys.path.pop(0)
 
 
@@ -196,16 +196,16 @@ def production_capability_checks() -> list[Check]:
 
 
 def semantic_guards(root: Path) -> list[Check]:
-    models = (root / "api/ontology_dashboard/modeling/models.py").read_text(
+    models = (root / "systems/backend/ontology_dashboard/modeling/models.py").read_text(
         encoding="utf-8"
     )
-    service = (root / "api/ontology_dashboard/modeling/service.py").read_text(
+    service = (root / "systems/backend/ontology_dashboard/modeling/service.py").read_text(
         encoding="utf-8"
     )
-    feature = (root / "api/ontology_dashboard/modeling/features.py").read_text(
+    feature = (root / "systems/backend/ontology_dashboard/modeling/features.py").read_text(
         encoding="utf-8"
     )
-    registry = (root / "api/ontology_dashboard/modeling/registry.py").read_text(
+    registry = (root / "systems/backend/ontology_dashboard/modeling/registry.py").read_text(
         encoding="utf-8"
     )
     return [
@@ -336,7 +336,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
                     "test",
                     "e2e/adaptive-modeling-validator.spec.ts",
                 ],
-                cwd=root / "web",
+                cwd=root / "systems" / "frontend",
                 timeout=900,
             )
         )

@@ -11,7 +11,7 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-export PYTHONPATH="${ROOT_DIR}/api:${ROOT_DIR}/ml/src"
+export PYTHONPATH="${ROOT_DIR}/systems/backend:${ROOT_DIR}/ml/src"
 API_HOST="${APP_HOST:-0.0.0.0}"
 API_PORT="${API_PORT:-8100}"
 

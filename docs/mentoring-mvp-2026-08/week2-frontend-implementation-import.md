@@ -15,8 +15,8 @@
 
 ## 이관한 실행 소스
 
-- `web/`: React/Vite 프론트엔드, Overview·Objects·Operations·Event Executive Brief 포함
-- `api/`: FastAPI 백엔드, predictive-maintenance runtime과 Event/Report API 포함
+- `systems/frontend/`: React/Vite 프론트엔드, Overview·Objects·Operations·Event Executive Brief 포함
+- `systems/backend/`: FastAPI 백엔드, predictive-maintenance runtime과 Event/Report API 포함
 - `ml/`: 모델링/예측 보조 코드
 - `schemas/`: Result Artifact, Evidence, Dashboard 등 공통 계약
 - `scripts/`: 로컬 실행, 적재, 검증 스크립트
@@ -41,11 +41,11 @@ PR에서 수렴한다.
 
 ## 코드상 주요 화면 위치
 
-- `web/src/features/blueprint/BlueprintManufacturingApp.tsx`
-- `web/src/features/blueprint-v2/BlueprintManufacturingV2App.tsx`
-- `web/src/features/manufacturing/ManufacturingApp.tsx`
-- `web/src/features/dashboard/`
-- `web/src/features/reports/RoleReportWorkbench.tsx`
+- `systems/frontend/src/features/blueprint/BlueprintManufacturingApp.tsx`
+- `systems/frontend/src/features/blueprint-v2/BlueprintManufacturingV2App.tsx`
+- `systems/frontend/src/features/manufacturing/ManufacturingApp.tsx`
+- `systems/frontend/src/features/dashboard/`
+- `systems/frontend/src/features/reports/RoleReportWorkbench.tsx`
 
 ## 이관하지 않은 것
 

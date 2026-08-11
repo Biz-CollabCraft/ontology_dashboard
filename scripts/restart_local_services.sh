@@ -57,10 +57,10 @@ sleep 0.5
 
 : > "${API_LOG}"
 : > "${WEB_LOG}"
-export PYTHONPATH="${ROOT_DIR}/api:${ROOT_DIR}/ml/src"
+export PYTHONPATH="${ROOT_DIR}/systems/backend:${ROOT_DIR}/ml/src"
 
-if [[ ! -f "${ROOT_DIR}/web/dist/index.html" ]]; then
-  echo "web/dist is missing; run: npm --prefix web run build" >&2
+if [[ ! -f "${ROOT_DIR}/systems/frontend/dist/index.html" ]]; then
+  echo "systems/frontend/dist is missing; run: npm --prefix systems/frontend run build" >&2
   exit 1
 fi
 
@@ -74,7 +74,7 @@ fi
 WEB_PID="$(lsof -tiTCP:"${WEB_PORT}" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
 if [[ -z "${WEB_PID}" ]]; then
   nohup bash -c 'cd "$1" && exec ./node_modules/.bin/vite preview --host "$2" --port "$3" --strictPort' \
-    _ "${ROOT_DIR}/web" "${API_HOST}" "${WEB_PORT}" >> "${WEB_LOG}" 2>&1 &
+    _ "${ROOT_DIR}/systems/frontend" "${API_HOST}" "${WEB_PORT}" >> "${WEB_LOG}" 2>&1 &
   WEB_PID=$!
 fi
 

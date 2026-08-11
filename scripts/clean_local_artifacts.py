@@ -19,17 +19,17 @@ DIRECTORY_NAMES = {
 }
 
 EXPLICIT_DIRECTORIES = {
-    ROOT / "web" / "dist",
-    ROOT / "web" / "test-results",
-    ROOT / "web" / "playwright-report",
-    ROOT / "web" / "coverage",
+    ROOT / "systems" / "frontend" / "dist",
+    ROOT / "systems" / "frontend" / "test-results",
+    ROOT / "systems" / "frontend" / "playwright-report",
+    ROOT / "systems" / "frontend" / "coverage",
     ROOT / "htmlcov",
 }
 
 
 RUNTIME_CACHE_DIRECTORIES = {
-    ROOT / "web" / ".vite",
-    ROOT / "web" / "node_modules" / ".vite",
+    ROOT / "systems" / "frontend" / ".vite",
+    ROOT / "systems" / "frontend" / "node_modules" / ".vite",
 }
 
 FILE_NAMES = {".DS_Store", ".coverage", "coverage.xml", "junit.xml"}

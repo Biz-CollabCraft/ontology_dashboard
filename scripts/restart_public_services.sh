@@ -10,8 +10,8 @@ WEB_LABEL="com.gabrieljang.ontology-dashboard-web-public"
 API_PORT="${API_PORT:-8100}"
 WEB_PORT="${WEB_PORT:-3100}"
 
-if [[ ! -f web/dist/index.html ]]; then
-  echo "web/dist is missing; run: npm --prefix web run build" >&2
+if [[ ! -f systems/frontend/dist/index.html ]]; then
+  echo "systems/frontend/dist is missing; run: npm --prefix systems/frontend run build" >&2
   exit 1
 fi
 

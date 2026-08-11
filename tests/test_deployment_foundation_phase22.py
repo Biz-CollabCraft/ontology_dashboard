@@ -24,7 +24,7 @@ def test_static_production_topology_is_hardened_and_keeps_four_routes() -> None:
     evidence = verify_deployment_files(ROOT)
     assert evidence["pass"] is True
     assert all(evidence["checks"].values())
-    nginx = (ROOT / "web/nginx.conf").read_text(encoding="utf-8")
+    nginx = (ROOT / "systems/frontend/nginx.conf").read_text(encoding="utf-8")
     assert "try_files $uri $uri/ /index.html" in nginx
     manifest = (ROOT / "infra/production/platform.yaml").read_text(encoding="utf-8")
     for route in VERSIONED_ROUTES:
