@@ -8,7 +8,11 @@ from ontology_dashboard.adapters import (
     PredictiveMaintenanceCanonicalV3SourceAdapter,
     default_adapter_registry,
 )
-from ontology_dashboard.demo_predictive_maintenance_bootstrap import _runtime_fixture
+from ontology_dashboard.demo_predictive_maintenance_bootstrap import (
+    RUNTIME_SELECTION_STRATEGY,
+    _runtime_candidates,
+    _runtime_fixture,
+)
 from predictive_maintenance_v3_helpers import create_small_v3_package
 
 
@@ -84,6 +88,35 @@ def test_runtime_fixture_uses_only_canonical_cnc_observation_fields() -> None:
         "torque_nm",
         "tool_wear_min",
     }
+
+
+def test_runtime_candidates_select_latest_observation_per_asset() -> None:
+    class Result:
+        def fetchall(self) -> list[dict[str, object]]:
+            return [{"asset_id": "CNC-001"}]
+
+    class Connection:
+        def __init__(self) -> None:
+            self.query = ""
+            self.parameters: tuple[str, ...] = ()
+
+        def execute(self, query: str, parameters: tuple[str, ...]) -> Result:
+            self.query = query
+            self.parameters = parameters
+            return Result()
+
+    connection = Connection()
+    candidates = _runtime_candidates(connection, "dsv-current")
+
+    assert candidates == [{"asset_id": "CNC-001"}]
+    assert connection.parameters == ("dsv-current",)
+    assert "DISTINCT ON (o.asset_id)" in connection.query
+    assert "ORDER BY o.asset_id, o.observed_at DESC" in connection.query
+    assert "signal_rank" not in connection.query
+
+
+def test_runtime_selection_strategy_declares_current_state_semantics() -> None:
+    assert RUNTIME_SELECTION_STRATEGY == "latest_observation_per_asset_v1"
 
 
 def test_threshold_policy_is_declared_as_wheel_package_data() -> None:

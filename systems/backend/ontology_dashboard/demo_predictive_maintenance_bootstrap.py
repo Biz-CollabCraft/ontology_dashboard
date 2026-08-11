@@ -31,6 +31,7 @@ ORGANIZATION_ID = "org-ontology-demo"
 PROJECT_ID = "manufacturing-demo-project"
 WORKSPACE_ID = "manufacturing-demo"
 SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
+RUNTIME_SELECTION_STRATEGY = "latest_observation_per_asset_v1"
 DEFAULT_SOURCE_ROOT = Path("/app/.source/gen_data")
 OUTPUT_ROLES = {
     "prediction_snapshot",
@@ -63,49 +64,20 @@ def _set_scope(connection: Any) -> None:
 
 
 def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[str, Any]]:
-    """Select one high-signal observation per CNC without consulting hidden truth.
+    """Select the latest observation per CNC for the current-state dashboard.
 
-    Candidate selection uses only public canonical sensor fields. The selected
-    observation is then passed through the backend-owned predictor; this query is
-    not itself a prediction or a label lookup.
+    The MVP overview represents the latest known state of every CNC asset. Historical
+    warning/critical observations remain in the canonical source data and belong in
+    event/history views rather than replacing an asset's current observation.
     """
 
     return list(
         connection.execute(
             """
-            WITH scored AS (
-                SELECT
-                    o.*,
-                    GREATEST(
-                        o.tool_wear_min / 240.0,
-                        (o.tool_wear_min * o.torque_nm) / 13000.0,
-                        CASE
-                            WHEN (o.torque_nm * o.rotational_speed_rpm * 2.0 * pi() / 60.0) < 3500.0
-                            THEN 1.0 + (3500.0 - (o.torque_nm * o.rotational_speed_rpm * 2.0 * pi() / 60.0)) / 3500.0
-                            WHEN (o.torque_nm * o.rotational_speed_rpm * 2.0 * pi() / 60.0) > 9000.0
-                            THEN 1.0 + ((o.torque_nm * o.rotational_speed_rpm * 2.0 * pi() / 60.0) - 9000.0) / 9000.0
-                            ELSE 0.0
-                        END,
-                        CASE
-                            WHEN (o.process_temperature_k - o.air_temperature_k) < 8.6
-                                 AND o.rotational_speed_rpm < 1380.0
-                            THEN 1.0 + (8.6 - (o.process_temperature_k - o.air_temperature_k))
-                            ELSE 0.0
-                        END
-                    ) AS signal_rank
-                FROM pm_cnc_observations o
-                WHERE o.dataset_version_id=%s
-            ), ranked AS (
-                SELECT scored.*,
-                       row_number() OVER (
-                           PARTITION BY asset_id
-                           ORDER BY signal_rank DESC, observed_at DESC
-                       ) AS candidate_rank
-                FROM scored
-            )
-            SELECT * FROM ranked
-            WHERE candidate_rank=1
-            ORDER BY asset_id
+            SELECT DISTINCT ON (o.asset_id) o.*
+            FROM pm_cnc_observations o
+            WHERE o.dataset_version_id=%s
+            ORDER BY o.asset_id, o.observed_at DESC
             """,
             (dataset_version_id,),
         ).fetchall()
@@ -184,20 +156,29 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                        COUNT(*) FILTER (WHERE model_version=%s) AS current_model_count,
                        COUNT(*) FILTER (
                            WHERE provenance->>'source_type'='product_runtime_inference'
-                       ) AS runtime_count
+                       ) AS runtime_count,
+                       COUNT(*) FILTER (
+                           WHERE provenance->>'selection_strategy'=%s
+                       ) AS current_selection_count
                 FROM pm_result_artifacts
                 WHERE dataset_version_id=%s
                 """,
-                (predictor.model_version, dataset_version_id),
+                (
+                    predictor.model_version,
+                    RUNTIME_SELECTION_STRATEGY,
+                    dataset_version_id,
+                ),
             ).fetchone()
             if (
                 int(existing["count"] or 0) == len(candidates)
                 and int(existing["current_model_count"] or 0) == len(candidates)
                 and int(existing["runtime_count"] or 0) == len(candidates)
+                and int(existing["current_selection_count"] or 0) == len(candidates)
             ):
                 return {
                     "model_version": predictor.model_version,
                     "result_artifact_count": len(candidates),
+                    "selection_strategy": RUNTIME_SELECTION_STRATEGY,
                     "reused": True,
                 }
 
@@ -247,6 +228,7 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                         "source_version": SOURCE_VERSION,
                         "source_observation_sha256": str(row["source_sha256"]),
                         "diagnostic_failure_type": diagnostic_type,
+                        "selection_strategy": RUNTIME_SELECTION_STRATEGY,
                     }
                 )
                 prediction_id = str(provenance["prediction_id"])
@@ -404,6 +386,7 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                 "model_version": predictor.model_version,
                 "result_artifact_count": len(candidates),
                 "status_counts": status_counts,
+                "selection_strategy": RUNTIME_SELECTION_STRATEGY,
                 "reused": False,
             }
 
