@@ -106,11 +106,15 @@ def extend_product_result_artifact(
 
     extension["top_factors"] = _normalise_top_factors(artifact.get("top_factors", []))
     extension.setdefault("sensor_evidence", _normalise_sensor_evidence(extension))
-    extension["source_fields"] = _build_source_fields(extension["top_factors"], extension["sensor_evidence"])
+    extension["source_fields"] = _build_source_fields(
+        extension["top_factors"],
+        extension["sensor_evidence"],
+        artifact.get("recommended_action"),
+    )
     extension["component_hypotheses"] = _normalise_component_hypotheses({}, extension["top_factors"])
     extension.setdefault("status_flags", {})
     extension.setdefault("maintenance_context", _empty_maintenance_context())
-    extension.setdefault("recommended_actions", _normalise_recommended_actions(extension, artifact))
+    extension["recommended_actions"] = _normalise_recommended_actions({}, artifact)
     extension.setdefault("data_quality_warnings", [])
     extension.setdefault("lineage", {})
 
@@ -409,7 +413,11 @@ def _normalise_recommended_actions(
     return []
 
 
-def _build_source_fields(top_factors: list[dict[str, Any]], sensor_evidence: dict[str, Any]) -> list[dict[str, Any]]:
+def _build_source_fields(
+    top_factors: list[dict[str, Any]],
+    sensor_evidence: dict[str, Any],
+    recommended_action: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     fields = [
         {
             "field_id": factor["evidence_field_id"],
@@ -426,6 +434,15 @@ def _build_source_fields(top_factors: list[dict[str, Any]], sensor_evidence: dic
                 "source_path": f"evidence_payload.sensor_evidence.sensors.{sensor_key}",
                 "label": sensor.get("display_name") or sensor_key,
                 "description": "센서 관측 및 baseline 근거",
+            }
+        )
+    if recommended_action:
+        fields.append(
+            {
+                "field_id": "recommended_action",
+                "source_path": "recommended_action",
+                "label": "권장 조치",
+                "description": "Product Result Artifact의 공식 권장 조치",
             }
         )
     return fields

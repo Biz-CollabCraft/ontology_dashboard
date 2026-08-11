@@ -150,6 +150,12 @@ def test_artifact_top_factors_override_reference_factors_without_losing_referenc
         for hypothesis in projection["report_projection"]["inspection_targets"]
         for basis in hypothesis["basis"]
     )
+    assert projection["report_projection"]["recommended_actions"][0]["action_id"] == "inspect_within_current_shift"
+    assert all(
+        basis in source_field_ids
+        for action in projection["report_projection"]["recommended_actions"]
+        for basis in action["basis"]
+    )
     assert projection["report_projection"]["inspection_targets"][0]["basis"] == ["factor.1.torque_nm"]
     assert projection["report_projection"]["sensor_cards"][0]["sensor_id"] == "rotation_raw"
     assert projection["report_projection"]["sensor_cards"][0]["basis"]["baseline_n"] == 240
