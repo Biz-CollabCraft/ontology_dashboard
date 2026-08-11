@@ -437,22 +437,90 @@ Extended Product Result Artifact
 - 정비이력 추가 액션이 보이고 기존 Event action/note/activity 경계로 연결되는지 확인한다.
 - limitation과 human approval 문구가 보이는지 확인한다.
 
-## 8. 권장 작업 순서
+## 8. 구현 순서와 진행 상태
 
-1. Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` reference fixture, backend extension/projection test를 추가한다.
-2. Product Result Artifact optional evidence extension shape를 고정한다.
-3. Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다.
-4. `product_result_evidence_projection.py`를 구현한다.
-5. Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다.
-6. `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다.
-7. runtime `_dashboard_detail`이 projection layer를 사용하도록 refactor한다.
-8. Event Evidence projection을 현행 `GroundedReport`로 변환하는 경로를 추가한다.
-9. 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다.
-10. frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다.
-11. map-report prototype에서 Inspection Request, Evidence Trace, Sensor Evidence 블록만 typed component로 옮긴다.
-12. component를 API data에 연결한다.
-13. 최소 report UI flow에 Playwright coverage를 추가한다.
-14. 구현 검증 후 API/schema 문서를 갱신한다.
+이 섹션은 구현 PR이 진행될 때마다 업데이트한다. 각 단계가 완료되면 `Status`를 `Done`으로 바꾸고, 해당 PR 번호와 검증 명령을 `Evidence`에 남긴다. 구현 중 범위가 바뀌면 새 단계를 끼워 넣기보다 `Notes`에 이유를 남기고 후속 PR로 분리한다.
+
+Status 값은 다음만 사용한다.
+
+- `Todo`: 아직 시작하지 않음
+- `In Progress`: 구현 또는 리뷰 진행 중
+- `Done`: PR 반영 및 검증 완료
+- `Deferred`: 2주차 범위에서 제외하고 후속 PR로 넘김
+
+### 8.1 1차 PR: Backend Projection Contract
+
+목표는 Product Result Artifact에서 Event Evidence projection과 legacy compatibility projection을 안정적으로 생성하는 것이다. 이 PR은 화면 이식이나 runtime live 경로 리팩터링을 포함하지 않는다.
+
+| Order | Status | Step | Deliverable | Evidence |
+|---:|---|---|---|---|
+| 1 | Todo | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` reference fixture를 추가한다. | 최소 fixture set | PR 번호, fixture 경로 |
+| 2 | Todo | Product Result Artifact optional evidence extension shape를 고정한다. | extension expected fixture 또는 schema candidate | schema/test 경로 |
+| 3 | Todo | Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다. | canonical projection expected fixture | test 경로 |
+| 4 | Todo | `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 구현한다. | extension/projection mapper | unit test 결과 |
+| 5 | Todo | Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다. | canonical + legacy regression test | test 결과 |
+| 6 | Todo | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | API contract test 결과 |
+
+1차 PR 완료 조건은 다음과 같다.
+
+- 기본 `GET /api/events/{event_id}/evidence` 응답은 legacy shape를 유지한다.
+- canonical Event Evidence projection은 명시적 selector가 있을 때만 반환된다.
+- `evaluation_truth`와 `hidden_truth`는 projection과 legacy response에 없다.
+- `pdm-mvp` sample은 운영 입력이 아니라 reference fixture로만 사용된다.
+
+### 8.2 2차 PR: Report Projection Integration
+
+목표는 Event Evidence projection을 현행 `GroundedReport`와 점검 요청용 report input으로 연결하는 것이다. 이 PR은 frontend component 이식 전 backend/report contract를 먼저 안정화한다.
+
+| Order | Status | Step | Deliverable | Evidence |
+|---:|---|---|---|---|
+| 7 | Todo | Event Evidence projection을 현행 `GroundedReport`로 변환하는 경로를 추가한다. | projection-to-report mapper | report unit test 결과 |
+| 8 | Todo | 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다. | `add_maintenance_note` descriptor | fixture/test 경로 |
+| 9 | Todo | report section, citation, evidence trace가 `source_fields`에 grounded 되는지 검증한다. | grounded report regression test | test 결과 |
+
+2차 PR 완료 조건은 다음과 같다.
+
+- `pdm-mvp/report_generator.py`를 runtime dependency로 import하지 않는다.
+- report mapper는 새 위험 수치나 집계 count를 만들지 않는다.
+- `review_shutdown`은 automatic control이 아니라 human review로만 표현된다.
+
+### 8.3 3차 PR: Runtime Path Refactor
+
+목표는 live/runtime 경로의 내부 매핑을 projection layer로 수렴하는 것이다. 1차와 2차 PR이 안정화된 뒤 진행한다.
+
+| Order | Status | Step | Deliverable | Evidence |
+|---:|---|---|---|---|
+| 10 | Todo | runtime `_dashboard_detail`이 projection layer를 사용하도록 refactor한다. | runtime service refactor | backend test 결과 |
+| 11 | Todo | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | API test 결과 |
+
+3차 PR 완료 조건은 다음과 같다.
+
+- runtime inference와 Product Result Artifact/Evidence 최종 생성 책임은 `systems/backend/app/diagnosis`에 유지된다.
+- `systems/backend/ontology_dashboard/...`는 dashboard API host와 projection layer 역할만 한다.
+
+### 8.4 4차 PR: Frontend ViewModel and UI
+
+목표는 점검 요청과 evidence trace 화면을 typed ViewModel으로 연결하는 것이다. 상태 요약, 요약 보고서, Operations 기간 집계 화면은 포함하지 않는다.
+
+| Order | Status | Step | Deliverable | Evidence |
+|---:|---|---|---|---|
+| 12 | Todo | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | Vitest 결과 |
+| 13 | Todo | map-report prototype에서 Inspection Request, Evidence Trace, Sensor Evidence 블록만 typed component로 옮긴다. | MVP report components | screenshot/test 결과 |
+| 14 | Todo | component를 API data에 연결한다. | fixture 또는 live-backed UI flow | browser 확인 결과 |
+| 15 | Todo | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | Playwright 결과 |
+
+4차 PR 완료 조건은 다음과 같다.
+
+- frontend는 raw JSONL이나 raw producer payload를 직접 파싱하지 않는다.
+- UI는 typed ViewModel 또는 `report_projection`만 사용한다.
+- 정비이력 추가는 최소 action descriptor로만 제공되며 Work Order 생성이나 Operations 기간 집계를 만들지 않는다.
+
+### 8.5 후속 문서 갱신
+
+| Order | Status | Step | Deliverable | Evidence |
+|---:|---|---|---|---|
+| 16 | Todo | 구현 검증 후 API/schema 문서를 갱신한다. | API/schema docs | PR 번호 |
+| 17 | Deferred | 상태 요약, 요약 보고서, Operations 기간 집계 입력 계약을 설계한다. | V2 aggregate/report input plan | 후속 계획 문서 |
 
 ## 9. 완료 기준
 
