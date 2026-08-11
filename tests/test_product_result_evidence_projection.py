@@ -137,6 +137,20 @@ def test_artifact_top_factors_override_reference_factors_without_losing_referenc
 
     assert extended["evidence_payload"]["top_factors"][0]["feature"] == "torque_nm"
     assert projection["assessment"]["top_factors"][0]["feature"] == "torque_nm"
+    factor_trace = [
+        item["field_id"]
+        for item in projection["report_projection"]["evidence_trace"]
+        if item["field_id"].startswith("factor.")
+    ]
+    assert factor_trace == ["factor.1.torque_nm"]
+    assert "factor.1.rotation_raw" not in factor_trace
+    source_field_ids = {item["field_id"] for item in projection["report_projection"]["evidence_trace"]}
+    assert all(
+        basis in source_field_ids
+        for hypothesis in projection["report_projection"]["inspection_targets"]
+        for basis in hypothesis["basis"]
+    )
+    assert projection["report_projection"]["inspection_targets"][0]["basis"] == ["factor.1.torque_nm"]
     assert projection["report_projection"]["sensor_cards"][0]["sensor_id"] == "rotation_raw"
     assert projection["report_projection"]["sensor_cards"][0]["basis"]["baseline_n"] == 240
 

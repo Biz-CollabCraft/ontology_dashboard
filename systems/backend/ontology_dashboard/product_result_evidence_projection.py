@@ -106,11 +106,11 @@ def extend_product_result_artifact(
 
     extension["top_factors"] = _normalise_top_factors(artifact.get("top_factors", []))
     extension.setdefault("sensor_evidence", _normalise_sensor_evidence(extension))
-    extension.setdefault("component_hypotheses", _normalise_component_hypotheses(extension, extension["top_factors"]))
+    extension["source_fields"] = _build_source_fields(extension["top_factors"], extension["sensor_evidence"])
+    extension["component_hypotheses"] = _normalise_component_hypotheses({}, extension["top_factors"])
     extension.setdefault("status_flags", {})
     extension.setdefault("maintenance_context", _empty_maintenance_context())
     extension.setdefault("recommended_actions", _normalise_recommended_actions(extension, artifact))
-    extension.setdefault("source_fields", _build_source_fields(extension["top_factors"], extension["sensor_evidence"]))
     extension.setdefault("data_quality_warnings", [])
     extension.setdefault("lineage", {})
 
