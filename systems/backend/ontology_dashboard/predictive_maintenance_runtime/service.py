@@ -82,6 +82,11 @@ PM_FEATURE_LABELS: dict[AppLocale, dict[str, str]] = {
         "rotation_raw_6h_mean": "6시간 회전속도 평균",
         "rotation_raw_6h_abs_mean": "6시간 회전속도 절대평균",
         "rotation_raw_6h_std": "6시간 회전속도 표준편차",
+        "voltage_raw": "전압 신호",
+        "rotation_raw": "회전 신호",
+        "pressure_raw": "압력 신호",
+        "vibration_raw": "진동 신호",
+        "relative_vibration_z": "상대 진동 Z-score",
     },
     "en-US": {
         "air_temperature_k": "Air temperature",
@@ -95,6 +100,11 @@ PM_FEATURE_LABELS: dict[AppLocale, dict[str, str]] = {
         "rotation_raw_6h_mean": "6-hour rotational-speed mean",
         "rotation_raw_6h_abs_mean": "6-hour rotational-speed absolute mean",
         "rotation_raw_6h_std": "6-hour rotational-speed standard deviation",
+        "voltage_raw": "Voltage signal",
+        "rotation_raw": "Rotation signal",
+        "pressure_raw": "Pressure signal",
+        "vibration_raw": "Vibration signal",
+        "relative_vibration_z": "Relative vibration Z-score",
     },
 }
 PM_LAYOUT_TITLES: dict[AppLocale, dict[str, str]] = {
@@ -968,6 +978,11 @@ class PredictiveMaintenanceRuntimeService:
             "rotational_speed_rpm": "rpm",
             "torque_nm": "Nm",
             "tool_wear_min": "min",
+            "voltage_raw": "raw",
+            "rotation_raw": "raw",
+            "pressure_raw": "raw",
+            "vibration_raw": "raw",
+            "relative_vibration_z": "z",
         }
         factors = [
             {

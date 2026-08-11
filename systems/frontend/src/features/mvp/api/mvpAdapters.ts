@@ -266,6 +266,16 @@ function evidenceFactors(evidence: Evidence | null): MvpFactor[] {
 
 function evidenceSensors(evidence: Evidence | null): MvpSensorValue[] {
   if (!evidence) return [];
+  if (String(evidence.observation.asset_type ?? "").toLowerCase() === "compressor") {
+    return [
+      { id: "voltage_raw", label: "전압 신호", value: evidence.observation.voltage_raw as number | null, unit: "raw" },
+      { id: "rotation_raw", label: "회전 신호", value: evidence.observation.rotation_raw as number | null, unit: "raw" },
+      { id: "pressure_raw", label: "압력 신호", value: evidence.observation.pressure_raw as number | null, unit: "raw" },
+      { id: "vibration_raw", label: "진동 신호", value: evidence.observation.vibration_raw as number | null, unit: "raw" },
+      { id: "relative_vibration_z", label: "상대 진동 Z-score", value: evidence.observation.relative_vibration_z as number | null, unit: "z" },
+      { id: "relative_vibration_zone", label: "진동 Zone", value: evidence.observation.relative_vibration_zone as string | null, unit: null },
+    ];
+  }
   const rows: MvpSensorValue[] = [
     { id: "air_temperature_k", label: "공기 온도", value: evidence.observation.air_temperature_k, unit: "K" },
     { id: "process_temperature_k", label: "공정 온도", value: evidence.observation.process_temperature_k, unit: "K" },

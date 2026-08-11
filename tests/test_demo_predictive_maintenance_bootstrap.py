@@ -9,10 +9,12 @@ from ontology_dashboard.adapters import (
     default_adapter_registry,
 )
 from ontology_dashboard.demo_predictive_maintenance_bootstrap import (
+    RUNTIME_MATERIALIZATION_PROFILE,
     RUNTIME_SELECTION_STRATEGY,
     _runtime_candidates,
     _runtime_fixture,
 )
+from app.diagnosis.predictor import CompressorHeuristicPredictor
 from predictive_maintenance_v3_helpers import create_small_v3_package
 
 
@@ -65,13 +67,16 @@ def test_runtime_fixture_uses_only_canonical_cnc_observation_fields() -> None:
 
     row = {
         "asset_id": "CNC-S01-L01-01",
+        "asset_type": "cnc",
         "observed_at": datetime(2026, 8, 1, 1, 0, tzinfo=timezone.utc),
-        "product_type": "M",
-        "air_temperature_k": 300.0,
-        "process_temperature_k": 307.7,
-        "rotational_speed_rpm": 1280.0,
-        "torque_nm": 46.0,
-        "tool_wear_min": 220.0,
+        "observation": {
+            "product_type": "M",
+            "air_temperature_k": 300.0,
+            "process_temperature_k": 307.7,
+            "rotational_speed_rpm": 1280.0,
+            "torque_nm": 46.0,
+            "tool_wear_min": 220.0,
+        },
     }
 
     fixture = _runtime_fixture(row)
@@ -88,6 +93,42 @@ def test_runtime_fixture_uses_only_canonical_cnc_observation_fields() -> None:
         "torque_nm",
         "tool_wear_min",
     }
+
+
+def test_runtime_fixture_and_predictor_support_canonical_compressor_fields() -> None:
+    from datetime import datetime, timezone
+
+    row = {
+        "asset_id": "CMP-S01-L01-01",
+        "asset_type": "compressor",
+        "observed_at": datetime(2026, 8, 1, 1, 0, tzinfo=timezone.utc),
+        "observation": {
+            "voltage_raw": 170.0,
+            "rotation_raw": 450.0,
+            "pressure_raw": 100.0,
+            "vibration_raw": 51.0,
+            "relative_vibration_z": 2.3,
+            "relative_vibration_zone": "C",
+        },
+    }
+
+    fixture = _runtime_fixture(row)
+    prediction = CompressorHeuristicPredictor().predict(fixture)
+
+    assert fixture["asset_type"] == "compressor"
+    assert set(fixture["observation"]) == {
+        "timestamp",
+        "voltage_raw",
+        "rotation_raw",
+        "pressure_raw",
+        "vibration_raw",
+        "relative_vibration_z",
+        "relative_vibration_zone",
+    }
+    assert prediction.model_version == "compressor-signal-heuristic-v1"
+    assert prediction.risk_band == "warning"
+    assert prediction.predicted_failure_type == "compressor_signal_anomaly"
+    assert prediction.factors
 
 
 def test_runtime_candidates_select_latest_observation_per_asset() -> None:
@@ -109,14 +150,17 @@ def test_runtime_candidates_select_latest_observation_per_asset() -> None:
     candidates = _runtime_candidates(connection, "dsv-current")
 
     assert candidates == [{"asset_id": "CNC-001"}]
-    assert connection.parameters == ("dsv-current",)
-    assert "DISTINCT ON (o.asset_id)" in connection.query
-    assert "ORDER BY o.asset_id, o.observed_at DESC" in connection.query
+    assert connection.parameters == ("dsv-current", "dsv-current")
+    assert connection.query.count("DISTINCT ON (o.asset_id)") == 2
+    assert "pm_cnc_observations" in connection.query
+    assert "pm_compressor_observations" in connection.query
+    assert "UNION ALL" in connection.query
     assert "signal_rank" not in connection.query
 
 
 def test_runtime_selection_strategy_declares_current_state_semantics() -> None:
     assert RUNTIME_SELECTION_STRATEGY == "latest_observation_per_asset_v1"
+    assert RUNTIME_MATERIALIZATION_PROFILE == "cnc_and_compressor_current_state_v1"
 
 
 def test_threshold_policy_is_declared_as_wheel_package_data() -> None:
