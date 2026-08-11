@@ -1,0 +1,36 @@
+{
+  "schema_version": "event-evidence-projection-v1",
+  "contract_type": "event_evidence_projection",
+  "event_id": "EVT-PDM-REF-004",
+  "scenario_id": "PDM-REF-004",
+  "subject": {
+    "equipment_id": "CMP-S03-L03-01",
+    "display_name": "압축기 S03-L03-01",
+    "line": "S03-L03",
+    "criticality": "high",
+    "assigned_engineer": "최민호"
+  },
+  "assessment": {
+    "status": "critical",
+    "recommended_decision": "review_shutdown",
+    "confidence": "medium",
+    "failure_probability": 0.92,
+    "threshold": 0.65,
+    "predicted_failure_type": "power_or_overstrain_failure"
+  },
+  "report_projection": {
+    "sensor_cards": [
+      {
+        "sensor_id": "rotation_raw",
+        "z_score": -2.9,
+        "source_field_id": "sensor_evidence.sensors.rotation_raw"
+      }
+    ],
+    "inspection_targets": [
+      {
+        "component_id": "rotating_assembly",
+        "association": "inspection_candidate"
+      }
+    ]
+  }
+}

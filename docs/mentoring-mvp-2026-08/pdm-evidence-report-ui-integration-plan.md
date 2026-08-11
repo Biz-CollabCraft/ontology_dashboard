@@ -454,11 +454,11 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 1 | Todo | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` reference fixture를 추가한다. | 최소 fixture set | PR 번호, fixture 경로 |
-| 2 | Todo | Product Result Artifact optional evidence extension shape를 고정한다. | extension expected fixture 또는 schema candidate | schema/test 경로 |
-| 3 | Todo | Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다. | canonical projection expected fixture | test 경로 |
-| 4 | Todo | `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 구현한다. | extension/projection mapper | unit test 결과 |
-| 5 | Todo | Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다. | canonical + legacy regression test | test 결과 |
+| 1 | Done | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` reference fixture를 추가한다. | 최소 fixture set | `tests/fixtures/product_result_evidence_projection/`, `data/fixtures/GS-*.json` |
+| 2 | Done | Product Result Artifact optional evidence extension shape를 고정한다. | extension expected fixture 또는 schema candidate | `tests/test_product_result_evidence_projection.py::test_extend_product_result_artifact_adds_optional_extension_without_mutating_source` |
+| 3 | Done | Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다. | canonical projection expected fixture | `tests/fixtures/product_result_evidence_projection/expected-event-evidence-projection-critical.json` |
+| 4 | Done | `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 구현한다. | extension/projection mapper | `pytest -q tests/test_product_result_evidence_projection.py` |
+| 5 | Done | Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다. | canonical + legacy regression test | `pytest -q tests/test_product_result_evidence_projection.py tests/test_system_ownership.py` |
 | 6 | Todo | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | API contract test 결과 |
 
 1차 PR 완료 조건은 다음과 같다.
