@@ -1229,7 +1229,8 @@ class PredictiveMaintenanceRuntimeService:
             maintenance = [
                 item
                 for item in maintenance_by_asset.get(result.asset_id, [])
-                if item["completed_at"] <= result.observed_at
+                if item.get("completed_at") is not None
+                and item["completed_at"] <= result.observed_at
             ]
             equipment = self._dashboard_equipment(result, maintenance)
             events.append(
@@ -1274,7 +1275,8 @@ class PredictiveMaintenanceRuntimeService:
             selected_maintenance = [
                 item
                 for item in maintenance_by_asset.get(selected_result.asset_id, [])
-                if item["completed_at"] <= selected_result.observed_at
+                if item.get("completed_at") is not None
+                and item["completed_at"] <= selected_result.observed_at
             ]
             detail = self._dashboard_detail(
                 organization_id=organization_id,
