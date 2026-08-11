@@ -7,9 +7,17 @@ describe("Week 2 MVP route boundary", () => {
   });
 
   it("redirects imported project workbenches to the canonical MVP route", () => {
-    expect(week2MvpRedirectPath("/app/projects/demo/datasets", "fallback")).toBe("/app/projects/demo/mvp");
-    expect(week2MvpRedirectPath("/app/projects/demo/workspaces/main/agent", "fallback")).toBe("/app/projects/demo/mvp");
-    expect(week2MvpRedirectPath("/app/projects/demo/blueprint-v4", "fallback")).toBe("/app/projects/demo/mvp");
+    for (const path of [
+      "/app/projects/demo",
+      "/app/projects/demo/datasets",
+      "/app/projects/demo/workspaces/main/agent",
+      "/app/projects/demo/blueprint",
+      "/app/projects/demo/blueprint-v2",
+      "/app/projects/demo/blueprint-v4",
+      "/app/projects/demo/blueprint-compare",
+    ]) {
+      expect(week2MvpRedirectPath(path, "fallback")).toBe("/app/projects/demo/mvp");
+    }
   });
 
   it("uses the active project for non-project app paths", () => {

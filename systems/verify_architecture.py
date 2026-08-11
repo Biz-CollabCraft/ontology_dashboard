@@ -292,7 +292,7 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         "Collect architecture failure evidence",
         'ARCHITECTURE_JOB_RESULT: ${{ inputs.architecture_result }}',
         'WORKFLOW_RUN_ID: ${{ inputs.workflow_run_id }}',
-        'gh run view "$WORKFLOW_RUN_ID" --repo "$GITHUB_REPOSITORY" --job "$architecture_job_id" --log',
+        '"repos/${GITHUB_REPOSITORY}/actions/jobs/${architecture_job_id}/logs"',
         'DOCKER_RUNTIME_VERIFIED: ${{ inputs.docker_runtime_verified }}',
         'FRONTEND_UNIT_VERIFIED: ${{ inputs.frontend_unit_verified }}',
         'MVP_E2E_VERIFIED: ${{ inputs.mvp_e2e_verified }}',

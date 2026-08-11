@@ -83,7 +83,9 @@ jobs:
 
           log_loaded=0
           for attempt in {1..5}; do
-            if gh run view "$WORKFLOW_RUN_ID" --repo "$GITHUB_REPOSITORY" --job "$architecture_job_id" --log > /tmp/architecture-job.log 2>/tmp/architecture-log-error.txt; then
+            if gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/jobs/${architecture_job_id}/logs" \
+              > /tmp/architecture-job.log 2>/tmp/architecture-log-error.txt; then
               log_loaded=1
               break
             fi

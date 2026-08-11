@@ -35,7 +35,7 @@ test("login exposes only the two mentoring MVP roles", async ({ page }) => {
   await expect(page.getByLabel("비밀번호")).toHaveValue("Engineer!2026");
 });
 
-test("completes Overview to Objects to Operations to Executive Report without Analysis", async ({ page }) => {
+test("completes Overview to Objects to Operations to Event Executive Brief without Analysis", async ({ page }) => {
   await login(page);
   await expect(page.locator(".mvp-app")).toBeVisible();
   await expect(page.locator(".mvp-navigation nav button")).toHaveCount(4);
@@ -60,7 +60,7 @@ test("completes Overview to Objects to Operations to Executive Report without An
   await page.getByRole("button", { name: "판단 기록", exact: true }).click();
   await expect(page.getByText("저장 완료", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /Executive Report 반영/ }).click();
+  await page.getByRole("button", { name: /Event Executive Brief 반영/ }).click();
   await expect(page).toHaveURL(/view=executive-report/);
   await expect(page.getByTestId("mvp-executive-report")).toBeVisible();
   await expect(page.locator(".mvp-report-document")).toBeVisible();
@@ -130,25 +130,16 @@ test("keeps all MVP views inside a 390px mobile viewport and exposes compact nav
 
   await page.getByRole("button", { name: "메뉴 열기" }).click();
   await expect(page.locator(".mvp-navigation")).toHaveClass(/is-open/);
-  for (const label of ["Overview", "Objects", "Operations", "Executive Report"]) {
+  for (const label of ["Overview", "Objects", "Operations", "Event Executive Brief"]) {
     await page.getByRole("button", { name: new RegExp(label) }).last().click();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-    if (label !== "Executive Report") await page.getByRole("button", { name: "메뉴 열기" }).click();
+    if (label !== "Event Executive Brief") await page.getByRole("button", { name: "메뉴 열기" }).click();
   }
 });
 
-test("preserves V1, V2, V3, V4, and comparison routes beside the new MVP", async ({ page }) => {
+test("redirects a legacy project surface to the official Week 2 MVP", async ({ page }) => {
   await login(page);
-  await page.goto(`/app/projects/${PROJECT}`);
-  await expect(page.locator(".mvp-app")).toHaveCount(0);
-  await page.goto(`/app/projects/${PROJECT}/blueprint`);
-  await expect(page.locator(".blueprint-preview")).toBeVisible();
-  await page.goto(`/app/projects/${PROJECT}/blueprint-v2`);
-  await expect(page.locator(".blueprint-v2")).toBeVisible();
   await page.goto(`/app/projects/${PROJECT}/blueprint-v4`);
-  await expect(page.locator('[data-application-id="ontology-commercial-v4"]')).toBeVisible();
-  await page.goto(`/app/projects/${PROJECT}/blueprint-compare`);
-  await expect(page.locator(".blueprint-comparison-page")).toBeVisible();
-  await page.goto(MVP_PATH);
-  await expect(page.locator(".mvp-app")).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${MVP_PATH}$`));
+  await expect(page.getByTestId("mvp-overview")).toBeVisible({ timeout: 15_000 });
 });

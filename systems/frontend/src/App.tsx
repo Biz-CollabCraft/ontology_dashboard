@@ -97,7 +97,13 @@ function RouteLoading({ operation }: { operation: string }) {
 }
 
 function Redirect({ to }: { to: string }) {
-  useEffect(() => navigate(to, { replace: true }), [to]);
+  useEffect(() => {
+    // On an initial page load this child effect can run before usePathname's
+    // parent popstate listener is registered. Deferring by one task guarantees
+    // the listener exists before navigate() dispatches the synthetic event.
+    const timer = window.setTimeout(() => navigate(to, { replace: true }), 0);
+    return () => window.clearTimeout(timer);
+  }, [to]);
   return <RouteLoading operation="Opening governed workspace" />;
 }
 
