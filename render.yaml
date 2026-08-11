@@ -8,7 +8,8 @@ services:
     autoDeployTrigger: checksPass
     dockerfilePath: ./systems/backend/Dockerfile
     dockerContext: .
-    dockerCommand: /bin/sh /app/systems/backend/render_start.sh
+    dockerCommand: >-
+      /bin/sh -c 'python -m ontology_dashboard.bootstrap && exec python -m uvicorn ontology_dashboard.app:app --host 0.0.0.0 --port ${PORT:-10000} --no-server-header'
     healthCheckPath: /health/live
     buildFilter:
       paths:
