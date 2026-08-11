@@ -1,11 +1,16 @@
 FROM node:22-bookworm-slim AS build
 
-WORKDIR /app
+WORKDIR /workspace/systems/frontend
 
-COPY systems/frontend/package.json systems/frontend/package-lock.json /app/
+COPY systems/frontend/package.json systems/frontend/package-lock.json /workspace/systems/frontend/
 RUN npm ci --no-audit --no-fund
 
-COPY systems/frontend /app
+# Keep the repository-relative frontend depth intact because a small set of
+# reference/story modules intentionally import versioned screenshots from
+# ../../../../../docs. Flattening systems/frontend to /app breaks those imports
+# only inside Docker even though the normal repository build succeeds.
+COPY systems/frontend /workspace/systems/frontend
+COPY docs /workspace/docs
 
 ARG VITE_API_BASE_URL=http://127.0.0.1:8100
 ARG VITE_FEATURE_ONTOLOGY_WORKBENCH=true
@@ -21,7 +26,7 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 
 COPY systems/frontend/nginx.conf /etc/nginx/nginx.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /workspace/systems/frontend/dist /usr/share/nginx/html
 
 RUN mkdir -p /tmp/nginx /var/cache/nginx /var/run \
     && chown -R 101:101 /tmp/nginx /var/cache/nginx /var/run /usr/share/nginx/html

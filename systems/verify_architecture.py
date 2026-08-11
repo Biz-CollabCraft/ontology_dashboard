@@ -194,6 +194,16 @@ def check_frontend_container_converged(errors: list[str]) -> None:
     dockerfile_text = (SYSTEMS / "frontend" / "Dockerfile").read_text(encoding="utf-8")
     if "EXPOSE 8080" not in dockerfile_text:
         errors.append("systems/frontend/Dockerfile must expose nginx runtime port 8080")
+    for fragment in (
+        "WORKDIR /workspace/systems/frontend",
+        "COPY docs /workspace/docs",
+        "COPY --from=build /workspace/systems/frontend/dist /usr/share/nginx/html",
+    ):
+        if fragment not in dockerfile_text:
+            errors.append(
+                "systems/frontend/Dockerfile must preserve repository-relative docs imports: "
+                f"missing {fragment}"
+            )
 
     nginx_text = (SYSTEMS / "frontend" / "nginx.conf").read_text(encoding="utf-8")
     if "listen 8080;" not in nginx_text:
