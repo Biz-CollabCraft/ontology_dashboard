@@ -228,6 +228,22 @@ def check_backend_runtime_root_converged(errors: list[str]) -> None:
                 )
 
 
+def check_docker_runtime_ci(errors: list[str]) -> None:
+    workflow_text = (ROOT / ".github" / "workflows" / "architecture.yml").read_text(
+        encoding="utf-8"
+    )
+    required_fragments = (
+        "docker compose -f infra/docker-compose.yml build api web",
+        "docker compose -f infra/docker-compose.yml up -d api web",
+        "http://127.0.0.1:8100/health",
+        "http://127.0.0.1:3100/health/live",
+        "docker compose -f infra/docker-compose.yml down --volumes --remove-orphans",
+    )
+    for fragment in required_fragments:
+        if fragment not in workflow_text:
+            errors.append(f"architecture CI is missing Docker runtime smoke coverage: {fragment}")
+
+
 def check_git_conflict_markers(errors: list[str]) -> None:
     conflict_prefixes = ("<<<<<<<", "=======", ">>>>>>>")
     ignored_parts = {"node_modules", "dist", ".venv", "__pycache__", ".git"}
@@ -262,6 +278,7 @@ def main() -> int:
     check_runtime_hosts_converged(errors)
     check_frontend_container_converged(errors)
     check_backend_runtime_root_converged(errors)
+    check_docker_runtime_ci(errors)
     check_git_conflict_markers(errors)
 
     if errors:
@@ -275,6 +292,7 @@ def main() -> int:
     print("- PR #11 API/frontend runtime hosts are physically converged under systems/")
     print("- frontend Docker context ignores and Compose/nginx runtime port are converged")
     print("- backend runtime asset root is explicit and independent of site-packages depth")
+    print("- architecture CI builds and boots backend/frontend Docker runtime hosts")
     print("- generator owns semantic/feature/training and Model Artifact publication")
     print("- backend diagnosis owns runtime inference and Result Artifact/Evidence")
     print("- generator/backend direct Python imports are absent")

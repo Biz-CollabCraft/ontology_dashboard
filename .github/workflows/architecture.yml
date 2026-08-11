@@ -97,6 +97,44 @@ jobs:
         working-directory: systems/frontend
         run: npm run build
 
+      - name: Docker Compose runtime smoke
+        shell: bash
+        run: |
+          docker version
+          docker compose version
+          docker compose -f infra/docker-compose.yml build api web
+          docker compose -f infra/docker-compose.yml up -d api web
+
+          api_ready=0
+          for attempt in {1..30}; do
+            if curl --fail --silent --output /tmp/docker-api-health.json http://127.0.0.1:8100/health; then
+              cat /tmp/docker-api-health.json
+              api_ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$api_ready" -eq 1
+
+          web_ready=0
+          for attempt in {1..30}; do
+            if curl --fail --silent --output /tmp/docker-web-health.json http://127.0.0.1:3100/health/live; then
+              cat /tmp/docker-web-health.json
+              web_ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$web_ready" -eq 1
+
+      - name: Docker Compose diagnostics
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color
+
+      - name: Docker Compose cleanup
+        if: always()
+        run: docker compose -f infra/docker-compose.yml down --volumes --remove-orphans
+
       - name: Diff whitespace check
         shell: bash
         run: |
