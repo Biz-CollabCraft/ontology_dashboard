@@ -318,19 +318,19 @@ Enriched Product Result Artifact
 
 ### 5.1 최소 샘플 fixture 추가
 
-dashboard 테스트 fixture 영역에 현행 dashboard fixture, Product Result Artifact sample, `pdm-mvp` reference sample, expected `evidence_payload`/projection 샘플을 최소 단위로 추가한다.
+dashboard 테스트 fixture 영역에 현행 dashboard fixture, Product Result Artifact sample, `pdm-mvp` semantic regression reference, expected `evidence_payload`/projection 샘플을 최소 단위로 추가한다.
 
 - critical Result Artifact sample
 - normal Result Artifact sample
 - critical enriched Product Result Artifact sample
 - normal enriched Product Result Artifact sample, 사용 가능한 경우
-- `pdm-mvp` reference Evidence Package sample
+- `pdm-mvp` semantic regression reference sample: `tests/fixtures/product_result_evidence_projection/semantic_regression/`
 - expected Event Evidence projection sample
 - expected legacy evidence projection sample
 - expected GroundedReport sample
 - expected Report UI ViewModel sample, UI 이식 단계에서 추가
 
-이 파일은 regression fixture이며 production data가 아니다. expected fixture는 원천 payload를 검증 없이 재작성하지 않고, producer-side `evidence_payload`와 projection 출력의 계약 회귀 테스트에만 사용한다. `pdm-mvp` sample은 운영 입력이 아니라 field semantics와 report grounding 비교 기준이다.
+이 파일은 regression fixture이며 production data가 아니다. expected fixture는 원천 payload를 검증 없이 재작성하지 않고, producer-side `evidence_payload`와 projection 출력의 계약 회귀 테스트에만 사용한다. `pdm-mvp` sample은 운영 입력이 아니라 field semantics와 report grounding 비교 기준이며, projection 입력 fixture와 분리된 `semantic_regression/` 하위에 둔다.
 
 ### 5.2 Producer Enrichment / Dashboard Projection 모듈 경계
 
@@ -417,7 +417,7 @@ def static_report_output_candidate_to_report_view_models(output: dict, evidence:
     ...
 ```
 
-PR #18의 `reference_pdm_evidence_to_artifact_extension()`와 `extend_product_result_artifact()`는 producer 구현 API가 아니라 transition/contract-test helper로만 취급한다. 다음 구현 PR에서는 이 helper 경로를 runtime-like 계획에서 철회하고, 동일 의미의 산출 규칙을 `systems/backend/app/diagnosis` producer 경계로 옮긴다. dashboard projection은 reference package나 dashboard fixture를 읽어 근거를 보강하지 않고, 이미 enriched된 Artifact만 입력으로 받는다.
+PR #18의 이전 transition helper는 producer 구현 API가 아니었다. 새 계획 기준 cleanup에서는 이 helper 경로를 projection 공개 API에서 제거하고, 동일 의미의 산출 규칙을 `systems/backend/app/diagnosis` producer 경계로 옮긴다. dashboard projection은 reference package나 dashboard fixture를 읽어 근거를 보강하지 않고, 이미 enriched된 Artifact만 입력으로 받는다.
 
 ### 5.3 Runtime Service 재사용
 
@@ -593,7 +593,7 @@ Status 값은 다음만 사용한다.
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
 | 1 | Done | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` reference fixture를 추가한다. | 최소 fixture set | `tests/fixtures/product_result_evidence_projection/`, `data/fixtures/GS-*.json` |
-| 2 | Done | Product Result Artifact `evidence_payload` 후보 shape를 projection regression fixture로 고정한다. | expected fixture 또는 schema candidate | `tests/test_product_result_evidence_projection.py::test_extend_product_result_artifact_adds_optional_extension_without_mutating_source` |
+| 2 | Done | Product Result Artifact `evidence_payload` 후보 shape를 producer-enriched Artifact regression fixture로 고정한다. | expected fixture 또는 schema candidate | `tests/test_product_result_evidence_projection.py::test_product_result_artifact_to_event_evidence_projection_matches_expected_reference_slice` |
 | 3 | Done | Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다. | canonical projection expected fixture | `tests/fixtures/product_result_evidence_projection/expected-event-evidence-projection-critical.json` |
 | 4 | Done | `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 구현한다. | transition projection mapper | `pytest -q tests/test_product_result_evidence_projection.py` |
 | 5 | Done | Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다. | canonical + legacy regression test | `pytest -q tests/test_product_result_evidence_projection.py tests/test_system_ownership.py` |
@@ -603,7 +603,7 @@ Status 값은 다음만 사용한다.
 - `evaluation_truth`와 `hidden_truth`는 projection과 legacy response에 없다.
 - `pdm-mvp` sample은 운영 입력이 아니라 reference fixture로만 사용된다.
 - 공식 판단 필드는 Product Result Artifact 값을 우선하며 reference fixture로 덮어쓰지 않는다.
-- PR #18의 reference-backed extension helper는 producer-side enrichment의 target runtime path가 아니며, 다음 PR에서 정리 또는 축소 대상이다.
+- PR #18의 이전 transition helper는 producer-side enrichment의 target runtime path가 아니며, projection 공개 API에서는 제거한다.
 
 ### 8.2 2차 PR: Producer-side Evidence Enrichment
 
@@ -615,7 +615,7 @@ Status 값은 다음만 사용한다.
 | 7 | Todo | `systems/backend/app/diagnosis`의 producer-side evidence enrichment schema와 ownership을 고정한다. | `evidence_payload` producer contract | schema/contract test 결과 |
 | 8 | Todo | `build_product_result_evidence_payload()`와 sensor/baseline/component/source-field 산출 함수를 추가한다. | producer enrichment module | backend unit test 결과 |
 | 9 | Todo | `pdm-mvp` reference fixture와 producer `evidence_payload`의 의미 동등성을 비교한다. 단, 화면/report 표현 필드는 비교 대상에서 제외한다. | semantic regression test | fixture comparison 결과 |
-| 10 | Todo | PR #18의 reference-backed extension helper 의존을 철회하고 dashboard projection이 enriched Artifact만 입력으로 받도록 정리한다. | projection input cleanup | projection test 결과 |
+| 10 | Done | PR #18의 이전 transition helper 의존을 철회하고 dashboard projection이 enriched Artifact만 입력으로 받도록 정리한다. | projection input cleanup | `tests/test_product_result_evidence_projection.py` |
 | 11 | Todo | 공식 판단 필드가 producer 출력 외부 값으로 overwrite되지 않는지 검증한다. | overwrite prevention test | backend test 결과 |
 | 12 | Todo | 산출 불가능한 값이 `0`, `정상`, reference fixture 값, LLM 출력으로 보정되지 않고 `evidence_gap`/`limitations` 또는 후속 도메인 field로 분리되는지 검증한다. | unavailable-field regression test | backend/doc test 결과 |
 

@@ -15,8 +15,8 @@
   },
   "model": {
     "model_version": "canonical-ai4i-physics-v3.1",
-    "policy_version": "pdm-reference-policy",
-    "mode": "reference_fixture"
+    "policy_version": "pdm-semantic-reference-policy",
+    "mode": "semantic_regression_reference"
   },
   "sensor_evidence": {
     "window": {
@@ -62,10 +62,10 @@
     }
   ],
   "maintenance_context": {
-    "provider": "pdm-mvp-reference",
+    "provider": "pdm-mvp-semantic-reference",
     "version": "2026-08-11",
-    "source_type": "reference_fixture",
-    "source_refs": ["manual:pdm-reference"],
+    "source_type": "semantic_regression_reference",
+    "source_refs": ["semantic-regression:pdm-mvp-critical"],
     "checklist": ["회전부 상태 확인", "진동 및 베어링 상태 확인"],
     "recommended_actions": ["다음 교대 전 현장 점검", "필요 시 정지 검토"]
   },
@@ -84,10 +84,10 @@
   },
   "lineage": {
     "fixture_id": "PDM-REF-004",
-    "fixture_schema_version": "pdm-reference-v1",
-    "sensor_source": "pdm-mvp reference fixture",
-    "context_source": "pdm-mvp-reference:2026-08-11",
-    "reference_fixture": "pdm-reference-evidence-critical.json"
+    "fixture_schema_version": "pdm-semantic-reference-v1",
+    "sensor_source": "pdm-mvp semantic regression reference",
+    "context_source": "pdm-mvp-semantic-reference:2026-08-11",
+    "semantic_reference_file": "semantic_regression/pdm-mvp-semantic-reference-critical.json"
   },
   "generated_at": "2026-08-01T00:00:00+09:00",
   "evaluation_truth": {

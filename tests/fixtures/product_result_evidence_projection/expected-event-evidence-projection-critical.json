@@ -10,13 +10,33 @@
     "criticality": "high",
     "assigned_engineer": "최민호"
   },
+  "artifact_reference": {
+    "evidence_payload_reference": {
+      "source": "product_result_artifact",
+      "reference": "producer-enriched-critical",
+      "generated_by": "systems.backend.app.diagnosis.evidence"
+    }
+  },
   "assessment": {
     "status": "critical",
     "recommended_decision": "review_shutdown",
-    "confidence": "medium",
+    "confidence": "high",
     "failure_probability": 0.92,
     "threshold": 0.65,
-    "predicted_failure_type": "power_or_overstrain_failure"
+    "predicted_failure_type": "power_or_overstrain_failure",
+    "top_factors": [
+      {
+        "evidence_field_id": "factor.1.rotation_raw",
+        "feature": "rotation_raw",
+        "display_name": "회전 상태",
+        "value": 1820.0,
+        "unit": "rpm",
+        "normal_range": "baseline z-score -2.0..2.0",
+        "direction": "risk_up",
+        "contribution": 0.42,
+        "source_type": "observed"
+      }
+    ]
   },
   "report_projection": {
     "sensor_cards": [
