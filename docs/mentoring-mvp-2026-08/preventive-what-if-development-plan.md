@@ -292,13 +292,13 @@ Intervention 기대비용
 
 ### 완료
 
-- [x] `main` 기준 독립 브랜치 생성
-- [x] What-if Result Pydantic 계약
-- [x] Draft 2020-12 JSON Schema
-- [x] `TOOL_REPLACEMENT` 정책 계약
-- [x] 원본 관측을 변경하지 않는 공구 교체 변환
-- [x] 계약 fixture와 검증 테스트
-- [x] Producer 결과에서 역할별 Report 필드 제외
+- O `main` 기준 독립 브랜치 생성
+- O What-if Result Pydantic 계약
+- O Draft 2020-12 JSON Schema
+- O `TOOL_REPLACEMENT` 정책 계약
+- O 원본 관측을 변경하지 않는 공구 교체 변환
+- O 계약 fixture와 검증 테스트
+- O Producer 결과에서 역할별 Report 필드 제외
 
 ### 다음 작업
 
