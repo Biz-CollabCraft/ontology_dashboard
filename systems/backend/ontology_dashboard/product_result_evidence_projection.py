@@ -90,6 +90,7 @@ def extend_product_result_artifact(
     """Return an artifact copy with a dashboard evidence extension envelope."""
 
     artifact = _strip_hidden(result)
+    _ensure_unmutated_source(artifact)
     payload_context = context or {}
     reference_package = (
         payload_context.get("pdm_reference_package")
@@ -103,7 +104,7 @@ def extend_product_result_artifact(
         if key in payload_context and payload_context[key] is not None:
             extension[key] = _strip_hidden(payload_context[key])
 
-    extension.setdefault("top_factors", _normalise_top_factors(artifact.get("top_factors", [])))
+    extension["top_factors"] = _normalise_top_factors(artifact.get("top_factors", []))
     extension.setdefault("sensor_evidence", _normalise_sensor_evidence(extension))
     extension.setdefault("component_hypotheses", _normalise_component_hypotheses(extension, extension["top_factors"]))
     extension.setdefault("status_flags", {})
@@ -115,7 +116,6 @@ def extend_product_result_artifact(
 
     artifact["evidence_payload"] = _strip_hidden(extension)
     provenance = artifact.setdefault("provenance", {})
-    provenance["canonical_source_mutated"] = False
     provenance["evidence_extension_reference"] = {
         "source": "artifact_derived_projection",
         "reference": payload_context.get("reference")
@@ -261,6 +261,16 @@ def _strip_none(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
+def _ensure_unmutated_source(artifact: dict[str, Any]) -> None:
+    provenance = artifact.get("provenance") or {}
+    if provenance.get("canonical_source_mutated") is not False:
+        raise ValueError("Product Result Artifact provenance.canonical_source_mutated must be false")
+
+
+def _is_numeric_sensor_value(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, float))
+
+
 def _normalise_top_factors(raw_factors: list[dict[str, Any]]) -> list[dict[str, Any]]:
     factors = []
     total_score = sum(abs(float(item.get("signed_contribution", item.get("contribution", 0.0)) or 0.0)) for item in raw_factors)
@@ -297,9 +307,9 @@ def _normalise_sensor_evidence(payload: dict[str, Any]) -> dict[str, Any]:
     detected = payload.get("detected_interval") or {}
     sensors = {}
     for feature, value in observation.items():
-        if feature in {"timestamp", "product_type"} or not isinstance(value, (int, float)):
+        if feature in {"timestamp", "product_type"} or not _is_numeric_sensor_value(value):
             continue
-        values = [row.get(feature) for row in history if isinstance(row.get(feature), (int, float))]
+        values = [row.get(feature) for row in history if _is_numeric_sensor_value(row.get(feature))]
         values.append(value)
         display_name, unit = SENSOR_DISPLAY.get(feature, (feature, ""))
         sensors[feature] = {

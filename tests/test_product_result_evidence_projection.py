@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from app.diagnosis.contracts import load_fixture
@@ -77,6 +78,102 @@ def test_extend_product_result_artifact_adds_optional_extension_without_mutating
     assert payload["sensor_evidence"]["sensors"]["torque_nm"]["z_score"] is None
     assert payload["sensor_evidence"]["sensors"]["torque_nm"]["basis"]["baseline_n"] == 0
     assert any(item["field_id"].startswith("sensor_evidence.sensors.") for item in payload["source_fields"])
+
+
+def test_extend_product_result_artifact_rejects_mutated_or_missing_source_flag() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-004-power-overstrain-critical.json")
+    predictor = HeuristicPredictor()
+    result = build_product_result_artifact(fixture, predictor=predictor)
+
+    mutated = json.loads(json.dumps(result))
+    mutated["provenance"]["canonical_source_mutated"] = True
+    with pytest.raises(ValueError, match="canonical_source_mutated must be false"):
+        extend_product_result_artifact(mutated)
+
+    missing = json.loads(json.dumps(result))
+    del missing["provenance"]["canonical_source_mutated"]
+    with pytest.raises(ValueError, match="canonical_source_mutated must be false"):
+        extend_product_result_artifact(missing)
+
+
+def test_artifact_top_factors_override_reference_factors_without_losing_reference_sensors() -> None:
+    package = load_projection_fixture("pdm-reference-evidence-critical.json")
+    artifact = {
+        "artifact_id": "RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
+        "artifact_type": "predictive_maintenance_result",
+        "schema_version": "result-artifact-v1.0",
+        "asset_id": "CMP-S03-L03-01",
+        "asset_type": "compressor",
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "prediction_horizon_hours": 24,
+        "prediction_task": "binary_failure_within_horizon",
+        "failure_probability": 0.82,
+        "predicted_failure_type": "power_or_overstrain_failure",
+        "status_grade": "warning",
+        "confidence": 0.64,
+        "top_factors": [
+            {
+                "rank": 1,
+                "feature": "torque_nm",
+                "feature_value": 88.0,
+                "signed_contribution": 0.55,
+                "direction": "risk_up",
+                "explanation_method": "deterministic_component_score",
+            }
+        ],
+        "recommended_action": {"action": "inspect_within_current_shift", "priority": "high"},
+        "provenance": {
+            "dataset_version": "runtime-dataset",
+            "model_version": "runtime-model",
+            "prediction_id": "runtime-prediction",
+            "source_type": "product_runtime_inference",
+            "canonical_source_mutated": False,
+            "model_artifact": None,
+        },
+    }
+
+    extended = extend_product_result_artifact(artifact, {"pdm_reference_package": package})
+    projection = extended_artifact_to_event_evidence_projection(extended)
+
+    assert extended["evidence_payload"]["top_factors"][0]["feature"] == "torque_nm"
+    assert projection["assessment"]["top_factors"][0]["feature"] == "torque_nm"
+    assert projection["report_projection"]["sensor_cards"][0]["sensor_id"] == "rotation_raw"
+    assert projection["report_projection"]["sensor_cards"][0]["basis"]["baseline_n"] == 240
+
+
+def test_boolean_observation_values_are_not_treated_as_sensors() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-004-power-overstrain-critical.json")
+    predictor = HeuristicPredictor()
+    result = build_product_result_artifact(fixture, predictor=predictor)
+    context = {
+        "evidence_package": {
+            "event_id": "EVT-BOOL-SENSOR",
+            "scenario_id": "BOOL-SENSOR",
+            "observation": {
+                "timestamp": "2026-08-01T00:00:00+09:00",
+                "is_valid": True,
+                "torque_nm": 12.0,
+            },
+            "history": [
+                {
+                    "timestamp": "2026-07-31T23:55:00+09:00",
+                    "is_valid": False,
+                    "torque_nm": 10.0,
+                }
+            ],
+            "detected_interval": {
+                "start": "2026-07-31T23:55:00+09:00",
+                "end": "2026-08-01T00:00:00+09:00",
+            },
+            "threshold": 0.65,
+        }
+    }
+
+    extended = extend_product_result_artifact(result, context)
+    sensors = extended["evidence_payload"]["sensor_evidence"]["sensors"]
+
+    assert "is_valid" not in sensors
+    assert sensors["torque_nm"]["window_mean"] == 11.0
 
 
 def test_extended_artifact_to_event_evidence_projection_matches_expected_reference_slice() -> None:
