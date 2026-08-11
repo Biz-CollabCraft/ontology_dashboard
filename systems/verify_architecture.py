@@ -217,6 +217,15 @@ def check_backend_runtime_root_converged(errors: list[str]) -> None:
             "systems/backend/Dockerfile must pin ONTOLOGY_DASHBOARD_PROJECT_ROOT=/app "
             "for non-editable package installs"
         )
+    for fragment in (
+        "mkdir -p /app/data/local /app/.runtime/object-storage",
+        "chown -R 10001:10001 /app/data/local /app/.runtime",
+    ):
+        if fragment not in dockerfile_text:
+            errors.append(
+                "systems/backend/Dockerfile must provision non-root writable runtime state: "
+                f"missing {fragment}"
+            )
 
     runtime_files = (
         SYSTEMS / "backend" / "ontology_dashboard" / "dependencies.py",
@@ -247,6 +256,10 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         "docker compose -f infra/docker-compose.yml up -d api web",
         "http://127.0.0.1:8100/health",
         "http://127.0.0.1:3100/health/live",
+        "from ontology_dashboard.dependencies import get_artifact_governance_service",
+        'assert os.getuid() == 10001',
+        'probe_key = "ci/docker-runtime/artifact-storage-smoke.txt"',
+        'assert service.backend.get(probe_key) == payload',
         "docker compose -f infra/docker-compose.yml down --volumes --remove-orphans",
     )
     for fragment in required_fragments:

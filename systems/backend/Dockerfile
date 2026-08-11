@@ -39,6 +39,12 @@ COPY --chown=10001:10001 schemas /app/schemas
 COPY --chown=10001:10001 prompts /app/prompts
 COPY --chown=10001:10001 data/fixtures /app/data/fixtures
 
+# Runtime state is written by the non-root API process. Create the writable
+# roots before dropping privileges so local SQLite and object storage do not
+# depend on root-owned /app directory permissions.
+RUN mkdir -p /app/data/local /app/.runtime/object-storage \
+    && chown -R 10001:10001 /app/data/local /app/.runtime
+
 USER 10001
 
 EXPOSE 8000

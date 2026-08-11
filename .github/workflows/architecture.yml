@@ -127,6 +127,33 @@ jobs:
           done
           test "$web_ready" -eq 1
 
+          docker compose -f infra/docker-compose.yml exec -T api python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from ontology_dashboard.dependencies import get_artifact_governance_service
+
+          assert os.getuid() == 10001, os.getuid()
+          service = get_artifact_governance_service()
+          root = Path(service.backend.root).resolve()
+          expected_root = Path("/app/.runtime/object-storage")
+          assert root == expected_root, (root, expected_root)
+
+          probe_key = "ci/docker-runtime/artifact-storage-smoke.txt"
+          payload = b"ontology-dashboard-artifact-storage-smoke"
+          service.backend.put(
+              probe_key,
+              payload,
+              media_type="text/plain",
+              metadata={"source": "architecture-ci"},
+          )
+          assert service.backend.get(probe_key) == payload
+          service.backend.delete(probe_key)
+          assert service.backend.head(probe_key) is None
+          print(f"artifact_storage_root={root}")
+          print("artifact_storage_write_read_delete=ok")
+          PY
+
       - name: Docker Compose diagnostics
         if: failure()
         run: docker compose -f infra/docker-compose.yml logs --no-color
