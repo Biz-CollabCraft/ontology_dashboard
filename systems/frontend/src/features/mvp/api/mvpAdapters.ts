@@ -115,7 +115,11 @@ function eventAsset(event: MvpEvent): MvpAsset {
   return {
     assetId: event.assetId,
     displayName: event.assetName,
-    assetType: event.assetId.toLowerCase().includes("cnc") || event.assetId.startsWith("M-") ? "cnc" : "equipment",
+    assetType: event.assetId.toLowerCase().includes("cnc") || event.assetId.startsWith("M-")
+      ? "cnc"
+      : event.assetId.toUpperCase().startsWith("CMP-")
+        ? "compressor"
+        : "equipment",
     site: "Manufacturing Demo",
     line: event.line,
     cell: event.line,
