@@ -237,6 +237,7 @@ export function computeLineRisk(assets: MvpAsset[]): MvpLineRisk[] {
     return {
       line,
       total: rows.length,
+      normal: rows.filter((row) => row.status === "normal").length,
       critical: rows.filter((row) => row.status === "critical").length,
       warning: rows.filter((row) => row.status === "warning").length,
       attention: rows.filter((row) => row.status === "attention").length,

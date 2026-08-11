@@ -82,7 +82,7 @@ describe("MVP adapter contract", () => {
     const events = [adaptEvent(event), adaptEvent({ ...event, event_id: "EVENT-002", equipment: { ...event.equipment, equipment_id: "CNC-002" }, status: "warning", failure_probability: 0.65 })];
     const assets = mergeAssets([], events);
     expect(computeMetrics(assets, events)).toEqual(expect.objectContaining({ critical: 1, warning: 1, estimatedDowntimeMinutes: 240 }));
-    expect(computeLineRisk(assets)[0]).toEqual(expect.objectContaining({ line: "Line A", critical: 1, warning: 1 }));
+    expect(computeLineRisk(assets)[0]).toEqual(expect.objectContaining({ line: "Line A", normal: 0, critical: 1, warning: 1 }));
   });
 
   it("keeps one asset row when multiple events reference the same equipment", () => {
