@@ -89,3 +89,5 @@ npm run build
 - [Week 2 실행 코드 책임 재배치 기록](./docs/mentoring-mvp-2026-08/week2-runtime-ownership-integration.md)
 
 Canonical V3.1 원본·생성 코드와 source/reference fixture는 `Biz-CollabCraft/gen_data`가 소유합니다. 이 저장소는 source를 소비해 semantic/model artifact와 제품 runtime 결과를 생성합니다.
+
+무료 팀 공유 배포 기준은 [Vercel + Render + Neon demo stack](./docs/deployment/free-demo-stack.md)을 참고합니다.
