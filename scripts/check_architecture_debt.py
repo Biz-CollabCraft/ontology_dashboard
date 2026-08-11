@@ -44,8 +44,8 @@ def _canonical_with_optional_legacy_shim(
     module: str,
     canonical_module: str | None = None,
 ) -> bool:
-    canonical_path = root / "api" / "ontology_dashboard" / f"{module}.py"
-    legacy_root = root / "api" / "factory_signal_board"
+    canonical_path = root / "systems" / "backend" / "ontology_dashboard" / f"{module}.py"
+    legacy_root = root / "systems" / "backend" / "factory_signal_board"
     if not canonical_path.exists():
         return False
     if not any(legacy_root.glob("*.py")):
@@ -57,18 +57,18 @@ def _canonical_with_optional_legacy_shim(
 
 
 def collect_architecture_debt(root: Path) -> list[DebtItem]:
-    canonical_init = root / "api" / "ontology_dashboard" / "__init__.py"
-    canonical_composition_root = root / "api" / "ontology_dashboard" / "main.py"
-    legacy_package = root / "api" / "factory_signal_board"
-    legacy_composition_shim = root / "api" / "factory_signal_board" / "main.py"
-    planner_router = root / "api" / "ontology_dashboard" / "routers" / "planner.py"
-    dependencies = root / "api" / "ontology_dashboard" / "dependencies.py"
-    feature_flags = root / "web" / "src" / "featureFlags.ts"
-    dashboard_shell = root / "web" / "src" / "features" / "dashboard" / "DashboardShell.tsx"
+    canonical_init = root / "systems" / "backend" / "ontology_dashboard" / "__init__.py"
+    canonical_composition_root = root / "systems" / "backend" / "ontology_dashboard" / "main.py"
+    legacy_package = root / "systems" / "backend" / "factory_signal_board"
+    legacy_composition_shim = root / "systems" / "backend" / "factory_signal_board" / "main.py"
+    planner_router = root / "systems" / "backend" / "ontology_dashboard" / "routers" / "planner.py"
+    dependencies = root / "systems" / "backend" / "ontology_dashboard" / "dependencies.py"
+    feature_flags = root / "systems" / "frontend" / "src" / "featureFlags.ts"
+    dashboard_shell = root / "systems" / "frontend" / "src" / "features" / "dashboard" / "DashboardShell.tsx"
     roadmap = root / "docs" / "30-implementation" / "product-convergence-roadmap.md"
     master_prompt = root / "docs" / "60-development-prompts" / "next-session-master-prompt.md"
-    project3_client = root / "api" / "ontology_dashboard" / "integrations" / "project3" / "client.py"
-    pyproject = root / "api" / "pyproject.toml"
+    project3_client = root / "systems" / "backend" / "ontology_dashboard" / "integrations" / "project3" / "client.py"
+    pyproject = root / "systems" / "backend" / "pyproject.toml"
     foundation_modules = (
         "context",
         "contracts",
@@ -182,7 +182,7 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="soon_navigation_feature_flags",
             state="resolved" if flags_explicit and nav_uses_flags else "regression",
             stage=44,
-            evidence="web/src/featureFlags.ts and DashboardShell.tsx",
+            evidence="systems/frontend/src/featureFlags.ts and DashboardShell.tsx",
             action="Every unfinished workbench must remain behind an explicit build-time feature flag.",
         ),
         DebtItem(
@@ -238,7 +238,7 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="legacy_namespace_path_extension",
             state="regression" if legacy_path_extension else "resolved",
             stage=55,
-            evidence="api/ontology_dashboard/__init__.py",
+            evidence="systems/backend/ontology_dashboard/__init__.py",
             action="Keep ontology_dashboard package resolution confined to its canonical directory.",
         ),
         DebtItem(
@@ -252,7 +252,7 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="legacy_composition_root",
             state="resolved" if canonical_root_present and not legacy_root_executable else "regression",
             stage=55,
-            evidence="api/ontology_dashboard/main.py with a compatibility-only legacy shim",
+            evidence="systems/backend/ontology_dashboard/main.py with a compatibility-only legacy shim",
             action="Keep the executable FastAPI composition root in ontology_dashboard.main.",
         ),
     ]

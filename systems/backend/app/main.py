@@ -1,34 +1,12 @@
+"""Canonical systems/backend ASGI entrypoint.
+
+The full Week 2 application composition now lives inside ``systems/backend``.
+This module intentionally exposes the same application object as
+``ontology_dashboard.app`` so local, Docker and CI execution all use the
+systems-owned runtime rather than a second scaffold application.
 """
-systems/backend/app/main.py
 
-FastAPI 애플리케이션 진입점 파일.
-4개 도메인(equipment, diagnosis, report, dashboard)의 라우터를 실제로 등록하고
-기동 가능한 애플리케이션 및 헬스체크(/health) 엔드포인트를 제공한다.
-"""
-
-from fastapi import FastAPI
-from app.equipment import router as equipment_router
-from app.diagnosis import router as diagnosis_router
-from app.report import router as report_router
-from app.dashboard import router as dashboard_router
-
-app = FastAPI(
-    title="Ontology Dashboard Backend API",
-    description="PdM 설비 예지보전 백엔드 API 서비스",
-    version="1.0.0",
-)
-
-# 4개 도메인 라우터 등록
-app.include_router(equipment_router, prefix="/api/v1")
-app.include_router(diagnosis_router, prefix="/api/v1")
-app.include_router(report_router, prefix="/api/v1")
-app.include_router(dashboard_router, prefix="/api/v1")
-
-
-@app.get("/health", tags=["Health"])
-def health_check():
-    """헬스체크 엔드포인트"""
-    return {"status": "ok", "system": "backend", "version": "1.0.0"}
+from ontology_dashboard.app import app
 
 
 if __name__ == "__main__":

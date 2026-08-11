@@ -30,9 +30,9 @@ def test_stage55_legacy_package_debt_is_fully_resolved() -> None:
     items = collect_architecture_debt(ROOT)
     assert not [item for item in items if item.state == "accepted"]
     assert next(item for item in items if item.id == "legacy_composition_root").state == "resolved"
-    assert not tuple((ROOT / "api" / "factory_signal_board").glob("*.py"))
+    assert not tuple((ROOT / "systems" / "backend" / "factory_signal_board").glob("*.py"))
     assert [Path(path).resolve() for path in ontology_dashboard.__path__] == [
-        (ROOT / "api" / "ontology_dashboard").resolve()
+        (ROOT / "systems" / "backend" / "ontology_dashboard").resolve()
     ]
 
 
@@ -47,7 +47,7 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
         "repository",
         "service",
     )
-    canonical_root = ROOT / "api" / "ontology_dashboard"
+    canonical_root = ROOT / "systems" / "backend" / "ontology_dashboard"
     for name in module_names:
         module = importlib.import_module(f"ontology_dashboard.{name}")
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()
@@ -64,7 +64,7 @@ def test_dashboard_modules_load_from_canonical_directory() -> None:
         "dashboard_repository",
         "dashboard_service",
     )
-    canonical_root = ROOT / "api" / "ontology_dashboard"
+    canonical_root = ROOT / "systems" / "backend" / "ontology_dashboard"
     for name in module_names:
         module = importlib.import_module(f"ontology_dashboard.{name}")
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()
@@ -85,7 +85,7 @@ def test_analysis_modules_load_from_canonical_directory() -> None:
         "analysis_repository",
         "analysis_service",
     )
-    canonical_root = ROOT / "api" / "ontology_dashboard"
+    canonical_root = ROOT / "systems" / "backend" / "ontology_dashboard"
     for name in module_names:
         module = importlib.import_module(f"ontology_dashboard.{name}")
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()
@@ -104,7 +104,7 @@ def test_export_workflow_modules_load_from_canonical_directory() -> None:
         "role_workflow_repository",
         "role_workflow_service",
     )
-    canonical_root = ROOT / "api" / "ontology_dashboard"
+    canonical_root = ROOT / "systems" / "backend" / "ontology_dashboard"
     for name in module_names:
         module = importlib.import_module(f"ontology_dashboard.{name}")
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()
@@ -138,7 +138,7 @@ def test_ontology_compatibility_modules_load_from_canonical_directory() -> None:
         "ontology_planner_models",
         "ontology_planner_service",
     )
-    canonical_root = ROOT / "api" / "ontology_dashboard"
+    canonical_root = ROOT / "systems" / "backend" / "ontology_dashboard"
     for name in module_names:
         module = importlib.import_module(f"ontology_dashboard.{name}")
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()

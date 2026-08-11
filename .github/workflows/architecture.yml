@@ -10,6 +10,10 @@ on:
 jobs:
   architecture:
     runs-on: ubuntu-latest
+    outputs:
+      docker_runtime_verified: ${{ steps.docker_runtime.outputs.verified }}
+      frontend_unit_verified: ${{ steps.frontend_unit.outputs.verified }}
+      mvp_e2e_verified: ${{ steps.mvp_e2e.outputs.verified }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,13 +34,13 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: systems/backend
-        run: pip install -r requirements.txt
+        run: pip install -e ../../ml -e .
 
       - name: Backend import and health
         working-directory: systems/backend
         run: |
-          python -c "from app.main import app; assert any(getattr(route, 'path', None) == '/health' for route in app.routes)"
-          uvicorn app.main:app --host 127.0.0.1 --port 18000 &
+          APP_ENV=test PYTHONPATH=../..:../../ml/src python -c "from fastapi.testclient import TestClient; from app.main import app; response=TestClient(app).get('/health'); assert response.status_code == 200, response.text"
+          APP_ENV=test PYTHONPATH=../..:../../ml/src uvicorn app.main:app --host 127.0.0.1 --port 18000 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           success=0
@@ -51,6 +55,39 @@ jobs:
           test "$success" -eq 1
           python -c "import json; payload=json.load(open('/tmp/health.json')); assert payload['status'] == 'ok', payload"
 
+      - name: Backend non-editable runtime root smoke
+        working-directory: systems/backend
+        env:
+          APP_ENV: test
+          ONTOLOGY_DASHBOARD_PROJECT_ROOT: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/ontology-dashboard-site
+          python -m pip install --no-deps --target /tmp/ontology-dashboard-site .
+          cd /tmp
+          PYTHONPATH=/tmp/ontology-dashboard-site:"${GITHUB_WORKSPACE}/ml/src" python - <<'PY'
+          import os
+          from pathlib import Path
+
+          import ontology_dashboard
+          from ontology_dashboard.application import ROOT as application_root
+          from ontology_dashboard.dependencies import ROOT as dependencies_root
+          from ontology_dashboard.routers import platform, system
+          from ontology_dashboard.settings import project_root
+
+          expected = Path(os.environ["ONTOLOGY_DASHBOARD_PROJECT_ROOT"]).resolve()
+          installed_package = Path(ontology_dashboard.__file__).resolve()
+          installed_root = Path("/tmp/ontology-dashboard-site").resolve()
+          assert installed_package.is_relative_to(installed_root), installed_package
+          assert project_root() == expected
+          assert application_root == expected
+          assert dependencies_root == expected
+          assert system.ROOT == expected
+          assert platform.project_root() == expected
+          assert (expected / "schemas").is_dir()
+          assert (expected / "prompts").is_dir()
+          assert (expected / "data" / "fixtures").is_dir()
+          PY
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -60,9 +97,96 @@ jobs:
         working-directory: systems/frontend
         run: npm install --no-audit --no-fund
 
+      - name: Frontend unit tests
+        id: frontend_unit
+        working-directory: systems/frontend
+        run: |
+          npm test
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+
       - name: Frontend production build
         working-directory: systems/frontend
         run: npm run build
+
+      - name: Install Playwright Chromium
+        working-directory: systems/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Critical MVP Playwright smoke
+        id: mvp_e2e
+        working-directory: systems/frontend
+        env:
+          PLAYWRIGHT_PYTHON_BIN: python
+        run: |
+          npm run test:e2e:mvp
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+
+      - name: Docker Compose runtime smoke
+        id: docker_runtime
+        shell: bash
+        run: |
+          docker version
+          docker compose version
+          docker compose -f infra/docker-compose.yml build api web
+          docker compose -f infra/docker-compose.yml up -d api web
+
+          api_ready=0
+          for attempt in {1..30}; do
+            if curl --fail --silent --output /tmp/docker-api-health.json http://127.0.0.1:8100/health; then
+              cat /tmp/docker-api-health.json
+              api_ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$api_ready" -eq 1
+
+          web_ready=0
+          for attempt in {1..30}; do
+            if curl --fail --silent --output /tmp/docker-web-health.json http://127.0.0.1:3100/health/live; then
+              cat /tmp/docker-web-health.json
+              web_ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$web_ready" -eq 1
+
+          docker compose -f infra/docker-compose.yml exec -T api python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from ontology_dashboard.dependencies import get_artifact_governance_service
+
+          assert os.getuid() == 10001, os.getuid()
+          service = get_artifact_governance_service()
+          root = Path(service.backend.root).resolve()
+          expected_root = Path("/app/.runtime/object-storage")
+          assert root == expected_root, (root, expected_root)
+
+          probe_key = "ci/docker-runtime/artifact-storage-smoke.txt"
+          payload = b"ontology-dashboard-artifact-storage-smoke"
+          service.backend.put(
+              probe_key,
+              payload,
+              media_type="text/plain",
+              metadata={"source": "architecture-ci"},
+          )
+          assert service.backend.get(probe_key) == payload
+          service.backend.delete(probe_key)
+          assert service.backend.head(probe_key) is None
+          print(f"artifact_storage_root={root}")
+          print("artifact_storage_write_read_delete=ok")
+          PY
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+
+      - name: Docker Compose diagnostics
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color
+
+      - name: Docker Compose cleanup
+        if: always()
+        run: docker compose -f infra/docker-compose.yml down --volumes --remove-orphans
 
       - name: Diff whitespace check
         shell: bash
@@ -73,3 +197,27 @@ jobs:
           else
             git show --check --oneline --no-renames HEAD
           fi
+
+  review:
+    needs: architecture
+    if: >-
+      ${{ always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/code-review.yml
+    with:
+      architecture_result: ${{ needs.architecture.result }}
+      docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}
+      frontend_unit_verified: ${{ needs.architecture.outputs.frontend_unit_verified }}
+      mvp_e2e_verified: ${{ needs.architecture.outputs.mvp_e2e_verified }}
+      workflow_run_id: ${{ github.run_id }}
+      pr_number: ${{ github.event.pull_request.number }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      pr_title: ${{ github.event.pull_request.title }}
+      pr_body: ${{ github.event.pull_request.body }}
