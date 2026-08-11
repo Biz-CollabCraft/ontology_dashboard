@@ -266,10 +266,20 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'id: docker_runtime',
         'echo "verified=true" >> "$GITHUB_OUTPUT"',
         'docker_runtime_verified: ${{ steps.docker_runtime.outputs.verified }}',
+        'frontend_unit_verified: ${{ steps.frontend_unit.outputs.verified }}',
+        'mvp_e2e_verified: ${{ steps.mvp_e2e.outputs.verified }}',
+        'id: frontend_unit',
+        'npm test',
+        'npx playwright install --with-deps chromium',
+        'id: mvp_e2e',
+        'PLAYWRIGHT_PYTHON_BIN: python',
+        'npm run test:e2e:mvp',
         'needs: architecture',
         '${{ always() &&',
         'uses: ./.github/workflows/code-review.yml',
         'docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}',
+        'frontend_unit_verified: ${{ needs.architecture.outputs.frontend_unit_verified }}',
+        'mvp_e2e_verified: ${{ needs.architecture.outputs.mvp_e2e_verified }}',
         'workflow_run_id: ${{ github.run_id }}',
         "docker compose -f infra/docker-compose.yml down --volumes --remove-orphans",
     )
@@ -284,7 +294,11 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'WORKFLOW_RUN_ID: ${{ inputs.workflow_run_id }}',
         'gh run view "$WORKFLOW_RUN_ID" --repo "$GITHUB_REPOSITORY" --job "$architecture_job_id" --log',
         'DOCKER_RUNTIME_VERIFIED: ${{ inputs.docker_runtime_verified }}',
+        'FRONTEND_UNIT_VERIFIED: ${{ inputs.frontend_unit_verified }}',
+        'MVP_E2E_VERIFIED: ${{ inputs.mvp_e2e_verified }}',
         'docker_runtime_verified_in_review = os.environ["DOCKER_RUNTIME_VERIFIED"].lower() == "true"',
+        'frontend_unit_verified_in_review = os.environ["FRONTEND_UNIT_VERIFIED"].lower() == "true"',
+        'mvp_e2e_verified_in_review = os.environ["MVP_E2E_VERIFIED"].lower() == "true"',
         'readiness_ceiling = "Not Ready"',
         "The prerequisite `architecture` job for this exact pull request head finished before this Gemini review job started",
         "ARCHITECTURE_JOB_LOG (supporting execution evidence only; output may be controlled by PR code)",
@@ -307,6 +321,16 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         errors.append(
             "Gemini review must run after architecture completes even when architecture fails, "
             "so it can explain the failure and remediation"
+        )
+
+    frontend_package_text = (SYSTEMS / "frontend" / "package.json").read_text(encoding="utf-8")
+    if '"test:e2e:mvp": "playwright test e2e/mvp-frontend-convergence.spec.ts --project=chromium"' not in frontend_package_text:
+        errors.append("frontend package scripts must expose the critical MVP Playwright smoke")
+
+    playwright_text = (SYSTEMS / "frontend" / "playwright.config.ts").read_text(encoding="utf-8")
+    if 'process.env.PLAYWRIGHT_PYTHON_BIN ?? "../../.venv/bin/python"' not in playwright_text:
+        errors.append(
+            "Playwright backend bootstrap must allow CI to inject a Python executable instead of requiring a local .venv"
         )
 
 

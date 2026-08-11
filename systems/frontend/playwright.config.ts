@@ -4,6 +4,7 @@ const webPort = process.env.PLAYWRIGHT_WEB_PORT ?? "3200";
 const apiPort = process.env.PLAYWRIGHT_API_PORT ?? "8200";
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${webPort}`;
 const apiURL = process.env.PLAYWRIGHT_API_URL ?? `http://127.0.0.1:${apiPort}`;
+const pythonBin = process.env.PLAYWRIGHT_PYTHON_BIN ?? "../../.venv/bin/python";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,7 +19,7 @@ export default defineConfig({
   },
   webServer: process.env.PLAYWRIGHT_EXTERNAL_SERVERS === "1" ? undefined : [
     {
-      command: `sh -c 'DB=/tmp/ontology-dashboard-playwright-$$.db; ARTIFACTS=/tmp/ontology-dashboard-playwright-$$-datasets; rm -f "$DB"; rm -rf "$ARTIFACTS"; APP_ENV=test SEED_DEMO_ACCOUNTS=1 ONTOLOGY_DASHBOARD_DB="$DB" PYTHONPATH=../..:../../systems/backend:../../ml/src ../../.venv/bin/python ../../scripts/seed_demo_dataset_catalog.py --database "$DB" --artifact-root "$ARTIFACTS" >/tmp/ontology-dashboard-playwright-seed.log && APP_ENV=test SEED_DEMO_ACCOUNTS=1 ONTOLOGY_DASHBOARD_DB="$DB" PYTHONPATH=../..:../../systems/backend:../../ml/src ../../.venv/bin/python -m uvicorn ontology_dashboard.main:app --host 127.0.0.1 --port ${apiPort}'`,
+      command: `sh -c 'DB=/tmp/ontology-dashboard-playwright-$$.db; ARTIFACTS=/tmp/ontology-dashboard-playwright-$$-datasets; rm -f "$DB"; rm -rf "$ARTIFACTS"; APP_ENV=test SEED_DEMO_ACCOUNTS=1 ONTOLOGY_DASHBOARD_DB="$DB" PYTHONPATH=../..:../../systems/backend:../../ml/src ${pythonBin} ../../scripts/seed_demo_dataset_catalog.py --database "$DB" --artifact-root "$ARTIFACTS" >/tmp/ontology-dashboard-playwright-seed.log && APP_ENV=test SEED_DEMO_ACCOUNTS=1 ONTOLOGY_DASHBOARD_DB="$DB" PYTHONPATH=../..:../../systems/backend:../../ml/src ${pythonBin} -m uvicorn ontology_dashboard.main:app --host 127.0.0.1 --port ${apiPort}'`,
       url: `${apiURL}/health`,
       timeout: 120_000,
       reuseExistingServer: false,

@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       docker_runtime_verified: ${{ steps.docker_runtime.outputs.verified }}
+      frontend_unit_verified: ${{ steps.frontend_unit.outputs.verified }}
+      mvp_e2e_verified: ${{ steps.mvp_e2e.outputs.verified }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,9 +97,29 @@ jobs:
         working-directory: systems/frontend
         run: npm install --no-audit --no-fund
 
+      - name: Frontend unit tests
+        id: frontend_unit
+        working-directory: systems/frontend
+        run: |
+          npm test
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+
       - name: Frontend production build
         working-directory: systems/frontend
         run: npm run build
+
+      - name: Install Playwright Chromium
+        working-directory: systems/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Critical MVP Playwright smoke
+        id: mvp_e2e
+        working-directory: systems/frontend
+        env:
+          PLAYWRIGHT_PYTHON_BIN: python
+        run: |
+          npm run test:e2e:mvp
+          echo "verified=true" >> "$GITHUB_OUTPUT"
 
       - name: Docker Compose runtime smoke
         id: docker_runtime
@@ -191,6 +213,8 @@ jobs:
     with:
       architecture_result: ${{ needs.architecture.result }}
       docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}
+      frontend_unit_verified: ${{ needs.architecture.outputs.frontend_unit_verified }}
+      mvp_e2e_verified: ${{ needs.architecture.outputs.mvp_e2e_verified }}
       workflow_run_id: ${{ github.run_id }}
       pr_number: ${{ github.event.pull_request.number }}
       base_sha: ${{ github.event.pull_request.base.sha }}
