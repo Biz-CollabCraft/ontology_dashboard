@@ -100,6 +100,8 @@ flowchart LR
 
 `schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. 이번 계획은 기존 required 필드를 깨지 않고 optional evidence extension을 추가하는 v1.0-compatible extension을 우선 검토한다. schema version bump가 필요하면 `result-artifact-v1.1`은 후속 결정으로 분리한다.
 
+여기서 optional evidence extension은 2주차 구현에서 원본 Artifact row를 in-place mutate한다는 뜻이 아니다. Product Result Artifact의 공식 생성 책임은 `systems/backend/app/diagnosis`에 유지하고, `systems/backend/ontology_dashboard/...`의 projection layer는 기존 Artifact와 추가 context를 입력으로 받아 derived evidence envelope/projection을 만든다. schema-level Artifact extension을 공식화할지는 후속 PR에서 `systems/backend/app/diagnosis` 소유 변경으로 결정한다.
+
 필수 확인 필드는 다음과 같다.
 
 - `artifact_id`
@@ -187,10 +189,11 @@ projection이 Artifact에서 읽어야 할 원천 필드는 다음을 포함한�
 
 - Event Evidence projection은 `schema_version="event-evidence-projection-v1"`와 `contract_type="event_evidence_projection"` 같은 명시적 discriminator를 포함한다.
 - projection layer는 canonical Event Evidence projection과 legacy evidence compatibility projection을 동시에 만들 수 있어야 한다.
-- 기존 consumer가 모두 Event Evidence projection 또는 ViewModel 입력으로 전환되기 전까지 legacy projection을 제거하지 않는다.
+- 2주차 기본 응답은 기존 legacy evidence shape를 유지한다.
+- canonical Event Evidence projection은 명시적 `schema_version`, `contract_type`, query/header/feature flag 같은 contract selector가 있을 때만 반환한다.
 - legacy projection은 새 수치를 만들지 않고 확장 Product Result Artifact와 Event Evidence projection의 `assessment`, `report_projection`에서 현행 `schemas/evidence-package.schema.json` 호환 필드만 재배열한다.
 - API contract regression test는 legacy evidence shape, Event Evidence projection shape, hidden/evaluation truth absence, report grounding source field를 함께 검증한다.
-- legacy 제거 시점은 frontend/report consumer 전환 완료와 contract regression 통과 후 별도 PR에서 결정한다.
+- canonical projection을 기본 응답으로 승격하고 legacy projection을 제거할지는 frontend/report consumer 전환 완료와 contract regression 통과 후 별도 PR에서 결정한다.
 
 ### 4.4 Report Output 계층
 
