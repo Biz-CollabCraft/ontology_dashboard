@@ -21,6 +21,7 @@
 14. [개인 프로토타입 원문 보존본](./prototype-source/)
 15. [Week 2 MVP 실행 소스 이관 기록](./week2-frontend-implementation-import.md)
 16. [Week 2 실행 코드 책임 재배치 기록](./week2-runtime-ownership-integration.md)
+17. [PdM Artifact Extension + Report UI 통합 계획](./pdm-evidence-report-ui-integration-plan.md)
 
 ## 문서 상태
 
@@ -42,6 +43,7 @@
 | `prototype-source/` | 원문 보존 | 개인 레포의 Week 2 상세 문서 4종을 내용 변경 없이 보존 |
 | `week2-frontend-implementation-import.md` | 이관 기준 | 개인 프로토타입에서 팀 저장소로 승격한 실행 소스와 화면 캡처의 provenance |
 | `week2-runtime-ownership-integration.md` | 구현 반영 | PR #8/#10/gen_data #2 책임 계약을 실행 코드에 적용한 기록 |
+| `pdm-evidence-report-ui-integration-plan.md` | 제안 | Product Result Artifact evidence extension과 Artifact-derived Evidence projection 기반 Report UI 이식 계획 |
 
 ## 기준 자료
 
