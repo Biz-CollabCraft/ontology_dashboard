@@ -296,16 +296,15 @@ Overview와 Objects 목록의 공통 행이다.
 현행 프로토타입의 Decision/Note는 저장·권한·감사 이력이 구현돼 있다. 제외하려면
 별도 제품 변경 결정과 코드 영향 분석이 필요하다.
 
-## 8. 담당자 합의 필요 사항
+## 8. 결정 상태와 후속 합의 사항
 
-| ID | 담당 | 결정 사항 |
-|---|---|---|
-| SCH-DEC-01 | 팀원1 | 화면의 최종 한국어 필드명과 상태 문구 |
-| SCH-DEC-02 | 팀원1·3 | 목록 pagination과 필터 응답 구조 |
-| SCH-DEC-03 | 팀원3 | 위험등급 임계값과 산출 책임 |
-| SCH-DEC-04 | 팀원3 | latest snapshot 기준시각과 stale 판정 기준 |
-| SCH-DEC-05 | 팀원3 | Canonical 장애 시 fallback 허용 여부와 표시 |
-| SCH-DEC-06 | 팀원3 | API 응답에서 provenance를 중첩 유지할지 평탄화할지 |
-| SCH-DEC-07 | 팀원4 | Report API 입력에 전달할 Summary/Detail 범위 |
-| SCH-DEC-08 | 팀원4 | Report API 출력 JSON, 근거 참조와 fallback 방식 |
-
+| ID | 담당 | 결정 사항 | 상태 |
+|---|---|---|---|
+| SCH-DEC-01 | 팀원1 | 내부 enum과 분리한 Week 2 한국어 상태 문구 | 결정 완료 |
+| SCH-DEC-02 | 팀원1·3 | 현행 `offset`/`limit`/`total`과 검색·라인·상태·담당자 필터 | 결정 완료; `page`/`size`는 V2 |
+| SCH-DEC-03 | 팀원3 | 위험등급은 runtime inference의 Result Artifact가 제공 | 결정 완료 |
+| SCH-DEC-04 | 팀원1·3 | 최신 `observed_at` 기준 프론트 24시간 stale MVP 정책 | 결정 완료 |
+| SCH-DEC-05 | 팀원3 | 로컬 compatibility fallback 표시, 비로컬 Model Artifact 누락은 fail-closed | 결정 완료 |
+| SCH-DEC-06 | 팀원3 | 현행 Evidence 호환 provenance 유지; JSON Pointer 전환 | V2 검토 |
+| SCH-DEC-07 | 팀원4 | 현행 Event Report 입력 범위와 기간 집계 Summary/Detail 범위 | 현행 확정·V2 후속 합의 |
+| SCH-DEC-08 | 팀원4 | 현행 grounded report, 근거 참조와 deterministic fallback | 결정 완료; 기간 집계 출력은 V2 |

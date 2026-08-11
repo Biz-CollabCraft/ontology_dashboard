@@ -29,15 +29,15 @@
 | `week2-team-role-and-deliverables.md` | 실행 기준 | 팀원별 책임·완료조건·병렬 작업 원칙 |
 | `v3.1-field-validation.md` | 검증 완료 | 공식 V3.1과 기존 V1.1/V1.3 초안의 필드 차이 근거 |
 | `prototype-mvp-gap-analysis.md` | Current/Target 정리 | 현행·목표·Gap과 Week 2 반영 여부 판단 |
-| `week2-requirements-specification.md` | 초안 | 검증된 범위로 작성한 MVP 요구사항 |
+| `week2-requirements-specification.md` | 실행 기준 대조 | 검증된 범위로 작성한 MVP 요구사항 |
 | `week2-schema-definition.md` | 일부 확정·일부 제안 | 화면·API·LLM 공통 필드명의 단일 기준 |
-| `week2-contract-review-checklist.md` | 결정 반영 | Week 2 결정과 후속 Target 기록 |
-| `current-mvp-implementation-baseline.md` | 코드 확인 | 현행 실행 코드의 역할·API·화면·fallback 기준선 |
-| `week2-report-specification.md` | 초안 | LLM 보고서 입력·출력·근거·문장·fallback 계약 |
-| `week2-functional-specification.md` | 초안 | 화면별 기능·처리·오류·완료 조건 |
-| `week2-api-specification.md` | 초안 | 팀원3 조회·집계 API와 팀원4 리포트 API 계약 |
-| `week2-mvp-design-specification.md` | 초안 | 시스템·데이터·화면·역할·구현 흐름 |
-| `week2-traceability-matrix.md` | 초안 | 요구사항부터 테스트까지 연결 |
+| `week2-contract-review-checklist.md` | 통합 결정 반영 | Week 2 결정과 후속 Target 기록 |
+| `current-mvp-implementation-baseline.md` | 통합 코드 기준 | 팀 저장소의 역할·API·화면·fallback 기준선 |
+| `week2-report-specification.md` | Current/V2 분리 | Event Report 현행 계약과 기간 집계 V2 계약 |
+| `week2-functional-specification.md` | Current/V2 분리·코드 대조 필요 | 화면별 기능·처리·오류·완료 조건 |
+| `week2-api-specification.md` | 현행 계약 반영·코드 대조 필요 | 팀원3 조회·집계 API와 팀원4 리포트 API 계약 |
+| `week2-mvp-design-specification.md` | 실행 구조 반영·코드 대조 필요 | 시스템·데이터·화면·역할·구현 흐름 |
+| `week2-traceability-matrix.md` | 실제 구현 추적 중 | 요구사항부터 실제 코드·테스트까지 연결 |
 | `week2-prototype-doc-migration-map.md` | 이관 기록 | 개인 프로토타입 상세 문서와 팀 기준 문서의 대응 관계 |
 | `prototype-source/` | 원문 보존 | 개인 레포의 Week 2 상세 문서 4종을 내용 변경 없이 보존 |
 | `week2-frontend-implementation-import.md` | 이관 기준 | 개인 프로토타입에서 팀 저장소로 승격한 실행 소스와 화면 캡처의 provenance |
@@ -64,6 +64,8 @@
 ## 다음 산출물
 
 필수 Week 2 문서와 현행 구현 기준선은 작성됐고 제품·리포트 계약 결정을 반영했다.
-남은 저장소 통합 방식과 실제 구현 결과는 후속 결정 및 테스트 이름과 함께 기록한다.
+실행 소스 통합과 책임 재배치는 PR #9/#10에서 완료됐다. 다음 산출물은 현행 API,
+화면, schema와 실제 테스트를 추적성 매트릭스에 연결하고 남은 V2 backlog를 분리하는
+것이다.
 
 공통 필드명의 최종 단일 기준은 `week2-schema-definition.md`로 한다.

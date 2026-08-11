@@ -192,13 +192,19 @@ deterministic 출력 계약부터 검증한다.
 - provenance는 구조화해 보존하되 `source_field`는 현행 Evidence 호환 형식을
   사용한다. JSON Pointer는 구현 비교 후 Target으로 검토한다.
 
-## 7. 확인 필요
+## 7. 결정 반영과 후속 확인
 
-- 현행 API 유지 또는 목표 경로로 전환할지
-- offset/limit 유지 또는 page/size로 전환할지
-- status grade 임계값 산출 주체
-- latest snapshot과 stale 기준
-- 인증·권한 포함 여부
-- fallback 허용 조건
-- 보고서 생성 timeout과 retry
+### Week 2 결정 완료
 
+- 현행 `/dashboard`, `/results/latest`와 Event API를 유지한다.
+- 최신 결과 pagination은 `offset`, `limit`, `total`을 유지한다.
+- `status_grade`는 runtime inference가 생성하는 Result Artifact 계약에 포함한다.
+- stale은 timezone을 포함한 최신 `observed_at` 기준 프론트 24시간 MVP 정책을 유지한다.
+- `manager`/`engineer` 인증과 Decision·Note 권한을 유지한다.
+- fallback은 로컬 데모 compatibility 경로에서 명시적으로 표시하며, Model Artifact가
+  필요한 비로컬 실행 환경은 fail-closed를 따른다.
+
+### 후속 확인
+
+- 보고서 생성 timeout과 retry 정책
+- V2 목표 경로와 `page`/`size` 계약 채택 여부 및 전환 계획

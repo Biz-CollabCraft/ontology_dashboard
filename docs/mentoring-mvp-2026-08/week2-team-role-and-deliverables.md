@@ -168,9 +168,11 @@ Extraction / Parsing
 - 목록 조회와 설비 단건 조회가 가능하다.
 - Frontend/Report가 사용할 샘플 응답을 제공한다.
 
-`ontology_dashboard` 내부의 `systems/generator`가 어느 단계까지 담당할지와 Backend가
-runtime inference 및 Result Artifact를 어느 경계에서 담당할지는 PR #10 아키텍처에서
-최종 확정한다. 이 문서는 저장소 수준 소유권만 고정한다.
+PR #10 아키텍처와 PR #9 실행 코드 통합에서 책임 경계가 확정됐다.
+`systems/generator`는 ontology mapping, feature engineering, model training/evaluation과
+versioned Model Artifact 발행을 담당한다. `systems/backend/app/diagnosis`는 주입된
+Model Artifact 검증, runtime inference와 Product Result Artifact/Evidence 생성을
+담당한다. Backend는 generator 구현이나 sibling model store를 직접 탐색하지 않는다.
 
 현재 팀 서비스가 project/workspace scope를 사용한다면 멘토 PPT의
 `GET /predictions`, `GET /predictions/{설비ID}`는 실제 서비스 경로에 맞춰
@@ -277,7 +279,9 @@ gen_data Raw Sensor Data
 - Canonical V3.1 데이터와 원천 생성/검증 자산은 `gen_data`의
   reference/source baseline으로 유지할 수 있다.
 - `prediction_pipeline.py`, prediction/model outputs, Result Artifact 등 제품
-  semantic/ML·Prediction 책임에 해당하는 자산은 `ontology_dashboard`로 이관·통합할
-  후속 작업 대상으로 둔다.
-- 실제 파일 이동과 `systems/generator`/Backend 내부 배치는 PR #10 아키텍처 확정 및
-  PR #9 재배치 작업에서 처리한다.
+  semantic/ML·Prediction 책임에 해당하는 실행 자산은 PR #9에서
+  `ontology_dashboard`로 이관·통합됐다.
+- `gen_data`에 남은 prediction/model output은 운영 입력이 아니라
+  compatibility/regression/migration fixture로 취급한다.
+- `systems/generator`와 `systems/backend/app/diagnosis` 내부 배치는 PR #10 아키텍처를
+  반영한 PR #9 통합에서 완료됐다.
