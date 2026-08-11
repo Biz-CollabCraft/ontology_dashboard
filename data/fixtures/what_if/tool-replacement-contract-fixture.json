@@ -10,7 +10,7 @@
     "baseline_probability": 0.18,
     "peak_probability": 0.82,
     "probability_delta": 0.64,
-    "duration_hours": 4.0
+    "time_to_peak_hours": 4.0
   },
   "leading_indicators": [
     {

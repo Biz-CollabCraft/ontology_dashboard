@@ -62,12 +62,24 @@ Result Artifact / Evidence consumer
 ```text
 project-root/
 ├── docs/
+├── experiments/
+│   └── preventive_intervention/  # 비배포 What-if 계약·정책·실험 코드
 ├── README.md
 └── systems/
     ├── generator/
     ├── backend/
     └── frontend/
 ```
+
+### 비배포 Experiment 계층
+
+`experiments/preventive_intervention`은 네 번째 제품 시스템이나 독립 배포 단위가 아니다. 예방조치 What-if의 버전된 계약, 합성 정책과 재현 가능한 실험 코드를 소유하는 **비배포 producer 계층**이다.
+
+- API를 호스팅하거나 자체 데이터베이스를 소유하지 않는다.
+- `systems/generator`와 `systems/backend`의 내부 구현을 직접 import하지 않는다.
+- 시스템과 연결할 때는 versioned Artifact/API contract를 사용한다.
+- 검증된 기능을 제품 runtime으로 승격할 때는 책임 시스템, 배포 방식과 계약 변경을 별도 architecture decision으로 확정한다.
+- `schemas/preventive-what-if.schema.json`은 downstream consumer가 사용하는 공유 산출물 계약이다.
 
 ---
 

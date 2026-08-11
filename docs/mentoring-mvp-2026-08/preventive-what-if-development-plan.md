@@ -280,13 +280,13 @@ Intervention 기대비용
 
 | 경로 | 역할 | 현재 상태 |
 |---|---|---|
-| `systems/what_if/contracts.py` | Pydantic 입출력 계약과 검증 규칙 | 구현 완료 |
-| `systems/what_if/policies.py` | 비파괴 예방조치 변환 | 공구 교체 구현 완료 |
-| `systems/what_if/policies/tool-replacement-v1.json` | 공구 교체 정책 | 구현 완료 |
+| `experiments/preventive_intervention/contracts.py` | Pydantic 입출력 계약과 검증 규칙 | 구현 완료 |
+| `experiments/preventive_intervention/policies.py` | 비파괴 예방조치 변환 | 공구 교체 구현 완료 |
+| `experiments/preventive_intervention/policies/tool-replacement-v1.json` | 공구 교체 정책 | 구현 완료 |
 | `schemas/preventive-what-if.schema.json` | Producer JSON Schema | 구현 완료 |
 | `data/fixtures/what_if/` | 계약 fixture | 1건 작성 완료 |
 | `tests/test_preventive_what_if_foundation.py` | 계약·정책 불변성 테스트 | 작성 완료 |
-| `experiments/preventive_intervention/` | 실제 시계열 실험 출력 | 미구현 |
+| `experiments/preventive_intervention/` | 비배포 계약·정책 producer 및 향후 시계열 실험 | 기반 구현 완료, 실제 시계열 출력 미구현 |
 
 ## 13. 현재 구현 상태
 
@@ -299,6 +299,9 @@ Intervention 기대비용
 - [O] 원본 관측을 변경하지 않는 공구 교체 변환
 - [O] 계약 fixture와 검증 테스트
 - [O] Producer 결과에서 역할별 Report 필드 제외
+- [O] What-if를 비배포 Experiment 계층으로 명문화
+- [O] 공구 교체 typed parameter와 cross-field 의미 검증
+- [O] 상승 시작부터 peak까지의 시간을 `time_to_peak_hours`로 명확화
 
 ### 다음 작업
 
@@ -355,7 +358,7 @@ Intervention 기대비용
 | ID | 결정 사항 | 영향 |
 |---|---|---|
 | `WIF-DEC-01` | 기존 Feature Engineering과 추론 함수 재사용 인터페이스 | Week 4 모델 재평가 |
-| `WIF-DEC-02` | 별도 Experiment 저장 위치 | 데이터 소유권·배포 제외 규칙 |
+| `WIF-DEC-02` | **결정 완료:** `experiments/preventive_intervention` 비배포 계층 | 제품 system과 분리하고 Artifact/API 계약으로만 연결 |
 | `WIF-DEC-03` | What-if Result의 ReportInput 연결 방식 | `map-report` 통합 |
 | `WIF-DEC-04` | `action_code`, limitation code, Evidence reference 목록 | Producer/Consumer 계약 |
 | `WIF-DEC-05` | API 동기 실행 또는 사전 생성 결과 조회 | 실행 시간·오류 계약 |
@@ -372,6 +375,10 @@ Intervention 기대비용
 - 두 시나리오는 동일 모델·버전·임계값을 사용한다.
 - `estimated_probability_reduction = baseline - intervention`을 만족한다.
 - 모든 선행 지표에 source reference가 존재한다.
+- 모든 선행 지표의 `source_reference.asset_id`는 결과의 `asset_id`와 같다.
+- `intervention.policy_version`과 `provenance.simulation_policy_version`은 같다.
+- `TOOL_REPLACEMENT`는 0 이상의 `tool_wear_after`를 필수로 가진다.
+- `time_to_peak_hours`는 `rise_event.started_at`부터 `peak_at`까지의 시간과 일치한다.
 - 모든 결과에 effect scope와 필수 limitation code가 있다.
 - Canonical 원본·Prediction Timeline·Result Artifact checksum을 변경하지 않는다.
 - Evaluation truth가 제품 응답에 포함되지 않는다.

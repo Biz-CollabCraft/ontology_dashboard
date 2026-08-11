@@ -7,17 +7,17 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 
-from systems.what_if.contracts import (
+from experiments.preventive_intervention.contracts import (
     ToolReplacementPolicy,
     WhatIfResult,
     preventive_what_if_schema,
 )
-from systems.what_if.policies import apply_tool_replacement
+from experiments.preventive_intervention.policies import apply_tool_replacement
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "preventive-what-if.schema.json"
-POLICY_PATH = ROOT / "systems" / "what_if" / "policies" / "tool-replacement-v1.json"
+POLICY_PATH = ROOT / "experiments" / "preventive_intervention" / "policies" / "tool-replacement-v1.json"
 FIXTURE_PATH = ROOT / "data" / "fixtures" / "what_if" / "tool-replacement-contract-fixture.json"
 
 
@@ -57,6 +57,42 @@ def test_contract_requires_synthetic_safety_limitations() -> None:
     payload = load_json(FIXTURE_PATH)
     payload["limitations"] = [{"code": "SYNTHETIC_DATA_ONLY"}]
     with pytest.raises(ValidationError, match="all safety limitations"):
+        WhatIfResult.model_validate(payload)
+
+
+def test_contract_rejects_leading_indicator_for_another_asset() -> None:
+    payload = load_json(FIXTURE_PATH)
+    payload["leading_indicators"][0]["source_reference"]["asset_id"] = "CNC-OTHER"
+    with pytest.raises(ValidationError, match="asset IDs must match"):
+        WhatIfResult.model_validate(payload)
+
+
+def test_contract_rejects_policy_version_mismatch() -> None:
+    payload = load_json(FIXTURE_PATH)
+    payload["provenance"]["simulation_policy_version"] = "different-policy"
+    with pytest.raises(ValidationError, match="policy versions must match"):
+        WhatIfResult.model_validate(payload)
+
+
+@pytest.mark.parametrize("parameters", [{}, {"tool_wear_after": -1}])
+def test_contract_requires_valid_tool_replacement_parameters(parameters: dict) -> None:
+    payload = load_json(FIXTURE_PATH)
+    payload["intervention"]["parameters"] = parameters
+    with pytest.raises(ValidationError, match="tool_wear_after"):
+        WhatIfResult.model_validate(payload)
+
+
+def test_contract_rejects_inconsistent_time_to_peak() -> None:
+    payload = load_json(FIXTURE_PATH)
+    payload["rise_event"]["time_to_peak_hours"] = 99
+    with pytest.raises(ValidationError, match="started_at to peak_at"):
+        WhatIfResult.model_validate(payload)
+
+
+def test_contract_rejects_decision_before_rise_event() -> None:
+    payload = load_json(FIXTURE_PATH)
+    payload["decision_at"] = "2026-07-31T23:59:59Z"
+    with pytest.raises(ValidationError, match="decision_at must not precede"):
         WhatIfResult.model_validate(payload)
 
 

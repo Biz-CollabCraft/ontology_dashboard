@@ -2,15 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ontology-dashboard.local/schemas/preventive-what-if.schema.json",
   "$defs": {
-    "ActionCode": {
-      "enum": [
-        "TOOL_REPLACEMENT",
-        "CUTTING_LOAD_REDUCTION",
-        "COOLING_SYSTEM_RESTORE"
-      ],
-      "title": "ActionCode",
-      "type": "string"
-    },
     "EconomicEffect": {
       "additionalProperties": false,
       "properties": {
@@ -105,44 +96,6 @@
       ],
       "title": "IndicatorDirection",
       "type": "string"
-    },
-    "Intervention": {
-      "additionalProperties": false,
-      "properties": {
-        "action_code": {
-          "$ref": "#/$defs/ActionCode"
-        },
-        "parameters": {
-          "additionalProperties": true,
-          "title": "Parameters",
-          "type": "object"
-        },
-        "estimated_downtime_minutes": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Estimated Downtime Minutes"
-        },
-        "policy_version": {
-          "minLength": 1,
-          "title": "Policy Version",
-          "type": "string"
-        }
-      },
-      "required": [
-        "action_code",
-        "parameters",
-        "policy_version"
-      ],
-      "title": "Intervention",
-      "type": "object"
     },
     "LeadingIndicator": {
       "additionalProperties": false,
@@ -285,9 +238,9 @@
           "title": "Probability Delta",
           "type": "number"
         },
-        "duration_hours": {
+        "time_to_peak_hours": {
           "minimum": 0,
-          "title": "Duration Hours",
+          "title": "Time To Peak Hours",
           "type": "number"
         }
       },
@@ -297,7 +250,7 @@
         "baseline_probability",
         "peak_probability",
         "probability_delta",
-        "duration_hours"
+        "time_to_peak_hours"
       ],
       "title": "RiseEvent",
       "type": "object"
@@ -353,6 +306,59 @@
         "asset_id"
       ],
       "title": "SourceReference",
+      "type": "object"
+    },
+    "ToolReplacementIntervention": {
+      "additionalProperties": false,
+      "properties": {
+        "action_code": {
+          "const": "TOOL_REPLACEMENT",
+          "title": "Action Code",
+          "type": "string"
+        },
+        "parameters": {
+          "$ref": "#/$defs/ToolReplacementParameters"
+        },
+        "estimated_downtime_minutes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Downtime Minutes"
+        },
+        "policy_version": {
+          "minLength": 1,
+          "title": "Policy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_code",
+        "parameters",
+        "policy_version"
+      ],
+      "title": "ToolReplacementIntervention",
+      "type": "object"
+    },
+    "ToolReplacementParameters": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_wear_after": {
+          "minimum": 0,
+          "title": "Tool Wear After",
+          "type": "number"
+        }
+      },
+      "required": [
+        "tool_wear_after"
+      ],
+      "title": "ToolReplacementParameters",
       "type": "object"
     },
     "WhatIfProvenance": {
@@ -416,10 +422,7 @@
       "type": "string"
     },
     "asset_type": {
-      "enum": [
-        "cnc",
-        "compressor"
-      ],
+      "const": "cnc",
       "title": "Asset Type",
       "type": "string"
     },
@@ -440,7 +443,7 @@
       "type": "array"
     },
     "intervention": {
-      "$ref": "#/$defs/Intervention"
+      "$ref": "#/$defs/ToolReplacementIntervention"
     },
     "effect": {
       "$ref": "#/$defs/ProbabilityEffect"
