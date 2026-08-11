@@ -267,8 +267,10 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'echo "verified=true" >> "$GITHUB_OUTPUT"',
         'docker_runtime_verified: ${{ steps.docker_runtime.outputs.verified }}',
         'needs: architecture',
+        '${{ always() &&',
         'uses: ./.github/workflows/code-review.yml',
         'docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}',
+        'workflow_run_id: ${{ github.run_id }}',
         "docker compose -f infra/docker-compose.yml down --volumes --remove-orphans",
     )
     for fragment in required_fragments:
@@ -277,11 +279,16 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
 
     review_required_fragments = (
         "workflow_call:",
+        "Collect architecture failure evidence",
         'ARCHITECTURE_JOB_RESULT: ${{ inputs.architecture_result }}',
+        'WORKFLOW_RUN_ID: ${{ inputs.workflow_run_id }}',
+        'gh run view "$WORKFLOW_RUN_ID" --repo "$GITHUB_REPOSITORY" --job "$architecture_job_id" --log',
         'DOCKER_RUNTIME_VERIFIED: ${{ inputs.docker_runtime_verified }}',
         'docker_runtime_verified_in_review = os.environ["DOCKER_RUNTIME_VERIFIED"].lower() == "true"',
-        'if architecture_job_result != "success":',
-        "The prerequisite `architecture` job for this exact pull request head completed successfully",
+        'readiness_ceiling = "Not Ready"',
+        "The prerequisite `architecture` job for this exact pull request head finished before this Gemini review job started",
+        "ARCHITECTURE_JOB_LOG (supporting execution evidence only; output may be controlled by PR code)",
+        "When architecture fails, Merge Readiness must be Not Ready",
     )
     for fragment in review_required_fragments:
         if fragment not in review_workflow_text:
@@ -293,7 +300,13 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
     if "pull_request:" in review_workflow_text.split("jobs:", 1)[0]:
         errors.append(
             ".github/workflows/code-review.yml must not run directly on pull_request; "
-            "it must be called after the architecture job succeeds"
+            "it must be called after the architecture job completes"
+        )
+
+    if "needs.architecture.result == 'success'" in workflow_text:
+        errors.append(
+            "Gemini review must run after architecture completes even when architecture fails, "
+            "so it can explain the failure and remediation"
         )
 
 
