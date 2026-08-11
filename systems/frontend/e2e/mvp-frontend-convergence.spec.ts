@@ -35,6 +35,15 @@ test("login exposes only the two mentoring MVP roles", async ({ page }) => {
   await expect(page.getByLabel("비밀번호")).toHaveValue("Engineer!2026");
 });
 
+test("shows normal assets in the current-state overview", async ({ page }) => {
+  await login(page);
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
+  await expect(page.getByText("라인별 설비 상태", { exact: true })).toBeVisible();
+  const lineStatuses = page.locator(".mvp-line-risk-list footer");
+  await expect(lineStatuses.first()).toBeVisible();
+  await expect(lineStatuses.first()).toContainText(/정상 \d+/);
+});
+
 test("completes Overview to Objects to Operations to Event Executive Brief without Analysis", async ({ page }) => {
   await login(page);
   await expect(page.locator(".mvp-app")).toBeVisible();
