@@ -7,11 +7,22 @@ from starlette.requests import Request
 
 from ontology_dashboard.dependencies import client_ip
 from ontology_dashboard.settings import (
+    allowed_origin_regex,
     allowed_origins,
     database_location,
     project_root,
     validate_runtime_environment,
 )
+
+
+def test_explicit_allowed_origin_regex_supports_preview_hosts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX",
+        r"^https://.*\.vercel\.app$",
+    )
+    assert allowed_origin_regex() == r"^https://.*\.vercel\.app$"
 
 
 def test_project_root_prefers_explicit_runtime_root(

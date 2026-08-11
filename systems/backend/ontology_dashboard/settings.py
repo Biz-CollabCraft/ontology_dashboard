@@ -12,6 +12,7 @@ CANONICAL_DATABASE_ENV = "ONTOLOGY_DASHBOARD_DATABASE_URL"
 CANONICAL_SQLITE_ENV = "ONTOLOGY_DASHBOARD_DB"
 LEGACY_DATABASE_ENV = "FACTORY_SIGNAL_DB"
 ALLOWED_ORIGINS_ENV = "ONTOLOGY_DASHBOARD_ALLOWED_ORIGINS"
+ALLOWED_ORIGIN_REGEX_ENV = "ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX"
 TRUSTED_PROXIES_ENV = "ONTOLOGY_DASHBOARD_TRUSTED_PROXIES"
 TRUST_PROXY_HEADERS_ENV = "ONTOLOGY_DASHBOARD_TRUST_PROXY_HEADERS"
 REDIS_URL_ENV = "ONTOLOGY_DASHBOARD_REDIS_URL"
@@ -85,6 +86,12 @@ def allowed_origins() -> list[str]:
     if app_environment() in {"development", "demo", "test"}:
         return []
     return []
+
+
+def allowed_origin_regex() -> str | None:
+    """Return an optional CORS origin regex for bounded preview environments."""
+    configured = os.getenv(ALLOWED_ORIGIN_REGEX_ENV, "").strip()
+    return configured or None
 
 
 def trust_proxy_headers() -> bool:
