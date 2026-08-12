@@ -119,7 +119,7 @@
     "evidence_payload_reference": {
       "source": "product_result_artifact",
       "reference": "producer-enriched-critical",
-      "generated_by": "app.diagnosis.producer_boundary_pending"
+      "generated_by": "systems.backend.app.diagnosis.evidence_enrichment"
     }
   },
   "evaluation_truth": {
