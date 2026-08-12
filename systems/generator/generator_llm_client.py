@@ -2,30 +2,30 @@
 generator_llm_client.py
 
 담당 기능:
-- Generator 도메인 전역 LLM 호출 서비스(call_llm) 및 다중 응답 형식 다각도 구조 변환기(transform_to_structured_data) 모듈.
-- OpenAI Chat Completions API(gpt-4o-mini) 호출을 통해 RAW 텍스트 응답을 수신하고, 이를 JSON/YAML/Key-Value/CSV 다중 변환기를 통해 정규 JSON Dict/List 객체로 안전하게 변환한다.
+- Generator 도메인 전역 LLM 호출 서비스(call_llm) 및 Pydantic 스키마 검증/다중 변환기(validate_or_transform_pydantic) 모듈.
+- OpenAI Chat Completions API(gpt-4o-mini) 호출을 통해 RAW 텍스트 응답을 수신하며, Pydantic 검증 ➔ 실패 시 Multi-Format Transformer(JSON/YAML/KV/CSV) ➔ Pydantic 스키마 재검증 ➔ 실패 시 None(Fail-Fast) 4단계 파이프라인으로 동작한다.
 
 입력:
 - prompt(str): LLM에 전달할 사용자 프롬프트
 - system(str, optional): system 역할 프롬프트. 기본값 "You are a helpful assistant."
 - raw_text(str): LLM 수신 RAW 응답 텍스트
-- expected_type(type, optional): 기대 데이터 구조 타입 (dict 또는 list). 기본값 dict.
+- pydantic_cls(type[T]): 검증 및 정제할 Pydantic 스키마 모델 클래스
 
 출력:
 - call_llm(): LLM RAW 응답 텍스트 (str)
-- transform_to_structured_data(): 정규화된 Dict/List 객체 또는 변환 실패 시 None
+- validate_or_transform_pydantic(): 스키마 검증이 완료된 Pydantic 모델 인스턴스 또는 실패 시 None
 
 의존 모듈:
 - generator_config.load_config: API 키 로딩 전 환경변수 세팅.
 - openai.OpenAI: OpenAI 공식 API 클라이언트.
-- json, re, yaml, logging
+- pydantic.BaseModel, json, re, yaml, logging
 
 예외/경계 상황:
 - OPENAI_API_KEY 미설정 시 ValueError 발생.
-- JSON 문법 파싱 및 YAML/KV/CSV 모든 변환 시도가 실패한 경우 경고 로그 후 None을 안전하게 반환한다(Fail-Fast).
+- Pydantic 스키마 검증 및 파싱 실패 시 경고 로그 후 None을 안전하게 반환한다(Fail-Fast).
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '단일 마이그레이션 파사드' 및 '단일 책임 원칙'에 따라 LLM호출(작업1)과 다중 형식 JSON 변환(작업2)을 독립된 기능으로 명확히 분리 관리한다.
+- docs/architecture.md의 '타입 안전 스키마 검증' 및 '단일 책임 원칙'에 따라 스키마 검증과 포맷 변환을 캡슐화하여 제공한다.
 """
 
 import os
@@ -34,7 +34,8 @@ import json
 import re
 import yaml
 import logging
-from typing import Any
+from typing import Any, TypeVar, Optional
+from pydantic import BaseModel, Field
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT_DIR not in sys.path:
@@ -44,6 +45,33 @@ from openai import OpenAI
 from systems.generator.generator_config import load_config
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
+
+# --- Pydantic Response Schemas ---
+
+class ExtractionStructureResponse(BaseModel):
+    structure_type: str = "tabular_column_as_attribute"
+    reason: Optional[str] = None
+
+
+class ExtractionColumnsResponse(BaseModel):
+    selected_columns: list[str] = Field(default_factory=list)
+
+
+class ColumnMappingResponse(BaseModel):
+    ontology_node: str = "Unknown"
+    confidence: float = 0.5
+    reason: Optional[str] = None
+
+
+class FileProfileResponse(BaseModel):
+    role: str = "unknown"
+    description: str = ""
+    id_columns: list[str] = Field(default_factory=list)
+    time_columns: list[dict] = Field(default_factory=list)
+    column_notes: dict[str, str] = Field(default_factory=dict)
+    confidence: float = 0.9
 
 
 def call_llm(prompt: str, system: str = "You are a helpful assistant.") -> str:
@@ -67,22 +95,19 @@ def call_llm(prompt: str, system: str = "You are a helpful assistant.") -> str:
 
 
 def transform_to_structured_data(raw_text: str, expected_type: type = dict) -> Any | None:
-    """
-    LLM 수신 응답 텍스트(raw_text)를 수용하여 정규 JSON Dict/List 객체로 변환하는 전용 변환기(Multi-Format Transformer).
-    JSON ➔ YAML ➔ Key-Value/화살표 ➔ CSV 순으로 다각도 구조 변환을 시도하며, 스키마 검증 실패 시 None을 반환한다.
-    """
+    """LLM 수신 응답 텍스트(raw_text)를 정규 JSON Dict/List 객체로 변환하는 변환기."""
     if not raw_text or not isinstance(raw_text, str):
         return None
 
     cleaned = raw_text.strip()
 
-    # 1. 마크다운 코드 블록(```json ... ``` 또는 ``` ... ```) 정제
+    # 1. 마크다운 코드 블록 태그 정제
     if cleaned.startswith("```"):
         lines = cleaned.splitlines()
         if len(lines) >= 2 and lines[-1].strip().startswith("```"):
             cleaned = "\n".join(lines[1:-1]).strip()
 
-    # 2. 규격 JSON 파싱 시도
+    # 2. 규격 JSON 파싱
     try:
         data = json.loads(cleaned)
         if isinstance(data, expected_type):
@@ -90,16 +115,16 @@ def transform_to_structured_data(raw_text: str, expected_type: type = dict) -> A
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # 3. YAML 변환 시도 (LLM이 인덴트/목록 형태로 응답한 경우)
+    # 3. YAML 파싱
     try:
         yaml_data = yaml.safe_load(cleaned)
         if isinstance(yaml_data, expected_type):
-            logger.info("[Transformer] YAML 응답 텍스트를 성공적으로 구조체로 변환함")
+            logger.info("[Transformer] YAML 응답을 성공적으로 구조체로 변환함")
             return yaml_data
     except Exception:
         pass
 
-    # 4. Key-Value / 화살표 (->, =>, :, =) 라인 정규식 파싱 시도 (dict 전용)
+    # 4. Key-Value / 화살표 (->, =>, :, =) 라인 파싱 (dict 전용)
     if expected_type is dict:
         kv_result = {}
         pattern = re.compile(r"^\s*[-*]?\s*[`'\"]?(\w+)[`'\"]?\s*(?:->|=>|:|=)\s*[`'\"]?(\w+)[`'\"]?", re.MULTILINE)
@@ -110,7 +135,7 @@ def transform_to_structured_data(raw_text: str, expected_type: type = dict) -> A
             logger.info(f"[Transformer] Key-Value/화살표 문장 {len(kv_result)}개를 성공적으로 Dict로 변환함")
             return kv_result
 
-        # 5. CSV / Tab 구분 라인 파싱 시도
+        # 5. CSV / Tab 구분 라인 파싱
         csv_result = {}
         for line in cleaned.splitlines():
             parts = re.split(r"[,;\t]+", line.strip())
@@ -126,10 +151,40 @@ def transform_to_structured_data(raw_text: str, expected_type: type = dict) -> A
     return None
 
 
+def validate_or_transform_pydantic(raw_text: str, pydantic_cls: type[T]) -> Optional[T]:
+    """
+    Pydantic 스키마 검증 ➔ 실패 시 Multi-Format Transformer ➔ Pydantic 스키마 재검증 4단계 파이프라인.
+    """
+    if not raw_text:
+        return None
+
+    # 1. Pydantic 직접 검증 시도
+    try:
+        cleaned = raw_text.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if len(lines) >= 2 and lines[-1].strip().startswith("```"):
+                cleaned = "\n".join(lines[1:-1]).strip()
+        return pydantic_cls.model_validate_json(cleaned)
+    except Exception:
+        pass
+
+    # 2. 다중 변환기(JSON/YAML/KV/CSV) 시도
+    transformed = transform_to_structured_data(raw_text, expected_type=dict)
+    if transformed and isinstance(transformed, dict):
+        try:
+            return pydantic_cls.model_validate(transformed)
+        except Exception as e:
+            logger.warning(f"[PydanticValidator] Transformed dict validation failed for {pydantic_cls.__name__}: {e}")
+
+    logger.warning(f"[PydanticValidator] Failed to validate or transform raw text for {pydantic_cls.__name__}")
+    return None
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print("=== Generator LLM Client Standalone Self-Test ===")
-    sample_markdown_json = "```json\n{\"test_key\": \"test_val\"}\n```"
-    res = transform_to_structured_data(sample_markdown_json)
-    assert res == {"test_key": "test_val"}, f"Expected dict, got {res}"
-    print("[SUCCESS] Transformer self-test passed!")
+    sample_raw = "```yaml\nstructure_type: wide_pivot\nreason: wide format\n```"
+    res = validate_or_transform_pydantic(sample_raw, ExtractionStructureResponse)
+    assert res is not None and res.structure_type == "wide_pivot", f"Failed: {res}"
+    print("[SUCCESS] Pydantic validator & transformer self-test passed!")

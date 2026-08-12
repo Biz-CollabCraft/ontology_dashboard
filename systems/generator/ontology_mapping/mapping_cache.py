@@ -2,8 +2,8 @@
 mapping_cache.py
 
 담당 기능:
-- 온톨로지 매핑 레코드(`MappingRecord`) 및 영속 저장소(`MappingStore`) 모듈.
-- 프로세스 전역에서 단일 저장소(싱글톤)로 동작하며 mapping_cache.json 파일과의 동기화를 관리한다.
+- 온톨로지 매핑 레코드(`MappingRecord`) 및 절대 경로 영속 저장소(`MappingStore`) 모듈.
+- 프로세스 전역에서 단일 저장소(싱글톤)로 동작하며 프로젝트 루트 하위 ontology/mapping_cache.json 파일과의 동기화를 관리한다.
 
 입력:
 - source_field(str): 소스 데이터셋 컬럼명
@@ -16,19 +16,22 @@ mapping_cache.py
 
 의존 모듈:
 - pydantic.BaseModel: 매핑 레코드 스키마 정의
-- json: 매핑 캐시 파일 입출력
+- json, os: 매핑 캐시 절대 경로 입출력
 
 예외/경계 상황:
-- 매핑 캐시 파일(ontology/mapping_cache.json) 미존재 시 빈 매핑으로 초기화한다.
+- 매핑 캐시 파일 미존재 시 빈 매핑으로 초기화한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '온톨로지 싱글톤 캐시' 원칙에 따라 동일 컬럼에 대한 일관된 매핑 상태를 메모리에서 공유한다.
+- docs/architecture.md의 '절대 경로 온톨로지 캐시' 원칙에 따라 CWD에 독립적으로 캐시를 읽고 저장한다.
 """
 
 import json
 import os
 from pydantic import BaseModel
 from typing import Dict, Optional
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+MAPPING_CACHE_PATH = os.path.join(ROOT_DIR, "ontology", "mapping_cache.json")
 
 
 class MappingRecord(BaseModel):
@@ -58,7 +61,7 @@ class MappingStore:
     def get_all(self):
         return self._mappings
 
-    def load_from_file(self, path: str):
+    def load_from_file(self, path: str = MAPPING_CACHE_PATH):
         if not os.path.exists(path):
             return
         with open(path, "r", encoding="utf-8") as f:
@@ -66,7 +69,7 @@ class MappingStore:
         for source_field, v in data.items():
             self._mappings[source_field] = MappingRecord(source_field=source_field, **v)
 
-    def save_to_file(self, path: str):
+    def save_to_file(self, path: str = MAPPING_CACHE_PATH):
         data = {
             k: {
                 "target_ontology": v.target_ontology,
@@ -82,7 +85,6 @@ class MappingStore:
 
 
 _singleton_instance: Optional["MappingStore"] = None
-MAPPING_CACHE_PATH = "ontology/mapping_cache.json"
 
 
 def get_mapping_store() -> "MappingStore":

@@ -3,8 +3,7 @@ extraction_agent.py
 
 담당 기능:
 - 원본 파일의 헤더와 샘플 행(최대 5행)을 LLM에 전달해 구조를 2단계로 판별한다.
-  1단계는 tabular_column_as_attribute / tabular_row_as_attribute / wide_pivot / unsupported 중 하나로 구조를 분류하고,
-  2단계는 실제로 추출할 컬럼 목록을 선정한다. 두 판단은 서로 다른 LLM 호출로 분리되어 있다.
+- Pydantic 스키마 검증기(ExtractionStructureResponse, ExtractionColumnsResponse)를 통해 1단계 구조 분류 및 2단계 컬럼 목록을 엄격히 검증하여 산출한다.
 
 입력:
 - filepath(str): 원본 데이터셋 파일 경로
@@ -14,23 +13,28 @@ extraction_agent.py
 - dict: {"filepath": str, "filename": str, "fingerprint": str, "structure_type": str, "selected_columns": list[str]}
 
 의존 모듈:
-- systems.generator.generator_llm_client.call_llm: LLM 호환 클라이언트.
+- systems.generator.generator_llm_client: call_llm, validate_or_transform_pydantic, ExtractionStructureResponse, ExtractionColumnsResponse.
 - extraction_cache.py: fingerprint 기반 캐시 로드/저장.
 - pandas: 엑셀 및 CSV 샘플 프리뷰 파싱.
 
 예외/경계 상황:
 - unsupported 구조 타입 감지 시 NotImplementedError 발생.
-- LLM 호출 실패 시 기본값(tabular_column_as_attribute 및 전체 컬럼)으로 안전하게 폴백한다.
+- LLM 서비스 장애 또는 파싱 실패 시 기본값으로 안전하게 폴백한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '판단 단계 분리' 원칙에 따라 구조 판별과 컬럼 선택을 개별 프롬프트 단계로 구별한다.
+- docs/architecture.md의 '판단 단계 분리' 및 '타입 안전 검증' 원칙에 따른다.
 """
 
 import os
 import json
 import logging
 import pandas as pd
-from systems.generator.generator_llm_client import call_llm, transform_to_structured_data
+from systems.generator.generator_llm_client import (
+    call_llm,
+    validate_or_transform_pydantic,
+    ExtractionStructureResponse,
+    ExtractionColumnsResponse,
+)
 from systems.generator.extraction.extraction_cache import (
     load_plan_cache,
     save_plan_cache,
@@ -55,8 +59,8 @@ def classify_structure(filepath: str, df_preview: pd.DataFrame) -> str:
 
     try:
         raw_res = call_llm(prompt, system=system_prompt)
-        parsed = transform_to_structured_data(raw_res, expected_type=dict) or {}
-        st_type = parsed.get("structure_type", "tabular_column_as_attribute")
+        res = validate_or_transform_pydantic(raw_res, ExtractionStructureResponse)
+        st_type = res.structure_type if res else "tabular_column_as_attribute"
         logger.info(f"[ExtractionPlanner] Stage 1 structure classification for '{filepath}': {st_type}")
         return st_type
     except Exception as e:
@@ -80,8 +84,8 @@ def plan_extraction(filepath: str, structure_type: str, df_preview: pd.DataFrame
 
     try:
         raw_res = call_llm(prompt, system=system_prompt)
-        parsed = transform_to_structured_data(raw_res, expected_type=dict) or {}
-        cols = parsed.get("selected_columns", list(df_preview.columns))
+        res = validate_or_transform_pydantic(raw_res, ExtractionColumnsResponse)
+        cols = res.selected_columns if res and res.selected_columns else list(df_preview.columns)
         logger.info(f"[ExtractionPlanner] Stage 2 column selection for '{filepath}': {cols}")
         return cols
     except Exception as e:
