@@ -1,8 +1,8 @@
 # ADR-002: Training과 Runtime Prediction 소유권 분리 및 Feature History Execution
 
-- **상태**: Accepted (의사결정 완료)
+- **상태**: Proposed (제안 — 목표 계약)
 - **날짜**: 2026-08-12
-- **결정자**: 팀 공통
+- **결정자**: 팀 공통 (검토 진행 중)
 
 ---
 
@@ -26,5 +26,18 @@
 
 ## 3. 결과 및 영향 (Consequences)
 
-- Training과 Runtime Inference 간 Feature Parity가 보장된다.
-- Backend artifact validator 및 observation 조회 범위에 `history_requirement.json` 로직이 반영되어야 한다.
+- `history_requirement.json`은 Feature Parity에 필요한 **입력 이력 조건**
+  (partition, order, minimum rows, lookback)을 정의한다. 실제 수치 재현
+  parity는 이것만으로 보장되지 않는다.
+- 완전한 parity는 다음이 추가로 확정되어야 보장된다: rolling `min_periods`,
+  std `ddof`, EMA `adjust`, NaN/drop 정책, timestamp 중복 순서, dtype 변환,
+  categorical preprocessing, transform executor 버전. 이 파라미터 집합은
+  `feature_schema.json`의 각 feature 항목에 포함시키거나(권장), 별도
+  versioned transform specification 문서로 분리한다.
+- parity 보장 여부는 선언이 아니라 **golden-vector contract test**(고정된
+  입력 → generator 산출 feature 벡터와 Backend 재현 feature 벡터가 완전
+  일치하는지 비교하는 테스트)로 검증한다. 이 테스트가 없으면 parity가
+  "보장"되었다고 표기하지 않는다.
+- 피처 덮어쓰기 충돌(Invariant 17 위반) 문제는 해결된다.
+- PR #21의 `feature_builder.py` 피처 생성기 및 피처 명칭 수정이 필요하며,
+  기존 NPY 캐시와의 마이그레이션이 필요하다.

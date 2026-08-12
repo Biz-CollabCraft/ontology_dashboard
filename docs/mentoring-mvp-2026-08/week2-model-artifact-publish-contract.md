@@ -81,12 +81,36 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
 
 ---
 
-## 7. Checksum 검증
+## 7. Manifest `artifact_files`와 Checksum 검증
 
-- `manifest.json`의 `checksum`은 `model.*` 파일에 대해 계산한 SHA-256 값이다.
-- consumer(Backend `artifact_provider.py`)는 로드 전 이 checksum을 실제 파일과
-  대조해 검증한다. 불일치 시 명시적으로 실패시키고 임의의 sibling 파일로
+`artifact_files`는 파일별 checksum을 갖는 객체 배열이다. 단일 `checksum`
+필드가 아니다 — 이는 이미 Backend `artifact_provider.py`가 요구하는 형식이다.
+
+```json
+{
+  "artifact_files": [
+    { "role": "model", "path": "model.joblib", "sha256": "..." },
+    { "role": "feature_schema", "path": "feature_schema.json", "sha256": "..." },
+    { "role": "label_schema", "path": "label_schema.json", "sha256": "..." },
+    { "role": "history_requirement", "path": "history_requirement.json", "sha256": "..." },
+    { "role": "metrics", "path": "metrics.json", "sha256": "..." }
+  ]
+}
+```
+
+- `role: "model"`, `role: "feature_schema"`는 Backend가 이미 필수로 요구한다
+  (`artifact_provider.py`의 `required_role` 검사).
+- `label_schema`, `history_requirement`, `metrics`도 이번 계약으로 필수
+  `artifact_files` 항목에 추가한다. Backend의 필수 role 목록도 함께 갱신한다
+  (PR #22와 Backend 측 변경을 함께 진행).
+- consumer는 `artifact_files`에 선언된 **모든 파일**에 대해 개별 SHA-256을
+  검증한다. 하나라도 불일치하면 명시적으로 실패시키고 임의의 sibling 파일로
   대체하지 않는다.
+- 신규 필수 파일(`label_schema.json`, `history_requirement.json`) 도입에
+  따라 `artifact_schema_version`을 올릴지 여부를 결정한다 (현재
+  `model-artifact-v1.0`). 필드 추가만으로는 하위 호환이 깨지지 않는다면
+  버전을 유지할 수 있으나, Backend의 필수 role 검사가 늘어나는 것은 호환성
+  변경이므로 팀 확인 후 결정한다.
 
 ---
 
@@ -106,5 +130,9 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
 - [ ] 동일 `model_version` 재publish가 명시적으로 실패한다.
 - [ ] publish 도중 예외 발생 시 목적지에 부분 결과가 남지 않는다 (atomic).
 - [ ] publish 실패 시 run registry가 갱신되지 않는다.
-- [ ] Backend `artifact_provider.py`가 checksum 불일치 시 명시적으로 실패한다.
+- [ ] `artifact_files`의 모든 항목(`model`, `feature_schema`, `label_schema`,
+      `history_requirement`, `metrics`)이 개별 SHA-256으로 검증된다.
+- [ ] Backend `artifact_provider.py`의 필수 role 목록이 `label_schema`,
+      `history_requirement`를 포함하도록 갱신된다.
+- [ ] `artifact_schema_version` 유지/변경 여부가 팀 결정으로 기록된다.
 - [ ] 기존 공개 파사드 심볼이 유지되어 기존 import가 깨지지 않는다.

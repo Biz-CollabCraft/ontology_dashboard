@@ -1,8 +1,8 @@
 # ADR-001: Unified Feature Contract 및 Feature Naming 명세
 
-- **상태**: Accepted (의사결정 완료, PR #21~#22 수용 진행 중)
+- **상태**: Proposed (제안 — 목표 계약)
 - **날짜**: 2026-08-12
-- **결정자**: 팀 공통
+- **결정자**: 팀 공통 (검토 진행 중)
 
 ---
 

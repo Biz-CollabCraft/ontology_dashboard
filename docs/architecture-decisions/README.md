@@ -4,5 +4,7 @@
 
 ## 목록
 
-- [ADR-001: Unified Feature Contract 및 Feature Naming 명세](./ADR-001-unified-feature-contract.md)
-- [ADR-002: Training과 Runtime Prediction 소유권 분리 및 Feature History Execution](./ADR-002-training-runtime-prediction-ownership.md)
+| ADR 번호 | 제목 | 상태 |
+|---|---|---|
+| [ADR-001](./ADR-001-unified-feature-contract.md) | Unified Feature Contract 및 Feature Naming 명세 | Proposed (제안) |
+| [ADR-002](./ADR-002-training-runtime-prediction-ownership.md) | Training과 Runtime Prediction 소유권 분리 및 Feature History Execution | Proposed (제안) |
