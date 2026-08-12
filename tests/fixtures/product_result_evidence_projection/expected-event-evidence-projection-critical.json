@@ -1,22 +1,37 @@
 {
   "schema_version": "event-evidence-projection-v1",
   "contract_type": "event_evidence_projection",
-  "event_id": "EVT-PDM-REF-004",
-  "scenario_id": "PDM-REF-004",
+  "event_id": "EVT-RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
+  "scenario_id": null,
   "subject": {
     "equipment_id": "CMP-S03-L03-01",
-    "display_name": "압축기 S03-L03-01",
-    "line": "S03-L03",
-    "criticality": "high",
-    "assigned_engineer": "최민호"
+    "display_name": "CMP-S03-L03-01",
+    "asset_type": "compressor"
+  },
+  "artifact_reference": {
+    "evidence_payload_reference": {
+      "source": "product_result_artifact",
+      "reference": "producer-enriched-critical",
+      "generated_by": "app.diagnosis.producer_boundary_pending"
+    }
   },
   "assessment": {
     "status": "critical",
     "recommended_decision": "review_shutdown",
-    "confidence": "medium",
+    "confidence": "high",
     "failure_probability": 0.92,
     "threshold": 0.65,
-    "predicted_failure_type": "power_or_overstrain_failure"
+    "predicted_failure_type": "power_or_overstrain_failure",
+    "top_factors": [
+      {
+        "rank": 1,
+        "feature": "rotation_raw",
+        "feature_value": 1820.0,
+        "signed_contribution": 0.42,
+        "direction": "risk_up",
+        "explanation_method": "deterministic_component_score"
+      }
+    ]
   },
   "report_projection": {
     "sensor_cards": [
