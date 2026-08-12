@@ -32,15 +32,15 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
     if not isinstance(payload, dict):
         raise ValueError("Product Result Artifact evidence_payload is required for Event Evidence projection")
     provenance = clean_artifact.get("provenance", {})
-    event_id = payload.get("event_id") or f"EVT-{clean_artifact['artifact_id']}"
-    threshold = payload.get("threshold")
+    event_id = clean_artifact.get("event_id") or f"EVT-{clean_artifact['artifact_id']}"
+    threshold = clean_artifact.get("decision_threshold")
     recommended_decision = _recommended_decision(clean_artifact)
     projection = {
         "schema_version": EVENT_EVIDENCE_SCHEMA_VERSION,
         "contract_type": EVENT_EVIDENCE_CONTRACT_TYPE,
         "event_id": event_id,
-        "scenario_id": payload.get("scenario_id"),
-        "subject": _subject(clean_artifact, payload),
+        "scenario_id": clean_artifact.get("scenario_id"),
+        "subject": _subject(clean_artifact),
         "artifact_reference": {
             "artifact_id": clean_artifact.get("artifact_id"),
             "artifact_type": clean_artifact.get("artifact_type"),
@@ -60,8 +60,8 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
             "failure_probability": clean_artifact.get("failure_probability"),
             "threshold": threshold,
             "predicted_failure_type": clean_artifact.get("predicted_failure_type"),
-            "top_factors": payload.get("top_factors", []),
-            "data_quality_warnings": payload.get("data_quality_warnings", []),
+            "top_factors": clean_artifact.get("top_factors", []),
+            "data_quality_warnings": clean_artifact.get("data_quality_warnings", []),
         },
         "report_projection": {
             "display_labels": {
@@ -83,16 +83,16 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
             "source_type": provenance.get("source_type"),
             "model_artifact": provenance.get("model_artifact"),
             "lineage": {
-                **(payload.get("lineage", {}) or {}),
-                "observation": payload.get("observation", {}),
-                "history": payload.get("history", []),
-                "detected_interval": payload.get("detected_interval"),
-                "policy_version": (payload.get("model") or {}).get("policy_version"),
-                "model_mode": (payload.get("model") or {}).get("mode"),
+                **(clean_artifact.get("lineage", {}) or {}),
+                "observation": clean_artifact.get("observation", {}),
+                "history": clean_artifact.get("history", []),
+                "detected_interval": clean_artifact.get("detected_interval"),
+                "policy_version": clean_artifact.get("policy_version"),
+                "model_mode": clean_artifact.get("model_mode"),
             },
         },
         "limitations": _limitations(clean_artifact, payload),
-        "generated_at": payload.get("generated_at") or clean_artifact.get("observed_at"),
+        "generated_at": clean_artifact.get("generated_at") or clean_artifact.get("observed_at"),
     }
     return _strip_hidden(projection)
 
@@ -133,7 +133,11 @@ def event_evidence_projection_to_legacy_evidence(evidence: dict[str, Any]) -> di
         "history": lineage.get("history", []),
         "detected_interval": lineage.get("detected_interval")
         or {"start": artifact_reference.get("observed_at"), "end": artifact_reference.get("observed_at")},
-        "top_factors": assessment.get("top_factors", []),
+        "top_factors": [
+            factor
+            for factor in assessment.get("top_factors", [])
+            if isinstance(factor, dict) and "evidence_field_id" in factor
+        ],
         "maintenance_context": maintenance_context,
         "data_quality_warnings": assessment.get("data_quality_warnings", []),
         "lineage": {
@@ -226,10 +230,7 @@ def _probability_label(value: Any) -> str:
     return f"{float(value) * 100:.1f}%"
 
 
-def _subject(artifact: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    equipment = payload.get("equipment") or {}
-    if equipment:
-        return equipment
+def _subject(artifact: dict[str, Any]) -> dict[str, Any]:
     return {
         "equipment_id": artifact.get("asset_id"),
         "display_name": artifact.get("asset_id"),
@@ -242,7 +243,7 @@ def _limitations(artifact: dict[str, Any], payload: dict[str, Any]) -> list[str]
         "예측 결과는 고장 확정이 아니라 점검 우선순위 근거다.",
         "권장 조치는 자동 제어가 아니라 사람의 검토를 요구한다.",
     ]
-    if payload.get("data_quality_warnings"):
+    if artifact.get("data_quality_warnings"):
         limitations.append("데이터 품질 경고가 있어 해석에 제한이 있다.")
     if artifact.get("status_grade") == "data_quality_hold":
         limitations.append("센서 데이터 확인 전까지 위험 판단을 보류한다.")

@@ -177,6 +177,8 @@ Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 - `evidence_payload.evidence_gaps[]`: producer가 산출할 수 없는 값의 명시적 결손 기록
 - `provenance.evidence_payload_reference`: 근거 산출 기준과 reference fixture 비교 기준
 
+`evidence_payload`는 위 7개 후보 필드로 제한한다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다.
+
 공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다.
 
 Producer에 올리지 않는 필드는 다음 기준으로 처리한다.
@@ -390,6 +392,21 @@ def build_source_fields(result: GovernedProductResult, evidence_payload: dict) -
     ...
 ```
 
+Producer 이관 Notes:
+
+projection cleanup에서 삭제한 이전 transition helper의 산출 규칙은 폐기된 것이 아니라 step 8 producer 구현의 회수 대상이다. 특히 다음 규칙은 `systems/backend/app/diagnosis` 경계로 옮기며, 구현 위치는 step 7에서 `evidence.py` 내부 helper 또는 `evidence_enrichment.py`로 확정한다.
+
+| 회수 대상 규칙 | producer 회수처 | 회귀 테스트 |
+|---|---|---|
+| 센서 표시명·단위 매핑. 기존 `SENSOR_DISPLAY` 전체와 `contracts.py`의 `DISPLAY_NAMES`/`UNITS` 중복을 정리 | `build_sensor_evidence()` 또는 공용 diagnosis contract | sensor evidence payload contract test |
+| feature → component_id/component_label 매핑. 기존 `COMPONENT_HINTS` 의미 보존 | `derive_component_hypotheses()` | component hypothesis semantic regression |
+| top factor 정규화. `signed_contribution < 0`이면 `risk_down`, contribution normalization 보존 | `build_product_result_evidence_payload()`의 top factor builder | `signed_contribution` 방향 폴백 test |
+| bool 관측값을 numeric sensor로 오인하지 않는 방어 | `build_sensor_evidence()` | boolean observation exclusion test |
+| recommended action grounding. `immediate_inspection_and_stop_review`는 사람이 승인하는 shutdown review이지 자동 제어가 아님 | producer action/source-field builder와 projection decision mapper | recommended action basis/decision test |
+| source field grounding. factor, sensor, recommended action basis가 producer source field ID로 연결됨 | `build_source_fields()` | source field grounding test |
+
+이 목록은 PR #18 이후 cleanup에서 projection layer의 산출 책임을 제거하며 생긴 이관 목록이다. 이전 fix 커밋에서 고친 부호 방향 폴백, factor grounding, action grounding 버그를 producer 구현에서 반복하지 않기 위해 step 8 완료 조건에 포함한다.
+
 Dashboard projection 후보 함수는 다음과 같다.
 
 ```python
@@ -592,8 +609,8 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 1 | Done | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` reference fixture를 추가한다. | 최소 fixture set | `tests/fixtures/product_result_evidence_projection/`, `data/fixtures/GS-*.json` |
-| 2 | Done | Product Result Artifact `evidence_payload` 후보 shape를 producer-enriched Artifact regression fixture로 고정한다. | expected fixture 또는 schema candidate | `tests/test_product_result_evidence_projection.py::test_product_result_artifact_to_event_evidence_projection_matches_expected_reference_slice` |
+| 1 | Done | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` semantic regression reference를 추가한다. | 최소 fixture set | `tests/fixtures/product_result_evidence_projection/`, `data/fixtures/GS-*.json` |
+| 2 | Done | Product Result Artifact `evidence_payload` 후보 shape를 producer-enriched Artifact regression fixture로 고정한다. | expected fixture 또는 schema candidate | `tests/fixtures/product_result_evidence_projection/producer-enriched-critical-artifact.json` |
 | 3 | Done | Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다. | canonical projection expected fixture | `tests/fixtures/product_result_evidence_projection/expected-event-evidence-projection-critical.json` |
 | 4 | Done | `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 구현한다. | transition projection mapper | `pytest -q tests/test_product_result_evidence_projection.py` |
 | 5 | Done | Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다. | canonical + legacy regression test | `pytest -q tests/test_product_result_evidence_projection.py tests/test_system_ownership.py` |
@@ -613,11 +630,20 @@ Status 값은 다음만 사용한다.
 |---:|---|---|---|---|
 | 6 | Todo | 기존 dashboard artifact/evidence와 `pdm-mvp` reference 필드를 producer fact, projection/display field, evidence gap, 후속 도메인 field로 분류한다. | field classification table | 문서/fixture audit 결과 |
 | 7 | Todo | `systems/backend/app/diagnosis`의 producer-side evidence enrichment schema와 ownership을 고정한다. | `evidence_payload` producer contract | schema/contract test 결과 |
-| 8 | Todo | `build_product_result_evidence_payload()`와 sensor/baseline/component/source-field 산출 함수를 추가한다. | producer enrichment module | backend unit test 결과 |
+| 8 | Todo | `build_product_result_evidence_payload()`와 sensor/baseline/component/source-field 산출 함수를 추가하고, cleanup에서 제거된 산출 규칙을 producer로 회수한다. | producer enrichment module | backend unit test 결과 |
 | 9 | Todo | `pdm-mvp` reference fixture와 producer `evidence_payload`의 의미 동등성을 비교한다. 단, 화면/report 표현 필드는 비교 대상에서 제외한다. | semantic regression test | fixture comparison 결과 |
 | 10 | Done | PR #18의 이전 transition helper 의존을 철회하고 dashboard projection이 enriched Artifact만 입력으로 받도록 정리한다. | projection input cleanup | `tests/test_product_result_evidence_projection.py` |
 | 11 | Todo | 공식 판단 필드가 producer 출력 외부 값으로 overwrite되지 않는지 검증한다. | overwrite prevention test | backend test 결과 |
 | 12 | Todo | 산출 불가능한 값이 `0`, `정상`, reference fixture 값, LLM 출력으로 보정되지 않고 `evidence_gap`/`limitations` 또는 후속 도메인 field로 분리되는지 검증한다. | unavailable-field regression test | backend/doc test 결과 |
+
+8.2 Notes:
+
+- step 10은 원래 step 8 이후 cleanup이었지만, projection layer가 reference package를 운영 입력처럼 읽지 못하게 하는 리뷰 리스크를 먼저 제거하기 위해 선행 완료했다.
+- 이 때문에 현재 projection module은 손으로 고정한 `producer-enriched-critical-artifact.json` fixture 외에는 runtime producer 입력을 받지 않는다. 실제 producer 연결은 step 7~9 완료 전까지 구현 완료로 보지 않는다.
+- step 8 producer test에는 boolean 관측값 센서 제외, signed contribution 방향 폴백, source field/action grounding 회귀 테스트를 포함한다.
+- step 11 producer test에는 Product Result Artifact의 공식 판단 필드가 semantic reference fixture 값으로 overwrite되지 않는지 검증한다.
+- projection contract test는 `evidence_payload`가 7개 후보 필드만 갖는지, payload의 `top_factors`/`equipment`가 실수로 들어와도 root 공식 판단 필드와 artifact subject를 덮지 않는지 검증한다.
+- `provenance.evidence_payload_reference.generated_by`는 producer helper 모듈 위치가 확정되기 전까지 fixture에서 `app.diagnosis.producer_boundary_pending`으로 둔다. step 7에서 `evidence.py` 또는 `evidence_enrichment.py`가 확정되면 이 값을 갱신한다.
 
 2차 PR 완료 조건은 다음과 같다.
 

@@ -5,16 +5,14 @@
   "scenario_id": "PDM-REF-004",
   "subject": {
     "equipment_id": "CMP-S03-L03-01",
-    "display_name": "압축기 S03-L03-01",
-    "line": "S03-L03",
-    "criticality": "high",
-    "assigned_engineer": "최민호"
+    "display_name": "CMP-S03-L03-01",
+    "asset_type": "compressor"
   },
   "artifact_reference": {
     "evidence_payload_reference": {
       "source": "product_result_artifact",
       "reference": "producer-enriched-critical",
-      "generated_by": "systems.backend.app.diagnosis.evidence"
+      "generated_by": "app.diagnosis.producer_boundary_pending"
     }
   },
   "assessment": {
@@ -26,15 +24,12 @@
     "predicted_failure_type": "power_or_overstrain_failure",
     "top_factors": [
       {
-        "evidence_field_id": "factor.1.rotation_raw",
+        "rank": 1,
         "feature": "rotation_raw",
-        "display_name": "회전 상태",
-        "value": 1820.0,
-        "unit": "rpm",
-        "normal_range": "baseline z-score -2.0..2.0",
+        "feature_value": 1820.0,
+        "signed_contribution": 0.42,
         "direction": "risk_up",
-        "contribution": 0.42,
-        "source_type": "observed"
+        "explanation_method": "deterministic_component_score"
       }
     ]
   },
