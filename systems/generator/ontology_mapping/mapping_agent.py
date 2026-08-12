@@ -37,7 +37,11 @@ from systems.generator.ontology_mapping.mapping_cache import (
     MAPPING_CACHE_PATH,
     get_mapping_store,
 )
-from systems.generator.generator_llm_client import call_llm, transform_to_structured_data
+from systems.generator.generator_llm_client import (
+    call_llm,
+    validate_or_transform_pydantic,
+    ColumnMappingResponse,
+)
 from systems.generator.extraction.extraction_profiler import load_family_registry
 
 logger = logging.getLogger(__name__)
@@ -106,12 +110,12 @@ def map_column(column_name: str, sample_values: list, store: MappingStore, file_
     try:
         raw = call_llm(prompt, system=system_prompt)
         logger.debug(f"[MappingAgent] LLM raw response for '{column_name}': {raw}")
-        parsed = transform_to_structured_data(raw, expected_type=dict)
+        parsed = validate_or_transform_pydantic(raw, ColumnMappingResponse)
         if not parsed:
-            raise ValueError(f"Failed to transform LLM response to valid structured data: '{raw[:100]}'")
-        target = parsed.get("ontology_node", "Unknown")
-        confidence = float(parsed.get("confidence", 0.5))
-        reason = parsed.get("reason", "")
+            raise ValueError(f"Failed to validate or transform LLM response: '{raw[:100]}'")
+        target = parsed.ontology_node
+        confidence = float(parsed.confidence)
+        reason = parsed.reason or ""
     except Exception as e:
         logger.warning(f"[MappingAgent] LLM mapping inference failed for '{column_name}': {e}. Applying heuristic fallback.")
         # Heuristic fallback for standard sensor column names

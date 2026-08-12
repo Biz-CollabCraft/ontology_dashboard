@@ -3,7 +3,7 @@ extraction_profiler.py
 
 담당 기능:
 - Stage 0 소스 데이터셋 파일 역할(role) 및 계열 메타데이터 프로파일링 모듈.
-- LLM을 사용하여 소스 파일의 데이터셋 역할(telemetry_sensor, failure_event 등), 계열 시그니처, 시간/식별자 컬럼 세맨틱을 자동 프로파일링하고 source_family_registry.json에 저장한다.
+- LLM 및 Pydantic 스키마 검증기(FileProfileResponse)를 사용하여 소스 파일의 역할, 계열 시그니처, 타임스탬프 세맨틱을 프로파일링하고 source_family_registry.json에 저장한다.
 
 입력:
 - data_dir(str): 소스 데이터셋 디렉토리 경로
@@ -13,14 +13,14 @@ extraction_profiler.py
 - registry(dict): 파일명 키별 프로파일링 메타데이터 딕셔너리
 
 의존 모듈:
-- systems.generator.generator_llm_client.call_llm: 프로파일링 프롬프트 전달.
+- systems.generator.generator_llm_client.call_llm, validate_or_transform_pydantic, FileProfileResponse: 프로파일링 및 스키마 검증.
 - pandas: 데이터셋 헤더 및 샘플 10행 파싱.
 
 예외/경계 상황:
-- LLM 서비스 장애 또는 네트워크 실패 시 룰 기반(Rule-based) 프로파일링 폴백으로 안전하게 가동한다.
+- LLM 장애 또는 파싱 실패 시 룰 기반(Rule-based) 프로파일링 폴백으로 안전하게 가동한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 'Stage 0 동적 계열 분류' 원칙에 따라 데이터셋 파일명을 하드코딩하지 않고 데이터 의미 기반으로 분류한다.
+- docs/architecture.md의 'Stage 0 동적 계열 분류' 및 '절대 경로 캐시' 원칙에 따른다.
 """
 
 import os
@@ -28,11 +28,16 @@ import json
 import logging
 from datetime import datetime, timezone
 import pandas as pd
-from systems.generator.generator_llm_client import call_llm, transform_to_structured_data
+from systems.generator.generator_llm_client import (
+    call_llm,
+    validate_or_transform_pydantic,
+    FileProfileResponse,
+)
 
 logger = logging.getLogger(__name__)
 
-FAMILY_REGISTRY_PATH = "data_preprocessed/source_family_registry.json"
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+FAMILY_REGISTRY_PATH = os.path.join(ROOT_DIR, "data_preprocessed", "source_family_registry.json")
 
 ID_CANDIDATES = ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]
 TIME_CANDIDATES = [
@@ -80,26 +85,26 @@ def profile_source_file_with_llm(filepath: str, filename: str, df_preview: pd.Da
 
     try:
         raw_res = call_llm(user_prompt, system=system_prompt)
-        parsed = transform_to_structured_data(raw_res, expected_type=dict)
-        if not parsed:
-            raise ValueError(f"Failed to transform LLM response to valid structured data: '{raw_res[:100]}'")
+        profile_res = validate_or_transform_pydantic(raw_res, FileProfileResponse)
+        if not profile_res:
+            raise ValueError(f"Pydantic profile validation failed for raw: '{raw_res[:100]}'")
 
-        confidence = float(parsed.get("confidence", 0.90))
+        confidence = profile_res.confidence
         status = "auto_confirmed" if confidence >= 0.7 else "pending"
 
         id_col, time_col = infer_key_signature(all_columns)
         family_id = compute_family_id(id_col, time_col)
 
-        col_notes = parsed.get("column_notes", {})
+        col_notes = profile_res.column_notes
         for col in all_columns:
             if col not in col_notes:
                 col_notes[col] = "일반 속성 컬럼"
 
-        time_cols_parsed = parsed.get("time_columns", [])
+        time_cols_parsed = profile_res.time_columns
         if not time_cols_parsed and time_col:
             time_cols_parsed = [{"name": time_col, "semantic": "timestamp"}]
 
-        id_cols_parsed = parsed.get("id_columns", [])
+        id_cols_parsed = profile_res.id_columns
         if not id_cols_parsed and id_col:
             id_cols_parsed = [id_col]
 
@@ -107,8 +112,8 @@ def profile_source_file_with_llm(filepath: str, filename: str, df_preview: pd.Da
             "family_id": family_id,
             "id_col": id_col,
             "time_col": time_col,
-            "role": parsed.get("role", "unknown"),
-            "description": parsed.get("description", f"Data source for {filename}"),
+            "role": profile_res.role,
+            "description": profile_res.description or f"Data source for {filename}",
             "all_columns": all_columns,
             "id_columns": id_cols_parsed,
             "time_columns": time_cols_parsed,

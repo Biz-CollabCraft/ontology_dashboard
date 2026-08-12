@@ -2,8 +2,8 @@
 extraction_cache.py
 
 담당 기능:
-- 추출 계획(Extraction Plan) 캐시 관리 모듈.
-- 소스 파일 샘플 데이터프레임의 md5 fingerprint 해시값을 기반으로 기존 추출 계획을 캐싱하고 조회/저장한다.
+- 추출 계획(Extraction Plan) 절대 경로 기반 캐시 관리 모듈.
+- 소스 파일 샘플 데이터프레임의 md5 fingerprint 해시값을 기반으로 기존 추출 계획을 캐싱하고 절대 경로에서 조회/저장한다.
 
 입력:
 - df_preview(pd.DataFrame): 파일의 프리뷰 데이터프레임 (fingerprint 계산용)
@@ -16,12 +16,13 @@ extraction_cache.py
 의존 모듈:
 - pandas: 데이터프레임 프리뷰 파싱 및 json 변환
 - hashlib: md5 해시 산출
+- os, json, logging
 
 예외/경계 상황:
-- 캐시 파일(data_preprocessed/extraction_plan_cache.json)이 없거나 파싱 실패 시 빈 딕셔너리를 반환하며 새로 생성한다.
+- 캐시 파일(data_preprocessed/extraction_plan_cache.json) 미존재 또는 파싱 실패 시 빈 딕셔너리를 반환하며 새로 생성한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '결과 재사용 및 LLM 비용 최적화' 원칙에 따라 동일 구조 파일의 불필요한 재분석을 방지한다.
+- docs/architecture.md의 '절대 경로 결합' 원칙에 따라 프로세스 실행 CWD와 무관하게 일관된 캐시 디렉토리를 참조한다.
 """
 
 import os
@@ -32,7 +33,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-EXTRACTION_PLAN_CACHE_PATH = "data_preprocessed/extraction_plan_cache.json"
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+EXTRACTION_PLAN_CACHE_PATH = os.path.join(ROOT_DIR, "data_preprocessed", "extraction_plan_cache.json")
 
 _plan_cache: dict = {}
 _cache_mtime: float = 0.0
@@ -51,7 +53,7 @@ def load_plan_cache() -> dict:
                 _cache_mtime = mtime
                 return _plan_cache
         except Exception as e:
-            logger.warning(f"[ExtractionPlanner] Failed to load plan cache: {e}")
+            logger.warning(f"[ExtractionPlanner] Failed to load plan cache at '{EXTRACTION_PLAN_CACHE_PATH}': {e}")
     _plan_cache = {}
     return _plan_cache
 
