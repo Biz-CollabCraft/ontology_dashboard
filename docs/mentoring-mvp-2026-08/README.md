@@ -46,7 +46,7 @@
 | `week2-frontend-implementation-import.md` | 이관 기준 | 개인 프로토타입에서 팀 저장소로 승격한 실행 소스와 화면 캡처의 provenance |
 | `week2-runtime-ownership-integration.md` | 구현 반영 | PR #8/#10/gen_data #2 책임 계약을 실행 코드에 적용한 기록 |
 | `pdm-evidence-report-ui-integration-plan.md` | 제안 | Product Result Artifact evidence extension과 Artifact-derived Evidence projection 기반 Report UI 이식 계획 |
-| `preventive-what-if-development-plan.md` | 실행 계획·팀 검토 필요 | 위험 상승 분석, 합성 반사실 예방조치, 고장·수리·경제 데이터와 주차별 개발 기준 |
+| `preventive-what-if-development-plan.md` | PR #20 완료·후속 의존성 대기 | 위험 상승 분석 완료 범위, PR #21~#24 재개 조건, 합성 반사실 예방조치 계획 |
 | `preventive-risk-rise-analysis.md` | 구현 기준 | Canonical V3.1 분포, 버전 정책, 위험 상승 사건 탐지 규칙과 입력 매핑 |
 
 ## 기준 자료
@@ -75,3 +75,12 @@
 것이다.
 
 공통 필드명의 최종 단일 기준은 `week2-schema-definition.md`로 한다.
+
+### 예방조치 What-if 현재 상태
+
+- PR #20에서 CNC 위험 상승 탐지, 공구 마모 후보 ranking, 대표 사례와 센서 통계를 완료했다.
+- Baseline/Intervention 생성과 모델 재평가는 PR #21~#24의 Feature·Model·Prediction
+  계약이 main에 최종 반영될 때까지 보류한다.
+- 재개 전에 Feature window/version, immutable model version과 추론 실행 주체를
+  `WIF-DEC-08`~`WIF-DEC-10`으로 확정한다.
+- 상세 상태와 재개 조건은 `preventive-what-if-development-plan.md`를 기준으로 한다.
