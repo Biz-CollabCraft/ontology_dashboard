@@ -53,7 +53,7 @@ REGISTRY_PATH = str(PATHS.registry_json)
 
 
 def _resolve_store_dir(store_dir: str | Path | None = None) -> Path:
-    if store_dir is None or store_dir == "models_store":
+    if store_dir is None:
         return PATHS.models_store
     return Path(store_dir).resolve()
 

@@ -95,14 +95,17 @@ def _select_training_pair(sources: dict) -> tuple[str, str, dict, dict]:
     )
 
 
-def train_all(data_dir: str = "data", store_dir: str = "models_store", force_reanalyze: bool = False) -> dict:
+def train_all(data_dir: str | Path | None = None, store_dir: str | Path | None = None, force_reanalyze: bool = False) -> dict:
     """전체 학습 파이프라인을 수행하고 전역 실행 버전(run_version) 단위로 산출물을 저장한다."""
+    target_data_dir = str(Path(data_dir).resolve()) if data_dir else str(PATHS.data_dir)
+    target_store_dir = Path(store_dir).resolve() if store_dir else PATHS.models_store
+
     logger.info("========================================")
-    logger.info(f"🚀 RUNNING TRAINING PIPELINE (v3): Data Directory = '{data_dir}', force_reanalyze = {force_reanalyze}")
+    logger.info(f"🚀 RUNNING TRAINING PIPELINE (v3): Data Directory = '{target_data_dir}', force_reanalyze = {force_reanalyze}")
     logger.info("========================================")
 
     logger.info(">>> STEP 1: PARSE & EXTRACT SOURCES (Extraction Agent)")
-    sources = load_all_sources(data_dir, force_reanalyze=force_reanalyze)
+    sources = load_all_sources(target_data_dir, force_reanalyze=force_reanalyze)
 
     try:
         from systems.generator.extraction.extraction_writer import persist_raw_extracted
@@ -147,7 +150,7 @@ def train_all(data_dir: str = "data", store_dir: str = "models_store", force_rea
     feature_cols = [c for c in labeled.columns if c not in exclude]
 
     logger.info(">>> STEP 6: TRAIN & SAVE MODELS (전역 실행 버전 v{N})")
-    run_version = get_next_run_version(store_dir=store_dir)
+    run_version = get_next_run_version(store_dir=target_store_dir)
 
     results = {}
     failed_models = {}
@@ -157,12 +160,12 @@ def train_all(data_dir: str = "data", store_dir: str = "models_store", force_rea
             model = cls()
             model.train(labeled, target_col="label", id_col=id_col, time_col=time_col)
 
-            model_dir = os.path.join(store_dir, name)
-            os.makedirs(model_dir, exist_ok=True)
-            model_path = os.path.join(model_dir, f"model_v{run_version}.joblib")
-            model.save(model_path)
+            model_dir = target_store_dir / name
+            model_dir.mkdir(parents=True, exist_ok=True)
+            model_path = model_dir / f"model_v{run_version}.joblib"
+            model.save(str(model_path))
 
-            results[name] = {"path": model_path, "train_positive_rate": train_positive_rate}
+            results[name] = {"path": str(model_path), "train_positive_rate": train_positive_rate}
             logger.info(f"Saved {name} to {model_path}")
         except Exception as e:
             logger.error(f"[TrainAll] 모델 '{name}' 학습/저장 실패, 다른 모델은 계속 진행: {e}")
@@ -173,8 +176,8 @@ def train_all(data_dir: str = "data", store_dir: str = "models_store", force_rea
         raise ValueError(f"모든 모델 학습이 실패했습니다: {failed_models}")
 
     # 학습 실행 전체 공유 산출물을 runs/v{N}/에 저장
-    run_artifacts_dir = os.path.join(store_dir, "runs", f"v{run_version}")
-    os.makedirs(run_artifacts_dir, exist_ok=True)
+    run_artifacts_dir = target_store_dir / "runs" / f"v{run_version}"
+    run_artifacts_dir.mkdir(parents=True, exist_ok=True)
     run_artifacts_meta = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "feature_cols": feature_cols,
@@ -182,10 +185,10 @@ def train_all(data_dir: str = "data", store_dir: str = "models_store", force_rea
         "source_telemetry_key": telemetry_key,
         "source_failures_key": failures_key,
     }
-    with open(os.path.join(run_artifacts_dir, "run_meta.json"), "w", encoding="utf-8") as f:
+    with open(run_artifacts_dir / "run_meta.json", "w", encoding="utf-8") as f:
         json.dump(run_artifacts_meta, f, ensure_ascii=False, indent=2)
 
-    save_run_result(run_version, results, run_artifacts_meta, store_dir=store_dir)
+    save_run_result(run_version, results, run_artifacts_meta, store_dir=target_store_dir)
 
     logger.info(">>> STEP 7: ASSEMBLE SUMMARY RESPONSE")
     summary = {
@@ -214,13 +217,14 @@ def train_all(data_dir: str = "data", store_dir: str = "models_store", force_rea
     }
 
 
-def run_parsing_only(data_dir: str = "data", force_reanalyze: bool = False) -> dict:
+def run_parsing_only(data_dir: str | Path | None = None, force_reanalyze: bool = False) -> dict:
     """학습 파이프라인과 완전히 분리된 파싱 시험 전용 함수."""
+    target_data_dir = str(Path(data_dir).resolve()) if data_dir else str(PATHS.data_dir)
     logger.info("========================================")
-    logger.info(f"🔍 PARSING TEST ONLY (no training): data_dir='{data_dir}', force_reanalyze={force_reanalyze}")
+    logger.info(f"🔍 PARSING TEST ONLY (no training): data_dir='{target_data_dir}', force_reanalyze={force_reanalyze}")
     logger.info("========================================")
 
-    sources = load_all_sources(data_dir, force_reanalyze=force_reanalyze)
+    sources = load_all_sources(target_data_dir, force_reanalyze=force_reanalyze)
 
     try:
         from systems.generator.extraction.extraction_writer import persist_raw_extracted
