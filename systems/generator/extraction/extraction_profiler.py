@@ -28,6 +28,7 @@ import json
 import logging
 from datetime import datetime, timezone
 import pandas as pd
+from systems.generator.generator_config import PATHS
 from systems.generator.generator_llm_client import (
     call_llm,
     validate_or_transform_pydantic,
@@ -36,8 +37,7 @@ from systems.generator.generator_llm_client import (
 
 logger = logging.getLogger(__name__)
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-FAMILY_REGISTRY_PATH = os.path.join(ROOT_DIR, "data_preprocessed", "source_family_registry.json")
+FAMILY_REGISTRY_PATH = PATHS.source_family_registry
 
 ID_CANDIDATES = ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]
 TIME_CANDIDATES = [
@@ -201,7 +201,7 @@ def build_family_registry(data_dir: str, force_reprofile: bool = False) -> dict:
 
 def load_family_registry() -> dict:
     """레지스트리 파일에서 Stage 0 프로파일링 결과를 조회한다."""
-    if not os.path.exists(FAMILY_REGISTRY_PATH):
+    if not FAMILY_REGISTRY_PATH.exists():
         return {}
     with open(FAMILY_REGISTRY_PATH, "r", encoding="utf-8") as f:
         return json.load(f)

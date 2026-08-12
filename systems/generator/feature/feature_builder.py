@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 from systems.generator.ontology_mapping.mapping_cache import MappingStore
 from systems.generator.feature.feature_catalog import load_catalog
+from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,8 @@ def save_features_npy(features_df: pd.DataFrame, out_dir: str, name: str) -> Non
 
     time_col = "observed_at" if "observed_at" in features_df.columns else ("datetime" if "datetime" in features_df.columns else None)
     if time_col:
-        np.save(os.path.join(out_dir, f"{name}_datetime.npy"), features_df[time_col].to_numpy(dtype="datetime64[ns]"))
+        dt_series = canonicalize_timestamp_series(features_df[time_col], col_name=time_col)
+        np.save(os.path.join(out_dir, f"{name}_datetime.npy"), dt_series.to_numpy(dtype="datetime64[ns]"))
 
     with open(os.path.join(out_dir, f"{name}_columns.json"), "w", encoding="utf-8") as f:
         json.dump(feature_cols, f, ensure_ascii=False, indent=2)

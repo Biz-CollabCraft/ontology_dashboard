@@ -2,7 +2,7 @@
 extraction_cache.py
 
 담당 기능:
-- 추출 계획(Extraction Plan) 절대 경로 기반 캐시 관리 모듈.
+- 추출 계획(Extraction Plan) 경로 레지스트리(PATHS.extraction_plan_cache) 기반 캐시 관리 모듈.
 - 소스 파일 샘플 데이터프레임의 md5 fingerprint 해시값을 기반으로 기존 추출 계획을 캐싱하고 절대 경로에서 조회/저장한다.
 
 입력:
@@ -16,13 +16,13 @@ extraction_cache.py
 의존 모듈:
 - pandas: 데이터프레임 프리뷰 파싱 및 json 변환
 - hashlib: md5 해시 산출
-- os, json, logging
+- systems.generator.generator_config.PATHS: 전역 경로 레지스트리
 
 예외/경계 상황:
-- 캐시 파일(data_preprocessed/extraction_plan_cache.json) 미존재 또는 파싱 실패 시 빈 딕셔너리를 반환하며 새로 생성한다.
+- 캐시 파일 미존재 또는 파싱 실패 시 빈 딕셔너리를 반환하며 새로 생성한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '절대 경로 결합' 원칙에 따라 프로세스 실행 CWD와 무관하게 일관된 캐시 디렉토리를 참조한다.
+- docs/architecture.md의 '단일 경로 제어' 원칙에 따라 PATHS 레지스트리를 통해 캐시 디렉토리를 참조한다.
 """
 
 import os
@@ -30,11 +30,11 @@ import json
 import logging
 import hashlib
 import pandas as pd
+from systems.generator.generator_config import PATHS
 
 logger = logging.getLogger(__name__)
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-EXTRACTION_PLAN_CACHE_PATH = os.path.join(ROOT_DIR, "data_preprocessed", "extraction_plan_cache.json")
+EXTRACTION_PLAN_CACHE_PATH = PATHS.extraction_plan_cache
 
 _plan_cache: dict = {}
 _cache_mtime: float = 0.0
@@ -43,7 +43,7 @@ _cache_mtime: float = 0.0
 def load_plan_cache() -> dict:
     """캐시 파일에서 추출 계획 캐시를 읽어 반환한다."""
     global _plan_cache, _cache_mtime
-    if os.path.exists(EXTRACTION_PLAN_CACHE_PATH):
+    if EXTRACTION_PLAN_CACHE_PATH.exists():
         mtime = os.path.getmtime(EXTRACTION_PLAN_CACHE_PATH)
         if _cache_mtime == mtime and _plan_cache:
             return _plan_cache
@@ -61,11 +61,11 @@ def load_plan_cache() -> dict:
 def save_plan_cache(cache: dict) -> None:
     """추출 계획 캐시를 파일에 영속화한다."""
     global _plan_cache, _cache_mtime
-    os.makedirs(os.path.dirname(os.path.abspath(EXTRACTION_PLAN_CACHE_PATH)), exist_ok=True)
+    PATHS.ensure_directories()
     with open(EXTRACTION_PLAN_CACHE_PATH, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
     _plan_cache = cache
-    if os.path.exists(EXTRACTION_PLAN_CACHE_PATH):
+    if EXTRACTION_PLAN_CACHE_PATH.exists():
         _cache_mtime = os.path.getmtime(EXTRACTION_PLAN_CACHE_PATH)
 
 
