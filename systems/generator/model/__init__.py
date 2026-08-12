@@ -28,13 +28,21 @@ _project_root = str(Path(__file__).resolve().parents[3])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from systems.generator.model.model_training import train_all, run_parsing_only
-from systems.generator.model.model_registry import (
-    REGISTERED_MODELS,
-    load_registry,
-    get_latest_model_path,
-    has_any_trained_model,
-)
+try:
+    from systems.generator.model.model_training import train_all, run_parsing_only
+    from systems.generator.model.model_registry import (
+        REGISTERED_MODELS,
+        load_registry,
+        get_latest_model_path,
+        has_any_trained_model,
+    )
+except ImportError:
+    train_all = None
+    run_parsing_only = None
+    REGISTERED_MODELS = {}
+    load_registry = None
+    get_latest_model_path = None
+    has_any_trained_model = None
 
 __all__ = [
     "train_all",
