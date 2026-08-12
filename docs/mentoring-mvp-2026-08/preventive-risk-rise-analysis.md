@@ -6,6 +6,10 @@
 API와 UI를 만들지 않고 Canonical V3.1 Prediction Timeline에서 재현 가능한 위험 상승
 사건만 구조화한다.
 
+대표 설비 한 대의 상세 분석은 프로젝트 범위를 한 대로 제한하는 것이 아니라,
+전체 CNC에 적용할 탐지·What-if 파이프라인을 먼저 검증하는 vertical slice다. 검증된
+파이프라인은 적용 가능한 전체 CNC 공구 마모 사건으로 배치 확장한다.
+
 Canonical V3.1 원본과 Result Artifact는 읽기 전용이다. 탐지 결과는 별도 derived
 output으로 생성하며 원본 파일을 덮어쓰지 않는다.
 
@@ -105,3 +109,7 @@ python -m experiments.preventive_intervention.cli `
 선정한 사건을 기준으로 Baseline/Intervention 시계열을 만들고 공구 교체 이후의
 `tool_wear_min`, 생산·정비 상태를 재계산한다. 이후 기존 Feature Engineering과 동일
 모델을 사용해 예방조치 전후 고장확률을 비교한다.
+
+대표 사례에서 End-to-End 결과가 검증되면 동일 파이프라인을 적용 가능한 전체 CNC
+사건에 실행하고, 사건별 결과뿐 아니라 적용 성공·실패 수와 위험 감소량 분포를 함께
+집계한다.
