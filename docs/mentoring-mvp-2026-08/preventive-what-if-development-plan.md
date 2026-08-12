@@ -1,11 +1,11 @@
 # 고장 전조 분석 및 예방조치 What-if 개발 계획
 
-- 문서 상태: `실행 계획 · 팀 검토 필요`
-- 기준일: `2026-08-11`
-- 개발 브랜치: `feat/preventive-what-if-foundation`
+- 문서 상태: `PR #20 완료 · 후속 시뮬레이션 의존성 대기`
+- 기준일: `2026-08-12`
+- 현재 문서 브랜치: `docs/preventive-what-if-status-update`
 - 발표일: `2026-09-11`
 - 기준 데이터: `canonical-ai4i-physics-v3.1`
-- 기준 모델: 기존 Prediction/Feature Engineering 계약 재사용
+- 기준 모델: `WIF-DEC-08`~`WIF-DEC-10` 확정 전 미결정
 
 ## 1. 문서 목적
 
@@ -305,7 +305,10 @@ Intervention 기대비용
 | `schemas/preventive-what-if.schema.json` | Producer JSON Schema | 구현 완료 |
 | `data/fixtures/what_if/` | 계약 fixture | 1건 작성 완료 |
 | `tests/test_preventive_what_if_foundation.py` | 계약·정책 불변성 테스트 | 작성 완료 |
-| `experiments/preventive_intervention/` | 비배포 계약·정책 producer 및 향후 시계열 실험 | 기반 구현 완료, 실제 시계열 출력 미구현 |
+| `experiments/preventive_intervention/risk_rise.py` | CNC 위험 상승 사건 탐지와 공구 마모 후보 ranking | PR #20 구현 완료 |
+| `experiments/preventive_intervention/sensor_analysis.py` | 대표 사례 baseline/risk 센서 통계 | PR #20 구현 완료 |
+| `experiments/preventive_intervention/cli.py` | 위험 상승·대표 사례 분석 재현 CLI | PR #20 구현 완료 |
+| `experiments/preventive_intervention/` | 비배포 What-if producer | 탐지·후보 분석 완료, Intervention 시계열 미구현 |
 
 ## 13. 현재 구현 상태
 
@@ -325,17 +328,82 @@ Intervention 기대비용
 - [O] `risk-rise-detection-v1` 정책과 deterministic 탐지기 구현
 - [O] 공구 마모 `risk_up` 후보 ranking과 대표 CNC 사례 선정
 - [O] 대표 사례의 6시간 baseline/risk 센서 통계 조인
+- [O] PR #20 머지 및 운영 판단 비권위 경계 명문화
 
-### 다음 작업
+### 현재 체크포인트
+
+PR #20으로 다음 vertical slice 전단계를 완료했다.
+
+```text
+Canonical V3.1 CNC Prediction Timeline
+→ 분포 기반 위험 상승 정책
+→ 전체 CNC 위험 상승 후보 탐지
+→ 공구 마모 risk_up 후보 선별
+→ 대표 사례 선정
+→ baseline/risk 센서 통계와 provenance
+```
+
+재현 기준 결과는 위험 상승 후보 2,606건, 공구 마모 후보 1,027건, 대표 설비
+`CNC-S02-L04-03`이다. 이 값들은 고장 원인이나 예방조치 효과가 아니라 후속 What-if
+입력 후보와 참고 근거다.
+
+### 후속 작업 상태
 
 - [O] Canonical V3.1 공구 마모 위험 사례 선정
 - [O] 상승 사건 탐지 기준의 데이터 분포 분석
-- [ ] Baseline/Intervention 시간창 생성
-- [ ] 조치 후 공구 마모 누적과 생산·정비 상태 재계산
-- [ ] 기존 Feature Engineering 재사용
-- [ ] 동일 모델로 확률 재평가
+- [보류] Baseline/Intervention 시간창 생성
+- [보류] 조치 후 공구 마모 누적과 생산·정비 상태 재계산
+- [보류] 기존 Feature Engineering 재사용
+- [보류] 동일 모델로 확률 재평가
 - [ ] 실제 실행 결과 fixture로 계약 예시 교체
 - [ ] 고장·수리·경제 확장 데이터 Schema 구현
+
+위 항목 중 Baseline/Intervention 시계열 생성부터 동일 모델 재평가까지는 현재 개발을
+중단한다. 열린 stacked PR #21~#24가 Feature Engineering, 모델 학습·버전 관리,
+Generator 실행 방식과 Prediction 서비스를 변경하고 있어 지금 연결하면 기준 모델과
+Feature 계약이 달라질 수 있기 때문이다.
+
+독립적으로 구현 가능한 시계열 변환도 후속 Feature·추론 인터페이스에 맞춘 재작업을
+피하기 위해 함께 보류한다. PR #20의 탐지·후보 분석 산출물은 현재 main에서 완결된
+체크포인트로 유지한다.
+
+### 개발 재개 조건
+
+PR #21~#24가 최종 대상 브랜치에 반영된 뒤 다음 조건을 확인하고 계획을 다시 승인한다.
+
+1. 최종 Feature schema와 window 의미가 확정돼야 한다.
+   - Canonical V3.1의 6시간 Feature
+   - PR #21의 5·10행 rolling Feature
+   - 두 체계를 병행할 경우 명시적 version 경계
+2. What-if 비교에 사용할 model ID, algorithm과 immutable version을 고정해야 한다.
+   `latest`를 재현 가능한 비교 기준으로 사용하지 않는다.
+3. Baseline과 Intervention이 동일 Feature Engineering과 동일 Model Artifact를 사용하는
+   추론 인터페이스를 확정해야 한다.
+4. Generator prediction, Backend diagnosis와 비배포 What-if experiment의 책임을 다시
+   확인해야 한다.
+5. Generator 결과가 Product Result Artifact의 운영 판단값을 직접 대체하지 않는다는
+   기존 경계를 유지해야 한다.
+6. 확정된 main에서 대표 사례의 입력 Feature와 기존 Prediction Timeline 호환성을
+   다시 검증해야 한다.
+
+### 외부 PR 의존성 현황
+
+2026-08-12 확인 기준으로 다음 stacked PR이 열려 있다.
+
+| PR | 변경 영역 | What-if 영향 | 현재 처리 |
+|---|---|---|---|
+| `#21` | Extraction·Feature pipeline | 6시간 Feature와 5·10행 rolling Feature의 호환성 | 머지 후 재검토 |
+| `#22` | LightGBM·XGBoost·RandomForest 학습·버전 | 비교 모델과 immutable version 선택 | 머지 후 재검토 |
+| `#23` | Generator daemon·재학습 API | 오프라인 실험보다 후속 실행 방식에 영향 | 머지 후 재검토 |
+| `#24` | Prediction service·latest 모델 로딩 | 추론 주체, 다중 모델 선택과 재현성 | 머지 후 재검토 |
+
+PR #21~#24는 `main → #21 → #22 → #23 → #24` 순서로 쌓인 의존 PR이다. 개별 PR의
+중간 계약을 What-if의 확정 인터페이스로 사용하지 않고 최종 반영된 main을 기준으로
+다시 검증한다.
+
+PR #17의 Backend Artifact inference와 Product Result Artifact 경계도 추론 adapter
+결정 시 함께 확인하되, demo/local `HeuristicPredictor`를 Canonical V3.1 What-if의
+공식 비교 모델로 사용하지 않는다.
 
 현재 `82% → 21%` 같은 값은 계약 구조 설명용 fixture이며 실제 시뮬레이션 성능
 결과가 아니다.
@@ -347,20 +415,21 @@ Intervention 기대비용
 - Producer/Consumer 책임과 입력·출력 계약 확정
 - 공구 교체 정책과 계약 fixture
 - 고장·수리·예방조치·경제 데이터 Schema 설계
-- 기존 Feature Engineering·추론 인터페이스 확인
+- PR #20 위험 상승 탐지·대표 사례 분석 완료
+- PR #21~#24 Feature/Model/Prediction 계약 검토 및 후속 개발 보류 결정
 
 ### Week 3 — 2026-08-17~08-23
 
-- Prediction Timeline 기반 위험 상승 탐지
-- 센서 시간 정렬과 구간 비교
-- 선행 지표 통계와 사전 탐지시간 평가
-- `risk-rise-events.jsonl` 생성
+- PR #20에서 선행 완료한 위험 상승 탐지·센서 구간 비교 결과 유지
+- PR #21~#24 최종 반영 상태 확인
+- `WIF-DEC-08`~`WIF-DEC-10` 결정 및 계획 갱신
+- 의존 PR이 미완료이면 시뮬레이션 구현을 시작하지 않음
 
 ### Week 4 — 2026-08-24~08-30
 
-- 공구 교체 Baseline/Intervention 시계열 생성
-- 6시간 Feature 재계산
-- 동일 모델 재평가와 위험 감소량 계산
+- 의존 계약 확정 시 공구 교체 Baseline/Intervention 시계열 생성
+- 확정된 version Feature 재계산
+- 고정된 동일 Model Artifact로 재평가와 위험 감소량 계산
 - 재현성·물리 규칙·Canonical 불변 검증
 
 ### Week 5 — 2026-08-31~09-06
@@ -387,6 +456,12 @@ Intervention 기대비용
 | `WIF-DEC-05` | API 동기 실행 또는 사전 생성 결과 조회 | 실행 시간·오류 계약 |
 | `WIF-DEC-06` | 실제·견적·합성 가격 구분과 가정 승인 방식 | 경제성 결과 신뢰도 |
 | `WIF-DEC-07` | Evaluation truth를 운영 고장 이력으로 공개하는 시점 규칙 | 누수 방지 |
+| `WIF-DEC-08` | What-if 재평가에 사용할 Feature schema와 window version | PR #21과 기존 6시간 Feature 호환성 |
+| `WIF-DEC-09` | model ID·algorithm·immutable version 선택 | PR #22/#24의 다중 모델·latest 사용 방지 |
+| `WIF-DEC-10` | 추론 실행 주체: Artifact adapter, Backend port 또는 Generator API | 시스템 direct import와 운영 책임 경계 |
+
+`WIF-DEC-08`~`WIF-DEC-10`은 PR #21~#24 반영 후 main 기준으로 결정한다. 세 항목이
+확정되기 전에는 `intervention_probability`와 위험 감소량을 공식 산출하지 않는다.
 
 ## 16. 검증 기준
 
@@ -474,3 +549,4 @@ CNC 공구 교체 파이프라인을 검증하고 전체 적용한 후 다음 �
 | 2026-08-11 | 고장·수리·예방조치·경제 데이터 계획 반영 |
 | 2026-08-12 | 대표 사례 vertical slice와 전체 CNC 프로젝트 완료 기준 분리 |
 | 2026-08-12 | Product Result Artifact 권위 경계와 후보·합성 표현 제한 반영 |
+| 2026-08-12 | PR #20 완료 상태, PR #21~#24 의존성 대기와 개발 재개 조건 반영 |
