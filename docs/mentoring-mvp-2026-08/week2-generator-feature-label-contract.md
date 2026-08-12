@@ -52,12 +52,41 @@
 - `prediction_horizon_hours`: 기본값 24시간
 
 ### 3.2 Label 구간 매칭 및 Active Failure 정책
-- **구간 매칭 (Interval Metadata 존재 시)**:
-  - `degradation start` ~ `failure point` 구간을 `label = 1`로 지정.
-- **Lead Window 매칭 (단일 고장 시점 존재 시)**:
-  - 고장발생 시점($T_{fail}$) 기준 사전 예측 호라이즌 구간 `[T_fail - horizon, T_fail)`을 `label = 1`로 지정.
-  - 고장발생 당해 시점(anchor) 이후 active failure interval은 예측 입력/학습 피처에서 제외(Excluded)한다.
-- **상태**: `목표 계약 / 구현 진행 중 (Target Contract)`
+
+failure metadata의 `time_columns`는 서로 다른 의미를 갖는 최소 2개의 역할로
+**반드시 분리해서 받는다.** 하나의 `end_col`로 뭉뚱그려 선택하지 않는다.
+
+| 역할 | semantic 태그 | 의미 |
+|---|---|---|
+| anchor | `failure_point` | 고장이 실제로 발생한 시점. positive 구간의 끝(제외) |
+| exclusion_end | `period_end`, `maintenance_end` | 다운타임/정비 완료 시점. 이 시점까지는 학습에서 제외 |
+
+**anchor(`failure_point`)가 metadata에 없으면 `period_end`나 `maintenance_end`를
+anchor로 대신 쓰지 않는다.** 이 경우 §3.2가 아니라 §1의 fallback 정책(anchor 불명확
+시 해당 이벤트 제외 또는 fail-fast)을 따른다.
+
+**구간 매칭 (anchor 존재 시)**
+- Positive 구간: `[degradation_start, failure_point)` — `failure_point` 자체는
+  포함하지 않는다.
+- 제외 구간: `[failure_point, exclusion_end]` (exclusion_end가 있는 경우) —
+  이 구간은 정상도 예측 대상도 아니므로 최종 라벨 DataFrame에서 행 자체를
+  제거한다. `label=0`으로 채우지 않는다.
+- `exclusion_end`가 metadata에 없으면 제외 구간을 만들 수 없으므로, 최소한
+  `failure_point` 자체 시점의 관측 행은 positive에서 제외한다 (경계 값 포함 금지).
+
+**Lead Window 매칭 (구간 metadata 없이 단일 고장 시점만 존재 시)**
+- 기존과 동일: `[T_fail - horizon, T_fail)`을 `label=1`로 지정.
+
+**구현 요구사항 (PR #21)**
+- `build_labels()`는 `start_col`(degradation_start), `anchor_col`
+  (`failure_point`), `exclusion_end_col`(`period_end`/`maintenance_end`)를
+  **서로 다른 변수로 분리**해서 받는다. 지금처럼 `end_col` 하나로 합쳐서 받지
+  않는다.
+- `anchor_col`을 찾지 못하면 `exclusion_end_col`로 대체하지 않는다 (§1 fallback
+  정책 적용).
+- 회귀 테스트: metadata가 `maintenance_end`만 갖고 `failure_point`가 없는
+  케이스를 넣었을 때, 그 이벤트가 anchor 없이 임의로 positive/exclusion 처리되지
+  않고 §1 fallback 정책대로 처리되는지 검증한다.
 
 ---
 
@@ -67,3 +96,12 @@
 - **`label_schema_version`**: `"pdm-label-v2"`
 - 학습 실행 및 Model Artifact Publish 시 `feature_schema.json`과 `label_schema.json`이 함께 패키징되어 저장되어야 한다.
 - **상태**: `목표 계약 / PR #22 구현 필요 (Target Contract)`
+
+---
+
+## 5. 완료 조건 (§3.2 보강분)
+
+- [ ] `build_labels()`가 anchor(`failure_point`)와 exclusion_end (`period_end`/`maintenance_end`)를 별도 변수로 받는다.
+- [ ] anchor 없이 exclusion_end만 있는 경우 anchor로 대체되지 않는다.
+- [ ] 제외 구간(`[failure_point, exclusion_end]`)이 label=0이 아니라 행 자체 제거로 처리된다.
+- [ ] anchor 부재 케이스에 대한 회귀 테스트가 존재한다.
