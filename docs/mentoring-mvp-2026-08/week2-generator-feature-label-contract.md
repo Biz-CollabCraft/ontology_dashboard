@@ -25,6 +25,28 @@
   환경에서는 경고 후 단일 시계열 분기로 분리한다.
 - 상태: `목표 계약 / PR #21~#22 구현 필요 (Target Contract)`
 
+### duplicate_policy 구현 범위
+
+| 필드 | 타입 (실제 Pydantic 정의) |
+|---|---|
+| `duplicate_policy` | `str`, 기본값 `"error"` (`"error"` \| `"aggregate"`, enum/Literal 아님) |
+| `aggregation` | `Optional[str]` (`"mean"` \| `"first"` \| `"sum"`, enum/Literal 아님) |
+
+- 현행: `structure_type="tabular_row_as_attribute"`(long-format) 구조에서는
+  `extraction_service.py`가 `[id_col, time_col, attribute_col]` 기준 중복을
+  검사하고, `duplicate_policy`에 따라 `aggregate`(지정 `aggregation`으로
+  `pivot_table` 집계) 또는 명시적 `ValueError`를 실행한다. **구현 완료.**
+- 현행: `structure_type="tabular_column_as_attribute"`(이미 wide 형태) 구조에는
+  `(id_col, time_col)` 기준 중복 검사가 없다. `feature_builder.py`도 이 검사를
+  하지 않는다. **구현 필요.**
+- 목표: `tabular_column_as_attribute` 구조에도 `[id_col, time_col]` 기준 중복
+  검사를 추가하고, 동일한 `duplicate_policy`/`aggregation` 필드로 처리한다
+  (센서 컬럼에 대해 `aggregation` 함수 적용, `error`면 명시적 실패).
+- 목표: `duplicate_policy`/`aggregation` 필드를 `Literal["error", "aggregate"]`
+  / `Literal["mean", "first", "sum"] | None`으로 강화해 Pydantic이 잘못된 값을
+  자동으로 거부하게 한다.
+- 상태: `부분 구현 (long-format 완료) / wide-format 구현 필요 (Target Contract)`
+
 ---
 
 ## 2. Feature 격리 및 결정론적 계산 계약 (Invariants 15~17)
@@ -63,37 +85,29 @@ failure metadata의 `time_columns`는 서로 다른 의미를 갖는 최소 2개
 |---|---|---|
 | anchor | `failure_point` | 고장이 실제로 발생한 시점. positive 구간의 끝(제외) |
 | exclusion_end | `period_end`, `maintenance_end` | 다운타임/정비 완료 시점. 이 시점까지는 학습에서 제외 |
+| degradation_start (참고용) | `period_start` | 열화 관측 시작 시점. **positive 구간 계산에는 사용하지 않는다** |
 
-**Positive interval은 metadata 형태와 무관하게 항상 다음 한 가지 의미로 통일한다.**
+**Positive interval은 `prediction_task=binary_failure_within_horizon` 의미와
+정확히 일치하도록 항상 다음 한 가지 공식을 사용한다.**
 
 ```text
-[max(degradation_start, failure_point - prediction_horizon), failure_point)
+positive = [failure_point - prediction_horizon, failure_point)
 ```
 
-- `degradation_start`(interval metadata의 `period_start`)가 없으면
-  `failure_point - prediction_horizon`을 그대로 사용한다 (Lead Window 매칭과
-  동일한 계산).
-- `degradation_start`가 있고 `failure_point - prediction_horizon`보다 늦은
-  시점이면(즉 열화가 horizon보다 짧게 시작됐으면) `degradation_start`부터
-  positive로 잡는다 — 이 경우 실제 positive 구간이 `prediction_horizon`보다
-  짧아질 수 있다. 이는 허용한다 (실제로 열화가 늦게 시작된 것이므로).
-- `degradation_start`가 `failure_point - prediction_horizon`보다 이르면(열화가
-  horizon보다 먼저 시작됐으면) `failure_point - prediction_horizon`으로 clip한다
-  — positive 구간이 `prediction_horizon`을 절대 넘지 않는다.
-- `degradation_start`는 이 clip 계산 외의 용도(데이터 품질 검증, 별도 열화 단계
-  분석)로 별도 활용할 수 있으나, 그 경우 이 라벨 계약과는 별개의 산출물로
-  취급한다.
+- `degradation_start`(`period_start`)가 있어도 이 공식에는 영향을 주지 않는다.
+  `degradation_start`는 positive 구간을 넓히거나 좁히는 데 쓰지 않는다.
+- `degradation_start`는 다음 용도로만 사용한다: 데이터 품질 검증, 별도 열화
+  단계 분석용 부가 필드(`degradation_observed_at` 등)로 라벨 DataFrame에
+  참고 컬럼으로만 남긴다. 학습 대상 feature나 label 자체에는 포함하지 않는다.
 
 **anchor(`failure_point`)를 metadata에서 찾을 수 없는 경우**
 
-이 정책은 §1의 `id_column` fail-fast 정책과는 별개의 관심사이며, 환경
-(`production`/`local`/`demo` 등)에 따라 분기하지 않는다.
+이 정책은 §1의 `id_column` fail-fast 정책과는 별개의 관심사이며, 환경에
+따라 분기하지 않는다.
 
-- `degradation_start`는 있지만 anchor가 없으면: 해당 이벤트는 라벨링에서
-  제외하고 warning을 남긴다. `period_end`/`maintenance_end`를 anchor로 대신
-  쓰지 않는다.
-- `degradation_start`도 anchor도 없으면: 해당 failure 소스 전체를 label 생성
-  대상에서 제외하고 warning을 남긴다.
+- anchor가 없으면(구간 metadata 유무와 무관하게): 해당 이벤트는 라벨링에서
+  제외하고 warning을 남긴다. `period_end`/`maintenance_end`/`period_start`를
+  anchor로 대신 쓰지 않는다.
 
 **제외 구간**
 - `[failure_point, exclusion_end]` (exclusion_end가 있는 경우)는 정상도 예측
@@ -103,39 +117,44 @@ failure metadata의 `time_columns`는 서로 다른 의미를 갖는 최소 2개
   positive에서 제외한다 (경계 값 포함 금지).
 
 **구현 요구사항 (PR #21)**
-- `build_labels()`는 `start_col`(degradation_start), `anchor_col`
-  (`failure_point`), `exclusion_end_col`(`period_end`/`maintenance_end`)를
-  서로 다른 변수로 분리해서 받는다.
-- 두 분기(interval metadata 있음/없음)가 최종적으로 동일한
-  `max(degradation_start, anchor - horizon)` 계산 로직을 공유한다 — 별도
-  마스킹 코드로 중복 구현하지 않는다.
+- `build_labels()`는 `anchor_col`(`failure_point`), `exclusion_end_col`
+  (`period_end`/`maintenance_end`)를 서로 다른 변수로 분리해서 받는다.
+  `degradation_start`는 라벨 계산에 관여하지 않으므로 별도 변수로 받되
+  positive/negative 마스킹 로직에는 전달하지 않는다.
+- 구간 metadata 있음/없음 두 분기 모두 동일한 `failure_point - horizon` 계산을
+  공유한다 (이제 두 분기의 공식이 완전히 동일해지므로, 사실상 분기 자체를
+  하나로 합칠 수 있다 — anchor만 있으면 공식은 항상 같다).
 - 회귀 테스트:
-  - `degradation_start`가 `anchor - horizon`보다 이른 경우 positive 구간이
-    `horizon`으로 clip되는지
-  - `degradation_start`가 `anchor - horizon`보다 늦은 경우 `degradation_start`
-    그대로 사용되는지
-  - anchor 없이 exclusion_end만 있는 경우 anchor로 대체되지 않고 이벤트가
-    제외되는지
+  - `degradation_start`가 `failure_point - horizon`보다 늦어도 positive 구간이
+    `[failure_point-horizon, failure_point)` 전체로 유지되는지 (더 이상
+    clip되지 않는지)
+  - anchor 없이 exclusion_end/degradation_start만 있는 경우 이벤트가 제외되는지
+
+> **주의**: 이 절 변경은 기존에 생성된 Feature/Label과 그 위에서 학습된
+> 모델의 의미를 바꾼다. `label_schema_version`을 올리고(`pdm-label-v3`),
+> 기존 산출물을 재사용하지 않고 재생성한다. PR #21 라벨 구현·테스트,
+> PR #22 학습 데이터가 함께 영향받는다.
 
 ---
 
 ## 4. Feature / Label Schema 버전 관리
 
 - **`feature_schema_version`**: `"pdm-feature-v2"`
-- **`label_schema_version`**: `"pdm-label-v2"`
+- **`label_schema_version`**: `"pdm-label-v3"`
 - 학습 실행 및 Model Artifact Publish 시 `feature_schema.json`과 `label_schema.json`이 함께 패키징되어 저장되어야 한다.
 - **상태**: `목표 계약 / PR #22 구현 필요 (Target Contract)`
 
 ---
 
-## 5. 완료 조건 (§3.2 보강분)
+## 5. 완료 조건
 
-- [ ] `build_labels()`가 anchor(`failure_point`)와 exclusion_end
-      (`period_end`/`maintenance_end`)를 별도 변수로 받는다.
-- [ ] interval metadata 있음/없음 두 분기가 동일한
-      `max(degradation_start, anchor-horizon)` 계산을 공유한다.
-- [ ] positive 구간이 `prediction_horizon`을 절대 넘지 않는다 (clip 검증).
-- [ ] anchor 없이 exclusion_end만 있는 경우 anchor로 대체되지 않는다.
+- [ ] positive 구간이 항상 `[failure_point-horizon, failure_point)`로
+      계산되며 `degradation_start`로 clip되지 않는다.
+- [ ] `degradation_start`는 참고 컬럼으로만 존재하고 label 계산에 관여하지
+      않는다.
+- [ ] anchor 없이 exclusion_end/degradation_start로 대체되지 않는다.
 - [ ] 제외 구간이 label=0이 아니라 행 자체 제거로 처리된다.
-- [ ] anchor 부재 케이스(§3.2 자체 정의, §1 참조 아님)에 대한 회귀 테스트가
-      존재한다.
+- [ ] 구간 metadata 있음/없음 두 분기가 동일한 계산 로직을 공유한다.
+- [ ] `tabular_column_as_attribute` 구조에 `[id_col, time_col]` 기준 중복 검사가 추가된다.
+- [ ] `duplicate_policy`/`aggregation`이 `Literal` 타입으로 강화된다.
+- [ ] 기존 학습 데이터·모델 재생성 필요성이 완료 노트에 기록된다 (§3.2 참조).

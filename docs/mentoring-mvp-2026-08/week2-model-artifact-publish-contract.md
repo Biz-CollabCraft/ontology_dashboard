@@ -81,7 +81,31 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
 
 ---
 
-## 7. Manifest `artifact_files`와 Checksum 검증
+## 7. Manifest `checksum`과 `artifact_files`의 관계
+
+Backend `artifact_provider.py`의 `REQUIRED_MANIFEST_FIELDS`는 최상위
+`checksum`과 `artifact_files`를 **둘 다** 필수 필드로 요구한다. 두 필드의
+역할을 아래처럼 명확히 구분한다.
+
+| 필드 | 상태 | 역할 |
+|---|---|---|
+| `checksum` (최상위) | **deprecated, 존재만 요구** | 값은 검증되지 않는다. 하위 호환을 위해 필드는 유지하되 새 코드가 이 값에 의미를 부여하지 않는다 |
+| `artifact_files[*].sha256` | **canonical, 실제 검증 대상** | consumer가 로드 전 개별 파일의 실제 SHA-256과 대조 검증 |
+
+**결정**: 최상위 `checksum`은 canonical 무결성 계약에서 제외하고
+deprecated 필드로 유지한다 (완전 제거는 하지 않는다 — `REQUIRED_MANIFEST_FIELDS`에서
+지금 빼면 기존 Backend 코드와 호환이 깨진다). publish 시 값은 임의의
+플레이스홀더(`"deprecated"` 또는 `artifact_files` 중 `model` 항목의
+sha256과 동일한 값)를 넣어 필드 존재 요건만 만족시킨다.
+
+**후속 결정 필요**: 다음 `artifact_schema_version`(`model-artifact-v1.1`
+이상)에서 최상위 `checksum`을 `REQUIRED_MANIFEST_FIELDS`에서 완전히
+제거할지는 Backend 담당자와 별도로 결정한다. 이번 문서 보강 범위에는
+포함하지 않는다.
+
+---
+
+## 8. Manifest `artifact_files`와 파일별 Checksum 검증
 
 `artifact_files`는 파일별 checksum을 갖는 객체 배열이다. 단일 `checksum`
 필드가 아니다 — 이는 이미 Backend `artifact_provider.py`가 요구하는 형식이다.
@@ -114,7 +138,7 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
 
 ---
 
-## 8. 공개 API 유지
+## 9. 공개 API 유지
 
 - 기존 `publish_model_artifact()`, `validate_manifest()`, `ModelRegistry` 공개
   API를 삭제하지 않고 유지한다.
@@ -124,15 +148,13 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
 
 ---
 
-## 9. 완료 조건 (§4~§8 보강분)
+## 10. 완료 조건
 
 - [ ] `publish_model_artifact()`, `validate_manifest()`, `ModelRegistry`가 존재한다.
 - [ ] 동일 `model_version` 재publish가 명시적으로 실패한다.
 - [ ] publish 도중 예외 발생 시 목적지에 부분 결과가 남지 않는다 (atomic).
 - [ ] publish 실패 시 run registry가 갱신되지 않는다.
-- [ ] `artifact_files`의 모든 항목(`model`, `feature_schema`, `label_schema`,
-      `history_requirement`, `metrics`)이 개별 SHA-256으로 검증된다.
-- [ ] Backend `artifact_provider.py`의 필수 role 목록이 `label_schema`,
-      `history_requirement`를 포함하도록 갱신된다.
-- [ ] `artifact_schema_version` 유지/변경 여부가 팀 결정으로 기록된다.
+- [ ] `artifact_files`의 모든 항목이 개별 SHA-256으로 검증된다.
+- [ ] 최상위 `checksum` 필드가 deprecated로 명시되고, 값 검증에 사용되지 않는다는 것이 문서와 코드 주석에 일치한다.
+- [ ] Backend `artifact_provider.py`의 필수 role 목록이 `label_schema`, `history_requirement`를 포함하도록 갱신된다.
 - [ ] 기존 공개 파사드 심볼이 유지되어 기존 import가 깨지지 않는다.
