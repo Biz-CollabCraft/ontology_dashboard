@@ -42,6 +42,7 @@ from systems.generator.ontology_mapping.ontology_mapping_capability_service impo
 from systems.generator.feature.feature_catalog import load_catalog
 from systems.generator.feature.feature_builder import build_features, save_features_npy
 from systems.generator.feature.feature_label_service import build_labels
+from systems.generator.generator_config import PATHS
 from systems.generator.model.model_registry import (
     REGISTERED_MODELS,
     get_next_run_version,
@@ -132,7 +133,7 @@ def train_all(data_dir: str = "data", store_dir: str = "models_store", force_rea
     features = build_features(sources[telemetry_key], store, catalog)
 
     try:
-        save_features_npy(features, "data_preprocessed/features", telemetry_key)
+        save_features_npy(features, str(PATHS.data_preprocessed / "features"), telemetry_key)
     except Exception as e:
         logger.warning(f"[TrainAll] Feature npy 저장 실패(학습은 계속 진행, 참고용 산출물만 없음): {e}")
 

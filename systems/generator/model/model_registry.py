@@ -2,7 +2,7 @@
 model_registry.py
 
 담당 기능:
-- 등록된 예측 모델 클래스 매핑(REGISTERED_MODELS) 관리 및 전역 학습 실행(run) 기준 모델 버전 관리 레지스트리 서비스.
+- 등록된 예측 모델 클래스 매핑(REGISTERED_MODELS) 관리 및 경로 레지스트리(PATHS.models_store) 기준 모델 버전 관리 레지스트리 서비스.
 - models_store/registry.json 파일에 전역 학습 실행 버전(latest_run_version), 실행별 공유 메타데이터(runs/v{N}), 모델별 최신 성공 버전 정보(models/{model_name})를 기록 관리한다.
 
 입력:
@@ -10,7 +10,7 @@ model_registry.py
 - run_version(int): 전역 1-indexed 학습 실행 버전 번호
 - model_results(dict): 모델별 성공 결과 딕셔너리 (실패한 모델은 None)
 - run_artifacts_meta(dict): 학습 실행 공유 메타데이터 (feature_cols, trained_at 등)
-- store_dir(str): 모델 저장소 디렉토리 경로. 기본값 "models_store".
+- store_dir(str | Path, optional): 모델 저장소 디렉토리 경로. 미지정 시 PATHS.models_store 사용.
 
 출력:
 - REGISTERED_MODELS(dict): {model_name: ModelClass}
@@ -22,6 +22,7 @@ model_registry.py
 - systems.generator.model.lightgbm.LightGBMModel
 - systems.generator.model.xgboost.XGBoostModel
 - systems.generator.model.random_forest.RandomForestModel
+- systems.generator.generator_config.PATHS
 - os, json, logging
 
 예외/경계 상황:
@@ -34,9 +35,11 @@ model_registry.py
 import os
 import json
 import logging
+from pathlib import Path
 from systems.generator.model.lightgbm import LightGBMModel
 from systems.generator.model.xgboost import XGBoostModel
 from systems.generator.model.random_forest import RandomForestModel
+from systems.generator.generator_config import PATHS
 
 logger = logging.getLogger(__name__)
 
@@ -46,13 +49,20 @@ REGISTERED_MODELS = {
     "random_forest": RandomForestModel,
 }
 
-REGISTRY_PATH = "models_store/registry.json"
+REGISTRY_PATH = str(PATHS.registry_json)
 
 
-def load_registry(store_dir: str = "models_store") -> dict:
+def _resolve_store_dir(store_dir: str | Path | None = None) -> Path:
+    if store_dir is None or store_dir == "models_store":
+        return PATHS.models_store
+    return Path(store_dir).resolve()
+
+
+def load_registry(store_dir: str | Path | None = None) -> dict:
     """models_store/registry.json 파일에서 전체 레지스트리를 읽어 반환한다."""
-    path = os.path.join(store_dir, "registry.json")
-    if not os.path.exists(path):
+    resolved_dir = _resolve_store_dir(store_dir)
+    path = resolved_dir / "registry.json"
+    if not path.exists():
         return {"latest_run_version": 0, "runs": {}, "models": {}}
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -62,7 +72,7 @@ def load_registry(store_dir: str = "models_store") -> dict:
         return {"latest_run_version": 0, "runs": {}, "models": {}}
 
 
-def get_next_run_version(store_dir: str = "models_store") -> int:
+def get_next_run_version(store_dir: str | Path | None = None) -> int:
     """전역 학습 실행 버전 번호를 하나 발급한다(모델별이 아니라 실행 전체 기준)."""
     registry = load_registry(store_dir)
     return registry.get("latest_run_version", 0) + 1
@@ -72,15 +82,15 @@ def save_run_result(
     run_version: int,
     model_results: dict,
     run_artifacts_meta: dict,
-    store_dir: str = "models_store",
+    store_dir: str | Path | None = None,
 ) -> None:
     """
     학습 실행 1회의 결과를 registry.json에 기록한다.
     - runs[str(run_version)]에 이번 실행의 공유 메타데이터를 기록
     - models[name]는 성공한 모델만 latest_version을 이번 run_version으로 갱신
-      (실패한 모델은 이전 latest_version을 그대로 유지)
     """
-    path = os.path.join(store_dir, "registry.json")
+    resolved_dir = _resolve_store_dir(store_dir)
+    path = resolved_dir / "registry.json"
     registry = load_registry(store_dir)
 
     registry["latest_run_version"] = run_version
@@ -96,13 +106,13 @@ def save_run_result(
             "train_positive_rate": result.get("train_positive_rate"),
         }
 
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(registry, f, ensure_ascii=False, indent=2)
     logger.info(f"[ModelRegistry] Saved run v{run_version} result to '{path}'")
 
 
-def get_latest_model_path(model_name: str, store_dir: str = "models_store") -> str | None:
+def get_latest_model_path(model_name: str, store_dir: str | Path | None = None) -> str | None:
     """해당 모델이 마지막으로 성공한 버전의 파일 경로(폴더 없이 파일명 버전)."""
     registry = load_registry(store_dir)
     model_entry = registry.get("models", {}).get(model_name)
@@ -111,7 +121,7 @@ def get_latest_model_path(model_name: str, store_dir: str = "models_store") -> s
     return model_entry["path"]
 
 
-def has_any_trained_model(store_dir: str = "models_store") -> bool:
+def has_any_trained_model(store_dir: str | Path | None = None) -> bool:
     """학습에 성공하여 등록된 모델이 하나라도 존재하는지 확인한다."""
     registry = load_registry(store_dir)
     return len(registry.get("models", {})) > 0
