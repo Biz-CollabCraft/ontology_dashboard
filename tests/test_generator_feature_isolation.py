@@ -127,7 +127,7 @@ def test_independent_window_initialization(dummy_store, catalog):
 
 
 def test_horizon_labeling_lead_window():
-    """테스트 4: 단일 고장 시점 기반 prediction_horizon_hours(24h) 사전 라벨링 매칭 검증."""
+    """테스트 4: 단일 고장 시점 기반 prediction_horizon_hours(24h) 사전 라벨링 매칭 및 active failure drop 검증."""
     from systems.generator.feature.feature_label_service import build_labels
 
     dates = pd.date_range("2026-01-01 00:00:00", periods=48, freq="1h")
@@ -147,6 +147,92 @@ def test_horizon_labeling_lead_window():
     pos_mask = labeled_df["label"] == 1
     pos_times = labeled_df.loc[pos_mask, "observed_at"]
 
-    assert len(pos_times) == 25, f"Expected 25 hourly points in 24h horizon window, got {len(pos_times)}"
+    # [2026-01-01 12:00:00, 2026-01-02 12:00:00) 24개 시간 관측 포인트가 positive
+    assert len(pos_times) == 24, f"Expected 24 hourly points in [f_time-24h, f_time), got {len(pos_times)}"
     assert pos_times.min() == pd.Timestamp("2026-01-01 12:00:00")
-    assert pos_times.max() == pd.Timestamp("2026-01-02 12:00:00")
+    assert pos_times.max() == pd.Timestamp("2026-01-02 11:00:00")
+    # 고장 당해 시점(2026-01-02 12:00:00)은 active failure 구간으로 drop되었는지 확인
+    assert pd.Timestamp("2026-01-02 12:00:00") not in labeled_df["observed_at"].values
+
+
+def test_anchor_missing_and_exclusion_drop():
+    """테스트 5: anchor(failure_point) 부재 시 대체 금지 및 active failure 구간(maintenance_end) drop 검증."""
+    from systems.generator.feature.feature_label_service import build_labels
+
+    dates = pd.date_range("2026-01-01 00:00:00", periods=48, freq="1h")
+    features_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"] * 48,
+        "observed_at": dates,
+        "voltage": [10.0] * 48
+    })
+
+    # failure_point(anchor)는 있고 maintenance_end(exclusion_end)가 존재하는 메타데이터 케이스
+    failures_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"],
+        "fail_time": [pd.Timestamp("2026-01-02 12:00:00")],
+        "maint_end": [pd.Timestamp("2026-01-02 18:00:00")]
+    })
+    meta = {
+        "time_columns": [
+            {"name": "fail_time", "semantic": "failure_point"},
+            {"name": "maint_end", "semantic": "maintenance_end"}
+        ]
+    }
+
+    labeled_df = build_labels(features_df, failures_df, failure_meta=meta, prediction_horizon_hours=24)
+
+    # 12:00 ~ 18:00 다운타임 구간 (7개 관측 행)이 label=0이 아닌 행 제거(drop)되었는지 확인
+    excluded_times = pd.date_range("2026-01-02 12:00:00", "2026-01-02 18:00:00", freq="1h")
+    for t in excluded_times:
+        assert t not in labeled_df["observed_at"].values, f"Expected {t} to be dropped from labeled_df"
+
+    # anchor 부재 케이스 (maintenance_end만 존재)
+    bad_failures_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"],
+        "maint_end": [pd.Timestamp("2026-01-02 18:00:00")]
+    })
+    bad_meta = {
+        "time_columns": [
+            {"name": "maint_end", "semantic": "maintenance_end"}
+        ]
+    }
+    bad_labeled_df = build_labels(features_df, bad_failures_df, failure_meta=bad_meta, prediction_horizon_hours=24)
+    # anchor 부재 시 maintenance_end를 anchor로 쓰지 않으므로 positive가 발생하지 않음
+    assert (bad_labeled_df["label"] == 0).all()
+
+
+def test_degradation_start_target_leakage_protection():
+    """테스트 6: degradation_start(period_start)가 positive 구간을 clip하지 않고 label df 컬럼에서 제외됨을 검증."""
+    from systems.generator.feature.feature_label_service import build_labels
+
+    dates = pd.date_range("2026-01-01 00:00:00", periods=48, freq="1h")
+    features_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"] * 48,
+        "observed_at": dates,
+        "voltage": [10.0] * 48
+    })
+
+    # period_start가 horizon 24시간보다 늦은 2026-01-02 06:00:00 에 나타난 케이스
+    failures_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"],
+        "start_time": [pd.Timestamp("2026-01-02 06:00:00")],
+        "fail_time": [pd.Timestamp("2026-01-02 12:00:00")]
+    })
+    meta = {
+        "time_columns": [
+            {"name": "start_time", "semantic": "period_start"},
+            {"name": "fail_time", "semantic": "failure_point"}
+        ]
+    }
+
+    labeled_df = build_labels(features_df, failures_df, failure_meta=meta, prediction_horizon_hours=24)
+
+    pos_mask = labeled_df["label"] == 1
+    pos_times = labeled_df.loc[pos_mask, "observed_at"]
+
+    # degradation_start로 clip되지 않고 24시간 전체 [2026-01-01 12:00:00, 2026-01-02 12:00:00)가 positive 임을 검증
+    assert len(pos_times) == 24
+    assert pos_times.min() == pd.Timestamp("2026-01-01 12:00:00")
+    # Target Leakage 방지: start_time, fail_time이 labeled_df 컬럼에 들어가지 않음
+    assert "start_time" not in labeled_df.columns
+    assert "fail_time" not in labeled_df.columns

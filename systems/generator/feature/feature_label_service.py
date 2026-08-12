@@ -39,7 +39,18 @@ def build_labels(
     failure_meta: dict | None = None,
     prediction_horizon_hours: int = 24
 ) -> pd.DataFrame:
-    """features_df와 failures_df를 매칭하여 prediction_horizon 기반 label(0/1) 컬럼을 생성한다."""
+    """
+    features_df와 failures_df를 매칭하여 prediction_horizon 기반 label(0/1) 컬럼을 생성하고 다운타임 구간을 제외한다.
+
+    계약 규격 (binary_failure_within_horizon):
+    1. anchor_col(failure_point): 필수 고장 시점.
+       - Positive 구간: [failure_point - prediction_horizon, failure_point)
+       - failure_point 시점 자체는 positive에서 제외.
+    2. exclusion_end_col(period_end / maintenance_end): 선택적 다운타임 완료 시점.
+       - Active failure 구간: [failure_point, exclusion_end] 은 label=0이 아니라 행 자체를 제거(Drop).
+    3. anchor_col 부재 시: period_end나 maintenance_end를 anchor로 대신 쓰지 않으며, 라벨링 대상에서 제외하고 경고 로그를 기록한다.
+    4. Target Leakage 방지: degradation_start(period_start) 등 고장 메타데이터 컬럼은 Label DataFrame 피처로 유입되지 않는다.
+    """
     df = features_df.copy()
     f_df = failures_df.copy()
 
@@ -51,54 +62,63 @@ def build_labels(
     if time_col and time_col in df.columns:
         df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
 
-    time_cols_meta = (failure_meta or {}).get("time_columns", [])
-    start_col = next((c["name"] for c in time_cols_meta if c.get("semantic") == "period_start"), None)
-    end_col = next((c["name"] for c in time_cols_meta if c.get("semantic") in ("failure_point", "period_end", "maintenance_end")), None)
-
     df["label"] = 0
 
-    # 1. 구간 매칭 (start_col ~ end_col)
-    if id_col and fail_id_col and time_col and start_col and end_col \
-            and start_col in f_df.columns and end_col in f_df.columns:
-        logger.info(f"[LabelBuilder] 열화/고장 구간 매칭 사용: start='{start_col}', end='{end_col}' (id_col='{id_col}')")
-        f_df[start_col] = canonicalize_timestamp_series(f_df[start_col], col_name=start_col)
-        f_df[end_col] = canonicalize_timestamp_series(f_df[end_col], col_name=end_col)
+    time_cols_meta = (failure_meta or {}).get("time_columns", [])
+    anchor_col = next((c["name"] for c in time_cols_meta if c.get("semantic") == "failure_point"), None)
+    if not anchor_col:
+        anchor_col = "observed_at" if "observed_at" in f_df.columns else ("datetime" if "datetime" in f_df.columns else None)
 
-        valid_fdf = f_df[[fail_id_col, start_col, end_col]].dropna()
-        for _, row in valid_fdf.iterrows():
-            mask = (
-                (df[id_col] == row[fail_id_col]) &
-                (df[time_col] >= row[start_col]) &
-                (df[time_col] <= row[end_col])
-            )
-            df.loc[mask, "label"] = 1
-        pos_count = (df["label"] == 1).sum()
-        logger.info(f"[LabelBuilder] 구간 매칭 완료. 총 {len(df)}행 중 positive label: {pos_count}행 ({pos_count/len(df):.4f})")
+    exclusion_end_col = next((c["name"] for c in time_cols_meta if c.get("semantic") in ("period_end", "maintenance_end")), None)
+    if not exclusion_end_col:
+        for c_cand in ("maintenance_end", "period_end"):
+            if c_cand in f_df.columns and c_cand != anchor_col:
+                exclusion_end_col = c_cand
+                break
+
+    if not id_col or not fail_id_col or not time_col or not anchor_col or anchor_col not in f_df.columns:
+        logger.warning("[LabelBuilder] 필수 id/time/anchor_col(failure_point)을 찾지 못해 라벨링을 수행할 수 없습니다.")
         return df
 
-    # 2. 호라이즌 기반 매칭 (Lead Window: failure_time - horizon ~ failure_time)
-    fail_time_col = next((c["name"] for c in time_cols_meta if c.get("semantic") == "failure_point"), None)
-    if not fail_time_col:
-        fail_time_col = "observed_at" if "observed_at" in f_df.columns else ("datetime" if "datetime" in f_df.columns else None)
+    logger.info(f"[LabelBuilder] Horizon ({prediction_horizon_hours}h) 라벨링 시작: anchor='{anchor_col}', exclusion_end='{exclusion_end_col}'")
+    f_df[anchor_col] = canonicalize_timestamp_series(f_df[anchor_col], col_name=anchor_col)
+    if exclusion_end_col and exclusion_end_col in f_df.columns:
+        f_df[exclusion_end_col] = canonicalize_timestamp_series(f_df[exclusion_end_col], col_name=exclusion_end_col)
 
-    if id_col and fail_id_col and time_col and fail_time_col and fail_time_col in f_df.columns:
-        logger.info(f"[LabelBuilder] Horizon ({prediction_horizon_hours}h) 기반 매칭 사용: fail_time='{fail_time_col}', id='{id_col}'")
-        f_df[fail_time_col] = canonicalize_timestamp_series(f_df[fail_time_col], col_name=fail_time_col)
-        horizon_delta = pd.Timedelta(hours=prediction_horizon_hours)
+    horizon_delta = pd.Timedelta(hours=prediction_horizon_hours)
+    rows_to_drop_mask = pd.Series(False, index=df.index)
 
-        valid_fdf = f_df[[fail_id_col, fail_time_col]].dropna()
-        for _, row in valid_fdf.iterrows():
-            f_time = row[fail_time_col]
-            h_start = f_time - horizon_delta
-            mask = (
+    valid_fdf = f_df.dropna(subset=[fail_id_col, anchor_col])
+    for _, row in valid_fdf.iterrows():
+        f_time = row[anchor_col]
+        h_start = f_time - horizon_delta
+
+        # 1. Positive interval: [f_time - horizon, f_time)
+        pos_mask = (
+            (df[id_col] == row[fail_id_col]) &
+            (df[time_col] >= h_start) &
+            (df[time_col] < f_time)
+        )
+        df.loc[pos_mask, "label"] = 1
+
+        # 2. Active failure exclusion: [f_time, exclusion_end] 또는 [f_time, f_time]
+        if exclusion_end_col and exclusion_end_col in row and pd.notna(row[exclusion_end_col]):
+            ex_end = row[exclusion_end_col]
+            ex_mask = (
                 (df[id_col] == row[fail_id_col]) &
-                (df[time_col] >= h_start) &
-                (df[time_col] <= f_time)
+                (df[time_col] >= f_time) &
+                (df[time_col] <= ex_end)
             )
-            df.loc[mask, "label"] = 1
-        pos_count = (df["label"] == 1).sum()
-        logger.info(f"[LabelBuilder] Horizon 매칭 완료. 총 {len(df)}행 중 positive label: {pos_count}행 ({pos_count/len(df):.4f})")
-    else:
-        logger.warning("[LabelBuilder] id/time 컬럼을 찾지 못해 label을 전부 0으로 채웁니다.")
+        else:
+            ex_mask = (
+                (df[id_col] == row[fail_id_col]) &
+                (df[time_col] == f_time)
+            )
+        rows_to_drop_mask |= ex_mask
 
+    # Active failure 구간 행 제거 (Drop)
+    df = df[~rows_to_drop_mask].reset_index(drop=True)
+
+    pos_count = (df["label"] == 1).sum()
+    logger.info(f"[LabelBuilder] 라벨링 완료. 최종 {len(df)}행 중 positive: {pos_count}행")
     return df
