@@ -68,13 +68,34 @@ def classify_structure(filepath: str, df_preview: pd.DataFrame) -> str:
         return "tabular_column_as_attribute"
 
 
-def plan_extraction(filepath: str, structure_type: str, df_preview: pd.DataFrame) -> list[str]:
-    """Stage 2: 오직 추출할 컬럼 목록만 선택한다."""
-    system_prompt = (
-        "You are a dataset column selector for manufacturing predictive maintenance.\n"
-        "Select all relevant telemetry sensors, time/date fields, and asset identifiers for model analysis.\n"
-        "Respond ONLY with a JSON object: {\"selected_columns\": [\"col1\", \"col2\", ...]}"
-    )
+def plan_extraction(filepath: str, structure_type: str, df_preview: pd.DataFrame) -> dict:
+    """Stage 2: 오직 추출할 컬럼 목록 및 long-format 역할 계약만 선택한다."""
+    if structure_type == "tabular_row_as_attribute":
+        system_prompt = (
+            "You are a dataset extraction planner for long-format (tabular_row_as_attribute) manufacturing sensor data.\n"
+            "Analyze the columns and sample data, then specify the exact role for each column:\n"
+            "- id_column: The asset/machine identifier column.\n"
+            "- time_column: The timestamp column (if present, else null).\n"
+            "- attribute_column: The sensor/feature attribute name column.\n"
+            "- value_column: The numeric measurement value column.\n"
+            "- selected_columns: List of all relevant columns.\n"
+            "Respond ONLY with a JSON object: {\n"
+            '  "structure_type": "tabular_row_as_attribute",\n'
+            '  "id_column": "col_id",\n'
+            '  "time_column": "col_time",\n'
+            '  "attribute_column": "col_attr",\n'
+            '  "value_column": "col_val",\n'
+            '  "duplicate_policy": "error",\n'
+            '  "selected_columns": ["col1", "col2", ...]\n'
+            "}"
+        )
+    else:
+        system_prompt = (
+            "You are a dataset column selector for manufacturing predictive maintenance.\n"
+            "Select all relevant telemetry sensors, time/date fields, and asset identifiers for model analysis.\n"
+            "Respond ONLY with a JSON object: {\"selected_columns\": [\"col1\", \"col2\", ...]}"
+        )
+
     prompt = (
         f"File: {os.path.basename(filepath)}\n"
         f"Structure Type: {structure_type}\n"
@@ -84,13 +105,23 @@ def plan_extraction(filepath: str, structure_type: str, df_preview: pd.DataFrame
 
     try:
         raw_res = call_llm(prompt, system=system_prompt)
-        res = validate_or_transform_pydantic(raw_res, ExtractionColumnsResponse)
-        cols = res.selected_columns if res and res.selected_columns else list(df_preview.columns)
-        logger.info(f"[ExtractionPlanner] Stage 2 column selection for '{filepath}': {cols}")
-        return cols
+        res = validate_or_transform_pydantic(raw_res, ExtractionPlanResponse)
+        if res:
+            cols = res.selected_columns if res.selected_columns else list(df_preview.columns)
+            logger.info(f"[ExtractionPlanner] Stage 2 column selection for '{filepath}': {cols}")
+            return {
+                "selected_columns": cols,
+                "id_column": res.id_column,
+                "time_column": res.time_column,
+                "attribute_column": res.attribute_column,
+                "value_column": res.value_column,
+                "duplicate_policy": res.duplicate_policy or "error",
+                "aggregation": res.aggregation,
+            }
     except Exception as e:
         logger.warning(f"[ExtractionPlanner] Stage 2 column selection failed: {e}. Fallback to all columns.")
-        return list(df_preview.columns)
+
+    return {"selected_columns": list(df_preview.columns), "duplicate_policy": "error"}
 
 
 def enforce_key_columns(selected_columns: list[str], available_columns: list[str]) -> list[str]:
@@ -142,7 +173,8 @@ def build_extraction_plan(filepath: str, force_reanalyze: bool = False) -> dict:
     if structure_type == "unsupported":
         raise NotImplementedError(f"File '{filepath}' classified as unsupported format.")
 
-    raw_selected = plan_extraction(filepath, structure_type, df_preview)
+    stage2_plan = plan_extraction(filepath, structure_type, df_preview)
+    raw_selected = stage2_plan.get("selected_columns", list(df_preview.columns))
     final_selected = enforce_key_columns(raw_selected, list(df_preview.columns))
 
     plan = {
@@ -150,7 +182,13 @@ def build_extraction_plan(filepath: str, force_reanalyze: bool = False) -> dict:
         "filename": file_key,
         "fingerprint": fingerprint,
         "structure_type": structure_type,
-        "selected_columns": final_selected
+        "selected_columns": final_selected,
+        "id_column": stage2_plan.get("id_column"),
+        "time_column": stage2_plan.get("time_column"),
+        "attribute_column": stage2_plan.get("attribute_column"),
+        "value_column": stage2_plan.get("value_column"),
+        "duplicate_policy": stage2_plan.get("duplicate_policy", "error"),
+        "aggregation": stage2_plan.get("aggregation"),
     }
 
     cache[file_key] = plan

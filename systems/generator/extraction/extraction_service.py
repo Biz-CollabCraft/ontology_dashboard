@@ -63,12 +63,45 @@ def extract_with_plan(filepath: str, plan: dict) -> pd.DataFrame:
         return extracted_df
 
     elif structure_type == "tabular_row_as_attribute":
-        logger.info(f"[Extractor] Performing tabular_row_as_attribute transform for '{filepath}'...")
-        if len(df.columns) >= 3:
-            id_col, attr_col, val_col = df.columns[0], df.columns[1], df.columns[2]
-            pivoted = df.pivot(index=id_col, columns=attr_col, values=val_col).reset_index()
-            return pivoted
-        return df
+        logger.info(f"[Extractor] Performing contract-driven tabular_row_as_attribute transform for '{filepath}'...")
+        id_col = plan.get("id_column") or (df.columns[0] if len(df.columns) >= 1 else None)
+        time_col = plan.get("time_column") or next((c for c in df.columns if c in ("observed_at", "datetime", "timestamp")), None)
+        attr_col = plan.get("attribute_column") or (df.columns[1] if len(df.columns) >= 2 else None)
+        val_col = plan.get("value_column") or (df.columns[2] if len(df.columns) >= 3 else None)
+
+        if not id_col or not attr_col or not val_col or id_col not in df.columns or attr_col not in df.columns or val_col not in df.columns:
+            logger.warning(f"[Extractor] Required long-format contract columns ({id_col}, {attr_col}, {val_col}) missing in '{filepath}'. Keeping original df.")
+            return df
+
+        from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
+        if time_col and time_col in df.columns:
+            df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
+            index_cols = [id_col, time_col]
+        else:
+            index_cols = [id_col]
+
+        # Check uniqueness of (index_cols + [attr_col])
+        check_cols = index_cols + [attr_col]
+        has_duplicates = df.duplicated(subset=check_cols).any()
+
+        dup_policy = plan.get("duplicate_policy", "error")
+        aggfunc = plan.get("aggregation")
+
+        if has_duplicates:
+            if dup_policy == "aggregate" and aggfunc:
+                logger.info(f"[Extractor] Duplicate entries found in long-format '{filepath}'. Aggregating using '{aggfunc}'...")
+                pivoted = df.pivot_table(index=index_cols, columns=attr_col, values=val_col, aggfunc=aggfunc).reset_index()
+                return pivoted
+            else:
+                raise ValueError(
+                    f"Long-format dataset '{filepath}' contains duplicate observation entries for keys {check_cols} "
+                    f"without an explicit aggregation policy (duplicate_policy='{dup_policy}')."
+                )
+
+        pivoted = df.pivot(index=index_cols, columns=attr_col, values=val_col).reset_index()
+        pivoted.columns.name = None
+        logger.info(f"[Extractor] Successfully pivoted long-format dataset '{filepath}'. Output shape: {pivoted.shape}")
+        return pivoted
 
     elif structure_type == "wide_pivot":
         logger.info(f"[Extractor] Performing wide_pivot transform for '{filepath}'...")
