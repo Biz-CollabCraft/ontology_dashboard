@@ -14,7 +14,8 @@
 |---|---|---|
 | `id_column` | 설비 식별자 (Asset Partition Key) | PR #21 구현 완료 |
 | `time_column` | 관측 시각 (Canonical Time Ordering Key) | PR #21 구현 완료 |
-| `duplicate_policy` | 중복 타임스탬프 처리 정책 (`aggregate`, `first`, `error`) | PR #21 구현 완료 |
+| `duplicate_policy` | 중복 처리 정책: `error`, `aggregate` | 부분 구현 — long-format 완료, wide-format 구현 필요 |
+| `aggregation` | 집계 방식: `mean`, `first`, `sum` | long-format의 `aggregate` 경로 구현 완료 |
 
 ### single_asset 및 Heuristic Fallback 정책
 
@@ -85,7 +86,7 @@ failure metadata의 `time_columns`는 서로 다른 의미를 갖는 최소 2개
 |---|---|---|
 | anchor | `failure_point` | 고장이 실제로 발생한 시점. positive 구간의 끝(제외) |
 | exclusion_end | `period_end`, `maintenance_end` | 다운타임/정비 완료 시점. 이 시점까지는 학습에서 제외 |
-| degradation_start (참고용) | `period_start` | 열화 관측 시작 시점. **positive 구간 계산에는 사용하지 않는다** |
+| degradation_start (참고용) | `period_start` | 열화 관측 시작 시점. **positive 구간 계산 및 학습 입력에 사용하지 않는다** |
 
 **Positive interval은 `prediction_task=binary_failure_within_horizon` 의미와
 정확히 일치하도록 항상 다음 한 가지 공식을 사용한다.**
@@ -96,9 +97,8 @@ positive = [failure_point - prediction_horizon, failure_point)
 
 - `degradation_start`(`period_start`)가 있어도 이 공식에는 영향을 주지 않는다.
   `degradation_start`는 positive 구간을 넓히거나 좁히는 데 쓰지 않는다.
-- `degradation_start`는 다음 용도로만 사용한다: 데이터 품질 검증, 별도 열화
-  단계 분석용 부가 필드(`degradation_observed_at` 등)로 라벨 DataFrame에
-  참고 컬럼으로만 남긴다. 학습 대상 feature나 label 자체에는 포함하지 않는다.
+- **Target Leakage 방지 정책**: `degradation_start`를 Label DataFrame의 일반 컬럼으로 추가하지 않으며 라벨 계산 및 모델 입력(`X`)에서 제외한다. 필요 시 별도 label metadata 또는 provenance에만 저장한다.
+- 모델 학습 시 학습 피처 선택은 임의 컬럼 제외 방식이 아니라 Feature Schema allowlist로 명시적으로 선택한다: `X = labeled_df[feature_schema.feature_names]`
 
 **anchor(`failure_point`)를 metadata에서 찾을 수 없는 경우**
 
@@ -119,16 +119,14 @@ positive = [failure_point - prediction_horizon, failure_point)
 **구현 요구사항 (PR #21)**
 - `build_labels()`는 `anchor_col`(`failure_point`), `exclusion_end_col`
   (`period_end`/`maintenance_end`)를 서로 다른 변수로 분리해서 받는다.
-  `degradation_start`는 라벨 계산에 관여하지 않으므로 별도 변수로 받되
-  positive/negative 마스킹 로직에는 전달하지 않는다.
+  `degradation_start`는 라벨 계산 및 라벨 DataFrame에 관여하지 않는다.
 - 구간 metadata 있음/없음 두 분기 모두 동일한 `failure_point - horizon` 계산을
-  공유한다 (이제 두 분기의 공식이 완전히 동일해지므로, 사실상 분기 자체를
-  하나로 합칠 수 있다 — anchor만 있으면 공식은 항상 같다).
+  공유한다.
 - 회귀 테스트:
   - `degradation_start`가 `failure_point - horizon`보다 늦어도 positive 구간이
-    `[failure_point-horizon, failure_point)` 전체로 유지되는지 (더 이상
-    clip되지 않는지)
+    `[failure_point-horizon, failure_point)` 전체로 유지되는지
   - anchor 없이 exclusion_end/degradation_start만 있는 경우 이벤트가 제외되는지
+  - `degradation_start`가 모델 입력에 포함되지 않으며, Feature Schema allowlist 컬럼만 학습에 사용되는지 검증한다.
 
 > **주의**: 이 절 변경은 기존에 생성된 Feature/Label과 그 위에서 학습된
 > 모델의 의미를 바꾼다. `label_schema_version`을 올리고(`pdm-label-v3`),
@@ -150,8 +148,8 @@ positive = [failure_point - prediction_horizon, failure_point)
 
 - [ ] positive 구간이 항상 `[failure_point-horizon, failure_point)`로
       계산되며 `degradation_start`로 clip되지 않는다.
-- [ ] `degradation_start`는 참고 컬럼으로만 존재하고 label 계산에 관여하지
-      않는다.
+- [ ] `degradation_start`는 Label DataFrame 및 모델 입력(`X`)에서 제외되어 target leakage가 방지된다.
+- [ ] Feature Schema에 선언된 컬럼 allowlist만 모델 학습 입력으로 사용된다.
 - [ ] anchor 없이 exclusion_end/degradation_start로 대체되지 않는다.
 - [ ] 제외 구간이 label=0이 아니라 행 자체 제거로 처리된다.
 - [ ] 구간 metadata 있음/없음 두 분기가 동일한 계산 로직을 공유한다.

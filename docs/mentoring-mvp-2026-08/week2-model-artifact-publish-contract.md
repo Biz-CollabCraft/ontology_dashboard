@@ -89,14 +89,11 @@ Backend `artifact_provider.py`의 `REQUIRED_MANIFEST_FIELDS`는 최상위
 
 | 필드 | 상태 | 역할 |
 |---|---|---|
-| `checksum` (최상위) | **deprecated, 존재만 요구** | 값은 검증되지 않는다. 하위 호환을 위해 필드는 유지하되 새 코드가 이 값에 의미를 부여하지 않는다 |
+| `checksum` (최상위) | **deprecated, 존재만 요구** | 값은 로더에서 직접 검증되지 않으나 하위 호환을 위해 유지한다 (`manifest.checksum = artifact_files에서 role="model"인 파일의 SHA-256`으로 고정) |
 | `artifact_files[*].sha256` | **canonical, 실제 검증 대상** | consumer가 로드 전 개별 파일의 실제 SHA-256과 대조 검증 |
 
 **결정**: 최상위 `checksum`은 canonical 무결성 계약에서 제외하고
-deprecated 필드로 유지한다 (완전 제거는 하지 않는다 — `REQUIRED_MANIFEST_FIELDS`에서
-지금 빼면 기존 Backend 코드와 호환이 깨진다). publish 시 값은 임의의
-플레이스홀더(`"deprecated"` 또는 `artifact_files` 중 `model` 항목의
-sha256과 동일한 값)를 넣어 필드 존재 요건만 만족시킨다.
+deprecated 필드로 유지하되, publish 시 값은 항상 `artifact_files`에서 `role="model"`인 파일의 SHA-256으로 통일하여 명시한다 (임의의 플레이스홀더 허용 안 함).
 
 **후속 결정 필요**: 다음 `artifact_schema_version`(`model-artifact-v1.1`
 이상)에서 최상위 `checksum`을 `REQUIRED_MANIFEST_FIELDS`에서 완전히
@@ -155,6 +152,6 @@ sha256과 동일한 값)를 넣어 필드 존재 요건만 만족시킨다.
 - [ ] publish 도중 예외 발생 시 목적지에 부분 결과가 남지 않는다 (atomic).
 - [ ] publish 실패 시 run registry가 갱신되지 않는다.
 - [ ] `artifact_files`의 모든 항목이 개별 SHA-256으로 검증된다.
-- [ ] 최상위 `checksum` 필드가 deprecated로 명시되고, 값 검증에 사용되지 않는다는 것이 문서와 코드 주석에 일치한다.
+- [ ] 최상위 `checksum` 필드가 deprecated로 명시되며 `manifest.checksum = artifact_files[role="model"].sha256`으로 값이 통일된다.
 - [ ] Backend `artifact_provider.py`의 필수 role 목록이 `label_schema`, `history_requirement`를 포함하도록 갱신된다.
 - [ ] 기존 공개 파사드 심볼이 유지되어 기존 import가 깨지지 않는다.
