@@ -3,11 +3,13 @@ feature_builder.py
 
 담당 기능:
 - 온톨로지 매핑 정보 및 카탈로그 규칙 기반 시계열 피처 추출(rolling mean, rolling std, gradient, ema, lag, moving average) 및 NPY 파일 영속화 모듈.
+- plan의 id_column/time_column 계약 및 groupby 격리 정렬을 통해 설비 경계를 넘어 데이터가 오염되는 현상을 엄격히 차단한다.
 
 입력:
 - telemetry_df(pd.DataFrame): 텔레메트리 원본 데이터프레임
 - store(MappingStore): 컬럼별 온톨로지 매핑 정보
 - catalog(dict): 온톨로지 노드별 피처 변환 규칙 딕셔너리
+- plan(dict, optional): ExtractionPlan 정보 (id_column, time_column 등)
 - features_df(pd.DataFrame): 생성된 피처 데이터프레임 (save_features_npy)
 - out_dir(str): NPY 파일 저장 디렉토리
 - name(str): 데이터셋 식별키
@@ -20,13 +22,15 @@ feature_builder.py
 - pandas, numpy: 시계열 연산 (rolling, diff, ewm, shift) 및 NPY 저장/복원
 - ontology_mapping.mapping_cache.MappingStore: 온톨로지 매핑 정보 참조
 - feature_catalog.load_catalog: 카탈로그 로더
+- common.timestamp_canonicalizer: canonicalize_timestamp_series
 
 예외/경계 상황:
 - 컬럼에 온톨로지 매핑이 없거나 카탈로그에 해당 노드가 없는 경우 피처 생성을 건너뛰고 경고 로그를 기록한다.
-- rolling 연산 등으로 발생하는 NaN 행은 dropna()로 처리한다.
+- id_col/time_col을 찾지 못한 경우 명시적 경고 로그를 남기고 단일 데이터 스트림으로 취급한다.
+- rolling 연산 등으로 발생하는 NaN 행은 dropna()로 정제 처리한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '온톨로지 규격 피처 자동 생성' 원칙에 따라 매핑된 노드에 기반하여 모델 입력 피처를 표준화한다.
+- docs/architecture.md의 '온톨로지 규격 피처 자동 생성' 및 '설비 단위 시간격리' 원칙에 따른다.
 """
 
 import os
@@ -41,20 +45,65 @@ from systems.generator.common.timestamp_canonicalizer import canonicalize_timest
 logger = logging.getLogger(__name__)
 
 
-def build_features(telemetry_df: pd.DataFrame, store: MappingStore, catalog: dict) -> pd.DataFrame:
-    """온톨로지 매핑 및 카탈로그 룰에 따라 시계열 피처를 추출한다."""
+def build_features(
+    telemetry_df: pd.DataFrame,
+    store: MappingStore,
+    catalog: dict,
+    plan: dict | None = None
+) -> pd.DataFrame:
+    """온톨로지 매핑 및 카탈로그 룰에 따라 설비별 시계열 피처를 독립적으로 추출한다."""
     logger.info(f"[FeatureBuilder] Starting feature extraction on dataset shape: {telemetry_df.shape}")
     df = telemetry_df.copy()
 
-    time_col = "observed_at" if "observed_at" in df.columns else ("datetime" if "datetime" in df.columns else df.columns[0])
-    id_col = "asset_id" if "asset_id" in df.columns else ("machineID" if "machineID" in df.columns else None)
+    # 1. Identify id_col and time_col (Plan priority -> Heuristics fallback -> Warning log)
+    id_col = None
+    time_col = None
 
-    meta_cols = [time_col]
+    if plan and isinstance(plan, dict):
+        id_col = plan.get("id_column")
+        time_col = plan.get("time_column")
+
+    id_candidates = ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]
+    time_candidates = ["observed_at", "datetime", "timestamp", "time", "date"]
+
+    if not id_col or id_col not in df.columns:
+        id_col = next((c for c in df.columns if c in id_candidates), None)
+
+    if not time_col or time_col not in df.columns:
+        time_col = next((c for c in df.columns if c in time_candidates), None)
+
+    if not id_col:
+        logger.warning(
+            "[FeatureBuilder] id_column could not be identified in plan or heuristics. "
+            "Feature extraction will treat the dataset as a single equipment stream."
+        )
+
+    if not time_col:
+        logger.warning(
+            "[FeatureBuilder] time_column could not be identified. Using default first column for sequence."
+        )
+        time_col = df.columns[0]
+
+    # 2. Apply timestamp canonicalization on time_col
+    if time_col in df.columns:
+        df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
+
+    # 3. Sort values by [id_col, time_col] or [time_col]
+    sort_cols = []
     if id_col and id_col in df.columns:
-        meta_cols.append(id_col)
+        sort_cols.append(id_col)
+    if time_col and time_col in df.columns:
+        sort_cols.append(time_col)
 
+    if sort_cols:
+        df = df.sort_values(by=sort_cols).reset_index(drop=True)
+
+    meta_cols = [c for c in [time_col, id_col] if c and c in df.columns]
     result = df[meta_cols].copy()
 
+    has_multi_assets = id_col and id_col in df.columns and df[id_col].nunique() > 1
+
+    # 4. Feature Extraction per Rule
     for col in df.columns:
         if col in meta_cols:
             continue
@@ -75,18 +124,44 @@ def build_features(telemetry_df: pd.DataFrame, store: MappingStore, catalog: dic
         for rule in catalog[node]:
             name = rule["name"]
             feat_name = f"{node}_{name}"
-            if name == "rolling_mean":
-                result[feat_name] = df[col].rolling(rule.get("window", 5)).mean()
-            elif name == "rolling_std":
-                result[feat_name] = df[col].rolling(rule.get("window", 5)).std()
-            elif name == "gradient":
-                result[feat_name] = df[col].diff()
-            elif name == "ema":
-                result[feat_name] = df[col].ewm(span=rule.get("span", 10)).mean()
-            elif name == "lag":
-                result[feat_name] = df[col].shift(rule.get("periods", 1))
-            elif name == "moving_average":
-                result[feat_name] = df[col].rolling(rule.get("window", 10)).mean()
+
+            if has_multi_assets:
+                grouped = df.groupby(id_col)[col]
+                if name == "rolling_mean":
+                    w = rule.get("window", 5)
+                    result[feat_name] = grouped.transform(lambda s: s.rolling(w, min_periods=1).mean())
+                elif name == "rolling_std":
+                    w = rule.get("window", 5)
+                    result[feat_name] = grouped.transform(lambda s: s.rolling(w, min_periods=1).std())
+                elif name == "gradient":
+                    result[feat_name] = grouped.diff()
+                elif name == "ema":
+                    s_val = rule.get("span", 10)
+                    result[feat_name] = grouped.transform(lambda s: s.ewm(span=s_val).mean())
+                elif name == "lag":
+                    p = rule.get("periods", 1)
+                    result[feat_name] = grouped.shift(p)
+                elif name == "moving_average":
+                    w = rule.get("window", 10)
+                    result[feat_name] = grouped.transform(lambda s: s.rolling(w, min_periods=1).mean())
+            else:
+                if name == "rolling_mean":
+                    w = rule.get("window", 5)
+                    result[feat_name] = df[col].rolling(w, min_periods=1).mean()
+                elif name == "rolling_std":
+                    w = rule.get("window", 5)
+                    result[feat_name] = df[col].rolling(w, min_periods=1).std()
+                elif name == "gradient":
+                    result[feat_name] = df[col].diff()
+                elif name == "ema":
+                    s_val = rule.get("span", 10)
+                    result[feat_name] = df[col].ewm(span=s_val).mean()
+                elif name == "lag":
+                    p = rule.get("periods", 1)
+                    result[feat_name] = df[col].shift(rule.get("periods", 1))
+                elif name == "moving_average":
+                    w = rule.get("window", 10)
+                    result[feat_name] = df[col].rolling(w, min_periods=1).mean()
 
             logger.debug(f"[FeatureBuilder] Generated feature '{feat_name}'")
 
