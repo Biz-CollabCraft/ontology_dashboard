@@ -57,7 +57,7 @@ def detect_risk_rise_events(
     points: Iterable[PredictionTimelinePoint],
     policy: RiskRiseDetectionPolicy,
 ) -> list[DetectedRiskRiseEvent]:
-    """Detect maximal strictly increasing runs triggered by the policy step threshold."""
+    """Detect rises beginning at the observation before the first threshold-crossing step."""
 
     grouped: dict[str, list[PredictionTimelinePoint]] = defaultdict(list)
     for point in points:
@@ -82,8 +82,7 @@ def detect_risk_rise_events(
             gap_hours = _hours_between(previous.observed_at, current.observed_at)
             step_delta = current.failure_probability - previous.failure_probability
             if (
-                gap_hours <= 0
-                or gap_hours > policy.maximum_observation_gap_hours
+                gap_hours > policy.maximum_observation_gap_hours
                 or step_delta < policy.minimum_step_probability_increase
             ):
                 index += 1
@@ -92,22 +91,25 @@ def detect_risk_rise_events(
             start_index = index - 1
             peak_index = index
             cursor = index + 1
+            terminated_by = "end_of_timeline"
             while cursor < len(ordered):
                 prior = ordered[cursor - 1]
                 candidate = ordered[cursor]
                 candidate_gap = _hours_between(prior.observed_at, candidate.observed_at)
-                if (
-                    candidate_gap <= 0
-                    or candidate_gap > policy.maximum_observation_gap_hours
-                    or candidate.failure_probability <= prior.failure_probability
-                ):
+                if candidate_gap > policy.maximum_observation_gap_hours:
+                    terminated_by = "gap"
+                    break
+                if candidate.failure_probability <= prior.failure_probability:
+                    terminated_by = "non_increase"
                     break
                 peak_index = cursor
                 cursor += 1
 
             baseline = ordered[start_index]
             peak = ordered[peak_index]
-            ended = ordered[cursor] if cursor < len(ordered) else peak
+            include_terminating_row = terminated_by == "non_increase"
+            ended = ordered[cursor] if include_terminating_row else peak
+            source_stop = cursor + 1 if include_terminating_row else cursor
             total_delta = peak.failure_probability - baseline.failure_probability
             if total_delta >= policy.minimum_total_probability_increase:
                 events.append(
@@ -123,14 +125,17 @@ def detect_risk_rise_events(
                         probability_delta=total_delta,
                         time_to_peak_hours=_hours_between(baseline.observed_at, peak.observed_at),
                         duration_hours=_hours_between(baseline.observed_at, ended.observed_at),
+                        terminated_by=terminated_by,
                         policy_version=policy.policy_version,
                         model_version=baseline.model_version,
                         source_prediction_ids=[
-                            item.prediction_id for item in ordered[start_index : cursor + 1]
+                            item.prediction_id for item in ordered[start_index:source_stop]
                         ],
                     )
                 )
-            index = max(cursor + 1, index + 1)
+            # The pair that ended the run is either non-increasing or outside the
+            # allowed gap. The next possible trigger therefore starts at cursor.
+            index = cursor + 1
 
     return events
 
@@ -140,11 +145,15 @@ def rank_events_by_risk_factor(
     points: Iterable[PredictionTimelinePoint],
     *,
     feature_prefix: str,
+    eligible_asset_types: Iterable[str] | None = None,
 ) -> list[DetectedRiskRiseEvent]:
     """Rank events whose peak prediction exposes a matching risk-up factor."""
 
+    eligible = set(eligible_asset_types) if eligible_asset_types is not None else None
     point_by_key: dict[tuple[str, datetime], PredictionTimelinePoint] = {}
     for point in points:
+        if eligible is not None and point.asset_type not in eligible:
+            continue
         key = (point.asset_id, point.observed_at)
         if key in point_by_key:
             raise ValueError(
@@ -176,4 +185,10 @@ def rank_events_by_risk_factor(
                     event,
                 )
             )
-    return [item[3] for item in sorted(ranked, reverse=True)]
+    return [
+        item[3]
+        for item in sorted(
+            ranked,
+            key=lambda item: (-item[0], -item[1], item[2]),
+        )
+    ]

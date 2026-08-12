@@ -8,8 +8,9 @@
   "distribution_basis": {
     "dataset_version": "canonical-ai4i-physics-v3.1",
     "model_version": "independent-logreg-v3.1",
-    "prediction_timeline_rows": 54567,
-    "asset_count": 80,
+    "total_prediction_timeline_rows": 68208,
+    "cnc_prediction_timeline_rows": 54567,
+    "cnc_asset_count": 80,
     "statistic": "positive_adjacent_probability_delta_p90",
     "value": 0.191046
   }

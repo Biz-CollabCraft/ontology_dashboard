@@ -48,11 +48,15 @@ output으로 생성하며 원본 파일을 덮어쓰지 않는다.
 ## 4. 탐지 규칙
 
 1. `asset_id`별로 `observed_at`을 정렬한다.
-2. 인접 확률 증가가 `0.191046` 이상이면 직전 관측을 상승 시작점으로 선택한다.
+2. 인접 확률 증가가 `0.191046` 이상이면 최초 threshold 통과 step의 직전 관측을
+   상승 시작점으로 선택한다. 이는 전체 구간의 국소 최솟값을 찾는 정의가 아니다.
 3. 확률이 계속 증가하고 관측 간격이 1시간 이내인 동안 같은 사건으로 확장한다.
 4. 첫 비증가 관측을 종료점으로 기록하고 직전 최고 확률 관측을 peak로 기록한다.
-5. 전체 상승폭이 최소 상승폭 기준 이상인 사건만 출력한다.
-6. 중복 timestamp와 인접 row의 model version 변경은 오류로 처리한다.
+5. 관측 간격이 정책의 1시간을 초과하면 peak에서 종료하고 gap 이후 관측은 사건
+   근거에 포함하지 않는다.
+6. 종료 사유는 `non_increase`, `gap`, `end_of_timeline`으로 기록한다.
+7. 전체 상승폭이 최소 상승폭 기준 이상인 사건만 출력한다.
+8. 중복 timestamp와 인접 row의 model version 변경은 오류로 처리한다.
 
 `time_to_peak_hours`는 시작부터 peak까지, `duration_hours`는 시작부터 종료까지다.
 
@@ -79,7 +83,7 @@ peak의 `top_factors`에 `tool_wear_min*`가 `risk_up`으로 포함된 후보는
 모델의 6시간 Feature Engineering과 동일하게 상승 시작 직전 6시간을 baseline으로
 사용하고, 상승 시작부터 peak까지를 risk window로 사용했다.
 
-| 센서 | Baseline 평균 | Risk 평균 | 변화율 | Z-score |
+| 센서 | Baseline 평균 | Risk 평균 | 변화율 | Baseline σ 이동량 |
 |---|---:|---:|---:|---:|
 | 공기 온도(K) | 299.339114 | 300.843820 | 0.502676% | 0.693462 |
 | 공정 온도(K) | 309.702592 | 310.762532 | 0.342245% | 0.677714 |
@@ -90,6 +94,10 @@ peak의 `top_factors`에 `tool_wear_min*`가 `risk_up`으로 포함된 후보는
 이 통계는 공구 마모가 위험 상승과 함께 크게 변했다는 선행 지표 근거이며 실제
 인과관계를 확정하지 않는다.
 
+`baseline_sigma_shift = (risk_mean - baseline_mean) / baseline_stddev`이며 Risk 평균이
+Baseline 분포의 표준편차 단위로 얼마나 이동했는지를 나타낸다. 표본 평균의 통계적
+유의성 검정이나 인과 효과의 Z-score가 아니다.
+
 ## 6. 구현과 실행
 
 - 정책: `experiments/preventive_intervention/policies/risk-rise-detection-v1.json`
@@ -98,11 +106,24 @@ peak의 `top_factors`에 `tool_wear_min*`가 `risk_up`으로 포함된 후보는
 - 실행기: `experiments/preventive_intervention/cli.py`
 - 테스트: `tests/test_preventive_risk_rise.py`
 
-```powershell
-python -m experiments.preventive_intervention.cli `
-  --timeline <canonical-root>/canonical/model_outputs/prediction_timeline.jsonl `
+```shell
+python -m experiments.preventive_intervention.cli detect \
+  --timeline <canonical-root>/canonical/model_outputs/prediction_timeline.jsonl \
   --output <derived-root>/risk-rise-events.jsonl
+
+python -m experiments.preventive_intervention.cli analyze \
+  --timeline <canonical-root>/canonical/model_outputs/prediction_timeline.jsonl \
+  --sensors <canonical-root>/canonical/dataset/cnc_sensor_observation.csv \
+  --output <derived-root>/tool-wear-analysis.json
 ```
+
+`detect`는 전체 위험 상승 후보를, `analyze`는 공구 마모 후보 수·대표 사건·센서 통계를
+생성한다. 따라서 이 문서의 후보 수와 대표 사례 표는 저장소 안의 실행 경로로
+재생성할 수 있다.
+
+`DetectedRiskRiseEvent`와 `SensorFeatureStatistic`은 비배포 experiment 내부의 derived
+contract다. 공개 `schemas/preventive-what-if.schema.json`은 downstream consumer에
+전달하는 최종 `WhatIfResult`만 정의하며 내부 탐지·통계 중간 산출물을 포함하지 않는다.
 
 ## 7. 다음 단계
 

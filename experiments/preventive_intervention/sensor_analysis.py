@@ -17,6 +17,7 @@ CNC_SENSOR_UNITS = {
     "torque_nm": "N·m",
     "tool_wear_min": "min",
 }
+REQUIRED_COLUMNS = {"observed_at", "asset_id", *CNC_SENSOR_UNITS}
 
 
 def _sample_stddev(values: list[float]) -> float:
@@ -34,10 +35,26 @@ def analyze_cnc_sensor_windows(
     risk_rows: list[dict[str, str]] = []
 
     with csv_path.open(encoding="utf-8", newline="") as handle:
-        for row in csv.DictReader(handle):
+        reader = csv.DictReader(handle)
+        missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"sensor CSV missing required columns: {', '.join(sorted(missing))}")
+        for line_number, row in enumerate(reader, start=2):
             if row.get("asset_id") != event.asset_id:
                 continue
-            observed_at = datetime.fromisoformat(row["observed_at"])
+            try:
+                observed_at = datetime.fromisoformat(row["observed_at"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"invalid observed_at at sensor CSV line {line_number}") from exc
+            if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+                raise ValueError(f"observed_at must include timezone at sensor CSV line {line_number}")
+            for feature in CNC_SENSOR_UNITS:
+                try:
+                    float(row[feature])
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"sensor feature {feature} must be numeric at CSV line {line_number}"
+                    ) from exc
             if baseline_from <= observed_at < event.started_at:
                 baseline_rows.append(row)
             elif event.started_at <= observed_at <= event.peak_at:
@@ -70,7 +87,7 @@ def analyze_cnc_sensor_windows(
                     if baseline_mean != 0
                     else None
                 ),
-                z_score=(
+                baseline_sigma_shift=(
                     (risk_mean - baseline_mean) / baseline_stddev
                     if baseline_stddev != 0
                     else None

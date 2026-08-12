@@ -112,6 +112,7 @@ class DetectedRiskRiseEvent(StrictModel):
     probability_delta: float = Field(gt=0, le=1)
     time_to_peak_hours: float = Field(ge=0)
     duration_hours: float = Field(ge=0)
+    terminated_by: Literal["non_increase", "gap", "end_of_timeline"]
     policy_version: str = Field(min_length=1)
     model_version: str = Field(min_length=1)
     source_prediction_ids: list[str] = Field(min_length=2)
@@ -144,7 +145,7 @@ class SensorFeatureStatistic(StrictModel):
     risk_median: float
     risk_stddev: float = Field(ge=0)
     change_percent: float | None = None
-    z_score: float | None = None
+    baseline_sigma_shift: float | None = None
     source_reference: SourceReference
 
 
