@@ -32,6 +32,7 @@ model_training.py
 import os
 import json
 import logging
+from pathlib import Path
 from datetime import datetime, timezone
 
 from systems.generator.extraction.extraction_service import load_all_sources
