@@ -143,13 +143,25 @@ def rank_events_by_risk_factor(
 ) -> list[DetectedRiskRiseEvent]:
     """Rank events whose peak prediction exposes a matching risk-up factor."""
 
-    point_by_id = {point.prediction_id: point for point in points}
+    point_by_key: dict[tuple[str, datetime], PredictionTimelinePoint] = {}
+    for point in points:
+        key = (point.asset_id, point.observed_at)
+        if key in point_by_key:
+            raise ValueError(
+                "duplicate asset_id and observed_at in prediction points: "
+                f"{point.asset_id}, {point.observed_at.isoformat()}"
+            )
+        point_by_key[key] = point
+
     ranked: list[tuple[float, float, str, DetectedRiskRiseEvent]] = []
     for event in events:
-        peak_prediction_id = f"{event.asset_id}#{event.peak_at.isoformat()}"
-        peak = point_by_id.get(peak_prediction_id)
+        peak_key = (event.asset_id, event.peak_at)
+        peak = point_by_key.get(peak_key)
         if peak is None:
-            raise ValueError(f"missing peak prediction row: {peak_prediction_id}")
+            raise ValueError(
+                "missing peak prediction row for asset and timestamp: "
+                f"{event.asset_id}, {event.peak_at.isoformat()}"
+            )
         contributions = [
             factor.signed_contribution
             for factor in peak.top_factors

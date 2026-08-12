@@ -97,6 +97,38 @@ def test_ranks_only_events_with_matching_peak_risk_factor() -> None:
     assert rank_events_by_risk_factor(events, points, feature_prefix="tool_wear_min") == events
 
 
+def test_ranking_does_not_depend_on_prediction_id_timestamp_format() -> None:
+    policy = load_risk_rise_policy(POLICY_PATH)
+    points = [point(0, 0.1), point(1, 0.5), point(2, 0.4)]
+    peak_payload = points[1].model_dump(mode="json")
+    peak_payload["prediction_id"] = "source-defined-id-without-iso-timestamp"
+    peak_payload["top_factors"] = [
+        {
+            "feature": "tool_wear_min_6h_change",
+            "signed_contribution": 2.0,
+            "direction": "risk_up",
+        }
+    ]
+    points[1] = PredictionTimelinePoint.model_validate(peak_payload)
+
+    events = detect_risk_rise_events(points, policy)
+
+    assert rank_events_by_risk_factor(events, points, feature_prefix="tool_wear_min") == events
+
+
+def test_ranking_rejects_duplicate_asset_timestamp_keys() -> None:
+    policy = load_risk_rise_policy(POLICY_PATH)
+    points = [point(0, 0.1), point(1, 0.5), point(2, 0.4)]
+    events = detect_risk_rise_events(points, policy)
+
+    with pytest.raises(ValueError, match="duplicate asset_id and observed_at"):
+        rank_events_by_risk_factor(
+            events,
+            [*points, points[1].model_copy(update={"prediction_id": "duplicate-id"})],
+            feature_prefix="tool_wear_min",
+        )
+
+
 def test_calculates_baseline_and_risk_sensor_statistics(tmp_path: Path) -> None:
     csv_path = tmp_path / "cnc.csv"
     csv_path.write_text(
