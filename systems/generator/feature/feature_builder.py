@@ -118,12 +118,17 @@ def save_features_npy(features_df: pd.DataFrame, out_dir: str, name: str) -> Non
 def load_features_npy(out_dir: str, name: str) -> pd.DataFrame:
     """NPY 파일 및 JSON 메타데이터에서 피처 데이터프레임을 복원한다."""
     X = np.load(os.path.join(out_dir, f"{name}_X.npy"))
-    machine_id = np.load(os.path.join(out_dir, f"{name}_machineID.npy"))
-    dt = np.load(os.path.join(out_dir, f"{name}_datetime.npy"))
     with open(os.path.join(out_dir, f"{name}_columns.json"), "r", encoding="utf-8") as f:
         columns = json.load(f)
 
     df = pd.DataFrame(X, columns=columns)
-    df["machineID"] = machine_id
-    df["datetime"] = dt
+
+    machine_id_path = os.path.join(out_dir, f"{name}_machineID.npy")
+    if os.path.exists(machine_id_path):
+        df["machineID"] = np.load(machine_id_path)
+
+    datetime_path = os.path.join(out_dir, f"{name}_datetime.npy")
+    if os.path.exists(datetime_path):
+        df["datetime"] = np.load(datetime_path)
+
     return df

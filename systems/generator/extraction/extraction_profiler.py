@@ -28,7 +28,7 @@ import json
 import logging
 from datetime import datetime, timezone
 import pandas as pd
-from systems.generator.generator_llm_client import call_llm
+from systems.generator.generator_llm_client import call_llm, transform_to_structured_data
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +80,9 @@ def profile_source_file_with_llm(filepath: str, filename: str, df_preview: pd.Da
 
     try:
         raw_res = call_llm(user_prompt, system=system_prompt)
-        cleaned = raw_res.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1]
-            if cleaned.endswith("```"):
-                cleaned = cleaned.rsplit("\n", 1)[0]
-            cleaned = cleaned.replace("```json", "").replace("```", "").strip()
-        parsed = json.loads(cleaned)
+        parsed = transform_to_structured_data(raw_res, expected_type=dict)
+        if not parsed:
+            raise ValueError(f"Failed to transform LLM response to valid structured data: '{raw_res[:100]}'")
 
         confidence = float(parsed.get("confidence", 0.90))
         status = "auto_confirmed" if confidence >= 0.7 else "pending"

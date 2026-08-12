@@ -30,7 +30,7 @@ import os
 import json
 import logging
 import pandas as pd
-from systems.generator.generator_llm_client import call_llm
+from systems.generator.generator_llm_client import call_llm, transform_to_structured_data
 from systems.generator.extraction.extraction_cache import (
     load_plan_cache,
     save_plan_cache,
@@ -54,8 +54,8 @@ def classify_structure(filepath: str, df_preview: pd.DataFrame) -> str:
     prompt = f"File: {os.path.basename(filepath)}\nColumns: {list(df_preview.columns)}\nSample:\n{df_preview.head(3).to_string()}"
 
     try:
-        res = call_llm(prompt, system=system_prompt)
-        parsed = json.loads(res)
+        raw_res = call_llm(prompt, system=system_prompt)
+        parsed = transform_to_structured_data(raw_res, expected_type=dict) or {}
         st_type = parsed.get("structure_type", "tabular_column_as_attribute")
         logger.info(f"[ExtractionPlanner] Stage 1 structure classification for '{filepath}': {st_type}")
         return st_type
@@ -79,8 +79,8 @@ def plan_extraction(filepath: str, structure_type: str, df_preview: pd.DataFrame
     )
 
     try:
-        res = call_llm(prompt, system=system_prompt)
-        parsed = json.loads(res)
+        raw_res = call_llm(prompt, system=system_prompt)
+        parsed = transform_to_structured_data(raw_res, expected_type=dict) or {}
         cols = parsed.get("selected_columns", list(df_preview.columns))
         logger.info(f"[ExtractionPlanner] Stage 2 column selection for '{filepath}': {cols}")
         return cols

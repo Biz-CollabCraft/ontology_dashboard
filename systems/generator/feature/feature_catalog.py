@@ -49,7 +49,8 @@ def load_catalog(path: str = None) -> dict:
 
     logger.info(f"[FeatureCatalog] Loading feature catalog from: {path} (mtime: {mtime})")
     with open(path, "r", encoding="utf-8") as f:
-        catalog = yaml.safe_load(f)["features"]
+        raw_yaml = yaml.safe_load(f) or {}
+        catalog = raw_yaml.get("features", {})
         logger.info(f"[FeatureCatalog] Loaded catalog rules for nodes: {list(catalog.keys())}")
         _catalog_cache[path] = (mtime, catalog)
         return catalog
