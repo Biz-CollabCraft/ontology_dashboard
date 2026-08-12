@@ -40,16 +40,14 @@ def build_labels(
     prediction_horizon_hours: int = 24
 ) -> pd.DataFrame:
     """
-    features_df와 failures_df를 매칭하여 prediction_horizon 기반 label(0/1) 컬럼을 생성하고 다운타임 구간을 제외한다.
+    features_df와 failures_df를 매칭하여 prediction_horizon 기반 label(0/1) 컬럼을 생성하고,
+    active failure 구간(다운타임) 행을 제거(drop)한다.
 
-    계약 규격 (binary_failure_within_horizon):
-    1. anchor_col(failure_point): 필수 고장 시점.
-       - Positive 구간: [failure_point - prediction_horizon, failure_point)
-       - failure_point 시점 자체는 positive에서 제외.
-    2. exclusion_end_col(period_end / maintenance_end): 선택적 다운타임 완료 시점.
-       - Active failure 구간: [failure_point, exclusion_end] 은 label=0이 아니라 행 자체를 제거(Drop).
-    3. anchor_col 부재 시: period_end나 maintenance_end를 anchor로 대신 쓰지 않으며, 라벨링 대상에서 제외하고 경고 로그를 기록한다.
-    4. Target Leakage 방지: degradation_start(period_start) 등 고장 메타데이터 컬럼은 Label DataFrame 피처로 유입되지 않는다.
+    Positive 구간 공식:
+        positive = [failure_point - prediction_horizon, failure_point)
+
+    Active Failure 제거 구간:
+        [failure_point, exclusion_end] (exclusion_end: period_end 또는 maintenance_end)
     """
     df = features_df.copy()
     f_df = failures_df.copy()
@@ -64,23 +62,23 @@ def build_labels(
 
     df["label"] = 0
 
+    if not (id_col and fail_id_col and time_col):
+        logger.warning("[LabelBuilder] id/time 컬럼을 찾지 못해 label을 전부 0으로 채웁니다.")
+        return df
+
     time_cols_meta = (failure_meta or {}).get("time_columns", [])
+
+    # anchor_col (failure_point) 및 exclusion_end_col (period_end / maintenance_end) 탐지
     anchor_col = next((c["name"] for c in time_cols_meta if c.get("semantic") == "failure_point"), None)
     if not anchor_col:
         anchor_col = "observed_at" if "observed_at" in f_df.columns else ("datetime" if "datetime" in f_df.columns else None)
 
     exclusion_end_col = next((c["name"] for c in time_cols_meta if c.get("semantic") in ("period_end", "maintenance_end")), None)
-    if not exclusion_end_col:
-        for c_cand in ("maintenance_end", "period_end"):
-            if c_cand in f_df.columns and c_cand != anchor_col:
-                exclusion_end_col = c_cand
-                break
 
-    if not id_col or not fail_id_col or not time_col or not anchor_col or anchor_col not in f_df.columns:
-        logger.warning("[LabelBuilder] 필수 id/time/anchor_col(failure_point)을 찾지 못해 라벨링을 수행할 수 없습니다.")
+    if not anchor_col or anchor_col not in f_df.columns:
+        logger.warning("[LabelBuilder] anchor_col(failure_point)를 찾지 못해 고장 이벤트를 라벨링에서 제외합니다.")
         return df
 
-    logger.info(f"[LabelBuilder] Horizon ({prediction_horizon_hours}h) 라벨링 시작: anchor='{anchor_col}', exclusion_end='{exclusion_end_col}'")
     f_df[anchor_col] = canonicalize_timestamp_series(f_df[anchor_col], col_name=anchor_col)
     if exclusion_end_col and exclusion_end_col in f_df.columns:
         f_df[exclusion_end_col] = canonicalize_timestamp_series(f_df[exclusion_end_col], col_name=exclusion_end_col)
@@ -88,12 +86,14 @@ def build_labels(
     horizon_delta = pd.Timedelta(hours=prediction_horizon_hours)
     rows_to_drop_mask = pd.Series(False, index=df.index)
 
-    valid_fdf = f_df.dropna(subset=[fail_id_col, anchor_col])
-    for _, row in valid_fdf.iterrows():
+    for _, row in f_df.iterrows():
+        if pd.isna(row[anchor_col]):
+            continue
+
         f_time = row[anchor_col]
         h_start = f_time - horizon_delta
 
-        # 1. Positive interval: [f_time - horizon, f_time)
+        # 1. Positive Labeling: [f_time - horizon, f_time)
         pos_mask = (
             (df[id_col] == row[fail_id_col]) &
             (df[time_col] >= h_start) &
@@ -101,7 +101,7 @@ def build_labels(
         )
         df.loc[pos_mask, "label"] = 1
 
-        # 2. Active failure exclusion: [f_time, exclusion_end] 또는 [f_time, f_time]
+        # 2. Active Failure Exclusion: [f_time, exclusion_end] 또는 [f_time, f_time]
         if exclusion_end_col and exclusion_end_col in row and pd.notna(row[exclusion_end_col]):
             ex_end = row[exclusion_end_col]
             ex_mask = (
@@ -116,7 +116,7 @@ def build_labels(
             )
         rows_to_drop_mask |= ex_mask
 
-    # Active failure 구간 행 제거 (Drop)
+    # Active Failure 구간 행 제거 (Drop)
     df = df[~rows_to_drop_mask].reset_index(drop=True)
 
     pos_count = (df["label"] == 1).sum()
