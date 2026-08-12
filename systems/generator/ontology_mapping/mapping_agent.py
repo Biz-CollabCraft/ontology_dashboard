@@ -37,7 +37,7 @@ from systems.generator.ontology_mapping.mapping_cache import (
     MAPPING_CACHE_PATH,
     get_mapping_store,
 )
-from systems.generator.generator_llm_client import call_llm
+from systems.generator.generator_llm_client import call_llm, transform_to_structured_data
 from systems.generator.extraction.extraction_profiler import load_family_registry
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,9 @@ def map_column(column_name: str, sample_values: list, store: MappingStore, file_
     try:
         raw = call_llm(prompt, system=system_prompt)
         logger.debug(f"[MappingAgent] LLM raw response for '{column_name}': {raw}")
-        parsed = json.loads(raw)
+        parsed = transform_to_structured_data(raw, expected_type=dict)
+        if not parsed:
+            raise ValueError(f"Failed to transform LLM response to valid structured data: '{raw[:100]}'")
         target = parsed.get("ontology_node", "Unknown")
         confidence = float(parsed.get("confidence", 0.5))
         reason = parsed.get("reason", "")
