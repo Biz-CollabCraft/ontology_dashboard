@@ -13,6 +13,22 @@ API와 UI를 만들지 않고 Canonical V3.1 Prediction Timeline에서 재현 �
 Canonical V3.1 원본과 Result Artifact는 읽기 전용이다. 탐지 결과는 별도 derived
 output으로 생성하며 원본 파일을 덮어쓰지 않는다.
 
+### 운영 판단 계약과의 경계
+
+`systems/backend/app/diagnosis`가 생성하는 Product Result Artifact와
+`evidence_payload`가 운영 판단의 authoritative source다. 이 실험은 기존
+`failure_probability`와 `top_factors`를 후보 탐지 입력으로 읽을 뿐 다음 값을 새로
+판정하거나 덮어쓰지 않는다.
+
+- `failure_probability`
+- `status_grade`
+- `top_factors`
+- `recommended_action`
+
+이 실험 산출물의 허용 범위는 What-if 후보 선정, 오프라인 실험 ranking,
+`sensor_evidence` 및 baseline 참고 근거다. 후속 Evidence/Report 연결에서도 운영
+판단값의 source가 아니라 후보 선정 provenance와 보조 근거로만 사용한다.
+
 ## 2. 입력 매핑
 
 | 분석 필드 | 원본 | 역할 |
@@ -44,6 +60,11 @@ output으로 생성하며 원본 파일을 덮어쓰지 않는다.
 초기 탐지 정책은 CNC 양의 인접 확률 변화량 90백분위인 `0.191046`을 시작 기준으로
 사용한다. 이 값은 도메인의 영구 임계값이 아니라 데이터·모델 버전에 귀속된
 `risk-rise-detection-v1` 실험 정책이다.
+
+정확히는 `canonical-ai4i-physics-v3.1`과 `independent-logreg-v3.1` 조합에서 What-if
+입력 후보를 찾기 위한 **오프라인 실험 임계값**이다. `status_grade`, 운영 경보,
+점검 명령, `recommended_action`을 결정하는 운영 임계값이 아니며 고장 원인이나
+예방조치 효과를 확정하는 기준으로 사용할 수 없다.
 
 ## 4. 탐지 규칙
 
@@ -97,6 +118,28 @@ peak의 `top_factors`에 `tool_wear_min*`가 `risk_up`으로 포함된 후보는
 `baseline_sigma_shift = (risk_mean - baseline_mean) / baseline_stddev`이며 Risk 평균이
 Baseline 분포의 표준편차 단위로 얼마나 이동했는지를 나타낸다. 표본 평균의 통계적
 유의성 검정이나 인과 효과의 Z-score가 아니다.
+
+### 결과 표현 규칙
+
+Intervention 재추론 전인 현재 결과에는 다음 후보·근거 표현만 사용한다.
+
+- 공구 마모 관련 위험 상승 후보
+- 점검 우선 검토 후보
+- What-if 입력 사례
+- 공구 마모 변화가 동반된 사건
+- 모델의 `risk_up` 요인에 공구 마모가 포함된 사례
+
+다음과 같은 원인·효과·행동 확정 표현은 사용하지 않는다.
+
+- 공구 마모가 고장 원인이다.
+- 공구 교체가 고장을 예방한다.
+- 공구 교체가 효과적이다.
+- 공구를 교체하면 위험이 감소한다.
+- 즉시 공구를 교체해야 한다.
+- 예방 효과가 검증됐다.
+
+후속 Intervention 재추론 결과도 “합성 시뮬레이션에서 예상 위험이 감소했다”는
+범위로만 표현하며 실제 인과 효과나 현장 효과를 보장하지 않는다.
 
 ## 6. 구현과 실행
 

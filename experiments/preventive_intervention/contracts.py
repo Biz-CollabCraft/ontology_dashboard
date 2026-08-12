@@ -76,12 +76,47 @@ class RiseEvent(StrictModel):
 
 class RiskRiseDetectionPolicy(StrictModel):
     policy_version: str = Field(min_length=1)
+    policy_scope: Literal["offline_what_if_candidate_detection"]
+    authoritative_for_operational_risk: Literal[False]
+    allowed_uses: list[
+        Literal[
+            "what_if_candidate_selection",
+            "offline_experiment_ranking",
+            "sensor_evidence_reference",
+        ]
+    ] = Field(min_length=1)
+    prohibited_uses: list[
+        Literal[
+            "failure_probability_override",
+            "status_grade_assignment",
+            "top_factors_override",
+            "recommended_action_assignment",
+            "operational_alert_threshold",
+            "failure_cause_confirmation",
+            "intervention_effect_confirmation",
+        ]
+    ] = Field(min_length=1)
     eligible_asset_types: list[str] = Field(min_length=1)
     minimum_step_probability_increase: float = Field(gt=0, le=1)
     minimum_total_probability_increase: float = Field(gt=0, le=1)
     maximum_observation_gap_hours: float = Field(gt=0)
     baseline_window_hours: float = Field(gt=0)
     distribution_basis: dict[str, str | int | float]
+
+    @model_validator(mode="after")
+    def validate_usage_boundary(self) -> RiskRiseDetectionPolicy:
+        required_prohibitions = {
+            "failure_probability_override",
+            "status_grade_assignment",
+            "top_factors_override",
+            "recommended_action_assignment",
+            "operational_alert_threshold",
+            "failure_cause_confirmation",
+            "intervention_effect_confirmation",
+        }
+        if not required_prohibitions.issubset(self.prohibited_uses):
+            raise ValueError("risk-rise policy must retain all operational-use prohibitions")
+        return self
 
 
 class PredictionFactor(StrictModel):

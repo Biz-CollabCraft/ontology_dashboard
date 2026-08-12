@@ -1,5 +1,21 @@
 {
   "policy_version": "risk-rise-detection-v1",
+  "policy_scope": "offline_what_if_candidate_detection",
+  "authoritative_for_operational_risk": false,
+  "allowed_uses": [
+    "what_if_candidate_selection",
+    "offline_experiment_ranking",
+    "sensor_evidence_reference"
+  ],
+  "prohibited_uses": [
+    "failure_probability_override",
+    "status_grade_assignment",
+    "top_factors_override",
+    "recommended_action_assignment",
+    "operational_alert_threshold",
+    "failure_cause_confirmation",
+    "intervention_effect_confirmation"
+  ],
   "eligible_asset_types": ["cnc"],
   "minimum_step_probability_increase": 0.191046,
   "minimum_total_probability_increase": 0.191046,

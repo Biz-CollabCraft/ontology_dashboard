@@ -61,6 +61,24 @@ What-if 모듈은 다음 값만 구조화해 생성한다.
 | Dashboard | 확률·센서 차트, 상태 문구, 툴팁과 사용자 상호작용 |
 | API | 분석 함수 호출, 결과 전달, 실행 상태와 오류 처리 |
 
+### 3.4 운영 판단 권위와 downstream 사용 제한
+
+`systems/backend/app/diagnosis`의 Product Result Artifact와 `evidence_payload`가
+`failure_probability`, `status_grade`, `top_factors`, `recommended_action`의
+authoritative source다. What-if Producer는 해당 값을 읽기 전용 입력과 provenance로
+사용하며 새 운영 판단값으로 덮어쓰거나 승격하지 않는다.
+
+위험 상승 탐지·센서 통계 산출물은 다음 용도로만 연결한다.
+
+- What-if 후보 사건 선정과 오프라인 ranking
+- `sensor_evidence`와 baseline 참고 근거
+- 후보 선정 정책·source field provenance
+- 합성 Baseline/Intervention 실험 입력
+
+Dashboard, Event Evidence projection과 `final/map-report`는 이 산출물을 운영
+`status_grade`, 경보 임계값, 점검 명령 또는 `recommended_action`의 source로 사용하지
+않는다. 역할별 표현에서도 후보·합성 추정 언어와 limitation을 유지한다.
+
 ## 4. 전체 처리 흐름
 
 ```text
@@ -73,7 +91,7 @@ Canonical V3.1 / Prediction Timeline
 → 예방조치 Intervention 생성
 → 관련 시계열과 6시간 특징 재계산
 → 동일한 기존 모델로 재평가
-→ 위험도·상태등급·비용 비교
+→ Baseline/Intervention 예상 확률·비용 비교
 → 구조화된 What-if Result 생성
 → API / Dashboard / map-report가 소비
 ```
@@ -388,6 +406,8 @@ Intervention 기대비용
 - Canonical 원본·Prediction Timeline·Result Artifact checksum을 변경하지 않는다.
 - Evaluation truth가 제품 응답에 포함되지 않는다.
 - Producer는 역할별 문장과 UI 표현을 생성하지 않는다.
+- 실험 정책은 운영 `status_grade`, 경보 또는 `recommended_action`을 결정하지 않는다.
+- What-if 산출물은 Product Result Artifact의 운영 판단 필드를 덮어쓰지 않는다.
 
 ## 17. 완료 기준
 
@@ -453,3 +473,4 @@ CNC 공구 교체 파이프라인을 검증하고 전체 적용한 후 다음 �
 | 2026-08-11 | What-if Producer와 `final/map-report` Consumer 경계 반영 |
 | 2026-08-11 | 고장·수리·예방조치·경제 데이터 계획 반영 |
 | 2026-08-12 | 대표 사례 vertical slice와 전체 CNC 프로젝트 완료 기준 분리 |
+| 2026-08-12 | Product Result Artifact 권위 경계와 후보·합성 표현 제한 반영 |

@@ -4,9 +4,13 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from experiments.preventive_intervention.cli import DEFAULT_POLICY_PATH, main as cli_main
-from experiments.preventive_intervention.contracts import PredictionTimelinePoint
+from experiments.preventive_intervention.contracts import (
+    PredictionTimelinePoint,
+    RiskRiseDetectionPolicy,
+)
 from experiments.preventive_intervention.risk_rise import (
     detect_risk_rise_events,
     load_risk_rise_policy,
@@ -41,6 +45,18 @@ def test_policy_records_the_distribution_basis() -> None:
     policy = load_risk_rise_policy(POLICY_PATH)
     assert policy.minimum_step_probability_increase == pytest.approx(0.191046)
     assert policy.distribution_basis["statistic"] == "positive_adjacent_probability_delta_p90"
+    assert policy.policy_scope == "offline_what_if_candidate_detection"
+    assert policy.authoritative_for_operational_risk is False
+    assert "what_if_candidate_selection" in policy.allowed_uses
+    assert "status_grade_assignment" in policy.prohibited_uses
+    assert "recommended_action_assignment" in policy.prohibited_uses
+
+
+def test_policy_rejects_removed_operational_use_prohibition() -> None:
+    payload = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    payload["prohibited_uses"].remove("status_grade_assignment")
+    with pytest.raises(ValidationError, match="all operational-use prohibitions"):
+        RiskRiseDetectionPolicy.model_validate(payload)
 
 
 def test_detects_threshold_triggered_rise_and_records_non_increase_end() -> None:
