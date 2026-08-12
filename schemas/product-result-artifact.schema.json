@@ -20,6 +20,24 @@
     "recommended_action",
     "provenance"
   ],
+  "allOf": [
+    {
+      "if": {"required": ["evidence_payload"]},
+      "then": {
+        "properties": {
+          "provenance": {"required": ["evidence_payload_reference"]}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "provenance": {"required": ["evidence_payload_reference"]}
+        }
+      },
+      "then": {"required": ["evidence_payload"]}
+    }
+  ],
   "properties": {
     "artifact_id": {"type": "string"},
     "artifact_type": {"const": "predictive_maintenance_result"},

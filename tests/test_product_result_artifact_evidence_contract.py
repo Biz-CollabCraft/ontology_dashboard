@@ -75,6 +75,24 @@ def test_product_result_artifact_schema_accepts_optional_evidence_payload_contra
     assert schema_errors(artifact) == []
 
 
+def test_product_result_artifact_schema_rejects_payload_without_evidence_reference() -> None:
+    artifact = producer_enriched_artifact()
+    artifact["provenance"].pop("evidence_payload_reference")
+
+    errors = schema_errors(artifact)
+
+    assert any("'evidence_payload_reference' is a required property" in error.message for error in errors)
+
+
+def test_product_result_artifact_schema_rejects_evidence_reference_without_payload() -> None:
+    artifact = producer_enriched_artifact()
+    artifact.pop("evidence_payload")
+
+    errors = schema_errors(artifact)
+
+    assert any("'evidence_payload' is a required property" in error.message for error in errors)
+
+
 def test_product_result_artifact_schema_allows_missing_maintenance_context_with_gap() -> None:
     artifact = producer_enriched_artifact()
     artifact["evidence_payload"].pop("maintenance_context")

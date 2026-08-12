@@ -181,6 +181,8 @@ Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 
 `evidence_payload`는 위 7개 후보 필드로 제한한다. 단, `maintenance_context`는 source가 없을 수 있으므로 optional/nullable이다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다.
 
+`evidence_payload`와 `provenance.evidence_payload_reference`는 동반 존재해야 한다. legacy v1.0 Artifact처럼 둘 다 없는 상태는 허용하지만, 한쪽만 존재하는 enriched Artifact는 계약 위반이다.
+
 Step 7 owner decision:
 
 - `event_id`, `scenario_id`: Product Result Artifact schema에는 추가하지 않고 Event Evidence projection/API 경계에서 부여한다.
@@ -189,6 +191,7 @@ Step 7 owner decision:
 - `lineage`, `data_quality_warnings`: Product Result Artifact root/provenance 또는 producer diagnostics 후보로 남기고, `evidence_payload`에는 복제하지 않는다.
 - 구현 위치: `build_product_result_artifact()`가 공식 producer entrypoint로 남고, `build_product_result_evidence_payload()`는 신규 `systems/backend/app/diagnosis/evidence_enrichment.py` 내부 helper로 둔다. `build_evidence_package()`는 legacy/dashboard compatibility 경로로 유지한다.
 - `basis` grounding: `component_hypotheses[].basis`와 `recommended_actions[].basis`의 모든 ID는 `evidence_payload.source_fields[].field_id`에 존재해야 한다. 이 cross-field invariant는 JSON Schema가 아니라 contract test로 검증한다.
+- `maintenance_context` gap invariant: `maintenance_context`가 없거나 `null`이면 `evidence_gaps[]`에 `field=evidence_payload.maintenance_context`, `owner_domain=maintenance` 항목이 있어야 한다. 이 조건은 JSON Schema가 아니라 step 8 producer validator/test가 검증한다.
 
 공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다.
 
@@ -651,7 +654,7 @@ Status 값은 다음만 사용한다.
 
 - step 10은 원래 step 8 이후 cleanup이었지만, projection layer가 reference package를 운영 입력처럼 읽지 못하게 하는 리뷰 리스크를 먼저 제거하기 위해 선행 완료했다.
 - 이 때문에 현재 projection module은 손으로 고정한 `producer-enriched-critical-artifact.json` fixture 외에는 runtime producer 입력을 받지 않는다. 실제 producer 연결은 step 7~9 완료 전까지 구현 완료로 보지 않는다.
-- step 8 producer test에는 boolean 관측값 센서 제외, signed contribution 방향 폴백, source field/action grounding 회귀 테스트를 포함한다.
+- step 8 producer test에는 boolean 관측값 센서 제외, signed contribution 방향 폴백, source field/action grounding, missing/null `maintenance_context` gap invariant 회귀 테스트를 포함한다.
 - step 11 producer test에는 Product Result Artifact의 공식 판단 필드가 semantic reference fixture 값으로 overwrite되지 않는지 검증한다.
 - projection contract test는 `evidence_payload`가 7개 후보 필드만 갖는지, payload의 `top_factors`/`equipment`가 실수로 들어와도 root 공식 판단 필드와 artifact subject를 덮지 않는지 검증한다.
 - cleanup 단계의 legacy compatibility projection은 producer-normalized `top_factors`가 없을 때 조용히 빈 배열로 버리지 않고 명시적으로 실패한다. factor ID 부여와 normalized legacy factor 생성은 step 8 producer 구현으로 넘긴다.
