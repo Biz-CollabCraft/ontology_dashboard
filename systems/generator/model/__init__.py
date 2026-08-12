@@ -1,22 +1,39 @@
-"""Model training/evaluation and immutable Model Artifact publication."""
+"""
+__init__.py (model package)
 
-from .model_registry import ModelRegistry, publish_model_artifact, train_and_publish_model, validate_manifest
-from .model_training import ModelTraining
+담당 기능:
+- model 도메인 공개 모듈 초기화 및 서비스 함수 파사드.
 
+입력:
+- None
 
-def __getattr__(name: str):
-    if name == "train_and_evaluate":
-        from .model_training import train_and_evaluate
+출력:
+- export symbols: train_all, run_parsing_only, REGISTERED_MODELS, load_registry, get_latest_model_path, has_any_trained_model
 
-        return train_and_evaluate
-    raise AttributeError(name)
+의존 모듈:
+- model_training: train_all, run_parsing_only
+- model_registry: REGISTERED_MODELS, load_registry, get_latest_model_path, has_any_trained_model
 
+예외/경계 상황:
+- None
+
+설계 원칙과의 연결:
+- docs/architecture.md의 '도메인 서비스 파사드' 원칙에 따라 외부에 일관된 진입점을 제공한다.
+"""
+
+from systems.generator.model.model_training import train_all, run_parsing_only
+from systems.generator.model.model_registry import (
+    REGISTERED_MODELS,
+    load_registry,
+    get_latest_model_path,
+    has_any_trained_model,
+)
 
 __all__ = [
-    "ModelRegistry",
-    "ModelTraining",
-    "publish_model_artifact",
-    "train_and_evaluate",
-    "train_and_publish_model",
-    "validate_manifest",
+    "train_all",
+    "run_parsing_only",
+    "REGISTERED_MODELS",
+    "load_registry",
+    "get_latest_model_path",
+    "has_any_trained_model",
 ]
