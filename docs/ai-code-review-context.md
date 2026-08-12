@@ -95,6 +95,19 @@ API / systems/frontend / Report
     docs/assets를 실제 실행 위치에서 올바르게 가리켜야 한다.
 14. optional PostgreSQL/Redis/Neo4j integration은 해당 기능을 사용하지 않는 local/SQLite startup을
     불필요하게 막으면 안 된다. optional dependency는 기능 경계에서 fail해야 한다.
+15. Feature의 rolling/diff/shift/ewm은 asset partition을 넘어가면 안 된다.
+16. Feature 계산은 canonical timestamp 기준으로 결정적이어야 한다.
+17. 동일 ontology node의 복수 source field가 Feature를 덮어쓰면 안 된다.
+18. Label은 `binary_failure_within_horizon` 의미를 따라야 한다.
+19. 고장 anchor 자체와 active failure interval을 예측 입력으로 사용하면 안 된다.
+20. Model package는 하위 stacked PR의 prediction package를 참조하면 안 된다.
+21. package facade가 ImportError를 None/빈 registry로 숨기면 안 된다.
+22. Generator internal API는 training/publish까지만 담당한다.
+23. runtime inference와 Result Artifact는 Backend diagnosis가 소유한다.
+
+15~19번은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
+20~23번은 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`와
+`docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 근거로 한다.
 
 ## 4. Model Artifact / Result Artifact 구분
 
@@ -160,6 +173,10 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 12. compatibility adapter가 새 canonical implementation copy로 다시 자라나 ownership 중복을 만들었는가?
 13. Model Artifact → Result Artifact/Evidence provenance가 유지되는가?
 14. 공식 Week 2 MVP workflow와 role surface가 변경으로 인해 퇴행하는가?
+15. PR branch 단독 import가 가능한가? (상위 stacked PR의 모듈을 참조하지 않고 독립적으로 import되는가)
+16. `REGISTERED_MODELS`가 비어 있지 않은가? (`except ImportError`로 조용히 빈 registry가 되지 않는가)
+17. Model Artifact publish/validate round trip이 가능한가? (Backend `artifact_provider.py`가 실제로 로드할 수 있는가)
+18. Feature/Label schema version이 manifest에 기록되는가? (`feature_schema_version`, `label_schema_version`)
 
 ## 8. 자동 리뷰 출력 형식
 

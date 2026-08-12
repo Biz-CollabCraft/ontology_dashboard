@@ -130,6 +130,77 @@
 `source_event_id`를 이용해 evaluation truth의 상세 내용을 일반 화면에 노출하지
 않는다.
 
+## 3.7 Extraction Plan
+
+출처: `systems/generator/extraction/extraction_agent.py`의 `ExtractionPlanResponse` · 상태: `확정`
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `id_column` | string | N | 설비를 식별하는 컬럼명. Feature/Label partition key로 사용 |
+| `time_column` | string | N | 관측 시각 컬럼명. 정렬·canonicalize 기준 |
+| `duplicate_policy` | enum | Y | `aggregate` 등 중복 처리 정책 |
+
+상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §1을 따른다.
+
+## 3.8 Feature Schema
+
+출처: `systems/generator/feature/feature_builder.py` · 상태: `확정`
+
+```json
+{
+  "feature_schema_version": "pdm-feature-v2",
+  "features": [
+    {
+      "name": "vibration_raw__Vibration__rolling_mean__window_5",
+      "source_field": "vibration_raw",
+      "source_ontology": "Vibration",
+      "dtype": "float64",
+      "unit": null,
+      "operation": "rolling_mean",
+      "parameters": {
+        "window": 5,
+        "min_periods": 1
+      },
+      "partition_by": "asset_id",
+      "order_by": "observed_at"
+    }
+  ]
+}
+```
+
+상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §2와
+`docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
+
+## 3.9 Label Schema
+
+출처: `systems/generator/feature/feature_label_service.py` · 상태: `확정`
+
+```json
+{
+  "label_schema_version": "pdm-label-v2",
+  "prediction_task": "binary_failure_within_horizon",
+  "prediction_horizon_hours": 24,
+  "positive_interval": "[anchor-horizon, anchor)",
+  "anchor_semantic": "failure_point",
+  "active_failure_policy": "excluded"
+}
+```
+
+현재 Result Artifact의 `prediction_horizon_hours=24`와 학습 Label 계약이 실제로 연결되어야
+한다. 상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §3을 따른다.
+
+## 3.10 Training Run Metadata
+
+출처: `systems/generator/model/model_registry.py`의 `runs/v{N}/run_meta.json` · 상태: `제안`
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|:---:|---|
+| `trained_at` | datetime | Y | 학습 실행 시각 |
+| `feature_cols` | string[] | Y | 학습에 사용된 feature 컬럼 순서 |
+| `family_id` | string | Y | 설비 계열 식별자 |
+| `source_telemetry_key` | string | Y | 학습에 사용된 telemetry 소스 |
+| `source_failures_key` | string | Y | 학습에 사용된 failure 소스 |
+
 ## 4. Result Artifact 스키마
 
 출처: `canonical/model_outputs/result_artifact.jsonl` · 상태: `확정`

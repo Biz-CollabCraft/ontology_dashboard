@@ -129,6 +129,14 @@ Raw / Canonical Observation
 
 `model_store/`는 local filesystem publish 구현 예시일 뿐이다. 운영 환경에서는 mounted volume, externally provisioned path, object storage, artifact registry 등으로 교체될 수 있다.
 
+### Generator Feature 책임
+
+Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, ontology node, dtype, unit, transform, parameter, partition key, ordering key를 포함한다. 상세 필드와 naming 규칙은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
+
+### Label 책임
+
+학습 Label은 Model Artifact provenance의 일부다. prediction horizon, anchor semantics, exclusion policy와 label schema version을 기록한다. 상세 규칙은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §3을 따른다.
+
 ---
 
 ## 4. Versioned Model Artifact contract
@@ -154,6 +162,22 @@ Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`�
 | `provenance` | 소스 데이터·코드·실행 provenance |
 | `compatibility` | Backend/runtime 호환 조건 |
 | `artifact_files` | 모델, feature schema, metrics 등 파일 목록/참조 |
+
+위 표는 `feature_schema_version`만 명시하므로, 실제 publish에서는 다음을 보강한다.
+
+- `feature_schema` artifact file(`feature_schema.json`)을 `artifact_files`에 필수로 포함한다.
+- label schema 또는 label contract metadata(`label_schema.json` 또는 `training_config.label_schema_version`)를 포함한다.
+- prediction horizon을 `training_config` 또는 label schema에 기록한다.
+- Feature 순서가 `feature_schema.json`과 학습 시점의 `feature_cols` 순서와 일치함을 보장한다.
+- training/runtime compatibility 범위를 `compatibility` 필드에 명시한다.
+
+상세 스키마는 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`를 따른다.
+
+변경 영향:
+
+- Backend artifact provider의 검증 범위가 늘어날 수 있음
+- 기존 Model Artifact는 새 계약 버전과 호환되지 않을 수 있음
+- artifact schema version bump가 필요할 수 있음
 
 ### 4.2 디렉터리 예시
 
@@ -217,6 +241,10 @@ API / Dashboard / Report / Frontend
 - **제품 Result Artifact의 최종 producer**
 
 Training metrics, feature importance 등 모델 개발 설명자료는 Model Artifact provenance에 포함될 수 있지만, 이를 제품 runtime Evidence와 동일 개념으로 취급하지 않는다.
+
+### Backend Feature 소비
+
+Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Feature를 생성해야 한다면 Model Artifact에 포함된 검증된 Feature Contract(`feature_schema.json`)와 지원 transform 집합만을 사용한다. 지원하지 않는 transform이나 `feature_schema_version` 불일치는 명시적으로 실패시킨다. 상세는 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
 ### Backend domain dependency rule
 

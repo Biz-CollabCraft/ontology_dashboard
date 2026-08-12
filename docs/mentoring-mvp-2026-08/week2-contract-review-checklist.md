@@ -226,6 +226,29 @@ Week 2 UI 표시: 매니저 / 엔지니어
 - 분류: `현행 구현 계약`
 - 결정 상태: `완료` (2026-08-07)
 
+## 6.1 팀원2·3 — Generator Feature/Label/Artifact 계약 (PR #21~#24)
+
+| ID | 주제 | 분류 | 결정 상태 |
+|---|---|---|---|
+| GEN-FEAT-01 | Feature canonical owner | 현행 구현 계약 | `미결` |
+| GEN-FEAT-02 | Feature naming/versioning | 구현 변경 필요 | `미결` |
+| GEN-FEAT-03 | asset/time partition | 구현 변경 필요 | `미결` |
+| GEN-LABEL-01 | failure anchor semantics | 구현 변경 필요 | `미결` |
+| GEN-LABEL-02 | horizon boundary | 구현 변경 필요 | `미결` |
+| GEN-LABEL-03 | active failure exclusion / fail-fast 기본값 | 구현 변경 필요 | `미결` |
+| GEN-ART-01 | run registry vs Model Artifact | 구현 변경 필요 | `미결` |
+| GEN-ART-02 | immutable publish/checksum/provider | 구현 변경 필요 | `미결` |
+| GEN-API-01 | training daemon 범위 | 구현 변경 필요 | `미결` |
+| RUN-OWN-01 | runtime inference owner | 현행 구현 계약 | `미결` |
+| RUN-OWN-02 | Product Result Artifact owner | 현행 구현 계약 | `미결` |
+
+상세 내용은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
+`docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,
+`docs/architecture-decisions/ADR-001-unified-feature-contract.md`,
+`docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
+
+특히 **GEN-LABEL-03**(fail-fast 기본값)은 PR #21 단독 결정이 아니다. `systems/generator/model/model_training.py`(PR #22)가 `build_labels()`를 호출하는 방식과 직접 연결되므로, #21과 #22 담당자가 함께 결정하고 이 표에 기록한다.
+
 ## 7. 결정 기록 양식
 
 각 항목 아래에 다음 형식으로 기록한다.
