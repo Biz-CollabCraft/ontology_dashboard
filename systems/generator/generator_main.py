@@ -4,18 +4,18 @@ generator_main.py
 담당 기능:
 - Generator 도메인 백그라운드 FastAPI 데몬 서버 모듈.
 - 서버 기동 시 모델 존재 여부를 자동 검사(has_any_trained_model)하여 모델이 없을 경우 자동 학습(train_all)을 최초 1회 구동한다.
-- /health, /internal/retrain (버전 관리 재학습), /internal/predict (메모리 추론), /internal/predict/file (스냅샷 자동조회 + 파일 영속화 추론) REST 엔트리포인트를 제공한다.
+- /health, /internal/train, /internal/retrain, /internal/predict, /internal/predict/file REST 엔트리포인트를 제공한다.
 
 입력:
-- RetrainRequest: data_dir(str), force_reanalyze(bool)
+- TrainRequest: data_dir(str | None = None), force_reanalyze(bool)
 - PredictRequest: rows(list[dict])
-- PredictFileRequest: data_dir(str), n(int)
+- PredictFileRequest: data_dir(str | None = None), n(int)
 
 출력:
 - JSON 응답: 시스템 헬스 상태, 재학습 버전 정보, 예측 결과 및 저장된 결과 파일 경로
 
 의존 모듈:
-- generator_config: load_config 전역 설정 로딩
+- generator_config: load_config, PATHS
 - model.model_registry: has_any_trained_model
 - model.model_training: train_all
 - prediction.prediction_service: run_prediction, get_current_snapshot
@@ -27,19 +27,21 @@ generator_main.py
 - /internal/predict/file 호출 시 파일 저장 단계에서 실패하더라도 500 에러를 내지 않고 save_error 항목을 채워 200 OK로 반환한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '자율 구동 데몬 및 세이프가드' 원칙에 따라 모델 부재 시 스스로 파이프라인을 복구하고 에러를 격리한다.
+- docs/architecture.md의 '자율 구동 데몬 및 단일 경로 제어' 원칙에 따라 모델 부재 시 스스로 파이프라인을 복구하고 에러를 격리한다.
 """
 
 import os
 import sys
 import logging
+from pathlib import Path
+from typing import Optional
 from contextlib import asynccontextmanager
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from systems.generator.generator_config import load_config
+from systems.generator.generator_config import load_config, PATHS
 load_config()
 
 from fastapi import FastAPI, HTTPException
@@ -59,7 +61,7 @@ async def lifespan(app: FastAPI):
     if not has_any_trained_model():
         logger.info("[GeneratorDaemon] 학습된 모델이 없습니다. 최초 자동 학습을 시작합니다...")
         try:
-            train_all(data_dir="data", force_reanalyze=False)
+            train_all(data_dir=None, force_reanalyze=False)
             logger.info("[GeneratorDaemon] 최초 자동 학습 완료.")
         except Exception as e:
             logger.error(f"[GeneratorDaemon] 최초 자동 학습 실패: {e}. 서버는 계속 기동합니다.")
@@ -78,7 +80,7 @@ def health():
 
 
 class TrainRequest(BaseModel):
-    data_dir: str = "data"
+    data_dir: Optional[str] = None
     force_reanalyze: bool = False
 
 
@@ -119,7 +121,7 @@ def predict(req: PredictRequest):
 
 
 class PredictFileRequest(BaseModel):
-    data_dir: str = "data"
+    data_dir: Optional[str] = None
     n: int = 20
 
 
