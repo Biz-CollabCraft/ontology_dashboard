@@ -22,6 +22,13 @@ __init__.py (feature package)
 - docs/architecture.md의 '도메인 서비스 파사드' 원칙에 따라 외부에 일관된 진입점을 제공한다.
 """
 
+import sys
+from pathlib import Path
+
+_project_root = str(Path(__file__).resolve().parents[3])
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 from systems.generator.feature.feature_catalog import load_catalog
 from systems.generator.feature.feature_builder import build_features, save_features_npy, load_features_npy
 from systems.generator.feature.feature_label_service import build_labels
