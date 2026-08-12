@@ -230,17 +230,17 @@ Week 2 UI 표시: 매니저 / 엔지니어
 
 | ID | 주제 | 분류 | 결정 상태 |
 |---|---|---|---|
-| GEN-FEAT-01 | Feature canonical owner | 현행 구현 계약 | `미결` |
-| GEN-FEAT-02 | Feature naming/versioning | 구현 변경 필요 | `미결` |
-| GEN-FEAT-03 | asset/time partition | 구현 변경 필요 | `미결` |
-| GEN-LABEL-01 | failure anchor semantics | 구현 변경 필요 | `미결` |
-| GEN-LABEL-02 | horizon boundary | 구현 변경 필요 | `미결` |
-| GEN-LABEL-03 | active failure exclusion / fail-fast 기본값 | 구현 변경 필요 | `미결` |
-| GEN-ART-01 | run registry vs Model Artifact | 구현 변경 필요 | `미결` |
-| GEN-ART-02 | immutable publish/checksum/provider | 구현 변경 필요 | `미결` |
-| GEN-API-01 | training daemon 범위 | 구현 변경 필요 | `미결` |
-| RUN-OWN-01 | runtime inference owner | 현행 구현 계약 | `미결` |
-| RUN-OWN-02 | Product Result Artifact owner | 현행 구현 계약 | `미결` |
+| GEN-FEAT-01 | Feature canonical owner | 현행 구현 계약 | `결정 완료` (`systems/generator`) |
+| GEN-FEAT-02 | Feature naming/versioning | 구현 변경 필요 | `목표 계약 / 구현 필요` (ADR-001) |
+| GEN-FEAT-03 | asset/time partition | 현행 구현 계약 | `결정 완료` (PR #21 구현됨) |
+| GEN-LABEL-01 | failure anchor semantics | 구현 변경 필요 | `목표 계약 / 구현 진행 중` |
+| GEN-LABEL-02 | horizon boundary | 구현 변경 필요 | `목표 계약 / 구현 진행 중` |
+| GEN-LABEL-03 | active failure exclusion / fail-fast 기본값 | 구현 변경 필요 | `목표 계약 / 구현 필요` |
+| GEN-ART-01 | run registry vs Model Artifact | 구현 변경 필요 | `목표 계약 / PR #22 구현 필요` |
+| GEN-ART-02 | immutable publish/checksum/provider | 구현 변경 필요 | `목표 계약 / PR #22 구현 필요` |
+| GEN-API-01 | training daemon 범위 | 구현 변경 필요 | `목표 계약 / PR #23 구현 필요` |
+| RUN-OWN-01 | runtime inference owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) |
+| RUN-OWN-02 | Product Result Artifact owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) |
 
 상세 내용은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,

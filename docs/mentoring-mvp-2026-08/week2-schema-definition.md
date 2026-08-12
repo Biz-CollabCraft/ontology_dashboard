@@ -144,7 +144,7 @@
 
 ## 3.8 Feature Schema
 
-출처: `systems/generator/feature/feature_builder.py` · 상태: `확정`
+출처: `systems/generator/feature/feature_builder.py` · 상태: `목표 계약 (Target Contract) / 구현 변경 필요`
 
 ```json
 {
@@ -173,7 +173,7 @@
 
 ## 3.9 Label Schema
 
-출처: `systems/generator/feature/feature_label_service.py` · 상태: `확정`
+출처: `systems/generator/feature/feature_label_service.py` · 상태: `목표 계약 (Target Contract) / 구현 변경 필요`
 
 ```json
 {
