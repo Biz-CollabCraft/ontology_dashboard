@@ -302,11 +302,15 @@ Intervention 기대비용
 - [O] What-if를 비배포 Experiment 계층으로 명문화
 - [O] 공구 교체 typed parameter와 cross-field 의미 검증
 - [O] 상승 시작부터 peak까지의 시간을 `time_to_peak_hours`로 명확화
+- [O] Canonical V3.1 CNC Prediction Timeline 분포 분석
+- [O] `risk-rise-detection-v1` 정책과 deterministic 탐지기 구현
+- [O] 공구 마모 `risk_up` 후보 ranking과 대표 CNC 사례 선정
+- [O] 대표 사례의 6시간 baseline/risk 센서 통계 조인
 
 ### 다음 작업
 
-- [ ] Canonical V3.1 공구 마모 위험 사례 선정
-- [ ] 상승 사건 탐지 기준의 데이터 분포 분석
+- [O] Canonical V3.1 공구 마모 위험 사례 선정
+- [O] 상승 사건 탐지 기준의 데이터 분포 분석
 - [ ] Baseline/Intervention 시간창 생성
 - [ ] 조치 후 공구 마모 누적과 생산·정비 상태 재계산
 - [ ] 기존 Feature Engineering 재사용

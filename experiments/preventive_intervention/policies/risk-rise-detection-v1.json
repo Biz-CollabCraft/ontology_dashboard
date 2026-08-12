@@ -1,0 +1,16 @@
+{
+  "policy_version": "risk-rise-detection-v1",
+  "eligible_asset_types": ["cnc"],
+  "minimum_step_probability_increase": 0.191046,
+  "minimum_total_probability_increase": 0.191046,
+  "maximum_observation_gap_hours": 1.0,
+  "baseline_window_hours": 6.0,
+  "distribution_basis": {
+    "dataset_version": "canonical-ai4i-physics-v3.1",
+    "model_version": "independent-logreg-v3.1",
+    "prediction_timeline_rows": 54567,
+    "asset_count": 80,
+    "statistic": "positive_adjacent_probability_delta_p90",
+    "value": 0.191046
+  }
+}
