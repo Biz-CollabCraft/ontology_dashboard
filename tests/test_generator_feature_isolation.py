@@ -124,3 +124,29 @@ def test_independent_window_initialization(dummy_store, catalog):
 
     assert (mean_a == 10.0).all(), f"ASSET_A rolling mean contaminated: {mean_a.tolist()}"
     assert (mean_b == 50.0).all(), f"ASSET_B rolling mean contaminated: {mean_b.tolist()}"
+
+
+def test_horizon_labeling_lead_window():
+    """테스트 4: 단일 고장 시점 기반 prediction_horizon_hours(24h) 사전 라벨링 매칭 검증."""
+    from systems.generator.feature.feature_label_service import build_labels
+
+    dates = pd.date_range("2026-01-01 00:00:00", periods=48, freq="1h")
+    features_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"] * 48,
+        "observed_at": dates,
+        "voltage": [10.0] * 48
+    })
+
+    failures_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"],
+        "observed_at": [pd.Timestamp("2026-01-02 12:00:00")]
+    })
+
+    labeled_df = build_labels(features_df, failures_df, prediction_horizon_hours=24)
+
+    pos_mask = labeled_df["label"] == 1
+    pos_times = labeled_df.loc[pos_mask, "observed_at"]
+
+    assert len(pos_times) == 25, f"Expected 25 hourly points in 24h horizon window, got {len(pos_times)}"
+    assert pos_times.min() == pd.Timestamp("2026-01-01 12:00:00")
+    assert pos_times.max() == pd.Timestamp("2026-01-02 12:00:00")
