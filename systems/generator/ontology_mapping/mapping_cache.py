@@ -2,8 +2,8 @@
 mapping_cache.py
 
 담당 기능:
-- 온톨로지 매핑 레코드(`MappingRecord`) 및 절대 경로 영속 저장소(`MappingStore`) 모듈.
-- 프로세스 전역에서 단일 저장소(싱글톤)로 동작하며 프로젝트 루트 하위 ontology/mapping_cache.json 파일과의 동기화를 관리한다.
+- 온톨로지 매핑 레코드(`MappingRecord`) 및 경로 레지스트리(PATHS.mapping_cache) 영속 저장소(`MappingStore`) 모듈.
+- 프로세스 전역에서 단일 저장소(싱글톤)로 동작하며 mapping_cache.json 파일과의 동기화를 관리한다.
 
 입력:
 - source_field(str): 소스 데이터셋 컬럼명
@@ -16,22 +16,23 @@ mapping_cache.py
 
 의존 모듈:
 - pydantic.BaseModel: 매핑 레코드 스키마 정의
-- json, os: 매핑 캐시 절대 경로 입출력
+- systems.generator.generator_config.PATHS: 전역 경로 레지스트리
 
 예외/경계 상황:
 - 매핑 캐시 파일 미존재 시 빈 매핑으로 초기화한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md의 '절대 경로 온톨로지 캐시' 원칙에 따라 CWD에 독립적으로 캐시를 읽고 저장한다.
+- docs/architecture.md의 '단일 경로 제어 온톨로지 캐시' 원칙에 따라 PATHS 레지스트리를 참조한다.
 """
 
 import json
 import os
+from pathlib import Path
 from pydantic import BaseModel
 from typing import Dict, Optional
+from systems.generator.generator_config import PATHS
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MAPPING_CACHE_PATH = os.path.join(ROOT_DIR, "ontology", "mapping_cache.json")
+MAPPING_CACHE_PATH = PATHS.mapping_cache
 
 
 class MappingRecord(BaseModel):
@@ -61,15 +62,17 @@ class MappingStore:
     def get_all(self):
         return self._mappings
 
-    def load_from_file(self, path: str = MAPPING_CACHE_PATH):
-        if not os.path.exists(path):
+    def load_from_file(self, path: Path = MAPPING_CACHE_PATH):
+        path_obj = Path(path)
+        if not path_obj.exists():
             return
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path_obj, "r", encoding="utf-8") as f:
             data = json.load(f)
         for source_field, v in data.items():
             self._mappings[source_field] = MappingRecord(source_field=source_field, **v)
 
-    def save_to_file(self, path: str = MAPPING_CACHE_PATH):
+    def save_to_file(self, path: Path = MAPPING_CACHE_PATH):
+        path_obj = Path(path)
         data = {
             k: {
                 "target_ontology": v.target_ontology,
@@ -79,8 +82,8 @@ class MappingStore:
             }
             for k, v in self._mappings.items()
         }
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        with open(path_obj, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
 
