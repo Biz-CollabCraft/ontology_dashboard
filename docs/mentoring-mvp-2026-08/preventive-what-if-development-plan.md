@@ -61,6 +61,24 @@ What-if 모듈은 다음 값만 구조화해 생성한다.
 | Dashboard | 확률·센서 차트, 상태 문구, 툴팁과 사용자 상호작용 |
 | API | 분석 함수 호출, 결과 전달, 실행 상태와 오류 처리 |
 
+### 3.4 운영 판단 권위와 downstream 사용 제한
+
+`systems/backend/app/diagnosis`의 Product Result Artifact와 `evidence_payload`가
+`failure_probability`, `status_grade`, `top_factors`, `recommended_action`의
+authoritative source다. What-if Producer는 해당 값을 읽기 전용 입력과 provenance로
+사용하며 새 운영 판단값으로 덮어쓰거나 승격하지 않는다.
+
+위험 상승 탐지·센서 통계 산출물은 다음 용도로만 연결한다.
+
+- What-if 후보 사건 선정과 오프라인 ranking
+- `sensor_evidence`와 baseline 참고 근거
+- 후보 선정 정책·source field provenance
+- 합성 Baseline/Intervention 실험 입력
+
+Dashboard, Event Evidence projection과 `final/map-report`는 이 산출물을 운영
+`status_grade`, 경보 임계값, 점검 명령 또는 `recommended_action`의 source로 사용하지
+않는다. 역할별 표현에서도 후보·합성 추정 언어와 limitation을 유지한다.
+
 ## 4. 전체 처리 흐름
 
 ```text
@@ -73,7 +91,7 @@ Canonical V3.1 / Prediction Timeline
 → 예방조치 Intervention 생성
 → 관련 시계열과 6시간 특징 재계산
 → 동일한 기존 모델로 재평가
-→ 위험도·상태등급·비용 비교
+→ Baseline/Intervention 예상 확률·비용 비교
 → 구조화된 What-if Result 생성
 → API / Dashboard / map-report가 소비
 ```
@@ -187,7 +205,8 @@ Evaluation truth에서 변환할 경우 `occurred_at`이 지난 이벤트만 운
 계산한다. 초기 임계값을 코드에 고정하지 않고 데이터 분포 분석 후 버전 있는 정책으로
 관리한다.
 
-센서별 정상 기준 구간과 위험 구간의 평균, 중앙값, 표준편차, 변화율, Z-score와
+센서별 정상 기준 구간과 위험 구간의 평균, 중앙값, 표준편차, 변화율,
+Baseline 표준편차 기준 이동량과
 모델 contribution을 계산한다.
 
 - CNC: 공기·공정 온도, 온도 차, RPM, Torque, Power, Tool wear, 제품 유형
@@ -302,11 +321,15 @@ Intervention 기대비용
 - [O] What-if를 비배포 Experiment 계층으로 명문화
 - [O] 공구 교체 typed parameter와 cross-field 의미 검증
 - [O] 상승 시작부터 peak까지의 시간을 `time_to_peak_hours`로 명확화
+- [O] Canonical V3.1 CNC Prediction Timeline 분포 분석
+- [O] `risk-rise-detection-v1` 정책과 deterministic 탐지기 구현
+- [O] 공구 마모 `risk_up` 후보 ranking과 대표 CNC 사례 선정
+- [O] 대표 사례의 6시간 baseline/risk 센서 통계 조인
 
 ### 다음 작업
 
-- [ ] Canonical V3.1 공구 마모 위험 사례 선정
-- [ ] 상승 사건 탐지 기준의 데이터 분포 분석
+- [O] Canonical V3.1 공구 마모 위험 사례 선정
+- [O] 상승 사건 탐지 기준의 데이터 분포 분석
 - [ ] Baseline/Intervention 시간창 생성
 - [ ] 조치 후 공구 마모 누적과 생산·정비 상태 재계산
 - [ ] 기존 Feature Engineering 재사용
@@ -383,13 +406,56 @@ Intervention 기대비용
 - Canonical 원본·Prediction Timeline·Result Artifact checksum을 변경하지 않는다.
 - Evaluation truth가 제품 응답에 포함되지 않는다.
 - Producer는 역할별 문장과 UI 표현을 생성하지 않는다.
+- 실험 정책은 운영 `status_grade`, 경보 또는 `recommended_action`을 결정하지 않는다.
+- What-if 산출물은 Product Result Artifact의 운영 판단 필드를 덮어쓰지 않는다.
 
-## 17. 최소 완료 기준
+## 17. 완료 기준
 
-> 설비 한 대의 고장확률 상승을 탐지하고 선행 센서 지표와 근거를 구조화해 제공하며,
-> 동일 초기 상태에서 공구 교체를 적용한 경우와 적용하지 않은 경우를 기존 모델로
-> 비교해 예상 위험 감소량을 생성한다. 결과에는 합성 시뮬레이션 범위와 한계가
-> 명시되고 역할별 자연어 문장은 `final/map-report`가 생성한다.
+### 17.1 첫 번째 End-to-End 검증 기준
+
+> 대표 CNC 설비 한 대의 고장확률 상승을 탐지하고 선행 센서 지표와 근거를
+> 구조화한다. 동일 초기 상태에서 공구 교체를 적용한 경우와 적용하지 않은 경우를
+> 동일 Feature Engineering과 기존 모델로 비교해 예상 위험 감소량을 생성한다.
+> 결과에는 합성 시뮬레이션 범위와 한계를 명시한다.
+
+대표 사례 한 건의 성공은 전체 기능 완료가 아니라 위험 탐지부터 예방조치 효과
+평가까지의 vertical slice 검증 완료를 의미한다.
+
+### 17.2 프로젝트 완료 기준
+
+> 검증된 위험 상승 탐지와 What-if 파이프라인을 Canonical V3.1의 적용 가능한
+> 전체 CNC 설비 및 공구 마모 관련 위험 상승 사건에 반복 적용한다. 사건별
+> 예방조치 결과와 함께 설비·사건 전체의 효과 분포 및 집계 결과를 생성한다.
+
+프로젝트 완료를 위해 다음을 만족해야 한다.
+
+- 전체 CNC Prediction Timeline을 동일한 버전 정책으로 분석한다.
+- 공구 마모 관련 위험 상승 사건을 재현 가능하게 선별한다.
+- 적용 가능한 각 사건에 동일한 공구 교체 정책을 적용한다.
+- Baseline과 Intervention은 동일 초기 상태에서 시작한다.
+- 두 시나리오에 동일한 Feature Engineering과 모델 버전을 사용한다.
+- 사건별 `baseline_probability`, `intervention_probability`,
+  `estimated_probability_reduction`을 생성한다.
+- 효과가 없거나 위험이 증가한 사건도 결과에서 제외하지 않는다.
+- 분석 대상 수, 적용 성공·실패 수, 평균·중앙값과 위험 감소량 분포를 집계한다.
+- 모든 결과에 dataset, model, detection policy와 simulation policy provenance를 남긴다.
+- 모든 수치는 `synthetic_counterfactual_simulation` 결과로 표시한다.
+- 실제 인과 효과나 현실의 예방 효과로 단정하지 않는다.
+- Producer는 역할별 자연어 문장이나 UI 표현을 생성하지 않는다.
+- 역할별 자연어 문장은 구조화된 결과를 소비하는 `final/map-report`가 생성한다.
+
+### 17.3 후속 도메인 확장 기준
+
+CNC 공구 교체 파이프라인을 검증하고 전체 적용한 후 다음 예방조치를 별도 정책으로
+확장한다.
+
+- `CUTTING_LOAD_REDUCTION`
+- `COOLING_SYSTEM_RESTORE`
+- Compressor 진동·압력·공기 공급 관련 예방조치
+
+각 예방조치는 별도의 typed parameter, 물리 변환 정책, 적용 가능 조건과 검증 기준을
+가져야 한다. CNC 공구 교체 정책과 같은 임계값 또는 변환 규칙을 공유한다고 가정하지
+않는다.
 
 ## 18. 후속 범위
 
@@ -406,3 +472,5 @@ Intervention 기대비용
 | 2026-08-11 | 실행 계획 최초 작성, 현재 구현 상태와 기준 경로 반영 |
 | 2026-08-11 | What-if Producer와 `final/map-report` Consumer 경계 반영 |
 | 2026-08-11 | 고장·수리·예방조치·경제 데이터 계획 반영 |
+| 2026-08-12 | 대표 사례 vertical slice와 전체 CNC 프로젝트 완료 기준 분리 |
+| 2026-08-12 | Product Result Artifact 권위 경계와 후보·합성 표현 제한 반영 |
