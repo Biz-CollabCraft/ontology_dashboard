@@ -30,8 +30,14 @@ _project_root = str(Path(__file__).resolve().parents[3])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from systems.generator.prediction.prediction_schema import PredictionOutput
-from systems.generator.prediction.prediction_repository import save_prediction_result
-from systems.generator.prediction.prediction_service import run_prediction, get_current_snapshot
+try:
+    from systems.generator.prediction.prediction_schema import PredictionOutput
+    from systems.generator.prediction.prediction_repository import save_prediction_result
+    from systems.generator.prediction.prediction_service import run_prediction, get_current_snapshot
+except ImportError:
+    PredictionOutput = None
+    save_prediction_result = None
+    run_prediction = None
+    get_current_snapshot = None
 
 __all__ = ["PredictionOutput", "save_prediction_result", "run_prediction", "get_current_snapshot"]
