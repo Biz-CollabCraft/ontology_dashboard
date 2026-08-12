@@ -177,7 +177,7 @@ Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 - `evidence_payload.evidence_gaps[]`: producer가 산출할 수 없는 값의 명시적 결손 기록
 - `provenance.evidence_payload_reference`: 근거 산출 기준과 reference fixture 비교 기준
 
-`evidence_payload`는 위 7개 후보 필드로 제한한다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다.
+`evidence_payload`는 위 7개 후보 필드로 제한한다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다. `event_id`/`scenario_id`의 producer 배치는 step 7에서 확정하며, cleanup fixture는 이를 Artifact root로 승격하지 않는다.
 
 공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다.
 
@@ -643,6 +643,7 @@ Status 값은 다음만 사용한다.
 - step 8 producer test에는 boolean 관측값 센서 제외, signed contribution 방향 폴백, source field/action grounding 회귀 테스트를 포함한다.
 - step 11 producer test에는 Product Result Artifact의 공식 판단 필드가 semantic reference fixture 값으로 overwrite되지 않는지 검증한다.
 - projection contract test는 `evidence_payload`가 7개 후보 필드만 갖는지, payload의 `top_factors`/`equipment`가 실수로 들어와도 root 공식 판단 필드와 artifact subject를 덮지 않는지 검증한다.
+- cleanup 단계의 legacy compatibility projection은 producer-normalized `top_factors`가 없을 때 조용히 빈 배열로 버리지 않고 명시적으로 실패한다. factor ID 부여와 normalized legacy factor 생성은 step 8 producer 구현으로 넘긴다.
 - `provenance.evidence_payload_reference.generated_by`는 producer helper 모듈 위치가 확정되기 전까지 fixture에서 `app.diagnosis.producer_boundary_pending`으로 둔다. step 7에서 `evidence.py` 또는 `evidence_enrichment.py`가 확정되면 이 값을 갱신한다.
 
 2차 PR 완료 조건은 다음과 같다.

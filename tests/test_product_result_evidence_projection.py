@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator
-
 from ontology_dashboard.product_result_evidence_projection import (
     EVENT_EVIDENCE_CONTRACT_TYPE,
     EVENT_EVIDENCE_SCHEMA_VERSION,
@@ -122,17 +120,8 @@ def test_payload_fields_do_not_override_artifact_judgement_or_subject() -> None:
     }
 
 
-def test_legacy_projection_passes_current_evidence_schema() -> None:
+def test_legacy_projection_rejects_unmapped_product_result_factors() -> None:
     projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
 
-    legacy = event_evidence_projection_to_legacy_evidence(projection)
-
-    schema = json.loads((ROOT / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
-    assert list(Draft202012Validator(schema).iter_errors(legacy)) == []
-    assert legacy["schema_version"] == "1.0"
-    assert legacy["event_id"] == projection["event_id"]
-    assert legacy["status"] == projection["assessment"]["status"]
-    assert legacy["recommended_decision"] == projection["assessment"]["recommended_decision"]
-    assert legacy["threshold"] == projection["assessment"]["threshold"]
-    assert legacy["lineage"]["product_result_artifact"]["artifact_id"] == projection["artifact_reference"]["artifact_id"]
-    assert_absent_hidden_truth(legacy)
+    with pytest.raises(ValueError, match="producer-normalized top_factors"):
+        event_evidence_projection_to_legacy_evidence(projection)

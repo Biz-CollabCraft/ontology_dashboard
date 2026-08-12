@@ -32,14 +32,14 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
     if not isinstance(payload, dict):
         raise ValueError("Product Result Artifact evidence_payload is required for Event Evidence projection")
     provenance = clean_artifact.get("provenance", {})
-    event_id = clean_artifact.get("event_id") or f"EVT-{clean_artifact['artifact_id']}"
-    threshold = clean_artifact.get("decision_threshold")
+    event_id = f"EVT-{clean_artifact['artifact_id']}"
+    threshold = clean_artifact.get("threshold")
     recommended_decision = _recommended_decision(clean_artifact)
     projection = {
         "schema_version": EVENT_EVIDENCE_SCHEMA_VERSION,
         "contract_type": EVENT_EVIDENCE_CONTRACT_TYPE,
         "event_id": event_id,
-        "scenario_id": clean_artifact.get("scenario_id"),
+        "scenario_id": None,
         "subject": _subject(clean_artifact),
         "artifact_reference": {
             "artifact_id": clean_artifact.get("artifact_id"),
@@ -111,6 +111,10 @@ def event_evidence_projection_to_legacy_evidence(evidence: dict[str, Any]) -> di
         raise ValueError("legacy evidence projection requires an explicit threshold")
 
     maintenance_context = report_projection.get("maintenance_context") or {}
+    top_factors = assessment.get("top_factors", [])
+    if any(not isinstance(factor, dict) or "evidence_field_id" not in factor for factor in top_factors):
+        raise ValueError("legacy evidence projection requires producer-normalized top_factors")
+
     legacy = {
         "schema_version": "1.0",
         "evidence_id": f"EVD-{projection['event_id']}",
@@ -133,11 +137,7 @@ def event_evidence_projection_to_legacy_evidence(evidence: dict[str, Any]) -> di
         "history": lineage.get("history", []),
         "detected_interval": lineage.get("detected_interval")
         or {"start": artifact_reference.get("observed_at"), "end": artifact_reference.get("observed_at")},
-        "top_factors": [
-            factor
-            for factor in assessment.get("top_factors", [])
-            if isinstance(factor, dict) and "evidence_field_id" in factor
-        ],
+        "top_factors": top_factors,
         "maintenance_context": maintenance_context,
         "data_quality_warnings": assessment.get("data_quality_warnings", []),
         "lineage": {

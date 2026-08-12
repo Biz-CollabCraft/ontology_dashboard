@@ -1,8 +1,8 @@
 {
   "schema_version": "event-evidence-projection-v1",
   "contract_type": "event_evidence_projection",
-  "event_id": "EVT-PDM-REF-004",
-  "scenario_id": "PDM-REF-004",
+  "event_id": "EVT-RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
+  "scenario_id": null,
   "subject": {
     "equipment_id": "CMP-S03-L03-01",
     "display_name": "CMP-S03-L03-01",
