@@ -48,6 +48,18 @@ def schema_errors(payload: dict) -> list:
     return list(Draft202012Validator(product_result_artifact_schema()).iter_errors(payload))
 
 
+def unresolved_basis_refs(evidence_payload: dict) -> set[str]:
+    source_field_ids = {field["field_id"] for field in evidence_payload["source_fields"]}
+    basis_refs: set[str] = set()
+
+    for hypothesis in evidence_payload["component_hypotheses"]:
+        basis_refs.update(hypothesis["basis"])
+    for action in evidence_payload["recommended_actions"]:
+        basis_refs.update(action["basis"])
+
+    return basis_refs - source_field_ids
+
+
 def test_product_result_artifact_schema_accepts_existing_v1_artifact_without_evidence_payload() -> None:
     artifact = producer_enriched_artifact()
     artifact.pop("evidence_payload")
@@ -63,6 +75,49 @@ def test_product_result_artifact_schema_accepts_optional_evidence_payload_contra
     assert schema_errors(artifact) == []
 
 
+def test_product_result_artifact_schema_allows_missing_maintenance_context_with_gap() -> None:
+    artifact = producer_enriched_artifact()
+    artifact["evidence_payload"].pop("maintenance_context")
+    artifact["evidence_payload"]["evidence_gaps"].append(
+        {
+            "gap_id": "gap.maintenance_context.unavailable",
+            "field": "evidence_payload.maintenance_context",
+            "reason": "missing_source",
+            "required_source": "maintenance_context_provider",
+            "owner_domain": "maintenance",
+            "display_policy": "show_as_unavailable",
+        }
+    )
+
+    assert schema_errors(artifact) == []
+
+
+def test_product_result_artifact_schema_allows_null_maintenance_context_with_gap() -> None:
+    artifact = producer_enriched_artifact()
+    artifact["evidence_payload"]["maintenance_context"] = None
+    artifact["evidence_payload"]["evidence_gaps"].append(
+        {
+            "gap_id": "gap.maintenance_context.null",
+            "field": "evidence_payload.maintenance_context",
+            "reason": "missing_source",
+            "required_source": "maintenance_context_provider",
+            "owner_domain": "maintenance",
+            "display_policy": "show_as_unavailable",
+        }
+    )
+
+    assert schema_errors(artifact) == []
+
+
+def test_product_result_artifact_status_flags_are_fixed_contract_flags() -> None:
+    artifact = producer_enriched_artifact()
+    artifact["evidence_payload"]["status_flags"]["made_up_flag"] = True
+
+    errors = schema_errors(artifact)
+
+    assert any("Additional properties are not allowed" in error.message for error in errors)
+
+
 def test_product_result_artifact_schema_rejects_dashboard_fixture_fields_inside_evidence_payload() -> None:
     artifact = producer_enriched_artifact()
     artifact["evidence_payload"]["event_id"] = "EVT-SHOULD-NOT-BE-HERE"
@@ -76,6 +131,19 @@ def test_product_result_artifact_evidence_payload_contract_documents_forbidden_k
     artifact = producer_enriched_artifact()
 
     assert set(artifact["evidence_payload"]).isdisjoint(FORBIDDEN_PAYLOAD_KEYS)
+
+
+def test_product_result_artifact_basis_refs_resolve_to_source_fields() -> None:
+    artifact = producer_enriched_artifact()
+
+    assert unresolved_basis_refs(artifact["evidence_payload"]) == set()
+
+
+def test_product_result_artifact_basis_refs_detect_unmapped_source_field_ids() -> None:
+    artifact = producer_enriched_artifact()
+    artifact["evidence_payload"]["recommended_actions"][0]["basis"].append("factor.999.nonexistent")
+
+    assert unresolved_basis_refs(artifact["evidence_payload"]) == {"factor.999.nonexistent"}
 
 
 def test_product_result_artifact_schema_keeps_event_identity_out_of_root_contract() -> None:

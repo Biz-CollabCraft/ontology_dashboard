@@ -166,18 +166,20 @@ flowchart LR
 - `recommended_action`
 - `provenance`
 
+호환용 optional root 필드는 `generated_at`, `threshold`다. 두 값은 기존 consumer를 깨지 않는 범위에서만 허용하며 `evidence_payload` 아래로 복제하지 않는다.
+
 Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 
 - `evidence_payload.sensor_evidence`: sensor별 window 평균, z-score, baseline basis
 - `evidence_payload.component_hypotheses`: top factor 기반 점검 후보. root cause로 승격하지 않음
-- `evidence_payload.status_flags`: `multiple_risk_factors`, `insufficient_data` 등 표시 보조 flag
-- `evidence_payload.maintenance_context`: 단일 설비 정비 문맥. 기간 정비 집계가 아님
+- `evidence_payload.status_flags`: `multiple_risk_factors`, `insufficient_data` 표시 보조 flag. step 7 contract에서는 임의 flag 확장을 허용하지 않는다
+- `evidence_payload.maintenance_context`: 단일 설비 정비 문맥. 기간 정비 집계가 아니며, 원천이 없으면 생략하거나 `null`로 두고 `evidence_gaps[]`에 기록한다
 - `evidence_payload.recommended_actions[].basis`: action 문구의 출처
 - `evidence_payload.source_fields`: report/evidence trace에서 참조할 source field ID
 - `evidence_payload.evidence_gaps[]`: producer가 산출할 수 없는 값의 명시적 결손 기록
 - `provenance.evidence_payload_reference`: 근거 산출 기준과 reference fixture 비교 기준
 
-`evidence_payload`는 위 7개 후보 필드로 제한한다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다.
+`evidence_payload`는 위 7개 후보 필드로 제한한다. 단, `maintenance_context`는 source가 없을 수 있으므로 optional/nullable이다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다.
 
 Step 7 owner decision:
 
@@ -186,6 +188,7 @@ Step 7 owner decision:
 - `observation`, `history`, `detected_interval`: raw source snapshot으로 보존할지 여부는 step 8 구현에서 producer input context로 다루며, `evidence_payload`에는 복제하지 않는다.
 - `lineage`, `data_quality_warnings`: Product Result Artifact root/provenance 또는 producer diagnostics 후보로 남기고, `evidence_payload`에는 복제하지 않는다.
 - 구현 위치: `build_product_result_artifact()`가 공식 producer entrypoint로 남고, `build_product_result_evidence_payload()`는 신규 `systems/backend/app/diagnosis/evidence_enrichment.py` 내부 helper로 둔다. `build_evidence_package()`는 legacy/dashboard compatibility 경로로 유지한다.
+- `basis` grounding: `component_hypotheses[].basis`와 `recommended_actions[].basis`의 모든 ID는 `evidence_payload.source_fields[].field_id`에 존재해야 한다. 이 cross-field invariant는 JSON Schema가 아니라 contract test로 검증한다.
 
 공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다.
 
@@ -636,7 +639,7 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 6 | Todo | 기존 dashboard artifact/evidence와 `pdm-mvp` reference 필드를 producer fact, projection/display field, evidence gap, 후속 도메인 field로 분류한다. | field classification table | 문서/fixture audit 결과 |
+| 6 | Done | 기존 dashboard artifact/evidence와 `pdm-mvp` reference 필드를 producer fact, projection/display field, evidence gap, 후속 도메인 field로 분류한다. | field classification table | §4.1 처리표와 Step 7 owner decision |
 | 7 | Done | `systems/backend/app/diagnosis`의 producer-side evidence enrichment schema와 ownership을 고정한다. | optional `evidence_payload` producer contract | `tests/test_product_result_artifact_evidence_contract.py` |
 | 8 | Todo | `build_product_result_evidence_payload()`와 sensor/baseline/component/source-field 산출 함수를 추가하고, cleanup에서 제거된 산출 규칙을 producer로 회수한다. | producer enrichment module | backend unit test 결과 |
 | 9 | Todo | `pdm-mvp` reference fixture와 producer `evidence_payload`의 의미 동등성을 비교한다. 단, 화면/report 표현 필드는 비교 대상에서 제외한다. | semantic regression test | fixture comparison 결과 |
