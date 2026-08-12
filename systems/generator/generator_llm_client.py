@@ -59,6 +59,18 @@ class ExtractionColumnsResponse(BaseModel):
     selected_columns: list[str] = Field(default_factory=list)
 
 
+class ExtractionPlanResponse(BaseModel):
+    structure_type: str = "tabular_column_as_attribute"
+    selected_columns: list[str] = Field(default_factory=list)
+    id_column: Optional[str] = None
+    time_column: Optional[str] = None
+    attribute_column: Optional[str] = None
+    value_column: Optional[str] = None
+    duplicate_policy: str = "error"  # "error" | "aggregate"
+    aggregation: Optional[str] = None  # "mean" | "first" | "sum"
+    reason: Optional[str] = None
+
+
 class ColumnMappingResponse(BaseModel):
     ontology_node: str = "Unknown"
     confidence: float = 0.5
