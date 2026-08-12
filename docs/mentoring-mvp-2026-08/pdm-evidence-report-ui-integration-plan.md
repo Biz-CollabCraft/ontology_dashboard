@@ -186,6 +186,7 @@ Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 Step 7 owner decision:
 
 - `event_id`, `scenario_id`: Product Result Artifact schema에는 추가하지 않고 Event Evidence projection/API 경계에서 부여한다.
+- Product Result Artifact root는 v1.0 forward-compatible open schema로 유지한다. 따라서 unknown root property를 JSON Schema에서 물리적으로 모두 거부하지는 않지만, `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `lineage`는 canonical defined property가 아니다.
 - `threshold`, `generated_at`: 기존 Artifact consumer를 깨지 않는 optional root compatibility field로만 허용한다. `evidence_payload`에는 복제하지 않는다.
 - `observation`, `history`, `detected_interval`: raw source snapshot으로 보존할지 여부는 step 8 구현에서 producer input context로 다루며, `evidence_payload`에는 복제하지 않는다.
 - `lineage`, `data_quality_warnings`: Product Result Artifact root/provenance 또는 producer diagnostics 후보로 남기고, `evidence_payload`에는 복제하지 않는다.
