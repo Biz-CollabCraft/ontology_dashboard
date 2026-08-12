@@ -1,11 +1,29 @@
-"""Source-consumer extraction package.
+"""
+__init__.py (extraction package)
 
-Source generation remains owned by Biz-CollabCraft/gen_data. This package only
-consumes and normalizes source observations after they cross that boundary.
+담당 기능:
+- extraction 도메인 공개 모듈 초기화 및 서비스 함수 파사드.
+
+입력:
+- None
+
+출력:
+- export symbols: load_all_sources, build_extraction_plan, build_family_registry, extract_with_plan
+
+의존 모듈:
+- extraction_service: load_all_sources, extract_with_plan
+- extraction_agent: build_extraction_plan
+- extraction_profiler: build_family_registry
+
+예외/경계 상황:
+- None
+
+설계 원칙과의 연결:
+- docs/architecture.md의 '도메인 서비스 파사드' 원칙에 따라 외부에 일관된 진입점을 제공한다.
 """
 
-from .extraction_agent import ExtractionAgent
-from .extraction_cache import ExtractionCache
-from .extraction_service import ExtractionService, extract_observation
+from systems.generator.extraction.extraction_service import load_all_sources, extract_with_plan
+from systems.generator.extraction.extraction_agent import build_extraction_plan
+from systems.generator.extraction.extraction_profiler import build_family_registry
 
-__all__ = ["ExtractionAgent", "ExtractionCache", "ExtractionService", "extract_observation"]
+__all__ = ["load_all_sources", "extract_with_plan", "build_extraction_plan", "build_family_registry"]
