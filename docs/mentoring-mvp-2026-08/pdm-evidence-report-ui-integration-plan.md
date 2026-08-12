@@ -146,7 +146,7 @@ flowchart LR
 
 ### 4.1 Product Result Artifact
 
-`schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. 이번 계획은 기존 required 필드를 깨지 않고 producer가 `evidence_payload`를 추가 산출하는 v1.0-compatible enrichment를 우선 검토한다. schema version bump가 필요하면 `result-artifact-v1.1`은 후속 결정으로 분리한다.
+`schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. step 7 결정은 기존 required 필드를 깨지 않고 producer가 optional `evidence_payload`를 추가 산출하는 v1.0-compatible enrichment다. `result-artifact-v1.1` schema version bump는 이번 2주차 producer contract 범위에 넣지 않는다.
 
 여기서 `evidence_payload`는 dashboard projection layer가 reference package를 읽어 운영 근거를 채워 넣는 뜻이 아니다. Product Result Artifact의 공식 생성 책임은 `systems/backend/app/diagnosis`에 유지하고, 같은 producer 경계에서 `sensor_evidence`, `component_hypotheses`, `maintenance_context`, `recommended_actions.basis`, `source_fields`를 산출한다. `systems/backend/ontology_dashboard/...`는 이미 enriched된 Artifact를 Event Evidence projection과 legacy compatibility output으로 변환한다.
 
@@ -177,7 +177,15 @@ Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 - `evidence_payload.evidence_gaps[]`: producer가 산출할 수 없는 값의 명시적 결손 기록
 - `provenance.evidence_payload_reference`: 근거 산출 기준과 reference fixture 비교 기준
 
-`evidence_payload`는 위 7개 후보 필드로 제한한다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다. `event_id`/`scenario_id`의 producer 배치는 step 7에서 확정하며, cleanup fixture는 이를 Artifact root로 승격하지 않는다.
+`evidence_payload`는 위 7개 후보 필드로 제한한다. `event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`, `generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는 payload 아래로 복제하지 않는다. 특히 `top_factors`는 Product Result Artifact root의 공식 판단 필드이고, `equipment` 표시 정체성은 dashboard Asset/Object 조회 또는 artifact identity fallback으로 결합한다.
+
+Step 7 owner decision:
+
+- `event_id`, `scenario_id`: Product Result Artifact schema에는 추가하지 않고 Event Evidence projection/API 경계에서 부여한다.
+- `threshold`, `generated_at`: 기존 Artifact consumer를 깨지 않는 optional root compatibility field로만 허용한다. `evidence_payload`에는 복제하지 않는다.
+- `observation`, `history`, `detected_interval`: raw source snapshot으로 보존할지 여부는 step 8 구현에서 producer input context로 다루며, `evidence_payload`에는 복제하지 않는다.
+- `lineage`, `data_quality_warnings`: Product Result Artifact root/provenance 또는 producer diagnostics 후보로 남기고, `evidence_payload`에는 복제하지 않는다.
+- 구현 위치: `build_product_result_artifact()`가 공식 producer entrypoint로 남고, `build_product_result_evidence_payload()`는 신규 `systems/backend/app/diagnosis/evidence_enrichment.py` 내부 helper로 둔다. `build_evidence_package()`는 legacy/dashboard compatibility 경로로 유지한다.
 
 공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다.
 
@@ -340,14 +348,14 @@ dashboard 테스트 fixture 영역에 현행 dashboard fixture, Product Result A
 
 Producer target은 다음 경계다.
 
-`systems/backend/app/diagnosis/evidence.py` 또는 `systems/backend/app/diagnosis/evidence_enrichment.py` (후보)
+`systems/backend/app/diagnosis/evidence_enrichment.py`
 
 기존 `systems/backend/app/diagnosis/evidence.py`에는 이미 `build_product_result_artifact()`와 `build_evidence_package()`가 있다. 다음 구현은 이 관계를 다음처럼 고정한다.
 
 - `build_product_result_artifact()`는 계속 Product Result Artifact의 공식 producer entrypoint다.
-- `build_product_result_evidence_payload()`는 `build_product_result_artifact()` 내부 또는 같은 diagnosis producer 흐름에서 호출되는 내부 helper로 둔다.
+- `build_product_result_evidence_payload()`는 `systems/backend/app/diagnosis/evidence_enrichment.py`의 내부 helper로 두고, step 8에서 `build_product_result_artifact()`가 같은 diagnosis producer 흐름 안에서 호출한다.
 - `build_evidence_package()`는 legacy/dashboard compatibility package 생성 경로로 해석하고, Product Result Artifact source of truth로 승격하지 않는다.
-- 신규 `evidence_enrichment.py`를 만들 경우에도 `app/diagnosis` 내부 helper 모듈일 뿐이며, dashboard projection이나 reference package adapter를 포함하지 않는다.
+- `evidence_enrichment.py`는 `app/diagnosis` 내부 helper 모듈일 뿐이며, dashboard projection이나 reference package adapter를 포함하지 않는다.
 
 책임은 다음과 같다.
 
@@ -394,7 +402,7 @@ def build_source_fields(result: GovernedProductResult, evidence_payload: dict) -
 
 Producer 이관 Notes:
 
-projection cleanup에서 삭제한 이전 transition helper의 산출 규칙은 폐기된 것이 아니라 step 8 producer 구현의 회수 대상이다. 특히 다음 규칙은 `systems/backend/app/diagnosis` 경계로 옮기며, 구현 위치는 step 7에서 `evidence.py` 내부 helper 또는 `evidence_enrichment.py`로 확정한다.
+projection cleanup에서 삭제한 이전 transition helper의 산출 규칙은 폐기된 것이 아니라 step 8 producer 구현의 회수 대상이다. 특히 다음 규칙은 `systems/backend/app/diagnosis/evidence_enrichment.py` 경계로 옮긴다.
 
 | 회수 대상 규칙 | producer 회수처 | 회귀 테스트 |
 |---|---|---|
@@ -629,7 +637,7 @@ Status 값은 다음만 사용한다.
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
 | 6 | Todo | 기존 dashboard artifact/evidence와 `pdm-mvp` reference 필드를 producer fact, projection/display field, evidence gap, 후속 도메인 field로 분류한다. | field classification table | 문서/fixture audit 결과 |
-| 7 | Todo | `systems/backend/app/diagnosis`의 producer-side evidence enrichment schema와 ownership을 고정한다. | `evidence_payload` producer contract | schema/contract test 결과 |
+| 7 | Done | `systems/backend/app/diagnosis`의 producer-side evidence enrichment schema와 ownership을 고정한다. | optional `evidence_payload` producer contract | `tests/test_product_result_artifact_evidence_contract.py` |
 | 8 | Todo | `build_product_result_evidence_payload()`와 sensor/baseline/component/source-field 산출 함수를 추가하고, cleanup에서 제거된 산출 규칙을 producer로 회수한다. | producer enrichment module | backend unit test 결과 |
 | 9 | Todo | `pdm-mvp` reference fixture와 producer `evidence_payload`의 의미 동등성을 비교한다. 단, 화면/report 표현 필드는 비교 대상에서 제외한다. | semantic regression test | fixture comparison 결과 |
 | 10 | Done | PR #18의 이전 transition helper 의존을 철회하고 dashboard projection이 enriched Artifact만 입력으로 받도록 정리한다. | projection input cleanup | `tests/test_product_result_evidence_projection.py` |
@@ -644,7 +652,7 @@ Status 값은 다음만 사용한다.
 - step 11 producer test에는 Product Result Artifact의 공식 판단 필드가 semantic reference fixture 값으로 overwrite되지 않는지 검증한다.
 - projection contract test는 `evidence_payload`가 7개 후보 필드만 갖는지, payload의 `top_factors`/`equipment`가 실수로 들어와도 root 공식 판단 필드와 artifact subject를 덮지 않는지 검증한다.
 - cleanup 단계의 legacy compatibility projection은 producer-normalized `top_factors`가 없을 때 조용히 빈 배열로 버리지 않고 명시적으로 실패한다. factor ID 부여와 normalized legacy factor 생성은 step 8 producer 구현으로 넘긴다.
-- `provenance.evidence_payload_reference.generated_by`는 producer helper 모듈 위치가 확정되기 전까지 fixture에서 `app.diagnosis.producer_boundary_pending`으로 둔다. step 7에서 `evidence.py` 또는 `evidence_enrichment.py`가 확정되면 이 값을 갱신한다.
+- `provenance.evidence_payload_reference.generated_by`는 `systems.backend.app.diagnosis.evidence_enrichment`를 target producer helper로 기록한다. 실제 helper 구현은 step 8에서 추가한다.
 
 2차 PR 완료 조건은 다음과 같다.
 
