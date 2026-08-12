@@ -34,6 +34,7 @@ from systems.generator.generator_llm_client import (
     validate_or_transform_pydantic,
     ExtractionStructureResponse,
     ExtractionColumnsResponse,
+    ExtractionPlanResponse,
 )
 from systems.generator.extraction.extraction_cache import (
     load_plan_cache,
