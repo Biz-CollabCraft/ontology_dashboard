@@ -29,9 +29,16 @@ _project_root = str(Path(__file__).resolve().parents[3])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from systems.generator.feature.feature_catalog import load_catalog
-from systems.generator.feature.feature_builder import build_features, save_features_npy, load_features_npy
-from systems.generator.feature.feature_label_service import build_labels
+try:
+    from systems.generator.feature.feature_catalog import load_catalog
+    from systems.generator.feature.feature_builder import build_features, save_features_npy, load_features_npy
+    from systems.generator.feature.feature_label_service import build_labels
+except ImportError:
+    load_catalog = None
+    build_features = None
+    save_features_npy = None
+    load_features_npy = None
+    build_labels = None
 
 
 def __getattr__(name: str):
