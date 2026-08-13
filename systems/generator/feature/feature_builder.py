@@ -44,12 +44,28 @@ from systems.generator.common.timestamp_canonicalizer import canonicalize_timest
 
 logger = logging.getLogger(__name__)
 
+_HEURISTIC_DEFAULT_ENVIRONMENTS = {"local", "demo", "test"}
+
+
+def _build_feature_name(source_field: str, node: str, operation: str, rule: dict) -> str:
+    """Feature naming rule: <source_field>__<ontology_node>__<operation>__<parameters>"""
+    param_parts = []
+    if "window" in rule:
+        param_parts.append(f"window_{rule['window']}")
+    if "span" in rule:
+        param_parts.append(f"span_{rule['span']}")
+    if "periods" in rule:
+        param_parts.append(f"periods_{rule['periods']}")
+    param_str = "_".join(param_parts) if param_parts else "default"
+    return f"{source_field}__{node}__{operation}__{param_str}"
+
 
 def build_features(
     telemetry_df: pd.DataFrame,
     store: MappingStore,
     catalog: dict,
-    plan: dict | None = None
+    plan: dict | None = None,
+    single_asset: bool | None = None,
 ) -> pd.DataFrame:
     """온톨로지 매핑 및 카탈로그 룰에 따라 설비별 시계열 피처를 독립적으로 추출한다."""
     logger.info(f"[FeatureBuilder] Starting feature extraction on dataset shape: {telemetry_df.shape}")
@@ -73,9 +89,21 @@ def build_features(
         time_col = next((c for c in df.columns if c in time_candidates), None)
 
     if not id_col:
+        app_env = os.getenv("APP_ENV", "development").strip().lower()
+        allow_single_asset = (
+            single_asset
+            if single_asset is not None
+            else app_env in _HEURISTIC_DEFAULT_ENVIRONMENTS
+        )
+        if not allow_single_asset:
+            raise ValueError(
+                f"id_column could not be identified and single-asset fallback is "
+                f"disabled for APP_ENV={app_env!r}; pass single_asset=True explicitly "
+                f"if this dataset is intentionally single-equipment"
+            )
         logger.warning(
-            "[FeatureBuilder] id_column could not be identified in plan or heuristics. "
-            "Feature extraction will treat the dataset as a single equipment stream."
+            "[FeatureBuilder] id_column could not be identified; treating dataset "
+            f"as single equipment stream (APP_ENV={app_env!r})."
         )
 
     if not time_col:
@@ -97,6 +125,23 @@ def build_features(
 
     if sort_cols:
         df = df.sort_values(by=sort_cols).reset_index(drop=True)
+
+    # Wide-format duplicate checking before feature extraction
+    if id_col and time_col and id_col in df.columns and time_col in df.columns:
+        dup_key = [id_col, time_col]
+        duplicate_mask = df.duplicated(subset=dup_key, keep=False)
+        if duplicate_mask.any():
+            duplicate_policy = (plan or {}).get("duplicate_policy", "error")
+            aggregation = (plan or {}).get("aggregation")
+            if duplicate_policy == "aggregate" and aggregation:
+                sensor_cols = [c for c in df.columns if c not in dup_key]
+                df = df.groupby(dup_key, as_index=False)[sensor_cols].agg(aggregation)
+            else:
+                raise ValueError(
+                    f"Duplicate rows found for key {dup_key} and duplicate_policy="
+                    f"{duplicate_policy!r}; set plan.duplicate_policy='aggregate' with "
+                    f"an aggregation function, or deduplicate the source data"
+                )
 
     meta_cols = [c for c in [time_col, id_col] if c and c in df.columns]
     result = df[meta_cols].copy()
@@ -123,7 +168,7 @@ def build_features(
 
         for rule in catalog[node]:
             name = rule["name"]
-            feat_name = f"{node}_{name}"
+            feat_name = _build_feature_name(col, node, name, rule)
 
             if has_multi_assets:
                 grouped = df.groupby(id_col)[col]

@@ -3,13 +3,14 @@ feature_label_service.py
 
 담당 기능:
 - 추출된 피처 데이터프레임과 고장 이력 데이터프레임을 조인하여 머신러닝 지도학습 라벨(label 0/1)을 생성하는 모듈.
-- canonicalize_timestamp_series를 통해 시간 컬럼을 표준형(datetime64[ns])으로 정규화한 후 구간 매칭(Interval-based) 또는 prediction_horizon_hours 기반 사전 예측 구간(Lead Window) 매칭을 수행한다.
+- canonicalize_timestamp_series를 통해 시간 컬럼을 표준형(datetime64[ns])으로 정규화한 후, failure metadata에서 anchor(failure_point)와 exclusion_end(period_end/maintenance_end)를 분리해 단일 공식 positive = [anchor-horizon, anchor)으로 라벨링한다. anchor~exclusion_end 구간(active failure)은 label=0이 아니라 행 자체를 제거한다. degradation_start(period_start)는 라벨 계산과 라벨 DataFrame 어디에도 관여하지 않는다.
 
 입력:
 - features_df(pd.DataFrame): 피처 데이터프레임
 - failures_df(pd.DataFrame): 고장 데이터프레임
 - failure_meta(dict, optional): Stage 0 고장 데이터셋 메타데이터
 - prediction_horizon_hours(int): 예측 호라이즌시간 (기본값 24시간)
+- plan(dict, optional): ExtractionPlan 정보 (id_column, time_column 등)
 
 출력:
 - df(pd.DataFrame): label 컬럼이 추가된 데이터프레임
@@ -19,7 +20,9 @@ feature_label_service.py
 - systems.generator.common.timestamp_canonicalizer.canonicalize_timestamp_series
 
 예외/경계 상황:
-- id/time 컬럼을 찾지 못하거나 조인 매칭 대상이 없는 경우 label을 0으로 채우고 경고 로그를 남긴다.
+- id/time 컬럼 자체를 찾지 못한 경우 label을 전부 0으로 채우고 경고 로그를 남긴다.
+- anchor_col(failure_point)을 metadata에서 찾지 못한 경우 라벨링을 수행하지 않고 (전체 label=0) 경고 로그를 남긴다.
+- 개별 고장 이벤트의 anchor 값이 결측(NaT)이면 해당 이벤트만 건너뛴다.
 
 설계 원칙과의 연결:
 - docs/architecture.md 및 schemas/product-result-artifact.schema.json의 'prediction_task: binary_failure_within_horizon' 계약을 준수한다.
@@ -37,7 +40,8 @@ def build_labels(
     features_df: pd.DataFrame,
     failures_df: pd.DataFrame,
     failure_meta: dict | None = None,
-    prediction_horizon_hours: int = 24
+    prediction_horizon_hours: int = 24,
+    plan: dict | None = None,
 ) -> pd.DataFrame:
     """
     features_df와 failures_df를 매칭하여 prediction_horizon 기반 label(0/1) 컬럼을 생성하고,
@@ -52,10 +56,23 @@ def build_labels(
     df = features_df.copy()
     f_df = failures_df.copy()
 
-    id_col = "asset_id" if "asset_id" in df.columns else ("machineID" if "machineID" in df.columns else None)
-    time_col = "observed_at" if "observed_at" in df.columns else ("datetime" if "datetime" in df.columns else None)
+    id_col = None
+    if plan and isinstance(plan, dict):
+        id_col = plan.get("id_column")
+    if not id_col or id_col not in df.columns:
+        id_col = "asset_id" if "asset_id" in df.columns else ("machineID" if "machineID" in df.columns else None)
 
-    fail_id_col = "asset_id" if "asset_id" in f_df.columns else ("machineID" if "machineID" in f_df.columns else None)
+    time_col = None
+    if plan and isinstance(plan, dict):
+        time_col = plan.get("time_column")
+    if not time_col or time_col not in df.columns:
+        time_col = "observed_at" if "observed_at" in df.columns else ("datetime" if "datetime" in df.columns else None)
+
+    fail_id_col = None
+    if plan and isinstance(plan, dict):
+        fail_id_col = plan.get("id_column")
+    if not fail_id_col or fail_id_col not in f_df.columns:
+        fail_id_col = "asset_id" if "asset_id" in f_df.columns else ("machineID" if "machineID" in f_df.columns else None)
 
     if time_col and time_col in df.columns:
         df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)

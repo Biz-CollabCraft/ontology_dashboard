@@ -34,7 +34,7 @@ import json
 import re
 import yaml
 import logging
-from typing import Any, TypeVar, Optional
+from typing import Any, TypeVar, Optional, Literal
 from pydantic import BaseModel, Field
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -66,8 +66,8 @@ class ExtractionPlanResponse(BaseModel):
     time_column: Optional[str] = None
     attribute_column: Optional[str] = None
     value_column: Optional[str] = None
-    duplicate_policy: str = "error"  # "error" | "aggregate"
-    aggregation: Optional[str] = None  # "mean" | "first" | "sum"
+    duplicate_policy: Literal["error", "aggregate"] = "error"
+    aggregation: Optional[Literal["mean", "first", "sum"]] = None
     reason: Optional[str] = None
 
 

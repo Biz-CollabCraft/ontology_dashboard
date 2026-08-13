@@ -78,7 +78,7 @@ def test_multi_asset_feature_isolation(dummy_store, catalog):
     # dropna()로 인해 std가 NaN인 ASSET_B의 첫 행이 제거되고, 2번째 행(100.0, 200.0)부터 보존됨
     # 오염 누설 시 rolling_mean은 (30 + 40 + 50 + 100 + 200) / 5 = 84.0이 되나,
     # 설비 격리에 의해 ASSET_B 2번째 행의 rolling_mean은 (100 + 200) / 2 = 150.0이어야 함
-    asset_b_mean = asset_b_res["Voltage_rolling_mean"].iloc[0]
+    asset_b_mean = asset_b_res["voltage__Voltage__rolling_mean__window_5"].iloc[0]
     assert asset_b_mean == 150.0, f"Expected ASSET_B rolling_mean to be 150.0 within ASSET_B stream, but got {asset_b_mean}"
 
 
@@ -119,8 +119,8 @@ def test_independent_window_initialization(dummy_store, catalog):
     res = build_features(df, dummy_store, catalog, plan=plan)
 
     # ASSET_A rolling_mean은 항상 10.0, ASSET_B rolling_mean은 항상 50.0이어야 함
-    mean_a = res[res["asset_id"] == "ASSET_A"]["Voltage_rolling_mean"]
-    mean_b = res[res["asset_id"] == "ASSET_B"]["Voltage_rolling_mean"]
+    mean_a = res[res["asset_id"] == "ASSET_A"]["voltage__Voltage__rolling_mean__window_5"]
+    mean_b = res[res["asset_id"] == "ASSET_B"]["voltage__Voltage__rolling_mean__window_5"]
 
     assert (mean_a == 10.0).all(), f"ASSET_A rolling mean contaminated: {mean_a.tolist()}"
     assert (mean_b == 50.0).all(), f"ASSET_B rolling mean contaminated: {mean_b.tolist()}"
@@ -236,3 +236,115 @@ def test_degradation_start_target_leakage_protection():
     # Target Leakage 방지: start_time, fail_time이 labeled_df 컬럼에 들어가지 않음
     assert "start_time" not in labeled_df.columns
     assert "fail_time" not in labeled_df.columns
+
+
+def test_feature_name_format_and_collision_prevention(catalog):
+    """테스트 7: 동일 ontology node에 매핑된 두 source column이 서로 다른 feature 컬럼 이름을 가짐."""
+    class MultiSourceStore:
+        def get_mapping(self, col: str):
+            if col in ("voltage_sensor_1", "voltage_sensor_2"):
+                from systems.generator.ontology_mapping.mapping_cache import MappingRecord
+                return MappingRecord(source_field=col, target_ontology="Voltage", source="llm_agent", confidence=1.0, status="confirmed")
+            return None
+
+    dates = pd.date_range("2026-01-01", periods=5, freq="1h")
+    df = pd.DataFrame({
+        "asset_id": ["ASSET_A"] * 5,
+        "observed_at": dates,
+        "voltage_sensor_1": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "voltage_sensor_2": [100.0, 200.0, 300.0, 400.0, 500.0],
+    })
+    plan = {"id_column": "asset_id", "time_column": "observed_at"}
+    res = build_features(df, MultiSourceStore(), catalog, plan=plan)
+
+    expected_col_1 = "voltage_sensor_1__Voltage__rolling_mean__window_5"
+    expected_col_2 = "voltage_sensor_2__Voltage__rolling_mean__window_5"
+
+    assert expected_col_1 in res.columns, f"Expected {expected_col_1} in columns: {res.columns}"
+    assert expected_col_2 in res.columns, f"Expected {expected_col_2} in columns: {res.columns}"
+    assert res[expected_col_1].iloc[-1] == 30.0
+    assert res[expected_col_2].iloc[-1] == 300.0
+
+
+def test_environment_fail_fast_on_missing_id_column(dummy_store, catalog, monkeypatch):
+    """테스트 8: production 환경에서 id_column 식별 실패 시 fail-fast 예외 발생."""
+    df = pd.DataFrame({
+        "observed_at": pd.date_range("2026-01-01", periods=5, freq="1h"),
+        "voltage": [10.0, 20.0, 30.0, 40.0, 50.0]
+    })
+
+    # 1. production 환경 -> ValueError
+    monkeypatch.setenv("APP_ENV", "production")
+    with pytest.raises(ValueError, match="id_column could not be identified"):
+        build_features(df, dummy_store, catalog)
+
+    # 2. single_asset=True 명시 시 production 환경에서도 처리 허용
+    res_single = build_features(df, dummy_store, catalog, single_asset=True)
+    assert len(res_single) > 0
+
+    # 3. test/local 환경에서는 single_asset 없이도 경고 후 허용
+    monkeypatch.setenv("APP_ENV", "test")
+    res_test = build_features(df, dummy_store, catalog)
+    assert len(res_test) > 0
+
+
+def test_wide_format_duplicate_checking(dummy_store, catalog):
+    """테스트 9: wide-format [id_col, time_col] 중복 행 처리 (error vs aggregate)."""
+    dates = pd.date_range("2026-01-01", periods=3, freq="1h")
+    df_dup = pd.DataFrame({
+        "asset_id": ["ASSET_A", "ASSET_A", "ASSET_A", "ASSET_A"],
+        "observed_at": [dates[0], dates[1], dates[1], dates[2]],
+        "voltage": [10.0, 20.0, 40.0, 50.0]
+    })
+
+    # 1. duplicate_policy="error" (기본값) -> ValueError
+    plan_err = {"id_column": "asset_id", "time_column": "observed_at", "duplicate_policy": "error"}
+    with pytest.raises(ValueError, match="Duplicate rows found"):
+        build_features(df_dup, dummy_store, catalog, plan=plan_err)
+
+    # 2. duplicate_policy="aggregate", aggregation="mean" -> 중복 집계 후 피처 생성
+    plan_agg = {"id_column": "asset_id", "time_column": "observed_at", "duplicate_policy": "aggregate", "aggregation": "mean"}
+    res = build_features(df_dup, dummy_store, catalog, plan=plan_agg)
+    assert len(res) > 0
+
+
+def test_build_labels_with_plan_wiring():
+    """테스트 10: build_labels()에 plan(id_column, time_column) 배선 검증."""
+    from systems.generator.feature.feature_label_service import build_labels
+
+    dates = pd.date_range("2026-01-01 00:00:00", periods=48, freq="1h")
+    features_df = pd.DataFrame({
+        "custom_eq_id": ["EQ_100"] * 48,
+        "custom_ts": dates,
+        "voltage": [10.0] * 48
+    })
+
+    failures_df = pd.DataFrame({
+        "custom_eq_id": ["EQ_100"],
+        "observed_at": [pd.Timestamp("2026-01-02 12:00:00")]
+    })
+
+    plan = {"id_column": "custom_eq_id", "time_column": "custom_ts"}
+    labeled_df = build_labels(features_df, failures_df, prediction_horizon_hours=24, plan=plan)
+
+    pos_count = (labeled_df["label"] == 1).sum()
+    assert pos_count == 24
+    assert "custom_eq_id" in labeled_df.columns
+    assert "custom_ts" in labeled_df.columns
+
+
+def test_extraction_plan_response_literal_validation():
+    """테스트 11: ExtractionPlanResponse duplicate_policy / aggregation Literal validation."""
+    from pydantic import ValidationError
+    from systems.generator.generator_llm_client import ExtractionPlanResponse
+
+    valid_plan = ExtractionPlanResponse(duplicate_policy="aggregate", aggregation="mean")
+    assert valid_plan.duplicate_policy == "aggregate"
+    assert valid_plan.aggregation == "mean"
+
+    with pytest.raises(ValidationError):
+        ExtractionPlanResponse(duplicate_policy="invalid_policy")
+
+    with pytest.raises(ValidationError):
+        ExtractionPlanResponse(aggregation="invalid_agg")
+
