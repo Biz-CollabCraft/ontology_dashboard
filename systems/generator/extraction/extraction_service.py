@@ -59,6 +59,40 @@ def extract_with_plan(filepath: str, plan: dict) -> pd.DataFrame:
             valid_cols = list(df.columns)
 
         extracted_df = df[valid_cols].copy()
+
+        id_col = plan.get("id_column")
+        time_col = plan.get("time_column")
+        if id_col and time_col and id_col in extracted_df.columns and time_col in extracted_df.columns:
+            dup_key = [id_col, time_col]
+            has_duplicates = extracted_df.duplicated(subset=dup_key).any()
+            if has_duplicates:
+                dup_policy = plan.get("duplicate_policy", "error")
+                aggfunc = plan.get("aggregation")
+                if dup_policy == "aggregate" and aggfunc:
+                    numeric_cols = [
+                        c for c in extracted_df.columns
+                        if c not in dup_key and pd.api.types.is_numeric_dtype(extracted_df[c])
+                    ]
+                    non_numeric_cols = [c for c in extracted_df.columns if c not in dup_key and c not in numeric_cols]
+                    for c in non_numeric_cols:
+                        per_group_nunique = extracted_df.groupby(dup_key)[c].nunique()
+                        if (per_group_nunique > 1).any():
+                            raise ValueError(
+                                f"Cannot deduplicate non-numeric column '{c}' with conflicting "
+                                f"values within the same {dup_key} group; no aggregation policy "
+                                f"is defined for non-numeric conflicts"
+                            )
+                    agg_map = {c: aggfunc for c in numeric_cols}
+                    agg_map.update({c: "first" for c in non_numeric_cols})
+                    extracted_df = extracted_df.groupby(dup_key, as_index=False).agg(agg_map)
+                    extracted_df = extracted_df.sort_values(by=dup_key).reset_index(drop=True)
+                else:
+                    raise ValueError(
+                        f"Duplicate rows found for key {dup_key} and duplicate_policy="
+                        f"{dup_policy!r}; set plan.duplicate_policy='aggregate' with an "
+                        f"aggregation function, or deduplicate the source data"
+                    )
+
         logger.info(f"[Extractor] Successfully extracted {len(valid_cols)} columns from '{filepath}'. Output shape: {extracted_df.shape}")
         return extracted_df
 

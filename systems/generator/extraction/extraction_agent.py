@@ -166,8 +166,12 @@ def build_extraction_plan(filepath: str, force_reanalyze: bool = False) -> dict:
     if not force_reanalyze and file_key in cache:
         cached_plan = cache[file_key]
         if cached_plan.get("fingerprint") == fingerprint:
-            logger.info(f"[ExtractionPlanner] Cache HIT for '{file_key}'. Reusing plan without LLM calls.")
-            return cached_plan
+            try:
+                ExtractionPlanResponse.model_validate(cached_plan)
+                logger.info(f"[ExtractionPlanner] Cache HIT for '{file_key}'. Reusing plan without LLM calls.")
+                return cached_plan
+            except Exception as e:
+                logger.warning(f"[ExtractionPlanner] Cached plan for '{file_key}' failed current schema validation: {e}. Invalidating cache and re-analyzing.")
 
     logger.info(f"[ExtractionPlanner] Cache MISS for '{file_key}'. Executing 2-stage LLM plan analysis...")
     structure_type = classify_structure(filepath, df_preview)

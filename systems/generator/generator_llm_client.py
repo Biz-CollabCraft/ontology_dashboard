@@ -32,10 +32,9 @@ import os
 import sys
 import json
 import re
-import yaml
 import logging
 from typing import Any, TypeVar, Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT_DIR not in sys.path:
@@ -69,6 +68,14 @@ class ExtractionPlanResponse(BaseModel):
     duplicate_policy: Literal["error", "aggregate"] = "error"
     aggregation: Optional[Literal["mean", "first", "sum"]] = None
     reason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check_duplicate_policy_aggregation_pair(self) -> "ExtractionPlanResponse":
+        if self.duplicate_policy == "aggregate" and self.aggregation is None:
+            raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation")
+        if self.duplicate_policy == "error" and self.aggregation is not None:
+            raise ValueError("duplicate_policy='error' must not specify an aggregation")
+        return self
 
 
 class ColumnMappingResponse(BaseModel):

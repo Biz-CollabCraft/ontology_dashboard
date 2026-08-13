@@ -267,7 +267,7 @@ def test_feature_name_format_and_collision_prevention(catalog):
 
 
 def test_environment_fail_fast_on_missing_id_column(dummy_store, catalog, monkeypatch):
-    """테스트 8: production 환경에서 id_column 식별 실패 시 fail-fast 예외 발생."""
+    """테스트 8: id_column 식별 실패 시 single_asset 설정 및 APP_ENV에 따른 fail-fast 정책."""
     df = pd.DataFrame({
         "observed_at": pd.date_range("2026-01-01", periods=5, freq="1h"),
         "voltage": [10.0, 20.0, 30.0, 40.0, 50.0]
@@ -278,38 +278,84 @@ def test_environment_fail_fast_on_missing_id_column(dummy_store, catalog, monkey
     with pytest.raises(ValueError, match="id_column could not be identified"):
         build_features(df, dummy_store, catalog)
 
-    # 2. single_asset=True 명시 시 production 환경에서도 처리 허용
+    # 2. single_asset=False -> test/local 환경에서도 ValueError
+    monkeypatch.setenv("APP_ENV", "test")
+    with pytest.raises(ValueError, match="single_asset=False was explicitly set"):
+        build_features(df, dummy_store, catalog, single_asset=False)
+
+    # 3. single_asset=True -> production 환경에서도 처리 허용
+    monkeypatch.setenv("APP_ENV", "production")
     res_single = build_features(df, dummy_store, catalog, single_asset=True)
     assert len(res_single) > 0
 
-    # 3. test/local 환경에서는 single_asset 없이도 경고 후 허용
+    # 4. test/local 환경 -> single_asset 미지정 시 경고 후 허용
     monkeypatch.setenv("APP_ENV", "test")
     res_test = build_features(df, dummy_store, catalog)
     assert len(res_test) > 0
 
 
-def test_wide_format_duplicate_checking(dummy_store, catalog):
-    """테스트 9: wide-format [id_col, time_col] 중복 행 처리 (error vs aggregate)."""
-    dates = pd.date_range("2026-01-01", periods=3, freq="1h")
-    df_dup = pd.DataFrame({
-        "asset_id": ["ASSET_A", "ASSET_A", "ASSET_A", "ASSET_A"],
-        "observed_at": [dates[0], dates[1], dates[1], dates[2]],
-        "voltage": [10.0, 20.0, 40.0, 50.0]
+def test_missing_time_column_always_fails(dummy_store, catalog):
+    """테스트 9: time_column 식별 실패 시 임의 첫번째 컬럼 fallback 없이 항상 ValueError 발생."""
+    df = pd.DataFrame({
+        "asset_id": ["ASSET_A"] * 5,
+        "voltage": [10.0, 20.0, 30.0, 40.0, 50.0]
     })
 
-    # 1. duplicate_policy="error" (기본값) -> ValueError
-    plan_err = {"id_column": "asset_id", "time_column": "observed_at", "duplicate_policy": "error"}
-    with pytest.raises(ValueError, match="Duplicate rows found"):
-        build_features(df_dup, dummy_store, catalog, plan=plan_err)
+    with pytest.raises(ValueError, match="time_column could not be identified"):
+        build_features(df, dummy_store, catalog, single_asset=True)
 
-    # 2. duplicate_policy="aggregate", aggregation="mean" -> 중복 집계 후 피처 생성
-    plan_agg = {"id_column": "asset_id", "time_column": "observed_at", "duplicate_policy": "aggregate", "aggregation": "mean"}
-    res = build_features(df_dup, dummy_store, catalog, plan=plan_agg)
-    assert len(res) > 0
+
+def test_extraction_service_wide_format_duplicate_checking(tmp_path):
+    """테스트 10: extraction_service.py 내 extract_with_plan wide-format 중복 검사 (aggregate vs error, 비숫자 충돌)."""
+    from systems.generator.extraction.extraction_service import extract_with_plan
+
+    csv_file = tmp_path / "wide_dup_sample.csv"
+    df_dup = pd.DataFrame({
+        "asset_id": ["ASSET_A", "ASSET_A", "ASSET_A"],
+        "observed_at": ["2026-01-01 00:00:00", "2026-01-01 00:00:00", "2026-01-01 01:00:00"],
+        "voltage": [10.0, 20.0, 30.0],
+        "status": ["OK", "OK", "OK"]
+    })
+    df_dup.to_csv(csv_file, index=False)
+
+    # 1. duplicate_policy="error" -> ValueError
+    plan_err = {
+        "structure_type": "tabular_column_as_attribute",
+        "id_column": "asset_id",
+        "time_column": "observed_at",
+        "duplicate_policy": "error"
+    }
+    with pytest.raises(ValueError, match="Duplicate rows found"):
+        extract_with_plan(str(csv_file), plan_err)
+
+    # 2. duplicate_policy="aggregate", aggregation="mean" -> 성공적 집계
+    plan_agg = {
+        "structure_type": "tabular_column_as_attribute",
+        "id_column": "asset_id",
+        "time_column": "observed_at",
+        "duplicate_policy": "aggregate",
+        "aggregation": "mean"
+    }
+    res = extract_with_plan(str(csv_file), plan_agg)
+    assert len(res) == 2
+    assert res.loc[res["observed_at"] == "2026-01-01 00:00:00", "voltage"].values[0] == 15.0
+
+    # 3. 비숫자 컬럼 값이 그룹 내에서 갈리는 경우 -> ValueError
+    df_conflict = pd.DataFrame({
+        "asset_id": ["ASSET_A", "ASSET_A"],
+        "observed_at": ["2026-01-01 00:00:00", "2026-01-01 00:00:00"],
+        "voltage": [10.0, 20.0],
+        "status": ["OK", "FAIL"]
+    })
+    csv_conflict = tmp_path / "wide_conflict.csv"
+    df_conflict.to_csv(csv_conflict, index=False)
+
+    with pytest.raises(ValueError, match="Cannot deduplicate non-numeric column"):
+        extract_with_plan(str(csv_conflict), plan_agg)
 
 
 def test_build_labels_with_plan_wiring():
-    """테스트 10: build_labels()에 plan(id_column, time_column) 배선 검증."""
+    """테스트 11: build_labels()에 plan(id_column, time_column) 배선 검증."""
     from systems.generator.feature.feature_label_service import build_labels
 
     dates = pd.date_range("2026-01-01 00:00:00", periods=48, freq="1h")
@@ -333,8 +379,8 @@ def test_build_labels_with_plan_wiring():
     assert "custom_ts" in labeled_df.columns
 
 
-def test_extraction_plan_response_literal_validation():
-    """테스트 11: ExtractionPlanResponse duplicate_policy / aggregation Literal validation."""
+def test_extraction_plan_response_literal_and_pair_validation():
+    """테스트 12: ExtractionPlanResponse duplicate_policy / aggregation Literal 및 Pair validation."""
     from pydantic import ValidationError
     from systems.generator.generator_llm_client import ExtractionPlanResponse
 
@@ -342,9 +388,44 @@ def test_extraction_plan_response_literal_validation():
     assert valid_plan.duplicate_policy == "aggregate"
     assert valid_plan.aggregation == "mean"
 
+    # invalid literal
     with pytest.raises(ValidationError):
         ExtractionPlanResponse(duplicate_policy="invalid_policy")
 
-    with pytest.raises(ValidationError):
-        ExtractionPlanResponse(aggregation="invalid_agg")
+    # duplicate_policy='aggregate' without aggregation -> ValidationError
+    with pytest.raises(ValidationError, match="requires a non-null aggregation"):
+        ExtractionPlanResponse(duplicate_policy="aggregate", aggregation=None)
+
+    # duplicate_policy='error' with aggregation -> ValidationError
+    with pytest.raises(ValidationError, match="must not specify an aggregation"):
+        ExtractionPlanResponse(duplicate_policy="error", aggregation="mean")
+
+
+def test_build_labels_removes_preexisting_leakage_columns():
+    """테스트 13: build_labels()가 features_df에 이미 조인되어 들어온 period_start(degradation_start) 누수 컬럼을 1차 제거한다."""
+    from systems.generator.feature.feature_label_service import build_labels
+
+    dates = pd.date_range("2026-01-01 00:00:00", periods=48, freq="1h")
+    features_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"] * 48,
+        "observed_at": dates,
+        "period_start": [pd.Timestamp("2026-01-01 12:00:00")] * 48,  # leaked column
+        "voltage": [10.0] * 48
+    })
+
+    failures_df = pd.DataFrame({
+        "asset_id": ["ASSET_A"],
+        "observed_at": [pd.Timestamp("2026-01-02 12:00:00")]
+    })
+
+    failure_meta = {
+        "time_columns": [
+            {"name": "period_start", "semantic": "period_start"},
+            {"name": "observed_at", "semantic": "failure_point"}
+        ]
+    }
+
+    labeled_df = build_labels(features_df, failures_df, failure_meta=failure_meta, prediction_horizon_hours=24)
+    assert "period_start" not in labeled_df.columns, "Leaked period_start column must be removed from labeled_df"
+
 

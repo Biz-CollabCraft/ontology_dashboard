@@ -10,6 +10,7 @@ feature_builder.py
 - store(MappingStore): 컬럼별 온톨로지 매핑 정보
 - catalog(dict): 온톨로지 노드별 피처 변환 규칙 딕셔너리
 - plan(dict, optional): ExtractionPlan 정보 (id_column, time_column 등)
+- single_asset(bool, optional): 단일 설비 명시 보증 플래그 (True: 환경 무관 통과, False: local에서도 fail-fast)
 - features_df(pd.DataFrame): 생성된 피처 데이터프레임 (save_features_npy)
 - out_dir(str): NPY 파일 저장 디렉토리
 - name(str): 데이터셋 식별키
@@ -26,7 +27,9 @@ feature_builder.py
 
 예외/경계 상황:
 - 컬럼에 온톨로지 매핑이 없거나 카탈로그에 해당 노드가 없는 경우 피처 생성을 건너뛰고 경고 로그를 기록한다.
-- id_col/time_col을 찾지 못한 경우 명시적 경고 로그를 남기고 단일 데이터 스트림으로 취급한다.
+- id_col 미식별 시 single_asset=False이거나 허용 환경(local/demo/test)이 아니면 ValueError 발생.
+- time_col 미식별 시 임의 첫번째 컬럼 fallback 없이 항상 ValueError 발생.
+- 피처 이름 중복 발생 시 ValueError 발생.
 - rolling 연산 등으로 발생하는 NaN 행은 dropna()로 정제 처리한다.
 
 설계 원칙과의 연결:
@@ -71,7 +74,7 @@ def build_features(
     logger.info(f"[FeatureBuilder] Starting feature extraction on dataset shape: {telemetry_df.shape}")
     df = telemetry_df.copy()
 
-    # 1. Identify id_col and time_col (Plan priority -> Heuristics fallback -> Warning log)
+    # 1. Identify id_col and time_col (Plan priority -> Heuristics fallback -> Fail-fast)
     id_col = None
     time_col = None
 
@@ -89,28 +92,30 @@ def build_features(
         time_col = next((c for c in df.columns if c in time_candidates), None)
 
     if not id_col:
-        app_env = os.getenv("APP_ENV", "development").strip().lower()
-        allow_single_asset = (
-            single_asset
-            if single_asset is not None
-            else app_env in _HEURISTIC_DEFAULT_ENVIRONMENTS
-        )
-        if not allow_single_asset:
+        if single_asset is False:
             raise ValueError(
-                f"id_column could not be identified and single-asset fallback is "
-                f"disabled for APP_ENV={app_env!r}; pass single_asset=True explicitly "
-                f"if this dataset is intentionally single-equipment"
+                "id_column could not be identified and single_asset=False was "
+                "explicitly set; refusing to treat multi-asset data as single stream"
             )
+        if single_asset is not True:
+            app_env = os.getenv("APP_ENV", "development").strip().lower()
+            if app_env not in _HEURISTIC_DEFAULT_ENVIRONMENTS:
+                raise ValueError(
+                    f"id_column could not be identified and single-asset fallback is "
+                    f"disabled for APP_ENV={app_env!r} (only {_HEURISTIC_DEFAULT_ENVIRONMENTS} "
+                    f"allow implicit fallback); pass single_asset=True explicitly if this "
+                    f"dataset is intentionally single-equipment"
+                )
         logger.warning(
             "[FeatureBuilder] id_column could not be identified; treating dataset "
-            f"as single equipment stream (APP_ENV={app_env!r})."
+            "as single equipment stream."
         )
 
     if not time_col:
-        logger.warning(
-            "[FeatureBuilder] time_column could not be identified. Using default first column for sequence."
+        raise ValueError(
+            f"time_column could not be identified from plan or heuristic candidates ({time_candidates}); "
+            "explicit time_column is required — no arbitrary first-column fallback is used"
         )
-        time_col = df.columns[0]
 
     # 2. Apply timestamp canonicalization on time_col
     if time_col in df.columns:
@@ -125,23 +130,6 @@ def build_features(
 
     if sort_cols:
         df = df.sort_values(by=sort_cols).reset_index(drop=True)
-
-    # Wide-format duplicate checking before feature extraction
-    if id_col and time_col and id_col in df.columns and time_col in df.columns:
-        dup_key = [id_col, time_col]
-        duplicate_mask = df.duplicated(subset=dup_key, keep=False)
-        if duplicate_mask.any():
-            duplicate_policy = (plan or {}).get("duplicate_policy", "error")
-            aggregation = (plan or {}).get("aggregation")
-            if duplicate_policy == "aggregate" and aggregation:
-                sensor_cols = [c for c in df.columns if c not in dup_key]
-                df = df.groupby(dup_key, as_index=False)[sensor_cols].agg(aggregation)
-            else:
-                raise ValueError(
-                    f"Duplicate rows found for key {dup_key} and duplicate_policy="
-                    f"{duplicate_policy!r}; set plan.duplicate_policy='aggregate' with "
-                    f"an aggregation function, or deduplicate the source data"
-                )
 
     meta_cols = [c for c in [time_col, id_col] if c and c in df.columns]
     result = df[meta_cols].copy()
@@ -169,6 +157,13 @@ def build_features(
         for rule in catalog[node]:
             name = rule["name"]
             feat_name = _build_feature_name(col, node, name, rule)
+
+            if feat_name in result.columns:
+                raise ValueError(
+                    f"Feature name collision: '{feat_name}' already exists in result. "
+                    f"This should not happen with source_field-qualified naming — "
+                    f"check for duplicate source columns or catalog rules."
+                )
 
             if has_multi_assets:
                 grouped = df.groupby(id_col)[col]
