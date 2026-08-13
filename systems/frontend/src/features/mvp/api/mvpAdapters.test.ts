@@ -3,6 +3,7 @@ import type { EventSummary } from "../../../types";
 import {
   adaptEvent,
   buildTemplateReport,
+  composeEventDetail,
   computeLineRisk,
   computeMetrics,
   mergeAssets,
@@ -82,7 +83,7 @@ describe("MVP adapter contract", () => {
     const events = [adaptEvent(event), adaptEvent({ ...event, event_id: "EVENT-002", equipment: { ...event.equipment, equipment_id: "CNC-002" }, status: "warning", failure_probability: 0.65 })];
     const assets = mergeAssets([], events);
     expect(computeMetrics(assets, events)).toEqual(expect.objectContaining({ critical: 1, warning: 1, estimatedDowntimeMinutes: 240 }));
-    expect(computeLineRisk(assets)[0]).toEqual(expect.objectContaining({ line: "Line A", critical: 1, warning: 1 }));
+    expect(computeLineRisk(assets)[0]).toEqual(expect.objectContaining({ line: "Line A", normal: 0, critical: 1, warning: 1 }));
   });
 
   it("keeps one asset row when multiple events reference the same equipment", () => {
@@ -111,5 +112,45 @@ describe("MVP adapter contract", () => {
     });
     expect(activity.map((item) => item.kind)).toEqual(["note", "decision"]);
     expect(activity[1].decision).toBe("request_inspection");
+  });
+
+  it("maps compressor evidence to compressor sensor fields", () => {
+    const evidence = {
+      observation: {
+        asset_type: "compressor",
+        voltage_raw: 171.2,
+        rotation_raw: 448.4,
+        pressure_raw: 101.5,
+        vibration_raw: 42.1,
+        relative_vibration_z: 1.2,
+        relative_vibration_zone: "B",
+      },
+      top_factors: [],
+      lineage: {},
+      maintenance_context: { source_refs: [] },
+      model: {},
+    } as never;
+
+    const event = adaptEvent({
+      event_id: "compressor-event",
+      equipment: { equipment_id: "CMP-001", display_name: "CMP-001", line: "S01 / L01", criticality: "medium" },
+      status: "attention",
+      failure_probability: 0.3,
+      confidence: "70%",
+      predicted_failure_type: "no_significant_risk",
+      recommended_decision: "request_inspection",
+      observed_at: "2026-08-01T00:00:00Z",
+      dataset_version_id: "dsv-test",
+    } as never);
+    const detail = composeEventDetail({ event, evidence, report: null, activity: null });
+
+    expect(detail.sensors.map((item) => item.id)).toEqual([
+      "voltage_raw",
+      "rotation_raw",
+      "pressure_raw",
+      "vibration_raw",
+      "relative_vibration_z",
+      "relative_vibration_zone",
+    ]);
   });
 });

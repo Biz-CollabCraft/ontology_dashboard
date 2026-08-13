@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { navigate } from "../../routing";
 import type {
   MvpAsset,
   MvpBootstrapModel,
@@ -42,7 +43,7 @@ export function MvpApplication({ projectId }: { projectId: string }) {
 export default MvpApplication;
 
 function MvpApplicationController({ projectId }: { projectId: string }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { selection, updateSelection } = useMvpSelection();
   const [model, setModel] = useState<MvpBootstrapModel | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,10 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
+  const signOut = useCallback(async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  }, [logout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +209,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       onRoleChange={(role: MvpRoleLens) => updateSelection({ role })}
       onRefresh={refresh}
       refreshing={loading}
+      onLogout={signOut}
     >
       {error ? <div className="mvp-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
       {content}

@@ -717,11 +717,13 @@ class PredictiveMaintenanceOntologyMaterializer:
                 else "cnc_sensor_observation"
             )
             result_role = str(row["artifact_source_role"])
+            result_checksum = role_checksums.get(result_role) or str(row["source_sha256"])
+            prediction_checksum = role_checksums.get("prediction_snapshot") or result_checksum
             result_ref = _source_ref(
                 dataset_id,
                 dataset_version_id,
                 result_role,
-                role_checksums[result_role],
+                result_checksum,
                 "risk_event",
                 artifact_id,
                 suffix=(
@@ -759,7 +761,7 @@ class PredictiveMaintenanceOntologyMaterializer:
                         dataset_id,
                         dataset_version_id,
                         "prediction_snapshot",
-                        role_checksums["prediction_snapshot"],
+                        prediction_checksum,
                         "prediction_result",
                         prediction_id,
                     ),

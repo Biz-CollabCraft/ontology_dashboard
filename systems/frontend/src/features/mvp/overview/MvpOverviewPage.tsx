@@ -48,14 +48,14 @@ export function MvpOverviewPage({
       </section>
 
       <div className="mvp-overview-grid">
-        <MvpPanel title="라인별 위험 현황" eyebrow="PRODUCTION RISK">
+        <MvpPanel title="라인별 설비 상태" eyebrow="CURRENT ASSET STATE">
           {model.lineRisk.length ? (
             <div className="mvp-line-risk-list">
               {model.lineRisk.slice(0, 8).map((line) => (
                 <article key={line.line}>
                   <header><strong>{line.line}</strong><span>{line.total} assets · 평균 {formatProbability(line.averageRisk)}</span></header>
                   <div className="mvp-risk-track" aria-label={`${line.line} 평균 위험 ${formatProbability(line.averageRisk)}`}><i style={{ width: `${Math.max(4, ((line.averageRisk ?? 0) / maxLineRisk) * 100)}%` }} /></div>
-                  <footer><span className="is-critical">위험 {line.critical}</span><span className="is-warning">경고 {line.warning}</span><span>주의 {line.attention}</span>{line.dataQualityHold ? <span className="is-hold">데이터 확인 {line.dataQualityHold}</span> : null}</footer>
+                  <footer><span className="is-normal">정상 {line.normal}</span><span>주의 {line.attention}</span><span className="is-warning">경고 {line.warning}</span><span className="is-critical">위험 {line.critical}</span>{line.dataQualityHold ? <span className="is-hold">데이터 확인 {line.dataQualityHold}</span> : null}</footer>
                 </article>
               ))}
             </div>

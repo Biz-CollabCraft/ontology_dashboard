@@ -119,9 +119,11 @@ function ProjectRouteBoundary({
   children: ReactNode;
 }) {
   const { user } = useAuth();
-  const [state, setState] = useState<"allowed" | "denied" | "tombstone" | null>(null);
+  const [state, setState] = useState<"allowed" | "auth-required" | "denied" | "tombstone" | null>(null);
   const lastValidProjectId = window.sessionStorage.getItem(LAST_VALID_PROJECT_KEY);
-  const fallbackProjectId = lastValidProjectId && user?.project_scopes.includes(lastValidProjectId)
+  const fallbackProjectId = lastValidProjectId
+    && lastValidProjectId !== projectId
+    && user?.project_scopes.includes(lastValidProjectId)
     ? lastValidProjectId
     : user?.active_project_id !== projectId
       ? user?.active_project_id
@@ -158,7 +160,8 @@ function ProjectRouteBoundary({
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
-        if (reason instanceof ApiError && reason.code === "project_not_found") setState("tombstone");
+        if (reason instanceof ApiError && reason.status === 401) setState("auth-required");
+        else if (reason instanceof ApiError && reason.code === "project_not_found") setState("tombstone");
         else setState("denied");
       });
     return () => { cancelled = true; };
@@ -166,6 +169,9 @@ function ProjectRouteBoundary({
 
   if (state === null) {
     return <RouteLoading operation="Validating Project scope" />;
+  }
+  if (state === "auth-required") {
+    return <Redirect to={loginPath(`${window.location.pathname}${window.location.search}`)} />;
   }
   if (state === "tombstone") return <ProjectTombstonePage projectId={projectId} />;
   if (state === "denied") return <Redirect to={fallback} />;

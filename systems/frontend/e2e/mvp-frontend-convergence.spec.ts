@@ -35,6 +35,15 @@ test("login exposes only the two mentoring MVP roles", async ({ page }) => {
   await expect(page.getByLabel("비밀번호")).toHaveValue("Engineer!2026");
 });
 
+test("shows normal assets in the current-state overview", async ({ page }) => {
+  await login(page);
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
+  await expect(page.getByText("라인별 설비 상태", { exact: true })).toBeVisible();
+  const lineStatuses = page.locator(".mvp-line-risk-list footer");
+  await expect(lineStatuses.first()).toBeVisible();
+  await expect(lineStatuses.first()).toContainText(/정상 \d+/);
+});
+
 test("completes Overview to Objects to Operations to Event Executive Brief without Analysis", async ({ page }) => {
   await login(page);
   await expect(page.locator(".mvp-app")).toBeVisible();
@@ -142,4 +151,12 @@ test("redirects a legacy project surface to the official Week 2 MVP", async ({ p
   await page.goto(`/app/projects/${PROJECT}/blueprint-v4`);
   await expect(page).toHaveURL(new RegExp(`${MVP_PATH}$`));
   await expect(page.getByTestId("mvp-overview")).toBeVisible({ timeout: 15_000 });
+});
+
+test("logs out from the official MVP shell", async ({ page }) => {
+  await login(page);
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
+  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
 });

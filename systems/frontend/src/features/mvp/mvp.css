@@ -271,6 +271,7 @@
 .mvp-line-risk-list footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mvp-line-risk-list header span { color: var(--mvp-dim); font-size: 10px; }
 .mvp-line-risk-list footer { justify-content: flex-start; flex-wrap: wrap; color: var(--mvp-muted); font-size: 9px; }
+.mvp-line-risk-list footer .is-normal { color: var(--mvp-success); }
 .mvp-line-risk-list footer .is-critical { color: #f69095; }
 .mvp-line-risk-list footer .is-warning { color: #efb665; }
 .mvp-line-risk-list footer .is-hold { color: #c5acf0; }

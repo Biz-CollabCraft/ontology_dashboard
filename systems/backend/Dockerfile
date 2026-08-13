@@ -4,10 +4,69 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+ARG GEN_DATA_SOURCE_REVISION=172f0dfd7fa5307273dec9e4f281f247d5a1d7cc
+
 WORKDIR /build
 
 COPY ml /build/ml
 COPY systems/backend /build/backend
+
+# Pin the hosted demo to one reviewed gen_data source revision. Only canonical
+# source files and safe release evidence are extracted; model/prediction
+# fixtures from gen_data are deliberately excluded from the runtime image.
+RUN GEN_DATA_SOURCE_REVISION="${GEN_DATA_SOURCE_REVISION}" python - <<'PY'
+import os
+import shutil
+import tarfile
+import tempfile
+import urllib.request
+from pathlib import Path
+
+revision = os.environ["GEN_DATA_SOURCE_REVISION"].strip()
+if len(revision) != 40 or any(char not in "0123456789abcdef" for char in revision.lower()):
+    raise SystemExit("GEN_DATA_SOURCE_REVISION must be a full Git commit SHA")
+required = {
+    "canonical/dataset/asset_master.csv",
+    "canonical/dataset/asset_relation.csv",
+    "canonical/dataset/compressor_sensor_observation.csv",
+    "canonical/dataset/cnc_sensor_observation.csv",
+    "canonical/dataset/cnc_production_cycle.csv",
+    "canonical/dataset/maintenance_event.csv",
+    "canonical/dataset/dataset_manifest.json",
+    "canonical/validation/package_validation.json",
+    "canonical/validation/agent_claims_example_evaluation.json",
+}
+destination = Path("/build/gen_data_source")
+destination.mkdir(parents=True, exist_ok=True)
+url = f"https://codeload.github.com/Biz-CollabCraft/gen_data/tar.gz/{revision}"
+with tempfile.NamedTemporaryFile(suffix=".tar.gz") as archive:
+    with urllib.request.urlopen(url, timeout=120) as response:
+        shutil.copyfileobj(response, archive)
+    archive.flush()
+    with tarfile.open(archive.name, "r:gz") as bundle:
+        found = set()
+        for member in bundle.getmembers():
+            if not member.isfile():
+                continue
+            parts = Path(member.name).parts
+            if len(parts) < 2:
+                continue
+            relative = Path(*parts[1:]).as_posix()
+            if relative not in required:
+                continue
+            source = bundle.extractfile(member)
+            if source is None:
+                raise SystemExit(f"cannot read gen_data source member: {relative}")
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("wb") as handle:
+                shutil.copyfileobj(source, handle)
+            found.add(relative)
+missing = sorted(required - found)
+if missing:
+    raise SystemExit(f"gen_data source revision is missing required files: {missing}")
+(destination / ".source_revision").write_text(revision + "\n", encoding="utf-8")
+PY
 
 # Render demo deployments need PostgreSQL support even when the platform does
 # not pass a Docker build arg. Local/CI Compose explicitly overrides this with
@@ -34,6 +93,7 @@ RUN groupadd --gid 10001 ontology \
     && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin ontology
 
 COPY --from=builder /install /usr/local
+COPY --from=builder /build/gen_data_source /app/.source/gen_data
 
 WORKDIR /app
 COPY --chown=10001:10001 systems/__init__.py /app/systems/__init__.py
