@@ -9,6 +9,13 @@
 > 이 계약 확정 이전의 개발 초안이며, 공식 Artifact나 호환·마이그레이션 대상으로 보지 않는다.
 > dual-version reader, 기존 버전과의 migration, 장기 deprecation 정책은 구현하지 않는다.
 
+> 이 문서가 정의하는 구조는 확정된 문서 계약이며, 아직
+> `schemas/model-artifact.schema.json`, Generator publisher 및 Backend loader에는
+> 반영되지 않았다. 현재 main은 PR #9의 실행 가능한 개발 초안
+> (`Implemented Draft`)을 사용하며, `tests/test_system_ownership.py`가 해당 초안의
+> publish → validation → load 경로를 검증한다. 공식 전환은 아래 후속 구현 완료
+> 조건과 통합 병합 게이트를 충족한 뒤 수행한다.
+
 ---
 
 ## 1. Model Artifact 개념 및 책임 경계
@@ -233,8 +240,20 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
 
 ---
 
-## 10. 완료 조건
+## 10. 완료 조건 및 후속 구현 완료 조건 — 공식 v1.0 전환
 
+- [ ] PR #22에서 Generator publisher가 공식 `model-artifact-v1.0` Manifest와
+      필수 파일 6개를 생성할 수 있도록 구현한다.
+- [ ] Backend/#24 작업에서 `artifact_provider.py`가 공식 Manifest 필드와
+      필수 role 5개를 검증하도록 구현한다.
+- [ ] `schemas/model-artifact.schema.json`은 publisher와 loader가 모두 준비된
+      통합 전환 시점에 공식 v1.0 구조로 교체한다. Schema만 먼저 바꾸지 않는다.
+- [ ] `tests/test_system_ownership.py`를 새 계약에 맞게 함께 갱신한다.
+- [ ] Schema, publisher, loader 및 테스트를 하나의 호환 전환 단위로 검증한다.
+- [ ] publish → JSON Schema validation → Backend load round-trip이 통과한다.
+- [ ] 한쪽만 공식 계약으로 전환된 main 상태를 배포하지 않는다.
+- [ ] PR #24 완료 후 공유 Schema를 `contracts/schemas/`로 이식하고 코드,
+      테스트, 스크립트, Docker, Render, CI 및 문서 참조를 함께 갱신한다.
 - [ ] `artifact_schema_version`이 `model-artifact-v1.0`(최초 공식)으로 발행된다.
 - [ ] `manifest.json`이 §3의 확정 구조(신규 3개 필드 포함)를 모두 포함한다.
 - [ ] 6개 파일이 모두 존재하고, `manifest.json`을 제외한 5개가 `artifact_files`
@@ -251,3 +270,90 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
 - [ ] `model_id`와 `model_version`이 Manifest에 별도 필수 필드로 기록된다.
 - [ ] 필요한 공개 학습·publish 심볼이 유지된다.
 - [ ] 필수 import 실패를 `None` 또는 빈 registry로 숨기지 않는다.
+
+---
+
+## 11. 공식 전환 병합 게이트 및 구현 참고사항
+
+### 11.1 공식 전환 병합 게이트
+
+PR별 구현 책임과 main 반영 시점을 구분한다.
+
+```text
+PR #22
+→ 공식 publisher와 필수 파일 생성 구현
+
+PR #24 / Backend
+→ 공식 loader 구현
+→ 공식 Schema 전환
+→ round-trip 테스트 갱신 및 통과
+
+통합 병합 게이트
+→ Schema + publisher + loader + 테스트가 모두 준비된 경우에만 공식 전환
+```
+
+Stacked PR을 유지하는 경우 PR #24에서 전체 round-trip을 통과시킨 뒤 #22~#24를
+중간 배포 없이 연속 병합한다. 필요하면 공식 전환 부분을 별도 통합 PR로 묶는다.
+
+다음 중간 상태는 허용하지 않는다.
+
+```text
+새 publisher + 구 Schema/loader
+구 publisher + 새 Schema/loader
+새 Schema + 구 publisher/loader
+```
+
+### 11.2 Artifact path containment (Backend loader 구현 참고)
+
+JSON Schema는 `artifact_files[*].path`가 비어 있지 않은 문자열인지 등 기본 형태만
+검증한다. 절대경로, Windows drive 경로, 역슬래시 traversal, symlink 및 Artifact
+root 이탈은 Backend loader에서 검증한다.
+
+문자열 `startswith()`만으로 root containment를 판정하지 않는다.
+
+```python
+from pathlib import Path
+
+
+def _resolve_within_root(root: Path, rel_path: str) -> Path:
+    resolved_root = root.resolve()
+    raw_path = Path(rel_path)
+
+    if raw_path.is_absolute() or raw_path.drive:
+        raise ValueError(f"artifact path must be relative: {rel_path!r}")
+
+    candidate = (resolved_root / raw_path).resolve()
+    try:
+        candidate.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"artifact_files path escapes artifact root: {rel_path!r}"
+        ) from exc
+
+    return candidate
+```
+
+### 11.3 필수 role과 path 중복 검사 (Backend loader 구현 참고)
+
+```python
+REQUIRED_ARTIFACT_ROLES = (
+    "model",
+    "feature_schema",
+    "label_schema",
+    "history_requirement",
+    "metrics",
+)
+
+roles = [item["role"] for item in manifest["artifact_files"]]
+if sorted(roles) != sorted(REQUIRED_ARTIFACT_ROLES):
+    raise ValueError(
+        f"artifact_files roles must be exactly {REQUIRED_ARTIFACT_ROLES}, got {roles}"
+    )
+
+paths = [item["path"] for item in manifest["artifact_files"]]
+if len(paths) != len(set(paths)):
+    raise ValueError("artifact_files declares duplicate paths")
+```
+
+각 role이 정확히 한 번씩 존재하는지는 JSON Schema의 `minItems`만으로 보장하지
+않고 loader에서 검증한다.

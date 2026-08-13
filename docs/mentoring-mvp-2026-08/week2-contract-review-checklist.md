@@ -246,6 +246,7 @@ Week 2 UI 표시: 매니저 / 엔지니어
 | RUN-OWN-01 | runtime inference owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) | 완료 | 완료 | 완료 |
 | RUN-OWN-02 | Product Result Artifact owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) | 완료 | 완료 | 완료 |
 | GEN-STACK-02 | 주기적 다중 모델 예측·신호 취합 실행 주체 | **결정 필요** | ADR-002 미해결 항목 — 다음 회의 대상 | **결정 필요** | 미정 | 미정 |
+| GEN-ART-07 | Manifest 중첩 객체 엄격성 및 학습 재현성 필드 | **결정 필요** | `training_config`/`provenance`/`compatibility`의 `additionalProperties` 정책과 `feature_count`/`random_seed` 필수 여부를 공식 전환 전에 결정 | **결정 필요** | 미정 | 미정 |
 
 상세 내용은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,
