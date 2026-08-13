@@ -1,10 +1,32 @@
-# Week 2 요구사항 명세 초안
+# Week 2 요구사항 정의서
 
 ## 기준
 
-이 문서는 Canonical V3.1 기반 예지보전 대시보드의 제품 방향 초안이다.
+이 문서는 Canonical V3.1 기반 예지보전 제품의 Week 2 요구사항 기준선이다.
 필드 근거는 [V3.1 검증표](./v3.1-field-validation.md), 프로토타입과의 차이는
 [Gap 분석](./prototype-mvp-gap-analysis.md)을 따른다.
+
+요구사항은 현재 실행 가능한 기능인 `Current Baseline`과 제품 목표인 `Target`을
+구분한다. 현재 구현돼 있다는 이유만으로 Target을 확정하지 않으며, Target 요구사항은
+Week 2 반영 여부와 후속 개발 여부를 명시한다.
+
+## 제품 데이터 흐름
+
+```text
+gen_data의 버전된 합성 원천 데이터
+→ systems/generator의 Feature·Model Artifact
+→ systems/backend/diagnosis의 runtime inference
+→ Product Result Artifact·Evidence
+→ API
+→ Dashboard·Report
+```
+
+- Canonical V3.1은 seed와 생성 정책으로 사전에 생성된 합성 데이터셋이다.
+- 현재 Replay는 저장된 관측값과 사전 계산된 예측을 시간순으로 공개한다.
+- Replay 중 센서값을 새로 생성하는 실시간 센서 서버로 표현하지 않는다.
+- Product Result Artifact의 운영 판단값은 Backend diagnosis가 생성한다.
+- What-if 결과는 별도 합성 분석 결과이며 Product Result Artifact의
+  `failure_probability`, `status_grade`, `top_factors`, `recommended_action`을 덮어쓰지 않는다.
 
 ## 사용자
 
@@ -34,10 +56,19 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 | CM-05 | 데이터·모델·Artifact schema 버전을 표시한다. | 화면 또는 상세에서 세 버전을 확인한다. |
 | CM-06 | loading, empty, error, stale, permission 상태를 구분한다. | 상태별 UI와 오류 응답이 정의된다. |
 | CM-07 | 평가 truth를 일반 화면/API에 노출하지 않는다. | 계약 테스트가 노출을 차단한다. |
+| CM-08 | 저장된 합성 데이터 Replay와 실제 실시간 수집을 구분한다. | 화면·API·문서가 Replay를 실제 센서 스트리밍으로 표현하지 않는다. |
+| CM-09 | Current Baseline과 Target 요구사항을 구분한다. | 미구현 Target을 현재 기능으로 표시하지 않는다. |
+| CM-10 | Producer의 구조화 결과와 역할별 문장·UI 표현을 분리한다. | What-if Producer에는 역할별 문장이 없고 Report/UI가 결과를 소비한다. |
 
 ## 화면별 요구사항
 
 ### Overview
+
+**Current Baseline**
+
+- 위험 KPI, Downtime과 판단 대기 Event 중심
+
+**Target**
 
 - 기준시각과 데이터·모델 버전
 - 전체·가동·비가동 설비 수
@@ -50,6 +81,13 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 등급별 합은 전체 설비 수와 같고, 같은 필터의 Operations 집계와 일치해야 한다.
 
 ### Objects
+
+**Current Baseline**
+
+- 검색·라인·상태·담당자 필터
+- 선택 Event와 설비의 Evidence 확인
+
+**Target**
 
 - 자산 ID·사이트·셀·유형·가동·위험 필터
 - 자산 기본정보
@@ -64,6 +102,12 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 
 ### Operations
 
+**Current Baseline**
+
+- Event Queue, Evidence, Decision, Note, Activity 중심
+
+**Target**
+
 - 기간별 생산 작업과 완료 현황
 - 제품·CNC·시작·완료·가공시간·공구마모 증가량
 - 기간별 정비 이력과 공구 교체 여부
@@ -76,6 +120,13 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 
 ### Executive Report
 
+**Current Baseline**
+
+- 선택 Event 기반 역할별 grounded report
+- `POST /api/events/{event_id}/report`
+
+**Target**
+
 - 보고 기간·생성시각·버전
 - 전체·가동·위험 설비와 생산·정비 건수
 - 위험 등급 분포
@@ -85,6 +136,74 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 - LLM 실패 시 deterministic/template fallback
 
 동일 조건의 Overview, Objects, Operations와 수치가 일치해야 한다.
+
+## 예방조치 What-if 확장 요구사항
+
+What-if는 운영 판단을 대신하는 기능이 아니라 동일 초기 상태에서 조치 미적용과
+적용 시나리오를 비교하는 합성 분석 Producer다. 세부 구현 계획은
+[예방조치 What-if 개발 계획](./preventive-what-if-development-plan.md)을 따른다.
+
+| ID | 요구사항 | 완료 기준 |
+|---|---|---|
+| WIF-01 | 위험 상승 사건과 선행 지표를 구조화한다. | 시작·peak·상승폭과 모든 지표의 source reference가 존재한다. |
+| WIF-02 | Baseline과 Intervention은 동일 초기 상태에서 시작한다. | 조치 필드 외 입력과 기준시각이 동일하다는 테스트를 통과한다. |
+| WIF-03 | 두 시나리오에 동일 Feature·Model Artifact를 사용한다. | model·feature·history 계약 버전과 checksum이 결과 provenance에 남는다. |
+| WIF-04 | 조치 전후 예상 위험을 비교한다. | `estimated_probability_reduction = baseline_probability - intervention_probability`를 만족한다. |
+| WIF-05 | 결과를 Product Result Artifact와 분리한다. | 운영 판단 필드를 덮어쓰지 않고 `synthetic_counterfactual_simulation`으로 표시한다. |
+| WIF-06 | 역할별 최종 문장은 Report/UI가 생성한다. | What-if 출력에는 구조화된 결과와 근거만 포함된다. |
+
+첫 vertical slice는 대표 CNC 설비의 `TOOL_REPLACEMENT`를 검증하고, 이후 적용 가능한
+전체 CNC 위험 상승 사건으로 확장한다. 대표 사례 한 건의 성공을 프로젝트 전체 완료로
+표현하지 않는다.
+
+## 경제성 비교 요구사항
+
+경제성 비교의 목표는 위험 감소량만 보여주는 것이 아니라 예방조치, 고장 후 수리와
+설비 교체 시나리오의 기대비용을 비교해 비용상 유리한 조치 시점을 찾는 것이다.
+
+Canonical V3.1에는 `asset_id`, `maintenance_id`, `product_type`, 생산·정비 시간은 있지만
+설비 모델, 부품 ID, 설비·부품 가격, 정비 인건비와 제품 공헌이익은 없다. 기존
+Canonical 파일에 임의의 금액을 역기입하지 않고 버전된 Economic Extension으로 연결한다.
+
+### 필요한 경제 데이터 계약
+
+| 데이터 | 연결 키 | 필수 내용 |
+|---|---|---|
+| 설비 카탈로그 | `asset_id → asset_model_id` | 제조사·모델명과 경제 기준 연결 |
+| 설비 경제 기준 | `asset_model_id` | 교체·운송·설치·시운전 비용, 잔존가치 |
+| 부품 마스터 | `part_id` | 부품번호·명칭·제조사·호환 설비 모델 |
+| 부품 가격 기준 | `part_id` | 단가, 통화, 유효기간과 가격 버전 |
+| 조치 카탈로그 | `action_code` | 필요 부품·수량·작업 역할·작업시간·정지시간 |
+| 인건비 기준 | `labor_role` | 시간당 총노무비와 적용 기간 |
+| 제품 경제 기준 | `product_type` | 단위 공헌이익·폐기비·재작업비 |
+| 수리 비용 이력 | `maintenance_id` | 부품비·인건비·외주비·재가동비 |
+
+### 금액 사용 규칙
+
+| 우선순위 | 출처 유형 | 용도 |
+|---:|---|---|
+| 1 | `actual` | 자산대장·ERP·MES·CMMS·구매 및 수리 이력 |
+| 2 | `vendor_quote` | 제조사·공급사 견적과 유지보수 계약 |
+| 3 | `public_reference` | 조달가격·공식 임금 통계·공식 요금표 대리값 |
+| 4 | `policy_assumption` | 팀 승인 산정식과 저·기준·고 범위 |
+| 5 | `synthetic` | 데모용 합성 경제 시나리오 |
+| 6 | `missing` | 계산 불가 또는 입력 필요 |
+
+모든 금액은 `currency`, 유효기간, `source_type`, `source_reference`, 가격·가정 버전을
+가진다. 공개 대리값이나 합성값을 실제 사업장 금액으로 표현하지 않는다.
+
+| ID | 요구사항 | 완료 기준 |
+|---|---|---|
+| ECO-01 | 기존 ID와 경제 데이터를 참조 무결성이 있는 키로 연결한다. | 모든 `asset_id`, `part_id`, `action_code`, `labor_role`, `product_type` 참조가 유효하다. |
+| ECO-02 | 조치 직접비와 조치 정지손실을 계산한다. | 부품·인건비·외주비·미생산 손실의 입력 근거를 역추적할 수 있다. |
+| ECO-03 | 미조치·예방조치·고장 후 수리/교체의 기대비용을 비교한다. | 동일 horizon과 동일 가격 버전으로 시나리오별 비용이 생성된다. |
+| ECO-04 | 시점별 최소 기대비용을 계산한다. | 비교한 후보 시점, 최소 시점과 비용 차이를 구조화해 반환한다. |
+| ECO-05 | 저·기준·고 민감도 분석을 제공한다. | 각 시나리오 결과와 추천 유지 여부를 함께 반환한다. |
+| ECO-06 | 결과 신뢰 수준을 표시한다. | `observed`, `quoted`, `reference_estimate`, `synthetic_scenario`, `insufficient` 중 하나가 존재한다. |
+| ECO-07 | 필수 금액이 없으면 절감액을 단정하지 않는다. | `missing` 입력이 있으면 단일 원화 최적값 대신 누락 항목 또는 손익분기 임계값을 반환한다. |
+
+초기 구현의 경제 결과는 `synthetic_scenario_estimate`이며 실제 절감 보장이나 확정된
+투자 회수 효과로 표현하지 않는다.
 
 ## 제외와 결정 결과
 
@@ -104,6 +223,10 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 - 현행 pagination과 프론트 24시간 stale 정책을 유지한다.
 - Event Evidence 기반 deterministic Report를 우선하고 기간 집계형은 Target이다.
 - Gold Fixture fallback은 source와 warning을 항상 표시한다.
+- Canonical V3.1은 저장된 합성 데이터이고 Replay는 실시간 재생성이 아니다.
+- What-if는 구조화된 합성 분석 Producer이며 역할별 문장 생성은 Report/UI가 담당한다.
+- 경제성 데이터는 Canonical에 역기입하지 않고 별도 버전의 Economic Extension으로 관리한다.
+- 실제 금액이 없는 초기 경제성 비교는 출처가 표시된 합성 시나리오로 제한한다.
 
 ## 대표 흐름
 
@@ -111,4 +234,5 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 2. 위험 설비를 선택해 Objects에서 센서와 Top-3 근거를 확인한다.
 3. Operations에서 관련 생산·정비 현황을 확인한다.
 4. Executive Report에서 같은 집계와 한계를 확인한다.
-
+5. What-if에서 동일 초기 상태의 조치 전후 위험과 근거를 비교한다.
+6. 경제성 비교에서 예방조치·미조치·고장 후 수리/교체의 기대비용과 민감도를 확인한다.

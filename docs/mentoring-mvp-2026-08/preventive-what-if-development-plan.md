@@ -1,8 +1,8 @@
 # 고장 전조 분석 및 예방조치 What-if 개발 계획
 
 - 문서 상태: `PR #20 완료 · 후속 시뮬레이션 의존성 대기`
-- 기준일: `2026-08-12`
-- 현재 문서 브랜치: `docs/preventive-what-if-status-update`
+- 기준일: `2026-08-13`
+- 현재 문서 브랜치: `docs/what-if-model-artifact-contract-alignment`
 - 발표일: `2026-09-11`
 - 기준 데이터: `canonical-ai4i-physics-v3.1`
 - 기준 모델: `WIF-DEC-08`~`WIF-DEC-10` 확정 전 미결정
@@ -95,6 +95,76 @@ Canonical V3.1 / Prediction Timeline
 → 구조화된 What-if Result 생성
 → API / Dashboard / map-report가 소비
 ```
+
+### 4.1 What-if 재평가용 Model Artifact 확정 원칙
+
+What-if는 임의 모델 파일이나 `latest` alias를 직접 선택하지 않는다. Baseline과
+Intervention은 동일한 immutable Model Artifact를 사용하며, Artifact manifest와
+동봉된 Feature·History 계약을 검증한 뒤 재평가한다.
+
+현재 `model-artifact-v1.0`과 Backend loader의 호환성을 유지하기 위해 다음 기존
+최상위 필드는 제거하거나 이름을 바꾸지 않는다.
+
+- `training_config`
+- `metrics`
+- `checksum`
+- `provenance`
+- `compatibility`
+- `artifact_files`
+
+What-if 계획은 `model-artifact-v1.0`의 호환 확장 방식을 채택한다. prediction,
+history, label과 runtime 계약을 명시적으로 추가하되 기존 필드와 소비자 계약을
+깨뜨리지 않는다. 다음 메타데이터를 v1.0 호환 확장 필드로 사용한다.
+
+- `dataset_schema_version`
+- `label_schema_version`
+- `history_requirement_version`
+- `metrics_schema_version`
+- `prediction_contract`
+- `model_runtime`
+
+`metrics_summary`는 기존 `metrics`를 대체하지 않고 `metrics.summary`로 포함한다.
+`compatibility.runtime`은 현행 Backend loader 호환을 위해 유지한다. What-if runtime
+호환 표시는 추론 실행 주체가 확정된 뒤 선택적으로 추가하며, What-if가 Generator나
+Backend 구현 코드를 직접 import할 수 있다는 의미로 사용하지 않는다.
+
+`artifact_files`는 빈 배열을 허용하지 않는다. 최소한 `model`과 `feature_schema` role을
+포함하고, History 기반 Feature를 채택하면 `history_requirement`, Label 재현·감사를
+요구하면 `label_schema`, 평가 상세를 외부 파일로 둘 경우 `metrics` role을 포함한다.
+각 파일은 `artifact_files[*].sha256`와 최상위 `checksum.files`에서 동일한 sha256으로
+검증돼야 한다.
+
+`prediction_contract`는 최소한 다음 의미를 고정한다.
+
+- `prediction_task = binary_failure_within_horizon`
+- `prediction_horizon_hours`
+- `probability_output = positive_class_probability`
+- `positive_class_label`
+- 학습 시 선택된 기본 `decision_threshold`
+- `threshold_policy_version`
+
+운영 환경에서 threshold override가 필요하면 Model Artifact의 학습 기준값을 변경하지
+않고 별도 versioned 운영 정책으로 관리한다.
+
+`history_requirement_version`만으로 Feature parity가 보장되지는 않는다.
+`feature_schema.json` 또는 연결된 명세에는 asset partition, timestamp ordering,
+최소 관측 수, lookback, sampling 규칙, 결측값, dtype, rolling `min_periods`, std
+`ddof`, EMA와 categorical transform 파라미터가 재현 가능하게 포함되어야 한다.
+
+따라서 What-if 연동에서 `metrics`, `checksum`, `compatibility.runtime`과 필수
+`artifact_files`를 유지한다. `metrics_summary`처럼 기존 필드를 대체하는 새 이름은
+사용하지 않고 `metrics.summary`처럼 기존 구조 안에서 확장한다. 이 방식은 기존
+Backend를 깨뜨리지 않는 계획상 확정 방향이다.
+
+PR #28 완료 전에는 세부 필드 shape와 구현 시점만 확정하지 않는다. 현행
+`schemas/model-artifact.schema.json`은 `additionalProperties: false`이므로 확장 필드를
+허용하도록 JSON Schema를 함께 갱신해야 한다. 이때 기존 필수 필드와 의미는 유지하고
+Generator publisher·Backend provider·계약 테스트가 기존 Artifact와 새 확장
+Artifact를 모두 처리하는지 확인한다.
+
+기존 필드 이름을 교체하거나 기존 의미를 깨야 한다면 호환 확장으로 처리하지 않는다.
+이 경우 `model-artifact-v2.0`으로 올리고 Generator·Backend·JSON Schema·테스트를
+동시에 변경한다.
 
 ## 5. 입력 데이터
 
@@ -199,6 +269,70 @@ Evaluation truth에서 변환할 경우 `occurred_at`이 지난 이벤트만 운
 
 실제 가격이 없으면 임의의 `0`이 아니라 `null`과 `source_type=missing`을 사용한다.
 
+### 7.4 금액 출처 등급과 사용 규칙
+
+Canonical V3.1은 생산 주기, 정비 시간과 공구 교체 여부를 제공하지만 설비 취득가,
+부품 단가, 정비 인건비, 제품 공헌이익과 고장 손실 금액은 제공하지 않는다. 따라서
+Canonical 데이터만으로 실제 비용 또는 실제 절감액을 계산하지 않는다.
+
+금액 입력은 다음 우선순위로 선택한다.
+
+| 우선순위 | `source_type` | 허용 출처 | 결과 표시 |
+|---:|---|---|---|
+| 1 | `actual` | 자산대장, 구매전표, 세금계산서, ERP·MES·CMMS 작업·비용 이력 | 실제 관측값 |
+| 2 | `vendor_quote` | 제조사·공급사 견적서, 유지보수 계약서 | 견적 기반 추정값 |
+| 3 | `public_reference` | 나라장터 계약·입찰 가격, 공공 임금 통계, 공식 전기요금표 | 외부 기준 대리값 |
+| 4 | `policy_assumption` | 팀이 승인한 계산식과 범위 | 정책 가정값 |
+| 5 | `synthetic` | 데모용 합성 분포에서 생성한 값 | 합성 시나리오 값 |
+| 6 | `missing` | 사용 가능한 근거 없음 | 계산 제외 또는 결과 `null` |
+
+공개 가격은 대상 설비·부품의 제조사, 모델, 규격, 납품 범위, 설치비와 기준일이
+일치할 때만 직접 대리값으로 사용한다. 조건이 다르면 단일 확정값이 아니라
+`estimate_low`, `estimate_base`, `estimate_high` 범위로 사용한다. 공개된 CNC 장비 한 건의
+조달가격을 모든 CNC 설비의 가격으로 복제하지 않는다.
+
+각 경제 입력에는 최소한 다음 provenance를 저장한다.
+
+- `amount`, `currency`, `price_basis`, `effective_from`, `effective_to`
+- `source_type`, `source_name`, `source_reference`, `retrieved_at`
+- `asset_model_or_part_number`, `quantity`, `included_cost_scope`
+- `estimate_method`, `estimate_low`, `estimate_base`, `estimate_high`
+- `assumption_version`, `approved_by`, `confidence_grade`
+
+문서 URL만으로 재현할 수 없는 견적·사내 자료는 문서 번호나 익명화된 참조 ID를 남긴다.
+합성값은 실제값처럼 승격하지 않으며 실제 자료가 들어오면 동일 키의 새 가격 버전으로
+교체한다.
+
+### 7.5 실제값이 없을 때의 산정 정책
+
+실제값이 없는 경우에도 경제성 비교는 구현할 수 있다. 단, 아래 산정식을 버전 있는
+정책으로 관리하고 결과를 `synthetic_scenario_estimate`로 제한한다.
+
+- 설비 교체비: 동급 사양의 2건 이상 견적·조달가격 범위 + 운송·설치·시운전 비용
+- 부품비: 동일 부품번호 견적을 우선하고, 없으면 호환 부품 가격 범위
+- 정비 인건비: 작업시간 × 직종별 시간당 총노무비. 최저임금만으로 숙련 정비 인건비를
+  대표하지 않는다.
+- 생산중단 손실: Canonical 생산 주기로 계산한 미생산 수량 × 제품별 단위 공헌이익
+- 폐기·재작업비: 영향 제품 수량 × 제품별 폐기·재작업 단가
+- 재가동비: 재가동 작업시간 인건비 + 시험 생산 폐기비 + 추가 에너지비
+
+제품 공헌이익 또는 수리 부품비처럼 공개자료로 사업장 실제값을 대체할 수 없는 항목은
+팀이 승인한 저·기준·고 시나리오를 사용한다. 하나라도 필수 입력이 `missing`이면 단일
+원화 최적값을 반환하지 않고 손익분기 임계값 또는 입력 필요 항목을 반환한다.
+
+### 7.6 경제성 결과의 신뢰 수준
+
+경제성 결과에는 사용한 입력 중 가장 낮은 신뢰 수준을 결과 신뢰 수준으로 전파한다.
+
+- `observed`: 필수 금액이 모두 사내 실제 이력
+- `quoted`: 실제값과 유효한 공급사 견적의 조합
+- `reference_estimate`: 공공·공식 대리값 포함
+- `synthetic_scenario`: 정책 가정 또는 합성값 포함
+- `insufficient`: 필수 금액 누락으로 비교 불가
+
+`reference_estimate` 이하 결과는 "예상 절감액" 또는 "시나리오 비교"로만 표시하고,
+실제 절감 보장, 투자 회수 확정 또는 최적 교체 시점 확정으로 표현하지 않는다.
+
 ## 8. 위험 상승과 선행 지표 분석
 
 설비별 Prediction Timeline에서 상승 시작·최고점·종료점, 확률 상승폭과 지속시간을
@@ -263,6 +397,10 @@ treatment-effect 모델을 후속 검토한다.
 
 ## 11. 경제성 계산
 
+경제성 계산은 한 개의 고정 금액만 비교하지 않고 각 금액의 저·기준·고 입력에 대해
+민감도 분석을 수행한다. 추천 시점은 기준 시나리오의 최소 기대비용 시점이며, 저·고
+시나리오에서도 동일 선택이 유지되는지 함께 제공한다.
+
 ```text
 고장 발생 손실
 = 직접 수리비
@@ -294,6 +432,8 @@ Intervention 기대비용
 ```
 
 모든 경제 결과는 `synthetic_scenario_estimate`로 표시하고 실제 절감액처럼 표현하지 않는다.
+향후 사내 실제 이력만 사용한 결과는 `observed`로 승격할 수 있으나, 사용한 source와
+계산 정책 버전을 결과에 계속 포함한다.
 
 ## 12. 구현 기준 경로
 
@@ -369,7 +509,8 @@ Feature 계약이 달라질 수 있기 때문이다.
 
 ### 개발 재개 조건
 
-PR #21~#24가 최종 대상 브랜치에 반영된 뒤 다음 조건을 확인하고 계획을 다시 승인한다.
+PR #21~#24의 구현 방향과 PR #28의 계약이 최종 대상 브랜치에 반영된 뒤 다음 조건을
+확인하고 계획을 다시 승인한다.
 
 1. 최종 Feature schema와 window 의미가 확정돼야 한다.
    - Canonical V3.1의 6시간 Feature
@@ -385,6 +526,10 @@ PR #21~#24가 최종 대상 브랜치에 반영된 뒤 다음 조건을 확인�
    기존 경계를 유지해야 한다.
 6. 확정된 main에서 대표 사례의 입력 Feature와 기존 Prediction Timeline 호환성을
    다시 검증해야 한다.
+7. 최종 Model Artifact manifest가 현행 필수 필드, 파일별 checksum과 최소 file role을
+   보존하는지 확인해야 한다.
+8. `prediction_contract`, Feature schema와 History requirement가 동일 horizon·feature
+   순서·window 의미를 재현할 수 있는지 golden-vector contract test로 검증해야 한다.
 
 ### 외부 PR 의존성 현황
 
@@ -396,6 +541,7 @@ PR #21~#24가 최종 대상 브랜치에 반영된 뒤 다음 조건을 확인�
 | `#22` | LightGBM·XGBoost·RandomForest 학습·버전 | 비교 모델과 immutable version 선택 | 머지 후 재검토 |
 | `#23` | Generator daemon·재학습 API | 오프라인 실험보다 후속 실행 방식에 영향 | 머지 후 재검토 |
 | `#24` | Prediction service·latest 모델 로딩 | 추론 주체, 다중 모델 선택과 재현성 | 머지 후 재검토 |
+| `#28` | Feature/Label·Model Artifact 목표 계약과 ADR | manifest 확장, History requirement, Feature parity 기준 | 계약 확정 후 계획 갱신 |
 
 PR #21~#24는 `main → #21 → #22 → #23 → #24` 순서로 쌓인 의존 PR이다. 개별 PR의
 중간 계약을 What-if의 확정 인터페이스로 사용하지 않고 최종 반영된 main을 기준으로
@@ -422,7 +568,8 @@ PR #17의 Backend Artifact inference와 Product Result Artifact 경계도 추론
 
 - PR #20에서 선행 완료한 위험 상승 탐지·센서 구간 비교 결과 유지
 - PR #21~#24 최종 반영 상태 확인
-- `WIF-DEC-08`~`WIF-DEC-10` 결정 및 계획 갱신
+- PR #28 Feature/Label·Model Artifact 계약 확정 상태 확인
+- `WIF-DEC-08`~`WIF-DEC-10` 결정 및 `WIF-DEC-11` 세부 shape 반영
 - 의존 PR이 미완료이면 시뮬레이션 구현을 시작하지 않음
 
 ### Week 4 — 2026-08-24~08-30
@@ -459,9 +606,12 @@ PR #17의 Backend Artifact inference와 Product Result Artifact 경계도 추론
 | `WIF-DEC-08` | What-if 재평가에 사용할 Feature schema와 window version | PR #21과 기존 6시간 Feature 호환성 |
 | `WIF-DEC-09` | model ID·algorithm·immutable version 선택 | PR #22/#24의 다중 모델·latest 사용 방지 |
 | `WIF-DEC-10` | 추론 실행 주체: Artifact adapter, Backend port 또는 Generator API | 시스템 direct import와 운영 책임 경계 |
+| `WIF-DEC-11` | **결정 완료:** `model-artifact-v1.0` 호환 확장 채택; 기존 필드 교체 시에만 v2 전환 | Generator publisher·Backend provider·What-if adapter 동시 호환 |
 
-`WIF-DEC-08`~`WIF-DEC-10`은 PR #21~#24 반영 후 main 기준으로 결정한다. 세 항목이
-확정되기 전에는 `intervention_probability`와 위험 감소량을 공식 산출하지 않는다.
+`WIF-DEC-11`의 호환 전략은 확정했다. `WIF-DEC-08`~`WIF-DEC-10`과 v1 확장 필드의
+세부 shape는 PR #21~#24와 PR #28의 최종 계약이 main에 반영된 뒤 결정한다. 해당
+Feature·모델·추론 계약이 확정되기 전에는 `intervention_probability`와 위험 감소량을
+공식 산출하지 않는다.
 
 ## 16. 검증 기준
 
@@ -471,6 +621,14 @@ PR #17의 Backend Artifact inference와 Product Result Artifact 경계도 추론
 - 공구 교체 시 `tool_wear_min=0`, `is_operating=0`, `operating_state=maintenance`다.
 - 조치 이후 시간창 Feature를 다시 계산한다.
 - 두 시나리오는 동일 모델·버전·임계값을 사용한다.
+- Model Artifact의 `model_id`, immutable `model_version`, Feature/Label/History 계약
+  버전과 file checksum을 결과 provenance에 남긴다.
+- `training_config.feature_count`는 `feature_schema.json`의 실제 입력 Feature 수와
+  일치해야 한다.
+- Generator가 publish한 Artifact를 Backend provider 또는 확정된 What-if adapter가
+  동일하게 검증·로드하는 round-trip test를 통과해야 한다.
+- 동일 고정 입력에 대해 학습 측 Feature executor와 재평가 측 Feature executor가 같은
+  순서와 값의 Feature vector를 생성하는 golden-vector test를 통과해야 한다.
 - `estimated_probability_reduction = baseline - intervention`을 만족한다.
 - 모든 선행 지표에 source reference가 존재한다.
 - 모든 선행 지표의 `source_reference.asset_id`는 결과의 `asset_id`와 같다.
