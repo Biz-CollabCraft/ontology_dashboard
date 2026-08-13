@@ -228,19 +228,24 @@ Week 2 UI 표시: 매니저 / 엔지니어
 
 ## 6.1 팀원2·3 — Generator Feature/Label/Artifact 계약 (PR #21~#24)
 
-| ID | 주제 | 분류 | 결정 상태 |
-|---|---|---|---|
-| GEN-FEAT-01 | Feature canonical owner | 현행 구현 계약 | `결정 완료` (`systems/generator`) |
-| GEN-FEAT-02 | Feature naming/versioning | 구현 변경 필요 | `목표 계약 / 구현 필요` (ADR-001) |
-| GEN-FEAT-03 | asset/time partition | 현행 구현 계약 | `결정 완료` (PR #21 구현됨) |
-| GEN-LABEL-01 | failure anchor semantics | 구현 변경 필요 | `목표 계약 / 구현 진행 중` |
-| GEN-LABEL-02 | horizon boundary | 구현 변경 필요 | `목표 계약 / 구현 진행 중` |
-| GEN-LABEL-03 | active failure exclusion / fail-fast 기본값 | 구현 변경 필요 | `목표 계약 / 구현 필요` |
-| GEN-ART-01 | run registry vs Model Artifact | 구현 변경 필요 | `목표 계약 / PR #22 구현 필요` |
-| GEN-ART-02 | immutable publish/checksum/provider | 구현 변경 필요 | `목표 계약 / PR #22 구현 필요` |
-| GEN-API-01 | training daemon 범위 | 구현 변경 필요 | `목표 계약 / PR #23 구현 필요` |
-| RUN-OWN-01 | runtime inference owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) |
-| RUN-OWN-02 | Product Result Artifact owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) |
+| ID | 주제 | 분류 | 결정 상태 | 계약 결정 | 코드 구현 | 테스트 |
+|---|---|---|---|---|---|---|
+| GEN-FEAT-01 | Feature canonical owner | 현행 구현 계약 | `결정 완료` (`systems/generator`) | 완료 | 완료 | 완료 |
+| GEN-FEAT-02 | Feature naming/versioning | 구현 변경 필요 | `목표 계약 / 구현 필요` (ADR-001) | 완료 | 필요 | 필요 |
+| GEN-FEAT-03 | asset/time partition | 현행 구현 계약 | `결정 완료` (PR #21 구현됨) | 완료 | 완료 | 완료 |
+| GEN-LABEL-01 | failure anchor semantics | 구현 변경 필요 | `목표 계약 / 구현 진행 중` | 완료 | 진행 중 | 진행 중 |
+| GEN-LABEL-02 | horizon boundary | 구현 변경 필요 | `목표 계약 / 구현 진행 중` | 완료 | 진행 중 | 진행 중 |
+| GEN-LABEL-03 | active failure exclusion / fail-fast 기본값 | 구현 변경 필요 | `목표 계약 / 구현 필요` | 완료 | 필요 | 필요 |
+| GEN-ART-01 | run registry vs Model Artifact | 구현 변경 필요 | `목표 계약 / PR #22 구현 필요` | 완료 | 필요 (PR #22) | 필요 |
+| GEN-ART-02 | immutable publish/checksum/provider | 구현 변경 필요 | `목표 계약 / PR #22 구현 필요` | 완료 | 필요 (PR #22) | 필요 |
+| GEN-ART-03 | Artifact 공식 버전 | 계약 결정 완료 | `model-artifact-v1.0` 최초 공식, 이전 동일 문자열은 개발 초안 | 완료 | 필요 (PR #22) | 필요 (round-trip, manifest 필드 검증) |
+| GEN-ART-04 | Artifact 필수 파일·role | 계약 결정 완료 | 6개 파일 전부 필수, 5개 role 전부 `artifact_files` 필수 등록 | 완료 | 필요 (PR #22) | 필요 (round-trip, manifest 필드 검증) |
+| GEN-ART-05 | 학습 데이터 분할 전략 | 계약 결정 완료 | `training_config.split_strategy = "asset_time_split"` 기본값 | 완료 | 필요 (PR #22) | 필요 (round-trip, manifest 필드 검증) |
+| GEN-ART-06 | Artifact 모델 식별 | 계약 결정 완료 | Manifest canonical identity는 `model_id`/`model_version` 별도 필드. `{model_base}_{version}`은 화면·경로용 파생 표시값일 뿐, 신호(signal) 내 사용 여부는 GEN-STACK-02로 이관 | 완료 | 필요 (PR #22) | 필요 (round-trip, manifest 필드 검증) |
+| GEN-API-01 | training daemon 범위 | 구현 변경 필요 | `목표 계약 / PR #23 구현 필요` | 완료 | 필요 | 필요 |
+| RUN-OWN-01 | runtime inference owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) | 완료 | 완료 | 완료 |
+| RUN-OWN-02 | Product Result Artifact owner | 현행 구현 계약 | `결정 완료` (`systems/backend/diagnosis`) | 완료 | 완료 | 완료 |
+| GEN-STACK-02 | 주기적 다중 모델 예측·신호 취합 실행 주체 | **결정 필요** | ADR-002 미해결 항목 — 다음 회의 대상 | **결정 필요** | 미정 | 미정 |
 
 상세 내용은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,

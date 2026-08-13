@@ -143,43 +143,23 @@ Feature engineering은 versioned Feature Contract를 생산한다. Feature Contr
 
 Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`라는 **로컬 물리 경로**가 아니라 versioned Model Artifact의 **형식과 식별자 및 `MODEL_ARTIFACT_URI` 주입 방식**이다.
 
-### 4.1 필수 manifest 메타데이터
+### 4.1 Model Artifact 원칙
 
-각 publish 단위는 최소한 다음 메타데이터를 제공한다.
+- Model Artifact는 `systems/generator`가 발행하는 불변(immutable) 산출물 패키지다.
+- `MODEL_ARTIFACT_URI` 또는 injected provider를 통해서만 Backend에 전달된다.
+  Backend는 sibling 경로(`../generator/...`)나 물리 디렉터리를 정적으로 탐색하지 않는다.
+- 각 `model_id` + `model_version` 조합은 재사용되지 않는다 (immutable publish).
+- publish는 atomic하게 수행되며, 실패 시 부분 결과를 남기지 않고 run registry도
+  갱신하지 않는다.
+- 파일 무결성은 `artifact_files[*].sha256` 개별 검증으로만 판단한다.
+  incompatible/corrupt Artifact를 heuristic으로 조용히 대체하지 않는다.
+- 현재 공식 계약 버전은 `model-artifact-v1.0`이다. 이전 코드·문서·테스트에서
+  사용된 동일 문자열은 이 계약 이전의 개발 초안이며 호환 대상이 아니다.
 
-| 필드 | 의미 |
-|---|---|
-| `artifact_type` | 산출물 종류. 예: `predictive_maintenance_model` |
-| `artifact_schema_version` | manifest/contract schema 버전 |
-| `model_id` | 논리 모델 식별자 |
-| `model_version` | immutable 모델 버전 |
-| `dataset_version` | 학습 데이터 버전 |
-| `feature_schema_version` | 입력 feature 계약 버전 |
-| `created_at` | 생성 시각 |
-| `training_config` | 학습 설정 및 재현성 정보 |
-| `metrics` | 평가 metric 요약 또는 metric 파일 참조 |
-| `checksum` | manifest가 가리키는 핵심 artifact 무결성 값 |
-| `provenance` | 소스 데이터·코드·실행 provenance |
-| `compatibility` | Backend/runtime 호환 조건 |
-| `artifact_files` | 모델, feature schema, metrics 등 파일 목록/참조 |
-
-위 표는 `feature_schema_version`만 명시하므로, 실제 publish에서는 다음을 보강한다.
-
-- `feature_schema` artifact file(`feature_schema.json`)을 `artifact_files`에 필수로 포함한다.
-- label schema 또는 label contract metadata(`label_schema.json` 또는 `training_config.label_schema_version`)를 포함한다. Label Schema 전달 방식은 Artifact schema version 전환 결정과 함께 확정한다.
-- prediction horizon을 `training_config` 또는 label schema에 기록한다.
-- Feature 순서가 `feature_schema.json`과 학습 시점의 `feature_cols` 순서와 일치함을 보장한다.
-- training/runtime compatibility 범위를 `compatibility` 필드에 명시한다.
-
-> ADR-001/002는 현재 `Proposed` 상태다. ADR-001/002 목표 계약은 승인 및 관련 구현 PR 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로 사용하지 않는다. (단, PR 단독 import 및 실행 가능성이라는 기존 코드 결함 항목은 ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.)
-
-상세 스키마는 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`를 따른다.
-
-변경 영향:
-
-- Backend artifact provider의 검증 범위가 늘어날 수 있음
-- 기존 Model Artifact는 새 계약 버전과 호환되지 않을 수 있음
-- artifact schema version bump가 필요할 수 있음
+Manifest의 실제 필드 구조, 6개 필수 파일의 역할, `artifact_files` role 목록,
+검증 규칙, publisher/consumer 책임은
+`docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`를
+단일 상세 기준으로 사용한다. 이 문서에는 Manifest JSON 구조를 복제하지 않는다.
 
 ### 4.2 디렉터리 예시
 
