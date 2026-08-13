@@ -35,14 +35,18 @@ rolling mean/std, lag, EMA 등의 시계열 피처는 단일 Current Observation
 
 ```json
 {
-  "partition_by": "asset_id",
-  "order_by": "observed_at",
+  "expected_sampling_interval_seconds": 3600,
   "minimum_history_rows": 10,
   "maximum_lookback_hours": 24,
-  "duplicate_policy": "error",
+  "history_sufficiency_policy": "decision-required",
   "missing_history_policy": "fail"
 }
 ```
+
+> 아래 값은 설명용 예시이며 전역 고정값이 아니다.
+> `expected_sampling_interval_seconds`, `minimum_history_rows`,
+> `maximum_lookback_hours`는 학습 데이터 프로파일과 Feature Schema에 따라
+> Artifact publish 시 결정한다.
 
 ---
 
@@ -127,11 +131,11 @@ deprecated 필드로 유지하되, publish 시 값은 항상 `artifact_files`에
 - consumer는 `artifact_files`에 선언된 **모든 파일**에 대해 개별 SHA-256을
   검증한다. 하나라도 불일치하면 명시적으로 실패시키고 임의의 sibling 파일로
   대체하지 않는다.
-- 신규 필수 파일(`label_schema.json`, `history_requirement.json`) 도입에
-  따라 `artifact_schema_version`을 올릴지 여부를 결정한다 (현재
-  `model-artifact-v1.0`). 필드 추가만으로는 하위 호환이 깨지지 않는다면
-  버전을 유지할 수 있으나, Backend의 필수 role 검사가 늘어나는 것은 호환성
-  변경이므로 팀 확인 후 결정한다.
+
+> `label_schema`, `history_requirement`, `metrics`를 필수 role로 승격하면
+> 기존 `model-artifact-v1.0`과 호환되지 않는 breaking change가 된다.
+> Artifact schema version, v1.0 호환 정책 및 Backend 배포 순서는 팀 결정
+> 전까지 `Proposed / 결정 대기` 상태로 유지한다.
 
 ---
 
@@ -153,5 +157,6 @@ deprecated 필드로 유지하되, publish 시 값은 항상 `artifact_files`에
 - [ ] publish 실패 시 run registry가 갱신되지 않는다.
 - [ ] `artifact_files`의 모든 항목이 개별 SHA-256으로 검증된다.
 - [ ] 최상위 `checksum` 필드가 deprecated로 명시되며 `manifest.checksum = artifact_files[role="model"].sha256`으로 값이 통일된다.
+- [ ] deprecated 최상위 `checksum`에 대한 계약 테스트가 추가된다: `manifest["checksum"] == next(item["sha256"] for item in manifest["artifact_files"] if item["role"] == "model")`
 - [ ] Backend `artifact_provider.py`의 필수 role 목록이 `label_schema`, `history_requirement`를 포함하도록 갱신된다.
 - [ ] 기존 공개 파사드 심볼이 유지되어 기존 import가 깨지지 않는다.

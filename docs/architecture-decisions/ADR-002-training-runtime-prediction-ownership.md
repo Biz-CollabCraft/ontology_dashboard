@@ -38,6 +38,3 @@
   입력 → generator 산출 feature 벡터와 Backend 재현 feature 벡터가 완전
   일치하는지 비교하는 테스트)로 검증한다. 이 테스트가 없으면 parity가
   "보장"되었다고 표기하지 않는다.
-- 피처 덮어쓰기 충돌(Invariant 17 위반) 문제는 해결된다.
-- PR #21의 `feature_builder.py` 피처 생성기 및 피처 명칭 수정이 필요하며,
-  기존 NPY 캐시와의 마이그레이션이 필요하다.

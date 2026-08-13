@@ -166,10 +166,12 @@ Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`�
 위 표는 `feature_schema_version`만 명시하므로, 실제 publish에서는 다음을 보강한다.
 
 - `feature_schema` artifact file(`feature_schema.json`)을 `artifact_files`에 필수로 포함한다.
-- label schema 또는 label contract metadata(`label_schema.json` 또는 `training_config.label_schema_version`)를 포함한다.
+- label schema 또는 label contract metadata(`label_schema.json` 또는 `training_config.label_schema_version`)를 포함한다. Label Schema 전달 방식은 Artifact schema version 전환 결정과 함께 확정한다.
 - prediction horizon을 `training_config` 또는 label schema에 기록한다.
 - Feature 순서가 `feature_schema.json`과 학습 시점의 `feature_cols` 순서와 일치함을 보장한다.
 - training/runtime compatibility 범위를 `compatibility` 필드에 명시한다.
+
+> ADR-001/002는 현재 `Proposed` 상태다. 해당 목표 계약은 승인 및 관련 구현 PR 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로 사용하지 않는다.
 
 상세 스키마는 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`를 따른다.
 

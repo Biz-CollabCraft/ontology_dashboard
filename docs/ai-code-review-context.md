@@ -109,6 +109,9 @@ API / systems/frontend / Report
 20~23번은 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`와
 `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 근거로 한다.
 
+> ADR-001/002는 현재 `Proposed` 상태다. 해당 목표 계약은 승인 및 관련 구현 PR
+> 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로 사용하지 않는다.
+
 ## 4. Model Artifact / Result Artifact 구분
 
 Model Artifact는 Generator가 만드는 학습/배포 산출물이고 Product Result Artifact/Evidence는 Backend가

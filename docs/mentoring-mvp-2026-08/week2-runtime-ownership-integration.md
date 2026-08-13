@@ -60,7 +60,7 @@ PR #11에서 기존 root `api/`와 `web/` 실행 host를 각각 `systems/backend
 
 `systems/generator`의 책임 끝점은 versioned Model Artifact publish까지다. 이 경계를
 구체적으로 판정하기 위해 Generator internal daemon(학습 daemon)의 허용/금지 범위를
-명문화한다. 상세 근거와 판정 표는 `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
+명문화한다. 상세 아키텍처 결정과 책임 분리 근거는 `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
 
 **허용**
 
@@ -72,6 +72,7 @@ PR #11에서 기존 root `api/`와 `web/` 실행 host를 각각 `systems/backend
 **금지**
 
 - 사용자 요청 기반 runtime predict (예: `/internal/predict`, `/internal/predict/file`)
+- `PredictionOutput` 등 runtime 응답 형식의 외부 노출
 - current telemetry를 운영 목적으로 자동 선택하는 기능
 - Product prediction 파일 저장 (예: `data_preprocessed/predictions/*.json`을 제품 저장소로 사용)
 - Product Result Artifact/Evidence 생성

@@ -132,13 +132,21 @@
 
 ## 3.7 Extraction Plan
 
-출처: `systems/generator/extraction/extraction_agent.py`의 `ExtractionPlanResponse` · 상태: `확정`
+출처: `systems/generator/extraction/extraction_agent.py`의 `ExtractionPlanResponse`
 
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|:---:|---|
-| `id_column` | string | N | 설비를 식별하는 컬럼명. Feature/Label partition key로 사용 |
-| `time_column` | string | N | 관측 시각 컬럼명. 정렬·canonicalize 기준 |
-| `duplicate_policy` | enum | Y | `aggregate` 등 중복 처리 정책 |
+상태: `부분 구현 — long-format 집행 완료, wide-format 구현 필요`
+
+| 필드 | 현행 타입 | 입력 필수 | 정규화 출력 | 현행 설명 | 목표 |
+|---|---|:---:|:---:|---|---|
+| `id_column` | string/null | N | Y(null 허용) | 설비 식별 컬럼 | 유지 |
+| `time_column` | string/null | N | Y(null 허용) | 관측 시각 컬럼 | 유지 |
+| `duplicate_policy` | string | N | Y | 기본값 `error`; `error`, `aggregate` | `Literal["error", "aggregate"]` |
+| `aggregation` | string/null | N | Y(null 허용) | `mean`, `first`, `sum` | `Literal["mean", "first", "sum"] | None` |
+
+현행 집행 범위:
+
+- `tabular_row_as_attribute`: 중복 검사 및 `error`/`aggregate` 정책 구현 완료
+- `tabular_column_as_attribute`: `[id_column, time_column]` 중복 검사 미구현
 
 상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §1을 따른다.
 
@@ -158,8 +166,7 @@
       "unit": null,
       "operation": "rolling_mean",
       "parameters": {
-        "window": 5,
-        "min_periods": 1
+        "window": 5
       },
       "partition_by": "asset_id",
       "order_by": "observed_at"
@@ -167,6 +174,12 @@
   ]
 }
 ```
+
+> `min_periods`는 아직 확정 계약이 아니다. 현재 PR #21 구현값은 `1`이지만,
+> golden-vector 검증과 모델 품질 비교 후 별도로 결정한다.
+>
+> 영향 범위는 워밍업 행 수, 학습 데이터 크기, rolling 통계 분포 및 기존
+> 모델 재학습 여부다.
 
 상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §2와
 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
@@ -177,7 +190,7 @@
 
 ```json
 {
-  "label_schema_version": "pdm-label-v2",
+  "label_schema_version": "pdm-label-v3",
   "prediction_task": "binary_failure_within_horizon",
   "prediction_horizon_hours": 24,
   "positive_interval": "[anchor-horizon, anchor)",
@@ -185,6 +198,9 @@
   "active_failure_policy": "excluded"
 }
 ```
+
+> `pdm-label-v3`는 기존 라벨 의미와 호환되지 않는다. 기존 Feature/Label
+> 산출물과 해당 데이터로 학습한 모델은 재생성·재학습이 필요하다.
 
 현재 Result Artifact의 `prediction_horizon_hours=24`와 학습 Label 계약이 실제로 연결되어야
 한다. 상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §3을 따른다.

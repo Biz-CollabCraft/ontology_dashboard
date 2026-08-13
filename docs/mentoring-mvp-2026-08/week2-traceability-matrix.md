@@ -33,7 +33,7 @@
 | Horizon Label | `feature_label_service.py` | label contract tests | #21 |
 | Model Artifact publish | model publish/registry | artifact round-trip | #22 |
 | Training daemon | `generator_main.py` | import/API tests | #23 |
-| Runtime inference | Backend diagnosis | Result Artifact tests | 재구성 #24 |
+| Runtime inference | Backend diagnosis | Result Artifact tests | #24의 Generator runtime 코드를 제거하고 Backend 구현으로 재구성 필요 |
 
 상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,
