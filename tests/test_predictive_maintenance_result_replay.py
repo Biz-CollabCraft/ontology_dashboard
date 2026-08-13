@@ -622,6 +622,13 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     )
     assert dashboard.selected_event_detail.report["locale"] == "ko-KR"
     assert "고장 위험" in dashboard.selected_event_detail.report["headline"]
+    selected_event = next(
+        item for item in dashboard.events if item.event_id == dashboard.selected_event_id
+    )
+    assert all(
+        datetime.fromisoformat(item["completed_at"]) <= selected_event.observed_at
+        for item in dashboard.selected_event_detail.maintenance_events
+    )
 
     english_dashboard = service.dashboard(
         organization_id="org-test",

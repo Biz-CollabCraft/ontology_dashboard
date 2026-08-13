@@ -82,6 +82,11 @@ PM_FEATURE_LABELS: dict[AppLocale, dict[str, str]] = {
         "rotation_raw_6h_mean": "6시간 회전속도 평균",
         "rotation_raw_6h_abs_mean": "6시간 회전속도 절대평균",
         "rotation_raw_6h_std": "6시간 회전속도 표준편차",
+        "voltage_raw": "전압 신호",
+        "rotation_raw": "회전 신호",
+        "pressure_raw": "압력 신호",
+        "vibration_raw": "진동 신호",
+        "relative_vibration_z": "상대 진동 Z-score",
     },
     "en-US": {
         "air_temperature_k": "Air temperature",
@@ -95,6 +100,11 @@ PM_FEATURE_LABELS: dict[AppLocale, dict[str, str]] = {
         "rotation_raw_6h_mean": "6-hour rotational-speed mean",
         "rotation_raw_6h_abs_mean": "6-hour rotational-speed absolute mean",
         "rotation_raw_6h_std": "6-hour rotational-speed standard deviation",
+        "voltage_raw": "Voltage signal",
+        "rotation_raw": "Rotation signal",
+        "pressure_raw": "Pressure signal",
+        "vibration_raw": "Vibration signal",
+        "relative_vibration_z": "Relative vibration Z-score",
     },
 }
 PM_LAYOUT_TITLES: dict[AppLocale, dict[str, str]] = {
@@ -718,10 +728,20 @@ class PredictiveMaintenanceRuntimeService:
                 raise ValueError("Result Artifact provenance must assert canonical_source_mutated=false")
             if prediction_task != PREDICTION_TASK:
                 raise ValueError("Result Artifact prediction task mismatch")
-            if context.source_version == V3_1_SOURCE_VERSION:
-                if model_version != V3_1_MODEL_VERSION or schema_version != V3_1_RESULT_SCHEMA:
-                    raise ValueError("V3.1 Result Artifact model/schema provenance mismatch")
             source_type = str(provenance.get("source_type") or "derived_result_artifact")
+            if context.source_version == V3_1_SOURCE_VERSION:
+                if schema_version != V3_1_RESULT_SCHEMA:
+                    raise ValueError("V3.1 Result Artifact model/schema provenance mismatch")
+                # The immutable gen_data regression fixture uses the Week-2
+                # independent-logreg model. Product runtime inference may use a
+                # different injected Model Artifact or the explicit demo-only
+                # heuristic fallback; the model version is therefore provenance,
+                # not a source-dataset identity constraint.
+                if (
+                    source_type != "product_runtime_inference"
+                    and model_version != V3_1_MODEL_VERSION
+                ):
+                    raise ValueError("V3.1 Result Artifact model/schema provenance mismatch")
         else:
             prediction_task = PREDICTION_TASK
             model_version = str(row["model_version"])
@@ -958,6 +978,11 @@ class PredictiveMaintenanceRuntimeService:
             "rotational_speed_rpm": "rpm",
             "torque_nm": "Nm",
             "tool_wear_min": "min",
+            "voltage_raw": "raw",
+            "rotation_raw": "raw",
+            "pressure_raw": "raw",
+            "vibration_raw": "raw",
+            "relative_vibration_z": "z",
         }
         factors = [
             {
@@ -1213,7 +1238,15 @@ class PredictiveMaintenanceRuntimeService:
         result_by_event: dict[str, GovernedProductResult] = {}
         for result in results.items:
             event_id = self._dashboard_event_id(result)
-            maintenance = maintenance_by_asset.get(result.asset_id, [])
+            # Evidence for a prediction must not include maintenance completed
+            # after that prediction timestamp. This also keeps replay/report
+            # context free of future operational information.
+            maintenance = [
+                item
+                for item in maintenance_by_asset.get(result.asset_id, [])
+                if item.get("completed_at") is not None
+                and item["completed_at"] <= result.observed_at
+            ]
             equipment = self._dashboard_equipment(result, maintenance)
             events.append(
                 DashboardEventSummary(
@@ -1254,6 +1287,12 @@ class PredictiveMaintenanceRuntimeService:
         detail = None
         if selected_id:
             selected_result = result_by_event[selected_id]
+            selected_maintenance = [
+                item
+                for item in maintenance_by_asset.get(selected_result.asset_id, [])
+                if item.get("completed_at") is not None
+                and item["completed_at"] <= selected_result.observed_at
+            ]
             detail = self._dashboard_detail(
                 organization_id=organization_id,
                 project_id=project_id,
@@ -1261,7 +1300,7 @@ class PredictiveMaintenanceRuntimeService:
                 context=context,
                 result=selected_result,
                 equipment=equipment_by_event[selected_id],
-                maintenance=maintenance_by_asset.get(selected_result.asset_id, []),
+                maintenance=selected_maintenance,
                 role=role,
                 intent=intent,
                 locale=locale,

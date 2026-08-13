@@ -14,6 +14,12 @@ JSON key 목표안은 [스키마 정의서](./week2-schema-definition.md)를 따
 - 팀원4: 현행 Event Report 및 V2 `/reports/executive` 리포트 API 계약·구현
 - 팀원2: API·스키마·리포트 계약 문서화와 추적성 관리
 
+> 이 문서는 Backend 제품 API 계약이다. Generator daemon의 내부 학습 API는 별도 문서(예:
+> `week2-generator-internal-api-specification.md`)를 따른다. Generator 내부 API는 외부 제품
+> prediction API가 아니며, `/health`, `/internal/train`, `/internal/retrain`과 같은 학습 운영
+> 엔드포인트만 제공한다. 상세 허용/금지 범위는
+> `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
+
 ## 1.1 현행 API 계약
 
 Canonical base path:

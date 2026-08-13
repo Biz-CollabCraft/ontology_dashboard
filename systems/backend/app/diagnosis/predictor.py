@@ -200,6 +200,111 @@ class HeuristicPredictor:
         )
 
 
+class CompressorHeuristicPredictor:
+    """Demo/local fallback for canonical compressor telemetry.
+
+    Compressor observations use a sensor contract that is intentionally separate
+    from the AI4I-style CNC feature contract. This fallback therefore must not run
+    the CNC heuristic against compressor fields. It grades the canonical vibration
+    zone and uses the other observed compressor signals as supporting factors.
+
+    The trained/versioned Model Artifact remains the production path. This class is
+    only used by an explicitly enabled heuristic fallback environment.
+    """
+
+    model_version = "compressor-signal-heuristic-v1"
+    _ZONE_STATUS = {
+        "A": "normal",
+        "B": "attention",
+        "C": "warning",
+        "D": "critical",
+    }
+
+    def __init__(self, policy_path: str | Path | None = None) -> None:
+        path = Path(policy_path) if policy_path else DEFAULT_POLICY_PATH
+        self.policy = json.loads(path.read_text(encoding="utf-8"))
+
+    def predict(self, fixture: dict[str, Any]) -> Prediction:
+        observation = fixture.get("observation") or {}
+        required = (
+            "voltage_raw",
+            "rotation_raw",
+            "pressure_raw",
+            "vibration_raw",
+            "relative_vibration_z",
+            "relative_vibration_zone",
+        )
+        issues: list[dict[str, str]] = []
+        missing = [name for name in required if observation.get(name) is None]
+        if missing:
+            issues.append({"code": "missing_field", "message": ", ".join(missing)})
+        numeric: dict[str, float] = {}
+        for name in required[:-1]:
+            if observation.get(name) is None:
+                continue
+            try:
+                value = float(observation[name])
+            except (TypeError, ValueError):
+                issues.append({"code": "invalid_numeric", "message": name})
+                continue
+            if not math.isfinite(value):
+                issues.append({"code": "invalid_numeric", "message": name})
+                continue
+            numeric[name] = value
+        zone = str(observation.get("relative_vibration_zone") or "").upper()
+        if zone not in self._ZONE_STATUS:
+            issues.append({"code": "invalid_vibration_zone", "message": zone or "missing"})
+        if issues:
+            return Prediction(
+                model_version=self.model_version,
+                probability=None,
+                risk_band="data_quality_hold",
+                recommended_decision="hold_for_data_check",
+                confidence="unavailable",
+                predicted_failure_type="unavailable",
+                factors=[],
+                quality_issues=issues,
+                model_artifact=None,
+            )
+
+        z_value = numeric["relative_vibration_z"]
+        z_component = min(1.0, abs(z_value) / 3.5)
+        components = {
+            "relative_vibration_z": z_component,
+            "vibration_raw": _sigmoid((abs(numeric["vibration_raw"] - 40.0) - 8.0) / 4.0),
+            "pressure_raw": _sigmoid((abs(numeric["pressure_raw"] - 100.0) - 12.0) / 6.0),
+            "rotation_raw": _sigmoid((abs(numeric["rotation_raw"] - 450.0) - 45.0) / 20.0),
+            "voltage_raw": _sigmoid((abs(numeric["voltage_raw"] - 170.0) - 18.0) / 8.0),
+        }
+        ordered = sorted(components.items(), key=lambda item: item[1], reverse=True)
+        support = sorted((score for name, score in components.items() if name != "relative_vibration_z"), reverse=True)
+        probability = min(0.99, max(0.01, 0.03 + 0.72 * z_component + 0.15 * support[0] + 0.05 * support[1]))
+        risk_band = self._ZONE_STATUS[zone]
+        distance = abs(probability - 0.5) * 2.0
+        confidence = "high" if distance >= 0.6 else "medium" if distance >= 0.3 else "low"
+        failure_type = "none" if risk_band == "normal" else "compressor_signal_anomaly"
+        factors = [
+            FactorScore(
+                feature=name,
+                raw_value=numeric[name],
+                score=float(round(score, 6)),
+                direction="risk_up" if score >= 0.5 else "risk_down",
+            )
+            for name, score in ordered
+        ]
+        return Prediction(
+            model_version=self.model_version,
+            probability=float(round(probability, 6)),
+            risk_band=risk_band,
+            recommended_decision=self.policy["decision_mapping"][risk_band],
+            confidence=confidence,
+            predicted_failure_type=failure_type,
+            factors=factors,
+            quality_issues=[],
+            model_artifact=None,
+        )
+
+
 class ArtifactPredictor:
     """Runtime inference against a versioned Model Artifact provided by URI."""
 

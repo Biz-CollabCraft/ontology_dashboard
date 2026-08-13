@@ -15,16 +15,31 @@
 
 | 화면 | 현행 입력/API | 구현 위치 | 검증 위치 | 상태 |
 |---|---|---|---|---|
-| Overview | `GET /dashboard` | `web/src/features/mvp/overview/MvpOverviewPage.tsx`, `api/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `web/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
-| Objects | `GET /results/latest` | `web/src/features/mvp/objects/MvpObjectsPage.tsx`, `api/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `web/src/features/mvp/api/mvpAdapters.test.ts`, `tests/test_predictive_maintenance_result_replay.py` | 현행 |
-| Operations | Event evidence/decision/notes/activity API | `web/src/features/mvp/operations/MvpOperationsPage.tsx`, `api/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `web/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
-| Executive Report | `POST /api/events/{event_id}/report` | `web/src/features/mvp/report/MvpExecutiveReportPage.tsx`, `api/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `web/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
+| Overview | `GET /dashboard` | `systems/frontend/src/features/mvp/overview/MvpOverviewPage.tsx`, `systems/backend/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
+| Objects | `GET /results/latest` | `systems/frontend/src/features/mvp/objects/MvpObjectsPage.tsx`, `systems/backend/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts`, `tests/test_predictive_maintenance_result_replay.py` | 현행 |
+| Operations | Event evidence/decision/notes/activity API | `systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx`, `systems/backend/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
+| Executive Report | `POST /api/events/{event_id}/report` | `systems/frontend/src/features/mvp/report/MvpExecutiveReportPage.tsx`, `systems/backend/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
 
 공식 `/app/projects/{project_id}/mvp` route 경계와 확장 Workbench 비노출은
-`web/src/routing.test.ts`에서 검증한다. 화면 간 선택 문맥과 deep link는
-`web/src/features/mvp/context/MvpSelectionContext.test.ts`에서 검증한다.
+`systems/frontend/src/routing.test.ts`에서 검증한다. 화면 간 선택 문맥과 deep link는
+`systems/frontend/src/features/mvp/context/MvpSelectionContext.test.ts`에서 검증한다.
 
-### 1.2 V2 변경 제안 추적
+### 1.2 Generator 파이프라인 추적
+
+| 계약 | 구현 | 테스트 | 담당 PR |
+|---|---|---|---|
+| Extraction Plan | `systems/generator/extraction` | extraction tests | #21 |
+| Feature partition/order | `feature_builder.py` | feature isolation tests | #21 |
+| Horizon Label | `feature_label_service.py` | label contract tests | #21 |
+| Model Artifact publish | model publish/registry | artifact round-trip | #22 |
+| Training daemon | `generator_main.py` | import/API tests | #23 |
+| Runtime inference | Backend diagnosis | Result Artifact tests | #24의 Generator runtime 코드를 제거하고 Backend 구현으로 재구성 필요 |
+
+상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
+`docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,
+`docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
+
+### 1.3 V2 변경 제안 추적
 
 조회·집계 API는 팀원3, 아래 Executive Report API와 RPT 테스트는 팀원4가 담당한다.
 
@@ -71,6 +86,6 @@
 - 모든 화면 요구사항에 기능 ID가 있다.
 - 모든 데이터 기능에 스키마가 있다.
 - 현행 Decision·Note 쓰기 기능은 `tests/test_mvp.py`의 API 상태 변경 검증과 연결한다.
-- 1.2 표의 목표 API와 `TC-*`/`RPT-TC-*`는 V2 제안이며 실제 구현 완료를 의미하지 않는다.
+- 1.3 표의 목표 API와 `TC-*`/`RPT-TC-*`는 V2 제안이며 실제 구현 완료를 의미하지 않는다.
 - V2를 채택할 때 호환 계층, 호출부와 실제 테스트 파일을 함께 확정한다.
 

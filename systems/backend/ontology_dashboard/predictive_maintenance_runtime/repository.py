@@ -76,8 +76,8 @@ class PredictiveMaintenanceRuntimeRepository:
                    (SELECT COUNT(*) FROM pm_prediction_timeline t
                     WHERE t.dataset_version_id=v.id) AS prediction_timeline_count,
                    COALESCE(
-                     (SELECT r.model_version FROM pm_result_artifacts r
-                      WHERE r.dataset_version_id=v.id ORDER BY r.observed_at DESC LIMIT 1),
+                     (SELECT string_agg(DISTINCT r.model_version, ', ' ORDER BY r.model_version)
+                      FROM pm_result_artifacts r WHERE r.dataset_version_id=v.id),
                      (SELECT s.model_version FROM pm_prediction_snapshots s
                       WHERE s.dataset_version_id=v.id ORDER BY s.observed_at DESC LIMIT 1)
                    ) AS runtime_model_version,
@@ -125,8 +125,8 @@ class PredictiveMaintenanceRuntimeRepository:
                    (SELECT COUNT(*) FROM pm_prediction_timeline t
                     WHERE t.dataset_version_id=v.id) AS prediction_timeline_count,
                    COALESCE(
-                     (SELECT r.model_version FROM pm_result_artifacts r
-                      WHERE r.dataset_version_id=v.id ORDER BY r.observed_at DESC LIMIT 1),
+                     (SELECT string_agg(DISTINCT r.model_version, ', ' ORDER BY r.model_version)
+                      FROM pm_result_artifacts r WHERE r.dataset_version_id=v.id),
                      (SELECT s.model_version FROM pm_prediction_snapshots s
                       WHERE s.dataset_version_id=v.id ORDER BY s.observed_at DESC LIMIT 1)
                    ) AS runtime_model_version,

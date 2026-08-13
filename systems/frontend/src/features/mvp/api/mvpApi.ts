@@ -69,7 +69,11 @@ export async function loadMvpBootstrap(
     intent: "overview",
     locale: "ko-KR",
   });
-  const resultPromise = getPredictiveMaintenanceLatestResults(projectId, workspace.id, 1000);
+  // The governed latest-results API caps a page at 500 rows. The current MVP
+  // needs one latest result per asset, so a single maximum-sized page covers
+  // the Canonical V3.1 fleet without triggering a 422 and silently falling
+  // back to event-only asset metadata.
+  const resultPromise = getPredictiveMaintenanceLatestResults(projectId, workspace.id, 500);
   const [dashboardState, resultState] = await Promise.allSettled([dashboardPromise, resultPromise]);
 
   const warnings: string[] = [];

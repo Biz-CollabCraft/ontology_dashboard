@@ -56,6 +56,39 @@ ML authoring compatibility port는 generator-capable 개발/통합 배포에서�
 
 PR #11에서 기존 root `api/`와 `web/` 실행 host를 각각 `systems/backend`와 `systems/frontend`로 수렴시켰다. Backend API의 실제 MVP Evidence 경로는 `systems/backend/app/diagnosis`를 호출하며, Frontend는 backend 도메인 폴더 구조와 1:1 재배치하지 않고 사용자 workflow 중심 구조를 유지한다.
 
+## Generator internal daemon의 허용/금지 범위
+
+`systems/generator`의 책임 끝점은 versioned Model Artifact publish까지다. 이 경계를
+구체적으로 판정하기 위해 Generator internal daemon(학습 daemon)의 허용/금지 범위를
+명문화한다. 상세 아키텍처 결정과 책임 분리 근거는 `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
+
+**허용**
+
+- `GET /health`
+- `POST /internal/train`
+- `POST /internal/retrain`
+- 학습 job 상태 또는 Model Artifact publish 상태 조회
+
+**금지**
+
+- 사용자 요청 기반 runtime predict (예: `/internal/predict`, `/internal/predict/file`)
+- `PredictionOutput` 등 runtime 응답 형식의 외부 노출
+- current telemetry를 운영 목적으로 자동 선택하는 기능
+- Product prediction 파일 저장 (예: `data_preprocessed/predictions/*.json`을 제품 저장소로 사용)
+- Product Result Artifact/Evidence 생성
+
+또한 다음 용어를 명확히 분리한다.
+
+```text
+offline model evaluation           ≠ operational runtime inference
+학습 후 검증/스코어링 목적           사용자 요청에 대한 실시간 응답 목적
+Generator 책임                      Backend diagnosis 책임
+```
+
+이 두 개념을 같은 함수/엔드포인트에서 처리하지 않는다. `offline evaluation`의 결과를
+`operational runtime inference`의 응답 형식(`PredictionOutput` 등)으로 감싸는 것도 이 분리를
+어기는 것으로 간주한다.
+
 ## 기존 `ml/` 처리
 
 기존 `ml/src/factory_signal_ml`에는 training과 runtime prediction/Evidence가 한 패키지에 섞여 있었다. 구현은 각각 `systems/generator`와 `systems/backend/app/diagnosis`로 이동했고, 기존 import와 CLI를 깨지 않기 위한 compatibility adapter만 남겼다.

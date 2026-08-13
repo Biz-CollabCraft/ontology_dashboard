@@ -37,6 +37,11 @@ def get_pool(database_url: str):
             max_size=max_size,
             timeout=timeout,
             kwargs={"row_factory": dict_row},
+            # Neon/serverless PostgreSQL may retire an idle backend while the
+            # client-side pool still holds the socket. Check on checkout so a
+            # stale AdminShutdown/broken connection is discarded and replaced
+            # before an identity or tenant transaction begins.
+            check=ConnectionPool.check_connection,
             open=True,
         )
         _POOLS[database_url] = pool

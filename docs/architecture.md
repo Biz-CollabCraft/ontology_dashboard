@@ -129,31 +129,37 @@ Raw / Canonical Observation
 
 `model_store/`는 local filesystem publish 구현 예시일 뿐이다. 운영 환경에서는 mounted volume, externally provisioned path, object storage, artifact registry 등으로 교체될 수 있다.
 
+### Generator Feature 책임
+
+Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, ontology node, dtype, unit, transform, parameter, partition key, ordering key를 포함한다. 상세 필드와 naming 규칙은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
+
+### Label 책임
+
+학습 Label은 Model Artifact provenance의 일부다. prediction horizon, anchor semantics, exclusion policy와 label schema version을 기록한다. 상세 규칙은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §3을 따른다.
+
 ---
 
 ## 4. Versioned Model Artifact contract
 
 Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`라는 **로컬 물리 경로**가 아니라 versioned Model Artifact의 **형식과 식별자 및 `MODEL_ARTIFACT_URI` 주입 방식**이다.
 
-### 4.1 필수 manifest 메타데이터
+### 4.1 Model Artifact 원칙
 
-각 publish 단위는 최소한 다음 메타데이터를 제공한다.
+- Model Artifact는 `systems/generator`가 발행하는 불변(immutable) 산출물 패키지다.
+- `MODEL_ARTIFACT_URI` 또는 injected provider를 통해서만 Backend에 전달된다.
+  Backend는 sibling 경로(`../generator/...`)나 물리 디렉터리를 정적으로 탐색하지 않는다.
+- 각 `model_id` + `model_version` 조합은 재사용되지 않는다 (immutable publish).
+- publish는 atomic하게 수행되며, 실패 시 부분 결과를 남기지 않고 run registry도
+  갱신하지 않는다.
+- 파일 무결성은 `artifact_files[*].sha256` 개별 검증으로만 판단한다.
+  incompatible/corrupt Artifact를 heuristic으로 조용히 대체하지 않는다.
+- 현재 공식 계약 버전은 `model-artifact-v1.0`이다. 이전 코드·문서·테스트에서
+  사용된 동일 문자열은 이 계약 이전의 개발 초안이며 호환 대상이 아니다.
 
-| 필드 | 의미 |
-|---|---|
-| `artifact_type` | 산출물 종류. 예: `predictive_maintenance_model` |
-| `artifact_schema_version` | manifest/contract schema 버전 |
-| `model_id` | 논리 모델 식별자 |
-| `model_version` | immutable 모델 버전 |
-| `dataset_version` | 학습 데이터 버전 |
-| `feature_schema_version` | 입력 feature 계약 버전 |
-| `created_at` | 생성 시각 |
-| `training_config` | 학습 설정 및 재현성 정보 |
-| `metrics` | 평가 metric 요약 또는 metric 파일 참조 |
-| `checksum` | manifest가 가리키는 핵심 artifact 무결성 값 |
-| `provenance` | 소스 데이터·코드·실행 provenance |
-| `compatibility` | Backend/runtime 호환 조건 |
-| `artifact_files` | 모델, feature schema, metrics 등 파일 목록/참조 |
+Manifest의 실제 필드 구조, 6개 필수 파일의 역할, `artifact_files` role 목록,
+검증 규칙, publisher/consumer 책임은
+`docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`를
+단일 상세 기준으로 사용한다. 이 문서에는 Manifest JSON 구조를 복제하지 않는다.
 
 ### 4.2 디렉터리 예시
 
@@ -217,6 +223,10 @@ API / Dashboard / Report / Frontend
 - **제품 Result Artifact의 최종 producer**
 
 Training metrics, feature importance 등 모델 개발 설명자료는 Model Artifact provenance에 포함될 수 있지만, 이를 제품 runtime Evidence와 동일 개념으로 취급하지 않는다.
+
+### Backend Feature 소비
+
+Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Feature를 생성해야 한다면 Model Artifact에 포함된 검증된 Feature Contract(`feature_schema.json`)와 지원 transform 집합만을 사용한다. 지원하지 않는 transform이나 `feature_schema_version` 불일치는 명시적으로 실패시킨다. 상세는 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
 ### Backend domain dependency rule
 

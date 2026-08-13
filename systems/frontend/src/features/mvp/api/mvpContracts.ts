@@ -91,6 +91,7 @@ export interface MvpMetrics {
 export interface MvpLineRisk {
   line: string;
   total: number;
+  normal: number;
   critical: number;
   warning: number;
   attention: number;

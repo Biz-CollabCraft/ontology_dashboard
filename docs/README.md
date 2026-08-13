@@ -5,7 +5,14 @@ API 계약과 팀 공유 문서를 관리한다.
 
 ## 문서 묶음
 
+- [아키텍처](./architecture.md)
+- [Architecture Decision Records](./architecture-decisions/README.md)
 - [2026년 8월 멘토링 MVP](./mentoring-mvp-2026-08/README.md)
+  - [Generator Feature/Label 계약](./mentoring-mvp-2026-08/week2-generator-feature-label-contract.md)
+  - [Model Artifact Publish 계약](./mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md)
+  - [Runtime Ownership](./mentoring-mvp-2026-08/week2-runtime-ownership-integration.md)
+  - [스키마 정의서](./mentoring-mvp-2026-08/week2-schema-definition.md)
+  - [추적성 매트릭스](./mentoring-mvp-2026-08/week2-traceability-matrix.md)
 - [AI 코드 리뷰 컨텍스트](./ai-code-review-context.md)
 
 ## 관리 원칙

@@ -212,6 +212,16 @@ ROLE_PATHS = {
     "result_artifact": "canonical/model_outputs/result_artifact.jsonl",
 }
 
+SOURCE_RUNTIME_ROLES = frozenset(
+    {
+        "asset_master",
+        "asset_relation",
+        "compressor_sensor_observation",
+        "cnc_sensor_observation",
+        "cnc_production_cycle",
+        "maintenance_event",
+    }
+)
 V2_RUNTIME_ROLES = frozenset(set(ROLE_CONTRACTS) - {"result_artifact"})
 V3_RUNTIME_ROLES = frozenset(ROLE_CONTRACTS)
 
@@ -226,6 +236,14 @@ V3_1_EXPECTED_PACKAGE_COUNTS = {
     "maintenance_events": 790,
     "prediction_timeline_rows": 68_208,
     "result_artifact_rows": 100,
+}
+V3_1_EXPECTED_SOURCE_COUNTS = {
+    "assets": 100,
+    "relations": 80,
+    "compressor_observations": 86_400,
+    "cnc_observations": 345_600,
+    "production_cycles": 170_875,
+    "maintenance_events": 790,
 }
 V3_1_RELEASE_PASS_FIELDS = (
     "canonical_source_separation",
@@ -401,6 +419,135 @@ class PredictiveMaintenanceCanonicalV2Adapter:
         return (
             {
                 "release_identity": release_identity,
+                "tool_wear_continuity": continuity_summary,
+                "agent_example_evaluation": agent_summary,
+            },
+            agent_summary,
+        )
+
+    @staticmethod
+    def _validate_v3_1_source_evidence(
+        *,
+        dataset_payload: dict[str, Any],
+        validation_payload: dict[str, Any],
+        agent_evaluation_payload: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Validate the source-side V3.1 release without consuming model outputs.
+
+        ``gen_data`` owns canonical source generation and release evidence. Model,
+        prediction and Result Artifact files that remain in that repository are
+        compatibility/regression fixtures and therefore must not become product
+        runtime inputs.
+        """
+
+        if dataset_payload.get("dataset_version") != V3_1_DATASET_VERSION:
+            raise ValueError("source-only predictive maintenance bootstrap requires canonical V3.1")
+        ownership = dataset_payload.get("ownership_contract")
+        if not isinstance(ownership, dict):
+            raise ValueError("predictive maintenance v3.1 ownership contract is missing")
+        if ownership.get("repository_role") != "source_data_producer":
+            raise ValueError("gen_data release must declare source_data_producer ownership")
+        if ownership.get("model_outputs_in_this_package") != "reference_regression_fixture":
+            raise ValueError("gen_data model outputs must remain reference/regression fixtures")
+        if validation_payload.get("valid") is not True:
+            raise ValueError("predictive maintenance v3.1 source package validation must pass")
+        source_release_checks = (
+            "canonical_source_separation",
+            "canonical_checksum_integrity",
+            "truth_separation",
+            "topology_integrity",
+            "observation_key_integrity",
+            "failure_maintenance_coverage",
+            "experiment_isolation",
+            "hidden_truth_not_public",
+            "negative_control_benchmark",
+            "agent_positive_negative_evaluator",
+        )
+        failed_release_checks = [
+            field for field in source_release_checks if validation_payload.get(field) != "pass"
+        ]
+        if failed_release_checks:
+            raise ValueError(
+                "predictive maintenance v3.1 source release checks failed: "
+                + ", ".join(failed_release_checks)
+            )
+
+        row_counts = validation_payload.get("row_counts")
+        if not isinstance(row_counts, dict):
+            raise ValueError("predictive maintenance v3.1 source row_counts are missing")
+        mismatched_counts = {
+            key: {"expected": expected, "actual": row_counts.get(key)}
+            for key, expected in V3_1_EXPECTED_SOURCE_COUNTS.items()
+            if row_counts.get(key) != expected
+        }
+        if mismatched_counts:
+            raise ValueError(
+                "predictive maintenance v3.1 source row counts do not match: "
+                + json.dumps(mismatched_counts, sort_keys=True)
+            )
+
+        continuity = validation_payload.get("tool_wear_continuity")
+        if not isinstance(continuity, dict) or continuity.get("pass") is not True:
+            raise ValueError("predictive maintenance v3.1 tool-wear continuity evidence must pass")
+        required_continuity = {
+            "running_reset_count": 0,
+            "maximum_allowed": 0,
+            "tool_replacement_event_count": 731,
+            "aligned_reset_transition_count": 731,
+            "reset_without_matching_maintenance_count": 0,
+            "replacement_without_reset_count": 0,
+        }
+        continuity_failures = {
+            key: {"expected": expected, "actual": continuity.get(key)}
+            for key, expected in required_continuity.items()
+            if continuity.get(key) != expected
+        }
+        if continuity_failures:
+            raise ValueError(
+                "predictive maintenance v3.1 source continuity gate failed: "
+                + json.dumps(continuity_failures, sort_keys=True)
+            )
+
+        required_agent_metrics = {
+            "positive_upstream_accuracy": 1.0,
+            "negative_rejection_accuracy": 1.0,
+            "false_upstream_claim_rate": 0.0,
+            "maintenance_evidence_claims": 1,
+            "maintenance_evidence_accuracy": 1.0,
+        }
+        agent_failures = {
+            key: {"expected": expected, "actual": agent_evaluation_payload.get(key)}
+            for key, expected in required_agent_metrics.items()
+            if agent_evaluation_payload.get(key) != expected
+        }
+        if agent_failures:
+            raise ValueError(
+                "predictive maintenance v3.1 source agent evidence gate failed: "
+                + json.dumps(agent_failures, sort_keys=True)
+            )
+        continuity_summary = {
+            key: continuity.get(key)
+            for key in (
+                "tolerance_minutes",
+                "reset_value_max_minutes",
+                "running_reset_count",
+                "maximum_allowed",
+                "tool_replacement_event_count",
+                "aligned_reset_transition_count",
+                "reset_without_matching_maintenance_count",
+                "replacement_without_reset_count",
+                "pass",
+            )
+        }
+        agent_summary = {key: agent_evaluation_payload.get(key) for key in required_agent_metrics}
+        return (
+            {
+                "release_identity": {
+                    "dataset_version": dataset_payload.get("dataset_version"),
+                    "release_profile": dataset_payload.get("rate_profile"),
+                    "release_seed": dataset_payload.get("seed"),
+                    "runtime_result_owner": ownership.get("runtime_result_owner"),
+                },
                 "tool_wear_continuity": continuity_summary,
                 "agent_example_evaluation": agent_summary,
             },
@@ -706,22 +853,24 @@ class PredictiveMaintenanceCanonicalV2Adapter:
             collector,
             lambda row: self._validate_maintenance(row, manifest, asset_ids),
         )
-        self._validate_jsonl(
-            manifest,
-            files["prediction_snapshot"],
-            summaries["prediction_snapshot"],
-            collector,
-            lambda row: self._validate_prediction_snapshot(
-                row, manifest, asset_types, prediction_ids
-            ),
-        )
-        self._validate_jsonl(
-            manifest,
-            files["prediction_factor"],
-            summaries["prediction_factor"],
-            collector,
-            lambda row: self._validate_prediction_factor(row, prediction_ids),
-        )
+        if "prediction_snapshot" in files:
+            self._validate_jsonl(
+                manifest,
+                files["prediction_snapshot"],
+                summaries["prediction_snapshot"],
+                collector,
+                lambda row: self._validate_prediction_snapshot(
+                    row, manifest, asset_types, prediction_ids
+                ),
+            )
+        if "prediction_factor" in files:
+            self._validate_jsonl(
+                manifest,
+                files["prediction_factor"],
+                summaries["prediction_factor"],
+                collector,
+                lambda row: self._validate_prediction_factor(row, prediction_ids),
+            )
         if "result_artifact" in files:
             self._validate_jsonl(
                 manifest,
@@ -750,15 +899,16 @@ class PredictiveMaintenanceCanonicalV2Adapter:
                     ),
                 )
                 summary.status = "failed"
-        self._validate_jsonl(
-            manifest,
-            files["prediction_timeline"],
-            summaries["prediction_timeline"],
-            collector,
-            lambda row: self._validate_prediction_timeline(
-                row, manifest, asset_types, timeline_ids
-            ),
-        )
+        if "prediction_timeline" in files:
+            self._validate_jsonl(
+                manifest,
+                files["prediction_timeline"],
+                summaries["prediction_timeline"],
+                collector,
+                lambda row: self._validate_prediction_timeline(
+                    row, manifest, asset_types, timeline_ids
+                ),
+            )
 
         normalized = tuple(
             BundleRoleValidationSummary.model_validate(summary.model_dump(mode="python"))
@@ -769,6 +919,7 @@ class PredictiveMaintenanceCanonicalV2Adapter:
             issues=tuple(collector.samples),
             issue_sample_truncated=collector.truncated,
         )
+
 
     def _validate_csv(
         self,
@@ -1166,11 +1317,167 @@ class PredictiveMaintenanceCanonicalV2Adapter:
         return None
 
 
+class PredictiveMaintenanceCanonicalV3SourceAdapter(PredictiveMaintenanceCanonicalV2Adapter):
+    """Canonical V3.1 source-only adapter for product ingestion.
+
+    It deliberately excludes ``canonical/model_outputs``. Product predictions
+    and Result Artifacts are materialized later by ontology_dashboard runtime.
+    """
+
+    code = "predictive-maintenance-canonical-v3-source"
+    display_name = "Predictive Maintenance Canonical v3.1 Source Bundle"
+    required_roles = SOURCE_RUNTIME_ROLES
+    allowed_roles = SOURCE_RUNTIME_ROLES
+
+    @staticmethod
+    def required_roles_for(manifest: DatasetBundleManifestV2) -> frozenset[str]:
+        return SOURCE_RUNTIME_ROLES
+
+    @staticmethod
+    def allowed_roles_for(manifest: DatasetBundleManifestV2) -> frozenset[str]:
+        return SOURCE_RUNTIME_ROLES
+
+    @classmethod
+    def build_manifest(
+        cls,
+        package_root: str | Path,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        manifest_id: str = "predictive-maintenance-canonical-v3-source",
+        dataset_name: str | None = None,
+    ) -> DatasetBundleManifestV2:
+        root = Path(package_root).expanduser().resolve(strict=True)
+        dataset_manifest_path = root / "canonical" / "dataset" / "dataset_manifest.json"
+        dataset_payload = json.loads(dataset_manifest_path.read_text(encoding="utf-8"))
+        dataset_version = str(dataset_payload["dataset_version"])
+        if dataset_version != V3_1_DATASET_VERSION:
+            raise ValueError("source-only adapter only accepts canonical-ai4i-physics-v3.1")
+        source_contract = PredictiveMaintenanceSourceContract.model_validate(
+            dataset_payload["source_contract"]
+        )
+        if not source_contract.is_v3:
+            raise ValueError("source-only adapter requires the V3 source contract")
+        canonical_checksums = dataset_payload.get("canonical_outputs", {})
+        files: list[DatasetBundleFile] = []
+        for role in sorted(SOURCE_RUNTIME_ROLES):
+            relative = ROLE_PATHS[role]
+            path = (root / relative).resolve()
+            contract = ROLE_CONTRACTS[role]
+            checksum = canonical_checksums.get(path.name)
+            if not isinstance(checksum, str):
+                raise ValueError(f"checksum is missing from source contract: {path.name}")
+            files.append(
+                DatasetBundleFile(
+                    role=role,
+                    uri=path.as_uri(),
+                    format=contract.format,
+                    media_type=contract.media_type,
+                    checksum_sha256=checksum,
+                    size_bytes=path.stat().st_size if path.is_file() else 0,
+                    schema=BundleFileSchemaMetadata(
+                        schema_version=f"predictive-maintenance-canonical-v3.{role}.v1",
+                        required_fields=list(contract.required_fields),
+                        primary_key=list(contract.primary_key),
+                        timestamp_field=contract.timestamp_field,
+                        timezone="Asia/Seoul" if contract.timestamp_field else None,
+                    ),
+                )
+            )
+
+        generation = BundleGenerationMetadata(
+            generator_version=dataset_version,
+            seed=int(dataset_payload["seed"]),
+            period_start=datetime.fromisoformat(str(dataset_payload["start_at"])),
+            period_end=datetime.fromisoformat(str(dataset_payload["end_at"])),
+            observation_interval_minutes=int(dataset_payload["observation_interval_minutes"]),
+            rate_profile=dataset_payload.get("rate_profile"),
+        )
+        package_validation_path = root / "canonical" / "validation" / "package_validation.json"
+        agent_evaluation_path = (
+            root / "canonical" / "validation" / "agent_claims_example_evaluation.json"
+        )
+        validation_payload = json.loads(package_validation_path.read_text(encoding="utf-8"))
+        agent_evaluation_payload = json.loads(agent_evaluation_path.read_text(encoding="utf-8"))
+        release_summary, safe_agent_summary = cls._validate_v3_1_source_evidence(
+            dataset_payload=dataset_payload,
+            validation_payload=validation_payload,
+            agent_evaluation_payload=agent_evaluation_payload,
+        )
+        ai4i_payload = validation_payload.get("ai4i_physics", {})
+        ai4i_summary = {
+            key: ai4i_payload.get(key)
+            for key in (
+                "air_process_correlation",
+                "rpm_torque_correlation",
+                "process_temperature_ordering",
+                "sensor_distribution",
+            )
+            if key in ai4i_payload
+        }
+        governance_artifacts = [
+            BundleGovernanceArtifact(
+                role="package_validation",
+                uri=package_validation_path.as_uri(),
+                checksum_sha256=hashlib.sha256(package_validation_path.read_bytes()).hexdigest(),
+                summary={
+                    "valid": True,
+                    "row_counts": validation_payload.get("row_counts", {}),
+                    "ai4i_physics": ai4i_summary,
+                    "ai4i_contract": dataset_payload.get("ai4i_contract", {}),
+                    "query_time_derived_measures": {
+                        "power_w": "torque_nm * rotational_speed_rpm * 2*pi/60",
+                        "temperature_gap_k": "process_temperature_k - air_temperature_k",
+                        "overstrain_load": "tool_wear_min * torque_nm",
+                    },
+                    "truth_separation": validation_payload.get("truth_separation"),
+                    "canonical_checksum_integrity": validation_payload.get(
+                        "canonical_checksum_integrity"
+                    ),
+                    **release_summary,
+                },
+            ),
+            BundleGovernanceArtifact(
+                role="agent_example_evaluation",
+                uri=agent_evaluation_path.as_uri(),
+                checksum_sha256=hashlib.sha256(agent_evaluation_path.read_bytes()).hexdigest(),
+                summary=safe_agent_summary,
+            ),
+        ]
+        checksum = compute_bundle_checksum(
+            dataset_version=dataset_version,
+            schema_version=cls.bundle_schema_version,
+            generation=generation,
+            source_contract=source_contract,
+            files=files,
+        )
+        return DatasetBundleManifestV2(
+            manifest_id=manifest_id,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            adapter_code=cls.code,
+            dataset_name=dataset_name
+            or "UCI AI4I 2020 Manufacturing Predictive Maintenance — Physics & Maintenance Canonical V3.1",
+            dataset_version=dataset_version,
+            schema_version=cls.bundle_schema_version,
+            bundle_checksum_sha256=checksum,
+            generation=generation,
+            source_contract=source_contract,
+            files=files,
+            governance_artifacts=governance_artifacts,
+            created_at=datetime.fromisoformat(str(dataset_payload["created_at"])),
+        )
+
+
 __all__ = [
     "PredictiveMaintenanceCanonicalV2Adapter",
+    "PredictiveMaintenanceCanonicalV3SourceAdapter",
     "PredictiveMaintenanceRoleContract",
     "ROLE_CONTRACTS",
     "ROLE_PATHS",
+    "SOURCE_RUNTIME_ROLES",
     "V2_RUNTIME_ROLES",
     "V3_RUNTIME_ROLES",
 ]

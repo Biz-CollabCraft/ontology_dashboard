@@ -46,5 +46,8 @@ production = [
 where = ["."]
 include = ["ontology_dashboard*", "app*"]
 
+[tool.setuptools.package-data]
+"app.diagnosis" = ["threshold_policy.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["../../tests", "tests"]
