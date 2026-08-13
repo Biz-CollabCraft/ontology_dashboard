@@ -141,7 +141,7 @@
 | `id_column` | string/null | N | Y(null 허용) | 설비 식별 컬럼 | 유지 |
 | `time_column` | string/null | N | Y(null 허용) | 관측 시각 컬럼 | 유지 |
 | `duplicate_policy` | string | N | Y | 기본값 `error`; `error`, `aggregate` | `Literal["error", "aggregate"]` |
-| `aggregation` | string/null | N | Y(null 허용) | `mean`, `first`, `sum` | `Literal["mean", "first", "sum"] | None` |
+| `aggregation` | string/null | N | Y(null 허용) | `mean`, `first`, `sum` | `Literal["mean", "first", "sum"] \| None` |
 
 현행 집행 범위:
 

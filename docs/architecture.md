@@ -171,7 +171,7 @@ Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`�
 - Feature 순서가 `feature_schema.json`과 학습 시점의 `feature_cols` 순서와 일치함을 보장한다.
 - training/runtime compatibility 범위를 `compatibility` 필드에 명시한다.
 
-> ADR-001/002는 현재 `Proposed` 상태다. 해당 목표 계약은 승인 및 관련 구현 PR 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로 사용하지 않는다.
+> ADR-001/002는 현재 `Proposed` 상태다. ADR-001/002 목표 계약은 승인 및 관련 구현 PR 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로 사용하지 않는다. (단, PR 단독 import 및 실행 가능성이라는 기존 코드 결함 항목은 ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.)
 
 상세 스키마는 `docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`를 따른다.
 

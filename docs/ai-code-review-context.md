@@ -105,12 +105,16 @@ API / systems/frontend / Report
 22. Generator internal API는 training/publish까지만 담당한다.
 23. runtime inference와 Result Artifact는 Backend diagnosis가 소유한다.
 
-15~19번은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
-20~23번은 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`와
-`docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 근거로 한다.
+15~19번은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`를 근거로 한다.
 
-> ADR-001/002는 현재 `Proposed` 상태다. 해당 목표 계약은 승인 및 관련 구현 PR
-> 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로 사용하지 않는다.
+20·21번은 PR 단독 import 및 실행 가능성이라는 기존 코드 결함에 근거하며,
+ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.
+
+22·23번은 ADR-001과 ADR-002를 근거로 한다.
+
+> ADR-001/002는 현재 `Proposed` 상태다. 22·23번 목표 계약은 승인 및 관련
+> 구현 PR 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로
+> 사용하지 않는다.
 
 ## 4. Model Artifact / Result Artifact 구분
 
