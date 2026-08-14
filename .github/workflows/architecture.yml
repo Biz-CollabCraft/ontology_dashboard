@@ -11,8 +11,11 @@ jobs:
   architecture:
     runs-on: ubuntu-latest
     outputs:
+      docker_runtime_required: ${{ steps.changes.outputs.docker }}
       docker_runtime_verified: ${{ steps.docker_runtime.outputs.verified }}
+      frontend_unit_required: ${{ steps.changes.outputs.frontend }}
       frontend_unit_verified: ${{ steps.frontend_unit.outputs.verified }}
+      mvp_e2e_required: ${{ steps.changes.outputs.integration }}
       mvp_e2e_verified: ${{ steps.mvp_e2e.outputs.verified }}
     steps:
       - name: Checkout
@@ -313,8 +316,11 @@ jobs:
     uses: ./.github/workflows/code-review.yml
     with:
       architecture_result: ${{ needs.architecture.result }}
+      docker_runtime_required: ${{ needs.architecture.outputs.docker_runtime_required }}
       docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}
+      frontend_unit_required: ${{ needs.architecture.outputs.frontend_unit_required }}
       frontend_unit_verified: ${{ needs.architecture.outputs.frontend_unit_verified }}
+      mvp_e2e_required: ${{ needs.architecture.outputs.mvp_e2e_required }}
       mvp_e2e_verified: ${{ needs.architecture.outputs.mvp_e2e_verified }}
       workflow_run_id: ${{ github.run_id }}
       pr_number: ${{ github.event.pull_request.number }}
