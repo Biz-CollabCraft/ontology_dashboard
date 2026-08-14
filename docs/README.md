@@ -6,6 +6,7 @@ API 계약과 팀 공유 문서를 관리한다.
 ## 문서 묶음
 
 - [최종 역할 분배 및 Step별 실행 계획](./final_team_role_and_step_plan.md)
+- [Ontology Operations & Closed-loop 구현 계획](./closed-loop-implementation-plan.md)
 - [아키텍처](./architecture.md)
 - [Architecture Decision Records](./architecture-decisions/README.md)
 - [2026년 8월 멘토링 MVP](./mentoring-mvp-2026-08/README.md)
