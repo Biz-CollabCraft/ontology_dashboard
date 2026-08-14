@@ -27,8 +27,6 @@ generator_config.py
 import os
 import logging
 from pathlib import Path
-from dotenv import load_dotenv
-
 logger = logging.getLogger(__name__)
 _config_loaded = False
 
@@ -44,8 +42,11 @@ def load_config(force: bool = False) -> None:
     env_path = PROJECT_ROOT / ".env"
     if env_path.exists():
         try:
+            from dotenv import load_dotenv
             load_dotenv(dotenv_path=env_path)
             logger.info(f"[GeneratorConfig] Loaded '{env_path}'")
+        except ImportError:
+            logger.warning("[GeneratorConfig] dotenv package not installed; skipping .env load")
         except Exception as e:
             logger.warning(f"[GeneratorConfig] Failed to load .env at '{env_path}': {e}")
     else:
