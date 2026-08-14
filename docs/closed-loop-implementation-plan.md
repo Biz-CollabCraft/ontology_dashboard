@@ -24,7 +24,7 @@
                  ↓
 광우: RiskEvent에 Result / Evidence 연결
                  ↓
-      RecommendedAction 후보 생성
+      Producer recommendation을 운영 RecommendedAction으로 materialize
                  ↓
       관리자 Decision 기록
                  ↓
@@ -50,9 +50,9 @@ Closed-loop는 과거 예측 결과를 수정하는 기능이 아니다. 정비 
 | 영역 | 구현 책임 |
 |---|---|
 | RiskEvent 연결 | Product Result/Evidence를 동일 Equipment의 운영 Event에 연결하고 중복 Event 정책 적용 |
-| RecommendedAction | Evidence 기반 후보 생성, 후보와 실제 실행 Action의 명확한 분리 |
+| RecommendedAction | 호범의 구조화 recommendation을 의미 변경 없이 운영 workflow 객체로 materialize하고 실제 실행 Action과 분리 |
 | Decision | 관리자 판단, 근거, 행위자, 시각 및 대상 Recommendation 기록 |
-| Work Order / MaintenanceAction | 승인 이후 작업 생성과 허용 상태 전이 구현 |
+| Work Order / MaintenanceAction | 정책 기반 점검 Work Order와 승인 후 정비 실행 Work Order/Action을 구분하고 허용 상태 전이 구현 |
 | MaintenanceEvent | 실제 수행 결과, 작업자, 시작·종료 시각, 정비 내용을 이력으로 기록 |
 | Ontology projection | 호범 계약의 Evidence ID와 의미를 변경하지 않고 Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계 유지 |
 | Equipment state | 정비 완료 후 운영 상태와 최신 정비 참조 갱신 |
@@ -114,6 +114,12 @@ Closed-loop는 과거 예측 결과를 수정하는 기능이 아니다. 정비 
 - 현재 점검 필요 정책만으로도 `work_type=inspection` Work Order가 투영될 수 있다.
   기존 점검 요청과 관리자 승인 후 정비 실행 Work Order를 같은 생성 규칙으로 묶지
   않아야 한다.
+- Product Result 최상위 `recommended_action`과
+  `evidence_payload.recommended_actions[]`, Closed-loop RecommendedAction의 관계가
+  아직 공식 계약으로 고정되지 않았다.
+- 현재 Event Evidence projection은 Product Result의 `asset_id`를 `equipment_id`로
+  직접 사용한다. 이 동일성 규칙과 Dataset Version을 넘어 유지할 Equipment identity를
+  구현 전에 고정해야 한다.
 
 ## 5. Domain 계약 초안
 
@@ -129,7 +135,8 @@ Closed-loop는 과거 예측 결과를 수정하는 기능이 아니다. 정비 
 organization_id
 project_id
 workspace_id
-equipment_id / asset_id
+asset_id
+equipment_id
 event_id
 product_result_id
 evidence_id
@@ -144,10 +151,30 @@ maintenance_event_id
 잃어버리면 안 된다. Product Result, Evidence, Decision과 정비 이력을 동일 Event와
 Equipment 기준으로 추적할 수 있어야 한다.
 
+Canonical V3.1 MVP에서는 다음 identity 계약을 사용한다.
+
+```text
+equipment_id = asset_id
+stable equipment key = organization_id + project_id + asset_id
+```
+
+- `asset_master.asset_id`와 PostgreSQL에 적재된 `pm_assets.asset_id`를 source of truth로
+  사용한다.
+- Dataset Version은 Observation/Product Result provenance이며 stable equipment key에
+  포함하지 않는다.
+- Dataset Version이 바뀌어도 동일 물리 설비는 동일 `asset_id/equipment_id`를 유지한다.
+- Ontology의 version-scoped object ID를 운영 Equipment identity로 사용하지 않는다.
+- mapping 누락·중복·모호성 또는 `asset_type` 불일치는 추정하지 않고 fail-fast한다.
+- 이름, 배열 순서나 표시 label을 이용한 fuzzy mapping은 허용하지 않는다.
+- 향후 외부 시스템에서 두 ID가 달라지면 versioned identity mapping registry와 별도
+  ADR을 먼저 확정한다. 이 경우에도 원본 `asset_id`와 운영 `equipment_id`를 lineage에
+  함께 보존한다.
+
 ### 5.2 추천과 실행의 구분
 
 ```text
-RecommendedAction = 모델 결과와 정책을 근거로 제시한 후보
+Producer recommendation    = 호범의 Product Result/Evidence가 생성한 구조화 후보
+Operational RecommendedAction = Producer recommendation을 운영 workflow에 materialize한 객체
 Decision          = 사람이 후보를 승인·거절·보류한 판단
 WorkOrder         = 점검 또는 승인된 정비 작업을 현장에 전달하는 업무 단위
 MaintenanceAction = WorkOrder 안에서 실제로 수행한 행동
@@ -158,6 +185,24 @@ RecommendedAction 생성만으로 MaintenanceAction이나 MaintenanceEvent를 �
 않는다. 기존 정책이 `work_type=inspection` Work Order를 생성하는 흐름은 유지할 수
 있지만, `work_type=maintenance` 실행 Work Order와 MaintenanceAction은 관리자 승인
 Decision을 통과한 경우에만 만들 수 있다.
+
+MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않는다.
+
+- materialization source는 stable `action_id`와 승인·근거 필드를 가진
+  `evidence_payload.recommended_actions[]`다.
+- Product Result 최상위 `recommended_action`은 producer의 요약 정책 결과로 보존하며,
+  Closed-loop 실행 객체로 직접 승격하지 않는다.
+- Operational RecommendedAction은 workflow용 `recommendation_id`와 상태를 추가하되
+  원본 `action_id`, label, kind, `requires_human_approval`, basis를 변경하지 않는다.
+- 최소한 `recommendation_origin=product_result_projection`, `source_action_id`,
+  `source_product_result_id=artifact_id`, `source_evidence_id`, `source_schema_version`,
+  `source_policy_version`과 원본 basis를 보존한다.
+- `source_product_result_id + source_action_id`를 materialization 중복 방지 키로 사용한다.
+- producer 계약에 stable `action_id`나 policy/version이 없으면 임의 값을 만들지 않고
+  PR 3 착수를 중단해 호범 계약을 먼저 보완한다.
+- 향후 Operations 정책이 별도 recommendation을 생성하려면 producer projection과 다른
+  origin·ID·정책 버전을 사용하고 별도 ADR로 승인한다. producer recommendation을
+  덮어쓰거나 같은 객체인 것처럼 취급하지 않는다.
 
 ### 5.3 상태 전이 초안
 
@@ -190,7 +235,8 @@ enum을 고정한다. 특히 Work Order와 MaintenanceAction을 같은 객체처
 ### 5.4 중복과 멱등성
 
 - 동일 Product Result/Evidence를 같은 Event에 두 번 연결해도 한 번만 반영한다.
-- 동일 Event와 활성 Recommendation에 대한 중복 후보 생성을 막는다.
+- 동일 `source_product_result_id + source_action_id`의 Operational RecommendedAction은
+  한 번만 materialize한다.
 - 같은 승인 요청이나 완료 요청이 재전송되어도 Work Order, MaintenanceEvent가
   중복 생성되지 않도록 idempotency key를 사용한다.
 - 같은 Equipment에 열린 Event가 있을 때 새 Result를 기존 Event에 연결할지 새
@@ -203,9 +249,19 @@ enum을 고정한다. 특히 Work Order와 MaintenanceAction을 같은 객체처
 - 승인되지 않은 Recommendation으로 정비 실행 Work Order나 MaintenanceAction을
   생성할 수 없다. 점검 요청 Work Order는 별도 정책과 권한을 따른다.
 - 허용되지 않은 상태 전이는 `409` 등 명시적인 오류로 실패한다.
-- Work Order 완료, MaintenanceAction 완료 기록, MaintenanceEvent 생성,
-  Equipment state 갱신과 Activity 기록은 가능한 한 하나의 트랜잭션으로 처리한다.
-- 일부 단계가 실패하면 완료 상태만 남거나 부분 MaintenanceEvent가 남아서는 안 된다.
+- PostgreSQL operational persistence를 Closed-loop 운영 상태의 source of truth로 사용한다.
+- Work Order 완료, MaintenanceAction 완료, MaintenanceEvent 생성, Equipment state 갱신,
+  Activity/Audit 기록과 Ontology projection용 outbox 적재는 **하나의 PostgreSQL
+  transaction에서 함께 commit하거나 전체 rollback**한다.
+- 일부 단계가 실패하면 완료 상태, 부분 MaintenanceEvent 또는 outbox 없는 운영 변경이
+  남아서는 안 된다.
+- Ontology/Neo4j 등 외부 projection은 위 transaction에 직접 묶지 않고 transactional
+  outbox consumer가 비동기로 처리한다.
+- projection consumer는 idempotent해야 하며 실패 시 retry하고, 반복 실패는
+  dead-letter와 운영 상태로 추적한다. projection 실패가 PostgreSQL 운영 정본을
+  되돌리지는 않는다.
+- SQLite 기반 로컬·테스트 adapter도 동일한 unit-of-work rollback과 멱등성 invariant를
+  검증한다.
 - 과거 Product Result와 Evidence는 수정하거나 삭제하지 않는다.
 
 ## 6. API 계획
@@ -239,6 +295,9 @@ API orchestration과 합의해 고정한다.
 - 기존 Decision/Work Order/Action 의미와 Target 매핑표 작성
 - Decision과 Note를 `maintenance_action`으로 투영하는 기존 호환 동작의 교정 범위 작성
 - 점검 Work Order와 정비 실행 Work Order의 생성 조건 분리
+- Producer recommendation → Operational RecommendedAction materialization 계약과
+  원본 참조 필드 정의
+- `asset_id = equipment_id` MVP identity 계약과 Dataset Version 독립 stable key 정의
 - RecommendedAction, Decision, WorkOrder/MaintenanceAction,
   MaintenanceEvent 최소 모델 정의
 - 허용·금지 상태 전이 구현
@@ -248,6 +307,9 @@ API orchestration과 합의해 고정한다.
 완료 조건:
 
 - 정상 흐름과 rejected/deferred/blocked/중복 요청 케이스가 테스트로 설명된다.
+- producer recommendation의 의미와 provenance가 Operational RecommendedAction에서
+  변경되지 않는다.
+- identity mapping 누락·충돌·type 불일치의 fail-fast 규칙이 테스트로 설명된다.
 - 기존 enum과 중복되는 새 상태 집합이 없다.
 - 팀이 요청·응답 및 상태 매핑을 검토할 수 있다.
 
@@ -257,6 +319,7 @@ API orchestration과 합의해 고정한다.
 - 기존 Decision 저장 경로와 Ontology Action 실행 경로 통합
 - Recommendation, Work Order/Action, MaintenanceEvent 저장·조회
 - Event activity에 전체 상태 변경 포함
+- PostgreSQL unit of work 안에서 운영 변경과 transactional outbox를 함께 commit
 - tenant/project/workspace scope, 권한, CSRF, idempotency 검증
 - OpenAPI response contract와 API test 추가
 
@@ -266,15 +329,22 @@ API orchestration과 합의해 고정한다.
 - 다른 tenant/project의 데이터가 조회·변경되지 않는다.
 - 같은 요청을 재전송해도 레코드가 중복되지 않는다.
 - 잘못된 상태 전이가 명시적으로 실패한다.
+- transaction 실패 시 Work Order/Action/MaintenanceEvent/Equipment state/Activity/outbox가
+  모두 rollback된다.
+- outbox consumer의 retry·idempotency·dead-letter 흐름이 검증된다.
 
 ### PR 3. Product Result/Evidence 및 Ontology 통합
 
-이 PR은 호범이 Product Result/Evidence Schema와 version, 식별자, 조회 API 및 Event
-Evidence Projection의 근거 의미를 확정한 뒤에만 착수한다. 계약이 확정되기 전에는
-Evidence payload, projection field 또는 Report grounding 의미를 광우 PR에서 임의로
-추가·변경하지 않는다.
+이 PR은 호범이 Product Result/Evidence Schema와 version, recommendation의 stable
+`action_id`·policy/version, 식별자, 조회 API 및 Event Evidence Projection의 근거
+의미를 확정하고, `asset_id/equipment_id` identity 계약이 검증된 뒤에만 착수한다.
+계약이 확정되기 전에는 Evidence payload, recommendation 의미, projection field 또는
+Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는다.
 
 - 호범의 실제 Product Result/Evidence ID를 payload 복사 없이 RiskEvent에 연결
+- `evidence_payload.recommended_actions[]`를 원본 의미·ID·provenance를 보존한
+  Operational RecommendedAction으로 materialize
+- `asset_id = equipment_id`와 stable equipment key를 검증하고 실패 시 fail-fast
 - 호범 계약의 Evidence 필드·근거 의미를 보존한 채
   Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계만 projection
 - Recommendation에 근거 Evidence 참조와 정책 버전 기록
@@ -285,6 +355,9 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 완료 조건:
 
 - Product Result/Evidence를 다시 계산하거나 복사하지 않고 참조한다.
+- Operational RecommendedAction이 원본 action ID, Product Result/Evidence ID,
+  schema/policy version과 basis를 보존한다.
+- Dataset Version이 변경돼도 동일 설비의 stable Equipment identity가 유지된다.
 - Event Evidence Projection의 필드와 근거 의미가 호범 계약과 일치한다.
 - 관계 탐색으로 판단 근거와 실제 조치 이력을 재구성할 수 있다.
 - 정비 전후 Result가 별도 불변 레코드로 존재한다.
@@ -322,6 +395,7 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 | `systems/backend/ontology_dashboard/ontology.py` | Closed-loop Object/Link/Action 의미 보강 | 우수, 호범 |
 | `systems/backend/ontology_dashboard/ontology_service.py` | 상태 전이 실행 및 감사 기록 보강 | 우수 |
 | `systems/backend/ontology_dashboard/repository.py` 및 PostgreSQL 대응부 | 운영 상태 persistence 확장 | 우수 |
+| `systems/backend/ontology_dashboard/outbox.py` 및 projection consumer | 기존 outbox 재사용, Closed-loop projection event의 retry·idempotency 보강 | 우수 |
 | `systems/backend/migrations/` | Closed-loop 운영 레코드 migration | 우수 |
 | `systems/backend/ontology_dashboard/ontology_adapter.py` | Evidence 의미 변경 없이 Closed-loop ID·관계 projection만 보강 | 호범 계약 확정·검토 후 |
 | `systems/backend/ontology_dashboard/openapi_contracts.py` | 응답 계약 등록 | 우수 |
@@ -346,13 +420,15 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 ### 9.1 구현 전에 받아야 할 입력
 
 아래 호범 입력은 단순 참고 자료가 아니라 **PR 3 착수 gate**다. Schema, 식별자,
-조회 방식과 근거 의미 중 하나라도 미확정이면 광우가 임의 계약을 만들어 통합 구현을
-진행하지 않는다.
+recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미확정이면 광우가 임의
+계약을 만들어 통합 구현을 진행하지 않는다.
 
 #### 호범에게 받을 것
 
 - Product Result Artifact와 Evidence Payload의 최종 Schema/version
-- `product_result_id`, `evidence_id`, `equipment_id/asset_id`, 생성 시각
+- `product_result_id`, `evidence_id`, `asset_id`, 생성 시각
+- `evidence_payload.recommended_actions[]`의 stable `action_id`, policy/version과 basis
+- `asset_id = equipment_id` MVP 규칙과 Dataset Version 독립 stable identity 검증 기준
 - risk grade, failure type, top factor의 공식 의미
 - Result/Evidence 조회 API와 unavailable/error 규칙
 - Event Evidence Projection의 필드와 근거 의미
@@ -396,6 +472,11 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 ### Domain unit test
 
 - Evidence 없는 Recommendation 생성 거부
+- producer recommendation의 action ID·label·kind·approval requirement·basis 불변
+- 같은 Product Result/action ID의 중복 materialization 방지
+- Operations 독자 recommendation과 producer projection origin 혼용 거부
+- asset mapping 누락·중복·type 불일치 fail-fast
+- Dataset Version 변경 후 stable Equipment identity 유지
 - 승인 없는 정비 실행 Work Order/Action 생성 거부
 - 승인·거절·보류 처리
 - 정상 시작·완료 전이
@@ -408,7 +489,8 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 - tenant/project/workspace 격리
 - 역할별 권한과 CSRF
 - 중복 idempotency key 처리
-- 트랜잭션 실패 시 부분 데이터 미생성
+- 트랜잭션 실패 시 운영 변경과 outbox 전체 rollback
+- outbox projection retry·idempotency·dead-letter 처리
 - 재시작 후 persistence
 - 기존 Event/Evidence/Decision API 하위 호환
 
@@ -424,7 +506,8 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 
 1. CNC 위험 Product Result/Evidence를 조회한다.
 2. 동일 Equipment의 RiskEvent에 근거를 연결한다.
-3. `TOOL_REPLACEMENT` RecommendedAction 후보를 확인한다.
+3. producer의 `TOOL_REPLACEMENT` recommendation이 원본 ID·근거를 보존한 운영
+   RecommendedAction으로 한 번만 materialize됐는지 확인한다.
 4. 관리자가 근거를 확인하고 승인한다.
 5. Work Order/MaintenanceAction이 한 번만 생성된다.
 6. 현장 작업자가 작업을 시작하고 완료한다.
@@ -438,9 +521,11 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 
 - 대표 CNC Event 한 건이 전체 Closed-loop를 통과한다.
 - Product Result/Evidence의 예측 진실을 재계산하지 않는다.
-- Recommendation과 실제 Action이 구분된다.
+- producer recommendation, 운영 materialization과 실제 Action이 구분되고 원본
+  provenance가 보존된다.
+- Dataset Version과 무관한 stable Equipment identity가 유지된다.
 - 사람의 승인 없이 정비 실행 객체가 생성되지 않는다.
-- 상태 전이, 권한, 멱등성, 트랜잭션과 scope 격리가 테스트된다.
+- 상태 전이, 권한, 멱등성, PostgreSQL transaction/outbox와 scope 격리가 테스트된다.
 - 관계와 Activity로 판단 근거 및 실행 이력을 재구성할 수 있다.
 - 정비 전후 Product Result가 별도로 보존되고 lineage로 연결된다.
 - 호범의 Report와 우수의 Product/UI가 동일 Closed-loop 상태를 소비한다.
@@ -452,11 +537,20 @@ Evidence payload, projection field 또는 Report grounding 의미를 광우 PR�
 - [ ] 기존 Decision 값과 Target 상태 전이의 매핑을 확정했다.
 - [ ] Work Order와 MaintenanceAction의 차이 및 생성 시점을 확정했다.
 - [ ] MaintenanceEvent의 runtime 저장 위치를 확정했다.
-- [ ] **PR 3 착수 gate:** Product Result/Evidence Schema·version·식별자·조회 API와
-      Event Evidence Projection/Report grounding 인계 계약을 호범에게 받았다.
+- [ ] Producer recommendation을 의미 변경 없이 운영 객체로 materialize하고 원본
+      ID·Product Result/Evidence ID·schema/policy version·basis를 보존하기로 확정했다.
+- [ ] `asset_id = equipment_id`, stable equipment key, fail-fast와 Dataset Version 변경
+      시 identity 유지 규칙을 확정했다.
+- [ ] PostgreSQL operational transaction + transactional outbox를 Closed-loop 원자성
+      전략으로 확정했다.
+- [ ] **PR 3 착수 gate:** Product Result/Evidence Schema·version·식별자·recommendation
+      provenance·조회 API와 Event Evidence Projection/Report grounding 인계 계약을
+      호범에게 받았다.
 - [ ] Product API endpoint/envelope를 우수와 합의했다.
 - [ ] 변경 예약 파일과 PR 순서를 팀 채널에 공유했다.
 - [ ] 비용 분석과 What-if가 핵심 MVP 범위 밖임을 재확인했다.
+- [ ] 이 문서 PR과 이후 구현 PR은 merge 전에 최신 `origin/main`을 반영하고
+      architecture/backend-contract CI를 다시 통과시킨다.
 
 체크리스트가 완료되기 전에는 공통 파일의 대규모 수정이나 새 API 구현을 시작하지
 않는다. 다만 기존 코드 조사, Domain unit test 초안과 상태 매핑표 작성은 병행할 수
