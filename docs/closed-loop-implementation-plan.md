@@ -54,7 +54,7 @@ Closed-loop는 과거 예측 결과를 수정하는 기능이 아니다. 정비 
 | Decision | 관리자 판단, 근거, 행위자, 시각 및 대상 Recommendation 기록 |
 | Work Order / MaintenanceAction | 승인 이후 작업 생성과 허용 상태 전이 구현 |
 | MaintenanceEvent | 실제 수행 결과, 작업자, 시작·종료 시각, 정비 내용을 이력으로 기록 |
-| Ontology projection | Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계 유지 |
+| Ontology projection | 호범 계약의 Evidence ID와 의미를 변경하지 않고 Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계 유지 |
 | Equipment state | 정비 완료 후 운영 상태와 최신 정비 참조 갱신 |
 | Activity / audit | 후보 생성부터 완료까지 모든 업무 변경을 시간순으로 추적 |
 | Closed-loop API | Domain 상태를 조회·변경하는 안정적인 Backend API 제공 |
@@ -269,8 +269,14 @@ API orchestration과 합의해 고정한다.
 
 ### PR 3. Product Result/Evidence 및 Ontology 통합
 
-- 호범의 실제 Product Result/Evidence ID를 RiskEvent에 연결
-- Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계 projection
+이 PR은 호범이 Product Result/Evidence Schema와 version, 식별자, 조회 API 및 Event
+Evidence Projection의 근거 의미를 확정한 뒤에만 착수한다. 계약이 확정되기 전에는
+Evidence payload, projection field 또는 Report grounding 의미를 광우 PR에서 임의로
+추가·변경하지 않는다.
+
+- 호범의 실제 Product Result/Evidence ID를 payload 복사 없이 RiskEvent에 연결
+- 호범 계약의 Evidence 필드·근거 의미를 보존한 채
+  Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계만 projection
 - Recommendation에 근거 Evidence 참조와 정책 버전 기록
 - 완료 시 Equipment 운영 상태와 최신 정비 참조 갱신
 - 정비 이후 새 Observation/새 Product Result와 과거 Event를 lineage로 연결
@@ -279,6 +285,7 @@ API orchestration과 합의해 고정한다.
 완료 조건:
 
 - Product Result/Evidence를 다시 계산하거나 복사하지 않고 참조한다.
+- Event Evidence Projection의 필드와 근거 의미가 호범 계약과 일치한다.
 - 관계 탐색으로 판단 근거와 실제 조치 이력을 재구성할 수 있다.
 - 정비 전후 Result가 별도 불변 레코드로 존재한다.
 
@@ -316,7 +323,7 @@ API orchestration과 합의해 고정한다.
 | `systems/backend/ontology_dashboard/ontology_service.py` | 상태 전이 실행 및 감사 기록 보강 | 우수 |
 | `systems/backend/ontology_dashboard/repository.py` 및 PostgreSQL 대응부 | 운영 상태 persistence 확장 | 우수 |
 | `systems/backend/migrations/` | Closed-loop 운영 레코드 migration | 우수 |
-| `systems/backend/ontology_dashboard/ontology_adapter.py` | Event–Evidence–Work Order–Action projection 보강 | 호범 |
+| `systems/backend/ontology_dashboard/ontology_adapter.py` | Evidence 의미 변경 없이 Closed-loop ID·관계 projection만 보강 | 호범 계약 확정·검토 후 |
 | `systems/backend/ontology_dashboard/openapi_contracts.py` | 응답 계약 등록 | 우수 |
 | `tests/`의 Closed-loop 관련 파일 | Domain/API/integration regression | 우수 |
 
@@ -328,6 +335,8 @@ API orchestration과 합의해 고정한다.
 - `experiments/preventive_intervention/`
 - Model Artifact/Feature/Label Schema
 - Product Result/Evidence Schema의 의미 변경
+- Event Evidence Projection의 필드·근거 의미 변경
+- Report grounding에서 Evidence/Activity 필드를 해석·매핑하는 계약 변경
 
 다른 담당 경로의 변경이 필요하면 해당 owner에게 요구 계약과 실패 재현 테스트를
 전달하고, 공동 수정 여부를 합의한다.
@@ -336,12 +345,18 @@ API orchestration과 합의해 고정한다.
 
 ### 9.1 구현 전에 받아야 할 입력
 
+아래 호범 입력은 단순 참고 자료가 아니라 **PR 3 착수 gate**다. Schema, 식별자,
+조회 방식과 근거 의미 중 하나라도 미확정이면 광우가 임의 계약을 만들어 통합 구현을
+진행하지 않는다.
+
 #### 호범에게 받을 것
 
 - Product Result Artifact와 Evidence Payload의 최종 Schema/version
 - `product_result_id`, `evidence_id`, `equipment_id/asset_id`, 생성 시각
 - risk grade, failure type, top factor의 공식 의미
 - Result/Evidence 조회 API와 unavailable/error 규칙
+- Event Evidence Projection의 필드와 근거 의미
+- Report grounding에서 참조할 Evidence/Activity 인계 계약
 - 새 Observation 이후 새 Product Result를 요청하거나 조회하는 공식 방식
 
 #### 성민에게 확인할 것
@@ -363,7 +378,10 @@ API orchestration과 합의해 고정한다.
 
 - 실제 Decision, RecommendedAction, WorkOrder/MaintenanceAction
 - MaintenanceEvent와 before/after 운영 상태
-- Report 문장 grounding에 사용할 Activity와 actor/timestamp
+- Report grounding의 입력으로 사용할 Activity와 actor/timestamp
+
+광우는 위 운영 사실을 제공하고, 이를 Evidence와 결합해 Report 근거로 해석·매핑하는
+계약과 문장 생성 규칙은 호범의 확정 계약을 따른다.
 
 #### 우수에게
 
@@ -434,7 +452,8 @@ API orchestration과 합의해 고정한다.
 - [ ] 기존 Decision 값과 Target 상태 전이의 매핑을 확정했다.
 - [ ] Work Order와 MaintenanceAction의 차이 및 생성 시점을 확정했다.
 - [ ] MaintenanceEvent의 runtime 저장 위치를 확정했다.
-- [ ] Product Result/Evidence 식별자와 조회 계약을 호범에게 받았다.
+- [ ] **PR 3 착수 gate:** Product Result/Evidence Schema·version·식별자·조회 API와
+      Event Evidence Projection/Report grounding 인계 계약을 호범에게 받았다.
 - [ ] Product API endpoint/envelope를 우수와 합의했다.
 - [ ] 변경 예약 파일과 PR 순서를 팀 채널에 공유했다.
 - [ ] 비용 분석과 What-if가 핵심 MVP 범위 밖임을 재확인했다.
