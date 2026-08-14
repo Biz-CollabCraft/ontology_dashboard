@@ -121,7 +121,7 @@ systems/
 │   └── app/diagnosis/         # Model Artifact load / inference / Result Artifact / Evidence
 └── frontend/                  # React + Vite 제품 Frontend
 
-contracts/                     # 시스템 간 공유 계약의 목표 위치
+contracts/                     # 시스템 간 공유 계약 (schemas, openapi, examples, test-vectors)
 docs/                          # 아키텍처, 요구사항, 팀 실행 계획, 구현 기록
 ml/                            # 이전 ML import/CLI compatibility adapter
 ```
