@@ -20,6 +20,96 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Classify changed files
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          # Keep the required `architecture` job running for every PR. Only the
+          # expensive domain/integration steps are selected from the diff.
+
+          full=false
+          generator=false
+          backend=false
+          frontend=false
+          integration=false
+          docker=false
+
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            full=true
+          else
+            base="$(git merge-base HEAD "origin/${BASE_REF}")"
+            mapfile -t changed_files < <(git diff --name-only "$base"...HEAD)
+
+            echo "Changed files:"
+            printf ' - %s\n' "${changed_files[@]}"
+
+            for path in "${changed_files[@]}"; do
+              case "$path" in
+                .github/workflows/*|systems/verify_architecture.py)
+                  full=true
+                  ;;
+                systems/generator/*)
+                  generator=true
+                  ;;
+                systems/backend/*)
+                  backend=true
+                  integration=true
+                  docker=true
+                  ;;
+                systems/frontend/*)
+                  frontend=true
+                  integration=true
+                  docker=true
+                  ;;
+                contracts/*|schemas/*)
+                  generator=true
+                  backend=true
+                  integration=true
+                  docker=true
+                  ;;
+                ml/*)
+                  generator=true
+                  backend=true
+                  integration=true
+                  ;;
+                infra/*|render.yaml)
+                  docker=true
+                  ;;
+                data/fixtures/*|prompts/*)
+                  backend=true
+                  integration=true
+                  ;;
+                tests/*|scripts/*)
+                  full=true
+                  ;;
+              esac
+            done
+          fi
+
+          if [[ "$full" == "true" ]]; then
+            generator=true
+            backend=true
+            frontend=true
+            integration=true
+            docker=true
+          fi
+
+          {
+            echo "full=$full"
+            echo "generator=$generator"
+            echo "backend=$backend"
+            echo "frontend=$frontend"
+            echo "integration=$integration"
+            echo "docker=$docker"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "CI scope: full=$full generator=$generator backend=$backend frontend=$frontend integration=$integration docker=$docker"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -29,14 +119,17 @@ jobs:
         run: python systems/verify_architecture.py
 
       - name: Generator import smoke
+        if: steps.changes.outputs.generator == 'true'
         working-directory: systems/generator
         run: python -c "import extraction; import ontology_mapping; import topology; import feature; import model; import common"
 
       - name: Install backend dependencies
+        if: steps.changes.outputs.backend == 'true' || steps.changes.outputs.integration == 'true'
         working-directory: systems/backend
         run: pip install -e ../../ml -e .
 
       - name: Backend import and health
+        if: steps.changes.outputs.backend == 'true'
         working-directory: systems/backend
         run: |
           APP_ENV=test PYTHONPATH=../..:../../ml/src python -c "from fastapi.testclient import TestClient; from app.main import app; response=TestClient(app).get('/health'); assert response.status_code == 200, response.text"
@@ -56,6 +149,7 @@ jobs:
           python -c "import json; payload=json.load(open('/tmp/health.json')); assert payload['status'] == 'ok', payload"
 
       - name: Backend non-editable runtime root smoke
+        if: steps.changes.outputs.backend == 'true'
         working-directory: systems/backend
         env:
           APP_ENV: test
@@ -89,15 +183,18 @@ jobs:
           PY
 
       - name: Set up Node
+        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.integration == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Install frontend dependencies
+        if: steps.changes.outputs.frontend == 'true' || steps.changes.outputs.integration == 'true'
         working-directory: systems/frontend
         run: npm install --no-audit --no-fund
 
       - name: Frontend unit tests
+        if: steps.changes.outputs.frontend == 'true'
         id: frontend_unit
         working-directory: systems/frontend
         run: |
@@ -105,14 +202,17 @@ jobs:
           echo "verified=true" >> "$GITHUB_OUTPUT"
 
       - name: Frontend production build
+        if: steps.changes.outputs.frontend == 'true'
         working-directory: systems/frontend
         run: npm run build
 
       - name: Install Playwright Chromium
+        if: steps.changes.outputs.integration == 'true'
         working-directory: systems/frontend
         run: npx playwright install --with-deps chromium
 
       - name: Critical MVP Playwright smoke
+        if: steps.changes.outputs.integration == 'true'
         id: mvp_e2e
         working-directory: systems/frontend
         env:
@@ -122,6 +222,7 @@ jobs:
           echo "verified=true" >> "$GITHUB_OUTPUT"
 
       - name: Docker Compose runtime smoke
+        if: steps.changes.outputs.docker == 'true'
         id: docker_runtime
         shell: bash
         run: |
@@ -181,11 +282,11 @@ jobs:
           echo "verified=true" >> "$GITHUB_OUTPUT"
 
       - name: Docker Compose diagnostics
-        if: failure()
+        if: failure() && steps.changes.outputs.docker == 'true'
         run: docker compose -f infra/docker-compose.yml logs --no-color
 
       - name: Docker Compose cleanup
-        if: always()
+        if: always() && steps.changes.outputs.docker == 'true'
         run: docker compose -f infra/docker-compose.yml down --volumes --remove-orphans
 
       - name: Diff whitespace check
