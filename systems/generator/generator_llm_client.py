@@ -40,12 +40,12 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from openai import OpenAI
 from systems.generator.generator_config import load_config
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
 
 # --- Pydantic Response Schemas ---
 
@@ -101,6 +101,7 @@ def call_llm(prompt: str, system: str = "You are a helpful assistant.") -> str:
         logger.warning("OPENAI_API_KEY environment variable is missing.")
         raise ValueError("OPENAI_API_KEY가 설정되어 있지 않습니다.")
 
+    from openai import OpenAI
     client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
