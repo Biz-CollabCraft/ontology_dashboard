@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **성민 (`smmini`)** | **ML Lifecycle & Contract Engineering** | Source를 학습 가능한 Feature/Label로 만들고, Model Artifact를 발행하며, 모델 계약·재학습·평가·버전·재현성을 프로젝트 종료까지 유지 | → **호범** Runtime, → **우수** CI/Report provenance |
 | **호범 (`enjoylonelines`)** | **Backend Intelligence & Dynamic Reporting** | Model Artifact를 Product Result/Evidence로 만들고, Evidence-grounded 동적 보고서의 내용·grounding·생성 규칙을 책임 | → **광우** Closed-loop, → **우수** Product/LLM runtime |
-| **광우 (`KOR-GANG`)** | **Ontology Operations & Closed-loop** | 분석 결과를 Decision/Action/Maintenance/Ontology state로 되돌리고, What-if와 업무 피드백 루프를 실제로 동작시킴 | → **호범** Report operational context, → **우수** Product surface |
+| **광우 (`KOR-GANG`)** | **Ontology Operations & Closed-loop** | 분석 결과를 Recommendation/Decision/Action/Maintenance/Ontology state로 되돌리고 업무 피드백 루프를 실제로 동작시킴 | → **호범** Report operational context, → **우수** Product surface |
 | **우수 (`oosuhada`)** | **Product AI & Integration** | 여러 Domain 결과를 Product API/Report Backend/LLM Runtime/Frontend로 조합하고, CI·E2E·배포·Release까지 실제 사용자 서비스로 완성 | → **전체 팀** Acceptance/Release, → **최종 사용자** |
 
 ### 역할을 한 문장으로 요약하면
@@ -112,7 +112,7 @@ Source Data
 - Backend loader와 Artifact compatibility 검증 지원
 - inference 결과 이상 시 feature parity / model input 문제 분석
 - Top factor / explainability에 필요한 모델 출력 의미 정리
-- What-if에서 변경 가능한 입력과 변경 불가능한 입력의 모델 관점 검토
+- Closed-loop가 소비하는 모델 결과와 Feature 의미의 정합성 검토
 - Report에 들어갈 model version / metrics / limitation provenance 제공
 - golden vector / artifact round-trip test 유지
 - 최종 발표용 모델 결과 재현성 검증
@@ -153,7 +153,7 @@ Model Artifact가 발행됐다고 성민 역할이 끝나지 않는다.
 - 데이터 분포가 바뀌면 retraining 필요 여부 판단
 - 모델 버전 변경 시 regression 비교
 - UI/Report의 top factor가 모델 의미와 다르면 semantic alignment 수정
-- What-if 입력이 모델 Feature contract를 깨지 않는지 검토
+- Closed-loop 입력이 Model Artifact와 Feature contract 의미를 왜곡하지 않는지 검토
 - 최종 E2E에서 동일 input → 동일 model result 재현성 확인
 - 발표에서 dataset → feature → model → artifact lineage 설명
 
@@ -200,12 +200,13 @@ Model Artifact
 ### Backend Intelligence 담당 작업
 
 - Model Artifact loader
-- manifest / checksum / compatibility validation
+- manifest / `artifact_files[*].sha256` / compatibility validation
 - current observation 조회
 - history requirement 처리
 - runtime inference orchestration
 - failure probability / failure type / status 산출
-- `normal / warning / danger / unavailable` 처리
+- Product Result `normal / attention / warning / critical`과 runtime
+  `available / unavailable` 상태를 분리해 처리
 - Product Result Artifact 생성
 - `evidence_payload` producer-side enrichment
 - source field evidence
@@ -295,7 +296,7 @@ LLM provider runtime / orchestration / API / UI / deployment
 Equipment / Process Context
 → RiskEvent
 → Evidence Association
-→ What-if / Recommendation
+→ RecommendedAction
 → Decision
 → MaintenanceAction
 → MaintenanceEvent
@@ -313,7 +314,7 @@ CNC 위험 상승
         ↓
 Product Result / Evidence
         ↓
-What-if / Recommendation
+RecommendedAction
         ↓
 관리자 Decision
         ↓
@@ -333,7 +334,7 @@ Dashboard / Report에 결과 재반영
 - Equipment / component / process context 정리
 - RiskEvent와 Equipment 관계
 - Evidence와 RiskEvent 관계
-- Recommendation / What-if semantics
+- RecommendedAction semantics
 - Decision model
 - RecommendedAction
 - MaintenanceAction
@@ -346,7 +347,7 @@ Dashboard / Report에 결과 재반영
 - Closed-loop API
 - Operations 화면이 소비할 workflow state 제공
 - Report가 소비할 Decision / Action / Activity context 제공
-- What-if 결과와 실제 Action을 구분
+- Recommendation 후보와 승인된 실제 Action을 구분
 - 실제 설비 자동제어가 아닌 human approval 기반 업무 반영
 
 ### 프로젝트 후반에도 계속 맡는 일
@@ -481,7 +482,7 @@ POST /api/reports/{report_id}/regenerate
 - state timeline
 - top contributing factors
 - Evidence / provenance visualization
-- What-if before / after
+- 정비 전후 상태와 Maintenance history
 - Decision / Action UI
 - Maintenance Activity
 - loading / empty / error / unavailable
@@ -629,7 +630,7 @@ Backend가 독립적으로 소비할 수 있는 immutable Model Artifact를 실�
 
 | 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
 |---|---|---|
-| **성민** | train/evaluate, metrics, 6-file Artifact, checksum, provenance, atomic publish, retrain/version 정책 구현 | 실제 Model Artifact + metrics |
+| **성민** | train/evaluate, metrics, 6-file Artifact, `artifact_files[*].sha256`, provenance, atomic publish, retrain/version 정책 구현 | 실제 Model Artifact + metrics |
 | **호범** | 샘플 Artifact를 Backend loader 관점에서 사전 검토하고 consumer fixture 준비 | loader acceptance fixture |
 | **광우** | model output/failure type/top factor가 RiskEvent/Recommendation으로 연결될 최소 semantic requirement 검토 | ontology consumption mapping |
 | **우수** | Artifact publish/schema/round-trip CI 추가, Artifact version/provenance가 제품에서 노출 가능한지 확인 | CI publish gate + report provenance requirement |
@@ -651,11 +652,13 @@ Backend가 독립적으로 소비할 수 있는 immutable Model Artifact를 실�
 | **성민** | loader에서 발생하는 feature/schema/model version mismatch 분석, runtime feature parity 지원 | producer-side compatibility fix |
 | **호범** | Artifact validation/load, history requirement, current observation, inference, status/unavailable 처리 구현 | runtime prediction service |
 | **광우** | prediction 결과가 Equipment/RiskEvent identity와 연결되도록 asset/event key 검증 | runtime→ontology identity mapping |
-| **우수** | publish→load round-trip CI, Backend health/integration smoke, Product API에서 사용할 runtime adapter 요구사항 정리 | integration gate + application adapter plan |
+| **우수** | publish→load round-trip CI, 고정 이력에 대한 Generator/Backend Feature golden-vector parity, Backend health/integration smoke, Product API에서 사용할 runtime adapter 요구사항 정리 | integration gate + application adapter plan |
 
 ### 완료 조건
 
-> 성민이 발행한 Artifact를 호범 Backend가 독립적으로 읽어 실제 observation에 inference한다.
+> 성민이 발행한 Artifact를 호범 Backend가 독립적으로 읽어 실제 observation에
+> inference하고, 동일 고정 이력에서 Generator와 Backend의 Feature 이름·순서·dtype·값이
+> 일치한다. MVP active model과 threshold/risk-grade mapping도 명시되어 있다.
 
 ---
 
@@ -686,14 +689,15 @@ Raw prediction을 Dashboard/Report/Action이 공통으로 소비할 수 있는 P
 
 | 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
 |---|---|---|
-| **성민** | What-if 입력이 model feature contract와 물리적으로 모순되지 않는지 검토, 필요 시 재추론 입력 범위 정의 | model-side intervention constraints |
-| **호범** | Action 판단에 필요한 Evidence API 지원, before/after Result 비교와 report용 근거 구조 지원 | evidence/what-if support |
+| **성민** | Recommendation에 노출되는 model status/factor가 Model Artifact와 Feature contract 의미를 왜곡하지 않는지 검토 | model interpretation constraints |
+| **호범** | Action 판단에 필요한 Product Result / Evidence API와 report용 근거 구조 제공 | evidence support |
 | **광우** | Recommendation → Decision → TOOL_REPLACEMENT → MaintenanceEvent → Ontology state → Activity 구현 | 실제 closed-loop state/API |
 | **우수** | Operations용 Product API orchestration과 Decision/Action UI, 상태 전이 acceptance flow 구현 | usable closed-loop product flow |
 
 ### 완료 조건
 
-> 하나의 CNC Event가 Evidence 확인부터 Action 완료와 상태 재반영까지 한 번 실제로 돈다.
+> 하나의 CNC Event가 Evidence 확인부터 Action 완료와 상태 재반영까지 실제로 동작하고,
+> 정비 이후 새로운 Observation으로 별도 Prediction Result가 생성된다.
 
 ---
 
@@ -830,7 +834,8 @@ Source
 → Runtime Inference
 → Product Result / Evidence
 → Recommendation / Decision / Action
-→ Maintenance / Activity
+→ Maintenance / Activity / Ontology State
+→ 새로운 Observation / Prediction Result
 → Executive Brief
 → Dynamic Report
 ```
@@ -866,8 +871,12 @@ FastAPI Backend / Report / LLM Runtime
 Neon
 PostgreSQL
 
-Model Artifact
+사전 학습 또는 CI
+→ 검증된 Model Artifact 영속 발행
+→ `MODEL_ARTIFACT_URI`
 → Backend Runtime
+
+Render의 임시 파일시스템은 Model Artifact 정본으로 사용하지 않는다.
 ```
 
 ### 완료 조건
@@ -895,15 +904,48 @@ Model Artifact
 1. Overview에서 CNC 위험 상승 확인
 2. Objects에서 probability / sensor / top factor 확인
 3. Evidence와 provenance 확인
-4. Operations에서 Recommendation / What-if 확인
+4. Operations에서 Evidence 기반 RecommendedAction 확인
 5. 관리자 Decision
 6. TOOL_REPLACEMENT Action 생성
 7. Maintenance 완료
 8. Activity / Ontology state 갱신 확인
-9. Static Executive Brief 확인
-10. Evidence-grounded Dynamic Report 확인
-11. 동일 근거가 Dashboard / Action / Report에 일관되게 사용됨을 설명
+9. 정비 이후 새로운 Observation / Prediction Result 확인
+10. Static Executive Brief 확인
+11. Evidence-grounded Dynamic Report 확인
+12. 동일 근거가 Dashboard / Action / Report에 일관되게 사용됨을 설명
 ```
+
+---
+
+## 선택 확장 — 비용 기반 정비 대안 분석
+
+이 기능은 핵심 Closed-loop와 공개 배포 E2E가 완료된 후 시간이 남는 경우에만 구현한다.
+필수 완료 경로와 CI gate에는 포함하지 않는다.
+
+### 목표
+
+고장이력, 수리이력, 설비·부품 가격, 정비 시간과 생산 중단 비용을 이용해 다음 대안을 비교한다.
+
+- 즉시 수리 또는 교체
+- 다음 계획 정비 시 수리
+- 일정 시간 운전 후 재평가
+
+### 출력
+
+- 선택지별 부품비·수리비
+- 예상 정지 시간과 생산 손실
+- 총 기대비용
+- 현재 입력과 가정에서 비용상 권장되는 수리 방법과 시점
+- 실제값·추정값·정책 기본값 구분
+- 근거와 제한사항
+
+### 안전 원칙
+
+- 위험도 변화를 필수 출력으로 요구하지 않는다.
+- 실제 예방효과나 인과관계를 확정하지 않는다.
+- 비용 데이터가 없으면 임의 값을 생성하지 않는다.
+- “최적”이라고 단정하지 않고 현재 입력과 가정에서 비용상 권장되는 대안으로 표현한다.
+- 관리자 승인 없이 MaintenanceAction을 자동 생성하지 않는다.
 
 ---
 
@@ -985,7 +1027,7 @@ Deployment Failure
 ```text
 Backend mismatch
 Report model provenance 문제
-What-if feature constraint
+Closed-loop model interpretation 문제
 Final regression
 ```
 
@@ -1080,6 +1122,8 @@ Product Result / Evidence
 Ontology Recommendation / Decision / Action
         ↓
 Maintenance / Activity / State Feedback
+        ↓
+새로운 Observation / Prediction Result
         ↓
 Static Executive Brief
         ↓

@@ -103,7 +103,7 @@ LLM이 실패해도 정적 보고서는 항상 생성될 수 있어야 합니다
 |---|---|---|---|
 | **성민 (`smmini`)** | **ML Lifecycle & Contract Engineering** | Feature/Label, Training, Model Artifact, 모델 버전·평가·재현성·Runtime compatibility | → **호범** Runtime, → **우수** CI/Report provenance |
 | **호범 (`enjoylonelines`)** | **Backend Intelligence & Dynamic Reporting** | Runtime Inference, Product Result/Evidence, Dynamic Report grounding·내용·검증 규칙 | → **광우** Closed-loop, → **우수** Product/LLM runtime |
-| **광우 (`KOR-GANG`)** | **Ontology Operations & Closed-loop** | RiskEvent, What-if, Decision, Action, Maintenance, Ontology state와 업무 feedback loop | → **호범** Report context, → **우수** Product surface |
+| **광우 (`KOR-GANG`)** | **Ontology Operations & Closed-loop** | RiskEvent, Recommendation, Decision, Action, Maintenance, Ontology state와 업무 feedback loop | → **호범** Report context, → **우수** Product surface |
 | **우수 (`oosuhada`)** | **Product AI & Integration** | Product/Report Backend, LLM Runtime Integration, Frontend·Visualization, CI·E2E, Deployment·Release | → **전체 팀** Acceptance/Release, → **최종 사용자** |
 
 동적 보고서는 **호범이 Grounding/Prompt/내용·검증 규칙의 feature owner**, 우수가 **실제 LLM provider runtime과 Report API/UI 통합 owner**로 역할을 분리합니다. Static Executive Brief는 LLM과 독립적으로 우수가 Product/Report 계층에서 보장합니다.
@@ -187,11 +187,14 @@ CI의 목적은 다른 담당자의 구현을 대신 수정하는 것이 아니�
 팀 공유 및 발표 환경은 다음 구조를 사용합니다.
 
 ```text
-Vercel
-Frontend
-        ↓
+사전 학습 또는 CI
+검증된 Model Artifact 영속 발행
+        ↓ MODEL_ARTIFACT_URI
 Render
 FastAPI Backend
+        ↑
+Vercel
+Frontend
         ↓
 Neon
 PostgreSQL
@@ -200,6 +203,8 @@ PostgreSQL
 - Vercel: Frontend 배포 및 사용자 진입점
 - Render: FastAPI Backend runtime
 - Neon: PostgreSQL 데이터 영속화
+- Model Artifact: 사전에 학습·검증한 Artifact를 영속 위치에 발행하고 Render에
+  `MODEL_ARTIFACT_URI`로 주입합니다. Render의 임시 파일시스템을 Artifact 정본으로 사용하지 않습니다.
 
 자세한 기준은 [Vercel + Render + Neon demo stack](./docs/deployment/free-demo-stack.md)을 참고합니다.
 
@@ -229,8 +234,10 @@ Canonical V3.1
 → Model Artifact
 → Backend Runtime Inference
 → Product Result / Evidence
-→ Ontology Decision / Action
-→ Maintenance State
+→ Recommended Action / Manager Decision
+→ Maintenance Action / Event
+→ Ontology State
+→ 새로운 Observation / Prediction
 → Dashboard
 → Executive Brief
 → LLM Dynamic Report
