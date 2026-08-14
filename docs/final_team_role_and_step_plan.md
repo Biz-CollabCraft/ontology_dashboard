@@ -202,6 +202,21 @@ unavailable
 
 등은 Backend diagnosis 쪽으로 가져와 재구성한다.
 
+### 현재 계획 범위에서의 우선순위
+
+PR #25에서 Product Result Artifact의 `evidence_payload` 계약은 고정되었지만, 현재 남은 직접 구현 범위는 Backend producer가 실제 `evidence_payload`를 산출하는 단계다.
+
+따라서 현재 호범의 우선 역할은 Product Result Artifact / Evidence / Product API가 Report와 Closed-loop가 소비할 수 있는 구조화 데이터를 안정적으로 제공하도록 만드는 것이다.
+
+보고서와 LLM 쪽은 이 우선순위 작업 이후 진행한다. 이때 LLM은 새로운 판단을 만드는 기능이 아니라, Backend producer 산출물과 정적 보고서를 grounding source로 사용해 관리자용 문장화, 요약, fallback을 담당하는 범위로 둔다.
+
+우선순위 작업 이후 호범이 Report / LLM 영역에서 맡을 수 있는 일은 다음이다.
+
+- Report가 필요로 하는 Backend 필드 제공 가능 여부 검토
+- Product Result Artifact / Evidence에서 제공할 수 없는 운영·정비·집계 데이터 구분
+- 산출 불가능한 값이 `evidence_gap` / `limitations` / `근거 부족`으로 남도록 producer 계약 보강
+- 정적 보고서 기반 LLM prompt / output 검증 / deterministic fallback 연결
+
 ### 하지 않을 일
 
 - Feature Engineering 정책 변경
@@ -746,6 +761,12 @@ Overview
 
 ## Step 8. Executive Brief 정적 보고서 구현
 
+### 진입 조건
+
+이 단계는 Backend producer가 Product Result Artifact / Evidence를 실제로 산출한 뒤 진행한다.
+
+PR #25로 계약은 고정되었지만, `evidence_payload` 생성 구현과 Event Evidence projection 연결이 끝나기 전까지 Report 관련 작업은 mock / contract 검토 범위로 제한한다.
+
 ### 우수
 
 먼저 LLM 없이 구조화된 보고서를 완성한다.
@@ -770,6 +791,12 @@ Deterministic Executive Brief
 ---
 
 ## Step 9. LLM 기반 동적 Executive Brief 구현
+
+### 진입 조건
+
+정적 Executive Brief가 먼저 완성되어야 한다.
+
+LLM은 새로운 판단을 만드는 작업이 아니라, 정적 보고서와 Evidence를 grounding source로 사용해 문장 표현을 바꾸는 단계로만 진행한다.
 
 ### 우수
 
