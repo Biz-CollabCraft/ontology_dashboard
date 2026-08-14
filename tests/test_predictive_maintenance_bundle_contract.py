@@ -38,8 +38,8 @@ SHA_B = "b" * 64
 SHA_C = "c" * 64
 
 
-def load_schema(name: str) -> dict:
-    return json.loads((ROOT / "schemas" / name).read_text(encoding="utf-8"))
+def load_schema(name: str) -> dict[str, Any]:
+    return json.loads((ROOT / "contracts" / "schemas" / name).read_text(encoding="utf-8"))
 
 
 def project3_v3_1_contract() -> dict[str, object]:

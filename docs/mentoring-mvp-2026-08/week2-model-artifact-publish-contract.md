@@ -10,7 +10,7 @@
 > dual-version reader, 기존 버전과의 migration, 장기 deprecation 정책은 구현하지 않는다.
 
 > 이 문서가 정의하는 구조는 확정된 문서 계약이며, 아직
-> `schemas/model-artifact.schema.json`, Generator publisher 및 Backend loader에는
+> `contracts/schemas/model-artifact.schema.json`, Generator publisher 및 Backend loader에는
 > 반영되지 않았다. 현재 main은 PR #9의 실행 가능한 개발 초안
 > (`Implemented Draft`)을 사용하며, `tests/test_system_ownership.py`가 해당 초안의
 > publish → validation → load 경로를 검증한다. 공식 전환은 아래 후속 구현 완료
@@ -246,7 +246,7 @@ publish를 생략하면 Backend가 새 모델을 영구히 로드할 수 없다.
       필수 파일 6개를 생성할 수 있도록 구현한다.
 - [ ] Backend/#24 작업에서 `artifact_provider.py`가 공식 Manifest 필드와
       필수 role 5개를 검증하도록 구현한다.
-- [ ] `schemas/model-artifact.schema.json`은 publisher와 loader가 모두 준비된
+- [ ] `contracts/schemas/model-artifact.schema.json`은 publisher와 loader가 모두 준비된
       통합 전환 시점에 공식 v1.0 구조로 교체한다. Schema만 먼저 바꾸지 않는다.
 - [ ] `tests/test_system_ownership.py`를 새 계약에 맞게 함께 갱신한다.
 - [ ] Schema, publisher, loader 및 테스트를 하나의 호환 전환 단위로 검증한다.

@@ -81,13 +81,13 @@ def project_root() -> Path:
         if configured:
             return Path(configured).expanduser().resolve()
     cwd = Path.cwd().resolve()
-    if (cwd / "schemas").is_dir() and (cwd / "data" / "fixtures").is_dir():
+    if (cwd / "contracts" / "schemas").is_dir() and (cwd / "data" / "fixtures").is_dir():
         return cwd
     app_root = Path("/app")
-    if (app_root / "schemas").is_dir() and (app_root / "data" / "fixtures").is_dir():
+    if (app_root / "contracts" / "schemas").is_dir() and (app_root / "data" / "fixtures").is_dir():
         return app_root
     for parent in Path(__file__).resolve().parents:
-        if (parent / "schemas").is_dir() and (parent / "data" / "fixtures").is_dir():
+        if (parent / "contracts" / "schemas").is_dir() and (parent / "data" / "fixtures").is_dir():
             return parent
     raise RuntimeError(
         "cannot resolve ontology_dashboard runtime root; "
@@ -96,7 +96,7 @@ def project_root() -> Path:
 
 
 def schema_path() -> Path:
-    return project_root() / "schemas" / "input-event.schema.json"
+    return project_root() / "contracts" / "schemas" / "input-event.schema.json"
 
 
 def load_json(path: str | Path) -> dict[str, Any]:

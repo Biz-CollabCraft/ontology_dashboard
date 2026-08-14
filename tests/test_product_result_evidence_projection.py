@@ -147,7 +147,7 @@ def test_legacy_projection_passes_current_evidence_schema_with_producer_normaliz
 
     legacy = event_evidence_projection_to_legacy_evidence(projection)
 
-    schema = json.loads((ROOT / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((ROOT / "contracts" / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
     assert list(Draft202012Validator(schema).iter_errors(legacy)) == []
     assert legacy["schema_version"] == "1.0"
     assert legacy["event_id"] == projection["event_id"]

@@ -61,7 +61,7 @@ class LayoutPlanner:
         self.root = Path(project_root)
         self.provider = provider
         self.schema = json.loads(
-            (self.root / "schemas" / "ui-block.schema.json").read_text(encoding="utf-8")
+            (self.root / "contracts" / "schemas" / "ui-block.schema.json").read_text(encoding="utf-8")
         )
 
     def _ordered_types(self, evidence: dict[str, Any], role: Role, intent: Intent) -> list[str]:
