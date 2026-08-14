@@ -427,5 +427,3 @@ def test_build_labels_removes_preexisting_leakage_columns():
 
     labeled_df = build_labels(features_df, failures_df, failure_meta=failure_meta, prediction_horizon_hours=24)
     assert "period_start" not in labeled_df.columns, "Leaked period_start column must be removed from labeled_df"
-
-

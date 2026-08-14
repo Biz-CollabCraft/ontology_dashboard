@@ -29,14 +29,8 @@ _project_root = str(Path(__file__).resolve().parents[3])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-try:
-    from systems.generator.ontology_mapping.mapping_agent import map_all_sources, map_column
-    from systems.generator.ontology_mapping.mapping_cache import get_mapping_store
-    from systems.generator.ontology_mapping.ontology_mapping_capability_service import detect_capabilities
-except ImportError:
-    map_all_sources = None
-    map_column = None
-    get_mapping_store = None
-    detect_capabilities = None
+from systems.generator.ontology_mapping.mapping_agent import map_all_sources, map_column
+from systems.generator.ontology_mapping.mapping_cache import get_mapping_store
+from systems.generator.ontology_mapping.ontology_mapping_capability_service import detect_capabilities
 
 __all__ = ["map_all_sources", "map_column", "get_mapping_store", "detect_capabilities"]
