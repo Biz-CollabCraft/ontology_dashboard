@@ -72,6 +72,62 @@ def check_cross_system_imports(errors: list[str]) -> None:
                         errors.append(f"cross-system direct import: {path.relative_to(ROOT)} imports {module}")
 
 
+def _catches_import_error(handler: ast.ExceptHandler) -> bool:
+    caught = handler.type
+    if isinstance(caught, ast.Name):
+        return caught.id in {"ImportError", "ModuleNotFoundError"}
+    if isinstance(caught, ast.Tuple):
+        return any(
+            isinstance(item, ast.Name) and item.id in {"ImportError", "ModuleNotFoundError"}
+            for item in caught.elts
+        )
+    return False
+
+
+def _is_masking_fallback(value: ast.AST) -> bool:
+    if isinstance(value, ast.Constant):
+        return value.value is None
+    if isinstance(value, (ast.Dict, ast.List, ast.Set, ast.Tuple)):
+        return len(value.elts if hasattr(value, "elts") else value.keys) == 0
+    return False
+
+
+def check_generator_package_import_masking(errors: list[str]) -> None:
+    """Reject package facades that turn required import failures into fake availability.
+
+    Optional dependency detection inside implementation modules is allowed. The unsafe
+    pattern is a package ``__init__.py`` catching ImportError/ModuleNotFoundError and
+    publishing ``None`` or an empty collection instead, because a shallow ``import``
+    smoke then succeeds while required Generator symbols are unusable.
+    """
+
+    generator_root = SYSTEMS / "generator"
+    for path in generator_root.rglob("__init__.py"):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as exc:
+            errors.append(f"cannot parse {path.relative_to(ROOT)}: {exc}")
+            continue
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try):
+                continue
+            for handler in node.handlers:
+                if not _catches_import_error(handler):
+                    continue
+                for handler_node in ast.walk(handler):
+                    if not isinstance(handler_node, (ast.Assign, ast.AnnAssign)):
+                        continue
+                    value = handler_node.value
+                    if value is not None and _is_masking_fallback(value):
+                        errors.append(
+                            "generator package facade masks a required import failure: "
+                            f"{path.relative_to(ROOT)} catches ImportError/ModuleNotFoundError "
+                            "and substitutes None or an empty collection"
+                        )
+                        break
+
+
 def check_backend_domain_dependencies(errors: list[str]) -> None:
     app_root = SYSTEMS / "backend" / "app"
     implementation_suffixes = ("_service", "_repository", "_adapter")
@@ -360,6 +416,7 @@ def main() -> int:
     errors: list[str] = []
     check_required_structure(errors)
     check_cross_system_imports(errors)
+    check_generator_package_import_masking(errors)
     check_backend_domain_dependencies(errors)
     check_product_api_dependency(errors)
     check_artifact_injection(errors)
@@ -386,6 +443,7 @@ def main() -> int:
     print("- generator owns semantic/feature/training and Model Artifact publication")
     print("- backend diagnosis owns runtime inference and Result Artifact/Evidence")
     print("- generator/backend direct Python imports are absent")
+    print("- Generator package facades do not mask required import failures")
     print("- backend domains do not import other domains' implementation modules")
     print("- product API has no static generator implementation import")
     print("- legacy ML/backend modeling compatibility paths are ports, not ML owners")
