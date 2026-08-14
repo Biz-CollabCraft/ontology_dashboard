@@ -38,6 +38,35 @@ Week 2 UI 표시명은 `매니저`, `엔지니어`를 사용하고 내부 enum
 
 UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후 변경할 수 있게 한다.
 
+## 개발 역할
+
+역할은 [Week 2 역할 분담 및 산출물 정의](./week2-team-role-and-deliverables.md)를
+기준으로 한다. 역할 재조정 이전 문서와 혼동하지 않도록 팀원 번호만 쓰지 않고
+담당자 이름과 역할명을 함께 표기한다.
+
+| 담당 | 공식 역할 | Week 2 핵심 책임 | 주요 산출물 |
+|---|---|---|---|
+| 우수 · 팀원1 | Frontend / MVP 화면 | 공통 Product Result Artifact·Evidence를 Overview·Objects·Operations·Event Executive Brief에 연결 | 화면 구현, 캡처, 데모 흐름, API 연결 상태 |
+| 광우 · 팀원2 | Contract / Requirements / Specifications | 요구사항·기능·스키마·API·리포트·MVP 설계 계약과 Traceability 관리 | 문서 6종, 결정 기록, Current/Target 구분 |
+| 성민 · 팀원3 | Prediction / Data / API | `gen_data` 원천 생성·재현성과 `ontology_dashboard`의 semantic/ML·Prediction·Product Result Artifact/Evidence 연결 | 원천 검증, Model Artifact, Prediction 목록·상세 조회, provenance |
+| 호범 · 팀원4 | Report / LLM | Product Result Artifact와 Evidence를 deterministic 우선의 근거 기반 역할별 Report로 변환 | Event Report 입력·출력, 생성·검증 API, fallback, 예시 결과 |
+
+세부 시스템 책임은 다음과 같이 구분한다.
+
+- `gen_data`: raw/simulation/synthetic sensor data와 Canonical V3.1 원천 생성·재현성.
+- `systems/generator`: extraction, ontology mapping, topology, Feature Engineering,
+  모델 학습·평가와 versioned Model Artifact 발행.
+- `systems/backend/app/diagnosis`: Model Artifact 검증·로드, runtime inference,
+  Product Result Artifact와 Evidence 생성.
+- Frontend: API가 제공한 공통 결과의 사용자 화면 표현.
+- Report: 검증된 구조화 결과의 역할별 문장·블록 생성.
+- `experiments/preventive_intervention`: 광우가 별도 확장으로 진행하는 비배포 What-if
+  분석 Producer. Week 2의 Contract/Docs 역할이나 호범의 Report 책임을 대체하지 않는다.
+
+과거 역할표의 `팀원2=Report`, `팀원3=API`, `팀원4=Pipeline` 표기는 사용하지 않는다.
+API는 하나의 담당으로 뭉뚱그리지 않고 Prediction·조회 API는 성민, Report 생성 API는
+호범, API 계약 문서와 Traceability는 광우가 담당한다.
+
 ## MVP 화면
 
 1. Overview
