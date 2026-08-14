@@ -181,6 +181,8 @@ Model Artifact가 발행됐다고 성민 역할이 끝나지 않는다.
 
 그리고 Product Result / Evidence가 안정화된 이후에는 **Evidence-grounded 동적 보고서 기능의 feature owner**를 맡는다.
 
+호범 파트의 개발 역량 포인트는 단순한 LLM 출력 검증 테스트가 아니라, ML Artifact를 제품 Backend Runtime으로 전환하고 그 결과를 Evidence API와 Grounded Report / LLM 입력까지 연결하는 제품화 레이어다.
+
 ### Primary Ownership
 
 ```text
@@ -284,6 +286,8 @@ LLM provider runtime / orchestration / API / UI / deployment
 광우는 “분석 결과를 보여주는 것”에서 끝내지 않고, **그 결과가 실제 업무 Decision과 Action으로 다시 돌아가는 온톨로지 Closed-loop**를 책임진다.
 
 범용 플랫폼을 만드는 것이 아니라 대표 Use Case 하나를 E2E로 완성해 프로젝트의 온톨로지 서비스성을 증명한다.
+
+광우 파트의 개발 역량 포인트는 단순히 온톨로지 용어를 문서화하는 것이 아니라, Product Result / Evidence를 실제 Decision / Action / Activity / Equipment state로 전환하는 업무 workflow 레이어다.
 
 ### Primary Ownership
 
@@ -404,6 +408,8 @@ GET  /events/{event_id}/activity
 우수는 Frontend만 담당하지 않는다.
 
 **각 Domain의 결과를 실제 제품이 소비할 수 있도록 Backend application layer에서 조합하고, Report Backend와 LLM Runtime을 연결한 뒤 Frontend·CI·E2E·배포까지 책임지는 Full-stack Product Integration 역할**을 맡는다.
+
+우수 파트의 개발 역량 포인트는 화면을 단순히 꾸미는 것이 아니라, Backend Result / Evidence, Closed-loop Action, Report / LLM output을 사용자가 따라갈 수 있는 제품 경험과 E2E 검증으로 묶는 통합 레이어다.
 
 ### Primary Ownership
 
