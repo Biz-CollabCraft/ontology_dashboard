@@ -15,6 +15,13 @@ API 계약과 팀 공유 문서를 관리한다.
   - [추적성 매트릭스](./mentoring-mvp-2026-08/week2-traceability-matrix.md)
 - [AI 코드 리뷰 컨텍스트](./ai-code-review-context.md)
 
+## 공유 계약 (Shared Contracts)
+
+향후 시스템 간 공유 계약은 저장소 최상위 `contracts/`에서 관리할 예정이다.
+현재는 디렉터리 골격과 관리 원칙만 마련된 상태이며, 기존 Schema와 실행 코드의
+참조 경로는 아직 변경되지 않았다.
+자세한 내용은 [`contracts/README.md`](../contracts/README.md)를 참고한다.
+
 ## 관리 원칙
 
 - 문서 묶음은 목적이나 마일스톤을 나타내는 이름으로 `docs/` 바로 아래에 둔다.
