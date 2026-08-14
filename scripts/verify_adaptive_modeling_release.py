@@ -62,7 +62,7 @@ REQUIRED_FILES = [
     "systems/backend/ontology_dashboard/modeling/schema.py",
     "systems/backend/ontology_dashboard/modeling/service.py",
     "systems/backend/ontology_dashboard/routers/modeling.py",
-    "schemas/adaptive-modeling.schema.json",
+    "contracts/schemas/adaptive-modeling.schema.json",
     "scripts/generate_adaptive_modeling_schema.py",
     "scripts/run_modeling_experiment_worker.py",
     "tests/test_adaptive_modeling_contracts.py",
@@ -135,7 +135,7 @@ def schema_parity_check(root: Path) -> Check:
         from ontology_dashboard.modeling.schema import adaptive_modeling_schema
 
         checked_in = json.loads(
-            (root / "schemas/adaptive-modeling.schema.json").read_text(
+            (root / "contracts/schemas/adaptive-modeling.schema.json").read_text(
                 encoding="utf-8"
             )
         )

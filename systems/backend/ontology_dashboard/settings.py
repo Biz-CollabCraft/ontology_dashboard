@@ -22,7 +22,7 @@ LEGACY_PROJECT_ROOT_ENV = "ONTOLOGY_DASHBOARD_ROOT"
 
 def _looks_like_project_root(path: Path) -> bool:
     return (
-        (path / "schemas").is_dir()
+        (path / "contracts" / "schemas").is_dir()
         and (path / "prompts").is_dir()
         and (path / "data" / "fixtures").is_dir()
     )

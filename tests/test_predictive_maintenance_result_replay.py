@@ -308,6 +308,7 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     prediction_schema = json.loads(
         (
             Path(__file__).resolve().parents[1]
+            / "contracts"
             / "schemas"
             / "prediction-result.schema.json"
         ).read_text(encoding="utf-8")

@@ -37,7 +37,7 @@ def load_json(path: Path) -> dict:
 
 
 def product_result_artifact_schema() -> dict:
-    return load_json(ROOT / "schemas" / "product-result-artifact.schema.json")
+    return load_json(ROOT / "contracts" / "schemas" / "product-result-artifact.schema.json")
 
 
 def producer_enriched_artifact() -> dict:

@@ -23,6 +23,9 @@ from ontology_dashboard.modeling.schema import adaptive_modeling_schema
 from ontology_dashboard.modeling.service import ModelingService
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 def profile_payload() -> dict:
     source_checksum = "a" * 64
     return DatasetIntakeProfile(
@@ -74,7 +77,7 @@ def draft_payload() -> dict:
 
 
 def test_draft_2020_12_schema_and_pydantic_examples_match() -> None:
-    schema = json.loads(Path("schemas/adaptive-modeling.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((ROOT / "contracts" / "schemas" / "adaptive-modeling.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     assert schema == adaptive_modeling_schema()
     validator = Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)

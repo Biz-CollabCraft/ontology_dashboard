@@ -53,7 +53,7 @@ def csrf_headers(client: TestClient) -> dict[str, str]:
 
 
 def validate_role_contract(payload: dict) -> None:
-    schema = json.loads((ROOT / "schemas" / "role-workspaces.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((ROOT / "contracts" / "schemas" / "role-workspaces.schema.json").read_text(encoding="utf-8"))
     errors = list(Draft202012Validator(schema).iter_errors(payload))
     assert errors == [], "\n".join(error.message for error in errors)
 
