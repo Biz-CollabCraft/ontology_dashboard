@@ -1,94 +1,140 @@
 # 최종 역할 분배 및 Step별 실행 계획
 
-> 목적: 4명이 각자 기능을 따로 만드는 구조가 아니라, **한 사람의 산출물이 다음 사람의 입력이 되도록** 프로젝트 종료까지의 역할과 실행 순서를 고정한다.
-> 기준: 담당자별 책임은 명확히 나누되, 계약은 작성자와 구현 소유자를 분리하고 최종 결과는 하나의 E2E 서비스로 연결한다.
+> 목적: 4명이 각자 하나의 기능을 만들고 끝나는 방식이 아니라, **프로젝트 종료까지 각자 하나의 전문 축을 계속 소유하면서 서로의 산출물을 다음 단계로 연결하는 구조**로 역할을 고정한다.
+>
+> 원칙: 역할은 기술 스택 하나로 제한하지 않는다. 각 담당자는 자기 전문 축에 대해 계약 → 구현 → 통합 → 검증 → 배포 → 발표까지 계속 책임진다.
 
 ---
 
 ## 1. 최종 역할 분배
 
-| 사람 | 최종 책임 | 산출물이 넘어가는 곳 |
-|---|---|---|
-| **성민 (`smmini`)** | Generator / Feature·Label / Model Training / Model Artifact + Backend API·Artifact 계약 명세 | → **호범** Backend 구현 |
-| **호범 (`enjoylonelines`)** | Backend Runtime / Model Artifact Loader / Runtime Inference / Product Result Artifact / Evidence / Product API 구현 | → **광우**, **우수** |
-| **광우 (`KOR-GANG`)** | Ontology Closed-loop / Decision / Recommended Action / Maintenance Action / What-if 활용 흐름 | → **우수** Frontend·Report |
-| **우수 (`oosuhada`)** | Frontend / UI·UX / CI / E2E / 배포 / 최종 통합 + Executive Brief 정적 보고서 + LLM 기반 동적 보고서 | → **최종 사용자 / 발표 데모** |
+| 사람 | 프로젝트 전체를 관통하는 역할 | 최종 책임 | 주요 산출물이 넘어가는 곳 |
+|---|---|---|---|
+| **성민 (`smmini`)** | **ML Lifecycle & Contract Engineering** | Source를 학습 가능한 Feature/Label로 만들고, Model Artifact를 발행하며, 모델 계약·재학습·평가·버전·재현성을 프로젝트 종료까지 유지 | → **호범** Runtime, → **우수** CI/Report provenance |
+| **호범 (`enjoylonelines`)** | **Backend Intelligence & Dynamic Reporting** | Model Artifact를 Product Result/Evidence로 만들고, Evidence-grounded 동적 보고서의 내용·grounding·생성 규칙을 책임 | → **광우** Closed-loop, → **우수** Product/LLM runtime |
+| **광우 (`KOR-GANG`)** | **Ontology Operations & Closed-loop** | 분석 결과를 Decision/Action/Maintenance/Ontology state로 되돌리고, What-if와 업무 피드백 루프를 실제로 동작시킴 | → **호범** Report operational context, → **우수** Product surface |
+| **우수 (`oosuhada`)** | **Product AI & Integration** | 여러 Domain 결과를 Product API/Report Backend/LLM Runtime/Frontend로 조합하고, CI·E2E·배포·Release까지 실제 사용자 서비스로 완성 | → **전체 팀** Acceptance/Release, → **최종 사용자** |
 
----
-
-## 2. 전체 연결 흐름
+### 역할을 한 문장으로 요약하면
 
 ```text
-gen_data
-Canonical V3.1 source
-        ↓
-성민
-Extraction / Feature / Label / Train
-        ↓
-Model Artifact
-        ↓
-호범
-Artifact Load / Runtime Inference
-        ↓
-Product Result Artifact / Evidence / API
-        ↓
-광우
-Decision / What-if / Recommended Action
-        ↓
-Maintenance Action / Ontology State
-        ↓
-우수
-Overview / Objects / Operations / Executive Brief
-        ↓
-Static Report + LLM Dynamic Report
-        ↓
-CI / E2E / Vercel·Render·Neon / 최종 Demo
+성민 = 모델의 전체 생명주기와 계약을 끝까지 책임진다.
+
+호범 = 모델 결과를 제품의 판단 근거로 만들고,
+       그 근거를 바탕으로 동적 보고서가 무엇을 말할 수 있는지 책임진다.
+
+광우 = 분석 결과를 실제 Decision / Action / Maintenance로 되돌려
+       온톨로지 기반 업무 Closed-loop를 완성한다.
+
+우수 = 세 사람의 결과를 Backend Product/AI 계층과 Frontend에서 조합하고,
+       CI / E2E / 배포까지 사용자에게 전달되는 하나의 제품으로 완성한다.
 ```
 
 ---
 
-# 3. 사람별 최종 책임
+## 2. 프로젝트 전체 연결 구조
+
+```text
+Biz-CollabCraft/gen_data
+Canonical V3.1 source / simulation / synthetic data
+        ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 성민 — ML Lifecycle & Contract Engineering                 │
+│ Extraction → Feature → Label → Train → Evaluate            │
+│ → Model Artifact → Retrain / Version / Quality             │
+└─────────────────────────────────────────────────────────────┘
+        ↓ Model Artifact + Contract
+┌─────────────────────────────────────────────────────────────┐
+│ 호범 — Backend Intelligence & Dynamic Reporting            │
+│ Artifact Load → Runtime Inference → Product Result          │
+│ → Evidence → Report Grounding → Dynamic Narrative Rules    │
+└─────────────────────────────────────────────────────────────┘
+        ↓ Product Result / Evidence
+┌─────────────────────────────────────────────────────────────┐
+│ 광우 — Ontology Operations & Closed-loop                   │
+│ RiskEvent → Recommendation → Decision → Action             │
+│ → Maintenance → Ontology State → Feedback                  │
+└─────────────────────────────────────────────────────────────┘
+        ↓ Result / Evidence / Decision / Action / Activity
+┌─────────────────────────────────────────────────────────────┐
+│ 우수 — Product AI & Integration                            │
+│ Product Aggregation API → Static Report Backend            │
+│ → LLM Runtime Integration → Frontend / Visualization       │
+│ → CI / E2E / Deployment / Release                          │
+└─────────────────────────────────────────────────────────────┘
+        ↓
+Overview / Objects / Operations / Executive Brief / API
+```
+
+이 구조에서 한 사람이 자기 앞 단계만 끝내고 빠지는 것이 아니라, 뒤 단계에서 발견되는 계약 불일치·품질 문제·통합 이슈를 자기 전문 축에서 계속 해결한다.
+
+---
+
+# 3. 사람별 프로젝트 전체 책임
 
 ## 3.1 성민 (`smmini`)
 
-### 최종 책임
+### Role: ML Lifecycle & Contract Engineering
 
-**Generator와 학습 결과 계약의 owner**로 한다.
+성민의 역할은 단순히 “모델 하나 학습시키기”가 아니다.
 
-성민의 책임 끝점은 다음이다.
+**데이터가 모델 입력으로 변환되는 순간부터 최종 발표 환경에서 동일 Artifact가 재현되고 설명될 때까지 ML lifecycle 전체를 책임진다.**
+
+### Primary Ownership
 
 ```text
-Canonical source
-→ Extraction
+Source Data
+→ Extraction / Profiling
+→ Semantic Mapping
 → Feature Engineering
-→ Label
-→ Model Training / Evaluation
-→ Immutable Model Artifact Publish
+→ Label Generation
+→ Training / Evaluation
+→ Model Artifact Publish
+→ Artifact Version / Reproducibility
+→ Retraining / Quality Regression
+→ Runtime Compatibility Support
 ```
 
-추가로 **Backend API / Artifact 계약 명세 작성**까지 맡는다.
+### 프로젝트 전반 담당 작업
 
-단, Backend runtime 구현 자체는 맡지 않는다.
-
-### 담당 작업
-
-- Extraction / profiling / semantic mapping
+- Canonical source extraction / profiling
+- asset별 시계열 격리와 deterministic ordering
 - Feature Engineering
 - Feature naming contract
-- Label contract
-- prediction horizon 반영
-- target leakage 방지
+- Label contract와 prediction horizon
+- active failure 구간 제외 및 leakage 방지
 - 모델 학습 / 평가
-- Model Artifact v1.0 생성
+- Model Artifact v1.0 publish
+- manifest / SHA-256 / provenance
 - immutable / atomic publish
-- manifest / checksum / provenance
-- Generator health / train / retrain endpoint
-- Backend가 소비할 API request / response schema 초안
-- Product Result / Evidence API shape 명세
-- Artifact error / compatibility contract 명세
-- OpenAPI 수준의 계약 문서 정리
+- training config와 dataset version 기록
+- 모델 재학습 / artifact version 갱신
+- Backend loader와 Artifact compatibility 검증 지원
+- inference 결과 이상 시 feature parity / model input 문제 분석
+- Top factor / explainability에 필요한 모델 출력 의미 정리
+- What-if에서 변경 가능한 입력과 변경 불가능한 입력의 모델 관점 검토
+- Report에 들어갈 model version / metrics / limitation provenance 제공
+- golden vector / artifact round-trip test 유지
+- 최종 발표용 모델 결과 재현성 검증
 
-### 필수 산출물
+### Backend API / Artifact 계약에서의 역할
+
+성민은 Backend implementation owner가 아니라 **ML producer 관점의 계약 작성자**다.
+
+```text
+성민
+Model Artifact / Prediction Output Contract 제안
+        ↓
+호범
+Backend consumer 관점 검토
+        ↓
+합의된 Contract
+        ↓
+호범 / 우수
+Runtime / Product integration 구현
+```
+
+### Model Artifact 필수 산출물
 
 ```text
 manifest.json
@@ -99,157 +145,169 @@ history_requirement.json
 metrics.json
 ```
 
-### 계약 작성과 구현의 분리
+### 프로젝트 후반에도 계속 맡는 일
 
-```text
-성민
-Backend API / Artifact Contract 작성
-        ↓
-호범
-구현 가능성 검토 및 소비자 관점 승인
-        ↓
-합의된 Contract
-        ↓
-호범
-Backend 실제 구현
-```
+Model Artifact가 발행됐다고 성민 역할이 끝나지 않는다.
+
+- Backend에서 Artifact를 못 읽으면 producer/consumer contract 원인 분석
+- 데이터 분포가 바뀌면 retraining 필요 여부 판단
+- 모델 버전 변경 시 regression 비교
+- UI/Report의 top factor가 모델 의미와 다르면 semantic alignment 수정
+- What-if 입력이 모델 Feature contract를 깨지 않는지 검토
+- 최종 E2E에서 동일 input → 동일 model result 재현성 확인
+- 발표에서 dataset → feature → model → artifact lineage 설명
 
 ### 하지 않을 일
 
-- Backend runtime inference 구현
-- Product Result Artifact 최종 producer 구현
-- Evidence 최종 producer 구현
-- `/internal/predict*` Generator 소유
-- Frontend 구현
-- 범용 Schema Registry
-- 범용 Workflow Engine
-- multi-version negotiation infrastructure
-- 새 microservice 추가
+- Product Result Artifact 최종 producer 소유
+- Evidence 최종 producer 소유
+- Generator가 `/internal/predict*` 제품 runtime을 소유
+- Product UI 구현
+- 범용 Feature Store 구축
+- 범용 Model Registry 플랫폼 구축
+- 필요하지 않은 multi-version compatibility framework 확장
 
-### 완료 조건
+### 최종 완료 조건
 
-> **Backend가 실제로 읽을 수 있는 Model Artifact를 1개 발행하고, 그 Artifact와 API 계약을 호범에게 넘기면 완료.**
+> **학습 코드가 동작하는 것뿐 아니라, 최종 배포에서 사용 중인 Model Artifact의 입력·출력·버전·평가·재현성을 팀이 설명하고 다시 생성할 수 있어야 완료다.**
 
 ---
 
 ## 3.2 호범 (`enjoylonelines`)
 
-### 최종 책임
+### Role: Backend Intelligence & Dynamic Reporting
 
-**Backend Product Runtime owner**로 한다.
+호범은 **모델 결과를 제품에서 신뢰할 수 있는 판단 근거로 변환하는 Backend Intelligence 축**을 책임진다.
 
-성민이 만든 Model Artifact와 계약을 입력으로 받아 실제 서비스 결과를 만든다.
+그리고 Product Result / Evidence가 안정화된 이후에는 **Evidence-grounded 동적 보고서 기능의 feature owner**를 맡는다.
+
+### Primary Ownership
 
 ```text
 Model Artifact
-        ↓
-Artifact Loader
-        ↓
-Current Observation
-        ↓
-Runtime Inference
-        ↓
-Product Result Artifact
-        ↓
-Evidence
-        ↓
-Product API
+→ Artifact Validation / Load
+→ Runtime Inference
+→ Product Result Artifact
+→ Evidence Payload / Provenance
+→ Event Evidence Projection
+→ Report Grounding Contract
+→ Dynamic Report Content / Prompt Rules
+→ Narrative Validation / Limitation Policy
 ```
 
-### 담당 작업
+### Backend Intelligence 담당 작업
 
 - Model Artifact loader
 - manifest / checksum / compatibility validation
 - current observation 조회
 - history requirement 처리
 - runtime inference orchestration
-- failure probability / status 산출
+- failure probability / failure type / status 산출
+- `normal / warning / danger / unavailable` 처리
 - Product Result Artifact 생성
-- Evidence enrichment
+- `evidence_payload` producer-side enrichment
+- source field evidence
+- sensor evidence
+- component hypothesis
+- `evidence_gap` invariant
 - Evidence provenance
+- Event Evidence projection
 - Product API endpoint 구현
 - DB persistence / query
-- unavailable / corrupt / unsupported artifact 처리
+- corrupt / unsupported Artifact fail-fast
 - Backend integration test
-- 광우 Closed-loop가 사용할 Backend service 연결
 
-### 상태 계약
+### Dynamic Report 담당 작업
 
-최소 다음 상태를 명확히 처리한다.
+호범이 **동적 보고서 feature owner**다.
+
+다만 “LLM SDK 연결과 전체 제품 통합”까지 한 사람에게 몰지 않고 역할을 다음처럼 분리한다.
+
+#### 호범이 소유하는 것
+
+- 어떤 Product Result / Evidence가 보고서 근거가 될 수 있는지 정의
+- Report Grounding Contract
+- 정적 보고서에서 LLM에 전달할 허용 필드 정의
+- prompt template의 내용 구조
+- 관리자용 narrative 요구사항
+- `evidence_gap` / `limitations` 문장화 규칙
+- Evidence에 없는 사실을 말하지 못하도록 generation rule 정의
+- dynamic report output schema
+- narrative validation rule
+- 숫자 / 상태 / 원인 consistency validation
+- hallucination guard 기준
+- deterministic fallback이 필요한 조건 정의
+- 동적 보고서 품질 테스트 케이스
+
+#### 우수에게 넘기는 것
 
 ```text
-normal
-warning
-danger
-unavailable
+Report Grounding Contract
+Prompt / Output Contract
+Validation Rules
+        ↓
+우수
+LLM provider runtime / orchestration / API / UI / deployment
 ```
 
-`unavailable`은 다음과 같은 상황에서 명시적으로 발생해야 한다.
+즉 **동적 보고서가 무엇을 말해야 하고 무엇을 말하면 안 되는지는 호범 책임**, 실제 외부 LLM provider 연결과 제품 runtime orchestration은 우수 책임이다.
 
-- history 부족
-- corrupt artifact
-- unsupported artifact
-- incompatible contract
-- 필수 입력 부재
+### 프로젝트 후반에도 계속 맡는 일
 
-### 현재 #24 관련 원칙
-
-기존 Generator prediction 구현에서 재사용할 수 있는:
-
-- model load
-- predict
-- SHAP / factor 계산
-
-등은 Backend diagnosis 쪽으로 가져와 재구성한다.
-
-### 현재 계획 범위에서의 우선순위
-
-PR #25에서 Product Result Artifact의 `evidence_payload` 계약은 고정되었지만, 현재 남은 직접 구현 범위는 Backend producer가 실제 `evidence_payload`를 산출하는 단계다.
-
-따라서 현재 호범의 우선 역할은 Product Result Artifact / Evidence / Product API가 Report와 Closed-loop가 소비할 수 있는 구조화 데이터를 안정적으로 제공하도록 만드는 것이다.
-
-보고서와 LLM 쪽은 이 우선순위 작업 이후 진행한다. 이때 LLM은 새로운 판단을 만드는 기능이 아니라, Backend producer 산출물과 정적 보고서를 grounding source로 사용해 관리자용 문장화, 요약, fallback을 담당하는 범위로 둔다.
-
-우선순위 작업 이후 호범이 Report / LLM 영역에서 맡을 수 있는 일은 다음이다.
-
-- Report가 필요로 하는 Backend 필드 제공 가능 여부 검토
-- Product Result Artifact / Evidence에서 제공할 수 없는 운영·정비·집계 데이터 구분
-- 산출 불가능한 값이 `evidence_gap` / `limitations` / `근거 부족`으로 남도록 producer 계약 보강
-- 정적 보고서 기반 LLM prompt / output 검증 / deterministic fallback 연결
+- Frontend/Report에서 필요한 Evidence가 부족하면 producer enrichment 보강
+- 광우 Action 결과가 Report에 포함되도록 projection 구조 조정
+- LLM report에서 근거 없는 문장이 발견되면 grounding/prompt/validation 수정
+- API response와 Report source 데이터 consistency 검증
+- Backend 성능 / unavailable / 오류 경로 검증
+- 최종 발표 시 Prediction → Evidence → Dynamic Report lineage 설명
 
 ### 하지 않을 일
 
-- Feature Engineering 정책 변경
-- Label 정책 변경
+- Feature Engineering 정책 소유
+- Label 정책 소유
 - 모델 학습 소유
-- Frontend 구현
+- LLM provider SDK / secret / deployment platform 단독 소유
+- Executive Brief Frontend surface 소유
 - Generator daemon 확장
-- 장기 계약 거버넌스 설계
+- 장기 범용 계약 거버넌스 플랫폼 구축
 
-### 완료 조건
+### 최종 완료 조건
 
-> **성민의 Model Artifact를 실제로 로드하고, current observation에 대해 Product Result Artifact와 Evidence를 API로 반환하면 완료.**
+> **Backend가 Model Artifact를 사용해 Product Result/Evidence를 안정적으로 제공하고, 동적 보고서가 그 Evidence에 근거해 검증 가능한 문장만 생성하도록 규칙과 품질을 보장해야 완료다.**
 
 ---
 
 ## 3.3 광우 (`KOR-GANG`)
 
-### 최종 책임
+### Role: Ontology Operations & Closed-loop
 
-**Ontology Closed-loop와 분석 결과의 업무 반영 흐름 owner**로 한다.
+광우는 “분석 결과를 보여주는 것”에서 끝내지 않고, **그 결과가 실제 업무 Decision과 Action으로 다시 돌아가는 온톨로지 Closed-loop**를 책임진다.
 
-광우가 원하는 “분석 결과가 다시 설비·공정에 반영되는 온톨로지 서비스”는 범용 플랫폼이 아니라 **하나의 대표 Closed-loop Use Case**로 증명한다.
+범용 플랫폼을 만드는 것이 아니라 대표 Use Case 하나를 E2E로 완성해 프로젝트의 온톨로지 서비스성을 증명한다.
+
+### Primary Ownership
+
+```text
+Equipment / Process Context
+→ RiskEvent
+→ Evidence Association
+→ What-if / Recommendation
+→ Decision
+→ MaintenanceAction
+→ MaintenanceEvent
+→ Ontology State Update
+→ Activity / Audit Trail
+→ Feedback to Product / Report
+```
 
 ### 대표 Use Case
 
 **CNC Tool Replacement Closed-loop**
 
 ```text
-CNC 센서
+CNC 위험 상승
         ↓
-위험 상승
-        ↓
-Product Result Artifact / Evidence
+Product Result / Evidence
         ↓
 What-if / Recommendation
         ↓
@@ -259,26 +317,44 @@ TOOL_REPLACEMENT Action
         ↓
 Maintenance Event
         ↓
-Ontology Equipment 상태 반영
+Equipment / Ontology State Update
         ↓
-Dashboard / Report에서 조치 결과 확인
+Activity 기록
+        ↓
+Dashboard / Report에 결과 재반영
 ```
 
-### 담당 작업
+### 프로젝트 전반 담당 작업
 
-- RiskEvent와 Equipment 연결
-- Evidence와 RiskEvent 연결
-- RecommendedAction 생성
-- What-if 결과와 Action 연결
-- 관리자 Decision
-- MaintenanceAction 생성
-- MaintenanceEvent 생성
-- Action 완료 상태
+- Equipment / component / process context 정리
+- RiskEvent와 Equipment 관계
+- Evidence와 RiskEvent 관계
+- Recommendation / What-if semantics
+- Decision model
+- RecommendedAction
+- MaintenanceAction
+- MaintenanceEvent
+- Action state transition
 - Activity / audit trail
-- Ontology state 반영
-- Action 이후 UI에서 다시 조회 가능한 상태 제공
+- Ontology state update
+- before / after state 비교
+- 조치 이후 다음 Event / Result와의 연결
+- Closed-loop API
+- Operations 화면이 소비할 workflow state 제공
+- Report가 소비할 Decision / Action / Activity context 제공
+- What-if 결과와 실제 Action을 구분
+- 실제 설비 자동제어가 아닌 human approval 기반 업무 반영
 
-### 최소 Ontology 관계
+### 프로젝트 후반에도 계속 맡는 일
+
+- 모델/Backend 결과를 실제 RiskEvent로 연결
+- Evidence가 새로 추가되면 Ontology association 보강
+- Operations UI에서 필요한 workflow state 개선
+- 보고서에서 “무엇을 판단했고 무엇을 실행했는가” 데이터 제공
+- E2E에서 Action 완료 후 state가 실제로 되돌아오는지 검증
+- 발표에서 prediction → decision → action → feedback loop 시연
+
+### 최소 관계
 
 ```text
 Equipment
@@ -294,10 +370,10 @@ Manager ─ APPROVES ───────────────────�
                                              ↓
                                       MaintenanceEvent
                                              ↓
-                                        Equipment
+                                       UPDATES Equipment
 ```
 
-### 추천 API 범위
+### 최소 API 범위
 
 ```text
 POST /events/{event_id}/decision
@@ -308,279 +384,202 @@ GET  /events/{event_id}/activity
 
 ### 하지 않을 일
 
-- 범용 Ontology Engine
-- 범용 Workflow Engine
-- MES / ERP 구축
+- 범용 Ontology Engine 구축
+- 범용 Workflow Engine 구축
+- MES / ERP 전체 구현
 - 실제 설비 자동 정지
-- Agent framework 확장
-- 모든 Action 유형 구현
+- 범용 Agent framework 확장
+- 모든 공정 / 모든 Action 유형 구현
 
-### 완료 조건
+### 최종 완료 조건
 
-> **한 개의 CNC 위험 Event에서 Evidence → Recommendation → Decision → Tool Replacement Action → MaintenanceEvent → Ontology 상태 갱신까지 한 사이클이 실제로 동작하면 완료.**
+> **한 개 대표 CNC Event에서 Evidence → Recommendation → Decision → Action → Maintenance → Ontology 상태 갱신 → Dashboard/Report 재반영까지 한 사이클이 실제로 돌아야 완료다.**
 
 ---
 
 ## 3.4 우수 (`oosuhada`)
 
-### 최종 책임
+### Role: Product AI & Integration
 
-**최종 Product Integration / Frontend / Report / CI / Release owner**로 한다.
+우수는 Frontend만 담당하지 않는다.
 
-UI·UX에서 끝나는 역할이 아니라, 다른 세 사람의 결과를 실제 사용 가능한 하나의 서비스로 통합한다.
+**각 Domain의 결과를 실제 제품이 소비할 수 있도록 Backend application layer에서 조합하고, Report Backend와 LLM Runtime을 연결한 뒤 Frontend·CI·E2E·배포까지 책임지는 Full-stack Product Integration 역할**을 맡는다.
 
-### 담당 영역
-
-```text
-Frontend
-UI / UX
-Executive Brief
-LLM Report
-CI
-E2E
-Deployment
-Release
-Final Demo
-```
-
-### A. Frontend / UI·UX
-
-다음 4개 공식 MVP 화면을 제품 흐름으로 연결한다.
+### Primary Ownership
 
 ```text
-Overview
-→ Objects
-→ Operations
-→ Executive Brief
+Diagnosis Result / Evidence       ← 호범
+Decision / Action / Activity      ← 광우
+Model provenance / metrics        ← 성민
+              ↓
+Product Aggregation / Report Context Backend
+              ↓
+Static Executive Brief Backend
+              ↓
+LLM Provider Runtime / Orchestration
+              ↓
+Product API / Frontend / Visualization
+              ↓
+CI / E2E / Deployment / Release
 ```
 
-#### Overview
+### Backend / Product Application 담당 작업
 
-- 전체 설비 상태
-- 정상 / 주의 / 경고 / 위험 분포
-- 주요 위험 설비
-- 다음 상세 화면 진입점
+- Product-oriented aggregation API
+- 여러 Domain API 결과 orchestration
+- Report Context Builder
+- deterministic Static Report model
+- Executive Brief backend endpoint
+- LLM provider adapter 실제 연결
+- API key / environment configuration
+- LLM client runtime
+- timeout / retry
+- structured output parsing
+- schema validation
+- report generation orchestration
+- generation status
+- optional cache / persistence
+- LLM failure → deterministic report fallback wiring
+- Report API와 Frontend 연결
 
-#### Objects
+예시 Product/Application API:
 
-- 개별 설비 상세
-- 센서 / 추세
+```text
+GET  /api/equipment/{equipment_id}/overview
+GET  /api/events/{event_id}/workspace
+GET  /api/reports/{event_id}/context
+POST /api/reports/{event_id}/generate
+GET  /api/reports/{report_id}
+POST /api/reports/{report_id}/regenerate
+```
+
+위 API는 새로운 Domain Truth를 만들기 위한 것이 아니라 기존 Domain 결과를 제품 단위로 조합하는 application layer다.
+
+```text
+성민 / 호범 / 광우
+= Domain Truth Producer
+
+우수
+= Product/Application Orchestrator
+```
+
+### Frontend / Visualization 담당 작업
+
+- Overview
+- Objects
+- Operations
+- Executive Brief
+- role-aware surface
+- sensor trend
 - failure probability
-- top factors
-- Evidence
-- provenance
+- state timeline
+- top contributing factors
+- Evidence / provenance visualization
+- What-if before / after
+- Decision / Action UI
+- Maintenance Activity
+- loading / empty / error / unavailable
+- cross-screen equipment/event/result identity consistency
 
-#### Operations
+### Static Executive Brief 담당
 
-- Risk Event
-- Evidence
-- Decision
-- Recommended Action
-- Maintenance Action
-- Activity
-- Closed-loop 상태
-
-#### Executive Brief
-
-- 동일 Event / Result / Evidence를 보고서 형태로 표현
-- 관리자·임원 관점의 핵심 요약 제공
-
-### B. Executive Brief — 1단계: 정적 보고서
-
-먼저 **LLM 없이도 항상 생성 가능한 deterministic/static report**를 구현한다.
-
-입력:
+정적 보고서는 우수가 owner다.
 
 ```text
-Product Result Artifact
+Product Result
 Evidence
 Decision
-RecommendedAction
-MaintenanceAction
+Action
 Activity
+Model Provenance
+       ↓
+Report Context Builder
+       ↓
+Deterministic Static Report
+       ↓
+Executive Brief UI
 ```
 
-정적 보고서 구성:
+정적 보고서는 LLM이 없어도 반드시 동작해야 한다.
+
+### LLM Runtime에서의 역할
+
+동적 보고서의 **내용/grounding feature owner는 호범**이지만, 실제 LLM Runtime과 제품 연결은 우수가 맡는다.
 
 ```text
-1. 상황 요약
-2. 위험 설비
-3. 고장 위험 / 상태
-4. 주요 판단 근거
-5. 권고 조치
-6. 관리자 결정
-7. 실제 수행 Action
-8. 현재 조치 상태
-9. 데이터 / 모델 / Artifact provenance
-10. 제한사항
+호범
+Grounding / Prompt / Output / Validation Contract
+        ↓
+우수
+LLM Provider Adapter
+→ Runtime Invocation
+→ Structured Output Parse
+→ Validation Pipeline 연결
+→ Static Fallback
+→ Report API
+→ Executive Brief UI
 ```
 
-#### 정적 보고서 완료 조건
+따라서 우수도 LLM과 Backend를 직접 구현하지만, Evidence 의미나 narrative truth rule을 임의로 변경하지 않는다.
 
-- LLM 없이 생성 가능
-- 같은 입력이면 같은 결과
-- Dashboard 숫자와 일치
-- 없는 정보를 생성하지 않음
-- Evidence source reference 유지
-- Report fallback으로 항상 사용 가능
+### CI / Acceptance / Release 담당 작업
 
-### C. Executive Brief — 2단계: LLM 기반 동적 보고서
-
-정적 보고서를 기준 데이터로 사용하고, 그 위에서 **문장 표현만 LLM이 동적으로 생성**하도록 한다.
-
-```text
-Structured Report Data
-        ↓
-Grounded Prompt
-        ↓
-LLM
-        ↓
-Executive Narrative
-```
-
-LLM이 맡는 영역:
-
-- 상황 요약 문장
-- 위험 설명
-- 주요 원인 설명
-- 관리자용 시사점
-- 권고 조치 설명
-- Decision / Action 결과 설명
-- 보고서 문체 변환
-
-LLM이 하지 않는 영역:
-
-- 새로운 수치 생성
-- 새로운 고장 원인 추측
-- 없는 정비 이력 생성
-- 없는 비용 / 손실 계산
-- Evidence에 없는 근거 생성
-
-#### LLM Report 원칙
-
-```text
-Structured data = Truth
-LLM = Expression layer
-```
-
-LLM 실패 시:
-
-```text
-LLM Report
-   ↓ 실패
-Static Deterministic Report
-```
-
-로 fallback한다.
-
-#### 동적 보고서 완료 조건
-
-- 같은 Product Result / Evidence를 grounding
-- 정적 보고서의 숫자와 불일치 없음
-- 근거 없는 주장 없음
-- LLM 실패 시 정적 보고서 정상 표시
-- manager / engineer 등 역할별 문체 차이 가능
-- 최종 Executive Brief 화면에서 동작
-
-### D. CI
-
-우수가 전체 흐름의 통합 안전망을 담당한다.
-
-```text
-Generator
-        ↓
-Model Artifact Contract
-        ↓
-Backend Runtime
-        ↓
-Product Result / Evidence
-        ↓
-Closed-loop Action
-        ↓
-Frontend
-        ↓
-Executive Brief
-        ↓
-E2E
-```
-
-CI에서 단계적으로 검증할 항목:
-
-- Architecture rules
-- Generator standalone import
-- Feature / Label tests
-- Model Artifact publish
-- JSON Schema validation
-- Backend Artifact load
-- Product Result / Evidence contract
-- Closed-loop Action API
-- Frontend unit
-- production build
-- Playwright E2E
+- architecture rules
+- contract validation
+- Model Artifact publish/load round-trip
+- Backend integration gate
+- Product API contract test
+- Closed-loop E2E
+- Frontend unit/build
+- Playwright user journey
 - Docker runtime smoke
+- Vercel / Render / Neon integration
+- preview deployment verification
+- final release gate
+- demo account / final URL / fallback scenario
 
-### CI 역할 원칙
+### 프로젝트 후반에도 계속 맡는 일
 
-> 다른 팀원의 구현을 대신 수정하는 것이 아니라, **잘못된 구현이 main에 들어오기 전에 자동으로 실패시키는 역할**을 한다.
-
-### E. 배포 / Release
-
-최종 공개 실행 환경을 우수가 책임진다.
-
-```text
-Vercel
-Frontend
-        ↓
-Render
-FastAPI Backend
-        ↓
-Neon
-PostgreSQL
-```
-
-완료 기준은:
-
-> “로컬에서 된다”가 아니라 **“발표용 공개 URL에서 처음부터 끝까지 된다”**.
+- 새 Backend 결과가 Product UI와 Report에 실제로 연결되는지 검증
+- Domain 사이 ID / timestamp / status 불일치 해결
+- LLM Runtime 오류와 fallback UX 검증
+- 배포 환경 secret / proxy / CORS / DB 연결 검증
+- 전체 시나리오 Playwright/E2E 유지
+- 최종 발표 환경과 demo flow 책임
 
 ### 하지 않을 일
 
-- Generator 내부 ML 구현 대행
-- Backend runtime 구현 대행
-- 광우의 Action/Ontology 구현 대행
-- 각 팀원의 기능을 대신 고치는 방식의 통합
+- ML Feature / Label 의미 임의 변경
+- Product Result/Evidence Truth 임의 생성
+- 광우 Action/Ontology semantics 임의 변경
+- LLM이 새로운 사실을 만들어 Domain Truth를 대체하게 하는 구현
 
-### 완료 조건
+### 최종 완료 조건
 
-> **4명의 산출물을 하나의 사용자 흐름으로 연결하고, 공개 배포 환경에서 E2E 시나리오와 Executive Brief까지 정상 동작하면 완료.**
+> **다른 세 사람의 Domain 산출물이 실제 공개 URL에서 하나의 Product API / Dashboard / Closed-loop / Executive Brief / LLM Report로 연결되고, CI/E2E로 재현 가능해야 완료다.**
 
 ---
 
-# 4. Step별 실행 계획
+# 4. Step별 역할 분배
+
+아래 Step은 “해당 단계의 담당자 한 명”을 의미하지 않는다.
+
+각 Step마다 네 사람이 자기 전문 축에서 해야 할 일을 동시에 수행하고, 다음 단계로 전달할 산출물을 만든다.
+
+---
 
 ## Step 1. 공통 계약 기준선 고정
 
-### 성민
+### 목표
 
-- Feature Contract 확정
-- Label Contract 확정
-- Model Artifact v1.0 계약 확정
-- Backend API / Artifact 계약 초안 작성
+Feature / Label / Model Artifact / Product Result / Evidence / Action / Report가 서로 다른 팀원의 구현에서도 같은 의미를 갖도록 계약을 고정한다.
 
-### 호범
-
-- Backend 소비자 관점 계약 검토
-- 실제 구현 가능한 API / Artifact 계약인지 승인
-- runtime 입력 / 출력 경계 확인
-
-### 광우
-
-- Closed-loop에 필요한 Product Result / Evidence / Decision 필드 확인
-- 추가 필드가 필요하면 계약 단계에서만 요청
-
-### 우수
-
-- Frontend / Executive Brief에서 필요한 API 필드 확인
-- CI에서 검증할 계약 목록 정리
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | Feature/Label/Model Artifact/Prediction Output 계약 작성, training provenance와 model runtime 요구사항 정의 | Feature/Label schema, Model Artifact v1.0 contract |
+| **호범** | Backend consumer 관점에서 Artifact 계약 검토, Product Result/Evidence 및 `evidence_payload` contract 확인 | Backend runtime/result/evidence contract |
+| **광우** | Event/Decision/Action/Maintenance/Activity에 필요한 ID·상태·관계 정의 | Closed-loop domain contract |
+| **우수** | Frontend/Report/Product API consumer 관점 필드 검토, acceptance criteria와 CI gate 정의 | Product/Report input contract, contract test plan |
 
 ### 완료 조건
 
@@ -588,402 +587,499 @@ PostgreSQL
 Feature Contract
 Label Contract
 Model Artifact Contract
-Product API Contract
-Result / Evidence Contract
+Product Result / Evidence Contract
 Action Contract
 Report Input Contract
 ```
 
-의 역할과 owner가 명확하다.
+의 producer와 consumer가 명확하다.
 
 ---
 
-## Step 2. Generator Feature / Label 구현 완료
+## Step 2. Feature / Label Pipeline 구현
 
-### 성민
+### 목표
 
-- asset별 시계열 격리
-- timestamp canonicalization
-- deterministic ordering
-- Feature naming
-- prediction horizon label
-- active failure 구간 제외
-- leakage 방지
-- Feature Schema 생성
+Canonical source를 재현 가능한 학습 입력과 label로 변환한다.
 
-### 우수
-
-- 관련 contract test가 CI에서 실행되도록 연결
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | extraction, asset isolation, timestamp canonicalization, feature engineering, prediction horizon label, leakage 방지 구현 | deterministic Feature/Label dataset |
+| **호범** | 향후 runtime inference에 동일 feature 의미를 재현할 수 있는지 consumer 관점 검토, evidence source field와 연결 가능성 확인 | runtime/evidence 요구사항 feedback |
+| **광우** | feature/source field가 Equipment/Component/Process context와 연결 가능한지 semantic mapping 검토 | ontology field mapping |
+| **우수** | Feature/Label 관련 contract test와 CI gate 추가, schema drift가 main에 들어오지 않도록 검증 | CI evidence / failure gate |
 
 ### 완료 조건
 
-> 동일 입력에서 deterministic Feature / Label이 생성되고 CI가 통과한다.
+> 동일 source와 config에서 deterministic Feature/Label이 생성되고, downstream이 필요한 의미 정보가 보존된다.
 
 ---
 
-## Step 3. Model Training / Artifact Publish 완성
+## Step 3. Model Training / Evaluation / Artifact Publish
 
-### 성민
+### 목표
 
-- 학습
-- 평가
-- metrics
-- Model Artifact 6-file 생성
-- immutable / atomic publish
-- checksum / provenance
-- Artifact publish test
+Backend가 독립적으로 소비할 수 있는 immutable Model Artifact를 실제 발행한다.
 
-### 호범
-
-- 실제 Backend loader에서 사용할 샘플 Artifact 검토
-
-### 우수
-
-- publish → schema validation CI 연결
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | train/evaluate, metrics, 6-file Artifact, checksum, provenance, atomic publish, retrain/version 정책 구현 | 실제 Model Artifact + metrics |
+| **호범** | 샘플 Artifact를 Backend loader 관점에서 사전 검토하고 consumer fixture 준비 | loader acceptance fixture |
+| **광우** | model output/failure type/top factor가 RiskEvent/Recommendation으로 연결될 최소 semantic requirement 검토 | ontology consumption mapping |
+| **우수** | Artifact publish/schema/round-trip CI 추가, Artifact version/provenance가 제품에서 노출 가능한지 확인 | CI publish gate + report provenance requirement |
 
 ### 완료 조건
 
-> 실제 Model Artifact 1개가 생성되고 Backend 쪽에 넘길 수 있다.
+> 실제 Model Artifact가 생성되고, 다른 프로세스가 Generator Python 구현 없이 읽을 수 있다.
 
 ---
 
-## Step 4. Backend Artifact Loader / Runtime Inference 구현
+## Step 4. Backend Artifact Loader / Runtime Inference
 
-### 호범
+### 목표
 
-- Artifact load
-- manifest validation
-- checksum validation
-- current observation
-- history requirement
-- runtime predict
-- status 계산
-- unavailable 처리
+학습 산출물을 실제 제품 runtime prediction으로 연결한다.
 
-### 성민
-
-- 계약상 불일치가 있는 경우에만 수정
-
-### 우수
-
-- Artifact publish → Backend load round-trip CI 연결
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | loader에서 발생하는 feature/schema/model version mismatch 분석, runtime feature parity 지원 | producer-side compatibility fix |
+| **호범** | Artifact validation/load, history requirement, current observation, inference, status/unavailable 처리 구현 | runtime prediction service |
+| **광우** | prediction 결과가 Equipment/RiskEvent identity와 연결되도록 asset/event key 검증 | runtime→ontology identity mapping |
+| **우수** | publish→load round-trip CI, Backend health/integration smoke, Product API에서 사용할 runtime adapter 요구사항 정리 | integration gate + application adapter plan |
 
 ### 완료 조건
 
-> 성민이 만든 Artifact를 호범 Backend가 독립적으로 읽고 inference한다.
+> 성민이 발행한 Artifact를 호범 Backend가 독립적으로 읽어 실제 observation에 inference한다.
 
 ---
 
-## Step 5. Product Result Artifact / Evidence API 완성
+## Step 5. Product Result Artifact / Evidence Enrichment
 
-### 호범
+### 목표
 
-- Product Result Artifact
-- Evidence
-- provenance
-- Product API
-- DB persistence/query
+Raw prediction을 Dashboard/Report/Action이 공통으로 소비할 수 있는 Product Result와 Evidence로 바꾼다.
 
-### 성민
-
-- API Contract와 실제 구현 간 차이 검토
-
-### 광우
-
-- Closed-loop에서 소비할 결과 연결
-
-### 우수
-
-- Objects / Operations 화면 연결 준비
-- contract CI 연결
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | top factor 의미, model metrics, model limitation, input feature provenance 제공 | model-side evidence metadata |
+| **호범** | Product Result Artifact, `evidence_payload`, source field/sensor/component hypothesis/evidence_gap/provenance producer 구현 | Product Result / Evidence API |
+| **광우** | Evidence를 RiskEvent/Equipment/Component와 projection하고 Action 판단에 필요한 정보 확인 | Event Evidence projection |
+| **우수** | Product Result/Evidence를 Product View Model로 변환할 aggregation adapter와 consumer contract test 구현 | Product aggregation input |
 
 ### 완료 조건
 
-> 동일 Result / Evidence를 API, UI, Closed-loop가 공통으로 소비할 수 있다.
+> API, Closed-loop, Dashboard, Report가 동일 Result/Evidence를 공유할 수 있다.
 
 ---
 
-## Step 6. Ontology Closed-loop 최소 구현
+## Step 6. Ontology Closed-loop 구현
 
-### 광우
+### 목표
 
-대표 시나리오:
+분석 결과가 실제 Decision / Action / Maintenance state로 되돌아가는 대표 loop를 완성한다.
 
-```text
-Risk Event
-→ Evidence
-→ Recommendation
-→ Decision
-→ TOOL_REPLACEMENT
-→ MaintenanceAction
-→ MaintenanceEvent
-→ Equipment State
-→ Activity
-```
-
-### 호범
-
-- 필요한 Backend API/service 지원
-- persistence 연결
-
-### 우수
-
-- Operations UI에 Action 흐름 연결
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | What-if 입력이 model feature contract와 물리적으로 모순되지 않는지 검토, 필요 시 재추론 입력 범위 정의 | model-side intervention constraints |
+| **호범** | Action 판단에 필요한 Evidence API 지원, before/after Result 비교와 report용 근거 구조 지원 | evidence/what-if support |
+| **광우** | Recommendation → Decision → TOOL_REPLACEMENT → MaintenanceEvent → Ontology state → Activity 구현 | 실제 closed-loop state/API |
+| **우수** | Operations용 Product API orchestration과 Decision/Action UI, 상태 전이 acceptance flow 구현 | usable closed-loop product flow |
 
 ### 완료 조건
 
-> 한 개 CNC Event에 대해 Closed-loop 1회가 실제로 완료된다.
+> 하나의 CNC Event가 Evidence 확인부터 Action 완료와 상태 재반영까지 한 번 실제로 돈다.
 
 ---
 
-## Step 7. Frontend 4개 화면 최종 연결
+## Step 7. Product API / 4개 화면 통합
 
-### 우수
+### 목표
+
+각 Domain API를 사용자가 이해할 수 있는 하나의 제품 흐름으로 묶는다.
+
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | UI에 노출되는 model status/factor/metrics가 모델 의미와 일치하는지 검토 | model interpretation feedback |
+| **호범** | Frontend가 요구하는 Result/Evidence field와 projection 누락 보완, API consistency 유지 | stable Product Result/Evidence API |
+| **광우** | Operations의 Decision/Action/Activity state와 ontology relation을 UI에 제공 | stable closed-loop API/state |
+| **우수** | Product aggregation API + Overview/Objects/Operations/Executive Brief navigation과 visualization 구현 | end-user product surface |
+
+### 화면 흐름
 
 ```text
 Overview
-→ Objects
-→ Operations
-→ Executive Brief
-```
-
-를 실제 Backend 데이터로 연결한다.
-
-### 호범 / 광우
-
-- UI에서 발견된 API 계약 오류만 수정
-
-### 완료 조건
-
-> 화면 간 동일 자산 / Event / Result / Evidence가 일관되게 연결된다.
-
----
-
-## Step 8. Executive Brief 정적 보고서 구현
-
-### 진입 조건
-
-이 단계는 Backend producer가 Product Result Artifact / Evidence를 실제로 산출한 뒤 진행한다.
-
-PR #25로 계약은 고정되었지만, `evidence_payload` 생성 구현과 Event Evidence projection 연결이 끝나기 전까지 Report 관련 작업은 mock / contract 검토 범위로 제한한다.
-
-### 우수
-
-먼저 LLM 없이 구조화된 보고서를 완성한다.
-
-```text
-Result
-Evidence
-Decision
-Action
-Activity
-        ↓
-Deterministic Executive Brief
+  ↓ equipment_id
+Objects
+  ↓ result_id / event_id
+Operations
+  ↓ decision / action / activity
+Executive Brief
 ```
 
 ### 완료 조건
 
-- 같은 데이터 → 같은 보고서
-- Dashboard와 숫자 일치
-- Evidence trace 가능
-- LLM 없이 항상 생성 가능
+> 동일 Equipment/Event/Result가 네 화면에서 같은 상태와 근거로 연결된다.
 
 ---
 
-## Step 9. LLM 기반 동적 Executive Brief 구현
+## Step 8. Deterministic Executive Brief / Report Backend
+
+### 목표
+
+LLM 없이도 항상 생성되는 정적 보고서와 Report Context를 먼저 완성한다.
 
 ### 진입 조건
 
-정적 Executive Brief가 먼저 완성되어야 한다.
+Backend producer가 Product Result / Evidence를 실제로 만들고, Closed-loop에서 Decision / Action / Activity를 조회할 수 있어야 한다.
 
-LLM은 새로운 판단을 만드는 작업이 아니라, 정적 보고서와 Evidence를 grounding source로 사용해 문장 표현을 바꾸는 단계로만 진행한다.
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | report에 노출할 model/dataset/artifact version, metrics, limitation provenance 제공 | model provenance block |
+| **호범** | Report가 사용할 Evidence field, evidence_gap, limitation, source reference 규칙 정의 | Report Grounding Contract |
+| **광우** | Decision/Action/Maintenance/Activity와 before/after operational context 제공 | operational report context |
+| **우수** | Report Context Builder, Static Report Backend/API, deterministic Executive Brief UI 구현 | Structured Executive Brief |
 
-### 우수
-
-정적 보고서 구조를 grounding source로 사용한다.
+### 정적 보고서 최소 구조
 
 ```text
-Structured Executive Brief
-        ↓
-Prompt
-        ↓
-LLM
-        ↓
-Natural-language Executive Brief
+1. 상황 요약
+2. 설비 / Event
+3. 위험 상태와 확률
+4. 주요 Evidence
+5. 모델 / 데이터 provenance
+6. Recommendation
+7. Decision
+8. Action / Maintenance
+9. 현재 상태
+10. Limitations / Evidence Gap
+```
+
+### 완료 조건
+
+- LLM 없이 생성 가능
+- 같은 입력 → 같은 결과
+- Dashboard 숫자와 일치
+- 없는 사실을 만들지 않음
+- source / evidence trace 가능
+
+---
+
+## Step 9. Evidence-grounded Dynamic Report + LLM Runtime
+
+### 목표
+
+정적 보고서를 Truth source로 두고, Evidence에 근거한 자연어 Executive Narrative를 생성한다.
+
+### 진입 조건
+
+Step 8의 Structured Executive Brief가 먼저 안정화되어야 한다.
+
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | 모델 결과/metrics/limitation 문장이 원래 Artifact 의미를 왜곡하지 않는지 검증 | model narrative validation cases |
+| **호범** | **Dynamic Report feature owner**: grounding selection, prompt content, output schema, narrative rule, evidence citation, hallucination guard, limitation/fallback rule, 품질 테스트 | Grounding/Prompt/Output/Validation Contract |
+| **광우** | Decision/Action/Activity 관련 문장이 실제 workflow state와 일치하는지 검증 | operational narrative validation cases |
+| **우수** | LLM provider adapter, runtime invocation, structured output parse, timeout/retry, validation pipeline 연결, static fallback, Report API, Executive Brief UI 연결 | deployed LLM report runtime |
+
+### 역할 경계
+
+```text
+호범
+= 동적 보고서의 내용과 Grounding 책임
+
+우수
+= 동적 보고서를 실제 LLM 서비스로 실행하고 제품에 연결하는 Runtime 책임
 ```
 
 ### 완료 조건
 
 - 숫자 hallucination 없음
-- Evidence에 없는 내용 생성 금지
+- Evidence에 없는 원인 생성 금지
+- Action 상태 왜곡 없음
 - 정적 보고서와 의미 불일치 없음
-- LLM 실패 시 deterministic fallback
+- LLM 실패 시 static fallback
+- 생성 결과 source trace 가능
 
 ---
 
-## Step 10. End-to-End CI 연결
+## Step 10. End-to-End CI / Acceptance 자동화
 
-### 우수
+### 목표
 
-다음 전체 흐름을 자동화한다.
+개별 PR 성공이 아니라 전체 서비스 흐름을 자동으로 보호한다.
+
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | feature/label/model artifact regression, reproducibility, golden vector, retraining smoke 유지 | ML quality gate |
+| **호범** | runtime/result/evidence/report-grounding Backend tests와 negative case 유지 | Backend intelligence gate |
+| **광우** | Decision/Action/Maintenance state transition과 closed-loop E2E fixture 유지 | closed-loop gate |
+| **우수** | 모든 gate를 GitHub Actions와 Playwright/Docker E2E로 묶고 release-blocking acceptance 관리 | integrated CI/release gate |
+
+### 핵심 E2E
 
 ```text
-Generator
+Source
+→ Feature / Label
 → Model Artifact
-→ Backend Load
 → Runtime Inference
 → Product Result / Evidence
-→ Decision / Action
-→ Frontend
+→ Recommendation / Decision / Action
+→ Maintenance / Activity
 → Executive Brief
+→ Dynamic Report
 ```
-
-### 각 담당자
-
-CI 실패가 자기 영역이면 자기 PR에서 수정한다.
 
 ### 완료 조건
 
-> main 기준 핵심 E2E gate가 green이다.
+> main의 핵심 acceptance gate가 green이고 실패 시 어느 역할의 문제인지 식별 가능하다.
 
 ---
 
-## Step 11. 공개 배포 환경 검증
+## Step 11. 공개 배포 / 운영 준비
 
-### 우수
+### 목표
+
+로컬이 아니라 실제 발표 환경에서 동일 파이프라인이 동작하게 한다.
+
+| 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
+|---|---|---|
+| **성민** | 배포 환경에서 사용하는 Model Artifact version 고정, 필요 시 retrain/publish, artifact reproducibility 확인 | release model artifact |
+| **호범** | Render Backend에서 Artifact load/inference/evidence/dynamic report grounding smoke, fail-fast 오류 경로 확인 | backend release sign-off |
+| **광우** | Neon 등 영속 환경에서 Decision/Action/Activity state와 closed-loop persistence 확인 | operations release sign-off |
+| **우수** | Vercel/Render/Neon, LLM secret, proxy/CORS, Product API, E2E, preview/final URL 검증 및 release orchestration | production-like demo environment |
+
+### 배포 기준
 
 ```text
 Vercel
-→ Render
-→ Neon
+Frontend
+        ↓
+Render
+FastAPI Backend / Report / LLM Runtime
+        ↓
+Neon
+PostgreSQL
+
+Model Artifact
+→ Backend Runtime
 ```
-
-실제 환경에서 검증한다.
-
-### 확인 항목
-
-- 로그인
-- Overview
-- Objects
-- Operations
-- Closed-loop Action
-- Executive Brief
-- LLM Report
-- fallback
-- logout
 
 ### 완료 조건
 
-> 로컬이 아닌 공개 URL에서 핵심 데모 전체가 동작한다.
+> 발표용 공개 URL에서 로그인부터 Dynamic Executive Brief까지 핵심 흐름이 실제로 동작한다.
 
 ---
 
-## Step 12. 최종 발표 시나리오 고정
+## Step 12. 최종 시연 / 발표 / 회귀 안정화
 
-최종 시나리오는 하나로 고정한다.
+### 목표
+
+새 기능을 추가하는 것이 아니라 하나의 스토리로 전체 기술 흐름을 증명한다.
+
+| 사람 | 이 Step의 책임 | 발표에서 설명할 축 |
+|---|---|---|
+| **성민** | 최종 Artifact 재현, 모델 품질/버전/feature-label lineage 확인, 발표 데이터 고정 | Source → Feature/Label → Model Artifact |
+| **호범** | Result/Evidence와 Dynamic Report grounding consistency 최종 검증 | Artifact → Runtime → Evidence → Grounded Narrative |
+| **광우** | 대표 CNC closed-loop 상태와 action history 안정화 | Evidence → Decision → Action → Maintenance → Feedback |
+| **우수** | 전체 demo orchestration, UI/LLM/배포/backup scenario, CI green, 발표용 최종 release | 여러 Domain을 하나의 사용자 Product로 통합 |
+
+### 최종 데모 시나리오
 
 ```text
 1. Overview에서 CNC 위험 상승 확인
-2. Objects에서 센서 / probability / top factor 확인
-3. Operations에서 Evidence 확인
-4. What-if / Recommendation 확인
+2. Objects에서 probability / sensor / top factor 확인
+3. Evidence와 provenance 확인
+4. Operations에서 Recommendation / What-if 확인
 5. 관리자 Decision
 6. TOOL_REPLACEMENT Action 생성
-7. Maintenance 완료 처리
-8. Activity / Ontology state 반영 확인
-9. Executive Brief 생성
-10. LLM 기반 동적 보고서 확인
+7. Maintenance 완료
+8. Activity / Ontology state 갱신 확인
+9. Static Executive Brief 확인
+10. Evidence-grounded Dynamic Report 확인
+11. 동일 근거가 Dashboard / Action / Report에 일관되게 사용됨을 설명
 ```
 
 ---
 
-# 5. 프로젝트 공통 작업 규칙
+# 5. 역할 간 인계 규칙
 
-## Rule 1. 새로운 아키텍처 제안 기준
+## 5.1 성민 → 호범
 
-다음 질문 하나로 결정한다.
+```text
+Model Artifact
++ Feature / Label Contract
++ history requirement
++ metrics / provenance
+```
+
+호범은 Generator implementation을 직접 import하지 않는다.
+
+---
+
+## 5.2 호범 → 광우
+
+```text
+Product Result Artifact
++ Evidence Payload
++ Event Evidence Projection
+```
+
+광우는 prediction truth를 다시 계산하지 않는다.
+
+---
+
+## 5.3 광우 → 호범 / 우수
+
+```text
+Decision
+RecommendedAction
+MaintenanceAction
+MaintenanceEvent
+Activity
+Ontology State
+```
+
+호범은 Report grounding에 사용하고, 우수는 Product/Report UI에 사용한다.
+
+---
+
+## 5.4 호범 → 우수: Dynamic Report 계약
+
+```text
+Grounding Fields
+Prompt Content Contract
+Output Schema
+Narrative Validation
+Fallback Conditions
+```
+
+우수는 이 계약을 사용해 실제 LLM provider runtime과 Product API를 구현한다.
+
+---
+
+## 5.5 우수 → 전체 팀
+
+```text
+CI Failure
+E2E Failure
+Integration Contract Failure
+Deployment Failure
+```
+
+문제가 발견되면 우수가 모든 코드를 대신 수정하는 것이 아니라, 해당 Domain owner에게 실패 근거를 넘기고 각 owner가 자기 영역을 수정한다.
+
+---
+
+# 6. 공통 작업 원칙
+
+## Rule 1. 역할은 Step이 끝나도 종료되지 않는다
+
+예를 들어 성민이 Model Artifact를 발행한 뒤에도:
+
+```text
+Backend mismatch
+Report model provenance 문제
+What-if feature constraint
+Final regression
+```
+
+은 계속 성민의 책임 범위다.
+
+같은 원칙을 네 사람 모두에게 적용한다.
+
+---
+
+## Rule 2. 새로운 아키텍처 제안은 E2E 필요성으로 판단한다
 
 > **이 작업을 하지 않으면 최종 E2E 데모가 동작하지 않는가?**
 
 - Yes → 지금 처리
 - No → Parking Lot
 
----
+다음은 기본적으로 Parking Lot 후보로 둔다.
 
-## Rule 2. 역할 경계
-
-```text
-성민 = 모델과 계약을 만든다
-호범 = 모델을 제품 결과로 만든다
-광우 = 결과를 실제 Action으로 되돌린다
-우수 = 모든 결과를 사용자 제품과 보고서로 완성한다
-```
-
----
-
-## Rule 3. 계약과 구현을 분리
-
-계약 작성자가 모든 구현까지 소유하지 않는다.
-
-예:
-
-```text
-성민
-Backend API 계약 작성
-        ↓
-호범
-소비자 검토
-        ↓
-호범
-Backend 구현
-```
+- 범용 Feature Store
+- 범용 Schema Registry
+- 범용 Workflow Engine
+- 범용 Ontology Engine
+- 여러 버전 동시 협상 인프라
+- 새 microservice 분리
+- 범용 Agent Platform
 
 ---
 
-## Rule 4. UI와 Report는 별도 데이터 생산자가 아니다
-
-Frontend / Report는 Backend Product Result / Evidence를 소비한다.
+## Rule 3. Contract 작성자와 구현자는 다를 수 있다
 
 ```text
-Backend Product Result / Evidence
-        ├─ Dashboard
-        ├─ Operations
-        └─ Executive Brief
+Producer
+Contract 제안
+    ↓
+Consumer
+구현 가능성 검토
+    ↓
+합의된 Contract
+    ↓
+각 Domain 구현
 ```
 
-같은 데이터를 서로 다른 방식으로 표현한다.
+계약을 작성했다는 이유로 다른 Domain 구현까지 소유하지 않는다.
+
+---
+
+## Rule 4. Domain Truth와 Product Orchestration을 구분한다
+
+```text
+성민 = Model Truth
+호범 = Prediction / Evidence Truth
+광우 = Decision / Action / Operational Truth
+우수 = Product / Report / LLM Runtime Orchestration
+```
+
+Product layer는 Domain Truth를 새로 만들어내지 않는다.
 
 ---
 
 ## Rule 5. LLM은 Truth Producer가 아니다
 
 ```text
-Structured Data = 사실
-LLM = 표현
+Structured Data / Evidence = Truth
+LLM = Expression Layer
 ```
 
-LLM이 실패해도 서비스와 보고서는 동작해야 한다.
+동적 보고서의 Grounding/내용 규칙은 호범이 책임지고, 실제 LLM Runtime/Product 연결은 우수가 책임진다.
+
+LLM 실패 여부와 관계없이 Static Executive Brief는 항상 제공되어야 한다.
 
 ---
 
-# 6. 최종 팀 완료 정의
+# 7. 최종 프로젝트 완료 정의
 
-프로젝트 완료는 네 사람이 각자 PR을 merge하는 것이 아니다.
+프로젝트 완료는 네 사람이 각각 자기 PR을 merge하는 것이 아니다.
 
-다음 하나의 흐름이 공개 환경에서 동작해야 완료다.
+다음 흐름이 **공개 배포 환경에서 하나의 사용자 시나리오로 동작하고 각 단계의 owner가 결과를 설명할 수 있어야** 완료다.
 
 ```text
-Canonical V3.1
-→ Feature / Label
-→ Model Training
-→ Model Artifact
-→ Backend Runtime Inference
-→ Product Result / Evidence
-→ Ontology Decision / Action
-→ Maintenance State
-→ Dashboard
-→ Executive Brief
-→ LLM Dynamic Report
+Canonical V3.1 Source
+        ↓
+Feature / Label
+        ↓
+Model Training / Evaluation
+        ↓
+Model Artifact
+        ↓
+Backend Runtime Inference
+        ↓
+Product Result / Evidence
+        ↓
+Ontology Recommendation / Decision / Action
+        ↓
+Maintenance / Activity / State Feedback
+        ↓
+Static Executive Brief
+        ↓
+Evidence-grounded Dynamic Report
+        ↓
+Dashboard / Report / API
 ```
 
-그리고 이 전체 흐름을 CI / E2E / 배포 환경에서 재현할 수 있어야 한다.
+그리고 이 전체 흐름을 CI / E2E / Vercel / Render / Neon 환경에서 재현할 수 있어야 한다.

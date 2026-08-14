@@ -97,14 +97,18 @@ LLM이 실패해도 정적 보고서는 항상 생성될 수 있어야 합니다
 
 ## 4. 팀 최종 역할 분배
 
-| 사람 | 최종 책임 | 산출물이 넘어가는 곳 |
-|---|---|---|
-| **성민 (`smmini`)** | Generator / Feature·Label / Model Training / Model Artifact + Backend API·Artifact 계약 명세 | → **호범** Backend 구현 |
-| **호범 (`enjoylonelines`)** | Backend Runtime / Model Artifact Loader / Runtime Inference / Product Result Artifact / Evidence / Product API 구현 | → **광우**, **우수** |
-| **광우 (`KOR-GANG`)** | Ontology Closed-loop / Decision / Recommended Action / Maintenance Action / What-if 활용 흐름 | → **우수** Frontend·Report |
-| **우수 (`oosuhada`)** | Frontend / UI·UX / CI / E2E / 배포 / 최종 통합 + Executive Brief 정적 보고서 + LLM 기반 동적 보고서 | → **최종 사용자 / 발표 데모** |
+각 담당자는 특정 기능 하나만 구현하고 끝나는 것이 아니라, 프로젝트 종료까지 자기 전문 축의 계약·구현·통합·검증을 계속 책임집니다.
 
-세부 역할, 하지 않을 일, 완료 조건과 Step 1~12 실행 순서는
+| 사람 | 프로젝트 전체 역할 | 최종 책임 | 주요 산출물이 넘어가는 곳 |
+|---|---|---|---|
+| **성민 (`smmini`)** | **ML Lifecycle & Contract Engineering** | Feature/Label, Training, Model Artifact, 모델 버전·평가·재현성·Runtime compatibility | → **호범** Runtime, → **우수** CI/Report provenance |
+| **호범 (`enjoylonelines`)** | **Backend Intelligence & Dynamic Reporting** | Runtime Inference, Product Result/Evidence, Dynamic Report grounding·내용·검증 규칙 | → **광우** Closed-loop, → **우수** Product/LLM runtime |
+| **광우 (`KOR-GANG`)** | **Ontology Operations & Closed-loop** | RiskEvent, What-if, Decision, Action, Maintenance, Ontology state와 업무 feedback loop | → **호범** Report context, → **우수** Product surface |
+| **우수 (`oosuhada`)** | **Product AI & Integration** | Product/Report Backend, LLM Runtime Integration, Frontend·Visualization, CI·E2E, Deployment·Release | → **전체 팀** Acceptance/Release, → **최종 사용자** |
+
+동적 보고서는 **호범이 Grounding/Prompt/내용·검증 규칙의 feature owner**, 우수가 **실제 LLM provider runtime과 Report API/UI 통합 owner**로 역할을 분리합니다. Static Executive Brief는 LLM과 독립적으로 우수가 Product/Report 계층에서 보장합니다.
+
+각 Step에서 네 사람이 맡는 세부 책임, 인계 산출물, 완료 조건은
 **[최종 역할 분배 및 Step별 실행 계획](./docs/final_team_role_and_step_plan.md)**을 기준으로 합니다.
 
 ## 5. 저장소 구조
