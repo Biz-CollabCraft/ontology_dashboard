@@ -54,7 +54,7 @@ compatibility fallback을 허용하지만, 그 외 환경은 fail-closed를 따�
 | stale | 프론트에서 최신 관측시각 기준 24시간 초과 |
 | 데이터 fallback | Canonical Runtime 실패 시 Gold Fixture와 warning 사용 |
 | Report 요청 | `ReportRequest(role, locale, use_llm)` |
-| Report 출력 | `schemas/report.schema.json`의 role-aware grounded report |
+| Report 출력 | `contracts/schemas/report.schema.json`의 role-aware grounded report |
 | Report fallback | LLM → deterministic → 최종 template 표시 흐름 |
 | 공식 Week 2 진입점 | `/app/projects/{project_id}/mvp` |
 | 확장 화면 노출 | 기본 비노출. `VITE_WEEK2_MVP_ONLY=false`일 때만 기존 Workbench route 사용 |

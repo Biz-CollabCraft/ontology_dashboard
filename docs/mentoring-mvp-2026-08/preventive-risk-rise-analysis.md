@@ -165,7 +165,7 @@ python -m experiments.preventive_intervention.cli analyze \
 재생성할 수 있다.
 
 `DetectedRiskRiseEvent`와 `SensorFeatureStatistic`은 비배포 experiment 내부의 derived
-contract다. 공개 `schemas/preventive-what-if.schema.json`은 downstream consumer에
+contract다. 공개 `contracts/schemas/preventive-what-if.schema.json`은 downstream consumer에
 전달하는 최종 `WhatIfResult`만 정의하며 내부 탐지·통계 중간 산출물을 포함하지 않는다.
 
 ## 7. 다음 단계
