@@ -8,7 +8,7 @@ from ontology_dashboard.modeling.schema import adaptive_modeling_schema
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "schemas" / "adaptive-modeling.schema.json"
+TARGET = ROOT / "contracts" / "schemas" / "adaptive-modeling.schema.json"
 
 
 def main() -> int:

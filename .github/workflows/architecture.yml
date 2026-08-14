@@ -177,7 +177,7 @@ jobs:
           assert dependencies_root == expected
           assert system.ROOT == expected
           assert platform.project_root() == expected
-          assert (expected / "schemas").is_dir()
+          assert (expected / "contracts" / "schemas").is_dir()
           assert (expected / "prompts").is_dir()
           assert (expected / "data" / "fixtures").is_dir()
           PY

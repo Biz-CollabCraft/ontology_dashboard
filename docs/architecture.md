@@ -79,7 +79,7 @@ project-root/
 - `systems/generator`와 `systems/backend`의 내부 구현을 직접 import하지 않는다.
 - 시스템과 연결할 때는 versioned Artifact/API contract를 사용한다.
 - 검증된 기능을 제품 runtime으로 승격할 때는 책임 시스템, 배포 방식과 계약 변경을 별도 architecture decision으로 확정한다.
-- `schemas/preventive-what-if.schema.json`은 downstream consumer가 사용하는 공유 산출물 계약이다.
+- `contracts/schemas/preventive-what-if.schema.json`은 downstream consumer가 사용하는 공유 산출물 계약이다.
 
 ---
 

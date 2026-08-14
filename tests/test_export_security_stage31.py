@@ -79,7 +79,7 @@ def csrf_headers(client: TestClient, *, user_agent: str = "stage31-test-client")
 
 
 def validate_export_contract(payload: dict[str, Any]) -> None:
-    schema = json.loads((ROOT / "schemas" / "export.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((ROOT / "contracts" / "schemas" / "export.schema.json").read_text(encoding="utf-8"))
     errors = list(Draft202012Validator(schema).iter_errors(payload))
     assert errors == [], "\n".join(error.message for error in errors)
 

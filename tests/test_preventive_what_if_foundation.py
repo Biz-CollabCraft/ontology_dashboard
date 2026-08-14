@@ -16,7 +16,7 @@ from experiments.preventive_intervention.policies import apply_tool_replacement
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "schemas" / "preventive-what-if.schema.json"
+SCHEMA_PATH = ROOT / "contracts" / "schemas" / "preventive-what-if.schema.json"
 POLICY_PATH = ROOT / "experiments" / "preventive_intervention" / "policies" / "tool-replacement-v1.json"
 FIXTURE_PATH = ROOT / "data" / "fixtures" / "what_if" / "tool-replacement-contract-fixture.json"
 

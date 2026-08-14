@@ -15,7 +15,7 @@ services:
         - systems/backend/**
         - systems/generator/**
         - ml/**
-        - schemas/**
+        - contracts/schemas/**
         - prompts/**
         - data/fixtures/**
         - render.yaml

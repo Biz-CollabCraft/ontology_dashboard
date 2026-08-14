@@ -188,7 +188,7 @@ def build_product_result_artifact(fixture: dict[str, Any], *, predictor: Predict
 
 def validate_product_result_artifact(artifact: dict[str, Any]) -> None:
     schema = json.loads(
-        (project_root() / "schemas" / "product-result-artifact.schema.json").read_text(encoding="utf-8")
+        (project_root() / "contracts" / "schemas" / "product-result-artifact.schema.json").read_text(encoding="utf-8")
     )
     errors = sorted(
         Draft202012Validator(schema).iter_errors(artifact),
@@ -202,7 +202,7 @@ def validate_product_result_artifact(artifact: dict[str, Any]) -> None:
 
 
 def validate_evidence_package(package: dict[str, Any]) -> None:
-    schema = json.loads((project_root() / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((project_root() / "contracts" / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
     errors = sorted(Draft202012Validator(schema).iter_errors(package), key=lambda item: list(item.absolute_path))
     if errors:
         rendered = "; ".join(

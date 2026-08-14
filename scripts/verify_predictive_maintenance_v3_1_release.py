@@ -228,9 +228,9 @@ def project_checks(project_root: Path) -> list[Check]:
         checks.append(required_file_check(f"project.prompt.{filename}", prompt_root / filename))
 
     required = [
-        "schemas/dataset-bundle-manifest.schema.json",
-        "schemas/prediction-result.schema.json",
-        "schemas/project3-graph-projection.schema.json",
+        "contracts/schemas/dataset-bundle-manifest.schema.json",
+        "contracts/schemas/prediction-result.schema.json",
+        "contracts/schemas/project3-graph-projection.schema.json",
         "systems/backend/ontology_dashboard/predictive_maintenance_runtime/service.py",
         "systems/backend/ontology_dashboard/routers/predictive_maintenance_runtime.py",
         "systems/frontend/src/features/predictive-maintenance/PredictiveMaintenanceReplayPanel.tsx",

@@ -77,7 +77,7 @@ def save_dashboard(client: TestClient, payload: dict) -> dict:
 def test_role_templates_versions_preview_and_dependency_graph(client: TestClient) -> None:
     login(client, "manager@ontology.local", "Manager!2026")
     manager = resolved(client)
-    schema = json.loads((ROOT / "schemas" / "dashboard-platform.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((ROOT / "contracts" / "schemas" / "dashboard-platform.schema.json").read_text(encoding="utf-8"))
     resolved_schema = schema["$defs"]["resolvedDashboard"]
     resolved_schema = {**resolved_schema, "$defs": schema["$defs"]}
     assert list(Draft202012Validator(resolved_schema).iter_errors(manager)) == []

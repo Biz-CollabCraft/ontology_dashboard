@@ -75,9 +75,9 @@ jobs:
 
           from jsonschema.validators import validator_for
 
-          schema_paths = sorted(Path("schemas").glob("*.schema.json"))
+          schema_paths = sorted(Path("contracts/schemas").glob("*.schema.json"))
           if not schema_paths:
-              raise SystemExit("no JSON Schema documents found under schemas/")
+              raise SystemExit("no JSON Schema documents found under contracts/schemas/")
 
           for path in schema_paths:
               schema = json.loads(path.read_text(encoding="utf-8"))
