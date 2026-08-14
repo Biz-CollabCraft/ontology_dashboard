@@ -28,13 +28,13 @@ jobs:
       - name: Static architecture rules
         run: python systems/verify_architecture.py
 
-      - name: Generator import smoke
-        working-directory: systems/generator
-        run: python -c "import extraction; import ontology_mapping; import topology; import feature; import model; import common"
-
       - name: Install backend dependencies
         working-directory: systems/backend
         run: pip install -e ../../ml -e .
+
+      - name: Generator import smoke
+        working-directory: systems/generator
+        run: python -c "import extraction; import ontology_mapping; import topology; import feature; import model; import common"
 
       - name: Backend import and health
         working-directory: systems/backend
