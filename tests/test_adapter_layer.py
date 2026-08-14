@@ -366,7 +366,7 @@ def test_governed_tabular_adapter_ingests_selected_xlsx_sheet(
     assert result.accepted_records[1]["equipment_id"] == "M-2"
     assert result.accepted_records[1]["voltage_v"] == "221"
     schema = json.loads(
-        (ROOT / "schemas" / "dataset-manifest.schema.json").read_text(encoding="utf-8")
+        (ROOT / "contracts" / "schemas" / "dataset-manifest.schema.json").read_text(encoding="utf-8")
     )
     validator = Draft202012Validator(
         schema,

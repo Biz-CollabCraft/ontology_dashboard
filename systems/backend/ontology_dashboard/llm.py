@@ -98,7 +98,7 @@ class ReportAgent:
     def __init__(self, project_root: str | Path, provider: LLMProvider | None = None) -> None:
         self.root = Path(project_root)
         self.provider = provider or OpenAICompatibleProvider()
-        self.report_schema = json.loads((self.root / "schemas" / "report.schema.json").read_text(encoding="utf-8"))
+        self.report_schema = json.loads((self.root / "contracts" / "schemas" / "report.schema.json").read_text(encoding="utf-8"))
 
     def _prompt(self, role: Role, locale: AppLocale) -> str:
         name = "manager-report.md" if role == "manager" else "engineer-report.md"

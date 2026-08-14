@@ -98,7 +98,7 @@ COPY --from=builder /build/gen_data_source /app/.source/gen_data
 WORKDIR /app
 COPY --chown=10001:10001 systems/__init__.py /app/systems/__init__.py
 COPY --chown=10001:10001 systems/backend /app/systems/backend
-COPY --chown=10001:10001 schemas /app/schemas
+COPY --chown=10001:10001 contracts/schemas /app/contracts/schemas
 COPY --chown=10001:10001 prompts /app/prompts
 COPY --chown=10001:10001 data/fixtures /app/data/fixtures
 

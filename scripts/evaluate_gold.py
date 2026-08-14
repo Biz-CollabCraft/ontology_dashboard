@@ -23,7 +23,7 @@ FORBIDDEN_PHRASES = [
 
 
 def load_schema(root: Path, name: str) -> dict[str, Any]:
-    return json.loads((root / "schemas" / name).read_text(encoding="utf-8"))
+    return json.loads((root / "contracts" / "schemas" / name).read_text(encoding="utf-8"))
 
 
 def evaluate(root: Path) -> dict[str, Any]:

@@ -19,9 +19,8 @@ API 계약과 팀 공유 문서를 관리한다.
 
 ## 공유 계약 (Shared Contracts)
 
-향후 시스템 간 공유 계약은 저장소 최상위 `contracts/`에서 관리할 예정이다.
-현재는 디렉터리 골격과 관리 원칙만 마련된 상태이며, 기존 Schema와 실행 코드의
-참조 경로는 아직 변경되지 않았다.
+시스템 간 공유 계약은 저장소 최상위 `contracts/`에서 관리한다.
+현재 공유 JSON Schema는 `contracts/schemas/`로 물리 이동이 완료되었으며, 실행 코드, 테스트, CI, Docker 참조가 모두 `contracts/schemas/`를 정본으로 바라보도록 설정되어 있다.
 자세한 내용은 [`contracts/README.md`](../contracts/README.md)를 참고한다.
 
 ## 관리 원칙

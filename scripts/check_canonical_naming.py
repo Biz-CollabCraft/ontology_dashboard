@@ -20,7 +20,7 @@ SCAN_PATHS = (
     ROOT / "systems" / "backend" / "README.md",
     ROOT / "systems" / "backend" / "ontology_dashboard",
     ROOT / "systems" / "frontend" / "src",
-    ROOT / "schemas",
+    ROOT / "contracts" / "schemas",
     ROOT / "infra",
     ROOT / ".github" / "workflows",
     ROOT / "evaluation",

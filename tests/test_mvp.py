@@ -92,7 +92,7 @@ def test_gold_predictions_match_expected_contracts() -> None:
 
 
 def test_evidence_packages_pass_json_schema() -> None:
-    schema = json.loads((ROOT / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((ROOT / "contracts" / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
     validator = Draft202012Validator(schema)
     for path in FIXTURES:
         evidence = build_evidence_package(load_fixture(path))

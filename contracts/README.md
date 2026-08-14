@@ -3,15 +3,14 @@
 이 디렉터리는 Generator, Backend, Frontend 등 둘 이상의 시스템이 공유하는
 기계 판독 계약을 관리하기 위한 저장소 최상위 위치다.
 
-현재 단계에서는 향후 계약 이전을 위한 디렉터리 골격만 구성한다.
-기존 `schemas/` 파일과 코드·테스트·문서 참조는 아직 변경하지 않는다.
+현재 공유 JSON Schema는 `contracts/schemas/`로 물리 이동이 완료되었으며,
+관련 코드·스크립트·테스트·CI·Docker·문서 참조가 모두 이 디렉터리를 정본으로 바라보도록 설정되어 있다.
 
 ## Directory layout
 
 ### `schemas/`
 여러 시스템이 공유하는 JSON Schema를 보관한다.
-현재 기존 Schema는 저장소 최상위 `schemas/`에 유지한다.
-실제 Schema 이전과 참조 경로 갱신은 별도 Migration PR에서 수행한다.
+기존 최상위 `schemas/` 위치의 17개 공유 JSON Schema는 `contracts/schemas/`로 물리 이전을 완료하였다.
 
 ### `openapi/`
 시스템 경계를 통과하는 공유 API 계약을 보관한다.
@@ -30,20 +29,15 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 
 ## Current status
 
-현재 `contracts/`는 디렉터리 구조와 관리 목적만 정의한다.
+현재 `contracts/`의 관리 상태는 다음과 같다.
 
-- 기존 `schemas/` 파일 이동 없음
-- Schema 파일명 변경 없음
-- Schema 내용 및 version 변경 없음
-- 코드·테스트·CI·Docker 경로 변경 없음
-- OpenAPI·Example·Test Vector 신규 생성 없음
-- 기존 `schemas/` 삭제 없음
-
-실제 Migration은 활성 Schema, 생산자, 소비자, 테스트 및 Docker 경로를 확인한 뒤
-별도 PR에서 수행한다.
+- `contracts/schemas/`: 17개 공유 JSON Schema 물리 이동 및 정본 관리 완료
+- `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`, `backend-contract-ci.yml`), `scripts/`, `tests/` 참조 전환 완료
+- Schema 내용 및 `$id` 식별자 무변경 보존
+- `openapi/`, `examples/`, `test-vectors/`: 향후 구체적 요구사항 확정 시 순차적으로 이식 예정
 
 ## Migration principle
 
-향후 Migration에서는 실제로 존재하고 시스템이 사용하는 계약만 이전한다.
+향후 추가 Migration에서는 실제로 존재하고 시스템이 사용하는 계약만 이전한다.
 존재하지 않는 Schema를 목표 구조를 채우기 위해 새로 만들지 않는다.
 사용 여부가 불명확한 파일은 삭제하지 않으며 먼저 생산자·소비자·테스트 참조를 확인한다.

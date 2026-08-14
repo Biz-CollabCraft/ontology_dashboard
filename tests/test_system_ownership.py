@@ -13,6 +13,9 @@ from systems.backend.app.diagnosis.predictor import ArtifactPredictor, Heuristic
 from systems.generator.model import train_and_publish_model
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 def _write_ai4i_fixture(path: Path, rows: int = 120) -> None:
     payload = []
     for index in range(rows):
@@ -50,7 +53,7 @@ def test_generator_publishes_model_artifact_and_backend_consumes_it(tmp_path: Pa
     )
 
     manifest = json.loads((artifact_path / "manifest.json").read_text(encoding="utf-8"))
-    schema = json.loads(Path("schemas/model-artifact.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((ROOT / "contracts" / "schemas" / "model-artifact.schema.json").read_text(encoding="utf-8"))
     assert list(Draft202012Validator(schema).iter_errors(manifest)) == []
     assert manifest["artifact_type"] == "predictive_maintenance_model"
     assert manifest["dataset_version"] == "test-ai4i-v1"
