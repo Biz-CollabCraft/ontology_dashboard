@@ -1,0 +1,293 @@
+from __future__ import annotations
+
+import math
+from statistics import mean, pstdev
+from typing import Any
+
+from .contracts import DISPLAY_NAMES, UNITS
+from .predictor import Prediction
+
+GENERATED_BY = "systems.backend.app.diagnosis.evidence_enrichment"
+
+_NON_SENSOR_FIELDS = {"timestamp", "product_type"}
+_COMPONENT_BY_FEATURE = {
+    "tool_wear_min": ("tooling", "공구/마모 계통"),
+    "temperature_difference_k": ("thermal_path", "열 방산 계통"),
+    "mechanical_power_w": ("drive_power", "동력 전달 계통"),
+    "overstrain_index": ("drive_power", "동력 전달 계통"),
+    "torque_nm": ("drive_power", "동력 전달 계통"),
+    "rotational_speed_rpm": ("rotating_assembly", "회전 계통"),
+    "rotation_raw": ("rotating_assembly", "회전/진동 계통"),
+    "relative_vibration_z": ("vibration_path", "진동 계통"),
+    "vibration_raw": ("vibration_path", "진동 계통"),
+    "pressure_raw": ("air_supply", "압력/공압 계통"),
+    "voltage_raw": ("electrical_supply", "전원 계통"),
+}
+_ACTION_BY_STATUS = {
+    "critical": ("inspect_and_stop_review", "긴급 점검 및 정지 검토", "stop_review"),
+    "warning": ("inspect_current_shift", "현재 교대 내 점검", "inspect"),
+    "attention": ("request_inspection", "점검 요청", "inspect"),
+    "normal": ("continue_monitoring", "모니터링 지속", "monitor"),
+    "data_quality_hold": ("hold_for_data_check", "데이터 확인 후 판단", "data_quality"),
+}
+_UNIT_FALLBACKS = {
+    "voltage_raw": "V",
+    "rotation_raw": "rpm",
+    "pressure_raw": "bar",
+    "vibration_raw": "mm/s",
+    "relative_vibration_z": "z",
+}
+_DISPLAY_FALLBACKS = {
+    "voltage_raw": "전압",
+    "rotation_raw": "회전 상태",
+    "pressure_raw": "압력",
+    "vibration_raw": "진동",
+    "relative_vibration_z": "상대 진동",
+}
+
+
+def build_product_result_evidence_payload(
+    artifact: dict[str, Any],
+    fixture: dict[str, Any],
+    prediction: Prediction,
+    *,
+    maintenance_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build producer-owned evidence facts for Product Result Artifact enrichment."""
+
+    sensor_evidence = _sensor_evidence(fixture)
+    source_fields = _factor_source_fields(artifact)
+    source_fields.extend(_sensor_source_fields(sensor_evidence))
+    component_hypotheses = _component_hypotheses(artifact, sensor_evidence)
+    recommended_actions = _recommended_actions(artifact, component_hypotheses)
+    evidence_gaps = _evidence_gaps(maintenance_context, prediction)
+
+    payload: dict[str, Any] = {
+        "sensor_evidence": sensor_evidence,
+        "component_hypotheses": component_hypotheses,
+        "status_flags": {
+            "multiple_risk_factors": _has_multiple_risk_factors(artifact),
+            "insufficient_data": bool(prediction.quality_issues),
+        },
+        "recommended_actions": recommended_actions,
+        "source_fields": _dedupe_source_fields(source_fields),
+        "evidence_gaps": evidence_gaps,
+    }
+    if maintenance_context is not None:
+        payload["maintenance_context"] = maintenance_context
+    return payload
+
+
+def evidence_payload_reference(artifact: dict[str, Any]) -> dict[str, str]:
+    return {
+        "source": "product_result_artifact",
+        "reference": str(artifact["artifact_id"]),
+        "generated_by": GENERATED_BY,
+    }
+
+
+def validate_evidence_payload_invariants(payload: dict[str, Any]) -> None:
+    source_field_ids = {field["field_id"] for field in payload.get("source_fields", [])}
+    basis_refs: set[str] = set()
+    for hypothesis in payload.get("component_hypotheses", []):
+        basis_refs.update(hypothesis.get("basis", []))
+    for action in payload.get("recommended_actions", []):
+        basis_refs.update(action.get("basis", []))
+    unresolved = sorted(basis_refs - source_field_ids)
+    if unresolved:
+        raise ValueError(f"evidence_payload basis refs are not in source_fields: {unresolved}")
+
+    if payload.get("maintenance_context") is None and not any(
+        gap.get("field") == "evidence_payload.maintenance_context"
+        and gap.get("owner_domain") == "maintenance"
+        for gap in payload.get("evidence_gaps", [])
+    ):
+        raise ValueError("evidence_payload missing maintenance_context gap")
+
+
+def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[str, Any] | None = None) -> None:
+    factors = artifact.get("top_factors") or []
+    total = sum(abs(float(factor.get("signed_contribution") or 0.0)) for factor in factors) or 1.0
+    observed_features = set(_numeric_observation((fixture or {}).get("observation") or {}))
+    for index, factor in enumerate(factors, start=1):
+        feature = str(factor.get("feature") or "unknown")
+        signed = float(factor.get("signed_contribution") or 0.0)
+        factor.setdefault("evidence_field_id", f"factor.{index}.{feature}")
+        factor.setdefault("display_name", _display_name(feature))
+        factor.setdefault("unit", _unit(feature))
+        factor.setdefault("normal_range", "근거 부족")
+        factor.setdefault("direction", "risk_up" if signed >= 0 else "risk_down")
+        factor.setdefault("contribution", round(abs(signed) / total, 6))
+        factor.setdefault("source_type", "observed" if feature in observed_features else "derived")
+
+
+def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
+    observation = _numeric_observation(fixture.get("observation") or {})
+    history_rows = [_numeric_observation(row) for row in fixture.get("history", [])]
+    window_rows = [row for row in [*history_rows, observation] if row]
+    sensors: dict[str, Any] = {}
+
+    for feature, current in observation.items():
+        values = [row[feature] for row in window_rows if feature in row]
+        baseline_mean = round(mean(values), 6) if values else None
+        baseline_std_raw = pstdev(values) if len(values) > 1 else 0.0
+        baseline_std = round(baseline_std_raw, 6)
+        z_score = None
+        if baseline_mean is not None and baseline_std_raw > 0:
+            z_score = round((current - baseline_mean) / baseline_std_raw, 6)
+        sensors[feature] = {
+            "display_name": _display_name(feature),
+            "unit": _unit(feature),
+            "current": current,
+            "window_mean": baseline_mean,
+            "z_score": z_score,
+            "basis": {
+                "baseline_mean": baseline_mean,
+                "baseline_std": baseline_std,
+                "baseline_n": len(values),
+                "baseline_reference": "fixture.history+observation",
+            },
+        }
+
+    timestamps = [
+        str(row.get("timestamp"))
+        for row in [*fixture.get("history", []), fixture.get("observation") or {}]
+        if row.get("timestamp")
+    ]
+    return {
+        "window": {"start": timestamps[0], "end": timestamps[-1]} if timestamps else {},
+        "window_rows": len(window_rows),
+        "sensors": sensors,
+    }
+
+
+def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    hypotheses: list[dict[str, Any]] = []
+    sensors = sensor_evidence.get("sensors") or {}
+    for factor in artifact.get("top_factors", [])[:3]:
+        feature = str(factor.get("feature") or "")
+        component_id, component_label = _COMPONENT_BY_FEATURE.get(feature, ("diagnosis_factor", "진단 요인"))
+        basis = [str(factor["evidence_field_id"])]
+        sensor_ref = f"sensor_evidence.sensors.{feature}"
+        if feature in sensors:
+            basis.append(sensor_ref)
+        hypotheses.append(
+            {
+                "component_id": component_id,
+                "component_label": component_label,
+                "association": "inspection_candidate",
+                "basis": basis,
+            }
+        )
+    return hypotheses
+
+
+def _recommended_actions(artifact: dict[str, Any], hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    status = str(artifact.get("status_grade") or "attention")
+    action_id, label, kind = _ACTION_BY_STATUS.get(status, _ACTION_BY_STATUS["attention"])
+    basis: list[str] = []
+    for hypothesis in hypotheses[:2]:
+        basis.extend(hypothesis.get("basis", []))
+    if not basis:
+        basis = [field["evidence_field_id"] for field in artifact.get("top_factors", [])[:1] if field.get("evidence_field_id")]
+    return [
+        {
+            "action_id": action_id,
+            "label": label,
+            "kind": kind,
+            "requires_human_approval": True,
+            "basis": list(dict.fromkeys(basis)),
+        }
+    ]
+
+
+def _factor_source_fields(artifact: dict[str, Any]) -> list[dict[str, str]]:
+    fields = []
+    for index, factor in enumerate(artifact.get("top_factors", [])):
+        field_id = str(factor["evidence_field_id"])
+        fields.append(
+            {
+                "field_id": field_id,
+                "source_path": f"top_factors[{index}]",
+                "label": str(factor.get("display_name") or _display_name(str(factor.get("feature") or ""))),
+                "description": "위험 판단에 사용된 상위 요인",
+            }
+        )
+    return fields
+
+
+def _sensor_source_fields(sensor_evidence: dict[str, Any]) -> list[dict[str, str]]:
+    return [
+        {
+            "field_id": f"sensor_evidence.sensors.{feature}",
+            "source_path": f"evidence_payload.sensor_evidence.sensors.{feature}",
+            "label": str(sensor.get("display_name") or _display_name(feature)),
+            "description": "센서 관측 및 baseline 근거",
+        }
+        for feature, sensor in (sensor_evidence.get("sensors") or {}).items()
+    ]
+
+
+def _evidence_gaps(maintenance_context: dict[str, Any] | None, prediction: Prediction) -> list[dict[str, str]]:
+    gaps: list[dict[str, str]] = []
+    if maintenance_context is None:
+        gaps.append(
+            {
+                "gap_id": "gap.maintenance_context.unavailable",
+                "field": "evidence_payload.maintenance_context",
+                "reason": "missing_source",
+                "required_source": "maintenance_context_provider",
+                "owner_domain": "maintenance",
+                "display_policy": "show_as_unavailable",
+            }
+        )
+    for index, issue in enumerate(prediction.quality_issues, start=1):
+        gaps.append(
+            {
+                "gap_id": f"gap.data_quality.{index}",
+                "field": str(issue.get("field") or "observation"),
+                "reason": "insufficient_context",
+                "required_source": "valid_runtime_observation",
+                "owner_domain": "diagnosis",
+                "display_policy": "show_limitation",
+            }
+        )
+    return gaps
+
+
+def _has_multiple_risk_factors(artifact: dict[str, Any]) -> bool:
+    factors = artifact.get("top_factors") or []
+    if len(factors) < 2:
+        return False
+    first = abs(float(factors[0].get("signed_contribution") or 0.0))
+    second = abs(float(factors[1].get("signed_contribution") or 0.0))
+    return second > 0 and first - second < 0.25
+
+
+def _numeric_observation(observation: dict[str, Any]) -> dict[str, float]:
+    numeric: dict[str, float] = {}
+    for key, value in observation.items():
+        if key in _NON_SENSOR_FIELDS or isinstance(value, bool) or value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            numeric[key] = number
+    return numeric
+
+
+def _dedupe_source_fields(fields: list[dict[str, str]]) -> list[dict[str, str]]:
+    deduped: dict[str, dict[str, str]] = {}
+    for field in fields:
+        deduped.setdefault(field["field_id"], field)
+    return list(deduped.values())
+
+
+def _display_name(feature: str) -> str:
+    return DISPLAY_NAMES.get(feature) or _DISPLAY_FALLBACKS.get(feature) or feature
+
+
+def _unit(feature: str) -> str:
+    return UNITS.get(feature) or _UNIT_FALLBACKS.get(feature) or ""

@@ -7,6 +7,12 @@ from typing import Any, Protocol
 from jsonschema import Draft202012Validator
 
 from .contracts import DISPLAY_NAMES, UNITS, derive_features, project_root
+from .evidence_enrichment import (
+    build_product_result_evidence_payload,
+    enrich_product_result_top_factors,
+    evidence_payload_reference,
+    validate_evidence_payload_invariants,
+)
 from .predictor import Prediction, Predictor, configured_predictor
 
 NORMAL_RANGES = {
@@ -121,7 +127,12 @@ def build_evidence_package(
     return package
 
 
-def build_product_result_artifact(fixture: dict[str, Any], *, predictor: Predictor | None = None) -> dict[str, Any]:
+def build_product_result_artifact(
+    fixture: dict[str, Any],
+    *,
+    predictor: Predictor | None = None,
+    context_provider: ContextProvider | None = None,
+) -> dict[str, Any]:
     """Create the product runtime Result Artifact owned by backend/diagnosis.
 
     The shape intentionally remains semantically compatible with the Canonical
@@ -182,6 +193,21 @@ def build_product_result_artifact(fixture: dict[str, Any], *, predictor: Predict
             "model_artifact": prediction.model_artifact,
         },
     }
+    enrich_product_result_top_factors(artifact, fixture)
+    maintenance_context = None
+    if context_provider is not None:
+        try:
+            maintenance_context = context_provider.get_context(asset_id, prediction.predicted_failure_type)
+        except (KeyError, TypeError, ValueError):
+            maintenance_context = None
+    artifact["evidence_payload"] = build_product_result_evidence_payload(
+        artifact,
+        fixture,
+        prediction,
+        maintenance_context=maintenance_context,
+    )
+    artifact["provenance"]["evidence_payload_reference"] = evidence_payload_reference(artifact)
+    validate_evidence_payload_invariants(artifact["evidence_payload"])
     validate_product_result_artifact(artifact)
     return artifact
 
