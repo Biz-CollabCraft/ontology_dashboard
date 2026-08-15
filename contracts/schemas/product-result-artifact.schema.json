@@ -54,6 +54,36 @@
     "status_grade": {"enum": ["normal", "attention", "warning", "critical", "data_quality_hold"]},
     "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
     "top_factors": {"type": "array", "items": {"type": "object"}},
+    "legacy_compatible_top_factors": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evidence_field_id",
+          "feature",
+          "display_name",
+          "value",
+          "unit",
+          "normal_range",
+          "direction",
+          "contribution",
+          "source_type"
+        ],
+        "properties": {
+          "evidence_field_id": {"type": "string"},
+          "feature": {"type": "string"},
+          "display_name": {"type": "string"},
+          "value": {"type": ["number", "null"]},
+          "unit": {"type": "string"},
+          "normal_range": {"type": "string"},
+          "direction": {"type": "string"},
+          "contribution": {"type": "number", "minimum": 0},
+          "source_type": {"type": "string"}
+        }
+      }
+    },
     "recommended_action": {"type": "object"},
     "evidence_payload": {
       "type": "object",

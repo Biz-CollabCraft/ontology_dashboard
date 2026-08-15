@@ -51,6 +51,7 @@ def test_product_result_artifact_to_event_evidence_projection_matches_expected_r
     assert projection["assessment"]["recommended_decision"] == expected["assessment"]["recommended_decision"]
     assert projection["assessment"]["threshold"] == expected["assessment"]["threshold"]
     assert projection["assessment"]["top_factors"] == expected["assessment"]["top_factors"]
+    assert projection["report_projection"]["display_labels"]["confidence_label"] == "high"
     assert projection["report_projection"]["sensor_cards"][0]["z_score"] == -2.9
     assert projection["report_projection"]["sensor_cards"][0]["basis"]["baseline_n"] == 240
     assert projection["report_projection"]["inspection_targets"][0]["component_id"] == "rotating_assembly"
@@ -124,26 +125,14 @@ def test_payload_fields_do_not_override_artifact_judgement_or_subject() -> None:
 
 def test_legacy_projection_rejects_unmapped_product_result_factors() -> None:
     projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
+    projection["artifact_reference"]["legacy_compatible_top_factors"] = []
 
     with pytest.raises(ValueError, match="producer-normalized top_factors"):
         event_evidence_projection_to_legacy_evidence(projection)
 
 
-def test_legacy_projection_passes_current_evidence_schema_with_producer_normalized_factors() -> None:
+def test_legacy_projection_uses_artifact_legacy_compatible_factors_for_current_schema() -> None:
     projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
-    projection["assessment"]["top_factors"] = [
-        {
-            "evidence_field_id": "factor.1.rotation_raw",
-            "feature": "rotation_raw",
-            "display_name": "회전 상태",
-            "value": 1820.0,
-            "unit": "rpm",
-            "normal_range": "baseline z-score -2.0..2.0",
-            "direction": "risk_up",
-            "contribution": 0.42,
-            "source_type": "observed",
-        }
-    ]
 
     legacy = event_evidence_projection_to_legacy_evidence(projection)
 
@@ -154,6 +143,18 @@ def test_legacy_projection_passes_current_evidence_schema_with_producer_normaliz
     assert legacy["status"] == projection["assessment"]["status"]
     assert legacy["recommended_decision"] == projection["assessment"]["recommended_decision"]
     assert legacy["threshold"] == projection["assessment"]["threshold"]
-    assert legacy["top_factors"] == projection["assessment"]["top_factors"]
+    assert legacy["top_factors"] == projection["artifact_reference"]["legacy_compatible_top_factors"]
+    assert legacy["top_factors"][0]["normal_range"] == "baseline z-score -2.0..2.0"
     assert legacy["lineage"]["product_result_artifact"]["artifact_id"] == projection["artifact_reference"]["artifact_id"]
     assert_absent_hidden_truth(legacy)
+
+
+def test_projection_display_confidence_prefers_canonical_label_over_numeric_value() -> None:
+    artifact = enriched_critical_artifact()
+    artifact["confidence"] = 0.84
+    artifact["confidence_label"] = "medium"
+
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
+
+    assert projection["assessment"]["confidence"] == "medium"
+    assert projection["report_projection"]["display_labels"]["confidence_label"] == "medium"

@@ -50,6 +50,7 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
             "observed_at": clean_artifact.get("observed_at"),
             "prediction_id": provenance.get("prediction_id"),
             "top_factor_count": len(clean_artifact.get("top_factors", [])),
+            "legacy_compatible_top_factors": clean_artifact.get("legacy_compatible_top_factors", []),
             "evidence_payload_reference": provenance.get("evidence_payload_reference"),
         },
         "assessment": {
@@ -66,7 +67,7 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
         "report_projection": {
             "display_labels": {
                 "status_label": _status_label(clean_artifact.get("status_grade")),
-                "confidence_label": _confidence_label(clean_artifact.get("confidence")),
+                "confidence_label": _confidence_label(clean_artifact.get("confidence_label") or clean_artifact.get("confidence")),
                 "probability_label": _probability_label(clean_artifact.get("failure_probability")),
             },
             "sensor_cards": _sensor_cards(payload.get("sensor_evidence", {})),
@@ -111,7 +112,8 @@ def event_evidence_projection_to_legacy_evidence(evidence: dict[str, Any]) -> di
         raise ValueError("legacy evidence projection requires an explicit threshold")
 
     maintenance_context = report_projection.get("maintenance_context") or {}
-    top_factors = [_legacy_top_factor(factor) for factor in assessment.get("top_factors", [])]
+    legacy_factor_source = artifact_reference.get("legacy_compatible_top_factors") or assessment.get("top_factors", [])
+    top_factors = [_legacy_top_factor(factor) for factor in legacy_factor_source]
     if any(not isinstance(factor, dict) or "evidence_field_id" not in factor for factor in top_factors):
         raise ValueError("legacy evidence projection requires producer-normalized top_factors")
 

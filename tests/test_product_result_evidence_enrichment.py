@@ -65,6 +65,11 @@ def test_product_result_artifact_includes_producer_evidence_payload_without_defa
     }
     assert payload["sensor_evidence"]["sensors"]["tool_wear_min"]["current"] == 230.0
     assert payload["sensor_evidence"]["sensors"]["tool_wear_min"]["basis"]["baseline_n"] == 5
+    assert [factor["feature"] for factor in artifact["legacy_compatible_top_factors"]] == [
+        factor.feature for factor in HeuristicPredictor().predict(fixture).factors[:5]
+    ]
+    assert artifact["legacy_compatible_top_factors"][0]["normal_range"] == "0–180"
+    assert artifact["legacy_compatible_top_factors"][0]["value"] == 230.0
     assert "maintenance_context" not in payload
     assert any(gap["field"] == "evidence_payload.maintenance_context" for gap in payload["evidence_gaps"])
     assert unresolved_basis_refs(payload) == set()

@@ -5,10 +5,17 @@ from statistics import mean, pstdev
 from typing import Any
 
 from .contracts import DISPLAY_NAMES, UNITS
-from .predictor import Prediction
+from .predictor import FactorScore, Prediction
 
 GENERATED_BY = "systems.backend.app.diagnosis.evidence_enrichment"
 
+NORMAL_RANGES = {
+    "tool_wear_min": "0–180",
+    "temperature_difference_k": "8.6–12.0",
+    "mechanical_power_w": "3,500–9,000",
+    "overstrain_index": "0–11,000",
+    "torque_nm": "10–60",
+}
 _NON_SENSOR_FIELDS = {"timestamp", "product_type"}
 _COMPONENT_BY_FEATURE = {
     "tool_wear_min": ("tooling", "공구/마모 계통"),
@@ -105,6 +112,12 @@ def validate_evidence_payload_invariants(payload: dict[str, Any]) -> None:
         raise ValueError("evidence_payload missing maintenance_context gap")
 
 
+def build_legacy_compatible_top_factors(prediction: Prediction) -> list[dict[str, Any]]:
+    scored = prediction.factors[:5]
+    total_score = sum(item.score for item in scored) or 1.0
+    return [_legacy_compatible_top_factor(index, item, total_score) for index, item in enumerate(scored, start=1)]
+
+
 def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[str, Any] | None = None) -> None:
     factors = artifact.get("top_factors") or []
     total = sum(abs(float(factor.get("signed_contribution") or 0.0)) for factor in factors) or 1.0
@@ -120,6 +133,21 @@ def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[st
         factor.setdefault("direction", "risk_up" if signed >= 0 else "risk_down")
         factor.setdefault("contribution", round(abs(signed) / total, 6))
         factor.setdefault("source_type", "observed" if feature in observed_features else "derived")
+
+
+def _legacy_compatible_top_factor(index: int, item: FactorScore, total_score: float) -> dict[str, Any]:
+    feature = item.feature
+    return {
+        "evidence_field_id": f"factor.{index}.{feature}",
+        "feature": feature,
+        "display_name": _display_name(feature),
+        "value": round(float(item.raw_value), 4),
+        "unit": _unit(feature),
+        "normal_range": NORMAL_RANGES.get(feature, "근거 부족"),
+        "direction": item.direction,
+        "contribution": round(item.score / total_score, 6),
+        "source_type": _source_type(feature),
+    }
 
 
 def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
@@ -292,3 +320,7 @@ def _display_name(feature: str) -> str:
 
 def _unit(feature: str) -> str:
     return UNITS.get(feature) or _UNIT_FALLBACKS.get(feature) or ""
+
+
+def _source_type(feature: str) -> str:
+    return "derived" if feature in {"temperature_difference_k", "mechanical_power_w", "overstrain_index"} else "observed"

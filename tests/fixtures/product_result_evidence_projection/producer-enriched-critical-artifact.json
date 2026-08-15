@@ -13,6 +13,7 @@
   "predicted_failure_type": "power_or_overstrain_failure",
   "status_grade": "critical",
   "confidence": 0.84,
+  "confidence_label": "high",
   "top_factors": [
     {
       "rank": 1,
@@ -21,6 +22,19 @@
       "signed_contribution": 0.42,
       "direction": "risk_up",
       "explanation_method": "deterministic_component_score"
+    }
+  ],
+  "legacy_compatible_top_factors": [
+    {
+      "evidence_field_id": "factor.1.rotation_raw",
+      "feature": "rotation_raw",
+      "display_name": "회전 상태",
+      "value": 1820.0,
+      "unit": "rpm",
+      "normal_range": "baseline z-score -2.0..2.0",
+      "direction": "risk_up",
+      "contribution": 0.42,
+      "source_type": "observed"
     }
   ],
   "recommended_action": {
