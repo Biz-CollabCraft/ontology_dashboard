@@ -469,6 +469,22 @@ class EvidenceResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class EventEvidenceProjectionResponse(BaseModel):
+    schema_version: str
+    contract_type: str
+    event_id: str
+    scenario_id: str | None = None
+    subject: dict[str, Any]
+    artifact_reference: dict[str, Any]
+    assessment: dict[str, Any]
+    report_projection: dict[str, Any]
+    provenance: dict[str, Any]
+    limitations: list[str]
+    generated_at: datetime | str
+
+    model_config = ConfigDict(extra="allow")
+
+
 class ActionMutationResponse(BaseModel):
     id: str | None = None
     event_id: str | None = None
@@ -688,7 +704,7 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.manufacturing.get_equipment": EquipmentResponse,
     "ontology_dashboard.routers.manufacturing.list_events": ItemsResponse[dict[str, Any]],
     "ontology_dashboard.routers.manufacturing.get_event": EventResponse,
-    "ontology_dashboard.routers.manufacturing.get_evidence": EvidenceResponse,
+    "ontology_dashboard.routers.manufacturing.get_evidence": EvidenceResponse | EventEvidenceProjectionResponse,
     "ontology_dashboard.routers.manufacturing.create_report": ReportGenerationResponse,
     "ontology_dashboard.routers.manufacturing.create_layout": LayoutGenerationResponse,
     "ontology_dashboard.routers.manufacturing.record_decision": ActionMutationResponse,

@@ -55,7 +55,7 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
         "assessment": {
             "status": clean_artifact.get("status_grade"),
             "recommended_decision": recommended_decision,
-            "confidence": _confidence_label(clean_artifact.get("confidence")),
+            "confidence": _confidence_label(clean_artifact.get("confidence_label") or clean_artifact.get("confidence")),
             "confidence_value": clean_artifact.get("confidence"),
             "failure_probability": clean_artifact.get("failure_probability"),
             "threshold": threshold,
@@ -111,7 +111,7 @@ def event_evidence_projection_to_legacy_evidence(evidence: dict[str, Any]) -> di
         raise ValueError("legacy evidence projection requires an explicit threshold")
 
     maintenance_context = report_projection.get("maintenance_context") or {}
-    top_factors = assessment.get("top_factors", [])
+    top_factors = [_legacy_top_factor(factor) for factor in assessment.get("top_factors", [])]
     if any(not isinstance(factor, dict) or "evidence_field_id" not in factor for factor in top_factors):
         raise ValueError("legacy evidence projection requires producer-normalized top_factors")
 
@@ -165,6 +165,22 @@ def _strip_hidden(value: Any) -> Any:
     return deepcopy(value)
 
 
+def _legacy_top_factor(factor: Any) -> dict[str, Any]:
+    if not isinstance(factor, dict) or "evidence_field_id" not in factor:
+        return {}
+    return {
+        "evidence_field_id": factor.get("evidence_field_id"),
+        "feature": factor.get("feature"),
+        "display_name": factor.get("display_name") or factor.get("feature"),
+        "value": factor.get("value") if factor.get("value") is not None else factor.get("feature_value"),
+        "unit": factor.get("unit", ""),
+        "normal_range": factor.get("normal_range", "근거 부족"),
+        "direction": factor.get("direction"),
+        "contribution": factor.get("contribution"),
+        "source_type": factor.get("source_type", "observed"),
+    }
+
+
 def _ensure_unmutated_source(artifact: dict[str, Any]) -> None:
     provenance = artifact.get("provenance") or {}
     if provenance.get("canonical_source_mutated") is not False:
@@ -206,6 +222,8 @@ def _recommended_decision(artifact: dict[str, Any]) -> str:
 def _confidence_label(value: Any) -> str:
     if value is None:
         return "unavailable"
+    if isinstance(value, str):
+        return value if value in {"high", "medium", "low", "unavailable"} else "unavailable"
     numeric = float(value)
     if numeric >= 0.7:
         return "high"

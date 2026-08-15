@@ -114,6 +114,7 @@ def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[st
         signed = float(factor.get("signed_contribution") or 0.0)
         factor.setdefault("evidence_field_id", f"factor.{index}.{feature}")
         factor.setdefault("display_name", _display_name(feature))
+        factor.setdefault("value", factor.get("feature_value"))
         factor.setdefault("unit", _unit(feature))
         factor.setdefault("normal_range", "근거 부족")
         factor.setdefault("direction", "risk_up" if signed >= 0 else "risk_down")

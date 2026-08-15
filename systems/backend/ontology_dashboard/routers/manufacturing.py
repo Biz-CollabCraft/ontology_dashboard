@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
 
 from ..contracts import DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
 from ..dependencies import (
@@ -85,11 +87,12 @@ def get_event(
 @router.get("/events/{event_id}/evidence")
 def get_evidence(
     event_id: str,
+    view: Literal["legacy", "canonical"] = Query(default="legacy"),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     _require_active_event_project(principal, service, event_id)
-    return service.evidence(event_id)
+    return service.evidence(event_id, view=view)
 
 
 @router.post("/events/{event_id}/report")

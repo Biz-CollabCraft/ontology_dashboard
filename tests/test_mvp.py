@@ -232,6 +232,13 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     evidence = client.get("/api/events/EVT-GS-002/evidence")
     assert evidence.status_code == 200
     assert evidence.json()["status"] == "warning"
+    assert evidence.json()["schema_version"] == "1.0"
+
+    canonical_evidence = client.get("/api/events/EVT-GS-002/evidence?view=canonical")
+    assert canonical_evidence.status_code == 200
+    assert canonical_evidence.json()["schema_version"] == "event-evidence-projection-v1"
+    assert canonical_evidence.json()["contract_type"] == "event_evidence_projection"
+    assert canonical_evidence.json()["assessment"]["status"] == "warning"
 
     report = client.post("/api/events/EVT-GS-002/report", json={"role": "manager", "use_llm": False})
     assert report.status_code == 200

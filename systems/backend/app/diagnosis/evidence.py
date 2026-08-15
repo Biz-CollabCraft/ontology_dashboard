@@ -142,6 +142,13 @@ def build_product_result_artifact(
 
     model = predictor or configured_predictor()
     prediction = model.predict(fixture)
+    observation = fixture["observation"]
+    derived = {}
+    if not prediction.quality_issues:
+        try:
+            derived = derive_features(observation)
+        except (KeyError, TypeError, ValueError):
+            derived = {}
     observed_at = fixture["observation"]["timestamp"]
     asset_id = fixture["equipment"]["equipment_id"]
     prediction_id = f"{asset_id}#{observed_at}"
@@ -176,14 +183,31 @@ def build_product_result_artifact(
         "asset_id": asset_id,
         "asset_type": str(fixture.get("asset_type") or "cnc"),
         "observed_at": observed_at,
+        "generated_at": observed_at,
+        "threshold": float(model.policy["decision_threshold"]),
         "prediction_horizon_hours": 24,
         "prediction_task": "binary_failure_within_horizon",
         "failure_probability": prediction.probability,
         "predicted_failure_type": prediction.predicted_failure_type,
         "status_grade": status,
         "confidence": None if prediction.probability is None else round(abs(prediction.probability - 0.5) * 2.0, 6),
+        "confidence_label": prediction.confidence,
         "top_factors": factors,
         "recommended_action": action,
+        "data_quality_warnings": prediction.quality_issues,
+        "observation": {**observation, **derived},
+        "history": fixture.get("history", []),
+        "detected_interval": {
+            "start": (fixture.get("history") or [observation])[0]["timestamp"],
+            "end": observed_at,
+        },
+        "policy_version": str(model.policy["policy_version"]),
+        "model_mode": "trained" if prediction.model_artifact else "deterministic_fallback",
+        "lineage": {
+            "fixture_id": fixture["scenario_id"],
+            "fixture_schema_version": fixture["schema_version"],
+            "sensor_source": "observed-compatible fixture",
+        },
         "provenance": {
             "dataset_version": dataset_version,
             "model_version": prediction.model_version,
