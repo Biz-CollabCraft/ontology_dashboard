@@ -684,8 +684,8 @@ Status 값은 다음만 사용한다.
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
 | 13 | Done | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
-| 14 | Done | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime service refactor | `test_runtime_dashboard_result_artifact_projects_to_event_evidence` |
-| 15 | Done | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | `test_api_contract_and_state_changes`, `test_runtime_dashboard_result_artifact_projects_to_event_evidence` |
+| 14 | Partially Verified | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime evidence projection refactor | `test_runtime_dashboard_result_artifact_projects_to_event_evidence`, `test_runtime_dashboard_history_excludes_current_observation_from_baseline_history`; full PostgreSQL consumer smoke pending |
+| 15 | Partially Verified | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | `test_api_contract_and_state_changes`, runtime helper regression; full dashboard/report/list consumer path smoke pending |
 
 3차 PR 완료 조건은 다음과 같다.
 
@@ -693,6 +693,7 @@ Status 값은 다음만 사용한다.
 - canonical Event Evidence projection은 명시적 selector가 있을 때만 반환된다.
 - runtime inference와 Product Result Artifact/Evidence 최종 생성 책임은 `systems/backend/app/diagnosis`에 유지된다.
 - API contract regression이 legacy/canonical 응답을 모두 검증한다.
+- ai-dev evidence-state 기준으로 runtime dashboard 경로는 Partially Verified다. 코드와 unit/contract test는 있으나, PostgreSQL-backed full consumer smoke와 frontend typed ViewModel/browser 검증은 후속 범위다.
 
 ### 8.4 후속 PR: Report Projection Integration
 
@@ -754,6 +755,6 @@ Status 값은 다음만 사용한다.
 - report section과 evidence trace가 source field ID에 grounded 되어 있다.
 - `evaluation_truth`와 `hidden_truth`가 runtime surface에 없다.
 - `review_shutdown`은 automatic control이 아니라 human review임이 명확하다.
-- 점검 요청과 evidence trace UI가 live 또는 fixture-backed Event Evidence projection으로 동작한다.
+- 점검 요청과 evidence trace UI가 live 또는 fixture-backed Event Evidence projection으로 동작한다. 상태: Not Proven, Step 19~22 후속 UI 이식 완료 전까지 완료 기준으로 승격하지 않는다.
 - 정비이력 추가는 최소 action descriptor로만 제공되며 Work Order 생성이나 Operations 기간 집계를 만들지 않는다.
 - 상태 요약, 요약 보고서, Operations 기간 집계는 V2 Target으로 남아 있다.

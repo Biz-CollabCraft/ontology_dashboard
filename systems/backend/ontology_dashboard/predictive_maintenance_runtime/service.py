@@ -932,6 +932,27 @@ class PredictiveMaintenanceRuntimeService:
             **observation.derived_measures,
         }
 
+    def _dashboard_history_and_observation(
+        self,
+        observations: list[SensorObservation],
+        result: GovernedProductResult,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        rows = [self._dashboard_observation_payload(item) for item in observations]
+        if not rows:
+            return [], {
+                "timestamp": result.observed_at.isoformat(),
+                "product_type": result.asset_type,
+                "air_temperature_k": None,
+                "process_temperature_k": None,
+                "rotational_speed_rpm": None,
+                "torque_nm": None,
+                "tool_wear_min": None,
+            }
+        observation = rows[-1]
+        observation_timestamp = observation.get("timestamp")
+        history = [row for row in rows[:-1] if row.get("timestamp") != observation_timestamp]
+        return history, observation
+
     @staticmethod
     def _runtime_result_factor_scores(result: GovernedProductResult) -> list[FactorScore]:
         return [
@@ -1050,6 +1071,31 @@ class PredictiveMaintenanceRuntimeService:
         validate_evidence_payload_invariants(artifact["evidence_payload"])
         return artifact
 
+    def _dashboard_summary_recommended_decision(
+        self,
+        *,
+        context: DatasetVersionRuntimeContext,
+        result: GovernedProductResult,
+        equipment: DashboardEquipment,
+    ) -> str:
+        observation = {
+            "timestamp": result.observed_at.isoformat(),
+            "product_type": result.asset_type,
+        }
+        artifact = self._dashboard_result_artifact(
+            project_id=context.project_id,
+            workspace_id=context.workspace_id,
+            context=context,
+            result=result,
+            equipment=equipment,
+            observation=observation,
+            history=[],
+            maintenance_context=None,
+            window_start=result.observed_at,
+        )
+        projection = product_result_artifact_to_event_evidence_projection(artifact)
+        return str(projection["assessment"]["recommended_decision"])
+
     def _dashboard_detail(
         self,
         *,
@@ -1081,19 +1127,7 @@ class PredictiveMaintenanceRuntimeService:
             derived_measures=ALLOWED_DERIVED_MEASURES,
             limit=72,
         )
-        history = [
-            self._dashboard_observation_payload(item)
-            for item in observation_response.observations
-        ]
-        observation = history[-1] if history else {
-            "timestamp": result.observed_at.isoformat(),
-            "product_type": result.asset_type,
-            "air_temperature_k": None,
-            "process_temperature_k": None,
-            "rotational_speed_rpm": None,
-            "torque_nm": None,
-            "tool_wear_min": None,
-        }
+        history, observation = self._dashboard_history_and_observation(observation_response.observations, result)
         recommendation = result.recommended_action
         action = recommendation.action if recommendation else "Review governed prediction"
         action_label = _pm_label(PM_ACTION_LABELS, locale, action)
@@ -1156,12 +1190,17 @@ class PredictiveMaintenanceRuntimeService:
         projection = product_result_artifact_to_event_evidence_projection(artifact)
         projection["event_id"] = event_id
         projection["scenario_id"] = f"{result.asset_type}:{result.site_id}:{result.cell_id}"
+        recommended_decision = str(projection["assessment"]["recommended_decision"])
+        action_label = _pm_label(PM_ACTION_LABELS, locale, recommended_decision)
+        if maintenance_context is not None:
+            maintenance_context["recommended_actions"] = [action_label]
         evidence = event_evidence_projection_to_legacy_evidence(
             projection,
             ranked_factor_evidence=artifact["ranked_factor_evidence"],
         )
         evidence["evidence_id"] = f"pm-evidence:{event_id}"
         evidence["equipment"] = equipment.model_dump(mode="json")
+        evidence["maintenance_context"]["recommended_actions"] = [action_label]
         factors = evidence["top_factors"]
         report = {
             "report_id": f"pm-report:{event_id}:{role}:{locale}",
@@ -1186,7 +1225,7 @@ class PredictiveMaintenanceRuntimeService:
             ),
             "status": result.status_grade,
             "confidence": confidence,
-            "recommended_decision": action,
+            "recommended_decision": recommended_decision,
             "sections": [
                 {
                     "section_id": "risk",
@@ -1340,6 +1379,11 @@ class PredictiveMaintenanceRuntimeService:
                 and item["completed_at"] <= result.observed_at
             ]
             equipment = self._dashboard_equipment(result, maintenance)
+            recommended_decision = self._dashboard_summary_recommended_decision(
+                context=context,
+                result=result,
+                equipment=equipment,
+            )
             events.append(
                 DashboardEventSummary(
                     event_id=event_id,
@@ -1350,11 +1394,7 @@ class PredictiveMaintenanceRuntimeService:
                     failure_probability=result.failure_probability,
                     confidence=f"{result.confidence * 100:.1f}% · calibrated",
                     predicted_failure_type=result.predicted_failure_type,
-                    recommended_decision=(
-                        result.recommended_action.action
-                        if result.recommended_action
-                        else "Review governed prediction"
-                    ),
+                    recommended_decision=recommended_decision,
                     observed_at=result.observed_at,
                     dataset_version_id=context.dataset_version_id,
                 )

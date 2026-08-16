@@ -295,14 +295,16 @@ prediction factor 원천에서 producer가 결정적으로 만든 `ranked_factor
 
 ### 4.5 Event Evidence Projection
 
-상태: `현행 구현`. Event Evidence projection은 enriched Product Result Artifact에서
-파생하며 `artifact_reference`, `assessment`, `report_projection`, `provenance`,
-`limitations`로 구성한다.
+상태: `부분 구현 / 부분 검증`. Event Evidence projection은 enriched Product Result
+Artifact에서 파생하며 `artifact_reference`, `assessment`, `report_projection`,
+`provenance`, `limitations`로 구성한다.
 
 `GET /api/events/{event_id}/evidence?view=canonical`은 path의 `event_id`로 projection
 identity를 정규화한다. 기본 `GET /api/events/{event_id}/evidence`와 runtime
 `selected_event_detail.evidence`는 legacy Evidence Package compatibility shape를 유지하되,
-내부 입력은 Event Evidence projection이다.
+내부 입력은 Event Evidence projection이다. Runtime report/list consumer는 projection-derived
+`assessment.recommended_decision`을 사용하도록 정규화했지만, PostgreSQL-backed full smoke와
+frontend typed ViewModel/browser 검증 전까지 ai-dev evidence-state는 Partially Verified로 둔다.
 
 ## 5. API/ViewModel 공통 스키마
 

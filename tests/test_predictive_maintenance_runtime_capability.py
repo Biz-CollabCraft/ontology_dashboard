@@ -25,6 +25,7 @@ from ontology_dashboard.predictive_maintenance_runtime.models import (
     ProductFactor,
     ProductResultProvenance,
     SemanticQueryCapability,
+    SensorObservation,
 )
 from ontology_dashboard.predictive_maintenance_runtime.service import (
     PredictiveMaintenanceRuntimeService,
@@ -125,7 +126,7 @@ def test_runtime_dashboard_result_artifact_projects_to_event_evidence() -> None:
                 explanation_method="result_artifact_factor",
             ),
         ],
-        recommended_action=PolicyRecommendation(action="request_inspection", priority="high"),
+        recommended_action=PolicyRecommendation(action="inspect_within_current_shift", priority="high"),
         provenance=ProductResultProvenance(
             dataset_id="dataset-test",
             dataset_version_id="dataset-version-test",
@@ -214,6 +215,137 @@ def test_runtime_dashboard_result_artifact_projects_to_event_evidence() -> None:
     assert artifact["evidence_payload"]["evidence_gaps"][0]["gap_id"] == "gap.maintenance_context.unavailable"
     assert projection["contract_type"] == "event_evidence_projection"
     assert projection["assessment"]["recommended_decision"] == "request_inspection"
+    assert service._dashboard_summary_recommended_decision(
+        context=context,
+        result=result,
+        equipment=equipment,
+    ) == "request_inspection"
     assert evidence["lineage"]["dataset_version_id"] == "dataset-version-test"
     assert evidence["lineage"]["product_result_artifact"]["artifact_id"] == artifact["artifact_id"]
     assert evidence["top_factors"][0]["evidence_field_id"] == "factor.1.rotation_raw"
+
+
+def test_runtime_dashboard_history_excludes_current_observation_from_baseline_history() -> None:
+    observed_at = datetime(2026, 8, 6, 1, 30, tzinfo=timezone.utc)
+    previous_at = observed_at - timedelta(minutes=10)
+    checksum = "b" * 64
+    service = PredictiveMaintenanceRuntimeService(repository=None)  # type: ignore[arg-type]
+    result = GovernedProductResult(
+        source_contract="result_artifact",
+        artifact_id="RESULT#CMP-001#2026-08-06T01:30:00+00:00",
+        asset_id="CMP-001",
+        asset_type="compressor",
+        site_id="S01",
+        cell_id="L03",
+        observed_at=observed_at,
+        prediction_horizon_hours=24,
+        prediction_task="binary_failure_within_horizon",
+        failure_probability=0.82,
+        predicted_failure_type="failure_risk",
+        status_grade="warning",
+        confidence=0.76,
+        top_factors=[
+            ProductFactor(
+                rank=1,
+                feature="rotation_raw",
+                feature_value=1120.0,
+                signed_contribution=0.52,
+                direction="risk_up",
+                explanation_method="result_artifact_factor",
+            ),
+            ProductFactor(
+                rank=2,
+                feature="pressure_raw",
+                feature_value=3.2,
+                signed_contribution=0.31,
+                direction="risk_up",
+                explanation_method="result_artifact_factor",
+            ),
+            ProductFactor(
+                rank=3,
+                feature="voltage_raw",
+                feature_value=221.0,
+                signed_contribution=-0.12,
+                direction="risk_down",
+                explanation_method="result_artifact_factor",
+            ),
+        ],
+        recommended_action=PolicyRecommendation(action="request_inspection", priority="high"),
+        provenance=ProductResultProvenance(
+            dataset_id="dataset-test",
+            dataset_version_id="dataset-version-test",
+            source_version="canonical-ai4i-physics-v3.1",
+            bundle_checksum_sha256=checksum,
+            result_artifact_source_sha256=checksum,
+            prediction_id="prediction-test",
+            prediction_result_id="prediction-result-test",
+            model_version="independent-logreg-v3.1",
+            schema_version="result-artifact-v1.0",
+            prediction_task="binary_failure_within_horizon",
+            source_type="derived_result_artifact",
+        ),
+        governance=GovernanceProvenance(),
+        graph=GraphReadiness(status="ready"),
+        prediction_result=PredictionResult(
+            prediction_id="prediction-result-test",
+            organization_id="org-test",
+            project_id="project-test",
+            workspace_id="workspace-test",
+            subject=PredictionSubject(object_type="equipment", object_id="CMP-001", observed_at=observed_at),
+            prediction=PredictionValue(
+                task="classification",
+                status="warning",
+                label="failure_risk",
+                score=0.82,
+                confidence=0.76,
+                horizon="24h",
+                value="failure_risk",
+            ),
+            evidence=[
+                PredictionEvidence(
+                    evidence_id="artifact:RESULT#CMP-001",
+                    kind="artifact",
+                    label="Governed Result Artifact",
+                    value={"source_contract": "result_artifact"},
+                    source=EvidenceSource(system="test", reference="fixture"),
+                )
+            ],
+            model=PredictionModel(
+                provider="canonical-predictive-maintenance",
+                model_name="independent-logreg",
+                model_version="independent-logreg-v3.1",
+                dataset_version="canonical-ai4i-physics-v3.1",
+            ),
+            data_quality=DataQuality(status="pass"),
+            created_at=observed_at,
+        ),
+    )
+    observations = [
+        SensorObservation(
+            observed_at=previous_at,
+            asset_id="CMP-001",
+            asset_type="compressor",
+            site_id="S01",
+            cell_id="L03",
+            is_operating=True,
+            operating_state="running",
+            source_sha256=checksum,
+            measurements={"rotation_raw": 1000.0},
+        ),
+        SensorObservation(
+            observed_at=observed_at,
+            asset_id="CMP-001",
+            asset_type="compressor",
+            site_id="S01",
+            cell_id="L03",
+            is_operating=True,
+            operating_state="running",
+            source_sha256=checksum,
+            measurements={"rotation_raw": 1120.0},
+        ),
+    ]
+
+    history, observation = service._dashboard_history_and_observation(observations, result)
+
+    assert observation["timestamp"] == observed_at.isoformat()
+    assert [row["timestamp"] for row in history] == [previous_at.isoformat()]

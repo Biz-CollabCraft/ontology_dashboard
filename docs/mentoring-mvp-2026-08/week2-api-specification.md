@@ -46,7 +46,9 @@ shape를 유지한다. `view=canonical`을 명시하면 같은 path `event_id`�
 Event Evidence projection을 반환한다. Runtime dashboard detail도 내부적으로
 Result Artifact fact와 canonical observation/history를 enriched artifact로 재구성한 뒤
 Event Evidence projection을 거쳐 legacy-compatible `selected_event_detail.evidence`를 만든다.
-Frontend는 raw JSONL이나 producer-only `evidence_payload`를 직접 파싱하지 않는다.
+이 runtime 경로의 evidence-state는 Partially Verified이며, PostgreSQL-backed full smoke와
+frontend typed ViewModel/browser 검증은 후속이다. Frontend는 raw JSONL이나 producer-only
+`evidence_payload`를 직접 파싱하지 않는다.
 
 변경 제안 base path: `/api`
 
