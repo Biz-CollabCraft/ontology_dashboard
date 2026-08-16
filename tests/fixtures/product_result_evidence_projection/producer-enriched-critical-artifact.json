@@ -24,7 +24,7 @@
       "explanation_method": "deterministic_component_score"
     }
   ],
-  "legacy_compatible_top_factors": [
+  "ranked_factor_evidence": [
     {
       "evidence_field_id": "factor.1.rotation_raw",
       "feature": "rotation_raw",

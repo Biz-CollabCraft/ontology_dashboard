@@ -195,20 +195,27 @@ class ManufacturingPredictiveMaintenanceService:
         return report, trace
 
     def _event_evidence_projection(self, fixture: dict[str, Any]) -> dict[str, Any]:
-        artifact = build_product_result_artifact(
-            fixture,
-            context_provider=self._context_provider(fixture),
-        )
+        artifact = self._product_result_artifact(fixture)
         return product_result_artifact_to_event_evidence_projection(artifact)
 
     def _projected_legacy_evidence(self, fixture: dict[str, Any]) -> dict[str, Any]:
-        projection = self._event_evidence_projection(fixture)
-        legacy = event_evidence_projection_to_legacy_evidence(projection)
+        artifact = self._product_result_artifact(fixture)
+        projection = product_result_artifact_to_event_evidence_projection(artifact)
+        legacy = event_evidence_projection_to_legacy_evidence(
+            projection,
+            ranked_factor_evidence=artifact.get("ranked_factor_evidence"),
+        )
         legacy["event_id"] = fixture["event_id"]
         legacy["evidence_id"] = f"EVD-{fixture['event_id']}"
         legacy["scenario_id"] = fixture["scenario_id"]
         legacy["equipment"] = fixture["equipment"]
         return legacy
+
+    def _product_result_artifact(self, fixture: dict[str, Any]) -> dict[str, Any]:
+        return build_product_result_artifact(
+            fixture,
+            context_provider=self._context_provider(fixture),
+        )
 
     def layout(self, event_id: str, request: LayoutRequest) -> tuple[UILayout, dict[str, Any]]:
         fixture = self._fixture(event_id)

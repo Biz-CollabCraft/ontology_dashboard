@@ -112,10 +112,10 @@ def validate_evidence_payload_invariants(payload: dict[str, Any]) -> None:
         raise ValueError("evidence_payload missing maintenance_context gap")
 
 
-def build_legacy_compatible_top_factors(prediction: Prediction) -> list[dict[str, Any]]:
+def build_ranked_factor_evidence(prediction: Prediction) -> list[dict[str, Any]]:
     scored = prediction.factors[:5]
     total_score = sum(item.score for item in scored) or 1.0
-    return [_legacy_compatible_top_factor(index, item, total_score) for index, item in enumerate(scored, start=1)]
+    return [_ranked_factor_evidence_row(index, item, total_score) for index, item in enumerate(scored, start=1)]
 
 
 def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[str, Any] | None = None) -> None:
@@ -135,7 +135,7 @@ def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[st
         factor.setdefault("source_type", "observed" if feature in observed_features else "derived")
 
 
-def _legacy_compatible_top_factor(index: int, item: FactorScore, total_score: float) -> dict[str, Any]:
+def _ranked_factor_evidence_row(index: int, item: FactorScore, total_score: float) -> dict[str, Any]:
     feature = item.feature
     return {
         "evidence_field_id": f"factor.{index}.{feature}",

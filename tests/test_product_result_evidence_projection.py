@@ -116,6 +116,7 @@ def test_payload_fields_do_not_override_artifact_judgement_or_subject() -> None:
 
     assert projection["assessment"]["top_factors"] == artifact["top_factors"]
     assert projection["artifact_reference"]["top_factor_count"] == len(artifact["top_factors"])
+    assert "ranked_factor_evidence" not in projection["artifact_reference"]
     assert projection["subject"] == {
         "equipment_id": "CMP-S03-L03-01",
         "display_name": "CMP-S03-L03-01",
@@ -125,16 +126,19 @@ def test_payload_fields_do_not_override_artifact_judgement_or_subject() -> None:
 
 def test_legacy_projection_rejects_unmapped_product_result_factors() -> None:
     projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
-    projection["artifact_reference"]["legacy_compatible_top_factors"] = []
 
     with pytest.raises(ValueError, match="producer-normalized top_factors"):
         event_evidence_projection_to_legacy_evidence(projection)
 
 
-def test_legacy_projection_uses_artifact_legacy_compatible_factors_for_current_schema() -> None:
-    projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
+def test_legacy_projection_uses_ranked_factor_evidence_for_current_schema() -> None:
+    artifact = enriched_critical_artifact()
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
 
-    legacy = event_evidence_projection_to_legacy_evidence(projection)
+    legacy = event_evidence_projection_to_legacy_evidence(
+        projection,
+        ranked_factor_evidence=artifact["ranked_factor_evidence"],
+    )
 
     schema = json.loads((ROOT / "contracts" / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
     assert list(Draft202012Validator(schema).iter_errors(legacy)) == []
@@ -143,7 +147,7 @@ def test_legacy_projection_uses_artifact_legacy_compatible_factors_for_current_s
     assert legacy["status"] == projection["assessment"]["status"]
     assert legacy["recommended_decision"] == projection["assessment"]["recommended_decision"]
     assert legacy["threshold"] == projection["assessment"]["threshold"]
-    assert legacy["top_factors"] == projection["artifact_reference"]["legacy_compatible_top_factors"]
+    assert legacy["top_factors"] == artifact["ranked_factor_evidence"]
     assert legacy["top_factors"][0]["normal_range"] == "baseline z-score -2.0..2.0"
     assert legacy["lineage"]["product_result_artifact"]["artifact_id"] == projection["artifact_reference"]["artifact_id"]
     assert_absent_hidden_truth(legacy)

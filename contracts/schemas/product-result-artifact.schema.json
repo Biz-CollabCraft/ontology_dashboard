@@ -54,7 +54,7 @@
     "status_grade": {"enum": ["normal", "attention", "warning", "critical", "data_quality_hold"]},
     "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
     "top_factors": {"type": "array", "items": {"type": "object"}},
-    "legacy_compatible_top_factors": {
+    "ranked_factor_evidence": {
       "type": "array",
       "maxItems": 5,
       "items": {

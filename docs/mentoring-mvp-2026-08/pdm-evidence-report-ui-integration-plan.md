@@ -168,6 +168,8 @@ flowchart LR
 
 호환용 optional root 필드는 `generated_at`, `threshold`다. 두 값은 기존 consumer를 깨지 않는 범위에서만 허용하며 `evidence_payload` 아래로 복제하지 않는다.
 
+`top_factors`는 Product Result Artifact의 공식 판단 요약이며 canonical consumer의 기본 기준은 top 3이다. 사용자가 보는 근거표, report/detail/audit, legacy Evidence Package 호환에는 같은 `prediction.factors` 원천에서 결정적으로 파생한 `ranked_factor_evidence` top 5를 사용한다. `ranked_factor_evidence`는 새 위험 판단이나 보정값이 아니라 producer-derived 설명 근거이며, canonical 판단 요약 계약을 대체하지 않는다.
+
 Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 
 - `evidence_payload.sensor_evidence`: sensor별 window 평균, z-score, baseline basis
@@ -194,7 +196,7 @@ Step 7 owner decision:
 - `basis` grounding: `component_hypotheses[].basis`와 `recommended_actions[].basis`의 모든 ID는 `evidence_payload.source_fields[].field_id`에 존재해야 한다. 이 cross-field invariant는 JSON Schema가 아니라 contract test로 검증한다.
 - `maintenance_context` gap invariant: `maintenance_context`가 없거나 `null`이면 `evidence_gaps[]`에 `field=evidence_payload.maintenance_context`, `owner_domain=maintenance` 항목이 있어야 한다. 이 조건은 JSON Schema가 아니라 step 8 producer validator/test가 검증한다.
 
-공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다.
+공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다. `ranked_factor_evidence`는 이 판단 필드에서 결론을 새로 만들지 않고, 동일 predictor ranking과 observation/derived feature 값을 reportable evidence row로 펼친다.
 
 Producer에 올리지 않는 필드는 다음 기준으로 처리한다.
 
@@ -275,6 +277,7 @@ projection이 Artifact에서 읽어야 할 원천 필드는 다음을 포함한�
 - `evidence_payload.sensor_evidence`
 - prediction summary: `failure_probability`, `status_grade`, `confidence`, `predicted_failure_type`
 - `top_factors`
+- `ranked_factor_evidence`
 - `evidence_payload.component_hypotheses`
 - `evidence_payload.maintenance_context`
 - `recommended_action`, `evidence_payload.recommended_actions`
@@ -296,6 +299,8 @@ projection이 Artifact에서 읽어야 할 원천 필드는 다음을 포함한�
 
 권장 구조는 Product Result Artifact를 공식 원천으로 보존하고, 프론트엔드 표시용 필드는 projection layer가 `assessment`와 `report_projection`으로 파생하는 방식이다. Artifact 원천 필드와 화면 표시용 필드를 같은 루트에 섞지 않는다.
 
+canonical Event Evidence의 `assessment.top_factors`는 Product Result Artifact의 공식 top 3 판단 요약을 유지한다. `report_projection`과 향후 ReportOutput/ViewModel은 기본적으로 top 3 요약을 우선 표시하되, 상세 EvidenceTable/audit 또는 legacy compatibility가 필요할 때 `ranked_factor_evidence`에서 top 5 factor rows를 파생한다. 이 top 5 자료는 `artifact_reference` 같은 public reference 필드에 복제하지 않고, legacy compatibility 변환 또는 명시적 detail ViewModel 경계에서만 사용한다.
+
 ### 4.3 Event Evidence Projection 전환 호환성
 
 현행 `GET /api/events/{event_id}/evidence` endpoint 경계는 유지하지만, 응답 shape를 즉시 바꾸면 기존 MVP 화면과 report consumer가 깨질 수 있다. 2주차 구현은 다음 전환 기준을 둔다.
@@ -305,6 +310,7 @@ projection이 Artifact에서 읽어야 할 원천 필드는 다음을 포함한�
 - 2주차 기본 응답은 기존 legacy evidence shape를 유지한다.
 - canonical Event Evidence projection은 명시적 `schema_version`, `contract_type`, query/header/feature flag 같은 contract selector가 있을 때만 반환한다.
 - legacy projection은 새 수치를 만들지 않고 enriched Product Result Artifact와 Event Evidence projection의 `assessment`, `report_projection`에서 현행 `schemas/evidence-package.schema.json` 호환 필드만 재배열한다.
+- legacy Evidence Package의 top 5 factor는 Product Result Artifact의 `ranked_factor_evidence`를 legacy 변환 내부 입력으로 받아 생성한다. `legacy_compatible_top_factors` 같은 migration helper 이름이나 배열은 canonical Event Evidence public 응답에 노출하지 않는다.
 - API contract regression test는 legacy evidence shape, Event Evidence projection shape, hidden/evaluation truth absence, report grounding source field를 함께 검증한다.
 - canonical projection을 기본 응답으로 승격하고 legacy projection을 제거할지는 frontend/report consumer 전환 완료와 contract regression 통과 후 별도 PR에서 결정한다.
 
@@ -492,6 +498,7 @@ Enriched Product Result Artifact
 
 - 점검 요청 output: 대상 설비, top factor 기반 점검 target, sensor evidence, human approval 문구
 - Evidence trace output: report section, evidence field ID, source path, lineage reference
+- Factor display output: canonical 기본 화면은 `assessment.top_factors` top 3을 사용하고, 상세/audit/legacy 근거표는 `ranked_factor_evidence`에서 top 5를 파생한다.
 - 상태 요약/요약 보고서 output: 2주차 구현 범위가 아니라 V2 Target으로 유지
 
 분기 mapper는 새 수치를 계산하지 않는다. producer가 산출한 enriched Artifact와 Event Evidence projection 값을 표시 목적에 맞게 재배열한다. `probability_label`, `status_label`, `sensor_window_label`처럼 표시 형식만 바꾸는 값은 허용하되, 확률·등급·z-score·집계 count를 새로 추정하지 않는다.

@@ -8,8 +8,8 @@ from jsonschema import Draft202012Validator
 
 from .contracts import DISPLAY_NAMES, UNITS, derive_features, project_root
 from .evidence_enrichment import (
-    build_legacy_compatible_top_factors,
     build_product_result_evidence_payload,
+    build_ranked_factor_evidence,
     enrich_product_result_top_factors,
     evidence_payload_reference,
     validate_evidence_payload_invariants,
@@ -194,7 +194,7 @@ def build_product_result_artifact(
         "confidence": None if prediction.probability is None else round(abs(prediction.probability - 0.5) * 2.0, 6),
         "confidence_label": prediction.confidence,
         "top_factors": factors,
-        "legacy_compatible_top_factors": build_legacy_compatible_top_factors(prediction),
+        "ranked_factor_evidence": build_ranked_factor_evidence(prediction),
         "recommended_action": action,
         "data_quality_warnings": prediction.quality_issues,
         "observation": {**observation, **derived},
