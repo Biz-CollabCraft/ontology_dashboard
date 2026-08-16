@@ -148,6 +148,21 @@ def event_evidence_projection_to_legacy_evidence(
         "maintenance_context": maintenance_context,
         "data_quality_warnings": assessment.get("data_quality_warnings", []),
         "lineage": {
+            **{
+                key: lineage[key]
+                for key in (
+                    "project_id",
+                    "workspace_id",
+                    "dataset_id",
+                    "dataset_version_id",
+                    "source_version",
+                    "bundle_checksum_sha256",
+                    "prediction_id",
+                    "prediction_result_id",
+                    "replay_timestamp",
+                )
+                if key in lineage
+            },
             "fixture_id": lineage.get("fixture_id") or projection.get("scenario_id") or "unknown",
             "fixture_schema_version": lineage.get("fixture_schema_version") or "derived",
             "sensor_source": lineage.get("sensor_source") or "artifact-derived projection",

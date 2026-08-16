@@ -4,6 +4,15 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from app.diagnosis.evidence_enrichment import (
+    build_product_result_evidence_payload,
+    build_ranked_factor_evidence,
+    enrich_product_result_top_factors,
+    evidence_payload_reference,
+    validate_evidence_payload_invariants,
+)
+from app.diagnosis.predictor import FactorScore, Prediction
+
 from ..contracts import AppLocale
 from ..adapters.models import (
     DataQuality,
@@ -40,6 +49,10 @@ from .models import (
     SensorObservation,
     SnapshotDrilldown,
     TimelinePrediction,
+)
+from ..product_result_evidence_projection import (
+    event_evidence_projection_to_legacy_evidence,
+    product_result_artifact_to_event_evidence_projection,
 )
 from .repository import ALLOWED_DERIVED_MEASURES, PredictiveMaintenanceRuntimeRepository
 
@@ -919,6 +932,124 @@ class PredictiveMaintenanceRuntimeService:
             **observation.derived_measures,
         }
 
+    @staticmethod
+    def _runtime_result_factor_scores(result: GovernedProductResult) -> list[FactorScore]:
+        return [
+            FactorScore(
+                feature=item.feature,
+                raw_value=item.feature_value,
+                score=abs(item.signed_contribution),
+                direction=item.direction,
+            )
+            for item in result.top_factors
+        ]
+
+    def _dashboard_result_artifact(
+        self,
+        *,
+        project_id: str,
+        workspace_id: str,
+        context: DatasetVersionRuntimeContext,
+        result: GovernedProductResult,
+        equipment: DashboardEquipment,
+        observation: dict[str, Any],
+        history: list[dict[str, Any]],
+        maintenance_context: dict[str, Any] | None,
+        window_start: datetime,
+    ) -> dict[str, Any]:
+        action = result.recommended_action
+        action_payload = (
+            {"action": action.action, "priority": action.priority}
+            if action is not None
+            else {"action": "request_inspection", "priority": "medium"}
+        )
+        factors = [item.model_dump(mode="json") for item in result.top_factors]
+        artifact = {
+            "artifact_id": result.artifact_id or f"RESULT#{result.provenance.prediction_id}",
+            "artifact_type": "predictive_maintenance_result",
+            "schema_version": result.provenance.schema_version,
+            "asset_id": result.asset_id,
+            "asset_type": result.asset_type,
+            "observed_at": result.observed_at.isoformat(),
+            "generated_at": result.observed_at.isoformat(),
+            "threshold": 0.5,
+            "prediction_horizon_hours": result.prediction_horizon_hours,
+            "prediction_task": result.prediction_task,
+            "failure_probability": result.failure_probability,
+            "predicted_failure_type": result.predicted_failure_type,
+            "status_grade": result.status_grade,
+            "confidence": result.confidence,
+            "top_factors": factors,
+            "recommended_action": action_payload,
+            "data_quality_warnings": [],
+            "observation": observation,
+            "history": history,
+            "detected_interval": {
+                "start": window_start.isoformat(),
+                "end": result.observed_at.isoformat(),
+            },
+            "policy_version": "result-artifact-policy-v1",
+            "model_mode": "postgresql_result_artifact",
+            "lineage": {
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+                "dataset_id": context.dataset_id,
+                "dataset_version_id": context.dataset_version_id,
+                "source_version": context.source_version,
+                "bundle_checksum_sha256": context.bundle_checksum_sha256,
+                "model_version": result.provenance.model_version,
+                "result_schema": result.provenance.schema_version,
+                "prediction_task": result.provenance.prediction_task,
+                "prediction_id": result.provenance.prediction_id,
+                "prediction_result_id": result.provenance.prediction_result_id,
+                "sensor_source": "postgresql_canonical_observation",
+                "context_source": (
+                    f"{maintenance_context['provider']}:{maintenance_context['version']}"
+                    if maintenance_context is not None
+                    else "unavailable"
+                ),
+                "replay_timestamp": result.observed_at.isoformat(),
+            },
+            "provenance": {
+                "dataset_version": context.source_version,
+                "model_version": result.provenance.model_version,
+                "prediction_id": result.provenance.prediction_id,
+                "source_type": result.provenance.source_type,
+                "canonical_source_mutated": result.provenance.canonical_source_mutated,
+                "model_artifact": {
+                    "dataset_version": context.source_version,
+                    "schema_version": result.provenance.schema_version,
+                    "source_sha256": result.provenance.result_artifact_source_sha256,
+                },
+            },
+        }
+        enrich_product_result_top_factors(artifact, {"observation": observation})
+        prediction = Prediction(
+            model_version=result.provenance.model_version,
+            probability=result.failure_probability,
+            risk_band=result.status_grade,
+            recommended_decision=str(action_payload["action"]),
+            confidence="high" if result.confidence >= 0.7 else "medium" if result.confidence >= 0.4 else "low",
+            predicted_failure_type=result.predicted_failure_type,
+            factors=self._runtime_result_factor_scores(result),
+            quality_issues=[],
+            model_artifact=artifact["provenance"]["model_artifact"],
+        )
+        artifact["ranked_factor_evidence"] = build_ranked_factor_evidence(prediction)
+        artifact["evidence_payload"] = build_product_result_evidence_payload(
+            artifact,
+            {
+                "observation": observation,
+                "history": history,
+                "equipment": equipment.model_dump(mode="json"),
+            },
+            prediction,
+            maintenance_context=maintenance_context,
+        )
+        artifact["provenance"]["evidence_payload_reference"] = evidence_payload_reference(artifact)
+        validate_evidence_payload_invariants(artifact["evidence_payload"])
+        return artifact
+
     def _dashboard_detail(
         self,
         *,
@@ -972,32 +1103,6 @@ class PredictiveMaintenanceRuntimeService:
             if locale == "ko-KR"
             else f"{result.confidence * 100:.1f}% · calibrated"
         )
-        factor_units = {
-            "air_temperature_k": "K",
-            "process_temperature_k": "K",
-            "rotational_speed_rpm": "rpm",
-            "torque_nm": "Nm",
-            "tool_wear_min": "min",
-            "voltage_raw": "raw",
-            "rotation_raw": "raw",
-            "pressure_raw": "raw",
-            "vibration_raw": "raw",
-            "relative_vibration_z": "z",
-        }
-        factors = [
-            {
-                "evidence_field_id": f"factor:{item.feature}",
-                "feature": item.feature,
-                "display_name": _pm_label(PM_FEATURE_LABELS, locale, item.feature),
-                "value": item.feature_value,
-                "unit": factor_units.get(item.feature, "model unit"),
-                "normal_range": "관리형 모델 계약 참조" if locale == "ko-KR" else "See governed model contract",
-                "direction": item.direction,
-                "contribution": item.signed_contribution,
-                "source_type": "result_artifact_factor",
-            }
-            for item in result.top_factors
-        ]
         maintenance_payload = [
             {
                 **item,
@@ -1011,31 +1116,11 @@ class PredictiveMaintenanceRuntimeService:
             f"result-artifact:{event_id}",
             *[f"maintenance:{item['maintenance_id']}" for item in maintenance[:5]],
         ]
-        evidence = {
-            "evidence_id": f"pm-evidence:{event_id}",
-            "event_id": event_id,
-            "scenario_id": f"{result.asset_type}:{result.site_id}:{result.cell_id}",
-            "equipment": equipment.model_dump(mode="json"),
-            "model": {
-                "model_version": result.provenance.model_version,
-                "policy_version": "result-artifact-policy-v1",
-                "mode": "postgresql_result_artifact",
-            },
-            "status": result.status_grade,
-            "recommended_decision": action,
-            "confidence": confidence,
-            "failure_probability": result.failure_probability,
-            "threshold": 0.5,
-            "predicted_failure_type": result.predicted_failure_type,
-            "observation": observation,
-            "history": history,
-            "detected_interval": {
-                "start": window_start.isoformat(),
-                "end": result.observed_at.isoformat(),
-            },
-            "top_factors": factors,
-            "maintenance_context": {
-                "provider": "PostgreSQL Canonical 정비 이력" if locale == "ko-KR" else "PostgreSQL canonical maintenance events",
+        maintenance_context = (
+            {
+                "provider": "PostgreSQL Canonical 정비 이력"
+                if locale == "ko-KR"
+                else "PostgreSQL canonical maintenance events",
                 "version": context.source_version,
                 "source_type": "canonical_maintenance_evidence",
                 "source_refs": source_refs,
@@ -1053,24 +1138,31 @@ class PredictiveMaintenanceRuntimeService:
                     ]
                 ),
                 "recommended_actions": [action_label],
-            },
-            "data_quality_warnings": [],
-            "lineage": {
-                "project_id": project_id,
-                "workspace_id": workspace_id,
-                "dataset_id": context.dataset_id,
-                "dataset_version_id": context.dataset_version_id,
-                "source_version": context.source_version,
-                "bundle_checksum_sha256": context.bundle_checksum_sha256,
-                "model_version": result.provenance.model_version,
-                "result_schema": result.provenance.schema_version,
-                "prediction_task": result.provenance.prediction_task,
-                "prediction_id": result.provenance.prediction_id,
-                "prediction_result_id": result.provenance.prediction_result_id,
-                "replay_timestamp": result.observed_at.isoformat(),
-            },
-            "generated_at": result.observed_at.isoformat(),
-        }
+            }
+            if maintenance
+            else None
+        )
+        artifact = self._dashboard_result_artifact(
+            project_id=project_id,
+            workspace_id=workspace_id,
+            context=context,
+            result=result,
+            equipment=equipment,
+            observation=observation,
+            history=history,
+            maintenance_context=maintenance_context,
+            window_start=window_start,
+        )
+        projection = product_result_artifact_to_event_evidence_projection(artifact)
+        projection["event_id"] = event_id
+        projection["scenario_id"] = f"{result.asset_type}:{result.site_id}:{result.cell_id}"
+        evidence = event_evidence_projection_to_legacy_evidence(
+            projection,
+            ranked_factor_evidence=artifact["ranked_factor_evidence"],
+        )
+        evidence["evidence_id"] = f"pm-evidence:{event_id}"
+        evidence["equipment"] = equipment.model_dump(mode="json")
+        factors = evidence["top_factors"]
         report = {
             "report_id": f"pm-report:{event_id}:{role}:{locale}",
             "event_id": event_id,

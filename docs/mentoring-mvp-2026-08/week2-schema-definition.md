@@ -273,6 +273,37 @@
 | `source_type` | string | Y | `derived_result_artifact` |
 | `canonical_source_mutated` | boolean | Y | 항상 `false` |
 
+### 4.4 Product Result Evidence Payload
+
+상태: `현행 구현`. `systems/backend/app/diagnosis`가 Product Result Artifact와 함께
+producer-owned `evidence_payload`를 산출한다. 이 payload는 Dashboard/API root shape가
+아니며, Event Evidence projection과 legacy compatibility projection의 입력이다.
+
+허용 필드는 `sensor_evidence`, `component_hypotheses`, `status_flags`,
+`maintenance_context`, `recommended_actions`, `source_fields`, `evidence_gaps`로 제한한다.
+`event_id`, `scenario_id`, `equipment`, `observation`, `history`, `detected_interval`,
+`generated_at`, `threshold`, `model`, `top_factors`, `data_quality_warnings`, `lineage`는
+payload 아래로 복제하지 않는다.
+
+`top_factors`는 공식 판단 요약 Top 3이다. report/detail/audit용 상세 factor row는 같은
+prediction factor 원천에서 producer가 결정적으로 만든 `ranked_factor_evidence` Top 5를
+사용한다. `ranked_factor_evidence`는 `assessment.top_factors`를 대체하지 않는다.
+
+`maintenance_context`가 없거나 null이면 `evidence_gaps[]`에
+`field=evidence_payload.maintenance_context`, `owner_domain=maintenance` 항목이 있어야 한다.
+없는 정비 문맥은 `0`, `normal`, reference fixture 또는 LLM 출력으로 보정하지 않는다.
+
+### 4.5 Event Evidence Projection
+
+상태: `현행 구현`. Event Evidence projection은 enriched Product Result Artifact에서
+파생하며 `artifact_reference`, `assessment`, `report_projection`, `provenance`,
+`limitations`로 구성한다.
+
+`GET /api/events/{event_id}/evidence?view=canonical`은 path의 `event_id`로 projection
+identity를 정규화한다. 기본 `GET /api/events/{event_id}/evidence`와 runtime
+`selected_event_detail.evidence`는 legacy Evidence Package compatibility shape를 유지하되,
+내부 입력은 Event Evidence projection이다.
+
 ## 5. API/ViewModel 공통 스키마
 
 이 절의 객체는 제품 계층 계약안이며 상태는 `제안`이다. 팀원1·3 합의 후 API

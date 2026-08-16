@@ -618,9 +618,15 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     assert dashboard.data_source.result_artifact_count == 2
     assert dashboard.events
     assert dashboard.selected_event_detail is not None
+    assert dashboard.selected_event_detail.evidence["schema_version"] == "1.0"
+    assert dashboard.selected_event_detail.evidence["event_id"] == dashboard.selected_event_id
     assert dashboard.selected_event_detail.evidence["lineage"]["dataset_version_id"] == (
         v3_ingestion.dataset_version_id
     )
+    assert dashboard.selected_event_detail.evidence["lineage"]["product_result_artifact"]["artifact_id"].startswith(
+        "RESULT#"
+    )
+    assert dashboard.selected_event_detail.evidence["top_factors"][0]["evidence_field_id"].startswith("factor.1.")
     assert dashboard.selected_event_detail.report["locale"] == "ko-KR"
     assert "고장 위험" in dashboard.selected_event_detail.report["headline"]
     selected_event = next(

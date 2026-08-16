@@ -652,11 +652,11 @@ Status 값은 다음만 사용한다.
 |---:|---|---|---|---|
 | 6 | Done | 기존 dashboard artifact/evidence와 `pdm-mvp` reference 필드를 producer fact, projection/display field, evidence gap, 후속 도메인 field로 분류한다. | field classification table | §4.1 처리표와 Step 7 owner decision |
 | 7 | Done | `systems/backend/app/diagnosis`의 producer-side evidence enrichment schema와 ownership을 고정한다. | optional `evidence_payload` producer contract | `tests/test_product_result_artifact_evidence_contract.py` |
-| 8 | Todo | `build_product_result_evidence_payload()`와 sensor/baseline/component/source-field 산출 함수를 추가하고, cleanup에서 제거된 산출 규칙을 producer로 회수한다. | producer enrichment module | backend unit test 결과 |
-| 9 | Todo | `pdm-mvp` reference fixture와 producer `evidence_payload`의 의미 동등성을 비교한다. 단, 화면/report 표현 필드는 비교 대상에서 제외한다. | semantic regression test | fixture comparison 결과 |
+| 8 | Done | `build_product_result_evidence_payload()`와 sensor/baseline/component/source-field 산출 함수를 추가하고, cleanup에서 제거된 산출 규칙을 producer로 회수한다. | `systems/backend/app/diagnosis/evidence_enrichment.py` | `tests/test_product_result_evidence_enrichment.py` |
+| 9 | Done | `pdm-mvp` reference fixture와 producer `evidence_payload`의 의미 동등성을 비교한다. 단, 화면/report 표현 필드는 비교 대상에서 제외한다. | semantic regression fixture | `test_evidence_payload_preserves_pdm_mvp_reference_semantics_without_copying_values` |
 | 10 | Done | PR #18의 이전 transition helper 의존을 철회하고 dashboard projection이 enriched Artifact만 입력으로 받도록 정리한다. | projection input cleanup | `tests/test_product_result_evidence_projection.py` |
-| 11 | Todo | 공식 판단 필드가 producer 출력 외부 값으로 overwrite되지 않는지 검증한다. | overwrite prevention test | backend test 결과 |
-| 12 | Todo | 산출 불가능한 값이 `0`, `정상`, reference fixture 값, LLM 출력으로 보정되지 않고 `evidence_gap`/`limitations` 또는 후속 도메인 field로 분리되는지 검증한다. | unavailable-field regression test | backend/doc test 결과 |
+| 11 | Done | 공식 판단 필드가 producer 출력 외부 값으로 overwrite되지 않는지 검증한다. | overwrite prevention test | `test_evidence_payload_does_not_overwrite_official_judgement_fields`, `test_payload_fields_do_not_override_artifact_judgement_or_subject` |
+| 12 | Done | 산출 불가능한 값이 `0`, `정상`, reference fixture 값, LLM 출력으로 보정되지 않고 `evidence_gap`/`limitations` 또는 후속 도메인 field로 분리되는지 검증한다. | unavailable-field regression test | `test_product_result_artifact_includes_producer_evidence_payload_without_default_maintenance_context`, `test_product_result_artifact_records_data_quality_gaps_without_zero_filling` |
 
 8.2 Notes:
 
@@ -683,9 +683,9 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 13 | Todo | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | API contract test 결과 |
-| 14 | Todo | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime service refactor | backend test 결과 |
-| 15 | Todo | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | API test 결과 |
+| 13 | Done | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
+| 14 | Done | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime service refactor | `test_runtime_dashboard_result_artifact_projects_to_event_evidence` |
+| 15 | Done | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | `test_api_contract_and_state_changes`, `test_runtime_dashboard_result_artifact_projects_to_event_evidence` |
 
 3차 PR 완료 조건은 다음과 같다.
 
@@ -731,8 +731,16 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 23 | Todo | 구현 검증 후 API/schema 문서를 갱신한다. | API/schema docs | PR 번호 |
-| 24 | Deferred | 상태 요약, 요약 보고서, Operations 기간 집계 입력 계약을 설계한다. | V2 aggregate/report input plan | 후속 계획 문서 |
+| 23 | Done | 구현 검증 후 API/schema 문서를 갱신한다. | API/schema docs | `week2-api-specification.md`, `week2-schema-definition.md` |
+| 24 | Done | 상태 요약, 요약 보고서, Operations 기간 집계 입력 계약을 설계한다. | V2 aggregate/report input plan | §8.6 V2 aggregate/report input boundary |
+
+8.6 V2 aggregate/report input boundary:
+
+- 상태 요약, 요약 보고서, Operations 기간 집계는 단일 Event Evidence 또는 Product Result Artifact에서 산출하지 않는다.
+- V2 `ReportInput`은 동일 `dataset_version_id`, `period_start`, `period_end`, `filters`, `snapshot_at`을 공유하는 별도 aggregate/read-model 응답을 입력으로 받아야 한다.
+- 집계 입력의 최소 단위는 `risk_status_counts`, `production_cycle_summary`, `maintenance_event_summary`, `selected_event_refs`, `data_status`, `provenance`다.
+- `production_cycle_count`, `maintenance_event_count`, downtime/cost 같은 값은 없으면 `0`으로 채우지 않고 `data_status.warnings` 또는 `unavailable_fields[]`에 기록한다.
+- approved maintenance fact와 field note/action은 분리한다. 승인되지 않은 note/action은 기간 정비 집계에 포함하지 않는다.
 
 ## 9. 완료 기준
 

@@ -41,6 +41,13 @@ Canonical base path:
 `/results/latest`는 `offset`, `limit`, `total`을 사용하며 `limit` 기본값은 100,
 최대값은 500이다.
 
+`GET /api/events/{event_id}/evidence`의 기본 응답은 legacy Evidence Package
+shape를 유지한다. `view=canonical`을 명시하면 같은 path `event_id`로 정규화된
+Event Evidence projection을 반환한다. Runtime dashboard detail도 내부적으로
+Result Artifact fact와 canonical observation/history를 enriched artifact로 재구성한 뒤
+Event Evidence projection을 거쳐 legacy-compatible `selected_event_detail.evidence`를 만든다.
+Frontend는 raw JSONL이나 producer-only `evidence_payload`를 직접 파싱하지 않는다.
+
 변경 제안 base path: `/api`
 
 ## 2. 공통 Query
@@ -154,6 +161,13 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 `GET /operations`는 같은 필터의 생산·정비 목록 합계와 일치하는 요약을 반환한다.
 생산 행의 위험 등급은 `cnc_asset_id`와 동일 snapshot Artifact를 결합한 파생값이다.
+
+V2 aggregate/report input은 별도 read-model/API 계약으로 분리한다. 동일
+`dataset_version_id`, `period_start`, `period_end`, `filters`, `snapshot_at`을 공유하는
+입력에서 `risk_status_counts`, `production_cycle_summary`,
+`maintenance_event_summary`, `selected_event_refs`, `data_status`, `provenance`를 제공해야
+한다. 단일 Event Evidence Package나 Product Result Artifact에서 기간 집계를 만들지
+않으며, unavailable 값은 `0`으로 대체하지 않는다.
 
 ### 4.7 `POST /reports/executive`
 
