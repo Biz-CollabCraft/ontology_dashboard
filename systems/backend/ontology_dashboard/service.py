@@ -32,6 +32,7 @@ from .conversation import IntentRouter, deterministic_answer
 from .llm import ReportAgent, configured_provider
 from .planner import LayoutPlanner
 from .product_result_evidence_projection import (
+    event_evidence_projection_to_grounded_report,
     event_evidence_projection_to_legacy_evidence,
     product_result_artifact_to_event_evidence_projection,
 )
@@ -110,6 +111,7 @@ class ManufacturingPredictiveMaintenanceService:
     def event_evidence_projection(self, event_id: str) -> dict[str, Any]:
         fixture = self._fixture(event_id)
         projection = self._event_evidence_projection(fixture)
+        projection["event_id"] = event_id
         projection["scenario_id"] = fixture["scenario_id"]
         return projection
 
@@ -178,18 +180,37 @@ class ManufacturingPredictiveMaintenanceService:
 
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
-        evidence = self._projected_legacy_evidence(fixture)
-        report, trace = self.report_agent.generate(
-            evidence,
-            request.role,
-            locale=request.locale,
-            use_llm=request.use_llm,
-            provider_available=fixture["runtime"]["llm_available"],
-        )
+        artifact = self._product_result_artifact(fixture)
+        projection = product_result_artifact_to_event_evidence_projection(artifact)
+        if not request.use_llm:
+            report = event_evidence_projection_to_grounded_report(
+                projection,
+                request.role,
+                locale=request.locale,
+                mode="deterministic",
+                ranked_factor_evidence=artifact.get("ranked_factor_evidence"),
+                event_id=event_id,
+                scenario_id=fixture["scenario_id"],
+                equipment=fixture["equipment"],
+            )
+            trace: dict[str, Any] = {
+                "provider": "none",
+                "fallback": False,
+                "source": "event_evidence_projection",
+            }
+        else:
+            evidence = self._projected_legacy_evidence_from_artifact(fixture, artifact, projection)
+            report, trace = self.report_agent.generate(
+                evidence,
+                request.role,
+                locale=request.locale,
+                use_llm=request.use_llm,
+                provider_available=fixture["runtime"]["llm_available"],
+            )
         self._audit(
             event_id,
             "report.generated",
-            evidence["model"]["model_version"],
+            projection["provenance"]["model_version"],
             {"report_id": report.report_id, "role": request.role, "locale": request.locale, **trace},
         )
         return report, trace
@@ -201,6 +222,14 @@ class ManufacturingPredictiveMaintenanceService:
     def _projected_legacy_evidence(self, fixture: dict[str, Any]) -> dict[str, Any]:
         artifact = self._product_result_artifact(fixture)
         projection = product_result_artifact_to_event_evidence_projection(artifact)
+        return self._projected_legacy_evidence_from_artifact(fixture, artifact, projection)
+
+    def _projected_legacy_evidence_from_artifact(
+        self,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+        projection: dict[str, Any],
+    ) -> dict[str, Any]:
         legacy = event_evidence_projection_to_legacy_evidence(
             projection,
             ranked_factor_evidence=artifact.get("ranked_factor_evidence"),

@@ -106,8 +106,8 @@ def test_evidence_packages_pass_json_schema() -> None:
 
 
 def test_role_reports_are_grounded_and_different(service: FactorySignalService) -> None:
-    manager, _ = service.report("EVT-GS-002", ReportRequest(role="manager", use_llm=False))
-    engineer, _ = service.report("EVT-GS-002", ReportRequest(role="engineer", use_llm=False))
+    manager, manager_trace = service.report("EVT-GS-002", ReportRequest(role="manager", use_llm=False))
+    engineer, engineer_trace = service.report("EVT-GS-002", ReportRequest(role="engineer", use_llm=False))
     assert manager.status == engineer.status == "warning"
     assert manager.recommended_decision == engineer.recommended_decision == "request_inspection"
     assert manager.summary != engineer.summary
@@ -115,6 +115,7 @@ def test_role_reports_are_grounded_and_different(service: FactorySignalService) 
     assert any(section.section_id == "engineer-factors" for section in engineer.sections)
     assert "factor.1.tool_wear_min" in engineer.citations
     assert all(action.requires_human_approval for action in manager.actions)
+    assert manager_trace["source"] == engineer_trace["source"] == "event_evidence_projection"
 
 
 def test_reports_are_generated_as_separate_locale_variants(service: FactorySignalService) -> None:
@@ -238,6 +239,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert canonical_evidence.status_code == 200
     assert canonical_evidence.json()["schema_version"] == "event-evidence-projection-v1"
     assert canonical_evidence.json()["contract_type"] == "event_evidence_projection"
+    assert canonical_evidence.json()["event_id"] == "EVT-GS-002"
     assert canonical_evidence.json()["assessment"]["status"] == "warning"
 
     report = client.post("/api/events/EVT-GS-002/report", json={"role": "manager", "use_llm": False})

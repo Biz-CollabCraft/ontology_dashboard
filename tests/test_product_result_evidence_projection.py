@@ -9,7 +9,9 @@ from jsonschema import Draft202012Validator
 from ontology_dashboard.product_result_evidence_projection import (
     EVENT_EVIDENCE_CONTRACT_TYPE,
     EVENT_EVIDENCE_SCHEMA_VERSION,
+    event_evidence_projection_to_grounded_report,
     event_evidence_projection_to_legacy_evidence,
+    inspection_request_action_descriptor,
     product_result_artifact_to_event_evidence_projection,
 )
 
@@ -151,6 +153,48 @@ def test_legacy_projection_uses_ranked_factor_evidence_for_current_schema() -> N
     assert legacy["top_factors"][0]["normal_range"] == "baseline z-score -2.0..2.0"
     assert legacy["lineage"]["product_result_artifact"]["artifact_id"] == projection["artifact_reference"]["artifact_id"]
     assert_absent_hidden_truth(legacy)
+
+
+def test_projection_to_grounded_report_uses_ranked_factor_evidence_and_schema() -> None:
+    artifact = enriched_critical_artifact()
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
+    equipment = {
+        "equipment_id": projection["subject"]["equipment_id"],
+        "display_name": "압축기 라인 3",
+        "asset_type": "compressor",
+        "criticality": "high",
+        "estimated_downtime_minutes": 45,
+    }
+
+    report = event_evidence_projection_to_grounded_report(
+        projection,
+        "manager",
+        ranked_factor_evidence=artifact["ranked_factor_evidence"],
+        event_id="EVT-CMP-CRITICAL",
+        scenario_id="CMP-CRITICAL",
+        equipment=equipment,
+    )
+
+    schema = json.loads((ROOT / "contracts" / "schemas" / "report.schema.json").read_text(encoding="utf-8"))
+    assert list(Draft202012Validator(schema).iter_errors(report.model_dump(mode="json"))) == []
+    assert report.event_id == "EVT-CMP-CRITICAL"
+    assert report.status == projection["assessment"]["status"]
+    assert report.recommended_decision == projection["assessment"]["recommended_decision"]
+    assert "factor.1.rotation_raw" in report.citations
+    assert all(section.evidence_field_ids for section in report.sections)
+
+
+def test_inspection_request_action_descriptor_is_grounded_in_projection_source_fields() -> None:
+    projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
+
+    action = inspection_request_action_descriptor(projection)
+
+    source_field_ids = {field["field_id"] for field in projection["report_projection"]["evidence_trace"]}
+    assert action["action_id"] == "add_maintenance_note"
+    assert action["kind"] == "maintenance_note"
+    assert action["requires_human_approval"] is True
+    assert action["source_refs"]
+    assert set(action["source_refs"]).issubset(source_field_ids)
 
 
 def test_projection_display_confidence_prefers_canonical_label_over_numeric_value() -> None:

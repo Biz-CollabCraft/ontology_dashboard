@@ -700,9 +700,9 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 16 | Deferred | Event Evidence projection을 현행 `GroundedReport`로 변환하는 경로를 추가한다. | projection-to-report mapper | 후속 PR test 결과 |
-| 17 | Deferred | 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다. | `add_maintenance_note` descriptor | 후속 PR fixture/test 경로 |
-| 18 | Deferred | report section, citation, evidence trace가 `source_fields`에 grounded 되는지 검증한다. | grounded report regression test | 후속 PR test 결과 |
+| 16 | Done | Event Evidence projection을 현행 `GroundedReport`로 변환하는 경로를 추가한다. | `event_evidence_projection_to_grounded_report` mapper | `tests/test_product_result_evidence_projection.py`, `tests/test_mvp.py` |
+| 17 | Done | 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다. | `add_maintenance_note` descriptor | `test_inspection_request_action_descriptor_is_grounded_in_projection_source_fields` |
+| 18 | Done | report section, citation, evidence trace가 `source_fields`에 grounded 되는지 검증한다. | grounded report regression test | `test_projection_to_grounded_report_uses_ranked_factor_evidence_and_schema` |
 
 4차 PR 완료 조건은 다음과 같다.
 

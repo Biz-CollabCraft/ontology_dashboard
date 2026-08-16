@@ -10,6 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from .contracts import AppLocale, GroundedReport, Role
+
 HIDDEN_KEYS = {"evaluation_truth", "hidden_truth"}
 EVENT_EVIDENCE_SCHEMA_VERSION = "event-evidence-projection-v1"
 EVENT_EVIDENCE_CONTRACT_TYPE = "event_evidence_projection"
@@ -162,6 +164,54 @@ def event_evidence_projection_to_legacy_evidence(
     return _strip_hidden(legacy)
 
 
+def event_evidence_projection_to_grounded_report(
+    evidence: dict[str, Any],
+    role: Role,
+    *,
+    locale: AppLocale = "ko-KR",
+    mode: str = "deterministic",
+    ranked_factor_evidence: list[dict[str, Any]] | None = None,
+    event_id: str | None = None,
+    scenario_id: str | None = None,
+    equipment: dict[str, Any] | None = None,
+) -> GroundedReport:
+    """Render the current GroundedReport contract from Event Evidence projection."""
+
+    report_input = event_evidence_projection_to_legacy_evidence(
+        evidence,
+        ranked_factor_evidence=ranked_factor_evidence,
+    )
+    if event_id is not None:
+        report_input["event_id"] = event_id
+        report_input["evidence_id"] = f"EVD-{event_id}"
+    if scenario_id is not None:
+        report_input["scenario_id"] = scenario_id
+    if equipment is not None:
+        report_input["equipment"] = equipment
+    if role == "manager" and not _has_manager_equipment_fields(report_input.get("equipment", {})):
+        raise ValueError("manager GroundedReport projection requires equipment criticality and downtime fields")
+
+    from .reports import render_report
+
+    return render_report(report_input, role, locale=locale, mode=mode)
+
+
+def inspection_request_action_descriptor(evidence: dict[str, Any], *, locale: AppLocale = "ko-KR") -> dict[str, Any]:
+    """Derive a human-approved inspection/note action descriptor from projection evidence."""
+
+    report_projection = evidence["report_projection"]
+    source_refs = _recommended_action_basis(report_projection)
+    return {
+        "action_id": "add_maintenance_note",
+        "label": "정비이력 추가" if locale == "ko-KR" else "Add maintenance note",
+        "kind": "maintenance_note",
+        "requires_human_approval": True,
+        "event_id": evidence["event_id"],
+        "subject": evidence.get("subject", {}),
+        "source_refs": source_refs,
+    }
+
+
 def _strip_hidden(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _strip_hidden(item) for key, item in deepcopy(value).items() if key not in HIDDEN_KEYS}
@@ -190,6 +240,22 @@ def _ensure_unmutated_source(artifact: dict[str, Any]) -> None:
     provenance = artifact.get("provenance") or {}
     if provenance.get("canonical_source_mutated") is not False:
         raise ValueError("Product Result Artifact provenance.canonical_source_mutated must be false")
+
+
+def _has_manager_equipment_fields(equipment: dict[str, Any]) -> bool:
+    return "criticality" in equipment and "estimated_downtime_minutes" in equipment
+
+
+def _recommended_action_basis(report_projection: dict[str, Any]) -> list[str]:
+    for action in report_projection.get("recommended_actions", []):
+        basis = [str(item) for item in action.get("basis", []) if item]
+        if basis:
+            return list(dict.fromkeys(basis))
+    return [
+        str(field["field_id"])
+        for field in report_projection.get("evidence_trace", [])[:2]
+        if field.get("field_id")
+    ]
 
 
 def _sensor_cards(sensor_evidence: dict[str, Any]) -> list[dict[str, Any]]:
