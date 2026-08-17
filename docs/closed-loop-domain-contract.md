@@ -77,6 +77,21 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 - 실제 projection 교정은 persistence/API 작업과 Product Result/Evidence 계약 반영 순서에
   맞춰 후속 PR에서 수행한다.
 
+기존 Ontology Action은 후속 PR에서 다음 Target 의미로 연결한다. 기존
+`field_task_actions` 레코드를 곧바로 새 Domain 객체로 간주하지 않으며, 모든 상태 변경은
+대상 Work Order의 `work_type`과 현재 상태를 확인한 뒤 수행한다.
+
+| 기존 Ontology Action | Target 객체·상태 | 유지할 의미와 제한 |
+|---|---|---|
+| `record_work_order_note` | WorkOrder에 연결된 Note/Activity | WorkOrder 상태를 변경하거나 MaintenanceAction을 생성하지 않는다. |
+| `complete_work_order` | WorkOrder `completed` | inspection이면 점검 완료 사실만 기록한다. maintenance이면 연결된 MaintenanceAction 완료와 MaintenanceEvent 생성 조건을 충족한 하나의 완료 명령으로 처리하며, WorkOrder만 단독 완료하지 않는다. |
+| `report_work_order_issue` | WorkOrder Activity `issue_found` | 이 보고만으로 WorkOrder를 `blocked`나 `failed`로 전이하지 않는다. |
+| `mark_work_order_blocked` | WorkOrder `blocked` | 허용된 상태 전이를 통하며 MaintenanceEvent를 생성하지 않는다. |
+| `record_inspection_note` | inspection WorkOrder에 연결된 Note/Activity | 점검 메모를 실제 정비 MaintenanceAction으로 승격하지 않는다. |
+| `complete_inspection` | inspection WorkOrder `completed`와 점검 결과 Activity | 점검 완료는 정비 승인이나 MaintenanceEvent가 아니다. |
+| `report_inspection_issue` | inspection WorkOrder Activity `issue_found` | 발견 결과를 기록하되 자동으로 정비 WorkOrder/Action을 생성하지 않는다. |
+| `mark_inspection_blocked` | inspection WorkOrder `blocked` | 점검 수행 불가 상태만 기록하며 정비 완료로 해석하지 않는다. |
+
 ## Product Result/Evidence 연동 선행 조건
 
 PR 1은 아래 필드를 임의 생성하지 않고 필수 lineage로 정의한다. 실제 materialization을

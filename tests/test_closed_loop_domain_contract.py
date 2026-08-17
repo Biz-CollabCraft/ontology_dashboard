@@ -14,6 +14,7 @@ from ontology_dashboard.closed_loop import (
     InvalidTransition,
     MaintenanceActionStatus,
     OperationalDecisionKind,
+    OperationalRecommendedAction,
     PriorActionFailed,
     ProducerRecommendation,
     RecommendationDecision,
@@ -28,6 +29,7 @@ from ontology_dashboard.closed_loop import (
     authorize_inspection_work_order,
     authorize_maintenance_work_order,
     create_work_order,
+    create_work_order_for_recommendation,
     materialize_recommended_action,
     plan_maintenance_action,
     record_maintenance_event,
@@ -150,6 +152,13 @@ def test_materialization_preserves_meaning_scope_lineage_and_dedupe_key() -> Non
         )
 
 
+def test_operational_recommendation_rejects_mismatched_mvp_identity() -> None:
+    payload = proposed_recommendation().model_dump()
+    payload["equipment_id"] = "CNC-OTHER"
+    with pytest.raises(ValidationError, match="equipment_id = asset_id"):
+        OperationalRecommendedAction.model_validate(payload)
+
+
 def test_materialization_refuses_missing_policy_version() -> None:
     payload = producer_recommendation().model_dump()
     payload["source_policy_version"] = ""
@@ -216,6 +225,10 @@ def test_state_machines_cover_rejected_deferred_blocked_and_terminal_rollback() 
         transition_work_order(WorkOrderStatus.COMPLETED, WorkOrderStatus.IN_PROGRESS)
     with pytest.raises(InvalidTransition, match="recommendation"):
         transition_recommendation(RecommendationStatus.REJECTED, RecommendationStatus.ACCEPTED)
+    with pytest.raises(InvalidTransition, match="recommendation"):
+        transition_recommendation(RecommendationStatus.ACCEPTED, RecommendationStatus.SUPERSEDED)
+    with pytest.raises(InvalidTransition, match="recommendation"):
+        transition_recommendation(RecommendationStatus.REJECTED, RecommendationStatus.SUPERSEDED)
 
 
 def test_inspection_mapping_preserves_existing_decision_behavior() -> None:
@@ -279,6 +292,28 @@ def test_maintenance_work_requires_matching_scoped_explicit_acceptance() -> None
 
 def test_action_and_event_require_approved_completed_matching_lineage() -> None:
     identity = equipment_identity()
+    recommendation = proposed_recommendation()
+    decision = recommendation_decision()
+    accepted = apply_recommendation_decision(recommendation, decision)
+    recommendation_order = create_work_order_for_recommendation(
+        work_order_id="work-order-from-recommendation",
+        recommendation=accepted,
+        decision=decision,
+        idempotency_key="work-order-from-recommendation-001",
+    )
+    assert recommendation_order.asset_id == recommendation_order.equipment_id == "CNC-001"
+    assert recommendation_order.event_id == accepted.event_id
+    assert recommendation_order.authorization.recommendation_decision_id == decision.decision_id
+
+    wrong_event_decision = recommendation_decision(event_id="event-other")
+    with pytest.raises(ValueError, match="decision event does not match"):
+        create_work_order_for_recommendation(
+            work_order_id="work-order-wrong-event",
+            recommendation=accepted,
+            decision=wrong_event_decision,
+            idempotency_key="work-order-wrong-event-001",
+        )
+
     requested = create_work_order(
         work_order_id="work-order-001",
         identity=identity,
@@ -320,6 +355,18 @@ def test_action_and_event_require_approved_completed_matching_lineage() -> None:
     completed_action = type(action).model_validate(
         {**action.model_dump(), "status": MaintenanceActionStatus.COMPLETED}
     )
+    wrong_approval_action = completed_action.model_copy(
+        update={"recommendation_decision_id": "decision-other"}
+    )
+    with pytest.raises(ValueError, match="approval lineage"):
+        record_maintenance_event(
+            work_order=completed_order,
+            action=wrong_approval_action,
+            maintenance_event_id="maintenance-event-wrong-approval",
+            completed_at=datetime.now(timezone.utc),
+            outcome="tool replaced",
+        )
+
     event = record_maintenance_event(
         work_order=completed_order,
         action=completed_action,

@@ -65,8 +65,8 @@ RECOMMENDATION_TRANSITIONS = {
         RecommendationStatus.REJECTED,
         RecommendationStatus.SUPERSEDED,
     },
-    RecommendationStatus.ACCEPTED: {RecommendationStatus.SUPERSEDED},
-    RecommendationStatus.REJECTED: {RecommendationStatus.SUPERSEDED},
+    RecommendationStatus.ACCEPTED: set(),
+    RecommendationStatus.REJECTED: set(),
     RecommendationStatus.SUPERSEDED: set(),
 }
 WORK_ORDER_TRANSITIONS = {
@@ -301,6 +301,33 @@ def create_work_order(
     )
 
 
+def create_work_order_for_recommendation(
+    *,
+    work_order_id: str,
+    recommendation: OperationalRecommendedAction,
+    decision: RecommendationDecision,
+    idempotency_key: str,
+) -> WorkOrder:
+    """Create maintenance work while deriving all lineage from its recommendation."""
+
+    authorization = authorize_maintenance_work_order(
+        recommendation=recommendation,
+        decision=decision,
+    )
+    return WorkOrder(
+        organization_id=recommendation.organization_id,
+        project_id=recommendation.project_id,
+        workspace_id=recommendation.workspace_id,
+        work_order_id=work_order_id,
+        event_id=recommendation.event_id,
+        asset_id=recommendation.asset_id,
+        equipment_id=recommendation.equipment_id,
+        work_type=WorkOrderType.MAINTENANCE,
+        idempotency_key=idempotency_key,
+        authorization=authorization,
+    )
+
+
 def plan_maintenance_action(
     *,
     work_order: WorkOrder,
@@ -348,6 +375,12 @@ def record_maintenance_event(
     _require_same_scope(work_order, action)
     if action.event_id != work_order.event_id or action.equipment_id != work_order.equipment_id:
         raise ValueError("maintenance action lineage does not match the work order")
+    authorization = work_order.authorization
+    if (
+        action.recommendation_id != authorization.recommendation_id
+        or action.recommendation_decision_id != authorization.recommendation_decision_id
+    ):
+        raise ValueError("maintenance action approval lineage does not match the work order")
     return MaintenanceEvent(
         organization_id=work_order.organization_id,
         project_id=work_order.project_id,

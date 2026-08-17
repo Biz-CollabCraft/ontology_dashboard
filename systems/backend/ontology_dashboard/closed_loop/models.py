@@ -126,6 +126,12 @@ class OperationalRecommendedAction(ScopedRecord):
     requires_human_approval: bool
     basis: tuple[str, ...] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def require_mvp_identity(self) -> OperationalRecommendedAction:
+        if self.asset_id != self.equipment_id:
+            raise ValueError("MVP recommendation requires equipment_id = asset_id")
+        return self
+
     @property
     def materialization_key(self) -> str:
         return f"{self.source_product_result_id}:{self.source_action_id}"
