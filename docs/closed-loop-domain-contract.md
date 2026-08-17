@@ -49,6 +49,8 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
   `source_product_result_id + source_action_id`다.
 - Producer의 action/result/evidence/schema/policy ID와 label, kind, approval requirement,
   basis는 materialization 과정에서 변경하지 않는다.
+- Producer가 소유하는 `kind`는 Closed-loop enum으로 재해석하지 않고 opaque string으로
+  그대로 보존한다. 운영 Decision은 Event Evidence Projection의 별도 계약을 사용한다.
 - 동일 idempotency key와 동일 요청이 성공한 경우 기존 결과를 replay한다.
 - 동일 key에 다른 요청을 사용하면 conflict, 기존 요청이 실행 중이거나 실패했다면 각각
   명시적인 `action_in_progress`, `prior_action_failed` 상태로 처리한다.
@@ -74,3 +76,16 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 - inspection Work Order의 현장 점검 결과와 실제 정비 MaintenanceAction을 구분한다.
 - 실제 projection 교정은 persistence/API 작업과 Product Result/Evidence 계약 반영 순서에
   맞춰 후속 PR에서 수행한다.
+
+## Product Result/Evidence 연동 선행 조건
+
+PR 1은 아래 필드를 임의 생성하지 않고 필수 lineage로 정의한다. 실제 materialization을
+연결하는 PR은 호범 담당 계약에서 공식 source가 제공된 뒤에만 시작한다.
+
+- `source_policy_version`: recommendation 또는 Event Evidence Projection에서 사용할
+  공식 policy version source를 먼저 확정한다. `unknown` 기본값을 만들지 않는다.
+- `source_evidence_id`: canonical Event Evidence Projection의 stable Evidence ID 또는
+  공식 식별 reference를 먼저 확정한다. `event_id`나 `artifact_id`를 임의 대입하지 않는다.
+
+위 두 필드가 확정되기 전까지 Product Result/Evidence runtime 연동은 중단하되, HTTP·DB가
+없는 순수 Domain 계약과 상태 머신은 독립적으로 사용할 수 있다.

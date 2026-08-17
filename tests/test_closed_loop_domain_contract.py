@@ -157,6 +157,22 @@ def test_materialization_refuses_missing_policy_version() -> None:
         ProducerRecommendation.model_validate(payload)
 
 
+@pytest.mark.parametrize("kind", ["inspect", "monitor", "stop_review", "data_quality"])
+def test_materialization_preserves_producer_owned_action_kind(kind: str) -> None:
+    payload = producer_recommendation().model_dump()
+    payload["kind"] = kind
+    source = ProducerRecommendation.model_validate(payload)
+
+    action = materialize_recommended_action(
+        source,
+        recommendation_id=f"recommendation-{kind}",
+        identity=equipment_identity(),
+        event_id="event-001",
+    )
+
+    assert action.kind == kind
+
+
 def test_equipment_identity_is_direct_stable_and_dataset_independent() -> None:
     identity = equipment_identity()
     assert identity.equipment_id == identity.asset_id

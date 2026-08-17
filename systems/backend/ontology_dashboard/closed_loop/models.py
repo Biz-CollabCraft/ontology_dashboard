@@ -100,7 +100,7 @@ class ProducerRecommendation(FrozenModel):
     source_schema_version: str = Field(min_length=1, max_length=160)
     source_policy_version: str = Field(min_length=1, max_length=160)
     label: str = Field(min_length=1, max_length=500)
-    kind: Literal["monitor", "inspect", "review_shutdown", "verify_data", "report"]
+    kind: str = Field(min_length=1, max_length=128)
     requires_human_approval: bool
     basis: tuple[str, ...] = Field(min_length=1)
 
@@ -122,7 +122,7 @@ class OperationalRecommendedAction(ScopedRecord):
     source_schema_version: str = Field(min_length=1, max_length=160)
     source_policy_version: str = Field(min_length=1, max_length=160)
     label: str = Field(min_length=1, max_length=500)
-    kind: Literal["monitor", "inspect", "review_shutdown", "verify_data", "report"]
+    kind: str = Field(min_length=1, max_length=128)
     requires_human_approval: bool
     basis: tuple[str, ...] = Field(min_length=1)
 
