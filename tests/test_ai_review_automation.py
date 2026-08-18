@@ -48,6 +48,7 @@ class AiReviewAutomationTests(unittest.TestCase):
         self.assertIn("docs/mvp/current-mvp-implementation-baseline.md", paths)
         self.assertIn("docs/mvp/functional-specification.md", paths)
         self.assertIn("docs/closed-loop-product-consumption-contract.md", paths)
+        self.assertIn("docs/closed-loop-runtime-overlay-contract.md", paths)
         self.assertNotIn(
             "docs/mvp/history/2026-08-week2/frontend-implementation-import.md", paths
         )
@@ -59,6 +60,7 @@ class AiReviewAutomationTests(unittest.TestCase):
         paths = context_documents(categories, DEFAULT_CONTEXT_ROUTING)
         self.assertIn("docs/closed-loop-domain-contract.md", paths)
         self.assertIn("docs/closed-loop-product-consumption-contract.md", paths)
+        self.assertIn("docs/closed-loop-runtime-overlay-contract.md", paths)
 
     def test_declared_context_paths_exist_and_old_namespace_is_absent(self):
         repository_root = Path(__file__).resolve().parents[1]

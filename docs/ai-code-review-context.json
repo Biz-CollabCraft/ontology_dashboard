@@ -32,6 +32,7 @@
       "context": [
         "docs/closed-loop-domain-contract.md",
         "docs/closed-loop-product-consumption-contract.md",
+        "docs/closed-loop-runtime-overlay-contract.md",
         "docs/closed-loop-implementation-plan.md"
       ]
     },
@@ -39,7 +40,8 @@
       "paths": ["systems/backend/app/diagnosis/**", "systems/backend/**/product_result*", "contracts/schemas/product-result*", "tests/test_product_result*"],
       "context": [
         "docs/mvp/model-artifact-publish-contract.md",
-        "docs/mvp/generator-feature-label-contract.md"
+        "docs/mvp/generator-feature-label-contract.md",
+        "docs/closed-loop-runtime-overlay-contract.md"
       ]
     },
     "evidence": {
@@ -62,7 +64,8 @@
         "docs/mvp/current-mvp-implementation-baseline.md",
         "docs/mvp/functional-specification.md",
         "docs/closed-loop-domain-contract.md",
-        "docs/closed-loop-product-consumption-contract.md"
+        "docs/closed-loop-product-consumption-contract.md",
+        "docs/closed-loop-runtime-overlay-contract.md"
       ]
     },
     "generator": {

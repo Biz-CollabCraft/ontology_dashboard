@@ -7,6 +7,10 @@ Product Result/Evidence projection은 이 범위에 포함하지 않는다.
 [`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)가 정본이다.
 Product/UI 문서는 이 문서의 상태 머신을 재정의하지 않는다.
 
+정비 완료를 대상 설비 Runtime Overlay와 정비 후 Prediction으로 연결하는 시스템 간
+handoff는 [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
+따른다. Runtime Overlay 계약은 이 문서의 Domain 상태 머신을 재정의하지 않는다.
+
 ## 기존 Decision과 실행 권한 매핑
 
 | 기존 Decision 값 | 운영 의미 | 점검 Work Order | 정비 Work Order |
@@ -95,6 +99,30 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 | `complete_inspection` | inspection WorkOrder `completed`와 점검 결과 Activity | 점검 완료는 정비 승인이나 MaintenanceEvent가 아니다. |
 | `report_inspection_issue` | inspection WorkOrder Activity `issue_found` | 발견 결과를 기록하되 자동으로 정비 WorkOrder/Action을 생성하지 않는다. |
 | `mark_inspection_blocked` | inspection WorkOrder `blocked` | 점검 수행 불가 상태만 기록하며 정비 완료로 해석하지 않는다. |
+
+## Runtime Overlay 인계 경계
+
+MaintenanceAction과 maintenance WorkOrder 완료, MaintenanceEvent 생성, Equipment state와
+Activity 기록은 하나의 운영 transaction으로 확정한다. 같은 transaction에 Runtime
+Overlay consumer로 전달할 Integration Outbox를 적재하되 외부 Generator 호출이나
+Prediction 실행을 transaction 안에서 동기 수행하지 않는다.
+
+- Domain/DB의 기존 완료 필드는 `completed_at`을 유지할 수 있다.
+- 시스템 간 Maintenance 완료 이벤트에서는 의미를 명확히 하기 위해
+  `maintenance_completed_at`으로 매핑한다.
+- Closed-loop는 `maintenance.started`, `maintenance.completed`,
+  `maintenance.replay_requested`와 재시작 요청에 필요한
+  `maintenance_action_id`, 완료 이후의 `maintenance_event_id`, `idempotency_key`,
+  `state_version`, 정비 효과와 lineage를 제공한다.
+- 완료 정보나 `restart_at`이 늦게 도착하면 대상 설비는 pause 상태를 유지하며 Timeout으로
+  자동 재개하지 않는다.
+- Closed-loop는 대상 설비 Overlay 생성, Simulation Clock Fast-forward, Feature history
+  계산 또는 Product Result/Evidence 생성을 소유하지 않는다.
+- 정비 완료 사실은 정상 Prediction을 의미하지 않는다.
+
+단계별 이벤트, typed `state_patch`, 시각 순서와 consumer 책임의 상세 기준은
+[`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
+따른다.
 
 ## Product Result/Evidence 연동 선행 조건
 

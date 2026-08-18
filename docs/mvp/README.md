@@ -25,6 +25,8 @@
 Closed-loop 상태 머신의 canonical source는 [`../closed-loop-domain-contract.md`](../closed-loop-domain-contract.md),
 Product/API/UI의 역할·Action·소비 규칙은
 [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
+정비 완료 이후 대상 설비 Overlay와 정비 후 Runtime Prediction handoff는
+[`../closed-loop-runtime-overlay-contract.md`](../closed-loop-runtime-overlay-contract.md)를 따른다.
 
 ## Current vs history
 

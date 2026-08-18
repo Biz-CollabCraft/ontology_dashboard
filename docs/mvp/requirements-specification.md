@@ -24,6 +24,10 @@ gen_data의 버전된 합성 원천 데이터
 - Canonical V3.1은 seed와 생성 정책으로 사전에 생성된 합성 데이터셋이다.
 - 현재 Replay는 저장된 관측값과 사전 계산된 예측을 시간순으로 공개한다.
 - Replay 중 센서값을 새로 생성하는 실시간 센서 서버로 표현하지 않는다.
+- Closed-loop Target에서는 Canonical Replay를 수정하지 않고 정비 대상 설비만 별도
+  `maintenance_replay_overlay` branch에서 정비 후 Observation을 생성한다.
+- Runtime Overlay는 실제 센서 수집이나 Canonical source로 표현하지 않으며 대상 설비
+  branch clock만 Fast-forward한다.
 - Product Result Artifact의 운영 판단값은 Backend diagnosis가 생성한다.
 - What-if 결과는 별도 합성 분석 결과이며 Product Result Artifact의
   `failure_probability`, `status_grade`, `top_factors`, `recommended_action`을 덮어쓰지 않는다.
@@ -92,6 +96,8 @@ API는 하나의 담당으로 뭉뚱그리지 않고 Prediction·조회 API는 �
 | CM-08 | 저장된 합성 데이터 Replay와 실제 실시간 수집을 구분한다. | 화면·API·문서가 Replay를 실제 센서 스트리밍으로 표현하지 않는다. |
 | CM-09 | Current Baseline과 Target 요구사항을 구분한다. | 미구현 Target을 현재 기능으로 표시하지 않는다. |
 | CM-10 | Producer의 구조화 결과와 역할별 문장·UI 표현을 분리한다. | What-if Producer에는 역할별 문장이 없고 Report/UI가 결과를 소비한다. |
+| CM-11 | 정비 완료, 정비 후 이력 준비와 실제 Prediction 결과를 구분한다. | `equipment_under_maintenance`, `warming_up`, `history_insufficient`, `ready`, `predicted`가 정상 Prediction과 구분된다. |
+| CM-12 | Runtime Overlay는 대상 설비에만 적용한다. | 다른 설비 Replay와 Canonical 원본이 변경되지 않는다. |
 
 ## 화면별 요구사항
 
@@ -257,6 +263,8 @@ Canonical 파일에 임의의 금액을 역기입하지 않고 버전된 Economi
 - Event Evidence 기반 deterministic Report를 우선하고 기간 집계형은 Target이다.
 - Gold Fixture fallback은 source와 warning을 항상 표시한다.
 - Canonical V3.1은 저장된 합성 데이터이고 Replay는 실시간 재생성이 아니다.
+- Runtime Overlay는 Closed-loop Target의 별도 opt-in source 경로이며 Canonical Replay
+  또는 실제 센서 스트리밍으로 표현하지 않는다.
 - What-if는 구조화된 합성 분석 Producer이며 역할별 문장 생성은 Report/UI가 담당한다.
 - 경제성 데이터는 Canonical에 역기입하지 않고 별도 버전의 Economic Extension으로 관리한다.
 - 실제 금액이 없는 초기 경제성 비교는 출처가 표시된 합성 시나리오로 제한한다.
@@ -269,3 +277,20 @@ Canonical 파일에 임의의 금액을 역기입하지 않고 버전된 Economi
 4. Executive Report에서 같은 집계와 한계를 확인한다.
 5. What-if에서 동일 초기 상태의 조치 전후 위험과 근거를 비교한다.
 6. 경제성 비교에서 예방조치·미조치·고장 후 수리/교체의 기대비용과 민감도를 확인한다.
+
+Closed-loop 최종 시연 Target은 별도로 다음 흐름을 사용한다.
+
+```text
+위험 Result/Evidence
+→ 사람의 Decision과 TOOL_REPLACEMENT
+→ MaintenanceEvent
+→ 대상 설비 Runtime Overlay + branch-local Fast-forward
+→ gen_data Observation 지속 생성/available
+→ Backend history_requirement 검증, 부족 시 다음 Observation 대기
+→ Backend ready
+→ 새 Runtime Prediction / Product Result / Evidence
+```
+
+상세 계약은
+[`../closed-loop-runtime-overlay-contract.md`](../closed-loop-runtime-overlay-contract.md)를
+따른다.

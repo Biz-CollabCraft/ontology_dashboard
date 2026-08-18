@@ -19,8 +19,10 @@ Closed-loop 계약의 정본은 역할별로 분리한다.
 - Domain 객체·상태·lineage: [`closed-loop-domain-contract.md`](./closed-loop-domain-contract.md)
 - Product/API/UI 소비·역할·Action·오류·E2E:
   [`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)
+- 정비 완료 → 대상 설비 Runtime Overlay → 정비 후 Runtime Prediction:
+  [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)
 
-이 구현 계획은 두 canonical contract의 상세 내용을 복제하지 않고 구현 순서와 변경 범위만 관리한다.
+이 구현 계획은 canonical contract의 상세 내용을 복제하지 않고 구현 순서와 변경 범위만 관리한다.
 
 ## 2. 구현 목표
 
@@ -46,7 +48,15 @@ Closed-loop 계약의 정본은 역할별로 분리한다.
                  ↓
       Equipment / Ontology 운영 상태 갱신
                  ↓
-호범: 새 Observation으로 새 Product Result 생성
+광우: 단계별 Maintenance Integration 이벤트를 Outbox로 발행
+                 ↓
+성민: 대상 설비만 Runtime Overlay로 분기하고 정비 효과 반영
+                 ↓
+      대상 설비 Overlay branch clock에서 Observation 지속 생성/available
+                 ↓
+호범: history_requirement 검증
+      ├─ 부족: Prediction 없이 다음 Observation 대기
+      └─ 충족: 첫 inference-ready Observation으로 새 Product Result/Evidence 생성
                  ↓
 우수: 전 과정을 Product API / UI / E2E로 노출
 ```
@@ -76,8 +86,8 @@ Closed-loop는 과거 예측 결과를 수정하는 기능이 아니다. 정비 
 
 | 담당자 | 정본 산출물 | 광우의 사용 방식 | 광우가 하지 않을 일 |
 |---|---|---|---|
-| 성민 | Feature/Label 계약, Model Artifact, 학습·발행 | 결과의 model/feature 의미를 읽기 전용으로 참조 | Feature 계산, 모델 학습, Artifact 발행·선택 |
-| 호범 | Runtime inference, Product Result Artifact, Evidence Payload/API | Event와 Action의 근거 입력으로 소비 | probability·risk grade·top factor 재계산, Evidence 재생성 |
+| 성민 | Feature/Label 계약, Model Artifact, 학습·발행 및 `gen_data` Runtime Overlay Observation 지속 생성/available | model/feature 의미와 Overlay Observation 계약을 읽기 전용으로 참조 | Feature 계산, 모델 학습, Artifact 발행·선택, Overlay 생성 |
+| 호범 | Runtime readiness, inference, Product Result Artifact, Evidence Payload/API | Event와 Action의 근거 입력으로 소비 | probability·risk grade·top factor 재계산, Evidence 재생성 |
 | 우수 | Product API orchestration, Operations UI, Report/LLM 연결, CI/E2E/배포 | 안정적인 Closed-loop Domain API와 fixture 제공 | 화면 구현, LLM 문장 생성, 전체 배포 파이프라인 소유 |
 
 ### 3.3 명시적으로 보류하는 범위
@@ -253,12 +263,21 @@ MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않�
 - SQLite 기반 로컬·테스트 adapter도 동일한 unit-of-work rollback과 멱등성 invariant를
   검증한다.
 - 과거 Product Result와 Evidence는 수정하거나 삭제하지 않는다.
+- Runtime Overlay Integration Outbox는 운영 transaction과 함께 적재하되 Generator와
+  Backend Diagnosis 호출은 외부 consumer가 비동기로 수행한다.
+- Closed-loop가 발행하는 `maintenance.*` Integration delivery는 HTTP mutation
+  idempotency와 별도로 `idempotency_key`와 단조 증가 `state_version`을 사용한다.
+- 내부 `completed_at`은 유지할 수 있으며 공유 이벤트에서
+  `maintenance_completed_at`으로 매핑한다.
 
 ## 6. API 계획
 
 기존 `/api/events`와 Ontology Action API를 우선 재사용한다. 최종 URL은 우수의 Product
 API orchestration과 합의해 고정한다. Product 소비 규칙, additive compatibility, mutation 응답과
 오류 계약의 정본은 `docs/closed-loop-product-consumption-contract.md`를 따른다.
+Runtime Overlay 준비 상태의 canonical Product read location은 versioned
+Observation/status handoff 계약 확정 이후 Backend integration 단계에서 결정하는
+Deferred 항목이다.
 
 | 기능 | 우선 방침 |
 |---|---|
@@ -311,6 +330,11 @@ API orchestration과 합의해 고정한다. Product 소비 규칙, additive com
 - Recommendation, Work Order/Action, MaintenanceEvent 저장·조회
 - Event activity에 전체 상태 변경 포함
 - PostgreSQL unit of work 안에서 운영 변경과 transactional outbox를 함께 commit
+- `maintenance.started`, `maintenance.completed`, `maintenance.replay_requested` 단계별
+  Integration event payload와 내부 `completed_at` → `maintenance_completed_at` 매핑
+- 시작 단계의 `maintenance_action_id`, 완료 이후의 `maintenance_event_id`,
+  `idempotency_key`, `state_version`, typed `state_patch`와 Product Result/Evidence
+  lineage를 outbox payload에 보존
 - tenant/project/workspace scope, 권한, CSRF, idempotency 검증
 - OpenAPI response contract와 API test 추가
 
@@ -328,6 +352,7 @@ API orchestration과 합의해 고정한다. Product 소비 규칙, additive com
 - transaction 실패 시 Work Order/Action/MaintenanceEvent/Equipment state/Activity/outbox가
   모두 rollback된다.
 - outbox consumer의 retry·idempotency·dead-letter 흐름이 검증된다.
+- 완료·재시작 정보가 지연돼도 완료 전에 자동 재개 이벤트를 발행하지 않는다.
 
 ### PR 3. Product Result/Evidence 및 Ontology 통합
 
@@ -345,7 +370,8 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
   Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계만 projection
 - Recommendation에 근거 Evidence 참조와 정책 버전 기록
 - 완료 시 Equipment 운영 상태와 최신 정비 참조 갱신
-- 정비 이후 새 Observation/새 Product Result와 과거 Event를 lineage로 연결
+- Runtime Overlay 계약에 따라 생성된 정비 후 Observation/새 Product Result와 과거
+  Event를 lineage로 연결
 - publish/load가 아닌 Product Result→Closed-loop integration test 추가
 
 완료 조건:
@@ -440,13 +466,20 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 - Result/Evidence 조회 API와 unavailable/error 규칙
 - Event Evidence Projection의 필드와 근거 의미
 - Report grounding에서 참조할 Evidence/Activity 인계 계약
-- 새 Observation 이후 새 Product Result를 요청하거나 조회하는 공식 방식
+- Overlay Observation 이후 새 Product Result를 요청하거나 조회하는 공식 방식
+- Backend가 `history_requirement` 충족 여부를 단독 판정하고, 부족하면 Prediction 없이
+  지속 생성되는 다음 Observation을 기다리는 계약
+- `warming_up`, `history_insufficient`, 첫 inference-ready Observation 처리 계약
 
 #### 성민에게 확인할 것
 
 - Recommendation에 표시 가능한 model status/factor 의미
 - Model Artifact version과 Product Result provenance 연결 방식
 - Closed-loop에서 사용하면 안 되는 Feature/Label 해석
+- 대상 설비 Overlay pause/branch와 branch-local Simulation Clock 처리 방식
+- `action_code`별 typed `state_patch` whitelist와 Overlay Observation provenance
+- Model Artifact를 읽지 않는 지속 Overlay Observation 생성/available 방식과 stream
+  종료·실패 상태 handoff
 
 #### 우수와 합의할 것
 
@@ -462,6 +495,8 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 
 - 실제 Decision, RecommendedAction, WorkOrder/MaintenanceAction
 - MaintenanceEvent와 before/after 운영 상태
+- 단계별 Integration 이벤트, `maintenance_completed_at`, `maintenance_event_id`,
+  `state_version`과 정비 후 history segment lineage
 - Report grounding의 입력으로 사용할 Activity와 actor/timestamp
 
 광우는 위 운영 사실을 제공하고, 이를 Evidence와 결합해 Report 근거로 해석·매핑하는
@@ -523,8 +558,12 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
    함께 완료한다.
 8. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
 9. 동일 mutation을 replay해 idempotency가 보장되는지 확인한다.
-10. 새 Observation으로 별도의 새 Product Result가 생성된다.
-11. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
+10. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay는 계속 진행한다.
+11. `gen_data`가 Overlay Observation을 지속 생성하고 Backend가 각 available
+    Observation의 `history_requirement`을 검증하며, 부족하면 다음 Observation을 기다린다.
+12. Backend가 `ready`로 판정한 첫 inference-ready Observation으로 별도의 새 Product
+    Result/Evidence가 생성된다.
+13. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
 
 ## 11. 완료 정의
 
@@ -539,6 +578,9 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 - 상태 전이, 권한, 멱등성, PostgreSQL transaction/outbox와 scope 격리가 테스트된다.
 - 관계와 Activity로 판단 근거 및 실행 이력을 재구성할 수 있다.
 - 정비 전후 Product Result가 별도로 보존되고 lineage로 연결된다.
+- Canonical과 다른 설비 Replay를 변경하지 않고 대상 설비 Overlay로 정비 후 이력을
+  생성한다.
+- 정비 완료, warming-up과 실제 정상 Prediction을 구분한다.
 - 호범의 Report와 우수의 Product/UI가 동일 Closed-loop 상태를 소비한다.
 - 공개 persistence 환경의 E2E가 통과한다.
 
@@ -548,6 +590,16 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 - [ ] 기존 Decision 값과 Target 상태 전이의 매핑을 확정했다.
 - [ ] Work Order와 MaintenanceAction의 차이 및 생성 시점을 확정했다.
 - [ ] MaintenanceEvent의 runtime 저장 위치를 확정했다.
+- [ ] Runtime Overlay 단계별 이벤트, `maintenance_completed_at`, `state_version`, typed
+      `state_patch`와 branch-local Fast-forward 계약을 확정했다.
+- [ ] Backend만 정비 후 최소 이력을 Model Artifact의 `history_requirement`에서 계산하고
+      readiness를 판정하기로 확정했다.
+- [ ] Observation 지속 생성/available, stream 종료·실패 handoff와
+      `history_insufficient` 전이 조건을 확정했다.
+- [ ] `warming_up`, `history_insufficient`, `ready`, `predicted`의 Product 표현을
+      확정했다.
+- [ ] Product API canonical runtime-status read location은 versioned handoff 확정 후
+      Backend integration 단계에서 결정하는 Deferred 항목으로 기록했다.
 - [ ] Producer recommendation을 의미 변경 없이 운영 객체로 materialize하고 원본
       ID·Product Result/Evidence ID·schema/policy version·basis를 보존하기로 확정했다.
 - [ ] `asset_id = equipment_id`, stable equipment key, fail-fast와 Dataset Version 변경

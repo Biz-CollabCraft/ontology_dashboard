@@ -114,6 +114,8 @@ API / systems/frontend / Report
     `process_engineer`와 `maintenance_technician`은 각각 현장 엔지니어와 정비 작업자로 구분한다.
 28. Closed-loop mutation 응답은 Persistence가 확정한 ID와 resulting state, replay 여부를 반환해 Frontend가
     운영 ID나 결과 상태를 추측하지 않게 한다.
+29. Runtime Overlay의 inference readiness는 Backend Diagnosis만 판정한다. `gen_data`가 Model Artifact 또는
+    `history_requirement.json`을 읽거나 Observation availability를 `ready`로 선언하면 안 된다.
 
 15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.
 
@@ -129,6 +131,9 @@ ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.
 24~28번은
 [`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 근거로 하며,
 Closed-loop Domain/API/UI를 변경하는 PR에서 적용한다.
+
+29번은 [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
+근거로 하며 정비 후 Observation/Prediction handoff를 변경하는 PR에서 적용한다.
 
 ## 4. Model Artifact / Result Artifact 구분
 
@@ -293,6 +298,7 @@ Observation / Product Result
 → WorkOrder
 → MaintenanceAction
 → MaintenanceEvent
+→ 대상 설비 Runtime Overlay / history 준비
 → 정비 후 Observation / Product Result
 ```
 
@@ -305,8 +311,21 @@ Observation / Product Result
 - Frontend가 WorkOrder/Recommendation 상태 머신 또는 role permission을 독자 구현
 - persisted ID/idempotency key를 Frontend가 문자열 조합으로 생성
 - `available_actions`와 같은 서버 판단 결과가 있는데도 Frontend가 동일 규칙을 다시 계산
+- Canonical Replay나 전체 Simulation Clock을 수정해 정비 대상이 아닌 설비까지
+  Fast-forward
+- 정비 완료, `warming_up` 또는 `history_insufficient`를 정상 Prediction으로 표현
+- 정비 전 history를 정비 후 Rolling/Lag Feature에 계약 없이 혼합
+- Maintenance 이벤트만 보고 Backend가 Overlay Observation 없이 Product Result를 생성
+- `gen_data`가 Model Artifact/history requirement를 읽거나 Observation availability를
+  inference readiness로 판정
+- versioned Runtime Overlay handoff 확정 전에 Product API의 canonical runtime-status
+  read location을 현행 계약으로 단정
 
-세부 계약은 `docs/closed-loop-domain-contract.md`와 `docs/closed-loop-implementation-plan.md`를 따른다.
+Domain과 구현 순서는 `docs/closed-loop-domain-contract.md`와
+`docs/closed-loop-implementation-plan.md`를 따른다. 정비 완료 이후 Runtime Overlay
+handoff를 구현하거나 변경하는 PR은
+`docs/closed-loop-runtime-overlay-contract.md`도 함께 따른다. 이 기준은 Runtime Overlay
+Target 범위에만 적용하며 미구현 Target을 현재 동작으로 간주하지 않는다.
 
 ## 11. Context routing과 trusted base 원칙
 
