@@ -232,7 +232,7 @@ Model Artifact
 - Report Grounding Contract
 - 정적 보고서에서 LLM에 전달할 허용 필드 정의
 - prompt template의 내용 구조
-- 관리자용 narrative 요구사항
+- 생산 운영 의사결정자용 narrative 요구사항
 - `evidence_gap` / `limitations` 문장화 규칙
 - Evidence에 없는 사실을 말하지 못하도록 generation rule 정의
 - dynamic report output schema
@@ -290,6 +290,11 @@ LLM provider runtime / orchestration / API / UI / deployment
 
 광우 파트의 개발 역량 포인트는 단순히 온톨로지 용어를 문서화하는 것이 아니라, Product Result / Evidence를 실제 Decision / Action / Activity / Equipment state로 전환하는 업무 workflow 레이어다.
 
+Closed-loop의 사용자 역할·Action·Product API/UI 소비 규칙은
+[`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 정본으로
+사용한다. `process_manager`는 시스템 Admin이 아닌 생산 운영 의사결정자이며,
+`process_engineer`와 `maintenance_technician`은 현장 엔지니어와 정비 작업자로 구분한다.
+
 ### Primary Ownership
 
 ```text
@@ -298,6 +303,7 @@ Equipment / Process Context
 → Evidence Association
 → RecommendedAction
 → Decision
+→ WorkOrder
 → MaintenanceAction
 → MaintenanceEvent
 → Ontology State Update
@@ -314,11 +320,15 @@ CNC 위험 상승
         ↓
 Product Result / Evidence
         ↓
+현장 엔지니어 점검·분석 근거
+        ↓
 RecommendedAction
         ↓
-관리자 Decision
+생산 운영 의사결정자 Decision
         ↓
-TOOL_REPLACEMENT Action
+승인된 WorkOrder
+        ↓
+정비 작업자의 TOOL_REPLACEMENT Action
         ↓
 Maintenance Event
         ↓
@@ -904,15 +914,16 @@ Render의 임시 파일시스템은 Model Artifact 정본으로 사용하지 않
 1. Overview에서 CNC 위험 상승 확인
 2. Objects에서 probability / sensor / top factor 확인
 3. Evidence와 provenance 확인
-4. Operations에서 Evidence 기반 RecommendedAction 확인
-5. 관리자 Decision
-6. TOOL_REPLACEMENT Action 생성
-7. Maintenance 완료
-8. Activity / Ontology state 갱신 확인
-9. 정비 이후 새로운 Observation / Prediction Result 확인
-10. Static Executive Brief 확인
-11. Evidence-grounded Dynamic Report 확인
-12. 동일 근거가 Dashboard / Action / Report에 일관되게 사용됨을 설명
+4. 현장 엔지니어가 Operations에서 Evidence를 확인하고 점검·분석 결과를 기록
+5. 생산 운영 의사결정자가 Evidence와 엔지니어 결과를 확인하고 Recommendation 판단
+6. 정비 필요 시 WorkOrder 승인
+7. 정비 작업자가 TOOL_REPLACEMENT Action을 시작·완료
+8. MaintenanceEvent / Activity / Ontology state 갱신 확인
+9. 동일 mutation replay의 idempotency 확인
+10. 정비 이후 새로운 Observation / Prediction Result 확인
+11. Static Executive Brief 확인
+12. Evidence-grounded Dynamic Report 확인
+13. 동일 근거가 Dashboard / Decision / Action / Report에 일관되게 사용됨을 설명
 ```
 
 ---
@@ -945,7 +956,7 @@ Render의 임시 파일시스템은 Model Artifact 정본으로 사용하지 않
 - 실제 예방효과나 인과관계를 확정하지 않는다.
 - 비용 데이터가 없으면 임의 값을 생성하지 않는다.
 - “최적”이라고 단정하지 않고 현재 입력과 가정에서 비용상 권장되는 대안으로 표현한다.
-- 관리자 승인 없이 MaintenanceAction을 자동 생성하지 않는다.
+- 생산 운영 의사결정자 승인 없이 MaintenanceAction을 자동 생성하지 않는다.
 
 ---
 

@@ -3,6 +3,10 @@
 이 문서는 `closed-loop-implementation-plan.md`의 PR 1 구현 기준이다. HTTP, DB,
 Product Result/Evidence projection은 이 범위에 포함하지 않는다.
 
+사용자 역할, 역할별 Action, `available_actions`, Event API additive compatibility, 오류와 E2E 소비 규칙은
+[`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)가 정본이다.
+Product/UI 문서는 이 문서의 상태 머신을 재정의하지 않는다.
+
 ## 기존 Decision과 실행 권한 매핑
 
 | 기존 Decision 값 | 운영 의미 | 점검 Work Order | 정비 Work Order |

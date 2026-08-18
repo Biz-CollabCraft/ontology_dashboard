@@ -6,7 +6,7 @@
 `codex/current-mvp-repository-convergence-20260806` 브랜치를 실행 가능한
 프로토타입으로 보고, 멘토링 MVP 기준과의 차이를 팀이 결정할 수 있게 정리한다.
 
-확인된 코드 계약은 [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을
+확인된 코드 계약은 [현행 MVP 구현 계약 기준선](../../current-mvp-implementation-baseline.md)을
 따른다. 현행과 다른 목표는 `변경 제안`이며 단순 미결정이나 미구현으로 해석하지 않는다.
 
 판정의 의미는 다음과 같다.

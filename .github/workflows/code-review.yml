@@ -178,11 +178,11 @@ jobs:
           trusted_contract = git_show(base, "docs/ai-code-review-context.md")
           contract_source = "base:docs/ai-code-review-context.md"
           if trusted_contract is None:
-              contract_source = "base:fallback architecture + Week 2 contracts"
+              contract_source = "base:fallback architecture + MVP contracts"
               fallback_paths = (
                   "docs/architecture.md",
-                  "docs/mentoring-mvp-2026-08/week2-runtime-ownership-integration.md",
-                  "docs/mentoring-mvp-2026-08/week2-frontend-implementation-import.md",
+                  "docs/mvp/runtime-ownership-integration.md",
+                  "docs/mvp/current-mvp-implementation-baseline.md",
               )
               chunks = []
               for path in fallback_paths:

@@ -1,4 +1,4 @@
-# Week 2 공통 스키마 정의서
+# MVP 공통 스키마 정의서
 
 ## 1. 목적과 상태
 
@@ -148,7 +148,7 @@
 - `tabular_row_as_attribute`: 중복 검사 및 `error`/`aggregate` 정책 구현 완료
 - `tabular_column_as_attribute`: `[id_column, time_column]` 중복 검사 미구현
 
-상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §1을 따른다.
+상세는 `docs/mvp/generator-feature-label-contract.md` §1을 따른다.
 
 ## 3.8 Feature Schema
 
@@ -181,7 +181,7 @@
 > 영향 범위는 워밍업 행 수, 학습 데이터 크기, rolling 통계 분포 및 기존
 > 모델 재학습 여부다.
 
-상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §2와
+상세는 `docs/mvp/generator-feature-label-contract.md` §2와
 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
 ## 3.9 Label Schema
@@ -203,7 +203,7 @@
 > 산출물과 해당 데이터로 학습한 모델은 재생성·재학습이 필요하다.
 
 현재 Result Artifact의 `prediction_horizon_hours=24`와 학습 Label 계약이 실제로 연결되어야
-한다. 상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §3을 따른다.
+한다. 상세는 `docs/mvp/generator-feature-label-contract.md` §3을 따른다.
 
 ## 3.10 Training Run Metadata
 
@@ -298,14 +298,18 @@ TopFactor 결정 변경:
 
 ### 5.0 역할 매핑
 
-| 계층 | 관리자 역할 | 현장 역할 |
-|---|---|---|
-| API/Auth enum | `manager` | `engineer` |
-| Week 2 UI 표시 | 매니저 | 엔지니어 |
-| 업무 관점 | 생산 관리·의사결정 | 현장 점검·근거 확인 |
+| 계층 | 생산 운영 의사결정자 | 현장 엔지니어 | 정비 작업자 |
+|---|---|---|---|
+| Identity/RBAC role code | `process_manager` | `process_engineer` | `maintenance_technician` |
+| 제품 표시 의미 | 생산 운영 의사결정자 | 현장 엔지니어 | 정비 작업자 |
+| legacy Report/UI view alias | `manager` | `engineer` | `engineer` |
+| 업무 관점 | Evidence·엔지니어 결과 기반 운영 판단 | Evidence 확인·점검·분석 근거 작성 | 승인된 WorkOrder/MaintenanceAction 실행 |
 
-내부 enum은 권한 계약과 연결되므로 유지한다. Week 2 UI는 `매니저`, `엔지니어`를
-사용하되 표시 매핑을 분리해 후속 사용자 검증 후 변경할 수 있게 한다.
+`manager` / `engineer`는 기존 Report와 일부 legacy MVP 화면의 compatibility view 값이며 Identity/RBAC
+role code가 아니다. `process_engineer`와 `maintenance_technician`은 legacy view alias가 같더라도 업무
+역할과 허용 Action을 합치지 않는다. 상세 Action matrix와 표시 용어는
+[`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 정본으로
+사용한다.
 
 ### 5.1 AssetPredictionSummary
 
@@ -348,7 +352,7 @@ Overview와 Objects 목록의 공통 행이다.
 | 필드 | 타입 | 필수 | 설명 | 상태 |
 |---|---|:---:|---|---|
 | `source` | enum | Y | `canonical`, `fallback` 후보 | 제안 |
-| `is_stale` | boolean | Y | Week 2는 프론트 observed_at 24시간 MVP 정책 | 현행 |
+| `is_stale` | boolean | Y | 현재 MVP는 프론트 observed_at 24시간 정책 | 현행 |
 | `is_data_quality_hold` | boolean | Y | ViewModel 품질 보류; Artifact 등급과 별도 | 제안 |
 | `last_updated_at` | datetime | N | 응답 생성 또는 적재 기준시각 | 제안 |
 | `warnings` | string[] | Y | 데이터 누락·fallback·신선도 경고 | 제안 |
@@ -405,7 +409,7 @@ Overview와 Objects 목록의 공통 행이다.
 
 | ID | 담당 | 결정 사항 | 상태 |
 |---|---|---|---|
-| SCH-DEC-01 | 팀원1 | 내부 enum과 분리한 Week 2 한국어 상태 문구 | 결정 완료 |
+| SCH-DEC-01 | 팀원1 | 내부 enum과 분리한 MVP 한국어 상태 문구 | 2026-08 Week 2 결정 |
 | SCH-DEC-02 | 팀원1·3 | 현행 `offset`/`limit`/`total`과 검색·라인·상태·담당자 필터 | 결정 완료; `page`/`size`는 V2 |
 | SCH-DEC-03 | 팀원3 | 위험등급은 runtime inference의 Result Artifact가 제공 | 결정 완료 |
 | SCH-DEC-04 | 팀원1·3 | 최신 `observed_at` 기준 프론트 24시간 stale MVP 정책 | 결정 완료 |

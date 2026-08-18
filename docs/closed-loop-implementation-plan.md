@@ -14,6 +14,14 @@
 이 계획의 기준은 main에 반영된 `docs/final_team_role_and_step_plan.md`이며, 해당
 문서와 충돌할 경우 팀 합의로 기준 문서를 먼저 수정한 뒤 이 문서를 맞춘다.
 
+Closed-loop 계약의 정본은 역할별로 분리한다.
+
+- Domain 객체·상태·lineage: [`closed-loop-domain-contract.md`](./closed-loop-domain-contract.md)
+- Product/API/UI 소비·역할·Action·오류·E2E:
+  [`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)
+
+이 구현 계획은 두 canonical contract의 상세 내용을 복제하지 않고 구현 순서와 변경 범위만 관리한다.
+
 ## 2. 구현 목표
 
 대표 CNC Tool Replacement 사례 하나에서 다음 흐름을 실제 데이터와 상태 전이로
@@ -26,9 +34,13 @@
                  ↓
       Producer recommendation을 운영 RecommendedAction으로 materialize
                  ↓
-      관리자 Decision 기록
+우수: 현장 엔지니어가 Evidence / 설비 상태 확인 및 점검·분석 근거 기록
+                 ↓
+      생산 운영 의사결정자가 Recommendation / operational Decision 판단
                  ↓
       승인된 MaintenanceAction / Work Order 실행
+                 ↓
+      정비 작업자가 실제 작업 수행
                  ↓
       MaintenanceEvent와 Activity 기록
                  ↓
@@ -51,7 +63,7 @@ Closed-loop는 과거 예측 결과를 수정하는 기능이 아니다. 정비 
 |---|---|
 | RiskEvent 연결 | Product Result/Evidence를 동일 Equipment의 운영 Event에 연결하고 중복 Event 정책 적용 |
 | RecommendedAction | 호범의 구조화 recommendation을 의미 변경 없이 운영 workflow 객체로 materialize하고 실제 실행 Action과 분리 |
-| Decision | 관리자 판단, 근거, 행위자, 시각 및 대상 Recommendation 기록 |
+| Decision | 생산 운영 의사결정자의 판단, 근거, 행위자, 시각 및 대상 Recommendation 기록 |
 | Work Order / MaintenanceAction | 정책 기반 점검 Work Order와 승인 후 정비 실행 Work Order/Action을 구분하고 허용 상태 전이 구현 |
 | MaintenanceEvent | 실제 수행 결과, 작업자, 시작·종료 시각, 정비 내용을 이력으로 기록 |
 | Ontology projection | 호범 계약의 Evidence ID와 의미를 변경하지 않고 Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계 유지 |
@@ -112,7 +124,7 @@ Closed-loop는 과거 예측 결과를 수정하는 기능이 아니다. 정비 
   투영한다. Decision, Note와 실제 수행 정비를 구분하려면 이 호환 projection을 그대로
   정본으로 사용하지 말고 객체 의미와 link를 바로잡아야 한다.
 - 현재 점검 필요 정책만으로도 `work_type=inspection` Work Order가 투영될 수 있다.
-  기존 점검 요청과 관리자 승인 후 정비 실행 Work Order를 같은 생성 규칙으로 묶지
+  기존 점검 요청과 생산 운영 의사결정자 승인 후 정비 실행 Work Order를 같은 생성 규칙으로 묶지
   않아야 한다.
 - Product Result 최상위 `recommended_action`과
   `evidence_payload.recommended_actions[]`, Closed-loop RecommendedAction의 관계가
@@ -183,7 +195,7 @@ MaintenanceEvent  = 수행된 정비 사실과 결과를 나타내는 이력
 
 RecommendedAction 생성만으로 MaintenanceAction이나 MaintenanceEvent를 자동 생성하지
 않는다. 기존 정책이 `work_type=inspection` Work Order를 생성하는 흐름은 유지할 수
-있지만, `work_type=maintenance` 실행 Work Order와 MaintenanceAction은 관리자 승인
+있지만, `work_type=maintenance` 실행 Work Order와 MaintenanceAction은 생산 운영 의사결정자의 승인
 Decision을 통과한 경우에만 만들 수 있다.
 
 MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않는다.
@@ -204,33 +216,11 @@ MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않�
   origin·ID·정책 버전을 사용하고 별도 ADR로 승인한다. producer recommendation을
   덮어쓰거나 같은 객체인 것처럼 취급하지 않는다.
 
-### 5.3 상태 전이 초안
+### 5.3 상태 전이 정본
 
-```text
-RiskEvent
-open → acknowledged → in_progress → resolved → closed
-
-RecommendedAction
-proposed → accepted | rejected | superseded
-
-WorkOrder
-requested → approved → in_progress → completed
-                               └→ blocked | failed | cancelled
-
-MaintenanceAction
-planned → in_progress → completed
-                      └→ failed | cancelled
-
-MaintenanceEvent
-completed work의 사실 기록으로 생성한 뒤 불변 유지
-```
-
-이 값은 바로 확정하지 않는다. 기존 `DecisionRequest`의
-`continue_monitoring`, `request_inspection`, `review_shutdown`,
-`hold_for_data_check` 및 기존 Work Order Action과의 매핑을 먼저 작성한 후 최종
-enum을 고정한다. 특히 Work Order와 MaintenanceAction을 같은 객체처럼 구현하지
-않고, 기존 코드에서 둘의 생성·완료 시점을 확인한다. 같은 의미의 상태 집합을 두 벌
-만들지 않는 것이 원칙이다.
+상태 전이는 PR #42에서 확정되어 `docs/closed-loop-domain-contract.md`가 canonical owner다.
+이 계획에서 별도 상태 집합을 유지하지 않는다. Product/UI가 어떤 상태와 Action을 노출하는지는
+`docs/closed-loop-product-consumption-contract.md`의 `available_actions` 계약을 따른다.
 
 ### 5.4 중복과 멱등성
 
@@ -267,13 +257,14 @@ enum을 고정한다. 특히 Work Order와 MaintenanceAction을 같은 객체처
 ## 6. API 계획
 
 기존 `/api/events`와 Ontology Action API를 우선 재사용한다. 최종 URL은 우수의 Product
-API orchestration과 합의해 고정한다.
+API orchestration과 합의해 고정한다. Product 소비 규칙, additive compatibility, mutation 응답과
+오류 계약의 정본은 `docs/closed-loop-product-consumption-contract.md`를 따른다.
 
 | 기능 | 우선 방침 |
 |---|---|
 | Event 상세·Evidence·Activity 조회 | 기존 API 확장 |
 | Recommendation 조회 | `GET /api/events/{event_id}/recommendations` 후보 |
-| 관리자 Decision | 기존 `POST /api/events/{event_id}/decision` 확장 |
+| 생산 운영 의사결정자 Decision | 기존 `POST /api/events/{event_id}/decision` 확장 |
 | 승인 후 Work Order/Action 생성 | `POST /api/events/{event_id}/actions` 후보 또는 Ontology Action 재사용 |
 | 작업 시작 | 기존 Ontology Action 확장 우선, 필요 시 `POST /api/actions/{id}/start` |
 | 작업 완료 | `complete_work_order` 재사용 우선, 필요 시 호환 endpoint 제공 |
@@ -322,6 +313,11 @@ API orchestration과 합의해 고정한다.
 - PostgreSQL unit of work 안에서 운영 변경과 transactional outbox를 함께 commit
 - tenant/project/workspace scope, 권한, CSRF, idempotency 검증
 - OpenAPI response contract와 API test 추가
+
+2026-08-18 기준 최신 `main`의 PostgreSQL/SQLite migration은
+`0029_governed_event_automation.sql`이다. 따라서 이 기준선에서 첫 Closed-loop migration은
+`0030_closed_loop_...sql`부터 시작하되, 구현 branch에서 최신 `main`을 다시 확인해 더 높은 번호가
+생겼다면 그 다음 번호를 사용한다.
 
 완료 조건:
 
@@ -374,7 +370,8 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 
 완료 조건:
 
-- UI에서 Evidence 확인 → 관리자 판단 → 작업 진행 → 완료 → 이력 확인이 가능하다.
+- UI에서 현장 엔지니어의 Evidence 확인·점검 근거 → 생산 운영 의사결정자 판단 → 정비 작업자 실행
+  → 완료 → 이력 확인이 가능하다.
 - Report가 실제 Decision과 수행 결과만 서술한다.
 - 공개 환경에서도 새 Result와 과거 조치의 연결이 유지된다.
 
@@ -382,7 +379,7 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 
 핵심 PR 1~4와 공개 E2E가 모두 완료된 경우에만 별도로 시작한다. 즉시 교체, 계획
 정비, 지연 후 재평가의 비용을 실제값·추정값·정책 기본값으로 나누어 비교하며,
-관리자 승인 없이 실행 Action을 생성하지 않는다.
+생산 운영 의사결정자 승인 없이 실행 Action을 생성하지 않는다.
 
 ## 8. 파일 소유와 변경 충돌 방지
 
@@ -415,6 +412,16 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 다른 담당 경로의 변경이 필요하면 해당 owner에게 요구 계약과 실패 재현 테스트를
 전달하고, 공동 수정 여부를 합의한다.
 
+2026-08-18 기준 PR #41은 OPEN이며 아래 공통 파일을 수정 중이다.
+
+- `systems/backend/ontology_dashboard/routers/manufacturing.py`
+- `systems/backend/ontology_dashboard/openapi_contracts.py`
+- `systems/backend/ontology_dashboard/service.py`
+
+따라서 PR 2는 `closed_loop/`, repository/PostgreSQL, outbox, migration, repository/domain test를 먼저
+진행하고, 위 공통 wiring은 PR #41 정리/merge 후 최신 `main`을 반영해 연결하는 것을 기본 순서로 한다.
+실제 구현 시점에는 PR #41 상태를 다시 확인한다.
+
 ## 9. 팀원별 선행 입력과 인계 산출물
 
 ### 9.1 구현 전에 받아야 할 입력
@@ -443,8 +450,9 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 
 #### 우수와 합의할 것
 
-- Product API에서 사용할 endpoint와 response envelope
-- 사용자 역할별 권한과 Decision/Action 화면 상태
+- Product API의 소비·response envelope 원칙은
+  `docs/closed-loop-product-consumption-contract.md`를 정본으로 사용하고 실제 OpenAPI 구현과 일치하는지 확인
+- 사용자 역할별 권한과 Decision/Action 화면 상태는 canonical role + `available_actions` 계약과 일치하는지 확인
 - E2E fixture ID 및 테스트 실행 순서
 - Neon 등 공개 persistence 환경과 migration 적용 방식
 
@@ -508,12 +516,15 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 2. 동일 Equipment의 RiskEvent에 근거를 연결한다.
 3. producer의 `TOOL_REPLACEMENT` recommendation이 원본 ID·근거를 보존한 운영
    RecommendedAction으로 한 번만 materialize됐는지 확인한다.
-4. 관리자가 근거를 확인하고 승인한다.
-5. Work Order/MaintenanceAction이 한 번만 생성된다.
-6. 현장 작업자가 작업을 시작하고 완료한다.
-7. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
-8. 새 Observation으로 별도의 새 Product Result가 생성된다.
-9. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
+4. `process_engineer`가 Event/Equipment/Evidence를 확인하고 점검·분석 결과와 판단 근거를 기록한다.
+5. `process_manager`가 Evidence와 엔지니어 결과를 확인하고 Recommendation을 승인·거절·보류한다.
+6. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.
+7. `maintenance_technician`이 배정된 WorkOrder/MaintenanceAction을 시작하고 체크리스트·측정값·note와
+   함께 완료한다.
+8. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
+9. 동일 mutation을 replay해 idempotency가 보장되는지 확인한다.
+10. 새 Observation으로 별도의 새 Product Result가 생성된다.
+11. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
 
 ## 11. 완료 정의
 
@@ -546,7 +557,9 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 - [ ] **PR 3 착수 gate:** Product Result/Evidence Schema·version·식별자·recommendation
       provenance·조회 API와 Event Evidence Projection/Report grounding 인계 계약을
       호범에게 받았다.
-- [ ] Product API endpoint/envelope를 우수와 합의했다.
+- [x] Product/API/UI 소비 원칙과 역할·Action·오류·E2E 계약을
+      `closed-loop-product-consumption-contract.md`로 합의·문서화했다.
+- [ ] 실제 Product API endpoint/OpenAPI payload가 canonical 소비 계약과 일치하는지 구현 PR에서 검증했다.
 - [ ] 변경 예약 파일과 PR 순서를 팀 채널에 공유했다.
 - [ ] 비용 분석과 What-if가 핵심 MVP 범위 밖임을 재확인했다.
 - [ ] 이 문서 PR과 이후 구현 PR은 merge 전에 최신 `origin/main`을 반영하고

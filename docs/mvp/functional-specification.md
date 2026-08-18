@@ -1,12 +1,14 @@
-# Week 2 기능 명세서
+# MVP 기능 명세서
 
 ## 1. 기준
 
-- 내부 역할: `manager`, `engineer`
-- Week 2 표시 명칭: `매니저`, `엔지니어`; 내부 enum과 분리해 후속 변경 가능
+- Identity/RBAC 역할: `process_manager`, `process_engineer`, `maintenance_technician`
+- 제품 표시 명칭: 생산 운영 의사결정자, 현장 엔지니어, 정비 작업자
+- 기존 `manager`, `engineer` 값은 Report/UI compatibility view alias로 유지
 - 화면: Overview, Objects, Operations, Executive Report
-- 공통 필드: [스키마 정의서](./week2-schema-definition.md)
+- 공통 필드: [스키마 정의서](./schema-definition.md)
 - 현행 기준: [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)
+- Closed-loop 역할·Action 기준: [Product/API/UI 소비 계약](../closed-loop-product-consumption-contract.md)
 - 상태: `초안 — 현행 기능과 변경 제안 분리`
 
 각 화면은 `현행 구현`과 `V2 변경 제안`을 구분한다.
@@ -40,7 +42,7 @@
 
 현행 구현: 검색·라인·상태·담당자 필터, 선택 설비 Inspector, 센서·요인·provenance.
 
-Week 2는 현행 필터를 유지한다. site/cell/유형/기간 필터는 Target으로 남긴다.
+현재 MVP는 현행 필터를 유지한다. site/cell/유형/기간 필터는 Target으로 남긴다.
 
 아래 표의 site/cell/유형/기간 필터와 전용 history·maintenance 조회는
 `V2 변경 제안`이다.
@@ -72,11 +74,15 @@ Week 2는 현행 필터를 유지한다. site/cell/유형/기간 필터는 Targe
 Decision·Note는 이미 권한 기반 저장과 Activity 감사 이력으로 구현돼 있다. 이를
 제외하려면 API·UI·권한·테스트 변경 항목으로 결정한다.
 
+Closed-loop Action 버튼은 Frontend가 role/state를 조합해 계산하지 않고 Backend가 반환하는
+`available_actions`를 사용한다. `process_engineer`와 `maintenance_technician`의 현장 책임도 별도 역할로
+유지한다.
+
 ## 6. Executive Report
 
 현행 구현: 선택 Event 단위 `ReportRequest`와 역할별 grounded report.
 
-Week 2는 Event Evidence 기반 deterministic 기준선을 먼저 완성한다. 아래 표의
+현재 MVP는 Event Evidence 기반 deterministic 기준선을 먼저 완성한다. 아래 표의
 기간·필터 집계 기반 `ReportInput`/`ReportOutput`은 Target이며 추가 집계 API가
 필요하면 후속 처리한다.
 

@@ -15,4 +15,4 @@
 `week2-*` 문서와 `current-mvp-implementation-baseline.md`를 우선한다.
 
 원본과 팀 기준 문서의 관계는
-[`../week2-prototype-doc-migration-map.md`](../week2-prototype-doc-migration-map.md)를 참고한다.
+[`../prototype-doc-migration-map.md`](../prototype-doc-migration-map.md)를 참고한다.
