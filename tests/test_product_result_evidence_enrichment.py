@@ -306,6 +306,53 @@ def test_evidence_payload_invariant_rejects_null_maintenance_context_without_gap
         validate_evidence_payload_invariants(artifact["evidence_payload"])
 
 
+def test_evidence_payload_records_gap_when_top_factors_are_unavailable() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    prediction = HeuristicPredictor().predict(fixture)
+    artifact = {
+        "status_grade": "warning",
+        "top_factors": [],
+    }
+
+    payload = build_product_result_evidence_payload(artifact, fixture, prediction)
+
+    assert payload["component_hypotheses"] == []
+    assert payload["recommended_actions"][0]["basis"] == []
+    assert {
+        "gap_id": "gap.top_factors.unavailable",
+        "field": "top_factors",
+        "reason": "insufficient_context",
+        "required_source": "observation_history",
+        "owner_domain": "diagnosis",
+        "display_policy": "show_limitation",
+    } in payload["evidence_gaps"]
+    validate_evidence_payload_invariants(payload)
+
+
+def test_evidence_payload_invariant_rejects_missing_top_factor_gap() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    payload = build_product_result_evidence_payload(
+        {
+            "status_grade": "warning",
+            "top_factors": [],
+        },
+        fixture,
+        HeuristicPredictor().predict(fixture),
+    )
+    payload["evidence_gaps"] = [
+        gap
+        for gap in payload["evidence_gaps"]
+        if gap["field"] != "top_factors"
+    ]
+
+    with pytest.raises(ValueError, match="missing top_factors gap"):
+        validate_evidence_payload_invariants(payload)
+
+
 def test_evidence_payload_does_not_overwrite_official_judgement_fields() -> None:
     fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
     artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())

@@ -70,7 +70,7 @@ def build_product_result_evidence_payload(
     source_fields.extend(_sensor_source_fields(sensor_evidence))
     component_hypotheses = _component_hypotheses(artifact, sensor_evidence)
     recommended_actions = _recommended_actions(artifact, component_hypotheses)
-    evidence_gaps = _evidence_gaps(maintenance_context, prediction)
+    evidence_gaps = _evidence_gaps(artifact, maintenance_context, prediction)
 
     payload: dict[str, Any] = {
         "sensor_evidence": sensor_evidence,
@@ -113,6 +113,14 @@ def validate_evidence_payload_invariants(payload: dict[str, Any]) -> None:
         for gap in payload.get("evidence_gaps", [])
     ):
         raise ValueError("evidence_payload missing maintenance_context gap")
+
+    has_factor_evidence = any(field_id.startswith("factor.") for field_id in source_field_ids)
+    if not has_factor_evidence and not any(
+        gap.get("field") == "top_factors"
+        and gap.get("owner_domain") == "diagnosis"
+        for gap in payload.get("evidence_gaps", [])
+    ):
+        raise ValueError("evidence_payload missing top_factors gap")
 
 
 def build_ranked_factor_evidence(prediction: Prediction) -> list[dict[str, Any]]:
@@ -259,8 +267,23 @@ def _sensor_source_fields(sensor_evidence: dict[str, Any]) -> list[dict[str, str
     ]
 
 
-def _evidence_gaps(maintenance_context: dict[str, Any] | None, prediction: Prediction) -> list[dict[str, str]]:
+def _evidence_gaps(
+    artifact: dict[str, Any],
+    maintenance_context: dict[str, Any] | None,
+    prediction: Prediction,
+) -> list[dict[str, str]]:
     gaps: list[dict[str, str]] = []
+    if not artifact.get("top_factors"):
+        gaps.append(
+            {
+                "gap_id": "gap.top_factors.unavailable",
+                "field": "top_factors",
+                "reason": "insufficient_context",
+                "required_source": "observation_history",
+                "owner_domain": "diagnosis",
+                "display_policy": "show_limitation",
+            }
+        )
     if maintenance_context is None:
         gaps.append(
             {
