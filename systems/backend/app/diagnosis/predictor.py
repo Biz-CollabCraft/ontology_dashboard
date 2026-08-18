@@ -378,18 +378,19 @@ class ArtifactPredictor:
             recommended_decision=self.policy["decision_mapping"][risk_band],
             confidence=confidence,
             predicted_failure_type="failure_risk" if probability >= 0.5 else "none",
-            factors=self._factor_scores(feature_names, values),
+            factors=self._factor_scores(feature_names, values, fixture),
             quality_issues=[],
             model_artifact=self._artifact_reference(),
         )
 
-    def _factor_scores(self, feature_names: list[str], values: dict[str, Any]) -> list[FactorScore]:
-        importances = self._original_feature_importances(feature_names)
-        if not importances:
+    def _factor_scores(self, feature_names: list[str], values: dict[str, Any], fixture: dict[str, Any]) -> list[FactorScore]:
+        feature_weights, weights_are_signed = self._original_feature_weights(feature_names)
+        if not feature_weights:
             return []
 
+        local_deltas = _local_feature_deltas(fixture, values)
         scores: list[FactorScore] = []
-        for feature, score in sorted(importances.items(), key=lambda item: abs(item[1]), reverse=True):
+        for feature, model_weight in feature_weights.items():
             if feature not in values:
                 continue
             try:
@@ -398,33 +399,40 @@ class ArtifactPredictor:
                 continue
             if not math.isfinite(raw_value):
                 continue
-            if feature in _RISK_DOWN_FEATURES:
-                direction = "risk_down"
-            elif feature in _RISK_UP_FEATURES:
-                direction = "risk_up"
+
+            local_delta = local_deltas.get(feature)
+            if local_delta is None:
+                continue
+            if weights_are_signed:
+                signed_score = model_weight * local_delta
             else:
-                direction = "risk_up" if score >= 0 else "risk_down"
+                signed_score = abs(model_weight) * _domain_oriented_delta(feature, local_delta)
+            if signed_score == 0:
+                continue
+            direction = "risk_up" if signed_score > 0 else "risk_down"
             scores.append(
                 FactorScore(
                     feature=feature,
                     raw_value=raw_value,
-                    score=float(round(abs(score), 6)),
+                    score=float(round(abs(signed_score), 6)),
                     direction=direction,
                 )
             )
-        return scores
+        return sorted(scores, key=lambda item: item.score, reverse=True)
 
-    def _original_feature_importances(self, feature_names: list[str]) -> dict[str, float]:
+    def _original_feature_weights(self, feature_names: list[str]) -> tuple[dict[str, float], bool]:
         classifier = getattr(self.model, "named_steps", {}).get("classifier")
         if classifier is None:
-            return {}
+            return {}, False
         weights = getattr(classifier, "feature_importances_", None)
+        weights_are_signed = False
         if weights is None:
             coefficients = getattr(classifier, "coef_", None)
             if coefficients is not None and len(coefficients):
                 weights = coefficients[0]
+                weights_are_signed = True
         if weights is None:
-            return {}
+            return {}, False
 
         preprocessor = getattr(self.model, "named_steps", {}).get("preprocess")
         if preprocessor is None:
@@ -439,7 +447,7 @@ class ArtifactPredictor:
         for transformed_name, weight in zip(transformed_names, weights):
             original = _original_feature_name(str(transformed_name), feature_names)
             aggregated[original] = aggregated.get(original, 0.0) + float(weight)
-        return aggregated
+        return aggregated, weights_are_signed
 
     def _artifact_reference(self) -> dict[str, Any]:
         return {
@@ -482,3 +490,50 @@ def _original_feature_name(transformed_name: str, feature_names: list[str]) -> s
         if suffix == feature or suffix.startswith(f"{feature}_"):
             return feature
     return suffix
+
+
+def _local_feature_deltas(fixture: dict[str, Any], current_values: dict[str, Any]) -> dict[str, float]:
+    observed_at = str((fixture.get("observation") or {}).get("timestamp") or "")
+    history_values: dict[str, list[float]] = {}
+    for row in fixture.get("history", []):
+        if observed_at and str(row.get("timestamp") or "") == observed_at:
+            continue
+        try:
+            row_values = {**row, **derive_features(row)}
+        except (KeyError, TypeError, ValueError):
+            row_values = dict(row)
+        for feature, value in row_values.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(number):
+                history_values.setdefault(feature, []).append(number)
+
+    deltas: dict[str, float] = {}
+    for feature, value in current_values.items():
+        try:
+            current = float(value)
+        except (TypeError, ValueError):
+            continue
+        values = history_values.get(feature) or []
+        if not values:
+            continue
+        baseline = sum(values) / len(values)
+        if len(values) > 1:
+            variance = sum((item - baseline) ** 2 for item in values) / len(values)
+            scale = math.sqrt(variance)
+        else:
+            scale = 0.0
+        if scale <= 0:
+            scale = max(abs(baseline), 1.0)
+        delta = (current - baseline) / scale
+        if math.isfinite(delta):
+            deltas[feature] = delta
+    return deltas
+
+
+def _domain_oriented_delta(feature: str, local_delta: float) -> float:
+    if feature in _RISK_DOWN_FEATURES:
+        return -local_delta
+    return local_delta

@@ -164,7 +164,7 @@ def build_product_result_artifact(
             "signed_contribution": item.score if item.direction == "risk_up" else -item.score,
             "direction": item.direction,
             "explanation_method": (
-                "model_artifact_feature_attribution"
+                "model_artifact_local_proxy_attribution"
                 if prediction.model_artifact
                 else "deterministic_component_score"
             ),

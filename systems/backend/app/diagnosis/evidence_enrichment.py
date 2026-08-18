@@ -169,7 +169,7 @@ def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
 def _dedupe_history_rows(rows: list[dict[str, Any]]) -> list[tuple[str, dict[str, float]]]:
     deduped: dict[str, dict[str, float]] = {}
     anonymous_rows: list[tuple[str, dict[str, float]]] = []
-    for index, row in enumerate(rows):
+    for row in rows:
         numeric = _numeric_observation(row)
         if not numeric:
             continue
@@ -177,7 +177,7 @@ def _dedupe_history_rows(rows: list[dict[str, Any]]) -> list[tuple[str, dict[str
         if timestamp:
             deduped[timestamp] = numeric
         else:
-            anonymous_rows.append((f"history[{index}]", numeric))
+            anonymous_rows.append(("", numeric))
     return [*anonymous_rows, *deduped.items()]
 
 

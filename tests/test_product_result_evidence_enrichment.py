@@ -184,6 +184,27 @@ def test_sensor_baseline_excludes_duplicate_current_observation_timestamp() -> N
     assert tool_wear["z_score"] == 2.352075
 
 
+def test_sensor_window_does_not_expose_placeholder_for_untimestamped_history_rows() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"].insert(
+        0,
+        {
+            "product_type": "M",
+            "air_temperature_k": 298.8,
+            "process_temperature_k": 309.1,
+            "rotational_speed_rpm": 1475,
+            "torque_nm": 49.0,
+            "tool_wear_min": 200,
+        },
+    )
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    window = artifact["evidence_payload"]["sensor_evidence"]["window"]
+
+    assert window["start"] == "2026-07-31T23:45:00+09:00"
+    assert not window["start"].startswith("history[")
+
+
 def test_component_hypotheses_are_grouped_by_component_id() -> None:
     from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
 

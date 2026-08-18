@@ -250,9 +250,17 @@
 | `rank` | integer | Y | 1~3 |
 | `feature` | string | Y | 모델 파생 feature 이름 |
 | `feature_value` | number | Y | 자산 내부 정규화 값 |
-| `signed_contribution` | number | Y | 모델 logit에 대한 부호 있는 기여 |
+| `signed_contribution` | number | Y | 해당 관측치의 local factor score. Model Artifact 경로는 전역 feature importance를 단독 사용하지 않고 history baseline 이탈도를 곱한 local proxy를 사용한다. |
 | `direction` | enum | Y | `risk_up`, `risk_down` |
-| `explanation_method` | string | Y | 현재 `linear_logit_contribution` |
+| `explanation_method` | string | Y | `deterministic_component_score` 또는 `model_artifact_local_proxy_attribution` |
+
+TopFactor 결정 변경:
+
+- `top_factors`는 모델 설명서가 아니라 해당 Result Artifact 판단을 설명하는 event-local 근거다.
+- Model Artifact가 `feature_importances_`나 `coef_` 같은 전역 모델 가중치를 제공하더라도, 그 값을 그대로 rank/score로 쓰지 않는다. 전역 값만 쓰면 정상 설비와 critical 설비가 같은 feature/rank/score를 받기 때문이다.
+- Model Artifact 경로의 현행 구현은 `전역 모델 가중치 × 현재 관측치의 history baseline 이탈도`로 local proxy score를 만든다. 이는 SHAP 같은 완전한 instance attribution이 아니므로 `model_artifact_local_proxy_attribution`으로 라벨링한다.
+- local proxy를 만들 수 없는 feature는 top factor 후보에서 제외한다. basis를 억지로 만들지 않는다.
+- history baseline은 observation timestamp와 같은 row를 제외한 과거 history로 계산한다. 따라서 GS-002 fixture처럼 history에 현재 observation이 중복 포함된 경우 baseline 표본은 3개이며, 현재 관측치는 비교 대상이지 baseline 구성원이 아니다.
 
 ### 4.2 RecommendedAction
 

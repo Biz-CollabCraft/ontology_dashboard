@@ -61,7 +61,9 @@ def test_generator_publishes_model_artifact_and_backend_consumes_it(tmp_path: Pa
 
     predictor = ArtifactPredictor(artifact_path)
     fixture = load_fixture("data/fixtures/GS-002-tool-wear-warning.json")
+    normal_fixture = load_fixture("data/fixtures/GS-001-normal-stable.json")
     prediction = predictor.predict(fixture)
+    normal_prediction = predictor.predict(normal_fixture)
     result = build_product_result_artifact(fixture, predictor=predictor)
     evidence = build_evidence_package(fixture, predictor=predictor)
 
@@ -70,8 +72,13 @@ def test_generator_publishes_model_artifact_and_backend_consumes_it(tmp_path: Pa
     assert result["provenance"]["source_type"] == "product_runtime_inference"
     assert result["provenance"]["model_artifact"]["model_version"] == manifest["model_version"]
     assert prediction.factors
+    assert normal_prediction.factors
+    assert [(item.feature, item.score) for item in prediction.factors[:3]] != [
+        (item.feature, item.score)
+        for item in normal_prediction.factors[:3]
+    ]
     assert result["top_factors"]
-    assert result["top_factors"][0]["explanation_method"] == "model_artifact_feature_attribution"
+    assert result["top_factors"][0]["explanation_method"] == "model_artifact_local_proxy_attribution"
     assert result["evidence_payload"]["recommended_actions"][0]["basis"]
     assert evidence["model"]["mode"] == "trained"
     assert evidence["model"]["artifact"]["dataset_version"] == "test-ai4i-v1"
