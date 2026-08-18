@@ -26,7 +26,7 @@ feature_label_service.py
 - 개별 고장 이벤트의 anchor 값이 결측(NaT)이면 해당 이벤트만 건너뛴다.
 
 설계 원칙과의 연결:
-- docs/architecture.md 및 schemas/product-result-artifact.schema.json의 'prediction_task: binary_failure_within_horizon' 계약을 준수한다.
+- docs/architecture.md 및 contracts/schemas/product-result-artifact.schema.json의 'prediction_task: binary_failure_within_horizon' 계약을 준수한다.
 """
 
 import logging
