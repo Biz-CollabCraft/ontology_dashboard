@@ -944,7 +944,9 @@ def _seed_live_product_results_for_cutover(
         original_prediction_id = str(artifact["provenance"]["prediction_id"])
         prediction_id = f"pmcutover-{uuid.uuid5(uuid.NAMESPACE_URL, f'{live_version_id}:{original_prediction_id}')}"
         prediction_result_id = f"pmcutover-result-{uuid.uuid5(uuid.NAMESPACE_URL, f'{live_version_id}:{original_prediction_id}')}"
-        artifact_id = f"pmcutover-artifact-{uuid.uuid5(uuid.NAMESPACE_URL, f'{live_version_id}:{artifact['artifact_id']}')}"
+        source_artifact_id = str(artifact["artifact_id"])
+        artifact_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"{live_version_id}:{source_artifact_id}")
+        artifact_id = f"pmcutover-artifact-{artifact_uuid}"
         cutover_sha256 = hashlib.sha256(
             (
                 f"{live_version_id}:{seed_version_id}:{row['source_sha256']}:"
