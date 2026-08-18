@@ -1,0 +1,112 @@
+name: ontology-dashboard-macmini
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    cpus: 1.5
+    mem_limit: 2g
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # PostgreSQL 18+ stores major-version-specific data beneath
+      # /var/lib/postgresql. Mount the parent so future pg_upgrade can operate
+      # without crossing a mount boundary.
+      - ${ONTOLOGY_DATA_ROOT}/postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    networks: [private]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [private]
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: systems/backend/Dockerfile
+      args:
+        API_EXTRAS: macmini
+    restart: unless-stopped
+    cpus: 2.0
+    mem_limit: 2g
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      PORT: 8000
+      # Restored production data is authoritative on the Mac mini.  Seed/demo
+      # bootstrap must be an explicit opt-in rather than silently mutating it.
+      SEED_DEMO_ACCOUNTS: ${SEED_DEMO_ACCOUNTS:-0}
+      ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA: ${ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA:-false}
+      ONTOLOGY_DASHBOARD_DATABASE_URL: ${ONTOLOGY_DASHBOARD_DATABASE_URL}
+      ONTOLOGY_DASHBOARD_REDIS_URL: redis://redis:6379/0
+      ONTOLOGY_DASHBOARD_ALLOWED_ORIGINS: ${ONTOLOGY_DASHBOARD_ALLOWED_ORIGINS:-}
+      ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX: ${ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX}
+      ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK: ${ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK:-0}
+      MODEL_ARTIFACT_URI: ${BACKEND_MODEL_ARTIFACT_URI:-/artifacts/compressor-failure-risk/current}
+      LLM_PROVIDER: ${LLM_PROVIDER:-deterministic}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      MAINTENANCE_CONTEXT_PROVIDER: ${MAINTENANCE_CONTEXT_PROVIDER:-fixture}
+    volumes:
+      - ${ONTOLOGY_DATA_ROOT}/artifacts:/artifacts:ro
+    ports:
+      - 127.0.0.1:${BACKEND_PORT:-8110}:8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    networks: [private]
+
+  generator:
+    build:
+      context: ../..
+      dockerfile: systems/generator/Dockerfile
+    restart: "no"
+    cpus: 2.0
+    mem_limit: 4g
+    profiles: ["generator"]
+    environment:
+      APP_ENV: production
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DATA_DIR: /data/source
+      DATA_PREPROCESSED_DIR: /data/preprocessed
+      ONTOLOGY_DIR: /data/ontology
+      MODELS_STORE_DIR: /data/models
+      MODEL_ARTIFACT_URI: /artifacts
+      GENERATOR_TRAINING_N_JOBS: ${GENERATOR_TRAINING_N_JOBS:-2}
+      LOG_LEVEL: ${GENERATOR_LOG_LEVEL:-INFO}
+    volumes:
+      - ${ONTOLOGY_DATA_ROOT}/generator/source:/data/source:ro
+      - ${ONTOLOGY_DATA_ROOT}/generator/data_preprocessed:/data/preprocessed
+      - ${ONTOLOGY_DATA_ROOT}/generator/ontology:/data/ontology
+      - ${ONTOLOGY_DATA_ROOT}/generator/models_store:/data/models
+      - ${ONTOLOGY_DATA_ROOT}/generator/logs:/logs
+      - ${ONTOLOGY_DATA_ROOT}/artifacts:/artifacts
+    networks: [private]
+
+networks:
+  private:
+    driver: bridge

@@ -11,6 +11,8 @@ import pandas as pd
 
 from .artifact_provider import LocalModelArtifactProvider
 from .feature_executor import execute_feature_contract
+from .compressor_runtime_features import SUPPORTED_KIND as COMPRESSOR_TEMPORAL_KIND
+from .compressor_runtime_features import derive_compressor_temporal_features
 from .contracts import audit_fixture, derive_features
 from .evidence_baseline import build_history_baseline_window
 
@@ -332,7 +334,9 @@ class ArtifactPredictor:
         self.policy = json.loads(policy.read_text(encoding="utf-8"))
 
     def predict(self, fixture: dict[str, Any]) -> Prediction:
-        quality_issues = [issue.to_dict() for issue in audit_fixture(fixture)]
+        engineering_kind = (self.feature_schema.get("feature_engineering") or {}).get("kind")
+        temporal_compressor = engineering_kind == COMPRESSOR_TEMPORAL_KIND
+        quality_issues = [] if temporal_compressor else [issue.to_dict() for issue in audit_fixture(fixture)]
         if quality_issues:
             return Prediction(
                 model_version=self.model_version,
@@ -346,8 +350,6 @@ class ArtifactPredictor:
                 model_artifact=self._artifact_reference(),
             )
 
-        observation = fixture["observation"]
-        derived = derive_features(observation)
         declared_features = list(self.feature_schema.get("features") or [])
         feature_names = [
             str(item["name"]) if isinstance(item, dict) else str(item)
@@ -355,14 +357,42 @@ class ArtifactPredictor:
         ]
         if not feature_names:
             raise ValueError("Model Artifact feature schema has no features")
-        direct_values = {**observation, **derived}
-        values = execute_feature_contract(
-            fixture,
-            feature_names=feature_names,
-            direct_values=direct_values,
-            history_requirement=self.history_requirement,
-            executor_version=str((self.manifest.get("compatibility") or {}).get("feature_executor_version") or "") or None,
-        )
+        if temporal_compressor:
+            try:
+                values = derive_compressor_temporal_features(fixture, self.feature_schema)
+            except (TypeError, ValueError) as exc:
+                return Prediction(
+                    model_version=self.model_version,
+                    probability=None,
+                    risk_band="data_quality_hold",
+                    recommended_decision="hold_for_data_check",
+                    confidence="unavailable",
+                    predicted_failure_type="unavailable",
+                    factors=[],
+                    quality_issues=[
+                        {
+                            "code": "insufficient_runtime_context",
+                            "field": "history",
+                            "message": str(exc),
+                            "severity": "error",
+                        }
+                    ],
+                    model_artifact=self._artifact_reference(),
+                )
+        else:
+            observation = fixture["observation"]
+            derived = derive_features(observation)
+            direct_values = {**observation, **derived}
+            values = execute_feature_contract(
+                fixture,
+                feature_names=feature_names,
+                direct_values=direct_values,
+                history_requirement=self.history_requirement,
+                executor_version=str(
+                    (self.manifest.get("compatibility") or {}).get("feature_executor_version") or ""
+                )
+                or None,
+            )
         frame = pd.DataFrame([{feature: values[feature] for feature in feature_names}])
         probability = float(self.model.predict_proba(frame)[:, 1][0])
 
@@ -382,17 +412,44 @@ class ArtifactPredictor:
 
         distance = abs(probability - 0.5) * 2.0
         confidence = "high" if distance >= 0.6 else "medium" if distance >= 0.3 else "low"
+        selected_threshold = float(self.manifest.get("training_config", {}).get("selected_threshold", 0.5))
         return Prediction(
             model_version=self.model_version,
             probability=float(round(probability, 6)),
             risk_band=risk_band,
             recommended_decision=self.policy["decision_mapping"][risk_band],
             confidence=confidence,
-            predicted_failure_type="failure_risk" if probability >= 0.5 else "none",
-            factors=self._factor_scores(feature_names, values, fixture),
+            predicted_failure_type="failure_risk" if probability >= selected_threshold else "none",
+            factors=(
+                self._temporal_factor_scores(feature_names, values)
+                if temporal_compressor
+                else self._factor_scores(feature_names, values, fixture)
+            ),
             quality_issues=[],
             model_artifact=self._artifact_reference(),
         )
+
+    def _temporal_factor_scores(self, feature_names: list[str], values: dict[str, Any]) -> list[FactorScore]:
+        feature_weights, weights_are_signed = self._original_feature_weights(feature_names)
+        if not feature_weights:
+            return []
+        scores: list[FactorScore] = []
+        for feature, model_weight in feature_weights.items():
+            if feature not in values:
+                continue
+            raw_value = float(values[feature])
+            signed_score = model_weight * raw_value if weights_are_signed else abs(model_weight) * abs(raw_value)
+            if not math.isfinite(signed_score) or signed_score == 0:
+                continue
+            scores.append(
+                FactorScore(
+                    feature=feature,
+                    raw_value=raw_value,
+                    score=float(round(abs(signed_score), 6)),
+                    direction="risk_up" if signed_score > 0 else "risk_down",
+                )
+            )
+        return sorted(scores, key=lambda item: item.score, reverse=True)[:5]
 
     def _factor_scores(self, feature_names: list[str], values: dict[str, Any], fixture: dict[str, Any]) -> list[FactorScore]:
         feature_weights, weights_are_signed = self._original_feature_weights(feature_names)

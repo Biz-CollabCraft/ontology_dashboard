@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.diagnosis.evidence import build_product_result_artifact
-from app.diagnosis.predictor import CompressorHeuristicPredictor, configured_predictor
+from app.diagnosis.predictor import HeuristicPredictor, configured_predictor
 
 from app.dataset.ingestion import (
     BundleFileAdapter,
@@ -32,7 +32,7 @@ PROJECT_ID = "manufacturing-demo-project"
 WORKSPACE_ID = "manufacturing-demo"
 SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
 RUNTIME_SELECTION_STRATEGY = "latest_observation_per_asset_v1"
-RUNTIME_MATERIALIZATION_PROFILE = "cnc_and_compressor_current_state_v1"
+RUNTIME_MATERIALIZATION_PROFILE = "cnc_heuristic_compressor_artifact_current_state_v2"
 DEFAULT_SOURCE_ROOT = Path("/app/.source/gen_data")
 OUTPUT_ROLES = {
     "prediction_snapshot",
@@ -168,7 +168,41 @@ def _artifact_checksum(artifact: dict[str, Any]) -> str:
     return hashlib.sha256(rendered).hexdigest()
 
 
-def _runtime_fixture(row: dict[str, Any]) -> dict[str, Any]:
+def _compressor_runtime_history(
+    connection: Any,
+    dataset_version_id: str,
+    asset_id: str,
+    observed_at: Any,
+) -> list[dict[str, Any]]:
+    """Return the 35 observations immediately preceding compressor inference."""
+
+    rows = connection.execute(
+        """
+        SELECT observed_at,voltage_raw,rotation_raw,pressure_raw,vibration_raw,
+               relative_vibration_z,relative_vibration_zone
+        FROM pm_compressor_observations
+        WHERE dataset_version_id=%s AND asset_id=%s AND observed_at < %s
+        ORDER BY observed_at DESC
+        LIMIT 35
+        """,
+        (dataset_version_id, asset_id, observed_at),
+    ).fetchall()
+    ordered = list(reversed(rows))
+    return [
+        {
+            "timestamp": item["observed_at"].isoformat(),
+            "voltage_raw": float(item["voltage_raw"]),
+            "rotation_raw": float(item["rotation_raw"]),
+            "pressure_raw": float(item["pressure_raw"]),
+            "vibration_raw": float(item["vibration_raw"]),
+            "relative_vibration_z": float(item["relative_vibration_z"]),
+            "relative_vibration_zone": str(item["relative_vibration_zone"]),
+        }
+        for item in ordered
+    ]
+
+
+def _runtime_fixture(row: dict[str, Any], *, history: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     observed_at = row["observed_at"].isoformat()
     asset_id = str(row["asset_id"])
     asset_type = str(row["asset_type"])
@@ -206,14 +240,17 @@ def _runtime_fixture(row: dict[str, Any]) -> dict[str, Any]:
             "criticality": "medium",
         },
         "observation": observation,
-        "history": list(row.get("history") or []),
+        "history": list(history if history is not None else row.get("history") or []),
     }
 
 
 def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
-    cnc_predictor = configured_predictor()
-    compressor_predictor = CompressorHeuristicPredictor()
+    # The active Model Artifact is currently compressor-specific. Keep the CNC
+    # deterministic compatibility predictor isolated until a CNC artifact is
+    # published rather than applying a compressor artifact to CNC fields.
+    cnc_predictor = HeuristicPredictor()
+    compressor_predictor = configured_predictor()
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         with connection.transaction():
             _set_scope(connection)
@@ -306,15 +343,30 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
             for row in candidates:
                 asset_type = str(row["asset_type"])
                 predictor = compressor_predictor if asset_type == "compressor" else cnc_predictor
+                history = (
+                    _compressor_runtime_history(
+                        connection,
+                        dataset_version_id,
+                        str(row["asset_id"]),
+                        row["observed_at"],
+                    )
+                    if asset_type == "compressor"
+                    else []
+                )
                 artifact = build_product_result_artifact(
-                    _runtime_fixture(row),
+                    _runtime_fixture(row, history=history),
                     predictor=predictor,
                 )
                 probability = float(artifact["failure_probability"])
-                binary_type = (
-                    "failure_risk" if probability >= 0.5 else "no_significant_risk"
-                )
                 diagnostic_type = str(artifact["predicted_failure_type"])
+                if asset_type == "compressor" and diagnostic_type in {"failure_risk", "none"}:
+                    binary_type = (
+                        "failure_risk" if diagnostic_type == "failure_risk" else "no_significant_risk"
+                    )
+                else:
+                    binary_type = (
+                        "failure_risk" if probability >= 0.5 else "no_significant_risk"
+                    )
                 provenance = dict(artifact["provenance"])
                 provenance.update(
                     {
