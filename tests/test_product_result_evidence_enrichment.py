@@ -213,7 +213,16 @@ def test_legacy_factor_labels_are_localized_without_changing_raw_units() -> None
 
     assert localized[0]["display_name"] == "Voltage signal"
     assert localized[0]["unit"] == "raw"
-    assert localized[0]["normal_range"] == "See governed model contract"
+    assert localized[0]["normal_range"] == "295.0–305.0"
+
+
+def test_snapshot_compatibility_does_not_require_dashboard_evidence_detail() -> None:
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "prediction_snapshot_compatibility"
+    ) is False
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "result_artifact"
+    ) is True
 
 
 def test_product_result_artifact_records_gap_when_maintenance_context_is_missing() -> None:

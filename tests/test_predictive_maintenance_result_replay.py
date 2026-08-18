@@ -619,7 +619,7 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     assert dashboard.events
     assert dashboard.selected_event_detail is not None
     assert dashboard.selected_event_detail.evidence["schema_version"] == "1.0"
-    assert dashboard.selected_event_detail.evidence["model"]["mode"] == "postgresql_result_artifact"
+    assert dashboard.selected_event_detail.evidence["model"]["mode"] == "deterministic_fallback"
     assert dashboard.selected_event_detail.evidence["top_factors"][0]["evidence_field_id"].startswith("factor.1.")
     assert dashboard.selected_event_detail.evidence["maintenance_context"]["source_type"] == (
         "canonical_maintenance_evidence"

@@ -184,7 +184,10 @@ def test_runtime_candidates_select_latest_observation_per_asset() -> None:
 
     assert candidates == [{"asset_id": "CNC-001"}]
     assert connection.parameters == ("dsv-current", "dsv-current")
-    assert connection.query.count("DISTINCT ON (o.asset_id)") == 2
+    assert connection.query.count(
+        "ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC)"
+    ) == 2
+    assert connection.query.count("h.observed_at < o.observed_at") == 2
     assert "pm_cnc_observations" in connection.query
     assert "pm_compressor_observations" in connection.query
     assert "UNION ALL" in connection.query

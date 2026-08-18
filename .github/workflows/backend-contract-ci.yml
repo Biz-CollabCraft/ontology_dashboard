@@ -95,8 +95,10 @@ jobs:
           APP_ENV: test
         run: >
           pytest -q
+          tests/test_demo_predictive_maintenance_bootstrap.py
           tests/test_product_result_artifact_evidence_contract.py
           tests/test_product_result_evidence_enrichment.py
+          tests/test_predictive_maintenance_result_replay.py
 
       - name: Model Artifact publish-validation-load round-trip
         if: steps.changes.outputs.run_contract == 'true'

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from ..contracts import AppLocale
@@ -148,12 +148,16 @@ def _localize_legacy_top_factors(
     factors: list[dict[str, Any]],
     locale: AppLocale,
 ) -> list[dict[str, Any]]:
-    normal_range = "관리형 모델 계약 참조" if locale == "ko-KR" else "See governed model contract"
+    fallback_range = "관리형 모델 계약 참조" if locale == "ko-KR" else "See governed model contract"
     return [
         {
             **factor,
             "display_name": _pm_label(PM_FEATURE_LABELS, locale, str(factor.get("feature") or "")),
-            "normal_range": normal_range,
+            "normal_range": (
+                fallback_range
+                if str(factor.get("normal_range") or "") in {"", "근거 부족"}
+                else factor["normal_range"]
+            ),
         }
         for factor in factors
     ]
@@ -180,6 +184,10 @@ def _list(value: Any) -> list[Any]:
 class PredictiveMaintenanceRuntimeService:
     def __init__(self, repository: PredictiveMaintenanceRuntimeRepository) -> None:
         self.repository = repository
+
+    @staticmethod
+    def _supports_dashboard_evidence_detail(source_contract: str) -> bool:
+        return source_contract == "result_artifact"
 
     @staticmethod
     def _safe_governance(profile: dict[str, Any]) -> GovernanceProvenance:
@@ -972,35 +980,6 @@ class PredictiveMaintenanceRuntimeService:
         view: Literal["legacy", "canonical"] = "legacy",
     ) -> DashboardEventDetail:
         event_id = self._dashboard_event_id(result)
-        window_start = result.observed_at - timedelta(hours=6)
-        observation_response = self.observations(
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            dataset_version_id=context.dataset_version_id,
-            start=window_start,
-            end=result.observed_at,
-            asset_id=result.asset_id,
-            site_id=None,
-            cell_id=None,
-            asset_type=None,
-            grain="10m",
-            derived_measures=ALLOWED_DERIVED_MEASURES,
-            limit=72,
-        )
-        history = [
-            self._dashboard_observation_payload(item)
-            for item in observation_response.observations
-        ]
-        observation = history[-1] if history else {
-            "timestamp": result.observed_at.isoformat(),
-            "product_type": result.asset_type,
-            "air_temperature_k": None,
-            "process_temperature_k": None,
-            "rotational_speed_rpm": None,
-            "torque_nm": None,
-            "tool_wear_min": None,
-        }
         recommendation = result.recommended_action
         action = recommendation.action if recommendation else "Review governed prediction"
         action_label = _pm_label(PM_ACTION_LABELS, locale, action)
@@ -1051,6 +1030,7 @@ class PredictiveMaintenanceRuntimeService:
         canonical_evidence["scenario_id"] = f"{result.asset_type}:{result.site_id}:{result.cell_id}"
         canonical_evidence["subject"] = equipment.model_dump(mode="json")
         canonical_evidence["artifact_reference"]["event_id"] = event_id
+        canonical_evidence["report_projection"]["maintenance_context"] = maintenance_context
         legacy_evidence = event_evidence_projection_to_legacy_evidence(
             canonical_evidence,
             ranked_factor_evidence=producer_artifact.get("ranked_factor_evidence"),
@@ -1307,19 +1287,20 @@ class PredictiveMaintenanceRuntimeService:
                 if item.get("completed_at") is not None
                 and item["completed_at"] <= selected_result.observed_at
             ]
-            detail = self._dashboard_detail(
-                organization_id=organization_id,
-                project_id=project_id,
-                workspace_id=workspace_id,
-                context=context,
-                result=selected_result,
-                equipment=equipment_by_event[selected_id],
-                maintenance=selected_maintenance,
-                role=role,
-                intent=intent,
-                locale=locale,
-                view=view,
-            )
+            if self._supports_dashboard_evidence_detail(selected_result.source_contract):
+                detail = self._dashboard_detail(
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    context=context,
+                    result=selected_result,
+                    equipment=equipment_by_event[selected_id],
+                    maintenance=selected_maintenance,
+                    role=role,
+                    intent=intent,
+                    locale=locale,
+                    view=view,
+                )
         return PredictiveMaintenanceDashboardResponse(
             data_source=DashboardDataSource(
                 dataset_id=context.dataset_id,
