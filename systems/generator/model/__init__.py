@@ -14,7 +14,9 @@ from .model_registry import (
     save_run_result,
     train_and_publish_model,
     validate_manifest,
+    validate_model_artifact_directory,
 )
+
 
 from .model_score import ModelScore
 from .model_training import (
@@ -58,4 +60,5 @@ __all__ = [
     "train_and_evaluate",
     "train_and_publish_model",
     "validate_manifest",
+    "validate_model_artifact_directory",
 ]
