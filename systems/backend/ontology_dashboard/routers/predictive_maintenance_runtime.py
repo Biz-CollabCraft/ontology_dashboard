@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -164,6 +165,7 @@ def dashboard_source(
         pattern="^(overview|explain-risk|compare|summarize-manager|detail-engineer|recommend-check|show-model-details)$",
     ),
     locale: AppLocale = Query(default="ko-KR"),
+    view: Literal["legacy", "canonical"] = Query(default="legacy"),
     principal: Principal = Depends(require_permission("events.read")),
     identity: IdentityService = Depends(get_identity_service),
     service: PredictiveMaintenanceRuntimeService = Depends(
@@ -187,6 +189,7 @@ def dashboard_source(
             role=role,
             intent=intent,
             locale=locale,
+            view=view,
         ).model_dump(mode="json")
     except KeyError as error:
         raise HTTPException(status_code=404, detail=f"Dataset Version not found: {error.args[0]}") from error

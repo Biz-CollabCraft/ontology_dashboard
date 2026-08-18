@@ -618,6 +618,12 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     assert dashboard.data_source.result_artifact_count == 2
     assert dashboard.events
     assert dashboard.selected_event_detail is not None
+    assert dashboard.selected_event_detail.evidence["schema_version"] == "1.0"
+    assert dashboard.selected_event_detail.evidence["model"]["mode"] == "postgresql_result_artifact"
+    assert dashboard.selected_event_detail.evidence["top_factors"][0]["evidence_field_id"].startswith("factor.1.")
+    assert dashboard.selected_event_detail.evidence["maintenance_context"]["source_type"] == (
+        "canonical_maintenance_evidence"
+    )
     assert dashboard.selected_event_detail.evidence["lineage"]["dataset_version_id"] == (
         v3_ingestion.dataset_version_id
     )
@@ -648,6 +654,27 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     assert (
         dashboard.selected_event_detail.report["report_id"]
         != english_dashboard.selected_event_detail.report["report_id"]
+    )
+    canonical_dashboard = service.dashboard(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        user_id="runtime-user-other",
+        dataset_version_id=None,
+        selected_event_id=dashboard.selected_event_id,
+        role="engineer",
+        intent="overview",
+        locale="ko-KR",
+        view="canonical",
+    )
+    assert canonical_dashboard.selected_event_detail is not None
+    canonical_evidence = canonical_dashboard.selected_event_detail.evidence
+    assert canonical_evidence["schema_version"] == "event-evidence-projection-v1"
+    assert canonical_evidence["contract_type"] == "event_evidence_projection"
+    assert canonical_evidence["event_id"] == dashboard.selected_event_id
+    assert canonical_evidence["report_projection"]["evidence_trace"]
+    assert canonical_evidence["artifact_reference"]["evidence_payload_reference"]["generated_by"] == (
+        "systems.backend.app.diagnosis.evidence_enrichment"
     )
 
     overview = service.release_overview(
@@ -718,6 +745,25 @@ def test_result_replay_http_and_sse_contracts_are_scoped(
             )
             assert latest.status_code == 200, latest.text
             assert latest.json()["latest_product_contract"] == "result_artifact"
+
+            dashboard = client.get(
+                f"{base}/dashboard",
+                params={"dataset_version_id": ingestion.dataset_version_id},
+            )
+            assert dashboard.status_code == 200, dashboard.text
+            assert dashboard.json()["selected_event_detail"]["evidence"]["schema_version"] == "1.0"
+
+            canonical_dashboard = client.get(
+                f"{base}/dashboard",
+                params={
+                    "dataset_version_id": ingestion.dataset_version_id,
+                    "view": "canonical",
+                },
+            )
+            assert canonical_dashboard.status_code == 200, canonical_dashboard.text
+            canonical_evidence = canonical_dashboard.json()["selected_event_detail"]["evidence"]
+            assert canonical_evidence["schema_version"] == "event-evidence-projection-v1"
+            assert canonical_evidence["contract_type"] == "event_evidence_projection"
 
             timeline = client.get(
                 f"{base}/timeline",

@@ -40,7 +40,7 @@ jobs:
 
             for path in "${changed_files[@]}"; do
               case "$path" in
-                .github/workflows/*|systems/verify_architecture.py|systems/backend/*|systems/generator/*|ml/*|contracts/*|schemas/*|data/fixtures/*|tests/test_product_result_artifact_evidence_contract.py|tests/test_system_ownership.py)
+                .github/workflows/*|systems/verify_architecture.py|systems/backend/*|systems/generator/*|ml/*|contracts/*|schemas/*|data/fixtures/*|tests/test_product_result_artifact_evidence_contract.py|tests/test_product_result_evidence_enrichment.py|tests/test_system_ownership.py)
                   run_contract=true
                   break
                   ;;
