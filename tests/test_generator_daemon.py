@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+import asyncio
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -36,6 +37,13 @@ def test_generator_daemon_train_endpoint(client):
         mock_train.assert_called_once()
 
 
+def test_generator_daemon_train_invalid_data_dir(client):
+    """Test POST /internal/train returns 400 when data_dir does not exist."""
+    response = client.post("/internal/train", json={"data_dir": "non_existent_directory_12345"})
+    assert response.status_code == 400
+    assert "지정한 data_dir가 존재하지 않습니다" in response.json()["detail"]
+
+
 def test_generator_daemon_retrain_endpoint(client):
     """Test POST /internal/retrain invokes train_all and returns response payload."""
     dummy_result = {
@@ -48,3 +56,23 @@ def test_generator_daemon_retrain_endpoint(client):
         assert response.status_code == 200
         assert response.json() == dummy_result
         mock_train.assert_called_once()
+
+
+def test_generator_daemon_retrain_invalid_data_dir(client):
+    """Test POST /internal/retrain returns 400 when data_dir does not exist."""
+    response = client.post("/internal/retrain", json={"data_dir": "non_existent_directory_12345"})
+    assert response.status_code == 400
+    assert "지정한 data_dir가 존재하지 않습니다" in response.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_generator_daemon_lifespan_triggers_async_training():
+    """Test lifespan triggers asyncio.to_thread(train_all) when no trained model exists."""
+    from systems.generator.generator_main import lifespan
+
+    with patch("systems.generator.generator_main.has_any_trained_model", return_value=False), \
+         patch("systems.generator.generator_main.load_config") as mock_load_config, \
+         patch("asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
+        async with lifespan(app):
+            mock_load_config.assert_called_once()
+            mock_to_thread.assert_called_once()
