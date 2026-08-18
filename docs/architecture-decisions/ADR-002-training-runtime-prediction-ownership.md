@@ -80,4 +80,5 @@
 - Frontend가 예측 실행 주체나 Generator를 직접 호출하지 않는다는 원칙은 이미
   합의됨 — Backend API 경로 설계만 결정 필요
 
-이 항목들은 `week2-contract-review-checklist.md`의 `GEN-STACK-02`로 추적한다.
+이 항목들은 `docs/mvp/history/2026-08-week2/contract-review-checklist.md`의
+`GEN-STACK-02`로 추적한다.

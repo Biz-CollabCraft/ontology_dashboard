@@ -141,9 +141,24 @@ Backend는 현재 요청 principal과 대상 객체를 기준으로 최소 다�
 사용한다. Frontend가 받은 배열을 보안 경계로 신뢰해서는 안 되며, mutation 요청 시 Backend가 동일한
 authorization/state 검증을 다시 수행한다.
 
-권장 item은 최소한 stable action identifier를 제공한다. display label, disabled reason, 입력 schema 같은
-표현 metadata는 additive하게 확장할 수 있으나, Frontend가 action identifier를 Domain transition으로
-재해석하지 않는다.
+각 item은 최소 다음 필드를 갖는다.
+
+```json
+{
+  "action_id": "approve_work_order",
+  "target_type": "work_order",
+  "target_id": "wo-..."
+}
+```
+
+- `action_id`: Backend가 정의한 stable machine identifier다. Frontend가 Domain transition 이름을 조합해
+  생성하지 않는다.
+- `target_type`: Action이 적용되는 canonical object type이다.
+- `target_id`: Persistence/API가 반환한 대상 객체 ID다. Frontend가 합성하지 않는다.
+
+display label, disabled reason, 입력 schema 같은 표현 metadata는 additive하게 확장할 수 있으나,
+Frontend가 `action_id`를 Domain transition으로 재해석하거나 이 세 필드만으로 authorization을 우회하지
+않는다.
 
 ## 5. Closed-loop 상태 소비 계약
 
@@ -174,6 +189,26 @@ planned → in_progress → completed | failed | cancelled
 - `MaintenanceEvent`는 완료된 정비 사실을 나타내는 immutable fact다.
 - `Activity`는 별도 stateful object가 아니라 immutable timeline이다.
 
+### 5.1 WorkOrder / MaintenanceAction 생성 경계
+
+정비가 필요한 Recommendation을 `accept`할 때와 WorkOrder를 `approve`할 때의 생성 책임을 분리한다.
+
+```text
+Recommendation accept
+→ maintenance WorkOrder(requested) 생성
+→ 이 단계에서는 MaintenanceAction을 생성하지 않음
+
+WorkOrder approve
+→ 해당 WorkOrder에 대한 MaintenanceAction(planned) 생성
+
+maintenance_technician
+→ approved WorkOrder / planned MaintenanceAction을 시작
+```
+
+따라서 Recommendation 승인 mutation이 WorkOrder와 MaintenanceAction을 동시에 생성하는 것으로 구현하지
+않는다. 각 생성 mutation의 응답은 Persistence가 확정한 `work_order_id` 또는
+`maintenance_action_id`를 반환하고, 다음 단계는 그 ID를 그대로 사용한다.
+
 ## 6. Event API Product 소비 계약
 
 ### 6.1 additive compatibility
@@ -181,16 +216,24 @@ planned → in_progress → completed | failed | cancelled
 기존 Event API key를 삭제하거나 rename하지 않는다. 이미 배포된 Frontend/Report consumer가 읽는 기존
 shape는 유지하고 Closed-loop 정보만 additive하게 확장한다.
 
-`GET /api/events/{event_id}`에는 필요 시 다음 필드를 추가할 수 있다.
+`GET /api/events/{event_id}`의 기존 top-level key는 그대로 유지하고, 새 Closed-loop 정보는 **하나의
+top-level `closed_loop` envelope 아래**에 추가한다. 새 필드를 top-level과 `closed_loop` 양쪽에 중복
+노출하지 않는다.
 
-- `closed_loop`
-- `event_status`
-- `recommendations[]`
-- `latest_decision`
-- `work_orders[]`
-- `maintenance_actions[]`
-- `maintenance_events[]`
-- `available_actions[]`
+```json
+{
+  "existing_field": "...",
+  "closed_loop": {
+    "event_status": "open",
+    "recommendations": [],
+    "latest_decision": null,
+    "work_orders": [],
+    "maintenance_actions": [],
+    "maintenance_events": [],
+    "available_actions": []
+  }
+}
+```
 
 Recommendation / WorkOrder / MaintenanceAction은 한 Event에 복수 존재할 수 있으므로 singular object로
 축약하지 않고 배열을 기본으로 한다.
@@ -216,6 +259,25 @@ Recommendation / WorkOrder / MaintenanceAction은 한 Event에 복수 존재할 
 서버가 아직 commit하지 않은 임시 ID를 반환하거나 Frontend가 다음 ID를 규칙으로 합성하는 방식을
 허용하지 않는다.
 
+### 6.3 Idempotency key 전달 계약
+
+모든 Closed-loop state-changing mutation은 클라이언트가 HTTP `Idempotency-Key` header를 전달하는
+방식을 canonical retry 계약으로 사용한다. 서버가 요청 처리 때마다 새 UUID를 만들어 client retry key를
+대체해서는 안 된다.
+
+서버는 key와 canonical request fingerprint를 함께 저장하고, commit된 결과와 연결한다.
+
+- 동일 `Idempotency-Key` + 동일 canonical request
+  → 새 side effect를 만들지 않고 기존 persisted 결과를 반환하며 `replayed=true`
+- 동일 `Idempotency-Key` + 다른 canonical request
+  → `409 idempotency_key_conflict`
+- 최초 성공 처리
+  → commit된 persisted ID/resulting state를 반환하며 `replayed=false`
+
+request fingerprint는 최소 대상 object, requested action/disposition, state-changing payload를 포함해야 하며,
+표시용 metadata나 전송 순서 차이 때문에 동일 논리 요청이 다른 요청으로 오인되지 않게 canonicalize한다.
+mutation authorization/state validation은 replay 여부와 무관하게 Backend 소유권 경계를 유지한다.
+
 ## 7. Activity 계약
 
 `GET /api/events/{event_id}/activity`의 기존 top-level 소비 계약인 다음 key는 유지한다.
@@ -224,7 +286,10 @@ Recommendation / WorkOrder / MaintenanceAction은 한 Event에 복수 존재할 
 - `notes`
 - `conversations`
 
-Closed-loop timeline item은 해당 activity에 적용되는 lineage와 transition 값만 포함한다. 가능한 필드는
+새 Closed-loop timeline은 기존 세 key를 대체하거나 섞어 쓰지 않고 additive top-level `activities` 배열에
+담는다.
+
+`activities[]`의 Closed-loop timeline item은 해당 activity에 적용되는 lineage와 transition 값만 포함한다. 가능한 필드는
 다음과 같다.
 
 - `activity_id`
@@ -343,12 +408,13 @@ persona:
 3. 현장 inspection / note / 측정 결과 기록
 4. `process_manager`가 Evidence + engineer 결과 확인
 5. Recommendation 승인 / 거절 / 보류
-6. 정비 필요 시 WorkOrder 승인
-7. `maintenance_technician`이 작업 시작
-8. checklist / measurement / note와 함께 작업 완료
-9. MaintenanceEvent / Equipment state / Activity 반영
-10. 동일 요청의 idempotency replay 검증
-11. 정비 전 Result → Decision → Action → 정비 후 Result lineage 확인
+6. Recommendation `accept` + 정비 필요 시 `WorkOrder(requested)` 생성 확인
+7. `process_manager`가 WorkOrder 승인 → `MaintenanceAction(planned)` 생성 확인
+8. `maintenance_technician`이 approved WorkOrder / planned MaintenanceAction 작업 시작
+9. checklist / measurement / note와 함께 작업 완료
+10. MaintenanceEvent / Equipment state / `activities[]` 반영
+11. 동일 `Idempotency-Key` + 동일 요청의 replay 및 다른 요청의 conflict 검증
+12. 정비 전 Result → Decision → Action → 정비 후 Result lineage 확인
 
 Recommendation / WorkOrder / MaintenanceAction ID는 E2E 코드에 하드코딩하지 않는다. 앞 mutation/API가
 반환한 persisted ID를 다음 요청으로 전달한다.
