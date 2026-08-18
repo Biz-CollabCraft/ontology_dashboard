@@ -340,6 +340,24 @@ read model을 사용해 대상 설비의 정비 후 예정 Canonical 행이 Over
 - Phase 14에서 레거시 디렉터리를 제거하기 전에 미배정 Source, `UNDECIDED`, `DEFER`가
   모두 0건이어야 한다.
 
+Phase 0.5의 capability disposition은 `backend-migration-map.md` §4~§5를 따른다. 이 결정은
+현재 compatibility UI/API가 호출한다는 이유만으로 기능을 보존하지 않으며 다음 경계를
+명시적으로 고정한다.
+
+- 시각적 Analysis와 generic multi-store Agent는 Diagnosis/Planner로 자동 이관하지 않는다.
+- Analysis/Connector Durable Worker는 Maintenance Outbox와 다른 runtime이며 제거 대상으로 본다.
+- generic Platform branch/merge는 `maintenance_replay_overlay`가 아니며 `gen_data`의
+  branch-local clock/Observation 생성 책임을 침범하지 않는다.
+- Backend Platform MLOps와 sample pipeline은 Generator의 Feature/학습/Model Artifact 책임을
+  대체하거나 중복 소유하지 않는다.
+- Project 3 integration은 graph/RAG 구현을 Backend로 가져오지 않고 typed external adapter와
+  실제 Ontology/Planner consumer port로만 분리한다.
+- hosted demo bootstrap은 domain service가 아니라 명시적 deployment/bootstrap entrypoint로
+  대체한다.
+
+`scripts/check_backend_migration_ledger.py`는 legacy Python Source의 누락·중복, 잘못된 disposition,
+`UNDECIDED`/`DEFER` 잔존을 deterministic하게 차단하고 `systems/verify_architecture.py`에서 실행된다.
+
 
 ---
 

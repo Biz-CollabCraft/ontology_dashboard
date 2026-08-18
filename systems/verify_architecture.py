@@ -9,6 +9,8 @@ systems/frontend instead of remaining in root api/web hosts.
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -458,6 +460,19 @@ def check_git_conflict_markers(errors: list[str]) -> None:
                     )
 
 
+def check_backend_migration_ledger(errors: list[str]) -> None:
+    checker = ROOT / "scripts" / "check_backend_migration_ledger.py"
+    completed = subprocess.run(
+        [sys.executable, str(checker), "--root", str(ROOT), "--quiet"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stdout or completed.stderr).strip()
+        errors.append(f"backend migration ledger is incomplete or ambiguous: {detail}")
+
+
 def main() -> int:
     errors: list[str] = []
     check_required_structure(errors)
@@ -473,6 +488,7 @@ def main() -> int:
     check_backend_runtime_root_converged(errors)
     check_docker_runtime_ci(errors)
     check_git_conflict_markers(errors)
+    check_backend_migration_ledger(errors)
 
     if errors:
         print("[ARCHITECTURE-CHECK] FAIL")
@@ -494,6 +510,7 @@ def main() -> int:
     print("- product API has no static generator implementation import")
     print("- legacy ML/backend modeling compatibility paths are ports, not ML owners")
     print("- Model Artifact location is injected through MODEL_ARTIFACT_URI")
+    print("- Backend migration ledger covers every legacy Python source exactly once with DEFER=0")
     return 0
 
 

@@ -53,22 +53,22 @@
 | `adapters/*` | Dataset ingestion, file/DB adapter, Prediction repository가 혼재 | `SPLIT` | bundle·CSV·canonical ingestion은 `dataset`, Prediction persistence는 `diagnosis`, 기술 I/O는 `infra` | #52, #57, #58 |
 | `predictive_maintenance_runtime/*`, `product_result_evidence_projection.py` | Runtime result/read model/replay | `SPLIT` | inference·Result/Evidence·history readiness는 `diagnosis`; Overlay 생성은 `gen_data` | #58 |
 | `modeling/*` | intake, mapping, feature, experiment, model registry/runtime DTO 혼재 | `SPLIT` | Backend runtime consumer 최소 계약만 `diagnosis`/`governance`; 학습·feature 생성은 Generator로 대체 후 Backend에서 삭제 | #58, #63, #68 |
-| `analysis_models.py`, `analysis_repository.py`, `analysis_service.py` | 시각적 Analysis graph와 실행 | `DEFER` | Diagnosis로 자동 이관 금지. 유지 시 별도 capability/도메인 필요 | #68 |
+| `analysis_models.py`, `analysis_repository.py`, `analysis_service.py` | 시각적 Analysis graph와 실행 | `REMOVE` | MVP 제외 범위. `/api/analyses`·Analysis UI·materialization compatibility를 종료한 뒤 삭제. Diagnosis로 이관하지 않음 | #58, #68 |
 | `closed_loop/*` 전체 | Recommendation, Decision, WorkOrder, MaintenanceAction/Event, persistence, integration | `MOVE` | 패키지명을 `app/maintenance`로 수렴 | #59 |
 | `contracts.py` | Maintenance, Report, Dashboard, HTTP DTO 혼재 | `SPLIT` | 의미 소유 도메인별 schema로 분해, 공통 오류만 `common` | #59~#63 |
 | `service.py`, `repository.py`, `context.py`, `conversation.py` | 제조 Facade, Audit, Project3 fallback, follow-up | `SPLIT` | Equipment/Maintenance/Report/Dashboard/Governance/Planner로 분해하거나 canonical 구현으로 대체 | #56, #59~#63 |
 | `dashboard_catalog.py`, `dashboard_models.py`, `dashboard_repository.py`, `dashboard_service.py`, `visualizations/*` | Dashboard/read-model composition | `MOVE` | `app/dashboard`; upstream 의미를 재계산하지 않음 | #60 |
 | `reports.py`, `export_models.py`, `export_repository.py`, `export_service.py` | Report와 Export | `MOVE` | `app/report` | #61 |
 | `planner/*`, `ontology_planner_models.py`, `ontology_planner_service.py` | 자연어 Planner와 UI plan | `MOVE` | `app/planner`, provider는 Infra port로 소비 | #62 |
-| `orchestration/*` | 범용 multi-store Agent orchestration | `DEFER` | 실제 Planner/Report consumer와 승인 계약이 있을 때만 분해 이관 | #62, #63, #68 |
-| `governance/*` | Agent trace와 projection governance | `SPLIT` | 승인된 governance 책임만 `app/governance`로 이관하고 나머지는 #68에서 처분 확정 | #63, #68 |
+| `orchestration/*` | 범용 multi-store Agent orchestration | `REMOVE` | Agent는 MVP 제외 범위. Planner/Report는 필요한 public port를 각 도메인에서 새로 정의하고 legacy Agent runtime을 재사용하지 않음 | #62, #63, #68 |
+| `governance/*` | Agent trace와 projection governance | `SPLIT` | Dataset/projection/audit/approval governance만 `app/governance`; Agent run/trace surface는 Agent 제거와 함께 종료 | #63, #68 |
 | `role_workflow_models.py`, `role_workflow_repository.py`, `role_workflow_service.py` | Field task, 역할별 read model, template/model 승인, audit | `SPLIT` | `maintenance`, `dashboard`, `governance` | #59, #60, #63 |
-| `automation_runtime.py` | Platform automation simulation | `DEFER` | Maintenance runtime으로 간주하지 않음 | #68 |
-| `branching_lineage.py` | Platform change/merge/policy branch | `DEFER` | `maintenance_replay_overlay`와 다른 개념. Governance 필요성 판정 | #68 |
-| `distributed_runtime.py`, `distributed_handlers.py`, `worker.py` | Analysis/Connector Durable Job | `DEFER` | Maintenance Outbox와 분리. 실제 비동기 consumer 유지 시만 Infra+owner domain으로 분해 | #68 |
-| `mlops_runtime.py` | Backend Platform drift API | `DEFER` | Generator MLOps 소유권과 충돌 여부 판정 | #68 |
-| `pipeline_runtime.py` | Platform sample pipeline plan | `DEFER` | Generator pipeline과 다른 기능. 실제 consumer가 없으면 제거 | #68 |
-| `polyglot/*` | Python/R/Java/Node health | `DEFER` | 최종 배포 requirement가 있을 때만 Infra probe로 유지 | #68 |
+| `automation_runtime.py` | Platform automation simulation | `REMOVE` | Human Decision 기반 Closed-loop와 다른 Commercial V4 simulation. 자동 설비 정지/Work Order도 MVP 제외 | #59, #68 |
+| `branching_lineage.py` | Platform change/merge/marking policy branch | `REMOVE` | `maintenance_replay_overlay`와 무관한 generic resource branch. marking policy도 승인된 MVP 계약이 없어 branch와 함께 종료 | #63, #68 |
+| `distributed_runtime.py`, `distributed_handlers.py`, `worker.py` | Analysis/Connector Durable Job | `REMOVE` | 실제 handler는 Analysis/Connector뿐이며 기본 worker는 Analysis. Maintenance Outbox와 별개. Dataset이 비동기 실행을 필요로 하면 #57에서 새 port/worker를 정의 | #52, #57, #68 |
+| `mlops_runtime.py` | Backend Platform drift API | `REMOVE` | snapshot/drift simulation은 Generator의 학습·평가·Model Artifact 소유권과 중복. Backend에는 runtime artifact consumer만 유지 | #58, #68 |
+| `pipeline_runtime.py` | Platform sample visual pipeline plan | `REMOVE` | sample SQL planner는 승인된 MVP가 아니며 extraction/Feature/Model pipeline의 canonical owner는 Generator | #57, #68 |
+| `polyglot/*` | PostgreSQL/Neo4j/Redis 직접 health | `REMOVE` | 표준 Backend health는 composition/Infra로 대체하고, graph/RAG readiness는 Project 3 typed integration 경계에서 확인. Backend가 Neo4j를 직접 소유하지 않음 | #52, #64, #68 |
 | `demo_predictive_maintenance_bootstrap.py` | Render용 Canonical demo materialization | `REPLACE` | 명시적 demo seed/bootstrap으로 대체하고 Domain package에서 분리 | #57, #64, #68 |
 | `routers/adapters.py`, `routers/datasets.py` | Dataset API | `SPLIT` | `dataset` Router, Prediction endpoint는 `diagnosis` | #57, #58 |
 | `routers/auth.py` | IAM API | `MOVE` | `app/identity` | #53 |
@@ -78,17 +78,101 @@
 | `routers/manufacturing.py` | Equipment, Event, Evidence, Report, Decision API 혼재 | `SPLIT` | `equipment`, `maintenance`, `report`, `dashboard`/composition | #56, #59~#61 |
 | `routers/dashboards.py` | Dashboard API | `MOVE` | `app/dashboard` | #60 |
 | `routers/exports.py` | Export API | `MOVE` | `app/report` | #61 |
-| `routers/planner.py`, `routers/agent.py` | Planner와 Agent API | `SPLIT` | Planner는 이관, Agent orchestration은 #68 결정 후 처리 | #62, #68 |
+| `routers/planner.py` | Planner API | `MOVE` | 승인된 자연어 Planner API를 `app/planner`로 이관 | #62 |
+| `routers/agent.py` | 범용 multi-store Agent API | `REMOVE` | Agent는 MVP 제외 범위. `/api/agent/*`와 Agent inspector/trace compatibility를 함께 종료 | #62, #63, #68 |
 | `routers/governance.py` | Governance API | `MOVE` | `app/governance` | #63 |
 | `routers/admin.py`, `routers/role_workspaces.py` | Identity, Dashboard, Governance, Maintenance API 혼재 | `SPLIT` | endpoint별 의미 소유 도메인으로 분해 | #53, #59, #60, #63 |
-| `routers/project3.py` | Project 3 passthrough API | `DEFER` | 유지 여부와 유지 시 external adapter·consumer port 분리 범위를 #68에서 판정 | #52, #55, #62, #68 |
-| `routers/platform.py` | 31개 Platform capability API 집합 | `DEFER` | endpoint별 consumer와 제품 근거를 #68에서 판정 | #52, #63, #68 |
-| `routers/system.py` | health와 polyglot health | `SPLIT` | 표준 health는 composition/Infra, polyglot은 #68 판정 | #52, #64, #68 |
-| `routers/analyses.py` | Analysis API | `DEFER` | `analysis_*` 결정과 함께 처리 | #68 |
-| `routers/modeling.py` | Backend 학습/실험/registry API | `DEFER` | Runtime·governance 최소 기능의 유지 여부를 Generator 소유권과 비교해 #68에서 판정 | #58, #63, #68 |
+| `routers/project3.py` | Project 3 passthrough API | `SPLIT` | raw passthrough는 제거. 필요한 topology/schema/subgraph 소비는 `infra/external` typed client 뒤 `ontology` public query로, Planner가 필요로 하는 RAG는 Planner port로 제한 | #52, #55, #62, #68 |
+| `routers/platform.py` | 31개 Commercial V4 Platform API 집합 | `SPLIT` | §5 endpoint ledger에 따라 canonical domain/health로 대체할 endpoint만 분해하고 generic Commercial V4 surface는 종료 | #52~#64, #68 |
+| `routers/system.py` | health와 polyglot health | `SPLIT` | 표준 health는 composition/Infra로 이관하고 polyglot endpoint는 `REMOVE` 판정에 따라 종료 | #52, #64, #68 |
+| `routers/analyses.py` | Analysis API | `REMOVE` | Analysis MVP 제외 결정에 따라 `/api/analyses/*` compatibility와 함께 종료 | #58, #68 |
+| `routers/modeling.py` | Backend 학습/실험/registry Workbench API | `REMOVE` | Modeling Workbench는 MVP 제외. 학습·Feature·experiment는 Generator, runtime scoring은 Diagnosis API가 소유 | #58, #63, #68 |
 | `routers/__init__.py` | 기술 중심 Router package export | `REPLACE` | 각 도메인 Router와 `app/main.py` 등록으로 대체 | #64 |
 
-## 4. Phase별 적용 규칙
+## 4. Phase 0.5 Legacy Capability Disposition 근거
+
+현재 실행 경로 또는 테스트가 있다는 사실은 아래의 **현재 consumer**에 기록하되,
+그 자체를 제품 유지 근거로 사용하지 않는다. Canonical 제품 기준은
+`docs/mvp/requirements-specification.md`의 MVP 화면/제외 범위와
+`docs/architecture.md`의 Runtime Ownership이다. 특히 Analysis, Agent, Admin,
+Modeling Workbench는 MVP 제외 범위이고, 학습·Feature·Model Artifact 생산은
+`systems/generator`, Runtime Overlay Observation 생성은 `gen_data`, graph/RAG 저장·질의는
+Project 3가 canonical owner다.
+
+| Source / capability | 현재 consumer / 실행 근거 | canonical owner | 처분 | target / 공개 port | 판정 근거 | removal / replacement prerequisite | regression coverage |
+|---|---|---|---|---|---|---|---|
+| `analysis_*`, `routers/analyses.py` | Analysis UI, Dashboard Analysis reference, Dataset materialization, Analysis tests | 없음(MVP 제외) | `REMOVE` | 없음 | 시각적 Analysis graph는 Diagnosis가 아니며 MVP 제외 범위 | `/api/analyses/*`, Analysis route/board reference, analysis-derived Dataset compatibility를 함께 종료 | `tests/test_analysis_path.py`, `tests/test_dataset_projection_stage47.py`, 관련 frontend E2E를 삭제/대체 기준으로 사용 |
+| `orchestration/*`, `routers/agent.py` | Agent UI/inspector, Governance Agent trace, Project 3 graph/RAG adapter | 없음(MVP 제외); Project 3는 외부 graph/RAG owner | `REMOVE` | Planner/Report가 필요하면 각 domain의 좁은 query port를 새로 정의 | generic multi-store Agent는 승인된 Planner/Report 계약이 아니며 Agent가 MVP 제외 | `/api/agent/*`, Governance Agent trace/read model, Agent UI를 같이 종료. Planner/Report가 legacy orchestrator를 import하지 않음 | `tests/test_multistore_orchestrator_stage49.py`, `tests/test_governance_workbench_stage51.py` |
+| `automation_runtime.py` | Commercial V4 `/automation`, `/automation/simulate`, unit test | Maintenance 아님 | `REMOVE` | 없음 | side-effect 없는 sample ECA simulation이고 자동 설비 정지/자동 Work Order는 MVP 제외 | Commercial V4 automation cards/API 제거. Closed-loop human Decision/Action contract로 대체했다고 주장하지 않음 | `tests/test_automation_runtime_phase32.py` |
+| `branching_lineage.py` | Commercial V4 branch/merge/policy UI, persistence tests | 없음; Runtime Overlay는 `gen_data` | `REMOVE` | 없음 | dataset/ontology/application generic branch는 `maintenance_replay_overlay`와 identity·clock·owner가 다름. generic marking policy도 승인된 MVP contract가 없음 | `/branching-lineage`, `/branches/*`, `/policy/check` 및 `platform_*` branch/marking compatibility 정리 | `tests/test_branching_lineage_phase28.py`, persistence migration coverage |
+| `distributed_runtime.py`, `distributed_handlers.py`, `worker.py` | production manifest의 `python -m ontology_dashboard.worker`; handlers는 `analysis`, `connector_ingestion` | 없음. 필요 시 Dataset + Infra가 새 계약 소유 | `REMOVE` | #57에서 필요성이 확인될 때 Dataset job port + Infra worker를 새로 정의 | Maintenance Outbox가 아니며 기본 job type도 Analysis. Analysis는 MVP 제외 | worker deployment command, `scripts/run_durable_worker.py`, distributed Platform API, Analysis/Connector queue caller를 함께 정리 | `tests/test_distributed_runtime_phase23.py`, `tests/test_connectors_phase26.py`, `tests/test_analysis_path.py` |
+| `mlops_runtime.py` | Commercial V4 MLOps card/API, drift unit test | `systems/generator`(학습·평가·publish), `app/diagnosis`(runtime consume) | `REMOVE` | 없음 | static champion/challenger/drift simulation은 canonical Model Artifact lifecycle과 중복 | `/api/platform/.../mlops*` 및 Commercial V4 card 종료. runtime Model Artifact 검증/score는 Diagnosis regression으로 보호 | `tests/test_mlops_runtime_phase31.py`, Generator artifact/Diagnosis runtime tests |
+| `pipeline_runtime.py` | Commercial V4 sample pipeline card/API, unit test | `systems/generator` + `app/dataset` ingestion | `REMOVE` | 없음 | sample SQL planner는 승인된 MVP pipeline 계약이 아니며 Feature/training pipeline owner가 아님 | `/pipeline/*`와 sample card 종료. Dataset ingestion API와 Generator pipeline은 별도 유지 | `tests/test_pipeline_runtime_phase30.py`, Generator pipeline tests |
+| `polyglot/*`, `/api/system/polyglot-health` | optional compose profile, direct PostgreSQL/Neo4j/Redis probes, unit test | Infra health + Project 3 | `REMOVE` | standard `/health/*`; Project 3 typed adapter readiness | Backend가 Neo4j를 직접 운영하는 계약이 없고 graph/RAG는 Project 3 경계 | optional polyglot dependency/profile/endpoint를 제거하되 standard liveness/startup/readiness 유지 | `tests/test_polyglot_infra_stage46.py`, deployment health tests |
+| `domain_packs/*` | Project metadata resolution, Commercial V4 application definition, PdM ontology materialization | `app/ontology` + `app/dataset`; generic registry는 없음 | `SPLIT` | PdM materialization을 Ontology/Dataset port로 분리 | generic default pack/application shell은 final MVP requirement가 아니지만 PdM materialization은 canonical source projection에 필요 | generic registry/alias/API를 종료하고 PdM mapping/materialization contract만 이관 | `tests/test_domain_pack_platform_phase19.py`, PdM projection/materialization tests |
+| `modeling/*` | Modeling Workbench/API; 일부 compatibility port가 Generator를 lazy import; model registry/scoring 일부 | Generator + `app/diagnosis` + `app/governance` | `SPLIT` | runtime artifact load/score는 Diagnosis, 승인/audit은 Governance; authoring/training은 Generator | Workbench는 제외 범위지만 이미 canonical owner가 있는 최소 runtime/governance 계약은 보존해야 함 | intake/mapping/feature/experiment/training Workbench를 제거하고 기존 `app/diagnosis` 계약과 Generator publish 계약으로 교체 | `tests/test_adaptive_modeling_*`, `tests/test_model_registry_and_explanations.py`를 owner별 회귀로 재배치 |
+| `routers/modeling.py` | MLValidatorWorkbench가 `/api/modeling/*` 호출 | 없음(Workbench 제외); 기능 owner는 위와 같음 | `REMOVE` | Diagnosis/Dataset/Governance의 승인된 endpoint만 별도 유지 | 35개 Workbench endpoint 전체를 migration target으로 유지하면 Generator 중복 소유가 재발 | MLValidatorWorkbench와 `/api/modeling/*` compatibility 종료 후 router 삭제 | frontend modeling E2E + modeling API tests를 제거/owner API regression으로 전환 |
+| `integrations/project3/*` | Project 3 passthrough, outbox projection, Agent graph/RAG ports | Project 3 + Backend `infra/external`/`ontology` | `SPLIT` | typed HTTP client=`infra/external`; PdM graph projection=`ontology` outbound port | Project 3 자체 기능은 Backend가 복제하지 않되 Objects topology/projection에는 typed integration이 필요 | raw graph/RAG 구현 금지; Project 3 장애/degraded contract와 projection idempotency 보존 | `tests/test_project3_client_stage45.py`, `tests/test_predictive_maintenance_graph_projection.py` |
+| `routers/project3.py` | frontend status/schema/subgraph direct calls; tests | Ontology/Planner consumer + `infra/external` | `SPLIT` | schema/search/subgraph 필요분은 Ontology query, RAG 필요분은 Planner port | raw passthrough를 제품 public API로 고정할 근거는 없지만 Objects topology consumer는 존재 | `/query`, `/rag` raw passthrough 제거; status/schema/subgraph consumer를 canonical domain API로 전환 후 legacy router 삭제 | `tests/test_project3_routes_stage45.py`, frontend Project 3 calls |
+| `demo_predictive_maintenance_bootstrap.py` | `systems/backend/render_start.sh` hosted startup; canonical V3.1 source ingest + runtime result materialization | Dataset bootstrap + Diagnosis runtime + composition | `REPLACE` | explicit deployment/bootstrap entrypoint; Domain package 밖에서 domain ports 호출 | 운영 domain implementation이 아니라 hosted-demo seed orchestration | #57/#64에서 source-only ingest, idempotency, Diagnosis-produced Result를 보존하는 새 bootstrap으로 Render start를 전환 | `tests/test_demo_predictive_maintenance_bootstrap.py`, `scripts/bootstrap_predictive_maintenance_v3_1_demo.py` release verification |
+| `governance/*` | Governance workbench가 Dataset projection, approval, Agent trace를 조합 | `app/governance` + 제거되는 Agent | `SPLIT` | Dataset projection/audit/approval query만 Governance public port | 승인된 governance와 제외 범위 Agent가 한 service에 혼재 | Agent run/count/trace 필드를 제거하고 Dataset/approval/audit consumer regression을 보존 | `tests/test_governance_workbench_stage51.py` |
+| Platform application/runtime/search | Commercial V4가 `applications/v4`, `application-runtime`, `global-search` 사용 | 없음 | `REMOVE` | final workflow routing은 frontend + canonical domain APIs | Commercial V4 metadata-driven platform shell은 MVP 화면 기준선이 아님 | Commercial V4 route/registry/search UI와 API를 같이 종료 | Commercial V4 UI/E2E를 compatibility 종료 대상으로 추적 |
+| Platform readiness wrappers | Commercial V4가 persistence/enterprise/deployment/observability readiness 조회 | composition/Infra/Identity | `REPLACE` | `/health/*`, Infra observability, Identity diagnostics가 필요 시 owner-specific query | project-scoped Commercial V4 wrapper와 실제 health invariant를 분리 | 배포 probe가 새 canonical host에서 먼저 통과한 뒤 wrapper 제거 | deployment/identity/observability tests |
+| Platform artifact/connector/ontology primitive APIs | Commercial V4 operator UI | Governance/Dataset/Ontology + Infra adapters | `SPLIT` | owner domain router/public port | 일부 capability는 유지 가치가 있지만 generic Platform router 소유가 아님 | 각 owner API 회귀가 준비된 뒤 `/api/platform` compatibility 제거 | artifact/connectors/ontology primitive tests |
+
+### 4.1 DEFER 해소 결과와 gate
+
+Phase 0.5 판정 후 Section 3의 `DEFER`는 **0건**이다. 이후 새로운 제품 근거가 생겨도
+legacy Source를 다시 `DEFER`로 되돌리지 않는다. 필요한 기능은 해당 owner Phase에서
+새 canonical port로 제안하고 검증한다.
+
+- #52~#64는 위 최종 disposition을 입력으로 삼되 PR #51 merge 전 구현하지 않는다.
+- `REMOVE`는 해당 Phase에서 API/UI/script/deployment/test compatibility 종료를 함께 수행한다.
+- `REPLACE`는 새 canonical entrypoint와 회귀 검증이 준비되기 전 legacy Source를 삭제하지 않는다.
+- `SPLIT`은 표의 owner별 target이 준비되기 전 source 전체를 한 도메인으로 복사하지 않는다.
+- #65는 ledger checker가 미배정/중복/`UNDECIDED`/`DEFER` 0건을 확인한 뒤에만 시작한다.
+
+## 5. `routers/platform.py` 31개 endpoint 최종 처분
+
+Commercial V4가 현재 consumer인 경우도 **현재 compatibility consumer**로만 기록한다.
+Final MVP가 `/api/platform` namespace 자체를 요구하지 않으므로 유지되는 capability도
+owner domain의 endpoint/port로 전환한 뒤 legacy Platform route를 종료한다.
+
+| Endpoint | 처분 | canonical owner / 종료 조건 |
+|---|---|---|
+| `GET /api/platform/domain-packs` | `REMOVE` | generic registry 종료; PdM materialization은 Ontology/Dataset으로 분리 |
+| `GET /api/platform/projects/{project_id}/applications/v4` | `REMOVE` | Commercial V4 application shell 종료 |
+| `GET /api/platform/projects/{project_id}/persistence-readiness` | `REPLACE` | composition/Infra의 canonical readiness로 대체 |
+| `GET /api/platform/projects/{project_id}/enterprise-identity` | `REPLACE` | 필요한 진단만 Identity owner로 이동; Commercial V4 wrapper 종료 |
+| `GET /api/platform/projects/{project_id}/deployment-readiness` | `REPLACE` | canonical `/health/startup`, `/health/ready` 및 deployment probe로 대체 |
+| `GET /api/platform/projects/{project_id}/distributed-runtime` | `REMOVE` | Analysis/Connector generic worker 제거와 함께 종료 |
+| `GET /api/platform/projects/{project_id}/artifact-governance` | `SPLIT` | catalog/verification 정책은 Governance, storage driver는 Infra |
+| `POST /api/platform/projects/{project_id}/artifacts/{artifact_id}/verify` | `SPLIT` | Governance 검증 use case로 owner API가 준비된 뒤 종료 |
+| `POST /api/platform/projects/{project_id}/artifacts/{artifact_id}/sign-download` | `SPLIT` | Governance policy + Infra storage signing으로 분리 |
+| `POST /api/platform/projects/{project_id}/artifact-reconciliation` | `SPLIT` | Governance reconciliation use case로 분리 |
+| `GET /api/platform/projects/{project_id}/observability` | `REPLACE` | Infra/composition observability contract로 대체 |
+| `GET /api/platform/projects/{project_id}/connectors` | `SPLIT` | Dataset ingestion use case + Infra external adapter로 분리 |
+| `POST /api/platform/projects/{project_id}/connectors/{connector_id}/run` | `SPLIT` | Dataset-owned ingestion command로 전환; generic durable worker는 보존하지 않음 |
+| `GET /api/platform/projects/{project_id}/ontology-primitives` | `SPLIT` | `app/ontology` query로 전환 |
+| `POST /api/platform/projects/{project_id}/actions/preview` | `SPLIT` | Ontology Action preview만 유지; MaintenanceAction과 혼합하지 않음 |
+| `POST /api/platform/projects/{project_id}/functions/execute` | `SPLIT` | `app/ontology` function execution port로 전환 |
+| `GET /api/platform/projects/{project_id}/branching-lineage` | `REMOVE` | generic Platform branch/lineage 종료 |
+| `POST /api/platform/projects/{project_id}/branches/change` | `REMOVE` | Runtime Overlay branch로 대체하지 않음 |
+| `POST /api/platform/projects/{project_id}/branches/{branch_id}/merge` | `REMOVE` | Runtime Overlay에는 generic merge semantics를 적용하지 않음 |
+| `POST /api/platform/projects/{project_id}/policy/check` | `REMOVE` | generic branch marking policy 종료; 필요한 owner-specific authorization은 Identity/Governance 계약 사용 |
+| `GET /api/platform/projects/{project_id}/application-runtime` | `REMOVE` | Commercial V4 application runtime shell 종료 |
+| `POST /api/platform/projects/{project_id}/global-search` | `REMOVE` | generic global search는 MVP 요구사항 아님 |
+| `GET /api/platform/projects/{project_id}/pipeline/sample-plan` | `REMOVE` | sample visual pipeline 종료 |
+| `POST /api/platform/projects/{project_id}/pipeline/plan` | `REMOVE` | Generator/Dataset canonical pipeline과 중복 방지 |
+| `GET /api/platform/projects/{project_id}/mlops` | `REMOVE` | Generator Model Artifact lifecycle을 canonical owner로 사용 |
+| `POST /api/platform/projects/{project_id}/mlops/drift/evaluate` | `REMOVE` | Backend drift simulation 종료; 향후 필요 시 Generator contract로 신규 정의 |
+| `GET /api/platform/projects/{project_id}/automation` | `REMOVE` | generic automation simulation 종료 |
+| `POST /api/platform/projects/{project_id}/automation/simulate` | `REMOVE` | Closed-loop human Decision/Action으로 자동 매핑하지 않음 |
+| `GET /api/platform/projects/{project_id}/distributed-job-events` | `REMOVE` | generic durable runtime 제거와 함께 종료 |
+| `POST /api/platform/projects/{project_id}/distributed-jobs/{job_id}/cancel` | `REMOVE` | generic durable runtime 제거와 함께 종료 |
+| `POST /api/platform/projects/{project_id}/distributed-jobs/{job_id}/replay` | `REMOVE` | generic durable replay와 Maintenance Replay/Overlay를 구분하고 종료 |
+
+## 6. Phase별 적용 규칙
 
 실행 순서는 `#51 Phase 0 → #68 capability disposition → #73 Architecture CI Ratchet → #52~#64 Domain/Infra migration → #65 legacy deletion → #66 final strict CI`로 고정한다.
 
@@ -96,10 +180,10 @@
 2. `SPLIT`은 각 책임의 새 owner와 public port를 확인한 뒤 레거시 Source를 삭제한다.
 3. `REPLACE`는 새 구현의 회귀 테스트와 deployment entrypoint가 통과한 뒤 삭제한다.
 4. `REMOVE`는 삭제되는 API/테스트/문서 참조를 함께 정리한다.
-5. `DEFER`는 임의 target으로 옮기지 않는다. #68 완료 전에는 Phase 1~13 구현을 시작하지 않고, #73 Ratchet 통과 전에는 해당 Phase 이슈의 DoD를 닫을 수 없다.
+5. #68 완료 전에는 Phase 1~13 구현을 시작하지 않고, Phase 0.5 이후 ledger에는 `DEFER`를 다시 추가하지 않는다. 새 필요성은 owner Phase에서 새 canonical port로 제안하며, #73 Ratchet 통과 전에는 해당 Phase 이슈의 DoD를 닫을 수 없다.
 6. Phase 14(#65)는 Ledger의 미배정 Source, `UNDECIDED`, `DEFER`가 모두 0건일 때만 시작한다.
 
-## 5. Architecture CI Ratchet
+## 7. Architecture CI Ratchet
 
 - Phase 0.6(#73): #68의 최종 처분 원장을 기준으로 레거시 Source/import baseline과 감소 전용 Ratchet을 먼저 도입한다.
 - Phase 1~13: 레거시 존재 자체는 허용하되 신규 레거시 파일, 신규 레거시 import, baseline 증가를 금지한다.
