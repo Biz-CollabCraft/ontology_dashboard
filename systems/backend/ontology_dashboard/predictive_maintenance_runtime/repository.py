@@ -341,6 +341,18 @@ class PredictiveMaintenanceRuntimeRepository:
                 ).fetchone()["count"]
             )
             if artifact_count:
+                full_artifact_count = int(
+                    connection.execute(
+                        """
+                        SELECT COUNT(*) AS count
+                        FROM pm_result_artifacts r
+                        JOIN prediction_results p ON p.prediction_id=r.prediction_result_id
+                        WHERE r.dataset_version_id=%s
+                          AND jsonb_typeof(p.payload_json->'evidence_payload')='object'
+                        """,
+                        (dataset_version_id,),
+                    ).fetchone()["count"]
+                )
                 if status_grade:
                     filters.append("r.status_grade=%s")
                     parameters.append(status_grade)
@@ -373,7 +385,12 @@ class PredictiveMaintenanceRuntimeRepository:
                     """,
                     (*parameters, offset, limit),
                 ).fetchall()
-                return "result_artifact", total, [dict(row) for row in rows]
+                source_contract = (
+                    "result_artifact"
+                    if full_artifact_count == artifact_count
+                    else "prediction_snapshot_compatibility"
+                )
+                return source_contract, total, [dict(row) for row in rows]
 
             if status_grade:
                 filters.append("s.status=%s")

@@ -41,11 +41,10 @@ from .models import (
     ReplaySessionRecord,
     ReplaySessionSnapshot,
     SemanticQueryCapability,
-    SensorObservation,
     SnapshotDrilldown,
     TimelinePrediction,
 )
-from .repository import ALLOWED_DERIVED_MEASURES, PredictiveMaintenanceRuntimeRepository
+from .repository import PredictiveMaintenanceRuntimeRepository
 from app.diagnosis.evidence import validate_product_result_artifact
 
 
@@ -186,8 +185,15 @@ class PredictiveMaintenanceRuntimeService:
         self.repository = repository
 
     @staticmethod
-    def _supports_dashboard_evidence_detail(source_contract: str) -> bool:
-        return source_contract == "result_artifact"
+    def _supports_dashboard_evidence_detail(
+        source_contract: str,
+        producer_artifact: dict[str, Any] | None = None,
+    ) -> bool:
+        return (
+            source_contract == "result_artifact"
+            and isinstance(producer_artifact, dict)
+            and isinstance(producer_artifact.get("evidence_payload"), dict)
+        )
 
     @staticmethod
     def _safe_governance(profile: dict[str, Any]) -> GovernanceProvenance:
@@ -733,10 +739,10 @@ class PredictiveMaintenanceRuntimeService:
         )
 
     @staticmethod
-    def _stored_producer_artifact(row: dict[str, Any]) -> dict[str, Any]:
+    def _stored_producer_artifact(row: dict[str, Any]) -> dict[str, Any] | None:
         artifact = _dict(row.get("prediction_result_payload"))
-        if not artifact:
-            raise ValueError("Result Artifact payload is unavailable for runtime projection")
+        if not isinstance(artifact.get("evidence_payload"), dict):
+            return None
         validate_product_result_artifact(artifact)
         for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):
             if str(artifact.get(field)) != str(row[field]):
@@ -755,8 +761,12 @@ class PredictiveMaintenanceRuntimeService:
     ) -> GovernedProductResult:
         factors = self._factor_models(row.get("top_factors"))
         producer_artifact: dict[str, Any] | None = None
+        effective_source_contract = source_contract
         if source_contract == "result_artifact":
             producer_artifact = self._stored_producer_artifact(row)
+            if producer_artifact is None:
+                effective_source_contract = "prediction_snapshot_compatibility"
+        if effective_source_contract == "result_artifact":
             provenance = _dict(row.get("provenance"))
             recommendation_raw = _dict(row.get("recommended_action"))
             prediction_task = str(row["prediction_task"])
@@ -795,7 +805,7 @@ class PredictiveMaintenanceRuntimeService:
             source_type = "prediction_snapshot_compatibility"
 
         predicted_type = str(row.get("predicted_failure_type") or "")
-        if source_contract == "prediction_snapshot_compatibility" and predicted_type not in {
+        if effective_source_contract == "prediction_snapshot_compatibility" and predicted_type not in {
             "failure_risk",
             "no_significant_risk",
         }:
@@ -811,13 +821,13 @@ class PredictiveMaintenanceRuntimeService:
             row=row,
             factors=factors,
             recommendation=recommendation,
-            source_contract=source_contract,
+            source_contract=effective_source_contract,
             source_checksum=source_checksum,
             prediction_task=prediction_task,
             model_version=model_version,
         )
         return GovernedProductResult(
-            source_contract=source_contract,
+            source_contract=effective_source_contract,
             artifact_id=(
                 str(row["artifact_id"]) if row.get("artifact_id") is not None else None
             ),
@@ -840,7 +850,7 @@ class PredictiveMaintenanceRuntimeService:
                 source_version=context.source_version,
                 bundle_checksum_sha256=context.bundle_checksum_sha256,
                 result_artifact_source_sha256=(
-                    source_checksum if source_contract == "result_artifact" else None
+                    source_checksum if effective_source_contract == "result_artifact" else None
                 ),
                 prediction_id=str(row["prediction_id"]),
                 prediction_result_id=str(row["prediction_result_id"]),
@@ -942,27 +952,6 @@ class PredictiveMaintenanceRuntimeService:
             estimated_downtime_minutes=downtime_by_status[result.status_grade],
             spare_part_available=None,
         )
-
-    @staticmethod
-    def _dashboard_observation_payload(observation: SensorObservation) -> dict[str, Any]:
-        measurements = observation.measurements
-        return {
-            "timestamp": observation.observed_at.isoformat(),
-            "product_type": str(measurements.get("product_type") or observation.asset_type),
-            "air_temperature_k": measurements.get("air_temperature_k"),
-            "process_temperature_k": measurements.get("process_temperature_k"),
-            "rotational_speed_rpm": measurements.get("rotational_speed_rpm"),
-            "torque_nm": measurements.get("torque_nm"),
-            "tool_wear_min": measurements.get("tool_wear_min"),
-            "asset_id": observation.asset_id,
-            "asset_type": observation.asset_type,
-            "site_id": observation.site_id,
-            "cell_id": observation.cell_id,
-            "is_operating": observation.is_operating,
-            "operating_state": observation.operating_state,
-            **measurements,
-            **observation.derived_measures,
-        }
 
     def _dashboard_detail(
         self,
@@ -1287,7 +1276,10 @@ class PredictiveMaintenanceRuntimeService:
                 if item.get("completed_at") is not None
                 and item["completed_at"] <= selected_result.observed_at
             ]
-            if self._supports_dashboard_evidence_detail(selected_result.source_contract):
+            if self._supports_dashboard_evidence_detail(
+                selected_result.source_contract,
+                selected_result.producer_artifact,
+            ):
                 detail = self._dashboard_detail(
                     organization_id=organization_id,
                     project_id=project_id,

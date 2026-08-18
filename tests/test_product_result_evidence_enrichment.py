@@ -215,14 +215,42 @@ def test_legacy_factor_labels_are_localized_without_changing_raw_units() -> None
     assert localized[0]["unit"] == "raw"
     assert localized[0]["normal_range"] == "295.0–305.0"
 
+    fallback = _localize_legacy_top_factors(
+        [{**factors[0], "normal_range": "근거 부족"}],
+        "en-US",
+    )
+    assert fallback[0]["normal_range"] == "See governed model contract"
+
 
 def test_snapshot_compatibility_does_not_require_dashboard_evidence_detail() -> None:
     assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
         "prediction_snapshot_compatibility"
     ) is False
     assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
-        "result_artifact"
+        "result_artifact",
+        {"evidence_payload": {"sensor_evidence": {}}},
     ) is True
+
+
+def test_compatibility_payload_is_not_validated_as_a_producer_artifact() -> None:
+    payload = {
+        "contract_version": "1.0",
+        "source_prediction_id": "prediction-1",
+        "dataset_version_id": "dataset-version-1",
+        "observed_at": "2026-08-01T00:00:00+00:00",
+        "prediction_horizon_hours": 24,
+        "failure_probability": 0.8,
+        "predicted_failure_type": "failure_risk",
+        "confidence": 0.9,
+        "feature_scope": {"tool_wear_min": "raw"},
+    }
+
+    assert PredictiveMaintenanceRuntimeService._stored_producer_artifact(
+        {"prediction_result_payload": payload}
+    ) is None
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "result_artifact", payload
+    ) is False
 
 
 def test_product_result_artifact_records_gap_when_maintenance_context_is_missing() -> None:

@@ -339,6 +339,8 @@ canonical Event Evidence의 `assessment.top_factors`는 Product Result Artifact�
 - API contract regression test는 legacy evidence shape, Event Evidence projection shape, hidden/evaluation truth absence, report grounding source field를 함께 검증한다.
 - canonical projection을 기본 응답으로 승격하고 legacy projection을 제거할지는 frontend/report consumer 전환 완료와 contract regression 통과 후 별도 PR에서 결정한다.
 
+Runtime 저장 경계도 이 전환 규칙을 따른다. `pm_result_artifacts` 행이나 `source_contract` 이름만으로 full Product Result Artifact를 판정하지 않는다. `prediction_results.payload_json.evidence_payload`가 object로 저장된 경우에만 producer Artifact와 dashboard detail을 활성화하고, bundle ingestion의 9키 prediction snapshot compatibility payload처럼 해당 근거가 없으면 `prediction_snapshot_compatibility`로 내려가 detail을 생략한다. 이 판정은 저장소와 service 양쪽에서 방어적으로 적용하며, PostgreSQL bundle replay를 CI service로 실행해 이 경계를 skip 없이 검증한다.
+
 ### 4.4 Report Output 계층
 
 현행 `contracts/schemas/report.schema.json`의 role-aware grounded report와 V2 제안 `ReportOutput`은 구분한다.

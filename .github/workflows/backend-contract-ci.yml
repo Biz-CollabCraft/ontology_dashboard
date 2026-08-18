@@ -10,6 +10,25 @@ on:
 jobs:
   backend-contract:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_HOST: 127.0.0.1
+      TEST_POSTGRES_PORT: 5432
+      TEST_POSTGRES_USER: postgres
+      TEST_POSTGRES_PASSWORD: postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,7 +59,7 @@ jobs:
 
             for path in "${changed_files[@]}"; do
               case "$path" in
-                .github/workflows/*|systems/verify_architecture.py|systems/backend/*|systems/generator/*|ml/*|contracts/*|schemas/*|data/fixtures/*|tests/test_product_result_artifact_evidence_contract.py|tests/test_product_result_evidence_enrichment.py|tests/test_system_ownership.py)
+                .github/workflows/*|systems/verify_architecture.py|systems/backend/*|systems/generator/*|ml/*|contracts/*|schemas/*|data/fixtures/*|tests/test_product_result_artifact_evidence_contract.py|tests/test_product_result_evidence_enrichment.py|tests/test_predictive_maintenance_result_replay.py|tests/test_predictive_maintenance_postgresql.py|tests/test_system_ownership.py)
                   run_contract=true
                   break
                   ;;
