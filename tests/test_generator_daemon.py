@@ -389,7 +389,7 @@ def test_artifact_validation_checksum_mismatch_rejected(tmp_path):
 
 
 def test_artifact_validation_unsafe_escaping_path_rejected(tmp_path):
-    """5.7 Declared path with .. or absolute path -> False."""
+    """5.7 Declared path with .. -> False."""
     artifact_dir = _create_valid_artifact(tmp_path / "artifacts")
     manifest_path = artifact_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -399,6 +399,33 @@ def test_artifact_validation_unsafe_escaping_path_rejected(tmp_path):
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     assert not has_any_published_model_artifact(tmp_path / "artifacts")
+
+
+def test_artifact_validation_absolute_path_rejected(tmp_path):
+    """5.7b Declared path as absolute path -> False."""
+    artifact_dir = _create_valid_artifact(tmp_path / "artifacts")
+    manifest_path = artifact_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Set absolute path
+    manifest["artifact_files"][0]["path"] = "/etc/passwd"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert not has_any_published_model_artifact(tmp_path / "artifacts")
+
+
+def test_artifact_validation_duplicate_paths_rejected(tmp_path):
+    """5.7c Declared duplicate paths across entries -> False."""
+    artifact_dir = _create_valid_artifact(tmp_path / "artifacts")
+    manifest_path = artifact_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Assign duplicate path
+    manifest["artifact_files"][1]["path"] = manifest["artifact_files"][0]["path"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert not has_any_published_model_artifact(tmp_path / "artifacts")
+
 
 
 def test_artifact_validation_canonical_complete_v1_accepted(tmp_path):

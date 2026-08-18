@@ -148,9 +148,10 @@
 - **Graceful Shutdown Worker 수명 보장**: 데몬 종료 시 실행 중인 초기 학습 worker thread를 가짜로 `cancel()`하지 않고 실제 worker 작업이 안전하게 끝날 때까지 `await task`로 대기한다. 이를 통해 worker와 `_training_lock`의 수명을 완벽히 일치시키고, shutdown 이후에 파일(Artifact/Registry)이 불완전하게 쓰이는 문제를 방지한다.
 - **동시성 Lock**: 프로세스 내 전역 `asyncio.Lock`을 두어 startup 백그라운드 학습과 수동 `/internal/train`, `/internal/retrain` 호출이 상호 배타적으로 실행되며, 중복 요청은 즉시 `409 Conflict`로 거부된다.
 - **예외 안전성**: 자동 학습 또는 수동 학습이 실패하더라도 데몬 프로세스는 중단되지 않으며, `async with _training_lock`을 통해 락은 즉시 해제되어 다음 요청을 처리할 수 있다.
-- **`has_any_published_model_artifact()` 판정 기준**: raw `.joblib` 파일 존재 여부가 아니라, `manifest.json` 및 필수 Role 파일(`model`, `feature_schema`)이 실제로 존재하는 유효한 Model Artifact v1.0 패키지를 기준으로 자동 학습 생략 여부를 판정한다.
+- **`has_any_published_model_artifact()` 판정 기준**: raw `.joblib` 파일이나 Artifact 디렉터리의 단순 존재 여부를 기준으로 하지 않는다. 공식 `model-artifact-v1.0`의 manifest 필수 필드, 필수 Role 5개(`model`, `feature_schema`, `label_schema`, `history_requirement`, `metrics`), Role·경로 중복 금지, Artifact 루트 내부 상대경로, 선언 파일 존재 및 각 `artifact_files[*].sha256` 검증을 모두 통과한 Artifact가 하나 이상 존재하는 경우에만 시작 시 자동 학습을 생략한다. 불완전하거나 손상된 Artifact만 존재하는 경우에는 발행 완료로 인정하지 않고 시작 시 자동 학습을 실행한다.
 
 ## 8. 결정 반영과 후속 확인
+
 
 ### Week 2 결정 완료
 - `generator` 내부 API는 프론트엔드에 직접 노출하지 않는다.
