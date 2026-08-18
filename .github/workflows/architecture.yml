@@ -53,6 +53,16 @@ jobs:
 
             for path in "${changed_files[@]}"; do
               case "$path" in
+                docs/*|README.md|THIRD_PARTY_NOTICES.md)
+                  # Explicitly safe documentation-only changes keep the
+                  # expensive validation steps disabled.
+                  ;;
+                .dockerignore)
+                  # The repository root is the Docker build context for both
+                  # backend and frontend images, so .dockerignore changes must
+                  # exercise the runtime image build/start smoke.
+                  docker=true
+                  ;;
                 .github/workflows/*|systems/verify_architecture.py)
                   full=true
                   ;;
@@ -88,6 +98,12 @@ jobs:
                   integration=true
                   ;;
                 tests/*|scripts/*)
+                  full=true
+                  ;;
+                *)
+                  # Fail closed for paths the classifier does not know yet.
+                  # New top-level config files/directories must not silently
+                  # bypass runtime validation until their impact is classified.
                   full=true
                   ;;
               esac
