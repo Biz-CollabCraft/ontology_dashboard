@@ -391,7 +391,9 @@ def is_trusted_comment_author(author_association: str) -> bool:
     return author_association.upper() in TRUSTED_COMMENT_AUTHOR_ASSOCIATIONS
 
 
-def event_to_comment(event: dict[str, Any]) -> CommentEvent:
+def event_to_comment(
+    event: dict[str, Any], *, authoritative_review: dict[str, Any] | None = None
+) -> CommentEvent:
     action = event.get("action", "")
     if action not in {"created", "submitted"}:
         raise ValueError(f"unsupported event action: {action!r}")
@@ -407,7 +409,7 @@ def event_to_comment(event: dict[str, Any]) -> CommentEvent:
         kind = "review_comment"
         review_state = None
     elif "review" in event and "pull_request" in event:
-        source = event["review"]
+        source = authoritative_review or event["review"]
         pr_number = int(event["pull_request"]["number"])
         kind = "review"
         review_state = source.get("state")
@@ -800,7 +802,12 @@ def parse_pr_vertex(args: argparse.Namespace) -> None:
 
 def command_event_info(args: argparse.Namespace) -> None:
     event = json.loads(Path(args.event).read_text(encoding="utf-8"))
-    info = event_to_comment(event)
+    authoritative_review = None
+    if args.review_json:
+        authoritative_review = json.loads(
+            Path(args.review_json).read_text(encoding="utf-8")
+        )
+    info = event_to_comment(event, authoritative_review=authoritative_review)
     print(f"pr_number={info.pr_number}")
     print(f"source_id={info.source_id}")
     print(f"source_kind={info.source_kind}")
@@ -972,6 +979,7 @@ def parser() -> argparse.ArgumentParser:
 
     event = sub.add_parser("event-info")
     event.add_argument("--event", required=True)
+    event.add_argument("--review-json")
     event.set_defaults(func=command_event_info)
 
     gate = sub.add_parser("repo-gate")

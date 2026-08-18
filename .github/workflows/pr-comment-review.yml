@@ -57,9 +57,29 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Read authoritative pull request review metadata
+        if: github.event_name == 'pull_request_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER="$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")"
+          REVIEW_ID="$(jq -r '.review.id' "$GITHUB_EVENT_PATH")"
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews/${REVIEW_ID}" \
+            > /tmp/source-review.json
+
       - name: Classify source comment without secrets
         id: event
-        run: python3 scripts/ci/ai_review.py event-info --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ -f /tmp/source-review.json ]]; then
+            python3 scripts/ci/ai_review.py event-info \
+              --event "$GITHUB_EVENT_PATH" \
+              --review-json /tmp/source-review.json >> "$GITHUB_OUTPUT"
+          else
+            python3 scripts/ci/ai_review.py event-info \
+              --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Read pull request repository boundary for authorized technical comment
         if: steps.event.outputs.eligible == 'true'
