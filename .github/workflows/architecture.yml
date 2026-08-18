@@ -137,15 +137,15 @@ jobs:
       - name: Static architecture rules
         run: python systems/verify_architecture.py
 
+      - name: Install Python dependencies
+        if: steps.changes.outputs.generator == 'true' || steps.changes.outputs.backend == 'true' || steps.changes.outputs.integration == 'true'
+        run: |
+          python -m pip install -e ./ml -e './systems/backend[dev]'
+
       - name: Generator import smoke
         if: steps.changes.outputs.generator == 'true'
         working-directory: systems/generator
         run: python -c "import extraction; import ontology_mapping; import topology; import feature; import model; import common"
-
-      - name: Install backend dependencies
-        if: steps.changes.outputs.backend == 'true' || steps.changes.outputs.integration == 'true'
-        working-directory: systems/backend
-        run: pip install -e ../../ml -e .
 
       - name: Backend import and health
         if: steps.changes.outputs.backend == 'true'
