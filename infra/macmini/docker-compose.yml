@@ -125,6 +125,7 @@ services:
       VERTEX_AI_API_KEY: ${VERTEX_AI_API_KEY:-}
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-application-credentials.json
       DATA_DIR: /data/source
       DATA_PREPROCESSED_DIR: /data/preprocessed
       ONTOLOGY_DIR: /data/ontology
@@ -139,6 +140,7 @@ services:
       - ${ONTOLOGY_DATA_ROOT}/generator/models_store:/data/models
       - ${ONTOLOGY_DATA_ROOT}/generator/logs:/logs
       - ${ONTOLOGY_DATA_ROOT}/artifacts:/artifacts
+      - ${GENERATOR_GOOGLE_APPLICATION_CREDENTIALS_HOST:-/dev/null}:/run/secrets/google-application-credentials.json:ro
     networks: [private]
 
 networks:

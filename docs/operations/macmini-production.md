@@ -47,6 +47,9 @@ available for diagnosis but do not replace the Backend runtime artifact.
 
 Generator LLM enrichment is optional to the deterministic closed loop. The
 client supports OpenAI or Google Vertex AI through `GENERATOR_LLM_PROVIDER`.
-Secrets stay server-side. For Vertex AI, prefer project-scoped credentials/ADC;
-an API key can be injected with `VERTEX_AI_API_KEY` when that authentication
-mode is intentionally used.
+Mac mini production uses Vertex AI project `flai-oosuhada-20260506`, location
+`global`, and `gemini-3.7-flash`. Its service-account credential stays in the
+server-only secrets tree and is mounted read-only into the one-shot Generator
+container through `GOOGLE_APPLICATION_CREDENTIALS`; it is never copied into the
+image or repository. An API key can still be injected with `VERTEX_AI_API_KEY`
+when that authentication mode is intentionally used.

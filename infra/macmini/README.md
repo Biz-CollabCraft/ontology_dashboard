@@ -85,12 +85,16 @@ can use an LLM and safely fall back to deterministic rules when credentials are
 absent. Supported providers are:
 
 - `GENERATOR_LLM_PROVIDER=openai` with `OPENAI_API_KEY`.
-- `GENERATOR_LLM_PROVIDER=vertex_ai` with Google Vertex AI. Configure
-  `GENERATOR_LLM_MODEL` (for example `gemini-3.5-flash`) and either a supported
-  `VERTEX_AI_API_KEY` or project/ADC credentials via `GOOGLE_CLOUD_PROJECT` and
-  `GOOGLE_CLOUD_LOCATION`.
+- `GENERATOR_LLM_PROVIDER=vertex_ai` with Google Vertex AI. Mac mini production
+  uses project `flai-oosuhada-20260506`, location `global`, and
+  `gemini-3.7-flash`. The server-side service-account JSON is mounted read-only
+  through `GENERATOR_GOOGLE_APPLICATION_CREDENTIALS_HOST` and exposed inside
+  the Generator container only as `GOOGLE_APPLICATION_CREDENTIALS`. A supported
+  `VERTEX_AI_API_KEY` remains available as an alternative, but is not the
+  production credential path.
 
-Do not commit either provider's credential.
+Do not commit either provider's credential. The production service account is
+expected to have only the Vertex AI runtime role needed by Generator.
 
 The standalone image declares dependencies from the current Generator import
 graph. Legacy `lightgbm`/`xgboost` declarations are intentionally not installed
