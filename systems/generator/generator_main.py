@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from systems.generator.generator_config import load_config
-from systems.generator.model.model_registry import has_any_trained_model
+from systems.generator.model.model_registry import has_any_published_model_artifact
 from systems.generator.model.model_training import train_all
 
 logger = logging.getLogger(__name__)
@@ -64,25 +64,22 @@ async def _run_initial_training() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan managing configuration loading and non-blocking background initial training."""
+    """Lifespan managing configuration loading, non-blocking startup, and graceful shutdown worker completion."""
     load_config()
     app.state.initial_training_task = None
 
-    if not has_any_trained_model():
-        logger.info("[GeneratorDaemon] No trained models found. Scheduling initial automatic training...")
+    if not has_any_published_model_artifact():
+        logger.info("[GeneratorDaemon] No published model artifacts found. Scheduling initial automatic training...")
         app.state.initial_training_task = asyncio.create_task(_run_initial_training())
     else:
-        logger.info("[GeneratorDaemon] Existing trained models detected. Skipping auto-training.")
+        logger.info("[GeneratorDaemon] Existing published model artifacts detected. Skipping auto-training.")
 
     yield
 
     task = getattr(app.state, "initial_training_task", None)
     if task is not None and not task.done():
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        logger.info("[GeneratorDaemon] Waiting for active initial training to finish before graceful shutdown.")
+        await task
 
 
 app = FastAPI(title="Generator Daemon API", lifespan=lifespan)

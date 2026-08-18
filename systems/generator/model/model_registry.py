@@ -380,3 +380,36 @@ def has_any_trained_model(store_dir: str | Path | None = None) -> bool:
         if get_latest_model_path(model_name, root) is not None:
             return True
     return False
+
+
+def has_any_published_model_artifact(artifact_uri: str | Path | None = None) -> bool:
+    """Check if any valid, immutable Model Artifact exists under the artifact root."""
+    try:
+        root = _local_root(artifact_uri or os.getenv("MODEL_ARTIFACT_URI") or (_get_default_store_dir() / "artifacts"))
+        if not root.exists():
+            return False
+
+        for manifest_path in root.glob("*/*/manifest.json"):
+            if not manifest_path.is_file():
+                continue
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if manifest.get("artifact_type") != ARTIFACT_TYPE:
+                    continue
+                if manifest.get("artifact_schema_version") != ARTIFACT_SCHEMA_VERSION:
+                    continue
+                artifact_files = manifest.get("artifact_files")
+                if not isinstance(artifact_files, list) or not artifact_files:
+                    continue
+                roles = {item.get("role"): item for item in artifact_files if isinstance(item, dict)}
+                if "model" not in roles or "feature_schema" not in roles:
+                    continue
+                model_path = manifest_path.parent / roles["model"].get("path", "")
+                feature_path = manifest_path.parent / roles["feature_schema"].get("path", "")
+                if model_path.is_file() and feature_path.is_file():
+                    return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return False

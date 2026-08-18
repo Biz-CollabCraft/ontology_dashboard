@@ -7,6 +7,7 @@ from .model_registry import (
     ModelRegistry,
     get_latest_model_path,
     get_next_run_version,
+    has_any_published_model_artifact,
     has_any_trained_model,
     load_registry,
     publish_model_artifact,
@@ -14,6 +15,7 @@ from .model_registry import (
     train_and_publish_model,
     validate_manifest,
 )
+
 from .model_score import ModelScore
 from .model_training import (
     FRAMEWORK_BY_ALGORITHM,
@@ -44,8 +46,10 @@ __all__ = [
     "get_latest_model_path",
     "get_model_class",
     "get_next_run_version",
+    "has_any_published_model_artifact",
     "has_any_trained_model",
     "infer_history_requirement",
+
     "load_registry",
     "publish_model_artifact",
     "run_parsing_only",

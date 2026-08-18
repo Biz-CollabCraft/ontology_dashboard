@@ -142,12 +142,13 @@
 - Run Registry(`models_store/registry.json`)는 학습 실행 이력을 기록하는 보조 인덱스이며, Backend가 소비하는 canonical 계약 단위는 `registry.json`이 아니라 Manifest와 5개 Role 파일이 포함된 [Model Artifact](./model-artifact-publish-contract.md) 디렉터리다.
 - 일부 모델이 실패해도 성공한 모델의 Artifact만 발행되며, registry의 `run_version`은 해당 run에서 성공한 모델에 대해서만 유효하게 취급된다.
 
-## 7. Startup 및 동시성 제어 정책
+## 7. Startup, Shutdown 및 동시성 제어 정책
 
-- **Non-blocking Startup**: Generator 데몬 기동 시 기존에 학습된 모델이 없으면(`has_any_trained_model() == False`), 초기 학습을 ASGI startup(`lifespan` yield)을 블로킹하지 않고 백그라운드 태스크(`asyncio.create_task`)로 예약한다. 따라서 `/health` 응답과 서버 기동은 즉시 완료된다.
+- **Non-blocking Startup**: Generator 데몬 기동 시 유효하게 발행된 Model Artifact가 없으면(`has_any_published_model_artifact() == False`), 초기 학습을 ASGI startup(`lifespan` yield)을 블로킹하지 않고 백그라운드 태스크(`asyncio.create_task`)로 예약한다. 따라서 `/health` 응답과 서버 기동은 즉시 완료된다.
+- **Graceful Shutdown Worker 수명 보장**: 데몬 종료 시 실행 중인 초기 학습 worker thread를 가짜로 `cancel()`하지 않고 실제 worker 작업이 안전하게 끝날 때까지 `await task`로 대기한다. 이를 통해 worker와 `_training_lock`의 수명을 완벽히 일치시키고, shutdown 이후에 파일(Artifact/Registry)이 불완전하게 쓰이는 문제를 방지한다.
 - **동시성 Lock**: 프로세스 내 전역 `asyncio.Lock`을 두어 startup 백그라운드 학습과 수동 `/internal/train`, `/internal/retrain` 호출이 상호 배타적으로 실행되며, 중복 요청은 즉시 `409 Conflict`로 거부된다.
 - **예외 안전성**: 자동 학습 또는 수동 학습이 실패하더라도 데몬 프로세스는 중단되지 않으며, `async with _training_lock`을 통해 락은 즉시 해제되어 다음 요청을 처리할 수 있다.
-- **`has_any_trained_model()` 판정 기준**: 현재 구현은 `models_store/{model}/model_v*.joblib` 파일 존재 여부로 판정한다. (아래 후속 확인 참조)
+- **`has_any_published_model_artifact()` 판정 기준**: raw `.joblib` 파일 존재 여부가 아니라, `manifest.json` 및 필수 Role 파일(`model`, `feature_schema`)이 실제로 존재하는 유효한 Model Artifact v1.0 패키지를 기준으로 자동 학습 생략 여부를 판정한다.
 
 ## 8. 결정 반영과 후속 확인
 
@@ -155,9 +156,10 @@
 - `generator` 내부 API는 프론트엔드에 직접 노출하지 않는다.
 - `generator` 데몬은 runtime predict를 노출하지 않으며(ADR-002 Invariant 22·23), 런타임 추론은 Backend Diagnosis가 전담한다.
 - 모델은 덮어쓰기가 아닌 immutable Model Artifact 버전 관리 방식으로 보존한다.
-- startup 학습은 non-blocking 백그라운드로 실행하고 프로세스 내 동시 학습은 409로 방어한다.
+- startup 학습은 non-blocking 백그라운드로 실행하고, shutdown 시에는 진행 중인 worker가 끝날 때까지 graceful 대기하며, 프로세스 내 동시 학습은 409로 방어한다.
+- 모델 존재 판정은 raw 파일이 아닌 유효하게 발행된 Model Artifact 존재 여부를 기준으로 한다.
 
 ### 후속 확인 (별도 이슈 이관)
-- `has_any_trained_model()`의 판정 기준을 raw `.joblib` 파일 탐색에서 Model Artifact Manifest 존재 확인으로 고도화하는 방안 검토 (PR #22 공유 모듈 영역)
-- 다중 프로세스/Worker 배포 환경을 위한 분산 Lock 또는 Job Queue 도입 검토
+- 다중 프로세스/Worker 배포 환경을 위한 분산 Lock 또는 Job Queue 도입 검토 (단일 프로세스 `asyncio.Lock` 한계 보완)
 - 학습 상태 조회를 위한 `GET /internal/training/status` 엔드포인트 신설 여부
+- 장시간 실행되는 학습의 강제 취소가 필요한 경우를 위한 별도 Process/Job Runner 분리
