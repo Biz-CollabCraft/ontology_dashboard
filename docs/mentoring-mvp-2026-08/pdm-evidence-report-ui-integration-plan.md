@@ -29,7 +29,7 @@
 | dashboard fixture | `data/fixtures/GS-*.json` schema/audit, expected prediction, 의도된 data-quality fixture 검증 | demo/gold regression 기준. 운영 source of truth로 취급하지 않음 |
 | diagnosis | `systems/backend/app/diagnosis`가 Result Artifact/Evidence producer 책임을 갖고 schema validation 수행 | producer 책임은 공식. 운영 Model Artifact 주입 기반 검증은 별도 단계 |
 | Product Result Artifact | `result-artifact-v1.0`, `prediction_task`, `canonical_source_mutated=false`, top factor shape 검증 | 제품 예측 결과 공식 기록. 예측 성능 검증과는 구분 |
-| dashboard Evidence | `schemas/evidence-package.schema.json`과 MVP report/layout 테스트로 검증 | 현행 consumer를 깨뜨리지 않는 compatibility 기준. `pdm-mvp` 필드 의미와 완전 일치한다고 보지는 않음 |
+| dashboard Evidence | `contracts/schemas/evidence-package.schema.json`과 MVP report/layout 테스트로 검증 | 현행 consumer를 깨뜨리지 않는 compatibility 기준. `pdm-mvp` 필드 의미와 완전 일치한다고 보지는 않음 |
 
 따라서 producer-side enrichment와 Event Evidence projection은 기존 dashboard 검증 경계를 버리는 작업이 아니다. 현행 schema/fixture/fallback으로 검증된 흐름을 유지하면서, 현재 Artifact/Evidence에 부족한 `sensor_evidence`, baseline, z-score, component hypothesis, source field trace 같은 의미를 Product Result Artifact의 producer 산출 필드와 projection 경계에서 흡수하는 작업이다.
 
@@ -146,7 +146,7 @@ flowchart LR
 
 ### 4.1 Product Result Artifact
 
-`schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. step 7 결정은 기존 required 필드를 깨지 않고 producer가 optional `evidence_payload`를 추가 산출하는 v1.0-compatible enrichment다. `result-artifact-v1.1` schema version bump는 이번 2주차 producer contract 범위에 넣지 않는다.
+`contracts/schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. step 7 결정은 기존 required 필드를 깨지 않고 producer가 optional `evidence_payload`를 추가 산출하는 v1.0-compatible enrichment다. `result-artifact-v1.1` schema version bump는 이번 2주차 producer contract 범위에 넣지 않는다.
 
 여기서 `evidence_payload`는 dashboard projection layer가 reference package를 읽어 운영 근거를 채워 넣는 뜻이 아니다. Product Result Artifact의 공식 생성 책임은 `systems/backend/app/diagnosis`에 유지하고, 같은 producer 경계에서 `sensor_evidence`, `component_hypotheses`, `maintenance_context`, `recommended_actions.basis`, `source_fields`를 산출한다. `systems/backend/ontology_dashboard/...`는 이미 enriched된 Artifact를 Event Evidence projection과 legacy compatibility output으로 변환한다.
 
@@ -252,7 +252,7 @@ Event Evidence projection은 `evidence_payload.evidence_gaps[]`를 `limitations`
 
 ### 4.2 Event Evidence Projection
 
-현행 fixture 기반 `schemas/evidence-package.schema.json`은 dashboard Evidence Package 역할을 해 왔지만, 실제로는 리포트 입력과 화면 표시용 값이 섞인 구조다. 이 작업에서는 이를 enriched Product Result Artifact에서 파생되는 Event Evidence projection으로 대체한다.
+현행 fixture 기반 `contracts/schemas/evidence-package.schema.json`은 dashboard Evidence Package 역할을 해 왔지만, 실제로는 리포트 입력과 화면 표시용 값이 섞인 구조다. 이 작업에서는 이를 enriched Product Result Artifact에서 파생되는 Event Evidence projection으로 대체한다.
 
 Event Evidence projection은 다음 계층을 분리한다.
 
@@ -304,13 +304,13 @@ projection이 Artifact에서 읽어야 할 원천 필드는 다음을 포함한�
 - projection layer는 canonical Event Evidence projection과 legacy evidence compatibility projection을 동시에 만들 수 있어야 한다.
 - 2주차 기본 응답은 기존 legacy evidence shape를 유지한다.
 - canonical Event Evidence projection은 명시적 `schema_version`, `contract_type`, query/header/feature flag 같은 contract selector가 있을 때만 반환한다.
-- legacy projection은 새 수치를 만들지 않고 enriched Product Result Artifact와 Event Evidence projection의 `assessment`, `report_projection`에서 현행 `schemas/evidence-package.schema.json` 호환 필드만 재배열한다.
+- legacy projection은 새 수치를 만들지 않고 enriched Product Result Artifact와 Event Evidence projection의 `assessment`, `report_projection`에서 현행 `contracts/schemas/evidence-package.schema.json` 호환 필드만 재배열한다.
 - API contract regression test는 legacy evidence shape, Event Evidence projection shape, hidden/evaluation truth absence, report grounding source field를 함께 검증한다.
 - canonical projection을 기본 응답으로 승격하고 legacy projection을 제거할지는 frontend/report consumer 전환 완료와 contract regression 통과 후 별도 PR에서 결정한다.
 
 ### 4.4 Report Output 계층
 
-현행 `schemas/report.schema.json`의 role-aware grounded report와 V2 제안 `ReportOutput`은 구분한다.
+현행 `contracts/schemas/report.schema.json`의 role-aware grounded report와 V2 제안 `ReportOutput`은 구분한다.
 
 - 현행 Event Report: `schema_version=1.0`, `GroundedReport`, `sections/actions/citations/limitations` 중심
 - V2 정적 Report Output: `executive-report-v1.0`, `generation_method`, `evidence_references`, `provenance` 중심

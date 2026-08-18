@@ -157,7 +157,7 @@ Backend 구현 코드를 직접 import할 수 있다는 의미로 사용하지 �
 Backend를 깨뜨리지 않는 계획상 확정 방향이다.
 
 PR #28 완료 전에는 세부 필드 shape와 구현 시점만 확정하지 않는다. 현행
-`schemas/model-artifact.schema.json`은 `additionalProperties: false`이므로 확장 필드를
+`contracts/schemas/model-artifact.schema.json`은 `additionalProperties: false`이므로 확장 필드를
 허용하도록 JSON Schema를 함께 갱신해야 한다. 이때 기존 필수 필드와 의미는 유지하고
 Generator publisher·Backend provider·계약 테스트가 기존 Artifact와 새 확장
 Artifact를 모두 처리하는지 확인한다.
@@ -442,7 +442,7 @@ Intervention 기대비용
 | `experiments/preventive_intervention/contracts.py` | Pydantic 입출력 계약과 검증 규칙 | 구현 완료 |
 | `experiments/preventive_intervention/policies.py` | 비파괴 예방조치 변환 | 공구 교체 구현 완료 |
 | `experiments/preventive_intervention/policies/tool-replacement-v1.json` | 공구 교체 정책 | 구현 완료 |
-| `schemas/preventive-what-if.schema.json` | Producer JSON Schema | 구현 완료 |
+| `contracts/schemas/preventive-what-if.schema.json` | Producer JSON Schema | 구현 완료 |
 | `data/fixtures/what_if/` | 계약 fixture | 1건 작성 완료 |
 | `tests/test_preventive_what_if_foundation.py` | 계약·정책 불변성 테스트 | 작성 완료 |
 | `experiments/preventive_intervention/risk_rise.py` | CNC 위험 상승 사건 탐지와 공구 마모 후보 ranking | PR #20 구현 완료 |

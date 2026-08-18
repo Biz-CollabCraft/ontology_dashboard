@@ -195,7 +195,7 @@ Week 2 UI 표시: 매니저 / 엔지니어
 
 ### RPT-02 — 출력 JSON
 
-- 현행: `schemas/report.schema.json`의 role-aware grounded report.
+- 현행: `contracts/schemas/report.schema.json`의 role-aware grounded report.
 - 문서의 `ReportOutput`: `변경 제안`.
 - 검토안: `executive-report-v1.0`을 V2 후보로 검증하고 현행 grounded report
   schema와 분리한다.
