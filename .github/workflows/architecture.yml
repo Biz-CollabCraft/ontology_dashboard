@@ -140,7 +140,7 @@ jobs:
       - name: Install Python dependencies
         if: steps.changes.outputs.generator == 'true' || steps.changes.outputs.backend == 'true' || steps.changes.outputs.integration == 'true'
         run: |
-          python -m pip install -e ./ml -e './systems/backend[dev]'
+          python -m pip install -e ./ml -e './systems/backend[dev]' -r systems/generator/requirements.txt
 
       - name: Generator import smoke
         if: steps.changes.outputs.generator == 'true'

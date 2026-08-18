@@ -55,6 +55,7 @@ class LoadedModelArtifact:
     manifest: dict[str, Any]
     model: Any
     feature_schema: dict[str, Any]
+    history_requirement: dict[str, Any]
 
 
 class LocalModelArtifactProvider:
@@ -101,8 +102,13 @@ class LocalModelArtifactProvider:
 
         model_path = root / declared["model"]["path"]
         feature_schema_path = root / declared["feature_schema"]["path"]
+        history_requirement = {}
+        if "history_requirement" in declared:
+            history_requirement_path = root / declared["history_requirement"]["path"]
+            history_requirement = json.loads(history_requirement_path.read_text(encoding="utf-8"))
         return LoadedModelArtifact(
             manifest=manifest,
             model=joblib.load(model_path),
             feature_schema=json.loads(feature_schema_path.read_text(encoding="utf-8")),
+            history_requirement=history_requirement,
         )

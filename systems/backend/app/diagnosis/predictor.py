@@ -10,6 +10,7 @@ from typing import Any, Protocol
 import pandas as pd
 
 from .artifact_provider import LocalModelArtifactProvider
+from .feature_executor import execute_feature_contract
 from .contracts import audit_fixture, derive_features
 from .evidence_baseline import build_history_baseline_window
 
@@ -325,6 +326,7 @@ class ArtifactPredictor:
         self.model = loaded.model
         self.manifest = loaded.manifest
         self.feature_schema = loaded.feature_schema
+        self.history_requirement = loaded.history_requirement
         self.model_version = str(self.manifest["model_version"])
         policy = Path(policy_path) if policy_path else DEFAULT_POLICY_PATH
         self.policy = json.loads(policy.read_text(encoding="utf-8"))
@@ -346,13 +348,21 @@ class ArtifactPredictor:
 
         observation = fixture["observation"]
         derived = derive_features(observation)
-        feature_names = list(self.feature_schema.get("features") or [])
+        declared_features = list(self.feature_schema.get("features") or [])
+        feature_names = [
+            str(item["name"]) if isinstance(item, dict) else str(item)
+            for item in declared_features
+        ]
         if not feature_names:
             raise ValueError("Model Artifact feature schema has no features")
-        values = {**observation, **derived}
-        missing = [feature for feature in feature_names if feature not in values]
-        if missing:
-            raise ValueError(f"runtime observation is incompatible with Model Artifact features: {missing}")
+        direct_values = {**observation, **derived}
+        values = execute_feature_contract(
+            fixture,
+            feature_names=feature_names,
+            direct_values=direct_values,
+            history_requirement=self.history_requirement,
+            executor_version=str((self.manifest.get("compatibility") or {}).get("feature_executor_version") or "") or None,
+        )
         frame = pd.DataFrame([{feature: values[feature] for feature in feature_names}])
         probability = float(self.model.predict_proba(frame)[:, 1][0])
 

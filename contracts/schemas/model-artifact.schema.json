@@ -25,8 +25,31 @@
     "model_id": {"type": "string", "minLength": 1},
     "model_version": {"type": "string", "minLength": 1},
     "dataset_version": {"type": "string", "minLength": 1},
+    "dataset_schema_version": {"type": "string"},
     "feature_schema_version": {"type": "string", "minLength": 1},
+    "label_schema_version": {"type": "string"},
+    "history_requirement_version": {"type": "string"},
+    "metrics_schema_version": {"type": "string"},
     "created_at": {"type": "string", "format": "date-time"},
+    "prediction_contract": {
+      "type": "object",
+      "properties": {
+        "prediction_task": {"type": "string"},
+        "prediction_horizon_hours": {"type": "number"},
+        "probability_output": {"type": "string"},
+        "positive_class": {"type": "integer"}
+      }
+    },
+    "model_runtime": {
+      "type": "object",
+      "properties": {
+        "format": {"type": "string"},
+        "framework": {"type": "string"},
+        "framework_api": {"type": "string"},
+        "entry_role": {"type": "string"},
+        "output_type": {"type": "string"}
+      }
+    },
     "training_config": {"type": "object"},
     "metrics": {"type": "object"},
     "checksum": {
