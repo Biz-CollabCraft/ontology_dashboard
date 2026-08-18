@@ -40,9 +40,10 @@ compatibility fallback을 허용하지만, 그 외 환경은 fail-closed를 따�
 
 | 영역 | 현행 구현 |
 |---|---|
-| 인증 역할 | `manager`, `engineer` |
-| Week 2 UI 역할 | 매니저, 엔지니어; 내부 enum과 표시 매핑 분리 |
-| 권한 | 관리자 `events.decision`, 엔지니어 `events.note` |
+| Identity/RBAC 역할 | `process_manager`, `process_engineer`, `maintenance_technician` 등 canonical role code |
+| Closed-loop 제품 역할 | 생산 운영 의사결정자, 현장 엔지니어, 정비 작업자 |
+| legacy Report/UI view alias | `manager`, `engineer`; RBAC role code와 별도 compatibility 관점 |
+| 핵심 권한 | `process_manager`의 `events.decision`, 현장 역할의 `events.note`/field task capability; 최종 Action 노출은 Backend `available_actions`가 결정 |
 | 쓰기 기능 | Decision·Note 실제 저장, Activity 감사 이력 제공 |
 | Operations | Event Queue, Evidence, Recommendation, Decision, Note, Activity 중심 |
 | Artifact 위험 enum | `normal`, `attention`, `warning`, `critical` |
@@ -87,11 +88,15 @@ Canonical Predictive Maintenance base path:
 | Pagination | offset/limit | page/size | API 계약 변경 |
 | Report JSON | ReportRequest와 report schema | ReportInput/ReportOutput | API·LLM·UI 계약 변경 |
 | Objects 필터 | 검색·라인·상태·담당자 | 사이트·셀·유형·상태·기간 | UI·조회 계약 변경 |
-| 역할 명칭 | 내부 `manager`/`engineer` | UI 매니저/엔지니어 | 매핑 분리, 후속 변경 가능 |
+| 역할 명칭 | RBAC `process_manager`/`process_engineer`/`maintenance_technician`; legacy view `manager`/`engineer` | 생산 운영 의사결정자/현장 엔지니어/정비 작업자 | Closed-loop canonical 계약으로 구분 완료 |
 
 ## 5. 사용 원칙
 
 - 명세서의 현행 설명은 이 문서를 따른다.
+- Closed-loop의 canonical 사용자 역할·Action·`available_actions`·Event API 소비 규칙은
+  [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
+- `manager`/`engineer`는 기존 Report/UI compatibility view 값으로만 설명하고 Identity/RBAC role code와
+  같은 enum으로 취급하지 않는다.
 - 현행과 다른 내용에는 `변경 제안`을 표시한다.
 - 변경 제안을 채택하기 전에는 실제 API 경로와 JSON schema를 대체하지 않는다.
 - 팀 결정에는 결정자, 결정일, 코드 영향과 전환 방법을 기록한다.

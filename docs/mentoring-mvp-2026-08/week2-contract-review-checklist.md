@@ -56,26 +56,28 @@
 
 ### DEC-COM-02 — MVP 사용자 명칭
 
-- 현행 권한: `manager`, `engineer`.
-- 현행 UI: 관리자·임원, 실무 엔지니어.
-- 문서 제안: 생산 관리자, 현장 담당자.
-- 결정: 내부 enum은 유지하고 Week 2 UI에는 `매니저`, `엔지니어`를 표시한다.
-  표시 문자열은 매핑으로 분리해 후속 사용자 검증 후 변경할 수 있게 한다.
+- 2026-08-07 당시 결정은 기존 Report/UI view의 `manager`, `engineer`를 유지하는 것이었다.
+- 2026-08-18 Closed-loop 계약에서는 Identity/RBAC role code를
+  `process_manager`, `process_engineer`, `maintenance_technician`으로 명확히 구분한다.
+- 제품 표시 의미는 생산 운영 의사결정자, 현장 엔지니어, 정비 작업자로 고정한다.
+- `manager`, `engineer`는 기존 Report/UI compatibility view alias로만 유지하며 RBAC role code와
+  같은 enum으로 해석하지 않는다.
+- 상세 역할별 Action은
+  [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
 - 분류: `용어·표현 합의`
 
 ```text
-내부 enum: manager / engineer 유지
-API/Auth 역할: manager / engineer
-Week 2 UI 표시: 매니저 / 엔지니어
-업무 관점: 생산 관리·의사결정 / 현장 점검·근거 확인
-결정 상태: 완료
-결정일: 2026-08-07
+Identity/RBAC: process_manager / process_engineer / maintenance_technician
+제품 표시: 생산 운영 의사결정자 / 현장 엔지니어 / 정비 작업자
+legacy Report/UI view: manager / engineer
+Closed-loop 결정 상태: 완료
+결정일: 2026-08-18
 ```
 
 ### DEC-COM-03 — Decision·Note 범위
 
-- 현행: Decision과 Note 모두 실제 저장 기능이다. 관리자는 `events.decision`,
-  엔지니어는 `events.note` 권한을 사용하며 Activity 감사 이력과 테스트가 있다.
+- 현행: Decision과 Note 모두 실제 저장 기능이다. 생산 운영 의사결정자(`process_manager`)는
+  `events.decision`, 현장 역할은 `events.note` 권한을 사용하며 Activity 감사 이력과 테스트가 있다.
 - 결정: Week 2 MVP에서 현행 Decision·Note를 유지한다. Recommendation, 사람의
   Decision과 Note는 분리하고 자동 실행으로 연결하지 않는다.
 - 분류: `현행 구현 계약`

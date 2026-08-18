@@ -257,6 +257,11 @@ Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Featur
 
 Frontend는 Backend API의 안정된 contract를 소비한다. 초기 스캐폴딩에서 폴더명이 `equipment`, `diagnosis`, `report`, `dashboard`로 유사하더라도 **Backend 도메인 이름과 1:1 대응을 강제하지 않는다.**
 
+Closed-loop에서는 Backend Domain이 상태 머신의 canonical owner다. Frontend가 role·permission·현재
+상태를 조합해 상태 전이를 재구현하지 않으며, Backend가 계산한 `available_actions`를 presentation에
+사용한다. 기존 Event API는 additive extension으로 유지한다. 상세 Product/API/UI 소비 계약은
+[`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 따른다.
+
 Frontend 구조는 다음 기준으로 독립적으로 진화할 수 있다.
 
 - 사용자 workflow

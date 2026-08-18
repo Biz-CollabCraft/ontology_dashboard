@@ -203,10 +203,14 @@ deterministic 출력 계약부터 검증한다.
 ### Week 2 결정 완료
 
 - 현행 `/dashboard`, `/results/latest`와 Event API를 유지한다.
+- Closed-loop 확장은 기존 Event API key를 삭제·rename하지 않는 additive extension으로 유지하며,
+  역할별 Action과 mutation 응답은
+  [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
 - 최신 결과 pagination은 `offset`, `limit`, `total`을 유지한다.
 - `status_grade`는 runtime inference가 생성하는 Result Artifact 계약에 포함한다.
 - stale은 timezone을 포함한 최신 `observed_at` 기준 프론트 24시간 MVP 정책을 유지한다.
-- `manager`/`engineer` 인증과 Decision·Note 권한을 유지한다.
+- Identity/RBAC는 `process_manager`, `process_engineer`, `maintenance_technician` role code를 사용하고,
+  기존 `manager`/`engineer`는 Report/UI compatibility view alias로 유지한다.
 - fallback은 로컬 데모 compatibility 경로에서 명시적으로 표시하며, Model Artifact가
   필요한 비로컬 실행 환경은 fail-closed를 따른다.
 

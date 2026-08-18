@@ -1,0 +1,427 @@
+# Closed-loop Product/API/UI 소비 계약
+
+## 1. 문서 지위와 목적
+
+이 문서는 Ontology Operations & Closed-loop를 **Product API와 Frontend가 어떻게 소비하는지**를
+정의하는 canonical contract다. 상태 머신 자체의 정본은
+[`closed-loop-domain-contract.md`](./closed-loop-domain-contract.md)이며, 이 문서는 Domain 상태를
+재정의하지 않는다.
+
+합의 근거는 2026-08-18 PR #42 Conversation의 Product/API/UI 소비 계약 코멘트다.
+PR #42가 `main`에 merge된 뒤에도 Backend Domain과 Product/UI가 서로 다른 상태·역할·Action 의미를
+만들지 않도록 저장소 안의 공식 계약으로 승격한다.
+
+문서 정본의 역할은 다음과 같이 나눈다.
+
+| 문서 | canonical 책임 |
+|---|---|
+| `docs/closed-loop-domain-contract.md` | Closed-loop 객체 경계, 상태 전이, lineage, Domain invariant |
+| `docs/closed-loop-product-consumption-contract.md` | 사용자 역할, Product Action, `available_actions`, Event API 소비, 오류, E2E, 구현 소유권 |
+| `docs/closed-loop-implementation-plan.md` | 구현 단계, PR 순서, 변경 예약 범위 |
+
+세 문서가 충돌하면 Domain 상태 자체는 Domain 계약을 따르고, Product/API/UI 표현과 소비 방식은 이
+문서를 따른다. 구현 계획은 두 canonical contract를 참조하는 실행 계획으로 취급한다.
+
+## 2. 핵심 원칙
+
+1. Closed-loop 상태 머신의 canonical owner는 Backend Domain이다.
+2. Frontend는 Domain 상태 머신을 재구현하지 않는다.
+3. Backend는 role + permission + object state + scope + lineage를 기준으로
+   `available_actions`를 계산해 반환한다.
+4. 기존 Event API는 key 삭제·rename 없이 additive extension으로 유지한다.
+5. Frontend는 Recommendation, WorkOrder, MaintenanceAction 등 운영 객체 ID를 합성하지 않는다.
+6. mutation 응답은 Persistence가 확정한 ID와 resulting state를 반환한다.
+7. `process_manager`는 시스템 Admin이 아니라 **생산 운영 의사결정자**다.
+8. `process_engineer`는 **현장 엔지니어**다.
+9. `maintenance_technician`은 승인된 작업을 실제 수행하는 **정비 작업자**다.
+10. 핵심 MVP UX는 **현장 엔지니어 → 생산 운영 의사결정자** 흐름이며, 정비가 필요한 경우
+    **정비 작업자**가 Closed-loop 실행을 이어간다.
+
+## 3. 역할·표시명 계약
+
+### 3.1 canonical RBAC role code와 legacy view alias를 구분한다
+
+Identity/RBAC의 canonical role code는 다음 세 역할이다.
+
+| RBAC role code | 제품 표시 의미 | 주요 사용자 |
+|---|---|---|
+| `process_manager` | 생산 운영 의사결정자 | 생산팀장, 공정·생산 관리자, 운영 판단 책임자 |
+| `process_engineer` | 현장 엔지니어 | 설비·공정 엔지니어, Evidence/점검·분석 담당자 |
+| `maintenance_technician` | 정비 작업자 | 승인된 정비 작업을 수행하는 정비기사·현장 작업자 |
+
+`manager` / `engineer`는 기존 Event Report와 일부 Week 2 UI에서 사용하는 legacy presentation/report
+view alias다. Identity/RBAC role code와 동일한 enum으로 문서화하지 않는다. 현재 compatibility mapping은
+`process_manager → manager`, `process_engineer → engineer`,
+`maintenance_technician → engineer`를 사용할 수 있지만, 이 매핑이 두 현장 역할의 업무 권한을 같게
+만든다는 뜻은 아니다.
+
+시스템 계정·권한·workspace scope를 관리하는 역할은 `tenant_admin`이다. 따라서
+`process_manager`를 단독으로 `관리자`라고 표기해 system administrator와 혼동시키지 않는다.
+
+### 3.2 생산 운영 의사결정자 (`process_manager`)
+
+현장 상태, Evidence, 엔지니어의 점검·분석 결과를 보고 운영 판단을 내리는 역할이다.
+
+허용 Product Action:
+
+- Event / Evidence / Recommendation 조회
+- 현장 엔지니어의 점검·분석 결과 확인
+- 기존 operational decision 기록
+- Recommendation 승인 / 거절 / 보류
+- 승인된 Recommendation에 대한 WorkOrder 승인
+- 현재 상태와 권한에서 가능한 다음 Action 조회
+
+기본 Product UX에서 현장 체크리스트 입력, 실제 정비 작업 시작·완료 같은 작업자 Action을 대신
+수행하지 않는다.
+
+### 3.3 현장 엔지니어 (`process_engineer`)
+
+설비 상태와 Evidence를 직접 확인하고 점검·분석 결과와 의사결정 근거를 만드는 역할이다.
+
+허용 Product Action:
+
+- Event / Equipment / Evidence 상세 조회
+- 센서·예측 결과 및 원인 후보 확인
+- 점검 note 기록
+- Inspection 수행 및 결과 기록
+- 측정값 / 체크리스트 / 현장 확인 내용 기록
+- 이상 상태 또는 추가 정비 필요 여부 보고
+- 생산 운영 의사결정자에게 판단 근거 전달
+- 현재 상태와 권한에서 가능한 다음 Action 조회
+
+Recommendation 승인/거절/보류 또는 maintenance WorkOrder 승인 권한을 갖지 않는다.
+
+### 3.4 정비 작업자 (`maintenance_technician`)
+
+승인된 WorkOrder / MaintenanceAction에 따라 실제 정비 작업을 수행하는 역할이다.
+
+허용 Product Action:
+
+- 배정 WorkOrder / Action 조회
+- 작업 메모 기록
+- 작업 시작 / 완료
+- 문제 발견 보고
+- 작업 불가(`blocked`) 기록
+- 측정값 / 체크리스트 / 사진 metadata / handoff note 기록
+- 현재 상태와 권한에서 가능한 다음 Action 조회
+
+Recommendation 승인/거절/보류 또는 WorkOrder 승인 권한을 갖지 않는다.
+
+### 3.5 역할별 Action 경계
+
+기존 Ontology Action의 의미를 우선 재사용한다.
+
+- WorkOrder: `complete_work_order`, `report_work_order_issue`, `mark_work_order_blocked`
+- Inspection: `complete_inspection`, `report_inspection_issue`, `mark_inspection_blocked`
+- 메모: `record_work_order_note`, `record_inspection_note`
+
+`process_engineer`와 `maintenance_technician`은 같은 역할로 합치지 않는다. 현재 coarse permission이
+일부 겹치더라도 Backend의 Product Action resolver가 role, 대상 객체의 `work_type`, 현재 상태, 배정,
+scope와 lineage를 함께 검사해야 한다.
+
+Domain에 `failed` / `cancelled` 상태가 존재한다는 이유만으로 Frontend가 사용자 버튼을 임의 생성하지
+않는다. 사용자 명령과 permission mapping이 합의된 경우에만 `available_actions`로 노출한다.
+
+## 4. `available_actions` 계약
+
+Frontend는 role, permission, Domain transition을 조합해 가능한 버튼을 자체 계산하지 않는다.
+
+Backend는 현재 요청 principal과 대상 객체를 기준으로 최소 다음 조건을 평가한다.
+
+- RBAC role
+- effective permission
+- organization / project / workspace scope
+- 현재 object state
+- object type / `work_type`
+- assignment 또는 actor eligibility
+- Event / Equipment / Recommendation / WorkOrder lineage
+- idempotency 또는 동시 실행 상태
+
+그 결과를 `available_actions`로 반환한다. Frontend는 이를 **presentation과 사용자 입력 진입점**에만
+사용한다. Frontend가 받은 배열을 보안 경계로 신뢰해서는 안 되며, mutation 요청 시 Backend가 동일한
+authorization/state 검증을 다시 수행한다.
+
+권장 item은 최소한 stable action identifier를 제공한다. display label, disabled reason, 입력 schema 같은
+표현 metadata는 additive하게 확장할 수 있으나, Frontend가 action identifier를 Domain transition으로
+재해석하지 않는다.
+
+## 5. Closed-loop 상태 소비 계약
+
+상태 값과 허용 전이는 `closed-loop-domain-contract.md`를 그대로 사용한다.
+
+```text
+RiskEvent
+open → acknowledged → in_progress → resolved → closed
+
+RecommendedAction
+proposed → accepted | rejected | deferred | superseded
+deferred → accepted | rejected | superseded
+
+WorkOrder
+requested → approved → in_progress → completed | blocked | failed | cancelled
+
+MaintenanceAction
+planned → in_progress → completed | failed | cancelled
+```
+
+추가 Product 의미는 다음과 같다.
+
+- `Decision`은 별도 mutable lifecycle을 만들지 않는 immutable operational decision record다.
+- 기존 operational decision은 `continue_monitoring`, `request_inspection`, `review_shutdown`,
+  `hold_for_data_check`를 유지한다.
+- Recommendation 판단은 `accept`, `reject`, `defer` disposition으로 표현한다.
+- `superseded`는 일반 사용자 Action 버튼보다 대체된 Recommendation의 상태 표현으로 본다.
+- `MaintenanceEvent`는 완료된 정비 사실을 나타내는 immutable fact다.
+- `Activity`는 별도 stateful object가 아니라 immutable timeline이다.
+
+## 6. Event API Product 소비 계약
+
+### 6.1 additive compatibility
+
+기존 Event API key를 삭제하거나 rename하지 않는다. 이미 배포된 Frontend/Report consumer가 읽는 기존
+shape는 유지하고 Closed-loop 정보만 additive하게 확장한다.
+
+`GET /api/events/{event_id}`에는 필요 시 다음 필드를 추가할 수 있다.
+
+- `closed_loop`
+- `event_status`
+- `recommendations[]`
+- `latest_decision`
+- `work_orders[]`
+- `maintenance_actions[]`
+- `maintenance_events[]`
+- `available_actions[]`
+
+Recommendation / WorkOrder / MaintenanceAction은 한 Event에 복수 존재할 수 있으므로 singular object로
+축약하지 않고 배열을 기본으로 한다.
+
+### 6.2 mutation 응답
+
+`POST /api/events/{event_id}/decision`은 기존 응답을 깨지 않고 필요 시 다음 정보를 additive하게
+반환한다.
+
+- `recommendation_id`
+- `disposition`
+- `previous_recommendation_status`
+- `recommendation_status`
+- `work_order_id`
+- `replayed`
+
+모든 Closed-loop mutation 응답은 Frontend가 결과를 추측하지 않도록 최소 다음을 반환한다.
+
+1. Persistence가 확정한 생성·변경 객체 ID
+2. 변경 전/후 상태 또는 최종 resulting state
+3. idempotency replay 여부
+
+서버가 아직 commit하지 않은 임시 ID를 반환하거나 Frontend가 다음 ID를 규칙으로 합성하는 방식을
+허용하지 않는다.
+
+## 7. Activity 계약
+
+`GET /api/events/{event_id}/activity`의 기존 top-level 소비 계약인 다음 key는 유지한다.
+
+- `decisions`
+- `notes`
+- `conversations`
+
+Closed-loop timeline item은 해당 activity에 적용되는 lineage와 transition 값만 포함한다. 가능한 필드는
+다음과 같다.
+
+- `activity_id`
+- `activity_type`
+- `event_id`
+- `equipment_id`
+- `recommendation_id`
+- `work_order_id`
+- `maintenance_action_id`
+- `maintenance_event_id`
+- `actor_user_id`
+- `actor_display_name`
+- `before_status`
+- `after_status`
+- `created_at`
+
+모든 activity에서 모든 ID를 강제하지 않는다. 예를 들어 Recommendation 판단에는
+`maintenance_event_id`가 없어도 된다. 대신 존재하는 ID는 같은 Event/Equipment lineage를 깨뜨리면 안
+된다.
+
+## 8. Product aggregation / identity 계약
+
+Product aggregation root는 `event_id`다.
+
+운영 객체 join key:
+
+- `event_id`
+- `equipment_id`
+- `recommendation_id`
+- `work_order_id`
+- `maintenance_action_id`
+- `maintenance_event_id`
+
+MVP identity는 `asset_id = equipment_id`를 사용한다. Frontend는 operational ID를 생성하지 않고
+Persistence/API가 반환한 ID를 이어서 사용한다.
+
+다음 값은 provenance이며 operational join ID의 대체물이 아니다.
+
+- `source_action_id`
+- `source_product_result_id`
+- `source_evidence_id`
+- `source_schema_version`
+- `source_policy_version`
+
+## 9. 오류 계약
+
+기존 ErrorEnvelope를 유지한다.
+
+```json
+{
+  "error": {
+    "code": "...",
+    "message": "..."
+  }
+}
+```
+
+Product/UI는 최소 다음 오류를 구분한다.
+
+| HTTP | code | Product 의미 |
+|---:|---|---|
+| 401 | `authentication_required` | 로그인 필요 또는 세션 만료 |
+| 403 | `permission_denied` | Action permission 부족 |
+| 403 | `project_scope_denied` | 허용 Project 범위 밖 |
+| 403 | `workspace_scope_denied` | 허용 Workspace 범위 밖 |
+| 404 | `not_found` | 대상 객체 없음 |
+| 409 | `active_project_mismatch` | 활성 Project와 대상 불일치 |
+| 409 | `invalid_state_transition` | 현재 상태에서 허용되지 않는 Domain transition |
+| 409 | `idempotency_key_conflict` | 같은 key에 다른 요청 |
+| 409 | `action_in_progress` | 동일 Action 요청 처리 중 |
+| 409 | `prior_action_failed` | 동일 요청의 이전 실행 실패 |
+| 422 | `contract_validation_failed` | 입력 계약 검증 실패 |
+| 422 | `project_action_not_configured` | Project에 Action 미구성 |
+| 5xx | persistence/transaction failure | 운영 transaction 확정 실패 |
+
+잘못된 Domain transition을 generic `ValueError → 422 contract_validation_failed`로 합치지 않고 가능한 한
+`409 invalid_state_transition`으로 구분한다.
+
+Operational PostgreSQL transaction 실패와 outbox/외부 projection 실패도 같은 UI failure로 취급하지
+않는다. 운영 transaction이 commit되지 못한 경우 mutation 자체 실패다. transaction은 성공했지만
+Ontology projection이 지연·실패한 경우에는 PostgreSQL 운영 정본을 되돌리지 않고 projection 상태를
+별도로 표시·복구한다.
+
+## 10. MVP E2E persona와 기본 흐름
+
+대표 fixture:
+
+- Project: `manufacturing-demo-project`
+- Workspace: `manufacturing-demo`
+- Event: `EVT-GS-002`
+- Equipment: `M-014`
+
+persona:
+
+| 제품 역할 | demo account | RBAC role |
+|---|---|---|
+| 생산 운영 의사결정자 | `manager@ontology.local` | `process_manager` |
+| 현장 엔지니어 | `engineer@ontology.local` | `process_engineer` |
+| 정비 작업자 | `technician@ontology.local` | `maintenance_technician` |
+
+`process_engineer`는 optional persona가 아니라 핵심 MVP 의사결정 흐름의 선행 역할이다.
+
+기본 업무 흐름:
+
+```text
+현장 엔지니어가 Evidence / 설비 상태 확인
+→ 점검·분석 결과와 판단 근거 기록
+→ 생산 운영 의사결정자가 근거를 확인하고 Recommendation / operational decision 판단
+→ 정비가 승인된 경우 정비 작업자가 WorkOrder / MaintenanceAction 수행
+```
+
+권장 E2E 순서:
+
+1. Product Result / Evidence 생성·조회
+2. `process_engineer`가 Event / Equipment / Evidence 확인
+3. 현장 inspection / note / 측정 결과 기록
+4. `process_manager`가 Evidence + engineer 결과 확인
+5. Recommendation 승인 / 거절 / 보류
+6. 정비 필요 시 WorkOrder 승인
+7. `maintenance_technician`이 작업 시작
+8. checklist / measurement / note와 함께 작업 완료
+9. MaintenanceEvent / Equipment state / Activity 반영
+10. 동일 요청의 idempotency replay 검증
+11. 정비 전 Result → Decision → Action → 정비 후 Result lineage 확인
+
+Recommendation / WorkOrder / MaintenanceAction ID는 E2E 코드에 하드코딩하지 않는다. 앞 mutation/API가
+반환한 persisted ID를 다음 요청으로 전달한다.
+
+공개 `/api/demo/reset` endpoint를 추가하지 않는다. fixture reset/setup이 필요하면 테스트·배포 환경에
+한정된 기존 setup 경계나 직접 repository fixture를 사용하고 public Product API로 노출하지 않는다.
+
+## 11. 역할 경계와 구현 소유권
+
+### 광우
+
+- Closed-loop Domain
+- Persistence
+- repository / PostgreSQL
+- outbox / projection consumer
+- migrations
+- backend Domain API
+- OpenAPI
+- Closed-loop backend tests
+
+광우가 직접 소유하지 않는 범위:
+
+- `systems/generator/`
+- `systems/backend/app/diagnosis/`
+- `systems/frontend/`
+- Product Result/Evidence 의미 변경
+- Event Evidence Projection 의미 변경
+- Report grounding 의미 변경
+
+### 우수
+
+- Product API aggregation / orchestration
+- Frontend / UI consumption
+- 최종 Product E2E / release orchestration
+
+이 문서는 Backend와 Frontend 사이의 공유 contract이므로 양쪽 구현에서 공식 참조 문서로 사용한다.
+
+## 12. 구현 순서·충돌 및 migration 기준
+
+### 12.1 PR #41과 공통 파일
+
+2026-08-18 문서 확정 시점에 PR #41은 OPEN이며 다음 공통 파일을 수정 중이다.
+
+- `systems/backend/ontology_dashboard/routers/manufacturing.py`
+- `systems/backend/ontology_dashboard/openapi_contracts.py`
+- `systems/backend/ontology_dashboard/service.py`
+
+따라서 Closed-loop Persistence/API 구현은 독립적인 `closed_loop/`, repository/PostgreSQL, outbox,
+migration, repository/domain test부터 진행할 수 있다. 위 공통 wiring 파일은 PR #41이 정리되거나 merge된
+뒤 최신 `main`을 반영해 연결하는 것을 기본 순서로 한다. 구현 시점에 PR #41 상태가 달라졌다면 과거
+상태를 가정하지 말고 다시 확인한다.
+
+### 12.2 migration 번호
+
+문서 확정 기준 `main` commit `4a9f094cb20c71258e702597846f9bdac4399178`에서 PostgreSQL과 SQLite의
+최신 migration은 모두 `0029_governed_event_automation.sql`이다. 따라서 이 기준선에서 시작하는 첫
+Closed-loop migration은 `0030_closed_loop_...sql`을 사용한다.
+
+단, 구현 branch가 최신 `main`을 반영했을 때 `0030` 이상 migration이 이미 존재하면 기존 번호를
+덮어쓰지 않고 그 다음 번호를 사용한다. migration 번호는 이 문서의 숫자보다 최신 `main`의 실제
+파일을 우선한다.
+
+## 13. 완료 조건
+
+Product/API/UI Closed-loop 구현은 최소 다음 조건을 만족해야 한다.
+
+- Backend Domain 상태와 Frontend 버튼 상태가 중복 state machine 없이 연결된다.
+- 세 역할의 제품 의미와 허용 Action이 분리된다.
+- `process_manager`가 system administrator로 표현되지 않는다.
+- `available_actions`가 role + permission + state + scope + lineage를 반영한다.
+- 기존 Event API key와 기존 Activity key가 유지된다.
+- mutation 응답으로 persisted ID와 resulting state를 이어갈 수 있다.
+- invalid transition과 contract validation 오류가 구분된다.
+- operational transaction 실패와 projection 실패가 구분된다.
+- E2E에서 engineer → manager → technician 흐름과 persisted ID chaining을 검증한다.
+- 정비 전·후 Product Result와 Decision/Action/MaintenanceEvent lineage를 재구성할 수 있다.

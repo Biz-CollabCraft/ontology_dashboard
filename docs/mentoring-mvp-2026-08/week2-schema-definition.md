@@ -298,14 +298,18 @@ TopFactor 결정 변경:
 
 ### 5.0 역할 매핑
 
-| 계층 | 관리자 역할 | 현장 역할 |
-|---|---|---|
-| API/Auth enum | `manager` | `engineer` |
-| Week 2 UI 표시 | 매니저 | 엔지니어 |
-| 업무 관점 | 생산 관리·의사결정 | 현장 점검·근거 확인 |
+| 계층 | 생산 운영 의사결정자 | 현장 엔지니어 | 정비 작업자 |
+|---|---|---|---|
+| Identity/RBAC role code | `process_manager` | `process_engineer` | `maintenance_technician` |
+| 제품 표시 의미 | 생산 운영 의사결정자 | 현장 엔지니어 | 정비 작업자 |
+| legacy Report/UI view alias | `manager` | `engineer` | `engineer` |
+| 업무 관점 | Evidence·엔지니어 결과 기반 운영 판단 | Evidence 확인·점검·분석 근거 작성 | 승인된 WorkOrder/MaintenanceAction 실행 |
 
-내부 enum은 권한 계약과 연결되므로 유지한다. Week 2 UI는 `매니저`, `엔지니어`를
-사용하되 표시 매핑을 분리해 후속 사용자 검증 후 변경할 수 있게 한다.
+`manager` / `engineer`는 기존 Report와 일부 Week 2 화면의 compatibility view 값이며 Identity/RBAC
+role code가 아니다. `process_engineer`와 `maintenance_technician`은 legacy view alias가 같더라도 업무
+역할과 허용 Action을 합치지 않는다. 상세 Action matrix와 표시 용어는
+[`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 정본으로
+사용한다.
 
 ### 5.1 AssetPredictionSummary
 
