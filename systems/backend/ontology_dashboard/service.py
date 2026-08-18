@@ -31,6 +31,10 @@ from .contracts import (
 from .conversation import IntentRouter, deterministic_answer
 from .llm import ReportAgent, configured_provider
 from .planner import LayoutPlanner
+from .product_result_evidence_projection import (
+    event_evidence_projection_to_legacy_evidence,
+    product_result_artifact_to_event_evidence_projection,
+)
 from .repository import AuditRepository
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
@@ -97,15 +101,29 @@ class ManufacturingPredictiveMaintenanceService:
 
     def evidence_snapshot(self, event_id: str) -> dict[str, Any]:
         fixture = self._fixture(event_id)
-        package = build_evidence_package(fixture, context_provider=self._context_provider(fixture))
-        result_artifact = build_product_result_artifact(fixture)
+        package = self._projected_legacy_evidence(fixture)
         package["lineage"]["project_id"] = self._fixture_project_id(fixture)
-        package["lineage"]["product_result_artifact"] = result_artifact
         if fixture.get("dataset_version"):
             package["lineage"]["dataset_version"] = str(fixture["dataset_version"])
         return package
 
-    def evidence(self, event_id: str) -> dict[str, Any]:
+    def event_evidence_projection(self, event_id: str) -> dict[str, Any]:
+        fixture = self._fixture(event_id)
+        projection = self._event_evidence_projection(fixture)
+        projection["event_id"] = fixture["event_id"]
+        projection["scenario_id"] = fixture["scenario_id"]
+        return projection
+
+    def evidence(self, event_id: str, *, view: str = "legacy") -> dict[str, Any]:
+        if view == "canonical":
+            projection = self.event_evidence_projection(event_id)
+            self._audit(
+                event_id,
+                "evidence.generated",
+                projection["provenance"]["model_version"],
+                {"event_id": projection["event_id"], "view": "canonical"},
+            )
+            return projection
         package = self.evidence_snapshot(event_id)
         self._audit(event_id, "evidence.generated", package["model"]["model_version"], {"evidence_id": package["evidence_id"]})
         return package
@@ -161,7 +179,7 @@ class ManufacturingPredictiveMaintenanceService:
 
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
-        evidence = build_evidence_package(fixture, context_provider=self._context_provider(fixture))
+        evidence = self._projected_legacy_evidence(fixture)
         report, trace = self.report_agent.generate(
             evidence,
             request.role,
@@ -176,6 +194,29 @@ class ManufacturingPredictiveMaintenanceService:
             {"report_id": report.report_id, "role": request.role, "locale": request.locale, **trace},
         )
         return report, trace
+
+    def _event_evidence_projection(self, fixture: dict[str, Any]) -> dict[str, Any]:
+        artifact = self._product_result_artifact(fixture)
+        return product_result_artifact_to_event_evidence_projection(artifact)
+
+    def _projected_legacy_evidence(self, fixture: dict[str, Any]) -> dict[str, Any]:
+        artifact = self._product_result_artifact(fixture)
+        projection = product_result_artifact_to_event_evidence_projection(artifact)
+        legacy = event_evidence_projection_to_legacy_evidence(
+            projection,
+            ranked_factor_evidence=artifact.get("ranked_factor_evidence"),
+        )
+        legacy["event_id"] = fixture["event_id"]
+        legacy["evidence_id"] = f"EVD-{fixture['event_id']}"
+        legacy["scenario_id"] = fixture["scenario_id"]
+        legacy["equipment"] = fixture["equipment"]
+        return legacy
+
+    def _product_result_artifact(self, fixture: dict[str, Any]) -> dict[str, Any]:
+        return build_product_result_artifact(
+            fixture,
+            context_provider=self._context_provider(fixture),
+        )
 
     def layout(self, event_id: str, request: LayoutRequest) -> tuple[UILayout, dict[str, Any]]:
         fixture = self._fixture(event_id)

@@ -9,6 +9,7 @@ from jsonschema import Draft202012Validator
 from .contracts import DISPLAY_NAMES, UNITS, derive_features, project_root
 from .evidence_enrichment import (
     build_product_result_evidence_payload,
+    build_ranked_factor_evidence,
     enrich_product_result_top_factors,
     evidence_payload_reference,
     validate_evidence_payload_invariants,
@@ -92,7 +93,8 @@ def build_evidence_package(
     ]
 
     history = fixture["history"]
-    start = history[0]["timestamp"] if history else observation["timestamp"]
+    history_timestamps = [str(row["timestamp"]) for row in history if row.get("timestamp")]
+    start = history_timestamps[0] if history_timestamps else observation["timestamp"]
     context = provider.get_context(fixture["equipment"]["equipment_id"], prediction.predicted_failure_type)
     package = {
         "schema_version": "1.0",
@@ -145,7 +147,15 @@ def build_product_result_artifact(
 
     model = predictor or configured_predictor()
     prediction = model.predict(fixture)
+    observation = fixture["observation"]
+    derived = {}
+    if not prediction.quality_issues:
+        try:
+            derived = derive_features(observation)
+        except (KeyError, TypeError, ValueError):
+            derived = {}
     observed_at = fixture["observation"]["timestamp"]
+    history_timestamps = [str(row["timestamp"]) for row in fixture.get("history", []) if row.get("timestamp")]
     asset_id = fixture["equipment"]["equipment_id"]
     prediction_id = f"{asset_id}#{observed_at}"
     status = prediction.risk_band
@@ -183,14 +193,32 @@ def build_product_result_artifact(
         "asset_id": asset_id,
         "asset_type": str(fixture.get("asset_type") or "cnc"),
         "observed_at": observed_at,
+        "generated_at": observed_at,
+        "threshold": float(model.policy["decision_threshold"]),
         "prediction_horizon_hours": 24,
         "prediction_task": "binary_failure_within_horizon",
         "failure_probability": prediction.probability,
         "predicted_failure_type": prediction.predicted_failure_type,
         "status_grade": status,
         "confidence": None if prediction.probability is None else round(abs(prediction.probability - 0.5) * 2.0, 6),
+        "confidence_label": prediction.confidence,
         "top_factors": factors,
+        "ranked_factor_evidence": build_ranked_factor_evidence(prediction),
         "recommended_action": action,
+        "data_quality_warnings": prediction.quality_issues,
+        "observation": {**observation, **derived},
+        "history": fixture.get("history", []),
+        "detected_interval": {
+            "start": history_timestamps[0] if history_timestamps else observed_at,
+            "end": observed_at,
+        },
+        "policy_version": str(model.policy["policy_version"]),
+        "model_mode": "trained" if prediction.model_artifact else "deterministic_fallback",
+        "lineage": {
+            "fixture_id": fixture["scenario_id"],
+            "fixture_schema_version": fixture["schema_version"],
+            "sensor_source": "observed-compatible fixture",
+        },
         "provenance": {
             "dataset_version": dataset_version,
             "model_version": prediction.model_version,

@@ -5,10 +5,20 @@ from typing import Any
 
 from .contracts import DISPLAY_NAMES, UNITS
 from .evidence_baseline import build_history_baseline_window, numeric_observation
-from .predictor import Prediction
+from .predictor import FactorScore, Prediction
 
 GENERATED_BY = "systems.backend.app.diagnosis.evidence_enrichment"
 
+NORMAL_RANGES = {
+    "air_temperature_k": "295.0–305.0",
+    "process_temperature_k": "304.0–315.0",
+    "rotational_speed_rpm": "1,400–2,200",
+    "tool_wear_min": "0–180",
+    "temperature_difference_k": "8.6–12.0",
+    "mechanical_power_w": "3,500–9,000",
+    "overstrain_index": "0–11,000",
+    "torque_nm": "10–60",
+}
 _COMPONENT_BY_FEATURE = {
     "tool_wear_min": ("tooling", "공구/마모 계통"),
     "temperature_difference_k": ("thermal_path", "열 방산 계통"),
@@ -60,7 +70,7 @@ def build_product_result_evidence_payload(
     source_fields.extend(_sensor_source_fields(sensor_evidence))
     component_hypotheses = _component_hypotheses(artifact, sensor_evidence)
     recommended_actions = _recommended_actions(artifact, component_hypotheses)
-    evidence_gaps = _evidence_gaps(maintenance_context, prediction)
+    evidence_gaps = _evidence_gaps(artifact, maintenance_context, prediction)
 
     payload: dict[str, Any] = {
         "sensor_evidence": sensor_evidence,
@@ -104,6 +114,20 @@ def validate_evidence_payload_invariants(payload: dict[str, Any]) -> None:
     ):
         raise ValueError("evidence_payload missing maintenance_context gap")
 
+    has_factor_evidence = any(field_id.startswith("factor.") for field_id in source_field_ids)
+    if not has_factor_evidence and not any(
+        gap.get("field") == "top_factors"
+        and gap.get("owner_domain") == "diagnosis"
+        for gap in payload.get("evidence_gaps", [])
+    ):
+        raise ValueError("evidence_payload missing top_factors gap")
+
+
+def build_ranked_factor_evidence(prediction: Prediction) -> list[dict[str, Any]]:
+    scored = prediction.factors[:5]
+    total_score = sum(item.score for item in scored) or 1.0
+    return [_ranked_factor_evidence_row(index, item, total_score) for index, item in enumerate(scored, start=1)]
+
 
 def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[str, Any] | None = None) -> None:
     factors = artifact.get("top_factors") or []
@@ -114,11 +138,35 @@ def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[st
         signed = float(factor.get("signed_contribution") or 0.0)
         factor.setdefault("evidence_field_id", f"factor.{index}.{feature}")
         factor.setdefault("display_name", _display_name(feature))
+        factor.setdefault("value", factor.get("feature_value"))
         factor.setdefault("unit", _unit(feature))
         factor.setdefault("normal_range", "근거 부족")
         factor.setdefault("direction", "risk_up" if signed >= 0 else "risk_down")
         factor.setdefault("contribution", round(abs(signed) / total, 6))
         factor.setdefault("source_type", "observed" if feature in observed_features else "derived")
+
+
+def _ranked_factor_evidence_row(index: int, item: FactorScore, total_score: float) -> dict[str, Any]:
+    feature = item.feature
+    value = None
+    if item.raw_value is not None:
+        try:
+            number = float(item.raw_value)
+        except (TypeError, ValueError):
+            value = None
+        else:
+            value = round(number, 4) if math.isfinite(number) else None
+    return {
+        "evidence_field_id": f"factor.{index}.{feature}",
+        "feature": feature,
+        "display_name": _display_name(feature),
+        "value": value,
+        "unit": _unit(feature),
+        "normal_range": NORMAL_RANGES.get(feature, "근거 부족"),
+        "direction": item.direction,
+        "contribution": round(item.score / total_score, 6),
+        "source_type": _source_type(feature),
+    }
 
 
 def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
@@ -219,8 +267,23 @@ def _sensor_source_fields(sensor_evidence: dict[str, Any]) -> list[dict[str, str
     ]
 
 
-def _evidence_gaps(maintenance_context: dict[str, Any] | None, prediction: Prediction) -> list[dict[str, str]]:
+def _evidence_gaps(
+    artifact: dict[str, Any],
+    maintenance_context: dict[str, Any] | None,
+    prediction: Prediction,
+) -> list[dict[str, str]]:
     gaps: list[dict[str, str]] = []
+    if not artifact.get("top_factors"):
+        gaps.append(
+            {
+                "gap_id": "gap.top_factors.unavailable",
+                "field": "top_factors",
+                "reason": "insufficient_context",
+                "required_source": "observation_history",
+                "owner_domain": "diagnosis",
+                "display_policy": "show_limitation",
+            }
+        )
     if maintenance_context is None:
         gaps.append(
             {
@@ -268,3 +331,7 @@ def _display_name(feature: str) -> str:
 
 def _unit(feature: str) -> str:
     return UNITS.get(feature) or _UNIT_FALLBACKS.get(feature) or ""
+
+
+def _source_type(feature: str) -> str:
+    return "derived" if feature in {"temperature_difference_k", "mechanical_power_w", "overstrain_index"} else "observed"

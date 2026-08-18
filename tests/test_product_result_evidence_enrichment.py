@@ -9,8 +9,11 @@ import pytest
 from systems.backend.app.diagnosis.contracts import load_fixture
 from systems.backend.app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
 from systems.backend.app.diagnosis.evidence_baseline import build_history_baseline_window
-from systems.backend.app.diagnosis.evidence_enrichment import validate_evidence_payload_invariants
-from systems.backend.app.diagnosis.predictor import HeuristicPredictor
+from systems.backend.app.diagnosis.evidence_enrichment import (
+    build_ranked_factor_evidence,
+    validate_evidence_payload_invariants,
+)
+from systems.backend.app.diagnosis.predictor import FactorScore, HeuristicPredictor, Prediction
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -78,6 +81,11 @@ def test_product_result_artifact_includes_producer_evidence_payload_without_defa
     assert tool_wear["basis"]["baseline_n"] == 3
     assert tool_wear["basis"]["baseline_reference"] == "fixture.history"
     assert payload["sensor_evidence"]["window_rows"] == 3
+    assert [factor["feature"] for factor in artifact["ranked_factor_evidence"]] == [
+        factor.feature for factor in HeuristicPredictor().predict(fixture).factors[:5]
+    ]
+    assert artifact["ranked_factor_evidence"][0]["normal_range"] == "0–180"
+    assert artifact["ranked_factor_evidence"][0]["value"] == 230.0
     assert "maintenance_context" not in payload
     assert any(gap["field"] == "evidence_payload.maintenance_context" for gap in payload["evidence_gaps"])
     assert unresolved_basis_refs(payload) == set()
@@ -298,6 +306,53 @@ def test_evidence_payload_invariant_rejects_null_maintenance_context_without_gap
         validate_evidence_payload_invariants(artifact["evidence_payload"])
 
 
+def test_evidence_payload_records_gap_when_top_factors_are_unavailable() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    prediction = HeuristicPredictor().predict(fixture)
+    artifact = {
+        "status_grade": "warning",
+        "top_factors": [],
+    }
+
+    payload = build_product_result_evidence_payload(artifact, fixture, prediction)
+
+    assert payload["component_hypotheses"] == []
+    assert payload["recommended_actions"][0]["basis"] == []
+    assert {
+        "gap_id": "gap.top_factors.unavailable",
+        "field": "top_factors",
+        "reason": "insufficient_context",
+        "required_source": "observation_history",
+        "owner_domain": "diagnosis",
+        "display_policy": "show_limitation",
+    } in payload["evidence_gaps"]
+    validate_evidence_payload_invariants(payload)
+
+
+def test_evidence_payload_invariant_rejects_missing_top_factor_gap() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    payload = build_product_result_evidence_payload(
+        {
+            "status_grade": "warning",
+            "top_factors": [],
+        },
+        fixture,
+        HeuristicPredictor().predict(fixture),
+    )
+    payload["evidence_gaps"] = [
+        gap
+        for gap in payload["evidence_gaps"]
+        if gap["field"] != "top_factors"
+    ]
+
+    with pytest.raises(ValueError, match="missing top_factors gap"):
+        validate_evidence_payload_invariants(payload)
+
+
 def test_evidence_payload_does_not_overwrite_official_judgement_fields() -> None:
     fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
     artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
@@ -345,3 +400,28 @@ def test_evidence_payload_builder_enriches_top_factor_basis_when_called_directly
 
     assert unresolved_basis_refs(payload) == set()
     assert all(factor.get("evidence_field_id") for factor in artifact["top_factors"])
+
+
+def test_ranked_factor_evidence_preserves_null_raw_values() -> None:
+    prediction = Prediction(
+        risk_band="warning",
+        probability=0.7,
+        confidence="medium",
+        predicted_failure_type="tool_wear",
+        recommended_decision="inspect_within_current_shift",
+        factors=[
+            FactorScore(
+                feature="tool_wear_min",
+                raw_value=None,  # type: ignore[arg-type]
+                score=1.0,
+                direction="risk_up",
+            )
+        ],
+        quality_issues=[],
+        model_version="test",
+        model_artifact=None,
+    )
+
+    ranked = build_ranked_factor_evidence(prediction)
+
+    assert ranked[0]["value"] is None
