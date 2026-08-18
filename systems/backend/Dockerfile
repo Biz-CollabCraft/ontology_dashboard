@@ -71,7 +71,7 @@ PY
 # Render demo deployments need PostgreSQL support even when the platform does
 # not pass a Docker build arg. Local/CI Compose explicitly overrides this with
 # API_EXTRAS when a smaller image is desired.
-ARG API_EXTRAS="postgres"
+ARG API_EXTRAS="postgres,model-runtimes"
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir --prefix=/install /build/ml \
     && if [ -n "$API_EXTRAS" ]; then \

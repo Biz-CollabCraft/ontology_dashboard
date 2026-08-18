@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,71 @@ FRAMEWORK_BY_ALGORITHM: dict[str, str] = {
 }
 
 MODEL_SPECS = REGISTERED_MODELS
+
+
+def infer_history_requirement(
+    telemetry: pd.DataFrame,
+    *,
+    feature_names: list[str],
+    id_col: str,
+    time_col: str,
+) -> dict[str, Any]:
+    """Infer runtime history requirements from cadence and published temporal features."""
+
+    cadence_seconds: float | None = None
+    if time_col in telemetry.columns:
+        work = telemetry[[c for c in (id_col, time_col) if c in telemetry.columns]].copy()
+        work[time_col] = canonicalize_timestamp_series(work[time_col], col_name=time_col)
+        deltas: list[float] = []
+        if id_col in work.columns:
+            grouped = work.sort_values([id_col, time_col]).groupby(id_col)[time_col]
+            series = grouped.diff().dt.total_seconds()
+        else:
+            series = work.sort_values(time_col)[time_col].diff().dt.total_seconds()
+        deltas = [float(value) for value in series.dropna().tolist() if float(value) > 0]
+        if deltas:
+            cadence_seconds = float(np.median(np.asarray(deltas, dtype=float)))
+
+    if cadence_seconds is None or not math.isfinite(cadence_seconds) or cadence_seconds <= 0:
+        raise ValueError("cannot infer positive telemetry cadence for history requirement")
+
+    minimum_rows = 1
+    for feature_name in feature_names:
+        parts = str(feature_name).split("__")
+        if len(parts) != 4:
+            continue
+        operation = parts[2]
+        parameter_text = parts[3]
+        parameters: dict[str, int] = {}
+        if parameter_text != "default":
+            pieces = parameter_text.split("_")
+            if len(pieces) == 2:
+                try:
+                    parameters[pieces[0]] = int(pieces[1])
+                except ValueError:
+                    pass
+        if operation in {"rolling_mean", "rolling_std", "moving_average"}:
+            default_window = 5 if operation != "moving_average" else 10
+            minimum_rows = max(minimum_rows, int(parameters.get("window", default_window)))
+        elif operation == "ema":
+            minimum_rows = max(minimum_rows, int(parameters.get("span", 10)))
+        elif operation == "lag":
+            minimum_rows = max(minimum_rows, int(parameters.get("periods", 1)) + 1)
+        elif operation == "gradient":
+            minimum_rows = max(minimum_rows, 2)
+
+    lookback_hours = max(1, math.ceil(((minimum_rows - 1) * cadence_seconds) / 3600.0))
+    return {
+        "history_requirement_version": "pdm-history-v1",
+        "partition_by": id_col,
+        "order_by": time_col,
+        "expected_sampling_interval_seconds": int(round(cadence_seconds)),
+        "minimum_history_rows": minimum_rows,
+        "maximum_lookback_hours": lookback_hours,
+        "history_sufficiency_policy": "decision-required",
+        "missing_history_policy": "fail",
+        "current_observation_included_in_window": True,
+    }
 
 
 def get_model_class(name: str) -> type[Any]:
@@ -293,15 +359,12 @@ def train_all(
             feature_schema_version = "pdm-feature-v1"
             framework = FRAMEWORK_BY_ALGORITHM.get(name, getattr(model, "framework", name))
 
-            # History requirement specification based on feature window
-            history_requirement = {
-                "history_requirement_version": "pdm-history-v1",
-                "partition_by": id_col,
-                "order_by": time_col,
-                "expected_sampling_interval_seconds": 3600,
-                "minimum_history_rows": 10,
-                "maximum_lookback_hours": 24,
-            }
+            history_requirement = infer_history_requirement(
+                sources[telemetry_key],
+                feature_names=feature_names,
+                id_col=id_col,
+                time_col=time_col,
+            )
 
             label_schema = {
                 "label_schema_version": "pdm-label-v1",
@@ -353,6 +416,9 @@ def train_all(
                     "features": feature_names,
                     "target": "label",
                     "prediction_task": "binary_failure_within_horizon",
+                    "feature_executor_version": "pdm-feature-executor-v1",
+                    "partition_by": id_col,
+                    "order_by": time_col,
                 },
                 training_config=training_config,
                 metrics=metrics,

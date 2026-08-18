@@ -11,6 +11,7 @@ import pytest
 
 from systems.backend.app.diagnosis.artifact_provider import LocalModelArtifactProvider
 from systems.backend.app.diagnosis.contracts import load_fixture
+from systems.backend.app.diagnosis.feature_executor import execute_feature_contract
 from systems.backend.app.diagnosis.predictor import ArtifactPredictor
 from systems.generator.model import (
     FRAMEWORK_BY_ALGORITHM,
@@ -23,6 +24,7 @@ from systems.generator.model import (
     XGBoostModel,
     asset_time_split,
     get_model_class,
+    infer_history_requirement,
     publish_model_artifact,
     validate_manifest,
 )
@@ -176,6 +178,160 @@ def test_missing_feature_column_raises_error():
     incomplete_df = df[["vibration_mean_3h", "temperature_std_6h"]]
     with pytest.raises(ValueError, match="missing required features"):
         model.predict_proba(incomplete_df)
+
+
+def test_history_requirement_is_inferred_from_cadence_and_feature_window():
+    telemetry = pd.DataFrame(
+        {
+            "asset_id": ["M-001"] * 12,
+            "observed_at": pd.date_range("2026-08-01T00:00:00Z", periods=12, freq="10min"),
+        }
+    )
+    requirement = infer_history_requirement(
+        telemetry,
+        feature_names=[
+            "rotational_speed_rpm__RotationalSpeed__moving_average__window_10",
+            "tool_wear_min__ToolWear__gradient__default",
+            "tool_wear_min__ToolWear__lag__periods_1",
+        ],
+        id_col="asset_id",
+        time_col="observed_at",
+    )
+
+    assert requirement["expected_sampling_interval_seconds"] == 600
+    assert requirement["minimum_history_rows"] == 10
+    assert requirement["maximum_lookback_hours"] == 2
+    assert requirement["missing_history_policy"] == "fail"
+
+
+def test_backend_feature_executor_matches_generator_temporal_semantics():
+    history = []
+    for index in range(10):
+        history.append(
+            {
+                "timestamp": f"2026-08-01T00:{index * 10:02d}:00+09:00" if index < 6 else f"2026-08-01T01:{(index - 6) * 10:02d}:00+09:00",
+                "air_temperature_k": 298.0 + index,
+                "process_temperature_k": 308.0 + index * 2,
+                "rotational_speed_rpm": 1500.0 + index * 10,
+                "torque_nm": 40.0 + index,
+                "tool_wear_min": 20.0 + index * 3,
+            }
+        )
+    fixture = {
+        "history": history,
+        "observation": dict(history[-1]),
+    }
+    feature_names = [
+        "air_temperature_k__AirTemperature__rolling_mean__window_5",
+        "air_temperature_k__AirTemperature__rolling_std__window_5",
+        "process_temperature_k__ProcessTemperature__gradient__default",
+        "rotational_speed_rpm__RotationalSpeed__moving_average__window_10",
+        "tool_wear_min__ToolWear__lag__periods_1",
+        "tool_wear_min__ToolWear__gradient__default",
+    ]
+    values = execute_feature_contract(
+        fixture,
+        feature_names=feature_names,
+        direct_values=fixture["observation"],
+        history_requirement={
+            "order_by": "observed_at",
+            "minimum_history_rows": 10,
+            "maximum_lookback_hours": 2,
+        },
+        executor_version="pdm-feature-executor-v1",
+    )
+
+    air = pd.Series([row["air_temperature_k"] for row in history], dtype=float)
+    process = pd.Series([row["process_temperature_k"] for row in history], dtype=float)
+    rpm = pd.Series([row["rotational_speed_rpm"] for row in history], dtype=float)
+    wear = pd.Series([row["tool_wear_min"] for row in history], dtype=float)
+    assert values[feature_names[0]] == pytest.approx(float(air.rolling(5, min_periods=1).mean().iloc[-1]))
+    assert values[feature_names[1]] == pytest.approx(float(air.rolling(5, min_periods=1).std().iloc[-1]))
+    assert values[feature_names[2]] == pytest.approx(float(process.diff().iloc[-1]))
+    assert values[feature_names[3]] == pytest.approx(float(rpm.rolling(10, min_periods=1).mean().iloc[-1]))
+    assert values[feature_names[4]] == pytest.approx(float(wear.shift(1).iloc[-1]))
+    assert values[feature_names[5]] == pytest.approx(float(wear.diff().iloc[-1]))
+
+
+def test_temporal_model_artifact_runs_through_backend_predictor(tmp_path):
+    feature_names = [
+        "air_temperature_k__AirTemperature__rolling_mean__window_5",
+        "process_temperature_k__ProcessTemperature__gradient__default",
+        "rotational_speed_rpm__RotationalSpeed__moving_average__window_10",
+        "tool_wear_min__ToolWear__lag__periods_1",
+    ]
+    rng = np.random.default_rng(7)
+    training = pd.DataFrame(
+        {
+            feature_names[0]: rng.normal(300.0, 1.0, 80),
+            feature_names[1]: rng.normal(0.0, 0.5, 80),
+            feature_names[2]: rng.normal(1500.0, 100.0, 80),
+            feature_names[3]: np.linspace(10.0, 210.0, 80),
+            "label": np.asarray([0] * 64 + [1] * 16, dtype=int),
+        }
+    )
+    model = RandomForestModel()
+    model.train(training, feature_names=feature_names, target_col="label")
+    model_file = tmp_path / "temporal.joblib"
+    model.save(model_file)
+
+    destination = publish_model_artifact(
+        artifact_uri=tmp_path / "artifacts",
+        model_id="temporal-rf",
+        model_version="v1",
+        dataset_version="temporal-test-v1",
+        feature_schema_version="pdm-feature-v1",
+        model_file=model_file,
+        feature_schema={
+            "schema_version": "pdm-feature-v1",
+            "features": feature_names,
+            "target": "label",
+            "prediction_task": "binary_failure_within_horizon",
+            "feature_executor_version": "pdm-feature-executor-v1",
+            "partition_by": "asset_id",
+            "order_by": "observed_at",
+        },
+        training_config={"algorithm": "random_forest", "framework": "scikit-learn"},
+        metrics={},
+        history_requirement={
+            "history_requirement_version": "pdm-history-v1",
+            "partition_by": "asset_id",
+            "order_by": "observed_at",
+            "expected_sampling_interval_seconds": 600,
+            "minimum_history_rows": 10,
+            "maximum_lookback_hours": 2,
+            "missing_history_policy": "fail",
+        },
+        provenance={"test": True},
+        compatibility={
+            "runtime": "ontology_dashboard.systems.backend.diagnosis",
+            "feature_executor_version": "pdm-feature-executor-v1",
+            "prediction_task": "binary_failure_within_horizon",
+        },
+    )
+
+    fixture = load_fixture("data/fixtures/GS-001-normal-stable.json")
+    start = pd.Timestamp("2026-08-01T00:00:00+09:00")
+    history = []
+    for index in range(10):
+        history.append(
+            {
+                "timestamp": (start + pd.Timedelta(minutes=10 * index)).isoformat(),
+                "product_type": "M",
+                "air_temperature_k": 298.0 + index * 0.1,
+                "process_temperature_k": 308.0 + index * 0.2,
+                "rotational_speed_rpm": 1500.0 + index * 5.0,
+                "torque_nm": 40.0 + index * 0.3,
+                "tool_wear_min": 20.0 + index,
+            }
+        )
+    fixture["history"] = history
+    fixture["observation"] = dict(history[-1])
+
+    prediction = ArtifactPredictor(destination).predict(fixture)
+
+    assert prediction.probability is not None
+    assert 0.0 <= prediction.probability <= 1.0
 
 
 @pytest.mark.parametrize("algo_name", ["random_forest", "lightgbm", "xgboost"])
