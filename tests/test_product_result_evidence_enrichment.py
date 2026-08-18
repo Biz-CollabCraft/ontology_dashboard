@@ -8,8 +8,12 @@ import pytest
 
 from systems.backend.app.diagnosis.contracts import load_fixture
 from systems.backend.app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
-from systems.backend.app.diagnosis.evidence_enrichment import validate_evidence_payload_invariants
-from systems.backend.app.diagnosis.predictor import HeuristicPredictor
+from systems.backend.app.diagnosis.evidence_baseline import build_history_baseline_window
+from systems.backend.app.diagnosis.evidence_enrichment import (
+    build_ranked_factor_evidence,
+    validate_evidence_payload_invariants,
+)
+from systems.backend.app.diagnosis.predictor import FactorScore, HeuristicPredictor, Prediction
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,6 +23,13 @@ class MissingContextProvider:
 
     def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None:
         return None
+
+
+class BrokenContextProvider:
+    provider_name = "broken"
+
+    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None:
+        raise ValueError("provider contract violation")
 
 
 def unresolved_basis_refs(evidence_payload: dict[str, Any]) -> set[str]:
@@ -63,8 +74,13 @@ def test_product_result_artifact_includes_producer_evidence_payload_without_defa
         "reference": artifact["artifact_id"],
         "generated_by": "systems.backend.app.diagnosis.evidence_enrichment",
     }
-    assert payload["sensor_evidence"]["sensors"]["tool_wear_min"]["current"] == 230.0
-    assert payload["sensor_evidence"]["sensors"]["tool_wear_min"]["basis"]["baseline_n"] == 5
+    tool_wear = payload["sensor_evidence"]["sensors"]["tool_wear_min"]
+    assert tool_wear["current"] == 230.0
+    assert tool_wear["window_mean"] == 213.666667
+    assert tool_wear["z_score"] == 2.352075
+    assert tool_wear["basis"]["baseline_n"] == 3
+    assert tool_wear["basis"]["baseline_reference"] == "fixture.history"
+    assert payload["sensor_evidence"]["window_rows"] == 3
     assert [factor["feature"] for factor in artifact["ranked_factor_evidence"]] == [
         factor.feature for factor in HeuristicPredictor().predict(fixture).factors[:5]
     ]
@@ -154,6 +170,107 @@ def test_product_result_artifact_records_gap_when_maintenance_context_is_missing
     } in payload["evidence_gaps"]
 
 
+def test_product_result_artifact_propagates_context_provider_contract_errors() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+
+    with pytest.raises(ValueError, match="provider contract violation"):
+        build_product_result_artifact(
+            fixture,
+            predictor=HeuristicPredictor(),
+            context_provider=BrokenContextProvider(),  # type: ignore[arg-type]
+        )
+
+
+def test_sensor_baseline_excludes_duplicate_current_observation_timestamp() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"].append(dict(fixture["observation"]))
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    tool_wear = artifact["evidence_payload"]["sensor_evidence"]["sensors"]["tool_wear_min"]
+
+    assert tool_wear["basis"]["baseline_n"] == 3
+    assert tool_wear["window_mean"] == 213.666667
+    assert tool_wear["z_score"] == 2.352075
+
+
+def test_history_baseline_policy_is_shared_for_dedupe_and_zero_variance() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"] = [
+        {
+            "timestamp": "2026-07-31T23:45:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 200,
+            "torque_nm": 50,
+        },
+        {
+            "timestamp": "2026-07-31T23:45:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 205,
+            "torque_nm": 50,
+        },
+        {
+            "timestamp": "2026-08-01T00:00:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 230,
+            "torque_nm": 55,
+        },
+    ]
+
+    baseline = build_history_baseline_window(fixture)
+
+    assert baseline.stat("tool_wear_min", 230.0).n == 1
+    assert baseline.stat("tool_wear_min", 230.0).mean == 205.0
+    assert baseline.stat("tool_wear_min", 230.0).z_score is None
+    assert baseline.stat("torque_nm", 55.0).z_score is None
+
+
+def test_sensor_window_does_not_expose_placeholder_for_untimestamped_history_rows() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"].insert(
+        0,
+        {
+            "product_type": "M",
+            "air_temperature_k": 298.8,
+            "process_temperature_k": 309.1,
+            "rotational_speed_rpm": 1475,
+            "torque_nm": 49.0,
+            "tool_wear_min": 200,
+        },
+    )
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    window = artifact["evidence_payload"]["sensor_evidence"]["window"]
+
+    assert window["start"] == "2026-07-31T23:45:00+09:00"
+    assert not window["start"].startswith("history[")
+
+
+def test_component_hypotheses_are_grouped_by_component_id() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    prediction = HeuristicPredictor().predict(fixture)
+    artifact = {
+        "status_grade": "warning",
+        "top_factors": [
+            {"rank": 1, "feature": "mechanical_power_w", "signed_contribution": 0.7},
+            {"rank": 2, "feature": "overstrain_index", "signed_contribution": 0.5},
+            {"rank": 3, "feature": "tool_wear_min", "signed_contribution": 0.4},
+        ],
+    }
+
+    payload = build_product_result_evidence_payload(artifact, fixture, prediction)
+    hypotheses = payload["component_hypotheses"]
+    component_ids = [hypothesis["component_id"] for hypothesis in hypotheses]
+
+    assert len(component_ids) == len(set(component_ids))
+    drive_power = next(hypothesis for hypothesis in hypotheses if hypothesis["component_id"] == "drive_power")
+    assert drive_power["basis"] == [
+        "factor.1.mechanical_power_w",
+        "factor.2.overstrain_index",
+    ]
+
+
 def test_product_result_artifact_records_data_quality_gaps_without_zero_filling() -> None:
     fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-007-invalid-sensor-data.json")
 
@@ -218,3 +335,46 @@ def test_evidence_payload_does_not_overwrite_official_judgement_fields() -> None
             "recommended_action",
         )
     } == before
+
+
+def test_evidence_payload_builder_enriches_top_factor_basis_when_called_directly() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    for factor in artifact["top_factors"]:
+        factor.pop("evidence_field_id")
+
+    payload = build_product_result_evidence_payload(
+        artifact,
+        fixture,
+        HeuristicPredictor().predict(fixture),
+    )
+
+    assert unresolved_basis_refs(payload) == set()
+    assert all(factor.get("evidence_field_id") for factor in artifact["top_factors"])
+
+
+def test_ranked_factor_evidence_preserves_null_raw_values() -> None:
+    prediction = Prediction(
+        risk_band="warning",
+        probability=0.7,
+        confidence="medium",
+        predicted_failure_type="tool_wear",
+        recommended_decision="inspect_within_current_shift",
+        factors=[
+            FactorScore(
+                feature="tool_wear_min",
+                raw_value=None,  # type: ignore[arg-type]
+                score=1.0,
+                direction="risk_up",
+            )
+        ],
+        quality_issues=[],
+        model_version="test",
+        model_artifact=None,
+    )
+
+    ranked = build_ranked_factor_evidence(prediction)
+
+    assert ranked[0]["value"] is None

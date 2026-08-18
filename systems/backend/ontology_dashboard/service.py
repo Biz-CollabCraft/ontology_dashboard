@@ -110,6 +110,7 @@ class ManufacturingPredictiveMaintenanceService:
     def event_evidence_projection(self, event_id: str) -> dict[str, Any]:
         fixture = self._fixture(event_id)
         projection = self._event_evidence_projection(fixture)
+        projection["event_id"] = fixture["event_id"]
         projection["scenario_id"] = fixture["scenario_id"]
         return projection
 

@@ -198,6 +198,29 @@ Step 7 owner decision:
 
 공식 판단 필드는 Product Result Artifact producer 출력만 사용한다. `status_grade`, `failure_probability`, `confidence`, `predicted_failure_type`, `top_factors`, `recommended_action`은 `pdm-mvp` reference fixture나 dashboard projection layer가 덮어쓰지 않는다. `ranked_factor_evidence`는 이 판단 필드에서 결론을 새로 만들지 않고, 동일 predictor ranking과 observation/derived feature 값을 reportable evidence row로 펼친다.
 
+Top factor 산출 결정 변경:
+
+- `top_factors`는 Product Result Artifact root의 공식 판단 필드이지만, Model Artifact의 전역 feature importance 자체를 공식 event top factor로 보지 않는다.
+- 3주차 현재 Model Artifact explanation contract와 API 이식은 완료되지 않았다. 따라서 PR #40은 한계를 인정하고 `model_artifact_local_proxy_attribution`을 우선 계약/구현한다. 이 PR은 SHAP, logit contribution, probability contribution을 제공한다고 주장하지 않는다.
+- Model Artifact 경로에서 `feature_importances_` 또는 `coef_`는 후보 feature의 모델 가중치로만 사용한다. 최종 rank/score는 현재 관측치가 history baseline에서 벗어난 정도를 곱한 local proxy로 산출한다.
+- 이 값은 SHAP/logit contribution 같은 완전한 instance attribution이 아니므로 `explanation_method="model_artifact_local_proxy_attribution"`으로 낮춰 표기한다. 전역 가중치를 그대로 써서 모든 설비가 같은 factor/rank/score를 받는 구현은 금지한다.
+- Heuristic fallback 경로는 기존 `deterministic_component_score`를 유지한다.
+- history baseline은 현재 observation timestamp와 같은 history row를 제외한 과거 row만 사용한다. GS-002의 `baseline_n=3`은 의도된 값이며, current row를 baseline에 포함한 `n=4` 또는 `history+observation` 중복 산출은 쓰지 않는다.
+- producer sensor evidence와 Model Artifact local proxy는 같은 history baseline helper를 사용한다. 같은 Artifact 안에서 sensor evidence와 top factor proxy가 서로 다른 dedupe, mean/std, zero-variance 정책을 갖지 않는다.
+
+Product Result Artifact consumer는 이 값을 다음처럼 해석한다.
+
+- 가능: "이번 예측 판단을 설명하는 proxy factor 후보"
+- 불가: "모델 예측값을 수학적으로 분해한 정확한 feature contribution", "정비 root cause", "인과 원인"
+- 후속 조건: 공식 local attribution으로 승격하려면 Model Artifact에 explanation method, feature space, output space, background/reference dataset, explainer version이 계약되고 API consumer가 이를 소비해야 한다.
+
+후속 SHAP 분리:
+
+- SHAP은 Product Result Artifact `top_factors`의 현재 proxy 구현에 섞지 않는다.
+- SHAP 도입은 Model Artifact explanation contract의 별도 후속 작업으로 다룬다.
+- 후속 계약은 `explanation.method`, `scope`, `output_space`, `feature_space`, `background_dataset_version`, `explainer_version`, `model_version` 결합을 명시해야 한다.
+- 해당 계약이 생기기 전까지 Product Result Artifact는 `model_artifact_local_proxy_attribution`만 제공한다.
+
 Producer에 올리지 않는 필드는 다음 기준으로 처리한다.
 
 | 값의 성격 | 예시 | 처리 |

@@ -52,7 +52,10 @@ jobs:
       - name: Backend Product Result and Evidence contract tests
         env:
           APP_ENV: test
-        run: pytest -q tests/test_product_result_artifact_evidence_contract.py
+        run: >
+          pytest -q
+          tests/test_product_result_artifact_evidence_contract.py
+          tests/test_product_result_evidence_enrichment.py
 
       - name: Model Artifact publish-validation-load round-trip
         env:

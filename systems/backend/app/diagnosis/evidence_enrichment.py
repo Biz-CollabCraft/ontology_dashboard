@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import math
-from statistics import mean, pstdev
 from typing import Any
 
 from .contracts import DISPLAY_NAMES, UNITS
+from .evidence_baseline import build_history_baseline_window, numeric_observation
 from .predictor import FactorScore, Prediction
 
 GENERATED_BY = "systems.backend.app.diagnosis.evidence_enrichment"
 
 NORMAL_RANGES = {
+    "air_temperature_k": "295.0–305.0",
+    "process_temperature_k": "304.0–315.0",
+    "rotational_speed_rpm": "1,400–2,200",
     "tool_wear_min": "0–180",
     "temperature_difference_k": "8.6–12.0",
     "mechanical_power_w": "3,500–9,000",
     "overstrain_index": "0–11,000",
     "torque_nm": "10–60",
 }
-_NON_SENSOR_FIELDS = {"timestamp", "product_type"}
 _COMPONENT_BY_FEATURE = {
     "tool_wear_min": ("tooling", "공구/마모 계통"),
     "temperature_difference_k": ("thermal_path", "열 방산 계통"),
@@ -62,6 +64,7 @@ def build_product_result_evidence_payload(
 ) -> dict[str, Any]:
     """Build producer-owned evidence facts for Product Result Artifact enrichment."""
 
+    enrich_product_result_top_factors(artifact, fixture)
     sensor_evidence = _sensor_evidence(fixture)
     source_fields = _factor_source_fields(artifact)
     source_fields.extend(_sensor_source_fields(sensor_evidence))
@@ -121,7 +124,7 @@ def build_ranked_factor_evidence(prediction: Prediction) -> list[dict[str, Any]]
 def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[str, Any] | None = None) -> None:
     factors = artifact.get("top_factors") or []
     total = sum(abs(float(factor.get("signed_contribution") or 0.0)) for factor in factors) or 1.0
-    observed_features = set(_numeric_observation((fixture or {}).get("observation") or {}))
+    observed_features = set(numeric_observation((fixture or {}).get("observation") or {}))
     for index, factor in enumerate(factors, start=1):
         feature = str(factor.get("feature") or "unknown")
         signed = float(factor.get("signed_contribution") or 0.0)
@@ -137,11 +140,19 @@ def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[st
 
 def _ranked_factor_evidence_row(index: int, item: FactorScore, total_score: float) -> dict[str, Any]:
     feature = item.feature
+    value = None
+    if item.raw_value is not None:
+        try:
+            number = float(item.raw_value)
+        except (TypeError, ValueError):
+            value = None
+        else:
+            value = round(number, 4) if math.isfinite(number) else None
     return {
         "evidence_field_id": f"factor.{index}.{feature}",
         "feature": feature,
         "display_name": _display_name(feature),
-        "value": round(float(item.raw_value), 4),
+        "value": value,
         "unit": _unit(feature),
         "normal_range": NORMAL_RANGES.get(feature, "근거 부족"),
         "direction": item.direction,
@@ -151,38 +162,29 @@ def _ranked_factor_evidence_row(index: int, item: FactorScore, total_score: floa
 
 
 def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
-    observation = _numeric_observation(fixture.get("observation") or {})
-    history_rows = [_numeric_observation(row) for row in fixture.get("history", [])]
-    window_rows = [row for row in [*history_rows, observation] if row]
+    raw_observation = fixture.get("observation") or {}
+    observation = numeric_observation(raw_observation)
+    baseline_window = build_history_baseline_window(fixture)
+    window_rows = [row for _, row in baseline_window.rows if row]
     sensors: dict[str, Any] = {}
 
     for feature, current in observation.items():
-        values = [row[feature] for row in window_rows if feature in row]
-        baseline_mean = round(mean(values), 6) if values else None
-        baseline_std_raw = pstdev(values) if len(values) > 1 else 0.0
-        baseline_std = round(baseline_std_raw, 6)
-        z_score = None
-        if baseline_mean is not None and baseline_std_raw > 0:
-            z_score = round((current - baseline_mean) / baseline_std_raw, 6)
+        stat = baseline_window.stat(feature, current)
         sensors[feature] = {
             "display_name": _display_name(feature),
             "unit": _unit(feature),
             "current": current,
-            "window_mean": baseline_mean,
-            "z_score": z_score,
+            "window_mean": stat.mean,
+            "z_score": stat.z_score,
             "basis": {
-                "baseline_mean": baseline_mean,
-                "baseline_std": baseline_std,
-                "baseline_n": len(values),
-                "baseline_reference": "fixture.history+observation",
+                "baseline_mean": stat.mean,
+                "baseline_std": stat.std,
+                "baseline_n": stat.n,
+                "baseline_reference": "fixture.history",
             },
         }
 
-    timestamps = [
-        str(row.get("timestamp"))
-        for row in [*fixture.get("history", []), fixture.get("observation") or {}]
-        if row.get("timestamp")
-    ]
+    timestamps = baseline_window.display_timestamps
     return {
         "window": {"start": timestamps[0], "end": timestamps[-1]} if timestamps else {},
         "window_rows": len(window_rows),
@@ -191,7 +193,7 @@ def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
 
 
 def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, Any]) -> list[dict[str, Any]]:
-    hypotheses: list[dict[str, Any]] = []
+    hypotheses: dict[str, dict[str, Any]] = {}
     sensors = sensor_evidence.get("sensors") or {}
     for factor in artifact.get("top_factors", [])[:3]:
         feature = str(factor.get("feature") or "")
@@ -200,15 +202,15 @@ def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, A
         sensor_ref = f"sensor_evidence.sensors.{feature}"
         if feature in sensors:
             basis.append(sensor_ref)
-        hypotheses.append(
-            {
+        if component_id not in hypotheses:
+            hypotheses[component_id] = {
                 "component_id": component_id,
                 "component_label": component_label,
                 "association": "inspection_candidate",
-                "basis": basis,
+                "basis": [],
             }
-        )
-    return hypotheses
+        hypotheses[component_id]["basis"] = list(dict.fromkeys([*hypotheses[component_id]["basis"], *basis]))
+    return list(hypotheses.values())
 
 
 def _recommended_actions(artifact: dict[str, Any], hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -291,20 +293,6 @@ def _has_multiple_risk_factors(artifact: dict[str, Any]) -> bool:
     first = abs(float(factors[0].get("signed_contribution") or 0.0))
     second = abs(float(factors[1].get("signed_contribution") or 0.0))
     return second > 0 and first - second < 0.25
-
-
-def _numeric_observation(observation: dict[str, Any]) -> dict[str, float]:
-    numeric: dict[str, float] = {}
-    for key, value in observation.items():
-        if key in _NON_SENSOR_FIELDS or isinstance(value, bool) or value is None:
-            continue
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            continue
-        if math.isfinite(number):
-            numeric[key] = number
-    return numeric
 
 
 def _dedupe_source_fields(fields: list[dict[str, str]]) -> list[dict[str, str]]:

@@ -236,6 +236,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
 
     canonical_evidence = client.get("/api/events/EVT-GS-002/evidence?view=canonical")
     assert canonical_evidence.status_code == 200
+    assert canonical_evidence.json()["event_id"] == "EVT-GS-002"
     assert canonical_evidence.json()["schema_version"] == "event-evidence-projection-v1"
     assert canonical_evidence.json()["contract_type"] == "event_evidence_projection"
     assert canonical_evidence.json()["assessment"]["status"] == "warning"
