@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { week2MvpRedirectPath } from "./routing";
+import { isDevDashboardPath, week2MvpRedirectPath } from "./routing";
 
 describe("Week 2 MVP route boundary", () => {
   it("keeps the canonical MVP route unchanged", () => {
@@ -27,5 +27,10 @@ describe("Week 2 MVP route boundary", () => {
 
   it("does not redirect public non-app routes", () => {
     expect(week2MvpRedirectPath("/team-share", "active-project")).toBeNull();
+  });
+
+  it("recognizes the public read-only development dashboard route", () => {
+    expect(isDevDashboardPath("/dev_dashboard")).toBe(true);
+    expect(isDevDashboardPath("/app/dev_dashboard")).toBe(false);
   });
 });

@@ -121,6 +121,10 @@ export function loginPath(returnTo?: string) {
   return `/login?${params.toString()}`;
 }
 
+export function isDevDashboardPath(pathname: string) {
+  return pathname === "/dev_dashboard";
+}
+
 export function safeApplicationReturnPath(value: string | null): string | null {
   if (!value || !value.startsWith("/app/")) return null;
   try {

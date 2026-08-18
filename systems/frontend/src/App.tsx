@@ -84,6 +84,9 @@ const AdaptiveTeamShareStory = lazy(() =>
 const EChartsComparisonEmbed = lazy(() =>
   import("./features/visualization/EChartsComparisonEmbed").then((module) => ({ default: module.EChartsComparisonEmbed })),
 );
+const DevDashboardPage = lazy(() =>
+  import("./features/dev-dashboard/DevDashboardPage").then((module) => ({ default: module.DevDashboardPage })),
+);
 
 const LAST_VALID_PROJECT_KEY = "ontology-dashboard:last-valid-project";
 const IS_PUBLIC_STORY = import.meta.env.VITE_PUBLIC_STORY === "1";
@@ -224,6 +227,7 @@ function AppRouter() {
   if (pathname === "/team-share") return <TeamShareStory />;
   if (pathname === "/team-share-adaptive") return <AdaptiveTeamShareStory />;
   if (pathname === "/visualization-compare/echarts") return <EChartsComparisonEmbed />;
+  if (pathname === "/dev_dashboard") return <DevDashboardPage />;
 
   if (loading) {
     return <RouteLoading operation="Checking session" />;
@@ -414,6 +418,15 @@ export default function App() {
       <I18nProvider>
         <Suspense fallback={<RouteLoading operation="Loading ECharts comparison" />}>
           <EChartsComparisonEmbed />
+        </Suspense>
+      </I18nProvider>
+    );
+  }
+  if (window.location.pathname === "/dev_dashboard") {
+    return (
+      <I18nProvider>
+        <Suspense fallback={<RouteLoading operation="Loading Development Flow" />}>
+          <DevDashboardPage />
         </Suspense>
       </I18nProvider>
     );
