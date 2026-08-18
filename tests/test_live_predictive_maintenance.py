@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from ontology_dashboard.live_predictive_maintenance import (
+    LIVE_SOURCE_VERSION,
     active_overlay_asset_ids,
     read_complete_ticks,
     read_overlay_available_events,
@@ -59,6 +60,30 @@ def test_read_complete_ticks_respects_ingestion_checkpoint(tmp_path):
 
     assert len(ticks) == 1
     assert ticks[0][0] == datetime(2026, 8, 18, 5, 40, tzinfo=timezone.utc)
+
+
+def test_wall_clock_live_version_does_not_admit_future_accelerated_ticks(tmp_path):
+    current = "2026-08-18T09:30:00+00:00"
+    future = "2026-08-19T09:30:00+00:00"
+    for line, asset in (("lineL01", "CMP-1"), ("lineL02", "CNC-1")):
+        _write(
+            tmp_path / f"sensor/facS01/{line}/sensor_stream.jsonl",
+            [
+                {"asset_id": asset, "observed_at": current},
+                {"asset_id": asset, "observed_at": future},
+            ],
+        )
+
+    ticks = read_complete_ticks(
+        tmp_path,
+        not_after=datetime(2026, 8, 18, 9, 32, tzinfo=timezone.utc),
+        expected_asset_count=2,
+    )
+
+    assert LIVE_SOURCE_VERSION == "gen-data-wall-clock-live-v2"
+    assert [tick[0] for tick in ticks] == [
+        datetime(2026, 8, 18, 9, 30, tzinfo=timezone.utc)
+    ]
 
 
 def test_active_overlay_asset_ids_reads_checkpoint_without_model_semantics(tmp_path):

@@ -204,7 +204,7 @@ def test_runtime_candidates_select_latest_observation_per_asset() -> None:
     candidates = _runtime_candidates(connection, "dsv-current")
 
     assert candidates == [{"asset_id": "CNC-001"}]
-    assert connection.parameters == ("dsv-current", "dsv-current")
+    assert connection.parameters == ("dsv-current", [], "dsv-current", [])
     assert connection.query.count(
         "ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC)"
     ) == 2

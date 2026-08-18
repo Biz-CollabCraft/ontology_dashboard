@@ -109,15 +109,36 @@ sensor stream. Production live data is a separate loop:
 1. the `Biz-CollabCraft/gen_data` daemon runs under launchd and appends one
    complete 100-asset sensor tick every 10 wall-clock minutes by default;
 2. `live-ingestor` watches those JSONL streams and publishes them into a
-   separate `gen-data-live-v1` Dataset Version;
+   separate `gen-data-wall-clock-live-v2` Dataset Version;
 3. Backend diagnosis invokes the currently promoted CNC and compressor Model
    Artifacts and atomically refreshes the 100 current Result Artifacts;
 4. the MVP frontend refreshes its governed runtime view every 30 seconds.
 
 The immutable Canonical V3.1 Dataset Version remains the training/regression
-baseline and is never appended to by the live loop. Set `GEN_DATA_LIVE_SPEED=1`
-for wall-clock production operation. The initial six-hour backfill exists only
-to provide the 35 preceding observations required by the temporal models.
+baseline and is never appended to by the live loop. Production uses
+`GEN_DATA_CLOCK_MODE=wall_clock`; `GEN_DATA_SPEED` remains an accelerated
+simulation/replay setting and is not a substitute for physical wall-clock
+semantics.
+
+The wall-clock daemon aligns observations to absolute UTC cadence boundaries
+(`:00`, `:10`, `:20`, ... for the current ten-minute contract). A restart does
+not fabricate observations for downtime and does not reuse a legacy accelerated
+watermark. The prior `gen-data-live-v1` Dataset Version and its output directory
+remain immutable historical simulation lineage. Cutover therefore points both
+the daemon and `live-ingestor` at a fresh runtime/output directory rather than
+mixing the old future-dated stream into the new timeline.
+
+The promoted temporal models currently require 35 prior ten-minute rows. A new
+wall-clock Dataset Version therefore cannot produce a fresh inference immediately.
+At creation time Backend uses the latest **non-future** pre-cutover observation and
+its 35-row history to evaluate the current Model Artifact once for each of the 100
+assets. Those seed results are stored in the new read model with explicit
+`cutover_carry_forward` lineage. Pre-cutover rows are never copied into the new
+wall-clock observation tables. Each asset is replaced by a real wall-clock
+inference only after its new same-Dataset-Version history satisfies the Model
+Artifact cadence/history contract.
+Runtime Overlay remains stricter: its post-maintenance branch uses only that
+branch's post-maintenance observations and never mixes pre-maintenance history.
 
 After the production `.env` is configured, install/reload the source daemon and
 start the ingestor with:

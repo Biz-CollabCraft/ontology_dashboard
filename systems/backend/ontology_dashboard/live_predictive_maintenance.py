@@ -16,7 +16,7 @@ import os
 import time
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -27,6 +27,8 @@ from .demo_predictive_maintenance_bootstrap import (
     ORGANIZATION_ID,
     PROJECT_ID,
     WORKSPACE_ID,
+    _cnc_runtime_history,
+    _compressor_runtime_history,
     _materialize_runtime_results,
     _normalize_database_url,
     _runtime_fixture,
@@ -37,11 +39,13 @@ from .domain_packs.predictive_maintenance import PredictiveMaintenanceOntologyMa
 
 
 LOGGER = logging.getLogger(__name__)
-LIVE_SOURCE_VERSION = "gen-data-live-v1"
-LIVE_MATERIALIZATION_PROFILE = "gen_data_live_current_state_v1"
+LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
+LEGACY_ACCELERATED_SOURCE_VERSION = "gen-data-live-v1"
+LIVE_MATERIALIZATION_PROFILE = "gen_data_wall_clock_live_current_state_v2"
 OVERLAY_SOURCE_VERSION = "maintenance-replay-overlay-v1"
 DEFAULT_STREAM_ROOT = Path("/gen-data-runtime")
 EXPECTED_ASSET_COUNT = 100
+MAX_LIVE_CLOCK_SKEW = timedelta(minutes=2)
 LIVE_STATIC_LINEAGE_ROLES = ("asset_master", "asset_relation")
 LIVE_SENSOR_ROLES = ("cnc_sensor_observation", "compressor_sensor_observation")
 
@@ -78,6 +82,7 @@ def read_complete_ticks(
     stream_root: str | Path,
     *,
     after: datetime | None = None,
+    not_after: datetime | None = None,
     expected_asset_count: int = EXPECTED_ASSET_COUNT,
 ) -> list[tuple[datetime, list[dict[str, Any]]]]:
     """Read complete cross-line ticks from daemon ``sensor_stream.jsonl`` files.
@@ -104,6 +109,8 @@ def read_complete_ticks(
                 except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
                     raise ValueError(f"invalid gen_data stream row: {path}:{line_number}") from exc
                 if after is not None and observed_at <= after:
+                    continue
+                if not_after is not None and observed_at > not_after:
                     continue
                 grouped[observed_at][asset_id] = payload
     return [
@@ -803,6 +810,314 @@ def _ensure_live_dataset_files(
         )
 
 
+def _cutover_seed_candidates(
+    connection: Any,
+    *,
+    dataset_version_id: str,
+    cutoff_at: datetime,
+) -> list[dict[str, Any]]:
+    """Select one current-or-past source observation per asset for cutover."""
+
+    return list(
+        connection.execute(
+            """
+            WITH latest_cnc AS (
+                SELECT DISTINCT ON (o.asset_id)
+                       o.asset_id,o.observed_at,o.source_sha256,'cnc'::text AS asset_type,
+                       jsonb_build_object(
+                           'product_type',o.product_type,
+                           'air_temperature_k',o.air_temperature_k,
+                           'process_temperature_k',o.process_temperature_k,
+                           'rotational_speed_rpm',o.rotational_speed_rpm,
+                           'torque_nm',o.torque_nm,
+                           'tool_wear_min',o.tool_wear_min
+                       ) AS observation
+                FROM pm_cnc_observations o
+                WHERE o.dataset_version_id=%s AND o.observed_at <= %s
+                ORDER BY o.asset_id,o.observed_at DESC
+            ), latest_compressor AS (
+                SELECT DISTINCT ON (o.asset_id)
+                       o.asset_id,o.observed_at,o.source_sha256,'compressor'::text AS asset_type,
+                       jsonb_build_object(
+                           'voltage_raw',o.voltage_raw,
+                           'rotation_raw',o.rotation_raw,
+                           'pressure_raw',o.pressure_raw,
+                           'vibration_raw',o.vibration_raw,
+                           'relative_vibration_z',o.relative_vibration_z,
+                           'relative_vibration_zone',o.relative_vibration_zone
+                       ) AS observation
+                FROM pm_compressor_observations o
+                WHERE o.dataset_version_id=%s AND o.observed_at <= %s
+                ORDER BY o.asset_id,o.observed_at DESC
+            )
+            SELECT * FROM latest_cnc
+            UNION ALL
+            SELECT * FROM latest_compressor
+            ORDER BY asset_id
+            """,
+            (dataset_version_id, cutoff_at, dataset_version_id, cutoff_at),
+        ).fetchall()
+    )
+
+
+def _seed_live_product_results_for_cutover(
+    connection: Any,
+    *,
+    seed_version_id: str,
+    seed_source_version: str,
+    live_version_id: str,
+    cutoff_at: datetime,
+    Jsonb: Any,
+) -> int:
+    """Build a non-future Product Result seed while wall-clock history warms up.
+
+    Only the cutover seed may use the pre-live source Dataset Version. The seed
+    is a fully evaluated current-model result whose observation timestamp is at
+    or before ``cutoff_at``. Subsequent wall-clock inference reads history only
+    from ``live_version_id``; this avoids both future timestamps and hidden
+    cross-version history mixing.
+    """
+
+    existing = int(
+        connection.execute(
+            "SELECT COUNT(*) AS count FROM pm_result_artifacts WHERE dataset_version_id=%s",
+            (live_version_id,),
+        ).fetchone()["count"]
+    )
+    if existing:
+        return existing
+
+    candidates = _cutover_seed_candidates(
+        connection,
+        dataset_version_id=seed_version_id,
+        cutoff_at=cutoff_at,
+    )
+    if len(candidates) != EXPECTED_ASSET_COUNT:
+        raise RuntimeError(
+            "wall-clock cutover seed requires one non-future observation for every asset: "
+            f"expected={EXPECTED_ASSET_COUNT} actual={len(candidates)}"
+        )
+
+    seeded = 0
+    for row in candidates:
+        asset_id = str(row["asset_id"])
+        asset_type = str(row["asset_type"])
+        predictor = configured_predictor(asset_type)
+        history = (
+            _compressor_runtime_history(
+                connection,
+                seed_version_id,
+                asset_id,
+                row["observed_at"],
+            )
+            if asset_type == "compressor"
+            else _cnc_runtime_history(
+                connection,
+                seed_version_id,
+                asset_id,
+                row["observed_at"],
+            )
+        )
+        artifact = build_product_result_artifact(
+            _runtime_fixture(
+                row,
+                history=history,
+                source_version=seed_source_version,
+            ),
+            predictor=predictor,
+        )
+        if artifact.get("failure_probability") is None:
+            raise RuntimeError(
+                "wall-clock cutover seed cannot satisfy current Model Artifact contract: "
+                f"asset={asset_id} warnings={artifact.get('data_quality_warnings') or []}"
+            )
+
+        probability = float(artifact["failure_probability"])
+        diagnostic_type = str(artifact["predicted_failure_type"])
+        if asset_type == "compressor" and diagnostic_type in {"failure_risk", "none"}:
+            binary_type = (
+                "failure_risk" if diagnostic_type == "failure_risk" else "no_significant_risk"
+            )
+        else:
+            binary_type = "failure_risk" if probability >= 0.5 else "no_significant_risk"
+
+        original_prediction_id = str(artifact["provenance"]["prediction_id"])
+        prediction_id = f"pmcutover-{uuid.uuid5(uuid.NAMESPACE_URL, f'{live_version_id}:{original_prediction_id}')}"
+        prediction_result_id = f"pmcutover-result-{uuid.uuid5(uuid.NAMESPACE_URL, f'{live_version_id}:{original_prediction_id}')}"
+        artifact_id = f"pmcutover-artifact-{uuid.uuid5(uuid.NAMESPACE_URL, f'{live_version_id}:{artifact['artifact_id']}')}"
+        cutover_sha256 = hashlib.sha256(
+            (
+                f"{live_version_id}:{seed_version_id}:{row['source_sha256']}:"
+                f"{row['observed_at'].isoformat()}:{artifact['artifact_id']}"
+            ).encode("utf-8")
+        ).hexdigest()
+        provenance = dict(artifact["provenance"])
+        provenance.update(
+            {
+                "prediction_id": prediction_id,
+                "dataset_version_id": live_version_id,
+                "source_version": LIVE_SOURCE_VERSION,
+                "source_type": "cutover_carry_forward",
+                "cutover_seed": True,
+                "cutover_seed_at": cutoff_at.isoformat(),
+                "cutover_history_dataset_version_id": seed_version_id,
+                "cutover_history_source_version": seed_source_version,
+                "cutover_source_prediction_id": original_prediction_id,
+                "live_runtime_history_mixed": False,
+                "history_pre_maintenance_mixed": False,
+            }
+        )
+        feature_scope = [str(item["feature"]) for item in artifact["top_factors"]]
+        result_payload = {
+            **artifact,
+            "artifact_id": artifact_id,
+            "predicted_failure_type": binary_type,
+            "provenance": provenance,
+            "dataset_version_id": live_version_id,
+            "source_type": "cutover_carry_forward",
+        }
+        connection.execute(
+            """
+            INSERT INTO prediction_results(
+                prediction_id,organization_id,project_id,workspace_id,
+                subject_object_type,subject_object_id,prediction_status,
+                model_version,dataset_version,payload_json,created_at,received_at
+            ) VALUES (%s,%s,%s,%s,'equipment',%s,%s,%s,%s,%s,%s,now())
+            """,
+            (
+                prediction_result_id,
+                ORGANIZATION_ID,
+                PROJECT_ID,
+                WORKSPACE_ID,
+                asset_id,
+                artifact["status_grade"],
+                artifact["provenance"]["model_version"],
+                LIVE_SOURCE_VERSION,
+                Jsonb(result_payload),
+                row["observed_at"],
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO pm_prediction_snapshots(
+                organization_id,project_id,workspace_id,dataset_version_id,
+                prediction_id,prediction_result_id,asset_id,asset_type,observed_at,
+                prediction_horizon_hours,failure_probability,predicted_failure_type,
+                confidence,status,model_version,feature_scope,source_sha256
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,24,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (
+                ORGANIZATION_ID,
+                PROJECT_ID,
+                WORKSPACE_ID,
+                live_version_id,
+                prediction_id,
+                prediction_result_id,
+                asset_id,
+                asset_type,
+                row["observed_at"],
+                probability,
+                binary_type,
+                float(artifact["confidence"]),
+                artifact["status_grade"],
+                artifact["provenance"]["model_version"],
+                Jsonb(feature_scope),
+                cutover_sha256,
+            ),
+        )
+        for factor in artifact["top_factors"]:
+            signed = float(factor["signed_contribution"])
+            connection.execute(
+                """
+                INSERT INTO pm_prediction_factors(
+                    organization_id,project_id,workspace_id,dataset_version_id,
+                    prediction_id,rank,feature,feature_value,signed_contribution,
+                    absolute_contribution,direction,explanation_method,source_type,source_sha256
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                          'cutover_carry_forward',%s)
+                """,
+                (
+                    ORGANIZATION_ID,
+                    PROJECT_ID,
+                    WORKSPACE_ID,
+                    live_version_id,
+                    prediction_id,
+                    int(factor["rank"]),
+                    factor["feature"],
+                    float(factor["feature_value"]),
+                    signed,
+                    abs(signed),
+                    factor["direction"],
+                    factor["explanation_method"],
+                    cutover_sha256,
+                ),
+            )
+        connection.execute(
+            """
+            INSERT INTO pm_prediction_timeline(
+                organization_id,project_id,workspace_id,dataset_version_id,
+                prediction_id,asset_id,asset_type,observed_at,prediction_horizon_hours,
+                failure_probability,status,top_factors,model_version,feature_scope,
+                source_type,source_sha256
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,24,%s,%s,%s,%s,%s,
+                      'cutover_carry_forward',%s)
+            """,
+            (
+                ORGANIZATION_ID,
+                PROJECT_ID,
+                WORKSPACE_ID,
+                live_version_id,
+                prediction_id,
+                asset_id,
+                asset_type,
+                row["observed_at"],
+                probability,
+                artifact["status_grade"],
+                Jsonb(artifact["top_factors"]),
+                artifact["provenance"]["model_version"],
+                Jsonb(feature_scope),
+                cutover_sha256,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO pm_result_artifacts(
+                organization_id,project_id,workspace_id,dataset_version_id,
+                artifact_id,prediction_id,prediction_result_id,asset_id,asset_type,
+                observed_at,prediction_horizon_hours,prediction_task,
+                failure_probability,predicted_failure_type,status_grade,confidence,
+                top_factors,recommended_action,provenance,schema_version,
+                model_version,source_sha256
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,24,
+                      'binary_failure_within_horizon',%s,%s,%s,%s,%s,%s,%s,
+                      'result-artifact-v1.0',%s,%s)
+            """,
+            (
+                ORGANIZATION_ID,
+                PROJECT_ID,
+                WORKSPACE_ID,
+                live_version_id,
+                artifact_id,
+                prediction_id,
+                prediction_result_id,
+                asset_id,
+                asset_type,
+                row["observed_at"],
+                probability,
+                binary_type,
+                artifact["status_grade"],
+                float(artifact["confidence"]),
+                Jsonb(artifact["top_factors"]),
+                Jsonb(artifact["recommended_action"]),
+                Jsonb(provenance),
+                artifact["provenance"]["model_version"],
+                cutover_sha256,
+            ),
+        )
+        seeded += 1
+    return seeded
+
+
 def _ensure_live_version(database_url: str) -> tuple[str, str]:
     psycopg, dict_row, Jsonb = _postgres_modules()
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
@@ -823,15 +1138,38 @@ def _ensure_live_version(database_url: str) -> tuple[str, str]:
                 FROM dataset_versions v
                 JOIN datasets d ON d.id=v.dataset_id
                 WHERE v.organization_id=%s AND v.project_id=%s AND v.workspace_id=%s
-                  AND v.source_version<>%s
+                  AND v.manifest_id IS NOT NULL
                   AND EXISTS (SELECT 1 FROM pm_assets a WHERE a.dataset_version_id=v.id)
                 ORDER BY v.version_number DESC,v.created_at DESC
                 LIMIT 1
                 """,
-                (ORGANIZATION_ID, PROJECT_ID, WORKSPACE_ID, LIVE_SOURCE_VERSION),
+                (ORGANIZATION_ID, PROJECT_ID, WORKSPACE_ID),
             ).fetchone()
             if base is None:
                 raise RuntimeError("cannot create live Dataset Version without a canonical base version")
+            seed = connection.execute(
+                """
+                SELECT id,source_version
+                FROM dataset_versions
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND source_version=%s
+                  AND EXISTS (SELECT 1 FROM pm_assets a WHERE a.dataset_version_id=dataset_versions.id)
+                ORDER BY version_number DESC,created_at DESC
+                LIMIT 1
+                """,
+                (
+                    ORGANIZATION_ID,
+                    PROJECT_ID,
+                    WORKSPACE_ID,
+                    LEGACY_ACCELERATED_SOURCE_VERSION,
+                ),
+            ).fetchone()
+            if seed is None:
+                seed = {
+                    "id": base["id"],
+                    "source_version": base["source_version"],
+                }
+            cutover_at = datetime.now(tz=timezone.utc)
             if existing is not None:
                 dataset_id = str(existing["dataset_id"])
                 version_id = str(existing["id"])
@@ -842,6 +1180,27 @@ def _ensure_live_version(database_url: str) -> tuple[str, str]:
                     live_version_id=version_id,
                     Jsonb=Jsonb,
                 )
+                carried = _seed_live_product_results_for_cutover(
+                    connection,
+                    seed_version_id=str(seed["id"]),
+                    seed_source_version=str(seed["source_version"]),
+                    live_version_id=version_id,
+                    cutoff_at=cutover_at,
+                    Jsonb=Jsonb,
+                )
+                if carried:
+                    profile_row = connection.execute(
+                        "SELECT profile_json FROM dataset_versions WHERE id=%s FOR UPDATE",
+                        (version_id,),
+                    ).fetchone()
+                    profile = dict(profile_row["profile_json"] or {})
+                    row_counts = dict(profile.get("row_counts") or {})
+                    row_counts["result_artifact"] = carried
+                    profile["row_counts"] = row_counts
+                    connection.execute(
+                        "UPDATE dataset_versions SET profile_json=%s WHERE id=%s",
+                        (Jsonb(profile), version_id),
+                    )
                 return dataset_id, version_id
 
             dataset_id = str(base["dataset_id"])
@@ -861,8 +1220,14 @@ def _ensure_live_version(database_url: str) -> tuple[str, str]:
             profile["source_contract"] = {
                 "producer": "Biz-CollabCraft/gen_data daemon",
                 "transport": "sensor_stream.jsonl",
-                "semantics": "time-progressing synthetic sensor observations",
+                "clock_mode": "wall_clock",
+                "cadence_minutes": 10,
+                "restart_policy": "align_to_current_boundary_without_backfill",
+                "semantics": "physical-sensor wall-clock synthetic observations",
                 "truth_exposed": False,
+                "legacy_accelerated_source_version": LEGACY_ACCELERATED_SOURCE_VERSION,
+                "cutover_seed_history_source_version": str(seed["source_version"]),
+                "cutover_seed_policy": "latest_non_future_result_then_live_history_only",
             }
             checksum = hashlib.sha256(
                 f"{dataset_id}:{LIVE_SOURCE_VERSION}:sensor-stream-contract-v1".encode("utf-8")
@@ -922,6 +1287,20 @@ def _ensure_live_version(database_url: str) -> tuple[str, str]:
                 live_version_id=version_id,
                 Jsonb=Jsonb,
             )
+            carried = _seed_live_product_results_for_cutover(
+                connection,
+                seed_version_id=str(seed["id"]),
+                seed_source_version=str(seed["source_version"]),
+                live_version_id=version_id,
+                cutoff_at=cutover_at,
+                Jsonb=Jsonb,
+            )
+            if carried:
+                profile["row_counts"]["result_artifact"] = carried
+                connection.execute(
+                    "UPDATE dataset_versions SET profile_json=%s WHERE id=%s",
+                    (Jsonb(profile), version_id),
+                )
             projection = connection.execute(
                 """
                 SELECT * FROM store_projections
@@ -1107,9 +1486,11 @@ def ingest_once(
     active_overlay_assets = active_overlay_asset_ids(stream_root)
     latest = _latest_ingested_at(target, dataset_version_id)
     expected_live_assets = max(1, EXPECTED_ASSET_COUNT - len(active_overlay_assets))
+    live_now = datetime.now(tz=timezone.utc)
     ticks = read_complete_ticks(
         stream_root,
         after=latest,
+        not_after=live_now + MAX_LIVE_CLOCK_SKEW,
         expected_asset_count=expected_live_assets,
     )
     if not ticks:
