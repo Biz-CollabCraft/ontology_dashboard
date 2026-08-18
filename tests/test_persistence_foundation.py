@@ -42,6 +42,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0027_scalable_pipeline_analysis",
             "0028_continuous_mlops_runtime",
             "0029_governed_event_automation",
+            "0030_closed_loop_operations",
         ]
     assert second == []
 
@@ -55,6 +56,43 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
     assert "ontology_schema_versions" in tables
     assert "ontology_source_mappings" in tables
     assert {"analyses", "analysis_boards", "analysis_runs"} <= tables
+    assert {
+        "closed_loop_recommendations",
+        "closed_loop_recommendation_decisions",
+        "closed_loop_work_orders",
+        "closed_loop_maintenance_actions",
+        "closed_loop_maintenance_events",
+        "closed_loop_equipment_state",
+        "closed_loop_activities",
+        "closed_loop_idempotency_records",
+    } <= tables
+    with sqlite3.connect(database) as connection:
+        activity_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(closed_loop_activities)")
+        }
+    assert {
+        "equipment_id",
+        "recommendation_id",
+        "work_order_id",
+        "maintenance_action_id",
+        "maintenance_event_id",
+        "actor_user_id",
+        "actor_display_name",
+        "before_status",
+        "after_status",
+        "created_at",
+    } <= activity_columns
+    with sqlite3.connect(database) as connection:
+        maintenance_action_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(closed_loop_maintenance_actions)")
+        }
+        maintenance_event_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(closed_loop_maintenance_events)")
+        }
+    assert "restart_at" in maintenance_action_columns
+    assert "restart_at" not in maintenance_event_columns
 
 
 def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Path) -> None:
