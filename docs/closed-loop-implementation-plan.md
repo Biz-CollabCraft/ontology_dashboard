@@ -24,6 +24,13 @@ Closed-loop 계약의 정본은 역할별로 분리한다.
 
 이 구현 계획은 canonical contract의 상세 내용을 복제하지 않고 구현 순서와 변경 범위만 관리한다.
 
+```text
+Closed-loop architecture/workflow (아키텍처 / 유스케이스 패턴 명칭)
+        ↓
+Backend owner: app/maintenance (Backend bounded context 명칭)
+```
+
+
 ## 2. 구현 목표
 
 대표 CNC Tool Replacement 사례 하나에서 다음 흐름을 실제 데이터와 상태 전이로
@@ -444,9 +451,10 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 - `systems/backend/ontology_dashboard/openapi_contracts.py`
 - `systems/backend/ontology_dashboard/service.py`
 
-따라서 PR 2는 `closed_loop/`, repository/PostgreSQL, outbox, migration, repository/domain test를 먼저
+따라서 PR 2는 `app/maintenance/`(구 `closed_loop/`), repository/PostgreSQL, outbox, migration, repository/domain test를 먼저
 진행하고, 위 공통 wiring은 PR #41 정리/merge 후 최신 `main`을 반영해 연결하는 것을 기본 순서로 한다.
 실제 구현 시점에는 PR #41 상태를 다시 확인한다.
+
 
 ## 9. 팀원별 선행 입력과 인계 산출물
 

@@ -24,7 +24,7 @@ extraction
 → model training
 → versioned Model Artifact
         ↓ Model Artifact contract
-ontology_dashboard/systems/backend/diagnosis
+ontology_dashboard/systems/backend/app/diagnosis
 current observation + Model Artifact
 → runtime inference
 → Result Artifact / Evidence
@@ -42,7 +42,7 @@ Closed-loop MaintenanceEvent
 gen_data Runtime Overlay
 target equipment snapshot + branch-local simulation clock
         ↓ continuous maintenance_replay_overlay Observation availability
-ontology_dashboard/systems/backend/diagnosis
+ontology_dashboard/systems/backend/app/diagnosis
 history requirement/readiness validation
         ├─ insufficient: wait for subsequent Observation
         └─ ready: runtime inference
@@ -67,7 +67,7 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
   - `systems/generator`: Semantic/ML pipeline 및 versioned Model Artifact producer
-  - `systems/backend/diagnosis`: runtime inference 및 제품 Result Artifact/Evidence 최종 producer
+  - `systems/backend/app/diagnosis`: runtime inference 및 제품 Result Artifact/Evidence 최종 producer
   - API / frontend / report: 제품 결과 소비자
 
 `gen_data`를 제품 prediction 또는 Result Artifact의 운영 producer로 해석하지 않는다.
@@ -80,8 +80,10 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
 - `systems/generator`, `systems/backend`, `systems/frontend`는 배치·API·UI라는 서로 다른 **독립 실행/배포 단위**다.
 - 시스템 간 Python/TypeScript 코드 direct import로 결합하지 않는다. 시스템 경계는 안정된 API 또는 versioned Artifact contract로 연결한다.
 - 각 시스템 내부는 계층 우선이 아니라 도메인 우선으로 구성한다. 계층 파일은 `{도메인}_{계층}.py` 형식을 따른다.
-- `common/` 이동은 사용 개수("3개 이상" 등)로 결정하지 않는다. **도메인 의미가 없고 안정된 cross-cutting concern 또는 infrastructure/common contract인지**를 먼저 판단한다. 성급한 공용화와 서로 다른 도메인 개념의 우연한 통합을 모두 피한다.
+- `systems/backend/ontology_dashboard`는 정식 compatibility architecture가 아니라 제거 대상 legacy migration source다. Migration 완료 전까지 한시적으로 존재할 수 있으나 신규 기능 또는 신규 파일 추가는 금지한다.
+- `common/` 이동 기준: 애매하면 우선 사용하는 domain에 둔다. 실제로 둘 이상의 domain에서 재사용되고, 특정 domain 고유의 업무 개념이 아닌 경우에 한해 `common`으로 승격한다. 단, 둘 이상에서 사용되더라도 특정 domain이 의미를 소유하는 개념(예: `DiagnosisResult`, `MaintenanceEvent`, `EquipmentId`)은 이동하지 않고 해당 domain이 계속 소유한다.
 - 물리 디렉터리 경로, sibling checkout 배치, 특정 로컬 파일명은 시스템 간 계약이 아니다.
+
 
 ```text
 project-root/
@@ -223,21 +225,57 @@ MODEL_ARTIFACT_URI=registry://pdm/production
 
 ## 5. systems/backend — Product Runtime
 
-Backend는 모델을 **학습하지 않는다**. `diagnosis`가 versioned Model Artifact와 현재 observation을 입력으로 runtime inference를 수행하고, 제품이 실제 소비하는 **Result Artifact/Evidence를 최종 생성**한다.
+Backend는 모델을 **학습하지 않는다**. `app/diagnosis`가 versioned Model Artifact와 현재 observation을 입력으로 runtime inference를 수행하고, 제품이 실제 소비하는 **Result Artifact/Evidence를 최종 생성**한다.
+
+### 5.1 Backend Canonical Root 및 목표 디렉터리 구조
+
+`systems/backend/app`은 제품 Backend Python package의 **유일한 Source of Truth**다.
+
+`systems/backend/ontology_dashboard`는 정식 compatibility architecture가 아니라 제거 대상 legacy migration source다. Migration 완료 전까지 한시적으로 존재할 수 있으나 신규 기능 또는 신규 파일 추가는 금지한다.
+
+목표 디렉터리 구조는 다음과 같다.
+
+```text
+systems/backend/
+├── app/
+│   ├── common/                  # 도메인 중립적 cross-cutting 유틸리티 및 기본 예외
+│   ├── infra/                   # 순수 기술 구현 (외부 I/O, DB, Storage, LLM 등)
+│   │   ├── db/
+│   │   ├── storage/
+│   │   ├── external/
+│   │   ├── llm/
+│   │   ├── messaging/
+│   │   └── observability/
+│   ├── identity/                # IAM bounded context (User, Session, Role, Scope 등)
+│   ├── project/                 # Project 메타데이터 및 라이프사이클
+│   ├── equipment/               # 설비 마스터 및 설비 상태
+│   ├── ontology/                # Object/Link/Action 온톨로지 레지스트리 및 인스턴스
+│   ├── dataset/                 # 데이터셋 소스 및 프로젝션
+│   ├── diagnosis/               # 런타임 추론 및 Result Artifact/Evidence 생성
+│   ├── maintenance/             # Closed-loop 정비 조치/이벤트/결정/작업지시 (구 closed_loop)
+│   ├── dashboard/               # Read-model composition 영역
+│   ├── report/                  # 보고서 생성 및 내보내기
+│   ├── planner/                 # 자연어 플래너
+│   └── governance/              # 거버넌스 및 감사
+├── migrations/
+├── tests/
+├── Dockerfile
+└── README.md
+```
+
+### 5.2 diagnosis 책임
 
 ```text
 Model Artifact
 + Current Observation
         ↓
-systems/backend/diagnosis
+systems/backend/app/diagnosis
 runtime inference
         ↓
 Result Artifact / Evidence
         ↓
 API / Dashboard / Report / Frontend
 ```
-
-### diagnosis 책임
 
 - `MODEL_ARTIFACT_URI`로 주입된 artifact provider에서 Model Artifact 로드
 - manifest compatibility / integrity 검증
@@ -248,7 +286,7 @@ API / Dashboard / Report / Frontend
 
 Training metrics, feature importance 등 모델 개발 설명자료는 Model Artifact provenance에 포함될 수 있지만, 이를 제품 runtime Evidence와 동일 개념으로 취급하지 않는다.
 
-### Backend Feature 소비
+### 5.3 Backend Feature 소비
 
 Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Feature를 생성해야 한다면 Model Artifact에 포함된 검증된 Feature Contract(`feature_schema.json`)와 지원 transform 집합만을 사용한다. 지원하지 않는 transform이나 `feature_schema_version` 불일치는 명시적으로 실패시킨다. 상세는 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
@@ -266,14 +304,28 @@ Canonical identity로 삽입하지 않는다. 별도 append-only Overlay 저장�
 read model을 사용해 대상 설비의 정비 후 예정 Canonical 행이 Overlay history에 다시
 섞이지 않도록 한다.
 
-### Backend domain dependency rule
+### 5.4 Backend 도메인 및 구조 규칙
 
-- 도메인 간 임의 `*_service.py` direct import를 금지한다.
-- 다른 도메인의 repository/adapter 구현을 직접 참조하지 않는다.
-- dependency cycle을 금지한다.
-- 조합이 필요하면 public application/query/port interface를 사용한다.
-- `dashboard`는 독립 business domain이라기보다 여러 public query/read model을 조합하는 **application/read-model composition** 영역으로 정의한다.
-- 실제 구현이 아직 placeholder인 경우에도 docstring과 새 코드는 위 방향을 위반하지 않는다.
+- **Domain-First 구조**: 각 도메인은 독립된 업무 단위를 형성하며, 계층 파일은 `{도메인}_{계층}.py` 형식을 따른다 (`{domain}_domain.py`, `{domain}_schema.py`, `{domain}_service.py`, `{domain}_repository.py`, `{domain}_router.py`, `exception.py`).
+- **도메인 간 서비스/레포지토리 직접 참조 금지**: 도메인 간 임의 `*_service.py` 또는 `*_repository.py`/`*_adapter.py` direct import를 금지한다. 다른 도메인과의 조합이 필요하면 public port/interface 또는 application query/read-model 경유로 결합한다.
+- **기술 중심 최상위 패키지 금지**: `routers/`, `adapters/`, `orchestration/`, `integrations/`, `modeling/`, `domain_packs/`, `predictive_maintenance_runtime/`, `closed_loop/` 등을 업무 package 최상위로 남기지 않는다.
+- **`infra/` 구조 및 기술 격리**: `infra/{db, storage, external, llm, messaging, observability}`로 구성하며 순수 기술 구현(DB 연결, 외부 API 클라이언트, 스토리지 드라이버 등)만 포함한다. 업무 도메인 로직을 포함하거나 domain service를 import해서는 안 된다.
+- **Exception 정책**:
+  - 도메인 전용 예외는 각 도메인의 `exception.py`에 정의한다.
+  - 범도메인 공통 예외는 `common/exceptions.py`로 정의한다.
+  - 도메인 서비스 레이어(`*_service.py`, domain logic)에서 `FastAPI`의 `HTTPException`을 직접 import하거나 발생시키는 것을 금지한다.
+  - 흐름: 도메인 오류 발생 (`DomainException`) → Router/Presentation 레이어 또는 app exception handler에서 포착 → HTTP 응답 변환.
+- **Identity vs Project 경계 구분**:
+  - `identity`: IAM bounded context (User, Session, Role, Permission, Organization, ProjectMembership, WorkspaceScope, OIDC, SCIM, MFA 등 "누가 접근 가능한가").
+  - `project`: Project 자체의 생성, 메타데이터, 라이프사이클 관리.
+- **`closed_loop` 명칭 정리**:
+  ```text
+  closed-loop = architecture / use-case 워크플로 패턴 명칭
+  maintenance = Backend bounded context 명칭 (app/maintenance)
+  ```
+  Backend 구현상의 bounded context 명칭은 `maintenance`이며, `app/maintenance`가 Recommendation, Decision, WorkOrder, MaintenanceAction, MaintenanceEvent를 소유한다.
+- **Dashboard 성격**: `dashboard`는 독립 business bounded context가 아니라 여러 public query/read model을 조합하는 **application/read-model composition** 영역으로 정의한다.
+
 
 ---
 
@@ -321,9 +373,9 @@ Backend의 내부 도메인 재구성은 API contract가 유지되는 한 Fronte
 
 ---
 
-## 9. 최소 Architecture CI / 검증 기준
+## 9. 최소 Architecture CI / 검증 기준 및 12대 목표
 
-구조 PR과 이후 재배치 PR은 최소한 다음을 검증한다.
+구조 PR과 이후 재배치 PR은 최소한 다음 기본 검증을 통과해야 한다.
 
 1. Generator 주요 package import smoke
 2. Backend FastAPI import 및 `GET /health` 200
@@ -334,7 +386,24 @@ Backend의 내부 도메인 재구성은 API contract가 유지되는 한 Fronte
 7. git conflict marker (`<<<<<<<`, `=======`, `>>>>>>>`) 부재 검사
 8. `git diff --check`
 
-이 저장소의 `systems/verify_architecture.py`는 4~7번의 정적 구조 검사(git conflict marker 검사 포함)를 담당한다. 런타임 import/build 검증은 각 시스템의 dependency 환경에서 별도로 실행한다.
+### Architecture CI 12대 목표 항목
+
+Domain-First 구조 전환 및 완전 수렴을 위해 다음 12개 Architecture invariant를 검증 목표로 유지한다.
+
+1. **Backend canonical package = `app/`**: `systems/backend/app`이 유일한 canonical package root임
+2. **`ontology_dashboard/` 존재 금지**: migration 완료 후 레거시 디렉터리 완전 제거
+3. **Domain-first 구조 유지**: `{domain}_{layer}.py` 구조 준수
+4. **`common` → `domain` import 금지**: 공통 계층이 개별 비즈니스 도메인에 역의존 금지
+5. **`domain` → 다른 domain의 `*_service`/`*_repository`/`*_adapter` 직접 import 금지**: port/interface 경유 조합
+6. **domain layer → FastAPI import 금지**: 도메인 계층의 HTTP 프레임워크 결합 금지
+7. **domain layer → DB/HTTP/storage 기술 라이브러리 직접 의존 금지**: 기술 구현 결합 금지
+8. **`infra` → domain service import 금지**: 인프라 계층의 상위 비즈니스 로직 역의존 금지
+9. **Backend → `systems.generator` direct import 금지**: 시스템 간 코드 직접 참조 금지
+10. **`main.py` business logic 포함 제한**: FastAPI 초기화, lifespan, middleware, exception handler, router include, DI 조립만 유지
+11. **domain exception / common exception 경계 검사**: 도메인별 `exception.py`와 `common/exceptions.py` 책임 분리
+12. **신규 top-level 기술 중심 패키지 생성 방지**: 최상위에 `routers/`, `adapters/`, `closed_loop/` 등 생성 금지
+
+> 위 12개 항목은 Architecture invariant 전체 목록이며, 기계적으로 안정적으로 검출 가능한 항목(예: 1, 2, 4, 5, 6, 8, 9)은 `verify_architecture.py`에 정적 검사로 구현하고, 의미 판단이 필요한 항목(예: 10 `main.py` business logic 포함 제한, 11 exception ownership 경계, 12 신규 기술 중심 package 여부)은 AI/code review checklist 및 테스트로 보완한다. CI가 regex 기반 정적 검사만으로 12개 전부를 완벽 판정하려 하지 않는다.
 
 ---
 
@@ -343,7 +412,7 @@ Backend의 내부 도메인 재구성은 API contract가 유지되는 한 Fronte
 PR #9의 대규모 실행 코드는 이 PR에서 이동하지 않는다. 이후 재배치 시 다음 책임으로 귀속한다.
 
 - semantic extraction / mapping / topology / feature / training → `systems/generator`
-- runtime prediction / inference / Result Artifact / Evidence → `systems/backend/diagnosis`
+- runtime prediction / inference / Result Artifact / Evidence → `systems/backend/app/diagnosis`
 - 정비 대상 설비 Runtime Overlay Observation → `gen_data`의 opt-in Runtime Overlay
 - 사용자 화면 및 report rendering → Frontend/Report consumer
 

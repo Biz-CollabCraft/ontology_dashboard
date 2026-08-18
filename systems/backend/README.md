@@ -5,8 +5,7 @@ FastAPI 서비스는 identity, hardened cookie session, RBAC·workspace scope, o
 ## 실행
 
 ```bash
-export PYTHONPATH="$PWD/../..:$PWD:$PWD/../../ml/src"
-uvicorn ontology_dashboard.app:app --host 127.0.0.1 --port 8100
+uvicorn app.main:app --host 127.0.0.1 --port 8100
 ```
 
 - Swagger: `http://127.0.0.1:8100/docs`
@@ -14,36 +13,25 @@ uvicorn ontology_dashboard.app:app --host 127.0.0.1 --port 8100
 
 개발·데모 환경에서는 8개 test account를 idempotent하게 seed한다. `APP_ENV=production`에서는 seed를 허용하지 않는다.
 
-## 모듈
+## 도메인 및 구조
 
-- `identity_models.py`: identity request model, principal, role·permission definitions
-- `identity_repository.py`: SQLite users, Argon2id credentials, sessions, workspace scopes, admin audit
-- `identity.py`: authentication, CSRF and permission policy facade
-- `ontology.py`: domain-neutral Object·Link·Action·Evidence·Dashboard·Board contract와 manufacturing registry
-- `ontology_adapter.py`: manufacturing fixture·Evidence·activity의 ObjectRecord·LinkRecord projection
-- `ontology_repository.py`: Action idempotency state와 persisted result
-- `ontology_service.py`: object query, traversal, Action validation·execution·audit
-- `dashboard_models.py`: strict Dashboard template·tab·board·preference·share contract
-- `dashboard_catalog.py`: 역할별 Board Catalog와 default template seed
-- `dashboard_repository.py`: template version, user preference, saved view, share persistence
-- `dashboard_service.py`: resolved dashboard, override merge, mandatory policy, dependency graph와 보안 검증
-- `role_workflow_models.py`: 역할 workspace, export checkpoint, field task와 승인 request contract
-- `role_workflow_repository.py`: audit checkpoint, field Action, template·model approval persistence
-- `role_workflow_service.py`: 역할 집계·재구성·diagnostic·release workflow orchestration
-- `ontology_planner_models.py`: typed Object query·Board recommendation·Dashboard draft·grounded narrative contract
-- `ontology_planner_service.py`: registry·Catalog·Evidence whitelist와 provider fail-closed planning
-- `security.py`: login·Planner·Export·session fixed-window rate limit
-- `export_models.py`: export request·checkpoint contract
-- `export_repository.py`: snapshot·artifact hash와 export checkpoint persistence
-- `export_service.py`: permission-scoped JSON·CSV·PDF generation과 operational audit
-- `service.py`: 기존 manufacturing domain pack orchestration
-- `reports.py`: deterministic manager/engineer reports
-- `llm.py`: OpenAI-compatible/Vertex AI provider와 grounding fallback
-- `planner.py`: 등록된 UI Block 전용 Planner
-- `context.py`: Project 3 HTTP Adapter와 fallback
-- `repository.py`: SQLite decision/note/conversation/operational audit
-- `conversation.py`: 제한된 intent와 안전한 후속 질문
-- `main.py`: auth, ontology, manufacturing, admin routes와 server-side permission 검사
+제품 Backend Python 패키지의 유일한 Source of Truth는 `app/`이다.
+
+- `app/identity`: IAM bounded context (User, Session, Role, Permission, Organization, ProjectMembership, WorkspaceScope, OIDC, SCIM, MFA)
+- `app/project`: Project 메타데이터 및 라이프사이클 관리
+- `app/equipment`: 설비 마스터 데이터 및 운영 상태 관리
+- `app/ontology`: Object, Link, Action 온톨로지 레지스트리 및 인스턴스 그래프
+- `app/dataset`: 데이터셋 소스 및 프로젝션
+- `app/diagnosis`: 런타임 추론 및 제품 Result Artifact / Evidence 최종 생성
+- `app/maintenance`: Closed-loop 추천, 운영 결정, 점검/정비 작업지시, 정비 이벤트 및 이력 (구 closed_loop)
+- `app/dashboard`: 여러 public query와 read model을 조합하는 application/read-model composition 영역
+- `app/report`: 결정론적 엔지니어/매니저 보고서 및 내보내기 관리
+- `app/planner`: 등록된 온톨로지 및 UI Block 기반 안전한 자연어 플래너
+- `app/governance`: 모델 릴리즈, 템플릿 승인 및 거버넌스 감사
+- `app/common`: 도메인 중립적 cross-cutting 유틸리티 및 기본 예외
+- `app/infra`: 순수 기술 구현 (DB 연결, Storage, 외부 API, LLM 프로바이더, 메시징, Observability)
+
+> `systems/backend/ontology_dashboard`는 정식 compatibility architecture가 아니라 제거 대상 legacy migration source다. Migration 완료 전까지 한시적으로 존재할 수 있으나 신규 기능 또는 신규 파일 추가는 금지한다.
 
 ## 보안 경계
 

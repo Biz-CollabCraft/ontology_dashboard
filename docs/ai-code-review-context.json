@@ -28,7 +28,7 @@
       ]
     },
     "closed_loop": {
-      "paths": ["systems/backend/**/closed_loop/**", "tests/test_closed_loop_domain_contract.py", "docs/closed-loop-*.md"],
+      "paths": ["systems/backend/app/maintenance/**", "systems/backend/**/closed_loop/**", "tests/test_closed_loop_domain_contract.py", "docs/closed-loop-*.md"],
       "context": [
         "docs/closed-loop-domain-contract.md",
         "docs/closed-loop-product-consumption-contract.md",
