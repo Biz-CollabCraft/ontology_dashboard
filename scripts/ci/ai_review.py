@@ -154,6 +154,12 @@ TECHNICAL_CLASSES = {
     "implementation_request",
 }
 
+TRUSTED_COMMENT_AUTHOR_ASSOCIATIONS = {
+    "OWNER",
+    "MEMBER",
+    "COLLABORATOR",
+}
+
 
 @dataclass(frozen=True)
 class CommentEvent:
@@ -162,8 +168,10 @@ class CommentEvent:
     source_kind: str
     author: str
     author_type: str
+    author_association: str
     body: str
     classification: str
+    authorized: bool
     eligible: bool
 
 
@@ -374,6 +382,12 @@ def is_bot_author(login: str, author_type: str = "", body: str = "") -> bool:
     )
 
 
+def is_trusted_comment_author(author_association: str) -> bool:
+    """Return whether a comment actor may trigger credentialed review automation."""
+
+    return author_association.upper() in TRUSTED_COMMENT_AUTHOR_ASSOCIATIONS
+
+
 def event_to_comment(event: dict[str, Any]) -> CommentEvent:
     action = event.get("action", "")
     if action not in {"created", "submitted"}:
@@ -402,16 +416,20 @@ def event_to_comment(event: dict[str, Any]) -> CommentEvent:
     classification = classify_comment(body, review_state=review_state)
     author = user.get("login") or "unknown"
     author_type = user.get("type") or ""
+    author_association = str(source.get("author_association") or "").upper()
     bot = is_bot_author(author, author_type, body)
+    authorized = is_trusted_comment_author(author_association)
     return CommentEvent(
         pr_number=pr_number,
         source_id=str(source.get("id") or source.get("node_id") or "unknown"),
         source_kind=kind,
         author=author,
         author_type=author_type,
+        author_association=author_association,
         body=body,
         classification=classification,
-        eligible=(classification in TECHNICAL_CLASSES and not bot),
+        authorized=authorized,
+        eligible=(classification in TECHNICAL_CLASSES and not bot and authorized),
     )
 
 
@@ -784,6 +802,8 @@ def command_event_info(args: argparse.Namespace) -> None:
     print(f"source_id={info.source_id}")
     print(f"source_kind={info.source_kind}")
     print(f"source_author={info.author}")
+    print(f"author_association={info.author_association}")
+    print(f"authorized={str(info.authorized).lower()}")
     print(f"classification={info.classification}")
     print(f"eligible={str(info.eligible).lower()}")
 

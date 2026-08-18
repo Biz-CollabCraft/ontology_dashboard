@@ -42,6 +42,8 @@ jobs:
       source_id: ${{ steps.event.outputs.source_id }}
       source_kind: ${{ steps.event.outputs.source_kind }}
       source_author: ${{ steps.event.outputs.source_author }}
+      author_association: ${{ steps.event.outputs.author_association }}
+      authorized: ${{ steps.event.outputs.authorized }}
       classification: ${{ steps.event.outputs.classification }}
       eligible: ${{ steps.event.outputs.eligible }}
       same_repo: ${{ steps.repo.outputs.same_repo }}
@@ -59,7 +61,7 @@ jobs:
         id: event
         run: python3 scripts/ci/ai_review.py event-info --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
 
-      - name: Read pull request repository boundary
+      - name: Read pull request repository boundary for authorized technical comment
         if: steps.event.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,7 +80,10 @@ jobs:
 
   review-comment:
     needs: gate
-    if: needs.gate.outputs.eligible == 'true' && needs.gate.outputs.same_repo == 'true'
+    if: >-
+      needs.gate.outputs.authorized == 'true' &&
+      needs.gate.outputs.eligible == 'true' &&
+      needs.gate.outputs.same_repo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -89,6 +94,7 @@ jobs:
       SOURCE_ID: ${{ needs.gate.outputs.source_id }}
       SOURCE_KIND: ${{ needs.gate.outputs.source_kind }}
       SOURCE_AUTHOR: ${{ needs.gate.outputs.source_author }}
+      SOURCE_AUTHOR_ASSOCIATION: ${{ needs.gate.outputs.author_association }}
       BASE_SHA: ${{ needs.gate.outputs.base_sha }}
       HEAD_SHA: ${{ needs.gate.outputs.head_sha }}
     permissions:

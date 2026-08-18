@@ -12,6 +12,7 @@ from scripts.ci.ai_review import (
     event_to_comment,
     human_technical_feedback,
     idempotency_decision,
+    is_trusted_comment_author,
     route_context,
 )
 
@@ -137,10 +138,51 @@ class AiReviewAutomationTests(unittest.TestCase):
             "comment": {
                 "id": 123,
                 "body": "<!-- automated-comment-review source-kind=issue_comment source-comment-id=1 head-sha=abc -->\n[P2] test",
+                "author_association": "MEMBER",
                 "user": {"login": "github-actions[bot]", "type": "Bot"},
             },
         }
         info = event_to_comment(event)
+        self.assertFalse(info.eligible)
+
+    def test_trusted_comment_author_associations_are_explicit(self):
+        for association in ("OWNER", "MEMBER", "COLLABORATOR"):
+            with self.subTest(association=association):
+                self.assertTrue(is_trusted_comment_author(association))
+
+        for association in ("NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", ""):
+            with self.subTest(association=association):
+                self.assertFalse(is_trusted_comment_author(association))
+
+    def test_member_technical_comment_can_enter_credentialed_review(self):
+        event = {
+            "action": "created",
+            "issue": {"number": 43, "pull_request": {"url": "x"}},
+            "comment": {
+                "id": 201,
+                "body": "[P1] OIDC gate 오류를 수정해야 합니다",
+                "author_association": "MEMBER",
+                "user": {"login": "KOR-GANG", "type": "User"},
+            },
+        }
+        info = event_to_comment(event)
+        self.assertTrue(info.authorized)
+        self.assertTrue(info.eligible)
+
+    def test_external_technical_comment_is_classified_but_cannot_enter_oidc_job(self):
+        event = {
+            "action": "created",
+            "issue": {"number": 43, "pull_request": {"url": "x"}},
+            "comment": {
+                "id": 202,
+                "body": "[P1] 버그가 있습니다",
+                "author_association": "NONE",
+                "user": {"login": "external-user", "type": "User"},
+            },
+        }
+        info = event_to_comment(event)
+        self.assertEqual(info.classification, "actionable_review")
+        self.assertFalse(info.authorized)
         self.assertFalse(info.eligible)
 
     def test_idempotency_noops_same_source_and_head(self):
