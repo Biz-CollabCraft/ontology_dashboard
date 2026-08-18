@@ -29,7 +29,7 @@
 | dashboard fixture | `data/fixtures/GS-*.json` schema/audit, expected prediction, 의도된 data-quality fixture 검증 | demo/gold regression 기준. 운영 source of truth로 취급하지 않음 |
 | diagnosis | `systems/backend/app/diagnosis`가 Result Artifact/Evidence producer 책임을 갖고 schema validation 수행 | producer 책임은 공식. 운영 Model Artifact 주입 기반 검증은 별도 단계 |
 | Product Result Artifact | `result-artifact-v1.0`, `prediction_task`, `canonical_source_mutated=false`, top factor shape 검증 | 제품 예측 결과 공식 기록. 예측 성능 검증과는 구분 |
-| dashboard Evidence | `schemas/evidence-package.schema.json`과 MVP report/layout 테스트로 검증 | 현행 consumer를 깨뜨리지 않는 compatibility 기준. `pdm-mvp` 필드 의미와 완전 일치한다고 보지는 않음 |
+| dashboard Evidence | `contracts/schemas/evidence-package.schema.json`과 MVP report/layout 테스트로 검증 | 현행 consumer를 깨뜨리지 않는 compatibility 기준. `pdm-mvp` 필드 의미와 완전 일치한다고 보지는 않음 |
 
 따라서 producer-side enrichment와 Event Evidence projection은 기존 dashboard 검증 경계를 버리는 작업이 아니다. 현행 schema/fixture/fallback으로 검증된 흐름을 유지하면서, 현재 Artifact/Evidence에 부족한 `sensor_evidence`, baseline, z-score, component hypothesis, source field trace 같은 의미를 Product Result Artifact의 producer 산출 필드와 projection 경계에서 흡수하는 작업이다.
 
@@ -146,7 +146,7 @@ flowchart LR
 
 ### 4.1 Product Result Artifact
 
-`schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. step 7 결정은 기존 required 필드를 깨지 않고 producer가 optional `evidence_payload`를 추가 산출하는 v1.0-compatible enrichment다. `result-artifact-v1.1` schema version bump는 이번 2주차 producer contract 범위에 넣지 않는다.
+`contracts/schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. step 7 결정은 기존 required 필드를 깨지 않고 producer가 optional `evidence_payload`를 추가 산출하는 v1.0-compatible enrichment다. `result-artifact-v1.1` schema version bump는 이번 2주차 producer contract 범위에 넣지 않는다.
 
 여기서 `evidence_payload`는 dashboard projection layer가 reference package를 읽어 운영 근거를 채워 넣는 뜻이 아니다. Product Result Artifact의 공식 생성 책임은 `systems/backend/app/diagnosis`에 유지하고, 같은 producer 경계에서 `sensor_evidence`, `component_hypotheses`, `maintenance_context`, `recommended_actions.basis`, `source_fields`를 산출한다. `systems/backend/ontology_dashboard/...`는 이미 enriched된 Artifact를 Event Evidence projection과 legacy compatibility output으로 변환한다.
 
@@ -277,7 +277,7 @@ Event Evidence projection은 `evidence_payload.evidence_gaps[]`를 `limitations`
 
 ### 4.2 Event Evidence Projection
 
-현행 fixture 기반 `schemas/evidence-package.schema.json`은 dashboard Evidence Package 역할을 해 왔지만, 실제로는 리포트 입력과 화면 표시용 값이 섞인 구조다. 이 작업에서는 이를 enriched Product Result Artifact에서 파생되는 Event Evidence projection으로 대체한다.
+현행 fixture 기반 `contracts/schemas/evidence-package.schema.json`은 dashboard Evidence Package 역할을 해 왔지만, 실제로는 리포트 입력과 화면 표시용 값이 섞인 구조다. 이 작업에서는 이를 enriched Product Result Artifact에서 파생되는 Event Evidence projection으로 대체한다.
 
 Event Evidence projection은 다음 계층을 분리한다.
 
@@ -332,14 +332,14 @@ canonical Event Evidence의 `assessment.top_factors`는 Product Result Artifact�
 - projection layer는 canonical Event Evidence projection과 legacy evidence compatibility projection을 동시에 만들 수 있어야 한다.
 - 2주차 기본 응답은 기존 legacy evidence shape를 유지한다.
 - canonical Event Evidence projection은 명시적 `schema_version`, `contract_type`, query/header/feature flag 같은 contract selector가 있을 때만 반환한다.
-- legacy projection은 새 수치를 만들지 않고 enriched Product Result Artifact와 Event Evidence projection의 `assessment`, `report_projection`에서 현행 `schemas/evidence-package.schema.json` 호환 필드만 재배열한다.
+- legacy projection은 새 수치를 만들지 않고 enriched Product Result Artifact와 Event Evidence projection의 `assessment`, `report_projection`에서 현행 `contracts/schemas/evidence-package.schema.json` 호환 필드만 재배열한다.
 - legacy Evidence Package의 top 5 factor는 Product Result Artifact의 `ranked_factor_evidence`를 legacy 변환 내부 입력으로 받아 생성한다. `legacy_compatible_top_factors` 같은 migration helper 이름이나 배열은 canonical Event Evidence public 응답에 노출하지 않는다.
 - API contract regression test는 legacy evidence shape, Event Evidence projection shape, hidden/evaluation truth absence, report grounding source field를 함께 검증한다.
 - canonical projection을 기본 응답으로 승격하고 legacy projection을 제거할지는 frontend/report consumer 전환 완료와 contract regression 통과 후 별도 PR에서 결정한다.
 
 ### 4.4 Report Output 계층
 
-현행 `schemas/report.schema.json`의 role-aware grounded report와 V2 제안 `ReportOutput`은 구분한다.
+현행 `contracts/schemas/report.schema.json`의 role-aware grounded report와 V2 제안 `ReportOutput`은 구분한다.
 
 - 현행 Event Report: `schema_version=1.0`, `GroundedReport`, `sections/actions/citations/limitations` 중심
 - V2 정적 Report Output: `executive-report-v1.0`, `generation_method`, `evidence_references`, `provenance` 중심
@@ -706,9 +706,15 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 13 | Todo | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | API contract test 결과 |
+| 13 | Done | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | PR #41 `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
 | 14 | Todo | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime service refactor | backend test 결과 |
 | 15 | Todo | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | API test 결과 |
+
+8.3 Notes:
+
+- PR #41의 Verified 범위는 fixture-backed `GET /api/events/{event_id}/evidence`, `GET /api/events/{event_id}/evidence?view=canonical`, `POST /api/events/{event_id}/report` 경로다.
+- `list_events`, `layout`, `follow_up`, runtime `_dashboard_detail`, frontend ViewModel/UI는 아직 `build_evidence_package()` 또는 별도 runtime 경로를 사용하므로 전체 consumer 전환 완료로 주장하지 않는다.
+- `ranked_factor_evidence`는 legacy/detail용 top 5 evidence row 입력이며, canonical Event Evidence의 공식 판단 요약인 `assessment.top_factors` top 3을 대체하지 않는다.
 
 3차 PR 완료 조건은 다음과 같다.
 
@@ -758,6 +764,8 @@ Status 값은 다음만 사용한다.
 | 24 | Deferred | 상태 요약, 요약 보고서, Operations 기간 집계 입력 계약을 설계한다. | V2 aggregate/report input plan | 후속 계획 문서 |
 
 ## 9. 완료 기준
+
+이 목록은 전체 integration plan의 최종 완료 기준이다. PR #41 기준 Verified 범위는 fixture evidence/report API path와 canonical selector이며, runtime `_dashboard_detail`, frontend ViewModel/UI, 점검 요청/evidence trace 화면 연결은 후속 PR 완료 전까지 Not Proven으로 남긴다.
 
 - Product Result Artifact producer가 운영 입력과 `evidence_payload`를 함께 산출한다.
 - Event Evidence projection이 enriched Product Result Artifact에서 생성된다.
