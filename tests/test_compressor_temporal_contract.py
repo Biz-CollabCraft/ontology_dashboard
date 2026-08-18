@@ -15,7 +15,7 @@ from systems.generator.model.compressor_training import (
 
 
 def _frames() -> tuple[pd.DataFrame, pd.DataFrame]:
-    timestamps = pd.date_range("2026-08-01T00:00:00Z", periods=8 * 24 * 6, freq="10min")
+    timestamps = pd.date_range("2026-08-01T00:00:00Z", periods=10 * 24 * 6, freq="10min")
     phase = np.arange(len(timestamps), dtype=float)
     observations = pd.DataFrame(
         {
@@ -33,7 +33,7 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     failures = pd.DataFrame(
         {
             "asset_id": ["CMP-TEST-01"],
-            "failure_occurred_at": [pd.Timestamp("2026-08-07T12:00:00Z")],
+            "failure_occurred_at": [pd.Timestamp("2026-08-09T12:00:00Z")],
         }
     )
     return observations, failures
@@ -81,9 +81,18 @@ def test_backend_reproduces_generator_temporal_features() -> None:
 def test_right_censor_and_failure_window_semantics() -> None:
     observations, failures = _frames()
     feature_table, _baseline_stats, _metadata = build_temporal_feature_table(observations, failures)
-    failure_at = pd.Timestamp("2026-08-07T12:00:00Z")
+    failure_at = pd.Timestamp("2026-08-09T12:00:00Z")
     positives = feature_table[feature_table["label"] == 1]
     assert not positives.empty
     assert positives["observed_at"].min() >= failure_at - pd.Timedelta(hours=24)
     assert positives["observed_at"].max() < failure_at
     assert feature_table["observed_at"].max() <= observations["observed_at"].max() - pd.Timedelta(hours=24)
+
+
+def test_first_seven_days_are_calibration_only() -> None:
+    observations, failures = _frames()
+    feature_table, _baseline_stats, metadata = build_temporal_feature_table(observations, failures)
+    baseline_end = observations["observed_at"].min() + pd.Timedelta(days=7)
+
+    assert metadata["baseline_calibration_only"] is True
+    assert feature_table["observed_at"].min() >= baseline_end

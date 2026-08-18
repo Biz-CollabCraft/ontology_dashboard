@@ -1013,6 +1013,55 @@ class PredictiveMaintenanceOntologyMaterializer:
         for artifact in artifacts:
             asset_id = str(artifact["asset_id"])
             observed_at = artifact["observed_at"]
+            provenance = artifact.get("provenance") or {}
+            if (
+                isinstance(provenance, dict)
+                and provenance.get("source_kind") == "maintenance_replay_overlay"
+            ):
+                overlay = connection.execute(
+                    """
+                    SELECT observed_at,observation_json
+                    FROM pm_runtime_overlay_observations
+                    WHERE dataset_version_id=%s AND asset_id=%s AND observed_at<=%s
+                    ORDER BY observed_at DESC LIMIT 1
+                    """,
+                    (dataset_version_id, asset_id, observed_at),
+                ).fetchone()
+                if overlay is not None:
+                    payload = dict(overlay["observation_json"] or {})
+                    if artifact["asset_type"] == "compressor":
+                        summaries[asset_id] = {
+                            "observed_at": overlay["observed_at"].isoformat(),
+                            "pressure_raw": float(payload["pressure_raw"]),
+                            "vibration_raw": float(payload["vibration_raw"]),
+                            "relative_vibration_z": float(payload["relative_vibration_z"]),
+                            "operating_state": str(payload.get("operating_state", "running")),
+                            "source_kind": "maintenance_replay_overlay",
+                        }
+                    else:
+                        rpm = float(payload["rotational_speed_rpm"])
+                        torque = float(payload["torque_nm"])
+                        wear = float(payload["tool_wear_min"])
+                        air = float(payload["air_temperature_k"])
+                        process = float(payload["process_temperature_k"])
+                        summaries[asset_id] = {
+                            "observed_at": overlay["observed_at"].isoformat(),
+                            "air_temperature_k": air,
+                            "process_temperature_k": process,
+                            "rotational_speed_rpm": rpm,
+                            "torque_nm": torque,
+                            "tool_wear_min": wear,
+                            "product_type": str(payload.get("product_type") or "L"),
+                            "operating_state": str(payload.get("operating_state", "running")),
+                            "source_kind": "maintenance_replay_overlay",
+                            "derived_measures": {
+                                "power_w": torque * rpm * 2 * math.pi / 60,
+                                "temperature_gap_k": process - air,
+                                "overstrain_load": wear * torque,
+                            },
+                            "derived_measure_contract": "query_time_from_runtime_overlay_observation",
+                        }
+                    continue
             if artifact["asset_type"] == "compressor":
                 row = connection.execute(
                     """

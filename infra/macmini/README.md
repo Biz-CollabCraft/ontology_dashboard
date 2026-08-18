@@ -101,6 +101,32 @@ graph. Legacy `lightgbm`/`xgboost` declarations are intentionally not installed
 because the merged canonical runtime does not import them; the production model
 uses scikit-learn RandomForest with bounded worker count.
 
+## Live `gen_data` → model → product loop
+
+The weekly `generator` job trains and promotes Model Artifacts; it is not the
+sensor stream. Production live data is a separate loop:
+
+1. the `Biz-CollabCraft/gen_data` daemon runs under launchd and appends one
+   complete 100-asset sensor tick every 10 wall-clock minutes by default;
+2. `live-ingestor` watches those JSONL streams and publishes them into a
+   separate `gen-data-live-v1` Dataset Version;
+3. Backend diagnosis invokes the currently promoted CNC and compressor Model
+   Artifacts and atomically refreshes the 100 current Result Artifacts;
+4. the MVP frontend refreshes its governed runtime view every 30 seconds.
+
+The immutable Canonical V3.1 Dataset Version remains the training/regression
+baseline and is never appended to by the live loop. Set `GEN_DATA_LIVE_SPEED=1`
+for wall-clock production operation. The initial six-hour backfill exists only
+to provide the 35 preceding observations required by the temporal models.
+
+After the production `.env` is configured, install/reload the source daemon and
+start the ingestor with:
+
+```bash
+infra/macmini/scripts/install-live-runtime.sh
+docker compose --env-file infra/macmini/.env -f infra/macmini/docker-compose.yml up -d live-ingestor
+```
+
 ## PostgreSQL migration, backup, restore
 
 Neon is dumped in PostgreSQL custom format with `--no-owner --no-acl`, retained

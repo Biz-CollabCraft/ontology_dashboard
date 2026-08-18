@@ -53,3 +53,26 @@ server-only secrets tree and is mounted read-only into the one-shot Generator
 container through `GOOGLE_APPLICATION_CREDENTIALS`; it is never copied into the
 image or repository. An API key can still be injected with `VERTEX_AI_API_KEY`
 when that authentication mode is intentionally used.
+
+The production sensor loop is distinct from weekly model training. The
+`gen_data` daemon owns time-progressing source observations and persists its
+checkpoint/output under the Mac mini data root. `live-ingestor` is owned by
+`ontology_dashboard`: in the normal path it accepts complete source ticks,
+writes them to the separate `gen-data-live-v1` Dataset Version, invokes the
+promoted CNC and compressor Model Artifacts, and refreshes Product Result
+Artifacts. The source clock is a configurable simulation clock; the production
+demo currently runs it faster than wall clock, so timestamps are virtual-time
+observations rather than a claim of physical real-time acquisition.
+
+Closed-loop maintenance uses a separate additive Runtime Overlay path. A target
+equipment branch is never merged back into Canonical source rows. `gen_data`
+persists append-only `maintenance_replay_overlay` observations and checkpoints a
+pending `runtime_overlay.observations.available` notification before advancing
+its durable branch state. The availability outbox is idempotent by `event_id`
+and is replayed on daemon restart, closing the observation-persisted / event-not-
+yet-persisted crash window. Backend stores those rows in dedicated Runtime
+Overlay tables, excludes active target equipment from the normal live inference
+selection, evaluates Model Artifact history requirements against branch-only
+post-maintenance history, and creates the post-maintenance prediction only after
+the required history is available. Pre-maintenance history is not mixed into the
+post-maintenance temporal window.

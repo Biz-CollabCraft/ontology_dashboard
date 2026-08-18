@@ -159,7 +159,7 @@ def test_outbox_projection_preserves_v3_contract_and_marks_graph_ready(
     assert request.result_contract.model_versions == ["independent-logreg-v3.1"]
     assert request.release_gates["tool_wear_continuity"][
         "tool_replacement_event_count"
-    ] == 731
+    ] == 1_075
     assert request.release_gates["agent_example_evaluation"][
         "maintenance_evidence_accuracy"
     ] == 1.0

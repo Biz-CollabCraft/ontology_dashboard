@@ -213,6 +213,87 @@ def publish_training_artifact(*, force_reanalyze: bool = False) -> Path:
             json.dumps(training.threshold_curve, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        label_schema_file = Path(work) / "label_schema.json"
+        label_schema_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": "compressor-failure-within-horizon-v1",
+                    "target": "failure_within_24h",
+                    "horizon_hours": 24,
+                    "positive_semantics": "next failure strictly after observation and within 24 hours",
+                    "post_failure_rows_positive": False,
+                    "right_censoring": "exclude final 24h of each asset observation horizon",
+                    "maintenance_rows_excluded": True,
+                    "truth_usage": "label creation and offline evaluation only",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        runtime_context = dict(
+            (training.feature_schema.get("feature_engineering") or {}).get("runtime_context") or {}
+        )
+        history_requirement_file = Path(work) / "history_requirement.json"
+        history_requirement_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": "compressor-history-requirement-v1",
+                    "observation_family": "compressor",
+                    "current_observation_required": True,
+                    "prior_observations_required": int(
+                        runtime_context.get("recent_history_rows_required", 35)
+                    ),
+                    "expected_cadence_minutes": float(
+                        (training.feature_schema.get("feature_engineering") or {}).get(
+                            "expected_cadence_minutes", 10.0
+                        )
+                    ),
+                    "ordering": runtime_context.get(
+                        "history_order", "strictly_ascending_before_current_observation"
+                    ),
+                    "new_asset_policy": runtime_context.get(
+                        "new_asset_policy", "calibrate_baseline_before_inference"
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return publish_model_artifact(
+            artifact_uri=artifact_uri,
+            model_id="compressor-failure-risk",
+            model_version=model_version,
+            dataset_version=dataset_version,
+            feature_schema_version=FEATURE_SCHEMA_VERSION,
+            model_file=model_file,
+            feature_schema=training.feature_schema,
+            training_config=training.training_config,
+            metrics=training.metrics,
+            provenance={
+                "source_repository": "Biz-CollabCraft/gen_data",
+                "source_contract": "Canonical V3.1 file/artifact",
+                "source_file": f"{candidate}.csv",
+                "source_file_sha256": source_sha,
+                "failure_truth_file": f"{failure_key}.csv",
+                "producer": "ontology_dashboard/systems/generator",
+                "training_implementation": TRAINING_VERSION,
+            },
+            compatibility={
+                "runtime": "ontology_dashboard.systems.backend.diagnosis",
+                "prediction_task": "binary_failure_within_horizon",
+                "observation_family": "compressor",
+                "python": ">=3.11",
+            },
+            extra_files={
+                "threshold_curve": threshold_curve_file,
+                "label_schema": label_schema_file,
+                "history_requirement": history_requirement_file,
+            },
+        )
 
 
 def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
@@ -275,7 +356,7 @@ def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
     source_sha = _sha256(source_file)
     dataset_version = f"gen-data-v3.1-sha256-{source_sha[:12]}"
     algorithm_slug = training.selected_model.replace("_", "-")
-    model_version = f"cnc-{algorithm_slug}-v1-{source_sha[:12]}"
+    model_version = f"cnc-{algorithm_slug}-v3-{source_sha[:12]}"
     destination = (
         Path(str(artifact_uri).removeprefix("file://")).expanduser().resolve()
         / "cnc-failure-risk"
@@ -375,85 +456,6 @@ def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
                 "history_requirement": history_requirement_file,
             },
         )
-        label_schema_file = Path(work) / "label_schema.json"
-        label_schema_file.write_text(
-            json.dumps(
-                {
-                    "schema_version": "compressor-failure-within-horizon-v1",
-                    "target": "failure_within_24h",
-                    "horizon_hours": 24,
-                    "positive_semantics": "next failure strictly after observation and within 24 hours",
-                    "post_failure_rows_positive": False,
-                    "right_censoring": "exclude final 24h of each asset observation horizon",
-                    "maintenance_rows_excluded": True,
-                    "truth_usage": "label creation and offline evaluation only",
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        history_requirement_file = Path(work) / "history_requirement.json"
-        runtime_context = dict(
-            (training.feature_schema.get("feature_engineering") or {}).get("runtime_context") or {}
-        )
-        history_requirement_file.write_text(
-            json.dumps(
-                {
-                    "schema_version": "compressor-history-requirement-v1",
-                    "observation_family": "compressor",
-                    "current_observation_required": True,
-                    "prior_observations_required": int(runtime_context.get("recent_history_rows_required", 35)),
-                    "expected_cadence_minutes": float(
-                        (training.feature_schema.get("feature_engineering") or {}).get(
-                            "expected_cadence_minutes", 10.0
-                        )
-                    ),
-                    "ordering": runtime_context.get(
-                        "history_order", "strictly_ascending_before_current_observation"
-                    ),
-                    "new_asset_policy": runtime_context.get(
-                        "new_asset_policy", "calibrate_baseline_before_inference"
-                    ),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        return publish_model_artifact(
-            artifact_uri=artifact_uri,
-            model_id="compressor-failure-risk",
-            model_version=model_version,
-            dataset_version=dataset_version,
-            feature_schema_version=FEATURE_SCHEMA_VERSION,
-            model_file=model_file,
-            feature_schema=training.feature_schema,
-            training_config=training.training_config,
-            metrics=training.metrics,
-            provenance={
-                "source_repository": "Biz-CollabCraft/gen_data",
-                "source_contract": "Canonical V3.1 file/artifact",
-                "source_file": f"{candidate}.csv",
-                "source_file_sha256": source_sha,
-                "failure_truth_file": f"{failure_key}.csv",
-                "producer": "ontology_dashboard/systems/generator",
-                "training_implementation": TRAINING_VERSION,
-            },
-            compatibility={
-                "runtime": "ontology_dashboard.systems.backend.diagnosis",
-                "prediction_task": "binary_failure_within_horizon",
-                "observation_family": "compressor",
-                "python": ">=3.11",
-            },
-            extra_files={
-                "threshold_curve": threshold_curve_file,
-                "label_schema": label_schema_file,
-                "history_requirement": history_requirement_file,
-            },
-        )
 
 
 def update_current_alias(artifact_path: Path) -> Path:
@@ -502,6 +504,30 @@ def assert_promotion_sanity(artifact_path: Path) -> None:
         )
     manifest = json.loads((artifact_path / "manifest.json").read_text(encoding="utf-8"))
     family = str((manifest.get("compatibility") or {}).get("observation_family") or "")
+    if family == "compressor":
+        deployment_ap = float(deployment.get("average_precision") or 0.0)
+        deployment_recall = float(deployment.get("recall") or 0.0)
+        precision_lift = float(deployment.get("precision_lift_over_prevalence") or 0.0)
+        if deployment_ap < 0.15:
+            raise RuntimeError(
+                "Compressor Model Artifact promotion blocked: deployment average precision "
+                f"{deployment_ap:.6f} is below the 0.150000 release floor"
+            )
+        if deployment_precision < 0.05:
+            raise RuntimeError(
+                "Compressor Model Artifact promotion blocked: deployment alert precision "
+                f"{deployment_precision:.6f} is below the 0.050000 release floor"
+            )
+        if deployment_recall < 0.30:
+            raise RuntimeError(
+                "Compressor Model Artifact promotion blocked: deployment recall "
+                f"{deployment_recall:.6f} is below the 0.300000 release floor"
+            )
+        if precision_lift < 5.0:
+            raise RuntimeError(
+                "Compressor Model Artifact promotion blocked: precision lift "
+                f"{precision_lift:.6f} is below the 5.000000 release floor"
+            )
     if family == "cnc":
         if deployment_precision < 0.50:
             raise RuntimeError(
@@ -552,6 +578,7 @@ def main() -> int:
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 
     result: dict[str, Any] = {}
+    promotion_failures: list[str] = []
     if args.command in {"run", "feature-label"}:
         result["pipeline"] = run_feature_label_pipeline(force_reanalyze=args.force_reanalyze)
     if args.command in {"run", "train-publish", "train-publish-all"}:
@@ -565,10 +592,14 @@ def main() -> int:
             "promoted_current": False,
         }
         if args.promote_current:
-            assert_promotion_sanity(artifact)
-            current = update_current_alias(artifact)
-            result["artifact"]["current_uri"] = str(current)
-            result["artifact"]["promoted_current"] = True
+            try:
+                assert_promotion_sanity(artifact)
+                current = update_current_alias(artifact)
+                result["artifact"]["current_uri"] = str(current)
+                result["artifact"]["promoted_current"] = True
+            except RuntimeError as exc:
+                result["artifact"]["promotion_error"] = str(exc)
+                promotion_failures.append(f"compressor: {exc}")
     if args.command in {"run", "train-publish-cnc", "train-publish-all"}:
         cnc_artifact = publish_cnc_training_artifact(force_reanalyze=args.force_reanalyze)
         cnc_manifest = json.loads((cnc_artifact / "manifest.json").read_text(encoding="utf-8"))
@@ -580,15 +611,19 @@ def main() -> int:
             "promoted_current": False,
         }
         if args.promote_current:
-            assert_promotion_sanity(cnc_artifact)
-            cnc_current = update_current_alias(cnc_artifact)
-            result["cnc_artifact"]["current_uri"] = str(cnc_current)
-            result["cnc_artifact"]["promoted_current"] = True
+            try:
+                assert_promotion_sanity(cnc_artifact)
+                cnc_current = update_current_alias(cnc_artifact)
+                result["cnc_artifact"]["current_uri"] = str(cnc_current)
+                result["cnc_artifact"]["promoted_current"] = True
+            except RuntimeError as exc:
+                result["cnc_artifact"]["promotion_error"] = str(exc)
+                promotion_failures.append(f"cnc: {exc}")
     if args.command == "llm-smoke":
         result["llm"] = llm_smoke()
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 2 if promotion_failures else 0
 
 
 if __name__ == "__main__":

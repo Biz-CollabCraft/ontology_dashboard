@@ -109,6 +109,33 @@ services:
       start_period: 10s
     networks: [private]
 
+  live-ingestor:
+    build:
+      context: ../..
+      dockerfile: systems/backend/Dockerfile
+      args:
+        API_EXTRAS: macmini
+    restart: unless-stopped
+    cpus: 0.75
+    mem_limit: 768m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      ONTOLOGY_DASHBOARD_DATABASE_URL: ${ONTOLOGY_DASHBOARD_DATABASE_URL}
+      MODEL_ARTIFACT_URI: ${BACKEND_MODEL_ARTIFACT_URI:-/artifacts/compressor-failure-risk/current}
+      CNC_MODEL_ARTIFACT_URI: ${BACKEND_CNC_MODEL_ARTIFACT_URI:-/artifacts/cnc-failure-risk/current}
+      ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK: "0"
+      GEN_DATA_RUNTIME_OUTPUT_ROOT: /gen-data-runtime
+      LIVE_PM_POLL_SECONDS: ${LIVE_PM_POLL_SECONDS:-5}
+      LOG_LEVEL: ${LIVE_PM_LOG_LEVEL:-INFO}
+    command: ["python", "-m", "ontology_dashboard.live_predictive_maintenance"]
+    volumes:
+      - ${ONTOLOGY_DATA_ROOT}/artifacts:/artifacts:ro
+      - ${GEN_DATA_RUNTIME_OUTPUT_ROOT}:/gen-data-runtime:ro
+    networks: [private]
+
   generator:
     build:
       context: ../..

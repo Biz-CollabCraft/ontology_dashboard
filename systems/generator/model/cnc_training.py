@@ -27,7 +27,7 @@ from .compressor_training import (
 )
 
 
-TRAINING_VERSION = "cnc-temporal-v1"
+TRAINING_VERSION = "cnc-temporal-v3-operational-selection"
 FEATURE_SCHEMA_VERSION = "cnc-temporal-v1"
 FEATURE_ENGINEERING_KIND = "cnc-temporal-v1"
 SENSORS = [
@@ -128,7 +128,8 @@ def build_temporal_feature_table(
         sample["label"] = _future_label(timestamps, event_times, horizon_hours)
         censor_cutoff = group["observed_at"].iloc[-1] - pd.Timedelta(hours=horizon_hours)
         sample = sample[
-            (sample["observed_at"] <= censor_cutoff)
+            (sample["observed_at"] >= baseline_end)
+            & (sample["observed_at"] <= censor_cutoff)
             & (sample["operating_state"] == "running")
         ]
         sample = sample.dropna(subset=FEATURE_COLUMNS)
@@ -147,6 +148,8 @@ def build_temporal_feature_table(
         "rolling_rows": 36,
         "rolling_min_periods": 12,
         "sample_stride_rows": 6,
+        "baseline_calibration_only": True,
+        "history_state_policy": "rolling_history_may_include_non_running_rows_current_sample_must_be_running",
         "right_censoring": True,
         "maintenance_rows_excluded": True,
     }
@@ -224,6 +227,48 @@ def _candidate(algorithm: str, *, n_jobs: int) -> Pipeline:
                 )
             ]
         )
+    if algorithm == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        return Pipeline(
+            [
+                (
+                    "classifier",
+                    LGBMClassifier(
+                        n_estimators=360,
+                        learning_rate=0.05,
+                        num_leaves=31,
+                        class_weight="balanced",
+                        subsample=0.9,
+                        colsample_bytree=0.9,
+                        n_jobs=n_jobs,
+                        random_state=RANDOM_SEED,
+                        verbosity=-1,
+                    ),
+                )
+            ]
+        )
+    if algorithm == "xgboost":
+        from xgboost import XGBClassifier
+
+        return Pipeline(
+            [
+                (
+                    "classifier",
+                    XGBClassifier(
+                        n_estimators=360,
+                        max_depth=6,
+                        learning_rate=0.05,
+                        subsample=0.9,
+                        colsample_bytree=0.9,
+                        tree_method="hist",
+                        eval_metric="logloss",
+                        n_jobs=n_jobs,
+                        random_state=RANDOM_SEED,
+                    ),
+                )
+            ]
+        )
     raise ValueError(f"unsupported CNC candidate: {algorithm}")
 
 
@@ -269,9 +314,18 @@ def train_cnc_model(
         horizon_hours=horizon_hours,
     )
     split = _split_chronologically(frame)
-    candidate_names = ("logistic_regression", "random_forest", "extra_trees")
+    candidate_names = (
+        "logistic_regression",
+        "random_forest",
+        "extra_trees",
+        "lightgbm",
+        "xgboost",
+    )
     candidate_validation: dict[str, Any] = {}
     candidate_sanity: dict[str, Any] = {}
+    candidate_operating_points: dict[str, Any] = {}
+    candidate_thresholds: dict[str, float] = {}
+    candidate_threshold_curves: dict[str, list[dict[str, Any]]] = {}
     fitted: dict[str, Pipeline] = {}
     validation_probabilities: dict[str, np.ndarray] = {}
 
@@ -282,6 +336,18 @@ def train_cnc_model(
         candidate_validation[algorithm] = _metric_set(split.validation["label"], probability, 0.5)
         fitted[algorithm] = model
         validation_probabilities[algorithm] = probability
+        candidate_threshold, candidate_curve = _select_threshold(
+            split.validation["label"],
+            probability,
+            minimum_recall=minimum_recall,
+        )
+        candidate_thresholds[algorithm] = candidate_threshold
+        candidate_threshold_curves[algorithm] = candidate_curve
+        candidate_operating_points[algorithm] = _metric_set(
+            split.validation["label"],
+            probability,
+            candidate_threshold,
+        )
 
     prevalence = float(frame["label"].mean())
     for algorithm in candidate_names:
@@ -295,19 +361,19 @@ def train_cnc_model(
         algorithm
         for algorithm in candidate_names
         if float(candidate_sanity[algorithm]["average_precision"]) > prevalence
+        and float(candidate_operating_points[algorithm]["recall"]) >= minimum_recall
     ] or list(candidate_names)
     selected_model = max(
         eligible,
         key=lambda algorithm: (
+            float(candidate_operating_points[algorithm]["f1"]),
+            float(candidate_operating_points[algorithm]["precision"]),
             float(candidate_validation[algorithm]["average_precision"]),
             float(candidate_sanity[algorithm]["average_precision"]),
         ),
     )
-    threshold, threshold_curve = _select_threshold(
-        split.validation["label"],
-        validation_probabilities[selected_model],
-        minimum_recall=minimum_recall,
-    )
+    threshold = candidate_thresholds[selected_model]
+    threshold_curve = candidate_threshold_curves[selected_model]
     deployment_probability = fitted[selected_model].predict_proba(split.test[FEATURE_COLUMNS])[:, 1]
     deployment_test = _metric_set(split.test["label"], deployment_probability, threshold)
     regression_sanity = _leave_one_site_out(
@@ -348,7 +414,8 @@ def train_cnc_model(
         "label_horizon_hours": horizon_hours,
         "deployment_split": "per_asset_chronological_70_15_15",
         "regression_sanity_split": "leave_one_site_out",
-        "threshold_selection": "validation_max_f1_with_minimum_recall_constraint",
+        "candidate_selection": "validation_operating_point_max_f1_then_precision_under_minimum_recall",
+        "threshold_selection": "per_candidate_validation_max_f1_with_minimum_recall_constraint",
         "minimum_recall": minimum_recall,
         "selected_threshold": threshold,
         "test_used_for_selection": False,
@@ -362,11 +429,13 @@ def train_cnc_model(
             "feature_count": len(FEATURE_COLUMNS),
         },
         "candidate_validation_metrics_at_0_5": candidate_validation,
+        "candidate_validation_operating_points": candidate_operating_points,
         "candidate_regression_sanity_at_0_5": candidate_sanity,
         "selected_model": selected_model,
         "selected_threshold": threshold,
         "threshold_selection_methodology": (
-            "validation max F1 subject to recall >= minimum_recall; "
+            "each candidate selects validation max F1 subject to recall >= minimum_recall; "
+            "candidate selection then maximizes validation operating-point F1/precision; "
             "deployment test untouched during threshold selection"
         ),
         "regression_sanity": regression_sanity,

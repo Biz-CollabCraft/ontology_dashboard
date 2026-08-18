@@ -64,7 +64,12 @@ def _set_scope(connection: Any) -> None:
     connection.execute("SELECT set_config('app.project_id',%s,true)", (PROJECT_ID,))
 
 
-def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[str, Any]]:
+def _runtime_candidates(
+    connection: Any,
+    dataset_version_id: str,
+    *,
+    excluded_asset_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Select the latest observation for every canonical equipment asset.
 
     The MVP overview represents the latest known state of both canonical asset
@@ -73,6 +78,7 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
     state.
     """
 
+    excluded = sorted(excluded_asset_ids or set())
     return list(
         connection.execute(
             """
@@ -81,6 +87,7 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
                        ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC) AS row_number
                 FROM pm_cnc_observations o
                 WHERE o.dataset_version_id=%s
+                  AND NOT (o.asset_id = ANY(%s))
             ), latest_cnc AS (
                 SELECT o.asset_id,o.observed_at,o.source_sha256,'cnc'::text AS asset_type,
                        jsonb_build_object(
@@ -116,6 +123,7 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
                        ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC) AS row_number
                 FROM pm_compressor_observations o
                 WHERE o.dataset_version_id=%s
+                  AND NOT (o.asset_id = ANY(%s))
             ), latest_compressor AS (
                 SELECT o.asset_id,o.observed_at,o.source_sha256,'compressor'::text AS asset_type,
                        jsonb_build_object(
@@ -152,7 +160,7 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
             SELECT * FROM latest_compressor
             ORDER BY asset_id
             """,
-            (dataset_version_id, dataset_version_id),
+            (dataset_version_id, excluded, dataset_version_id, excluded),
         ).fetchall()
     )
 
@@ -236,7 +244,12 @@ def _cnc_runtime_history(
     ]
 
 
-def _runtime_fixture(row: dict[str, Any], *, history: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _runtime_fixture(
+    row: dict[str, Any],
+    *,
+    history: list[dict[str, Any]] | None = None,
+    source_version: str = SOURCE_VERSION,
+) -> dict[str, Any]:
     observed_at = row["observed_at"].isoformat()
     asset_id = str(row["asset_id"])
     asset_type = str(row["asset_type"])
@@ -265,7 +278,7 @@ def _runtime_fixture(row: dict[str, Any], *, history: list[dict[str, Any]] | Non
         "schema_version": "1.0",
         "event_id": f"runtime-{asset_id}-{observed_at}",
         "scenario_id": f"canonical-v3.1-runtime:{asset_id}",
-        "dataset_version": SOURCE_VERSION,
+        "dataset_version": source_version,
         "asset_type": asset_type,
         "equipment": {
             "equipment_id": asset_id,
@@ -278,7 +291,14 @@ def _runtime_fixture(row: dict[str, Any], *, history: list[dict[str, Any]] | Non
     }
 
 
-def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> dict[str, Any]:
+def _materialize_runtime_results(
+    database_url: str,
+    dataset_version_id: str,
+    *,
+    source_version: str = SOURCE_VERSION,
+    materialization_profile: str = RUNTIME_MATERIALIZATION_PROFILE,
+    excluded_asset_ids: set[str] | None = None,
+) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
     cnc_predictor = configured_predictor("cnc")
     compressor_predictor = configured_predictor("compressor")
@@ -302,7 +322,11 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                     "refusing to overwrite fixture-backed predictive outputs: "
                     + ", ".join(unexpected)
                 )
-            candidates = _runtime_candidates(connection, dataset_version_id)
+            candidates = _runtime_candidates(
+                connection,
+                dataset_version_id,
+                excluded_asset_ids=excluded_asset_ids,
+            )
             if not candidates:
                 raise RuntimeError("canonical V3.1 source ingestion produced no equipment observations")
 
@@ -317,27 +341,30 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                        ) AS current_selection_count,
                        COUNT(*) FILTER (
                            WHERE provenance->>'materialization_profile'=%s
-                       ) AS current_profile_count
+                       ) AS current_profile_count,
+                       MAX(observed_at) AS latest_observed_at
                 FROM pm_result_artifacts
                 WHERE dataset_version_id=%s
                 """,
                 (
                     RUNTIME_SELECTION_STRATEGY,
-                    RUNTIME_MATERIALIZATION_PROFILE,
+                    materialization_profile,
                     dataset_version_id,
                 ),
             ).fetchone()
+            latest_candidate_observed_at = max(row["observed_at"] for row in candidates)
             if (
                 int(existing["count"] or 0) == len(candidates)
                 and int(existing["runtime_count"] or 0) == len(candidates)
                 and int(existing["current_selection_count"] or 0) == len(candidates)
                 and int(existing["current_profile_count"] or 0) == len(candidates)
+                and existing["latest_observed_at"] == latest_candidate_observed_at
             ):
                 return {
                     "model_versions": sorted({cnc_predictor.model_version, compressor_predictor.model_version}),
                     "result_artifact_count": len(candidates),
                     "selection_strategy": RUNTIME_SELECTION_STRATEGY,
-                    "materialization_profile": RUNTIME_MATERIALIZATION_PROFILE,
+                    "materialization_profile": materialization_profile,
                     "reused": True,
                 }
 
@@ -390,7 +417,7 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                     )
                 )
                 artifact = build_product_result_artifact(
-                    _runtime_fixture(row, history=history),
+                    _runtime_fixture(row, history=history, source_version=source_version),
                     predictor=predictor,
                 )
                 probability = float(artifact["failure_probability"])
@@ -407,11 +434,11 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                 provenance.update(
                     {
                         "dataset_version_id": dataset_version_id,
-                        "source_version": SOURCE_VERSION,
+                        "source_version": source_version,
                         "source_observation_sha256": str(row["source_sha256"]),
                         "diagnostic_failure_type": diagnostic_type,
                         "selection_strategy": RUNTIME_SELECTION_STRATEGY,
-                        "materialization_profile": RUNTIME_MATERIALIZATION_PROFILE,
+                        "materialization_profile": materialization_profile,
                     }
                 )
                 prediction_id = str(provenance["prediction_id"])
@@ -446,7 +473,7 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                         row["asset_id"],
                         status,
                         artifact["provenance"]["model_version"],
-                        SOURCE_VERSION,
+                        source_version,
                         Jsonb(result_payload),
                         row["observed_at"],
                     ),
@@ -575,7 +602,7 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                 "status_counts": status_counts,
                 "asset_type_counts": asset_type_counts,
                 "selection_strategy": RUNTIME_SELECTION_STRATEGY,
-                "materialization_profile": RUNTIME_MATERIALIZATION_PROFILE,
+                "materialization_profile": materialization_profile,
                 "reused": False,
             }
 

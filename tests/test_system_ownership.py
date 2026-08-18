@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from jsonschema import Draft202012Validator
@@ -82,6 +83,32 @@ def test_generator_publishes_model_artifact_and_backend_consumes_it(tmp_path: Pa
     assert result["evidence_payload"]["recommended_actions"][0]["basis"]
     assert evidence["model"]["mode"] == "trained"
     assert evidence["model"]["artifact"]["dataset_version"] == "test-ai4i-v1"
+
+
+def test_model_positive_probability_cannot_remain_operationally_normal(tmp_path: Path) -> None:
+    csv_path = tmp_path / "ai4i.csv"
+    _write_ai4i_fixture(csv_path)
+    artifact_path = train_and_publish_model(
+        csv_path=csv_path,
+        artifact_uri=tmp_path / "artifacts",
+        dataset_version="threshold-contract-v1",
+    )
+    predictor = ArtifactPredictor(artifact_path)
+    predictor.manifest.setdefault("training_config", {})["selected_threshold"] = 0.12
+
+    class FixedProbabilityModel:
+        def predict_proba(self, frame):
+            return np.asarray([[0.82, 0.18] for _ in range(len(frame))], dtype=float)
+
+    predictor.model = FixedProbabilityModel()
+    fixture = load_fixture("data/fixtures/GS-001-normal-stable.json")
+    fixture["equipment"]["criticality"] = "medium"
+
+    prediction = predictor.predict(fixture)
+
+    assert prediction.predicted_failure_type == "failure_risk"
+    assert prediction.risk_band in {"attention", "warning", "critical"}
+    assert prediction.recommended_decision != "continue_monitoring"
 
 
 def test_week2_fixture_fallback_remains_backend_owned(monkeypatch) -> None:

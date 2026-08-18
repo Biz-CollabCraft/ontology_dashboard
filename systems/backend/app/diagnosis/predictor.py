@@ -406,7 +406,19 @@ class ArtifactPredictor:
 
         criticality = fixture["equipment"]["criticality"]
         adjustment = float(self.policy["criticality_adjustments"][criticality])
-        attention = float(self.policy["severity_rules"]["attention"]) + adjustment
+        selected_threshold = float(
+            self.manifest.get("training_config", {}).get("selected_threshold", 0.5)
+        )
+        if not 0.0 <= selected_threshold <= 1.0:
+            raise ValueError("Model Artifact selected_threshold must be between 0 and 1")
+        # A model-positive prediction must never be presented as operationally
+        # normal/continue_monitoring.  The artifact threshold is therefore the
+        # upper bound of the attention boundary, while warning/critical remain
+        # Backend-owned operational severity thresholds.
+        attention = min(
+            float(self.policy["severity_rules"]["attention"]) + adjustment,
+            selected_threshold,
+        )
         warning = float(self.policy["severity_rules"]["warning"]) + adjustment
         critical = float(self.policy["severity_rules"]["critical"])
         if probability >= critical:
@@ -420,7 +432,6 @@ class ArtifactPredictor:
 
         distance = abs(probability - 0.5) * 2.0
         confidence = "high" if distance >= 0.6 else "medium" if distance >= 0.3 else "low"
-        selected_threshold = float(self.manifest.get("training_config", {}).get("selected_threshold", 0.5))
         return Prediction(
             model_version=self.model_version,
             probability=float(round(probability, 6)),

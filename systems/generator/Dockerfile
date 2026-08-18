@@ -7,6 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY systems/generator/requirements.txt /tmp/generator-requirements.txt
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r /tmp/generator-requirements.txt

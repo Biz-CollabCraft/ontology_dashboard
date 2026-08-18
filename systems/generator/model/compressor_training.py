@@ -162,7 +162,8 @@ def build_temporal_feature_table(
         # operating examples either.
         censor_cutoff = group["observed_at"].iloc[-1] - pd.Timedelta(hours=horizon_hours)
         sample = sample[
-            (sample["observed_at"] <= censor_cutoff)
+            (sample["observed_at"] >= baseline_end)
+            & (sample["observed_at"] <= censor_cutoff)
             & (sample["operating_state"] == "running")
         ]
         sample = sample.dropna(subset=FEATURE_COLUMNS)
@@ -181,6 +182,8 @@ def build_temporal_feature_table(
         "rolling_rows": 36,
         "rolling_min_periods": 12,
         "sample_stride_rows": 6,
+        "baseline_calibration_only": True,
+        "history_state_policy": "rolling_history_may_include_non_running_rows_current_sample_must_be_running",
         "right_censoring": True,
         "maintenance_rows_excluded": True,
     }
