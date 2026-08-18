@@ -7,9 +7,18 @@ from typing import Any, Protocol
 from jsonschema import Draft202012Validator
 
 from .contracts import DISPLAY_NAMES, UNITS, derive_features, project_root
+from .evidence_enrichment import (
+    build_product_result_evidence_payload,
+    enrich_product_result_top_factors,
+    evidence_payload_reference,
+    validate_evidence_payload_invariants,
+)
 from .predictor import Prediction, Predictor, configured_predictor
 
 NORMAL_RANGES = {
+    "air_temperature_k": "295.0–305.0",
+    "process_temperature_k": "304.0–315.0",
+    "rotational_speed_rpm": "1,400–2,200",
     "tool_wear_min": "0–180",
     "temperature_difference_k": "8.6–12.0",
     "mechanical_power_w": "3,500–9,000",
@@ -21,7 +30,7 @@ NORMAL_RANGES = {
 class ContextProvider(Protocol):
     provider_name: str
 
-    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any]: ...
+    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None: ...
 
 
 class FixtureContextProvider:
@@ -121,7 +130,12 @@ def build_evidence_package(
     return package
 
 
-def build_product_result_artifact(fixture: dict[str, Any], *, predictor: Predictor | None = None) -> dict[str, Any]:
+def build_product_result_artifact(
+    fixture: dict[str, Any],
+    *,
+    predictor: Predictor | None = None,
+    context_provider: ContextProvider | None = None,
+) -> dict[str, Any]:
     """Create the product runtime Result Artifact owned by backend/diagnosis.
 
     The shape intentionally remains semantically compatible with the Canonical
@@ -149,7 +163,11 @@ def build_product_result_artifact(fixture: dict[str, Any], *, predictor: Predict
             "feature_value": item.raw_value,
             "signed_contribution": item.score if item.direction == "risk_up" else -item.score,
             "direction": item.direction,
-            "explanation_method": "deterministic_component_score",
+            "explanation_method": (
+                "model_artifact_local_proxy_attribution"
+                if prediction.model_artifact
+                else "deterministic_component_score"
+            ),
         }
         for rank, item in enumerate(prediction.factors[:3], start=1)
     ]
@@ -182,6 +200,18 @@ def build_product_result_artifact(fixture: dict[str, Any], *, predictor: Predict
             "model_artifact": prediction.model_artifact,
         },
     }
+    enrich_product_result_top_factors(artifact, fixture)
+    maintenance_context = None
+    if context_provider is not None:
+        maintenance_context = context_provider.get_context(asset_id, prediction.predicted_failure_type)
+    artifact["evidence_payload"] = build_product_result_evidence_payload(
+        artifact,
+        fixture,
+        prediction,
+        maintenance_context=maintenance_context,
+    )
+    artifact["provenance"]["evidence_payload_reference"] = evidence_payload_reference(artifact)
+    validate_evidence_payload_invariants(artifact["evidence_payload"])
     validate_product_result_artifact(artifact)
     return artifact
 
