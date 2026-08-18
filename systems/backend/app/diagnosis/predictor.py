@@ -16,6 +16,16 @@ from .contracts import audit_fixture, derive_features
 DEFAULT_POLICY_PATH = Path(__file__).with_name("threshold_policy.json")
 _TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
 _HEURISTIC_DEFAULT_ENVIRONMENTS = {"local", "demo", "test"}
+_RISK_UP_FEATURES = {
+    "tool_wear_min",
+    "torque_nm",
+    "mechanical_power_w",
+    "overstrain_index",
+}
+_RISK_DOWN_FEATURES = {
+    "rotational_speed_rpm",
+    "temperature_difference_k",
+}
 
 
 def _sigmoid(value: float) -> float:
@@ -368,10 +378,68 @@ class ArtifactPredictor:
             recommended_decision=self.policy["decision_mapping"][risk_band],
             confidence=confidence,
             predicted_failure_type="failure_risk" if probability >= 0.5 else "none",
-            factors=[],
+            factors=self._factor_scores(feature_names, values),
             quality_issues=[],
             model_artifact=self._artifact_reference(),
         )
+
+    def _factor_scores(self, feature_names: list[str], values: dict[str, Any]) -> list[FactorScore]:
+        importances = self._original_feature_importances(feature_names)
+        if not importances:
+            return []
+
+        scores: list[FactorScore] = []
+        for feature, score in sorted(importances.items(), key=lambda item: abs(item[1]), reverse=True):
+            if feature not in values:
+                continue
+            try:
+                raw_value = float(values[feature])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(raw_value):
+                continue
+            if feature in _RISK_DOWN_FEATURES:
+                direction = "risk_down"
+            elif feature in _RISK_UP_FEATURES:
+                direction = "risk_up"
+            else:
+                direction = "risk_up" if score >= 0 else "risk_down"
+            scores.append(
+                FactorScore(
+                    feature=feature,
+                    raw_value=raw_value,
+                    score=float(round(abs(score), 6)),
+                    direction=direction,
+                )
+            )
+        return scores
+
+    def _original_feature_importances(self, feature_names: list[str]) -> dict[str, float]:
+        classifier = getattr(self.model, "named_steps", {}).get("classifier")
+        if classifier is None:
+            return {}
+        weights = getattr(classifier, "feature_importances_", None)
+        if weights is None:
+            coefficients = getattr(classifier, "coef_", None)
+            if coefficients is not None and len(coefficients):
+                weights = coefficients[0]
+        if weights is None:
+            return {}
+
+        preprocessor = getattr(self.model, "named_steps", {}).get("preprocess")
+        if preprocessor is None:
+            transformed_names = feature_names
+        else:
+            try:
+                transformed_names = list(preprocessor.get_feature_names_out(feature_names))
+            except ValueError:
+                transformed_names = feature_names
+
+        aggregated: dict[str, float] = {}
+        for transformed_name, weight in zip(transformed_names, weights):
+            original = _original_feature_name(str(transformed_name), feature_names)
+            aggregated[original] = aggregated.get(original, 0.0) + float(weight)
+        return aggregated
 
     def _artifact_reference(self) -> dict[str, Any]:
         return {
@@ -406,3 +474,11 @@ def configured_predictor() -> Predictor:
             "ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK=1 only when an explicit fallback is intended"
         )
     return HeuristicPredictor()
+
+
+def _original_feature_name(transformed_name: str, feature_names: list[str]) -> str:
+    suffix = transformed_name.split("__", 1)[-1]
+    for feature in feature_names:
+        if suffix == feature or suffix.startswith(f"{feature}_"):
+            return feature
+    return suffix

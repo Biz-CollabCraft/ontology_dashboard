@@ -16,6 +16,9 @@ from .evidence_enrichment import (
 from .predictor import Prediction, Predictor, configured_predictor
 
 NORMAL_RANGES = {
+    "air_temperature_k": "295.0–305.0",
+    "process_temperature_k": "304.0–315.0",
+    "rotational_speed_rpm": "1,400–2,200",
     "tool_wear_min": "0–180",
     "temperature_difference_k": "8.6–12.0",
     "mechanical_power_w": "3,500–9,000",
@@ -27,7 +30,7 @@ NORMAL_RANGES = {
 class ContextProvider(Protocol):
     provider_name: str
 
-    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any]: ...
+    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None: ...
 
 
 class FixtureContextProvider:
@@ -160,7 +163,11 @@ def build_product_result_artifact(
             "feature_value": item.raw_value,
             "signed_contribution": item.score if item.direction == "risk_up" else -item.score,
             "direction": item.direction,
-            "explanation_method": "deterministic_component_score",
+            "explanation_method": (
+                "model_artifact_feature_attribution"
+                if prediction.model_artifact
+                else "deterministic_component_score"
+            ),
         }
         for rank, item in enumerate(prediction.factors[:3], start=1)
     ]
@@ -196,10 +203,7 @@ def build_product_result_artifact(
     enrich_product_result_top_factors(artifact, fixture)
     maintenance_context = None
     if context_provider is not None:
-        try:
-            maintenance_context = context_provider.get_context(asset_id, prediction.predicted_failure_type)
-        except (KeyError, TypeError, ValueError):
-            maintenance_context = None
+        maintenance_context = context_provider.get_context(asset_id, prediction.predicted_failure_type)
     artifact["evidence_payload"] = build_product_result_evidence_payload(
         artifact,
         fixture,

@@ -69,6 +69,10 @@ def test_generator_publishes_model_artifact_and_backend_consumes_it(tmp_path: Pa
     assert result["prediction_task"] == "binary_failure_within_horizon"
     assert result["provenance"]["source_type"] == "product_runtime_inference"
     assert result["provenance"]["model_artifact"]["model_version"] == manifest["model_version"]
+    assert prediction.factors
+    assert result["top_factors"]
+    assert result["top_factors"][0]["explanation_method"] == "model_artifact_feature_attribution"
+    assert result["evidence_payload"]["recommended_actions"][0]["basis"]
     assert evidence["model"]["mode"] == "trained"
     assert evidence["model"]["artifact"]["dataset_version"] == "test-ai4i-v1"
 

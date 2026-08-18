@@ -21,6 +21,13 @@ class MissingContextProvider:
         return None
 
 
+class BrokenContextProvider:
+    provider_name = "broken"
+
+    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None:
+        raise ValueError("provider contract violation")
+
+
 def unresolved_basis_refs(evidence_payload: dict[str, Any]) -> set[str]:
     source_field_ids = {field["field_id"] for field in evidence_payload["source_fields"]}
     basis_refs: set[str] = set()
@@ -63,8 +70,13 @@ def test_product_result_artifact_includes_producer_evidence_payload_without_defa
         "reference": artifact["artifact_id"],
         "generated_by": "systems.backend.app.diagnosis.evidence_enrichment",
     }
-    assert payload["sensor_evidence"]["sensors"]["tool_wear_min"]["current"] == 230.0
-    assert payload["sensor_evidence"]["sensors"]["tool_wear_min"]["basis"]["baseline_n"] == 5
+    tool_wear = payload["sensor_evidence"]["sensors"]["tool_wear_min"]
+    assert tool_wear["current"] == 230.0
+    assert tool_wear["window_mean"] == 213.666667
+    assert tool_wear["z_score"] == 2.352075
+    assert tool_wear["basis"]["baseline_n"] == 3
+    assert tool_wear["basis"]["baseline_reference"] == "fixture.history"
+    assert payload["sensor_evidence"]["window_rows"] == 3
     assert "maintenance_context" not in payload
     assert any(gap["field"] == "evidence_payload.maintenance_context" for gap in payload["evidence_gaps"])
     assert unresolved_basis_refs(payload) == set()
@@ -149,6 +161,55 @@ def test_product_result_artifact_records_gap_when_maintenance_context_is_missing
     } in payload["evidence_gaps"]
 
 
+def test_product_result_artifact_propagates_context_provider_contract_errors() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+
+    with pytest.raises(ValueError, match="provider contract violation"):
+        build_product_result_artifact(
+            fixture,
+            predictor=HeuristicPredictor(),
+            context_provider=BrokenContextProvider(),  # type: ignore[arg-type]
+        )
+
+
+def test_sensor_baseline_excludes_duplicate_current_observation_timestamp() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"].append(dict(fixture["observation"]))
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    tool_wear = artifact["evidence_payload"]["sensor_evidence"]["sensors"]["tool_wear_min"]
+
+    assert tool_wear["basis"]["baseline_n"] == 3
+    assert tool_wear["window_mean"] == 213.666667
+    assert tool_wear["z_score"] == 2.352075
+
+
+def test_component_hypotheses_are_grouped_by_component_id() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    prediction = HeuristicPredictor().predict(fixture)
+    artifact = {
+        "status_grade": "warning",
+        "top_factors": [
+            {"rank": 1, "feature": "mechanical_power_w", "signed_contribution": 0.7},
+            {"rank": 2, "feature": "overstrain_index", "signed_contribution": 0.5},
+            {"rank": 3, "feature": "tool_wear_min", "signed_contribution": 0.4},
+        ],
+    }
+
+    payload = build_product_result_evidence_payload(artifact, fixture, prediction)
+    hypotheses = payload["component_hypotheses"]
+    component_ids = [hypothesis["component_id"] for hypothesis in hypotheses]
+
+    assert len(component_ids) == len(set(component_ids))
+    drive_power = next(hypothesis for hypothesis in hypotheses if hypothesis["component_id"] == "drive_power")
+    assert drive_power["basis"] == [
+        "factor.1.mechanical_power_w",
+        "factor.2.overstrain_index",
+    ]
+
+
 def test_product_result_artifact_records_data_quality_gaps_without_zero_filling() -> None:
     fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-007-invalid-sensor-data.json")
 
@@ -213,3 +274,21 @@ def test_evidence_payload_does_not_overwrite_official_judgement_fields() -> None
             "recommended_action",
         )
     } == before
+
+
+def test_evidence_payload_builder_enriches_top_factor_basis_when_called_directly() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    for factor in artifact["top_factors"]:
+        factor.pop("evidence_field_id")
+
+    payload = build_product_result_evidence_payload(
+        artifact,
+        fixture,
+        HeuristicPredictor().predict(fixture),
+    )
+
+    assert unresolved_basis_refs(payload) == set()
+    assert all(factor.get("evidence_field_id") for factor in artifact["top_factors"])

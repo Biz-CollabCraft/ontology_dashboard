@@ -55,6 +55,7 @@ def build_product_result_evidence_payload(
 ) -> dict[str, Any]:
     """Build producer-owned evidence facts for Product Result Artifact enrichment."""
 
+    enrich_product_result_top_factors(artifact, fixture)
     sensor_evidence = _sensor_evidence(fixture)
     source_fields = _factor_source_fields(artifact)
     source_fields.extend(_sensor_source_fields(sensor_evidence))
@@ -122,9 +123,15 @@ def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[st
 
 
 def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
-    observation = _numeric_observation(fixture.get("observation") or {})
-    history_rows = [_numeric_observation(row) for row in fixture.get("history", [])]
-    window_rows = [row for row in [*history_rows, observation] if row]
+    raw_observation = fixture.get("observation") or {}
+    observation = _numeric_observation(raw_observation)
+    observed_at = str(raw_observation.get("timestamp") or "")
+    history_rows = [
+        (timestamp, row)
+        for timestamp, row in _dedupe_history_rows(fixture.get("history", []))
+        if not observed_at or timestamp != observed_at
+    ]
+    window_rows = [row for _, row in history_rows if row]
     sensors: dict[str, Any] = {}
 
     for feature, current in observation.items():
@@ -145,15 +152,13 @@ def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
                 "baseline_mean": baseline_mean,
                 "baseline_std": baseline_std,
                 "baseline_n": len(values),
-                "baseline_reference": "fixture.history+observation",
+                "baseline_reference": "fixture.history",
             },
         }
 
-    timestamps = [
-        str(row.get("timestamp"))
-        for row in [*fixture.get("history", []), fixture.get("observation") or {}]
-        if row.get("timestamp")
-    ]
+    timestamps = [timestamp for timestamp, row in history_rows if timestamp and row]
+    if observed_at:
+        timestamps.append(observed_at)
     return {
         "window": {"start": timestamps[0], "end": timestamps[-1]} if timestamps else {},
         "window_rows": len(window_rows),
@@ -161,8 +166,23 @@ def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _dedupe_history_rows(rows: list[dict[str, Any]]) -> list[tuple[str, dict[str, float]]]:
+    deduped: dict[str, dict[str, float]] = {}
+    anonymous_rows: list[tuple[str, dict[str, float]]] = []
+    for index, row in enumerate(rows):
+        numeric = _numeric_observation(row)
+        if not numeric:
+            continue
+        timestamp = str(row.get("timestamp") or "")
+        if timestamp:
+            deduped[timestamp] = numeric
+        else:
+            anonymous_rows.append((f"history[{index}]", numeric))
+    return [*anonymous_rows, *deduped.items()]
+
+
 def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, Any]) -> list[dict[str, Any]]:
-    hypotheses: list[dict[str, Any]] = []
+    hypotheses: dict[str, dict[str, Any]] = {}
     sensors = sensor_evidence.get("sensors") or {}
     for factor in artifact.get("top_factors", [])[:3]:
         feature = str(factor.get("feature") or "")
@@ -171,15 +191,15 @@ def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, A
         sensor_ref = f"sensor_evidence.sensors.{feature}"
         if feature in sensors:
             basis.append(sensor_ref)
-        hypotheses.append(
-            {
+        if component_id not in hypotheses:
+            hypotheses[component_id] = {
                 "component_id": component_id,
                 "component_label": component_label,
                 "association": "inspection_candidate",
-                "basis": basis,
+                "basis": [],
             }
-        )
-    return hypotheses
+        hypotheses[component_id]["basis"] = list(dict.fromkeys([*hypotheses[component_id]["basis"], *basis]))
+    return list(hypotheses.values())
 
 
 def _recommended_actions(artifact: dict[str, Any], hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
