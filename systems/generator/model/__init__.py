@@ -1,21 +1,56 @@
-"""Model training/evaluation and immutable Model Artifact publication."""
+"""Model training, multi-algorithm offline evaluation, and immutable Model Artifact publication."""
 
-from .model_registry import ModelRegistry, publish_model_artifact, train_and_publish_model, validate_manifest
-from .model_training import ModelTraining
+from __future__ import annotations
 
-
-def __getattr__(name: str):
-    if name == "train_and_evaluate":
-        from .model_training import train_and_evaluate
-
-        return train_and_evaluate
-    raise AttributeError(name)
-
+from .lightgbm import LightGBMModel
+from .model_registry import (
+    ModelRegistry,
+    get_latest_model_path,
+    get_next_run_version,
+    has_any_trained_model,
+    load_registry,
+    publish_model_artifact,
+    save_run_result,
+    train_and_publish_model,
+    validate_manifest,
+)
+from .model_score import ModelScore
+from .model_training import (
+    FRAMEWORK_BY_ALGORITHM,
+    MODEL_SPECS,
+    REGISTERED_MODELS,
+    ModelTraining,
+    asset_time_split,
+    get_model_class,
+    infer_history_requirement,
+    run_parsing_only,
+    train_all,
+    train_and_evaluate,
+)
+from .random_forest import RandomForestModel
+from .xgboost import XGBoostModel
 
 __all__ = [
+    "FRAMEWORK_BY_ALGORITHM",
+    "LightGBMModel",
+    "MODEL_SPECS",
     "ModelRegistry",
+    "ModelScore",
     "ModelTraining",
+    "REGISTERED_MODELS",
+    "RandomForestModel",
+    "XGBoostModel",
+    "asset_time_split",
+    "get_latest_model_path",
+    "get_model_class",
+    "get_next_run_version",
+    "has_any_trained_model",
+    "infer_history_requirement",
+    "load_registry",
     "publish_model_artifact",
+    "run_parsing_only",
+    "save_run_result",
+    "train_all",
     "train_and_evaluate",
     "train_and_publish_model",
     "validate_manifest",
