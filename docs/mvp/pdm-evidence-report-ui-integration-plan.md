@@ -709,13 +709,15 @@ Status 값은 다음만 사용한다.
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
 | 13 | Done | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | PR #41 `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
-| 14 | In Progress | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime service refactor | current branch validates and projects the stored `prediction_result_payload`; PostgreSQL-backed regression pending |
-| 15 | In Progress | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | current branch `/dashboard?view=canonical` route/test, PostgreSQL-backed regression pending |
+| 14 | In Progress | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime service refactor | `ac07b58` validates and projects the stored `prediction_result_payload`; PostgreSQL-backed regression pending |
+| 15 | In Progress | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | `ac07b58` keeps legacy/canonical mapping, locale adapter, and raw units; PostgreSQL-backed regression pending |
 
 8.3 Notes:
 
 - PR #41의 Verified 범위는 fixture-backed `GET /api/events/{event_id}/evidence`, `GET /api/events/{event_id}/evidence?view=canonical`, `POST /api/events/{event_id}/report` 경로다.
 - current branch는 runtime `_dashboard_detail`이 `prediction_results.payload_json`에 보존된 diagnosis producer Artifact를 검증해 Event Evidence projection에 직접 전달하도록 전환하고, `/predictive-maintenance/dashboard?view=canonical` selector 회귀 테스트를 추가했다. runtime은 저장된 Result Artifact의 `evidence_payload`를 재생성하지 않는다. 로컬 PostgreSQL 조건에서는 replay 테스트가 skip되므로 PR/CI 통과 전까지 Verified로 승격하지 않는다.
+- `ac07b58`은 canonical V3.1 최신 관측 행을 만들 때 같은 asset의 현재 시각 이전 canonical 관측치를 producer fixture의 `history`로 전달한다. baseline은 current observation을 다시 포함하지 않으며, history가 실제로 없으면 빈 값과 evidence gap 경계를 유지한다.
+- legacy compatibility output의 표시명과 범위 문구는 runtime locale adapter에서 변환하고, canonical projection의 producer 값과 raw 신호 단위는 변조하지 않는다. `minimum_history_rows`의 모델 Artifact 강제는 이 checkout의 generator 계약에 임의로 복제하지 않고 별도 owner decision으로 남긴다.
 - runtime review에서는 `pm_result_artifacts`의 검색/요약 행과 `prediction_results.payload_json`의 full producer Artifact를 분리한다. summary 행에 `evidence_payload`가 없다는 사실은 producer persistence 부재의 근거가 아니다. full payload가 존재하지만 read-model이 이를 버리면 migration이나 dashboard 재생성이 아니라 repository/service read path를 고친다.
 - `list_events`, `layout`, `follow_up`, frontend ViewModel/UI는 아직 `build_evidence_package()` 또는 별도 경로를 사용하므로 전체 consumer 전환 완료로 주장하지 않는다.
 - `ranked_factor_evidence`는 legacy/detail용 top 5 evidence row 입력이며, canonical Event Evidence의 공식 판단 요약인 `assessment.top_factors` top 3을 대체하지 않는다.
