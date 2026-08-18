@@ -1,8 +1,8 @@
 # Mac mini production stack
 
-This stack moves PostgreSQL, Backend, and the batch Generator onto the Mac mini
-while keeping the Vercel frontend. Render and Neon remain untouched rollback
-sources during the validation period.
+This stack runs Frontend, Backend, PostgreSQL and the batch Generator on the Mac
+mini. Vercel remains available for CI/preview validation; Render and Neon remain
+untouched rollback sources during the validation period.
 
 ## Services and boundary
 
@@ -18,8 +18,11 @@ sources during the validation period.
 - `generator`: one-shot batch profile. It owns extraction, ontology mapping,
   feature/label processing and immutable Model Artifact publication. It is not a
   continuously spinning API server.
-- Frontend stays on Vercel. `/api/*` remains same-origin in the browser and the
-  Vercel rewrite targets the Cloudflare HTTPS API.
+- `frontend`: canonical `systems/frontend` nginx runtime, published only to
+  `127.0.0.1:8120`. It builds with an empty `VITE_API_BASE_URL`, so browser API
+  requests remain same-origin and nginx proxies `/api/*` to Backend through the
+  private Compose alias `api:8000`.
+- Vercel is retained as CI/preview validation rather than the production origin.
 
 The production `.env` is server-only, mode `0600`, and must never be committed.
 
@@ -33,23 +36,24 @@ and the source snapshot metadata are backup-worthy.
 ## Startup / shutdown / logs
 
 ```sh
-docker compose --env-file .env -f docker-compose.yml up -d postgres redis backend
+docker compose --env-file .env -f docker-compose.yml up -d postgres redis backend frontend
 docker compose --env-file .env -f docker-compose.yml ps
-docker compose --env-file .env -f docker-compose.yml logs -f backend
-docker compose --env-file .env -f docker-compose.yml stop backend redis postgres
+docker compose --env-file .env -f docker-compose.yml logs -f frontend backend
+docker compose --env-file .env -f docker-compose.yml stop frontend backend redis postgres
 ```
 
-Do not publish port 5432. Cloudflare should route only the backend localhost
-port. `restart: unless-stopped` makes PostgreSQL and Backend return after
-OrbStack/host restart.
+Do not publish port 5432. Cloudflare routes the product hostname only to the
+frontend localhost port and may keep the dedicated Backend health/API hostname
+on its backend localhost port. `restart: unless-stopped` makes the long-running
+services return after OrbStack/host restart.
 
 ## Generator
 
 The source contract is file/artifact based; there is no Python import from
-`Biz-CollabCraft/gen_data`. Place or synchronize the pinned Canonical V3.1
-compressor telemetry and failure-truth files under `generator/source`. The
-training path derives per-asset first-seven-day running baselines plus temporal
-1 h / 6 h change and rolling statistics. The immutable artifact embeds those
+`Biz-CollabCraft/gen_data`. Place or synchronize the pinned Canonical V3.1 CNC
+and compressor telemetry/failure-truth files under `generator/source`. Both
+trained families derive per-asset first-seven-day running baselines plus temporal
+1 h / 6 h change and rolling statistics. Each immutable artifact embeds those
 baseline statistics and a rolling-context contract so Backend can reproduce the
 same 40 features from the current observation plus the preceding 35 ten-minute
 observations without importing Generator or `gen_data` code.
@@ -71,7 +75,22 @@ sensor event.
 
 On the 16 GiB / 8-core Mac mini, Compose caps PostgreSQL at 1.5 CPU / 2 GiB,
 Redis at 0.25 CPU / 128 MiB, Backend at 2 CPU / 2 GiB, and Generator at 2 CPU /
-4 GiB so the stack cannot consume the whole host alongside existing services.
+4 GiB. Frontend is capped at 0.5 CPU / 256 MiB, so the stack cannot consume the
+whole host alongside existing services.
+
+### Optional Generator LLM provider
+
+The ML path does not require an LLM. Extraction profiling and ontology mapping
+can use an LLM and safely fall back to deterministic rules when credentials are
+absent. Supported providers are:
+
+- `GENERATOR_LLM_PROVIDER=openai` with `OPENAI_API_KEY`.
+- `GENERATOR_LLM_PROVIDER=vertex_ai` with Google Vertex AI. Configure
+  `GENERATOR_LLM_MODEL` (for example `gemini-3.5-flash`) and either a supported
+  `VERTEX_AI_API_KEY` or project/ADC credentials via `GOOGLE_CLOUD_PROJECT` and
+  `GOOGLE_CLOUD_LOCATION`.
+
+Do not commit either provider's credential.
 
 The standalone image declares dependencies from the current Generator import
 graph. Legacy `lightgbm`/`xgboost` declarations are intentionally not installed
@@ -93,27 +112,31 @@ prove the dump is usable. `scripts/install-backup-schedules.sh` installs the
 macOS LaunchAgents. `generator-backup.sh` stores immutable artifacts and mapping/
 plan metadata while intentionally excluding reproducible feature matrices.
 
-## Cloudflare and Vercel
+## Cloudflare production and Vercel CI/preview
 
-Reuse the existing named Mac mini tunnel. Add one ingress immediately before
-the final `http_status:404` rule:
+Reuse the existing named Mac mini tunnel. The canonical production routes are:
 
 ```yaml
 - hostname: ontology-api.oosu.dev
   service: http://127.0.0.1:8110
+- hostname: ontology.oosu.dev
+  service: http://127.0.0.1:8120
 ```
 
 Validate the tunnel configuration before restarting it. Never commit tunnel
 credentials. The single-label `ontology-api.oosu.dev` hostname is used because
 the zone's standard `*.oosu.dev` certificate does not cover a two-label hostname
-such as `api.ontology.oosu.dev`. Vercel keeps browser requests same-origin and
-rewrites `/api/*` to `https://ontology-api.oosu.dev/api/*`.
+such as `api.ontology.oosu.dev`. The Mac mini frontend keeps browser requests
+same-origin and proxies `/api/*` privately. Vercel may still rewrite `/api/*` to
+`https://ontology-api.oosu.dev/api/*` for preview/CI deployments, but it is not
+the canonical production origin.
 
 ## Rollback
 
-Backend rollback: change the Vercel `/api/*` destination back to
-`https://ontology-dashboard-demo-api.onrender.com/api/:path*` and redeploy.
-Render remains live until a separate retirement decision.
+Frontend rollback: return the Cloudflare `ontology.oosu.dev` catch-all to the
+existing Vercel production origin. Full application rollback can then use the
+previous Vercel `/api/*` destination to Render. Render remains available until
+a separate retirement decision.
 
 Database rollback: restore the previous Render configuration (whose
 `ONTOLOGY_DASHBOARD_DATABASE_URL` still points to Neon) rather than repointing
@@ -122,6 +145,6 @@ the authoritative pre-cutover fallback snapshot until the retention decision.
 
 ## Secret handling
 
-`POSTGRES_PASSWORD`, Neon URLs, `OPENAI_API_KEY`, Render/Vercel/Cloudflare
+`POSTGRES_PASSWORD`, Neon URLs, `OPENAI_API_KEY`, `VERTEX_AI_API_KEY`, Render/Vercel/Cloudflare
 credentials, and session/JWT secrets are never repository values. Store them in
 the Mac mini `.env`/existing platform secret stores only, with permission 0600.

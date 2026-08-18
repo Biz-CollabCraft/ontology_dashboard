@@ -10,9 +10,11 @@ from typing import Any, Protocol
 import pandas as pd
 
 from .artifact_provider import LocalModelArtifactProvider
-from .feature_executor import execute_feature_contract
+from .cnc_runtime_features import SUPPORTED_KIND as CNC_TEMPORAL_KIND
+from .cnc_runtime_features import derive_cnc_temporal_features
 from .compressor_runtime_features import SUPPORTED_KIND as COMPRESSOR_TEMPORAL_KIND
 from .compressor_runtime_features import derive_compressor_temporal_features
+from .feature_executor import execute_feature_contract
 from .contracts import audit_fixture, derive_features
 from .evidence_baseline import build_history_baseline_window
 
@@ -336,7 +338,9 @@ class ArtifactPredictor:
     def predict(self, fixture: dict[str, Any]) -> Prediction:
         engineering_kind = (self.feature_schema.get("feature_engineering") or {}).get("kind")
         temporal_compressor = engineering_kind == COMPRESSOR_TEMPORAL_KIND
-        quality_issues = [] if temporal_compressor else [issue.to_dict() for issue in audit_fixture(fixture)]
+        temporal_cnc = engineering_kind == CNC_TEMPORAL_KIND
+        temporal_model = temporal_compressor or temporal_cnc
+        quality_issues = [] if temporal_model else [issue.to_dict() for issue in audit_fixture(fixture)]
         if quality_issues:
             return Prediction(
                 model_version=self.model_version,
@@ -357,9 +361,13 @@ class ArtifactPredictor:
         ]
         if not feature_names:
             raise ValueError("Model Artifact feature schema has no features")
-        if temporal_compressor:
+        if temporal_model:
             try:
-                values = derive_compressor_temporal_features(fixture, self.feature_schema)
+                values = (
+                    derive_compressor_temporal_features(fixture, self.feature_schema)
+                    if temporal_compressor
+                    else derive_cnc_temporal_features(fixture, self.feature_schema)
+                )
             except (TypeError, ValueError) as exc:
                 return Prediction(
                     model_version=self.model_version,
@@ -422,7 +430,7 @@ class ArtifactPredictor:
             predicted_failure_type="failure_risk" if probability >= selected_threshold else "none",
             factors=(
                 self._temporal_factor_scores(feature_names, values)
-                if temporal_compressor
+                if temporal_model
                 else self._factor_scores(feature_names, values, fixture)
             ),
             quality_issues=[],
@@ -530,10 +538,14 @@ class ArtifactPredictor:
         }
 
 
-def configured_predictor() -> Predictor:
+def configured_predictor(asset_type: str | None = None) -> Predictor:
     """Resolve runtime inference from injected artifact or explicit MVP fallback."""
 
-    artifact_uri = os.getenv("MODEL_ARTIFACT_URI", "").strip()
+    # Preserve the historical no-argument resolver contract for compatibility
+    # callers. Product runtime paths now pass the fixture asset family explicitly.
+    normalized_asset_type = str(asset_type or "cnc").strip().lower()
+    artifact_env = "CNC_MODEL_ARTIFACT_URI" if normalized_asset_type == "cnc" else "MODEL_ARTIFACT_URI"
+    artifact_uri = os.getenv(artifact_env, "").strip()
     if artifact_uri:
         return ArtifactPredictor(artifact_uri)
 
@@ -546,11 +558,11 @@ def configured_predictor() -> Predictor:
     )
     if not fallback_enabled:
         raise RuntimeError(
-            "MODEL_ARTIFACT_URI is required because heuristic fallback is disabled "
+            f"{artifact_env} is required because heuristic fallback is disabled "
             f"for APP_ENV={app_env!r}; set "
             "ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK=1 only when an explicit fallback is intended"
         )
-    return HeuristicPredictor()
+    return CompressorHeuristicPredictor() if normalized_asset_type == "compressor" else HeuristicPredictor()
 
 
 def _original_feature_name(transformed_name: str, feature_names: list[str]) -> str:

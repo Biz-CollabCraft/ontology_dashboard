@@ -219,7 +219,7 @@ def test_runtime_candidates_select_latest_observation_per_asset() -> None:
 
 def test_runtime_selection_strategy_declares_current_state_semantics() -> None:
     assert RUNTIME_SELECTION_STRATEGY == "latest_observation_per_asset_v1"
-    assert RUNTIME_MATERIALIZATION_PROFILE == "cnc_heuristic_compressor_artifact_current_state_v2"
+    assert RUNTIME_MATERIALIZATION_PROFILE == "cnc_and_compressor_artifact_current_state_v3"
 
 
 def test_threshold_policy_is_declared_as_wheel_package_data() -> None:

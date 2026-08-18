@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.diagnosis.evidence import build_product_result_artifact
-from app.diagnosis.predictor import HeuristicPredictor, configured_predictor
+from app.diagnosis.predictor import configured_predictor
 
 from app.dataset.ingestion import (
     BundleFileAdapter,
@@ -32,7 +32,7 @@ PROJECT_ID = "manufacturing-demo-project"
 WORKSPACE_ID = "manufacturing-demo"
 SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
 RUNTIME_SELECTION_STRATEGY = "latest_observation_per_asset_v1"
-RUNTIME_MATERIALIZATION_PROFILE = "cnc_heuristic_compressor_artifact_current_state_v2"
+RUNTIME_MATERIALIZATION_PROFILE = "cnc_and_compressor_artifact_current_state_v3"
 DEFAULT_SOURCE_ROOT = Path("/app/.source/gen_data")
 OUTPUT_ROLES = {
     "prediction_snapshot",
@@ -202,6 +202,40 @@ def _compressor_runtime_history(
     ]
 
 
+def _cnc_runtime_history(
+    connection: Any,
+    dataset_version_id: str,
+    asset_id: str,
+    observed_at: Any,
+) -> list[dict[str, Any]]:
+    """Return the 35 observations immediately preceding CNC inference."""
+
+    rows = connection.execute(
+        """
+        SELECT observed_at,product_type,air_temperature_k,process_temperature_k,
+               rotational_speed_rpm,torque_nm,tool_wear_min
+        FROM pm_cnc_observations
+        WHERE dataset_version_id=%s AND asset_id=%s AND observed_at < %s
+        ORDER BY observed_at DESC
+        LIMIT 35
+        """,
+        (dataset_version_id, asset_id, observed_at),
+    ).fetchall()
+    ordered = list(reversed(rows))
+    return [
+        {
+            "timestamp": item["observed_at"].isoformat(),
+            "product_type": item["product_type"],
+            "air_temperature_k": float(item["air_temperature_k"]),
+            "process_temperature_k": float(item["process_temperature_k"]),
+            "rotational_speed_rpm": float(item["rotational_speed_rpm"]),
+            "torque_nm": float(item["torque_nm"]),
+            "tool_wear_min": float(item["tool_wear_min"]),
+        }
+        for item in ordered
+    ]
+
+
 def _runtime_fixture(row: dict[str, Any], *, history: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     observed_at = row["observed_at"].isoformat()
     asset_id = str(row["asset_id"])
@@ -246,11 +280,8 @@ def _runtime_fixture(row: dict[str, Any], *, history: list[dict[str, Any]] | Non
 
 def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
-    # The active Model Artifact is currently compressor-specific. Keep the CNC
-    # deterministic compatibility predictor isolated until a CNC artifact is
-    # published rather than applying a compressor artifact to CNC fields.
-    cnc_predictor = HeuristicPredictor()
-    compressor_predictor = configured_predictor()
+    cnc_predictor = configured_predictor("cnc")
+    compressor_predictor = configured_predictor("compressor")
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         with connection.transaction():
             _set_scope(connection)
@@ -351,7 +382,12 @@ def _materialize_runtime_results(database_url: str, dataset_version_id: str) -> 
                         row["observed_at"],
                     )
                     if asset_type == "compressor"
-                    else []
+                    else _cnc_runtime_history(
+                        connection,
+                        dataset_version_id,
+                        str(row["asset_id"]),
+                        row["observed_at"],
+                    )
                 )
                 artifact = build_product_result_artifact(
                     _runtime_fixture(row, history=history),

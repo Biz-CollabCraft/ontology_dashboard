@@ -64,6 +64,7 @@ services:
       ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX: ${ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX}
       ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK: ${ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK:-0}
       MODEL_ARTIFACT_URI: ${BACKEND_MODEL_ARTIFACT_URI:-/artifacts/compressor-failure-risk/current}
+      CNC_MODEL_ARTIFACT_URI: ${BACKEND_CNC_MODEL_ARTIFACT_URI:-/artifacts/cnc-failure-risk/current}
       LLM_PROVIDER: ${LLM_PROVIDER:-deterministic}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
@@ -78,6 +79,34 @@ services:
       timeout: 5s
       retries: 18
       start_period: 20s
+    networks:
+      private:
+        aliases: [api]
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: systems/frontend/Dockerfile
+      args:
+        # Mac mini production is same-origin: nginx proxies /api/* to Backend.
+        VITE_API_BASE_URL: ""
+        VITE_FEATURE_ONTOLOGY_WORKBENCH: "true"
+        VITE_FEATURE_DATASET_CATALOG: "false"
+        VITE_FEATURE_GOVERNANCE_WORKBENCH: "false"
+    restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 256m
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${FRONTEND_PORT:-8120}:8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     networks: [private]
 
   generator:
@@ -91,6 +120,11 @@ services:
     environment:
       APP_ENV: production
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GENERATOR_LLM_PROVIDER: ${GENERATOR_LLM_PROVIDER:-openai}
+      GENERATOR_LLM_MODEL: ${GENERATOR_LLM_MODEL:-gpt-4o-mini}
+      VERTEX_AI_API_KEY: ${VERTEX_AI_API_KEY:-}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
       DATA_DIR: /data/source
       DATA_PREPROCESSED_DIR: /data/preprocessed
       ONTOLOGY_DIR: /data/ontology

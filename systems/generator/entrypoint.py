@@ -23,6 +23,11 @@ from systems.generator.feature.feature_builder import build_features, save_featu
 from systems.generator.feature.feature_catalog import load_catalog
 from systems.generator.feature.feature_label_service import build_labels
 from systems.generator.generator_config import PATHS
+from systems.generator.model.cnc_training import (
+    FEATURE_SCHEMA_VERSION as CNC_FEATURE_SCHEMA_VERSION,
+    TRAINING_VERSION as CNC_TRAINING_VERSION,
+    train_cnc_model,
+)
 from systems.generator.model.compressor_training import (
     FEATURE_SCHEMA_VERSION,
     TRAINING_VERSION,
@@ -208,6 +213,168 @@ def publish_training_artifact(*, force_reanalyze: bool = False) -> Path:
             json.dumps(training.threshold_curve, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+
+
+def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
+    """Train the 80-asset Canonical V3.1 CNC family and publish immutably."""
+
+    artifact_uri = os.getenv("MODEL_ARTIFACT_URI", "").strip()
+    if not artifact_uri:
+        raise RuntimeError("MODEL_ARTIFACT_URI is required for Generator publication")
+
+    sources = load_all_sources(str(PATHS.data_dir), force_reanalyze=force_reanalyze)
+    registry = load_family_registry()
+    candidate = next(
+        (
+            key
+            for key, frame in sources.items()
+            if all(
+                feature in frame.columns
+                for feature in (
+                    "observed_at",
+                    "asset_id",
+                    "site_id",
+                    "operating_state",
+                    "air_temperature_k",
+                    "process_temperature_k",
+                    "rotational_speed_rpm",
+                    "torque_nm",
+                    "tool_wear_min",
+                )
+            )
+            and _metadata_for(key, registry).get("role") == "telemetry_sensor"
+            and "cnc" in key.lower()
+        ),
+        None,
+    )
+    if candidate is None:
+        raise ValueError("no CNC telemetry source matches the Backend runtime feature contract")
+    telemetry_meta = _metadata_for(candidate, registry)
+    telemetry_ids = set(telemetry_meta.get("id_columns") or [])
+    failure_key = next(
+        (
+            key
+            for key in sources
+            if _metadata_for(key, registry).get("role") in {"failure_event", "evaluation_truth"}
+            and telemetry_ids.intersection(_metadata_for(key, registry).get("id_columns") or [])
+            and "cnc" in key.lower()
+        ),
+        None,
+    )
+    if failure_key is None:
+        raise ValueError("no CNC failure truth source matches CNC telemetry")
+
+    training = train_cnc_model(
+        sources[candidate],
+        sources[failure_key],
+        n_jobs=_training_n_jobs(),
+        horizon_hours=24,
+        minimum_recall=0.50,
+    )
+    source_file = PATHS.data_dir / f"{candidate}.csv"
+    source_sha = _sha256(source_file)
+    dataset_version = f"gen-data-v3.1-sha256-{source_sha[:12]}"
+    algorithm_slug = training.selected_model.replace("_", "-")
+    model_version = f"cnc-{algorithm_slug}-v1-{source_sha[:12]}"
+    destination = (
+        Path(str(artifact_uri).removeprefix("file://")).expanduser().resolve()
+        / "cnc-failure-risk"
+        / model_version
+    )
+    if destination.exists():
+        return destination
+
+    with tempfile.TemporaryDirectory(prefix="cnc-model-") as work:
+        model_file = Path(work) / "model.joblib"
+        import joblib
+
+        joblib.dump(training.model, model_file)
+        threshold_curve_file = Path(work) / "threshold_curve.json"
+        threshold_curve_file.write_text(
+            json.dumps(training.threshold_curve, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        label_schema_file = Path(work) / "label_schema.json"
+        label_schema_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": "cnc-failure-within-horizon-v1",
+                    "target": "failure_within_24h",
+                    "horizon_hours": 24,
+                    "positive_semantics": "next failure strictly after observation and within 24 hours",
+                    "post_failure_rows_positive": False,
+                    "right_censoring": "exclude final 24h of each asset observation horizon",
+                    "maintenance_rows_excluded": True,
+                    "truth_usage": "label creation and offline evaluation only",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        runtime_context = dict(
+            (training.feature_schema.get("feature_engineering") or {}).get("runtime_context") or {}
+        )
+        history_requirement_file = Path(work) / "history_requirement.json"
+        history_requirement_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": "cnc-history-requirement-v1",
+                    "observation_family": "cnc",
+                    "current_observation_required": True,
+                    "prior_observations_required": int(
+                        runtime_context.get("recent_history_rows_required", 35)
+                    ),
+                    "expected_cadence_minutes": float(
+                        (training.feature_schema.get("feature_engineering") or {}).get(
+                            "expected_cadence_minutes", 10.0
+                        )
+                    ),
+                    "ordering": runtime_context.get(
+                        "history_order", "strictly_ascending_before_current_observation"
+                    ),
+                    "new_asset_policy": runtime_context.get(
+                        "new_asset_policy", "calibrate_baseline_before_inference"
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return publish_model_artifact(
+            artifact_uri=artifact_uri,
+            model_id="cnc-failure-risk",
+            model_version=model_version,
+            dataset_version=dataset_version,
+            feature_schema_version=CNC_FEATURE_SCHEMA_VERSION,
+            model_file=model_file,
+            feature_schema=training.feature_schema,
+            training_config=training.training_config,
+            metrics=training.metrics,
+            provenance={
+                "source_repository": "Biz-CollabCraft/gen_data",
+                "source_contract": "Canonical V3.1 file/artifact",
+                "source_file": f"{candidate}.csv",
+                "source_file_sha256": source_sha,
+                "failure_truth_file": f"{failure_key}.csv",
+                "producer": "ontology_dashboard/systems/generator",
+                "training_implementation": CNC_TRAINING_VERSION,
+            },
+            compatibility={
+                "runtime": "ontology_dashboard.systems.backend.diagnosis",
+                "prediction_task": "binary_failure_within_horizon",
+                "observation_family": "cnc",
+                "python": ">=3.11",
+            },
+            extra_files={
+                "threshold_curve": threshold_curve_file,
+                "label_schema": label_schema_file,
+                "history_requirement": history_requirement_file,
+            },
+        )
         label_schema_file = Path(work) / "label_schema.json"
         label_schema_file.write_text(
             json.dumps(
@@ -333,6 +500,18 @@ def assert_promotion_sanity(artifact_path: Path) -> None:
             "Model Artifact promotion blocked: deployment alert precision does not exceed base prevalence "
             f"({deployment_precision:.6f} <= {deployment_prevalence:.6f})"
         )
+    manifest = json.loads((artifact_path / "manifest.json").read_text(encoding="utf-8"))
+    family = str((manifest.get("compatibility") or {}).get("observation_family") or "")
+    if family == "cnc":
+        if deployment_precision < 0.50:
+            raise RuntimeError(
+                "CNC Model Artifact promotion blocked: deployment alert precision "
+                f"{deployment_precision:.6f} is below the 0.500000 release floor"
+            )
+        if float(deployment.get("recall") or 0.0) < 0.30:
+            raise RuntimeError(
+                "CNC Model Artifact promotion blocked: deployment recall is below the 0.300000 release floor"
+            )
 
 
 def llm_smoke() -> dict[str, Any]:
@@ -350,7 +529,19 @@ def llm_smoke() -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ontology_dashboard standalone Generator")
-    parser.add_argument("command", choices=("run", "feature-label", "train-publish", "llm-smoke"), nargs="?", default="run")
+    parser.add_argument(
+        "command",
+        choices=(
+            "run",
+            "feature-label",
+            "train-publish",
+            "train-publish-cnc",
+            "train-publish-all",
+            "llm-smoke",
+        ),
+        nargs="?",
+        default="run",
+    )
     parser.add_argument("--force-reanalyze", action="store_true")
     parser.add_argument(
         "--promote-current",
@@ -363,7 +554,7 @@ def main() -> int:
     result: dict[str, Any] = {}
     if args.command in {"run", "feature-label"}:
         result["pipeline"] = run_feature_label_pipeline(force_reanalyze=args.force_reanalyze)
-    if args.command in {"run", "train-publish"}:
+    if args.command in {"run", "train-publish", "train-publish-all"}:
         artifact = publish_training_artifact(force_reanalyze=args.force_reanalyze)
         manifest = json.loads((artifact / "manifest.json").read_text(encoding="utf-8"))
         result["artifact"] = {
@@ -378,6 +569,21 @@ def main() -> int:
             current = update_current_alias(artifact)
             result["artifact"]["current_uri"] = str(current)
             result["artifact"]["promoted_current"] = True
+    if args.command in {"run", "train-publish-cnc", "train-publish-all"}:
+        cnc_artifact = publish_cnc_training_artifact(force_reanalyze=args.force_reanalyze)
+        cnc_manifest = json.loads((cnc_artifact / "manifest.json").read_text(encoding="utf-8"))
+        result["cnc_artifact"] = {
+            "path": str(cnc_artifact),
+            "model_version": cnc_manifest["model_version"],
+            "dataset_version": cnc_manifest["dataset_version"],
+            "artifact_files": len(cnc_manifest["artifact_files"]),
+            "promoted_current": False,
+        }
+        if args.promote_current:
+            assert_promotion_sanity(cnc_artifact)
+            cnc_current = update_current_alias(cnc_artifact)
+            result["cnc_artifact"]["current_uri"] = str(cnc_current)
+            result["cnc_artifact"]["promoted_current"] = True
     if args.command == "llm-smoke":
         result["llm"] = llm_smoke()
 
