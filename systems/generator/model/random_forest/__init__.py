@@ -153,13 +153,20 @@ class RandomForestModel:
         )
 
     def save(self, path: str | Path) -> None:
-        """Save model object and feature column list."""
+        """Save the sklearn-compatible estimator expected by Backend runtime."""
+        if self.model is None:
+            raise RuntimeError("Model has not been trained or loaded yet.")
         target_path = Path(path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump({"model": self.model, "feature_cols": self.feature_cols, "name": self.name}, target_path)
+        joblib.dump(self.model, target_path)
 
     def load(self, path: str | Path) -> None:
-        """Load model object and feature column list from file."""
+        """Load estimator, accepting the pre-contract wrapper format for local compatibility."""
         data = joblib.load(path)
-        self.model = data["model"]
-        self.feature_cols = data["feature_cols"]
+        if isinstance(data, dict) and "model" in data:
+            self.model = data["model"]
+            self.feature_cols = list(data.get("feature_cols") or [])
+            return
+        self.model = data
+        names = getattr(self.model, "feature_names_in_", None)
+        self.feature_cols = [str(name) for name in names] if names is not None else None

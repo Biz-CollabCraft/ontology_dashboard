@@ -10,6 +10,8 @@ import pandas as pd
 import pytest
 
 from systems.backend.app.diagnosis.artifact_provider import LocalModelArtifactProvider
+from systems.backend.app.diagnosis.contracts import load_fixture
+from systems.backend.app.diagnosis.predictor import ArtifactPredictor
 from systems.generator.model import (
     FRAMEWORK_BY_ALGORITHM,
     MODEL_SPECS,
@@ -39,6 +41,21 @@ def _make_synthetic_labeled_dataset(n_samples: int = 100) -> pd.DataFrame:
         "temperature_std_6h": np.random.normal(50.0, 5.0, n_samples),
         "pressure_raw": np.random.normal(100.0, 10.0, n_samples),
         "label": np.random.choice([0, 1], size=n_samples, p=[0.8, 0.2]),
+    })
+
+
+def _make_runtime_compatible_labeled_dataset(n_samples: int = 80) -> pd.DataFrame:
+    dates = pd.date_range("2026-01-01 00:00:00", periods=n_samples, freq="1h")
+    rng = np.random.default_rng(42)
+    return pd.DataFrame({
+        "asset_id": ["M-001"] * n_samples,
+        "observed_at": dates,
+        "air_temperature_k": rng.normal(298.2, 0.8, n_samples),
+        "process_temperature_k": rng.normal(308.7, 1.0, n_samples),
+        "rotational_speed_rpm": rng.normal(1510.0, 120.0, n_samples),
+        "torque_nm": rng.normal(41.0, 7.0, n_samples),
+        "tool_wear_min": np.linspace(20.0, 220.0, n_samples),
+        "label": np.asarray([0] * (n_samples - 16) + [1] * 16, dtype=int),
     })
 
 
@@ -161,22 +178,28 @@ def test_missing_feature_column_raises_error():
         model.predict_proba(incomplete_df)
 
 
-def test_canonical_model_artifact_publish_and_backend_roundtrip(tmp_path):
-    """Test 7: Generator publish_model_artifact produces 6 files and is verifiable by Backend LocalModelArtifactProvider."""
-    df = _make_synthetic_labeled_dataset(40)
-    features = ["vibration_mean_3h", "temperature_std_6h", "pressure_raw"]
+@pytest.mark.parametrize("algo_name", ["random_forest", "lightgbm", "xgboost"])
+def test_canonical_model_artifact_publish_and_backend_roundtrip(tmp_path, algo_name):
+    """Test 7: every published estimator survives the real Backend ArtifactPredictor path."""
+    df = _make_runtime_compatible_labeled_dataset()
+    features = [
+        "air_temperature_k",
+        "process_temperature_k",
+        "rotational_speed_rpm",
+        "torque_nm",
+        "tool_wear_min",
+    ]
 
-    rf_cls = get_model_class("random_forest")
-    model = rf_cls()
+    model_cls = get_model_class(algo_name)
+    model = model_cls()
     model.train(df, feature_names=features, target_col="label")
 
-    model_file = tmp_path / "model.joblib"
+    model_file = tmp_path / f"{algo_name}.joblib"
     model.save(model_file)
 
     artifact_root = tmp_path / "artifacts"
     artifact_uri = f"file://{artifact_root.resolve()}"
-
-    model_id = "pdm-cnc-tool-wear-random-forest"
+    model_id = f"pdm-cnc-tool-wear-{algo_name}"
     model_version = "v1"
 
     dest = publish_model_artifact(
@@ -193,8 +216,8 @@ def test_canonical_model_artifact_publish_and_backend_roundtrip(tmp_path):
             "prediction_task": "binary_failure_within_horizon",
         },
         training_config={
-            "algorithm": "random_forest",
-            "framework": "scikit-learn",
+            "algorithm": algo_name,
+            "framework": FRAMEWORK_BY_ALGORITHM[algo_name],
             "feature_count": len(features),
             "split_strategy": "asset_time_split",
             "target_name": "label",
@@ -202,25 +225,37 @@ def test_canonical_model_artifact_publish_and_backend_roundtrip(tmp_path):
         },
         metrics={"validation_metrics": {"precision": 0.85, "recall": 0.80}},
         provenance={"training": {"run_id": "run-test-01", "publisher": "systems/generator"}},
-        compatibility={"runtime": "ontology_dashboard.systems.backend.diagnosis", "feature_executor_version": "pdm-feature-executor-v1", "prediction_task": "binary_failure_within_horizon"},
+        compatibility={
+            "runtime": "ontology_dashboard.systems.backend.diagnosis",
+            "feature_executor_version": "pdm-feature-executor-v1",
+            "prediction_task": "binary_failure_within_horizon",
+        },
     )
 
     assert dest.exists()
-    assert (dest / "manifest.json").exists()
-    assert (dest / "model.joblib").exists()
-    assert (dest / "feature_schema.json").exists()
-    assert (dest / "label_schema.json").exists()
-    assert (dest / "history_requirement.json").exists()
-    assert (dest / "metrics.json").exists()
+    for filename in (
+        "manifest.json",
+        "model.joblib",
+        "feature_schema.json",
+        "label_schema.json",
+        "history_requirement.json",
+        "metrics.json",
+    ):
+        assert (dest / filename).exists()
 
-    # Backend loader verification
     provider = LocalModelArtifactProvider(f"file://{dest.resolve()}")
     loaded = provider.load()
     assert loaded.manifest["model_id"] == model_id
     assert loaded.manifest["model_version"] == model_version
     assert loaded.feature_schema["features"] == features
+    direct_probs = loaded.model.predict_proba(df[features].iloc[:2])
+    assert direct_probs.shape == (2, 2)
 
-    # Test duplicate publish fails (immutability guarantee)
+    fixture = load_fixture("data/fixtures/GS-001-normal-stable.json")
+    prediction = ArtifactPredictor(f"file://{dest.resolve()}").predict(fixture)
+    assert prediction.probability is not None
+    assert 0.0 <= prediction.probability <= 1.0
+
     with pytest.raises(FileExistsError, match="Model Artifact already published"):
         publish_model_artifact(
             artifact_uri=artifact_uri,
@@ -230,7 +265,7 @@ def test_canonical_model_artifact_publish_and_backend_roundtrip(tmp_path):
             feature_schema_version="pdm-feature-v1",
             model_file=model_file,
             feature_schema={"schema_version": "pdm-feature-v1", "features": features},
-            training_config={"algorithm": "random_forest"},
+            training_config={"algorithm": algo_name},
             metrics={},
             provenance={},
             compatibility={},
