@@ -1,9 +1,13 @@
+import json
 import unittest
 from argparse import Namespace
+from pathlib import Path
 
 from scripts.ci.ai_review import (
+    DEFAULT_CONTEXT_ROUTING,
     build_verified_evidence,
     classify_comment,
+    context_documents,
     detect_intent_risk_hints,
     event_to_comment,
     human_technical_feedback,
@@ -34,6 +38,53 @@ class AiReviewAutomationTests(unittest.TestCase):
         categories = route_context([".dockerignore"])
         self.assertIn("project_intent", categories)
         self.assertIn("deployment", categories)
+
+    def test_context_router_uses_current_mvp_paths_and_closed_loop_product_contract(self):
+        categories = route_context(
+            ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"]
+        )
+        paths = context_documents(categories, DEFAULT_CONTEXT_ROUTING)
+        self.assertIn("docs/mvp/current-mvp-implementation-baseline.md", paths)
+        self.assertIn("docs/mvp/functional-specification.md", paths)
+        self.assertIn("docs/closed-loop-product-consumption-contract.md", paths)
+        self.assertNotIn(
+            "docs/mvp/history/2026-08-week2/frontend-implementation-import.md", paths
+        )
+
+    def test_closed_loop_context_includes_product_api_ui_consumption_contract(self):
+        categories = route_context(
+            ["systems/backend/ontology_dashboard/closed_loop/domain.py"]
+        )
+        paths = context_documents(categories, DEFAULT_CONTEXT_ROUTING)
+        self.assertIn("docs/closed-loop-domain-contract.md", paths)
+        self.assertIn("docs/closed-loop-product-consumption-contract.md", paths)
+
+    def test_declared_context_paths_exist_and_old_namespace_is_absent(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        routing_file = repository_root / "docs/ai-code-review-context.json"
+        declared = json.loads(routing_file.read_text(encoding="utf-8"))["routing"]
+        old_namespace = "docs/" + "mentoring-mvp-2026-08"
+
+        for routing_name, routing in (
+            ("json", declared),
+            ("fallback", DEFAULT_CONTEXT_ROUTING),
+        ):
+            for category, rule in routing.items():
+                for path in rule.get("context", []):
+                    with self.subTest(
+                        routing=routing_name, category=category, path=path
+                    ):
+                        self.assertNotIn(old_namespace, path)
+                        self.assertTrue((repository_root / path).is_file(), path)
+
+        self.assertEqual(declared, DEFAULT_CONTEXT_ROUTING)
+
+    def test_default_routing_does_not_use_week2_history_as_current_contract(self):
+        history_prefix = "docs/mvp/history/2026-08-week2/"
+        for category, rule in DEFAULT_CONTEXT_ROUTING.items():
+            for path in rule.get("context", []):
+                with self.subTest(category=category, path=path):
+                    self.assertFalse(path.startswith(history_prefix), path)
 
     def test_project_intent_hint_detects_frontend_state_machine_reimplementation(self):
         diff = """diff --git a/x b/x

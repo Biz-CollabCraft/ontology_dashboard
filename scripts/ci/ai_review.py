@@ -29,7 +29,8 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         "paths": ["**"],
         "context": [
             "docs/ai-code-review-context.md",
-            "docs/mentoring-mvp-2026-08/current-mvp-implementation-baseline.md",
+            "docs/mvp/current-mvp-implementation-baseline.md",
+            "docs/mvp/requirements-specification.md",
         ],
     },
     "architecture": {
@@ -44,7 +45,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         ],
         "context": [
             "docs/architecture.md",
-            "docs/mentoring-mvp-2026-08/week2-runtime-ownership-integration.md",
+            "docs/mvp/runtime-ownership-integration.md",
             "docs/architecture-decisions/ADR-001-unified-feature-contract.md",
             "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md",
         ],
@@ -57,9 +58,9 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "systems/backend/app/report/**",
         ],
         "context": [
-            "docs/mentoring-mvp-2026-08/week2-functional-specification.md",
-            "docs/mentoring-mvp-2026-08/week2-team-role-and-deliverables.md",
-            "docs/mentoring-mvp-2026-08/week2-frontend-implementation-import.md",
+            "docs/mvp/current-mvp-implementation-baseline.md",
+            "docs/mvp/functional-specification.md",
+            "docs/mvp/api-specification.md",
         ],
     },
     "closed_loop": {
@@ -70,6 +71,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         ],
         "context": [
             "docs/closed-loop-domain-contract.md",
+            "docs/closed-loop-product-consumption-contract.md",
             "docs/closed-loop-implementation-plan.md",
         ],
     },
@@ -81,8 +83,8 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "tests/test_product_result*",
         ],
         "context": [
-            "docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md",
-            "docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md",
+            "docs/mvp/model-artifact-publish-contract.md",
+            "docs/mvp/generator-feature-label-contract.md",
         ],
     },
     "evidence": {
@@ -92,8 +94,8 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "tests/**/*evidence*",
         ],
         "context": [
-            "docs/mentoring-mvp-2026-08/pdm-evidence-report-ui-integration-plan.md",
-            "docs/mentoring-mvp-2026-08/week2-contract-review-checklist.md",
+            "docs/mvp/pdm-evidence-report-ui-integration-plan.md",
+            "docs/mvp/report-specification.md",
         ],
     },
     "report": {
@@ -104,8 +106,8 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "contracts/schemas/report.schema.json",
         ],
         "context": [
-            "docs/mentoring-mvp-2026-08/week2-report-specification.md",
-            "docs/mentoring-mvp-2026-08/pdm-evidence-report-ui-integration-plan.md",
+            "docs/mvp/report-specification.md",
+            "docs/mvp/pdm-evidence-report-ui-integration-plan.md",
         ],
     },
     "frontend_operations": {
@@ -114,15 +116,16 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "systems/frontend/src/features/mvp/**",
         ],
         "context": [
-            "docs/mentoring-mvp-2026-08/current-mvp-implementation-baseline.md",
+            "docs/mvp/current-mvp-implementation-baseline.md",
+            "docs/mvp/functional-specification.md",
             "docs/closed-loop-domain-contract.md",
-            "docs/mentoring-mvp-2026-08/week2-frontend-implementation-import.md",
+            "docs/closed-loop-product-consumption-contract.md",
         ],
     },
     "generator": {
         "paths": ["systems/generator/**", "ml/**"],
         "context": [
-            "docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md",
+            "docs/mvp/generator-feature-label-contract.md",
             "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md",
         ],
     },
@@ -137,7 +140,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         ],
         "context": [
             "docs/architecture.md",
-            "docs/mentoring-mvp-2026-08/week2-runtime-ownership-integration.md",
+            "docs/mvp/runtime-ownership-integration.md",
         ],
     },
 }
