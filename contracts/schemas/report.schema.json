@@ -40,7 +40,7 @@
         "properties": {
           "action_id": {"type": "string"},
           "label": {"type": "string"},
-          "kind": {"enum": ["monitor", "inspect", "review_shutdown", "verify_data", "report"]},
+          "kind": {"enum": ["monitor", "inspect", "review_shutdown", "verify_data", "report", "maintenance_note"]},
           "requires_human_approval": {"type": "boolean"},
           "source_refs": {"type": "array", "items": {"type": "string"}}
         }

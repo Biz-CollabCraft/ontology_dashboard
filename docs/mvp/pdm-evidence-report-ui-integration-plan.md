@@ -729,9 +729,9 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 16 | Deferred | Event Evidence projection을 현행 `GroundedReport`로 변환하는 경로를 추가한다. | projection-to-report mapper | 후속 PR test 결과 |
-| 17 | Deferred | 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다. | `add_maintenance_note` descriptor | 후속 PR fixture/test 경로 |
-| 18 | Deferred | report section, citation, evidence trace가 `source_fields`에 grounded 되는지 검증한다. | grounded report regression test | 후속 PR test 결과 |
+| 16 | Partially Verified | Event Evidence projection을 현행 `GroundedReport`로 변환하는 mapper를 추가한다. | projection-to-report mapper | `pytest -q tests/test_product_result_evidence_projection.py` 14 passed |
+| 17 | Partially Verified | 정비이력 추가 action descriptor를 Event action/note/activity 경계에 맞춰 정의한다. | `add_maintenance_note` descriptor | grounded descriptor unit/contract regression |
+| 18 | Partially Verified | report section, citation, evidence trace가 `source_fields`에 grounded 되는지 검증한다. | grounded report regression test | role/locale, legacy compatibility, hidden-truth regression |
 
 4차 PR 완료 조건은 다음과 같다.
 
@@ -777,6 +777,25 @@ Status 값은 다음만 사용한다.
 - report section과 evidence trace가 source field ID에 grounded 되어 있다.
 - `evaluation_truth`와 `hidden_truth`가 runtime surface에 없다.
 - `review_shutdown`은 automatic control이 아니라 human review임이 명확하다.
+
 - 점검 요청과 evidence trace UI가 live 또는 fixture-backed Event Evidence projection으로 동작한다.
 - 정비이력 추가는 최소 action descriptor로만 제공되며 Work Order 생성이나 Operations 기간 집계를 만들지 않는다.
 - 상태 요약, 요약 보고서, Operations 기간 집계는 V2 Target으로 남아 있다.
+
+### 8.4 검증 기록 (2026-08-18)
+
+- mapper 입력은 이미 저장된 Product Result Artifact에서 파생된 Event Evidence projection이다. mapper는
+  raw Artifact, fixture, `pdm-mvp/report_generator.py`를 읽거나 producer Evidence를 재생성하지 않는다.
+- `GroundedReport`의 기존 `manager`/`engineer` 역할과 schema v1.0을 유지한다. `maintenance_note`는
+  기존 action enum에 대한 additive compatibility 확장이며, `add_maintenance_note`는 Event note 제안만
+  표현한다. Work Order 생성, Maintenance Record 확정, Operations 기간 집계, 자동 조치는 포함하지 않는다.
+- citation, section evidence field, action source ref는 모두
+  `report_projection.evidence_trace`의 `source_fields[].field_id`에 포함되는지 unit/contract test가 검증한다.
+  unknown reference는 report에 포함되지 않는다. `evaluation_truth`와 `hidden_truth`는 canonical projection,
+  legacy compatibility response, report payload에서 제외된다.
+- `pytest -q tests/test_product_result_evidence_projection.py`는 14 passed,
+  `APP_ENV=test pytest -q tests/test_mvp.py`는 16 passed였다. PostgreSQL replay는 로컬 서버 부재로
+  `tests/test_predictive_maintenance_result_replay.py -k v3_result_artifact_mapping_observation_query_and_replay_controls`
+  가 1 skipped였으므로 stored-runtime API 소비는 `Not Proven`이며, 16~18 전체는 `Partially Verified`로 유지한다.
+- frontend ViewModel/UI(19~22)는 이 PR 범위가 아니며, runtime stored Artifact consumer와의 실제 연결은
+  PR #50 경로의 PostgreSQL replay가 통과할 때까지 완료로 주장하지 않는다.

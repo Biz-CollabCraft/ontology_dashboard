@@ -10,6 +10,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from .contracts import AppLocale, GroundedReport, ReportAction, ReportSection, Role
+
 HIDDEN_KEYS = {"evaluation_truth", "hidden_truth"}
 EVENT_EVIDENCE_SCHEMA_VERSION = "event-evidence-projection-v1"
 EVENT_EVIDENCE_CONTRACT_TYPE = "event_evidence_projection"
@@ -160,6 +162,293 @@ def event_evidence_projection_to_legacy_evidence(
         "generated_at": projection.get("generated_at") or artifact_reference.get("observed_at"),
     }
     return _strip_hidden(legacy)
+
+
+def event_evidence_projection_to_grounded_report(
+    evidence: dict[str, Any],
+    role: Role,
+    *,
+    locale: AppLocale = "ko-KR",
+    mode: str = "deterministic",
+) -> GroundedReport:
+    """Render the current report contract from canonical Event Evidence only.
+
+    This is deliberately a projection mapper: it neither reads Product Result
+    Artifact payloads nor computes risk, aggregate, or operations values.
+    """
+
+    projection = _strip_hidden(evidence)
+    if role not in {"manager", "engineer"}:
+        raise ValueError(f"unsupported report role: {role}")
+    if locale not in {"ko-KR", "en-US"}:
+        raise ValueError(f"unsupported report locale: {locale}")
+    if mode not in {"deterministic", "llm", "deterministic_fallback"}:
+        raise ValueError(f"unsupported report mode: {mode}")
+
+    assessment = projection["assessment"]
+    report_projection = projection["report_projection"]
+    source_fields = _source_field_map(report_projection)
+    factor_refs = _factor_source_refs(assessment.get("top_factors"), source_fields)
+    action_refs = _action_source_refs(report_projection, source_fields)
+    evidence_refs = action_refs or factor_refs
+    status = str(assessment.get("status") or "unavailable")
+    decision = str(assessment.get("recommended_decision") or "continue_monitoring")
+    subject = projection.get("subject") or {}
+    equipment_name = str(subject.get("display_name") or subject.get("equipment_id") or "Unknown asset")
+    status_label = _localized_status_label(status, locale)
+    decision_label = _localized_decision_label(decision, locale)
+    evidence_text = _grounded_evidence_text(source_fields, evidence_refs, locale)
+
+    if role == "manager":
+        headline = (
+            f"{equipment_name} · {status_label} · {decision_label}"
+            if locale == "ko-KR"
+            else f"{equipment_name} · {status_label} · {decision_label}"
+        )
+        summary = (
+            f"저장된 producer Artifact에서 파생된 Event Evidence는 {status_label} 상태와 "
+            f"'{decision_label}' 결정을 나타냅니다."
+            if locale == "ko-KR"
+            else f"Event Evidence derived from the stored producer Artifact indicates {status_label.lower()} status and the '{decision_label}' decision."
+        )
+        sections = [
+            ReportSection(
+                section_id="manager-status",
+                title="현재 판단" if locale == "ko-KR" else "Current assessment",
+                body=summary,
+                evidence_field_ids=evidence_refs,
+            ),
+            ReportSection(
+                section_id="manager-evidence",
+                title="핵심 근거" if locale == "ko-KR" else "Key evidence",
+                body=evidence_text,
+                evidence_field_ids=evidence_refs,
+            ),
+        ]
+    else:
+        inspection_text = _inspection_targets_text(
+            report_projection.get("inspection_targets"), source_fields, locale
+        )
+        headline = (
+            f"{equipment_name} 근거 분석 · {status_label}"
+            if locale == "ko-KR"
+            else f"{equipment_name} evidence analysis · {status_label}"
+        )
+        summary = (
+            f"{status_label} 상태의 근거를 확인하고 현장 점검으로 원인을 검토해야 합니다."
+            if locale == "ko-KR"
+            else f"Review the evidence for {status_label.lower()} status and confirm the cause through a field inspection."
+        )
+        sections = [
+            ReportSection(
+                section_id="engineer-factors",
+                title="센서·요인 근거" if locale == "ko-KR" else "Sensor and factor evidence",
+                body=evidence_text,
+                evidence_field_ids=evidence_refs,
+            ),
+            ReportSection(
+                section_id="engineer-checklist",
+                title="점검 후보" if locale == "ko-KR" else "Inspection candidates",
+                body=inspection_text,
+                evidence_field_ids=action_refs,
+            ),
+            ReportSection(
+                section_id="engineer-manager-summary",
+                title="매니저 보고용 요약" if locale == "ko-KR" else "Manager briefing",
+                body=summary,
+                evidence_field_ids=evidence_refs,
+            ),
+        ]
+
+    actions = [
+        ReportAction(
+            action_id=f"decision.{decision}",
+            label=decision_label,
+            kind=_report_action_kind(decision),
+            requires_human_approval=True,
+            source_refs=action_refs,
+        )
+    ]
+    maintenance_note = add_maintenance_note_descriptor(projection, locale=locale)
+    if maintenance_note is not None:
+        actions.append(maintenance_note)
+
+    report = GroundedReport(
+        report_id=f"RPT-{projection['event_id']}-{role}-{locale}",
+        event_id=projection["event_id"],
+        role=role,
+        locale=locale,
+        mode=mode,  # type: ignore[arg-type]
+        headline=headline,
+        summary=summary,
+        status=status,
+        confidence=str(assessment.get("confidence") or "unavailable"),
+        recommended_decision=decision,
+        sections=sections,
+        actions=actions,
+        citations=sorted({reference for section in sections for reference in section.evidence_field_ids}),
+        limitations=_report_limitations(projection, locale),
+        generated_at=projection["generated_at"],
+    )
+    validate_grounded_report_source_refs(projection, report)
+    return report
+
+
+def add_maintenance_note_descriptor(
+    evidence: dict[str, Any],
+    *,
+    locale: AppLocale = "ko-KR",
+) -> ReportAction | None:
+    """Return the bounded Event-note descriptor when the evidence is grounded.
+
+    The descriptor intentionally does not create a Work Order, confirm a
+    Maintenance Record, or execute an operational action.
+    """
+
+    report_projection = evidence.get("report_projection") or {}
+    source_fields = _source_field_map(report_projection)
+    source_refs = _action_source_refs(report_projection, source_fields)
+    if not source_refs:
+        return None
+    return ReportAction(
+        action_id="add_maintenance_note",
+        label="정비이력 추가" if locale == "ko-KR" else "Add maintenance note",
+        kind="maintenance_note",
+        requires_human_approval=True,
+        source_refs=source_refs,
+    )
+
+
+def validate_grounded_report_source_refs(evidence: dict[str, Any], report: GroundedReport) -> None:
+    """Reject reports that cite anything outside Event Evidence source fields."""
+
+    source_field_ids = set(_source_field_map(evidence.get("report_projection") or {}))
+    references = set(report.citations)
+    for section in report.sections:
+        references.update(section.evidence_field_ids)
+    for action in report.actions:
+        references.update(action.source_refs)
+    unknown = sorted(references - source_field_ids)
+    if unknown:
+        raise ValueError(f"report references unknown Event Evidence source fields: {unknown}")
+
+
+def _source_field_map(report_projection: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    source_fields = report_projection.get("evidence_trace") or []
+    mapped: dict[str, dict[str, Any]] = {}
+    for field in source_fields:
+        if not isinstance(field, dict) or not isinstance(field.get("field_id"), str):
+            raise ValueError("Event Evidence evidence_trace must contain source_fields[].field_id")
+        mapped[field["field_id"]] = field
+    return mapped
+
+
+def _factor_source_refs(factors: Any, source_fields: dict[str, dict[str, Any]]) -> list[str]:
+    refs: list[str] = []
+    for factor in factors or []:
+        if not isinstance(factor, dict):
+            continue
+        rank = factor.get("rank")
+        feature = factor.get("feature")
+        if isinstance(rank, int) and isinstance(feature, str):
+            field_id = f"factor.{rank}.{feature}"
+            if field_id in source_fields:
+                refs.append(field_id)
+    return _unique_refs(refs)
+
+
+def _action_source_refs(report_projection: dict[str, Any], source_fields: dict[str, dict[str, Any]]) -> list[str]:
+    refs: list[str] = []
+    for action in report_projection.get("recommended_actions") or []:
+        if isinstance(action, dict):
+            refs.extend(action.get("basis") or [])
+    for target in report_projection.get("inspection_targets") or []:
+        if isinstance(target, dict):
+            refs.extend(target.get("basis") or [])
+    return _unique_refs(reference for reference in refs if isinstance(reference, str) and reference in source_fields)
+
+
+def _unique_refs(references: Any) -> list[str]:
+    return list(dict.fromkeys(references))
+
+
+def _grounded_evidence_text(
+    source_fields: dict[str, dict[str, Any]],
+    source_refs: list[str],
+    locale: AppLocale,
+) -> str:
+    if not source_refs:
+        return "근거 필드가 제공되지 않았습니다." if locale == "ko-KR" else "No grounded evidence field was provided."
+    labels = [str(source_fields[reference].get("label") or reference) for reference in source_refs]
+    if locale == "ko-KR":
+        return "확인할 근거: " + ", ".join(labels)
+    return "Evidence to review: " + ", ".join(labels)
+
+
+def _inspection_targets_text(
+    targets: Any,
+    source_fields: dict[str, dict[str, Any]],
+    locale: AppLocale,
+) -> str:
+    labels = []
+    for target in targets or []:
+        if not isinstance(target, dict):
+            continue
+        basis = _unique_refs(
+            reference for reference in target.get("basis") or [] if isinstance(reference, str) and reference in source_fields
+        )
+        if basis:
+            labels.append(str(target.get("component_label") or target.get("component_id") or "inspection candidate"))
+    if not labels:
+        return "근거가 연결된 점검 후보가 없습니다." if locale == "ko-KR" else "No grounded inspection candidate is available."
+    if locale == "ko-KR":
+        return "점검 후보: " + ", ".join(labels)
+    return "Inspection candidates: " + ", ".join(labels)
+
+
+def _localized_status_label(status: str, locale: AppLocale) -> str:
+    labels = {
+        "ko-KR": {"normal": "정상", "attention": "주의", "warning": "경고", "critical": "긴급", "data_quality_hold": "데이터 확인 필요"},
+        "en-US": {"normal": "Normal", "attention": "Attention", "warning": "Warning", "critical": "Critical", "data_quality_hold": "Data quality review required"},
+    }
+    return labels[locale].get(status, status)
+
+
+def _localized_decision_label(decision: str, locale: AppLocale) -> str:
+    labels = {
+        "ko-KR": {
+            "continue_monitoring": "계속 모니터링",
+            "request_inspection": "현장 점검 요청",
+            "review_shutdown": "권한자의 정지 검토 요청",
+            "hold_for_data_check": "데이터 확인 전 판단 보류",
+        },
+        "en-US": {
+            "continue_monitoring": "Continue monitoring",
+            "request_inspection": "Request a field inspection",
+            "review_shutdown": "Request an authorized shutdown review",
+            "hold_for_data_check": "Hold pending data verification",
+        },
+    }
+    return labels[locale].get(decision, decision)
+
+
+def _report_action_kind(decision: str) -> str:
+    return {
+        "continue_monitoring": "monitor",
+        "request_inspection": "inspect",
+        "review_shutdown": "review_shutdown",
+        "hold_for_data_check": "verify_data",
+    }.get(decision, "report")
+
+
+def _report_limitations(evidence: dict[str, Any], locale: AppLocale) -> list[str]:
+    limitations = [str(item) for item in evidence.get("limitations") or []]
+    note_boundary = (
+        "정비이력 추가는 Event 메모 기록 제안이며 Work Order 생성이나 정비 확정이 아닙니다."
+        if locale == "ko-KR"
+        else "Adding a maintenance note is an Event-note proposal, not Work Order creation or maintenance confirmation."
+    )
+    return _unique_refs([*limitations, note_boundary])
 
 
 def _strip_hidden(value: Any) -> Any:

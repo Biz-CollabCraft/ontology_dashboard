@@ -43,7 +43,7 @@ class ReportSection(StrictModel):
 class ReportAction(StrictModel):
     action_id: str
     label: str
-    kind: Literal["monitor", "inspect", "review_shutdown", "verify_data", "report"]
+    kind: Literal["monitor", "inspect", "review_shutdown", "verify_data", "report", "maintenance_note"]
     requires_human_approval: bool = True
     source_refs: list[str] = Field(default_factory=list)
 

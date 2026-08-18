@@ -9,8 +9,11 @@ from jsonschema import Draft202012Validator
 from ontology_dashboard.product_result_evidence_projection import (
     EVENT_EVIDENCE_CONTRACT_TYPE,
     EVENT_EVIDENCE_SCHEMA_VERSION,
+    add_maintenance_note_descriptor,
+    event_evidence_projection_to_grounded_report,
     event_evidence_projection_to_legacy_evidence,
     product_result_artifact_to_event_evidence_projection,
+    validate_grounded_report_source_refs,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -162,3 +165,87 @@ def test_projection_display_confidence_prefers_canonical_label_over_numeric_valu
 
     assert projection["assessment"]["confidence"] == "medium"
     assert projection["report_projection"]["display_labels"]["confidence_label"] == "medium"
+
+
+@pytest.mark.parametrize(
+    ("role", "locale", "expected_sections"),
+    [
+        ("manager", "ko-KR", {"manager-status", "manager-evidence"}),
+        ("engineer", "en-US", {"engineer-factors", "engineer-checklist", "engineer-manager-summary"}),
+    ],
+)
+def test_event_evidence_projection_maps_to_current_grounded_report_with_grounded_role_blocks(
+    role: str,
+    locale: str,
+    expected_sections: set[str],
+) -> None:
+    projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
+    before_mapping = json.dumps(projection, ensure_ascii=False, sort_keys=True)
+    report = event_evidence_projection_to_grounded_report(projection, role, locale=locale)  # type: ignore[arg-type]
+
+    schema = json.loads((ROOT / "contracts" / "schemas" / "report.schema.json").read_text(encoding="utf-8"))
+    assert list(Draft202012Validator(schema).iter_errors(report.model_dump(mode="json"))) == []
+    assert report.event_id == projection["event_id"]
+    assert report.status == projection["assessment"]["status"]
+    assert report.confidence == projection["assessment"]["confidence"]
+    assert report.recommended_decision == projection["assessment"]["recommended_decision"]
+    assert {section.section_id for section in report.sections} == expected_sections
+    assert json.dumps(projection, ensure_ascii=False, sort_keys=True) == before_mapping
+
+    source_field_ids = {item["field_id"] for item in projection["report_projection"]["evidence_trace"]}
+    report_refs = set(report.citations)
+    for section in report.sections:
+        report_refs.update(section.evidence_field_ids)
+    for action in report.actions:
+        report_refs.update(action.source_refs)
+    assert report_refs <= source_field_ids
+    validate_grounded_report_source_refs(projection, report)
+
+    descriptor = next(action for action in report.actions if action.action_id == "add_maintenance_note")
+    assert descriptor.kind == "maintenance_note"
+    assert descriptor.requires_human_approval is True
+    assert set(descriptor.source_refs) <= source_field_ids
+    assert all("automatic" not in action.label.lower() for action in report.actions)
+    assert_absent_hidden_truth(report.model_dump(mode="json"))
+
+
+def test_report_mapper_does_not_create_risk_values_or_ungrounded_action_refs() -> None:
+    projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
+    projection["report_projection"]["recommended_actions"][0]["basis"].append("synthetic.risk.count")
+
+    report = event_evidence_projection_to_grounded_report(projection, "manager")
+    payload = report.model_dump(mode="json")
+
+    assert report.status == "critical"
+    assert report.recommended_decision == "review_shutdown"
+    assert "failure_probability" not in payload
+    assert "0.92" not in json.dumps(payload, ensure_ascii=False)
+    assert "synthetic.risk.count" not in json.dumps(payload, ensure_ascii=False)
+    assert "권한자의 정지 검토 요청" in next(
+        action.label for action in report.actions if action.kind == "review_shutdown"
+    )
+
+
+def test_maintenance_note_descriptor_is_omitted_without_grounded_source_fields() -> None:
+    projection = product_result_artifact_to_event_evidence_projection(enriched_critical_artifact())
+    projection["report_projection"]["evidence_trace"] = []
+
+    assert add_maintenance_note_descriptor(projection) is None
+    report = event_evidence_projection_to_grounded_report(projection, "engineer")
+    assert all(action.action_id != "add_maintenance_note" for action in report.actions)
+
+
+def test_grounded_report_and_legacy_projection_keep_truth_fields_absent() -> None:
+    artifact = enriched_critical_artifact()
+    artifact["evaluation_truth"] = {"should_not_surface": True}
+    artifact["evidence_payload"]["hidden_truth"] = {"should_not_surface": True}
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
+    report = event_evidence_projection_to_grounded_report(projection, "engineer")
+    legacy = event_evidence_projection_to_legacy_evidence(
+        projection,
+        ranked_factor_evidence=artifact["ranked_factor_evidence"],
+    )
+
+    assert_absent_hidden_truth(projection)
+    assert_absent_hidden_truth(report.model_dump(mode="json"))
+    assert_absent_hidden_truth(legacy)
