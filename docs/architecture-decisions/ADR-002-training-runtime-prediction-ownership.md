@@ -21,6 +21,19 @@
    `systems/backend`는 `history_requirement.json`에 따라 자산별 시계열 history를 조회한 후 `feature_schema.json` 기반으로 피처를 재현한다.
 3. **책임 경계 완전 격리**:
    `systems/backend`는 `systems/generator` 코드를 static/direct import 하지 않고 versioned Model Artifact만 소비한다.
+4. **정비 후 Feature History 경계**:
+   Closed-loop Runtime Overlay Observation은 `restart_at`부터 새로운
+   `history_segment_id`를 사용한다. 별도 versioned transform 계약이 없는 한 정비 전
+   history를 정비 후 rolling/lag/EMA 입력에 암묵적으로 혼합하지 않는다.
+5. **Inference-ready 실행**:
+   정비 후 최소 Observation 수와 lookback은 고정 demo 값이 아니라 현재 Model
+   Artifact의 `history_requirement.json`에서 계산한다. Backend는 요구 이력을 충족한
+   첫 Observation에서 최초 Prediction을 생성하고 이후 정상 runtime 주기를 유지한다.
+6. **Readiness 및 Observation availability 소유권**:
+   Backend Diagnosis만 현재 Model Artifact와 `history_requirement.json`을 소비해
+   inference readiness를 판정한다. `gen_data` Runtime Overlay는 Model Artifact를 읽지
+   않고 정비 후 Observation을 지속 생성·제공한다. 이력이 부족하면 Backend는 Prediction을
+   수행하지 않고 다음 Observation을 기다린다.
 
 ---
 
@@ -38,6 +51,15 @@
   입력 → generator 산출 feature 벡터와 Backend 재현 feature 벡터가 완전
   일치하는지 비교하는 테스트)로 검증한다. 이 테스트가 없으면 parity가
   "보장"되었다고 표기하지 않는다.
+- 정비 후 요구 이력을 충족하지 못한 상태는 `warming_up` 또는
+  `history_insufficient`로 명시한다. 이를 정상 Prediction이나 heuristic 결과로
+  대체하지 않는다.
+- 대상 설비 Overlay branch의 Fast-forward와 Observation 생성은 Source Data Producer
+  경계이며 Backend는 그 실행을 소유하지 않는다.
+
+정비 완료에서 Overlay Observation으로 이어지는 Integration 계약은
+[`../closed-loop-runtime-overlay-contract.md`](../closed-loop-runtime-overlay-contract.md)를
+따른다. 이 추가 결정도 ADR의 전체 상태가 `Accepted`로 변경됐다는 의미는 아니다.
 
 ---
 
