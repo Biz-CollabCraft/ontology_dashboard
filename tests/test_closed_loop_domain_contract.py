@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+import ontology_dashboard.closed_loop as closed_loop_contract
 from ontology_dashboard.closed_loop import (
     ActionInProgress,
     IdempotencyConflict,
@@ -28,7 +29,7 @@ from ontology_dashboard.closed_loop import (
     apply_recommendation_decision,
     authorize_inspection_work_order,
     authorize_maintenance_work_order,
-    create_work_order,
+    create_inspection_work_order,
     create_work_order_for_recommendation,
     materialize_recommended_action,
     plan_maintenance_action,
@@ -94,13 +95,6 @@ def recommendation_decision(
     }
     payload.update(updates)
     return RecommendationDecision.model_validate(payload)
-
-
-def accepted_maintenance_authorization():
-    proposed = proposed_recommendation()
-    decision = recommendation_decision()
-    accepted = apply_recommendation_decision(proposed, decision)
-    return authorize_maintenance_work_order(recommendation=accepted, decision=decision)
 
 
 def test_existing_decision_request_and_closed_loop_share_one_enum() -> None:
@@ -314,13 +308,7 @@ def test_action_and_event_require_approved_completed_matching_lineage() -> None:
             idempotency_key="work-order-wrong-event-001",
         )
 
-    requested = create_work_order(
-        work_order_id="work-order-001",
-        identity=identity,
-        event_id="event-001",
-        authorization=accepted_maintenance_authorization(),
-        idempotency_key="work-order-create-001",
-    )
+    requested = recommendation_order
     with pytest.raises(ValueError, match="approved work order"):
         plan_maintenance_action(
             work_order=requested,
@@ -378,13 +366,11 @@ def test_action_and_event_require_approved_completed_matching_lineage() -> None:
     assert event.maintenance_action_id == completed_action.maintenance_action_id
     assert event.recommendation_id == "recommendation-001"
 
-    inspection = create_work_order(
+    inspection = create_inspection_work_order(
         work_order_id="inspection-001",
         identity=identity,
         event_id="event-001",
-        authorization=authorize_inspection_work_order(
-            operational_decision=OperationalDecisionKind.REQUEST_INSPECTION
-        ),
+        operational_decision=OperationalDecisionKind.REQUEST_INSPECTION,
         idempotency_key="inspection-create-001",
     )
     inspection_approved = WorkOrder.model_validate(
@@ -396,6 +382,12 @@ def test_action_and_event_require_approved_completed_matching_lineage() -> None:
             maintenance_action_id="invalid-action",
             idempotency_key="invalid-action-001",
         )
+
+
+def test_public_work_order_factories_do_not_expose_unbound_authorization_path() -> None:
+    assert not hasattr(closed_loop_contract, "create_work_order")
+    assert hasattr(closed_loop_contract, "create_inspection_work_order")
+    assert hasattr(closed_loop_contract, "create_work_order_for_recommendation")
 
 
 def test_idempotency_allows_replay_and_rejects_conflict_or_unfinished_state() -> None:

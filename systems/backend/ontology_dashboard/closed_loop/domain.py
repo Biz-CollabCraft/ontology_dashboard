@@ -279,14 +279,19 @@ def authorize_maintenance_work_order(
     )
 
 
-def create_work_order(
+def create_inspection_work_order(
     *,
     work_order_id: str,
     identity: EquipmentIdentity,
     event_id: str,
-    authorization: WorkOrderAuthorization,
+    operational_decision: OperationalDecisionKind,
     idempotency_key: str,
 ) -> WorkOrder:
+    """Create inspection work without accepting a self-asserted authorization."""
+
+    authorization = authorize_inspection_work_order(
+        operational_decision=operational_decision,
+    )
     return WorkOrder(
         organization_id=identity.organization_id,
         project_id=identity.project_id,
@@ -295,7 +300,7 @@ def create_work_order(
         event_id=event_id,
         asset_id=identity.asset_id,
         equipment_id=identity.equipment_id,
-        work_type=authorization.work_type,
+        work_type=WorkOrderType.INSPECTION,
         idempotency_key=idempotency_key,
         authorization=authorization,
     )
