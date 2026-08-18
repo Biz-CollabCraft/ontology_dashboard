@@ -368,36 +368,8 @@ def _materialize_runtime_results(
                     "reused": True,
                 }
 
-            # This Dataset Version is source-only by contract, so its runtime
-            # outputs can be refreshed atomically without touching gen_data rows.
-            connection.execute(
-                "DELETE FROM pm_result_artifacts WHERE dataset_version_id=%s",
-                (dataset_version_id,),
-            )
-            connection.execute(
-                "DELETE FROM pm_prediction_factors WHERE dataset_version_id=%s",
-                (dataset_version_id,),
-            )
-            connection.execute(
-                "DELETE FROM pm_prediction_timeline WHERE dataset_version_id=%s",
-                (dataset_version_id,),
-            )
-            connection.execute(
-                "DELETE FROM pm_prediction_snapshots WHERE dataset_version_id=%s",
-                (dataset_version_id,),
-            )
-            connection.execute(
-                """
-                DELETE FROM prediction_results
-                WHERE project_id=%s
-                  AND payload_json->>'dataset_version_id'=%s
-                  AND payload_json->>'source_type'='product_runtime_inference'
-                """,
-                (PROJECT_ID, dataset_version_id),
-            )
-
-            status_counts: dict[str, int] = {}
-            asset_type_counts: dict[str, int] = {}
+            prepared: list[tuple[dict[str, Any], dict[str, Any]]] = []
+            held_assets: list[dict[str, Any]] = []
             for row in candidates:
                 asset_type = str(row["asset_type"])
                 predictor = compressor_predictor if asset_type == "compressor" else cnc_predictor
@@ -420,6 +392,60 @@ def _materialize_runtime_results(
                     _runtime_fixture(row, history=history, source_version=source_version),
                     predictor=predictor,
                 )
+                if artifact.get("failure_probability") is None:
+                    held_assets.append(
+                        {
+                            "asset_id": str(row["asset_id"]),
+                            "asset_type": asset_type,
+                            "observed_at": row["observed_at"].isoformat(),
+                            "quality_warnings": list(artifact.get("data_quality_warnings") or []),
+                        }
+                    )
+                    continue
+                prepared.append((row, artifact))
+
+            # Refresh only assets for which the current Model Artifact can make
+            # a valid prediction. If a just-resumed equipment is still warming
+            # up (for example after a maintenance branch), preserve its last
+            # valid Product Result rather than deleting it or mixing older
+            # pre-maintenance history to force a prediction.
+            ready_asset_ids = sorted({str(row["asset_id"]) for row, _artifact in prepared})
+            if ready_asset_ids:
+                previous = connection.execute(
+                    """
+                    SELECT prediction_id,prediction_result_id
+                    FROM pm_prediction_snapshots
+                    WHERE dataset_version_id=%s AND asset_id = ANY(%s)
+                    """,
+                    (dataset_version_id, ready_asset_ids),
+                ).fetchall()
+                previous_prediction_ids = [str(item["prediction_id"]) for item in previous]
+                previous_result_ids = [str(item["prediction_result_id"]) for item in previous]
+                connection.execute(
+                    "DELETE FROM pm_result_artifacts WHERE dataset_version_id=%s AND asset_id = ANY(%s)",
+                    (dataset_version_id, ready_asset_ids),
+                )
+                if previous_prediction_ids:
+                    connection.execute(
+                        "DELETE FROM pm_prediction_factors WHERE dataset_version_id=%s AND prediction_id = ANY(%s)",
+                        (dataset_version_id, previous_prediction_ids),
+                    )
+                    connection.execute(
+                        "DELETE FROM pm_prediction_timeline WHERE dataset_version_id=%s AND prediction_id = ANY(%s)",
+                        (dataset_version_id, previous_prediction_ids),
+                    )
+                connection.execute(
+                    "DELETE FROM pm_prediction_snapshots WHERE dataset_version_id=%s AND asset_id = ANY(%s)",
+                    (dataset_version_id, ready_asset_ids),
+                )
+                if previous_result_ids:
+                    connection.execute(
+                        "DELETE FROM prediction_results WHERE prediction_id = ANY(%s)",
+                        (previous_result_ids,),
+                    )
+
+            for row, artifact in prepared:
+                asset_type = str(row["asset_type"])
                 probability = float(artifact["failure_probability"])
                 diagnostic_type = str(artifact["predicted_failure_type"])
                 if asset_type == "compressor" and diagnostic_type in {"failure_risk", "none"}:
@@ -446,8 +472,6 @@ def _materialize_runtime_results(
                 artifact_checksum = _artifact_checksum({**artifact, "provenance": provenance})
                 confidence = float(artifact["confidence"])
                 status = str(artifact["status_grade"])
-                status_counts[status] = status_counts.get(status, 0) + 1
-                asset_type_counts[asset_type] = asset_type_counts.get(asset_type, 0) + 1
                 feature_scope = [str(item["feature"]) for item in artifact["top_factors"]]
                 result_payload = {
                     **artifact,
@@ -596,13 +620,35 @@ def _materialize_runtime_results(
                     ),
                 )
 
+            final_rows = connection.execute(
+                """
+                SELECT status_grade,asset_type,COUNT(*) AS count
+                FROM pm_result_artifacts
+                WHERE dataset_version_id=%s
+                GROUP BY status_grade,asset_type
+                """,
+                (dataset_version_id,),
+            ).fetchall()
+            status_counts: dict[str, int] = {}
+            asset_type_counts: dict[str, int] = {}
+            result_artifact_count = 0
+            for item in final_rows:
+                count = int(item["count"])
+                result_artifact_count += count
+                status = str(item["status_grade"])
+                family = str(item["asset_type"])
+                status_counts[status] = status_counts.get(status, 0) + count
+                asset_type_counts[family] = asset_type_counts.get(family, 0) + count
+
             return {
                 "model_versions": sorted({cnc_predictor.model_version, compressor_predictor.model_version}),
-                "result_artifact_count": len(candidates),
+                "result_artifact_count": result_artifact_count,
                 "status_counts": status_counts,
                 "asset_type_counts": asset_type_counts,
                 "selection_strategy": RUNTIME_SELECTION_STRATEGY,
                 "materialization_profile": materialization_profile,
+                "held_asset_count": len(held_assets),
+                "held_assets": held_assets,
                 "reused": False,
             }
 
