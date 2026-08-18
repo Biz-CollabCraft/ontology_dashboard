@@ -120,6 +120,9 @@ API / systems/frontend / Report
 32. 도메인 서비스/로직 레이어에서 `FastAPI`(`HTTPException` 등) 및 DB/Storage 기술 라이브러리를 직접 import/의존하지 않는다.
 33. `infra/`는 순수 기술 구현만 포함하며 상위 도메인 서비스를 import/역의존하지 않는다.
 34. 최상위에 `routers/`, `adapters/`, `closed_loop/`, `orchestration/` 등 기술 중심 패키지를 신설하지 않고 domain-first(`app/{domain}/`) 원칙을 따른다.
+35. 레거시 Source는 [`backend-migration-map.md`](./backend-migration-map.md)의
+    `MOVE | SPLIT | REPLACE | REMOVE | DEFER` 처분을 따라야 한다. 현재 import·테스트된다는
+    이유만으로 자동 이관하지 않으며, Phase 14 전에는 미배정·`UNDECIDED`·`DEFER`를 0건으로 해소한다.
 
 
 15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.

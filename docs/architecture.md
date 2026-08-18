@@ -326,6 +326,19 @@ read model을 사용해 대상 설비의 정비 후 예정 Canonical 행이 Over
   Backend 구현상의 bounded context 명칭은 `maintenance`이며, `app/maintenance`가 Recommendation, Decision, WorkOrder, MaintenanceAction, MaintenanceEvent를 소유한다.
 - **Dashboard 성격**: `dashboard`는 독립 business bounded context가 아니라 여러 public query/read model을 조합하는 **application/read-model composition** 영역으로 정의한다.
 
+### 5.5 레거시 처분과 Migration Ledger
+
+레거시 Source가 현재 import되거나 테스트된다는 이유만으로 새 구조에 자동 이관하지
+않는다. 모든 `systems/backend/ontology_dashboard` Python Source에는 `MOVE`, `SPLIT`,
+`REPLACE`, `REMOVE`, `DEFER` 중 하나의 처분을 부여하고, 실제 target과 삭제 조건은
+[`backend-migration-map.md`](./backend-migration-map.md)를 정본으로 관리한다.
+
+- `MOVE`/`SPLIT`은 승인된 제품 책임과 실제 consumer가 확인된 경우에만 사용한다.
+- `REPLACE`는 새 canonical 구현과 회귀 테스트가 준비된 뒤 레거시를 삭제한다.
+- `DEFER`를 임의 도메인으로 이동하지 않는다.
+- Phase 14에서 레거시 디렉터리를 제거하기 전에 미배정 Source, `UNDECIDED`, `DEFER`가
+  모두 0건이어야 한다.
+
 
 ---
 
@@ -333,8 +346,8 @@ read model을 사용해 대상 설비의 정비 후 예정 Canonical 행이 Over
 
 | 구분 | Model Artifact | Result Artifact |
 |---|---|---|
-| Producer | `systems/generator` | `systems/backend/diagnosis` |
-| Consumer | `systems/backend/diagnosis` | Backend API / Dashboard / Report / Frontend |
+| Producer | `systems/generator` | `systems/backend/app/diagnosis` |
+| Consumer | `systems/backend/app/diagnosis` | Backend API / Dashboard / Report / Frontend |
 | 생성 시점 | 학습/publish 시점 | runtime inference 시점 |
 | 의미 | 학습된 모델, feature contract, metrics, version, provenance | 특정 asset + observation time에 대한 실제 inference 결과 |
 | Evidence 관계 | 학습 provenance/평가 정보 포함 가능 | 제품 판단에 제시되는 runtime Evidence/provenance 포함 |
@@ -404,6 +417,10 @@ Domain-First 구조 전환 및 완전 수렴을 위해 다음 12개 Architecture
 12. **신규 top-level 기술 중심 패키지 생성 방지**: 최상위에 `routers/`, `adapters/`, `closed_loop/` 등 생성 금지
 
 > 위 12개 항목은 Architecture invariant 전체 목록이며, 기계적으로 안정적으로 검출 가능한 항목(예: 1, 2, 4, 5, 6, 8, 9)은 `verify_architecture.py`에 정적 검사로 구현하고, 의미 판단이 필요한 항목(예: 10 `main.py` business logic 포함 제한, 11 exception ownership 경계, 12 신규 기술 중심 package 여부)은 AI/code review checklist 및 테스트로 보완한다. CI가 regex 기반 정적 검사만으로 12개 전부를 완벽 판정하려 하지 않는다.
+
+Migration 중에는 phase-aware ratchet을 적용한다. Phase 0~13은 레거시 존재를 허용하되
+신규 레거시 파일·import와 이미 이관된 경로의 회귀를 차단한다. Phase 14에서 레거시
+경로와 참조 0건을 강제하고, Phase 15에서 이를 최종 strict gate로 유지한다.
 
 ---
 

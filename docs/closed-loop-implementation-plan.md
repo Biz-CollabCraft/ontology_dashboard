@@ -421,14 +421,14 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 
 | 경로 | 광우 작업 | 협의 대상 |
 |---|---|---|
-| `systems/backend/ontology_dashboard/routers/manufacturing.py` | 기존 Event/Decision/Activity API 확장 | 우수 |
-| `systems/backend/ontology_dashboard/ontology.py` | Closed-loop Object/Link/Action 의미 보강 | 우수, 호범 |
-| `systems/backend/ontology_dashboard/ontology_service.py` | 상태 전이 실행 및 감사 기록 보강 | 우수 |
-| `systems/backend/ontology_dashboard/repository.py` 및 PostgreSQL 대응부 | 운영 상태 persistence 확장 | 우수 |
-| `systems/backend/ontology_dashboard/outbox.py` 및 projection consumer | 기존 outbox 재사용, Closed-loop projection event의 retry·idempotency 보강 | 우수 |
+| `systems/backend/app/maintenance/` | Recommendation/Decision/WorkOrder/MaintenanceAction/MaintenanceEvent 상태와 use case | 우수 |
+| `systems/backend/app/equipment/` public port | Equipment identity와 적용된 운영 상태 연결 | 우수, 호범 |
+| `systems/backend/app/ontology/` public port | Closed-loop Object/Link/Action projection | 우수, 호범 |
+| `systems/backend/app/infra/db/` 및 Maintenance repository adapter | 운영 상태 persistence | 우수 |
+| `systems/backend/app/infra/messaging/` 및 Maintenance integration port | Outbox retry·idempotency | 우수 |
 | `systems/backend/migrations/` | Closed-loop 운영 레코드 migration | 우수 |
-| `systems/backend/ontology_dashboard/ontology_adapter.py` | Evidence 의미 변경 없이 Closed-loop ID·관계 projection만 보강 | 호범 계약 확정·검토 후 |
-| `systems/backend/ontology_dashboard/openapi_contracts.py` | 응답 계약 등록 | 우수 |
+| `systems/backend/app/diagnosis/` public contract | Evidence 의미 변경 없이 Product Result/Evidence 식별자만 소비 | 호범 계약 확정·검토 후 |
+| `systems/backend/app/maintenance/maintenance_router.py` | 응답 계약과 HTTP 변환 | 우수 |
 | `tests/`의 Closed-loop 관련 파일 | Domain/API/integration regression | 우수 |
 
 광우는 아래 경로를 직접 소유하지 않는다.
@@ -445,15 +445,10 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 다른 담당 경로의 변경이 필요하면 해당 owner에게 요구 계약과 실패 재현 테스트를
 전달하고, 공동 수정 여부를 합의한다.
 
-2026-08-18 기준 PR #41은 OPEN이며 아래 공통 파일을 수정 중이다.
-
-- `systems/backend/ontology_dashboard/routers/manufacturing.py`
-- `systems/backend/ontology_dashboard/openapi_contracts.py`
-- `systems/backend/ontology_dashboard/service.py`
-
-따라서 PR 2는 `app/maintenance/`(구 `closed_loop/`), repository/PostgreSQL, outbox, migration, repository/domain test를 먼저
-진행하고, 위 공통 wiring은 PR #41 정리/merge 후 최신 `main`을 반영해 연결하는 것을 기본 순서로 한다.
-실제 구현 시점에는 PR #41 상태를 다시 확인한다.
+PR #41의 Product Result/Evidence handoff 계약은 merge되었다. 이후 구현은 최신 `main`과
+[`backend-migration-map.md`](./backend-migration-map.md)를 기준으로 `app/maintenance`에
+수렴한다. 레거시 `routers/manufacturing.py`, `service.py`, `repository.py`를 확장하지 않고,
+필요한 호환 API는 도메인 Router 또는 composition adapter로 대체한 뒤 제거한다.
 
 
 ## 9. 팀원별 선행 입력과 인계 산출물

@@ -11,9 +11,10 @@
       ]
     },
     "architecture": {
-      "paths": ["systems/**", "infra/**", "scripts/**", ".github/workflows/**", "render.yaml", "contracts/**", "schemas/**"],
+      "paths": ["systems/**", "infra/**", "scripts/**", ".github/workflows/**", "render.yaml", "contracts/**", "schemas/**", "docs/architecture*.md", "docs/backend-migration-map.*", "systems/backend/README.md"],
       "context": [
         "docs/architecture.md",
+        "docs/backend-migration-map.md",
         "docs/mvp/runtime-ownership-integration.md",
         "docs/architecture-decisions/ADR-001-unified-feature-contract.md",
         "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md"

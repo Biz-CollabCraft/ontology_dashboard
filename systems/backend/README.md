@@ -33,6 +33,10 @@ uvicorn app.main:app --host 127.0.0.1 --port 8100
 
 > `systems/backend/ontology_dashboard`는 정식 compatibility architecture가 아니라 제거 대상 legacy migration source다. Migration 완료 전까지 한시적으로 존재할 수 있으나 신규 기능 또는 신규 파일 추가는 금지한다.
 
+레거시 파일별 `MOVE | SPLIT | REPLACE | REMOVE | DEFER` 처분과 담당 Phase는
+[`docs/backend-migration-map.md`](../../docs/backend-migration-map.md)를 따른다. 현재 import되거나
+테스트된다는 사실만으로 새 구조에 자동 이관하지 않는다.
+
 ## 보안 경계
 
 - session token은 HttpOnly SameSite cookie로 전달하고 DB에는 SHA-256 hash만 저장한다.
