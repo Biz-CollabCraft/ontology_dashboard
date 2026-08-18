@@ -1,0 +1,203 @@
+name: PR Comment Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: pr-comment-review-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  self-test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pull request code for deterministic self-test only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify comment classifier, routing, loop and idempotency
+        run: python3 -m unittest tests.test_ai_review_automation
+
+  gate:
+    if: >-
+      ${{ github.event_name != 'pull_request' &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr_number: ${{ steps.event.outputs.pr_number }}
+      source_id: ${{ steps.event.outputs.source_id }}
+      source_kind: ${{ steps.event.outputs.source_kind }}
+      source_author: ${{ steps.event.outputs.source_author }}
+      author_association: ${{ steps.event.outputs.author_association }}
+      authorized: ${{ steps.event.outputs.authorized }}
+      classification: ${{ steps.event.outputs.classification }}
+      eligible: ${{ steps.event.outputs.eligible }}
+      same_repo: ${{ steps.repo.outputs.same_repo }}
+      head_sha: ${{ steps.repo.outputs.head_sha }}
+      base_sha: ${{ steps.repo.outputs.base_sha }}
+    steps:
+      - name: Checkout trusted default branch reviewer code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify source comment without secrets
+        id: event
+        run: python3 scripts/ci/ai_review.py event-info --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Read pull request repository boundary for authorized technical comment
+        if: steps.event.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.event.outputs.pr_number }}
+        run: gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > /tmp/pr.json
+
+      - name: Reject fork/untrusted head before OIDC job
+        if: steps.event.outputs.eligible == 'true'
+        id: repo
+        env:
+          PR_NUMBER: ${{ steps.event.outputs.pr_number }}
+        run: |
+          python3 scripts/ci/ai_review.py repo-gate \
+            --pr-json /tmp/pr.json \
+            --repository "$GITHUB_REPOSITORY" >> "$GITHUB_OUTPUT"
+
+  review-comment:
+    needs: gate
+    if: >-
+      needs.gate.outputs.authorized == 'true' &&
+      needs.gate.outputs.eligible == 'true' &&
+      needs.gate.outputs.same_repo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GEMINI_REVIEW_MODEL: gemini-3.7-flash
+      GEMINI_REVIEW_MODEL_DISPLAY_NAME: Gemini 3.7 Flash
+      VERTEX_LOCATION: global
+      PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
+      SOURCE_ID: ${{ needs.gate.outputs.source_id }}
+      SOURCE_KIND: ${{ needs.gate.outputs.source_kind }}
+      SOURCE_AUTHOR: ${{ needs.gate.outputs.source_author }}
+      SOURCE_AUTHOR_ASSOCIATION: ${{ needs.gate.outputs.author_association }}
+      BASE_SHA: ${{ needs.gate.outputs.base_sha }}
+      HEAD_SHA: ${{ needs.gate.outputs.head_sha }}
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout trusted default branch reviewer code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch PR objects without checking out untrusted head code
+        run: git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Collect PR metadata and existing automated responses
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > /tmp/pr.json
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+            --slurp > /tmp/comments-pages.json
+          jq '[.[][]]' /tmp/comments-pages.json > /tmp/comments.json
+
+      - name: Decide idempotent create/update/no-op before Vertex call
+        id: idem
+        run: |
+          python3 scripts/ci/ai_review.py idempotency \
+            --comments-json /tmp/comments.json \
+            --source-kind "$SOURCE_KIND" \
+            --source-id "$SOURCE_ID" \
+            --head-sha "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare trusted comment validity context
+        if: steps.idem.outputs.action != 'noop'
+        run: |
+          python3 scripts/ci/ai_review.py prepare-comment \
+            --event "$GITHUB_EVENT_PATH" \
+            --pr-json /tmp/pr.json \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --output /tmp/comment-review-prompt.md
+
+      - name: Authenticate to Google Cloud with GitHub OIDC
+        if: steps.idem.outputs.action != 'noop'
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: flai-oosuhada-20260506
+          workload_identity_provider: projects/932697090428/locations/global/workloadIdentityPools/github-actions/providers/ontology-dashboard
+          service_account: ontology-gh-review@flai-oosuhada-20260506.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+
+      - name: Review comment validity with ${{ env.GEMINI_REVIEW_MODEL_DISPLAY_NAME }} on Vertex AI
+        if: steps.idem.outputs.action != 'noop'
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/ai_review.py build-request \
+            --prompt /tmp/comment-review-prompt.md \
+            --output /tmp/vertex-request.json
+
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-delay 2 \
+            -X POST \
+            -H "Authorization: Bearer ${GCP_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/vertex-request.json \
+            "https://aiplatform.googleapis.com/v1/projects/flai-oosuhada-20260506/locations/${VERTEX_LOCATION}/publishers/google/models/${GEMINI_REVIEW_MODEL}:generateContent" \
+            > /tmp/vertex-response.json
+
+          python3 scripts/ci/ai_review.py parse-comment \
+            --response /tmp/vertex-response.json \
+            --source-kind "$SOURCE_KIND" \
+            --source-id "$SOURCE_ID" \
+            --head-sha "$HEAD_SHA" \
+            --model-display-name "$GEMINI_REVIEW_MODEL_DISPLAY_NAME" \
+            --model-id "$GEMINI_REVIEW_MODEL" \
+            --vertex-location "$VERTEX_LOCATION" \
+            --output /tmp/comment-review.md
+
+      - name: Publish or update one response for the source comment
+        if: steps.idem.outputs.action != 'noop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ steps.idem.outputs.action }}
+          EXISTING_ID: ${{ steps.idem.outputs.existing_id }}
+        run: |
+          set -euo pipefail
+          jq -n --rawfile body /tmp/comment-review.md '{body: $body}' > /tmp/comment-payload.json
+          if [[ "$ACTION" == "update" ]]; then
+            gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING_ID}" \
+              --input /tmp/comment-payload.json
+          else
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --input /tmp/comment-payload.json
+          fi
