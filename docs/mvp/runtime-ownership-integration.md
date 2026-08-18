@@ -1,8 +1,8 @@
-# Week 2 MVP 실행 코드 책임 재배치 기록
+# MVP Runtime Ownership 통합 기준
 
 - 대상: PR #9 `feat/week2-mvp-implementation-import`
 - 상위 계약: PR #8 저장소 책임, PR #10 시스템 아키텍처, `gen_data` PR #2 source/reference fixture 분류
-- 목적: 개인 프로토타입에서 이관한 실행 코드를 팀의 장기 책임 경계에 맞추되 Week 2 MVP 화면과 API 호환성을 유지한다.
+- 목적: 개인 프로토타입에서 이관한 실행 코드를 팀의 장기 책임 경계에 맞추되 현재 MVP 화면과 API 호환성을 유지한다.
 
 ## 적용한 책임 경계
 
@@ -48,7 +48,7 @@ Model Artifact는 `model-artifact-v1.0` manifest로 publish하며 artifact type/
 
 기존 `systems/backend/ontology_dashboard/modeling/registry.py`가 수행하던 active model load/scoring/explanation 구현도 `systems/backend/app/diagnosis/model_registry.py`로 이동했고 API 경로에는 compatibility adapter만 남겼다.
 
-Backend는 generator Python 구현이나 sibling `model_store` 경로를 import/탐색하지 않는다. Week 2 로컬 데모에서 Artifact가 주입되지 않은 경우에만 기존 deterministic heuristic을 명시적 compatibility fallback으로 유지한다.
+Backend는 generator Python 구현이나 sibling `model_store` 경로를 import/탐색하지 않는다. MVP 로컬 데모에서 Artifact가 주입되지 않은 경우에만 기존 deterministic heuristic을 명시적 compatibility fallback으로 유지한다.
 
 ML authoring compatibility port는 generator-capable 개발/통합 배포에서만 실제 generator 구현을 지연 로드한다. 일반 Backend startup과 diagnosis runtime은 generator package 없이도 import 가능하도록 유지한다.
 

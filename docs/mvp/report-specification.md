@@ -1,4 +1,4 @@
-# Week 2 리포트 정의서
+# MVP 리포트 정의서
 
 ## 1. 목적과 상태
 
@@ -10,10 +10,10 @@
 - 기준 Model: `independent-logreg-v3.1`
 - 기준 Result Artifact: `result-artifact-v1.0`
 
-공통 필드명은 [공통 스키마 정의서](./week2-schema-definition.md)를 따른다.
+공통 필드명은 [공통 스키마 정의서](./schema-definition.md)를 따른다.
 
 현행 구현은 `ReportRequest(role, locale, use_llm)`과
-`schemas/report.schema.json`의 role-aware grounded report를 사용한다. 이 문서의
+`contracts/schemas/report.schema.json`의 role-aware grounded report를 사용한다. 이 문서의
 기간·필터 기반 `ReportInput`과 `ReportOutput`은 현행 계약을 설명하지 않는
 `V2 변경 제안`이다. 기준은
 [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을 따른다.
@@ -75,7 +75,7 @@ Canonical V3.1
 → Event Executive Brief 화면
 ```
 
-Week 2는 Event Evidence 기반 `mock ReportInput → deterministic ReportOutput`을
+현재 MVP는 Event Evidence 기반 `mock ReportInput → deterministic ReportOutput`을
 우선 검증한다. 현행 화면 명칭은 계약 단위를 드러내도록 `Event Executive Brief`로
 고정한다. 기간 기반 Executive Report는 Target으로 유지하고 추가 집계 API가
 필요하면 후속 처리한다. LLM은 이후에도 입력 데이터를 수정하지 않고 검증된 사실을

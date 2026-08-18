@@ -215,13 +215,14 @@ PostgreSQL
 - [시스템 아키텍처](./docs/architecture.md)
 - [Architecture Decision Records](./docs/architecture-decisions/README.md)
 - [Shared Contracts](./contracts/README.md)
-- [2026년 8월 멘토링 MVP 문서](./docs/mentoring-mvp-2026-08/README.md)
-- [Generator Feature/Label 계약](./docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md)
-- [Model Artifact Publish 계약](./docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md)
-- [Runtime Ownership](./docs/mentoring-mvp-2026-08/week2-runtime-ownership-integration.md)
+- [MVP / Product documentation](./docs/mvp/README.md)
+- [MVP 요구사항](./docs/mvp/requirements-specification.md)
+- [Generator Feature/Label 계약](./docs/mvp/generator-feature-label-contract.md)
+- [Model Artifact Publish 계약](./docs/mvp/model-artifact-publish-contract.md)
+- [Runtime Ownership](./docs/mvp/runtime-ownership-integration.md)
 
-`docs/mentoring-mvp-2026-08/`의 Week 2 문서는 프로젝트 전체 README를 대체하는 것이 아니라,
-해당 시점의 요구사항·계약·결정 근거를 보존하는 milestone 문서로 취급합니다.
+현재 제품/MVP 계약은 `docs/mvp/` 바로 아래에서 관리하고, 2026년 8월 Week 2의
+역할 분담·이관·provenance 기록은 `docs/mvp/history/2026-08-week2/`에 보존합니다.
 
 ## 10. 최종 완료 정의
 

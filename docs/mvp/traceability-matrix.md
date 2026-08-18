@@ -1,4 +1,4 @@
-# Week 2 추적성 매트릭스
+# MVP 추적성 매트릭스
 
 ## 1. 목적
 
@@ -35,8 +35,8 @@
 | Training daemon | `generator_main.py` | import/API tests | #23 |
 | Runtime inference | Backend diagnosis | Result Artifact tests | #24의 Generator runtime 코드를 제거하고 Backend 구현으로 재구성 필요 |
 
-상세는 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
-`docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,
+상세는 `docs/mvp/generator-feature-label-contract.md`,
+`docs/mvp/model-artifact-publish-contract.md`,
 `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
 
 ### 1.3 V2 변경 제안 추적

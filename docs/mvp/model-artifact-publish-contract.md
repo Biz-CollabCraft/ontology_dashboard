@@ -1,4 +1,4 @@
-# Week 2 Model Artifact Publish 계약 명세서
+# Model Artifact Publish 계약 명세서
 
 - **문서 상태**: `확정 계약 (Confirmed Contract)` — 최초 공식 `model-artifact-v1.0`
 - **관련 저장소**: `Biz-CollabCraft/ontology_dashboard`

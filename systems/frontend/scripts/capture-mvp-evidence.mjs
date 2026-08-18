@@ -1,14 +1,16 @@
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const baseUrl = (process.env.MVP_CAPTURE_BASE_URL ?? "http://127.0.0.1:3100").replace(/\/$/, "");
 const email = process.env.MVP_CAPTURE_EMAIL ?? "manager@ontology.local";
 const password = process.env.MVP_CAPTURE_PASSWORD ?? "Manager!2026";
 const projectId = process.env.MVP_CAPTURE_PROJECT_ID ?? "manufacturing-demo-project";
+const scriptDir = dirname(fileURLToPath(import.meta.url));
 const outputDir = resolve(
   process.env.MVP_CAPTURE_OUTPUT_DIR
-    ?? resolve(process.cwd(), "../docs/10-product/mentoring-mvp-2026-08/assets/week2-mvp-frontend-convergence"),
+    ?? resolve(scriptDir, "../../../docs/mvp/history/2026-08-week2/assets/week2-mvp-frontend-convergence"),
 );
 const mvpPath = `/app/projects/${projectId}/mvp`;
 

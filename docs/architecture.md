@@ -131,11 +131,11 @@ Raw / Canonical Observation
 
 ### Generator Feature 책임
 
-Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, ontology node, dtype, unit, transform, parameter, partition key, ordering key를 포함한다. 상세 필드와 naming 규칙은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
+Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, ontology node, dtype, unit, transform, parameter, partition key, ordering key를 포함한다. 상세 필드와 naming 규칙은 `docs/mvp/generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
 ### Label 책임
 
-학습 Label은 Model Artifact provenance의 일부다. prediction horizon, anchor semantics, exclusion policy와 label schema version을 기록한다. 상세 규칙은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md` §3을 따른다.
+학습 Label은 Model Artifact provenance의 일부다. prediction horizon, anchor semantics, exclusion policy와 label schema version을 기록한다. 상세 규칙은 `docs/mvp/generator-feature-label-contract.md` §3을 따른다.
 
 ---
 
@@ -158,7 +158,7 @@ Generator와 Backend 사이의 계약은 `systems/generator/model/model_store`�
 
 Manifest의 실제 필드 구조, 6개 필수 파일의 역할, `artifact_files` role 목록,
 검증 규칙, publisher/consumer 책임은
-`docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`를
+`docs/mvp/model-artifact-publish-contract.md`를
 단일 상세 기준으로 사용한다. 이 문서에는 Manifest JSON 구조를 복제하지 않는다.
 
 ### 4.2 디렉터리 예시
@@ -256,6 +256,11 @@ Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Featur
 ## 7. systems/frontend — Workflow/UI 중심 Consumer
 
 Frontend는 Backend API의 안정된 contract를 소비한다. 초기 스캐폴딩에서 폴더명이 `equipment`, `diagnosis`, `report`, `dashboard`로 유사하더라도 **Backend 도메인 이름과 1:1 대응을 강제하지 않는다.**
+
+Closed-loop에서는 Backend Domain이 상태 머신의 canonical owner다. Frontend가 role·permission·현재
+상태를 조합해 상태 전이를 재구현하지 않으며, Backend가 계산한 `available_actions`를 presentation에
+사용한다. 기존 Event API는 additive extension으로 유지한다. 상세 Product/API/UI 소비 계약은
+[`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 따른다.
 
 Frontend 구조는 다음 기준으로 독립적으로 진화할 수 있다.
 

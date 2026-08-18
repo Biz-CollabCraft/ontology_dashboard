@@ -6,10 +6,19 @@ on:
       architecture_result:
         required: true
         type: string
+      docker_runtime_required:
+        required: true
+        type: string
       docker_runtime_verified:
         required: true
         type: string
+      frontend_unit_required:
+        required: true
+        type: string
       frontend_unit_verified:
+        required: true
+        type: string
+      mvp_e2e_required:
         required: true
         type: string
       mvp_e2e_verified:
@@ -43,6 +52,10 @@ jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      GEMINI_REVIEW_MODEL: gemini-3.7-flash
+      GEMINI_REVIEW_MODEL_DISPLAY_NAME: Gemini 3.7 Flash
+      VERTEX_LOCATION: global
     permissions:
       actions: read
       contents: read
@@ -101,8 +114,11 @@ jobs:
       - name: Prepare pull request review context
         env:
           ARCHITECTURE_JOB_RESULT: ${{ inputs.architecture_result }}
+          DOCKER_RUNTIME_REQUIRED: ${{ inputs.docker_runtime_required }}
           DOCKER_RUNTIME_VERIFIED: ${{ inputs.docker_runtime_verified }}
+          FRONTEND_UNIT_REQUIRED: ${{ inputs.frontend_unit_required }}
           FRONTEND_UNIT_VERIFIED: ${{ inputs.frontend_unit_verified }}
+          MVP_E2E_REQUIRED: ${{ inputs.mvp_e2e_required }}
           MVP_E2E_VERIFIED: ${{ inputs.mvp_e2e_verified }}
           BASE_SHA: ${{ inputs.base_sha }}
           HEAD_SHA: ${{ inputs.head_sha }}
@@ -118,8 +134,11 @@ jobs:
           base = os.environ["BASE_SHA"]
           head = os.environ["HEAD_SHA"]
           architecture_job_result = os.environ["ARCHITECTURE_JOB_RESULT"]
+          docker_runtime_required_in_review = os.environ["DOCKER_RUNTIME_REQUIRED"].lower() == "true"
           docker_runtime_verified_in_review = os.environ["DOCKER_RUNTIME_VERIFIED"].lower() == "true"
+          frontend_unit_required_in_review = os.environ["FRONTEND_UNIT_REQUIRED"].lower() == "true"
           frontend_unit_verified_in_review = os.environ["FRONTEND_UNIT_VERIFIED"].lower() == "true"
+          mvp_e2e_required_in_review = os.environ["MVP_E2E_REQUIRED"].lower() == "true"
           mvp_e2e_verified_in_review = os.environ["MVP_E2E_VERIFIED"].lower() == "true"
           architecture_job_log = Path("/tmp/architecture-job.log").read_text(
               encoding="utf-8", errors="replace"
@@ -159,11 +178,11 @@ jobs:
           trusted_contract = git_show(base, "docs/ai-code-review-context.md")
           contract_source = "base:docs/ai-code-review-context.md"
           if trusted_contract is None:
-              contract_source = "base:fallback architecture + Week 2 contracts"
+              contract_source = "base:fallback architecture + MVP contracts"
               fallback_paths = (
                   "docs/architecture.md",
-                  "docs/mentoring-mvp-2026-08/week2-runtime-ownership-integration.md",
-                  "docs/mentoring-mvp-2026-08/week2-frontend-implementation-import.md",
+                  "docs/mvp/runtime-ownership-integration.md",
+                  "docs/mvp/current-mvp-implementation-baseline.md",
               )
               chunks = []
               for path in fallback_paths:
@@ -197,8 +216,8 @@ jobs:
               stdout=subprocess.PIPE,
           ).stdout
 
-          # Gemini 3.6 Flash has a large context window, but a hard cap keeps
-          # automatic reviews predictable in both latency and credit usage.
+          # Keep a hard cap below the model context limit so automatic reviews
+          # remain predictable in both latency and credit usage.
           max_chars = 1_200_000
           truncated = len(diff) > max_chars
           if truncated:
@@ -253,11 +272,17 @@ jobs:
               "systems/frontend/nginx.conf",
           }
           deployment_sensitive = bool(changed_paths & deployment_sensitive_paths)
+          missing_required_checks = []
+          if docker_runtime_required_in_review and not docker_runtime_verified_in_review:
+              missing_required_checks.append("docker_runtime")
+          if frontend_unit_required_in_review and not frontend_unit_verified_in_review:
+              missing_required_checks.append("frontend_unit")
+          if mvp_e2e_required_in_review and not mvp_e2e_verified_in_review:
+              missing_required_checks.append("mvp_e2e")
+
           if architecture_job_result != "success":
               readiness_ceiling = "Not Ready"
-          elif deployment_sensitive and not docker_runtime_verified_in_review:
-              readiness_ceiling = "Conditional"
-          elif not frontend_unit_verified_in_review or not mvp_e2e_verified_in_review:
+          elif missing_required_checks:
               readiness_ceiling = "Conditional"
           else:
               readiness_ceiling = "Ready to Merge"
@@ -265,9 +290,13 @@ jobs:
               __import__("json").dumps(
                   {
                       "deployment_sensitive": deployment_sensitive,
+                      "docker_runtime_required_in_review": docker_runtime_required_in_review,
                       "docker_runtime_verified_in_review": docker_runtime_verified_in_review,
+                      "frontend_unit_required_in_review": frontend_unit_required_in_review,
                       "frontend_unit_verified_in_review": frontend_unit_verified_in_review,
+                      "mvp_e2e_required_in_review": mvp_e2e_required_in_review,
                       "mvp_e2e_verified_in_review": mvp_e2e_verified_in_review,
+                      "missing_required_checks": missing_required_checks,
                       "merge_readiness_ceiling": readiness_ceiling,
                   }
               ),
@@ -302,12 +331,13 @@ jobs:
                   "- The prerequisite `architecture` job for this exact pull request head finished before this Gemini review job started.",
                   f"- The prerequisite `architecture` job result is `{architecture_job_result}`.",
                   "- The architecture job is configured to include real Docker Compose image build/start smoke, Backend `/health`, Frontend `/health/live`, non-root UID 10001 verification, and Artifact Storage write/read/delete smoke when execution reaches those steps.",
-                  f"- Docker runtime verification output from the prerequisite job is `{str(docker_runtime_verified_in_review).lower()}` for this exact head SHA.",
-                  f"- Frontend Vitest unit-test verification output from the prerequisite job is `{str(frontend_unit_verified_in_review).lower()}` for this exact head SHA.",
-                  f"- Critical MVP Playwright E2E verification output from the prerequisite job is `{str(mvp_e2e_verified_in_review).lower()}` for this exact head SHA.",
+                  "- Each selective validation below has a separate `required` scope bit and `verified` execution bit. `required=false` means not applicable for this PR scope, not a failed or missing verification.",
+                  f"- Docker runtime: required=`{str(docker_runtime_required_in_review).lower()}`, verified=`{str(docker_runtime_verified_in_review).lower()}` for this exact head SHA.",
+                  f"- Frontend Vitest unit tests: required=`{str(frontend_unit_required_in_review).lower()}`, verified=`{str(frontend_unit_verified_in_review).lower()}` for this exact head SHA.",
+                  f"- Critical MVP Playwright E2E: required=`{str(mvp_e2e_required_in_review).lower()}`, verified=`{str(mvp_e2e_verified_in_review).lower()}` for this exact head SHA.",
                   "- This GitHub Actions job has already authenticated to Google Cloud through GitHub OIDC / Workload Identity Federation before this review request is sent.",
-                  "- This review response is being generated by Vertex AI model `gemini-3.6-flash` through the `global` endpoint configured in this workflow.",
-                  "- Therefore the `gemini-3.6-flash` model ID and this Vertex AI global endpoint are runtime-confirmed for this job. Do not report them as unavailable, invalid, or hypothetical.",
+                  f"- This review response is being generated by Vertex AI model `{os.environ['GEMINI_REVIEW_MODEL']}` through the `{os.environ['VERTEX_LOCATION']}` endpoint configured in this workflow.",
+                  f"- Therefore the `{os.environ['GEMINI_REVIEW_MODEL']}` model ID and this Vertex AI {os.environ['VERTEX_LOCATION']} endpoint are runtime-confirmed for this job. Do not report them as unavailable, invalid, or hypothetical.",
                   "- Do not make external service, model-version, API-availability, pricing, or quota claims from memory. Only report such a problem when it is demonstrated by supplied repository evidence or a trusted runtime fact.",
                   "- A workflow implementation may still contain other defects; review those normally without contradicting the runtime-confirmed facts above.",
                   "",
@@ -368,9 +398,13 @@ jobs:
                   f"CRITICAL_CONTEXT_CHARS={len(critical_context)}",
                   f"DEPLOYMENT_SENSITIVE={str(deployment_sensitive).lower()}",
                   f"ARCHITECTURE_JOB_RESULT={architecture_job_result}",
+                  f"DOCKER_RUNTIME_REQUIRED_IN_REVIEW={str(docker_runtime_required_in_review).lower()}",
                   f"DOCKER_RUNTIME_VERIFIED_IN_REVIEW={str(docker_runtime_verified_in_review).lower()}",
+                  f"FRONTEND_UNIT_REQUIRED_IN_REVIEW={str(frontend_unit_required_in_review).lower()}",
                   f"FRONTEND_UNIT_VERIFIED_IN_REVIEW={str(frontend_unit_verified_in_review).lower()}",
+                  f"MVP_E2E_REQUIRED_IN_REVIEW={str(mvp_e2e_required_in_review).lower()}",
                   f"MVP_E2E_VERIFIED_IN_REVIEW={str(mvp_e2e_verified_in_review).lower()}",
+                  f"MISSING_REQUIRED_CHECKS={','.join(missing_required_checks) or 'none'}",
                   f"MERGE_READINESS_CEILING={readiness_ceiling}",
                   "---",
                   trusted_contract,
@@ -435,7 +469,7 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
           create_credentials_file: false
 
-      - name: Review with Gemini 3.6 Flash on Vertex AI
+      - name: Review with configured Gemini model on Vertex AI
         env:
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
@@ -472,7 +506,7 @@ jobs:
             -H "Authorization: Bearer ${GCP_ACCESS_TOKEN}" \
             -H "Content-Type: application/json" \
             --data-binary @/tmp/vertex-request.json \
-            "https://aiplatform.googleapis.com/v1/projects/flai-oosuhada-20260506/locations/global/publishers/google/models/gemini-3.6-flash:generateContent" \
+            "https://aiplatform.googleapis.com/v1/projects/flai-oosuhada-20260506/locations/${VERTEX_LOCATION}/publishers/google/models/${GEMINI_REVIEW_MODEL}:generateContent" \
             > /tmp/vertex-response.json
 
           python3 - <<'PY'
@@ -539,13 +573,13 @@ jobs:
           elif readiness_ceiling == "Conditional":
               prefix, marker, merge_section = review.partition("### Merge Readiness")
               if marker and "Not Ready" not in merge_section and "Conditional" not in merge_section:
+                  missing_required_checks = ", ".join(policy.get("missing_required_checks", [])) or "unknown"
                   review = (
                       prefix
                       + marker
                       + "\n\n- **Conditional**\n"
-                      + "- **Deterministic evidence guard**: 이 PR은 Docker/Compose/Nginx 배포 경로를 변경하지만 "
-                      + "이 Code Review job 자체에는 image build/container runtime smoke 증거가 없습니다. "
-                      + "따라서 정적 검토가 PASS여도 이 자동 리뷰의 최종 verdict는 Conditional을 넘을 수 없습니다.\n\n"
+                      + "- **Deterministic evidence guard**: 이 PR 범위에서 필수인 selective validation의 검증 증거가 누락되었습니다: "
+                      + f"`{missing_required_checks}`. 해당 검증이 성공하기 전까지 이 자동 리뷰의 최종 verdict는 Conditional을 넘을 수 없습니다.\n\n"
                       + "#### Model rationale (참고용)\n\n"
                       + merge_section.strip()
                   )
@@ -553,7 +587,7 @@ jobs:
           usage = payload.get("usageMetadata", {})
           header = (
               "<!-- automated-vertex-gemini-review -->\n"
-              "## Gemini 3.6 Flash 자동 코드 리뷰\n\n"
+              f"## {os.environ['GEMINI_REVIEW_MODEL_DISPLAY_NAME']} 자동 코드 리뷰\n\n"
               f"검토 대상 commit: `{os.environ['REVIEW_HEAD_SHA']}`  \n"
               "실행 환경: Google Cloud Vertex AI · GitHub OIDC/WIF  \n"
               "이 리뷰는 같은 PR의 이전 자동 리뷰보다 최신 commit을 대상으로 하며 이전 자동 리뷰를 대체합니다.\n\n"

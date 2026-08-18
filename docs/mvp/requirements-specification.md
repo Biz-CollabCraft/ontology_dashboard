@@ -1,14 +1,14 @@
-# Week 2 요구사항 정의서
+# MVP 요구사항 정의서
 
 ## 기준
 
-이 문서는 Canonical V3.1 기반 예지보전 제품의 Week 2 요구사항 기준선이다.
-필드 근거는 [V3.1 검증표](./v3.1-field-validation.md), 프로토타입과의 차이는
-[Gap 분석](./prototype-mvp-gap-analysis.md)을 따른다.
+이 문서는 Canonical V3.1 기반 예지보전 제품의 현재 MVP 요구사항 기준선이다.
+필드 근거는 [V3.1 검증표](./v3.1-field-validation.md), 프로토타입 이관 당시의 차이는
+[2026-08 Week 2 Gap 분석](./history/2026-08-week2/prototype-mvp-gap-analysis.md)을 provenance로 참고한다.
 
 요구사항은 현재 실행 가능한 기능인 `Current Baseline`과 제품 목표인 `Target`을
 구분한다. 현재 구현돼 있다는 이유만으로 Target을 확정하지 않으며, Target 요구사항은
-Week 2 반영 여부와 후속 개발 여부를 명시한다.
+현재 반영 여부와 후속 개발 여부를 명시한다.
 
 ## 제품 데이터 흐름
 
@@ -30,8 +30,11 @@ gen_data의 버전된 합성 원천 데이터
 
 ## 사용자
 
-Week 2 UI 표시명은 `매니저`, `엔지니어`를 사용하고 내부 enum
-`manager`, `engineer`와 매핑한다. 아래 명칭은 업무 관점 설명이다.
+기존 MVP UI compatibility view는 `매니저`, `엔지니어` 표시와 내부 alias
+`manager`, `engineer`를 유지할 수 있다. Closed-loop의 canonical 역할은
+`process_manager`, `process_engineer`, `maintenance_technician`이며 Product Action 경계는
+[`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
+아래 명칭은 업무 관점 설명이다.
 
 - 현장 담당자: 위험 설비와 센서·예측 근거를 확인하고 점검 대상을 판단한다.
 - 생산 관리자: 설비 위험과 생산·정비 현황을 함께 보고 대응 우선순위를 판단한다.
@@ -40,11 +43,12 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 
 ## 개발 역할
 
-역할은 [Week 2 역할 분담 및 산출물 정의](./week2-team-role-and-deliverables.md)를
-기준으로 한다. 역할 재조정 이전 문서와 혼동하지 않도록 팀원 번호만 쓰지 않고
-담당자 이름과 역할명을 함께 표기한다.
+개발 역할의 2026-08 Week 2 provenance는
+[역할 분담 및 산출물 정의](./history/2026-08-week2/team-role-and-deliverables.md)에 보존한다.
+현재 구현 책임은 `docs/architecture.md`와 [Runtime Ownership](./runtime-ownership-integration.md)을
+우선하며, 아래 표는 당시 역할 분담의 후속 작업 추적을 위한 참고다.
 
-| 담당 | 공식 역할 | Week 2 핵심 책임 | 주요 산출물 |
+| 담당 | 공식 역할 | 당시 핵심 책임 | 주요 산출물 |
 |---|---|---|---|
 | 우수 · 팀원1 | Frontend / MVP 화면 | 공통 Product Result Artifact·Evidence를 Overview·Objects·Operations·Event Executive Brief에 연결 | 화면 구현, 캡처, 데모 흐름, API 연결 상태 |
 | 광우 · 팀원2 | Contract / Requirements / Specifications | 요구사항·기능·스키마·API·리포트·MVP 설계 계약과 Traceability 관리 | 문서 6종, 결정 기록, Current/Target 구분 |
@@ -61,7 +65,7 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 - Frontend: API가 제공한 공통 결과의 사용자 화면 표현.
 - Report: 검증된 구조화 결과의 역할별 문장·블록 생성.
 - `experiments/preventive_intervention`: 광우가 별도 확장으로 진행하는 비배포 What-if
-  분석 Producer. Week 2의 Contract/Docs 역할이나 호범의 Report 책임을 대체하지 않는다.
+  분석 Producer. Contract/Docs 역할이나 Report 책임을 대체하지 않는다.
 
 과거 역할표의 `팀원2=Report`, `팀원3=API`, `팀원4=Pipeline` 표기는 사용하지 않는다.
 API는 하나의 담당으로 뭉뚱그리지 않고 Prediction·조회 API는 성민, Report 생성 API는
@@ -243,7 +247,7 @@ Canonical 파일에 임의의 금액을 역기입하지 않고 버전된 Economi
 - 자동 생산계획 변경
 - 평가 truth의 운영 노출
 
-### Week 2 결정
+### 2026-08 Week 2 결정 기록
 
 - UI 표시명은 매니저·엔지니어로 하고 내부 enum·권한과 매핑한다.
 - 로그인·RBAC와 Decision·Note를 유지한다.

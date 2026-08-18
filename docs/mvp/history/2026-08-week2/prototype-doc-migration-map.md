@@ -43,7 +43,7 @@ branch: feature/predictive-maintenance-adaptive-modeling
 팀 저장소 내 원문 보존 경로:
 
 ```text
-docs/mentoring-mvp-2026-08/prototype-source/
+docs/mvp/history/2026-08-week2/prototype-source/
 ├── week2-team-role-and-deliverables.md
 ├── mvp-scope-and-screen-specification.md
 ├── mvp-api-specification.md

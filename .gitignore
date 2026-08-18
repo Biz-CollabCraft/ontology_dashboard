@@ -387,6 +387,12 @@ data/result/*
 front/.next/
 front/node_modules/
 
+# Data Preprocessed & Model Artifacts
+data_preprocessed/
+models_store/
+ontology/mapping_cache.json
+data/*.csv
+
 # Gemini CLI / GitHub Actions local artifacts
 .gemini/
 gha-creds-*.json

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +18,15 @@ Intent = Literal[
     "recommend-check",
     "show-model-details",
 ]
+
+
+class OperationalDecisionKind(StrEnum):
+    """Canonical values accepted by the existing Event decision API."""
+
+    CONTINUE_MONITORING = "continue_monitoring"
+    REQUEST_INSPECTION = "request_inspection"
+    REVIEW_SHUTDOWN = "review_shutdown"
+    HOLD_FOR_DATA_CHECK = "hold_for_data_check"
 
 
 class StrictModel(BaseModel):
@@ -109,7 +119,7 @@ class LayoutRequest(StrictModel):
 
 class DecisionRequest(StrictModel):
     actor: str = Field(min_length=1)
-    decision: Literal["continue_monitoring", "request_inspection", "review_shutdown", "hold_for_data_check"]
+    decision: OperationalDecisionKind
     note: str = ""
 
 

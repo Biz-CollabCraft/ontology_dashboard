@@ -104,8 +104,18 @@ API / systems/frontend / Report
 21. package facade가 ImportError를 None/빈 registry로 숨기면 안 된다.
 22. Generator internal API는 training/publish까지만 담당한다.
 23. runtime inference와 Result Artifact는 Backend diagnosis가 소유한다.
+24. Closed-loop 상태 머신은 Backend Domain이 canonical owner이며 Frontend가 role/state 조합으로 별도 상태
+    머신을 구현하면 안 된다.
+25. Closed-loop Product Action은 Backend가 role + permission + object state + scope + lineage를 기준으로
+    계산한 `available_actions`를 통해 노출한다.
+26. 기존 Event API와 Activity key는 Closed-loop 확장 때문에 삭제·rename하지 않고 additive compatibility를
+    유지한다.
+27. `process_manager`는 system administrator가 아니라 생산 운영 의사결정자이며,
+    `process_engineer`와 `maintenance_technician`은 각각 현장 엔지니어와 정비 작업자로 구분한다.
+28. Closed-loop mutation 응답은 Persistence가 확정한 ID와 resulting state, replay 여부를 반환해 Frontend가
+    운영 ID나 결과 상태를 추측하지 않게 한다.
 
-15~19번은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`를 근거로 한다.
+15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.
 
 20·21번은 PR 단독 import 및 실행 가능성이라는 기존 코드 결함에 근거하며,
 ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.
@@ -115,6 +125,10 @@ ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.
 > ADR-001/002는 현재 `Proposed` 상태다. 22·23번 목표 계약은 승인 및 관련
 > 구현 PR 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로
 > 사용하지 않는다.
+
+24~28번은
+[`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 근거로 하며,
+Closed-loop Domain/API/UI를 변경하는 PR에서 적용한다.
 
 ## 4. Model Artifact / Result Artifact 구분
 
@@ -130,18 +144,24 @@ Model Artifact는 Generator가 만드는 학습/배포 산출물이고 Product R
 - mutable `latest`만 기록하고 실제 immutable model version을 남기지 않는 경우
 - generator가 Product Result Artifact를 최종 생산하거나 Backend가 training을 다시 소유하는 경우
 
-## 5. 공식 Week 2 MVP 제품 계약
+## 5. 공식 MVP 제품 계약
 
 공식 제품 Surface는 다음을 우선한다.
 
 - 공식 진입점: `/app/projects/{project_id}/mvp`
 - 공식 화면: Overview / Objects / Operations / Event Executive Brief
 - 기본 설정: `VITE_WEEK2_MVP_ONLY=true`
-- 핵심 흐름: 역할별 PdM view → 고위험 설비 확인 → Event 기반 Report → Evidence 확인
-  → decision / note / activity
-- 주요 역할: manager / engineer
+- 핵심 흐름: 역할별 PdM view → 고위험 설비 확인 → Event 기반 Report/Evidence → 현장 엔지니어의
+  점검·분석 근거 → 생산 운영 의사결정자의 Recommendation/Decision 판단 → 정비 필요 시 정비 작업자의
+  WorkOrder/MaintenanceAction 실행 → Activity/lineage 확인
+- Closed-loop 주요 RBAC 역할: `process_manager`, `process_engineer`, `maintenance_technician`
+- 제품 표시 의미: 생산 운영 의사결정자, 현장 엔지니어, 정비 작업자
+- 기존 `manager` / `engineer`는 Report/UI compatibility view alias이며 RBAC role code와 동일 enum이 아니다.
 - Dataset / Governance / Modeling / Agent / Analysis / 전체 Ontology Workbench 및 실험 화면은
-  보존할 수 있으나 Week 2 공식 Surface를 덮어쓰면 안 된다.
+  보존할 수 있으나 공식 MVP Surface를 덮어쓰면 안 된다.
+
+Closed-loop 상태·역할·Action·API 소비 기준은
+[`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 사용한다.
 
 Frontend 변경은 다음 regression을 우선 확인한다.
 
@@ -179,11 +199,16 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 11. Frontend build/Playwright/nginx가 `systems/frontend`를 canonical host로 사용하며 route/assets를 유지하는가?
 12. compatibility adapter가 새 canonical implementation copy로 다시 자라나 ownership 중복을 만들었는가?
 13. Model Artifact → Result Artifact/Evidence provenance가 유지되는가?
-14. 공식 Week 2 MVP workflow와 role surface가 변경으로 인해 퇴행하는가?
+14. 공식 MVP workflow와 role surface가 변경으로 인해 퇴행하는가?
 15. PR branch 단독 import가 가능한가? (상위 stacked PR의 모듈을 참조하지 않고 독립적으로 import되는가)
 16. `REGISTERED_MODELS`가 비어 있지 않은가? (`except ImportError`로 조용히 빈 registry가 되지 않는가)
 17. Model Artifact publish/validate round trip이 가능한가? (Backend `artifact_provider.py`가 실제로 로드할 수 있는가)
 18. Feature/Label schema version이 manifest에 기록되는가? (`feature_schema_version`, `label_schema_version`)
+19. Closed-loop UI가 Backend Domain 상태 머신을 자체 재구현하는가?
+20. Backend가 실제 role/permission/state/scope/lineage를 반영한 `available_actions`를 제공하는가?
+21. Event/Activity API의 기존 key가 Closed-loop 추가로 삭제·rename되거나 shape-breaking 변경되는가?
+22. `process_manager`, `process_engineer`, `maintenance_technician`의 제품 역할과 Action 경계가 섞이는가?
+23. mutation 이후 Frontend가 ID나 resulting state를 합성·추측해야 하는 응답 계약인가?
 
 ## 8. 자동 리뷰 출력 형식
 
