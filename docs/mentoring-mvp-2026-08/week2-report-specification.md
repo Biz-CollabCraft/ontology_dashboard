@@ -13,7 +13,7 @@
 공통 필드명은 [공통 스키마 정의서](./week2-schema-definition.md)를 따른다.
 
 현행 구현은 `ReportRequest(role, locale, use_llm)`과
-`schemas/report.schema.json`의 role-aware grounded report를 사용한다. 이 문서의
+`contracts/schemas/report.schema.json`의 role-aware grounded report를 사용한다. 이 문서의
 기간·필터 기반 `ReportInput`과 `ReportOutput`은 현행 계약을 설명하지 않는
 `V2 변경 제안`이다. 기준은
 [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을 따른다.
