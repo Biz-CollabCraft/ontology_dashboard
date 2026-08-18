@@ -5,6 +5,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/dev_dashboard/:path*",
+      "destination": "https://ontology-dashboard.oosu.dev/dev_dashboard/:path*"
+    },
+    {
+      "source": "/cdn-cgi/rum",
+      "destination": "https://ontology-dashboard.oosu.dev/cdn-cgi/rum"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://ontology-dashboard-demo-api.onrender.com/api/:path*"
     },
