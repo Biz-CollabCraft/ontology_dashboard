@@ -2,39 +2,106 @@
 mapping_cache.py
 
 담당 기능:
-- 컬럼 명칭 및 메타데이터 세트에 대한 온톨로지 노드 매핑 결과를 캐싱 및 조회한다.
-  동일한 사양의 설비 컬럼들이 재입력되었을 때 LLM을 매번 재호출하지 않고 저장된 매핑 맵을 신속하게 복원한다.
+- 온톨로지 매핑 레코드(`MappingRecord`) 및 경로 레지스트리(PATHS.mapping_cache) 영속 저장소(`MappingStore`) 모듈.
+- 프로세스 전역에서 단일 저장소(싱글톤)로 동작하며 mapping_cache.json 파일과의 동기화를 관리한다.
 
 입력:
-- 컬럼 메타데이터 세트의 지문 키 (`str`) 및 저장할 `OntologyMappingResult` 객체.
+- source_field(str): 소스 데이터셋 컬럼명
+- target_ontology(str): 표준 온톨로지 노드명
+- confidence(float): 0.0 ~ 1.0 확신도
 
 출력:
-- 매핑 결과 존재 여부 및 조회된 `OntologyMappingResult` 객체.
+- MappingStore: 매핑 레코드 딕셔너리를 관리하는 객체
+- get_mapping_store(): 싱글톤 인스턴스 반환
 
 의존 모듈:
-- generator/common/cache_base.py (공통 캐시 베이스 활용)
+- pydantic.BaseModel: 매핑 레코드 스키마 정의
+- systems.generator.generator_config.PATHS: 전역 경로 레지스트리
 
 예외/경계 상황:
-- 캐시 파일 손상 시 `MappingCacheInvalidError`를 발생시키고 해당 캐시 항목을 무효화한 후 재추론을 유도한다.
+- 매핑 캐시 파일 미존재 시 빈 매핑으로 초기화한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md 3장의 'mapping_cache' 역할을 수행한다.
+- docs/architecture.md의 '단일 경로 제어 온톨로지 캐시' 원칙에 따라 PATHS 레지스트리를 참조한다.
 """
 
+import json
+import os
+from pathlib import Path
+from pydantic import BaseModel
+from typing import Dict, Optional
+from systems.generator.generator_config import PATHS
 
-class MappingCache:
-    """온톨로지 매핑 캐시 클래스 스켈레톤"""
-
-    pass
-
-
-def _self_test() -> None:
-    """
-    이 모듈을 단독 실행했을 때 수행되는 기능 테스트.
-    실제 검증 로직은 이 모듈의 실제 구현 작업에서 채운다.
-    """
-    print("[SELF-TEST] mapping_cache.py - 아직 테스트 로직이 구현되지 않았습니다.")
+MAPPING_CACHE_PATH = PATHS.mapping_cache
 
 
-if __name__ == "__main__":
-    _self_test()
+class MappingRecord(BaseModel):
+    source_field: str
+    target_ontology: str
+    source: str
+    confidence: float
+    status: str
+
+
+class MappingStore:
+    def __init__(self):
+        self._mappings: Dict[str, MappingRecord] = {}
+
+    def add_mapping(self, record: MappingRecord):
+        self._mappings[record.source_field] = record
+
+    def get_mapping(self, source_field: str) -> Optional[MappingRecord]:
+        return self._mappings.get(source_field)
+
+    def confirm_mapping(self, source_field: str):
+        if source_field in self._mappings:
+            self._mappings[source_field].status = "confirmed"
+            self._mappings[source_field].source = "user_confirmed"
+            self._mappings[source_field].confidence = 1.0
+
+    def get_all(self):
+        return self._mappings
+
+    def load_from_file(self, path: Path = MAPPING_CACHE_PATH):
+        path_obj = Path(path)
+        if not path_obj.exists():
+            return
+        with open(path_obj, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for source_field, v in data.items():
+            self._mappings[source_field] = MappingRecord(source_field=source_field, **v)
+
+    def save_to_file(self, path: Path = MAPPING_CACHE_PATH):
+        path_obj = Path(path)
+        data = {
+            k: {
+                "target_ontology": v.target_ontology,
+                "source": v.source,
+                "confidence": v.confidence,
+                "status": v.status,
+            }
+            for k, v in self._mappings.items()
+        }
+        path_obj.parent.mkdir(parents=True, exist_ok=True)
+        with open(path_obj, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+_singleton_instance: Optional["MappingStore"] = None
+
+
+def get_mapping_store() -> "MappingStore":
+    """프로세스 전역에서 공유되는 MappingStore 싱글톤을 반환한다."""
+    global _singleton_instance
+    if _singleton_instance is None:
+        _singleton_instance = MappingStore()
+        _singleton_instance.load_from_file(MAPPING_CACHE_PATH)
+    return _singleton_instance
+
+
+def reload_mapping_store() -> "MappingStore":
+    """캐시 파일이 외부에서 갱신된 뒤 강제로 다시 로드해야 할 때 사용한다."""
+    global _singleton_instance
+    _singleton_instance = MappingStore()
+    _singleton_instance.load_from_file(MAPPING_CACHE_PATH)
+    return _singleton_instance

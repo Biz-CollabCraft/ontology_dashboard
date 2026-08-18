@@ -2,55 +2,207 @@
 extraction_service.py
 
 담당 기능:
-- extraction_agent가 수립한 추출 계획(ExtractionPlan)에 따라 실제 원본 데이터를 파싱하고 추출을 실행한다.
-  대용량 파싱 작업을 안전하게 처리하며, 추출된 정제 레코드를 다음 단계인 ontology_mapping 모듈이
-  소비할 수 있는 표준 데이터프레임/딕셔너리 규격으로 변환 및 전달한다.
+- 소스 데이터셋 변환 실행 및 전체 파일 순회 로딩 오케스트레이션 서비스 모듈.
+- build_extraction_plan()이 만든 플랜에 맞춰 실제 데이터프레임 구조 변환(extract_with_plan)을 수행하고, 지정 디렉토리 내의 지원 데이터셋 파일들을 일괄 수집(load_all_sources)한다.
 
 입력:
-- extraction_agent.py에서 전달되는 `ExtractionPlan` 및 원본 파일 경로 (`Path`).
+- data_dir(str): 소스 데이터셋 폴더 경로
+- force_reanalyze(bool): 재분석 여부
 
 출력:
-- 정제 및 추출이 완료된 표준 데이터셋 (`DataFrame` 또는 레코드 리스트).
+- sources(dict): {file_key: pd.DataFrame} 구조의 파싱 완료 데이터셋 딕셔너리
 
 의존 모듈:
-- extraction_agent.py (추출 계획 수용)
-- extraction_cache.py (추출 과정 중 캐싱 상태 확인)
+- extraction_agent.build_extraction_plan: 파일별 추출 계획 수립.
+- extraction_profiler.build_family_registry: Stage 0 프로파일링 메타데이터 생성.
+- pandas: 데이터프레임 로드 및 피벗/선택 조작.
 
 예외/경계 상황:
-- extraction_agent의 계획과 실제 데이터 파일의 행/열 구조가 불일치할 경우 `ExtractionExecutionError`를 발생시킨다.
+- 지원되지 않는 확장자의 파일은 건너뛴다.
+- data_dir 미존재 시 ValueError 발생.
 
 설계 원칙과의 연결:
-- docs/architecture.md 1장 컨벤션에 따라 파일명은 {도메인}_{계층}.py 규칙을 따른다.
+- docs/architecture.md의 '추출 서비스 격리' 원칙에 따라 데이터 로딩 및 구조 정형화를 전담 처리한다.
 """
 
-from __future__ import annotations
+import os
+import logging
+import pandas as pd
+from systems.generator.extraction.extraction_agent import build_extraction_plan
+from systems.generator.extraction.extraction_profiler import build_family_registry
 
-from collections.abc import Mapping
-from typing import Any
+logger = logging.getLogger(__name__)
 
-
-class ExtractionService:
-    """데이터 추출 서비스 클래스 스켈레톤"""
-
-    pass
-
-
-def extract_observation(row: Mapping[str, Any], required_fields: tuple[str, ...]) -> dict[str, Any]:
-    """Normalize already-produced source data without generating or mutating it."""
-
-    missing = [field for field in required_fields if field not in row]
-    if missing:
-        raise ValueError(f"source observation is missing required fields: {missing}")
-    return {field: row[field] for field in required_fields}
+SUPPORTED_EXTENSIONS = (".csv", ".xlsx", ".xls")
+_last_plans: dict = {}
 
 
-def _self_test() -> None:
-    """
-    이 모듈을 단독 실행했을 때 수행되는 기능 테스트.
-    실제 검증 로직은 이 모듈의 실제 구현 작업에서 채운다.
-    """
-    print("[SELF-TEST] extraction_service.py - 아직 테스트 로직이 구현되지 않았습니다.")
+def extract_with_plan(filepath: str, plan: dict) -> pd.DataFrame:
+    """build_extraction_plan()이 반환한 plan에 따라 실제 pandas 데이터프레임 로드 및 형태 변환을 수행한다."""
+    ext = os.path.splitext(filepath)[1].lower()
+    logger.info(f"[Extractor] Reading file '{filepath}' (ext: {ext})...")
+
+    if ext == ".csv":
+        df = pd.read_csv(filepath)
+    elif ext in (".xlsx", ".xls"):
+        df = pd.read_excel(filepath)
+    else:
+        raise ValueError(f"Unsupported file extension: {ext}")
+
+    structure_type = plan.get("structure_type", "tabular_column_as_attribute")
+    selected_cols = plan.get("selected_columns", list(df.columns))
+
+    if structure_type == "tabular_column_as_attribute":
+        valid_cols = [c for c in selected_cols if c in df.columns]
+        if not valid_cols:
+            logger.warning(f"[Extractor] None of the selected columns {selected_cols} exist in '{filepath}'. Keeping all columns.")
+            valid_cols = list(df.columns)
+
+        extracted_df = df[valid_cols].copy()
+
+        id_col = plan.get("id_column")
+        time_col = plan.get("time_column")
+        if id_col and time_col and id_col in extracted_df.columns and time_col in extracted_df.columns:
+            dup_key = [id_col, time_col]
+            has_duplicates = extracted_df.duplicated(subset=dup_key).any()
+            if has_duplicates:
+                dup_policy = plan.get("duplicate_policy", "error")
+                aggfunc = plan.get("aggregation")
+                if dup_policy == "aggregate" and aggfunc:
+                    numeric_cols = [
+                        c for c in extracted_df.columns
+                        if c not in dup_key and pd.api.types.is_numeric_dtype(extracted_df[c])
+                    ]
+                    non_numeric_cols = [c for c in extracted_df.columns if c not in dup_key and c not in numeric_cols]
+                    for c in non_numeric_cols:
+                        per_group_nunique = extracted_df.groupby(dup_key)[c].nunique()
+                        if (per_group_nunique > 1).any():
+                            raise ValueError(
+                                f"Cannot deduplicate non-numeric column '{c}' with conflicting "
+                                f"values within the same {dup_key} group; no aggregation policy "
+                                f"is defined for non-numeric conflicts"
+                            )
+                    agg_map = {c: aggfunc for c in numeric_cols}
+                    agg_map.update({c: "first" for c in non_numeric_cols})
+                    extracted_df = extracted_df.groupby(dup_key, as_index=False).agg(agg_map)
+                    extracted_df = extracted_df.sort_values(by=dup_key).reset_index(drop=True)
+                else:
+                    raise ValueError(
+                        f"Duplicate rows found for key {dup_key} and duplicate_policy="
+                        f"{dup_policy!r}; set plan.duplicate_policy='aggregate' with an "
+                        f"aggregation function, or deduplicate the source data"
+                    )
+
+        logger.info(f"[Extractor] Successfully extracted {len(valid_cols)} columns from '{filepath}'. Output shape: {extracted_df.shape}")
+        return extracted_df
+
+    elif structure_type == "tabular_row_as_attribute":
+        logger.info(f"[Extractor] Performing contract-driven tabular_row_as_attribute transform for '{filepath}'...")
+        id_col = plan.get("id_column")
+        time_col = plan.get("time_column")
+        attr_col = plan.get("attribute_column")
+        val_col = plan.get("value_column")
+
+        missing_roles = []
+        if not id_col:
+            missing_roles.append("id_column")
+        if not attr_col:
+            missing_roles.append("attribute_column")
+        if not val_col:
+            missing_roles.append("value_column")
+
+        if missing_roles:
+            raise ValueError(
+                f"Long-format extraction for '{filepath}' failed: missing required role(s) {missing_roles}. "
+                f"Specified roles: id_column={id_col!r}, attribute_column={attr_col!r}, value_column={val_col!r}, time_column={time_col!r}. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        missing_cols = [c for c in [id_col, attr_col, val_col] if c not in df.columns]
+        if time_col and time_col not in df.columns:
+            missing_cols.append(time_col)
+
+        if missing_cols:
+            raise ValueError(
+                f"Long-format extraction for '{filepath}' failed: specified role columns {missing_cols} not found in DataFrame. "
+                f"Specified roles: id_column={id_col!r}, attribute_column={attr_col!r}, value_column={val_col!r}, time_column={time_col!r}. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        roles = [id_col, attr_col, val_col]
+        if time_col:
+            roles.append(time_col)
+        if len(roles) != len(set(roles)):
+            raise ValueError(
+                f"Long-format extraction for '{filepath}' failed: role columns must be unique and cannot overlap. "
+                f"Specified roles: {roles}. Available columns: {list(df.columns)}"
+            )
+
+        from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
+        if time_col and time_col in df.columns:
+            df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
+            index_cols = [id_col, time_col]
+        else:
+            index_cols = [id_col]
+
+        # Check uniqueness of (index_cols + [attr_col])
+        check_cols = index_cols + [attr_col]
+        has_duplicates = df.duplicated(subset=check_cols).any()
+
+        dup_policy = plan.get("duplicate_policy", "error")
+        aggfunc = plan.get("aggregation")
+
+        if has_duplicates:
+            if dup_policy == "aggregate" and aggfunc:
+                logger.info(f"[Extractor] Duplicate entries found in long-format '{filepath}'. Aggregating using '{aggfunc}'...")
+                pivoted = df.pivot_table(index=index_cols, columns=attr_col, values=val_col, aggfunc=aggfunc).reset_index()
+                return pivoted
+            else:
+                raise ValueError(
+                    f"Long-format dataset '{filepath}' contains duplicate observation entries for keys {check_cols} "
+                    f"without an explicit aggregation policy (duplicate_policy='{dup_policy}')."
+                )
+
+        pivoted = df.pivot(index=index_cols, columns=attr_col, values=val_col).reset_index()
+        pivoted.columns.name = None
+        logger.info(f"[Extractor] Successfully pivoted long-format dataset '{filepath}'. Output shape: {pivoted.shape}")
+        return pivoted
+
+    elif structure_type == "wide_pivot":
+        logger.info(f"[Extractor] Performing wide_pivot transform for '{filepath}'...")
+        return df
+
+    else:
+        raise NotImplementedError(f"Extraction for structure type '{structure_type}' is not implemented.")
 
 
-if __name__ == "__main__":
-    _self_test()
+def load_all_sources(data_dir: str, force_reanalyze: bool = False) -> dict:
+    """data_dir 내의 파일들에 대해 Stage 0 프로파일링 ➔ 플랜 수립 ➔ 변환 추출을 순차 수행한다."""
+    global _last_plans
+    logger.info(f"[Loader] Loading all sources from data_dir: '{data_dir}' (force_reanalyze={force_reanalyze})")
+    if not os.path.exists(data_dir):
+        raise ValueError(f"Directory missing: {data_dir}")
+
+    build_family_registry(data_dir)
+    sources = {}
+    plans = {}
+    for filename in sorted(os.listdir(data_dir)):
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in SUPPORTED_EXTENSIONS:
+            filepath = os.path.join(data_dir, filename)
+            key = os.path.splitext(filename)[0]
+            logger.info(f"[Loader] Processing source file: '{filename}' (key: '{key}')...")
+
+            plan = build_extraction_plan(filepath, force_reanalyze=force_reanalyze)
+            df = extract_with_plan(filepath, plan)
+            sources[key] = df
+            plans[key] = plan
+
+    _last_plans = plans
+    logger.info(f"[Loader] Successfully loaded {len(sources)} source datasets from '{data_dir}'.")
+    return sources
+
+
+def get_last_plans() -> dict:
+    """가장 최근 load_all_sources() 호출에서 만들어진 plan 정보를 조회한다."""
+    return _last_plans

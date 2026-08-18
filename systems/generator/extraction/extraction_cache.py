@@ -2,40 +2,74 @@
 extraction_cache.py
 
 담당 기능:
-- extraction_agent의 원본 구조 판별 결과 및 추출 계획을 파일 지문(Fingerprint) 기반으로 캐싱한다.
-  동일한 파일 구조나 중복 데이터 파싱 요청이 들어왔을 때 LLM 재호출 및 반복 계산을 방지하여
-  파이프라인 실행 속도와 리소스 효율성을 보장한다.
+- 추출 계획(Extraction Plan) 경로 레지스트리(PATHS.extraction_plan_cache) 기반 캐시 관리 모듈.
+- 소스 파일 샘플 데이터프레임의 md5 fingerprint 해시값을 기반으로 기존 추출 계획을 캐싱하고 절대 경로에서 조회/저장한다.
 
 입력:
-- 원본 파일의 해시/지문 문자열 (`str`) 및 캐싱할 `ExtractionPlan` 객체.
+- df_preview(pd.DataFrame): 파일의 프리뷰 데이터프레임 (fingerprint 계산용)
+- cache(dict): 저장할 캐시 객체 (save_plan_cache)
 
 출력:
-- 캐시 존재 여부 (`bool`) 및 조회 성공 시 캐싱된 `ExtractionPlan` 객체.
+- compute_fingerprint: md5 32자리 해시 문자열
+- load_plan_cache: 캐시 딕셔너리 객체
 
 의존 모듈:
-- generator/common/cache_base.py의 공통 캐싱 인터페이스 및 지문 생성 로직을 상속/활용한다.
+- pandas: 데이터프레임 프리뷰 파싱 및 json 변환
+- hashlib: md5 해시 산출
+- systems.generator.generator_config.PATHS: 전역 경로 레지스트리
 
 예외/경계 상황:
-- 캐시 저장 디렉토리가 없거나 파일 IO 권한 에러 발생 시 `ExtractionCacheError`를 발생시키고 경고 로그 후 기본 파이프라인으로 fallback한다.
+- 캐시 파일 미존재 또는 파싱 실패 시 빈 딕셔너리를 반환하며 새로 생성한다.
 
 설계 원칙과의 연결:
-- docs/architecture.md 3장의 '판별 결과 캐싱' 원칙을 구현한다.
+- docs/architecture.md의 '단일 경로 제어' 원칙에 따라 PATHS 레지스트리를 통해 캐시 디렉토리를 참조한다.
 """
 
+import os
+import json
+import logging
+import hashlib
+import pandas as pd
+from systems.generator.generator_config import PATHS
 
-class ExtractionCache:
-    """추출 캐시 관리 클래스 스켈레톤"""
+logger = logging.getLogger(__name__)
 
-    pass
+EXTRACTION_PLAN_CACHE_PATH = PATHS.extraction_plan_cache
 
-
-def _self_test() -> None:
-    """
-    이 모듈을 단독 실행했을 때 수행되는 기능 테스트.
-    실제 검증 로직은 이 모듈의 실제 구현 작업에서 채운다.
-    """
-    print("[SELF-TEST] extraction_cache.py - 아직 테스트 로직이 구현되지 않았습니다.")
+_plan_cache: dict = {}
+_cache_mtime: float = 0.0
 
 
-if __name__ == "__main__":
-    _self_test()
+def load_plan_cache() -> dict:
+    """캐시 파일에서 추출 계획 캐시를 읽어 반환한다."""
+    global _plan_cache, _cache_mtime
+    if EXTRACTION_PLAN_CACHE_PATH.exists():
+        mtime = os.path.getmtime(EXTRACTION_PLAN_CACHE_PATH)
+        if _cache_mtime == mtime and _plan_cache:
+            return _plan_cache
+        try:
+            with open(EXTRACTION_PLAN_CACHE_PATH, "r", encoding="utf-8") as f:
+                _plan_cache = json.load(f)
+                _cache_mtime = mtime
+                return _plan_cache
+        except Exception as e:
+            logger.warning(f"[ExtractionPlanner] Failed to load plan cache at '{EXTRACTION_PLAN_CACHE_PATH}': {e}")
+    _plan_cache = {}
+    return _plan_cache
+
+
+def save_plan_cache(cache: dict) -> None:
+    """추출 계획 캐시를 파일에 영속화한다."""
+    global _plan_cache, _cache_mtime
+    PATHS.ensure_directories()
+    with open(EXTRACTION_PLAN_CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    _plan_cache = cache
+    if EXTRACTION_PLAN_CACHE_PATH.exists():
+        _cache_mtime = os.path.getmtime(EXTRACTION_PLAN_CACHE_PATH)
+
+
+def compute_fingerprint(df_preview: pd.DataFrame) -> str:
+    """df_preview의 컬럼명과 헤더 샘플 텍스트를 기반으로 md5 해시를 생성한다."""
+    raw_str = f"cols:{list(df_preview.columns)}|head:{df_preview.head(3).to_json()}"
+    return hashlib.md5(raw_str.encode("utf-8")).hexdigest()
