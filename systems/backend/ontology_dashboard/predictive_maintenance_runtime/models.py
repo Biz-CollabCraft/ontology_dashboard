@@ -274,6 +274,7 @@ class GovernedProductResult(StrictModel):
     governance: GovernanceProvenance
     graph: GraphReadiness
     prediction_result: PredictionResult
+    producer_artifact: dict[str, Any] | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def enforce_result_semantics(self) -> "GovernedProductResult":

@@ -131,6 +131,39 @@ def test_runtime_fixture_and_predictor_support_canonical_compressor_fields() -> 
     assert prediction.factors
 
 
+def test_runtime_fixture_preserves_pre_current_history_from_canonical_selection() -> None:
+    from datetime import datetime, timezone
+
+    history = [
+        {
+            "timestamp": "2026-07-31T01:00:00+00:00",
+            "air_temperature_k": 299.0,
+            "process_temperature_k": 306.5,
+            "rotational_speed_rpm": 1300.0,
+            "torque_nm": 44.0,
+            "tool_wear_min": 210.0,
+        }
+    ]
+    row = {
+        "asset_id": "CNC-S01-L01-01",
+        "asset_type": "cnc",
+        "observed_at": datetime(2026, 8, 1, 1, 0, tzinfo=timezone.utc),
+        "observation": {
+            "product_type": "M",
+            "air_temperature_k": 300.0,
+            "process_temperature_k": 307.7,
+            "rotational_speed_rpm": 1280.0,
+            "torque_nm": 46.0,
+            "tool_wear_min": 220.0,
+        },
+        "history": history,
+    }
+
+    fixture = _runtime_fixture(row)
+
+    assert fixture["history"] == history
+
+
 def test_runtime_candidates_select_latest_observation_per_asset() -> None:
     class Result:
         def fetchall(self) -> list[dict[str, object]]:

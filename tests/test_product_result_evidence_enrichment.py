@@ -14,6 +14,10 @@ from systems.backend.app.diagnosis.evidence_enrichment import (
     validate_evidence_payload_invariants,
 )
 from systems.backend.app.diagnosis.predictor import FactorScore, HeuristicPredictor, Prediction
+from ontology_dashboard.predictive_maintenance_runtime.service import (
+    PredictiveMaintenanceRuntimeService,
+    _localize_legacy_top_factors,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -147,6 +151,69 @@ def test_product_result_artifact_preserves_signed_contribution_direction_fallbac
             assert factor["direction"] == "risk_down"
         assert factor["evidence_field_id"].startswith(f"factor.{factor['rank']}.")
         assert 0 <= factor["contribution"] <= 1
+
+
+def test_raw_signal_factor_keeps_source_raw_unit_and_signal_label() -> None:
+    prediction = Prediction(
+        model_version="test-model",
+        probability=0.8,
+        risk_band="warning",
+        recommended_decision="request_inspection",
+        confidence="medium",
+        predicted_failure_type="failure_risk",
+        factors=[
+            FactorScore(
+                feature="voltage_raw",
+                raw_value=170.0,
+                score=0.8,
+                direction="risk_up",
+            )
+        ],
+        quality_issues=[],
+        model_artifact=None,
+    )
+
+    factor = build_ranked_factor_evidence(prediction)[0]
+
+    assert factor["unit"] == "raw"
+    assert factor["display_name"] == "전압 신호"
+
+
+def test_runtime_uses_the_stored_producer_artifact_payload() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    row = {
+        "artifact_id": artifact["artifact_id"],
+        "asset_id": artifact["asset_id"],
+        "asset_type": artifact["asset_type"],
+        "schema_version": artifact["schema_version"],
+        "prediction_id": artifact["provenance"]["prediction_id"],
+        "prediction_result_payload": artifact,
+    }
+
+    stored = PredictiveMaintenanceRuntimeService._stored_producer_artifact(row)
+
+    assert stored is artifact
+    assert stored["evidence_payload"] == artifact["evidence_payload"]
+    assert stored["ranked_factor_evidence"] == artifact["ranked_factor_evidence"]
+
+
+def test_legacy_factor_labels_are_localized_without_changing_raw_units() -> None:
+    factors = [
+        {
+            "evidence_field_id": "factor.1.voltage_raw",
+            "feature": "voltage_raw",
+            "display_name": "전압 신호",
+            "unit": "raw",
+            "normal_range": "295.0–305.0",
+        }
+    ]
+
+    localized = _localize_legacy_top_factors(factors, "en-US")
+
+    assert localized[0]["display_name"] == "Voltage signal"
+    assert localized[0]["unit"] == "raw"
+    assert localized[0]["normal_range"] == "See governed model contract"
 
 
 def test_product_result_artifact_records_gap_when_maintenance_context_is_missing() -> None:

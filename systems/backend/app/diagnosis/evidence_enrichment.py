@@ -40,17 +40,17 @@ _ACTION_BY_STATUS = {
     "data_quality_hold": ("hold_for_data_check", "데이터 확인 후 판단", "data_quality"),
 }
 _UNIT_FALLBACKS = {
-    "voltage_raw": "V",
-    "rotation_raw": "rpm",
-    "pressure_raw": "bar",
-    "vibration_raw": "mm/s",
+    "voltage_raw": "raw",
+    "rotation_raw": "raw",
+    "pressure_raw": "raw",
+    "vibration_raw": "raw",
     "relative_vibration_z": "z",
 }
 _DISPLAY_FALLBACKS = {
-    "voltage_raw": "전압",
-    "rotation_raw": "회전 상태",
-    "pressure_raw": "압력",
-    "vibration_raw": "진동",
+    "voltage_raw": "전압 신호",
+    "rotation_raw": "회전 신호",
+    "pressure_raw": "압력 신호",
+    "vibration_raw": "진동 신호",
     "relative_vibration_z": "상대 진동",
 }
 

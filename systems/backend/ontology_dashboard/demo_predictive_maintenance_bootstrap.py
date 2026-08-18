@@ -76,9 +76,13 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
     return list(
         connection.execute(
             """
-            WITH latest_cnc AS (
-                SELECT DISTINCT ON (o.asset_id)
-                       o.asset_id,o.observed_at,o.source_sha256,'cnc'::text AS asset_type,
+            WITH cnc_ranked AS (
+                SELECT o.*,
+                       ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC) AS row_number
+                FROM pm_cnc_observations o
+                WHERE o.dataset_version_id=%s
+            ), latest_cnc AS (
+                SELECT o.asset_id,o.observed_at,o.source_sha256,'cnc'::text AS asset_type,
                        jsonb_build_object(
                            'product_type',o.product_type,
                            'air_temperature_k',o.air_temperature_k,
@@ -86,13 +90,34 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
                            'rotational_speed_rpm',o.rotational_speed_rpm,
                            'torque_nm',o.torque_nm,
                            'tool_wear_min',o.tool_wear_min
-                       ) AS observation
-                FROM pm_cnc_observations o
+                       ) AS observation,
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'timestamp',h.observed_at,
+                                       'product_type',h.product_type,
+                                       'air_temperature_k',h.air_temperature_k,
+                                       'process_temperature_k',h.process_temperature_k,
+                                       'rotational_speed_rpm',h.rotational_speed_rpm,
+                                       'torque_nm',h.torque_nm,
+                                       'tool_wear_min',h.tool_wear_min
+                                   ) ORDER BY h.observed_at DESC
+                               )
+                               FROM cnc_ranked h
+                               WHERE h.asset_id=o.asset_id AND h.observed_at < o.observed_at
+                           ),
+                           '[]'::jsonb
+                       ) AS history
+                FROM cnc_ranked o
+                WHERE o.row_number=1
+            ), compressor_ranked AS (
+                SELECT o.*,
+                       ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC) AS row_number
+                FROM pm_compressor_observations o
                 WHERE o.dataset_version_id=%s
-                ORDER BY o.asset_id,o.observed_at DESC
             ), latest_compressor AS (
-                SELECT DISTINCT ON (o.asset_id)
-                       o.asset_id,o.observed_at,o.source_sha256,'compressor'::text AS asset_type,
+                SELECT o.asset_id,o.observed_at,o.source_sha256,'compressor'::text AS asset_type,
                        jsonb_build_object(
                            'voltage_raw',o.voltage_raw,
                            'rotation_raw',o.rotation_raw,
@@ -100,10 +125,27 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
                            'vibration_raw',o.vibration_raw,
                            'relative_vibration_z',o.relative_vibration_z,
                            'relative_vibration_zone',o.relative_vibration_zone
-                       ) AS observation
-                FROM pm_compressor_observations o
-                WHERE o.dataset_version_id=%s
-                ORDER BY o.asset_id,o.observed_at DESC
+                       ) AS observation,
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'timestamp',h.observed_at,
+                                       'voltage_raw',h.voltage_raw,
+                                       'rotation_raw',h.rotation_raw,
+                                       'pressure_raw',h.pressure_raw,
+                                       'vibration_raw',h.vibration_raw,
+                                       'relative_vibration_z',h.relative_vibration_z,
+                                       'relative_vibration_zone',h.relative_vibration_zone
+                                   ) ORDER BY h.observed_at DESC
+                               )
+                               FROM compressor_ranked h
+                               WHERE h.asset_id=o.asset_id AND h.observed_at < o.observed_at
+                           ),
+                           '[]'::jsonb
+                       ) AS history
+                FROM compressor_ranked o
+                WHERE o.row_number=1
             )
             SELECT * FROM latest_cnc
             UNION ALL
@@ -164,7 +206,7 @@ def _runtime_fixture(row: dict[str, Any]) -> dict[str, Any]:
             "criticality": "medium",
         },
         "observation": observation,
-        "history": [],
+        "history": list(row.get("history") or []),
     }
 
 

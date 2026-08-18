@@ -46,12 +46,7 @@ from .models import (
     TimelinePrediction,
 )
 from .repository import ALLOWED_DERIVED_MEASURES, PredictiveMaintenanceRuntimeRepository
-from systems.backend.app.diagnosis.evidence_enrichment import (
-    build_product_result_evidence_payload,
-    evidence_payload_reference,
-    validate_evidence_payload_invariants,
-)
-from systems.backend.app.diagnosis.predictor import FactorScore, Prediction
+from app.diagnosis.evidence import validate_product_result_artifact
 
 
 V3_1_SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
@@ -147,6 +142,21 @@ PM_LAYOUT_TITLES: dict[AppLocale, dict[str, str]] = {
 
 def _pm_label(mapping: dict[AppLocale, dict[str, str]], locale: AppLocale, value: str) -> str:
     return mapping[locale].get(value, value.replace("_", " ").title() if locale == "en-US" else value)
+
+
+def _localize_legacy_top_factors(
+    factors: list[dict[str, Any]],
+    locale: AppLocale,
+) -> list[dict[str, Any]]:
+    normal_range = "관리형 모델 계약 참조" if locale == "ko-KR" else "See governed model contract"
+    return [
+        {
+            **factor,
+            "display_name": _pm_label(PM_FEATURE_LABELS, locale, str(factor.get("feature") or "")),
+            "normal_range": normal_range,
+        }
+        for factor in factors
+    ]
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -714,6 +724,20 @@ class PredictiveMaintenanceRuntimeService:
             created_at=row.get("prediction_result_created_at") or row["observed_at"],
         )
 
+    @staticmethod
+    def _stored_producer_artifact(row: dict[str, Any]) -> dict[str, Any]:
+        artifact = _dict(row.get("prediction_result_payload"))
+        if not artifact:
+            raise ValueError("Result Artifact payload is unavailable for runtime projection")
+        validate_product_result_artifact(artifact)
+        for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):
+            if str(artifact.get(field)) != str(row[field]):
+                raise ValueError(f"stored Product Result Artifact {field} does not match runtime index")
+        provenance = _dict(artifact.get("provenance"))
+        if str(provenance.get("prediction_id")) != str(row["prediction_id"]):
+            raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
+        return artifact
+
     def _product_result(
         self,
         *,
@@ -722,7 +746,9 @@ class PredictiveMaintenanceRuntimeService:
         source_contract: str,
     ) -> GovernedProductResult:
         factors = self._factor_models(row.get("top_factors"))
+        producer_artifact: dict[str, Any] | None = None
         if source_contract == "result_artifact":
+            producer_artifact = self._stored_producer_artifact(row)
             provenance = _dict(row.get("provenance"))
             recommendation_raw = _dict(row.get("recommended_action"))
             prediction_task = str(row["prediction_task"])
@@ -819,6 +845,7 @@ class PredictiveMaintenanceRuntimeService:
             governance=context.governance,
             graph=context.graph,
             prediction_result=prediction_result,
+            producer_artifact=producer_artifact,
         )
 
     def latest_results(
@@ -929,120 +956,6 @@ class PredictiveMaintenanceRuntimeService:
             **observation.derived_measures,
         }
 
-    @staticmethod
-    def _confidence_band(value: float) -> str:
-        if value >= 0.7:
-            return "high"
-        if value >= 0.4:
-            return "medium"
-        return "low"
-
-    def _runtime_prediction_for_enrichment(self, result: GovernedProductResult) -> Prediction:
-        action = (
-            result.recommended_action.action
-            if result.recommended_action is not None
-            else "continue_monitoring"
-        )
-        factors = [
-            FactorScore(
-                feature=item.feature,
-                raw_value=item.feature_value,
-                score=abs(item.signed_contribution),
-                direction=item.direction,
-            )
-            for item in result.top_factors
-        ]
-        return Prediction(
-            model_version=result.provenance.model_version,
-            probability=result.failure_probability,
-            risk_band=result.status_grade,
-            recommended_decision=action,
-            confidence=self._confidence_band(result.confidence),
-            predicted_failure_type=result.predicted_failure_type,
-            factors=factors,
-            quality_issues=[],
-            model_artifact=None,
-        )
-
-    def _runtime_artifact_projection(
-        self,
-        *,
-        context: DatasetVersionRuntimeContext,
-        result: GovernedProductResult,
-        equipment: DashboardEquipment,
-        observation: dict[str, Any],
-        history: list[dict[str, Any]],
-        detected_interval: dict[str, str],
-        maintenance_context: dict[str, Any],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        event_id = self._dashboard_event_id(result)
-        artifact: dict[str, Any] = {
-            "artifact_id": result.artifact_id or result.provenance.prediction_id,
-            "artifact_type": "product_result_artifact",
-            "schema_version": result.provenance.schema_version,
-            "asset_id": result.asset_id,
-            "asset_type": result.asset_type,
-            "observed_at": result.observed_at.isoformat(),
-            "prediction_horizon_hours": result.prediction_horizon_hours,
-            "prediction_task": result.prediction_task,
-            "failure_probability": result.failure_probability,
-            "predicted_failure_type": result.predicted_failure_type,
-            "status_grade": result.status_grade,
-            "confidence": result.confidence,
-            "confidence_label": self._confidence_band(result.confidence),
-            "top_factors": [item.model_dump(mode="json") for item in result.top_factors],
-            "recommended_action": (
-                result.recommended_action.model_dump(mode="json")
-                if result.recommended_action is not None
-                else None
-            ),
-            "threshold": 0.5,
-            "generated_at": result.observed_at.isoformat(),
-            "observation": observation,
-            "history": history,
-            "detected_interval": detected_interval,
-            "policy_version": "result-artifact-policy-v1",
-            "model_mode": "postgresql_result_artifact",
-            "lineage": {
-                "project_id": context.project_id,
-                "workspace_id": context.workspace_id,
-                "dataset_id": context.dataset_id,
-                "dataset_version_id": context.dataset_version_id,
-                "source_version": context.source_version,
-                "bundle_checksum_sha256": context.bundle_checksum_sha256,
-                "model_version": result.provenance.model_version,
-                "result_schema": result.provenance.schema_version,
-                "prediction_task": result.provenance.prediction_task,
-                "prediction_id": result.provenance.prediction_id,
-                "prediction_result_id": result.provenance.prediction_result_id,
-                "replay_timestamp": result.observed_at.isoformat(),
-            },
-            "provenance": {
-                "dataset_version": context.source_version,
-                "model_version": result.provenance.model_version,
-                "prediction_id": result.provenance.prediction_id,
-                "source_type": result.provenance.source_type,
-                "canonical_source_mutated": False,
-                "model_artifact": None,
-            },
-        }
-        fixture = {"observation": observation, "history": history}
-        artifact["evidence_payload"] = build_product_result_evidence_payload(
-            artifact,
-            fixture,
-            self._runtime_prediction_for_enrichment(result),
-            maintenance_context=maintenance_context,
-        )
-        artifact["provenance"]["evidence_payload_reference"] = evidence_payload_reference(artifact)
-        validate_evidence_payload_invariants(artifact["evidence_payload"])
-
-        projection = product_result_artifact_to_event_evidence_projection(artifact)
-        projection["event_id"] = event_id
-        projection["scenario_id"] = f"{result.asset_type}:{result.site_id}:{result.cell_id}"
-        projection["subject"] = equipment.model_dump(mode="json")
-        projection["artifact_reference"]["event_id"] = event_id
-        return artifact, projection
-
     def _dashboard_detail(
         self,
         *,
@@ -1130,20 +1043,22 @@ class PredictiveMaintenanceRuntimeService:
             ),
             "recommended_actions": [action_label],
         }
-        detected_interval = {
-            "start": window_start.isoformat(),
-            "end": result.observed_at.isoformat(),
-        }
-        _, canonical_evidence = self._runtime_artifact_projection(
-            context=context,
-            result=result,
-            equipment=equipment,
-            observation=observation,
-            history=history,
-            detected_interval=detected_interval,
-            maintenance_context=maintenance_context,
+        producer_artifact = result.producer_artifact
+        if producer_artifact is None:
+            raise ValueError("runtime Result Artifact does not include producer evidence payload")
+        canonical_evidence = product_result_artifact_to_event_evidence_projection(producer_artifact)
+        canonical_evidence["event_id"] = event_id
+        canonical_evidence["scenario_id"] = f"{result.asset_type}:{result.site_id}:{result.cell_id}"
+        canonical_evidence["subject"] = equipment.model_dump(mode="json")
+        canonical_evidence["artifact_reference"]["event_id"] = event_id
+        legacy_evidence = event_evidence_projection_to_legacy_evidence(
+            canonical_evidence,
+            ranked_factor_evidence=producer_artifact.get("ranked_factor_evidence"),
         )
-        legacy_evidence = event_evidence_projection_to_legacy_evidence(canonical_evidence)
+        legacy_evidence["top_factors"] = _localize_legacy_top_factors(
+            legacy_evidence["top_factors"],
+            locale,
+        )
         legacy_evidence["evidence_id"] = f"pm-evidence:{event_id}"
         legacy_evidence["equipment"] = equipment.model_dump(mode="json")
         legacy_evidence["confidence"] = confidence

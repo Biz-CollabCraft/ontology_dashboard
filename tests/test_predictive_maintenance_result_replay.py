@@ -672,6 +672,7 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     assert canonical_evidence["schema_version"] == "event-evidence-projection-v1"
     assert canonical_evidence["contract_type"] == "event_evidence_projection"
     assert canonical_evidence["event_id"] == dashboard.selected_event_id
+    assert canonical_evidence["artifact_reference"]["artifact_type"] == "predictive_maintenance_result"
     assert canonical_evidence["report_projection"]["evidence_trace"]
     assert canonical_evidence["artifact_reference"]["evidence_payload_reference"]["generated_by"] == (
         "systems.backend.app.diagnosis.evidence_enrichment"
