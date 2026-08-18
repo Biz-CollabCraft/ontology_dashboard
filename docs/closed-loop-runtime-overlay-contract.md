@@ -15,8 +15,10 @@ Prediction으로 연결하는 시스템 간 Target 계약이다.
 | `closed-loop-implementation-plan.md` | 구현 PR 순서와 담당자별 인계 |
 
 이 문서는 Canonical V3.1 또는 과거 Result/Evidence를 수정하는 계약이 아니다.
-시스템 경계를 넘는 최종 기계 판독 계약은 팀 검토 후 `contracts/schemas/`의
-versioned JSON Schema로 고정한다.
+Closed-loop가 발행하는 `maintenance.*` 기계 판독 계약은
+`contracts/schemas/maintenance-replay-event.schema.json`에서 versioned JSON Schema로
+고정한다. `gen_data`가 발행하는 `runtime_overlay.observations.available` 계약은 해당
+producer와 Backend consumer가 별도 Schema로 확정한다.
 
 ## 2. 결정 요약
 
@@ -175,8 +177,10 @@ persistence라면 recoverable delivery record와 idempotent publish retry를 사
 따라 Observation을 계속 생성한다. `available`은 Backend가 저장된 Observation을 소비할
 수 있다는 뜻이며 inference-ready를 뜻하지 않는다. Backend가 이력이 부족하다고 판단해도
 역방향 생성 요청을 발행하지 않고 다음 `available` Observation을 기다린다. 충분하면
-`ready`로 전이해 추론한다. 최종 transport와 payload Schema는 구현 PR 전에
-`contracts/schemas/`에서 고정한다.
+`ready`로 전이해 추론한다. Closed-loop 소유 이벤트는
+`contracts/schemas/maintenance-replay-event.schema.json`을 따르며,
+`runtime_overlay.observations.available`의 최종 transport와 payload Schema는 `gen_data`와
+Backend integration 구현 전에 별도로 고정한다.
 
 ## 7. 멱등성과 순서
 
@@ -224,6 +228,9 @@ MVP의 `TOOL_REPLACEMENT`는 다음 typed patch를 사용한다.
 - `TOOL_REPLACEMENT`는 승인된 공구 마모 상태만 변경한다.
 - 허용되지 않은 필드나 단위는 fail-fast한다.
 - patch는 Canonical이 아니라 해당 Simulation Session의 Overlay Snapshot에만 적용한다.
+- Closed-loop의 immutable `MaintenanceEvent`에는 위 typed patch 명령을 그대로 보존하고,
+  운영 `Equipment state`에는 명령 객체가 아니라 적용된 현재값
+  (`tool_wear_min: {value: 0, unit: "min"}`)을 저장한다.
 - 향후 범용화할 때는 versioned `maintenance_effect` 계약으로 확장할 수 있다.
 
 ## 9. 이벤트 최소 필드
@@ -428,12 +435,14 @@ publish이며 Runtime Overlay 실행 주체가 아니다.
 
 ## 16. 후속 기계 판독 계약
 
-팀 검토 완료 후 다음 Schema와 OpenAPI를 별도 구현 PR에서 확정한다.
+Closed-loop 소유 이벤트 Schema는 이 구현 PR에서 확정한다. Generator/Backend handoff
+Schema와 Product OpenAPI는 각 소유자의 구현 PR에서 확정한다.
 
 ```text
 contracts/schemas/maintenance-replay-event.schema.json
 contracts/schemas/runtime-overlay-observation.schema.json
 ```
 
-문서 예시만으로 producer와 consumer를 독립 구현하지 않는다. Schema 확정 전에는 이
-문서를 Target 계약으로 사용하고, 계약 변경은 관련 소유자 리뷰를 거친다.
+첫 번째 파일은 Closed-loop가 발행하는 `maintenance.*`의 정본이다. 두 번째 파일은 아직
+후속 확정 대상이며, 그 전에는 `runtime_overlay.observations.available`를 문서 예시만으로
+독립 구현하지 않는다. 계약 변경은 관련 소유자 리뷰를 거친다.
