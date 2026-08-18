@@ -15,6 +15,41 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Classify changed files
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          # Keep the required job present even for docs-only PRs; selectively
+          # skip dependency installation and contract tests when they cannot be affected.
+
+          run_contract=false
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            run_contract=true
+          else
+            base="$(git merge-base HEAD "origin/${BASE_REF}")"
+            mapfile -t changed_files < <(git diff --name-only "$base"...HEAD)
+
+            echo "Changed files:"
+            printf ' - %s\n' "${changed_files[@]}"
+
+            for path in "${changed_files[@]}"; do
+              case "$path" in
+                .github/workflows/*|systems/verify_architecture.py|systems/backend/*|systems/generator/*|ml/*|contracts/*|schemas/*|data/fixtures/*|tests/test_product_result_artifact_evidence_contract.py|tests/test_system_ownership.py)
+                  run_contract=true
+                  break
+                  ;;
+              esac
+            done
+          fi
+
+          echo "run_contract=$run_contract" >> "$GITHUB_OUTPUT"
+          echo "Backend contract scope: run_contract=$run_contract"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -28,9 +63,11 @@ jobs:
         run: python systems/verify_architecture.py
 
       - name: Install Backend contract test dependencies
+        if: steps.changes.outputs.run_contract == 'true'
         run: python -m pip install -e ./ml -e './systems/backend[dev]'
 
       - name: Validate JSON Schema documents
+        if: steps.changes.outputs.run_contract == 'true'
         run: |
           python - <<'PY'
           import json
@@ -50,11 +87,13 @@ jobs:
           PY
 
       - name: Backend Product Result and Evidence contract tests
+        if: steps.changes.outputs.run_contract == 'true'
         env:
           APP_ENV: test
         run: pytest -q tests/test_product_result_artifact_evidence_contract.py
 
       - name: Model Artifact publish-validation-load round-trip
+        if: steps.changes.outputs.run_contract == 'true'
         env:
           APP_ENV: test
         run: pytest -q tests/test_system_ownership.py
