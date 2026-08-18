@@ -8,6 +8,7 @@ import pytest
 
 from systems.backend.app.diagnosis.contracts import load_fixture
 from systems.backend.app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from systems.backend.app.diagnosis.evidence_baseline import build_history_baseline_window
 from systems.backend.app.diagnosis.evidence_enrichment import validate_evidence_payload_invariants
 from systems.backend.app.diagnosis.predictor import HeuristicPredictor
 
@@ -182,6 +183,37 @@ def test_sensor_baseline_excludes_duplicate_current_observation_timestamp() -> N
     assert tool_wear["basis"]["baseline_n"] == 3
     assert tool_wear["window_mean"] == 213.666667
     assert tool_wear["z_score"] == 2.352075
+
+
+def test_history_baseline_policy_is_shared_for_dedupe_and_zero_variance() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"] = [
+        {
+            "timestamp": "2026-07-31T23:45:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 200,
+            "torque_nm": 50,
+        },
+        {
+            "timestamp": "2026-07-31T23:45:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 205,
+            "torque_nm": 50,
+        },
+        {
+            "timestamp": "2026-08-01T00:00:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 230,
+            "torque_nm": 55,
+        },
+    ]
+
+    baseline = build_history_baseline_window(fixture)
+
+    assert baseline.stat("tool_wear_min", 230.0).n == 1
+    assert baseline.stat("tool_wear_min", 230.0).mean == 205.0
+    assert baseline.stat("tool_wear_min", 230.0).z_score is None
+    assert baseline.stat("torque_nm", 55.0).z_score is None
 
 
 def test_sensor_window_does_not_expose_placeholder_for_untimestamped_history_rows() -> None:

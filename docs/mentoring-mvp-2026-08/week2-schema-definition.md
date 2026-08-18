@@ -262,6 +262,7 @@ TopFactor 결정 변경:
 - Model Artifact 경로의 현행 구현은 `전역 모델 가중치 × 현재 관측치의 history baseline 이탈도`로 local proxy score를 만든다. 이는 SHAP 같은 완전한 instance attribution이 아니므로 `model_artifact_local_proxy_attribution`으로 라벨링한다.
 - local proxy를 만들 수 없는 feature는 top factor 후보에서 제외한다. basis를 억지로 만들지 않는다.
 - history baseline은 observation timestamp와 같은 row를 제외한 과거 history로 계산한다. 따라서 GS-002 fixture처럼 history에 현재 observation이 중복 포함된 경우 baseline 표본은 3개이며, 현재 관측치는 비교 대상이지 baseline 구성원이 아니다.
+- sensor evidence와 Model Artifact local proxy는 동일한 history baseline helper를 사용한다. dedupe, current-row exclusion, zero-variance 처리 정책이 두 곳에 따로 존재하지 않아야 한다.
 
 현재 한계:
 
@@ -269,6 +270,7 @@ TopFactor 결정 변경:
 - `direction`과 score scale은 모델군 간 동일한 절대 척도로 비교하지 않는다.
 - top factor는 인과 원인이나 정비 root cause가 아니라, 현재 시점에서 모델 관련성과 baseline 이탈도를 함께 만족한 판단 근거 후보로 해석한다.
 - 공식 local attribution이 필요하면 후속 Model Artifact explanation contract와 API 이식이 먼저 필요하다.
+- SHAP은 현재 Product Result Artifact proxy 구현에 포함하지 않는다. SHAP은 별도 Model Artifact explanation contract에서 `method`, `scope`, `output_space`, `feature_space`, `background_dataset_version`, `explainer_version`을 명시한 뒤 도입한다.
 
 ### 4.2 RecommendedAction
 

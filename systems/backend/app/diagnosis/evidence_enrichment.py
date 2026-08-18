@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import math
-from statistics import mean, pstdev
 from typing import Any
 
 from .contracts import DISPLAY_NAMES, UNITS
+from .evidence_baseline import build_history_baseline_window, numeric_observation
 from .predictor import Prediction
 
 GENERATED_BY = "systems.backend.app.diagnosis.evidence_enrichment"
 
-_NON_SENSOR_FIELDS = {"timestamp", "product_type"}
 _COMPONENT_BY_FEATURE = {
     "tool_wear_min": ("tooling", "공구/마모 계통"),
     "temperature_difference_k": ("thermal_path", "열 방산 계통"),
@@ -109,7 +108,7 @@ def validate_evidence_payload_invariants(payload: dict[str, Any]) -> None:
 def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[str, Any] | None = None) -> None:
     factors = artifact.get("top_factors") or []
     total = sum(abs(float(factor.get("signed_contribution") or 0.0)) for factor in factors) or 1.0
-    observed_features = set(_numeric_observation((fixture or {}).get("observation") or {}))
+    observed_features = set(numeric_observation((fixture or {}).get("observation") or {}))
     for index, factor in enumerate(factors, start=1):
         feature = str(factor.get("feature") or "unknown")
         signed = float(factor.get("signed_contribution") or 0.0)
@@ -124,61 +123,33 @@ def enrich_product_result_top_factors(artifact: dict[str, Any], fixture: dict[st
 
 def _sensor_evidence(fixture: dict[str, Any]) -> dict[str, Any]:
     raw_observation = fixture.get("observation") or {}
-    observation = _numeric_observation(raw_observation)
-    observed_at = str(raw_observation.get("timestamp") or "")
-    history_rows = [
-        (timestamp, row)
-        for timestamp, row in _dedupe_history_rows(fixture.get("history", []))
-        if not observed_at or timestamp != observed_at
-    ]
-    window_rows = [row for _, row in history_rows if row]
+    observation = numeric_observation(raw_observation)
+    baseline_window = build_history_baseline_window(fixture)
+    window_rows = [row for _, row in baseline_window.rows if row]
     sensors: dict[str, Any] = {}
 
     for feature, current in observation.items():
-        values = [row[feature] for row in window_rows if feature in row]
-        baseline_mean = round(mean(values), 6) if values else None
-        baseline_std_raw = pstdev(values) if len(values) > 1 else 0.0
-        baseline_std = round(baseline_std_raw, 6)
-        z_score = None
-        if baseline_mean is not None and baseline_std_raw > 0:
-            z_score = round((current - baseline_mean) / baseline_std_raw, 6)
+        stat = baseline_window.stat(feature, current)
         sensors[feature] = {
             "display_name": _display_name(feature),
             "unit": _unit(feature),
             "current": current,
-            "window_mean": baseline_mean,
-            "z_score": z_score,
+            "window_mean": stat.mean,
+            "z_score": stat.z_score,
             "basis": {
-                "baseline_mean": baseline_mean,
-                "baseline_std": baseline_std,
-                "baseline_n": len(values),
+                "baseline_mean": stat.mean,
+                "baseline_std": stat.std,
+                "baseline_n": stat.n,
                 "baseline_reference": "fixture.history",
             },
         }
 
-    timestamps = [timestamp for timestamp, row in history_rows if timestamp and row]
-    if observed_at:
-        timestamps.append(observed_at)
+    timestamps = baseline_window.display_timestamps
     return {
         "window": {"start": timestamps[0], "end": timestamps[-1]} if timestamps else {},
         "window_rows": len(window_rows),
         "sensors": sensors,
     }
-
-
-def _dedupe_history_rows(rows: list[dict[str, Any]]) -> list[tuple[str, dict[str, float]]]:
-    deduped: dict[str, dict[str, float]] = {}
-    anonymous_rows: list[tuple[str, dict[str, float]]] = []
-    for row in rows:
-        numeric = _numeric_observation(row)
-        if not numeric:
-            continue
-        timestamp = str(row.get("timestamp") or "")
-        if timestamp:
-            deduped[timestamp] = numeric
-        else:
-            anonymous_rows.append(("", numeric))
-    return [*anonymous_rows, *deduped.items()]
 
 
 def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -282,20 +253,6 @@ def _has_multiple_risk_factors(artifact: dict[str, Any]) -> bool:
     first = abs(float(factors[0].get("signed_contribution") or 0.0))
     second = abs(float(factors[1].get("signed_contribution") or 0.0))
     return second > 0 and first - second < 0.25
-
-
-def _numeric_observation(observation: dict[str, Any]) -> dict[str, float]:
-    numeric: dict[str, float] = {}
-    for key, value in observation.items():
-        if key in _NON_SENSOR_FIELDS or isinstance(value, bool) or value is None:
-            continue
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            continue
-        if math.isfinite(number):
-            numeric[key] = number
-    return numeric
 
 
 def _dedupe_source_fields(fields: list[dict[str, str]]) -> list[dict[str, str]]:

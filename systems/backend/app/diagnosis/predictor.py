@@ -11,6 +11,7 @@ import pandas as pd
 
 from .artifact_provider import LocalModelArtifactProvider
 from .contracts import audit_fixture, derive_features
+from .evidence_baseline import build_history_baseline_window
 
 
 DEFAULT_POLICY_PATH = Path(__file__).with_name("threshold_policy.json")
@@ -388,7 +389,7 @@ class ArtifactPredictor:
         if not feature_weights:
             return []
 
-        local_deltas = _local_feature_deltas(fixture, values)
+        baseline_window = build_history_baseline_window(fixture, enrich_row=derive_features)
         scores: list[FactorScore] = []
         for feature, model_weight in feature_weights.items():
             if feature not in values:
@@ -400,9 +401,10 @@ class ArtifactPredictor:
             if not math.isfinite(raw_value):
                 continue
 
-            local_delta = local_deltas.get(feature)
-            if local_delta is None:
+            stat = baseline_window.stat(feature, raw_value)
+            if stat.z_score is None:
                 continue
+            local_delta = stat.z_score
             if weights_are_signed:
                 signed_score = model_weight * local_delta
             else:
@@ -490,49 +492,6 @@ def _original_feature_name(transformed_name: str, feature_names: list[str]) -> s
         if suffix == feature or suffix.startswith(f"{feature}_"):
             return feature
     return suffix
-
-
-def _local_feature_deltas(fixture: dict[str, Any], current_values: dict[str, Any]) -> dict[str, float]:
-    observed_at = str((fixture.get("observation") or {}).get("timestamp") or "")
-    history_values: dict[str, list[float]] = {}
-    for row in fixture.get("history", []):
-        if observed_at and str(row.get("timestamp") or "") == observed_at:
-            continue
-        try:
-            row_values = {**row, **derive_features(row)}
-        except (KeyError, TypeError, ValueError):
-            row_values = dict(row)
-        for feature, value in row_values.items():
-            try:
-                number = float(value)
-            except (TypeError, ValueError):
-                continue
-            if math.isfinite(number):
-                history_values.setdefault(feature, []).append(number)
-
-    deltas: dict[str, float] = {}
-    for feature, value in current_values.items():
-        try:
-            current = float(value)
-        except (TypeError, ValueError):
-            continue
-        values = history_values.get(feature) or []
-        if not values:
-            continue
-        baseline = sum(values) / len(values)
-        if len(values) > 1:
-            variance = sum((item - baseline) ** 2 for item in values) / len(values)
-            scale = math.sqrt(variance)
-        else:
-            scale = 0.0
-        if scale <= 0:
-            scale = max(abs(baseline), 1.0)
-        delta = (current - baseline) / scale
-        if math.isfinite(delta):
-            deltas[feature] = delta
-    return deltas
-
-
 def _domain_oriented_delta(feature: str, local_delta: float) -> float:
     if feature in _RISK_DOWN_FEATURES:
         return -local_delta
