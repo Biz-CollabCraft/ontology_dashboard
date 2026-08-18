@@ -1,0 +1,347 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from systems.backend.app.diagnosis.contracts import load_fixture
+from systems.backend.app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from systems.backend.app.diagnosis.evidence_baseline import build_history_baseline_window
+from systems.backend.app.diagnosis.evidence_enrichment import validate_evidence_payload_invariants
+from systems.backend.app.diagnosis.predictor import HeuristicPredictor
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class MissingContextProvider:
+    provider_name = "missing"
+
+    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None:
+        return None
+
+
+class BrokenContextProvider:
+    provider_name = "broken"
+
+    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None:
+        raise ValueError("provider contract violation")
+
+
+def unresolved_basis_refs(evidence_payload: dict[str, Any]) -> set[str]:
+    source_field_ids = {field["field_id"] for field in evidence_payload["source_fields"]}
+    basis_refs: set[str] = set()
+    for hypothesis in evidence_payload["component_hypotheses"]:
+        basis_refs.update(hypothesis["basis"])
+    for action in evidence_payload["recommended_actions"]:
+        basis_refs.update(action["basis"])
+    return basis_refs - source_field_ids
+
+
+def semantic_reference_payload() -> dict[str, Any]:
+    return json.loads(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "product_result_evidence_projection"
+            / "semantic_regression"
+            / "pdm-mvp-semantic-reference-critical.json"
+        ).read_text(encoding="utf-8")
+    )
+
+
+def test_product_result_artifact_includes_producer_evidence_payload_without_default_maintenance_context() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    payload = artifact["evidence_payload"]
+
+    assert set(payload) == {
+        "sensor_evidence",
+        "component_hypotheses",
+        "status_flags",
+        "recommended_actions",
+        "source_fields",
+        "evidence_gaps",
+    }
+    assert artifact["provenance"]["evidence_payload_reference"] == {
+        "source": "product_result_artifact",
+        "reference": artifact["artifact_id"],
+        "generated_by": "systems.backend.app.diagnosis.evidence_enrichment",
+    }
+    tool_wear = payload["sensor_evidence"]["sensors"]["tool_wear_min"]
+    assert tool_wear["current"] == 230.0
+    assert tool_wear["window_mean"] == 213.666667
+    assert tool_wear["z_score"] == 2.352075
+    assert tool_wear["basis"]["baseline_n"] == 3
+    assert tool_wear["basis"]["baseline_reference"] == "fixture.history"
+    assert payload["sensor_evidence"]["window_rows"] == 3
+    assert "maintenance_context" not in payload
+    assert any(gap["field"] == "evidence_payload.maintenance_context" for gap in payload["evidence_gaps"])
+    assert unresolved_basis_refs(payload) == set()
+
+
+def test_product_result_artifact_uses_maintenance_context_only_when_provider_is_explicit() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+
+    artifact = build_product_result_artifact(
+        fixture,
+        predictor=HeuristicPredictor(),
+        context_provider=FixtureContextProvider(),
+    )
+    payload = artifact["evidence_payload"]
+
+    assert payload["maintenance_context"]["provider"] == "fixture"
+    assert not any(gap["field"] == "evidence_payload.maintenance_context" for gap in payload["evidence_gaps"])
+
+
+def test_evidence_payload_preserves_pdm_mvp_reference_semantics_without_copying_values() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    semantic_reference = semantic_reference_payload()
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    payload = artifact["evidence_payload"]
+
+    assert set(payload["sensor_evidence"]) == set(semantic_reference["sensor_evidence"])
+    assert set(next(iter(payload["sensor_evidence"]["sensors"].values()))["basis"]) == set(
+        next(iter(semantic_reference["sensor_evidence"]["sensors"].values()))["basis"]
+    )
+    assert payload["component_hypotheses"][0]["association"] == semantic_reference["component_hypotheses"][0][
+        "association"
+    ]
+    assert set(payload["recommended_actions"][0]) == set(semantic_reference["recommended_actions"][0])
+    assert payload["source_fields"][0]["field_id"].startswith("factor.1.")
+    assert any(field["field_id"].startswith("sensor_evidence.sensors.") for field in payload["source_fields"])
+
+
+def test_product_result_artifact_excludes_non_numeric_observation_values_from_sensor_evidence() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["observation"]["operator_confirmed"] = True
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    sensors = artifact["evidence_payload"]["sensor_evidence"]["sensors"]
+
+    assert "product_type" not in sensors
+    assert "operator_confirmed" not in sensors
+    assert "tool_wear_min" in sensors
+
+
+def test_product_result_artifact_preserves_signed_contribution_direction_fallback() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-001-normal-stable.json")
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+
+    assert any(factor["signed_contribution"] < 0 for factor in artifact["top_factors"])
+    for factor in artifact["top_factors"]:
+        if factor["signed_contribution"] < 0:
+            assert factor["direction"] == "risk_down"
+        assert factor["evidence_field_id"].startswith(f"factor.{factor['rank']}.")
+        assert 0 <= factor["contribution"] <= 1
+
+
+def test_product_result_artifact_records_gap_when_maintenance_context_is_missing() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+
+    artifact = build_product_result_artifact(
+        fixture,
+        predictor=HeuristicPredictor(),
+        context_provider=MissingContextProvider(),  # type: ignore[arg-type]
+    )
+    payload = artifact["evidence_payload"]
+
+    assert "maintenance_context" not in payload
+    assert {
+        "gap_id": "gap.maintenance_context.unavailable",
+        "field": "evidence_payload.maintenance_context",
+        "reason": "missing_source",
+        "required_source": "maintenance_context_provider",
+        "owner_domain": "maintenance",
+        "display_policy": "show_as_unavailable",
+    } in payload["evidence_gaps"]
+
+
+def test_product_result_artifact_propagates_context_provider_contract_errors() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+
+    with pytest.raises(ValueError, match="provider contract violation"):
+        build_product_result_artifact(
+            fixture,
+            predictor=HeuristicPredictor(),
+            context_provider=BrokenContextProvider(),  # type: ignore[arg-type]
+        )
+
+
+def test_sensor_baseline_excludes_duplicate_current_observation_timestamp() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"].append(dict(fixture["observation"]))
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    tool_wear = artifact["evidence_payload"]["sensor_evidence"]["sensors"]["tool_wear_min"]
+
+    assert tool_wear["basis"]["baseline_n"] == 3
+    assert tool_wear["window_mean"] == 213.666667
+    assert tool_wear["z_score"] == 2.352075
+
+
+def test_history_baseline_policy_is_shared_for_dedupe_and_zero_variance() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"] = [
+        {
+            "timestamp": "2026-07-31T23:45:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 200,
+            "torque_nm": 50,
+        },
+        {
+            "timestamp": "2026-07-31T23:45:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 205,
+            "torque_nm": 50,
+        },
+        {
+            "timestamp": "2026-08-01T00:00:00+09:00",
+            "product_type": "M",
+            "tool_wear_min": 230,
+            "torque_nm": 55,
+        },
+    ]
+
+    baseline = build_history_baseline_window(fixture)
+
+    assert baseline.stat("tool_wear_min", 230.0).n == 1
+    assert baseline.stat("tool_wear_min", 230.0).mean == 205.0
+    assert baseline.stat("tool_wear_min", 230.0).z_score is None
+    assert baseline.stat("torque_nm", 55.0).z_score is None
+
+
+def test_sensor_window_does_not_expose_placeholder_for_untimestamped_history_rows() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    fixture["history"].insert(
+        0,
+        {
+            "product_type": "M",
+            "air_temperature_k": 298.8,
+            "process_temperature_k": 309.1,
+            "rotational_speed_rpm": 1475,
+            "torque_nm": 49.0,
+            "tool_wear_min": 200,
+        },
+    )
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    window = artifact["evidence_payload"]["sensor_evidence"]["window"]
+
+    assert window["start"] == "2026-07-31T23:45:00+09:00"
+    assert not window["start"].startswith("history[")
+
+
+def test_component_hypotheses_are_grouped_by_component_id() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    prediction = HeuristicPredictor().predict(fixture)
+    artifact = {
+        "status_grade": "warning",
+        "top_factors": [
+            {"rank": 1, "feature": "mechanical_power_w", "signed_contribution": 0.7},
+            {"rank": 2, "feature": "overstrain_index", "signed_contribution": 0.5},
+            {"rank": 3, "feature": "tool_wear_min", "signed_contribution": 0.4},
+        ],
+    }
+
+    payload = build_product_result_evidence_payload(artifact, fixture, prediction)
+    hypotheses = payload["component_hypotheses"]
+    component_ids = [hypothesis["component_id"] for hypothesis in hypotheses]
+
+    assert len(component_ids) == len(set(component_ids))
+    drive_power = next(hypothesis for hypothesis in hypotheses if hypothesis["component_id"] == "drive_power")
+    assert drive_power["basis"] == [
+        "factor.1.mechanical_power_w",
+        "factor.2.overstrain_index",
+    ]
+
+
+def test_product_result_artifact_records_data_quality_gaps_without_zero_filling() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-007-invalid-sensor-data.json")
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    payload = artifact["evidence_payload"]
+
+    assert artifact["status_grade"] == "data_quality_hold"
+    assert artifact["failure_probability"] is None
+    assert "air_temperature_k" not in payload["sensor_evidence"]["sensors"]
+    assert any(gap["gap_id"].startswith("gap.data_quality.") for gap in payload["evidence_gaps"])
+
+
+def test_evidence_payload_invariant_rejects_unmapped_basis_refs() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    artifact["evidence_payload"]["recommended_actions"][0]["basis"].append("factor.999.missing")
+
+    with pytest.raises(ValueError, match="basis refs are not in source_fields"):
+        validate_evidence_payload_invariants(artifact["evidence_payload"])
+
+
+def test_evidence_payload_invariant_rejects_null_maintenance_context_without_gap() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    artifact["evidence_payload"]["maintenance_context"] = None
+    artifact["evidence_payload"]["evidence_gaps"] = [
+        gap
+        for gap in artifact["evidence_payload"]["evidence_gaps"]
+        if gap["field"] != "evidence_payload.maintenance_context"
+    ]
+
+    with pytest.raises(ValueError, match="missing maintenance_context gap"):
+        validate_evidence_payload_invariants(artifact["evidence_payload"])
+
+
+def test_evidence_payload_does_not_overwrite_official_judgement_fields() -> None:
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    before = {
+        key: json.loads(json.dumps(artifact[key]))
+        for key in (
+            "status_grade",
+            "failure_probability",
+            "confidence",
+            "predicted_failure_type",
+            "top_factors",
+            "recommended_action",
+        )
+    }
+
+    artifact["evidence_payload"]["top_factors"] = [{"feature": "payload_should_not_win"}]
+    artifact["evidence_payload"]["recommended_action"] = {"action": "payload_should_not_win"}
+
+    assert {
+        key: artifact[key]
+        for key in (
+            "status_grade",
+            "failure_probability",
+            "confidence",
+            "predicted_failure_type",
+            "top_factors",
+            "recommended_action",
+        )
+    } == before
+
+
+def test_evidence_payload_builder_enriches_top_factor_basis_when_called_directly() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    for factor in artifact["top_factors"]:
+        factor.pop("evidence_field_id")
+
+    payload = build_product_result_evidence_payload(
+        artifact,
+        fixture,
+        HeuristicPredictor().predict(fixture),
+    )
+
+    assert unresolved_basis_refs(payload) == set()
+    assert all(factor.get("evidence_field_id") for factor in artifact["top_factors"])
