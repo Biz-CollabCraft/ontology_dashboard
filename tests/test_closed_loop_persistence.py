@@ -571,6 +571,115 @@ def test_completion_rolls_back_state_activity_outbox_and_idempotency_together(tm
     assert statuses == ("in_progress", "in_progress")
 
 
+def test_equipment_state_compare_and_swap_rejects_stale_update_and_insert(tmp_path: Path) -> None:
+    repository = ClosedLoopRepository(tmp_path / "equipment-state-cas.db")
+    action, cause = _foundation(repository)
+    started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
+    completed_at = started_at + timedelta(minutes=20)
+    repository.start_maintenance(
+        _started(action, cause, started_at),
+        workspace_id=DEFAULT_WORKSPACE_ID,
+        actor_id="technician-001",
+        request_idempotency_key="http-maintenance-start-001",
+        request_fingerprint="maintenance-action-001:start",
+    )
+    repository.complete_maintenance(
+        _completed(action, cause, started_at, completed_at),
+        workspace_id=DEFAULT_WORKSPACE_ID,
+        actor_id="technician-001",
+        outcome="tool replaced",
+        request_idempotency_key="http-maintenance-complete-001",
+        request_fingerprint="maintenance-action-001:complete",
+    )
+
+    with repository._connect() as connection:
+        scope = repository.project_context.resolve(
+            DEFAULT_WORKSPACE_ID,
+            connection=connection,
+        )
+        with pytest.raises(InvalidTransition, match="changed concurrently"):
+            repository._persist_equipment_state(
+                connection,
+                scope=scope,
+                equipment_id=action.equipment_id,
+                expected_version=0,
+                new_version=1,
+                state={"tool_wear_min": {"value": 0, "unit": "min"}},
+                maintenance_event_id="MAINTENANCE-EVENT-001",
+                updated_at=completed_at.isoformat(),
+            )
+        with pytest.raises(InvalidTransition, match="created concurrently"):
+            repository._persist_equipment_state(
+                connection,
+                scope=scope,
+                equipment_id=action.equipment_id,
+                expected_version=None,
+                new_version=1,
+                state={"tool_wear_min": {"value": 0, "unit": "min"}},
+                maintenance_event_id="MAINTENANCE-EVENT-001",
+                updated_at=completed_at.isoformat(),
+            )
+
+    state = repository.equipment_state(
+        workspace_id=DEFAULT_WORKSPACE_ID,
+        equipment_id=action.equipment_id,
+    )
+    assert state is not None
+    assert state["state_version"] == 1
+    assert state["last_maintenance_event_id"] == "MAINTENANCE-EVENT-001"
+
+
+def test_equipment_state_concurrency_conflict_rolls_back_completion(tmp_path: Path) -> None:
+    class ConflictingEquipmentStateRepository(ClosedLoopRepository):
+        def _persist_equipment_state(self, *args, **kwargs):
+            raise InvalidTransition("equipment state was changed concurrently")
+
+    database = tmp_path / "equipment-state-conflict.db"
+    repository = ConflictingEquipmentStateRepository(database)
+    action, cause = _foundation(repository)
+    started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
+    repository.start_maintenance(
+        _started(action, cause, started_at),
+        workspace_id=DEFAULT_WORKSPACE_ID,
+        actor_id="technician-001",
+        request_idempotency_key="http-maintenance-start-001",
+        request_fingerprint="maintenance-action-001:start",
+    )
+
+    with pytest.raises(InvalidTransition, match="changed concurrently"):
+        repository.complete_maintenance(
+            _completed(action, cause, started_at, started_at + timedelta(minutes=20)),
+            workspace_id=DEFAULT_WORKSPACE_ID,
+            actor_id="technician-001",
+            outcome="tool replaced",
+            request_idempotency_key="http-maintenance-complete-001",
+            request_fingerprint="maintenance-action-001:complete",
+        )
+
+    with sqlite3.connect(database) as connection:
+        statuses = connection.execute(
+            """
+            SELECT w.status,a.status
+            FROM closed_loop_work_orders w
+            JOIN closed_loop_maintenance_actions a ON a.work_order_id=w.work_order_id
+            WHERE a.maintenance_action_id=?
+            """,
+            (action.maintenance_action_id,),
+        ).fetchone()
+        assert connection.execute("SELECT COUNT(*) FROM closed_loop_maintenance_events").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM closed_loop_equipment_state").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM closed_loop_activities WHERE activity_type='maintenance.completed'"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM transactional_outbox WHERE event_type='maintenance.completed'"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM closed_loop_idempotency_records WHERE idempotency_key='http-maintenance-complete-001'"
+        ).fetchone()[0] == 0
+    assert statuses == ("in_progress", "in_progress")
+
+
 def test_replay_request_requires_completion_and_advances_lifecycle_version(tmp_path: Path) -> None:
     repository = ClosedLoopRepository(tmp_path / "replay.db")
     action, cause = _foundation(repository)

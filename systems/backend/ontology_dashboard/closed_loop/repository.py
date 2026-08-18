@@ -673,7 +673,14 @@ class ClosedLoopRepository:
                     event.equipment_id,
                 ),
             ).fetchone()
-            equipment_state_version = 1 if existing_state is None else int(existing_state["state_version"]) + 1
+            expected_equipment_state_version = (
+                None if existing_state is None else int(existing_state["state_version"])
+            )
+            equipment_state_version = (
+                1
+                if expected_equipment_state_version is None
+                else expected_equipment_state_version + 1
+            )
             previous_equipment_state = (
                 {} if existing_state is None else dict(self._decoded(existing_state["state_json"]))
             )
@@ -709,28 +716,15 @@ class ClosedLoopRepository:
                     now,
                 ),
             )
-            connection.execute(
-                """
-                INSERT INTO closed_loop_equipment_state (
-                    organization_id,project_id,workspace_id,equipment_id,state_version,
-                    state_json,last_maintenance_event_id,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?)
-                ON CONFLICT(organization_id,project_id,workspace_id,equipment_id) DO UPDATE SET
-                    state_version=excluded.state_version,
-                    state_json=excluded.state_json,
-                    last_maintenance_event_id=excluded.last_maintenance_event_id,
-                    updated_at=excluded.updated_at
-                """,
-                (
-                    action["organization_id"],
-                    action["project_id"],
-                    action["workspace_id"],
-                    action["equipment_id"],
-                    equipment_state_version,
-                    self._json(applied_equipment_state),
-                    event.maintenance_event_id,
-                    now,
-                ),
+            self._persist_equipment_state(
+                connection,
+                scope=scope,
+                equipment_id=action["equipment_id"],
+                expected_version=expected_equipment_state_version,
+                new_version=equipment_state_version,
+                state=applied_equipment_state,
+                maintenance_event_id=event.maintenance_event_id,
+                updated_at=now,
             )
             self._record_activity(
                 connection,
@@ -1349,6 +1343,67 @@ class ClosedLoopRepository:
             "unit": tool_wear.get("unit"),
         }
         return updated
+
+    def _persist_equipment_state(
+        self,
+        connection: Any,
+        *,
+        scope: Any,
+        equipment_id: str,
+        expected_version: int | None,
+        new_version: int,
+        state: Mapping[str, Any],
+        maintenance_event_id: str,
+        updated_at: str,
+    ) -> None:
+        expected_new_version = 1 if expected_version is None else expected_version + 1
+        if new_version != expected_new_version:
+            raise ValueError("equipment state_version must advance exactly once")
+
+        if expected_version is None:
+            inserted = connection.execute(
+                """
+                INSERT OR IGNORE INTO closed_loop_equipment_state (
+                    organization_id,project_id,workspace_id,equipment_id,state_version,
+                    state_json,last_maintenance_event_id,updated_at
+                ) VALUES (?,?,?,?,?,?,?,?)
+                """,
+                (
+                    scope.organization_id,
+                    scope.project_id,
+                    scope.workspace_id,
+                    equipment_id,
+                    new_version,
+                    self._json(state),
+                    maintenance_event_id,
+                    updated_at,
+                ),
+            )
+            if inserted.rowcount != 1:
+                raise InvalidTransition("equipment state was created concurrently")
+            return
+
+        updated = connection.execute(
+            """
+            UPDATE closed_loop_equipment_state
+            SET state_version=?,state_json=?,last_maintenance_event_id=?,updated_at=?
+            WHERE organization_id=? AND project_id=? AND workspace_id=?
+              AND equipment_id=? AND state_version=?
+            """,
+            (
+                new_version,
+                self._json(state),
+                maintenance_event_id,
+                updated_at,
+                scope.organization_id,
+                scope.project_id,
+                scope.workspace_id,
+                equipment_id,
+                expected_version,
+            ),
+        )
+        if updated.rowcount != 1:
+            raise InvalidTransition("equipment state was changed concurrently")
 
     def _enqueue(
         self,
