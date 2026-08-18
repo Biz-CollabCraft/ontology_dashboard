@@ -52,6 +52,11 @@
 | CM-05 버전 표시 | FEAT-CM-003 | 전체 | 목록·상세·보고서 | provenance | TC-CM-004 버전 일치 |
 | CM-06 화면 상태 | FEAT-CM-004 | 전체 | 오류 envelope | DataStatus | TC-UI-002 상태별 UI |
 | CM-07 truth 비노출 | 전체 | 전체 | 전체 | 제품 스키마 제외 | TC-SAFE-001 truth 차단 |
+| CM-08 Replay/실시간 구분 | FEAT-CM-003 | 전체 | provenance/source | Observation source | TC-SAFE-004 source 표기 |
+| CM-09 Current/Target 구분 | 문서·Product 상태 | 전체 | 구현된 경로만 현행 표기 | 계약 status | TC-DOC-001 Target 오표기 방지 |
+| CM-10 Producer/UI 분리 | FEAT-CM-004 | What-if/Report | Producer result + Product adapter | producer contract | TC-SAFE-005 역할 문장 분리 |
+| CM-11 정비 후 준비 상태 | Closed-loop Target | Operations/Objects | endpoint 위치 결정 필요 | runtime status | TC-CL-OVERLAY-001 상태 구분 |
+| CM-12 대상 설비 Overlay | Closed-loop Target | Operations/Objects | Overlay Observation 소비 API | overlay lineage | TC-CL-OVERLAY-002 다른 설비 무영향 |
 | OV-01 설비 현황 | FEAT-OV-001 | Overview | GET `/overview` | OverviewSummary | TC-OV-001 가동 합계 |
 | OV-02 위험 현황 | FEAT-OV-002 | Overview | GET `/overview` | status_counts | TC-OV-002 등급 합계 |
 | OV-03 유형 요약 | FEAT-OV-003 | Overview | GET `/overview` | asset_type_counts | TC-OV-003 유형 합계 |
@@ -86,6 +91,7 @@
 - 모든 화면 요구사항에 기능 ID가 있다.
 - 모든 데이터 기능에 스키마가 있다.
 - 현행 Decision·Note 쓰기 기능은 `tests/test_mvp.py`의 API 상태 변경 검증과 연결한다.
+- `TC-CL-OVERLAY-*`는 Runtime Overlay 구현 전 Target test ID이며 실제 테스트 경로가
+  생기면 이 표를 갱신한다.
 - 1.3 표의 목표 API와 `TC-*`/`RPT-TC-*`는 V2 제안이며 실제 구현 완료를 의미하지 않는다.
 - V2를 채택할 때 호환 계층, 호출부와 실제 테스트 파일을 함께 확정한다.
-

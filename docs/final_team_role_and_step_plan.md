@@ -699,15 +699,15 @@ Raw prediction을 Dashboard/Report/Action이 공통으로 소비할 수 있는 P
 
 | 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
 |---|---|---|
-| **성민** | Recommendation에 노출되는 model status/factor가 Model Artifact와 Feature contract 의미를 왜곡하지 않는지 검토 | model interpretation constraints |
-| **호범** | Action 판단에 필요한 Product Result / Evidence API와 report용 근거 구조 제공 | evidence support |
-| **광우** | Recommendation → Decision → TOOL_REPLACEMENT → MaintenanceEvent → Ontology state → Activity 구현 | 실제 closed-loop state/API |
-| **우수** | Operations용 Product API orchestration과 Decision/Action UI, 상태 전이 acceptance flow 구현 | usable closed-loop product flow |
+| **성민** | Model/Feature 의미 검토와 `gen_data` 대상 설비 Runtime Overlay Observation 생성 | model constraints + overlay observation |
+| **호범** | Action 판단용 Result/Evidence 제공 및 정비 후 history 경계·Runtime Prediction 연결 | evidence + post-maintenance result |
+| **광우** | Recommendation → Decision → TOOL_REPLACEMENT → MaintenanceEvent → Ontology state → Integration Outbox 구현 | closed-loop state + maintenance handoff |
+| **우수** | Operations용 Product API/UI, Runtime 준비 상태와 상태 전이 acceptance flow 구현 | usable closed-loop product flow |
 
 ### 완료 조건
 
-> 하나의 CNC Event가 Evidence 확인부터 Action 완료와 상태 재반영까지 실제로 동작하고,
-> 정비 이후 새로운 Observation으로 별도 Prediction Result가 생성된다.
+> 하나의 CNC Event가 Evidence 확인부터 Action 완료까지 동작하고, 대상 설비 Runtime
+> Overlay가 `history_requirement`을 충족한 뒤 별도 Prediction Result를 생성한다.
 
 ---
 
@@ -830,9 +830,9 @@ Step 8의 Structured Executive Brief가 먼저 안정화되어야 한다.
 
 | 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
 |---|---|---|
-| **성민** | feature/label/model artifact regression, reproducibility, golden vector, retraining smoke 유지 | ML quality gate |
-| **호범** | runtime/result/evidence/report-grounding Backend tests와 negative case 유지 | Backend intelligence gate |
-| **광우** | Decision/Action/Maintenance state transition과 closed-loop E2E fixture 유지 | closed-loop gate |
+| **성민** | feature/label/model artifact regression과 대상 설비 Overlay 재현성·다른 설비 무영향 검증 | ML/source quality gate |
+| **호범** | runtime/result/evidence, post-maintenance history와 unavailable negative case 유지 | Backend intelligence gate |
+| **광우** | Decision/Action/Maintenance state, Integration Outbox와 closed-loop E2E fixture 유지 | closed-loop gate |
 | **우수** | 모든 gate를 GitHub Actions와 Playwright/Docker E2E로 묶고 release-blocking acceptance 관리 | integrated CI/release gate |
 
 ### 핵심 E2E
@@ -845,6 +845,7 @@ Source
 → Product Result / Evidence
 → Recommendation / Decision / Action
 → Maintenance / Activity / Ontology State
+→ 대상 설비 Runtime Overlay / history 준비
 → 새로운 Observation / Prediction Result
 → Executive Brief
 → Dynamic Report
@@ -903,9 +904,9 @@ Render의 임시 파일시스템은 Model Artifact 정본으로 사용하지 않
 
 | 사람 | 이 Step의 책임 | 발표에서 설명할 축 |
 |---|---|---|
-| **성민** | 최종 Artifact 재현, 모델 품질/버전/feature-label lineage 확인, 발표 데이터 고정 | Source → Feature/Label → Model Artifact |
-| **호범** | Result/Evidence와 Dynamic Report grounding consistency 최종 검증 | Artifact → Runtime → Evidence → Grounded Narrative |
-| **광우** | 대표 CNC closed-loop 상태와 action history 안정화 | Evidence → Decision → Action → Maintenance → Feedback |
+| **성민** | 최종 Artifact 재현과 대상 설비 Runtime Overlay/branch clock 재현성 확인 | Source → Feature/Label → Model Artifact/Overlay |
+| **호범** | 정비 전후 Result/Evidence, history와 Dynamic Report grounding consistency 검증 | Artifact → Runtime → Evidence → Grounded Narrative |
+| **광우** | 대표 CNC closed-loop 상태, action history와 Maintenance Integration event 안정화 | Evidence → Decision → Action → Maintenance → Feedback |
 | **우수** | 전체 demo orchestration, UI/LLM/배포/backup scenario, CI green, 발표용 최종 release | 여러 Domain을 하나의 사용자 Product로 통합 |
 
 ### 최종 데모 시나리오
@@ -920,10 +921,12 @@ Render의 임시 파일시스템은 Model Artifact 정본으로 사용하지 않
 7. 정비 작업자가 TOOL_REPLACEMENT Action을 시작·완료
 8. MaintenanceEvent / Activity / Ontology state 갱신 확인
 9. 동일 mutation replay의 idempotency 확인
-10. 정비 이후 새로운 Observation / Prediction Result 확인
-11. Static Executive Brief 확인
-12. Evidence-grounded Dynamic Report 확인
-13. 동일 근거가 Dashboard / Decision / Action / Report에 일관되게 사용됨을 설명
+10. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay가 유지되는지 확인
+11. 대상 설비 branch clock Fast-forward와 history 준비 상태 확인
+12. 첫 inference-ready Observation의 새로운 Prediction Result 확인
+13. Static Executive Brief 확인
+14. Evidence-grounded Dynamic Report 확인
+15. 동일 근거가 Dashboard / Decision / Action / Report에 일관되게 사용됨을 설명
 ```
 
 ---
@@ -987,7 +990,7 @@ Product Result Artifact
 
 ---
 
-## 5.3 광우 → 호범 / 우수
+## 5.3 광우 → 성민 / 호범 / 우수
 
 ```text
 Decision
@@ -996,9 +999,14 @@ MaintenanceAction
 MaintenanceEvent
 Activity
 Ontology State
+maintenance.started / maintenance.completed / maintenance.replay_requested
+maintenance_event_id + idempotency_key + state_version + state_patch
 ```
 
-호범은 Report grounding에 사용하고, 우수는 Product/Report UI에 사용한다.
+성민은 Runtime Overlay 입력으로, 호범은 정비 후 Result/Evidence와 Report grounding
+lineage로, 우수는 Product/Report UI와 E2E에 사용한다. 상세 handoff는
+[`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
+따른다.
 
 ---
 

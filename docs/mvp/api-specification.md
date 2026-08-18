@@ -206,6 +206,14 @@ deterministic 출력 계약부터 검증한다.
 - Closed-loop 확장은 기존 Event API key를 삭제·rename하지 않는 additive extension으로 유지하며,
   역할별 Action과 mutation 응답은
   [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
+- 정비 후 Runtime Overlay의 Target 상태는 `equipment_under_maintenance`, `warming_up`,
+  `history_insufficient`, `ready`, `predicted`를 사용한다. 최종 endpoint와 response 위치는
+  구현 전에 확정하며 기존 Result의 `status_grade`를 이 준비 상태로 덮어쓰지 않는다.
+- Runtime Overlay의 이벤트·Observation lineage는
+  [`../closed-loop-runtime-overlay-contract.md`](../closed-loop-runtime-overlay-contract.md)를 따른다.
+- Observation `source_kind`는 Target 구현에서 `canonical_observation` 또는
+  `maintenance_replay_overlay`를 반환한다. Overlay 응답은 `simulation_session_id`,
+  `overlay_branch_id`, `maintenance_event_id`, `history_segment_id`를 함께 보존한다.
 - 최신 결과 pagination은 `offset`, `limit`, `total`을 유지한다.
 - `status_grade`는 runtime inference가 생성하는 Result Artifact 계약에 포함한다.
 - stale은 timezone을 포함한 최신 `observed_at` 기준 프론트 24시간 MVP 정책을 유지한다.
@@ -218,3 +226,6 @@ deterministic 출력 계약부터 검증한다.
 
 - 보고서 생성 timeout과 retry 정책
 - V2 목표 경로와 `page`/`size` 계약 채택 여부 및 전환 계획
+- Runtime Overlay 준비 상태를 Event `closed_loop` envelope, Equipment 상태 API 또는
+  별도 runtime status endpoint 중 어디에 노출할지
+- `warming_up` 진행률의 `generated_rows`/`required_rows` 필드와 unavailable 오류 envelope

@@ -293,6 +293,7 @@ Observation / Product Result
 → WorkOrder
 → MaintenanceAction
 → MaintenanceEvent
+→ 대상 설비 Runtime Overlay / history 준비
 → 정비 후 Observation / Product Result
 ```
 
@@ -305,8 +306,17 @@ Observation / Product Result
 - Frontend가 WorkOrder/Recommendation 상태 머신 또는 role permission을 독자 구현
 - persisted ID/idempotency key를 Frontend가 문자열 조합으로 생성
 - `available_actions`와 같은 서버 판단 결과가 있는데도 Frontend가 동일 규칙을 다시 계산
+- Canonical Replay나 전체 Simulation Clock을 수정해 정비 대상이 아닌 설비까지
+  Fast-forward
+- 정비 완료, `warming_up` 또는 `history_insufficient`를 정상 Prediction으로 표현
+- 정비 전 history를 정비 후 Rolling/Lag Feature에 계약 없이 혼합
+- Maintenance 이벤트만 보고 Backend가 Overlay Observation 없이 Product Result를 생성
 
-세부 계약은 `docs/closed-loop-domain-contract.md`와 `docs/closed-loop-implementation-plan.md`를 따른다.
+Domain과 구현 순서는 `docs/closed-loop-domain-contract.md`와
+`docs/closed-loop-implementation-plan.md`를 따른다. 정비 완료 이후 Runtime Overlay
+handoff를 구현하거나 변경하는 PR은
+`docs/closed-loop-runtime-overlay-contract.md`도 함께 따른다. 이 기준은 Runtime Overlay
+Target 범위에만 적용하며 미구현 Target을 현재 동작으로 간주하지 않는다.
 
 ## 11. Context routing과 trusted base 원칙
 

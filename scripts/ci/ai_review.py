@@ -72,6 +72,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         "context": [
             "docs/closed-loop-domain-contract.md",
             "docs/closed-loop-product-consumption-contract.md",
+            "docs/closed-loop-runtime-overlay-contract.md",
             "docs/closed-loop-implementation-plan.md",
         ],
     },
@@ -85,6 +86,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
         "context": [
             "docs/mvp/model-artifact-publish-contract.md",
             "docs/mvp/generator-feature-label-contract.md",
+            "docs/closed-loop-runtime-overlay-contract.md",
         ],
     },
     "evidence": {
@@ -120,6 +122,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             "docs/mvp/functional-specification.md",
             "docs/closed-loop-domain-contract.md",
             "docs/closed-loop-product-consumption-contract.md",
+            "docs/closed-loop-runtime-overlay-contract.md",
         ],
     },
     "generator": {

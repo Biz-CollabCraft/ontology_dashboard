@@ -9,6 +9,8 @@ API 계약과 팀 공유 문서를 관리한다.
 - [Ontology Operations & Closed-loop 구현 계획](./closed-loop-implementation-plan.md)
 - [Closed-loop Domain 계약](./closed-loop-domain-contract.md)
 - [Closed-loop Product/API/UI 소비 계약](./closed-loop-product-consumption-contract.md)
+- [Closed-loop Runtime Overlay 통합 계약](./closed-loop-runtime-overlay-contract.md)
+- [Runtime Overlay 기존 계획 변경 영향 안내](./closed-loop-runtime-overlay-change-impact.md)
 - [아키텍처](./architecture.md)
 - [Architecture Decision Records](./architecture-decisions/README.md)
 - [MVP / Product documentation](./mvp/README.md)

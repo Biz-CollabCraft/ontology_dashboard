@@ -17,10 +17,12 @@ PR #42가 `main`에 merge된 뒤에도 Backend Domain과 Product/UI가 서로 �
 |---|---|
 | `docs/closed-loop-domain-contract.md` | Closed-loop 객체 경계, 상태 전이, lineage, Domain invariant |
 | `docs/closed-loop-product-consumption-contract.md` | 사용자 역할, Product Action, `available_actions`, Event API 소비, 오류, E2E, 구현 소유권 |
+| `docs/closed-loop-runtime-overlay-contract.md` | 정비 완료 이후 대상 설비 Overlay와 정비 후 Runtime Prediction handoff |
 | `docs/closed-loop-implementation-plan.md` | 구현 단계, PR 순서, 변경 예약 범위 |
 
-세 문서가 충돌하면 Domain 상태 자체는 Domain 계약을 따르고, Product/API/UI 표현과 소비 방식은 이
-문서를 따른다. 구현 계획은 두 canonical contract를 참조하는 실행 계획으로 취급한다.
+문서가 충돌하면 Domain 상태 자체는 Domain 계약을, Product/API/UI 표현과 소비 방식은 이
+문서를, 정비 완료 이후 Runtime Overlay handoff는 Runtime Overlay 계약을 따른다. 구현
+계획은 canonical contract를 참조하는 실행 계획으로 취급한다.
 
 ## 2. 핵심 원칙
 
@@ -208,6 +210,25 @@ maintenance_technician
 따라서 Recommendation 승인 mutation이 WorkOrder와 MaintenanceAction을 동시에 생성하는 것으로 구현하지
 않는다. 각 생성 mutation의 응답은 Persistence가 확정한 `work_order_id` 또는
 `maintenance_action_id`를 반환하고, 다음 단계는 그 ID를 그대로 사용한다.
+
+### 5.2 정비 후 Runtime 준비 상태
+
+MaintenanceEvent 완료 이후 Product/API/UI는 정비 완료 사실과 Prediction 준비·결과를
+같은 상태로 합치지 않는다. Runtime Overlay 상세 동작은
+[`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
+따른다.
+
+| 상태 | Product/UI 의미 |
+|---|---|
+| `equipment_under_maintenance` | 정비 진행 중 |
+| `warming_up` | 정비 후 Observation 이력 생성 중. 가능하면 `n/N` 진행률 표시 |
+| `history_insufficient` | 요구 이력을 확보하지 못해 Prediction 불가 |
+| `ready` | Backend가 추론 가능한 이력을 확보함 |
+| `predicted` | 신규 Runtime Prediction과 Product Result/Evidence 생성 완료 |
+
+`equipment_under_maintenance`, `warming_up`, `history_insufficient`, `ready`를
+`NORMAL` Prediction으로 표현하지 않는다. 정비 완료 자체도 정상 판정이 아니며, 정비 후
+실제 Product Result가 조치 불필요로 판정한 경우에만 정상으로 표시한다.
 
 ## 6. Event API Product 소비 계약
 
@@ -414,7 +435,9 @@ persona:
 9. checklist / measurement / note와 함께 작업 완료
 10. MaintenanceEvent / Equipment state / `activities[]` 반영
 11. 동일 `Idempotency-Key` + 동일 요청의 replay 및 다른 요청의 conflict 검증
-12. 정비 전 Result → Decision → Action → 정비 후 Result lineage 확인
+12. 대상 설비만 Runtime Overlay로 분기되고 정비 후 이력이 준비되는 상태 확인
+13. 첫 inference-ready Observation에서 새 Product Result/Evidence 생성 확인
+14. 정비 전 Result → Decision → Action → 정비 후 Result lineage 확인
 
 Recommendation / WorkOrder / MaintenanceAction ID는 E2E 코드에 하드코딩하지 않는다. 앞 mutation/API가
 반환한 persisted ID를 다음 요청으로 전달한다.
@@ -491,3 +514,5 @@ Product/API/UI Closed-loop 구현은 최소 다음 조건을 만족해야 한다
 - operational transaction 실패와 projection 실패가 구분된다.
 - E2E에서 engineer → manager → technician 흐름과 persisted ID chaining을 검증한다.
 - 정비 전·후 Product Result와 Decision/Action/MaintenanceEvent lineage를 재구성할 수 있다.
+- 정비 완료, 이력 준비 중, 이력 부족과 실제 Prediction 결과를 서로 다른 상태로
+  소비한다.

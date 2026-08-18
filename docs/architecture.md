@@ -33,6 +33,26 @@ ontology_dashboard/systems/frontend / Report
 Result Artifact / Evidence consumer
 ```
 
+정비 후 Closed-loop feedback은 위 단방향 학습/추론 소유권을 뒤집지 않고 별도 Runtime
+Overlay handoff로 연결한다.
+
+```text
+Closed-loop MaintenanceEvent
+        ↓ versioned Integration event
+gen_data Runtime Overlay
+target equipment snapshot + branch-local simulation clock
+        ↓ maintenance_replay_overlay Observation
+ontology_dashboard/systems/backend/diagnosis
+history requirement + runtime inference
+        ↓
+new Result Artifact / Evidence
+```
+
+Canonical/source Replay는 계속 read-only다. Runtime Overlay는 대상 설비에만 적용하는
+opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 않는다. 상세는
+[`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
+따른다.
+
 ### 저장소별 Source of Truth
 
 - **`gen_data` = Source Data Producer**
@@ -40,6 +60,8 @@ Result Artifact / Evidence consumer
   - Canonical V3.1 물리·생성 기준
   - source/reference/test fixture와 seed 기반 재현성
   - source package validation
+  - Closed-loop Target에서 정비 대상 설비의 Runtime Overlay Snapshot과 branch-local
+    Simulation Clock을 이용한 source Observation 생성
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
   - `systems/generator`: Semantic/ML pipeline 및 versioned Model Artifact producer
@@ -228,6 +250,17 @@ Training metrics, feature importance 등 모델 개발 설명자료는 Model Art
 
 Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Feature를 생성해야 한다면 Model Artifact에 포함된 검증된 Feature Contract(`feature_schema.json`)와 지원 transform 집합만을 사용한다. 지원하지 않는 transform이나 `feature_schema_version` 불일치는 명시적으로 실패시킨다. 상세는 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
+정비 후 Overlay Observation은 `restart_at`부터 새 history segment를 사용한다. Backend는
+Model Artifact의 `history_requirement.json`을 충족하기 전에는 heuristic이나 silent
+fallback으로 Prediction하지 않으며 `warming_up` 또는 `history_insufficient`를 명시한다.
+첫 inference-ready Observation에서 새 Product Result/Evidence를 생성하고 이후 정상
+Runtime Prediction 주기를 유지한다.
+
+Runtime Overlay Observation은 Canonical Observation 테이블을 update하거나 같은
+Canonical identity로 삽입하지 않는다. 별도 append-only Overlay 저장소와 branch-aware
+read model을 사용해 대상 설비의 정비 후 예정 Canonical 행이 Overlay history에 다시
+섞이지 않도록 한다.
+
 ### Backend domain dependency rule
 
 - 도메인 간 임의 `*_service.py` direct import를 금지한다.
@@ -306,6 +339,7 @@ PR #9의 대규모 실행 코드는 이 PR에서 이동하지 않는다. 이후 
 
 - semantic extraction / mapping / topology / feature / training → `systems/generator`
 - runtime prediction / inference / Result Artifact / Evidence → `systems/backend/diagnosis`
+- 정비 대상 설비 Runtime Overlay Observation → `gen_data`의 opt-in Runtime Overlay
 - 사용자 화면 및 report rendering → Frontend/Report consumer
 
 재배치 과정에서도 `gen_data`의 Source Data Producer 책임과 본 문서의 Model Artifact / Result Artifact 경계를 변경하지 않는다.
