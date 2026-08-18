@@ -23,12 +23,12 @@
 | 기존 계획 표현 | 보강된 구현 기준 |
 |---|---|
 | 정비 후 새 Observation 생성 | 대상 설비만 `maintenance_replay_overlay` branch에서 생성 |
-| 정비 후 재예측 | `history_requirement`을 충족한 첫 inference-ready Observation에서 실행 |
-| 이력 확보 방식 미정 | 대상 설비 Overlay branch clock만 Fast-forward |
+| 정비 후 재예측 | Backend가 `history_requirement`을 충족했다고 판정한 첫 inference-ready Observation에서 실행 |
+| 이력 확보 방식 미정 | 대상 설비 Overlay branch clock만 Fast-forward하고 Observation을 지속 생성 |
 | Replay는 새 센서값을 만들지 않음 | Canonical Replay는 계속 read-only, Overlay는 별도 opt-in 경로 |
 | 완료 시각 `completed_at` | 내부 Domain은 유지, 시스템 간 이벤트는 `maintenance_completed_at` |
 | 완료 이벤트 단일 처리 | Started, Completed, ReplayRequested 단계와 지연 도착 처리 |
-| HTTP mutation 멱등성 | Integration delivery에는 `idempotency_key`와 `state_version` 모두 사용 |
+| HTTP mutation 멱등성 | Integration delivery에는 `idempotency_key`와 `state_version` 사용 |
 | `state_patch` 자유 형식 | `action_code`별 field/operation/value/unit whitelist |
 | 정비 후 첫 값에서 Prediction | 첫 inference-ready 값에서 Prediction, 이후 정상 주기 유지 |
 | 정비 전후 history 규칙 없음 | `restart_at`부터 새 history segment, 암묵적 혼합 금지 |
@@ -62,13 +62,17 @@
 - 대상 설비 branch clock만 Fast-forward
 - 기존 Observation의 `source_kind`를 `maintenance_replay_overlay`로 확장하고 lineage를
   가진 Overlay Observation 발행
+- Model Artifact를 읽지 않고 Overlay Observation을 지속 생성
+- 생성 완료는 `observations.available`로 알리며 readiness를 선언하지 않음
 - 운영 Product Result/Evidence는 생성하지 않음
 
 ### 호범 — Backend Diagnosis 후속 작업
 
 - Overlay Observation을 기존 Runtime Diagnosis 입력으로 소비
 - `restart_at` 이후 새 history segment 적용
-- Model Artifact의 `history_requirement`에서 최소 이력 계산
+- Model Artifact의 `history_requirement`에서 최소 이력을 계산하는 유일한 readiness owner
+- 이력 부족 시 Prediction하지 않고 이후 available Observation을 기다림
+- stream 종료·실패 등 유효 이력 확보 불가가 확정될 때만 `history_insufficient` 처리
 - `warming_up`과 `history_insufficient` 처리
 - 첫 inference-ready Observation에서 신규 Product Result/Evidence 생성
 - 정비 전 Result/Evidence는 수정하지 않음
@@ -80,6 +84,8 @@
 - `equipment_under_maintenance`, `warming_up`, `history_insufficient`, `ready`,
   `predicted` 상태 표시
 - `warming_up` 진행률을 가능하면 `n/N`으로 표시
+- canonical runtime-status read location은 versioned handoff 확정 후 Backend integration
+  단계에서 결정
 - 정비 완료와 정상 Prediction을 구분
 - 정비 전 Result → Maintenance → 정비 후 Result E2E 구성
 - 기존 Backend/Frontend Observation의 `source_kind="canonical_observation"` literal을
@@ -140,9 +146,11 @@
 - [ ] 공유 이벤트 완료 필드가 `maintenance_completed_at`으로 확정됐다.
 - [ ] Closed-loop가 발행하는 단계별 이벤트와 consumer가 확정됐다.
 - [ ] Backend는 Maintenance 이벤트가 아니라 Overlay Observation으로 Prediction한다.
-- [ ] 최소 Observation 수를 `history_requirement`에서 계산한다.
+- [ ] Backend만 최소 Observation 수를 `history_requirement`에서 계산하고 readiness를 판정한다.
+- [ ] `gen_data`는 Model Artifact를 읽지 않고 Overlay Observation을 지속 생성한다.
 - [ ] `state_patch` whitelist가 Schema로 확정됐다.
-- [ ] API/UI 준비 상태 표현이 Product 소비 계약에 반영됐다.
+- [ ] Product API 위치는 versioned handoff 확정 후 Backend integration에서 결정하는
+      Deferred 항목으로 추적된다.
 - [ ] 대상 설비 branch clock만 Fast-forward한다.
 - [ ] Overlay 저장소가 Canonical Observation 저장소와 분리됐다.
 - [ ] branch-aware read가 정비 후 Canonical 미래 행을 제외한다.

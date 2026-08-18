@@ -41,9 +41,11 @@ Closed-loop MaintenanceEvent
         ↓ versioned Integration event
 gen_data Runtime Overlay
 target equipment snapshot + branch-local simulation clock
-        ↓ maintenance_replay_overlay Observation
+        ↓ continuous maintenance_replay_overlay Observation availability
 ontology_dashboard/systems/backend/diagnosis
-history requirement + runtime inference
+history requirement/readiness validation
+        ├─ insufficient: wait for subsequent Observation
+        └─ ready: runtime inference
         ↓
 new Result Artifact / Evidence
 ```
@@ -253,6 +255,9 @@ Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Featur
 정비 후 Overlay Observation은 `restart_at`부터 새 history segment를 사용한다. Backend는
 Model Artifact의 `history_requirement.json`을 충족하기 전에는 heuristic이나 silent
 fallback으로 Prediction하지 않으며 `warming_up` 또는 `history_insufficient`를 명시한다.
+Inference readiness는 Backend Diagnosis가 단독 판정한다. `gen_data`는 Model Artifact를
+소비하지 않고 Overlay branch의 Observation을 지속 생성한다. 이력이 부족하면 Backend는
+Prediction을 수행하지 않고 같은 branch의 다음 Observation을 기다린다.
 첫 inference-ready Observation에서 새 Product Result/Evidence를 생성하고 이후 정상
 Runtime Prediction 주기를 유지한다.
 

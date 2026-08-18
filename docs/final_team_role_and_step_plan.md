@@ -699,15 +699,16 @@ Raw prediction을 Dashboard/Report/Action이 공통으로 소비할 수 있는 P
 
 | 사람 | 이 Step의 책임 | 다음 단계로 넘길 것 |
 |---|---|---|
-| **성민** | Model/Feature 의미 검토와 `gen_data` 대상 설비 Runtime Overlay Observation 생성 | model constraints + overlay observation |
-| **호범** | Action 판단용 Result/Evidence 제공 및 정비 후 history 경계·Runtime Prediction 연결 | evidence + post-maintenance result |
+| **성민** | Model/Feature 의미 검토와 `gen_data` 대상 설비 Runtime Overlay Observation 지속 생성/available | model constraints + overlay observation availability |
+| **호범** | Action 판단용 Result/Evidence 제공, 정비 후 history readiness 판정·Runtime Prediction 연결 | readiness + evidence + post-maintenance result |
 | **광우** | Recommendation → Decision → TOOL_REPLACEMENT → MaintenanceEvent → Ontology state → Integration Outbox 구현 | closed-loop state + maintenance handoff |
 | **우수** | Operations용 Product API/UI, Runtime 준비 상태와 상태 전이 acceptance flow 구현 | usable closed-loop product flow |
 
 ### 완료 조건
 
 > 하나의 CNC Event가 Evidence 확인부터 Action 완료까지 동작하고, 대상 설비 Runtime
-> Overlay가 `history_requirement`을 충족한 뒤 별도 Prediction Result를 생성한다.
+> Overlay batch를 Backend가 `history_requirement`으로 검증해 ready로 판정한 뒤 별도
+> Prediction Result를 생성한다.
 
 ---
 
@@ -922,8 +923,9 @@ Render의 임시 파일시스템은 Model Artifact 정본으로 사용하지 않
 8. MaintenanceEvent / Activity / Ontology state 갱신 확인
 9. 동일 mutation replay의 idempotency 확인
 10. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay가 유지되는지 확인
-11. 대상 설비 branch clock Fast-forward와 history 준비 상태 확인
-12. 첫 inference-ready Observation의 새로운 Prediction Result 확인
+11. 대상 설비 branch clock Fast-forward, 지속 Observation availability와 Backend history
+    준비 상태 확인
+12. Backend가 ready로 판정한 첫 inference-ready Observation의 새로운 Prediction Result 확인
 13. Static Executive Brief 확인
 14. Evidence-grounded Dynamic Report 확인
 15. 동일 근거가 Dashboard / Decision / Action / Report에 일관되게 사용됨을 설명
@@ -1001,10 +1003,13 @@ Activity
 Ontology State
 maintenance.started / maintenance.completed / maintenance.replay_requested
 maintenance_event_id + idempotency_key + state_version + state_patch
+runtime_overlay.observations.available
+overlay_branch_id + Observation range + storage reference
 ```
 
-성민은 Runtime Overlay 입력으로, 호범은 정비 후 Result/Evidence와 Report grounding
-lineage로, 우수는 Product/Report UI와 E2E에 사용한다. 상세 handoff는
+성민은 지속 Runtime Overlay Observation 생성/available로, 호범은 history readiness와
+정비 후 Result/Evidence로, 우수는 후속 Backend integration에서 확정될 Product read
+location과 E2E로 사용한다. 상세 handoff는
 [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
 따른다.
 

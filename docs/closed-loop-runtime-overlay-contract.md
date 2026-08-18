@@ -26,9 +26,10 @@ versioned JSON Schema로 고정한다.
 - 다른 설비의 Replay는 계속 진행한다.
 - 정비 완료 후 Snapshot에 정비 효과를 반영한다.
 - 실제 시간만큼 기다리지 않고 **대상 설비 Overlay branch의 Simulation Clock만**
-  Fast-forward하여 필요한 정비 후 이력을 생성한다.
-- 필요한 Observation 수는 고정값이 아니라 현재 Model Artifact의
-  `history_requirement.json`에서 계산한다.
+  Fast-forward하여 정비 후 Observation 생성을 재개하고 지속한다.
+- 필요한 Observation 수와 이력 충족 여부는 Backend Diagnosis가 현재 Model Artifact의
+  `history_requirement.json`으로 계산한다. `gen_data`는 Model Artifact를 읽거나
+  inference readiness를 판정하지 않는다.
 - Backend는 첫 번째 `inference-ready` Observation에서 신규 Runtime Prediction과
   Product Result/Evidence를 생성한다.
 - Canonical, 정비 전 Observation, 정비 전 Product Result/Evidence는 immutable하게
@@ -56,11 +57,14 @@ maintenance.completed
         ↓
 maintenance.replay_requested
         ↓
-대상 설비 Overlay branch clock Fast-forward
+gen_data: 대상 설비 Overlay branch 생성 + Observation 지속 생성
+        ↓ 매 tick 또는 persisted batch
+runtime_overlay.observations.available
         ↓
-history_requirement 충족
-        ↓
-Post-maintenance Overlay Observation
+Backend: 새 Observation마다 history_requirement 검증
+        ├─ 부족 + stream 진행 중: warming_up / 다음 Observation 대기
+        ├─ 유효 이력 확보 불가 확정: history_insufficient
+        └─ 충족: ready
         ↓
 Backend Runtime Prediction / 새 Product Result / Evidence
 ```
@@ -142,6 +146,9 @@ Outbox에 적재한다.
 - `restart_at` 이후 대상 설비 Overlay branch에서만 Observation 생성을 재개한다.
 - `restart_at`이 미래이면 해당 virtual time까지 대기한다.
 - 이미 지난 경우 최초 가능한 Overlay tick부터 생성한다.
+- 재개 후에는 Backend의 추가 요청 없이 Simulation Session의 정상 tick 정책에 따라
+  Observation 생성을 지속한다. 명시적인 Session 종료, 새 `maintenance.started` 또는
+  생성 실패가 있을 때만 중단한다.
 
 ### 6.4 발행·소비 경계
 
@@ -152,12 +159,24 @@ Outbox에 적재한다.
 | `maintenance.started` | Closed-loop | `gen_data` Runtime Overlay adapter | 대상 설비 pause |
 | `maintenance.completed` | Closed-loop | `gen_data` Runtime Overlay adapter | 완료 사실과 effect 전달 |
 | `maintenance.replay_requested` | Closed-loop | `gen_data` Runtime Overlay adapter | restart/branch 생성 요청 |
-| `runtime_overlay.observations.ready` | `gen_data` Runtime Overlay | Backend ingestion/diagnosis adapter | 생성된 branch와 Observation 범위 인계 |
+| `runtime_overlay.observations.available` | `gen_data` Runtime Overlay | Backend ingestion/diagnosis adapter | 생성 완료된 batch와 Observation 범위 인계. readiness 의미 없음 |
 
 Backend Diagnosis는 `maintenance.*` 이벤트만 보고 Prediction하지 않는다.
-`runtime_overlay.observations.ready`의 branch가 append-only Overlay 저장소에 반영된 뒤
-해당 Observation을 읽어 history requirement를 평가한다. 최종 transport와 payload
-Schema는 구현 PR 전에 `contracts/schemas/`에서 고정한다.
+`runtime_overlay.observations.available`의 branch가 append-only Overlay 저장소에 반영된
+뒤 해당 Observation과 현재 Model Artifact를 읽어 history requirement를 평가한다.
+`gen_data`는 Observation batch와 progress를 durable commit한 뒤 available 이벤트를
+발행한다. 같은 persistence를 사용하면 transactional outbox로 함께 commit하고, 다른
+persistence라면 recoverable delivery record와 idempotent publish retry를 사용해 데이터만
+남고 이벤트가 유실되는 dual-write gap을 막는다. Backend가 available 이벤트를 수신할 때
+저장 reference를 읽을 수 있어야 한다. 비동기 저장소의 일시적인 가시성 지연은 새 event를
+만들지 않고 동일 event의 멱등 consumer retry로 처리한다.
+
+`gen_data`는 `maintenance.replay_requested` 이후 해당 branch의 Simulation Clock 정책에
+따라 Observation을 계속 생성한다. `available`은 Backend가 저장된 Observation을 소비할
+수 있다는 뜻이며 inference-ready를 뜻하지 않는다. Backend가 이력이 부족하다고 판단해도
+역방향 생성 요청을 발행하지 않고 다음 `available` Observation을 기다린다. 충분하면
+`ready`로 전이해 추론한다. 최종 transport와 payload Schema는 구현 PR 전에
+`contracts/schemas/`에서 고정한다.
 
 ## 7. 멱등성과 순서
 
@@ -166,7 +185,7 @@ Schema는 구현 PR 전에 `contracts/schemas/`에서 고정한다.
 | `maintenance_action_id` | 시작부터 완료까지의 lifecycle correlation |
 | `maintenance_event_id` | 완료 이후 정비 전후 업무 lineage |
 | `idempotency_key` | 동일 delivery의 중복 여부 |
-| `state_version` | 대상 설비 Runtime state의 순서와 최신성 |
+| `state_version` | Closed-loop가 발행하는 `maintenance.*` lifecycle 순서와 최신성 |
 
 - Closed-loop event producer가 동일
   `simulation_session_id + equipment_id + maintenance_action_id` 범위에서
@@ -176,10 +195,13 @@ Schema는 구현 PR 전에 `contracts/schemas/`에서 고정한다.
   아니라 전달된 version과 Domain 선행 조건을 함께 검증한다.
 - 동일 key와 동일 payload는 기존 처리 결과를 반환한다.
 - 동일 key에 다른 payload는 conflict다.
-- 낮은 `state_version`은 stale event로 거절하거나 명시적으로 무시한다.
-- 동일 version과 동일 payload는 멱등 처리한다.
-- 동일 version에 다른 payload는 conflict다.
+- `maintenance.*`의 낮은 `state_version`은 stale event로 거절하거나 명시적으로 무시한다.
+- `maintenance.*`의 동일 version과 동일 payload는 멱등 처리한다.
+- `maintenance.*`의 동일 version에 다른 payload는 conflict다.
 - 완료되지 않은 Maintenance의 restart 요청은 처리하지 않는다.
+- `available` 이벤트의 `state_version`은 원인이 된 maintenance lifecycle version의
+  lineage이며 batch 순서가 아니다. 반복 batch는 고유 `event_id`/`idempotency_key`와
+  단조 증가하는 Observation range로 구분한다.
 
 ## 8. 정비 효과 계약
 
@@ -242,11 +264,12 @@ MVP의 `TOOL_REPLACEMENT`는 다음 typed patch를 사용한다.
 
 | event type | 추가 required field |
 |---|---|
-| 공통 | `contract_version`, `event_id`, `idempotency_key`, `state_version`, `simulation_session_id`, `maintenance_action_id`, `equipment_id` |
+| 모든 이벤트 공통 | `contract_version`, `event_type`, `event_id`, `idempotency_key`, `simulation_session_id`, `maintenance_action_id`, `equipment_id` |
+| `maintenance.*` 공통 | `state_version` |
 | `maintenance.started` | `work_order_id`, `maintenance_started_at`, `action_code` |
 | `maintenance.completed` | `maintenance_event_id`, `maintenance_completed_at`, `action_code`, `state_patch` |
 | `maintenance.replay_requested` | `maintenance_event_id`, `restart_at` |
-| `runtime_overlay.observations.ready` | `maintenance_event_id`, `overlay_branch_id`, Observation 범위·개수와 저장 reference |
+| `runtime_overlay.observations.available` | `maintenance_event_id`, `overlay_branch_id`, `history_segment_id`, Observation 범위·개수와 저장 reference |
 
 ## 10. Overlay branch와 Simulation Clock
 
@@ -288,6 +311,9 @@ Canonical Replay Clock
 ```
 
 Model Artifact의 학습 provenance와 운영 Maintenance lineage를 혼합하지 않는다.
+Observation의 `state_version`은 원인이 된 최신 maintenance lifecycle version의 복사본이며
+`gen_data`의 생성 순서를 뜻하지 않는다. 생성 순서는 branch 내 `observed_at`과
+`observation_id`로 추적한다.
 
 ### 11.1 저장과 조회 경계
 
@@ -327,9 +353,17 @@ Feature history와 Product Observation API는 동일 branch-aware read rule을 �
 
 - `restart_at`부터 새 `history_segment_id`를 시작한다.
 - 별도 계약이 없으면 정비 전 history를 정비 후 Rolling/Lag Feature에 섞지 않는다.
-- 최소 Observation 수와 lookback은 현재 Model Artifact의 `history_requirement.json`에서
-  계산한다.
+- Backend Diagnosis만 현재 Model Artifact의 `history_requirement.json`을 읽고 최소
+  Observation 수, lookback, partition/order와 유효성을 평가한다.
+- `gen_data`는 Runtime Overlay Observation을 지속 생성할 뿐 `history_requirement`을 소비하거나
+  `ready`/`history_insufficient`를 판정하지 않는다.
 - 고정된 demo 숫자를 Model contract 대신 사용하지 않는다.
+- 요구 이력이 부족하고 Overlay stream이 진행 중이면 Backend는 `warming_up`으로 유지하고
+  이후 `available` Observation을 기다린다.
+- `history_insufficient`는 단순히 현재 row가 부족하다는 뜻이 아니다. Overlay stream이
+  종료·실패했거나 Session 종료 조건, 데이터 유효성 문제 등으로 해당 history segment에서
+  유효 이력을 더 이상 확보할 수 없음이 확정된 경우에만 사용한다. 그 종료/status 신호의
+  기계 판독 handoff는 후속 versioned Schema에서 고정한다.
 - 요구 이력을 충족하지 못하면 heuristic이나 silent fallback으로 Prediction하지 않는다.
 - 첫 번째 `inference-ready` Observation에서 최초 Prediction을 정확히 한 번 생성한다.
 - 이후에는 정상 Runtime Prediction 주기를 유지한다.
@@ -354,13 +388,19 @@ maintenance_event_id + history_segment_id + prediction_target_time
 정상 Prediction이 아니다. 정비 후 실제 Prediction이 조치 불필요로 판정한 경우에만
 정상으로 표시한다.
 
+Product API의 canonical runtime-status read location은 이 PR에서 확정하지 않는다.
+`gen_data` Runtime Overlay의 Observation/status handoff Schema가 확정된 이후 Backend
+integration 단계에서 결정한다. 이는 누락된 TBD가 아니라 선행조건이 명시된 Deferred
+decision이다. 기존 Result의 `status_grade`와 Runtime Overlay 준비 상태는 어떤 위치를
+채택하더라도 별도 필드와 의미로 유지한다.
+
 ## 14. 역할 경계
 
 | 담당 | 소유 책임 | 소유하지 않는 책임 |
 |---|---|---|
 | 광우 / Closed-loop | Maintenance 상태, transaction, 단계별 Outbox 이벤트, 운영 lineage | Overlay 생성, Feature 계산, Prediction |
-| 성민 / `gen_data` Generator·Replay | 대상 설비 pause/branch, Snapshot effect, branch-local Fast-forward, Overlay Observation | Product Result/Evidence |
-| 호범 / Backend Diagnosis | Overlay Observation 소비, history 경계, Runtime Prediction, Product Result/Evidence | Maintenance 상태 변경, Overlay 센서 생성 |
+| 성민 / `gen_data` Generator·Replay | 대상 설비 pause/branch, Snapshot effect, branch-local Fast-forward, 지속 Overlay Observation 생성/available | Model Artifact/history requirement 해석, readiness 판정, Product Result/Evidence |
+| 호범 / Backend Diagnosis | Overlay Observation 소비, history requirement/readiness 판정, Runtime Prediction, Product Result/Evidence | Maintenance 상태 변경, Overlay 센서 생성 |
 | 우수 / Product API·UI·E2E | 진행 상태·결과 노출, 통합 시나리오 검증 | Domain 상태·Prediction 의미 재계산 |
 
 `ontology_dashboard/systems/generator`의 책임은 Feature/Label, training과 Model Artifact
@@ -372,13 +412,15 @@ publish이며 Runtime Overlay 실행 주체가 아니다.
 - [ ] Maintenance gap 동안 대상 설비 정상 Replay와 Prediction이 중단된다.
 - [ ] 다른 설비의 Replay Clock과 데이터는 영향을 받지 않는다.
 - [ ] 부분·지연 이벤트에도 완료 전 자동 재개하지 않는다.
-- [ ] `idempotency_key`와 `state_version` 규칙이 검증된다.
+- [ ] `idempotency_key`, maintenance `state_version`, available Observation 순서 규칙이 검증된다.
 - [ ] 정비 효과가 action별 whitelist를 통과한다.
 - [ ] Canonical과 정비 전 Observation/Result/Evidence는 변경되지 않는다.
 - [ ] Overlay Observation에 `source_kind`, branch, Maintenance lineage가 기록된다.
 - [ ] Overlay Observation은 Canonical 테이블과 분리된 append-only 저장소에 기록된다.
 - [ ] branch-aware read가 대상 설비의 정비 후 Canonical 미래 행을 다시 섞지 않는다.
-- [ ] 필요한 이력은 `history_requirement.json`에서 계산한다.
+- [ ] Backend만 필요한 이력을 `history_requirement.json`에서 계산하고 readiness를 판정한다.
+- [ ] 이력 부족 시 Backend가 Prediction하지 않고 지속 생성되는 다음 Observation을 기다린다.
+- [ ] `history_insufficient`가 일시적인 warming-up과 명확히 구분된다.
 - [ ] 정비 전후 Feature history가 암묵적으로 혼합되지 않는다.
 - [ ] 첫 inference-ready Observation에서 신규 Result/Evidence가 한 번 생성된다.
 - [ ] 정비 완료나 warming-up 상태가 정상 Prediction으로 표시되지 않는다.

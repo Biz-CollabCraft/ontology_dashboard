@@ -55,7 +55,7 @@
 | CM-08 Replay/실시간 구분 | FEAT-CM-003 | 전체 | provenance/source | Observation source | TC-SAFE-004 source 표기 |
 | CM-09 Current/Target 구분 | 문서·Product 상태 | 전체 | 구현된 경로만 현행 표기 | 계약 status | TC-DOC-001 Target 오표기 방지 |
 | CM-10 Producer/UI 분리 | FEAT-CM-004 | What-if/Report | Producer result + Product adapter | producer contract | TC-SAFE-005 역할 문장 분리 |
-| CM-11 정비 후 준비 상태 | Closed-loop Target | Operations/Objects | endpoint 위치 결정 필요 | runtime status | TC-CL-OVERLAY-001 상태 구분 |
+| CM-11 정비 후 준비 상태 | Closed-loop Target | Operations/Objects | Deferred: versioned Overlay handoff 확정 후 Backend integration에서 canonical read location 결정 | runtime status 의미 | TC-CL-OVERLAY-001 상태 구분 |
 | CM-12 대상 설비 Overlay | Closed-loop Target | Operations/Objects | Overlay Observation 소비 API | overlay lineage | TC-CL-OVERLAY-002 다른 설비 무영향 |
 | OV-01 설비 현황 | FEAT-OV-001 | Overview | GET `/overview` | OverviewSummary | TC-OV-001 가동 합계 |
 | OV-02 위험 현황 | FEAT-OV-002 | Overview | GET `/overview` | status_counts | TC-OV-002 등급 합계 |

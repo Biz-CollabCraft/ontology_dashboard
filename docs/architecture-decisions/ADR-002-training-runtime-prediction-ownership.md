@@ -29,6 +29,11 @@
    정비 후 최소 Observation 수와 lookback은 고정 demo 값이 아니라 현재 Model
    Artifact의 `history_requirement.json`에서 계산한다. Backend는 요구 이력을 충족한
    첫 Observation에서 최초 Prediction을 생성하고 이후 정상 runtime 주기를 유지한다.
+6. **Readiness 및 Observation availability 소유권**:
+   Backend Diagnosis만 현재 Model Artifact와 `history_requirement.json`을 소비해
+   inference readiness를 판정한다. `gen_data` Runtime Overlay는 Model Artifact를 읽지
+   않고 정비 후 Observation을 지속 생성·제공한다. 이력이 부족하면 Backend는 Prediction을
+   수행하지 않고 다음 Observation을 기다린다.
 
 ---
 

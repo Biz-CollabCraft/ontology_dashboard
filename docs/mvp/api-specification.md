@@ -207,8 +207,12 @@ deterministic 출력 계약부터 검증한다.
   역할별 Action과 mutation 응답은
   [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
 - 정비 후 Runtime Overlay의 Target 상태는 `equipment_under_maintenance`, `warming_up`,
-  `history_insufficient`, `ready`, `predicted`를 사용한다. 최종 endpoint와 response 위치는
-  구현 전에 확정하며 기존 Result의 `status_grade`를 이 준비 상태로 덮어쓰지 않는다.
+  `history_insufficient`, `ready`, `predicted`를 사용한다. 기존 Result의 `status_grade`를
+  이 준비 상태로 덮어쓰지 않는다.
+- Runtime Overlay readiness는 Backend Diagnosis가 현재 Model Artifact의
+  `history_requirement.json`으로 결정한다. `gen_data`는 Overlay Observation을 지속
+  생성하고 availability를 알릴 뿐 readiness를 판정하지 않는다. 진행률 필드의 구체적인
+  shape는 canonical read location과 함께 후속 Backend integration에서 결정한다.
 - Runtime Overlay의 이벤트·Observation lineage는
   [`../closed-loop-runtime-overlay-contract.md`](../closed-loop-runtime-overlay-contract.md)를 따른다.
 - Observation `source_kind`는 Target 구현에서 `canonical_observation` 또는
@@ -226,6 +230,8 @@ deterministic 출력 계약부터 검증한다.
 
 - 보고서 생성 timeout과 retry 정책
 - V2 목표 경로와 `page`/`size` 계약 채택 여부 및 전환 계획
-- Runtime Overlay 준비 상태를 Event `closed_loop` envelope, Equipment 상태 API 또는
-  별도 runtime status endpoint 중 어디에 노출할지
-- `warming_up` 진행률의 `generated_rows`/`required_rows` 필드와 unavailable 오류 envelope
+- **Deferred:** Product API의 canonical runtime-status read location은 `gen_data` Runtime
+  Overlay의 versioned Observation/status handoff 계약 확정 이후 Backend integration
+  단계에서 결정한다. 후보는 Event `closed_loop` envelope, Equipment 상태 API 또는 별도
+  runtime status endpoint이며, 결정 시 OpenAPI·Frontend adapter·E2E를 함께 갱신한다.
+- `warming_up` 진행률 필드와 `history_insufficient` 사유 envelope

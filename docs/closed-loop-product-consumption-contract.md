@@ -230,6 +230,13 @@ MaintenanceEvent 완료 이후 Product/API/UI는 정비 완료 사실과 Predict
 `NORMAL` Prediction으로 표현하지 않는다. 정비 완료 자체도 정상 판정이 아니며, 정비 후
 실제 Product Result가 조치 불필요로 판정한 경우에만 정상으로 표시한다.
 
+Inference readiness의 canonical owner는 Backend Diagnosis다. `gen_data`는 생성된
+Observation availability를 알릴 뿐 `ready` 또는 `history_insufficient`를 판정하지 않는다.
+
+> **Deferred:** Product API의 canonical runtime-status read location은 `gen_data` Runtime
+> Overlay의 versioned Observation/status handoff 계약이 확정된 이후 Backend integration
+> 단계에서 결정한다. 현재 문서는 상태 의미와 `status_grade` 분리 원칙만 고정한다.
+
 ## 6. Event API Product 소비 계약
 
 ### 6.1 additive compatibility
@@ -436,8 +443,9 @@ persona:
 10. MaintenanceEvent / Equipment state / `activities[]` 반영
 11. 동일 `Idempotency-Key` + 동일 요청의 replay 및 다른 요청의 conflict 검증
 12. 대상 설비만 Runtime Overlay로 분기되고 정비 후 이력이 준비되는 상태 확인
-13. 첫 inference-ready Observation에서 새 Product Result/Evidence 생성 확인
-14. 정비 전 Result → Decision → Action → 정비 후 Result lineage 확인
+13. Backend가 이력 부족 시 Prediction하지 않고 다음 available Observation을 기다리는지 확인
+14. 첫 inference-ready Observation에서 새 Product Result/Evidence 생성 확인
+15. 정비 전 Result → Decision → Action → 정비 후 Result lineage 확인
 
 Recommendation / WorkOrder / MaintenanceAction ID는 E2E 코드에 하드코딩하지 않는다. 앞 mutation/API가
 반환한 persisted ID를 다음 요청으로 전달한다.

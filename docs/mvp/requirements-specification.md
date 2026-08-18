@@ -285,7 +285,9 @@ Closed-loop 최종 시연 Target은 별도로 다음 흐름을 사용한다.
 → 사람의 Decision과 TOOL_REPLACEMENT
 → MaintenanceEvent
 → 대상 설비 Runtime Overlay + branch-local Fast-forward
-→ history_requirement 충족
+→ gen_data Observation 지속 생성/available
+→ Backend history_requirement 검증, 부족 시 다음 Observation 대기
+→ Backend ready
 → 새 Runtime Prediction / Product Result / Evidence
 ```
 

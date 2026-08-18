@@ -29,9 +29,11 @@ Closed-loop Maintenance Integration event
         ↓
 gen_data 대상 설비 Runtime Overlay
 Snapshot effect + branch-local Simulation Clock Fast-forward
-        ↓ maintenance_replay_overlay Observation
+        ↓ continuous maintenance_replay_overlay Observation availability
 systems/backend/app/diagnosis
-history_requirement + runtime inference
+history_requirement/readiness validation
+        ├─ insufficient: wait for subsequent Observation
+        └─ ready: runtime inference
         ↓
 새 Product Result Artifact / Evidence
 ```
@@ -42,7 +44,9 @@ raw/simulation/synthetic sensor data, Canonical V3.1 물리·생성 기준, sour
 
 Closed-loop Target에서 `gen_data`는 Canonical을 변경하지 않고 정비 대상 설비에만
 Runtime Overlay Snapshot과 branch-local clock을 적용해 source Observation을 생성한다.
-이 경로는 opt-in이며 Product Result/Evidence를 생성하지 않는다.
+이 경로는 opt-in이며 Model Artifact와 `history_requirement`을 읽거나 inference readiness,
+Product Result/Evidence를 생성하지 않는다. `maintenance.replay_requested` 이후 해당
+branch의 Simulation Clock 정책에 따라 Observation을 지속 append한다.
 
 Overlay Observation은 Canonical Observation 저장소와 분리한 append-only runtime
 저장소로 전달한다. Backend의 Product/Feature read model은 대상 설비·branch를 기준으로
@@ -68,7 +72,8 @@ Model Artifact는 `model-artifact-v1.0` manifest로 publish하며 artifact type/
 - `result-artifact-v1.0` 의미와 호환되는 Product Result Artifact 생성
 - 제품 Evidence 생성
 - 정비 후 Overlay Observation의 새 history segment 로드
-- `history_requirement` 충족 전 `warming_up`/`history_insufficient` 처리
+- Model Artifact의 `history_requirement`을 읽는 유일한 readiness owner
+- 이력 부족 시 다음 Observation을 기다리며 `warming_up`/`history_insufficient` 처리
 - 첫 inference-ready Observation의 신규 Product Result/Evidence 생성
 
 기존 `systems/backend/ontology_dashboard/modeling/registry.py`가 수행하던 active model load/scoring/explanation 구현도 `systems/backend/app/diagnosis/model_registry.py`로 이동했고 API 경로에는 compatibility adapter만 남겼다.
