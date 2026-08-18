@@ -210,7 +210,7 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 22. `process_manager`, `process_engineer`, `maintenance_technician`의 제품 역할과 Action 경계가 섞이는가?
 23. mutation 이후 Frontend가 ID나 resulting state를 합성·추측해야 하는 응답 계약인가?
 
-## 8. 자동 리뷰 출력 형식
+## 8. v1 레거시 출력 형식 — v2에서는 사용하지 않음
 
 리뷰는 가능한 한 다음 구조를 따른다.
 
@@ -257,3 +257,92 @@ diff/context만으로 증명할 수 없는 항목을 명확하게 분리한다.
 - Critical architecture invariant에 FAIL이 있거나 P0/P1 finding이 있으면 `Not Ready`.
 - 중요한 항목이 `NOT PROVEN`이면 기본적으로 `Conditional`.
 - 모든 critical invariant가 PASS이고 P0/P1이 없을 때만 `Ready to Merge`를 사용할 수 있다.
+
+위 matrix 형식은 기존 reviewer의 provenance를 위해 남겨두지만 **v2 자동 리뷰의 출력 계약은 아니다.**
+v2에서는 CI 성공 목록과 PASS matrix 반복을 기본 출력에서 제거한다.
+
+## 9. 프로젝트 인지형 리뷰 우선순위
+
+deterministic CI가 이미 검증하는 YAML parse, architecture rule, import boundary, unit/contract/E2E,
+Docker runtime, migration, whitespace 등은 `verified evidence`로만 사용한다. 자동 리뷰의 주 목적은
+다음 semantic/product/domain 판단이다.
+
+1. PR body와 실제 diff가 같은 목적을 향하는지
+2. 현재 Week 2 MVP와 manager/engineer 사용자 workflow에 기여하는지
+3. Ontology / Action / Evidence / Decision 흐름과 책임 경계를 유지하는지
+4. immutable producer fact/provenance와 mutable operational state를 혼동하지 않는지
+5. Backend가 소유해야 할 상태 전이, 권한, persisted ID를 Frontend가 재구현하지 않는지
+6. 특정 demo fixture 하나를 제품 규칙처럼 하드코딩하지 않는지
+7. API만 추가되고 제품에서 소비되지 않거나 UI만 있고 실제 action이 없는 dead surface가 아닌지
+8. 동일 business rule이 여러 layer에서 중복 구현되지 않는지
+
+구현이 기술적으로 동작하더라도 현재 제품 목적에 필요하지 않은 abstraction, 기존 canonical owner와
+중복되는 구현, 향후 agent/action automation을 막는 local workaround라면 finding이 될 수 있다. 단,
+이 판단은 반드시 base SHA의 문서와 실제 diff 근거를 사용한다.
+
+## 10. Closed-loop Domain 검토 기준
+
+현재 운영 방향은 다음 흐름을 서로 다른 의미와 소유권을 가진 객체로 유지하는 것이다.
+
+```text
+Observation / Product Result
+→ RiskEvent
+→ Evidence
+→ Recommendation
+→ Decision / disposition
+→ WorkOrder
+→ MaintenanceAction
+→ MaintenanceEvent
+→ 정비 후 Observation / Product Result
+```
+
+특히 다음을 회귀로 본다.
+
+- producer recommendation을 operational state 변경 과정에서 의미가 다른 값으로 재작성
+- provenance ID와 operational join ID 혼동
+- Decision/Note를 실제 MaintenanceAction으로 승격
+- inspection 완료를 maintenance 승인/완료로 해석
+- Frontend가 WorkOrder/Recommendation 상태 머신 또는 role permission을 독자 구현
+- persisted ID/idempotency key를 Frontend가 문자열 조합으로 생성
+- `available_actions`와 같은 서버 판단 결과가 있는데도 Frontend가 동일 규칙을 다시 계산
+
+세부 계약은 `docs/closed-loop-domain-contract.md`와 `docs/closed-loop-implementation-plan.md`를 따른다.
+
+## 11. Context routing과 trusted base 원칙
+
+자동 리뷰는 매 PR마다 repository 전체 문서를 prompt에 넣지 않는다. 변경 경로를
+`docs/ai-code-review-context.json`의 category와 매칭해 관련 문서만 선택한다.
+
+대표 category는 `project_intent`, `architecture`, `mvp`, `closed_loop`, `product_result`,
+`evidence`, `report`, `frontend_operations`, `generator`, `deployment`이다.
+
+reviewer policy, architecture/MVP/ownership/domain 계약, routing manifest는 **PR head가 아니라 base SHA의
+내용만 trusted context로 사용한다.** PR이 이 파일들을 수정하면 변경 자체는 일반 diff로 검토하되,
+같은 PR의 새 내용으로 자기 변경을 정당화할 수 없다.
+
+## 12. 기존 팀 리뷰 추적
+
+새 head를 리뷰할 때 사람의 technical feedback을 함께 확인하고 `Resolved`, `Partially Resolved`,
+`Unresolved`, `Not Reproducible`, `Superseded` 중 하나로 보고한다. 승인, 감사, 확인, 일반 대화,
+bot comment는 추적 대상에서 제외한다. 자동 reviewer는 사람의 GitHub review thread를 직접 resolve하지
+않고 현재 head에서의 상태만 설명한다.
+
+## 13. v2 자동 리뷰 출력 형식
+
+기본 출력은 다음 구조다.
+
+- `### 이 PR이 하는 일`: 실제 diff의 의미를 2~4문장으로 설명한다.
+- `### 프로젝트 목표와의 정합성`: 변경과 직접 관련된 MVP/Domain/Architecture/사용자 workflow만 판단한다.
+- `### 발견 사항`: 실제 actionable `[P0]`~`[P3]`만 작성하며 억지 P3를 만들지 않는다.
+- `### 기존 팀 리뷰 반영 상태`: 관련 human technical feedback이 있을 때만 출력한다.
+- `### 다음 단계`: 자연스러운 후속 작업이 있을 때만 출력한다.
+- `### Merge Readiness`: `Ready to Merge` / `Conditional` / `Not Ready` 중 하나와 짧은 이유만 작성한다.
+
+deterministic evidence guard가 허용하는 readiness ceiling을 넘을 수 없다.
+
+기본적으로 다음은 출력하지 않는다.
+
+- Architecture/Backend/Docker/MVP/Frontend 성공 목록
+- contract별 PASS matrix
+- CI에서 이미 확인 가능한 성공 사실 반복
+- 변경과 무관한 architecture 설명

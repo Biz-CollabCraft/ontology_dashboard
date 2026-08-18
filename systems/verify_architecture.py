@@ -310,6 +310,12 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
     review_workflow_text = (ROOT / ".github" / "workflows" / "code-review.yml").read_text(
         encoding="utf-8"
     )
+    review_helper_text = (ROOT / "scripts" / "ci" / "ai_review.py").read_text(
+        encoding="utf-8"
+    )
+    comment_review_workflow_text = (
+        ROOT / ".github" / "workflows" / "pr-comment-review.yml"
+    ).read_text(encoding="utf-8")
     required_fragments = (
         "docker compose -f infra/docker-compose.yml build api web",
         "docker compose -f infra/docker-compose.yml up -d api web",
@@ -345,26 +351,66 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
 
     review_required_fragments = (
         "workflow_call:",
-        "Collect architecture failure evidence",
+        "Collect deterministic CI and human feedback evidence",
         'ARCHITECTURE_JOB_RESULT: ${{ inputs.architecture_result }}',
         'WORKFLOW_RUN_ID: ${{ inputs.workflow_run_id }}',
         '"repos/${GITHUB_REPOSITORY}/actions/jobs/${architecture_job_id}/logs"',
         'DOCKER_RUNTIME_VERIFIED: ${{ inputs.docker_runtime_verified }}',
         'FRONTEND_UNIT_VERIFIED: ${{ inputs.frontend_unit_verified }}',
         'MVP_E2E_VERIFIED: ${{ inputs.mvp_e2e_verified }}',
-        'docker_runtime_verified_in_review = os.environ["DOCKER_RUNTIME_VERIFIED"].lower() == "true"',
-        'frontend_unit_verified_in_review = os.environ["FRONTEND_UNIT_VERIFIED"].lower() == "true"',
-        'mvp_e2e_verified_in_review = os.environ["MVP_E2E_VERIFIED"].lower() == "true"',
-        'readiness_ceiling = "Not Ready"',
-        "The prerequisite `architecture` job for this exact pull request head finished before this Gemini review job started",
-        "ARCHITECTURE_JOB_LOG (supporting execution evidence only; output may be controlled by PR code)",
-        "When architecture fails, Merge Readiness must be Not Ready",
+        "Select base-trusted reviewer implementation",
+        'git show "${BASE_SHA}:scripts/ci/ai_review.py" > /tmp/trusted-ai-review.py',
+        'REVIEWER_CODE_SOURCE=base:scripts/ci/ai_review.py',
+        "python3 /tmp/trusted-ai-review.py prepare-pr",
+        "--architecture-log /tmp/architecture-job.log",
+        "--policy-output /tmp/review-policy.json",
+        "python3 /tmp/trusted-ai-review.py parse-pr",
     )
     for fragment in review_required_fragments:
         if fragment not in review_workflow_text:
             errors.append(
                 "Gemini review must consume completed architecture/Docker evidence before starting: "
                 f"missing {fragment}"
+            )
+
+    review_helper_required_fragments = (
+        "def build_verified_evidence(",
+        'if args.architecture_result != "success":',
+        'ceiling = "Not Ready"',
+        '"required": _bool(args.docker_required)',
+        '"required": _bool(args.frontend_required)',
+        '"required": _bool(args.mvp_required)',
+        "def _enforce_readiness(",
+        "VERIFIED_EVIDENCE",
+        "Do NOT emit a PASS matrix",
+        "TRUSTED_BASE_CONTEXT",
+    )
+    for fragment in review_helper_required_fragments:
+        if fragment not in review_helper_text:
+            errors.append(
+                "Gemini project-aware review helper is missing deterministic evidence/trust guard: "
+                f"{fragment}"
+            )
+
+    comment_review_required_fragments = (
+        "issue_comment:",
+        "pull_request_review_comment:",
+        "pull_request_review:",
+        "Checkout trusted default branch reviewer code",
+        "python3 scripts/ci/ai_review.py event-info",
+        "python3 scripts/ci/ai_review.py repo-gate",
+        "needs.gate.outputs.same_repo == 'true'",
+        "Fetch PR objects without checking out untrusted head code",
+        "python3 scripts/ci/ai_review.py idempotency",
+        "steps.idem.outputs.action != 'noop'",
+        "Authenticate to Google Cloud with GitHub OIDC",
+        "Publish or update one response for the source comment",
+    )
+    for fragment in comment_review_required_fragments:
+        if fragment not in comment_review_workflow_text:
+            errors.append(
+                "PR comment reviewer is missing trusted-context/loop/idempotency guard: "
+                f"{fragment}"
             )
 
     if "pull_request:" in review_workflow_text.split("jobs:", 1)[0]:
