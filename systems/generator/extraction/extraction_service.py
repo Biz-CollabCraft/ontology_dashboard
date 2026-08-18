@@ -98,14 +98,45 @@ def extract_with_plan(filepath: str, plan: dict) -> pd.DataFrame:
 
     elif structure_type == "tabular_row_as_attribute":
         logger.info(f"[Extractor] Performing contract-driven tabular_row_as_attribute transform for '{filepath}'...")
-        id_col = plan.get("id_column") or (df.columns[0] if len(df.columns) >= 1 else None)
-        time_col = plan.get("time_column") or next((c for c in df.columns if c in ("observed_at", "datetime", "timestamp")), None)
-        attr_col = plan.get("attribute_column") or (df.columns[1] if len(df.columns) >= 2 else None)
-        val_col = plan.get("value_column") or (df.columns[2] if len(df.columns) >= 3 else None)
+        id_col = plan.get("id_column")
+        time_col = plan.get("time_column")
+        attr_col = plan.get("attribute_column")
+        val_col = plan.get("value_column")
 
-        if not id_col or not attr_col or not val_col or id_col not in df.columns or attr_col not in df.columns or val_col not in df.columns:
-            logger.warning(f"[Extractor] Required long-format contract columns ({id_col}, {attr_col}, {val_col}) missing in '{filepath}'. Keeping original df.")
-            return df
+        missing_roles = []
+        if not id_col:
+            missing_roles.append("id_column")
+        if not attr_col:
+            missing_roles.append("attribute_column")
+        if not val_col:
+            missing_roles.append("value_column")
+
+        if missing_roles:
+            raise ValueError(
+                f"Long-format extraction for '{filepath}' failed: missing required role(s) {missing_roles}. "
+                f"Specified roles: id_column={id_col!r}, attribute_column={attr_col!r}, value_column={val_col!r}, time_column={time_col!r}. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        missing_cols = [c for c in [id_col, attr_col, val_col] if c not in df.columns]
+        if time_col and time_col not in df.columns:
+            missing_cols.append(time_col)
+
+        if missing_cols:
+            raise ValueError(
+                f"Long-format extraction for '{filepath}' failed: specified role columns {missing_cols} not found in DataFrame. "
+                f"Specified roles: id_column={id_col!r}, attribute_column={attr_col!r}, value_column={val_col!r}, time_column={time_col!r}. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        roles = [id_col, attr_col, val_col]
+        if time_col:
+            roles.append(time_col)
+        if len(roles) != len(set(roles)):
+            raise ValueError(
+                f"Long-format extraction for '{filepath}' failed: role columns must be unique and cannot overlap. "
+                f"Specified roles: {roles}. Available columns: {list(df.columns)}"
+            )
 
         from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
         if time_col and time_col in df.columns:

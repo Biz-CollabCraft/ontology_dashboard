@@ -70,11 +70,32 @@ class ExtractionPlanResponse(BaseModel):
     reason: Optional[str] = None
 
     @model_validator(mode="after")
-    def _check_duplicate_policy_aggregation_pair(self) -> "ExtractionPlanResponse":
+    def _validate_contract_rules(self) -> "ExtractionPlanResponse":
         if self.duplicate_policy == "aggregate" and self.aggregation is None:
             raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation")
         if self.duplicate_policy == "error" and self.aggregation is not None:
             raise ValueError("duplicate_policy='error' must not specify an aggregation")
+
+        if self.structure_type == "tabular_row_as_attribute":
+            if not self.id_column or not str(self.id_column).strip():
+                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'id_column'")
+            if not self.attribute_column or not str(self.attribute_column).strip():
+                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'attribute_column'")
+            if not self.value_column or not str(self.value_column).strip():
+                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'value_column'")
+
+            roles = [self.id_column, self.attribute_column, self.value_column]
+            if self.time_column and str(self.time_column).strip():
+                roles.append(self.time_column)
+
+            if len(roles) != len(set(roles)):
+                raise ValueError(f"Long-format role columns must be unique and cannot overlap: {roles}")
+
+            if self.selected_columns:
+                missing_in_selected = [r for r in roles if r not in self.selected_columns]
+                if missing_in_selected:
+                    raise ValueError(f"Long-format role columns {missing_in_selected} must be present in selected_columns")
+
         return self
 
 

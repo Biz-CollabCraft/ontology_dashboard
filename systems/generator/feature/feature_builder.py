@@ -210,42 +210,105 @@ def build_features(
     return final_df
 
 
-def save_features_npy(features_df: pd.DataFrame, out_dir: str, name: str) -> None:
+def save_features_npy(
+    features_df: pd.DataFrame,
+    out_dir: str,
+    name: str,
+    *,
+    id_column: str | None = None,
+    time_column: str | None = None,
+    plan: dict | None = None,
+) -> None:
     """생성된 피처 데이터프레임을 NPY 및 JSON 컬럼 메타데이터로 저장한다."""
     os.makedirs(out_dir, exist_ok=True)
-    meta_cols = {"datetime", "observed_at", "machineID", "asset_id"}
+
+    # 1. Resolve ID column (explicit -> plan -> canonical lookup)
+    id_col = id_column
+    if not id_col and plan and isinstance(plan, dict):
+        id_col = plan.get("id_column")
+    if not id_col or id_col not in features_df.columns:
+        id_candidates = ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]
+        id_col = next((c for c in features_df.columns if c in id_candidates), None)
+
+    # 2. Resolve Time column (explicit -> plan -> canonical lookup)
+    time_col = time_column
+    if not time_col and plan and isinstance(plan, dict):
+        time_col = plan.get("time_column")
+    if not time_col or time_col not in features_df.columns:
+        time_candidates = ["observed_at", "datetime", "timestamp", "time", "date"]
+        time_col = next((c for c in features_df.columns if c in time_candidates), None)
+
+    if id_col and time_col and id_col == time_col:
+        raise ValueError(f"id_column and time_column cannot be the same column: '{id_col}'")
+
+    meta_cols = set()
+    if id_col and id_col in features_df.columns:
+        meta_cols.add(id_col)
+    if time_col and time_col in features_df.columns:
+        meta_cols.add(time_col)
+
     feature_cols = [c for c in features_df.columns if c not in meta_cols]
 
-    np.save(os.path.join(out_dir, f"{name}_X.npy"), features_df[feature_cols].to_numpy())
+    if not feature_cols:
+        raise ValueError(f"No feature columns found to save for dataset '{name}'. Available columns: {list(features_df.columns)}")
 
-    id_col = "asset_id" if "asset_id" in features_df.columns else ("machineID" if "machineID" in features_df.columns else None)
-    if id_col:
-        np.save(os.path.join(out_dir, f"{name}_machineID.npy"), features_df[id_col].to_numpy())
+    for c in feature_cols:
+        if not pd.api.types.is_numeric_dtype(features_df[c]):
+            raise ValueError(
+                f"Feature column '{c}' in dataset '{name}' has non-numeric dtype '{features_df[c].dtype}'. "
+                f"Cannot save non-numeric columns in X.npy without object/pickle corruption."
+            )
 
-    time_col = "observed_at" if "observed_at" in features_df.columns else ("datetime" if "datetime" in features_df.columns else None)
-    if time_col:
+    X_matrix = features_df[feature_cols].to_numpy(dtype=np.float64)
+    np.save(os.path.join(out_dir, f"{name}_X.npy"), X_matrix, allow_pickle=False)
+
+    if id_col and id_col in features_df.columns:
+        np.save(os.path.join(out_dir, f"{name}_id.npy"), features_df[id_col].to_numpy(), allow_pickle=True)
+        np.save(os.path.join(out_dir, f"{name}_machineID.npy"), features_df[id_col].to_numpy(), allow_pickle=True)
+
+    if time_col and time_col in features_df.columns:
         dt_series = canonicalize_timestamp_series(features_df[time_col], col_name=time_col)
-        np.save(os.path.join(out_dir, f"{name}_datetime.npy"), dt_series.to_numpy(dtype="datetime64[ns]"))
+        np.save(os.path.join(out_dir, f"{name}_datetime.npy"), dt_series.to_numpy(dtype="datetime64[ns]"), allow_pickle=False)
 
+    metadata = {
+        "feature_columns": feature_cols,
+        "id_column": id_col,
+        "time_column": time_col,
+    }
     with open(os.path.join(out_dir, f"{name}_columns.json"), "w", encoding="utf-8") as f:
-        json.dump(feature_cols, f, ensure_ascii=False, indent=2)
-    logger.info(f"[FeatureBuilder] Saved NPY features to: {out_dir}/{name}_*.npy")
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
+    logger.info(f"[FeatureBuilder] Saved NPY features to: {out_dir}/{name}_*.npy (id_col={id_col}, time_col={time_col})")
 
 
 def load_features_npy(out_dir: str, name: str) -> pd.DataFrame:
     """NPY 파일 및 JSON 메타데이터에서 피처 데이터프레임을 복원한다."""
-    X = np.load(os.path.join(out_dir, f"{name}_X.npy"))
+    X = np.load(os.path.join(out_dir, f"{name}_X.npy"), allow_pickle=False)
     with open(os.path.join(out_dir, f"{name}_columns.json"), "r", encoding="utf-8") as f:
-        columns = json.load(f)
+        col_data = json.load(f)
 
-    df = pd.DataFrame(X, columns=columns)
+    if isinstance(col_data, dict):
+        feature_cols = col_data.get("feature_columns", [])
+        id_col = col_data.get("id_column")
+        time_col = col_data.get("time_column")
+    else:
+        feature_cols = col_data
+        id_col = None
+        time_col = None
 
-    machine_id_path = os.path.join(out_dir, f"{name}_machineID.npy")
-    if os.path.exists(machine_id_path):
-        df["machineID"] = np.load(machine_id_path)
+    df = pd.DataFrame(X, columns=feature_cols)
 
+    id_name = id_col or "machineID"
+    id_path = os.path.join(out_dir, f"{name}_id.npy")
+    legacy_id_path = os.path.join(out_dir, f"{name}_machineID.npy")
+
+    if os.path.exists(id_path):
+        df[id_name] = np.load(id_path, allow_pickle=True)
+    elif os.path.exists(legacy_id_path):
+        df[id_name] = np.load(legacy_id_path, allow_pickle=True)
+
+    time_name = time_col or "datetime"
     datetime_path = os.path.join(out_dir, f"{name}_datetime.npy")
     if os.path.exists(datetime_path):
-        df["datetime"] = np.load(datetime_path)
+        df[time_name] = np.load(datetime_path, allow_pickle=False)
 
     return df

@@ -110,6 +110,17 @@ def plan_extraction(filepath: str, structure_type: str, df_preview: pd.DataFrame
         if res:
             cols = res.selected_columns if res.selected_columns else list(df_preview.columns)
             logger.info(f"[ExtractionPlanner] Stage 2 column selection for '{filepath}': {cols}")
+
+            if structure_type == "tabular_row_as_attribute":
+                avail = list(df_preview.columns)
+                roles = [res.id_column, res.attribute_column, res.value_column]
+                missing_roles = [r for r in roles if not r or r not in avail]
+                if missing_roles:
+                    raise ValueError(
+                        f"Long-format extraction requires explicit id, attribute, and value columns; "
+                        f"specified roles {roles} not fully found in columns {avail}"
+                    )
+
             return {
                 "selected_columns": cols,
                 "id_column": res.id_column,
@@ -120,7 +131,15 @@ def plan_extraction(filepath: str, structure_type: str, df_preview: pd.DataFrame
                 "aggregation": res.aggregation,
             }
     except Exception as e:
-        logger.warning(f"[ExtractionPlanner] Stage 2 column selection failed: {e}. Fallback to all columns.")
+        logger.warning(f"[ExtractionPlanner] Stage 2 column selection failed: {e}.")
+        if structure_type == "tabular_row_as_attribute":
+            raise ValueError(
+                f"Long-format extraction requires explicit id, attribute, and value columns. "
+                f"Planning failed for '{filepath}': {e}"
+            )
+
+    if structure_type == "tabular_row_as_attribute":
+        raise ValueError(f"Long-format extraction requires explicit id, attribute, and value columns for '{filepath}'")
 
     return {"selected_columns": list(df_preview.columns), "duplicate_policy": "error"}
 

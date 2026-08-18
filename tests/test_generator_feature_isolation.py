@@ -21,6 +21,8 @@ test_generator_feature_isolation.py
 - docs/architecture.md의 '설비 단위 시간격리 및 결정론적 피처 연산' 원칙을 검증한다.
 """
 
+import os
+import json
 import pytest
 import pandas as pd
 import numpy as np
@@ -427,3 +429,203 @@ def test_build_labels_removes_preexisting_leakage_columns():
 
     labeled_df = build_labels(features_df, failures_df, failure_meta=failure_meta, prediction_horizon_hours=24)
     assert "period_start" not in labeled_df.columns, "Leaked period_start column must be removed from labeled_df"
+
+
+def test_long_format_extraction_with_explicit_roles(tmp_path):
+    """테스트 14: 역할이 명시된 long-format 데이터가 정상 피벗됨."""
+    from systems.generator.extraction.extraction_service import extract_with_plan
+
+    csv_file = tmp_path / "long_sample.csv"
+    df_long = pd.DataFrame({
+        "timestamp": ["2026-01-01 00:00:00", "2026-01-01 00:00:00", "2026-01-01 01:00:00", "2026-01-01 01:00:00"],
+        "asset_id": ["A1", "A1", "A1", "A1"],
+        "attribute": ["volt", "rot", "volt", "rot"],
+        "value": [10.0, 100.0, 20.0, 200.0]
+    })
+    df_long.to_csv(csv_file, index=False)
+
+    plan = {
+        "structure_type": "tabular_row_as_attribute",
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "attribute_column": "attribute",
+        "value_column": "value",
+        "duplicate_policy": "error"
+    }
+
+    pivoted = extract_with_plan(str(csv_file), plan)
+    assert len(pivoted) == 2
+    assert "asset_id" in pivoted.columns
+    assert "timestamp" in pivoted.columns
+    assert "volt" in pivoted.columns
+    assert "rot" in pivoted.columns
+    assert pivoted.loc[pivoted["timestamp"] == pd.Timestamp("2026-01-01 00:00:00"), "volt"].values[0] == 10.0
+
+
+def test_long_format_extraction_missing_roles_fails(tmp_path):
+    """테스트 15: 역할 정보가 누락된 long-format plan이 위치 기반 추측 없이 명시적 실패(ValueError)."""
+    from systems.generator.extraction.extraction_service import extract_with_plan
+
+    csv_file = tmp_path / "long_incomplete.csv"
+    df_long = pd.DataFrame({
+        "c0": ["A1", "A1"],
+        "c1": ["volt", "rot"],
+        "c2": [10.0, 100.0]
+    })
+    df_long.to_csv(csv_file, index=False)
+
+    incomplete_plan = {
+        "structure_type": "tabular_row_as_attribute",
+        "duplicate_policy": "error"
+    }
+
+    with pytest.raises(ValueError, match="missing required role"):
+        extract_with_plan(str(csv_file), incomplete_plan)
+
+
+def test_long_format_extraction_nonexistent_column_fails(tmp_path):
+    """테스트 16: plan이 DataFrame에 없는 컬럼을 가리키면 ValueError 발생."""
+    from systems.generator.extraction.extraction_service import extract_with_plan
+
+    csv_file = tmp_path / "long_sample2.csv"
+    df_long = pd.DataFrame({
+        "asset_id": ["A1"],
+        "attribute": ["volt"],
+        "value": [10.0]
+    })
+    df_long.to_csv(csv_file, index=False)
+
+    bad_plan = {
+        "structure_type": "tabular_row_as_attribute",
+        "id_column": "non_existent_id",
+        "attribute_column": "attribute",
+        "value_column": "value",
+        "duplicate_policy": "error"
+    }
+
+    with pytest.raises(ValueError, match="not found in DataFrame"):
+        extract_with_plan(str(csv_file), bad_plan)
+
+
+def test_long_format_extraction_overlapping_roles_fails(tmp_path):
+    """테스트 17: 동일 컬럼이 여러 역할에 지정되면 거부됨."""
+    from systems.generator.extraction.extraction_service import extract_with_plan
+
+    csv_file = tmp_path / "long_sample3.csv"
+    df_long = pd.DataFrame({
+        "col_a": ["A1"],
+        "col_b": [10.0]
+    })
+    df_long.to_csv(csv_file, index=False)
+
+    overlap_plan = {
+        "structure_type": "tabular_row_as_attribute",
+        "id_column": "col_a",
+        "attribute_column": "col_a",
+        "value_column": "col_b",
+        "duplicate_policy": "error"
+    }
+
+    with pytest.raises(ValueError, match="must be unique and cannot overlap"):
+        extract_with_plan(str(csv_file), overlap_plan)
+
+
+def test_long_format_extraction_column_order_independence(tmp_path):
+    """테스트 18: 입력 컬럼 순서를 섞어도 명시적 역할 계약에 따라 동일한 피벗 결과 생성."""
+    from systems.generator.extraction.extraction_service import extract_with_plan
+
+    df_order1 = pd.DataFrame({
+        "timestamp": ["2026-01-01 00:00:00", "2026-01-01 00:00:00"],
+        "asset_id": ["A1", "A1"],
+        "attribute": ["volt", "rot"],
+        "value": [10.0, 100.0]
+    })
+    df_order2 = pd.DataFrame({
+        "value": [10.0, 100.0],
+        "attribute": ["volt", "rot"],
+        "asset_id": ["A1", "A1"],
+        "timestamp": ["2026-01-01 00:00:00", "2026-01-01 00:00:00"]
+    })
+
+    file1 = tmp_path / "order1.csv"
+    file2 = tmp_path / "order2.csv"
+    df_order1.to_csv(file1, index=False)
+    df_order2.to_csv(file2, index=False)
+
+    plan = {
+        "structure_type": "tabular_row_as_attribute",
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "attribute_column": "attribute",
+        "value_column": "value",
+        "duplicate_policy": "error"
+    }
+
+    res1 = extract_with_plan(str(file1), plan)
+    res2 = extract_with_plan(str(file2), plan)
+
+    assert_frame_equal(res1, res2)
+
+
+def test_save_load_features_npy_custom_meta_columns_roundtrip(tmp_path):
+    """테스트 19: 사용자 정의 ID/time 컬럼(equipment_id, event_time)의 NPY 저장 및 복원 round-trip 검증."""
+    from systems.generator.feature.feature_builder import save_features_npy, load_features_npy
+
+    df = pd.DataFrame({
+        "equipment_id": ["EQ_01", "EQ_01", "EQ_02", "EQ_02"],
+        "event_time": pd.date_range("2026-01-01", periods=4, freq="1h"),
+        "voltage_feat": [10.5, 11.0, 20.5, 21.0],
+        "rotation_feat": [100.0, 105.0, 200.0, 205.0]
+    })
+
+    out_dir = str(tmp_path / "npy_custom")
+    save_features_npy(
+        df,
+        out_dir,
+        "custom_test",
+        id_column="equipment_id",
+        time_column="event_time"
+    )
+
+    # 1. X.npy 검증: feature_cols (2개)만 포함되고 equipment_id, event_time은 제외됨
+    X = np.load(f"{out_dir}/custom_test_X.npy", allow_pickle=False)
+    assert X.shape == (4, 2)
+    assert np.allclose(X[:, 0], [10.5, 11.0, 20.5, 21.0])
+
+    # 2. columns.json 메타데이터 검증
+    import json
+    with open(f"{out_dir}/custom_test_columns.json", "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    assert meta["feature_columns"] == ["voltage_feat", "rotation_feat"]
+    assert meta["id_column"] == "equipment_id"
+    assert meta["time_column"] == "event_time"
+
+    # 3. load_features_npy 복원 검증: 원래 컬럼명(equipment_id, event_time) 복원
+    loaded_df = load_features_npy(out_dir, "custom_test")
+    assert list(loaded_df.columns) == ["voltage_feat", "rotation_feat", "equipment_id", "event_time"]
+    assert loaded_df["equipment_id"].tolist() == ["EQ_01", "EQ_01", "EQ_02", "EQ_02"]
+    assert (loaded_df["event_time"] == df["event_time"]).all()
+
+
+def test_save_load_features_npy_legacy_format_compatibility(tmp_path):
+    """테스트 20: 레거시 리스트 형식 _columns.json 캐시 하위 호환성 복원 검증."""
+    from systems.generator.feature.feature_builder import load_features_npy
+
+    out_dir = str(tmp_path / "npy_legacy")
+    os.makedirs(out_dir, exist_ok=True)
+
+    X = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float64)
+    np.save(f"{out_dir}/legacy_X.npy", X, allow_pickle=False)
+    np.save(f"{out_dir}/legacy_machineID.npy", np.array(["M1", "M2"]), allow_pickle=True)
+    np.save(f"{out_dir}/legacy_datetime.npy", pd.to_datetime(["2026-01-01", "2026-01-02"]).to_numpy(dtype="datetime64[ns]"), allow_pickle=False)
+
+    import json
+    with open(f"{out_dir}/legacy_columns.json", "w", encoding="utf-8") as f:
+        json.dump(["f1", "f2"], f)
+
+    loaded_df = load_features_npy(out_dir, "legacy")
+    assert "f1" in loaded_df.columns
+    assert "f2" in loaded_df.columns
+    assert "machineID" in loaded_df.columns
+    assert "datetime" in loaded_df.columns
+    assert loaded_df["machineID"].tolist() == ["M1", "M2"]
