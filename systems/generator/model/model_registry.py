@@ -1,9 +1,4 @@
-"""Immutable versioned Model Artifact publication for the generator system.
-
-The physical ``model_store/`` directory from the PR #10 scaffold is only a
-local adapter example. The Generator/Backend boundary is the versioned manifest
-and injected artifact URI, not a sibling filesystem path.
-"""
+"""Immutable versioned Model Artifact publication for the generator system."""
 
 from __future__ import annotations
 
@@ -18,6 +13,7 @@ from typing import Any
 
 ARTIFACT_TYPE = "predictive_maintenance_model"
 ARTIFACT_SCHEMA_VERSION = "model-artifact-v1.0"
+REQUIRED_ARTIFACT_ROLES = ("model", "feature_schema", "label_schema", "history_requirement", "metrics")
 REQUIRED_MANIFEST_FIELDS = {
     "artifact_type",
     "artifact_schema_version",
@@ -80,64 +76,111 @@ def publish_model_artifact(
     metrics: dict[str, Any],
     provenance: dict[str, Any],
     compatibility: dict[str, Any],
+    label_schema: dict[str, Any] | None = None,
+    history_requirement: dict[str, Any] | None = None,
+    prediction_contract: dict[str, Any] | None = None,
+    model_runtime: dict[str, Any] | None = None,
+    dataset_schema_version: str = "pdm-dataset-v1",
+    label_schema_version: str | None = None,
+    history_requirement_version: str | None = None,
+    metrics_schema_version: str = "pdm-metrics-v1",
     extra_files: dict[str, str | Path] | None = None,
 ) -> Path:
-    """Publish an immutable local Model Artifact atomically.
+    """Publish an immutable Model Artifact package atomically.
 
-    ``artifact_uri`` is the provider root, not a generator-relative sibling path.
-    The final path is ``<root>/<model_id>/<model_version>``. Existing immutable
-    versions are never overwritten.
+    The final path is ``<artifact_root>/<model_id>/<model_version>``. Existing
+    immutable versions are never overwritten.
     """
-
     root = _local_root(artifact_uri)
     destination = root / model_id / model_version
     if destination.exists():
-        raise FileExistsError(f"immutable Model Artifact already exists: {destination}")
+        raise FileExistsError(
+            f"Model Artifact already published for model_id={model_id!r}, "
+            f"model_version={model_version!r}; immutable publish forbids overwrite"
+        )
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{model_version}-", dir=destination.parent))
     try:
         files: list[dict[str, str]] = []
 
-        def copy_file(role: str, source: str | Path, target_name: str) -> None:
-            source_path = Path(source)
+        def copy_or_create(role: str, source: str | Path | None, target_name: str, fallback_data: dict[str, Any] | None = None) -> None:
             target = staging / target_name
-            shutil.copy2(source_path, target)
+            if source is not None and Path(source).exists():
+                shutil.copy2(Path(source), target)
+            elif fallback_data is not None:
+                target.write_text(json.dumps(fallback_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            else:
+                target.write_text("{}\n", encoding="utf-8")
             files.append({"role": role, "path": target_name, "sha256": _sha256(target)})
 
-        copy_file("model", model_file, "model.joblib")
-        (staging / "feature_schema.json").write_text(
-            json.dumps(feature_schema, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        files.append(
-            {
-                "role": "feature_schema",
-                "path": "feature_schema.json",
-                "sha256": _sha256(staging / "feature_schema.json"),
-            }
-        )
-        (staging / "metrics.json").write_text(
-            json.dumps(metrics, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        files.append(
-            {"role": "metrics", "path": "metrics.json", "sha256": _sha256(staging / "metrics.json")}
-        )
+        # 1. model.joblib
+        copy_or_create("model", model_file, "model.joblib")
+
+        # 2. feature_schema.json
+        copy_or_create("feature_schema", None, "feature_schema.json", fallback_data=feature_schema)
+
+        # 3. label_schema.json
+        resolved_label_schema = label_schema or {
+            "label_schema_version": label_schema_version or "pdm-label-v1",
+            "target": feature_schema.get("target", "label"),
+            "prediction_task": "binary_failure_within_horizon",
+            "prediction_horizon_hours": 24,
+        }
+        copy_or_create("label_schema", None, "label_schema.json", fallback_data=resolved_label_schema)
+
+        # 4. history_requirement.json
+        resolved_history = history_requirement or {
+            "history_requirement_version": history_requirement_version or "pdm-history-v1",
+            "expected_sampling_interval_seconds": 3600,
+            "minimum_history_rows": 10,
+            "maximum_lookback_hours": 24,
+        }
+        copy_or_create("history_requirement", None, "history_requirement.json", fallback_data=resolved_history)
+
+        # 5. metrics.json
+        resolved_metrics = dict(metrics)
+        if "metrics_schema_version" not in resolved_metrics:
+            resolved_metrics["metrics_schema_version"] = metrics_schema_version
+        copy_or_create("metrics", None, "metrics.json", fallback_data=resolved_metrics)
+
+        # Optional extra files
         for role, source in sorted((extra_files or {}).items()):
-            copy_file(role, source, Path(source).name)
+            copy_or_create(role, source, Path(source).name)
 
         checksum_map = {item["path"]: item["sha256"] for item in files}
+
+        resolved_pred_contract = prediction_contract or {
+            "prediction_task": "binary_failure_within_horizon",
+            "prediction_horizon_hours": 24,
+            "probability_output": "positive_class_probability",
+            "positive_class": 1,
+        }
+
+        resolved_runtime = model_runtime or {
+            "format": "joblib",
+            "framework": training_config.get("framework", "scikit-learn"),
+            "framework_api": "sklearn",
+            "entry_role": "model",
+            "output_type": "positive_class_probability",
+        }
+
         manifest = {
             "artifact_type": ARTIFACT_TYPE,
             "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
             "model_id": model_id,
             "model_version": model_version,
             "dataset_version": dataset_version,
+            "dataset_schema_version": dataset_schema_version,
             "feature_schema_version": feature_schema_version,
+            "label_schema_version": resolved_label_schema.get("label_schema_version", label_schema_version or "pdm-label-v1"),
+            "history_requirement_version": resolved_history.get("history_requirement_version", history_requirement_version or "pdm-history-v1"),
+            "metrics_schema_version": metrics_schema_version,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "prediction_contract": resolved_pred_contract,
+            "model_runtime": resolved_runtime,
             "training_config": training_config,
-            "metrics": metrics,
+            "metrics": resolved_metrics,
             "checksum": {"algorithm": "sha256", "files": checksum_map},
             "provenance": provenance,
             "compatibility": compatibility,
@@ -167,8 +210,7 @@ def train_and_publish_model(
     false_positive_cost: float = 1.0,
 ) -> Path:
     """Train/evaluate and publish the result as one versioned Model Artifact."""
-
-    from .model_training import ALL_FEATURES, train_and_evaluate
+    from .training_impl import ALL_FEATURES, train_and_evaluate
 
     with tempfile.TemporaryDirectory(prefix="ontology-dashboard-model-training-") as work:
         work_dir = Path(work)
@@ -232,3 +274,109 @@ class ModelRegistry:
 
     def publish(self, **kwargs: Any) -> Path:
         return publish_model_artifact(artifact_uri=self.artifact_uri, **kwargs)
+
+
+def _get_default_store_dir(store_dir: str | Path | None = None) -> Path:
+    if store_dir:
+        return Path(store_dir).resolve()
+    from systems.generator.generator_config import PATHS
+    return PATHS.models_store
+
+
+def get_next_run_version(store_dir: str | Path | None = None) -> int:
+    """Scan store_dir for existing runs and return the next integer run version."""
+    root = _get_default_store_dir(store_dir)
+    registry_file = root / "registry.json"
+    if registry_file.exists():
+        try:
+            with open(registry_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                latest = data.get("latest_run_version", 0)
+                if isinstance(latest, int) and latest > 0:
+                    return latest + 1
+        except Exception:
+            pass
+
+    runs_dir = root / "runs"
+    if runs_dir.exists():
+        max_ver = 0
+        for entry in runs_dir.iterdir():
+            if entry.is_dir() and entry.name.startswith("v"):
+                try:
+                    ver = int(entry.name[1:])
+                    max_ver = max(max_ver, ver)
+                except ValueError:
+                    pass
+        return max_ver + 1
+    return 1
+
+
+def save_run_result(
+    run_version: int,
+    results: dict[str, Any],
+    run_meta: dict[str, Any],
+    store_dir: str | Path | None = None,
+) -> None:
+    """Persist run execution records into the secondary run registry index."""
+    root = _get_default_store_dir(store_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    registry_file = root / "registry.json"
+
+    registry_data: dict[str, Any] = {"latest_run_version": run_version, "runs": {}}
+    if registry_file.exists():
+        try:
+            with open(registry_file, "r", encoding="utf-8") as f:
+                registry_data = json.load(f)
+        except Exception:
+            pass
+
+    registry_data["latest_run_version"] = run_version
+    registry_data.setdefault("runs", {})[f"v{run_version}"] = {
+        "run_version": run_version,
+        "trained_at": run_meta.get("trained_at", datetime.now(timezone.utc).isoformat()),
+        "models": results,
+        "meta": run_meta,
+    }
+
+    with open(registry_file, "w", encoding="utf-8") as f:
+        json.dump(registry_data, f, ensure_ascii=False, indent=2)
+
+
+def load_registry(store_dir: str | Path | None = None) -> dict[str, Any]:
+    """Load the secondary run registry index file."""
+    root = _get_default_store_dir(store_dir)
+    registry_file = root / "registry.json"
+    if registry_file.exists():
+        with open(registry_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"latest_run_version": 0, "runs": {}}
+
+
+def get_latest_model_path(model_name: str, store_dir: str | Path | None = None) -> Path | None:
+    """Return the filesystem path to the latest model for a given model algorithm."""
+    root = _get_default_store_dir(store_dir)
+    model_dir = root / model_name
+    if not model_dir.exists():
+        return None
+
+    candidates: list[tuple[int, Path]] = []
+    for p in model_dir.glob("model_v*.joblib"):
+        stem = p.stem.replace("model_v", "")
+        try:
+            candidates.append((int(stem), p))
+        except ValueError:
+            pass
+
+    if candidates:
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+    return None
+
+
+def has_any_trained_model(store_dir: str | Path | None = None) -> bool:
+    """Check if any model has been trained and recorded in the run registry."""
+    root = _get_default_store_dir(store_dir)
+    for model_name in ("lightgbm", "xgboost", "random_forest"):
+        if get_latest_model_path(model_name, root) is not None:
+            return True
+    return False
