@@ -37,17 +37,17 @@ Result Artifact / Evidence
 
 팀 작업은 아래 문서를 단일 기준으로 사용한다.
 
-- [요구사항 명세](./week2-requirements-specification.md)
-- [기능 명세](./week2-functional-specification.md)
-- [공통 스키마 정의](./week2-schema-definition.md)
-- [API 명세](./week2-api-specification.md)
-- [리포트 명세](./week2-report-specification.md)
-- [MVP 설계 명세](./week2-mvp-design-specification.md)
-- [현행 구현 기준선](./current-mvp-implementation-baseline.md)
-- [계약 검토 체크리스트](./week2-contract-review-checklist.md)
+- [요구사항 명세](../../requirements-specification.md)
+- [기능 명세](../../functional-specification.md)
+- [공통 스키마 정의](../../schema-definition.md)
+- [API 명세](../../api-specification.md)
+- [리포트 명세](../../report-specification.md)
+- [MVP 설계 명세](../../mvp-design-specification.md)
+- [현행 구현 기준선](../../current-mvp-implementation-baseline.md)
+- [계약 검토 체크리스트](./contract-review-checklist.md)
 
 개인 프로토타입에서 작성된 상세 명세와의 관계는
-[프로토타입 문서 이관 매핑](./week2-prototype-doc-migration-map.md)에 기록한다.
+[프로토타입 문서 이관 매핑](./prototype-doc-migration-map.md)에 기록한다.
 
 ## 3. 최종 역할 요약
 

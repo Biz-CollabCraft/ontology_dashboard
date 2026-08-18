@@ -3,7 +3,7 @@
 ## 1. 목적과 판정 기준
 
 이 문서는 현행 실행 코드와 Week 2 설계안을 비교해 팀 결정을 기록한다. 모든 항목을
-미결정으로 간주하지 않으며, [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을
+미결정으로 간주하지 않으며, [현행 MVP 구현 계약 기준선](../../current-mvp-implementation-baseline.md)을
 코드 사실의 기준으로 사용한다.
 
 | 분류 | 의미 |
@@ -63,7 +63,7 @@
 - `manager`, `engineer`는 기존 Report/UI compatibility view alias로만 유지하며 RBAC role code와
   같은 enum으로 해석하지 않는다.
 - 상세 역할별 Action은
-  [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
+  [`closed-loop-product-consumption-contract.md`](../../../closed-loop-product-consumption-contract.md)를 따른다.
 - 분류: `용어·표현 합의`
 
 ```text
@@ -250,8 +250,8 @@ Closed-loop 결정 상태: 완료
 | GEN-STACK-02 | 주기적 다중 모델 예측·신호 취합 실행 주체 | **결정 필요** | ADR-002 미해결 항목 — 다음 회의 대상 | **결정 필요** | 미정 | 미정 |
 | GEN-ART-07 | Manifest 중첩 객체 엄격성 및 학습 재현성 필드 | **결정 필요** | `training_config`/`provenance`/`compatibility`의 `additionalProperties` 정책과 `feature_count`/`random_seed` 필수 여부를 공식 전환 전에 결정 | **결정 필요** | 미정 | 미정 |
 
-상세 내용은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`,
-`docs/mentoring-mvp-2026-08/week2-model-artifact-publish-contract.md`,
+상세 내용은 `docs/mvp/generator-feature-label-contract.md`,
+`docs/mvp/model-artifact-publish-contract.md`,
 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`,
 `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
 

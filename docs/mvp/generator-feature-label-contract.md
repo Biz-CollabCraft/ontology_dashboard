@@ -1,4 +1,4 @@
-# Week 2 Generator Feature & Label 계약 명세서
+# Generator Feature & Label 계약 명세서
 
 - **문서 상태**: `목표 계약 (Target Specification)` — 부분 구현 완료, 피처 네이밍/스키마 발행 후속 수용 예정
 - **관련 저장소**: `Biz-CollabCraft/ontology_dashboard`

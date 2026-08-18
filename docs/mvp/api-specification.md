@@ -1,11 +1,11 @@
-# Week 2 API 명세서
+# MVP API 명세서
 
 ## 1. 기준과 상태
 
 이 문서는 목표 REST 계약안이다. 현행 API는
 [현행 MVP 구현 계약 기준선](./current-mvp-implementation-baseline.md)을 따르며, 아래
 `/overview`, `/objects`, `/operations`와 page/size 계약은 모두 `변경 제안`이다.
-JSON key 목표안은 [스키마 정의서](./week2-schema-definition.md)를 따른다.
+JSON key 목표안은 [스키마 정의서](./schema-definition.md)를 따른다.
 
 책임 분리:
 
@@ -14,8 +14,8 @@ JSON key 목표안은 [스키마 정의서](./week2-schema-definition.md)를 따
 - 팀원4: 현행 Event Report 및 V2 `/reports/executive` 리포트 API 계약·구현
 - 팀원2: API·스키마·리포트 계약 문서화와 추적성 관리
 
-> 이 문서는 Backend 제품 API 계약이다. Generator daemon의 내부 학습 API는 별도 문서(예:
-> `week2-generator-internal-api-specification.md`)를 따른다. Generator 내부 API는 외부 제품
+> 이 문서는 Backend 제품 API 계약이다. Generator daemon의 내부 학습 API는 Generator 내부
+> 운영 계약을 따른다. Generator 내부 API는 외부 제품
 > prediction API가 아니며, `/health`, `/internal/train`, `/internal/retrain`과 같은 학습 운영
 > 엔드포인트만 제공한다. 상세 허용/금지 범위는
 > `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
@@ -47,7 +47,7 @@ Canonical base path:
 
 아래 Query는 현행 설명이 아닌 변경 제안이다.
 
-Week 2 Objects는 검색·라인·상태·담당자 필터와 현행 URL 상태를 유지한다. 아래
+현재 MVP Objects는 검색·라인·상태·담당자 필터와 현행 URL 상태를 유지한다. 아래
 site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니다.
 
 | Parameter | 타입 | 설명 |
@@ -160,7 +160,7 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 현행은 `POST /api/events/{event_id}/report`에서
 `ReportRequest(role, locale, use_llm)`와 role-aware grounded report를 사용한다.
 
-`POST /reports/executive`는 [리포트 정의서](./week2-report-specification.md)의 V2
+`POST /reports/executive`는 [리포트 정의서](./report-specification.md)의 V2
 `ReportInput`/`ReportOutput` 후보이며 현행 API를 대체하지 않는다. 이번 단계에서는
 팀원4가 담당하며, 이번 단계에서는 endpoint를 수정·구현하지 않고 mock 입력과
 deterministic 출력 계약부터 검증한다.
@@ -193,14 +193,14 @@ deterministic 출력 계약부터 검증한다.
 - `site_id`, `cell_id`는 Asset 결합 필드다.
 - fallback 사용 시 `source=fallback`과 warning을 반환한다.
 - evaluation truth를 반환하지 않는다.
-- Week 2 stale은 timezone을 포함한 `observed_at` 기준 프론트 24시간 판정을
+- 현재 MVP stale은 timezone을 포함한 `observed_at` 기준 프론트 24시간 판정을
   유지한다. 이는 도메인 불변값이 아니라 현재 MVP freshness 정책이다.
 - provenance는 구조화해 보존하되 `source_field`는 현행 Evidence 호환 형식을
   사용한다. JSON Pointer는 구현 비교 후 Target으로 검토한다.
 
 ## 7. 결정 반영과 후속 확인
 
-### Week 2 결정 완료
+### 2026-08 Week 2 결정 기록
 
 - 현행 `/dashboard`, `/results/latest`와 Event API를 유지한다.
 - Closed-loop 확장은 기존 Event API key를 삭제·rename하지 않는 additive extension으로 유지하며,

@@ -115,7 +115,7 @@ API / systems/frontend / Report
 28. Closed-loop mutation 응답은 Persistence가 확정한 ID와 resulting state, replay 여부를 반환해 Frontend가
     운영 ID나 결과 상태를 추측하지 않게 한다.
 
-15~19번은 `docs/mentoring-mvp-2026-08/week2-generator-feature-label-contract.md`를 근거로 한다.
+15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.
 
 20·21번은 PR 단독 import 및 실행 가능성이라는 기존 코드 결함에 근거하며,
 ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.
@@ -144,7 +144,7 @@ Model Artifact는 Generator가 만드는 학습/배포 산출물이고 Product R
 - mutable `latest`만 기록하고 실제 immutable model version을 남기지 않는 경우
 - generator가 Product Result Artifact를 최종 생산하거나 Backend가 training을 다시 소유하는 경우
 
-## 5. 공식 Week 2 MVP 제품 계약
+## 5. 공식 MVP 제품 계약
 
 공식 제품 Surface는 다음을 우선한다.
 
@@ -158,7 +158,7 @@ Model Artifact는 Generator가 만드는 학습/배포 산출물이고 Product R
 - 제품 표시 의미: 생산 운영 의사결정자, 현장 엔지니어, 정비 작업자
 - 기존 `manager` / `engineer`는 Report/UI compatibility view alias이며 RBAC role code와 동일 enum이 아니다.
 - Dataset / Governance / Modeling / Agent / Analysis / 전체 Ontology Workbench 및 실험 화면은
-  보존할 수 있으나 Week 2 공식 Surface를 덮어쓰면 안 된다.
+  보존할 수 있으나 공식 MVP Surface를 덮어쓰면 안 된다.
 
 Closed-loop 상태·역할·Action·API 소비 기준은
 [`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 사용한다.
@@ -199,7 +199,7 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 11. Frontend build/Playwright/nginx가 `systems/frontend`를 canonical host로 사용하며 route/assets를 유지하는가?
 12. compatibility adapter가 새 canonical implementation copy로 다시 자라나 ownership 중복을 만들었는가?
 13. Model Artifact → Result Artifact/Evidence provenance가 유지되는가?
-14. 공식 Week 2 MVP workflow와 role surface가 변경으로 인해 퇴행하는가?
+14. 공식 MVP workflow와 role surface가 변경으로 인해 퇴행하는가?
 15. PR branch 단독 import가 가능한가? (상위 stacked PR의 모듈을 참조하지 않고 독립적으로 import되는가)
 16. `REGISTERED_MODELS`가 비어 있지 않은가? (`except ImportError`로 조용히 빈 registry가 되지 않는가)
 17. Model Artifact publish/validate round trip이 가능한가? (Backend `artifact_provider.py`가 실제로 로드할 수 있는가)
