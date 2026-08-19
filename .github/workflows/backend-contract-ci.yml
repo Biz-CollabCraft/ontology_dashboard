@@ -2,6 +2,7 @@ name: backend-contract-ci
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - main
@@ -60,6 +61,8 @@ jobs:
             ml/pyproject.toml
 
       - name: Static architecture and Generator import-safety rules
+        env:
+          BACKEND_MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha }}
         run: python systems/verify_architecture.py
 
       - name: Install Backend contract test dependencies

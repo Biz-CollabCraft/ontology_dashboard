@@ -358,6 +358,17 @@ Phase 0.5의 capability disposition은 `backend-migration-map.md` §4~§5를 따
 `scripts/check_backend_migration_ledger.py`는 legacy Python Source의 누락·중복, 잘못된 disposition,
 `UNDECIDED`/`DEFER` 잔존을 deterministic하게 차단하고 `systems/verify_architecture.py`에서 실행된다.
 
+Phase 0.6부터 [`backend-migration-baseline.json`](./backend-migration-baseline.json)이 현재 남아 있는
+legacy Python Source와 non-legacy 영역의 static/dynamic import 및 문자열 runtime entrypoint를 정확한
+경로 단위로 기록한다. `scripts/check_backend_migration_ratchet.py`는 저장소 상태와 baseline의 정확한
+일치, Migration Ledger 유효성, PR base 대비 감소 전용 조건을 표준 라이브러리만으로 검증한다.
+
+- 현재 Source/reference를 baseline에 누락하거나 이미 제거된 항목을 남길 수 없다.
+- PR base에 없던 legacy Source/reference를 추가하거나 이관 완료 Source를 재생성할 수 없다.
+- Migration PR은 실제 Source/reference 제거와 같은 변경에서 baseline 항목도 함께 제거한다.
+- Phase 14에서 `mode`를 `strict`로 전환하고 두 목록을 모두 0건으로 만든다.
+- Architecture CI는 의존성 설치 전 이 검사와 음성 fixture를 실행하며 docs-only PR에도 적용한다.
+
 
 ---
 
@@ -440,6 +451,14 @@ Domain-First 구조 전환 및 완전 수렴을 위해 다음 12개 Architecture
 Migration 중에는 phase-aware ratchet을 적용한다. Phase 0~13은 레거시 존재를 허용하되
 신규 레거시 파일·import와 이미 이관된 경로의 회귀를 차단한다. Phase 14에서 레거시
 경로와 참조 0건을 강제하고, Phase 15에서 이를 최종 strict gate로 유지한다.
+
+현재 baseline을 기계적으로 갱신해야 하는 Migration PR에서는 다음 명령을 사용한다. 이 명령은
+현 상태를 기록할 뿐 증가를 승인하지 않으며, CI가 PR base와 비교해 증가 여부를 별도로 차단한다.
+
+```bash
+python scripts/check_backend_migration_ratchet.py --write-baseline
+python systems/verify_architecture.py
+```
 
 ---
 

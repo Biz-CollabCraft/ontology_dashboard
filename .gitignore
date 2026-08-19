@@ -354,6 +354,8 @@ sketch
 [Ll]ib64
 [Ll]ocal
 [Ss]cripts
+# The repository's root scripts directory contains versioned automation, not a venv.
+!scripts/
 pyvenv.cfg
 pip-selfcheck.json
 
