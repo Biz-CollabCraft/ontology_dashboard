@@ -32,13 +32,12 @@ class ProjectService:
     @staticmethod
     def _require_permission(principal: PrincipalContext, permission: str) -> None:
         if permission not in principal.permissions:
-            raise ProjectError(403, "permission_denied", "이 작업을 수행할 권한이 없습니다.")
+            raise ProjectError("permission_denied", "이 작업을 수행할 권한이 없습니다.")
 
     @staticmethod
     def _require_membership_scope(principal: PrincipalContext, project_id: ProjectId) -> None:
         if project_id not in principal.project_scopes:
             raise ProjectError(
-                403,
                 "project_scope_denied",
                 "허용된 Project 범위를 벗어난 요청입니다.",
             )
@@ -60,7 +59,7 @@ class ProjectService:
             project_id=project_id,
         )
         if item is None or item["status"] == "archived":
-            raise ProjectError(404, "project_not_found", "Project를 찾을 수 없습니다.")
+            raise ProjectError("project_not_found", "Project를 찾을 수 없습니다.")
         return Project.model_validate(item)
 
     def list_workspaces(
@@ -81,7 +80,6 @@ class ProjectService:
     def create(self, principal: PrincipalContext, request: ProjectCreateRequest) -> Project:
         if not principal.is_admin:
             raise ProjectError(
-                403,
                 "permission_denied",
                 "Project 생성은 조직 관리자만 수행할 수 있습니다.",
             )
@@ -99,7 +97,6 @@ class ProjectService:
     ) -> Project:
         if not principal.is_admin:
             raise ProjectError(
-                403,
                 "permission_denied",
                 "Project 수정은 조직 관리자만 수행할 수 있습니다.",
             )
@@ -109,7 +106,6 @@ class ProjectService:
             workspace_id=request.default_workspace_id,
         ):
             raise ProjectError(
-                422,
                 "invalid_default_workspace",
                 "기본 Workspace는 같은 Organization과 Project에 속해야 합니다.",
             )
@@ -119,7 +115,7 @@ class ProjectService:
             request=request,
         )
         if item is None:
-            raise ProjectError(404, "project_not_found", "Project를 찾을 수 없습니다.")
+            raise ProjectError("project_not_found", "Project를 찾을 수 없습니다.")
         return Project.model_validate(item)
 
     @staticmethod
@@ -128,7 +124,6 @@ class ProjectService:
             return
         if project_id not in principal.project_scopes:
             raise ProjectError(
-                403,
                 "project_scope_denied",
                 "허용된 Project 범위를 벗어난 요청입니다.",
             )
@@ -159,13 +154,11 @@ class ProjectService:
         invalid_roles = sorted(set(request.roles) - set(ROLE_DEFINITIONS))
         if invalid_roles:
             raise ProjectError(
-                422,
                 "invalid_role",
                 f"알 수 없는 역할입니다: {', '.join(invalid_roles)}",
             )
         if not request.roles:
             raise ProjectError(
-                422,
                 "role_required",
                 "Project membership에는 역할이 하나 이상 필요합니다.",
             )

@@ -15,6 +15,26 @@ from .project_schema import ProjectCreateRequest, ProjectUpdateRequest
 from .project_service import ProjectService
 
 
+_PROJECT_HTTP_STATUS_BY_CODE = {
+    "permission_denied": 403,
+    "project_scope_denied": 403,
+    "project_not_found": 404,
+    "user_not_found": 404,
+    "active_project_mismatch": 409,
+    "project_slug_conflict": 409,
+    "self_lockout_blocked": 409,
+    "invalid_default_workspace": 422,
+    "invalid_role": 422,
+    "role_required": 422,
+}
+
+
+def project_http_status(error: ProjectError) -> int:
+    """Translate Project application error codes at the HTTP boundary."""
+
+    return _PROJECT_HTTP_STATUS_BY_CODE.get(error.code, 400)
+
+
 def build_project_router(
     *,
     get_project_service: Callable[..., ProjectService],
@@ -64,7 +84,6 @@ def build_project_router(
         projects.get_for_principal(principal, project_id)
         if principal.active_project_id != project_id:
             raise ProjectError(
-                409,
                 "active_project_mismatch",
                 "먼저 해당 Project를 활성화해야 합니다.",
             )
@@ -92,4 +111,4 @@ def build_project_router(
     return router
 
 
-__all__ = ["build_project_router"]
+__all__ = ["build_project_router", "project_http_status"]

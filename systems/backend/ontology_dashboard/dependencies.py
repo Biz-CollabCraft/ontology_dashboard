@@ -42,7 +42,8 @@ from .distributed_runtime import DurableJobRepository
 from .export_service import ExportService
 from .governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
-from app.project import ProjectRepository, ProjectService
+from app.project import ProjectService
+from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
 from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
@@ -154,7 +155,7 @@ def get_project_service() -> ProjectService:
     repository = (
         PostgreSQLProjectRepository(target)
         if is_postgresql(target)
-        else ProjectRepository(target)
+        else SQLiteProjectRepository(target)
     )
     return ProjectService(repository, audit_port=get_identity_service().repository)
 

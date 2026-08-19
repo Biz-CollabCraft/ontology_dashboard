@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.dataset.ingestion.ingestion_schema import DatasetManifest, QuarantinedRecord
-from app.project import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 
 
 DEFAULT_ORGANIZATION_ID = "org-ontology-demo"

@@ -11,7 +11,7 @@ from ontology_dashboard.connectors import (
 )
 from ontology_dashboard.distributed_runtime import DurableJobRepository, DurableWorker
 from ontology_dashboard.migrations import migrate
-from app.project import ProjectRepository
+from app.infra.db.project_repository import ProjectRepository
 
 
 ORG = "org-ontology-demo"

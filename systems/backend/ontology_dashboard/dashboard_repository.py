@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.project import SQLiteProjectContextResolver, ensure_scope_columns
+from app.infra.db.project_repository import SQLiteProjectContextResolver, ensure_scope_columns
 
 from .dashboard_catalog import seed_templates
 from .dashboard_models import DashboardTemplateSnapshot, SavedViewRecord

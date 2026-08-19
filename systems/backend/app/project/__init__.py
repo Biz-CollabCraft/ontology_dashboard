@@ -3,6 +3,7 @@
 from .project_domain import (
     ProjectAuditPort,
     ProjectContext,
+    ProjectContextResolverPort,
     ProjectEventQueryPort,
     ProjectId,
     ProjectScope,
@@ -16,8 +17,6 @@ from .project_repository import (
     DEMO_PROJECT_ID,
     DEMO_WORKSPACE_ID,
     ProjectRepository,
-    SQLiteProjectContextResolver,
-    ensure_scope_columns,
 )
 from .project_schema import (
     Project,
@@ -38,6 +37,7 @@ __all__ = [
     "Project",
     "ProjectAuditPort",
     "ProjectContext",
+    "ProjectContextResolverPort",
     "ProjectContextError",
     "ProjectCreateRequest",
     "ProjectError",
@@ -49,6 +49,4 @@ __all__ = [
     "ProjectService",
     "ProjectStatus",
     "ProjectUpdateRequest",
-    "SQLiteProjectContextResolver",
-    "ensure_scope_columns",
 ]

@@ -4,13 +4,18 @@ from __future__ import annotations
 
 
 class ProjectError(RuntimeError):
-    """Project use-case failure translated to HTTP at the composition boundary."""
+    """Project use-case failure expressed without HTTP transport concerns."""
 
-    def __init__(self, status_code: int, code: str, message: str) -> None:
-        super().__init__(message)
-        self.status_code = status_code
+    def __init__(self, code_or_status: str | int, code_or_message: str, message: str | None = None) -> None:
+        if message is None:
+            code = str(code_or_status)
+            resolved_message = code_or_message
+        else:
+            code = code_or_message
+            resolved_message = message
+        super().__init__(resolved_message)
         self.code = code
-        self.message = message
+        self.message = resolved_message
 
 
 class ProjectContextError(ValueError):
