@@ -489,3 +489,5 @@ jobs:
       head_sha: ${{ github.event.pull_request.head.sha }}
       pr_title: ${{ github.event.pull_request.title }}
       pr_body: ${{ github.event.pull_request.body }}
+    secrets:
+      local_review_token: ${{ secrets.LOCAL_REVIEW_TOKEN }}

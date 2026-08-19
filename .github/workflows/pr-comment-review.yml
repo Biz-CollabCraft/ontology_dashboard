@@ -172,11 +172,74 @@ jobs:
           python3 scripts/ci/ai_review.py comment-route \
             --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare bounded local semantic-review context
+        if: steps.idem.outputs.action != 'noop'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/ai_review.py local-prompt \
+            --kind comment \
+            --prompt /tmp/comment-review-prompt.md \
+            --output /tmp/local-comment-review-prompt.md
+
+      - name: Try local Qwen3-Coder-Next technical-comment review
+        if: steps.idem.outputs.action != 'noop'
+        id: local_review
+        continue-on-error: true
+        env:
+          LOCAL_REVIEW_TOKEN: ${{ secrets.LOCAL_REVIEW_TOKEN }}
+          LOCAL_REVIEW_URL: https://local-review.oosu.dev/v1/review
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$LOCAL_REVIEW_TOKEN"
+          echo "::add-mask::$LOCAL_REVIEW_TOKEN"
+          jq -n \
+            --arg kind comment \
+            --arg request_id "comment-${SOURCE_KIND}-${SOURCE_ID}-${HEAD_SHA}" \
+            --rawfile prompt /tmp/local-comment-review-prompt.md \
+            '{kind:$kind, request_id:$request_id, prompt:$prompt}' \
+            > /tmp/local-comment-review-request.json
+          if ! curl --fail-with-body --silent --show-error \
+            --connect-timeout 4 --max-time 220 \
+            -H "Authorization: Bearer ${LOCAL_REVIEW_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/local-comment-review-request.json \
+            "$LOCAL_REVIEW_URL" > /tmp/local-comment-review-response.json; then
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          try:
+              payload = json.loads(Path('/tmp/local-comment-review-response.json').read_text())
+              print('local reviewer gateway:', str(payload.get('error') or 'request failed')[:500])
+          except Exception:
+              print('local reviewer gateway: request failed without JSON error body')
+          PY
+            exit 1
+          fi
+          python3 scripts/ci/ai_review.py parse-local \
+            --kind comment \
+            --response /tmp/local-comment-review-response.json \
+            --output /tmp/local-comment-review-draft.md
+
+      - name: Classify local review consequence
+        if: >-
+          steps.idem.outputs.action != 'noop' &&
+          steps.local_review.outcome == 'success'
+        id: local_risk
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/ai_review.py local-escalation \
+            --kind comment \
+            --draft /tmp/local-comment-review-draft.md >> "$GITHUB_OUTPUT"
+
       - name: Authenticate free-tier key lookup with GitHub OIDC
         if: >-
           steps.idem.outputs.action != 'noop' &&
-          steps.route.outputs.reasoning != 'true'
+          steps.local_review.outcome == 'success'
         id: free_auth
+        continue-on-error: true
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           project_id: flai-oosuhada-20260506
@@ -186,54 +249,83 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
           create_credentials_file: false
 
-      - name: Try zero-cost technical comment review with dual-model quality gate
+      - name: Falsify local technical-comment review with free Gemma
         if: >-
           steps.idem.outputs.action != 'noop' &&
-          steps.route.outputs.reasoning != 'true'
-        id: free_review
+          steps.local_review.outcome == 'success' &&
+          steps.free_auth.outcome == 'success'
+        id: local_gate
         continue-on-error: true
         env:
           GCP_ACCESS_TOKEN: ${{ steps.free_auth.outputs.access_token }}
           FREE_API_KEY_RESOURCE: projects/395559345329/locations/global/keys/efe3579e-c4db-4e35-88b9-12188bb1a119
         run: |
           set -euo pipefail
-          FREE_API_KEY="$(
+          GEMINI_FREE_API_KEY="$(
             curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${GCP_ACCESS_TOKEN}" \
               "https://apikeys.googleapis.com/v2/${FREE_API_KEY_RESOURCE}/keyString" \
               | jq -r '.keyString'
           )"
-          test -n "$FREE_API_KEY" && test "$FREE_API_KEY" != "null"
-          echo "::add-mask::$FREE_API_KEY"
-          GEMINI_FREE_API_KEY="$FREE_API_KEY" python3 scripts/ci/free_comment_review.py \
-            --prompt /tmp/comment-review-prompt.md \
+          test -n "$GEMINI_FREE_API_KEY" && test "$GEMINI_FREE_API_KEY" != "null"
+          echo "::add-mask::$GEMINI_FREE_API_KEY"
+          GEMINI_FREE_API_KEY="$GEMINI_FREE_API_KEY" \
+            python3 scripts/ci/free_review_falsifier.py \
+              --kind comment \
+              --prompt /tmp/comment-review-prompt.md \
+              --candidate /tmp/local-comment-review-draft.md \
+              --output /tmp/local-comment-falsifier.json
+
+      - name: Format locally accepted technical-comment review
+        if: >-
+          steps.idem.outputs.action != 'noop' &&
+          steps.route.outputs.reasoning != 'true' &&
+          steps.local_review.outcome == 'success' &&
+          steps.local_gate.outcome == 'success' &&
+          steps.local_risk.outputs.force_vertex != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/ai_review.py format-local-comment \
+            --draft /tmp/local-comment-review-draft.md \
             --source-kind "$SOURCE_KIND" \
             --source-id "$SOURCE_ID" \
             --head-sha "$HEAD_SHA" \
             --output /tmp/comment-review.md
-
           {
-            echo "### Free technical-comment review"
-            echo "- route: Gemini 3.5 Flash-Lite draft → Gemma 4 26B A4B verifier"
-            echo "- result: accepted without Vertex fallback"
+            echo "### Local technical-comment review"
+            echo "- primary: Qwen3-Coder-Next Q3_K_XL on MacBook Pro"
+            echo "- falsifier: Gemma 4 26B A4B free tier"
+            echo "- result: accepted without Vertex model invocation"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Record free-review fallback
+      - name: Record local-review escalation
         if: >-
           steps.idem.outputs.action != 'noop' &&
-          steps.route.outputs.reasoning != 'true' &&
-          steps.free_review.outcome == 'failure'
+          (steps.route.outputs.reasoning == 'true' ||
+           steps.local_risk.outputs.force_vertex == 'true' ||
+           steps.local_review.outcome != 'success' ||
+           steps.free_auth.outcome != 'success' ||
+           steps.local_gate.outcome != 'success')
         run: |
           {
-            echo "### Free technical-comment review"
-            echo "- result: fallback to Vertex Gemini 3.7 Flash"
-            echo "- reason: free model quota/API/format/quality gate did not produce a publishable response"
+            echo "### Local technical-comment review"
+            echo "- local outcome: ${{ steps.local_review.outcome }}"
+            echo "- local consequence requires Vertex: ${{ steps.local_risk.outputs.force_vertex }}"
+            echo "- local consequence reason: ${{ steps.local_risk.outputs.reason }}"
+            echo "- Gemma falsifier outcome: ${{ steps.local_gate.outcome }}"
+            echo "- high-risk/final-reasoning route: ${{ steps.route.outputs.reasoning }}"
+            echo "- result: Vertex Gemini 3.7 final adjudication"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Authenticate to Google Cloud with GitHub OIDC
         if: >-
           steps.idem.outputs.action != 'noop' &&
-          steps.route.outputs.reasoning == 'true'
+          (steps.route.outputs.reasoning == 'true' ||
+           steps.local_risk.outputs.force_vertex == 'true' ||
+           steps.local_review.outcome != 'success' ||
+           steps.free_auth.outcome != 'success' ||
+           steps.local_gate.outcome != 'success')
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -247,9 +339,13 @@ jobs:
       - name: Review comment validity with ${{ env.GEMINI_REVIEW_MODEL_DISPLAY_NAME }} on Vertex AI
         if: >-
           steps.idem.outputs.action != 'noop' &&
-          (steps.route.outputs.reasoning == 'true' || steps.free_review.outcome != 'success')
+          (steps.route.outputs.reasoning == 'true' ||
+           steps.local_risk.outputs.force_vertex == 'true' ||
+           steps.local_review.outcome != 'success' ||
+           steps.free_auth.outcome != 'success' ||
+           steps.local_gate.outcome != 'success')
         env:
-          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token || steps.free_auth.outputs.access_token }}
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
           set -euo pipefail
           python3 scripts/ci/ai_review.py build-request \

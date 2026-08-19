@@ -43,6 +43,9 @@ on:
         required: false
         default: ""
         type: string
+    secrets:
+      local_review_token:
+        required: false
 
 concurrency:
   group: code-review-${{ inputs.pr_number }}
@@ -77,12 +80,28 @@ jobs:
         run: |
           set -euo pipefail
           if git show "${BASE_SHA}:scripts/ci/ai_review.py" > /tmp/trusted-ai-review.py 2>/dev/null; then
-            echo "REVIEWER_CODE_SOURCE=base:scripts/ci/ai_review.py" >> "$GITHUB_ENV"
+            if python3 /tmp/trusted-ai-review.py local-prompt --help >/dev/null 2>&1; then
+              echo "REVIEWER_CODE_SOURCE=base:scripts/ci/ai_review.py" >> "$GITHUB_ENV"
+            else
+              # One-time bootstrap for the PR that introduces the local-review
+              # commands. This rollout PR is policy-forced through Vertex, so
+              # its head implementation can be exercised without becoming the
+              # final semantic authority for itself.
+              cp scripts/ci/ai_review.py /tmp/trusted-ai-review.py
+              echo "REVIEWER_CODE_SOURCE=head:local-review-rollout-bootstrap" >> "$GITHUB_ENV"
+              echo "LOCAL_REVIEW_ROLLOUT_BOOTSTRAP=true" >> "$GITHUB_ENV"
+            fi
           else
             # One-time rollout bootstrap: the v2 introduction PR has no helper
             # at its base SHA. Future PRs must use the base copy above.
             cp scripts/ci/ai_review.py /tmp/trusted-ai-review.py
             echo "REVIEWER_CODE_SOURCE=head:rollout-bootstrap" >> "$GITHUB_ENV"
+            echo "LOCAL_REVIEW_ROLLOUT_BOOTSTRAP=true" >> "$GITHUB_ENV"
+          fi
+          if ! git show "${BASE_SHA}:scripts/ci/free_review_falsifier.py" > /tmp/trusted-free-review-falsifier.py 2>/dev/null; then
+            # One-time rollout bootstrap. Once merged, all future PRs use the
+            # base-branch copy and PR content cannot redefine the falsifier.
+            cp scripts/ci/free_review_falsifier.py /tmp/trusted-free-review-falsifier.py
           fi
 
       - name: Plan AI review spend
@@ -98,7 +117,17 @@ jobs:
             python3 /tmp/trusted-ai-review.py review-plan \
               --base "$BASE_SHA" \
               --head "$HEAD_SHA" \
-              --explicit "$EXPLICIT_REVIEW" >> "$GITHUB_OUTPUT"
+              --explicit "$EXPLICIT_REVIEW" > /tmp/review-plan.outputs
+            if [[ "${LOCAL_REVIEW_ROLLOUT_BOOTSTRAP:-false}" == "true" ]]; then
+              sed -E '/^force_vertex(_reason)?=/d' /tmp/review-plan.outputs \
+                > /tmp/review-plan.bootstrap.outputs
+              mv /tmp/review-plan.bootstrap.outputs /tmp/review-plan.outputs
+              {
+                echo "force_vertex=true"
+                echo "force_vertex_reason=local-review rollout bootstrap uses head reviewer code"
+              } >> /tmp/review-plan.outputs
+            fi
+            cat /tmp/review-plan.outputs >> "$GITHUB_OUTPUT"
           else
             # Rollout compatibility for the PR that introduces review-plan.
             {
@@ -109,6 +138,8 @@ jobs:
               echo "model_display_name=Gemini 3.7 Flash"
               echo "max_output_tokens=6000"
               echo "thinking_level=MEDIUM"
+              echo "force_vertex=true"
+              echo "force_vertex_reason=rollout compatibility"
             } >> "$GITHUB_OUTPUT"
           fi
 
@@ -222,11 +253,81 @@ jobs:
             --policy-output /tmp/review-policy.json \
             --output /tmp/code-review-prompt.md
 
+      - name: Prepare bounded local semantic-review context
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier != 'simple'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 /tmp/trusted-ai-review.py local-prompt \
+            --kind pr \
+            --prompt /tmp/code-review-prompt.md \
+            --output /tmp/local-review-prompt.md
+
+      - name: Try local Qwen3-Coder-Next semantic review
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier != 'simple'
+        id: local_review
+        continue-on-error: true
+        env:
+          LOCAL_REVIEW_TOKEN: ${{ secrets.local_review_token }}
+          LOCAL_REVIEW_URL: https://local-review.oosu.dev/v1/review
+          PR_NUMBER: ${{ inputs.pr_number }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$LOCAL_REVIEW_TOKEN"
+          echo "::add-mask::$LOCAL_REVIEW_TOKEN"
+          jq -n \
+            --arg kind pr \
+            --arg request_id "pr-${PR_NUMBER}-${HEAD_SHA}" \
+            --rawfile prompt /tmp/local-review-prompt.md \
+            '{kind:$kind, request_id:$request_id, prompt:$prompt}' \
+            > /tmp/local-review-request.json
+          if ! curl --fail-with-body --silent --show-error \
+            --connect-timeout 4 --max-time 220 \
+            -H "Authorization: Bearer ${LOCAL_REVIEW_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/local-review-request.json \
+            "$LOCAL_REVIEW_URL" > /tmp/local-review-response.json; then
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          try:
+              payload = json.loads(Path('/tmp/local-review-response.json').read_text())
+              print('local reviewer gateway:', str(payload.get('error') or 'request failed')[:500])
+          except Exception:
+              print('local reviewer gateway: request failed without JSON error body')
+          PY
+            exit 1
+          fi
+          python3 /tmp/trusted-ai-review.py parse-local \
+            --kind pr \
+            --response /tmp/local-review-response.json \
+            --output /tmp/local-review-draft.md
+
+      - name: Classify local review consequence
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier != 'simple' &&
+          steps.local_review.outcome == 'success'
+        id: local_risk
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 /tmp/trusted-ai-review.py local-escalation \
+            --kind pr \
+            --draft /tmp/local-review-draft.md >> "$GITHUB_OUTPUT"
+
       - name: Authenticate free-tier key lookup with GitHub OIDC
         if: >-
           steps.plan.outputs.run == 'true' &&
-          steps.plan.outputs.tier == 'simple'
+          (steps.plan.outputs.tier == 'simple' || steps.local_review.outcome == 'success')
         id: free_auth
+        continue-on-error: true
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           project_id: flai-oosuhada-20260506
@@ -280,10 +381,93 @@ jobs:
             --runtime-label "Gemini Developer API Free Tier · ${GEMINI_REVIEW_MODEL}" \
             --output /tmp/code-review.md
 
+      - name: Falsify local review with free Gemma quality gate
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier != 'simple' &&
+          steps.local_review.outcome == 'success' &&
+          steps.free_auth.outcome == 'success'
+        id: local_gate
+        continue-on-error: true
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.free_auth.outputs.access_token }}
+          FREE_API_KEY_RESOURCE: projects/395559345329/locations/global/keys/efe3579e-c4db-4e35-88b9-12188bb1a119
+        shell: bash
+        run: |
+          set -euo pipefail
+          GEMINI_FREE_API_KEY="$(
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${GCP_ACCESS_TOKEN}" \
+              "https://apikeys.googleapis.com/v2/${FREE_API_KEY_RESOURCE}/keyString" \
+              | jq -r '.keyString'
+          )"
+          test -n "$GEMINI_FREE_API_KEY" && test "$GEMINI_FREE_API_KEY" != "null"
+          echo "::add-mask::$GEMINI_FREE_API_KEY"
+          GEMINI_FREE_API_KEY="$GEMINI_FREE_API_KEY" \
+            python3 /tmp/trusted-free-review-falsifier.py \
+              --kind pr \
+              --prompt /tmp/code-review-prompt.md \
+              --candidate /tmp/local-review-draft.md \
+              --output /tmp/local-falsifier.json
+
+      - name: Publishable local review passed both model gates
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier != 'simple' &&
+          steps.local_review.outcome == 'success' &&
+          steps.local_gate.outcome == 'success' &&
+          steps.local_risk.outputs.force_vertex != 'true' &&
+          steps.plan.outputs.force_vertex != 'true'
+        env:
+          REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 /tmp/trusted-ai-review.py format-local-pr \
+            --draft /tmp/local-review-draft.md \
+            --policy /tmp/review-policy.json \
+            --head-sha "$REVIEW_HEAD_SHA" \
+            --output /tmp/code-review.md
+          {
+            echo "### Local semantic review"
+            echo "- primary: Qwen3-Coder-Next Q3_K_XL on MacBook Pro"
+            echo "- falsifier: Gemma 4 26B A4B free tier"
+            echo "- result: accepted without Vertex model invocation"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record local review escalation reason
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier != 'simple' &&
+          (steps.local_review.outcome != 'success' ||
+           steps.free_auth.outcome != 'success' ||
+           steps.local_gate.outcome != 'success' ||
+           steps.local_risk.outputs.force_vertex == 'true' ||
+           steps.plan.outputs.force_vertex == 'true')
+        shell: bash
+        run: |
+          {
+            echo "### Local semantic review"
+            echo "- local outcome: ${{ steps.local_review.outcome }}"
+            echo "- local consequence requires Vertex: ${{ steps.local_risk.outputs.force_vertex }}"
+            echo "- local consequence reason: ${{ steps.local_risk.outputs.reason }}"
+            echo "- Gemma falsifier outcome: ${{ steps.local_gate.outcome }}"
+            echo "- force Vertex: ${{ steps.plan.outputs.force_vertex }}"
+            echo "- policy reason: ${{ steps.plan.outputs.force_vertex_reason }}"
+            echo "- result: Vertex Gemini 3.7 final adjudication"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Authenticate to Google Cloud with GitHub OIDC
         if: >-
           steps.plan.outputs.run == 'true' &&
-          steps.plan.outputs.tier != 'simple'
+          ((steps.plan.outputs.tier == 'simple' &&
+            (steps.plan.outputs.force_vertex == 'true' || steps.free_review.outcome != 'success')) ||
+           (steps.plan.outputs.tier != 'simple' &&
+            (steps.plan.outputs.force_vertex == 'true' ||
+             steps.local_risk.outputs.force_vertex == 'true' ||
+             steps.local_review.outcome != 'success' ||
+             steps.free_auth.outcome != 'success' ||
+             steps.local_gate.outcome != 'success')))
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -297,7 +481,14 @@ jobs:
       - name: Review project intent with ${{ env.GEMINI_REVIEW_MODEL_DISPLAY_NAME }} on Vertex AI
         if: >-
           steps.plan.outputs.run == 'true' &&
-          (steps.plan.outputs.tier != 'simple' || steps.free_review.outcome != 'success')
+          ((steps.plan.outputs.tier == 'simple' &&
+            (steps.plan.outputs.force_vertex == 'true' || steps.free_review.outcome != 'success')) ||
+           (steps.plan.outputs.tier != 'simple' &&
+            (steps.plan.outputs.force_vertex == 'true' ||
+             steps.local_risk.outputs.force_vertex == 'true' ||
+             steps.local_review.outcome != 'success' ||
+             steps.free_auth.outcome != 'success' ||
+             steps.local_gate.outcome != 'success')))
         env:
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token || steps.free_auth.outputs.access_token }}
           REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
