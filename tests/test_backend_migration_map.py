@@ -4,7 +4,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 import re
 
-from scripts.check_backend_migration_ledger import _migration_progress
+from scripts.check_backend_migration_ledger import migration_progress
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +38,7 @@ def _ledger_rows() -> list[tuple[int, list[str]]]:
 
 
 def _migrated_sources() -> set[str]:
-    return set(_migration_progress(MIGRATION_MAP.read_text(encoding="utf-8")))
+    return set(migration_progress(MIGRATION_MAP.read_text(encoding="utf-8")))
 
 
 def test_migration_progress_parser_stops_at_next_section() -> None:
@@ -57,7 +57,7 @@ def test_migration_progress_parser_stops_at_next_section() -> None:
 | dashboard | team | #53 | planned |
 """
 
-    assert _migration_progress(text) == {
+    assert migration_progress(text) == {
         "example.py": ("systems/backend/app/example.py",)
     }
 

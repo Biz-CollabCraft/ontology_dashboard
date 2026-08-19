@@ -15,6 +15,13 @@ DEFAULT_LEDGER = ROOT / "docs" / "backend-migration-map.md"
 DEFAULT_LEGACY_ROOT = ROOT / "systems" / "backend" / "ontology_dashboard"
 ALLOWED_DISPOSITIONS = {"MOVE", "SPLIT", "REPLACE", "REMOVE", "DEFER"}
 
+__all__ = [
+    "LedgerReport",
+    "LedgerValidationError",
+    "migration_progress",
+    "validate_ledger",
+]
+
 
 class LedgerValidationError(RuntimeError):
     """Raised when the migration ledger is structurally incomplete or ambiguous."""
@@ -74,7 +81,7 @@ def _parse_rows(text: str) -> list[tuple[list[str], str, int]]:
     return rows
 
 
-def _migration_progress(text: str) -> dict[str, tuple[str, ...]]:
+def migration_progress(text: str) -> dict[str, tuple[str, ...]]:
     marker = "## 8. Physical migration progress"
     start = text.find(marker)
     if start < 0:
@@ -163,8 +170,8 @@ def validate_ledger(
     legacy = legacy_root or root / "systems" / "backend" / "ontology_dashboard"
     text = ledger.read_text(encoding="utf-8")
     rows = _parse_rows(text)
-    migration_progress = _migration_progress(text)
-    migrated_sources = set(migration_progress)
+    progress = migration_progress(text)
+    migrated_sources = set(progress)
 
     actual = {
         path.relative_to(legacy).as_posix()
@@ -196,7 +203,7 @@ def validate_ledger(
                 assigned[relative_path] = (disposition, line_number, source)
 
     errors: list[str] = []
-    for source, targets in sorted(migration_progress.items()):
+    for source, targets in sorted(progress.items()):
         legacy_path = legacy / source
         if legacy_path.exists():
             errors.append(f"migrated legacy Source reappeared: {source}")
@@ -241,7 +248,7 @@ def validate_ledger(
         total_sources=len(actual),
         disposition_counts={key: counts.get(key, 0) for key in sorted(ALLOWED_DISPOSITIONS)},
         row_count=len(rows),
-        migrated_sources=len(migration_progress),
+        migrated_sources=len(progress),
     )
 
 

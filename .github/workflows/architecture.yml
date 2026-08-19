@@ -182,6 +182,13 @@ jobs:
             tests/test_backend_migration_ledger.py \
             tests/test_architecture_debt_stage44.py
 
+      - name: Deployed metrics security regressions
+        if: needs.changes.outputs.backend == 'true'
+        run: |
+          python -m pytest -q \
+            tests/test_observability_phase25.py::test_deployed_nonproduction_metrics_endpoint_requires_token \
+            tests/test_observability_phase25.py::test_deployment_manifests_wire_metrics_token
+
       - name: Generator import smoke
         if: needs.changes.outputs.generator == 'true'
         working-directory: systems/generator
