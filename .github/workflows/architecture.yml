@@ -165,7 +165,9 @@ jobs:
         run: python systems/verify_architecture.py
 
       - name: Backend migration ratchet negative fixtures
-        run: python -m unittest tests.test_backend_migration_ratchet
+        run: |
+          python -m unittest tests.test_backend_migration_ratchet
+          python -m unittest tests.test_backend_domain_first_architecture
 
       - name: Install Python dependencies
         if: needs.changes.outputs.generator == 'true' || needs.changes.outputs.backend == 'true'
