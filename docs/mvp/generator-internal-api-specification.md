@@ -32,6 +32,7 @@
 | Method | Path | 목적 |
 |---|---|---|
 | GET | `/health` | 데몬 프로세스 상태 확인 |
+| POST | `/extraction` | 데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·원자적 영속화 (1단계) |
 | POST | `/internal/train` | 파이프라인 최초 학습 실행 (단일 프로세스 Lock 하에 실행) |
 | POST | `/internal/retrain` | 재학습 실행, 기존 모델을 덮어쓰지 않고 새 버전으로 저장 (Lock 하에 실행) |
 
@@ -46,7 +47,66 @@
 }
 ```
 
-### 4.2 `POST /internal/train`, `POST /internal/retrain`
+### 4.2 `POST /extraction`
+
+> **단계 범위 명시**:
+> - `/extraction`은 Extraction Plan 및 Mapping 수립·검증 전용 엔드포인트입니다.
+> - Feature·Label·NPY 생성(`/feature`) 및 모델 학습·Artifact 발행(`/train`)은 후속 단계이며, `/extraction`이 후속 단계를 자동 실행하지 않습니다.
+> - Long-format 데이터셋에서 필수 역할(`id_column`, `attribute_column`, `value_column`)을 결정할 수 없는 경우 위치 기반 추측을 금지하고 `EXTRACTION_ROLE_COLUMNS_MISSING` 오류로 즉시 실패합니다.
+
+**요청 본문:**
+
+```json
+{
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "source_uri": "data_preprocessed/ai4i/input.csv",
+  "force_reanalyze": false,
+  "duplicate_policy": "error",
+  "aggregation": null,
+  "idempotency_key": "extract-20260819-001"
+}
+```
+
+**성공 응답 본문:**
+
+```json
+{
+  "request_id": "req-...",
+  "run_id": "extraction-...",
+  "status": "succeeded",
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "extraction_plan_version": "extraction-plan-ai4i-canonical-ai4i-physics-v3.1",
+  "result": {
+    "extraction_type": "tabular_row_as_attribute",
+    "id_column": "asset_id",
+    "time_column": "timestamp",
+    "attribute_column": "attribute",
+    "value_column": "value",
+    "duplicate_policy": "error",
+    "aggregation": null,
+    "mapping_uri": "models_store/cache/extraction_plans/ai4i-canonical-ai4i-physics-v3.1.json"
+  }
+}
+```
+
+**공통 오류 응답 (ErrorEnvelope):**
+
+```json
+{
+  "error": {
+    "code": "REQUEST_VALIDATION_ERROR",
+    "message": "요청 형식이 올바르지 않습니다.",
+    "path": "/extraction",
+    "request_id": "req-...",
+    "error_id": "err-...",
+    "details": []
+  }
+}
+```
+
+### 4.3 `POST /internal/train`, `POST /internal/retrain`
 
 요청:
 
