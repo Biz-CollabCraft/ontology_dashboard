@@ -317,8 +317,6 @@ class ExtractionService:
         """Execute end-to-end extraction and ontology mapping workflow."""
         req_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
         run_id = f"extraction-{uuid.uuid4().hex[:12]}"
-        plan_version = f"extraction-plan-{request.dataset_id}-{request.dataset_version}"
-        mapping_version = f"mapping-{request.dataset_id}-{request.dataset_version}"
 
         dataset_path = self._resolve_dataset_path(request)
         ext = dataset_path.suffix.lower()
@@ -328,67 +326,56 @@ class ExtractionService:
         except Exception as exc:
             raise DatasetContractError(f"데이터셋을 읽는 중 오류가 발생했습니다: {exc}") from exc
 
-        # Check existing plan and mapping
-        existing_plan = None if request.force_reanalyze else self.repository.find_plan(request.dataset_id, request.dataset_version)
-        existing_mapping = None if request.force_reanalyze else self.repository.find_mapping(request.dataset_id, request.dataset_version)
+        logger.info(f"[ExtractionService] Building extraction plan for '{dataset_path.name}'...")
+        plan_dict = self.planner.build_plan(
+            filepath=str(dataset_path),
+            force_reanalyze=request.force_reanalyze,
+            duplicate_policy=request.duplicate_policy,
+            aggregation=request.aggregation,
+        )
+        self.validate_plan(preview_df, plan_dict)
 
-        if existing_plan and existing_mapping:
-            logger.info(f"[ExtractionService] Reusing existing plan and mapping for {request.dataset_id}-{request.dataset_version}")
-            plan_dict = existing_plan
-            plan_uri = self.repository.get_logical_uri(request.dataset_id, request.dataset_version)
-            mapping_uri = self.repository.get_mapping_uri(request.dataset_id, request.dataset_version)
-        else:
-            logger.info(f"[ExtractionService] Building new extraction plan for '{dataset_path.name}'...")
-            plan_dict = self.planner.build_plan(
-                filepath=str(dataset_path),
-                force_reanalyze=request.force_reanalyze,
-                duplicate_policy=request.duplicate_policy,
-                aggregation=request.aggregation,
-            )
-            self.validate_plan(preview_df, plan_dict)
+        # Extract data using validated plan
+        try:
+            extracted_df = extract_with_plan(str(dataset_path), plan_dict)
+        except Exception as exc:
+            raise ExtractionPlanValidationError(f"추출 계획 실행 검증 실패: {exc}") from exc
 
-            # Extract data using validated plan
-            try:
-                extracted_df = extract_with_plan(str(dataset_path), plan_dict)
-            except Exception as exc:
-                raise ExtractionPlanValidationError(f"추출 계획 실행 검증 실패: {exc}") from exc
+        # Perform & Persist Ontology Mapping (Mandatory for /extraction)
+        from systems.generator.ontology_mapping.mapping_cache import MappingStore
+        from systems.generator.ontology_mapping.mapping_agent import map_all_sources
 
-            # Perform & Persist Ontology Mapping (Mandatory for /extraction)
-            from systems.generator.ontology_mapping.mapping_cache import MappingStore
-            from systems.generator.ontology_mapping.mapping_agent import map_all_sources
+        dataset_store = MappingStore()
+        source_key = os.path.splitext(dataset_path.name)[0]
+        sources_dict = {source_key: extracted_df}
+        try:
+            map_all_sources(sources_dict, store=dataset_store)
+        except Exception as exc:
+            logger.exception(f"[ExtractionService] Ontology mapping generation failed: {exc}")
+            raise ExtractionPlanPublishError(f"온톨로지 매핑 생성에 실패했습니다: {exc}") from exc
 
-            dataset_store = MappingStore()
-            source_key = os.path.splitext(dataset_path.name)[0]
-            sources_dict = {source_key: extracted_df}
-            try:
-                map_all_sources(sources_dict, store=dataset_store)
-            except Exception as exc:
-                logger.exception(f"[ExtractionService] Ontology mapping generation failed: {exc}")
-                raise ExtractionPlanPublishError(f"온톨로지 매핑 생성에 실패했습니다: {exc}") from exc
-
-            mapping_dict = {
-                k: {
-                    "target_ontology": v.target_ontology,
-                    "source": v.source,
-                    "confidence": v.confidence,
-                    "status": v.status,
-                }
-                for k, v in dataset_store.get_all().items()
+        mapping_dict = {
+            k: {
+                "target_ontology": v.target_ontology,
+                "source": v.source,
+                "confidence": v.confidence,
+                "status": v.status,
             }
+            for k, v in dataset_store.get_all().items()
+        }
 
-            # Save plan and mapping atomically
-            plan_uri = self.repository.publish_plan(
-                request.dataset_id,
-                request.dataset_version,
-                plan_dict,
-                overwrite=request.force_reanalyze,
-            )
-            mapping_uri = self.repository.publish_mapping(
-                request.dataset_id,
-                request.dataset_version,
-                mapping_dict,
-                overwrite=request.force_reanalyze,
-            )
+        # Publish content-addressed plan and mapping
+        plan_version, plan_uri = self.repository.publish_plan(
+            request.dataset_id,
+            request.dataset_version,
+            plan_dict,
+        )
+        mapping_version, mapping_uri = self.repository.publish_mapping(
+            request.dataset_id,
+            request.dataset_version,
+            mapping_dict,
+            extracted_columns=list(extracted_df.columns),
+        )
 
         return ExtractionResponse(
             request_id=req_id,

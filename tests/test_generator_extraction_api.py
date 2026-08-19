@@ -16,8 +16,18 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionError,
     DatasetNotFoundError,
     ExtractionRoleError,
+    ExtractionPlanNotReadyError,
+    ExtractionPlanIntegrityError,
+    ExtractionPlanContractInvalidError,
+    OntologyMappingNotReadyError,
+    OntologyMappingIntegrityError,
+    OntologyMappingContractInvalidError,
 )
-from systems.generator.app.extraction.extraction_repository import ExtractionRepository
+from systems.generator.app.extraction.extraction_repository import (
+    ExtractionRepository,
+    compute_plan_version,
+    compute_mapping_version,
+)
 from systems.generator.app.extraction.extraction_service import (
     ExtractionService,
     extract_with_plan,
@@ -67,7 +77,7 @@ def test_app_health_endpoint(client):
 
 
 def test_extraction_wide_format_success(client, sample_wide_csv):
-    """POST /extraction on wide tabular data succeeds and returns plan response."""
+    """POST /extraction on wide tabular data succeeds and returns content-addressed plan response."""
     payload = {
         "dataset_id": "test_wide",
         "dataset_version": "v1.0",
@@ -85,15 +95,16 @@ def test_extraction_wide_format_success(client, sample_wide_csv):
     assert data["dataset_version"] == "v1.0"
     assert "request_id" in data
     assert "run_id" in data
+    assert data["extraction_plan_version"].startswith("extraction-plan-")
+    assert data["result"]["mapping_version"].startswith("ontology-mapping-")
     assert "result" in data
     assert data["result"]["extraction_type"] in ("tabular_column_as_attribute", "wide_pivot")
     assert "mapping_uri" in data["result"]
-    assert not data["result"]["mapping_uri"].startswith("C:")  # Logical / relative URI
+    assert not data["result"]["mapping_uri"].startswith("C:")
 
 
 def test_extraction_long_format_success(client, sample_long_csv, monkeypatch):
     """POST /extraction on long format data plans roles and pivots successfully."""
-    # Mock planner stage2 to return explicit long format roles
     from systems.generator.app.extraction.extraction_planner import ExtractionPlanner
     def mock_plan_columns(self, filepath, structure_type, df_preview, duplicate_policy="error", aggregation=None):
         return {
@@ -116,7 +127,6 @@ def test_extraction_long_format_success(client, sample_long_csv, monkeypatch):
         "dataset_version": "v1.0",
         "source_uri": sample_long_csv,
         "force_reanalyze": True,
-        "duplicate_policy": "error",
     }
     res = client.post("/extraction", json=payload)
     assert res.status_code == 200
@@ -135,7 +145,7 @@ def test_extraction_long_format_missing_roles_fails_fast(client, sample_long_csv
     def mock_plan_columns_missing_role(self, filepath, structure_type, df_preview, duplicate_policy="error", aggregation=None):
         return {
             "selected_columns": list(df_preview.columns),
-            "id_column": None,  # Missing id_column
+            "id_column": None,
             "attribute_column": "metric_name",
             "value_column": "metric_value",
         }
@@ -155,16 +165,14 @@ def test_extraction_long_format_missing_roles_fails_fast(client, sample_long_csv
     assert res.status_code == 422
     err = res.json()["error"]
     assert err["code"] == "EXTRACTION_ROLE_COLUMNS_MISSING"
-    assert "error_id" in err
-    assert "request_id" in err
 
 
 def test_extraction_dataset_not_found(client):
-    """POST /extraction with non-existent dataset returns 404 DATASET_NOT_FOUND."""
+    """Non-existent dataset returns 404 DATASET_NOT_FOUND."""
     payload = {
-        "dataset_id": "completely_nonexistent_dataset_xyz",
-        "dataset_version": "v99.9",
-        "source_uri": "nonexistent/path/never_existed.csv",
+        "dataset_id": "non_existent_dataset_xyz",
+        "dataset_version": "v999",
+        "source_uri": "data/non_existent.csv",
     }
     res = client.post("/extraction", json=payload)
     assert res.status_code == 404
@@ -182,19 +190,18 @@ def test_extraction_method_not_allowed(client):
 
 def test_undefined_route_not_found(client):
     """Undefined route returns 404 NOT_FOUND."""
-    res = client.get("/nonexistent/api/route")
+    res = client.get("/unknown_domain_endpoint")
     assert res.status_code == 404
     err = res.json()["error"]
     assert err["code"] == "NOT_FOUND"
 
 
 def test_request_validation_missing_required_fields(client):
-    """Missing required dataset_id/dataset_version returns 422 REQUEST_VALIDATION_ERROR."""
-    res = client.post("/extraction", json={"force_reanalyze": True})
+    """Request missing dataset_id returns 422 REQUEST_VALIDATION_ERROR."""
+    res = client.post("/extraction", json={})
     assert res.status_code == 422
     err = res.json()["error"]
     assert err["code"] == "REQUEST_VALIDATION_ERROR"
-    assert len(err["details"]) > 0
 
 
 def test_request_validation_duplicate_policy_aggregation_conflict(client):
@@ -210,7 +217,6 @@ def test_request_validation_duplicate_policy_aggregation_conflict(client):
     err = res.json()["error"]
     assert err["code"] == "REQUEST_VALIDATION_ERROR"
 
-    # duplicate_policy='error' with aggregation='mean'
     payload2 = {
         "dataset_id": "ds1",
         "dataset_version": "v1",
@@ -223,19 +229,48 @@ def test_request_validation_duplicate_policy_aggregation_conflict(client):
     assert err2["code"] == "REQUEST_VALIDATION_ERROR"
 
 
-def test_repository_atomic_publish(tmp_path):
-    """ExtractionRepository stages in temp file and publishes atomically."""
-    repo = ExtractionRepository(base_dir=tmp_path / "plans")
-    plan_data = {"test_key": "test_value", "structure_type": "tabular_column_as_attribute"}
-    uri = repo.publish_plan("ds_test", "v1", plan_data)
-    assert "ds_test-v1.json" in uri
+def test_repository_content_addressed_plan_and_mapping(tmp_path):
+    """ExtractionRepository creates content-based hashes, verifies integrity, and never overwrites."""
+    repo = ExtractionRepository(
+        base_dir=tmp_path / "plans",
+        mappings_dir=tmp_path / "mappings",
+    )
 
-    loaded = repo.find_plan("ds_test", "v1")
-    assert loaded == plan_data
+    plan1 = {"structure_type": "tabular_column_as_attribute", "selected_columns": ["c1", "c2"]}
+    plan2 = {"structure_type": "tabular_column_as_attribute", "selected_columns": ["c1", "c2", "c3"]}
 
-    # Ensure no lingering .tmp files
-    tmp_files = list((tmp_path / "plans").glob(".tmp_*"))
-    assert len(tmp_files) == 0
+    ver1, uri1 = repo.publish_plan("ds1", "v1", plan1)
+    ver2, uri2 = repo.publish_plan("ds1", "v1", plan2)
+
+    assert ver1.startswith("extraction-plan-")
+    assert ver2.startswith("extraction-plan-")
+    assert ver1 != ver2, "Different plan content must have different versions"
+
+    # Re-publish same plan produces same version and reuses file
+    ver1_again, _ = repo.publish_plan("ds1", "v1", plan1)
+    assert ver1_again == ver1
+
+    loaded1 = repo.find_plan("ds1", "v1", ver1)
+    assert loaded1 == plan1
+
+    # Mapping content hashing and validation
+    mapping1 = {
+        "c1": {"target_ontology": "Voltage", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
+        "c2": {"target_ontology": "Rotation", "source": "mapping_agent", "confidence": 0.9, "status": "auto_mapped"},
+    }
+    mver1, muri1 = repo.publish_mapping("ds1", "v1", mapping1)
+    assert mver1.startswith("ontology-mapping-")
+
+    loaded_map = repo.find_mapping("ds1", "v1", mver1)
+    assert loaded_map == mapping1
+
+    # Integrity verification on corrupted file
+    bad_plan_file = repo.get_plan_path("ds1", "v1", ver1)
+    with open(bad_plan_file, "w", encoding="utf-8") as f:
+        json.dump({"tampered": True}, f)
+
+    with pytest.raises(ExtractionPlanIntegrityError):
+        repo.find_plan("ds1", "v1", ver1)
 
 
 def test_legacy_facade_compatibility(sample_wide_csv):

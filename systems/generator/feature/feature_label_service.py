@@ -69,19 +69,28 @@ def build_labels(
     if plan and isinstance(plan, dict):
         id_col = plan.get("id_column")
     if not id_col or id_col not in df.columns:
-        id_col = "asset_id" if "asset_id" in df.columns else ("machineID" if "machineID" in df.columns else None)
+        for candidate in ("asset_id", "machineID", "equipment_id", "machine_id", "device_id", "UDI", "Product ID", "id"):
+            if candidate in df.columns:
+                id_col = candidate
+                break
 
     time_col = None
     if plan and isinstance(plan, dict):
         time_col = plan.get("time_column")
     if not time_col or time_col not in df.columns:
-        time_col = "observed_at" if "observed_at" in df.columns else ("datetime" if "datetime" in df.columns else None)
+        for candidate in ("observed_at", "datetime", "timestamp", "time", "ts", "date"):
+            if candidate in df.columns:
+                time_col = candidate
+                break
 
     fail_id_col = None
     if plan and isinstance(plan, dict):
         fail_id_col = plan.get("id_column")
     if not fail_id_col or fail_id_col not in f_df.columns:
-        fail_id_col = "asset_id" if "asset_id" in f_df.columns else ("machineID" if "machineID" in f_df.columns else None)
+        for candidate in ("asset_id", "machineID", "equipment_id", "machine_id", "device_id", "UDI", "Product ID", "id"):
+            if candidate in f_df.columns:
+                fail_id_col = candidate
+                break
 
     if time_col and time_col in df.columns:
         df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
@@ -95,7 +104,10 @@ def build_labels(
     # anchor_col (failure_point) 및 exclusion_end_col (period_end / maintenance_end) 탐지
     anchor_col = next((c["name"] for c in time_cols_meta if c.get("semantic") == "failure_point"), None)
     if not anchor_col:
-        anchor_col = "observed_at" if "observed_at" in f_df.columns else ("datetime" if "datetime" in f_df.columns else None)
+        for candidate in ("observed_at", "datetime", "timestamp", "time", "ts", "date", "failure_point"):
+            if candidate in f_df.columns:
+                anchor_col = candidate
+                break
 
     exclusion_end_col = next((c["name"] for c in time_cols_meta if c.get("semantic") in ("period_end", "maintenance_end")), None)
 

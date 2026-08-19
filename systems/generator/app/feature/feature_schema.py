@@ -9,13 +9,12 @@ from pydantic import BaseModel, Field, model_validator
 class FeatureRequest(BaseModel):
     dataset_id: str = Field(..., min_length=1, description="Dataset identifier")
     dataset_version: str = Field(..., min_length=1, description="Dataset version string")
-    extraction_plan_version: str = Field(..., min_length=1, description="Extraction plan version string")
-    mapping_version: str = Field(..., min_length=1, description="Ontology mapping version string")
+    extraction_plan_version: str = Field(..., min_length=1, description="Content-based extraction plan version")
+    mapping_version: str = Field(..., min_length=1, description="Content-based ontology mapping version")
     feature_schema_version: str = Field(..., min_length=1, description="Feature schema version string")
     label_schema_version: str = Field(..., min_length=1, description="Label schema version string")
     prediction_horizon_hours: int = Field(24, gt=0, description="Prediction horizon in hours (must be > 0)")
     rebuild_npy: bool = Field(True, description="Whether to build/rebuild NPY outputs")
-    force: bool = Field(False, description="Force overwrite existing feature outputs")
 
     @model_validator(mode="after")
     def _validate_request(self) -> "FeatureRequest":

@@ -66,7 +66,6 @@ class FeatureRepository:
         y: np.ndarray,
         feature_names: list[str],
         metadata: dict[str, Any],
-        overwrite: bool = False,
     ) -> dict[str, str]:
         """Atomically stage, validate, and publish NPY arrays and metadata into immutable directory."""
         target_dir = self.get_feature_dir(dataset_id, dataset_version, feature_dataset_version)
@@ -89,13 +88,30 @@ class FeatureRepository:
         if X.shape[0] == 0:
             raise NpyValidationError("Cannot publish empty feature dataset (row_count=0)")
 
-        if target_dir.exists() and not overwrite:
-            logger.info(f"[FeatureRepository] Immutable target feature directory {target_dir} exists, reusing without overwrite.")
-            return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
+        # 2. Immutable existence check: never overwrite!
+        if target_dir.exists():
+            meta_path = target_dir / "feature_metadata.json"
+            if meta_path.exists():
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        existing_meta = json.load(f)
+                    if (
+                        existing_meta.get("contract") == metadata.get("contract")
+                        and existing_meta.get("feature_dataset_version") == feature_dataset_version
+                    ):
+                        logger.info(f"[FeatureRepository] Target feature directory {target_dir} exists with exact contract match, returning existing bundle.")
+                        return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
+                except Exception:
+                    pass
+            # If target_dir exists but contract doesn't match or corrupted -> 409 conflict
+            raise FeatureConflictError(
+                f"동일한 Feature Dataset 디렉터리 '{target_dir.name}'가 이미 존재하지만 계약 또는 내용이 일치하지 않습니다. "
+                f"기존 산출물은 불변(immutable)이므로 덮어쓸 수 없습니다."
+            )
 
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-        # 2. Stage in temp directory
+        # 3. Stage in temp directory
         temp_dir = self.base_dir / f".tmp_{uuid.uuid4().hex}_{self._feature_dirname(dataset_id, dataset_version, feature_dataset_version)}"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -114,7 +130,7 @@ class FeatureRepository:
             with open(meta_file, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-            # 3. Post-write disk validation
+            # 4. Post-write disk validation
             X_read = np.load(features_file, allow_pickle=False)
             y_read = np.load(labels_file, allow_pickle=False)
 
@@ -125,10 +141,7 @@ class FeatureRepository:
             if X_read.dtype != np.float64 or y_read.dtype != np.int64:
                 raise NpyValidationError(f"Saved dtypes invalid (X: {X_read.dtype}, y: {y_read.dtype})")
 
-            # 4. Atomic publish (if target exists and overwrite, remove old first; else atomic rename)
-            if target_dir.exists():
-                shutil.rmtree(target_dir, ignore_errors=True)
-
+            # 5. Atomic publish (atomic rename without prior rmtree)
             temp_dir.replace(target_dir)
             logger.info(f"[FeatureRepository] Atomically published immutable feature outputs to {target_dir}")
             return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
@@ -136,7 +149,7 @@ class FeatureRepository:
         except Exception as exc:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
-            if isinstance(exc, NpyValidationError):
+            if isinstance(exc, (NpyValidationError, FeatureConflictError)):
                 raise
             logger.exception(f"[FeatureRepository] Failed to publish feature bundle: {exc}")
             raise NpyPublishError(f"Feature NPY 산출물 저장에 실패했습니다: {exc}") from exc

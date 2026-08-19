@@ -13,7 +13,7 @@
 
 ### 허용 범위
 - `GET /health` (데몬 상태 확인)
-- `POST /extraction` (데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·원자적 영속화)
+- `POST /extraction` (데이터셋 분석 및 내용 기반 해시 Extraction Plan/Mapping 수립·검증·불변 영속화)
 - `POST /feature` (Extraction Plan/Mapping 소비, Feature·Label 생성 및 NPY 불변 발행)
 - `POST /train` (다중 모델 학습 및 Model Artifact 발행 - 후속 구현 대상)
 - `POST /internal/train` (파이프라인 최초 학습 실행, 단일 프로세스 Lock 하에 실행)
@@ -35,7 +35,7 @@
 | Method | Path | 목적 | 상태 |
 |---|---|---|---|
 | GET | `/health` | 데몬 프로세스 상태 확인 | 완료 |
-| POST | `/extraction` | 데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·원자적 영속화 (1단계) | 완료 |
+| POST | `/extraction` | 데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·불변 영속화 (1단계) | 완료 |
 | POST | `/feature` | Extraction Plan/Mapping 소비, Feature·Label 생성 및 NPY/메타데이터 불변 발행 (2단계) | 완료 |
 | POST | `/train` | 다중 ML 모델 학습 및 Model Artifact 발행 | **후속 PR 대상 (미구현)** |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | 완료 |
@@ -58,10 +58,11 @@
 
 ### 4.2 `POST /extraction`
 
-> **단계 범위 및 온톨로지 매핑 책임 명시**:
+> **단계 범위 및 내용 기반 버전(Content-Addressed) 정책 명시**:
 > - `/extraction`은 Extraction Plan 및 Ontology Mapping 수립·검증·영속화 전용 엔드포인트입니다.
-> - 데이터셋 분석 후 컬럼 온톨로지 매핑을 수행하여 `models_store/cache/mappings/{dataset_id}-{dataset_version}.json`에 저장하고 `mapping_version`, `mapping_uri`를 응답에 포함합니다.
+> - Plan과 Mapping의 canonical JSON에 대한 SHA-256 fingerprint 앞 16자리를 실제 식별 버전(`extraction-plan-<hash>`, `ontology-mapping-<hash>`)으로 사용합니다.
 > - 매핑 생성 실패 시 `/extraction` 요청은 실패 처리됩니다.
+> - Plan 및 Mapping은 불변(immutable)으로 저장되며 동일 버전을 덮어쓰지 않습니다.
 > - Feature·Label·NPY 생성(`/feature`) 및 모델 학습·Artifact 발행(`/train`)은 후속 단계이며, `/extraction`이 후속 단계를 자동 실행하지 않습니다.
 
 **요청 본문:**
@@ -86,7 +87,7 @@
   "status": "succeeded",
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "extraction_plan_version": "extraction-plan-ai4i-canonical-ai4i-physics-v3.1",
+  "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
   "result": {
     "extraction_type": "tabular_column_as_attribute",
     "id_column": "UDI",
@@ -95,8 +96,8 @@
     "value_column": null,
     "duplicate_policy": "error",
     "aggregation": null,
-    "mapping_version": "mapping-ai4i-canonical-ai4i-physics-v3.1",
-    "mapping_uri": "models_store/cache/mappings/ai4i-canonical-ai4i-physics-v3.1.json"
+    "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
+    "mapping_uri": "models_store/cache/mappings/ai4i/canonical-ai4i-physics-v3.1/ontology-mapping-b2c3d4e5f6789012.json"
   }
 }
 ```
@@ -106,11 +107,12 @@
 ### 4.3 `POST /feature`
 
 > **단계 범위 및 안전 원칙 명시**:
-> - `POST /feature`는 이미 발행된 `ExtractionPlan` 및 `OntologyMapping`을 조회·검증하여 소비합니다 (자체적인 매핑 생성 로직을 실행하지 않음).
+> - `POST /feature`는 이미 발행된 `ExtractionPlan` 및 `OntologyMapping`을 조회·무결성 검증하여 소비합니다.
 > - `feature_schema_version`으로 Feature Schema를 조회하여 선언된 `feature_names` allowlist에 따라 X 행렬을 구성합니다 (알파벳 정렬 금지, 선언 순서 유지, 선언 외 숫자 컬럼 배제).
 > - `(dataset_id, dataset_version, extraction_plan_version, mapping_version, feature_schema_version, label_schema_version, prediction_horizon_hours)` 계약에 대한 SHA-256 해시로 `feature-dataset-{fingerprint}` 버전을 결정합니다.
-> - 고장 데이터 누락 시 `FAILURE_DATA_NOT_READY` (404), 라벨 계약 위반 시 `LABEL_CONTRACT_INVALID` (422)로 fail-fast합니다.
-> - 불변 디렉터리 구조로 원자적 publish를 수행하며 기존 버전을 덮어쓰지 않습니다.
+> - 원본 데이터셋의 기존 label 컬럼을 신뢰하지 않고 공식 failure event 데이터셋을 기준으로 `[anchor - horizon, anchor)` 구간을 계산합니다.
+> - 고장 데이터 누락 시 `FAILURE_DATA_NOT_READY` (404), Positive 고장 샘플 0건 시 `INSUFFICIENT_POSITIVE_SAMPLES` (422)로 fail-fast합니다.
+> - 불변 디렉터리 구조로 원자적 publish를 수행하며 기존 동일 버전 디렉터리를 선삭제하거나 덮어쓰지 않습니다 (계약 불일치 시 409 `FEATURE_DATASET_CONFLICT`).
 
 **요청 본문:**
 
@@ -118,13 +120,12 @@
 {
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "extraction_plan_version": "extraction-plan-ai4i-canonical-ai4i-physics-v3.1",
-  "mapping_version": "mapping-ai4i-canonical-ai4i-physics-v3.1",
+  "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
+  "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
   "feature_schema_version": "ai4i-feature-v1",
   "label_schema_version": "ai4i-label-v1",
   "prediction_horizon_hours": 24,
-  "rebuild_npy": true,
-  "force": false
+  "rebuild_npy": true
 }
 ```
 
@@ -137,17 +138,17 @@
   "status": "succeeded",
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "extraction_plan_version": "extraction-plan-ai4i-canonical-ai4i-physics-v3.1",
-  "mapping_version": "mapping-ai4i-canonical-ai4i-physics-v3.1",
+  "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
+  "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
   "feature_schema_version": "ai4i-feature-v1",
   "label_schema_version": "ai4i-label-v1",
   "outputs": {
-    "feature_dataset_version": "feature-dataset-a1b2c3d4e5f67890",
+    "feature_dataset_version": "feature-dataset-c3d4e5f678901234",
     "row_count": 10000,
     "feature_count": 5,
-    "features_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-a1b2c3d4e5f67890/features.npy",
-    "labels_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-a1b2c3d4e5f67890/labels.npy",
-    "metadata_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-a1b2c3d4e5f67890/feature_metadata.json"
+    "features_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-c3d4e5f678901234/features.npy",
+    "labels_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-c3d4e5f678901234/labels.npy",
+    "metadata_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-c3d4e5f678901234/feature_metadata.json"
   }
 }
 ```
@@ -201,11 +202,15 @@
 | 404 | `ONTOLOGY_MAPPING_NOT_READY` | `/feature` 실행 전 필수 Ontology Mapping 산출물 부재 |
 | 404 | `FAILURE_DATA_NOT_READY` | 학습 라벨링에 필요한 고장 이력 데이터 부재 |
 | 405 | `METHOD_NOT_ALLOWED` | 허용되지 않은 HTTP 메서드 호출 |
-| 422 | `EXTRACTION_PLAN_VERSION_MISMATCH` | 요청한 plan_version과 저장된 plan_version 불일치 |
-| 422 | `ONTOLOGY_MAPPING_VERSION_MISMATCH` | 요청한 mapping_version과 저장된 mapping_version 불일치 |
+| 409 | `FEATURE_DATASET_CONFLICT` | 동일 Feature Dataset 버전 디렉터리가 이미 존재하나 계약 내용이 불일치함 |
+| 422 | `EXTRACTION_PLAN_INTEGRITY_ERROR` | Extraction Plan의 내용 해시와 요청된 버전 불일치 |
+| 422 | `ONTOLOGY_MAPPING_INTEGRITY_ERROR` | Ontology Mapping의 내용 해시와 요청된 버전 불일치 |
+| 422 | `EXTRACTION_PLAN_CONTRACT_INVALID` | Extraction Plan 파일 손상 또는 스키마 위반 |
+| 422 | `ONTOLOGY_MAPPING_CONTRACT_INVALID` | Ontology Mapping 파일 손상 또는 스키마 위반 |
 | 422 | `FEATURE_SCHEMA_MISMATCH` | Feature Schema 미존재, allowlist 컬럼 부재, 누수 컬럼 포함 등 |
 | 422 | `LABEL_CONTRACT_INVALID` | 라벨 컬럼 부재 또는 값이 `{0, 1}` 범위를 벗어남 |
 | 422 | `LABEL_ANCHOR_NOT_FOUND` | id, time 또는 failure anchor 결정을 할 수 없음 |
+| 422 | `INSUFFICIENT_POSITIVE_SAMPLES` | 고장 예측 구간 내 Positive 고장 샘플 0건 |
 | 422 | `INSUFFICIENT_TRAINING_DATA` | 유효 데이터 행 수 0건 등 학습 데이터 부족 |
 | 422 | `NPY_VALIDATION_ERROR` | NPY 행렬 shape, dtype, NaN/Inf 불일치 |
 | 500 | `EXTRACTION_PLAN_PUBLISH_ERROR` | 추출 계획 또는 온톨로지 매핑 파일 저장 실패 |

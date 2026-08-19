@@ -120,24 +120,32 @@ def map_column(column_name: str, sample_values: list, store: MappingStore, file_
         logger.warning(f"[MappingAgent] LLM mapping inference failed for '{column_name}': {e}. Applying heuristic fallback.")
         # Heuristic fallback for standard sensor column names
         c_lower = column_name.lower()
-        if "voltage" in c_lower:
+        if "volt" in c_lower:
             target, confidence = "Voltage", 0.8
-        elif "rotation" in c_lower and "speed" not in c_lower:
+        elif "rot" in c_lower and "speed" not in c_lower:
             target, confidence = "Rotation", 0.8
-        elif "pressure" in c_lower:
+        elif "press" in c_lower:
             target, confidence = "Pressure", 0.8
-        elif "vibration" in c_lower:
+        elif "vib" in c_lower:
             target, confidence = "Vibration", 0.8
         elif "air" in c_lower and "temp" in c_lower:
             target, confidence = "AirTemperature", 0.8
         elif "process" in c_lower and "temp" in c_lower:
             target, confidence = "ProcessTemperature", 0.8
+        elif "temp" in c_lower:
+            target, confidence = "AirTemperature", 0.8
         elif "speed" in c_lower or "rpm" in c_lower:
             target, confidence = "RotationalSpeed", 0.8
         elif "torque" in c_lower:
             target, confidence = "Torque", 0.8
         elif "tool" in c_lower and "wear" in c_lower:
             target, confidence = "ToolWear", 0.8
+        elif "wear" in c_lower:
+            target, confidence = "ToolWear", 0.8
+        elif "id" in c_lower or "machine" in c_lower or "asset" in c_lower or "udi" in c_lower:
+            target, confidence = "Equipment", 0.8
+        elif "time" in c_lower or "date" in c_lower or "ts" in c_lower:
+            target, confidence = "Timestamp", 0.8
         else:
             target, confidence = "Unknown", 0.0
         reason = f"Heuristic fallback due to inference exception: {e}"
