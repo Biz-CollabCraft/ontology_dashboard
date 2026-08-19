@@ -223,3 +223,14 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
 Governance/Report 책임이 남아 있으므로 파일 자체를 `MIGRATED`로 표시하지 않는다.
+
+Phase 5(#56)는 공유 Source를 삭제하지 않고 Equipment 책임만 물리적으로 분리한다.
+`service.py`의 Equipment master application 책임과
+`routers/manufacturing.py`의 `/api/equipment*` route 정의는
+`systems/backend/app/equipment`으로 이동하고, Equipment current-state query/state-patch
+public port와 optimistic `state_version` 규칙을 canonical domain에 정의한다. `service.py`, `repository.py`,
+`routers/manufacturing.py`에는 다른 Domain 책임이 남아 있으므로 이 표의 `MIGRATED`
+Source로 올리지 않으며 Section 3의 `SPLIT` disposition도 유지한다. Equipment가 소유하는
+state patch 적용 규칙과 `state_version` compare-and-set 계약은 이후 Maintenance/Dashboard가
+public Equipment contract를 통해 소비하고, 기존 `closed_loop` persistence 연결은 #59에서
+그 port에 맞춰 수렴시킨다.

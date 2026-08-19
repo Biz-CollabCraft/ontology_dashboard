@@ -1,40 +1,99 @@
-"""
-equipment_repository.py
+"""Repository port and fixture adapter for the Equipment bounded context."""
 
-담당 기능:
-- 설비 데이터의 영속성(Persistence) 접근을 담당한다. 데이터베이스 또는 영속성 스토리지에
-  접근하여 설비 마스터 레코드에 대한 CRUD(생성, 읽기, 수정, 삭제) 쿼리를 실행한다.
+from __future__ import annotations
 
-입력:
-- equipment_service에서 전달받은 조회 쿼리 조건 또는 저장 대상 도메인 엔티티 객체.
+from copy import deepcopy
+from threading import RLock
+from typing import Any, Iterable, Mapping, Protocol, cast
 
-출력:
-- 데이터베이스 튜플/엔티티 객체 또는 영속화 처리 성공 여부 (`bool`).
-
-의존 모듈:
-- DB 연결 세션 관리자 및 ORM/SQL 매퍼.
-
-예외/경계 상황:
-- 데이터베이스 연결 끊김 또는 쿼리 실행 타임아웃 발생 시 `EquipmentRepositoryError`를 발생시킨다.
-  단독 실행 대상이 아닌 모듈이다.
-
-설계 원칙과의 연결:
-- docs/architecture.md 4장의 백엔드 계층 분리 원칙을 지킨다.
-"""
-
-import sys
+from .equipment_domain import EquipmentCurrentState, EquipmentMaster, next_state_version
+from .equipment_exception import EquipmentStateVersionConflictError
 
 
-class EquipmentRepository:
-    """설비 영속성 리포지토리 클래스 스켈레톤"""
+class EquipmentRepository(Protocol):
+    """Persistence-neutral contract consumed by :class:`EquipmentService`."""
 
-    pass
+    def list_masters(self, *, project_id: str) -> list[EquipmentMaster]: ...
+
+    def get_master(self, *, project_id: str, equipment_id: str) -> EquipmentMaster | None: ...
+
+    def get_current_state(
+        self, *, project_id: str, equipment_id: str
+    ) -> EquipmentCurrentState | None: ...
+
+    def compare_and_set_state(
+        self,
+        *,
+        project_id: str,
+        equipment_id: str,
+        expected_state_version: int | None,
+        state: Mapping[str, Any],
+    ) -> EquipmentCurrentState: ...
 
 
-if __name__ == "__main__":
-    print(
-        "[ERROR] equipment_repository.py는 단독 실행 대상이 아닙니다. "
-        "DB 연결 세션 컨텍스트 내에서 실행하십시오.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+class FixtureEquipmentRepository:
+    """Fixture-backed adapter for the existing manufacturing showcase host."""
+
+    def __init__(
+        self,
+        masters: Iterable[tuple[str, Mapping[str, Any]]],
+    ) -> None:
+        self._masters: dict[tuple[str, str], EquipmentMaster] = {}
+        for project_id, payload in masters:
+            master = EquipmentMaster.from_mapping(payload)
+            self._masters[(project_id, master.equipment_id)] = master
+        self._states: dict[tuple[str, str], EquipmentCurrentState] = {}
+        self._state_lock = RLock()
+
+    def list_masters(self, *, project_id: str) -> list[EquipmentMaster]:
+        return sorted(
+            (
+                master
+                for (candidate_project_id, _), master in self._masters.items()
+                if candidate_project_id == project_id
+            ),
+            key=lambda master: master.equipment_id,
+        )
+
+    def get_master(self, *, project_id: str, equipment_id: str) -> EquipmentMaster | None:
+        return self._masters.get((project_id, equipment_id))
+
+    def get_current_state(
+        self, *, project_id: str, equipment_id: str
+    ) -> EquipmentCurrentState | None:
+        with self._state_lock:
+            snapshot = self._states.get((project_id, equipment_id))
+            if snapshot is None:
+                return None
+            return EquipmentCurrentState(
+                equipment_id=snapshot.equipment_id,
+                state_version=snapshot.state_version,
+                state=deepcopy(dict(snapshot.state)),
+            )
+
+    def compare_and_set_state(
+        self,
+        *,
+        project_id: str,
+        equipment_id: str,
+        expected_state_version: int | None,
+        state: Mapping[str, Any],
+    ) -> EquipmentCurrentState:
+        key = (project_id, equipment_id)
+        with self._state_lock:
+            current = self._states.get(key)
+            actual_version = None if current is None else current.state_version
+            if actual_version != expected_state_version:
+                raise EquipmentStateVersionConflictError(
+                    expected=expected_state_version,
+                    actual=actual_version,
+                )
+            self._states[key] = EquipmentCurrentState(
+                equipment_id=equipment_id,
+                state_version=next_state_version(actual_version),
+                state=deepcopy(dict(state)),
+            )
+            return cast(
+                EquipmentCurrentState,
+                self.get_current_state(project_id=project_id, equipment_id=equipment_id),
+            )
