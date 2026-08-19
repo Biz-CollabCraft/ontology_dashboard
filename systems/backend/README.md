@@ -37,6 +37,22 @@ uvicorn app.main:app --host 127.0.0.1 --port 8100
 [`docs/backend-migration-map.md`](../../docs/backend-migration-map.md)를 따른다. 현재 import되거나
 테스트된다는 사실만으로 새 구조에 자동 이관하지 않는다.
 
+Phase 0.5에서는 160개 legacy Python Source 전체의 처분을 최종화했고 `DEFER=0`을
+gate로 고정한다. Analysis/Agent/Modeling Workbench, generic Platform automation/branching/
+durable runtime/MLOps/pipeline은 존재 여부와 무관하게 제품 Target 근거가 없어 제거 대상으로
+분류한다. 반대로 PdM ontology materialization, Project 3 typed integration, artifact/dataset/
+ontology capability처럼 유지 근거가 있는 기능은 해당 owner domain/Infra로만 분해한다.
+
+Migration Ledger는 다음 deterministic check로 검증한다.
+
+```bash
+python3 scripts/check_backend_migration_ledger.py
+```
+
+이 검사는 모든 `systems/backend/ontology_dashboard/**/*.py`가 ledger에 정확히 한 번 포함되는지,
+처분 enum이 유효한지, 중복/누락이 없는지, `UNDECIDED`/`DEFER`가 남지 않는지를 확인하며
+`systems/verify_architecture.py`에도 연결된다.
+
 ## 보안 경계
 
 - session token은 HttpOnly SameSite cookie로 전달하고 DB에는 SHA-256 hash만 저장한다.
