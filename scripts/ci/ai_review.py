@@ -157,6 +157,12 @@ TECHNICAL_CLASSES = {
     "implementation_request",
 }
 
+FULL_REVIEW_REQUEST = "full_review_request"
+REASONING_MODEL = "gemini-3.7-flash"
+REASONING_MODEL_DISPLAY = "Gemini 3.7 Flash"
+SIMPLE_MODEL = "gemini-3.5-flash-lite"
+SIMPLE_MODEL_DISPLAY = "Gemini 3.5 Flash-Lite"
+
 TRUSTED_COMMENT_AUTHOR_ASSOCIATIONS = {
     "OWNER",
     "MEMBER",
@@ -351,6 +357,8 @@ def assemble_head_source_context(
 def classify_comment(body: str, *, review_state: str | None = None) -> str:
     text = body.strip()
     lower = text.lower()
+    if lower in {"/ai-review", "ai-review"}:
+        return FULL_REVIEW_REQUEST
     if review_state and review_state.lower() == "approved" and not text:
         return "approval"
     if not text:
@@ -434,7 +442,11 @@ def event_to_comment(
         body=body,
         classification=classification,
         authorized=authorized,
-        eligible=(classification in TECHNICAL_CLASSES and not bot and authorized),
+        eligible=(
+            classification in (TECHNICAL_CLASSES | {FULL_REVIEW_REQUEST})
+            and not bot
+            and authorized
+        ),
     )
 
 
@@ -565,33 +577,132 @@ def _bool(value: str | bool | None) -> bool:
     return str(value or "").lower() == "true"
 
 
+def review_profile(changed_paths: Sequence[str]) -> dict[str, Any]:
+    docs_only = bool(changed_paths) and all(
+        path.startswith("docs/")
+        or path in {"README.md", "THIRD_PARTY_NOTICES.md"}
+        for path in changed_paths
+    )
+    large_or_high_risk = len(changed_paths) > 20 or any(
+        path.startswith(
+            (
+                "systems/backend/",
+                "contracts/",
+                "schemas/",
+                "infra/",
+                "ml/",
+            )
+        )
+        or "migration" in path.lower()
+        for path in changed_paths
+    )
+    if docs_only:
+        return {
+            "tier": "simple",
+            "model_id": SIMPLE_MODEL,
+            "model_display_name": SIMPLE_MODEL_DISPLAY,
+            "prompt_char_budget": 160_000,
+            "max_output_tokens": 4000,
+            "thinking_level": "",
+        }
+    return {
+        "tier": "reasoning",
+        "model_id": REASONING_MODEL,
+        "model_display_name": REASONING_MODEL_DISPLAY,
+        "prompt_char_budget": 360_000 if large_or_high_risk else 240_000,
+        "max_output_tokens": 6000,
+        "thinking_level": "MEDIUM",
+    }
+
+
+def should_run_full_review(
+    base: str,
+    head: str,
+    changed_paths: Sequence[str],
+    *,
+    explicit: bool = False,
+) -> tuple[bool, str]:
+    if explicit:
+        return True, "explicit ai-review request"
+    if not changed_paths:
+        return False, "no changed files"
+    docs_only = all(
+        path.startswith("docs/")
+        or path in {"README.md", "THIRD_PARTY_NOTICES.md"}
+        for path in changed_paths
+    )
+    if docs_only:
+        return False, "documentation-only change"
+    lockfile_only = all(path == "systems/frontend/package-lock.json" for path in changed_paths)
+    if lockfile_only:
+        return False, "generated lockfile-only change"
+    whitespace = subprocess.run(
+        ["git", "diff", "--quiet", "-w", base, head],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+    if whitespace:
+        return False, "whitespace-only change"
+    return True, "semantic code/config change"
+
+
+def _bounded_feedback(items: Sequence[dict[str, str]], max_chars: int = 32_000) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    total = 0
+    for item in items[:16]:
+        clipped = dict(item)
+        clipped["body"] = str(clipped.get("body") or "")[:2400]
+        encoded = json.dumps(clipped, ensure_ascii=False)
+        if total + len(encoded) > max_chars:
+            break
+        result.append(clipped)
+        total += len(encoded)
+    return result
+
+
 def _bounded_diff(base: str, head: str, max_chars: int = 900_000) -> tuple[str, bool]:
     diff = run_git("diff", "--find-renames", "--unified=12", base, head)
     truncated = len(diff) > max_chars
     return diff[:max_chars], truncated
 
 
-def _architecture_log(path: str | None) -> str:
+def _architecture_log(path: str | None, max_chars: int = 30_000) -> str:
     if not path or not Path(path).exists():
         return "(not supplied)"
     text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return text[-80_000:]
+    return text[-max_chars:]
 
 
 def prepare_pr_prompt(args: argparse.Namespace) -> None:
     name_status, changed_paths = git_changed_paths(args.base, args.head)
-    diff, truncated = _bounded_diff(args.base, args.head)
+    profile = review_profile(changed_paths)
+    reasoning = profile["tier"] == "reasoning"
+    diff, truncated = _bounded_diff(
+        args.base, args.head, max_chars=150_000 if reasoning else 80_000
+    )
     trusted_context, categories, context_paths, routing_source = assemble_trusted_context(
-        args.base, changed_paths
+        args.base,
+        changed_paths,
+        max_total_chars=80_000 if reasoning else 45_000,
+        max_doc_chars=20_000 if reasoning else 12_000,
     )
     intent_hints = detect_intent_risk_hints(diff, changed_paths)
-    head_source_context = assemble_head_source_context(args.head, changed_paths)
-    feedback = human_technical_feedback(
-        _json_items(_load_json(args.issue_comments, [])),
-        _json_items(_load_json(args.reviews, [])),
-        _json_items(_load_json(args.review_comments, [])),
+    head_source_context = assemble_head_source_context(
+        args.head,
+        changed_paths,
+        max_total_chars=80_000 if reasoning else 40_000,
+        max_file_chars=18_000 if reasoning else 10_000,
+    )
+    feedback = _bounded_feedback(
+        human_technical_feedback(
+            _json_items(_load_json(args.issue_comments, [])),
+            _json_items(_load_json(args.reviews, [])),
+            _json_items(_load_json(args.review_comments, [])),
+        )
     )
     evidence = build_verified_evidence(args)
+    evidence["review_profile"] = profile
     Path(args.policy_output).write_text(
         json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -607,7 +718,7 @@ TRUST BOUNDARY
 
 RUNTIME-CONFIRMED REVIEWER FACTS
 - This prompt will be sent only after GitHub OIDC/WIF authentication in the review workflow.
-- Configured Vertex model ID: {os.environ.get('GEMINI_REVIEW_MODEL', 'unknown')}.
+- Selected Vertex model ID: {profile['model_id']} ({profile['tier']} tier).
 - Configured Vertex location: {os.environ.get('VERTEX_LOCATION', 'unknown')}.
 - Reviewer implementation source: {os.environ.get('REVIEWER_CODE_SOURCE', 'unknown')}.
 - Treat model/location availability as runtime-confirmed only if the supplied Vertex response later completes with finishReason=STOP; do not infer external availability from memory.
@@ -679,10 +790,10 @@ TRUSTED_BASE_CONTEXT
 {trusted_context}
 
 PR_TITLE (untrusted)
-{args.pr_title}
+{args.pr_title[:1000]}
 
 PR_BODY (untrusted)
-{args.pr_body}
+{args.pr_body[:8000]}
 
 CHANGED_FILES
 {name_status}
@@ -696,27 +807,39 @@ CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before trunca
 DIFF (untrusted review input)
 {diff}
 """
+    prompt_budget = int(profile["prompt_char_budget"])
+    prompt_truncated = len(prompt) > prompt_budget
+    if prompt_truncated:
+        prompt = prompt[:prompt_budget] + "\n\n[INPUT TRUNCATED BY REVIEW COST BUDGET]\n"
     Path(args.output).write_text(prompt, encoding="utf-8")
     print(
         "review context:",
+        f"tier={profile['tier']}",
+        f"model={profile['model_id']}",
         f"categories={','.join(categories)}",
         f"docs={len(context_paths)}",
         f"feedback={len(feedback)}",
         f"diff_chars={len(diff)}",
         f"truncated={truncated}",
+        f"prompt_chars={len(prompt)}",
+        f"prompt_truncated={prompt_truncated}",
         f"readiness_ceiling={evidence['merge_readiness_ceiling']}",
     )
 
 
 def build_vertex_request(prompt_path: str, output_path: str) -> None:
     prompt = Path(prompt_path).read_text(encoding="utf-8")
+    max_output_tokens = int(os.getenv("GEMINI_REVIEW_MAX_OUTPUT_TOKENS", "6000"))
+    thinking_level = os.getenv("GEMINI_REVIEW_THINKING_LEVEL", "MEDIUM").strip()
+    generation_config: dict[str, Any] = {
+        "temperature": 0.1,
+        "maxOutputTokens": max_output_tokens,
+    }
+    if thinking_level:
+        generation_config["thinkingConfig"] = {"thinkingLevel": thinking_level}
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 32768,
-            "thinkingConfig": {"thinkingLevel": "MEDIUM"},
-        },
+        "generationConfig": generation_config,
     }
     Path(output_path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
@@ -839,13 +962,13 @@ def prepare_comment_prompt(args: argparse.Namespace) -> None:
     base = (pr.get("base") or {}).get("sha") or args.base_sha
     head = (pr.get("head") or {}).get("sha") or args.head_sha
     name_status, changed_paths = git_changed_paths(base, head)
-    diff, truncated = _bounded_diff(base, head, max_chars=700_000)
+    diff, truncated = _bounded_diff(base, head, max_chars=80_000)
     trusted_context, categories, context_paths, routing_source = assemble_trusted_context(
-        base, changed_paths, max_total_chars=220_000
+        base, changed_paths, max_total_chars=50_000, max_doc_chars=14_000
     )
     intent_hints = detect_intent_risk_hints(diff, changed_paths)
     head_source_context = assemble_head_source_context(
-        head, changed_paths, max_total_chars=160_000
+        head, changed_paths, max_total_chars=50_000, max_file_chars=12_000
     )
 
     prompt = f"""You review a human technical comment on Biz-CollabCraft/ontology_dashboard.
@@ -878,7 +1001,7 @@ kind={source.source_kind}
 id={source.source_id}
 classification={source.classification}
 author=@{source.author}
-comment={source.body}
+comment={source.body[:8000]}
 
 PR
 number={source.pr_number}
@@ -905,6 +1028,8 @@ CHANGED_HEAD_SOURCE_CONTEXT
 DIFF
 {diff}
 """
+    if len(prompt) > 220_000:
+        prompt = prompt[:220_000] + "\n\n[INPUT TRUNCATED BY COMMENT REVIEW COST BUDGET]\n"
     Path(args.output).write_text(prompt, encoding="utf-8")
 
 
@@ -937,9 +1062,33 @@ def command_idempotency(args: argparse.Namespace) -> None:
     print(f"existing_id={existing_id or ''}")
 
 
+def command_review_plan(args: argparse.Namespace) -> None:
+    _name_status, changed_paths = git_changed_paths(args.base, args.head)
+    run, reason = should_run_full_review(
+        args.base,
+        args.head,
+        changed_paths,
+        explicit=_bool(args.explicit),
+    )
+    profile = review_profile(changed_paths)
+    print(f"run={str(run).lower()}")
+    print(f"reason={reason}")
+    print(f"tier={profile['tier']}")
+    print(f"model_id={profile['model_id']}")
+    print(f"model_display_name={profile['model_display_name']}")
+    print(f"max_output_tokens={profile['max_output_tokens']}")
+    print(f"thinking_level={profile['thinking_level']}")
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     sub = root.add_subparsers(dest="command", required=True)
+
+    plan = sub.add_parser("review-plan")
+    plan.add_argument("--base", required=True)
+    plan.add_argument("--head", required=True)
+    plan.add_argument("--explicit", default="false")
+    plan.set_defaults(func=command_review_plan)
 
     pr = sub.add_parser("prepare-pr")
     pr.add_argument("--base", required=True)

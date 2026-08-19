@@ -103,12 +103,15 @@ jobs:
     if: >-
       needs.gate.outputs.authorized == 'true' &&
       needs.gate.outputs.eligible == 'true' &&
-      needs.gate.outputs.same_repo == 'true'
+      needs.gate.outputs.same_repo == 'true' &&
+      needs.gate.outputs.classification != 'full_review_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       GEMINI_REVIEW_MODEL: gemini-3.7-flash
       GEMINI_REVIEW_MODEL_DISPLAY_NAME: Gemini 3.7 Flash
+      GEMINI_REVIEW_MAX_OUTPUT_TOKENS: 4000
+      GEMINI_REVIEW_THINKING_LEVEL: MEDIUM
       VERTEX_LOCATION: global
       PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
       SOURCE_ID: ${{ needs.gate.outputs.source_id }}
@@ -221,3 +224,31 @@ jobs:
               "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
               --input /tmp/comment-payload.json
           fi
+
+  full-review-request:
+    needs: gate
+    if: >-
+      needs.gate.outputs.authorized == 'true' &&
+      needs.gate.outputs.eligible == 'true' &&
+      needs.gate.outputs.same_repo == 'true' &&
+      needs.gate.outputs.classification == 'full_review_request'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Convert /ai-review into one-shot label trigger
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh label create ai-review \
+            --repo "$GITHUB_REPOSITORY" \
+            --color "5319E7" \
+            --description "Request one full Vertex AI PR review" \
+            --force
+          gh issue edit "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --add-label ai-review
