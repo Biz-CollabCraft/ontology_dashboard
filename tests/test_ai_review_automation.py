@@ -8,21 +8,124 @@ from scripts.ci.ai_review import (
     build_verified_evidence,
     classify_comment,
     comment_requires_reasoning,
+    compact_local_review_prompt,
     context_documents,
     detect_intent_risk_hints,
     event_to_comment,
     human_technical_feedback,
     idempotency_decision,
     is_trusted_comment_author,
+    local_review_requires_vertex,
     review_profile,
+    review_force_vertex,
     route_context,
     should_run_full_review,
 )
 from scripts.ci.free_comment_review import _compact_verifier_evidence, _verifier_prompt
 from scripts.ci.free_comment_review import _draft_is_well_formed, _parse_verifier
+from scripts.ci.free_review_falsifier import compact_evidence, compact_candidate
 
 
 class AiReviewAutomationTests(unittest.TestCase):
+    def test_local_review_prompt_stays_within_qwen_runtime_budget(self):
+        prompt = """review policy
+
+SOURCE
+comment=""" + ("technical question " * 2000) + """
+
+PR
+number=72
+
+INTENT_RISK_HINTS (verify before relying on them)
+["domain"]
+
+TRUSTED_BASE_CONTEXT
+""" + ("contract evidence " * 5000) + """
+
+CHANGED_FILES
+M\tsystems/backend/app/dashboard/dashboard_service.py
+
+CHANGED_HEAD_SOURCE_CONTEXT
+""" + ("head source " * 8000) + """
+
+DIFF
+""" + ("+changed line\n" * 12000)
+
+        compact = compact_local_review_prompt(prompt, "comment")
+        self.assertLessEqual(len(compact), 89_000)
+        self.assertIn("SOURCE", compact)
+        self.assertIn("TRUSTED_BASE_CONTEXT", compact)
+        self.assertIn("CHANGED_HEAD_SOURCE_CONTEXT", compact)
+
+    def test_full_review_risk_gate_keeps_privileged_paths_on_vertex_final(self):
+        force, reason = review_force_vertex([".github/workflows/code-review.yml"])
+        self.assertTrue(force)
+        self.assertIn("high-risk", reason)
+
+        force, reason = review_force_vertex(
+            ["systems/backend/app/dashboard/dashboard_service.py"]
+        )
+        self.assertFalse(force)
+        self.assertIn("local semantic", reason)
+
+        force, reason = review_force_vertex(
+            ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"],
+            explicit=True,
+        )
+        self.assertTrue(force)
+        self.assertIn("explicit", reason)
+
+    def test_local_review_output_escalates_blockers_but_not_clean_reviews(self):
+        force, reason = local_review_requires_vertex(
+            "### 발견 사항\n[P1] domain boundary violation\n\n### Merge Readiness\nNot Ready",
+            "pr",
+        )
+        self.assertTrue(force)
+        self.assertIn("P0/P1", reason)
+
+        force, reason = local_review_requires_vertex(
+            "### 발견 사항\n현재 actionable finding은 없습니다.\n\n### Merge Readiness\nReady to Merge",
+            "pr",
+        )
+        self.assertFalse(force)
+        self.assertIn("no high-consequence", reason)
+
+        force, reason = local_review_requires_vertex(
+            "@reviewer 부분적으로 타당합니다. [P1] 인증 권한 경계 문제가 확인됩니다.",
+            "comment",
+        )
+        self.assertTrue(force)
+        self.assertIn("P0/P1", reason)
+
+    def test_gemma_falsifier_packet_is_smaller_than_local_prompt(self):
+        source = """policy
+
+SOURCE
+comment=""" + ("human comment " * 1000) + """
+
+PR
+number=72
+
+INTENT_RISK_HINTS (verify before relying on them)
+["domain"]
+
+TRUSTED_BASE_CONTEXT
+""" + ("contract " * 5000) + """
+
+CHANGED_FILES
+M\tsystems/backend/app/dashboard/dashboard_service.py
+
+CHANGED_HEAD_SOURCE_CONTEXT
+""" + ("source " * 10000) + """
+
+DIFF
+""" + ("+line\n" * 15000)
+        packet = compact_evidence(source, "comment")
+        candidate = compact_candidate("타당합니다. " + ("근거 설명 " * 3000), "comment")
+        self.assertLessEqual(len(packet), 23_000)
+        self.assertLessEqual(len(candidate), 8_100)
+        self.assertIn("CHANGED_HEAD_SOURCE_CONTEXT", packet)
+
     def test_free_verifier_context_is_compact_even_for_large_review_prompt(self):
         prompt = """header
 
