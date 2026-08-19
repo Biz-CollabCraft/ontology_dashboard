@@ -339,7 +339,30 @@ canonical Event Evidence의 `assessment.top_factors`는 Product Result Artifact�
 - API contract regression test는 legacy evidence shape, Event Evidence projection shape, hidden/evaluation truth absence, report grounding source field를 함께 검증한다.
 - canonical projection을 기본 응답으로 승격하고 legacy projection을 제거할지는 frontend/report consumer 전환 완료와 contract regression 통과 후 별도 PR에서 결정한다.
 
-Runtime 저장 경계도 이 전환 규칙을 따른다. `pm_result_artifacts` 행이나 `source_contract` 이름만으로 full Product Result Artifact를 판정하지 않는다. `prediction_results.payload_json.evidence_payload`가 object로 저장된 경우에만 producer Artifact와 dashboard detail을 활성화하고, bundle ingestion의 9키 prediction snapshot compatibility payload처럼 해당 근거가 없으면 `prediction_snapshot_compatibility`로 내려가 detail을 생략한다. 이 판정은 저장소와 service 양쪽에서 방어적으로 적용하며, PostgreSQL bundle replay를 CI service로 실행해 이 경계를 skip 없이 검증한다.
+Runtime 저장 경계는 결과 계약과 Evidence detail 가용성을 분리한다. `pm_result_artifacts`로 검증된 Result Artifact의 `source_contract`, `artifact_id`, `schema_version`, `recommended_action`은 연결된 `prediction_results.payload_json`에 `evidence_payload`가 없다는 이유로 prediction snapshot compatibility로 강등하지 않는다. 저장된 producer Artifact와 `evidence_payload`가 있으면 dashboard detail을 만들고, 없으면 같은 Result API/화면 shape에서 detail을 unavailable로 표시한다. dashboard는 누락된 Evidence를 재생성하지 않는다.
+
+신규 runtime 생성과 기존 precomputed bundle import는 내부 쓰기 전략으로 분리하되 public API나 frontend 화면 모드로 분기하지 않는다. 신규 데이터의 canonical 경로는 source ingestion 후 `systems/backend/app/diagnosis` runtime producer가 full Product Result Artifact를 저장하는 경로다. 기존 prediction/result 파일은 migration·회귀·과거 데이터 조회를 위한 imported compatibility 경로로 보존한다. 한 Dataset Version에서 두 writer를 동시에 사용하거나 runtime 실패를 imported 결과로 자동 fallback하지 않는다. 명시적인 `materialization_strategy`와 writer 분리는 후속 persistence PR에서 구현하며, 구현 전에는 payload shape나 dataset 전체 row count로 전략을 추측하지 않는다.
+
+#### 4.3.1 이전 구현 계획 대비 변경
+
+PR #25 기반 원안의 producer/projection/UI 경계는 유지한다. 변경되는 부분은 PR #50에서 처음 구체화된 persistence writer와 runtime read path다.
+
+| 비교 항목 | PR #25 원안 | PR #50 초기 구현 | `59651ca` 대응 | 현재 결정 |
+|---|---|---|---|---|
+| Product Result source of truth | `systems/backend/app/diagnosis`가 Product Result Artifact와 Evidence를 생성 | 저장된 `prediction_result_payload`를 producer Artifact로 검증해 projection | `evidence_payload`가 없으면 전체 결과를 snapshot compatibility로 강등 | Result Artifact 계약과 공식 필드는 유지하고 Evidence detail 가용성만 별도 판정 |
+| Persistence writer | 구체적인 runtime/import writer 차이는 계획 범위에 명시되지 않음 | demo runtime writer의 full payload 저장을 모든 Result Artifact row에 일반화 | dataset 전체 `full_artifact_count`로 payload completeness 추론 | 신규 runtime writer와 imported precomputed writer를 내부 전략으로 분리하고 한 Dataset Version에는 하나만 허용 |
+| `prediction_results.payload_json` 의미 | canonical producer payload를 projection 입력으로 사용할 목표 | 모든 Result Artifact index가 full payload를 가리킨다고 전제 | payload shape를 `source_contract` discriminator로 사용 | writer별 저장 의미를 명시하고 payload shape로 Result 계약을 추론하지 않음 |
+| Evidence 부재 | `evidence_gap`/`limitations` 또는 unavailable, consumer 합성 금지 | `_stored_producer_artifact()` validation error로 runtime 실패 | `None` fallback 후 Result 계약 전체 강등 | Result 목록·추천·schema는 보존하고 detail만 unavailable |
+| API/UI | legacy 기본 응답과 selector 기반 canonical projection, typed ViewModel 하나 | runtime detail을 같은 API에 연결 | runtime/imported 결과가 서로 다른 계약처럼 보일 위험 발생 | 저장 전략은 frontend에 노출하지 않고 동일 API/ViewModel에서 availability와 limitations만 표시 |
+| 검증 | fixture/contract 중심, PostgreSQL runtime replay 미완료 | full producer payload happy path 중심 | PostgreSQL service 추가 후 replay 3 failed, 1 passed, 1 skipped | runtime full-Evidence와 imported Evidence-unavailable 경로를 별도 PostgreSQL 회귀로 검증 |
+
+Evidence-state 기준으로 PR #25 Step 1~13은 기존 `Done` 판정을 유지한다. “모든 Result Artifact index가 full producer payload를 가리킨다”는 전제는 `Superseded`, `59651ca`의 dataset 전체 계약 강등은 `Rejected`다. 현재 writer 분리와 공통 read/API 경계는 결정만 완료됐고 구현·PostgreSQL 회귀가 남아 있으므로 Step 14~15는 `In Progress` / `Partially Verified`다.
+
+```text
+유지: Diagnosis Producer -> Product Result Artifact -> Event Evidence Projection -> Report/ViewModel
+변경: Persistence writer 추론 -> 명시적 내부 writer 전략
+금지: Evidence 부재 -> Result 계약 강등 또는 별도 UI 모드
+```
 
 ### 4.4 Report Output 계층
 
@@ -711,18 +734,19 @@ Status 값은 다음만 사용한다.
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
 | 13 | Done | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | PR #41 `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
-| 14 | In Progress | runtime `_dashboard_detail`이 enriched Artifact와 projection layer를 사용하도록 refactor한다. | runtime service refactor | PR #50 validates and projects the stored `prediction_result_payload`; PostgreSQL-backed regression pending |
-| 15 | In Progress | runtime path에서도 legacy 기본 응답과 selector 기반 canonical 응답을 유지한다. | runtime API regression | PR #50 keeps legacy/canonical mapping, locale adapter, and raw units; PostgreSQL-backed regression pending |
+| 14 | In Progress | runtime 생성 결과와 imported 기존 결과를 하나의 Result read model로 유지하되, 검증된 producer Evidence가 있을 때만 `_dashboard_detail`이 projection layer를 사용하도록 refactor한다. | runtime service refactor + Evidence availability boundary | PR #50 PostgreSQL replay에서 bundle payload와 runtime payload의 writer 차이 확인; 계약 전체 강등 수정 및 재검증 필요 |
+| 15 | In Progress | 저장 전략과 무관하게 동일한 legacy 기본 응답과 selector 기반 canonical 응답 shape를 유지하고, Evidence가 없으면 detail unavailable을 명시한다. | runtime/imported API regression | PostgreSQL 조건에서 PR #50 replay 3 failed, 1 passed, 1 skipped; runtime/imported 회귀 분리 필요 |
 
 8.3 Notes:
 
 - PR #41의 Verified 범위는 fixture-backed `GET /api/events/{event_id}/evidence`, `GET /api/events/{event_id}/evidence?view=canonical`, `POST /api/events/{event_id}/report` 경로다.
-- current branch는 runtime `_dashboard_detail`이 `prediction_results.payload_json`에 보존된 diagnosis producer Artifact를 검증해 Event Evidence projection에 직접 전달하도록 전환하고, `/predictive-maintenance/dashboard?view=canonical` selector 회귀 테스트를 추가했다. runtime은 저장된 Result Artifact의 `evidence_payload`를 재생성하지 않는다. 로컬 PostgreSQL 조건에서는 replay 테스트가 skip되므로 PR/CI 통과 전까지 Verified로 승격하지 않는다.
+- PR #50의 초기 변경은 demo runtime writer가 `prediction_results.payload_json`에 저장한 full diagnosis producer Artifact를 projection에 직접 전달하고 dashboard 재생성을 제거했다. PostgreSQL bundle replay 결과, bundle ingestion writer는 같은 컬럼에 9키 prediction snapshot payload를 저장하면서 `pm_result_artifacts`를 연결한다는 별도 경로가 확인됐다. 따라서 “모든 Result Artifact index가 full producer payload를 가리킨다”는 전제는 `Superseded`이며 Step 14~15는 계속 `In Progress`다.
 - PR #50은 canonical V3.1 최신 관측 행을 만들 때 같은 asset의 현재 시각 이전 canonical 관측치를 producer fixture의 `history`로 전달한다. baseline은 current observation을 다시 포함하지 않으며, history가 실제로 없으면 빈 값과 evidence gap 경계를 유지한다.
 - legacy compatibility output의 표시명과 범위 문구는 runtime locale adapter에서 변환하고, canonical projection의 producer 값과 raw 신호 단위는 변조하지 않는다. `minimum_history_rows`의 모델 Artifact 강제는 이 checkout의 generator 계약에 임의로 복제하지 않고 별도 owner decision으로 남긴다.
-- producer `evidence_payload`가 없는 `prediction_snapshot_compatibility` 결과는 synthetic Artifact를 만들지 않고 `selected_event_detail`을 생략한다. snapshot compatibility는 명시적 unavailable/legacy-only 경계로 남기며 Result Artifact projection과 같은 detail 계약으로 취급하지 않는다.
+- producer `evidence_payload`가 없는 imported Result Artifact도 `source_contract=result_artifact`와 공식 결과 필드를 유지한다. synthetic Artifact나 Evidence를 만들지 않고 `selected_event_detail`만 생략하며, 실제 `pm_result_artifacts`가 없는 prediction snapshot만 `prediction_snapshot_compatibility`로 취급한다.
 - runtime detail의 observation window는 dashboard live query가 아니라 저장된 producer Artifact의 `history`와 `detected_interval`을 기준으로 한다. 따라서 별도의 6시간/10분 observation query를 Evidence source로 중복 사용하지 않는다.
-- runtime review에서는 `pm_result_artifacts`의 검색/요약 행과 `prediction_results.payload_json`의 full producer Artifact를 분리한다. summary 행에 `evidence_payload`가 없다는 사실은 producer persistence 부재의 근거가 아니다. full payload가 존재하지만 read-model이 이를 버리면 migration이나 dashboard 재생성이 아니라 repository/service read path를 고친다.
+- runtime review에서는 producer 생성, 각 persistence writer, `prediction_results.payload_json`, `pm_result_artifacts` index, repository, projection consumer를 모두 추적한다. demo runtime writer의 full payload 보존을 bundle ingestion writer까지 일반화하지 않는다. full payload가 실제로 있으면 read path를 고치고, imported 결과에 Evidence가 실제로 없으면 같은 Result API에서 unavailable로 남긴다.
+- `materialization_strategy=runtime_generated|imported_precomputed`는 writer 선택과 provenance를 위한 내부 persistence 후속 계약이다. frontend는 이 값으로 별도 화면을 만들지 않고 공통 Event Evidence/ViewModel의 availability와 limitations만 소비한다.
 - `list_events`, `layout`, `follow_up`, frontend ViewModel/UI는 아직 `build_evidence_package()` 또는 별도 경로를 사용하므로 전체 consumer 전환 완료로 주장하지 않는다.
 - `ranked_factor_evidence`는 legacy/detail용 top 5 evidence row 입력이며, canonical Event Evidence의 공식 판단 요약인 `assessment.top_factors` top 3을 대체하지 않는다.
 
@@ -732,6 +756,7 @@ Status 값은 다음만 사용한다.
 - canonical Event Evidence projection은 명시적 selector가 있을 때만 반환된다.
 - runtime inference와 Product Result Artifact/Evidence 최종 생성 책임은 `systems/backend/app/diagnosis`에 유지된다.
 - API contract regression이 legacy/canonical 응답을 모두 검증한다.
+- runtime 생성 결과와 imported 기존 결과가 동일한 Result API shape를 사용하고, Evidence 부재가 계약 전체 강등이나 화면 분기로 이어지지 않는다.
 
 ### 8.4 후속 PR: Report Projection Integration
 
