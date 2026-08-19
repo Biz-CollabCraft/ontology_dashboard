@@ -47,7 +47,7 @@ test("shows normal assets in the current-state overview", async ({ page }) => {
 test("completes Overview to Objects to Operations to Event Executive Brief without Analysis", async ({ page }) => {
   await login(page);
   await expect(page.locator(".mvp-app")).toBeVisible();
-  await expect(page.locator(".mvp-navigation nav button")).toHaveCount(4);
+  await expect(page.locator(".mvp-navigation nav button")).toHaveCount(5);
   await expect(page.getByText("Analysis", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("mvp-overview")).toBeVisible();
   await expect(page.locator(".mvp-kpi")).toHaveCount(6);
@@ -82,6 +82,71 @@ test("completes Overview to Objects to Operations to Event Executive Brief witho
   const query = new URL(page.url()).searchParams;
   expect(query.get("asset_id")).toBeTruthy();
   expect(query.get("event_id")).toBeTruthy();
+});
+
+test("covers Inspection Report side-tab flow and action links", async ({ page }) => {
+  await login(page, `${MVP_PATH}?view=inspection-report`);
+  await expect(page.getByTestId("mvp-inspection-report")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "점검 요청", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "센서 참고값", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "한계와 provenance", exact: true })).toBeVisible();
+  await expect(page.locator(".mvp-inspection-lead")).toBeVisible();
+  await expect(page.locator(".mvp-inspection-lead")).toHaveText(/.+/);
+  await expect(page.locator(".mvp-inspection-hero h2")).toHaveText(/예지보전 점검 요청/);
+  await expect(page.locator(".mvp-inspection-summary-grid")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "근거 추적", exact: true })).toBeVisible();
+  expect(
+    (await page.locator(".mvp-inspection-trace-list article").count()) +
+      (await page.getByText("검증된 evidence trace가 없습니다.").count()) >
+      0,
+  ).toBeTruthy();
+  expect(
+    (await page.locator(".mvp-inspection-sensor-grid div").count()) +
+      (await page.getByText("표시 가능한 sensor card가 없습니다.").count()) > 0,
+  ).toBeTruthy();
+  await expect(page.getByRole("button", { name: "Operations에서 기록하기", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Executive Brief", exact: true })).toBeVisible();
+
+  const query = new URL(page.url()).searchParams;
+  expect(query.get("view")).toBe("inspection-report");
+  expect(query.get("asset_id")).toBeTruthy();
+  expect(query.get("event_id")).toBeTruthy();
+  const selectedAssetId = query.get("asset_id");
+  const selectedEventId = query.get("event_id");
+
+  await page.getByRole("button", { name: "Operations에서 기록하기", exact: true }).click();
+  await expect(page).toHaveURL(/view=operations/);
+  await expect(page.getByTestId("mvp-operations")).toBeVisible();
+  {
+    const nextQuery = new URL(page.url()).searchParams;
+    expect(nextQuery.get("view")).toBe("operations");
+    if (selectedAssetId) expect(nextQuery.get("asset_id")).toBe(selectedAssetId);
+    if (selectedEventId) expect(nextQuery.get("event_id")).toBe(selectedEventId);
+    expect(nextQuery.get("asset_id")).toBeTruthy();
+    expect(nextQuery.get("event_id")).toBeTruthy();
+  }
+
+  await page.getByRole("button", { name: /Inspection Report/ }).click();
+  await expect(page.getByTestId("mvp-inspection-report")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Operations에서 기록하기", exact: true })).toBeVisible();
+  {
+    const nextQuery = new URL(page.url()).searchParams;
+    expect(nextQuery.get("view")).toBe("inspection-report");
+    if (selectedAssetId) expect(nextQuery.get("asset_id")).toBe(selectedAssetId);
+    if (selectedEventId) expect(nextQuery.get("event_id")).toBe(selectedEventId);
+  }
+
+  await page.getByRole("button", { name: "Executive Brief", exact: true }).click();
+  await expect(page).toHaveURL(/view=executive-report/);
+  await expect(page.getByTestId("mvp-executive-report")).toBeVisible();
+  {
+    const nextQuery = new URL(page.url()).searchParams;
+    expect(nextQuery.get("view")).toBe("executive-report");
+    if (selectedAssetId) expect(nextQuery.get("asset_id")).toBe(selectedAssetId);
+    if (selectedEventId) expect(nextQuery.get("event_id")).toBe(selectedEventId);
+    expect(nextQuery.get("asset_id")).toBeTruthy();
+    expect(nextQuery.get("event_id")).toBeTruthy();
+  }
 });
 
 test("separates manager decisions from field-operator notes using real permissions", async ({ page }) => {
@@ -132,6 +197,23 @@ test("uses the verified report template when both LLM and deterministic report A
   await expect(page.getByText(/모델 확률은 실제 고장 발생을 확정하지 않습니다/)).toBeVisible();
 });
 
+test("shows a safe fallback in Inspection Report when predictive or report APIs fail", async ({ page }) => {
+  await page.route("**/api/projects/*/workspaces/*/predictive-maintenance/dashboard**", async (route) => {
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "runtime_unavailable", message: "runtime unavailable in test" } }) });
+  });
+  await page.route("**/api/events/*/evidence", async (route) => {
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "evidence_unavailable", message: "evidence unavailable in test" } }) });
+  });
+  await page.route("**/api/events/*/report", async (route) => {
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "report_unavailable", message: "report unavailable in test" } }) });
+  });
+  await login(page, `${MVP_PATH}?view=inspection-report`);
+  await expect(page.getByTestId("mvp-inspection-report")).toBeVisible();
+  await expect(page.locator(".mvp-report-mode")).toContainText("Template fallback");
+  await expect(page.getByRole("heading", { name: "근거 추적", exact: true })).toBeVisible();
+  await expect(page.getByText("Evidence gap으로 처리합니다.")).toBeVisible();
+});
+
 test("keeps all MVP views inside a 390px mobile viewport and exposes compact navigation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
@@ -139,8 +221,8 @@ test("keeps all MVP views inside a 390px mobile viewport and exposes compact nav
 
   await page.getByRole("button", { name: "메뉴 열기" }).click();
   await expect(page.locator(".mvp-navigation")).toHaveClass(/is-open/);
-  for (const label of ["Overview", "Objects", "Operations", "Event Executive Brief"]) {
-    await page.getByRole("button", { name: new RegExp(label) }).last().click();
+  for (const label of ["Overview", "Objects", "Operations", "Inspection Report", "Event Executive Brief"]) {
+    await page.locator(".mvp-navigation nav").getByRole("button", { name: new RegExp(label) }).first().click();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     if (label !== "Event Executive Brief") await page.getByRole("button", { name: "메뉴 열기" }).click();
   }

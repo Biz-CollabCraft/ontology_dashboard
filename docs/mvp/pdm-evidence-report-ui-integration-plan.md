@@ -18,7 +18,7 @@
   - `POST /api/events/{event_id}/report`
 - 현행 dashboard evidence schema는 fixture 중심 구조다. 주요 필드는 `equipment`, `observation`, `history`, `top_factors`, `maintenance_context`, `lineage`다.
 - `pdm-mvp` Evidence Package는 Result Artifact 중심 구조다. 주요 필드는 `asset_id`, `sensor_evidence`, `model_prediction`, `top_factors`, `maintenance_context`, `recommended_actions`, `status_flags`, `lineage`다.
-- `map-report-ui-prototype`은 정적 React 프로토타입이다. 2주차에는 화면별 필요 필드 후보를 역추적하는 참고 자료로만 사용하고, 하드코딩된 데이터 생성 로직은 제품 데이터 소스가 될 수 없다.
+- `map-report-ui-prototype`은 외부/local Report UI reference app이다. 상태 맵, 점검 요청, 설비 상세, 요약 보고서 화면 후보와 일부 runtime-shaped adapter 실험이 포함될 수 있지만, 2주차에는 화면별 필요 필드 후보를 역추적하는 참고 자료로만 사용한다. 하드코딩된 데이터 생성 로직과 prototype adapter는 제품 데이터 소스 또는 runtime dependency가 될 수 없다.
 
 ### 1.1 현재 dashboard 값의 검증 수준
 
@@ -599,7 +599,7 @@ Enriched Product Result Artifact
 
 ### 6.2 UI 컴포넌트 이식
 
-`map-report-ui-prototype`에서 유용한 UI 블록을 2주차 MVP에 필요한 typed component로만 옮긴다.
+`map-report-ui-prototype`에서 유용한 UI 블록을 2주차 MVP 대시보드의 사이드탭 화면에 필요한 typed component로만 옮긴다. 이식 대상은 외부 prototype import가 아니라 `systems/frontend/src/features/mvp/` 아래의 ViewModel/component 재구현이다.
 
 - `InspectionRequestView.tsx`
 - `EvidenceTracePanel.tsx`
@@ -610,12 +610,13 @@ Enriched Product Result Artifact
 
 - 정적 mock asset 생성 로직
 - 하드코딩된 report text를 source data로 쓰는 방식
+- `assetDetailApi.js` 또는 prototype runtime adapter를 제품 adapter로 직접 가져오는 방식
 - prototype 전용 navigation state
 - 기간/전체 설비 집계 표시 로직
 
 ### 6.3 기존 MVP 화면과 통합
 
-새 report UI 묶음은 현행 Event API를 깨지 않는 방식으로 기존 MVP route에 붙인다.
+새 report UI 묶음은 현행 Event API를 깨지 않는 방식으로 기존 MVP route의 dashboard side tab에 붙인다.
 
 초기 통합 방식은 다음을 권장한다.
 
@@ -780,15 +781,16 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 19 | Deferred | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | 후속 PR Vitest 결과 |
-| 20 | Deferred | map-report prototype에서 Inspection Request, Evidence Trace, Sensor Evidence 블록만 typed component로 옮긴다. | MVP report components | 후속 PR screenshot/test 결과 |
-| 21 | Deferred | component를 API data에 연결한다. | fixture 또는 live-backed UI flow | 후속 PR browser 확인 결과 |
-| 22 | Deferred | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | 후속 PR Playwright 결과 |
+| 19 | In Progress | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | local `npm run lint`, `npm run test -- src/features/mvp/context/MvpSelectionContext.test.ts src/features/mvp/api/mvpAdapters.test.ts` |
+| 20 | In Progress | map-report prototype의 Inspection Request, Evidence Trace, Sensor Evidence 패턴만 dashboard side tab용 typed component로 재구현한다. `MapReportView`, 설비상세, 요약/집계 탭은 V2로 보류한다. | MVP report components | local `npm run build`; screenshot/Playwright는 후속 |
+| 21 | In Progress | component를 API data에 연결한다. | fixture 또는 live-backed UI flow | 기존 MVP `MvpEventDetailModel` 소비; browser 확인은 후속 |
+| 22 | In Progress | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | `PLAYWRIGHT_PYTHON_BIN=python3 PLAYWRIGHT_API_PORT=8210 PLAYWRIGHT_WEB_PORT=3210 npm run test:e2e:mvp` → 로컬 샌드박스에서 첫 실행은 API 바인딩(`operation not permitted` on 8200/8210)로 미기동, 수동 서버 기동 후에는 Chromium MachPort 권한(`Permission denied (1100)`)으로 브라우저 기동 실패. `npm run lint`, `npm run test -- ...`, `npm run build`는 통과 |
 
 5차 PR 완료 조건은 다음과 같다.
 
 - frontend는 raw JSONL이나 raw producer payload를 직접 파싱하지 않는다.
 - UI는 typed ViewModel 또는 `report_projection`만 사용한다.
+- `/Users/hb/Documents/final/map-report-ui-prototype`은 참조 출처일 뿐 제품 runtime dependency로 import하지 않는다.
 - 정비이력 추가는 최소 action descriptor로만 제공되며 Work Order 생성이나 Operations 기간 집계를 만들지 않는다.
 
 ### 8.6 후속 문서 갱신
