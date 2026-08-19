@@ -13,7 +13,8 @@ from app.diagnosis.evidence import (
     build_evidence_package,
     build_product_result_artifact,
 )
-from app.equipment import EquipmentService, FixtureEquipmentRepository
+from app.equipment import EquipmentService
+from app.equipment.adapters import FixtureEquipmentRepository
 from ontology_dashboard.migrations import migrate
 from app.infra.db.settings import database_location
 

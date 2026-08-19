@@ -12,11 +12,11 @@ from app.equipment import (
     EquipmentService,
     EquipmentStatePatchPort,
     EquipmentStateVersionConflictError,
-    FixtureEquipmentRepository,
     InvalidEquipmentStatePatchError,
     apply_state_patch,
     next_state_version,
 )
+from app.equipment.adapters import FixtureEquipmentRepository
 from app.equipment.equipment_router import register_equipment_routes
 
 
