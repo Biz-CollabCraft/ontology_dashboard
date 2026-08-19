@@ -41,6 +41,7 @@ from .models import (
     ReplaySessionRecord,
     ReplaySessionSnapshot,
     SemanticQueryCapability,
+    SensorObservation,
     SnapshotDrilldown,
     TimelinePrediction,
 )

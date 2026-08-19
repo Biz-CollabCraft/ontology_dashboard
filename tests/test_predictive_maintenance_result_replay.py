@@ -140,6 +140,29 @@ def test_snapshot_compatibility_does_not_require_dashboard_evidence_detail() -> 
     ) is True
 
 
+def test_sensor_projection_constructs_canonical_observation() -> None:
+    observed_at = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+    observation = PredictiveMaintenanceRuntimeService._sensor(
+        {
+            "observed_at": observed_at,
+            "asset_id": "CMP-001",
+            "asset_type": "compressor",
+            "site_id": "S01",
+            "cell_id": "S01-L01",
+            "is_operating": True,
+            "operating_state": "running",
+            "source_sha256": "a" * 64,
+            "measurements": {"temperature_c": 72.5},
+            "derived_measures": {"temperature_delta_c": 2.5},
+        }
+    )
+
+    assert observation.asset_id == "CMP-001"
+    assert observation.measurements == {"temperature_c": 72.5}
+    assert observation.derived_measures == {"temperature_delta_c": 2.5}
+
+
 def test_legacy_factor_labels_are_localized_without_changing_raw_units() -> None:
     factors = [
         {
