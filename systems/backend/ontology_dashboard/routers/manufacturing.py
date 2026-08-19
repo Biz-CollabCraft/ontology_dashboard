@@ -21,9 +21,9 @@ from ..dependencies import (
     require_permission,
 )
 from app.identity import AuthError, IdentityService, Principal
-from ..ontology import ActionInvocation
-from ..ontology_adapter import inspection_object_id, risk_event_object_id
-from ..ontology_service import OntologyService
+from app.ontology.ontology_domain import ActionInvocation
+from app.ontology.projection import inspection_object_id, risk_event_object_id
+from app.ontology.ontology_service import OntologyService
 from ..service import ManufacturingPredictiveMaintenanceService
 
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])

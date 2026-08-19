@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Iterable
 
-from .ontology import LinkRecord, ObjectRecord
+from app.ontology.ontology_domain import LinkRecord, ObjectRecord
 from app.infra.db.connection import tenant_connection
 
 

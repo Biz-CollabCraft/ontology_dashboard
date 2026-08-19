@@ -204,16 +204,6 @@ export interface Project3DegradedResponse {
 }
 
 export interface OntologyRegistry {
-  domain_packs: Array<{
-    id: string;
-    display_name: string;
-    description: string;
-    workspace_ids: string[];
-    object_type_ids: string[];
-    link_type_ids: string[];
-    action_type_ids: string[];
-    status: "active" | "draft" | "disabled";
-  }>;
   object_types: ObjectTypeDefinition[];
   link_types: LinkTypeDefinition[];
   action_types: ActionTypeDefinition[];

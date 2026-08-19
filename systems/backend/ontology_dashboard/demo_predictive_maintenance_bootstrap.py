@@ -24,7 +24,9 @@ from app.dataset.ingestion import (
 )
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from .dependencies import database_target
-from .domain_packs.predictive_maintenance import PredictiveMaintenanceOntologyMaterializer
+from app.infra.db.predictive_maintenance_ontology_projection import (
+    PredictiveMaintenanceOntologyMaterializer,
+)
 
 
 ORGANIZATION_ID = "org-ontology-demo"

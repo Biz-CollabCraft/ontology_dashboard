@@ -6,7 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ontology_dashboard.dependencies import get_project_service
-from ontology_dashboard.domain_packs import resolve_domain_pack
 from app.identity import IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.main import app
@@ -33,37 +32,27 @@ def client(tmp_path: Path):
     app.dependency_overrides.clear()
 
 
-def test_domain_pack_registry_is_domain_neutral_and_alias_safe() -> None:
-    generic, generic_source = resolve_domain_pack("unknown-domain")
-    manufacturing, manufacturing_source = resolve_domain_pack("predictive-maintenance")
-
-    assert generic.code == "generic-operations"
-    assert generic_source == "default_platform"
-    assert manufacturing.code == "manufacturing-predictive-maintenance"
-    assert manufacturing_source == "project_metadata"
-    assert {item.id for item in manufacturing.bounded_contexts} == {
-        "asset-reliability",
-        "maintenance-execution",
-        "model-operations",
-        "source-integration",
-    }
-    assert generic.namespace.startswith("ontology_dashboard.")
-    assert manufacturing.namespace.startswith("ontology_dashboard.")
-
-
-def test_v4_application_definition_uses_project_domain_pack(client: TestClient) -> None:
+def test_generic_domain_pack_registry_and_v4_application_are_retired(client: TestClient) -> None:
     login = client.post(
         "/api/auth/login",
         json={"email": "manager@ontology.local", "password": "Manager!2026"},
     )
     assert login.status_code == 200
-    response = client.get(
+    assert client.get("/api/domain-packs").status_code == 404
+    assert client.get("/api/platform/domain-packs").status_code == 404
+    assert client.get(
         "/api/platform/projects/manufacturing-demo-project/applications/v4"
+    ).status_code == 404
+
+
+def test_ontology_registry_exposes_concepts_without_pack_selection(client: TestClient) -> None:
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "manager@ontology.local", "password": "Manager!2026"},
     )
+    assert login.status_code == 200
+    response = client.get("/api/ontology/registry")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["application_id"] == "ontology-commercial-v4"
-    assert payload["application_version"] == "v4"
-    assert payload["domain_pack"]["code"] == "manufacturing-predictive-maintenance"
-    assert payload["platform_namespace"] == "ontology_dashboard"
-    assert payload["compatibility_namespaces"] == []
+    assert "domain_packs" not in payload
+    assert {"object_types", "link_types", "action_types"} == set(payload)

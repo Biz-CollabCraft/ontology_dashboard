@@ -32,7 +32,7 @@ from .dashboard_models import (
 )
 from .dashboard_repository import DashboardPreferenceConflict, DashboardRepository
 from app.identity import AuthError, Principal
-from .ontology_service import OntologyService
+from app.ontology.ontology_service import OntologyService
 from .service import EventNotFound
 from .visualizations import recommend_visualization
 

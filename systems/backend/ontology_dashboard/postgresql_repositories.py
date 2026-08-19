@@ -18,13 +18,13 @@ from argon2 import PasswordHasher
 
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.prediction_result_repository import PredictionResultRepository
+from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
 
 from .dashboard_catalog import seed_templates
 from .dashboard_repository import DashboardRepository
 from .export_repository import ExportRepository
 from app.infra.db.identity_repository import IdentityRepository as SQLIdentityRepository
-from .ontology_repository import OntologyActionRepository
 from .repository import AuditRepository
 from .role_workflow_repository import RoleWorkflowRepository
 from .postgresql_compat import (

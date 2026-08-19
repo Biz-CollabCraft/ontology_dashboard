@@ -25,9 +25,17 @@ from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.settings import database_location
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.infra.db.ontology_primitives import OntologyPrimitiveRepository
+from app.infra.db.project_repository import (
+    ProjectRepository as SQLiteProjectRepository,
+    SQLiteProjectContextResolver,
+)
 from app.infra.external.project3 import Project3Client
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.infra.llm import configured_provider
+from app.ontology.ontology_service import OntologyService
 
 from .adapters.service import AdapterService
 from app.infra.db.prediction_result_repository import PredictionResultRepository
@@ -52,8 +60,6 @@ from app.infra.db.project_repository import (
 from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
-from .ontology_service import OntologyService
-from .ontology_primitives import OntologyPrimitiveRepository
 from .orchestration import AgentRunRepository, MultiStoreOrchestrator
 from .orchestration.ports import Project3GraphPort, Project3VectorPort, RelationalOntologyPort
 from .postgresql_ontology_repository import PostgreSQLOntologyInstanceRepository
@@ -230,9 +236,21 @@ def get_ontology_service(
                 organization_id=principal.organization_id,
                 project_id=project_id,
             ),
-            role_workflow_repository=PostgreSQLRoleWorkflowRepository(target),
+            field_actions=PostgreSQLRoleWorkflowRepository(target),
         )
-    return OntologyService(service)
+    project_context = SQLiteProjectContextResolver(target)
+    return OntologyService(
+        service,
+        action_repository=OntologyActionRepository(
+            target,
+            project_context=project_context,
+        ),
+        instance_repository=OntologyInstanceRepository(
+            target,
+            project_context=project_context,
+        ),
+        field_actions=RoleWorkflowRepository(target),
+    )
 
 
 def get_analysis_service(

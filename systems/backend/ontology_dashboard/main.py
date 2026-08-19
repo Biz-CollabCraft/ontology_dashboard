@@ -14,6 +14,7 @@ from .dependencies import (
     current_principal,
     get_dataset_catalog_service,
     get_identity_service,
+    get_ontology_service,
     get_ontology_planner_service,
     get_project_service,
     get_predictive_maintenance_runtime_service,
@@ -38,7 +39,7 @@ from .routers.exports import router as exports_router
 from .routers.governance import router as governance_router
 from .routers.manufacturing import router as manufacturing_router
 from .routers.modeling import router as modeling_router
-from .routers.ontology import router as ontology_router
+from app.ontology.ontology_router import create_ontology_router
 from .routers.planner import router as planner_router
 from .routers.platform import router as platform_router
 from .routers.project3 import router as project3_router
@@ -51,6 +52,7 @@ from app.equipment import (
     EquipmentStateVersionConflictError,
     InvalidEquipmentStatePatchError,
 )
+from app.ontology.ontology_service import OntologyAccessError, OntologyNotFound
 from .service import EventNotFound
 
 app = create_app()
@@ -70,13 +72,18 @@ auth_router = build_identity_router(
     rate_limit_subject=rate_limit_subject,
     set_auth_cookies=set_auth_cookies,
 )
-
 datasets_router = create_dataset_router(
     get_dataset_catalog_service=get_dataset_catalog_service,
     require_csrf=require_csrf,
     require_permission=require_permission,
 )
 
+ontology_router = create_ontology_router(
+    get_identity_service=get_identity_service,
+    get_ontology_service=get_ontology_service,
+    require_csrf=require_csrf,
+    require_permission=require_permission,
+)
 projects_router = build_project_router(
     get_project_service=get_project_service,
     get_event_query=get_service,
@@ -102,6 +109,19 @@ async def not_found_handler(_: Request, exc: EventNotFound) -> JSONResponse:
 async def equipment_not_found_handler(
     _: Request, exc: EquipmentNotFoundError
 ) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "code": "not_found",
+                "message": f"resource not found: {exc.args[0]}",
+            }
+        },
+    )
+
+
+@app.exception_handler(OntologyNotFound)
+async def ontology_not_found_handler(_: Request, exc: OntologyNotFound) -> JSONResponse:
     return JSONResponse(
         status_code=404,
         content={
@@ -140,6 +160,14 @@ async def invalid_equipment_state_patch_handler(
                 "message": str(exc),
             }
         },
+    )
+
+
+@app.exception_handler(OntologyAccessError)
+async def ontology_access_error_handler(_: Request, exc: OntologyAccessError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.detail}},
     )
 
 
