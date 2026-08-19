@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.ontology_instance_repository import OntologyInstanceRepository
 from ontology_dashboard.ontology_service import OntologyService

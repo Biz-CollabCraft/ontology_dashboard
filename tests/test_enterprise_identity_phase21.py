@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ontology_dashboard.enterprise_identity import (
+from app.identity import (
     EnterpriseIdentityError,
     GroupMapping,
     InMemorySCIMDirectory,
@@ -17,7 +17,7 @@ from ontology_dashboard.enterprise_identity import (
     mock_id_token,
     preview_group_mapping,
 )
-from ontology_dashboard.identity import AuthError, IdentityService, LoginRequest
+from app.identity import AuthError, IdentityService, LoginRequest
 
 
 NOW = datetime(2026, 8, 6, 2, 45, tzinfo=timezone.utc)

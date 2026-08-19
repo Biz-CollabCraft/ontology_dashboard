@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from .contracts import DecisionRequest, NoteRequest
-from .identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from .ontology import (
     ACTION_TYPE_BY_ID,
     LINK_TYPE_BY_ID,

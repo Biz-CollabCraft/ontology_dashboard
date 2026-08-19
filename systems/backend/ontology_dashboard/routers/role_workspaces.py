@@ -10,7 +10,7 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import IdentityService, Principal
+from app.identity import IdentityService, Principal
 from ..role_workflow_models import AuditExportCheckpointRequest, ModelReleaseRequestCreate
 from ..role_workflow_service import RoleWorkflowService
 

@@ -12,7 +12,7 @@ from ..datasets import (
     OntologyMappingCreateRequest,
 )
 from ..dependencies import get_dataset_catalog_service, require_csrf, require_permission
-from ..identity import Principal
+from app.identity import Principal
 
 router = APIRouter(prefix="/api", tags=["datasets"])
 

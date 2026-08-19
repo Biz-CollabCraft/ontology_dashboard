@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
 from ontology_dashboard.dashboard_service import DashboardService
-from ontology_dashboard.identity import CSRF_COOKIE, SESSION_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, SESSION_COOKIE, IdentityService
 from ontology_dashboard.main import (
     app,
     get_identity_service,

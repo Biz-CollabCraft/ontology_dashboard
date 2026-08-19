@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query
 
 from ..dependencies import get_identity_service, get_ontology_service, require_csrf, require_permission
-from ..identity import IdentityService, Principal
+from app.identity import IdentityService, Principal
 from ..ontology import (
     ACTION_TYPES,
     LINK_TYPES,

@@ -18,7 +18,7 @@ from .analysis_models import (
     AnalysisUpdateRequest,
 )
 from .analysis_repository import AnalysisRepository
-from .identity import Principal
+from app.identity import Principal
 from .ontology import LinkRecord, ObjectRecord
 from .ontology_service import OntologyService
 

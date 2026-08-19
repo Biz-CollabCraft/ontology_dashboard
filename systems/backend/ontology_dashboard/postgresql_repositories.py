@@ -23,7 +23,7 @@ from ontology_dashboard.projects.repository import ProjectRepository
 from .dashboard_catalog import seed_templates
 from .dashboard_repository import DashboardRepository
 from .export_repository import ExportRepository
-from .identity_repository import IdentityRepository
+from app.identity.identity_repository import IdentityRepository
 from .ontology_repository import OntologyActionRepository
 from .repository import AuditRepository
 from .role_workflow_repository import RoleWorkflowRepository

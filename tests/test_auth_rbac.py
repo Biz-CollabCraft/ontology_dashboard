@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.identity import CSRF_COOKIE, DEMO_ACCOUNTS, AuthError, IdentityService
-from ontology_dashboard.identity_models import PUBLIC_COMPARISON_EMAIL
+from app.identity import CSRF_COOKIE, DEMO_ACCOUNTS, AuthError, IdentityService, PUBLIC_COMPARISON_EMAIL
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..analysis_models import AnalysisRunRequest
 from ..analysis_service import AnalysisService
-from ..identity import Principal
+from app.identity import Principal
 from ..ontology_service import OntologyService
 from .models import (
     DatasetCreateRequest,

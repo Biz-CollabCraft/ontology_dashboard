@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.outbox import OutboxRepository, OutboxWorker, default_outbox_worker
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository

@@ -18,7 +18,7 @@ from ..dependencies import (
     require_manufacturing_scope,
     require_permission,
 )
-from ..identity import AuthError, IdentityService, Principal
+from app.identity import AuthError, IdentityService, Principal
 from ..ontology import ActionInvocation
 from ..ontology_adapter import inspection_object_id, risk_event_object_id
 from ..ontology_service import OntologyService

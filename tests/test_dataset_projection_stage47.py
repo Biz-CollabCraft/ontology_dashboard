@@ -17,7 +17,7 @@ from ontology_dashboard.datasets.projection import (
     InMemoryProjectionPort,
 )
 from ontology_dashboard.dependencies import get_dataset_catalog_service
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService

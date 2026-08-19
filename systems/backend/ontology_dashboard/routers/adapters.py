@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from ..adapters.models import DatasetManifest, PredictionResult
 from ..adapters.service import AdapterService
 from ..dependencies import current_principal, get_adapter_service, require_csrf
-from ..identity import Principal
+from app.identity import Principal
 
 router = APIRouter(tags=["datasets", "predictions"])
 

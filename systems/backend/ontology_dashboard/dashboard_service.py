@@ -31,7 +31,7 @@ from .dashboard_models import (
     SavedViewRecord,
 )
 from .dashboard_repository import DashboardPreferenceConflict, DashboardRepository
-from .identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from .ontology_service import OntologyService
 from .service import EventNotFound
 from .visualizations import recommend_visualization

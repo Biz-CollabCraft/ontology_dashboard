@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.identity import AdminUserUpdateRequest, CSRF_COOKIE, IdentityService
+from app.identity import AdminUserUpdateRequest, CSRF_COOKIE, IdentityService
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 

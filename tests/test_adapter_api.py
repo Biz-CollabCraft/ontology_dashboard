@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from ontology_dashboard.adapters.service import AdapterService
 from ontology_dashboard.dependencies import get_adapter_service, get_project_service
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.projects import ProjectRepository, ProjectService
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService

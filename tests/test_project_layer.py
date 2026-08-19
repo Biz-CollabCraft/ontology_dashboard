@@ -10,7 +10,7 @@ from ontology_dashboard.dashboard_models import SavedViewCreateRequest
 from ontology_dashboard.dashboard_service import DashboardService
 from ontology_dashboard.dependencies import get_project_service
 from ontology_dashboard.export_repository import ExportRepository
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.projects import ProjectRepository, ProjectService
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService

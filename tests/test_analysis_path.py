@@ -9,7 +9,7 @@ from ontology_dashboard.analysis_models import AnalysisRunRequest
 from ontology_dashboard.analysis_service import AnalysisService
 from ontology_dashboard.distributed_handlers import configured_handlers
 from ontology_dashboard.distributed_runtime import DurableJobRepository, DurableWorker
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 

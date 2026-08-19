@@ -37,7 +37,8 @@ from .datasets import (
 )
 from .export_service import ExportService
 from .governance import GovernanceService
-from .identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
+from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
+from .identity import ProjectIdentityService
 from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
@@ -122,6 +123,12 @@ def get_identity_service() -> IdentityService:
         )
         return IdentityService(target, repository=repository)
     return IdentityService(target)
+
+
+def get_project_identity_service(
+    identity: IdentityService = Depends(get_identity_service),
+) -> ProjectIdentityService:
+    return ProjectIdentityService(identity.repository)
 
 
 @lru_cache(maxsize=1)

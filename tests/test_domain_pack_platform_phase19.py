@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from ontology_dashboard.dependencies import get_project_service
 from ontology_dashboard.domain_packs import resolve_domain_pack
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
 from ontology_dashboard.main import app
 from ontology_dashboard.main import get_identity_service, get_service
 from ontology_dashboard.projects import ProjectRepository, ProjectService

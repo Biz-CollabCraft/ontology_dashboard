@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from ontology_dashboard.identity import AuthError, Principal
+from app.identity import AuthError, Principal
 
 from .models import Project, ProjectCreateRequest, ProjectUpdateRequest
 from .repository import ProjectRepository

@@ -10,7 +10,7 @@ from .analysis_service import AnalysisService
 from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorAdapter
 from .datasets import DatasetMaterializationSource, DatasetRepository
 from .distributed_runtime import DurableJob, DurableJobRepository
-from .identity import Principal
+from app.identity import Principal
 from .ontology_service import OntologyService
 from .postgresql_ontology_repository import PostgreSQLOntologyInstanceRepository
 from .postgresql_repositories import (

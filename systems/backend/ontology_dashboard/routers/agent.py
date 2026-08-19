@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..dependencies import get_multistore_orchestrator, require_csrf, require_permission
-from ..identity import Principal
+from app.identity import Principal
 from ..orchestration import AgentQueryRequest, MultiStoreOrchestrator
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])

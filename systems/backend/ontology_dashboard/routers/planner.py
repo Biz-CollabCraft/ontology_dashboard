@@ -15,7 +15,7 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import IdentityService, Principal
+from app.identity import IdentityService, Principal
 from ..planner import (
     BoardRecommendationRequest,
     DashboardDraftRequest,

@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from ontology_dashboard.dashboard_models import DashboardPreferenceSaveRequest
 from ontology_dashboard.dashboard_service import DashboardService
 from ontology_dashboard.dependencies import get_predictive_maintenance_runtime_service
-from ontology_dashboard.identity import (
+from app.identity import (
     CSRF_COOKIE,
     AuthError,
     IdentityService,

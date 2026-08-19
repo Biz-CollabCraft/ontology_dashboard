@@ -29,7 +29,7 @@ from ontology_dashboard.dependencies import (
     get_identity_service,
     get_predictive_maintenance_runtime_service,
 )
-from ontology_dashboard.identity import AuthError, CSRF_COOKIE, Principal, SESSION_COOKIE
+from app.identity import AuthError, CSRF_COOKIE, Principal, SESSION_COOKIE
 from ontology_dashboard.main import app
 from ontology_dashboard.routers.predictive_maintenance_runtime import replay_events
 from predictive_maintenance_v3_helpers import (

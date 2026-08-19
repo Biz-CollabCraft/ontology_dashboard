@@ -14,7 +14,7 @@ from typing import Any
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
-from .identity_models import (
+from .identity_schema import (
     DEMO_ACCOUNTS,
     PERMISSION_DEFINITIONS,
     ROLE_DEFINITIONS,

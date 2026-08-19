@@ -28,7 +28,7 @@ from ontology_dashboard.datasets.models import (
     OntologyMappingCreateRequest,
 )
 from ontology_dashboard.datasets.repository import DatasetRepository
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.postgresql_repositories import PostgreSQLIdentityRepository
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService

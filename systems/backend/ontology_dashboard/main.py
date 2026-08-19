@@ -7,18 +7,23 @@ from fastapi.responses import JSONResponse
 
 from .application import create_app
 from .dependencies import (
+    client_ip,
+    current_principal,
     get_identity_service,
     get_ontology_planner_service,
     get_rate_limiter,
     get_service,
+    rate_limit_subject,
+    require_csrf,
+    set_auth_cookies,
 )
-from .identity import AuthError
+from app.identity import AuthError
+from app.identity.identity_router import build_identity_router
 from .openapi_contracts import apply_response_contracts
 from .routers.adapters import router as adapters_router
 from .routers.agent import router as agent_router
 from .routers.admin import router as admin_router
 from .routers.analyses import router as analyses_router
-from .routers.auth import router as auth_router
 from .routers.dashboards import router as dashboards_router
 from .routers.datasets import router as datasets_router
 from .routers.exports import router as exports_router
@@ -39,6 +44,16 @@ from app.common.exceptions import RateLimitExceeded
 from .service import EventNotFound
 
 app = create_app()
+
+auth_router = build_identity_router(
+    get_identity_service=get_identity_service,
+    get_rate_limiter=get_rate_limiter,
+    current_principal=current_principal,
+    require_csrf=require_csrf,
+    client_ip=client_ip,
+    rate_limit_subject=rate_limit_subject,
+    set_auth_cookies=set_auth_cookies,
+)
 
 
 @app.exception_handler(EventNotFound)

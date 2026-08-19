@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from ..identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from .models import (
     AdapterIngestionRunRecord,
     CanonicalObjectEnvelope,

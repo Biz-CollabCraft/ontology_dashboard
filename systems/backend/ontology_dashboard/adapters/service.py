@@ -12,7 +12,7 @@ from ontology_dashboard.datasets import (
     DatasetRepository,
     DatasetVersionCreateRequest,
 )
-from ontology_dashboard.identity import AuthError, IdentityService, Principal
+from app.identity import AuthError, IdentityService, Principal
 
 from .file_adapter import FileAdapter
 from .bundle_file_adapter import BundleFileAdapter

@@ -6,7 +6,7 @@ import pytest
 
 from ontology_dashboard.dashboard_repository import DashboardRepository
 from ontology_dashboard.export_repository import ExportRepository
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.ontology_repository import OntologyActionRepository
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository

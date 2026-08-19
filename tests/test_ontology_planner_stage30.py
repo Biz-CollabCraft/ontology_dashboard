@@ -8,7 +8,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
 from ontology_dashboard.main import (
     app,
     get_identity_service,

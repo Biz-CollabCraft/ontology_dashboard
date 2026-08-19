@@ -13,7 +13,7 @@ from ontology_dashboard.datasets import (
 )
 from ontology_dashboard.dependencies import get_governance_service
 from ontology_dashboard.governance import GovernanceService
-from ontology_dashboard.identity import CSRF_COOKIE, AuthError, IdentityService
+from app.identity import CSRF_COOKIE, AuthError, IdentityService
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.orchestration import AgentRunRepository

@@ -72,8 +72,6 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     foundation_modules = (
         "context",
         "contracts",
-        "identity_models",
-        "identity_repository",
         "identity",
         "repository",
         "service",
@@ -153,6 +151,11 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     ) and all(
         (root / path).is_file()
         for path in (
+            "systems/backend/app/identity/identity_schema.py",
+            "systems/backend/app/identity/identity_repository.py",
+            "systems/backend/app/identity/identity_service.py",
+            "systems/backend/app/identity/identity_router.py",
+            "systems/backend/app/identity/ports.py",
             "systems/backend/app/common/exceptions.py",
             "systems/backend/app/common/rate_limit.py",
             "systems/backend/app/infra/rate_limit.py",

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
 from ontology_dashboard.adapters.service import AdapterService
-from ontology_dashboard.identity_models import Principal
+from app.identity import Principal
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.modeling.models import (
     ExperimentCreateRequest,

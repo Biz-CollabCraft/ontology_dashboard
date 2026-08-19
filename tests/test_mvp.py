@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from ontology_dashboard.context import Project3HttpContextProvider, ResilientContextProvider
 from ontology_dashboard.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
 from app.infra.llm import VertexAIProvider, configured_provider
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.planner import LayoutPlanner

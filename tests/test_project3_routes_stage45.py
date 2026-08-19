@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ontology_dashboard.dependencies import get_project3_client
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
 from app.infra.external.project3 import (
     Project3GraphSchema,
     Project3Health,

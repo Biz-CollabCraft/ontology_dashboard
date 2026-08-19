@@ -23,7 +23,7 @@ from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, 
 from .dashboard_service import DashboardService
 from .export_models import ExportArtifact, ExportCheckpoint, ExportRequest
 from .export_repository import ExportRepository
-from .identity import Principal
+from app.identity import Principal
 from .role_workflow_service import RoleWorkflowService
 from .service import FactorySignalService
 

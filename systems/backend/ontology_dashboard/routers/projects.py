@@ -8,7 +8,7 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from ..projects import ProjectCreateRequest, ProjectService, ProjectUpdateRequest
 from ..service import ManufacturingPredictiveMaintenanceService
 

@@ -54,7 +54,7 @@ from .domain_packs.models import (
     DomainPackDefinition as PlatformDomainPackDefinition,
     ProjectApplicationDefinition,
 )
-from .enterprise_identity import EnterpriseIdentityReadiness
+from app.identity import EnterpriseIdentityReadiness
 from .deployment import DeploymentReadiness, ProcessProbe, ReadinessProbe, StartupProbe
 from .distributed_runtime import (
     DistributedRuntimeSnapshot,
@@ -63,7 +63,7 @@ from .distributed_runtime import (
 )
 from .export_models import ExportCheckpoint
 from .governance.models import GovernanceAgentRunDetail, ProjectionRetryResult
-from .identity_models import DisplayPreferenceUpdateRequest, Principal
+from app.identity import DisplayPreferenceUpdateRequest, Principal
 from app.infra.external.project3.models import Project3IntegrationSnapshot
 from .modeling.models import (
     CapabilityEvaluation,
@@ -612,16 +612,16 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.system.health_ready": ReadinessProbe,
     "ontology_dashboard.routers.system.polyglot_health": PolyglotHealthResponse,
     "ontology_dashboard.routers.system.openapi_contract": dict[str, Any],
-    "ontology_dashboard.routers.auth.register": RegisterResponse,
-    "ontology_dashboard.routers.auth.login": AuthSessionResponse,
-    "ontology_dashboard.routers.auth.public_blueprint_comparison": AuthSessionResponse,
-    "ontology_dashboard.routers.auth.me": CurrentUserResponse,
-    "ontology_dashboard.routers.auth.get_display_preferences": DisplayPreferencesResponse,
-    "ontology_dashboard.routers.auth.save_display_preferences": DisplayPreferenceRecord,
-    "ontology_dashboard.routers.auth.set_active_project": ActiveProjectResponse,
-    "ontology_dashboard.routers.auth.refresh_session": AuthSessionResponse,
-    "ontology_dashboard.routers.auth.list_sessions": ItemsResponse[SessionRecord],
-    "ontology_dashboard.routers.auth.revoke_other_sessions": RevokedSessionsResponse,
+    "app.identity.identity_router.register": RegisterResponse,
+    "app.identity.identity_router.login": AuthSessionResponse,
+    "app.identity.identity_router.public_blueprint_comparison": AuthSessionResponse,
+    "app.identity.identity_router.me": CurrentUserResponse,
+    "app.identity.identity_router.get_display_preferences": DisplayPreferencesResponse,
+    "app.identity.identity_router.save_display_preferences": DisplayPreferenceRecord,
+    "app.identity.identity_router.set_active_project": ActiveProjectResponse,
+    "app.identity.identity_router.refresh_session": AuthSessionResponse,
+    "app.identity.identity_router.list_sessions": ItemsResponse[SessionRecord],
+    "app.identity.identity_router.revoke_other_sessions": RevokedSessionsResponse,
     "ontology_dashboard.routers.agent.inspect_agent_run": AgentRunResponse,
     "ontology_dashboard.routers.adapters.list_adapters": ItemsResponse[dict[str, str]],
     "ontology_dashboard.routers.adapters.list_project_datasets": ItemsResponse[dict[str, Any]],
@@ -732,7 +732,7 @@ _EXPLICIT_MEDIA_EXAMPLES: dict[str, dict[str, Any]] = {
 
 
 _NO_CONTENT_ENDPOINTS = {
-    "ontology_dashboard.routers.auth.logout",
+    "app.identity.identity_router.logout",
     "ontology_dashboard.routers.dashboards.delete_dashboard_saved_view",
 }
 
