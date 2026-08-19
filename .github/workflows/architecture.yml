@@ -286,6 +286,8 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.integration == 'true' }}
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
     outputs:
       verified: ${{ steps.mvp_e2e.outputs.verified }}
     steps:
@@ -296,11 +298,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            systems/backend/pyproject.toml
-            ml/pyproject.toml
-            systems/generator/requirements.txt
 
       - name: Install Python dependencies for MVP runtime
         run: |
@@ -317,18 +314,11 @@ jobs:
         working-directory: systems/frontend
         run: npm ci --no-audit --no-fund
 
-      - name: Restore Playwright Chromium cache
-        id: playwright_cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('systems/frontend/package-lock.json') }}
-
-      - name: Install Playwright Chromium and system dependencies
+      - name: Verify Playwright Chromium from official image
         working-directory: systems/frontend
-        # Keep --with-deps on cache hits: browser files do not guarantee that
-        # a fresh runner still has every operating-system dependency.
-        run: npx playwright install --with-deps chromium
+        run: |
+          npx playwright --version
+          test -x "$(node -e 'const { chromium } = require("playwright"); process.stdout.write(chromium.executablePath())')"
 
       - name: Critical MVP Playwright smoke
         id: mvp_e2e

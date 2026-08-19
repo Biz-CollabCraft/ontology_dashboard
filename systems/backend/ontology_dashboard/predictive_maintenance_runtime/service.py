@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal
 
 from ..contracts import AppLocale
+from ..product_result_evidence_projection import (
+    event_evidence_projection_to_legacy_evidence,
+    product_result_artifact_to_event_evidence_projection,
+)
 from ..adapters.models import (
     DataQuality,
     EvidenceSource,
@@ -41,7 +45,8 @@ from .models import (
     SnapshotDrilldown,
     TimelinePrediction,
 )
-from .repository import ALLOWED_DERIVED_MEASURES, PredictiveMaintenanceRuntimeRepository
+from .repository import PredictiveMaintenanceRuntimeRepository
+from app.diagnosis.evidence import validate_product_result_artifact
 
 
 V3_1_SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
@@ -139,6 +144,25 @@ def _pm_label(mapping: dict[AppLocale, dict[str, str]], locale: AppLocale, value
     return mapping[locale].get(value, value.replace("_", " ").title() if locale == "en-US" else value)
 
 
+def _localize_legacy_top_factors(
+    factors: list[dict[str, Any]],
+    locale: AppLocale,
+) -> list[dict[str, Any]]:
+    fallback_range = "관리형 모델 계약 참조" if locale == "ko-KR" else "See governed model contract"
+    return [
+        {
+            **factor,
+            "display_name": _pm_label(PM_FEATURE_LABELS, locale, str(factor.get("feature") or "")),
+            "normal_range": (
+                fallback_range
+                if str(factor.get("normal_range") or "") in {"", "근거 부족"}
+                else factor["normal_range"]
+            ),
+        }
+        for factor in factors
+    ]
+
+
 def _dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -160,6 +184,17 @@ def _list(value: Any) -> list[Any]:
 class PredictiveMaintenanceRuntimeService:
     def __init__(self, repository: PredictiveMaintenanceRuntimeRepository) -> None:
         self.repository = repository
+
+    @staticmethod
+    def _supports_dashboard_evidence_detail(
+        source_contract: str,
+        producer_artifact: dict[str, Any] | None = None,
+    ) -> bool:
+        return (
+            source_contract == "result_artifact"
+            and isinstance(producer_artifact, dict)
+            and isinstance(producer_artifact.get("evidence_payload"), dict)
+        )
 
     @staticmethod
     def _safe_governance(profile: dict[str, Any]) -> GovernanceProvenance:
@@ -704,6 +739,20 @@ class PredictiveMaintenanceRuntimeService:
             created_at=row.get("prediction_result_created_at") or row["observed_at"],
         )
 
+    @staticmethod
+    def _stored_producer_artifact(row: dict[str, Any]) -> dict[str, Any] | None:
+        artifact = _dict(row.get("prediction_result_payload"))
+        if not isinstance(artifact.get("evidence_payload"), dict):
+            return None
+        validate_product_result_artifact(artifact)
+        for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):
+            if str(artifact.get(field)) != str(row[field]):
+                raise ValueError(f"stored Product Result Artifact {field} does not match runtime index")
+        provenance = _dict(artifact.get("provenance"))
+        if str(provenance.get("prediction_id")) != str(row["prediction_id"]):
+            raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
+        return artifact
+
     def _product_result(
         self,
         *,
@@ -712,6 +761,9 @@ class PredictiveMaintenanceRuntimeService:
         source_contract: str,
     ) -> GovernedProductResult:
         factors = self._factor_models(row.get("top_factors"))
+        producer_artifact: dict[str, Any] | None = None
+        if source_contract == "result_artifact":
+            producer_artifact = self._stored_producer_artifact(row)
         if source_contract == "result_artifact":
             provenance = _dict(row.get("provenance"))
             recommendation_raw = _dict(row.get("recommended_action"))
@@ -809,6 +861,7 @@ class PredictiveMaintenanceRuntimeService:
             governance=context.governance,
             graph=context.graph,
             prediction_result=prediction_result,
+            producer_artifact=producer_artifact,
         )
 
     def latest_results(
@@ -898,27 +951,6 @@ class PredictiveMaintenanceRuntimeService:
             spare_part_available=None,
         )
 
-    @staticmethod
-    def _dashboard_observation_payload(observation: SensorObservation) -> dict[str, Any]:
-        measurements = observation.measurements
-        return {
-            "timestamp": observation.observed_at.isoformat(),
-            "product_type": str(measurements.get("product_type") or observation.asset_type),
-            "air_temperature_k": measurements.get("air_temperature_k"),
-            "process_temperature_k": measurements.get("process_temperature_k"),
-            "rotational_speed_rpm": measurements.get("rotational_speed_rpm"),
-            "torque_nm": measurements.get("torque_nm"),
-            "tool_wear_min": measurements.get("tool_wear_min"),
-            "asset_id": observation.asset_id,
-            "asset_type": observation.asset_type,
-            "site_id": observation.site_id,
-            "cell_id": observation.cell_id,
-            "is_operating": observation.is_operating,
-            "operating_state": observation.operating_state,
-            **measurements,
-            **observation.derived_measures,
-        }
-
     def _dashboard_detail(
         self,
         *,
@@ -932,37 +964,9 @@ class PredictiveMaintenanceRuntimeService:
         role: str,
         intent: str,
         locale: AppLocale,
+        view: Literal["legacy", "canonical"] = "legacy",
     ) -> DashboardEventDetail:
         event_id = self._dashboard_event_id(result)
-        window_start = result.observed_at - timedelta(hours=6)
-        observation_response = self.observations(
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            dataset_version_id=context.dataset_version_id,
-            start=window_start,
-            end=result.observed_at,
-            asset_id=result.asset_id,
-            site_id=None,
-            cell_id=None,
-            asset_type=None,
-            grain="10m",
-            derived_measures=ALLOWED_DERIVED_MEASURES,
-            limit=72,
-        )
-        history = [
-            self._dashboard_observation_payload(item)
-            for item in observation_response.observations
-        ]
-        observation = history[-1] if history else {
-            "timestamp": result.observed_at.isoformat(),
-            "product_type": result.asset_type,
-            "air_temperature_k": None,
-            "process_temperature_k": None,
-            "rotational_speed_rpm": None,
-            "torque_nm": None,
-            "tool_wear_min": None,
-        }
         recommendation = result.recommended_action
         action = recommendation.action if recommendation else "Review governed prediction"
         action_label = _pm_label(PM_ACTION_LABELS, locale, action)
@@ -972,32 +976,6 @@ class PredictiveMaintenanceRuntimeService:
             if locale == "ko-KR"
             else f"{result.confidence * 100:.1f}% · calibrated"
         )
-        factor_units = {
-            "air_temperature_k": "K",
-            "process_temperature_k": "K",
-            "rotational_speed_rpm": "rpm",
-            "torque_nm": "Nm",
-            "tool_wear_min": "min",
-            "voltage_raw": "raw",
-            "rotation_raw": "raw",
-            "pressure_raw": "raw",
-            "vibration_raw": "raw",
-            "relative_vibration_z": "z",
-        }
-        factors = [
-            {
-                "evidence_field_id": f"factor:{item.feature}",
-                "feature": item.feature,
-                "display_name": _pm_label(PM_FEATURE_LABELS, locale, item.feature),
-                "value": item.feature_value,
-                "unit": factor_units.get(item.feature, "model unit"),
-                "normal_range": "관리형 모델 계약 참조" if locale == "ko-KR" else "See governed model contract",
-                "direction": item.direction,
-                "contribution": item.signed_contribution,
-                "source_type": "result_artifact_factor",
-            }
-            for item in result.top_factors
-        ]
         maintenance_payload = [
             {
                 **item,
@@ -1011,51 +989,49 @@ class PredictiveMaintenanceRuntimeService:
             f"result-artifact:{event_id}",
             *[f"maintenance:{item['maintenance_id']}" for item in maintenance[:5]],
         ]
-        evidence = {
-            "evidence_id": f"pm-evidence:{event_id}",
-            "event_id": event_id,
-            "scenario_id": f"{result.asset_type}:{result.site_id}:{result.cell_id}",
-            "equipment": equipment.model_dump(mode="json"),
-            "model": {
-                "model_version": result.provenance.model_version,
-                "policy_version": "result-artifact-policy-v1",
-                "mode": "postgresql_result_artifact",
-            },
-            "status": result.status_grade,
-            "recommended_decision": action,
-            "confidence": confidence,
-            "failure_probability": result.failure_probability,
-            "threshold": 0.5,
-            "predicted_failure_type": result.predicted_failure_type,
-            "observation": observation,
-            "history": history,
-            "detected_interval": {
-                "start": window_start.isoformat(),
-                "end": result.observed_at.isoformat(),
-            },
-            "top_factors": factors,
-            "maintenance_context": {
-                "provider": "PostgreSQL Canonical 정비 이력" if locale == "ko-KR" else "PostgreSQL canonical maintenance events",
-                "version": context.source_version,
-                "source_type": "canonical_maintenance_evidence",
-                "source_refs": source_refs,
-                "checklist": (
-                    [
-                        "관리형 상위 3개 위험 요인을 검토합니다",
-                        "최신 Canonical 센서 구간을 확인합니다",
-                        "승인 전에 정비 근거를 확인합니다",
-                    ]
-                    if locale == "ko-KR"
-                    else [
-                        "Review the governed Top-3 factors",
-                        "Confirm the latest canonical sensor window",
-                        "Check maintenance evidence before approval",
-                    ]
-                ),
-                "recommended_actions": [action_label],
-            },
-            "data_quality_warnings": [],
-            "lineage": {
+        maintenance_context = {
+            "provider": "PostgreSQL Canonical 정비 이력" if locale == "ko-KR" else "PostgreSQL canonical maintenance events",
+            "version": context.source_version,
+            "source_type": "canonical_maintenance_evidence",
+            "source_refs": source_refs,
+            "checklist": (
+                [
+                    "관리형 상위 3개 위험 요인을 검토합니다",
+                    "최신 Canonical 센서 구간을 확인합니다",
+                    "승인 전에 정비 근거를 확인합니다",
+                ]
+                if locale == "ko-KR"
+                else [
+                    "Review the governed Top-3 factors",
+                    "Confirm the latest canonical sensor window",
+                    "Check maintenance evidence before approval",
+                ]
+            ),
+            "recommended_actions": [action_label],
+        }
+        producer_artifact = result.producer_artifact
+        if producer_artifact is None:
+            raise ValueError("runtime Result Artifact does not include producer evidence payload")
+        canonical_evidence = product_result_artifact_to_event_evidence_projection(producer_artifact)
+        canonical_evidence["event_id"] = event_id
+        canonical_evidence["scenario_id"] = f"{result.asset_type}:{result.site_id}:{result.cell_id}"
+        canonical_evidence["subject"] = equipment.model_dump(mode="json")
+        canonical_evidence["artifact_reference"]["event_id"] = event_id
+        canonical_evidence["report_projection"]["maintenance_context"] = maintenance_context
+        legacy_evidence = event_evidence_projection_to_legacy_evidence(
+            canonical_evidence,
+            ranked_factor_evidence=producer_artifact.get("ranked_factor_evidence"),
+        )
+        legacy_evidence["top_factors"] = _localize_legacy_top_factors(
+            legacy_evidence["top_factors"],
+            locale,
+        )
+        legacy_evidence["evidence_id"] = f"pm-evidence:{event_id}"
+        legacy_evidence["equipment"] = equipment.model_dump(mode="json")
+        legacy_evidence["confidence"] = confidence
+        legacy_evidence["maintenance_context"] = maintenance_context
+        legacy_evidence["lineage"].update(
+            {
                 "project_id": project_id,
                 "workspace_id": workspace_id,
                 "dataset_id": context.dataset_id,
@@ -1068,9 +1044,10 @@ class PredictiveMaintenanceRuntimeService:
                 "prediction_id": result.provenance.prediction_id,
                 "prediction_result_id": result.provenance.prediction_result_id,
                 "replay_timestamp": result.observed_at.isoformat(),
-            },
-            "generated_at": result.observed_at.isoformat(),
-        }
+            }
+        )
+        evidence = canonical_evidence if view == "canonical" else legacy_evidence
+        factors = legacy_evidence["top_factors"]
         report = {
             "report_id": f"pm-report:{event_id}:{role}:{locale}",
             "event_id": event_id,
@@ -1101,12 +1078,15 @@ class PredictiveMaintenanceRuntimeService:
                     "title": "위험도와 주요 요인" if locale == "ko-KR" else "Risk and factors",
                     "body": ", ".join(
                         (
-                            f"{_pm_label(PM_FEATURE_LABELS, locale, item.feature)} "
-                            f"{'위험 증가' if item.direction == 'risk_up' else '위험 감소'}"
+                            f"{_pm_label(PM_FEATURE_LABELS, locale, str(item.get('feature')))} "
+                            f"{'위험 증가' if item.get('direction') == 'risk_up' else '위험 감소'}"
                             if locale == "ko-KR"
-                            else f"{_pm_label(PM_FEATURE_LABELS, locale, item.feature)} {item.direction.replace('_', ' ')}"
+                            else (
+                                f"{_pm_label(PM_FEATURE_LABELS, locale, str(item.get('feature')))} "
+                                f"{str(item.get('direction')).replace('_', ' ')}"
+                            )
                         )
-                        for item in result.top_factors
+                        for item in factors
                     ),
                     "evidence_field_ids": [item["evidence_field_id"] for item in factors],
                 },
@@ -1206,6 +1186,7 @@ class PredictiveMaintenanceRuntimeService:
         role: str,
         intent: str,
         locale: AppLocale = "ko-KR",
+        view: Literal["legacy", "canonical"] = "legacy",
     ) -> PredictiveMaintenanceDashboardResponse:
         versions = self.versions(
             organization_id=organization_id,
@@ -1293,18 +1274,23 @@ class PredictiveMaintenanceRuntimeService:
                 if item.get("completed_at") is not None
                 and item["completed_at"] <= selected_result.observed_at
             ]
-            detail = self._dashboard_detail(
-                organization_id=organization_id,
-                project_id=project_id,
-                workspace_id=workspace_id,
-                context=context,
-                result=selected_result,
-                equipment=equipment_by_event[selected_id],
-                maintenance=selected_maintenance,
-                role=role,
-                intent=intent,
-                locale=locale,
-            )
+            if self._supports_dashboard_evidence_detail(
+                selected_result.source_contract,
+                selected_result.producer_artifact,
+            ):
+                detail = self._dashboard_detail(
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    context=context,
+                    result=selected_result,
+                    equipment=equipment_by_event[selected_id],
+                    maintenance=selected_maintenance,
+                    role=role,
+                    intent=intent,
+                    locale=locale,
+                    view=view,
+                )
         return PredictiveMaintenanceDashboardResponse(
             data_source=DashboardDataSource(
                 dataset_id=context.dataset_id,

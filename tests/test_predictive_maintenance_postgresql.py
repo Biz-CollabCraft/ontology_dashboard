@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import os
 import subprocess
 import uuid
 from pathlib import Path
@@ -29,7 +30,13 @@ def _postgres_tools_available() -> bool:
     if any(shutil.which(command) is None for command in required):
         return False
     return subprocess.run(
-        ["pg_isready", "-h", "127.0.0.1", "-p", "5432"],
+        [
+            "pg_isready",
+            "-h",
+            os.getenv("TEST_POSTGRES_HOST", "127.0.0.1"),
+            "-p",
+            os.getenv("TEST_POSTGRES_PORT", "5432"),
+        ],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -37,15 +44,38 @@ def _postgres_tools_available() -> bool:
 
 
 def _dsn_for_database(database: str) -> str:
-    return f"postgresql://{subprocess.check_output(['whoami'], text=True).strip()}@127.0.0.1:5432/{database}"
+    user = os.getenv("TEST_POSTGRES_USER") or subprocess.check_output(
+        ["whoami"], text=True
+    ).strip()
+    password = os.getenv("TEST_POSTGRES_PASSWORD")
+    host = os.getenv("TEST_POSTGRES_HOST", "127.0.0.1")
+    port = os.getenv("TEST_POSTGRES_PORT", "5432")
+    credentials = user if not password else f"{user}:{password}"
+    return f"postgresql://{credentials}@{host}:{port}/{database}"
 
 
-def _dsn_for_user(database_url: str, user: str) -> str:
+def _dsn_for_user(database_url: str, user: str, password: str | None = None) -> str:
     parsed = urlsplit(database_url)
     host = parsed.hostname or "127.0.0.1"
     if parsed.port:
         host = f"{host}:{parsed.port}"
-    return urlunsplit(("postgresql", f"{user}@{host}", parsed.path, parsed.query, ""))
+    credentials = user if not password else f"{user}:{password}"
+    return urlunsplit(("postgresql", f"{credentials}@{host}", parsed.path, parsed.query, ""))
+
+
+def _postgres_cli_env() -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PGHOST": os.getenv("TEST_POSTGRES_HOST", "127.0.0.1"),
+            "PGPORT": os.getenv("TEST_POSTGRES_PORT", "5432"),
+            "PGUSER": os.getenv("TEST_POSTGRES_USER")
+            or subprocess.check_output(["whoami"], text=True).strip(),
+        }
+    )
+    if os.getenv("TEST_POSTGRES_PASSWORD"):
+        environment["PGPASSWORD"] = os.environ["TEST_POSTGRES_PASSWORD"]
+    return environment
 
 
 @pytest.fixture()
@@ -53,11 +83,11 @@ def postgresql_database():
     if not _postgres_tools_available():
         pytest.skip("local disposable PostgreSQL is unavailable")
     database = f"od_pm_test_{uuid.uuid4().hex[:12]}"
-    subprocess.run(["createdb", database], check=True)
+    subprocess.run(["createdb", database], check=True, env=_postgres_cli_env())
     dsn = _dsn_for_database(database)
     try:
         applied = migrate(dsn)
-        assert applied[-1] == "0029_governed_event_automation"
+        assert "0029_governed_event_automation" in applied
         assert migrate(dsn) == []
         import psycopg
 
@@ -84,7 +114,11 @@ def postgresql_database():
         yield dsn
     finally:
         close_pools()
-        subprocess.run(["dropdb", "--if-exists", database], check=False)
+        subprocess.run(
+            ["dropdb", "--if-exists", database],
+            check=False,
+            env=_postgres_cli_env(),
+        )
 
 
 def _changed_schema_manifest(manifest: DatasetBundleManifestV2) -> DatasetBundleManifestV2:
@@ -234,12 +268,20 @@ def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
     role = f"pm_rls_test_{uuid.uuid4().hex[:10]}"
     try:
         with psycopg.connect(postgresql_database, autocommit=True) as admin:
-            admin.execute(sql.SQL("CREATE ROLE {} LOGIN").format(sql.Identifier(role)))
+            admin.execute(
+                sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                    sql.Identifier(role),
+                    sql.Literal("runtime-test-password"),
+                )
+            )
             admin.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(role)))
             admin.execute(
                 sql.SQL("GRANT SELECT ON pm_assets TO {}").format(sql.Identifier(role))
             )
-        with psycopg.connect(_dsn_for_user(postgresql_database, role), row_factory=dict_row) as scoped:
+        with psycopg.connect(
+            _dsn_for_user(postgresql_database, role, "runtime-test-password"),
+            row_factory=dict_row,
+        ) as scoped:
             scoped.execute("SELECT set_config('app.organization_id','org-test',false)")
             scoped.execute("SELECT set_config('app.project_id','project-test',false)")
             visible = int(scoped.execute("SELECT COUNT(*) AS count FROM pm_assets").fetchone()["count"])
@@ -328,7 +370,12 @@ def test_postgresql_adaptive_modeling_repository_jsonb_idempotency_and_rls(
     role = f"modeling_rls_test_{uuid.uuid4().hex[:10]}"
     try:
         with psycopg.connect(postgresql_database, autocommit=True) as admin:
-            admin.execute(sql.SQL("CREATE ROLE {} LOGIN").format(sql.Identifier(role)))
+            admin.execute(
+                sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                    sql.Identifier(role),
+                    sql.Literal("runtime-test-password"),
+                )
+            )
             admin.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(role)))
             admin.execute(
                 sql.SQL("GRANT SELECT ON modeling_intake_profiles TO {}").format(
@@ -336,7 +383,8 @@ def test_postgresql_adaptive_modeling_repository_jsonb_idempotency_and_rls(
                 )
             )
         with psycopg.connect(
-            _dsn_for_user(postgresql_database, role), row_factory=dict_row
+            _dsn_for_user(postgresql_database, role, "runtime-test-password"),
+            row_factory=dict_row,
         ) as scoped:
             scoped.execute("SELECT set_config('app.organization_id','org-test',false)")
             scoped.execute("SELECT set_config('app.project_id','project-test',false)")

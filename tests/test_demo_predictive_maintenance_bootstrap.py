@@ -14,7 +14,8 @@ from ontology_dashboard.demo_predictive_maintenance_bootstrap import (
     _runtime_candidates,
     _runtime_fixture,
 )
-from app.diagnosis.predictor import CompressorHeuristicPredictor
+from app.diagnosis.evidence import build_product_result_artifact
+from app.diagnosis.predictor import CompressorHeuristicPredictor, HeuristicPredictor
 from predictive_maintenance_v3_helpers import create_small_v3_package
 
 
@@ -131,6 +132,59 @@ def test_runtime_fixture_and_predictor_support_canonical_compressor_fields() -> 
     assert prediction.factors
 
 
+def test_runtime_fixture_preserves_pre_current_history_from_canonical_selection() -> None:
+    from datetime import datetime, timezone
+
+    history = [
+        {
+            "timestamp": "2026-07-31T01:00:00+00:00",
+            "air_temperature_k": 299.0,
+            "process_temperature_k": 306.5,
+            "rotational_speed_rpm": 1300.0,
+            "torque_nm": 44.0,
+            "tool_wear_min": 210.0,
+        },
+        {
+            "timestamp": "2026-07-31T02:00:00+00:00",
+            "air_temperature_k": 299.5,
+            "process_temperature_k": 306.8,
+            "rotational_speed_rpm": 1290.0,
+            "torque_nm": 45.0,
+            "tool_wear_min": 215.0,
+        },
+    ]
+    row = {
+        "asset_id": "CNC-S01-L01-01",
+        "asset_type": "cnc",
+        "observed_at": datetime(2026, 8, 1, 1, 0, tzinfo=timezone.utc),
+        "observation": {
+            "product_type": "M",
+            "air_temperature_k": 300.0,
+            "process_temperature_k": 307.7,
+            "rotational_speed_rpm": 1280.0,
+            "torque_nm": 46.0,
+            "tool_wear_min": 220.0,
+        },
+        "history": history,
+    }
+
+    fixture = _runtime_fixture(row)
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    history_timestamps = [item["timestamp"] for item in fixture["history"]]
+
+    assert fixture["history"] == history
+    assert history_timestamps == sorted(history_timestamps)
+    assert history_timestamps[-1] < fixture["observation"]["timestamp"]
+    assert artifact["detected_interval"] == {
+        "start": history_timestamps[0],
+        "end": fixture["observation"]["timestamp"],
+    }
+    assert all(
+        warning.get("code") != "non_monotonic_time"
+        for warning in artifact["data_quality_warnings"]
+    )
+
+
 def test_runtime_candidates_select_latest_observation_per_asset() -> None:
     class Result:
         def fetchall(self) -> list[dict[str, object]]:
@@ -151,7 +205,12 @@ def test_runtime_candidates_select_latest_observation_per_asset() -> None:
 
     assert candidates == [{"asset_id": "CNC-001"}]
     assert connection.parameters == ("dsv-current", "dsv-current")
-    assert connection.query.count("DISTINCT ON (o.asset_id)") == 2
+    assert connection.query.count(
+        "ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC)"
+    ) == 2
+    assert connection.query.count("ORDER BY h.observed_at ASC") == 2
+    assert "ORDER BY h.observed_at DESC" not in connection.query
+    assert connection.query.count("h.observed_at < o.observed_at") == 2
     assert "pm_cnc_observations" in connection.query
     assert "pm_compressor_observations" in connection.query
     assert "UNION ALL" in connection.query

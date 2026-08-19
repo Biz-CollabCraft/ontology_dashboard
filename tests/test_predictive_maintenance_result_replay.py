@@ -12,6 +12,9 @@ import pytest
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator, FormatChecker
 
+from systems.backend.app.diagnosis.contracts import load_fixture
+from systems.backend.app.diagnosis.evidence import build_product_result_artifact
+from systems.backend.app.diagnosis.predictor import HeuristicPredictor
 from ontology_dashboard.adapters import (
     BundleFileAdapter,
     PostgreSQLPredictiveMaintenanceBundleIngestor,
@@ -21,6 +24,7 @@ from ontology_dashboard.predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeRepository,
     PredictiveMaintenanceRuntimeService,
 )
+from ontology_dashboard.predictive_maintenance_runtime import service as runtime_service
 from ontology_dashboard.dependencies import (
     get_identity_service,
     get_predictive_maintenance_runtime_service,
@@ -103,6 +107,105 @@ class RuntimeIdentity:
 class ConnectedRequest:
     async def is_disconnected(self) -> bool:
         return False
+
+
+def test_runtime_uses_the_stored_producer_artifact_payload() -> None:
+    fixture = load_fixture(
+        Path(__file__).resolve().parents[1] / "data" / "fixtures" / "GS-002-tool-wear-warning.json"
+    )
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    row = {
+        "artifact_id": artifact["artifact_id"],
+        "asset_id": artifact["asset_id"],
+        "asset_type": artifact["asset_type"],
+        "schema_version": artifact["schema_version"],
+        "prediction_id": artifact["provenance"]["prediction_id"],
+        "prediction_result_payload": artifact,
+    }
+
+    stored = PredictiveMaintenanceRuntimeService._stored_producer_artifact(row)
+
+    assert stored is artifact
+    assert stored["evidence_payload"] == artifact["evidence_payload"]
+    assert stored["ranked_factor_evidence"] == artifact["ranked_factor_evidence"]
+
+
+def test_snapshot_compatibility_does_not_require_dashboard_evidence_detail() -> None:
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "prediction_snapshot_compatibility"
+    ) is False
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "result_artifact",
+        {"evidence_payload": {"sensor_evidence": {}}},
+    ) is True
+
+
+def test_sensor_projection_constructs_canonical_observation() -> None:
+    observed_at = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+    observation = PredictiveMaintenanceRuntimeService._sensor(
+        {
+            "observed_at": observed_at,
+            "asset_id": "CMP-001",
+            "asset_type": "compressor",
+            "site_id": "S01",
+            "cell_id": "S01-L01",
+            "is_operating": True,
+            "operating_state": "running",
+            "source_sha256": "a" * 64,
+            "measurements": {"temperature_c": 72.5},
+            "derived_measures": {"temperature_delta_c": 2.5},
+        }
+    )
+
+    assert observation.asset_id == "CMP-001"
+    assert observation.measurements == {"temperature_c": 72.5}
+    assert observation.derived_measures == {"temperature_delta_c": 2.5}
+
+
+def test_legacy_factor_labels_are_localized_without_changing_raw_units() -> None:
+    factors = [
+        {
+            "evidence_field_id": "factor.1.voltage_raw",
+            "feature": "voltage_raw",
+            "display_name": "전압 신호",
+            "unit": "raw",
+            "normal_range": "295.0–305.0",
+        }
+    ]
+
+    localized = runtime_service._localize_legacy_top_factors(factors, "en-US")
+
+    assert localized[0]["display_name"] == "Voltage signal"
+    assert localized[0]["unit"] == "raw"
+    assert localized[0]["normal_range"] == "295.0–305.0"
+
+    fallback = runtime_service._localize_legacy_top_factors(
+        [{**factors[0], "normal_range": "근거 부족"}],
+        "en-US",
+    )
+    assert fallback[0]["normal_range"] == "See governed model contract"
+
+
+def test_compatibility_payload_is_not_validated_as_a_producer_artifact() -> None:
+    payload = {
+        "contract_version": "1.0",
+        "source_prediction_id": "prediction-1",
+        "dataset_version_id": "dataset-version-1",
+        "observed_at": "2026-08-01T00:00:00+00:00",
+        "prediction_horizon_hours": 24,
+        "failure_probability": 0.8,
+        "predicted_failure_type": "failure_risk",
+        "confidence": 0.9,
+        "feature_scope": {"tool_wear_min": "raw"},
+    }
+
+    assert PredictiveMaintenanceRuntimeService._stored_producer_artifact(
+        {"prediction_result_payload": payload}
+    ) is None
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "result_artifact", payload
+    ) is False
 
 
 def _append_csv(path: Path, row: dict[str, object]) -> None:
@@ -263,6 +366,8 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     )
     assert page.latest_product_contract == "result_artifact"
     assert page.total == len(page.items) == 2
+    assert {item.source_contract for item in page.items} == {"result_artifact"}
+    assert all(item.producer_artifact is None for item in page.items)
     assert page.context.source_version == "canonical-ai4i-physics-v3.1"
     assert page.context.bundle_checksum_sha256 == manifest.bundle_checksum_sha256
     assert page.context.graph.status == "failed"
@@ -617,38 +722,7 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     assert dashboard.data_source.model_version == "independent-logreg-v3.1"
     assert dashboard.data_source.result_artifact_count == 2
     assert dashboard.events
-    assert dashboard.selected_event_detail is not None
-    assert dashboard.selected_event_detail.evidence["lineage"]["dataset_version_id"] == (
-        v3_ingestion.dataset_version_id
-    )
-    assert dashboard.selected_event_detail.report["locale"] == "ko-KR"
-    assert "고장 위험" in dashboard.selected_event_detail.report["headline"]
-    selected_event = next(
-        item for item in dashboard.events if item.event_id == dashboard.selected_event_id
-    )
-    assert all(
-        datetime.fromisoformat(item["completed_at"]) <= selected_event.observed_at
-        for item in dashboard.selected_event_detail.maintenance_events
-    )
-
-    english_dashboard = service.dashboard(
-        organization_id="org-test",
-        project_id="project-test",
-        workspace_id="workspace-test",
-        user_id="runtime-user-other",
-        dataset_version_id=None,
-        selected_event_id=dashboard.selected_event_id,
-        role="engineer",
-        intent="overview",
-        locale="en-US",
-    )
-    assert english_dashboard.selected_event_detail is not None
-    assert english_dashboard.selected_event_detail.report["locale"] == "en-US"
-    assert "failure risk" in english_dashboard.selected_event_detail.report["headline"]
-    assert (
-        dashboard.selected_event_detail.report["report_id"]
-        != english_dashboard.selected_event_detail.report["report_id"]
-    )
+    assert dashboard.selected_event_detail is None
 
     overview = service.release_overview(
         organization_id="org-test",
@@ -718,6 +792,23 @@ def test_result_replay_http_and_sse_contracts_are_scoped(
             )
             assert latest.status_code == 200, latest.text
             assert latest.json()["latest_product_contract"] == "result_artifact"
+
+            dashboard = client.get(
+                f"{base}/dashboard",
+                params={"dataset_version_id": ingestion.dataset_version_id},
+            )
+            assert dashboard.status_code == 200, dashboard.text
+            assert dashboard.json()["selected_event_detail"] is None
+
+            canonical_dashboard = client.get(
+                f"{base}/dashboard",
+                params={
+                    "dataset_version_id": ingestion.dataset_version_id,
+                    "view": "canonical",
+                },
+            )
+            assert canonical_dashboard.status_code == 200, canonical_dashboard.text
+            assert canonical_dashboard.json()["selected_event_detail"] is None
 
             timeline = client.get(
                 f"{base}/timeline",

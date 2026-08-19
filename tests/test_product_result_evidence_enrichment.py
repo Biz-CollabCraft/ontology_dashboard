@@ -149,6 +149,32 @@ def test_product_result_artifact_preserves_signed_contribution_direction_fallbac
         assert 0 <= factor["contribution"] <= 1
 
 
+def test_raw_signal_factor_keeps_source_raw_unit_and_signal_label() -> None:
+    prediction = Prediction(
+        model_version="test-model",
+        probability=0.8,
+        risk_band="warning",
+        recommended_decision="request_inspection",
+        confidence="medium",
+        predicted_failure_type="failure_risk",
+        factors=[
+            FactorScore(
+                feature="voltage_raw",
+                raw_value=170.0,
+                score=0.8,
+                direction="risk_up",
+            )
+        ],
+        quality_issues=[],
+        model_artifact=None,
+    )
+
+    factor = build_ranked_factor_evidence(prediction)[0]
+
+    assert factor["unit"] == "raw"
+    assert factor["display_name"] == "전압 신호"
+
+
 def test_product_result_artifact_records_gap_when_maintenance_context_is_missing() -> None:
     fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-002-tool-wear-warning.json")
 
