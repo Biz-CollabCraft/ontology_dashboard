@@ -139,10 +139,10 @@ def main() -> int:
                 seed_reference_data=True,
             )
             identity = IdentityService(
-                database_url,
+                identity_repository,
                 app_env="test",
                 seed_demo=True,
-                repository=identity_repository,
+                rate_limit_namespace=f"identity:{database_url}",
             )
             principal, token, _, _ = identity.login(
                 LoginRequest(email="manager@ontology.local", password="Manager!2026"),
