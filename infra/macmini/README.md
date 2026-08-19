@@ -184,15 +184,84 @@ the canonical production origin.
 
 ## Rollback
 
-Frontend rollback: return the Cloudflare `ontology.oosu.dev` catch-all to the
-existing Vercel production origin. Full application rollback can then use the
-previous Vercel `/api/*` destination to Render. Render remains available until
-a separate retirement decision.
+### Guarantee boundary
 
-Database rollback: restore the previous Render configuration (whose
-`ONTOLOGY_DASHBOARD_DATABASE_URL` still points to Neon) rather than repointing
-the Mac mini Backend across the public internet. Neon remains unchanged and is
-the authoritative pre-cutover fallback snapshot until the retention decision.
+The retained Vercel → Render → Neon stack is a **pre-cutover rollback path**,
+not a post-cutover disaster-recovery/failover replica.
+
+- Frontend rollback returns the Cloudflare `ontology.oosu.dev` catch-all to the
+  retained Vercel production origin. The retained pre-cutover frontend route
+  sends `/api/*` to Render.
+- Application/database rollback uses the retained Render service with its
+  existing `ONTOLOGY_DASHBOARD_DATABASE_URL` pointing to Neon. Do not repoint
+  the Mac mini Backend to Neon over the public internet.
+- Neon is the authoritative **pre-cutover** fallback state. Mac mini PostgreSQL
+  does not continuously replicate post-cutover writes to Neon.
+- The daily PostgreSQL dumps described above are local Mac mini recovery
+  artifacts. They do not protect against total loss of the Mac mini and its
+  local data root because no independent off-host copy is currently part of
+  this PR.
+
+Consequently, if the Mac mini and its storage are unavailable, the cloud
+rollback RPO is the retained Neon cutover point: all writes accepted only by Mac
+mini after that point may be lost from the fallback view. There is no guaranteed
+RTO; changing Cloudflare ingress is manual and a retained Render instance may
+need to cold-start. A post-cutover DR/failover claim requires a separate
+off-host/replicated backup design, an explicit RPO/RTO, and a restore/failover
+drill.
+
+### Cloud rollback procedure
+
+Before changing public ingress during an incident:
+
+1. Check the retained Render `/health/ready` endpoint directly. The database and
+   migration dependencies must report `ready`; optional demo Redis may remain
+   unconfigured.
+2. Check the retained Vercel production URL directly. Confirm `/` returns 200,
+   unauthenticated `/api/projects` returns the expected 401, then use an approved
+   demo/operator account to prove login, `/api/projects`, and at least one
+   representative runtime API.
+3. Record the current Mac mini and fallback Dataset Version/model identifiers and
+   the latest accepted PostgreSQL backup or cutover timestamp. This makes the
+   expected data-loss window explicit before traffic is moved.
+4. Restore the last known-good pre-cutover Cloudflare ingress entry for
+   `ontology.oosu.dev`, validate the tunnel configuration, and reload the tunnel.
+5. Repeat the login and representative API smoke through
+   `https://ontology.oosu.dev`. Record status codes and the fallback Dataset
+   Version/model identifiers in the incident log.
+
+Do not describe the rollback as zero-data-loss or as automatic failover unless
+continuous replication/off-host recovery has been added and separately proven.
+
+### 2026-08-19 cloud fallback smoke record
+
+At `2026-08-19 12:51 KST`, the retained cloud path was checked directly from a
+machine outside the Mac mini data plane, without changing Cloudflare production
+ingress:
+
+- Vercel production root: HTTP 200.
+- Vercel `/api/projects` without a session: expected HTTP 401.
+- Render `/health/ready`: HTTP 200 after cold-start delay; database=`ready`,
+  migrations=`ready`. Earlier 25-second probes timed out while the retained
+  service was cold, so rollback RTO must not assume an already-warm Render
+  instance.
+- Login through Vercel: HTTP 200; authenticated `/api/projects`: HTTP 200 with
+  three projects.
+- Manufacturing predictive-maintenance runtime context through Vercel: HTTP
+  200, `relational_status=ready`, fallback Dataset Version
+  `dsv-c42ef81d-f744-5b9b-8390-ac2e45bb8f17`, model version
+  `compressor-signal-heuristic-v1, fixture-heuristic-v1`.
+- At the same time the active Mac mini path reported Dataset Version
+  `dsv-3a047e0d-b120-508a-99b2-e27d8e4cb213` and model version
+  `cnc-random-forest-v3-f898a33ade7f, compressor-random-forest-v3-138e75c0f721`.
+  The differing runtime lineage is concrete evidence that the cloud standby is
+  a retained pre-cutover state rather than a synchronized post-cutover replica.
+
+This smoke proves the direct Vercel → Render → Neon fallback data path was
+reachable and could authenticate/read application data at that time. It does
+**not** prove the Cloudflare ingress switch itself, an actual powered-off Mac
+mini drill, post-cutover data parity, or post-cutover disaster recovery. Those
+remain separate operational proofs.
 
 ## Secret handling
 

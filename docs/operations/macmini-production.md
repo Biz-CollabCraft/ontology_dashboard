@@ -16,10 +16,27 @@ in `infra/macmini/README.md`.
 
 During cutover, Vercel, Render and Neon are rollback/validation standbys and are
 not deleted, suspended, branched, truncated, or otherwise destructively
-modified. A failed frontend cutover returns the Cloudflare `ontology.oosu.dev`
-catch-all ingress to the existing Vercel production origin. A full application
-rollback can then use Vercel's Render rewrite, returning to Render+Neon without
-publishing PostgreSQL port 5432.
+modified. The guarantee provided by those standbys is deliberately limited to
+a **pre-cutover service rollback**. A failed frontend cutover returns the
+Cloudflare `ontology.oosu.dev` catch-all ingress to the retained Vercel
+production origin, whose pre-cutover `/api/*` route reaches Render; Render keeps
+its existing Neon database configuration.
+
+This is **not** a post-cutover disaster-recovery or automatic failover claim.
+Mac mini PostgreSQL is not continuously replicated to Neon, and the local daily
+PostgreSQL dumps are not currently copied to an independent off-host backup
+target. If the Mac mini and its local storage become completely unavailable,
+the cloud rollback data recovery point is therefore the retained Neon
+pre-cutover state: Mac mini writes after cutover are outside the guaranteed
+recovery set. No contractual RTO is claimed either; the Cloudflare ingress
+change is manual and the retained Render service may require a cold start.
+
+Local PostgreSQL dumps remain useful for host/service recovery when the Mac
+mini data root is still accessible. Claiming post-cutover DR/failover requires a
+separate change that adds an off-host or continuously replicated PostgreSQL
+recovery path, defines an explicit RPO/RTO, and proves that path with a restore
+or failover drill. The concrete rollback smoke record and procedure are kept in
+`infra/macmini/README.md`.
 
 Production validation must include all three backend health endpoints, database
 migration/row-count comparison, artifact checksum validation, a real Generator
