@@ -52,6 +52,20 @@ def _synthetic_repository(root: Path) -> Path:
 
 
 class BackendMigrationRatchetTests(unittest.TestCase):
+    def test_pr_base_edit_retriggers_both_ratchet_workflows(self) -> None:
+        workflow_paths = (
+            ROOT / ".github/workflows/architecture.yml",
+            ROOT / ".github/workflows/backend-contract-ci.yml",
+        )
+
+        for workflow_path in workflow_paths:
+            with self.subTest(workflow=workflow_path.name):
+                workflow = workflow_path.read_text(encoding="utf-8")
+                pull_request_section = workflow.split("pull_request:", 1)[1].split(
+                    "push:", 1
+                )[0]
+                self.assertIn("edited", pull_request_section)
+
     def test_repository_matches_committed_baseline(self) -> None:
         report = validate_ratchet(ROOT)
 
@@ -142,6 +156,35 @@ class BackendMigrationRatchetTests(unittest.TestCase):
             ),
             references,
         )
+
+    def test_direct_and_keyword_dynamic_imports_are_collected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            targets = (
+                "ontology_" + "dashboard.direct",
+                "ontology_" + "dashboard.keyword",
+                "ontology_" + "dashboard.builtin",
+            )
+            _write(
+                root / "systems/backend/app/runtime.py",
+                "from importlib import import_module\n"
+                + "import importlib\n"
+                + f"DIRECT = import_module({targets[0]!r})\n"
+                + f"KEYWORD = importlib.import_module(name={targets[1]!r})\n"
+                + f"BUILTIN = __import__(name={targets[2]!r})\n",
+            )
+
+            references = collect_transitional_references(root)
+
+        for target in targets:
+            self.assertIn(
+                LegacyReference(
+                    "systems/backend/app/runtime.py",
+                    "dynamic_import",
+                    target,
+                ),
+                references,
+            )
 
     def test_baseline_may_decrease_but_cannot_increase(self) -> None:
         reference = LegacyReference(

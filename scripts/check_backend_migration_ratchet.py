@@ -116,12 +116,46 @@ def _literal_dynamic_target(node: ast.AST) -> str | None:
     return None
 
 
-def _dynamic_import_kind(call: ast.Call) -> str | None:
+def _dynamic_import_names(tree: ast.AST) -> tuple[set[str], set[str]]:
+    direct_names = {"__import__"}
+    module_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "importlib":
+                    module_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "importlib":
+            for alias in node.names:
+                if alias.name == "import_module":
+                    direct_names.add(alias.asname or alias.name)
+    return direct_names, module_names
+
+
+def _dynamic_import_kind(
+    call: ast.Call,
+    *,
+    direct_names: set[str],
+    module_names: set[str],
+) -> str | None:
     function = call.func
-    if isinstance(function, ast.Name) and function.id == "__import__":
+    if isinstance(function, ast.Name) and function.id in direct_names:
         return "dynamic_import"
-    if isinstance(function, ast.Attribute) and function.attr == "import_module":
+    if (
+        isinstance(function, ast.Attribute)
+        and function.attr == "import_module"
+        and isinstance(function.value, ast.Name)
+        and function.value.id in module_names
+    ):
         return "dynamic_import"
+    return None
+
+
+def _dynamic_import_target_node(call: ast.Call) -> ast.AST | None:
+    if call.args:
+        return call.args[0]
+    for keyword in call.keywords:
+        if keyword.arg == "name":
+            return keyword.value
     return None
 
 
@@ -134,6 +168,7 @@ def _python_references(path: Path, root: Path) -> set[LegacyReference]:
             f"RAT003 {relative}: cannot inspect Python imports: {exc}"
         ) from exc
 
+    direct_names, module_names = _dynamic_import_names(tree)
     references: set[LegacyReference] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -142,8 +177,13 @@ def _python_references(path: Path, root: Path) -> set[LegacyReference]:
                     references.add(LegacyReference(relative, "static_import", alias.name))
         elif isinstance(node, ast.ImportFrom) and node.module and _is_legacy_module(node.module):
             references.add(LegacyReference(relative, "static_import", node.module))
-        elif isinstance(node, ast.Call) and _dynamic_import_kind(node) and node.args:
-            target = _literal_dynamic_target(node.args[0])
+        elif isinstance(node, ast.Call) and _dynamic_import_kind(
+            node,
+            direct_names=direct_names,
+            module_names=module_names,
+        ):
+            target_node = _dynamic_import_target_node(node)
+            target = _literal_dynamic_target(target_node) if target_node else None
             if target and _is_legacy_module(target.rstrip(".*")):
                 references.add(LegacyReference(relative, "dynamic_import", target))
     return references

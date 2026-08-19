@@ -356,8 +356,6 @@ sketch
 [Ss]cripts
 # The repository's root scripts directory contains versioned automation, not a venv.
 !scripts/
-scripts/*
-!scripts/check_backend_migration_ratchet.py
 pyvenv.cfg
 pip-selfcheck.json
 
