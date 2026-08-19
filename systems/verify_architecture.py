@@ -461,9 +461,10 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'npm ci --no-audit --no-fund',
         'cache: pip',
         'cache: npm',
-        'uses: actions/cache@v4',
-        'path: ~/.cache/ms-playwright',
-        'npx playwright install --with-deps chromium',
+        'image: mcr.microsoft.com/playwright:v1.62.1-noble',
+        'Verify Playwright Chromium from official image',
+        'npx playwright --version',
+        'chromium.executablePath()',
         'id: mvp_e2e',
         'PLAYWRIGHT_PYTHON_BIN: python',
         'npm run test:e2e:mvp',
@@ -487,6 +488,12 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
     for fragment in required_fragments:
         if fragment not in workflow_text:
             errors.append(f"architecture CI is missing Docker runtime smoke coverage: {fragment}")
+
+    if "npx playwright install --with-deps chromium" in workflow_text:
+        errors.append(
+            "Playwright MVP E2E must use the official Playwright image instead of "
+            "installing operating-system dependencies through apt during CI"
+        )
 
     review_required_fragments = (
         "workflow_call:",
