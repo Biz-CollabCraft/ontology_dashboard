@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import tempfile
 import unittest
 from pathlib import Path
@@ -103,6 +104,32 @@ class BackendDomainFirstArchitectureTests(unittest.TestCase):
             any(
                 "backend infra imports domain implementation" in error
                 and "app.equipment.equipment_repository" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_multi_alias_relative_import_normalizes_each_module(self) -> None:
+        node = ast.parse("from .. import infra as i, common as c\n").body[0]
+
+        modules = verifier._module_names(node, package="app.equipment")
+
+        self.assertEqual(modules, ["app.infra", "app.common"])
+
+    def test_multi_alias_relative_import_cannot_bypass_infra_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write(
+                root / "systems/backend/app/equipment/equipment_service.py",
+                "from .. import infra as i, common as c\n",
+            )
+
+            errors = self._run_ratchet(root)
+
+        self.assertTrue(
+            any(
+                "backend domain imports infra implementation" in error
+                and "app.infra" in error
                 for error in errors
             ),
             errors,

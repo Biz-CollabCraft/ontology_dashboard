@@ -72,10 +72,18 @@ def _module_names(node: ast.AST, *, package: str | None = None) -> list[str]:
             resolved_parts = package_parts[:keep]
             if module:
                 resolved_parts.extend(module.split("."))
-            elif len(node.names) == 1 and node.names[0].name != "*":
-                resolved_parts.append(node.names[0].name)
-            resolved = ".".join(part for part in resolved_parts if part)
-            return [resolved] if resolved else []
+                resolved = ".".join(part for part in resolved_parts if part)
+                return [resolved] if resolved else []
+
+            resolved_modules: list[str] = []
+            for alias in node.names:
+                alias_parts = list(resolved_parts)
+                if alias.name != "*":
+                    alias_parts.extend(alias.name.split("."))
+                resolved = ".".join(part for part in alias_parts if part)
+                if resolved:
+                    resolved_modules.append(resolved)
+            return resolved_modules
         if module:
             return [module]
     return []
