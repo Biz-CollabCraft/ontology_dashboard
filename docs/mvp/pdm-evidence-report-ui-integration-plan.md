@@ -784,7 +784,7 @@ Status 값은 다음만 사용한다.
 | 19 | In Progress | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | local `npm run lint`, `npm run test -- src/features/mvp/context/MvpSelectionContext.test.ts src/features/mvp/api/mvpAdapters.test.ts` |
 | 20 | In Progress | map-report prototype의 Inspection Request, Evidence Trace, Sensor Evidence 패턴만 dashboard side tab용 typed component로 재구현한다. `MapReportView`, 설비상세, 요약/집계 탭은 V2로 보류한다. | MVP report components | local `npm run build`; screenshot/Playwright는 후속 |
 | 21 | In Progress | component를 API data에 연결한다. | fixture 또는 live-backed UI flow | 기존 MVP `MvpEventDetailModel` 소비; browser 확인은 후속 |
-| 22 | In Progress | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | `PLAYWRIGHT_PYTHON_BIN=python3 PLAYWRIGHT_API_PORT=8210 PLAYWRIGHT_WEB_PORT=3210 npm run test:e2e:mvp` (local: 12 passed) |
+| 22 | In Progress | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | `PLAYWRIGHT_PYTHON_BIN=python3 PLAYWRIGHT_API_PORT=8210 PLAYWRIGHT_WEB_PORT=3210 npm run test:e2e:mvp` → 통과 12개 |
 
 5차 PR 완료 조건은 다음과 같다.
 
