@@ -17,11 +17,6 @@
     "automation_runtime.py",
     "bootstrap.py",
     "branching_lineage.py",
-    "closed_loop/__init__.py",
-    "closed_loop/domain.py",
-    "closed_loop/integration.py",
-    "closed_loop/models.py",
-    "closed_loop/repository.py",
     "connectors.py",
     "context.py",
     "contracts.py",
@@ -555,32 +550,7 @@
     {
       "source": "tests/test_closed_loop_domain_contract.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.closed_loop"
-    },
-    {
-      "source": "tests/test_closed_loop_domain_contract.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.contracts"
-    },
-    {
-      "source": "tests/test_closed_loop_integration_contract.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.closed_loop.integration"
-    },
-    {
-      "source": "tests/test_closed_loop_persistence.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.closed_loop"
-    },
-    {
-      "source": "tests/test_closed_loop_persistence.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.closed_loop.integration"
-    },
-    {
-      "source": "tests/test_closed_loop_persistence.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.closed_loop.repository"
     },
     {
       "source": "tests/test_connectors_phase26.py",

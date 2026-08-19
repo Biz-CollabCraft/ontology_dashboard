@@ -8,7 +8,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..contracts import OperationalDecisionKind
+
+class OperationalDecisionKind(StrEnum):
+    """Operational decision values shared by maintenance authorization flows."""
+
+    CONTINUE_MONITORING = "continue_monitoring"
+    REQUEST_INSPECTION = "request_inspection"
+    REVIEW_SHUTDOWN = "review_shutdown"
+    HOLD_FOR_DATA_CHECK = "hold_for_data_check"
 
 
 class FrozenModel(BaseModel):

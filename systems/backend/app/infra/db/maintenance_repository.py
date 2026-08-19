@@ -7,23 +7,21 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, Protocol
 
-from ..migrations import migrate
-from ..postgresql_compat import PostgreSQLProjectContextResolver, postgres_repository_connection
-from app.infra.db.project_repository import SQLiteProjectContextResolver
-from .domain import (
+from app.infra.db.migrations import migrate
+from app.maintenance.maintenance_domain import (
     IdempotencyConflict,
     InvalidTransition,
     apply_recommendation_decision,
     transition_work_order,
 )
-from .integration import (
+from app.maintenance.integration import (
     MaintenanceCompletedEvent,
     MaintenanceReplayRequestedEvent,
     MaintenanceStartedEvent,
 )
-from .models import (
+from app.maintenance.maintenance_schema import (
     MaintenanceAction,
     MaintenanceActionStatus,
     OperationalRecommendedAction,
@@ -36,15 +34,40 @@ from .models import (
 )
 
 
-class ClosedLoopRepository:
+class ProjectScope(Protocol):
+    organization_id: str
+    project_id: str
+    workspace_id: str
+
+
+class ProjectContextResolverPort(Protocol):
+    def resolve(
+        self,
+        workspace_id: str,
+        *,
+        expected_organization_id: str | None = None,
+        expected_project_id: str | None = None,
+        connection: Any | None = None,
+    ) -> ProjectScope: ...
+
+
+ConnectionFactory = Callable[..., Any]
+
+
+class MaintenanceRepository:
     """SQLite adapter; PostgreSQL uses the same conservative SQL through compat."""
 
-    def __init__(self, database: str | Path) -> None:
+    def __init__(
+        self,
+        database: str | Path,
+        *,
+        project_context: ProjectContextResolverPort,
+    ) -> None:
         self.database = str(database)
         self.path = Path(database)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         migrate(self.database)
-        self.project_context = SQLiteProjectContextResolver(self.path)
+        self.project_context = project_context
 
     def _connect(self):
         connection = sqlite3.connect(self.path)
@@ -1436,16 +1459,28 @@ class ClosedLoopRepository:
         )
 
 
-class PostgreSQLClosedLoopRepository(ClosedLoopRepository):
-    """PostgreSQL/RLS adapter using the canonical compatibility connection."""
+class PostgreSQLMaintenanceRepository(MaintenanceRepository):
+    """PostgreSQL adapter with composition-injected tenant context/connection factory."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        project_context: ProjectContextResolverPort,
+        connection_factory: ConnectionFactory,
+    ) -> None:
         self.database = database_url
         self.path = database_url
-        self.project_context = PostgreSQLProjectContextResolver(database_url)
+        self.project_context = project_context
+        self.connection_factory = connection_factory
 
     def _connect(self):
-        return postgres_repository_connection(
+        return self.connection_factory(
             self.database,
             resolver=self.project_context,
         )
+
+
+# Transitional class name retained for callers while the legacy package disappears.
+ClosedLoopRepository = MaintenanceRepository
+PostgreSQLClosedLoopRepository = PostgreSQLMaintenanceRepository

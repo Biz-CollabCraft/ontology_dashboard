@@ -54,7 +54,7 @@
 | `predictive_maintenance_runtime/*`, `product_result_evidence_projection.py` | Runtime result/read model/replay | `SPLIT` | inference·Result/Evidence·history readiness는 `diagnosis`; Overlay 생성은 `gen_data` | #58 |
 | `modeling/*` | intake, mapping, feature, experiment, model registry/runtime DTO 혼재 | `SPLIT` | Backend runtime consumer 최소 계약만 `diagnosis`/`governance`; 학습·feature 생성은 Generator로 대체 후 Backend에서 삭제 | #58, #63, #68 |
 | `analysis_models.py`, `analysis_repository.py`, `analysis_service.py` | 시각적 Analysis graph와 실행 | `REMOVE` | MVP 제외 범위. `/api/analyses`·Analysis UI·materialization compatibility를 종료한 뒤 삭제. Diagnosis로 이관하지 않음 | #58, #68 |
-| `closed_loop/*` 전체 | Recommendation, Decision, WorkOrder, MaintenanceAction/Event, persistence, integration | `MOVE` | 패키지명을 `app/maintenance`로 수렴 | #59 |
+| `closed_loop/__init__.py`, `closed_loop/domain.py`, `closed_loop/integration.py`, `closed_loop/models.py`, `closed_loop/repository.py` | Recommendation, Decision, WorkOrder, MaintenanceAction/Event, persistence, integration | `MOVE` | `app/maintenance` public contracts/domain + `app/infra/db` persistence로 수렴 | #59 |
 | `contracts.py` | Maintenance, Report, Dashboard, HTTP DTO 혼재 | `SPLIT` | 의미 소유 도메인별 schema로 분해, 공통 오류만 `common` | #59~#63 |
 | `service.py`, `repository.py`, `context.py`, `conversation.py` | 제조 Facade, Audit, Project3 fallback, follow-up | `SPLIT` | Equipment/Maintenance/Report/Dashboard/Governance/Planner로 분해하거나 canonical 구현으로 대체 | #56, #59~#63 |
 | `dashboard_catalog.py`, `dashboard_models.py`, `dashboard_repository.py`, `dashboard_service.py`, `visualizations/*` | Dashboard/read-model composition | `MOVE` | `app/dashboard`; upstream 의미를 재계산하지 않음 | #60 |
@@ -255,6 +255,11 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `predictive_maintenance_runtime/service.py` | `systems/backend/app/diagnosis/runtime_service.py` | `MIGRATED` |
 | `product_result_evidence_projection.py` | `systems/backend/app/diagnosis/evidence_projection.py` | `MIGRATED` |
 | `routers/predictive_maintenance_runtime.py` | `systems/backend/app/diagnosis/diagnosis_router.py` | `MIGRATED` |
+| `closed_loop/__init__.py` | `systems/backend/app/maintenance/__init__.py` | `MIGRATED` |
+| `closed_loop/domain.py` | `systems/backend/app/maintenance/maintenance_domain.py` | `MIGRATED` |
+| `closed_loop/integration.py` | `systems/backend/app/maintenance/integration.py` | `MIGRATED` |
+| `closed_loop/models.py` | `systems/backend/app/maintenance/maintenance_schema.py`, `systems/backend/app/maintenance/ports.py` | `MIGRATED` |
+| `closed_loop/repository.py` | `systems/backend/app/infra/db/maintenance_repository.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
@@ -286,3 +291,9 @@ Phase 7 / #58에서 Product Result/Evidence와 PostgreSQL runtime read/replay �
 구현을 Diagnosis가 직접 import하지 않고 `ObservationDatasetQueryPort`와
 `EquipmentSnapshotQueryPort` inbound boundary로 연결하며, modeling Workbench의
 학습/실험/feature-learning 책임은 이관하지 않는다.
+
+Phase 8 / #59에서는 Recommendation → Decision → WorkOrder → MaintenanceAction →
+MaintenanceEvent 상태 흐름과 integration event schema를 `app/maintenance`가 소유한다.
+DB/RLS persistence는 `app/infra/db/maintenance_repository.py`로 분리했으며,
+Diagnosis Product Result/Evidence와 Equipment state patch/state-version은 각각 public
+inbound port로만 소비한다.

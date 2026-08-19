@@ -1,7 +1,7 @@
 """Pure domain contracts for the predictive-maintenance closed loop."""
 
-from ..contracts import OperationalDecisionKind
-from .domain import (
+from .maintenance_schema import OperationalDecisionKind
+from .maintenance_domain import (
     ActionInProgress,
     IdempotencyConflict,
     InvalidTransition,
@@ -21,7 +21,7 @@ from .domain import (
     transition_risk_event,
     transition_work_order,
 )
-from .models import (
+from .maintenance_schema import (
     EquipmentIdentity,
     IdempotencyOutcome,
     IdempotencyRecord,

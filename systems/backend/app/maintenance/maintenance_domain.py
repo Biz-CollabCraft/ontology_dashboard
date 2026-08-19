@@ -8,7 +8,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from .models import (
+from .maintenance_schema import (
     EquipmentIdentity,
     IdempotencyOutcome,
     IdempotencyRecord,

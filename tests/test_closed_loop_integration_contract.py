@@ -8,7 +8,7 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 
-from ontology_dashboard.closed_loop.integration import (
+from app.maintenance.integration import (
     MaintenanceCause,
     MaintenanceCompletedEvent,
     MaintenanceReplayRequestedEvent,
