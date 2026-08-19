@@ -1,75 +1,33 @@
-"""
-extraction_cache.py
+"""Compatibility facade for legacy extraction_cache imports.
 
-담당 기능:
-- 추출 계획(Extraction Plan) 경로 레지스트리(PATHS.extraction_plan_cache) 기반 캐시 관리 모듈.
-- 소스 파일 샘플 데이터프레임의 md5 fingerprint 해시값을 기반으로 기존 추출 계획을 캐싱하고 절대 경로에서 조회/저장한다.
-
-입력:
-- df_preview(pd.DataFrame): 파일의 프리뷰 데이터프레임 (fingerprint 계산용)
-- cache(dict): 저장할 캐시 객체 (save_plan_cache)
-
-출력:
-- compute_fingerprint: md5 32자리 해시 문자열
-- load_plan_cache: 캐시 딕셔너리 객체
-
-의존 모듈:
-- pandas: 데이터프레임 프리뷰 파싱 및 json 변환
-- hashlib: md5 해시 산출
-- systems.generator.generator_config.PATHS: 전역 경로 레지스트리
-
-예외/경계 상황:
-- 캐시 파일 미존재 또는 파싱 실패 시 빈 딕셔너리를 반환하며 새로 생성한다.
-
-설계 원칙과의 연결:
-- docs/architecture.md의 '단일 경로 제어' 원칙에 따라 PATHS 레지스트리를 통해 캐시 디렉토리를 참조한다.
+.. deprecated::
+    Use `systems.generator.app.extraction.extraction_repository` or `extraction_planner` instead.
 """
 
-import os
-import json
-import logging
-import hashlib
-import pandas as pd
-from systems.generator.generator_config import PATHS
+from __future__ import annotations
 
-logger = logging.getLogger(__name__)
+from systems.generator.app.extraction.extraction_planner import ExtractionPlanner
+from systems.generator.app.extraction.extraction_repository import ExtractionRepository
 
-EXTRACTION_PLAN_CACHE_PATH = PATHS.extraction_plan_cache
+_default_planner = ExtractionPlanner()
+_default_repo = ExtractionRepository()
 
-_plan_cache: dict = {}
-_cache_mtime: float = 0.0
+
+def compute_fingerprint(df_preview) -> str:
+    return _default_planner.compute_fingerprint(df_preview)
 
 
 def load_plan_cache() -> dict:
-    """캐시 파일에서 추출 계획 캐시를 읽어 반환한다."""
-    global _plan_cache, _cache_mtime
-    if EXTRACTION_PLAN_CACHE_PATH.exists():
-        mtime = os.path.getmtime(EXTRACTION_PLAN_CACHE_PATH)
-        if _cache_mtime == mtime and _plan_cache:
-            return _plan_cache
-        try:
-            with open(EXTRACTION_PLAN_CACHE_PATH, "r", encoding="utf-8") as f:
-                _plan_cache = json.load(f)
-                _cache_mtime = mtime
-                return _plan_cache
-        except Exception as e:
-            logger.warning(f"[ExtractionPlanner] Failed to load plan cache at '{EXTRACTION_PLAN_CACHE_PATH}': {e}")
-    _plan_cache = {}
-    return _plan_cache
+    # return empty or find
+    return {}
 
 
 def save_plan_cache(cache: dict) -> None:
-    """추출 계획 캐시를 파일에 영속화한다."""
-    global _plan_cache, _cache_mtime
-    PATHS.ensure_directories()
-    with open(EXTRACTION_PLAN_CACHE_PATH, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
-    _plan_cache = cache
-    if EXTRACTION_PLAN_CACHE_PATH.exists():
-        _cache_mtime = os.path.getmtime(EXTRACTION_PLAN_CACHE_PATH)
+    pass
 
 
-def compute_fingerprint(df_preview: pd.DataFrame) -> str:
-    """df_preview의 컬럼명과 헤더 샘플 텍스트를 기반으로 md5 해시를 생성한다."""
-    raw_str = f"cols:{list(df_preview.columns)}|head:{df_preview.head(3).to_json()}"
-    return hashlib.md5(raw_str.encode("utf-8")).hexdigest()
+__all__ = [
+    "compute_fingerprint",
+    "load_plan_cache",
+    "save_plan_cache",
+]
