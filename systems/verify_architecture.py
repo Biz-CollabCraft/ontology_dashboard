@@ -9,6 +9,7 @@ systems/frontend instead of remaining in root api/web hosts.
 from __future__ import annotations
 
 import ast
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -338,6 +339,8 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'id: mvp_e2e',
         'PLAYWRIGHT_PYTHON_BIN: python',
         'npm run test:e2e:mvp',
+        'BACKEND_MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha }}',
+        'python -m unittest tests.test_backend_migration_ratchet',
         'needs: architecture',
         '${{ always() &&',
         'uses: ./.github/workflows/code-review.yml',
@@ -473,6 +476,23 @@ def check_backend_migration_ledger(errors: list[str]) -> None:
         errors.append(f"backend migration ledger is incomplete or ambiguous: {detail}")
 
 
+def check_backend_migration_ratchet(errors: list[str]) -> None:
+    checker = ROOT / "scripts" / "check_backend_migration_ratchet.py"
+    command = [sys.executable, str(checker), "--root", str(ROOT), "--quiet"]
+    base_ref = os.environ.get("BACKEND_MIGRATION_BASE_REF", "").strip()
+    if base_ref:
+        command.extend(("--base-ref", base_ref))
+    completed = subprocess.run(
+        command,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stdout or completed.stderr).strip()
+        errors.append(f"backend migration ratchet failed: {detail}")
+
+
 def main() -> int:
     errors: list[str] = []
     check_required_structure(errors)
@@ -489,6 +509,7 @@ def main() -> int:
     check_docker_runtime_ci(errors)
     check_git_conflict_markers(errors)
     check_backend_migration_ledger(errors)
+    check_backend_migration_ratchet(errors)
 
     if errors:
         print("[ARCHITECTURE-CHECK] FAIL")
@@ -511,6 +532,7 @@ def main() -> int:
     print("- legacy ML/backend modeling compatibility paths are ports, not ML owners")
     print("- Model Artifact location is injected through MODEL_ARTIFACT_URI")
     print("- Backend migration ledger covers every legacy Python source exactly once with DEFER=0")
+    print("- Backend migration baseline is exact and cannot increase from the PR base")
     return 0
 
 

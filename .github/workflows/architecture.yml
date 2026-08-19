@@ -136,7 +136,12 @@ jobs:
           python-version: "3.11"
 
       - name: Static architecture rules
+        env:
+          BACKEND_MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha }}
         run: python systems/verify_architecture.py
+
+      - name: Backend migration ratchet negative fixtures
+        run: python -m unittest tests.test_backend_migration_ratchet
 
       - name: Install Python dependencies
         if: steps.changes.outputs.generator == 'true' || steps.changes.outputs.backend == 'true' || steps.changes.outputs.integration == 'true'

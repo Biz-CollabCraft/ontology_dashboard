@@ -185,8 +185,19 @@ owner domain의 endpoint/port로 전환한 뒤 legacy Platform route를 종료�
 
 ## 7. Architecture CI Ratchet
 
-- Phase 0.6(#73): #68의 최종 처분 원장을 기준으로 레거시 Source/import baseline과 감소 전용 Ratchet을 먼저 도입한다.
-- Phase 1~13: 레거시 존재 자체는 허용하되 신규 레거시 파일, 신규 레거시 import, baseline 증가를 금지한다.
-- 각 Phase: 이미 이관 완료로 선언한 Source의 재생성과 `app`에서 레거시로 향하는 신규 import를 금지하고 baseline을 감소시킨다.
+- Phase 0.6(#73): #68의 최종 처분 원장을 기준으로
+  [`backend-migration-baseline.json`](./backend-migration-baseline.json)에 정확한 legacy Python Source와
+  non-legacy static/dynamic import 및 문자열 runtime entrypoint를 동결한다.
+- `scripts/check_backend_migration_ratchet.py`는 현 저장소와 baseline의 정확한 일치 및 PR base 대비
+  감소 전용 조건을 검사하고, 기존 Ledger 검증도 함께 실행한다.
+- Phase 1~13: 레거시 존재 자체는 허용하되 신규 레거시 파일, 신규 레거시 import/entrypoint,
+  baseline 증가를 금지한다.
+- 각 Phase: 이미 이관 완료로 선언한 Source의 재생성과 모든 non-legacy 영역에서 레거시로 향하는
+  신규 참조를 금지하고, 실제 이관·삭제와 같은 PR에서 baseline을 함께 감소시킨다.
 - Phase 14: `systems/backend/ontology_dashboard`와 모든 import/실행 참조가 0건인지 검사한다.
 - Phase 15(#66): baseline 비교가 아닌 최종 strict invariant를 유지하고 이후 회귀를 차단한다.
+
+Baseline 갱신은 `python scripts/check_backend_migration_ratchet.py --write-baseline`로 기계적으로
+수행한다. 이 명령으로 증가를 승인할 수는 없으며, Architecture CI가 dependency 설치 전에
+`github.event.pull_request.base.sha`의 baseline과 비교한다. baseline 자체를 바꾸는 docs-only PR도
+동일 검사를 우회하지 않는다.
