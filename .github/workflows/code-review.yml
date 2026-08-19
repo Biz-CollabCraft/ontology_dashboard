@@ -205,8 +205,68 @@ jobs:
             --policy-output /tmp/review-policy.json \
             --output /tmp/code-review-prompt.md
 
+      - name: Authenticate free-tier key lookup with GitHub OIDC
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier == 'simple'
+        id: free_auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: flai-oosuhada-20260506
+          workload_identity_provider: projects/932697090428/locations/global/workloadIdentityPools/github-actions/providers/ontology-dashboard
+          service_account: ontology-gh-review@flai-oosuhada-20260506.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+
+      - name: Try free Flash-Lite for simple review tier
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier == 'simple'
+        id: free_review
+        continue-on-error: true
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.free_auth.outputs.access_token }}
+          FREE_API_KEY_RESOURCE: projects/395559345329/locations/global/keys/efe3579e-c4db-4e35-88b9-12188bb1a119
+          REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          GEMINI_FREE_API_KEY="$(
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${GCP_ACCESS_TOKEN}" \
+              "https://apikeys.googleapis.com/v2/${FREE_API_KEY_RESOURCE}/keyString" \
+              | jq -r '.keyString'
+          )"
+          test -n "$GEMINI_FREE_API_KEY" && test "$GEMINI_FREE_API_KEY" != "null"
+          echo "::add-mask::$GEMINI_FREE_API_KEY"
+          python3 /tmp/trusted-ai-review.py build-request \
+            --prompt /tmp/code-review-prompt.md \
+            --output /tmp/free-request.json
+
+          curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-delay 2 \
+            -X POST \
+            -H "x-goog-api-key: ${GEMINI_FREE_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/free-request.json \
+            "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_REVIEW_MODEL}:generateContent" \
+            > /tmp/free-response.json
+
+          python3 /tmp/trusted-ai-review.py parse-pr \
+            --response /tmp/free-response.json \
+            --policy /tmp/review-policy.json \
+            --head-sha "$REVIEW_HEAD_SHA" \
+            --model-display-name "$GEMINI_REVIEW_MODEL_DISPLAY_NAME" \
+            --model-id "$GEMINI_REVIEW_MODEL" \
+            --vertex-location "$VERTEX_LOCATION" \
+            --runtime-label "Gemini Developer API Free Tier · ${GEMINI_REVIEW_MODEL}" \
+            --output /tmp/code-review.md
+
       - name: Authenticate to Google Cloud with GitHub OIDC
-        if: steps.plan.outputs.run == 'true'
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          steps.plan.outputs.tier != 'simple'
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -218,9 +278,11 @@ jobs:
           create_credentials_file: false
 
       - name: Review project intent with ${{ env.GEMINI_REVIEW_MODEL_DISPLAY_NAME }} on Vertex AI
-        if: steps.plan.outputs.run == 'true'
+        if: >-
+          steps.plan.outputs.run == 'true' &&
+          (steps.plan.outputs.tier != 'simple' || steps.free_review.outcome != 'success')
         env:
-          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token || steps.free_auth.outputs.access_token }}
           REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
         shell: bash
         run: |
