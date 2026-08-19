@@ -219,7 +219,7 @@ jobs:
           from ontology_dashboard.application import ROOT as application_root
           from ontology_dashboard.dependencies import ROOT as dependencies_root
           from ontology_dashboard.routers import platform, system
-          from ontology_dashboard.settings import project_root
+          from app.common.runtime_settings import project_root
 
           expected = Path(os.environ["ONTOLOGY_DASHBOARD_PROJECT_ROOT"]).resolve()
           installed_package = Path(ontology_dashboard.__file__).resolve()

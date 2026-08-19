@@ -7,13 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from app.infra.storage import LocalObjectStorageBackend, deterministic_object_key
 from ontology_dashboard.artifact_storage import (
     ArtifactIntegrityError,
     ArtifactPermissionError,
-    LocalObjectStorageBackend,
     artifact_storage_readiness,
     build_artifact_service,
-    deterministic_object_key,
 )
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.projects import ProjectRepository

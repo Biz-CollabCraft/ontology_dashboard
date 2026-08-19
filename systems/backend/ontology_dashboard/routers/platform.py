@@ -74,8 +74,8 @@ from ..automation_runtime import (
 )
 from ..projects import ProjectService
 from ..persistence_readiness import persistence_readiness
-from ..observability import ObservabilityReadiness, observability_readiness
-from ..settings import project_root
+from app.infra.observability.runtime import ObservabilityReadiness, observability_readiness
+from app.common.runtime_settings import project_root
 
 router = APIRouter(prefix="/api/platform", tags=["platform"])
 

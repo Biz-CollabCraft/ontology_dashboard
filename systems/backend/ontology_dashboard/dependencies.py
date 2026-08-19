@@ -13,6 +13,13 @@ from typing import Callable
 from argon2 import PasswordHasher
 from fastapi import Depends, HTTPException, Request, Response, status
 
+from app.common.rate_limit import RateLimiter
+from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
+from app.infra.db.settings import database_location
+from app.infra.external.project3 import Project3Client
+from app.infra.external.rate_limit import InMemoryRateLimiter, RedisRateLimiter
+from app.infra.llm import configured_provider
+
 from .adapters.service import AdapterService
 from .adapters.prediction_repository import PredictionResultRepository
 from .analysis_service import AnalysisService
@@ -31,8 +38,6 @@ from .datasets import (
 from .export_service import ExportService
 from .governance import GovernanceService
 from .identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
-from .integrations.project3 import Project3Client
-from .llm import configured_provider
 from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
@@ -60,9 +65,7 @@ from .predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeService,
 )
 from .role_workflow_service import RoleWorkflowService
-from .security import InMemoryRateLimiter, RateLimiter, RedisRateLimiter
 from .service import ManufacturingPredictiveMaintenanceService
-from .settings import database_location, project_root, trust_proxy_headers, trusted_proxy_networks
 
 ROOT = project_root()
 MANUFACTURING_WORKSPACE = "manufacturing-demo"

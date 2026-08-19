@@ -9,7 +9,7 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.observability import (
+from app.infra.observability.runtime import (
     METRICS,
     JsonLogFormatter,
     MetricsRegistry,

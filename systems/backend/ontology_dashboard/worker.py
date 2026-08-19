@@ -13,10 +13,12 @@ import signal
 import socket
 import time
 
+from app.common.runtime_settings import project_root
+from app.infra.db.settings import database_location
+
 from .distributed_handlers import configured_handlers
 from .distributed_runtime import DurableJobRepository, DurableWorker
 from .migrations import migrate
-from .settings import database_location, project_root
 
 
 ROOT = project_root()

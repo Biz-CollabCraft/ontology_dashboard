@@ -8,15 +8,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .migrations import migration_status
-from .persistence_readiness import persistence_readiness
-from .settings import (
+from app.common.runtime_settings import (
     allowed_origins,
     app_environment,
-    database_location,
     trust_proxy_headers,
     trusted_proxy_networks,
 )
+from app.infra.db.settings import database_location
+
+from .migrations import migration_status
+from .persistence_readiness import persistence_readiness
 
 
 ProbeState = Literal["alive", "ready", "degraded", "blocked", "starting"]

@@ -17,7 +17,7 @@ from ontology_dashboard.distributed_runtime import (
 )
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.projects import ProjectRepository
-from ontology_dashboard.security import RateLimitExceeded
+from app.common.rate_limit import RateLimitExceeded
 
 
 def repository(tmp_path: Path, *, max_queued: int = 100) -> DurableJobRepository:

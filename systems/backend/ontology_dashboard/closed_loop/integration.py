@@ -15,7 +15,7 @@ from typing import Annotated, Literal, TypeAlias
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..settings import project_root
+from app.common.runtime_settings import project_root
 
 
 class FrozenEventModel(BaseModel):

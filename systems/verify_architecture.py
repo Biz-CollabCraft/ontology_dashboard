@@ -33,6 +33,13 @@ REQUIRED_PATHS = (
     SYSTEMS / "backend" / "app" / "diagnosis" / "model_registry.py",
     SYSTEMS / "backend" / "app" / "diagnosis" / "predictor.py",
     SYSTEMS / "backend" / "app" / "diagnosis" / "evidence.py",
+    SYSTEMS / "backend" / "app" / "common" / "runtime_settings.py",
+    SYSTEMS / "backend" / "app" / "common" / "rate_limit.py",
+    SYSTEMS / "backend" / "app" / "infra" / "db" / "pool.py",
+    SYSTEMS / "backend" / "app" / "infra" / "db" / "connection.py",
+    SYSTEMS / "backend" / "app" / "infra" / "storage" / "object_storage.py",
+    SYSTEMS / "backend" / "app" / "infra" / "external" / "project3" / "client.py",
+    SYSTEMS / "backend" / "app" / "infra" / "llm" / "provider.py",
     SYSTEMS / "backend" / "app" / "main.py",
     SYSTEMS / "backend" / "ontology_dashboard" / "main.py",
     SYSTEMS / "backend" / "migrations",
@@ -152,6 +159,75 @@ def check_backend_domain_dependencies(errors: list[str]) -> None:
                     errors.append(
                         f"backend domain implementation import: {path.relative_to(ROOT)} imports {module}"
                     )
+
+
+def check_backend_domain_first_ratchet(errors: list[str]) -> None:
+    """Prevent Phase 1 physical convergence from drifting back toward legacy layout."""
+
+    app_root = SYSTEMS / "backend" / "app"
+    forbidden_top_level = {
+        "routers",
+        "adapters",
+        "orchestration",
+        "integrations",
+        "modeling",
+        "domain_packs",
+        "predictive_maintenance_runtime",
+        "closed_loop",
+    }
+    for name in sorted(forbidden_top_level):
+        if (app_root / name).exists():
+            errors.append(f"backend technical top-level package is forbidden: systems/backend/app/{name}")
+
+    allowed_legacy_imports = {
+        Path("systems/backend/app/main.py"): {"ontology_dashboard.app"},
+        Path("systems/backend/app/diagnosis/model_registry.py"): {
+            "ontology_dashboard.modeling.models"
+        },
+    }
+
+    for path in app_root.rglob("*.py"):
+        relative = path.relative_to(ROOT)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as exc:
+            errors.append(f"cannot parse {relative}: {exc}")
+            continue
+
+        domain = path.relative_to(app_root).parts[0]
+        for node in ast.walk(tree):
+            for module in _module_names(node):
+                if module == "ontology_dashboard" or module.startswith("ontology_dashboard."):
+                    allowed = allowed_legacy_imports.get(relative, set())
+                    if module not in allowed:
+                        errors.append(
+                            f"new canonical-to-legacy Backend import is forbidden: {relative} imports {module}"
+                        )
+
+                if domain == "common" and module.startswith("app.") and not module.startswith(
+                    "app.common"
+                ):
+                    errors.append(f"backend common reverse dependency: {relative} imports {module}")
+
+                if domain == "infra":
+                    if module == "ontology_dashboard" or module.startswith("ontology_dashboard."):
+                        errors.append(f"backend infra imports legacy package: {relative} imports {module}")
+                    parts = module.split(".")
+                    if len(parts) >= 3 and parts[0] == "app" and parts[1] not in {
+                        "common",
+                        "infra",
+                    } and parts[-1].endswith("_service"):
+                        errors.append(f"backend infra imports domain service: {relative} imports {module}")
+
+                if domain not in {"common", "infra"} and module.startswith("app.infra"):
+                    errors.append(f"backend domain imports infra implementation: {relative} imports {module}")
+
+                if (
+                    domain not in {"common", "infra"}
+                    and not path.name.endswith("_router.py")
+                    and (module == "fastapi" or module.startswith("fastapi."))
+                ):
+                    errors.append(f"backend domain layer imports FastAPI: {relative} imports {module}")
 
 
 def check_product_api_dependency(errors: list[str]) -> None:
@@ -509,6 +585,7 @@ def main() -> int:
     check_cross_system_imports(errors)
     check_generator_package_import_masking(errors)
     check_backend_domain_dependencies(errors)
+    check_backend_domain_first_ratchet(errors)
     check_product_api_dependency(errors)
     check_artifact_injection(errors)
     check_legacy_ml_is_compatibility_only(errors)
@@ -538,6 +615,7 @@ def main() -> int:
     print("- generator/backend direct Python imports are absent")
     print("- Generator package facades do not mask required import failures")
     print("- backend domains do not import other domains' implementation modules")
+    print("- Backend Phase 1 common/infra and canonical-to-legacy import ratchets are enforced")
     print("- product API has no static generator implementation import")
     print("- legacy ML/backend modeling compatibility paths are ports, not ML owners")
     print("- Model Artifact location is injected through MODEL_ARTIFACT_URI")

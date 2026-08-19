@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.outbox import default_outbox_worker
-from ontology_dashboard.settings import database_location
+from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]
 

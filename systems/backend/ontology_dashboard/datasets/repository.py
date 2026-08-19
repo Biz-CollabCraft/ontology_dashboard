@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from ..postgresql import tenant_connection
+from app.infra.db.connection import tenant_connection
 from ..postgresql_repositories import is_postgresql
 from .models import (
     DatasetCreateRequest,

@@ -15,7 +15,7 @@ from typing import Any, Iterable, Literal, Mapping, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from .distributed_runtime import DurableJobRepository
-from .observability import METRICS
+from app.infra.observability.runtime import METRICS
 from .postgresql_compat import postgres_repository_connection
 from .postgresql_repositories import is_postgresql
 

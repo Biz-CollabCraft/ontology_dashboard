@@ -9,7 +9,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from ..contracts import AppLocale, GroundedReport, Intent, Role, UIBlock, UILayout
-from ..llm import LLMProvider
+from app.infra.llm import LLMProvider
 
 BLOCK_REGISTRY: dict[str, tuple[str, list[str]]] = {
     "StatusSummary": ("현재 상태", ["status", "confidence", "predicted_failure_type"]),

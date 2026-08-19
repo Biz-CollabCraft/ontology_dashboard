@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from app.common.rate_limit import RateLimiter, RateLimitRule
+
 from ..dependencies import (
     client_ip,
     current_principal,
@@ -22,7 +24,9 @@ from ..identity import (
     Principal,
     RegisterRequest,
 )
-from ..security import LOGIN_RATE, SESSION_RATE, InMemoryRateLimiter
+
+LOGIN_RATE = RateLimitRule(limit=12, window_seconds=60)
+SESSION_RATE = RateLimitRule(limit=20, window_seconds=60)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -46,7 +50,7 @@ def login(
     request: Request,
     response: Response,
     identity: IdentityService = Depends(get_identity_service),
-    limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
+    limiter: RateLimiter = Depends(get_rate_limiter),
 ):
     limiter.check(
         bucket="auth.login",
@@ -73,7 +77,7 @@ def public_blueprint_comparison(
     request: Request,
     response: Response,
     identity: IdentityService = Depends(get_identity_service),
-    limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
+    limiter: RateLimiter = Depends(get_rate_limiter),
 ):
     limiter.check(
         bucket="auth.public_blueprint_comparison",
@@ -164,7 +168,7 @@ def refresh_session(
     response: Response,
     _: None = Depends(require_csrf),
     identity: IdentityService = Depends(get_identity_service),
-    limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
+    limiter: RateLimiter = Depends(get_rate_limiter),
 ):
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
@@ -207,7 +211,7 @@ def revoke_other_sessions(
     principal: Principal = Depends(current_principal),
     _: None = Depends(require_csrf),
     identity: IdentityService = Depends(get_identity_service),
-    limiter: InMemoryRateLimiter = Depends(get_rate_limiter),
+    limiter: RateLimiter = Depends(get_rate_limiter),
 ):
     token = request.cookies.get(SESSION_COOKIE)
     if not token:

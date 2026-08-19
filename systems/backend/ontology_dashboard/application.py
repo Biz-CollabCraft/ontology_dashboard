@@ -9,13 +9,13 @@ from typing import Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from .postgresql_pool import close_pools
-from .settings import (
+from app.common.runtime_settings import (
     allowed_origin_regex,
     allowed_origins,
     project_root,
-    validate_runtime_environment,
 )
+from app.infra.db.pool import close_pools
+from app.infra.observability.runtime_validation import validate_runtime_environment
 
 ROOT = project_root()
 

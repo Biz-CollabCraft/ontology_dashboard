@@ -66,13 +66,13 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     feature_flags = root / "systems" / "frontend" / "src" / "featureFlags.ts"
     dashboard_shell = root / "systems" / "frontend" / "src" / "features" / "dashboard" / "DashboardShell.tsx"
     roadmap = root / "docs" / "30-implementation" / "product-convergence-roadmap.md"
-    master_prompt = root / "docs" / "60-development-prompts" / "next-session-master-prompt.md"
-    project3_client = root / "systems" / "backend" / "ontology_dashboard" / "integrations" / "project3" / "client.py"
+    architecture = root / "docs" / "architecture.md"
+    migration_map = root / "docs" / "backend-migration-map.md"
+    project3_client = root / "systems" / "backend" / "app" / "infra" / "external" / "project3" / "client.py"
     pyproject = root / "systems" / "backend" / "pyproject.toml"
     foundation_modules = (
         "context",
         "contracts",
-        "security",
         "identity_models",
         "identity_repository",
         "identity",
@@ -137,13 +137,12 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         )
     )
     nav_uses_flags = _contains(dashboard_shell, "featureFlags.ontologyWorkbench")
-    roadmap_is_override = _contains(
-        master_prompt,
-        "docs/30-implementation/product-convergence-roadmap.md",
-    )
-    polyglot_target = all(
-        _contains(roadmap, token)
-        for token in ("PostgreSQL", "pgvector", "Neo4j", "LangGraph")
+    roadmap_is_override = all(
+        (
+            _contains(architecture, "Domain-First"),
+            _contains(migration_map, "## 3. Source 처분 Ledger"),
+            _contains(migration_map, "## 8. Physical migration progress"),
+        )
     )
     raw_cypher_method = any(
         _contains(project3_client, token)
@@ -152,7 +151,14 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     foundation_identity_relocated = all(
         _canonical_with_optional_legacy_shim(root, module)
         for module in foundation_modules
-    )
+    ) and all(
+        (root / path).is_file()
+        for path in (
+            "systems/backend/app/common/exceptions.py",
+            "systems/backend/app/common/rate_limit.py",
+            "systems/backend/app/infra/external/rate_limit.py",
+        )
+    ) and not (root / "systems/backend/ontology_dashboard/security.py").exists()
     dashboard_relocated = all(
         _canonical_with_optional_legacy_shim(root, module)
         for module in dashboard_modules
@@ -173,10 +179,10 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     return [
         DebtItem(
             id="roadmap_override_registered",
-            state="resolved" if roadmap_is_override and polyglot_target else "regression",
+            state="resolved" if roadmap_is_override else "regression",
             stage=44,
-            evidence="next-session master prompt and convergence roadmap",
-            action="Keep the convergence roadmap authoritative over the historical Project Layer sequence.",
+            evidence="Domain-First architecture, migration ledger and convergence roadmap",
+            action="Keep the current Domain-First architecture and migration ledger authoritative over historical sequencing.",
         ),
         DebtItem(
             id="soon_navigation_feature_flags",
@@ -203,8 +209,8 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="foundation_identity_physical_relocation",
             state="resolved" if foundation_identity_relocated else "regression",
             stage=55,
-            evidence="canonical foundation/identity modules with compatibility-only legacy re-exports",
-            action="Keep context, contracts, security, identity, audit repository and demo service implementations physically canonical.",
+            evidence="foundation/identity modules plus canonical app/common and rate-limit infrastructure",
+            action="Keep shared security primitives in app/common/infra and prevent the removed legacy security module from returning.",
         ),
         DebtItem(
             id="dashboard_physical_relocation",

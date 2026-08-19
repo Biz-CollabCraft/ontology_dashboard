@@ -240,7 +240,7 @@ class MetricsRegistry:
 
 
 METRICS = MetricsRegistry()
-LOGGER = logging.getLogger("ontology_dashboard.runtime")
+LOGGER = logging.getLogger("app.runtime")
 
 
 def parse_traceparent(value: str | None) -> tuple[str, str] | None:

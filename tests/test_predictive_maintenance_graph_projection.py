@@ -14,9 +14,9 @@ from ontology_dashboard.adapters import (
 from ontology_dashboard.domain_packs.predictive_maintenance import (
     PredictiveMaintenanceOntologyMaterializer,
 )
+from app.infra.external.project3 import Project3Client
 from ontology_dashboard.integrations.project3 import (
     PredictiveMaintenanceProject3ProjectionHandler,
-    Project3Client,
     Project3ProjectionDeliveryError,
 )
 from ontology_dashboard.outbox import OutboxMessage

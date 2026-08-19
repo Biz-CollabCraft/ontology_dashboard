@@ -19,8 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .postgresql_compat import postgres_repository_connection
 from .postgresql_repositories import is_postgresql
-from .security import RateLimitExceeded, RateLimitRule
-from .observability import METRICS
+from app.common.rate_limit import RateLimitExceeded, RateLimitRule
+from app.infra.observability.runtime import METRICS
 
 
 JobType = Literal[
@@ -349,7 +349,7 @@ class DurableJobRepository:
 
     def project_scopes(self) -> tuple[tuple[str, str], ...]:
         if self.postgresql:
-            from .postgresql_pool import pooled_identity_connection
+            from app.infra.db.pool import pooled_identity_connection
 
             with pooled_identity_connection(self.database) as connection:
                 rows = connection.execute(
@@ -392,7 +392,7 @@ class DurableJobRepository:
             now,
         )
         if self.postgresql:
-            from .postgresql_pool import pooled_identity_connection
+            from app.infra.db.pool import pooled_identity_connection
 
             with pooled_identity_connection(self.database) as connection:
                 connection.execute(
@@ -446,7 +446,7 @@ class DurableJobRepository:
     def worker_status(self, *, stale_after_seconds: int = 90) -> tuple[dict[str, Any], ...]:
         cutoff = (_utcnow() - timedelta(seconds=max(5, stale_after_seconds))).isoformat()
         if self.postgresql:
-            from .postgresql_pool import pooled_identity_connection
+            from app.infra.db.pool import pooled_identity_connection
 
             with pooled_identity_connection(self.database) as connection:
                 connection.execute("SELECT set_config('app.identity_access','1',true)")

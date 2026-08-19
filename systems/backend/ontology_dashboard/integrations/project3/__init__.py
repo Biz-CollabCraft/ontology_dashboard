@@ -1,13 +1,13 @@
 """Typed Project 3 integration boundary."""
 
-from .client import (
+from app.infra.external.project3.client import (
     Project3Client,
     Project3ContractError,
     Project3Error,
     Project3Unavailable,
     parse_project_mapping,
 )
-from .models import (
+from app.infra.external.project3.models import (
     Project3AgentRun,
     Project3GraphProjectionRequest,
     Project3GraphProjectionResponse,

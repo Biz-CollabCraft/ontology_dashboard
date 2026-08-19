@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Sequence
 
-from ..postgresql_pool import pooled_tenant_connection
+from app.infra.db.pool import pooled_tenant_connection
 from ..postgresql_repositories import is_postgresql
 
 

@@ -1,47 +1,16 @@
-"""Rate limiting primitives shared by the canonical application runtime."""
+"""Concrete in-process and Redis rate-limit adapters."""
 
 from __future__ import annotations
 
-import hashlib
 import threading
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass
 
-
-@dataclass(frozen=True)
-class RateLimitRule:
-    limit: int
-    window_seconds: int
-
-
-class RateLimitExceeded(RuntimeError):
-    def __init__(self, *, bucket: str, retry_after: int) -> None:
-        super().__init__(f"rate limit exceeded for {bucket}")
-        self.bucket = bucket
-        self.retry_after = max(1, retry_after)
-
-
-class RateLimiter:
-    """Synchronous limiter contract used by FastAPI dependencies."""
-
-    @staticmethod
-    def anonymized_key(*parts: str) -> str:
-        payload = "|".join(parts)
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-    def check(self, *, bucket: str, subject: str, rule: RateLimitRule) -> None:
-        raise NotImplementedError
-
-    def clear(self) -> None:
-        raise NotImplementedError
+from app.common.rate_limit import RateLimitExceeded, RateLimiter, RateLimitRule
 
 
 class InMemoryRateLimiter(RateLimiter):
-    """Single-process fixed-window limiter for the MVP API surface.
-
-    Production multi-instance deployments should replace this with a shared Redis-backed limiter.
-    """
+    """Single-process limiter for development, tests, and single-instance demos."""
 
     def __init__(self) -> None:
         self._events: dict[str, deque[float]] = defaultdict(deque)
@@ -66,7 +35,7 @@ class InMemoryRateLimiter(RateLimiter):
 
 
 class RedisRateLimiter(RateLimiter):
-    """Redis-backed fixed-window limiter shared by all API instances."""
+    """Redis-backed limiter shared by all API instances."""
 
     _SCRIPT = """
     local current = redis.call('INCR', KEYS[1])
@@ -115,7 +84,4 @@ class RedisRateLimiter(RateLimiter):
                 break
 
 
-LOGIN_RATE = RateLimitRule(limit=12, window_seconds=60)
-PLANNER_RATE = RateLimitRule(limit=30, window_seconds=60)
-EXPORT_RATE = RateLimitRule(limit=20, window_seconds=60)
-SESSION_RATE = RateLimitRule(limit=20, window_seconds=60)
+__all__ = ["InMemoryRateLimiter", "RedisRateLimiter"]

@@ -9,13 +9,13 @@ from typing import Any
 import uuid
 
 from ...outbox import OutboxMessage
-from .client import (
+from app.infra.external.project3.client import (
     Project3Client,
     Project3ContractError,
     Project3Error,
     Project3Unavailable,
 )
-from .models import (
+from app.infra.external.project3.models import (
     Project3GraphProjectionRequest,
     Project3GraphProjectionResponse,
     Project3ProjectionIdentity,

@@ -35,6 +35,30 @@ def _ledger_rows() -> list[tuple[int, list[str]]]:
     return rows
 
 
+def _migrated_sources() -> set[str]:
+    lines = MIGRATION_MAP.read_text(encoding="utf-8").splitlines()
+    in_progress = False
+    migrated: set[str] = set()
+
+    for line in lines:
+        if line == "## 8. Physical migration progress":
+            in_progress = True
+            continue
+        if in_progress and line.startswith("## "):
+            break
+        if not in_progress or not line.startswith("|"):
+            continue
+
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 3 or cells[0] in {"Legacy Source", "---"}:
+            continue
+        if cells[2] != "`MIGRATED`":
+            continue
+        migrated.update(SOURCE_PATTERN.findall(cells[0]))
+
+    return migrated
+
+
 def test_migration_ledger_uses_one_allowed_disposition_per_row() -> None:
     invalid: list[str] = []
 
@@ -57,8 +81,13 @@ def test_every_legacy_python_source_matches_exactly_one_ledger_row() -> None:
     multiply_assigned: list[str] = []
     matched_lines: set[int] = set()
 
-    for source in sorted(LEGACY_ROOT.rglob("*.py")):
-        relative_source = source.relative_to(LEGACY_ROOT).as_posix()
+    live_sources = {
+        source.relative_to(LEGACY_ROOT).as_posix()
+        for source in LEGACY_ROOT.rglob("*.py")
+    }
+    migrated_sources = _migrated_sources()
+
+    for relative_source in sorted(live_sources | migrated_sources):
         matching_rows = [
             line_number
             for line_number, patterns in rows
@@ -70,10 +99,17 @@ def test_every_legacy_python_source_matches_exactly_one_ledger_row() -> None:
         elif len(matching_rows) > 1:
             multiply_assigned.append(f"{relative_source}: lines {matching_rows}")
 
+    reappeared = sorted(
+        source for source in migrated_sources if (LEGACY_ROOT / source).exists()
+    )
+
     unused_rows = [line_number for line_number, _ in rows if line_number not in matched_lines]
 
     assert not unmatched, "unassigned legacy Python sources: " + ", ".join(unmatched)
     assert not multiply_assigned, "multiply assigned legacy Python sources: " + "; ".join(
         multiply_assigned
+    )
+    assert not reappeared, "physically migrated legacy Python sources reappeared: " + ", ".join(
+        reappeared
     )
     assert not unused_rows, f"migration ledger rows without matching sources: {unused_rows}"

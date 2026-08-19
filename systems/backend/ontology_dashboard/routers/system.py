@@ -1,11 +1,12 @@
 """System and contract endpoints."""
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
+from app.infra.observability.runtime import METRICS, metrics_authorized
 from ..deployment import process_probe, readiness_probe, startup_probe
 from ..polyglot import PolyglotHealthService, PolyglotSettings
-from ..settings import project_root
+from app.common.runtime_settings import project_root
 
 router = APIRouter(tags=["system"])
 ROOT = project_root()
@@ -41,6 +42,16 @@ def health_ready():
     return JSONResponse(
         payload.model_dump(mode="json"),
         status_code=200 if payload.state in {"ready", "degraded"} else 503,
+    )
+
+
+@router.get("/metrics", include_in_schema=False)
+def metrics(request: Request):
+    if not metrics_authorized(request):
+        return JSONResponse({"detail": "metrics authentication required"}, status_code=401)
+    return PlainTextResponse(
+        METRICS.render_prometheus(),
+        media_type="text/plain; version=0.0.4",
     )
 
 

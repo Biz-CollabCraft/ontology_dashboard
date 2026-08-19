@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ontology_dashboard import postgresql_pool
+from app.infra.db import pool as postgresql_pool
 
 
 def test_pool_checks_connection_before_checkout(monkeypatch) -> None:
