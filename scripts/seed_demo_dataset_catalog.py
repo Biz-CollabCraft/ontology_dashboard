@@ -20,14 +20,14 @@ from urllib.parse import urlparse
 
 from argon2 import PasswordHasher
 
-from ontology_dashboard.datasets.models import (
+from app.dataset.dataset_schema import (
     DatasetCreateRequest,
     DatasetFileCreate,
     DatasetVersionCreateRequest,
     MaterializationCreateRequest,
     OntologyMappingCreateRequest,
 )
-from ontology_dashboard.datasets.repository import DatasetRepository
+from app.infra.db.dataset_repository import DatasetRepository
 from app.identity import IdentityService
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
 from ontology_dashboard.migrations import migrate
@@ -280,28 +280,17 @@ def seed(
             salt_len=16,
         )
         IdentityService(
-            PostgreSQLIdentityRepository(
+            database,
+            app_env="demo",
+            seed_demo=True,
+            repository=PostgreSQLIdentityRepository(
                 database,
                 password_hasher=password_hasher,
                 seed_reference_data=True,
             ),
-            app_env="demo",
-            seed_demo=True,
         )
     else:
-        password_hasher = PasswordHasher(
-            time_cost=2,
-            memory_cost=19456,
-            parallelism=1,
-            hash_len=32,
-            salt_len=16,
-        )
-        IdentityService(
-            SQLiteIdentityRepository(database, password_hasher=password_hasher),
-            app_env="demo",
-            seed_demo=True,
-            rate_limit_namespace=f"identity:{database}",
-        )
+        IdentityService(database, app_env="demo", seed_demo=True)
     repository = DatasetRepository(database)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
     existing = {

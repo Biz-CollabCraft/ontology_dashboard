@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import unquote, urlparse
 
-from .bundle_models import (
+from ..bundle_contract import (
     BundleRoleValidationSummary,
     BundleValidationIssue,
     BundleValidationResult,

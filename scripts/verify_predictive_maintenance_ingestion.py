@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
     PredictiveMaintenanceCanonicalV2Adapter,
 )

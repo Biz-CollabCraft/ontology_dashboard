@@ -9,13 +9,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .bundle_file_adapter import bundle_source_path
-from .bundle_models import (
+from app.dataset.bundle_contract import (
     BundleValidationResult,
     DatasetBundleManifestV2,
     PostgreSQLBundleIngestionResult,
 )
-from .predictive_maintenance_v2 import ROLE_CONTRACTS
+from app.infra.storage.local_file_uri import local_file_uri_path
 
 
 ROLE_TARGET_TABLES = {
@@ -43,16 +42,6 @@ STAGING_TABLES = {
     "prediction_timeline": "stg_pm_prediction_timeline",
     "result_artifact": "stg_pm_result_artifacts",
 }
-
-STAGING_DDL = {
-    role: (
-        f"CREATE TEMP TABLE {STAGING_TABLES[role]} ("
-        + ",".join(f'"{field}" text' for field in contract.required_fields)
-        + ") ON COMMIT DROP"
-    )
-    for role, contract in ROLE_CONTRACTS.items()
-}
-
 
 def _require_psycopg():
     try:
@@ -160,6 +149,16 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
                 raise ValueError(f"bundle role is not ready for PostgreSQL ingestion: {role}")
             if summary.actual_checksum_sha256 != descriptor.checksum_sha256:
                 raise ValueError(f"validated checksum does not match manifest role: {role}")
+            if summary.format != descriptor.format:
+                raise ValueError(f"validated format does not match manifest role: {role}")
+            if summary.media_type != descriptor.media_type:
+                raise ValueError(f"validated media type does not match manifest role: {role}")
+            if tuple(summary.required_fields) != tuple(descriptor.schema_.required_fields):
+                raise ValueError(f"validated schema fields do not match manifest role: {role}")
+            if not descriptor.schema_.required_fields:
+                raise ValueError(f"bundle role has no declared schema fields: {role}")
+            if role not in STAGING_TABLES or role not in ROLE_TARGET_TABLES:
+                raise ValueError(f"bundle role has no PostgreSQL ingestion mapping: {role}")
 
     @staticmethod
     def _set_scope(connection: Any, manifest: DatasetBundleManifestV2) -> None:
@@ -390,7 +389,7 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
                 )
                 self._ensure_observation_partitions(connection, manifest)
                 runtime_roles = [item.role for item in manifest.files]
-                self._create_staging_tables(connection, runtime_roles)
+                self._create_staging_tables(connection, manifest)
                 for role in runtime_roles:
                     self._copy_role(connection, manifest, role)
                     if fail_after_role == role:
@@ -658,9 +657,24 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
             current = following
 
     @staticmethod
-    def _create_staging_tables(connection: Any, roles: list[str]) -> None:
-        for role in roles:
-            connection.execute(STAGING_DDL[role])
+    def _create_staging_tables(
+        connection: Any,
+        manifest: DatasetBundleManifestV2,
+    ) -> None:
+        _, sql, _, _ = _require_psycopg()
+        for descriptor in manifest.files:
+            role = descriptor.role
+            staging_table = STAGING_TABLES[role]
+            fields = descriptor.schema_.required_fields
+            column_ddl = sql.SQL(",").join(
+                sql.SQL("{} text").format(sql.Identifier(field)) for field in fields
+            )
+            connection.execute(
+                sql.SQL("CREATE TEMP TABLE {} ({}) ON COMMIT DROP").format(
+                    sql.Identifier(staging_table),
+                    column_ddl,
+                )
+            )
 
     def _copy_role(
         self,
@@ -668,25 +682,27 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
         manifest: DatasetBundleManifestV2,
         role: str,
     ) -> None:
+        _, sql, _, _ = _require_psycopg()
         descriptor = next(item for item in manifest.files if item.role == role)
-        path = bundle_source_path(descriptor.uri).expanduser().resolve(strict=True)
+        path = local_file_uri_path(descriptor.uri).expanduser().resolve(strict=True)
         if path.stat().st_size != descriptor.size_bytes:
             raise ValueError(f"runtime file size changed after validation: {role}")
-        contract = ROLE_CONTRACTS[role]
-        columns = ",".join(f'"{field}"' for field in contract.required_fields)
+        required_fields = descriptor.schema_.required_fields
+        columns = sql.SQL(",").join(sql.Identifier(field) for field in required_fields)
+        staging_table = sql.Identifier(STAGING_TABLES[role])
         digest = hashlib.sha256()
-        if contract.format == "csv":
-            statement = (
-                f"COPY {STAGING_TABLES[role]} ({columns}) FROM STDIN "
-                "WITH (FORMAT CSV, HEADER TRUE)"
+        if descriptor.format == "csv":
+            statement = sql.SQL("COPY {} ({}) FROM STDIN WITH (FORMAT CSV, HEADER TRUE)").format(
+                staging_table,
+                columns,
             )
             with connection.cursor().copy(statement) as copy:
                 with path.open("rb") as source:
                     for chunk in iter(lambda: source.read(1024 * 1024), b""):
                         digest.update(chunk)
                         copy.write(chunk)
-        else:
-            statement = f"COPY {STAGING_TABLES[role]} ({columns}) FROM STDIN"
+        elif descriptor.format == "jsonl":
+            statement = sql.SQL("COPY {} ({}) FROM STDIN").format(staging_table, columns)
             with connection.cursor().copy(statement) as copy:
                 with path.open("rb") as source:
                     for raw_line in source:
@@ -695,8 +711,12 @@ class PostgreSQLPredictiveMaintenanceBundleIngestor:
                             continue
                         payload = json.loads(raw_line.decode("utf-8"))
                         copy.write_row(
-                            tuple(_json_text(payload.get(field)) for field in contract.required_fields)
+                            tuple(_json_text(payload.get(field)) for field in required_fields)
                         )
+        else:
+            raise ValueError(
+                f"PostgreSQL bundle ingestion does not support {descriptor.format}: {role}"
+            )
         if digest.hexdigest() != descriptor.checksum_sha256:
             raise ValueError(f"runtime file checksum changed after validation: {role}")
 

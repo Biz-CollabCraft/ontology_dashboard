@@ -43,7 +43,7 @@ from .dashboard_models import (
     ReportDraftRecord,
     SavedViewRecord,
 )
-from .datasets.models import (
+from app.dataset.dataset_schema import (
     DatasetDetail,
     DatasetPage,
     DatasetVersionRecord,

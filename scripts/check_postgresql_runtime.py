@@ -11,7 +11,8 @@ from pathlib import Path
 
 from argon2 import PasswordHasher
 
-from ontology_dashboard.adapters.models import DatasetManifest, PredictionResult
+from app.dataset.ingestion import DatasetManifest
+from ontology_dashboard.adapters.models import PredictionResult
 from ontology_dashboard.dashboard_service import DashboardService
 from app.identity import IdentityService, LoginRequest
 from ontology_dashboard.outbox import default_outbox_worker

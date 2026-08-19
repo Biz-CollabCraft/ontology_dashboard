@@ -1,4 +1,4 @@
-"""Read immutable Dataset materializations as governed Analysis input rows."""
+"""Read immutable Dataset materializations through the Dataset query contract."""
 
 from __future__ import annotations
 
@@ -8,17 +8,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from .repository import DatasetRepository
+from .dataset_repository import DatasetRepositoryPort
 
 
 class DatasetMaterializationSource:
     """Loads the latest ready materialization for a project-scoped Dataset.
 
     The source only accepts registered materialization artifacts. It never accepts
-    arbitrary filesystem paths from Analysis configuration.
+    arbitrary filesystem paths from consumer configuration.
     """
 
-    def __init__(self, repository: DatasetRepository) -> None:
+    def __init__(self, repository: DatasetRepositoryPort) -> None:
         self.repository = repository
 
     def load(
@@ -62,7 +62,7 @@ class DatasetMaterializationSource:
     def _file_path(uri: str) -> Path:
         parsed = urlparse(uri)
         if parsed.scheme != "file":
-            raise ValueError("only registered file:// materialization artifacts can be Analysis inputs")
+            raise ValueError("only registered file:// materialization artifacts can be Dataset inputs")
         path = Path(unquote(parsed.path)).resolve()
         if not path.exists() or not path.is_file():
             raise FileNotFoundError(f"materialization artifact is unavailable: {path}")
@@ -76,7 +76,7 @@ class DatasetMaterializationSource:
                 import pyarrow.parquet as pq
             except ImportError as error:
                 raise RuntimeError(
-                    "Reading Parquet Analysis sources requires the polyglot/production extra (pyarrow)."
+                    "Reading Parquet Dataset sources requires the polyglot/production extra (pyarrow)."
                 ) from error
             table = pq.read_table(path)
             return [dict(row) for row in table.slice(0, limit).to_pylist()]

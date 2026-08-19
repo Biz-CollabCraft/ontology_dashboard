@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from .models import CanonicalObjectEnvelope, ProjectionBatch, StoreKind
-from .repository import DatasetRepository
+from .dataset_repository import DatasetRepositoryPort
+from .dataset_schema import CanonicalObjectEnvelope, ProjectionBatch, StoreKind
 
 
 class ProjectionPort(Protocol):
@@ -32,7 +32,7 @@ class InMemoryProjectionPort:
 class DatasetProjectionCoordinator:
     def __init__(
         self,
-        repository: DatasetRepository,
+        repository: DatasetRepositoryPort,
         ports: dict[StoreKind, ProjectionPort],
     ) -> None:
         self.repository = repository

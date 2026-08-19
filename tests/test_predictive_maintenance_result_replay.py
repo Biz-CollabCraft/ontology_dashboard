@@ -15,11 +15,11 @@ from jsonschema import Draft202012Validator, FormatChecker
 from systems.backend.app.diagnosis.contracts import load_fixture
 from systems.backend.app.diagnosis.evidence import build_product_result_artifact
 from systems.backend.app.diagnosis.predictor import HeuristicPredictor
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
-    PostgreSQLPredictiveMaintenanceBundleIngestor,
     PredictiveMaintenanceCanonicalV2Adapter,
 )
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from ontology_dashboard.predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeRepository,
     PredictiveMaintenanceRuntimeService,

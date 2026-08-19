@@ -9,12 +9,12 @@ from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
     DatasetBundleManifestV2,
-    PostgreSQLPredictiveMaintenanceBundleIngestor,
     compute_bundle_checksum,
 )
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.modeling.models import DatasetIntakeProfile, canonical_checksum
 from ontology_dashboard.modeling.repository import ModelingRepository
@@ -88,6 +88,7 @@ def postgresql_database():
     try:
         applied = migrate(dsn)
         assert "0029_governed_event_automation" in applied
+        assert "0030_closed_loop_operations" in applied
         assert migrate(dsn) == []
         import psycopg
 

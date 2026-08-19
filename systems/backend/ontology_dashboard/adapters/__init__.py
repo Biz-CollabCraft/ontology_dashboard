@@ -1,58 +1,6 @@
-"""Dataset and Prediction Result adapter layer."""
+"""Legacy Prediction persistence exports retained until Diagnosis phase #58."""
 
-from .bundle_models import (
-    BundleFileSchemaMetadata,
-    BundleGenerationMetadata,
-    BundleGovernanceArtifact,
-    BundleRoleValidationSummary,
-    BundleValidationIssue,
-    BundleValidationResult,
-    DatasetBundleFile,
-    DatasetBundleManifestV2,
-    DatasetSourceReference,
-    DatasetVersionIdentity,
-    Neo4jProjectionIdentity,
-    PostgreSQLBundleIngestionResult,
-    PostgreSQLObjectIdentity,
-    PredictiveMaintenanceSourceContract,
-    canonical_bundle_checksum_payload,
-    compute_bundle_checksum,
-)
-from .bundle_file_adapter import BundleFileAdapter
-from .file_adapter import FileAdapter, IngestionResult
-from .models import DatasetManifest, PredictionResult
-from .predictive_maintenance_v2 import (
-    PredictiveMaintenanceCanonicalV2Adapter,
-    PredictiveMaintenanceCanonicalV3SourceAdapter,
-)
-from .postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
-from .registry import AdapterRegistry, default_adapter_registry
+from .models import PredictionResult
+from .prediction_repository import PredictionResultRepository
 
-__all__ = [
-    "AdapterRegistry",
-    "BundleFileSchemaMetadata",
-    "BundleFileAdapter",
-    "BundleGenerationMetadata",
-    "BundleGovernanceArtifact",
-    "BundleRoleValidationSummary",
-    "BundleValidationIssue",
-    "BundleValidationResult",
-    "DatasetBundleFile",
-    "DatasetBundleManifestV2",
-    "DatasetManifest",
-    "DatasetSourceReference",
-    "DatasetVersionIdentity",
-    "FileAdapter",
-    "IngestionResult",
-    "Neo4jProjectionIdentity",
-    "PostgreSQLBundleIngestionResult",
-    "PostgreSQLObjectIdentity",
-    "PostgreSQLPredictiveMaintenanceBundleIngestor",
-    "PredictionResult",
-    "PredictiveMaintenanceCanonicalV2Adapter",
-    "PredictiveMaintenanceCanonicalV3SourceAdapter",
-    "PredictiveMaintenanceSourceContract",
-    "canonical_bundle_checksum_payload",
-    "compute_bundle_checksum",
-    "default_adapter_registry",
-]
+__all__ = ["PredictionResult", "PredictionResultRepository"]

@@ -8,7 +8,7 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 
-from ontology_dashboard.adapters.bundle_models import (
+from app.dataset.ingestion.bundle_models import (
     BundleFileSchemaMetadata,
     BundleGenerationMetadata,
     DatasetBundleFile,

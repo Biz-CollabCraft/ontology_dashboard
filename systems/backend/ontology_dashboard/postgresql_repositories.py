@@ -16,8 +16,8 @@ from typing import Any
 
 from argon2 import PasswordHasher
 
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
-from ontology_dashboard.adapters.repository import AdapterRepository
 from ontology_dashboard.projects.repository import ProjectRepository
 
 from .dashboard_catalog import seed_templates
@@ -189,7 +189,7 @@ class PostgreSQLExportRepository(ExportRepository):
         return None
 
 
-class PostgreSQLAdapterRepository(AdapterRepository):
+class PostgreSQLAdapterRepository(DatasetIngestionRepository):
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
         self.path = database_url

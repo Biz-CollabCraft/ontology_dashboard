@@ -8,7 +8,8 @@ from typing import Any, Callable
 from .analysis_models import AnalysisRunRequest
 from .analysis_service import AnalysisService
 from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorAdapter
-from .datasets import DatasetMaterializationSource, DatasetRepository
+from app.dataset import DatasetMaterializationSource
+from app.infra.db.dataset_repository import DatasetRepository
 from .distributed_runtime import DurableJob, DurableJobRepository
 from app.identity import Principal
 from .ontology_service import OntologyService

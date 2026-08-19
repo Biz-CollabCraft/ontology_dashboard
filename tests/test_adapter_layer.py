@@ -9,8 +9,9 @@ from openpyxl import Workbook
 from pydantic import ValidationError
 from jsonschema import Draft202012Validator
 
-from ontology_dashboard.adapters.file_adapter import FileAdapter
-from ontology_dashboard.adapters.models import DatasetManifest, PredictionResult
+from app.dataset.ingestion import DatasetManifest, FileAdapter
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
+from ontology_dashboard.adapters.models import PredictionResult
 from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
 from app.identity import IdentityService
 from identity_test_support import build_identity_service
@@ -88,7 +89,10 @@ def test_azure_file_adapter_quarantines_invalid_rows_and_recalculates_metrics(
         workspace_id="azure-fleet-maintenance",
         required_fields=["datetime", "machineID"],
     )
-    result = FileAdapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
+    result = FileAdapter(
+        allowed_roots=[tmp_path],
+        repository=DatasetIngestionRepository(adapter_database),
+    ).ingest(manifest)
 
     assert result.status == "completed_with_quarantine"
     assert result.source_record_count == 3
@@ -121,7 +125,10 @@ def test_metropt_adapter_validates_second_project_abstraction(
         workspace_id="metropt-compressor-monitoring",
         required_fields=["timestamp", "TP2"],
     )
-    result = FileAdapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
+    result = FileAdapter(
+        allowed_roots=[tmp_path],
+        repository=DatasetIngestionRepository(adapter_database),
+    ).ingest(manifest)
 
     assert result.status == "completed"
     assert result.accepted_record_count == 2
@@ -227,8 +234,8 @@ def test_checked_in_adapter_manifests_are_checksum_reproducible(
         json.loads(manifest_path.read_text(encoding="utf-8"))
     )
     result = FileAdapter(
-        adapter_database,
         allowed_roots=[ROOT / "data" / "fixtures"],
+        repository=DatasetIngestionRepository(adapter_database),
     ).ingest(manifest)
     assert result.adapter_code == expected_adapter
     assert result.accepted_record_count == expected_count
@@ -252,7 +259,10 @@ def test_file_adapter_rejects_sources_outside_allowlisted_roots(
         required_fields=["datetime", "machineID"],
     )
     with pytest.raises(ValueError, match="outside the configured ingestion roots"):
-        FileAdapter(adapter_database, allowed_roots=[allowed]).ingest(manifest)
+        FileAdapter(
+            allowed_roots=[allowed],
+            repository=DatasetIngestionRepository(adapter_database),
+        ).ingest(manifest)
 
 
 def test_governed_tabular_adapter_honors_approved_csv_delimiter(
@@ -302,7 +312,10 @@ def test_governed_tabular_adapter_honors_approved_csv_delimiter(
             ],
         }
     )
-    result = FileAdapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
+    result = FileAdapter(
+        allowed_roots=[tmp_path],
+        repository=DatasetIngestionRepository(adapter_database),
+    ).ingest(manifest)
     assert result.status == "completed"
     assert result.accepted_record_count == 2
     assert result.accepted_records[0]["equipment_id"] == "M-1"
@@ -361,7 +374,10 @@ def test_governed_tabular_adapter_ingests_selected_xlsx_sheet(
             ],
         }
     )
-    result = FileAdapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
+    result = FileAdapter(
+        allowed_roots=[tmp_path],
+        repository=DatasetIngestionRepository(adapter_database),
+    ).ingest(manifest)
     assert result.status == "completed"
     assert result.accepted_record_count == 2
     assert result.accepted_records[1]["equipment_id"] == "M-2"

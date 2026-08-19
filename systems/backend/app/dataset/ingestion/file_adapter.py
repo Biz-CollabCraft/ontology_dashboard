@@ -9,9 +9,9 @@ from urllib.parse import unquote, urlparse
 
 from openpyxl import load_workbook
 
-from .models import DatasetManifest, IngestionResult, QualityRule, QuarantinedRecord
+from .ingestion_schema import DatasetManifest, IngestionResult, QualityRule, QuarantinedRecord
 from .registry import AdapterRegistry, default_adapter_registry
-from .repository import AdapterRepository
+from .repository import IngestionRepositoryPort
 
 
 class FileAccessPolicy:
@@ -35,13 +35,12 @@ class FileAccessPolicy:
 class FileAdapter:
     def __init__(
         self,
-        database_path: str | Path,
         *,
         allowed_roots: Iterable[str | Path],
         registry: AdapterRegistry | None = None,
-        repository: AdapterRepository | None = None,
+        repository: IngestionRepositoryPort,
     ) -> None:
-        self.repository = repository or AdapterRepository(database_path)
+        self.repository = repository
         self.registry = registry or default_adapter_registry()
         self.policy = FileAccessPolicy(allowed_roots)
 

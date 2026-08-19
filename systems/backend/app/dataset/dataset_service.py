@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from app.identity import AuthError, Principal
-from .models import (
+from .dataset_domain import DatasetPrincipal
+from .dataset_exception import DatasetAccessError
+from .dataset_repository import DatasetRepositoryPort
+from .dataset_schema import (
     AdapterIngestionRunRecord,
     CanonicalObjectEnvelope,
     DatasetCreateRequest,
@@ -24,29 +26,28 @@ from .models import (
     ProjectionRecord,
     QuarantineRecord,
 )
-from .repository import DatasetRepository
 
 
 class DatasetCatalogService:
-    def __init__(self, repository: DatasetRepository) -> None:
+    def __init__(self, repository: DatasetRepositoryPort) -> None:
         self.repository = repository
 
     @staticmethod
-    def _require_project(principal: Principal, project_id: str) -> None:
+    def _require_project(principal: DatasetPrincipal, project_id: str) -> None:
         if project_id not in principal.project_scopes:
-            raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
+            raise DatasetAccessError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
         if principal.active_project_id and principal.active_project_id != project_id:
-            raise AuthError(409, "active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
+            raise DatasetAccessError(409, "active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
 
     @staticmethod
-    def _require_workspace(principal: Principal, workspace_id: str) -> None:
+    def _require_workspace(principal: DatasetPrincipal, workspace_id: str) -> None:
         if workspace_id not in principal.workspace_scopes:
-            raise AuthError(403, "workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
+            raise DatasetAccessError(403, "workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
 
     def create_dataset(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         request: DatasetCreateRequest,
     ) -> DatasetRecord:
         self._require_project(principal, request.project_id)
@@ -59,7 +60,7 @@ class DatasetCatalogService:
             )
         )
 
-    def list_datasets(self, *, principal: Principal, project_id: str) -> list[DatasetRecord]:
+    def list_datasets(self, *, principal: DatasetPrincipal, project_id: str) -> list[DatasetRecord]:
         return self.list_dataset_page(
             principal=principal,
             project_id=project_id,
@@ -70,7 +71,7 @@ class DatasetCatalogService:
     def list_dataset_page(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         project_id: str,
         offset: int = 0,
         limit: int = 50,
@@ -102,7 +103,7 @@ class DatasetCatalogService:
     def detail(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         project_id: str,
         dataset_id: str,
     ) -> DatasetDetail:
@@ -230,7 +231,7 @@ class DatasetCatalogService:
     def create_version(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         project_id: str,
         dataset_id: str,
         request: DatasetVersionCreateRequest,
@@ -249,7 +250,7 @@ class DatasetCatalogService:
     def save_mapping(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         project_id: str,
         dataset_id: str,
         version_id: str,
@@ -270,7 +271,7 @@ class DatasetCatalogService:
     def create_materialization(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         project_id: str,
         dataset_id: str,
         version_id: str,
@@ -291,7 +292,7 @@ class DatasetCatalogService:
     def build_projection_batch(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         project_id: str,
         dataset_id: str,
         version_id: str,

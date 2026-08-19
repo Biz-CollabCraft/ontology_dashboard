@@ -1,4 +1,4 @@
-"""Versioned multi-file Dataset Bundle contracts.
+"""Public versioned multi-file Dataset Bundle contracts.
 
 The bundle checksum intentionally excludes local URIs, file ordering, manifest
 identity, and tenant scope. It identifies immutable dataset content and the

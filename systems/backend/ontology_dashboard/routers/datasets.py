@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from ..datasets import (
+from app.dataset import (
     DatasetCatalogService,
     DatasetCreateRequest,
     DatasetVersionCreateRequest,

@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from .bundle_models import (
+from ..bundle_contract import (
     BundleFileSchemaMetadata,
     BundleGenerationMetadata,
     BundleGovernanceArtifact,

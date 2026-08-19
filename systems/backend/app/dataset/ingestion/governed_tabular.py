@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import DatasetManifest, QuarantinedRecord
+from .ingestion_schema import DatasetManifest, QuarantinedRecord
 
 
 class GovernedTabularAdapter:

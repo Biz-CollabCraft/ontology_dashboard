@@ -6,11 +6,11 @@ from pathlib import Path
 import httpx
 import pytest
 
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
-    PostgreSQLPredictiveMaintenanceBundleIngestor,
     PredictiveMaintenanceCanonicalV2Adapter,
 )
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from ontology_dashboard.domain_packs.predictive_maintenance import (
     PredictiveMaintenanceOntologyMaterializer,
 )

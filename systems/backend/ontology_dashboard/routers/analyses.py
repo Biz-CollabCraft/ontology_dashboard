@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..analysis_models import AnalysisCreateRequest, AnalysisRunRequest, AnalysisUpdateRequest
-from ..datasets import AnalysisDatasetMaterializer, AnalysisMaterializationRequest
+from app.dataset import AnalysisDatasetMaterializer, AnalysisMaterializationRequest
 from ..analysis_repository import AnalysisVersionConflict
 from ..analysis_service import AnalysisNotFound, AnalysisService
 from ..dependencies import (

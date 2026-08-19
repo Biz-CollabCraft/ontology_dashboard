@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.datasets import (
+from app.dataset import (
     DatasetCatalogService,
     DatasetCreateRequest,
-    DatasetRepository,
     DatasetVersionCreateRequest,
 )
+from app.infra.db.dataset_repository import DatasetRepository
 from ontology_dashboard.dependencies import get_governance_service
 from ontology_dashboard.governance import GovernanceService
 from app.identity import CSRF_COOKIE, AuthError, IdentityService

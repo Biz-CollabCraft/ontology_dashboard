@@ -1,4 +1,4 @@
-"""Typed Dataset, version, mapping, materialization and projection models."""
+"""Dataset-owned schemas for ingestion, versions, provenance, and projection."""
 
 from __future__ import annotations
 

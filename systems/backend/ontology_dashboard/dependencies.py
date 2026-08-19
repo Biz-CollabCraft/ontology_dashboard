@@ -15,6 +15,14 @@ from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.common.rate_limit import RateLimiter
 from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
+from app.dataset import (
+    AnalysisDatasetMaterializer,
+    DatasetCatalogService,
+    DatasetMaterializationSource,
+)
+from app.dataset.ingestion import DatasetIngestionService
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
+from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.settings import database_location
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
 from app.infra.external.project3 import Project3Client
@@ -23,6 +31,7 @@ from app.infra.llm import configured_provider
 
 from .adapters.service import AdapterService
 from .adapters.prediction_repository import PredictionResultRepository
+from .analysis_models import AnalysisRunRequest
 from .analysis_service import AnalysisService
 from .application_runtime import ApplicationRuntimeRepository
 from .artifact_storage import ArtifactGovernanceService, build_artifact_service
@@ -30,12 +39,6 @@ from .branching_lineage import BranchingLineageRepository
 from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorAdapter
 from .dashboard_service import DashboardService
 from .distributed_runtime import DurableJobRepository
-from .datasets import (
-    AnalysisDatasetMaterializer,
-    DatasetCatalogService,
-    DatasetMaterializationSource,
-    DatasetRepository,
-)
 from .export_service import ExportService
 from .governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
@@ -170,11 +173,29 @@ def get_adapter_service() -> AdapterService:
     if is_postgresql(target):
         return AdapterService(
             target,
-            root=ROOT,
-            repository=PostgreSQLAdapterRepository(target),
             prediction_repository=PostgreSQLPredictionResultRepository(target),
         )
-    return AdapterService(target, root=ROOT)
+    return AdapterService(target)
+
+
+@lru_cache(maxsize=1)
+def get_dataset_ingestion_service() -> DatasetIngestionService:
+    ensure_database_migrations()
+    target = database_target()
+    configured = os.getenv("ONTOLOGY_DASHBOARD_DATA_ROOTS", "")
+    roots = [Path(value) for value in configured.split(os.pathsep) if value.strip()]
+    if not roots:
+        roots = [ROOT / "data" / "raw", ROOT / "data" / "fixtures"]
+    repository = (
+        PostgreSQLAdapterRepository(target)
+        if is_postgresql(target)
+        else DatasetIngestionRepository(target)
+    )
+    return DatasetIngestionService(
+        repository=repository,
+        dataset_catalog=get_dataset_catalog_service(),
+        allowed_roots=roots,
+    )
 
 
 def _ontology_principal(
@@ -345,6 +366,7 @@ def get_analysis_materializer(
         analysis=analyses,
         ontology=ontology,
         datasets=datasets,
+        analysis_request_factory=AnalysisRunRequest,
         artifact_root=ROOT / "data" / "materializations",
     )
 

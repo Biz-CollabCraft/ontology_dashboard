@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from .bundle_models import (
+from ..bundle_contract import (
     BundleRoleValidationSummary,
     BundleValidationIssue,
     BundleValidationResult,
@@ -12,7 +12,7 @@ from .bundle_models import (
     DatasetBundleManifestV2,
     PostgreSQLBundleIngestionResult,
 )
-from .models import DatasetManifest, QuarantinedRecord
+from .ingestion_schema import DatasetManifest, QuarantinedRecord
 
 
 @runtime_checkable

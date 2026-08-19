@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.dataset import DatasetAccessError
+
 from .application import create_app
 from .dependencies import (
     client_ip,
@@ -123,6 +125,14 @@ async def invalid_equipment_state_patch_handler(
 async def auth_error_handler(_: Request, exc: AuthError) -> JSONResponse:
     return JSONResponse(
         status_code=identity_http_status(exc),
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
+
+@app.exception_handler(DatasetAccessError)
+async def dataset_access_error_handler(_: Request, exc: DatasetAccessError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
         content={"error": {"code": exc.code, "message": exc.message}},
     )
 

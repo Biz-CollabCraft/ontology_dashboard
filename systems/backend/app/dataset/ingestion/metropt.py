@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from statistics import mean
 from typing import Any
 
-from .models import DatasetManifest, QuarantinedRecord
+from .ingestion_schema import DatasetManifest, QuarantinedRecord
 
 
 class MetroPTCompressorAdapter:
