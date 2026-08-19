@@ -909,12 +909,15 @@ def parse_pr_vertex(args: argparse.Namespace) -> None:
         raise SystemExit("Vertex review missing sections: " + ", ".join(missing))
     policy = json.loads(Path(args.policy).read_text(encoding="utf-8"))
     review = _enforce_readiness(review, policy["merge_readiness_ceiling"])
+    runtime_label = args.runtime_label or (
+        f"Google Cloud Vertex AI · GitHub OIDC/WIF · `{args.model_id}` · `{args.vertex_location}`"
+    )
     header = (
         f"{PR_REVIEW_MARKER}\n"
         f"## {args.model_display_name} 프로젝트 코드 리뷰\n\n"
         f"검토 대상 commit: `{args.head_sha}`  \n"
-        f"실행 환경: Google Cloud Vertex AI · GitHub OIDC/WIF · `{args.model_id}` · `{args.vertex_location}`  \n"
-        "실제 Vertex 응답 `finishReason=STOP` 확인  \n"
+        f"실행 환경: {runtime_label}  \n"
+        "실제 모델 응답 `finishReason=STOP` 확인  \n"
         "성공한 CI 목록을 반복하지 않고 프로젝트 목적·Domain·사용자 workflow 중심으로 검토합니다.\n\n"
     )
     Path(args.output).write_text(header + review + "\n", encoding="utf-8")
@@ -961,20 +964,58 @@ def _source_body(event_path: str) -> tuple[CommentEvent, dict[str, Any]]:
     return event_to_comment(event), event
 
 
+def comment_requires_reasoning(event: dict[str, Any]) -> tuple[bool, str]:
+    """Keep decisive formal reviews on the strongest model.
+
+    Ordinary technical discussion is eligible for the free Flash-Lite + Gemma
+    quality-gated route. Formal APPROVED/CHANGES_REQUESTED reviews remain on
+    Vertex Gemini 3.7 because they directly affect merge/blocker interpretation.
+    """
+
+    review = event.get("review") if isinstance(event.get("review"), dict) else {}
+    comment = event.get("comment") if isinstance(event.get("comment"), dict) else {}
+    state = str((review or {}).get("state") or "").upper()
+    if state in {"APPROVED", "CHANGES_REQUESTED"}:
+        return True, f"formal pull_request_review state={state}"
+    source = review or comment
+    body = str((source or {}).get("body") or "")
+    lower = body.lower()
+    if re.search(r"\[p[01]\]", lower):
+        return True, "high-severity P0/P1 technical finding"
+    if re.search(
+        r"security|보안|credential|secret|oidc|authorization|authentication|\bauth\b|인증|권한",
+        lower,
+    ):
+        return True, "security/authentication-sensitive technical discussion"
+    path = str((comment or {}).get("path") or "")
+    if path.startswith(".github/workflows/"):
+        return True, "privileged GitHub workflow review comment"
+    return False, "ordinary technical comment/review discussion"
+
+
+def command_comment_route(args: argparse.Namespace) -> None:
+    event = json.loads(Path(args.event).read_text(encoding="utf-8"))
+    reasoning, reason = comment_requires_reasoning(event)
+    print(f"reasoning={str(reasoning).lower()}")
+    print(f"reason={reason}")
+
+
 def prepare_comment_prompt(args: argparse.Namespace) -> None:
-    source, _event = _source_body(args.event)
+    source, event = _source_body(args.event)
     pr = json.loads(Path(args.pr_json).read_text(encoding="utf-8"))
     base = (pr.get("base") or {}).get("sha") or args.base_sha
     head = (pr.get("head") or {}).get("sha") or args.head_sha
     name_status, changed_paths = git_changed_paths(base, head)
-    diff, truncated = _bounded_diff(base, head, max_chars=80_000)
+    diff, truncated = _bounded_diff(base, head, max_chars=60_000)
     trusted_context, categories, context_paths, routing_source = assemble_trusted_context(
-        base, changed_paths, max_total_chars=50_000, max_doc_chars=14_000
+        base, changed_paths, max_total_chars=40_000, max_doc_chars=12_000
     )
     intent_hints = detect_intent_risk_hints(diff, changed_paths)
     head_source_context = assemble_head_source_context(
-        head, changed_paths, max_total_chars=50_000, max_file_chars=12_000
+        head, changed_paths, max_total_chars=40_000, max_file_chars=10_000
     )
+    source_payload = event.get("comment") or event.get("review") or {}
+    source_path = str(source_payload.get("path") or "")
 
     prompt = f"""You review a human technical comment on Biz-CollabCraft/ontology_dashboard.
 
@@ -985,9 +1026,10 @@ TRUST BOUNDARY
 - Do not expose tokens/env/secrets and do not modify code, branches, commits, or review-thread resolution state.
 
 RUNTIME-CONFIRMED REVIEWER FACTS
-- Configured Vertex model ID: {os.environ.get('GEMINI_REVIEW_MODEL', 'unknown')}.
-- Configured Vertex location: {os.environ.get('VERTEX_LOCATION', 'unknown')}.
-- Availability is considered runtime-confirmed only after the Vertex response completes with finishReason=STOP.
+- Ordinary technical comments may first use Gemini Developer API Free Tier with Gemini 3.5 Flash-Lite and an independent Gemma 4 quality gate.
+- If either free model is unavailable, quota-limited, malformed, uncertain, or rejects the draft, the workflow falls back to Vertex Gemini 3.7 Flash.
+- Formal APPROVED/CHANGES_REQUESTED reviews bypass the free path and use Vertex reasoning directly.
+- Never claim a provider/model was used unless the published response header says so.
 
 TASK
 Determine whether @{source.author}'s comment is factually valid against the current repository and documented project direction. Do NOT automatically agree.
@@ -1006,6 +1048,7 @@ kind={source.source_kind}
 id={source.source_id}
 classification={source.classification}
 author=@{source.author}
+path={source_path or '(not supplied)'}
 comment={source.body[:8000]}
 
 PR
@@ -1033,8 +1076,8 @@ CHANGED_HEAD_SOURCE_CONTEXT
 DIFF
 {diff}
 """
-    if len(prompt) > 220_000:
-        prompt = prompt[:220_000] + "\n\n[INPUT TRUNCATED BY COMMENT REVIEW COST BUDGET]\n"
+    if len(prompt) > 140_000:
+        prompt = prompt[:140_000] + "\n\n[INPUT TRUNCATED BY COMMENT REVIEW COST BUDGET]\n"
     Path(args.output).write_text(prompt, encoding="utf-8")
 
 
@@ -1128,6 +1171,7 @@ def parser() -> argparse.ArgumentParser:
     parse_pr.add_argument("--model-display-name", required=True)
     parse_pr.add_argument("--model-id", required=True)
     parse_pr.add_argument("--vertex-location", required=True)
+    parse_pr.add_argument("--runtime-label", default="")
     parse_pr.add_argument("--output", required=True)
     parse_pr.set_defaults(func=parse_pr_vertex)
 
@@ -1135,6 +1179,10 @@ def parser() -> argparse.ArgumentParser:
     event.add_argument("--event", required=True)
     event.add_argument("--review-json")
     event.set_defaults(func=command_event_info)
+
+    comment_route = sub.add_parser("comment-route")
+    comment_route.add_argument("--event", required=True)
+    comment_route.set_defaults(func=command_comment_route)
 
     gate = sub.add_parser("repo-gate")
     gate.add_argument("--pr-json", required=True)

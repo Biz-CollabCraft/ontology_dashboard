@@ -7,6 +7,7 @@ from scripts.ci.ai_review import (
     DEFAULT_CONTEXT_ROUTING,
     build_verified_evidence,
     classify_comment,
+    comment_requires_reasoning,
     context_documents,
     detect_intent_risk_hints,
     event_to_comment,
@@ -17,6 +18,7 @@ from scripts.ci.ai_review import (
     route_context,
     should_run_full_review,
 )
+from scripts.ci.free_comment_review import _draft_is_well_formed, _parse_verifier
 
 
 class AiReviewAutomationTests(unittest.TestCase):
@@ -148,6 +150,60 @@ class AiReviewAutomationTests(unittest.TestCase):
         self.assertEqual(classify_comment("확인했습니다"), "acknowledgement")
         self.assertEqual(classify_comment("감사합니다"), "acknowledgement")
         self.assertEqual(classify_comment("/ai-review"), "full_review_request")
+
+    def test_comment_route_keeps_decisive_formal_reviews_on_reasoning_model(self):
+        for state in ("APPROVED", "CHANGES_REQUESTED"):
+            with self.subTest(state=state):
+                reasoning, reason = comment_requires_reasoning(
+                    {"review": {"state": state}}
+                )
+                self.assertTrue(reasoning)
+                self.assertIn(state, reason)
+
+        reasoning, reason = comment_requires_reasoning(
+            {"comment": {"body": "[P2] implementation detail needs a fix"}}
+        )
+        self.assertFalse(reasoning)
+        self.assertIn("ordinary technical", reason)
+
+        reasoning, reason = comment_requires_reasoning(
+            {"comment": {"body": "[P1] OIDC 권한 경계가 fail-open입니다"}}
+        )
+        self.assertTrue(reasoning)
+        self.assertIn("P0/P1", reason)
+
+        reasoning, reason = comment_requires_reasoning(
+            {
+                "comment": {
+                    "body": "이 부분은 P2 수준이지만 workflow 변경입니다",
+                    "path": ".github/workflows/code-review.yml",
+                }
+            }
+        )
+        self.assertTrue(reasoning)
+        self.assertIn("workflow", reason)
+
+    def test_free_comment_quality_gate_requires_verdict_and_accept_json(self):
+        self.assertTrue(
+            _draft_is_well_formed(
+                "@reviewer 부분적으로 타당합니다. "
+                "현재 구현 근거를 확인하면 수정 범위는 해당 helper로 제한됩니다. "
+                "권장 구현과 회귀 검증을 함께 적용하는 것이 안전합니다."
+            )
+        )
+        self.assertFalse(_draft_is_well_formed("looks good"))
+
+        decision, confidence, reason = _parse_verifier(
+            '{"decision":"ACCEPT","confidence":0.92,"reason":"grounded"}'
+        )
+        self.assertEqual(decision, "ACCEPT")
+        self.assertAlmostEqual(confidence, 0.92)
+        self.assertEqual(reason, "grounded")
+
+        fenced = "```json\n{\"decision\":\"ESCALATE\",\"confidence\":0.8,\"reason\":\"ambiguous\"}\n```"
+        decision, confidence, _ = _parse_verifier(fenced)
+        self.assertEqual(decision, "ESCALATE")
+        self.assertAlmostEqual(confidence, 0.8)
 
     def test_review_profile_routes_docs_to_flash_lite_and_code_to_reasoning(self):
         docs = review_profile(["docs/architecture.md"])

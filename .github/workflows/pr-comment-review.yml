@@ -165,8 +165,57 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --output /tmp/comment-review-prompt.md
 
-      - name: Authenticate to Google Cloud with GitHub OIDC
+      - name: Route decisive reviews to reasoning model
         if: steps.idem.outputs.action != 'noop'
+        id: route
+        run: |
+          python3 scripts/ci/ai_review.py comment-route \
+            --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate free-tier key lookup with GitHub OIDC
+        if: >-
+          steps.idem.outputs.action != 'noop' &&
+          steps.route.outputs.reasoning != 'true'
+        id: free_auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: flai-oosuhada-20260506
+          workload_identity_provider: projects/932697090428/locations/global/workloadIdentityPools/github-actions/providers/ontology-dashboard
+          service_account: ontology-gh-review@flai-oosuhada-20260506.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+
+      - name: Try zero-cost technical comment review with dual-model quality gate
+        if: >-
+          steps.idem.outputs.action != 'noop' &&
+          steps.route.outputs.reasoning != 'true'
+        id: free_review
+        continue-on-error: true
+        env:
+          GCP_ACCESS_TOKEN: ${{ steps.free_auth.outputs.access_token }}
+          FREE_API_KEY_RESOURCE: projects/395559345329/locations/global/keys/efe3579e-c4db-4e35-88b9-12188bb1a119
+        run: |
+          set -euo pipefail
+          FREE_API_KEY="$(
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${GCP_ACCESS_TOKEN}" \
+              "https://apikeys.googleapis.com/v2/${FREE_API_KEY_RESOURCE}/keyString" \
+              | jq -r '.keyString'
+          )"
+          test -n "$FREE_API_KEY" && test "$FREE_API_KEY" != "null"
+          echo "::add-mask::$FREE_API_KEY"
+          GEMINI_FREE_API_KEY="$FREE_API_KEY" python3 scripts/ci/free_comment_review.py \
+            --prompt /tmp/comment-review-prompt.md \
+            --source-kind "$SOURCE_KIND" \
+            --source-id "$SOURCE_ID" \
+            --head-sha "$HEAD_SHA" \
+            --output /tmp/comment-review.md
+
+      - name: Authenticate to Google Cloud with GitHub OIDC
+        if: >-
+          steps.idem.outputs.action != 'noop' &&
+          steps.route.outputs.reasoning == 'true'
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -178,9 +227,11 @@ jobs:
           create_credentials_file: false
 
       - name: Review comment validity with ${{ env.GEMINI_REVIEW_MODEL_DISPLAY_NAME }} on Vertex AI
-        if: steps.idem.outputs.action != 'noop'
+        if: >-
+          steps.idem.outputs.action != 'noop' &&
+          (steps.route.outputs.reasoning == 'true' || steps.free_review.outcome != 'success')
         env:
-          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token || steps.free_auth.outputs.access_token }}
         run: |
           set -euo pipefail
           python3 scripts/ci/ai_review.py build-request \
