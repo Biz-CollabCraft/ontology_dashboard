@@ -52,7 +52,7 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()
 
     common_rate_limit = importlib.import_module("app.common.rate_limit")
-    infra_rate_limit = importlib.import_module("app.infra.external.rate_limit")
+    infra_rate_limit = importlib.import_module("app.infra.rate_limit")
     assert Path(common_rate_limit.__file__).resolve().is_relative_to(
         (ROOT / "systems" / "backend" / "app" / "common").resolve()
     )

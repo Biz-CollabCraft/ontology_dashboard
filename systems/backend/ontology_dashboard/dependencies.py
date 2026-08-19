@@ -17,7 +17,7 @@ from app.common.rate_limit import RateLimiter
 from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
 from app.infra.db.settings import database_location
 from app.infra.external.project3 import Project3Client
-from app.infra.external.rate_limit import InMemoryRateLimiter, RedisRateLimiter
+from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.infra.llm import configured_provider
 
 from .adapters.service import AdapterService

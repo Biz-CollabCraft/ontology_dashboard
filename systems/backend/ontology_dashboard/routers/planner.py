@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.common.rate_limit import RateLimiter, RateLimitRule
+from app.common.rate_limit import PLANNER_RATE, RateLimiter
 
 from ..dependencies import (
     get_identity_service,
@@ -26,7 +26,6 @@ from ..planner import (
 )
 from ..predictive_maintenance_runtime import PredictiveMaintenanceRuntimeService
 
-PLANNER_RATE = RateLimitRule(limit=30, window_seconds=60)
 from ..visualizations import SemanticVisualizationPlanRequest
 
 router = APIRouter(prefix="/api/planner", tags=["planner"])

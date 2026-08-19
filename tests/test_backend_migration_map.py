@@ -4,6 +4,8 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 import re
 
+from scripts.check_backend_migration_ledger import _migration_progress
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_ROOT = REPOSITORY_ROOT / "systems" / "backend" / "ontology_dashboard"
@@ -36,27 +38,28 @@ def _ledger_rows() -> list[tuple[int, list[str]]]:
 
 
 def _migrated_sources() -> set[str]:
-    lines = MIGRATION_MAP.read_text(encoding="utf-8").splitlines()
-    in_progress = False
-    migrated: set[str] = set()
+    return set(_migration_progress(MIGRATION_MAP.read_text(encoding="utf-8")))
 
-    for line in lines:
-        if line == "## 8. Physical migration progress":
-            in_progress = True
-            continue
-        if in_progress and line.startswith("## "):
-            break
-        if not in_progress or not line.startswith("|"):
-            continue
 
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) != 3 or cells[0] in {"Legacy Source", "---"}:
-            continue
-        if cells[2] != "`MIGRATED`":
-            continue
-        migrated.update(SOURCE_PATTERN.findall(cells[0]))
+def test_migration_progress_parser_stops_at_next_section() -> None:
+    text = """# synthetic map
 
-    return migrated
+## 8. Physical migration progress
+
+| Legacy Source | Canonical target(s) | State |
+|---|---|---|
+| `example.py` | `systems/backend/app/example.py` | `MIGRATED` |
+
+## 9. Phase 2 notes
+
+| item | owner | note | state |
+|---|---|---|---|
+| dashboard | team | #53 | planned |
+"""
+
+    assert _migration_progress(text) == {
+        "example.py": ("systems/backend/app/example.py",)
+    }
 
 
 def test_migration_ledger_uses_one_allowed_disposition_per_row() -> None:

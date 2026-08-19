@@ -32,7 +32,7 @@ REQUIRED_FILES = [
     "systems/backend/app/infra/db/settings.py",
     "systems/backend/app/infra/db/connection.py",
     "systems/backend/app/infra/db/pool.py",
-    "systems/backend/app/infra/external/rate_limit.py",
+    "systems/backend/app/infra/rate_limit.py",
     "systems/backend/app/infra/external/project3/client.py",
     "systems/backend/app/infra/external/project3/models.py",
     "systems/backend/app/infra/llm/provider.py",

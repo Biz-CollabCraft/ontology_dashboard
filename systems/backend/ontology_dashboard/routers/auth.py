@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from app.common.rate_limit import RateLimiter, RateLimitRule
+from app.common.rate_limit import LOGIN_RATE, SESSION_RATE, RateLimiter
 
 from ..dependencies import (
     client_ip,
@@ -24,9 +24,6 @@ from ..identity import (
     Principal,
     RegisterRequest,
 )
-
-LOGIN_RATE = RateLimitRule(limit=12, window_seconds=60)
-SESSION_RATE = RateLimitRule(limit=20, window_seconds=60)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

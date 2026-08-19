@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from app.common.rate_limit import RateLimiter, RateLimitRule
+from app.common.rate_limit import EXPORT_RATE, RateLimiter
 
 from ..dependencies import (
     get_export_service,
@@ -17,8 +17,6 @@ from ..dependencies import (
 from ..export_models import ExportRequest
 from ..export_service import ExportService
 from ..identity import IdentityService, Principal
-
-EXPORT_RATE = RateLimitRule(limit=20, window_seconds=60)
 
 router = APIRouter(prefix="/api/exports", tags=["exports"])
 

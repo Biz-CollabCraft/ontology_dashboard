@@ -32,6 +32,8 @@ services:
         value: "1"
       - key: ONTOLOGY_DASHBOARD_DATABASE_URL
         sync: false
+      - key: ONTOLOGY_DASHBOARD_METRICS_TOKEN
+        sync: false
       - key: ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX
         value: ^https://.*\.vercel\.app$
       - key: MAINTENANCE_CONTEXT_PROVIDER

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable architecture-debt inventory for the convergence roadmap.
+"""Executable architecture-debt inventory for Domain-First convergence.
 
 The inventory distinguishes accepted migration debt from regressions that must fail CI.
 It intentionally uses only the standard library so it can run before dependencies install.
@@ -65,7 +65,6 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     dependencies = root / "systems" / "backend" / "ontology_dashboard" / "dependencies.py"
     feature_flags = root / "systems" / "frontend" / "src" / "featureFlags.ts"
     dashboard_shell = root / "systems" / "frontend" / "src" / "features" / "dashboard" / "DashboardShell.tsx"
-    roadmap = root / "docs" / "30-implementation" / "product-convergence-roadmap.md"
     architecture = root / "docs" / "architecture.md"
     migration_map = root / "docs" / "backend-migration-map.md"
     project3_client = root / "systems" / "backend" / "app" / "infra" / "external" / "project3" / "client.py"
@@ -156,7 +155,7 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         for path in (
             "systems/backend/app/common/exceptions.py",
             "systems/backend/app/common/rate_limit.py",
-            "systems/backend/app/infra/external/rate_limit.py",
+            "systems/backend/app/infra/rate_limit.py",
         )
     ) and not (root / "systems/backend/ontology_dashboard/security.py").exists()
     dashboard_relocated = all(
@@ -181,8 +180,11 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="roadmap_override_registered",
             state="resolved" if roadmap_is_override else "regression",
             stage=44,
-            evidence="Domain-First architecture, migration ledger and convergence roadmap",
-            action="Keep the current Domain-First architecture and migration ledger authoritative over historical sequencing.",
+            evidence="Domain-First architecture and backend migration ledger",
+            action=(
+                "Keep the current Domain-First architecture and migration ledger authoritative; "
+                "the historical direct polyglot Backend target is retired in favor of typed Project 3 boundaries."
+            ),
         ),
         DebtItem(
             id="soon_navigation_feature_flags",

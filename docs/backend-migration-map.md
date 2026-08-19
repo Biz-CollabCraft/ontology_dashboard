@@ -207,13 +207,13 @@ Baseline 갱신은 `python scripts/check_backend_migration_ratchet.py --write-ba
 이 표는 처분 자체를 바꾸는 두 번째 Ledger가 아니라, Section 3의 결정을 실제 물리
 이동으로 완료한 Source를 되돌리지 않기 위한 **CI ratchet**이다. `MIGRATED` Source는
 더 이상 `systems/backend/ontology_dashboard` 아래에 존재해서는 안 되며, 기록된 canonical
-target이 실제로 존재해야 한다. `SPLIT` Source는 이 표에 올라온 파일 단위 책임만 완료된
+target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source는 이 표에 올라온 파일 단위 책임만 완료된
 것이며, 같은 Section 3 행의 다른 Source까지 완료됐다는 의미는 아니다.
 
 | Legacy Source | Canonical target(s) | State |
 |---|---|---|
 | `settings.py` | `systems/backend/app/common/runtime_settings.py`, `systems/backend/app/infra/db/settings.py`, `systems/backend/app/infra/observability/runtime_validation.py` | `MIGRATED` |
-| `security.py` | `systems/backend/app/common/exceptions.py`, `systems/backend/app/common/rate_limit.py`, `systems/backend/app/infra/external/rate_limit.py` | `MIGRATED` |
+| `security.py` | `systems/backend/app/common/exceptions.py`, `systems/backend/app/common/rate_limit.py`, `systems/backend/app/infra/rate_limit.py` | `MIGRATED` |
 | `postgresql.py` | `systems/backend/app/infra/db/connection.py` | `MIGRATED` |
 | `postgresql_pool.py` | `systems/backend/app/infra/db/pool.py` | `MIGRATED` |
 | `observability.py` | `systems/backend/app/infra/observability/runtime.py` | `MIGRATED` |

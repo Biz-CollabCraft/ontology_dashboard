@@ -80,6 +80,9 @@ def _migration_progress(text: str) -> dict[str, tuple[str, ...]]:
     if start < 0:
         return {}
     section = text[start:]
+    end = section.find("\n## ", 1)
+    if end >= 0:
+        section = section[:end]
     migrated: dict[str, tuple[str, ...]] = {}
     errors: list[str] = []
     for line_number, line in enumerate(section.splitlines(), start=1):
@@ -212,6 +215,8 @@ def validate_ledger(
             target_path = root / target
             if not target_path.is_file():
                 errors.append(f"migrated canonical target does not exist: {target}")
+            elif target_path.stat().st_size == 0:
+                errors.append(f"migrated canonical target is empty: {target}")
 
     missing = sorted(actual - set(assigned))
     extra = sorted(set(assigned) - actual)

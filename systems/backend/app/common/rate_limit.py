@@ -14,6 +14,12 @@ class RateLimitRule:
     window_seconds: int
 
 
+LOGIN_RATE = RateLimitRule(limit=12, window_seconds=60)
+SESSION_RATE = RateLimitRule(limit=20, window_seconds=60)
+PLANNER_RATE = RateLimitRule(limit=30, window_seconds=60)
+EXPORT_RATE = RateLimitRule(limit=20, window_seconds=60)
+
+
 class RateLimiter:
     """Synchronous limiter port used by HTTP dependencies."""
 
@@ -29,4 +35,12 @@ class RateLimiter:
         raise NotImplementedError
 
 
-__all__ = ["RateLimitExceeded", "RateLimiter", "RateLimitRule"]
+__all__ = [
+    "EXPORT_RATE",
+    "LOGIN_RATE",
+    "PLANNER_RATE",
+    "RateLimitExceeded",
+    "RateLimiter",
+    "RateLimitRule",
+    "SESSION_RATE",
+]
