@@ -40,7 +40,6 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     module_names = (
         "context",
         "contracts",
-        "identity",
         "repository",
         "service",
     )
@@ -62,6 +61,14 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     identity = importlib.import_module("app.identity.identity_service")
     identity_repository = importlib.import_module("app.identity.identity_repository")
     assert identity.IdentityRepository is identity_repository.IdentityRepository
+
+    project = importlib.import_module("app.project.project_service")
+    project_repository = importlib.import_module("app.project.project_repository")
+    assert project.ProjectRepository is project_repository.ProjectRepository
+    assert Path(project.__file__).resolve().is_relative_to(
+        (ROOT / "systems" / "backend" / "app" / "project").resolve()
+    )
+    assert not (canonical_root / "identity.py").exists()
 
 
 def test_dashboard_modules_load_from_canonical_directory() -> None:

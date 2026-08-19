@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .ontology import LinkRecord, ObjectRecord
-from .project_context import SQLiteProjectContextResolver, ensure_scope_columns
+from app.project import SQLiteProjectContextResolver, ensure_scope_columns
 
 
 class OntologyInstanceRepository:

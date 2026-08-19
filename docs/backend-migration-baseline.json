@@ -47,7 +47,6 @@
     "governance/__init__.py",
     "governance/models.py",
     "governance/service.py",
-    "identity.py",
     "integrations/__init__.py",
     "integrations/project3/__init__.py",
     "integrations/project3/projection.py",
@@ -98,11 +97,6 @@
     "predictive_maintenance_runtime/repository.py",
     "predictive_maintenance_runtime/service.py",
     "product_result_evidence_projection.py",
-    "project_context.py",
-    "projects/__init__.py",
-    "projects/models.py",
-    "projects/repository.py",
-    "projects/service.py",
     "reports.py",
     "repository.py",
     "role_workflow_models.py",
@@ -123,7 +117,6 @@
     "routers/platform.py",
     "routers/predictive_maintenance_runtime.py",
     "routers/project3.py",
-    "routers/projects.py",
     "routers/role_workspaces.py",
     "routers/system.py",
     "service.py",
@@ -169,11 +162,6 @@
       "source": "scripts/check_postgresql_runtime.py",
       "kind": "static_import",
       "target": "ontology_dashboard.postgresql_repositories"
-    },
-    {
-      "source": "scripts/check_postgresql_runtime.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
     },
     {
       "source": "scripts/evaluate_gold.py",
@@ -373,11 +361,6 @@
     {
       "source": "tests/test_adapter_api.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
-      "source": "tests/test_adapter_api.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.service"
     },
     {
@@ -571,11 +554,6 @@
       "target": "ontology_dashboard.migrations"
     },
     {
-      "source": "tests/test_artifact_storage_phase24.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
       "source": "tests/test_auth_rbac.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
@@ -631,11 +609,6 @@
       "target": "ontology_dashboard.closed_loop.repository"
     },
     {
-      "source": "tests/test_closed_loop_persistence.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.project_context"
-    },
-    {
       "source": "tests/test_connectors_phase26.py",
       "kind": "static_import",
       "target": "ontology_dashboard.connectors"
@@ -649,11 +622,6 @@
       "source": "tests/test_connectors_phase26.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "tests/test_connectors_phase26.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
     },
     {
       "source": "tests/test_dashboard_stages20_24.py",
@@ -746,11 +714,6 @@
       "target": "ontology_dashboard.migrations"
     },
     {
-      "source": "tests/test_distributed_runtime_phase23.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
       "source": "tests/test_domain_pack_platform_phase19.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
@@ -764,11 +727,6 @@
       "source": "tests/test_domain_pack_platform_phase19.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
-    },
-    {
-      "source": "tests/test_domain_pack_platform_phase19.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
     },
     {
       "source": "tests/test_domain_pack_platform_phase19.py",
@@ -1268,11 +1226,6 @@
     {
       "source": "tests/test_project_layer.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
-      "source": "tests/test_project_layer.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.service"
     },
     {
@@ -1339,11 +1292,6 @@
       "source": "tests/test_tenant_persistence_phase20.py",
       "kind": "static_import",
       "target": "ontology_dashboard.persistence_readiness"
-    },
-    {
-      "source": "tests/test_tenant_persistence_phase20.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
     }
   ]
 }

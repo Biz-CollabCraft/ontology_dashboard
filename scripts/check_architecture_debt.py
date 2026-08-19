@@ -72,7 +72,6 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     foundation_modules = (
         "context",
         "contracts",
-        "identity",
         "repository",
         "service",
     )
@@ -156,11 +155,22 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             "systems/backend/app/identity/identity_service.py",
             "systems/backend/app/identity/identity_router.py",
             "systems/backend/app/identity/ports.py",
+            "systems/backend/app/project/project_domain.py",
+            "systems/backend/app/project/project_schema.py",
+            "systems/backend/app/project/project_repository.py",
+            "systems/backend/app/project/project_service.py",
+            "systems/backend/app/project/project_router.py",
             "systems/backend/app/common/exceptions.py",
             "systems/backend/app/common/rate_limit.py",
             "systems/backend/app/infra/rate_limit.py",
         )
-    ) and not (root / "systems/backend/ontology_dashboard/security.py").exists()
+    ) and not any(
+        (root / path).exists()
+        for path in (
+            "systems/backend/ontology_dashboard/identity.py",
+            "systems/backend/ontology_dashboard/security.py",
+        )
+    )
     dashboard_relocated = all(
         _canonical_with_optional_legacy_shim(root, module)
         for module in dashboard_modules
@@ -214,8 +224,8 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="foundation_identity_physical_relocation",
             state="resolved" if foundation_identity_relocated else "regression",
             stage=55,
-            evidence="foundation/identity modules plus canonical app/common and rate-limit infrastructure",
-            action="Keep shared security primitives in app/common/infra and prevent the removed legacy security module from returning.",
+            evidence="canonical app/identity and app/project ownership plus app/common and rate-limit infrastructure",
+            action="Keep IAM in app/identity, Project lifecycle in app/project, shared security primitives in app/common/infra, and prevent removed legacy identity/security modules from returning.",
         ),
         DebtItem(
             id="dashboard_physical_relocation",

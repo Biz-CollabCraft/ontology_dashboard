@@ -1,0 +1,54 @@
+"""Canonical Project public API."""
+
+from .project_domain import (
+    ProjectAuditPort,
+    ProjectContext,
+    ProjectEventQueryPort,
+    ProjectId,
+    ProjectScope,
+)
+from .project_exception import ProjectContextError, ProjectError
+from .project_repository import (
+    DEFAULT_ORGANIZATION_ID,
+    DEFAULT_PROJECT_ID,
+    DEFAULT_WORKSPACE_ID,
+    DEMO_ORGANIZATION_ID,
+    DEMO_PROJECT_ID,
+    DEMO_WORKSPACE_ID,
+    ProjectRepository,
+    SQLiteProjectContextResolver,
+    ensure_scope_columns,
+)
+from .project_schema import (
+    Project,
+    ProjectCreateRequest,
+    ProjectMembershipUpdateRequest,
+    ProjectStatus,
+    ProjectUpdateRequest,
+)
+from .project_service import ProjectService
+
+__all__ = [
+    "DEFAULT_ORGANIZATION_ID",
+    "DEFAULT_PROJECT_ID",
+    "DEFAULT_WORKSPACE_ID",
+    "DEMO_ORGANIZATION_ID",
+    "DEMO_PROJECT_ID",
+    "DEMO_WORKSPACE_ID",
+    "Project",
+    "ProjectAuditPort",
+    "ProjectContext",
+    "ProjectContextError",
+    "ProjectCreateRequest",
+    "ProjectError",
+    "ProjectEventQueryPort",
+    "ProjectId",
+    "ProjectMembershipUpdateRequest",
+    "ProjectRepository",
+    "ProjectScope",
+    "ProjectService",
+    "ProjectStatus",
+    "ProjectUpdateRequest",
+    "SQLiteProjectContextResolver",
+    "ensure_scope_columns",
+]

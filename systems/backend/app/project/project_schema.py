@@ -1,3 +1,5 @@
+"""Project metadata and lifecycle schemas."""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -48,3 +50,21 @@ class ProjectUpdateRequest(BaseModel):
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None
+
+
+class ProjectMembershipUpdateRequest(BaseModel):
+    """Project-owned membership lifecycle command payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["active", "suspended"] = "active"
+    roles: list[str] = Field(min_length=1)
+
+
+__all__ = [
+    "Project",
+    "ProjectCreateRequest",
+    "ProjectMembershipUpdateRequest",
+    "ProjectStatus",
+    "ProjectUpdateRequest",
+]

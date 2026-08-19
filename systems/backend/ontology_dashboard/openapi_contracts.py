@@ -95,7 +95,7 @@ from .predictive_maintenance_runtime.models import (
 from .persistence_readiness import PersistenceReadiness
 from .pipeline_runtime import PipelinePlan
 from .mlops_runtime import MLOpsSnapshot
-from .projects.models import Project
+from app.project import Project
 
 
 class ContractModel(BaseModel):
@@ -642,9 +642,9 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.ontology.aggregate_ontology_objects": OntologyAggregateResponse,
     "ontology_dashboard.routers.ontology.list_ontology_action_invocations": ItemsResponse[ActionInvocationRecord],
     "ontology_dashboard.routers.analyses.queue_analysis_run": AnalysisRunResult,
-    "ontology_dashboard.routers.projects.list_projects": ProjectListResponse,
-    "ontology_dashboard.routers.projects.list_project_workspaces": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.projects.list_project_events": ItemsResponse[dict[str, Any]],
+    "app.project.project_router.list_projects": ProjectListResponse,
+    "app.project.project_router.list_project_workspaces": ItemsResponse[dict[str, Any]],
+    "app.project.project_router.list_project_events": ItemsResponse[dict[str, Any]],
     "ontology_dashboard.routers.platform.domain_pack_catalog": ItemsResponse[PlatformDomainPackDefinition],
     "ontology_dashboard.routers.platform.project_v4_application": ProjectApplicationDefinition,
     "ontology_dashboard.routers.platform.project_persistence_readiness": PersistenceReadiness,
@@ -727,7 +727,7 @@ _EXPLICIT_MODELS: dict[str, Any] = {
 
 
 _EXPLICIT_MEDIA_EXAMPLES: dict[str, dict[str, Any]] = {
-    "ontology_dashboard.routers.projects.list_projects": PROJECT_LIST_EXAMPLE,
+    "app.project.project_router.list_projects": PROJECT_LIST_EXAMPLE,
 }
 
 

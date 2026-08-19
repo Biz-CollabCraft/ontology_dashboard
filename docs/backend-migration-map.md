@@ -242,16 +242,25 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `adapters/registry.py` | `systems/backend/app/dataset/ingestion/registry.py` | `MIGRATED` |
 | `adapters/repository.py` | `systems/backend/app/dataset/ingestion/repository.py`, `systems/backend/app/infra/db/dataset_ingestion_repository.py` | `MIGRATED` |
 | `routers/datasets.py` | `systems/backend/app/dataset/dataset_router.py` | `MIGRATED` |
+| `identity.py` | `systems/backend/app/project/project_service.py`, `systems/backend/app/project/project_repository.py` | `MIGRATED` |
+| `project_context.py` | `systems/backend/app/project/project_domain.py`, `systems/backend/app/project/project_repository.py` | `MIGRATED` |
+| `projects/__init__.py` | `systems/backend/app/project/__init__.py` | `MIGRATED` |
+| `projects/models.py` | `systems/backend/app/project/project_schema.py` | `MIGRATED` |
+| `projects/repository.py` | `systems/backend/app/project/project_repository.py` | `MIGRATED` |
+| `projects/service.py` | `systems/backend/app/project/project_service.py` | `MIGRATED` |
+| `routers/projects.py` | `systems/backend/app/project/project_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
 Governance/Report 책임이 남아 있으므로 파일 자체를 `MIGRATED`로 표시하지 않는다.
 
-`identity.py`는 IAM service 책임을 `app/identity/identity_service.py`로 분리했지만,
-Project membership lifecycle 책임이 #54 소유로 남아 있으므로 legacy Source 자체는
-아직 `MIGRATED`로 표시하지 않는다. `app/identity`는 `PrincipalContext`와
-`WorkspaceScope` public port를 제공하고 Project membership lifecycle은 이 source에
-남겨 다음 Phase에서 `app/project`로 이관한다.
+Phase 3 / #54에서 `identity.py`에 남아 있던 Project membership lifecycle과
+`projects/*`, `project_context.py`, `routers/projects.py`를 `app/project`로 물리 이관했다.
+Project는 `app.identity`의 `PrincipalContext`/`WorkspaceScope` public contract만 소비하며,
+membership audit는 composition이 `ProjectAuditPort`로 주입한다. 따라서 Project domain이
+Identity repository/service 구현을 직접 import하지 않는다. Identity repository에는
+Principal IAM context를 구성하기 위한 membership read projection만 남고 Project membership
+mutation 책임은 `app/project`가 소유한다.
 Phase 5(#56)는 공유 Source를 삭제하지 않고 Equipment 책임만 물리적으로 분리한다.
 `service.py`의 Equipment master application 책임과
 `routers/manufacturing.py`의 `/api/equipment*` route 정의는

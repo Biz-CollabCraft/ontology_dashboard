@@ -15,6 +15,7 @@ from .dependencies import (
     get_dataset_catalog_service,
     get_identity_service,
     get_ontology_planner_service,
+    get_project_service,
     get_rate_limiter,
     get_service,
     rate_limit_subject,
@@ -24,6 +25,8 @@ from .dependencies import (
 )
 from app.identity import AuthError
 from app.identity.identity_router import build_identity_router, identity_http_status
+from app.project import ProjectError
+from app.project.project_router import build_project_router, project_http_status
 from .openapi_contracts import apply_response_contracts
 from .routers.adapters import router as adapters_router
 from .routers.agent import router as agent_router
@@ -41,7 +44,6 @@ from .routers.project3 import router as project3_router
 from .routers.predictive_maintenance_runtime import (
     router as predictive_maintenance_runtime_router,
 )
-from .routers.projects import router as projects_router
 from .routers.role_workspaces import router as role_workspaces_router
 from .routers.system import router as system_router
 from app.common.exceptions import RateLimitExceeded
@@ -68,6 +70,13 @@ datasets_router = create_dataset_router(
     get_dataset_catalog_service=get_dataset_catalog_service,
     require_csrf=require_csrf,
     require_permission=require_permission,
+)
+
+projects_router = build_project_router(
+    get_project_service=get_project_service,
+    get_event_query=get_service,
+    require_permission=require_permission,
+    require_csrf=require_csrf,
 )
 
 
@@ -141,6 +150,14 @@ async def auth_error_handler(_: Request, exc: AuthError) -> JSONResponse:
 async def dataset_access_error_handler(_: Request, exc: DatasetAccessError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
+
+@app.exception_handler(ProjectError)
+async def project_error_handler(_: Request, exc: ProjectError) -> JSONResponse:
+    return JSONResponse(
+        status_code=project_http_status(exc),
         content={"error": {"code": exc.code, "message": exc.message}},
     )
 

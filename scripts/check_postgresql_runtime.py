@@ -28,7 +28,7 @@ from ontology_dashboard.postgresql_repositories import (
     PostgreSQLProjectRepository,
     PostgreSQLRoleWorkflowRepository,
 )
-from ontology_dashboard.projects import ProjectService
+from app.project import ProjectService
 
 from check_postgresql_migration import MIGRATION_DIR, REQUIRED_BINARIES, free_port, run
 

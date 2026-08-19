@@ -19,7 +19,7 @@ from ontology_dashboard.dependencies import (
 from app.identity import CSRF_COOKIE, IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
-from ontology_dashboard.projects import ProjectRepository, ProjectService
+from app.project import ProjectRepository, ProjectService
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 
 ROOT = Path(__file__).resolve().parents[1]

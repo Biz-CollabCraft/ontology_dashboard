@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from .project_context import ensure_scope_columns
+from app.project import ensure_scope_columns
 
 MIGRATION_ROOT = Path(
     os.getenv(

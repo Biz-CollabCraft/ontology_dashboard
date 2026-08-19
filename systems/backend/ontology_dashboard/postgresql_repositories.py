@@ -18,7 +18,7 @@ from argon2 import PasswordHasher
 
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
-from ontology_dashboard.projects.repository import ProjectRepository
+from app.project import ProjectRepository
 
 from .dashboard_catalog import seed_templates
 from .dashboard_repository import DashboardRepository

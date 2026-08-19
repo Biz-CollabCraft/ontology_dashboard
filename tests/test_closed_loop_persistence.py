@@ -29,7 +29,7 @@ from ontology_dashboard.closed_loop.integration import (
     MaintenanceStartedEvent,
 )
 from ontology_dashboard.closed_loop.repository import ClosedLoopRepository
-from ontology_dashboard.project_context import (
+from app.project import (
     DEFAULT_ORGANIZATION_ID,
     DEFAULT_PROJECT_ID,
     DEFAULT_WORKSPACE_ID,

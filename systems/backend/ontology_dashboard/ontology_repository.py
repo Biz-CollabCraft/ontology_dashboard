@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from ontology_dashboard.project_context import SQLiteProjectContextResolver, ensure_scope_columns
+from app.project import SQLiteProjectContextResolver, ensure_scope_columns
 
 
 InvocationState = Literal["running", "succeeded", "failed"]
