@@ -29,12 +29,13 @@
 
 ## 3. Endpoint
 
-| Method | Path | 목적 |
-|---|---|---|
-| GET | `/health` | 데몬 프로세스 상태 확인 |
-| POST | `/extraction` | 데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·원자적 영속화 (1단계) |
-| POST | `/internal/train` | 파이프라인 최초 학습 실행 (단일 프로세스 Lock 하에 실행) |
-| POST | `/internal/retrain` | 재학습 실행, 기존 모델을 덮어쓰지 않고 새 버전으로 저장 (Lock 하에 실행) |
+| Method | Path | 목적 | 상태 |
+|---|---|---|---|
+| GET | `/health` | 데몬 프로세스 상태 확인 | 완료 |
+| POST | `/extraction` | 데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·원자적 영속화 (1단계) | 완료 |
+| POST | `/feature` | Extraction Plan 소비, Feature·Label 생성 및 NPY/메타데이터 원자적 영속화 (2단계) | 완료 |
+| POST | `/internal/train` | 파이프라인 최초 학습 실행 (단일 프로세스 Lock 하에 실행) | 후속 단계 |
+| POST | `/internal/retrain` | 재학습 실행, 기존 모델을 덮어쓰지 않고 새 버전으로 저장 (Lock 하에 실행) | 후속 단계 |
 
 ## 4. 요청/응답 계약
 
@@ -106,7 +107,53 @@
 }
 ```
 
-### 4.3 `POST /internal/train`, `POST /internal/retrain`
+### 4.3 `POST /feature`
+
+> **단계 범위 명시**:
+> - `/feature`는 이미 발행된 `ExtractionPlan`을 조회·검증하여 시계열 피처 및 라벨을 생성하고 NPY 및 메타데이터를 원자적으로 발행합니다.
+> - Plan이 존재하지 않거나 버전이 불일치할 경우 `/extraction`을 자동 실행하지 않고 `EXTRACTION_PLAN_NOT_READY` (404) 또는 `EXTRACTION_PLAN_VERSION_MISMATCH` (422)로 실패합니다.
+> - 모델 학습 및 Model Artifact 발행은 후속 `/train` 단계이며, `/feature`가 모델 학습을 자동 실행하지 않습니다.
+
+**요청 본문:**
+
+```json
+{
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "extraction_plan_version": "extraction-plan-ai4i-canonical-ai4i-physics-v3.1",
+  "feature_schema_version": "pdm-feature-v2",
+  "label_schema_version": "pdm-label-v3",
+  "prediction_horizon_hours": 24,
+  "rebuild_npy": true,
+  "force": false,
+  "idempotency_key": "feature-20260819-001"
+}
+```
+
+**성공 응답 본문:**
+
+```json
+{
+  "request_id": "req-...",
+  "run_id": "feature-...",
+  "status": "succeeded",
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "extraction_plan_version": "extraction-plan-ai4i-canonical-ai4i-physics-v3.1",
+  "feature_schema_version": "pdm-feature-v2",
+  "label_schema_version": "pdm-label-v3",
+  "outputs": {
+    "feature_dataset_version": "feature-dataset-ai4i-canonical-ai4i-physics-v3.1",
+    "row_count": 10000,
+    "feature_count": 42,
+    "features_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-ai4i-canonical-ai4i-physics-v3.1/features.npy",
+    "labels_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-ai4i-canonical-ai4i-physics-v3.1/labels.npy",
+    "metadata_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-ai4i-canonical-ai4i-physics-v3.1/feature_metadata.json"
+  }
+}
+```
+
+### 4.4 `POST /internal/train`, `POST /internal/retrain`
 
 요청:
 

@@ -18,8 +18,13 @@ class ExtractionRepository:
     """Manages versioned storage of Extraction Plans and mappings with atomic publishing."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
-        self.base_dir = base_dir or (PATHS.models_store / "cache" / "extraction_plans")
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self._custom_base_dir = base_dir
+
+    @property
+    def base_dir(self) -> Path:
+        if self._custom_base_dir is not None:
+            return self._custom_base_dir
+        return PATHS.models_store / "cache" / "extraction_plans"
 
     def _plan_filename(self, dataset_id: str, dataset_version: str) -> str:
         safe_id = dataset_id.replace("/", "_").replace("\\", "_")
@@ -61,6 +66,7 @@ class ExtractionRepository:
             logger.info(f"[ExtractionRepository] Plan already exists at {target_path}, reusing without overwrite.")
             return self.get_logical_uri(dataset_id, dataset_version)
 
+        self.base_dir.mkdir(parents=True, exist_ok=True)
         temp_path = self.base_dir / f".tmp_{uuid.uuid4().hex}_{self._plan_filename(dataset_id, dataset_version)}"
         try:
             with open(temp_path, "w", encoding="utf-8") as f:
