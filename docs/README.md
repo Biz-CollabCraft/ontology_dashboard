@@ -12,6 +12,7 @@ API 계약과 팀 공유 문서를 관리한다.
 - [Closed-loop Runtime Overlay 통합 계약](./closed-loop-runtime-overlay-contract.md)
 - [Runtime Overlay 기존 계획 변경 영향 안내](./closed-loop-runtime-overlay-change-impact.md)
 - [아키텍처](./architecture.md)
+- [CI 개발 피드백 시간 단축 제안](./ci-development-feedback-optimization-proposal.md)
 - [Backend Domain-First Migration Map](./backend-migration-map.md)
 - [Architecture Decision Records](./architecture-decisions/README.md)
 - [MVP / Product documentation](./mvp/README.md)
