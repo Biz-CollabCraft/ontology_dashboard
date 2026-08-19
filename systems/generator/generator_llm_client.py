@@ -35,7 +35,7 @@ import json
 import re
 import logging
 from typing import Any, TypeVar, Optional, Literal
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT_DIR not in sys.path:
@@ -49,56 +49,6 @@ T = TypeVar("T", bound=BaseModel)
 
 
 # --- Pydantic Response Schemas ---
-
-class ExtractionStructureResponse(BaseModel):
-    structure_type: str = "tabular_column_as_attribute"
-    reason: Optional[str] = None
-
-
-class ExtractionColumnsResponse(BaseModel):
-    selected_columns: list[str] = Field(default_factory=list)
-
-
-class ExtractionPlanResponse(BaseModel):
-    structure_type: str = "tabular_column_as_attribute"
-    selected_columns: list[str] = Field(default_factory=list)
-    id_column: Optional[str] = None
-    time_column: Optional[str] = None
-    attribute_column: Optional[str] = None
-    value_column: Optional[str] = None
-    duplicate_policy: Literal["error", "aggregate"] = "error"
-    aggregation: Optional[Literal["mean", "first", "sum"]] = None
-    reason: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _validate_contract_rules(self) -> "ExtractionPlanResponse":
-        if self.duplicate_policy == "aggregate" and self.aggregation is None:
-            raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation")
-        if self.duplicate_policy == "error" and self.aggregation is not None:
-            raise ValueError("duplicate_policy='error' must not specify an aggregation")
-
-        if self.structure_type == "tabular_row_as_attribute":
-            if not self.id_column or not str(self.id_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'id_column'")
-            if not self.attribute_column or not str(self.attribute_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'attribute_column'")
-            if not self.value_column or not str(self.value_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'value_column'")
-
-            roles = [self.id_column, self.attribute_column, self.value_column]
-            if self.time_column and str(self.time_column).strip():
-                roles.append(self.time_column)
-
-            if len(roles) != len(set(roles)):
-                raise ValueError(f"Long-format role columns must be unique and cannot overlap: {roles}")
-
-            if self.selected_columns:
-                missing_in_selected = [r for r in roles if r not in self.selected_columns]
-                if missing_in_selected:
-                    raise ValueError(f"Long-format role columns {missing_in_selected} must be present in selected_columns")
-
-        return self
-
 
 class ColumnMappingResponse(BaseModel):
     ontology_node: str = "Unknown"
@@ -116,7 +66,7 @@ class FileProfileResponse(BaseModel):
 
 
 def call_llm(prompt: str, system: str = "You are a helpful assistant.") -> str:
-    """Generator 전용 LLM 호출 클라이언트 (RAW 텍스트 응답 수신 전용)."""
+    """OpenAI 또는 Vertex AI Gemini 모델을 호출하여 RAW 응답 텍스트를 반환한다."""
     load_config()
     provider = os.getenv("GENERATOR_LLM_PROVIDER", "openai").strip().lower()
     if provider == "openai":
@@ -178,97 +128,83 @@ def call_llm(prompt: str, system: str = "You are a helpful assistant.") -> str:
     raise ValueError(f"unsupported GENERATOR_LLM_PROVIDER: {provider!r}")
 
 
-def transform_to_structured_data(raw_text: str, expected_type: type = dict) -> Any | None:
-    """LLM 수신 응답 텍스트(raw_text)를 정규 JSON Dict/List 객체로 변환하는 변환기."""
-    if not raw_text or not isinstance(raw_text, str):
-        return None
+def clean_markdown_block(raw_text: str) -> str:
+    """응답 텍스트에서 ```json ... ``` 형태의 마크다운 코드 블록을 제거한다."""
+    text = raw_text.strip()
+    match = re.search(r"```(?:json|yaml)?\s*(.*?)\s*```", text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return text
 
-    cleaned = raw_text.strip()
 
-    # 1. 마크다운 코드 블록 태그 정제
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        if len(lines) >= 2 and lines[-1].strip().startswith("```"):
-            cleaned = "\n".join(lines[1:-1]).strip()
-
-    # 2. 규격 JSON 파싱
+def parse_multiformat(cleaned_text: str) -> Optional[dict]:
+    """JSON, YAML, Key-Value, CSV 순으로 다중 포맷 파싱을 시도한다."""
     try:
-        data = json.loads(cleaned)
-        if isinstance(data, expected_type):
+        data = json.loads(cleaned_text)
+        if isinstance(data, dict):
             return data
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    # 3. YAML 파싱
-    try:
-        yaml_data = yaml.safe_load(cleaned)
-        if isinstance(yaml_data, expected_type):
-            logger.info("[Transformer] YAML 응답을 성공적으로 구조체로 변환함")
-            return yaml_data
     except Exception:
         pass
 
-    # 4. Key-Value / 화살표 (->, =>, :, =) 라인 파싱 (dict 전용)
-    if expected_type is dict:
-        kv_result = {}
-        pattern = re.compile(r"^\s*[-*]?\s*[`'\"]?(\w+)[`'\"]?\s*(?:->|=>|:|=)\s*[`'\"]?(\w+)[`'\"]?", re.MULTILINE)
-        matches = pattern.findall(cleaned)
-        if matches:
-            for k, v in matches:
-                kv_result[k] = v
-            logger.info(f"[Transformer] Key-Value/화살표 문장 {len(kv_result)}개를 성공적으로 Dict로 변환함")
-            return kv_result
+    try:
+        import yaml
+        data = yaml.safe_load(cleaned_text)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
 
-        # 5. CSV / Tab 구분 라인 파싱
-        csv_result = {}
-        for line in cleaned.splitlines():
-            parts = re.split(r"[,;\t]+", line.strip())
-            if len(parts) == 2:
-                key, val = parts[0].strip(" -`'\""), parts[1].strip(" -`'\"")
-                if key and val and key != val:
-                    csv_result[key] = val
-        if csv_result:
-            logger.info(f"[Transformer] CSV/Tab 구분 라인 {len(csv_result)}개를 성공적으로 Dict로 변환함")
-            return csv_result
+    try:
+        kv_data = {}
+        lines = cleaned_text.strip().splitlines()
+        for line in lines:
+            if ":" in line:
+                k, v = line.split(":", 1)
+                k = k.strip().strip("- ")
+                v = v.strip()
+                if k:
+                    try:
+                        v = json.loads(v)
+                    except Exception:
+                        pass
+                    kv_data[k] = v
+        if kv_data:
+            return kv_data
+    except Exception:
+        pass
 
-    logger.warning("[Transformer] 모든 응답 형식(JSON/YAML/KV/CSV) 변환 실패 -> Rule-based 폴백 전달")
+    try:
+        import io
+        import csv
+        reader = csv.DictReader(io.StringIO(cleaned_text))
+        rows = list(reader)
+        if rows and isinstance(rows[0], dict):
+            return rows[0]
+    except Exception:
+        pass
+
     return None
 
 
 def validate_or_transform_pydantic(raw_text: str, pydantic_cls: type[T]) -> Optional[T]:
-    """
-    Pydantic 스키마 검증 ➔ 실패 시 Multi-Format Transformer ➔ Pydantic 스키마 재검증 4단계 파이프라인.
-    """
-    if not raw_text:
-        return None
+    """LLM RAW 텍스트를 Pydantic 모델로 파싱/검증/변환하는 4단계 파이프라인."""
+    cleaned = clean_markdown_block(raw_text)
 
-    # 1. Pydantic 직접 검증 시도
     try:
-        cleaned = raw_text.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.splitlines()
-            if len(lines) >= 2 and lines[-1].strip().startswith("```"):
-                cleaned = "\n".join(lines[1:-1]).strip()
-        return pydantic_cls.model_validate_json(cleaned)
+        data = json.loads(cleaned)
+        return pydantic_cls.model_validate(data)
     except Exception:
         pass
 
-    # 2. 다중 변환기(JSON/YAML/KV/CSV) 시도
-    transformed = transform_to_structured_data(raw_text, expected_type=dict)
-    if transformed and isinstance(transformed, dict):
+    logger.warning(f"[GeneratorLLM] Stage 1 JSON validation failed for {pydantic_cls.__name__}. Trying Stage 2 multi-format transformation.")
+    transformed_dict = parse_multiformat(cleaned)
+    if transformed_dict:
         try:
-            return pydantic_cls.model_validate(transformed)
+            return pydantic_cls.model_validate(transformed_dict)
         except Exception as e:
-            logger.warning(f"[PydanticValidator] Transformed dict validation failed for {pydantic_cls.__name__}: {e}")
+            logger.warning(f"[GeneratorLLM] Stage 3 schema validation failed for {pydantic_cls.__name__}: {e}")
+    else:
+        logger.warning(f"[GeneratorLLM] Stage 2 multi-format transformation could not parse text.")
 
-    logger.warning(f"[PydanticValidator] Failed to validate or transform raw text for {pydantic_cls.__name__}")
+    logger.error(f"[GeneratorLLM] Fail-Fast: All validation/transformation stages failed for {pydantic_cls.__name__}.")
     return None
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    print("=== Generator LLM Client Standalone Self-Test ===")
-    sample_raw = "```yaml\nstructure_type: wide_pivot\nreason: wide format\n```"
-    res = validate_or_transform_pydantic(sample_raw, ExtractionStructureResponse)
-    assert res is not None and res.structure_type == "wide_pivot", f"Failed: {res}"
-    print("[SUCCESS] Pydantic validator & transformer self-test passed!")
