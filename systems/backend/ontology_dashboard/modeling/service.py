@@ -1603,7 +1603,7 @@ class ModelingService:
             calibration_method=None,
             calibration_artifact=None,
             confidence_status="unavailable_uncalibrated",
-            threshold_policy=threshold_policy.model_dump(mode="python"),
+            threshold_policy=threshold_policy,
             explanation_provider=explanation_provider,
             explanation_provider_version="1",
             limitations=list(report.get("limitations", [])),

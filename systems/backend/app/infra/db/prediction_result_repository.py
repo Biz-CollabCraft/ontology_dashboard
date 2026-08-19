@@ -30,7 +30,7 @@ class PredictionResultRepository:
         self,
         database_path: str | Path,
         *,
-        project_context: ProjectContextResolverPort | None = None,
+        project_context: ProjectContextResolverPort,
     ) -> None:
         self.path = Path(database_path)
         self.project_context = project_context
@@ -47,15 +47,11 @@ class PredictionResultRepository:
 
     def save(self, result: PredictionResult) -> dict[str, Any]:
         with self._connect() as connection:
-            scope = (
-                self.project_context.resolve(
-                    result.workspace_id,
-                    expected_organization_id=result.organization_id,
-                    expected_project_id=result.project_id,
-                    connection=connection,
-                )
-                if self.project_context is not None
-                else result
+            scope = self.project_context.resolve(
+                result.workspace_id,
+                expected_organization_id=result.organization_id,
+                expected_project_id=result.project_id,
+                connection=connection,
             )
             connection.execute(
                 """
@@ -115,13 +111,12 @@ class PredictionResultRepository:
         parameters: list[Any] = [organization_id, project_id]
         if workspace_id is not None:
             with self._connect() as connection:
-                if self.project_context is not None:
-                    self.project_context.resolve(
-                        workspace_id,
-                        expected_organization_id=organization_id,
-                        expected_project_id=project_id,
-                        connection=connection,
-                    )
+                self.project_context.resolve(
+                    workspace_id,
+                    expected_organization_id=organization_id,
+                    expected_project_id=project_id,
+                    connection=connection,
+                )
             clauses.append("workspace_id=?")
             parameters.append(workspace_id)
         parameters.append(limit)

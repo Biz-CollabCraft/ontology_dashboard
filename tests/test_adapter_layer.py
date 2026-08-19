@@ -195,7 +195,11 @@ def test_prediction_contract_requires_evidence_and_project_scope(adapter_databas
         workspace_id="azure-fleet-maintenance",
     )
     result = PredictionResult.model_validate(payload)
-    repository = PredictionResultRepository(adapter_database)
+    context = FileAdapter(
+        adapter_database,
+        allowed_roots=[adapter_database.parent],
+    ).repository.project_context
+    repository = PredictionResultRepository(adapter_database, project_context=context)
     saved = repository.save(result)
     assert saved["project_id"] == "azure-fleet-maintenance-project"
     assert repository.list(
@@ -208,6 +212,17 @@ def test_prediction_contract_requires_evidence_and_project_scope(adapter_databas
             project_id="azure-fleet-maintenance-project",
         )
     ) == 1
+
+    out_of_scope = result.model_copy(
+        update={
+            "prediction_id": "prediction-out-of-scope",
+            "organization_id": "attacker-org",
+            "project_id": "attacker-project",
+            "workspace_id": "totally-unknown-workspace",
+        }
+    )
+    with pytest.raises(ValueError, match="workspace"):
+        repository.save(out_of_scope)
 
     invalid = dict(payload)
     invalid["prediction_id"] = "prediction-without-evidence"
