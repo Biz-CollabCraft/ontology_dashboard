@@ -761,12 +761,9 @@ class PredictiveMaintenanceRuntimeService:
     ) -> GovernedProductResult:
         factors = self._factor_models(row.get("top_factors"))
         producer_artifact: dict[str, Any] | None = None
-        effective_source_contract = source_contract
         if source_contract == "result_artifact":
             producer_artifact = self._stored_producer_artifact(row)
-            if producer_artifact is None:
-                effective_source_contract = "prediction_snapshot_compatibility"
-        if effective_source_contract == "result_artifact":
+        if source_contract == "result_artifact":
             provenance = _dict(row.get("provenance"))
             recommendation_raw = _dict(row.get("recommended_action"))
             prediction_task = str(row["prediction_task"])
@@ -805,7 +802,7 @@ class PredictiveMaintenanceRuntimeService:
             source_type = "prediction_snapshot_compatibility"
 
         predicted_type = str(row.get("predicted_failure_type") or "")
-        if effective_source_contract == "prediction_snapshot_compatibility" and predicted_type not in {
+        if source_contract == "prediction_snapshot_compatibility" and predicted_type not in {
             "failure_risk",
             "no_significant_risk",
         }:
@@ -821,13 +818,13 @@ class PredictiveMaintenanceRuntimeService:
             row=row,
             factors=factors,
             recommendation=recommendation,
-            source_contract=effective_source_contract,
+            source_contract=source_contract,
             source_checksum=source_checksum,
             prediction_task=prediction_task,
             model_version=model_version,
         )
         return GovernedProductResult(
-            source_contract=effective_source_contract,
+            source_contract=source_contract,
             artifact_id=(
                 str(row["artifact_id"]) if row.get("artifact_id") is not None else None
             ),
@@ -850,7 +847,7 @@ class PredictiveMaintenanceRuntimeService:
                 source_version=context.source_version,
                 bundle_checksum_sha256=context.bundle_checksum_sha256,
                 result_artifact_source_sha256=(
-                    source_checksum if effective_source_contract == "result_artifact" else None
+                    source_checksum if source_contract == "result_artifact" else None
                 ),
                 prediction_id=str(row["prediction_id"]),
                 prediction_result_id=str(row["prediction_result_id"]),

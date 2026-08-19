@@ -343,6 +343,8 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     )
     assert page.latest_product_contract == "result_artifact"
     assert page.total == len(page.items) == 2
+    assert {item.source_contract for item in page.items} == {"result_artifact"}
+    assert all(item.producer_artifact is None for item in page.items)
     assert page.context.source_version == "canonical-ai4i-physics-v3.1"
     assert page.context.bundle_checksum_sha256 == manifest.bundle_checksum_sha256
     assert page.context.graph.status == "failed"
@@ -697,66 +699,7 @@ def test_v2_v3_runtime_versions_and_release_overview_are_immutable(
     assert dashboard.data_source.model_version == "independent-logreg-v3.1"
     assert dashboard.data_source.result_artifact_count == 2
     assert dashboard.events
-    assert dashboard.selected_event_detail is not None
-    assert dashboard.selected_event_detail.evidence["schema_version"] == "1.0"
-    assert dashboard.selected_event_detail.evidence["model"]["mode"] == "deterministic_fallback"
-    assert dashboard.selected_event_detail.evidence["top_factors"][0]["evidence_field_id"].startswith("factor.1.")
-    assert dashboard.selected_event_detail.evidence["maintenance_context"]["source_type"] == (
-        "canonical_maintenance_evidence"
-    )
-    assert dashboard.selected_event_detail.evidence["lineage"]["dataset_version_id"] == (
-        v3_ingestion.dataset_version_id
-    )
-    assert dashboard.selected_event_detail.report["locale"] == "ko-KR"
-    assert "고장 위험" in dashboard.selected_event_detail.report["headline"]
-    selected_event = next(
-        item for item in dashboard.events if item.event_id == dashboard.selected_event_id
-    )
-    assert all(
-        datetime.fromisoformat(item["completed_at"]) <= selected_event.observed_at
-        for item in dashboard.selected_event_detail.maintenance_events
-    )
-
-    english_dashboard = service.dashboard(
-        organization_id="org-test",
-        project_id="project-test",
-        workspace_id="workspace-test",
-        user_id="runtime-user-other",
-        dataset_version_id=None,
-        selected_event_id=dashboard.selected_event_id,
-        role="engineer",
-        intent="overview",
-        locale="en-US",
-    )
-    assert english_dashboard.selected_event_detail is not None
-    assert english_dashboard.selected_event_detail.report["locale"] == "en-US"
-    assert "failure risk" in english_dashboard.selected_event_detail.report["headline"]
-    assert (
-        dashboard.selected_event_detail.report["report_id"]
-        != english_dashboard.selected_event_detail.report["report_id"]
-    )
-    canonical_dashboard = service.dashboard(
-        organization_id="org-test",
-        project_id="project-test",
-        workspace_id="workspace-test",
-        user_id="runtime-user-other",
-        dataset_version_id=None,
-        selected_event_id=dashboard.selected_event_id,
-        role="engineer",
-        intent="overview",
-        locale="ko-KR",
-        view="canonical",
-    )
-    assert canonical_dashboard.selected_event_detail is not None
-    canonical_evidence = canonical_dashboard.selected_event_detail.evidence
-    assert canonical_evidence["schema_version"] == "event-evidence-projection-v1"
-    assert canonical_evidence["contract_type"] == "event_evidence_projection"
-    assert canonical_evidence["event_id"] == dashboard.selected_event_id
-    assert canonical_evidence["artifact_reference"]["artifact_type"] == "predictive_maintenance_result"
-    assert canonical_evidence["report_projection"]["evidence_trace"]
-    assert canonical_evidence["artifact_reference"]["evidence_payload_reference"]["generated_by"] == (
-        "systems.backend.app.diagnosis.evidence_enrichment"
-    )
+    assert dashboard.selected_event_detail is None
 
     overview = service.release_overview(
         organization_id="org-test",
@@ -832,7 +775,7 @@ def test_result_replay_http_and_sse_contracts_are_scoped(
                 params={"dataset_version_id": ingestion.dataset_version_id},
             )
             assert dashboard.status_code == 200, dashboard.text
-            assert dashboard.json()["selected_event_detail"]["evidence"]["schema_version"] == "1.0"
+            assert dashboard.json()["selected_event_detail"] is None
 
             canonical_dashboard = client.get(
                 f"{base}/dashboard",
@@ -842,9 +785,7 @@ def test_result_replay_http_and_sse_contracts_are_scoped(
                 },
             )
             assert canonical_dashboard.status_code == 200, canonical_dashboard.text
-            canonical_evidence = canonical_dashboard.json()["selected_event_detail"]["evidence"]
-            assert canonical_evidence["schema_version"] == "event-evidence-projection-v1"
-            assert canonical_evidence["contract_type"] == "event_evidence_projection"
+            assert canonical_dashboard.json()["selected_event_detail"] is None
 
             timeline = client.get(
                 f"{base}/timeline",
