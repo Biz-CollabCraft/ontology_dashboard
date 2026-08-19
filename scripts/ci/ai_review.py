@@ -41,10 +41,14 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             ".github/workflows/**",
             "render.yaml",
             "contracts/**",
-            "schemas/**",
+            "contracts/schemas/**",
+            "docs/architecture*.md",
+            "docs/backend-migration-map.*",
+            "systems/backend/README.md",
         ],
         "context": [
             "docs/architecture.md",
+            "docs/backend-migration-map.md",
             "docs/mvp/runtime-ownership-integration.md",
             "docs/architecture-decisions/ADR-001-unified-feature-contract.md",
             "docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md",
@@ -65,6 +69,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
     },
     "closed_loop": {
         "paths": [
+            "systems/backend/app/maintenance/**",
             "systems/backend/**/closed_loop/**",
             "tests/test_closed_loop_domain_contract.py",
             "docs/closed-loop-*.md",

@@ -26,6 +26,13 @@ class AiReviewAutomationTests(unittest.TestCase):
         self.assertIn("architecture", categories)
         self.assertIn("closed_loop", categories)
 
+    def test_context_router_selects_maintenance_as_closed_loop(self):
+        categories = route_context(
+            ["systems/backend/app/maintenance/maintenance_service.py"]
+        )
+        self.assertIn("architecture", categories)
+        self.assertIn("closed_loop", categories)
+
     def test_context_router_selects_frontend_mvp_operations_docs(self):
         categories = route_context(
             ["systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx"]
@@ -52,6 +59,12 @@ class AiReviewAutomationTests(unittest.TestCase):
         self.assertNotIn(
             "docs/mvp/history/2026-08-week2/frontend-implementation-import.md", paths
         )
+
+    def test_architecture_context_includes_backend_migration_map(self):
+        categories = route_context(["docs/backend-migration-map.md"])
+        self.assertIn("architecture", categories)
+        paths = context_documents(categories, DEFAULT_CONTEXT_ROUTING)
+        self.assertIn("docs/backend-migration-map.md", paths)
 
     def test_closed_loop_context_includes_product_api_ui_consumption_contract(self):
         categories = route_context(

@@ -80,8 +80,7 @@ API / systems/frontend / Report
 3. Backend가 sibling generator 디렉터리, `model_store`, `../generator/...` 물리 경로를 탐색하면 안 된다.
 4. Generator/Backend 경계는 Python import가 아니라 versioned Model Artifact contract로 연결한다.
 5. Backend가 `gen_data` prediction/result fixture를 최신 operational runtime result처럼 직접 읽으면 안 된다.
-6. `systems/backend/ontology_dashboard/modeling`과 `ml/src/factory_signal_ml`은 compatibility port/adapter일 수
-   있으나 semantic mapping, feature build, model training 또는 runtime inference의 canonical owner가 되면 안 된다.
+6. `systems/backend/ontology_dashboard`는 정식 compatibility architecture가 아니라 제거 대상 legacy migration source다. Migration 완료 전까지 한시적으로 존재할 수 있으나 신규 기능 또는 신규 파일 추가는 금지한다.
 7. Model Artifact의 실제 위치는 `MODEL_ARTIFACT_URI` 또는 동등한 injected provider로 전달해야 한다.
 8. incompatible/corrupt Model Artifact를 임의 sibling file이나 heuristic으로 조용히 대체하면 안 된다.
 9. `development`, `dev`, `deploy`, `staging`, `production`에서는 Model Artifact가 없을 때 heuristic fallback이
@@ -116,6 +115,16 @@ API / systems/frontend / Report
     운영 ID나 결과 상태를 추측하지 않게 한다.
 29. Runtime Overlay의 inference readiness는 Backend Diagnosis만 판정한다. `gen_data`가 Model Artifact 또는
     `history_requirement.json`을 읽거나 Observation availability를 `ready`로 선언하면 안 된다.
+30. `systems/backend/app`이 제품 Backend Python package의 유일한 canonical root이며, `common`은 둘 이상의 도메인에서 재사용되는 비업무 cross-cutting 요소에 한해 승격한다 (도메인 고유 개념은 도메인이 계속 소유).
+31. 도메인 간 임의 `*_service.py` 또는 `*_repository.py`/`*_adapter.py` direct import를 금지하며, public port/interface를 경유한다.
+32. 도메인 서비스/로직 레이어에서 `FastAPI`(`HTTPException` 등) 및 DB/Storage 기술 라이브러리를 직접 import/의존하지 않는다.
+33. `infra/`는 순수 기술 구현만 포함하며 상위 도메인 서비스를 import/역의존하지 않는다.
+34. 최상위에 `routers/`, `adapters/`, `closed_loop/`, `orchestration/` 등 기술 중심 패키지를 신설하지 않고 domain-first(`app/{domain}/`) 원칙을 따른다.
+35. 레거시 Source는 [`backend-migration-map.md`](./backend-migration-map.md)의
+    `MOVE | SPLIT | REPLACE | REMOVE | DEFER` 처분을 따라야 한다. 현재 import·테스트된다는
+    이유만으로 자동 이관하지 않으며, Phase 14 전에는 미배정·`UNDECIDED`·`DEFER`를 0건으로 해소한다.
+36. 도메인 전용 예외는 각 도메인의 `{domain}_exception.py`에 정의하고, 범도메인 공통 예외는 `common/exceptions.py`로 정의하며, 도메인 레이어에서 `FastAPI`의 `HTTPException`을 직접 import/발생시키지 않는다.
+37. `systems/backend/ontology_dashboard/modeling`과 `ml/src/factory_signal_ml`은 compatibility port/adapter일 수 있으나 semantic mapping, feature build, model training 또는 runtime inference의 canonical owner가 되면 안 된다.
 
 15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.
 
@@ -134,6 +143,11 @@ Closed-loop Domain/API/UI를 변경하는 PR에서 적용한다.
 
 29번은 [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
 근거로 하며 정비 후 Observation/Prediction handoff를 변경하는 PR에서 적용한다.
+
+30~36번은 `docs/architecture.md` §5 Backend Domain-First 구조 계약, §9 Architecture CI 목표 및 [`backend-migration-map.md`](./backend-migration-map.md)를 근거로 한다.
+
+37번은 §4 Model Artifact/Result Artifact 구분과 §5 Backend ownership 계약을 근거로 한다.
+
 
 ## 4. Model Artifact / Result Artifact 구분
 
