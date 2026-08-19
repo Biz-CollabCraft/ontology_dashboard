@@ -89,7 +89,7 @@ def postgresql_database():
         applied = migrate(dsn)
         assert "0029_governed_event_automation" in applied
         assert "0030_closed_loop_operations" in applied
-        assert "0030_predictive_maintenance_runtime_overlay" in applied
+        assert "0031_predictive_maintenance_runtime_overlay" in applied
         assert migrate(dsn) == []
         import psycopg
 
