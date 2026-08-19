@@ -6,7 +6,7 @@ import uuid
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from ..contracts import DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
 from ..dependencies import (
@@ -92,15 +92,7 @@ def get_evidence(
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     _require_active_event_project(principal, service, event_id)
-    try:
-        return service.evidence(event_id, view=view)
-    except RuntimeError as error:
-        if "MODEL_ARTIFACT_URI is required" in str(error):
-            raise HTTPException(
-                status_code=503,
-                detail="Predictive model is unavailable. Evidence is temporarily unavailable.",
-            ) from error
-        raise
+    return service.evidence(event_id, view=view)
 
 
 @router.post("/events/{event_id}/report")
@@ -113,18 +105,10 @@ def create_report(
 ):
     _require_active_event_project(principal, service, event_id)
     role = identity.legacy_dashboard_role(principal, request.role)
-    try:
-        report, trace = service.report(
-            event_id,
-            ReportRequest(role=role, locale=request.locale, use_llm=request.use_llm),
-        )
-    except RuntimeError as error:
-        if "MODEL_ARTIFACT_URI is required" in str(error):
-            raise HTTPException(
-                status_code=503,
-                detail="Predictive model is unavailable. Report is temporarily unavailable.",
-            ) from error
-        raise
+    report, trace = service.report(
+        event_id,
+        ReportRequest(role=role, locale=request.locale, use_llm=request.use_llm),
+    )
     return {"report": report.model_dump(mode="json"), "trace": trace}
 
 
