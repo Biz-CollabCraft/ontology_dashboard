@@ -1,6 +1,7 @@
 import {
   Boxes,
   ClipboardCheck,
+  ClipboardList,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -16,6 +17,7 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
   { id: "overview", label: "Overview", description: "위험 현황과 우선순위", icon: LayoutDashboard },
   { id: "objects", label: "Objects", description: "설비 목록과 근거", icon: Boxes },
   { id: "operations", label: "Operations", description: "점검·판단 업무", icon: ClipboardCheck },
+  { id: "inspection-report", label: "Inspection Report", description: "점검 요청과 근거 추적", icon: ClipboardList },
   { id: "executive-report", label: "Event Executive Brief", description: "선택 Event 보고와 출력", icon: FileText },
 ];
 
@@ -76,7 +78,7 @@ export function MvpShell({
 
       <div className="mvp-workspace">
         <aside className={`mvp-navigation ${mobileOpen ? "is-open" : ""}`} aria-label="MVP 화면">
-          <div className="mvp-nav-intro"><span>MENTORING SCOPE</span><strong>4-screen flow</strong><p>Analysis 없이 운영 판단부터 보고까지 연결합니다.</p></div>
+          <div className="mvp-nav-intro"><span>MENTORING SCOPE</span><strong>Dashboard side tabs</strong><p>Analysis 없이 운영 판단부터 점검 보고까지 연결합니다.</p></div>
           <nav>
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;

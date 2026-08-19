@@ -44,4 +44,15 @@ describe("MVP URL selection contract", () => {
     expect(params.get("asset_id")).toBe("CNC S01");
     expect(params.get("event_id")).toBe("EVENT#1");
   });
+
+  it("accepts the dashboard side-tab inspection report view", () => {
+    const selection = parseMvpSelection({
+      projectId: "project-a",
+      search: "?view=inspection-report&asset_id=CNC-2&event_id=EVENT-2",
+      defaultRole: "process_manager",
+    });
+    expect(selection.view).toBe("inspection-report");
+    expect(selection.assetId).toBe("CNC-2");
+    expect(selection.eventId).toBe("EVENT-2");
+  });
 });
