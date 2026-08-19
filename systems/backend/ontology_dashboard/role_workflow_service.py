@@ -9,7 +9,7 @@ from .contracts import ReportRequest
 from .dashboard_models import DashboardTemplatePublishRequest
 from .dashboard_service import DashboardService
 from app.identity import AuthError, Principal
-from app.project import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from app.ontology.ontology_domain import registry_payload
 from app.ontology.ontology_service import OntologyService
 from app.infra.db.ontology_action_repository import OntologyActionRepository

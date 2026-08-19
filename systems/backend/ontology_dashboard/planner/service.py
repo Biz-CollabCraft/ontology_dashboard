@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from ..dashboard_models import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
 from ..dashboard_service import DashboardService
 from app.identity import AuthError, Principal
-from app.project import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from app.infra.llm import LLMProvider

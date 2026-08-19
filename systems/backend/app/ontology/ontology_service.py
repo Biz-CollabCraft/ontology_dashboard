@@ -78,6 +78,12 @@ class OntologyAccessError(RuntimeError):
 
 
 class OntologyService:
+    @staticmethod
+    def object_type_registry() -> dict[str, Any]:
+        """Expose registered Object Types through the Ontology-owned read boundary."""
+
+        return dict(OBJECT_TYPE_BY_ID)
+
     def __init__(
         self,
         source: OntologyRuntimeSource,
