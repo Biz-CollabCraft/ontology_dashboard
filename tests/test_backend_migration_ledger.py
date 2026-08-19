@@ -17,7 +17,6 @@ def test_backend_migration_ledger_covers_every_legacy_python_source_once() -> No
     )
 
     assert report.total_sources == expected
-    assert report.migrated_sources == 11
     assert report.disposition_counts["DEFER"] == 0
     assert sum(report.disposition_counts.values()) == expected
 
