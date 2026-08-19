@@ -973,9 +973,23 @@ def comment_requires_reasoning(event: dict[str, Any]) -> tuple[bool, str]:
     """
 
     review = event.get("review") if isinstance(event.get("review"), dict) else {}
+    comment = event.get("comment") if isinstance(event.get("comment"), dict) else {}
     state = str((review or {}).get("state") or "").upper()
     if state in {"APPROVED", "CHANGES_REQUESTED"}:
         return True, f"formal pull_request_review state={state}"
+    source = review or comment
+    body = str((source or {}).get("body") or "")
+    lower = body.lower()
+    if re.search(r"\[p[01]\]", lower):
+        return True, "high-severity P0/P1 technical finding"
+    if re.search(
+        r"security|보안|credential|secret|oidc|authorization|authentication|\bauth\b|인증|권한",
+        lower,
+    ):
+        return True, "security/authentication-sensitive technical discussion"
+    path = str((comment or {}).get("path") or "")
+    if path.startswith(".github/workflows/"):
+        return True, "privileged GitHub workflow review comment"
     return False, "ordinary technical comment/review discussion"
 
 

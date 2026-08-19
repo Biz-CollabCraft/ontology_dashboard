@@ -166,6 +166,23 @@ class AiReviewAutomationTests(unittest.TestCase):
         self.assertFalse(reasoning)
         self.assertIn("ordinary technical", reason)
 
+        reasoning, reason = comment_requires_reasoning(
+            {"comment": {"body": "[P1] OIDC 권한 경계가 fail-open입니다"}}
+        )
+        self.assertTrue(reasoning)
+        self.assertIn("P0/P1", reason)
+
+        reasoning, reason = comment_requires_reasoning(
+            {
+                "comment": {
+                    "body": "이 부분은 P2 수준이지만 workflow 변경입니다",
+                    "path": ".github/workflows/code-review.yml",
+                }
+            }
+        )
+        self.assertTrue(reasoning)
+        self.assertIn("workflow", reason)
+
     def test_free_comment_quality_gate_requires_verdict_and_accept_json(self):
         self.assertTrue(
             _draft_is_well_formed(
