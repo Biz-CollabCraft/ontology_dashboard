@@ -8,23 +8,76 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from app.infra.db.project_repository import SQLiteProjectContextResolver, ensure_scope_columns
+from app.infra.db.migrations import ensure_scope_columns
+from app.dashboard.catalog import seed_templates
+from app.dashboard.dashboard_schema import DashboardTemplateSnapshot, SavedViewRecord
+from app.dashboard.dashboard_exception import DashboardPreferenceConflict
 
-from .dashboard_catalog import seed_templates
-from .dashboard_models import DashboardTemplateSnapshot, SavedViewRecord
+
+class ProjectScope(Protocol):
+    organization_id: str
+    project_id: str
+    workspace_id: str
 
 
-class DashboardPreferenceConflict(RuntimeError):
-    pass
+class ProjectContextResolverPort(Protocol):
+    def resolve(
+        self,
+        workspace_id: str,
+        *,
+        expected_organization_id: str | None = None,
+        expected_project_id: str | None = None,
+        connection: sqlite3.Connection | None = None,
+    ) -> ProjectScope: ...
+
+
+class _SQLiteScope:
+    def __init__(self, organization_id: str, project_id: str, workspace_id: str) -> None:
+        self.organization_id = organization_id
+        self.project_id = project_id
+        self.workspace_id = workspace_id
+
+
+class _SQLiteWorkspaceScopeLookup:
+    """Persistence-only fallback used when composition has not injected Project context yet."""
+
+    def resolve(
+        self,
+        workspace_id: str,
+        *,
+        expected_organization_id: str | None = None,
+        expected_project_id: str | None = None,
+        connection: sqlite3.Connection | None = None,
+    ) -> _SQLiteScope:
+        if connection is None:
+            raise RuntimeError("dashboard scope lookup requires an active repository connection")
+        row = connection.execute(
+            "SELECT organization_id,project_id FROM workspaces WHERE id=?",
+            (workspace_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(workspace_id)
+        organization_id = str(row[0])
+        project_id = str(row[1])
+        if expected_organization_id is not None and organization_id != expected_organization_id:
+            raise PermissionError("workspace organization scope mismatch")
+        if expected_project_id is not None and project_id != expected_project_id:
+            raise PermissionError("workspace project scope mismatch")
+        return _SQLiteScope(organization_id, project_id, workspace_id)
 
 
 class DashboardRepository:
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(
+        self,
+        database_path: str | Path,
+        *,
+        project_context: ProjectContextResolverPort | None = None,
+    ) -> None:
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.project_context = SQLiteProjectContextResolver(self.path)
+        self.project_context = project_context or _SQLiteWorkspaceScopeLookup()
         self._template_cache: dict[
             tuple[str, str], tuple[float, DashboardTemplateSnapshot]
         ] = {}

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.dashboard.dashboard_schema import DashboardTemplatePublishRequestCreate
 
 
 class StrictModel(BaseModel):
@@ -40,13 +41,7 @@ class FieldTaskActionRequest(StrictModel):
         return items
 
 
-class TemplatePublishRequestCreate(StrictModel):
-    workspace_id: str
-    target_role: str
-    display_name: str = Field(min_length=1, max_length=120)
-    tabs: list[dict[str, Any]]
-    parameter_definitions: list[dict[str, Any]] = Field(default_factory=list)
-    change_summary: str = Field(min_length=2, max_length=500)
+TemplatePublishRequestCreate = DashboardTemplatePublishRequestCreate
 
 
 class ModelReleaseRequestCreate(StrictModel):

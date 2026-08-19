@@ -15,18 +15,26 @@ from .dependencies import (
     client_ip,
     current_principal,
     get_dataset_catalog_service,
+    get_dashboard_service,
     get_governance_service,
     get_identity_service,
     get_maintenance_application_service,
+    get_ontology_service,
     get_ontology_planner_service,
     get_project_service,
     get_predictive_maintenance_runtime_service,
     get_rate_limiter,
+    get_role_workflow_service,
     get_service,
     rate_limit_subject,
     require_csrf,
     require_permission,
     set_auth_cookies,
+)
+from app.dashboard import (
+    DashboardAccessError,
+    DashboardNotFoundError,
+    build_dashboard_router,
 )
 from app.governance import GovernanceAccessError, build_governance_router
 from app.identity import AuthError
@@ -38,7 +46,6 @@ from .routers.adapters import router as adapters_router
 from .routers.agent import router as agent_router
 from .routers.admin import router as admin_router
 from .routers.analyses import router as analyses_router
-from .routers.dashboards import router as dashboards_router
 from .routers.exports import router as exports_router
 from .routers.manufacturing import router as manufacturing_router
 from .routers.modeling import router as modeling_router
@@ -88,6 +95,15 @@ projects_router = build_project_router(
     require_csrf=require_csrf,
 )
 
+dashboards_router = build_dashboard_router(
+    get_dashboard_service=get_dashboard_service,
+    get_identity_service=get_identity_service,
+    get_ontology_service=get_ontology_service,
+    get_role_workflow_service=get_role_workflow_service,
+    get_event_query_service=get_service,
+    require_csrf=require_csrf,
+    require_permission=require_permission,
+)
 governance_router = build_governance_router(
     get_governance_service=get_governance_service,
     require_permission=require_permission,
@@ -99,6 +115,22 @@ maintenance_router = build_maintenance_router(
     require_permission=require_permission,
     require_csrf=require_csrf,
 )
+
+
+@app.exception_handler(DashboardNotFoundError)
+async def dashboard_not_found_handler(_: Request, exc: DashboardNotFoundError) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={"error": {"code": "not_found", "message": f"resource not found: {exc.args[0]}"}},
+    )
+
+
+@app.exception_handler(DashboardAccessError)
+async def dashboard_access_error_handler(_: Request, exc: DashboardAccessError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
 
 
 @app.exception_handler(EventNotFound)

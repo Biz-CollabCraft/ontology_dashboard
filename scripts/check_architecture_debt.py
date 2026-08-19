@@ -75,12 +75,6 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         "repository",
         "service",
     )
-    dashboard_modules = (
-        "dashboard_models",
-        "dashboard_catalog",
-        "dashboard_repository",
-        "dashboard_service",
-    )
     analysis_modules = (
         "analysis_models",
         "analysis_repository",
@@ -172,8 +166,24 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         )
     )
     dashboard_relocated = all(
-        _canonical_with_optional_legacy_shim(root, module)
-        for module in dashboard_modules
+        (root / path).is_file()
+        for path in (
+            "systems/backend/app/dashboard/dashboard_schema.py",
+            "systems/backend/app/dashboard/catalog.py",
+            "systems/backend/app/dashboard/dashboard_service.py",
+            "systems/backend/app/dashboard/dashboard_router.py",
+            "systems/backend/app/dashboard/ports.py",
+            "systems/backend/app/infra/db/dashboard_repository.py",
+        )
+    ) and all(
+        not (root / path).exists()
+        for path in (
+            "systems/backend/ontology_dashboard/dashboard_models.py",
+            "systems/backend/ontology_dashboard/dashboard_catalog.py",
+            "systems/backend/ontology_dashboard/dashboard_repository.py",
+            "systems/backend/ontology_dashboard/dashboard_service.py",
+            "systems/backend/ontology_dashboard/routers/dashboards.py",
+        )
     )
     analysis_relocated = all(
         _canonical_with_optional_legacy_shim(root, module)
@@ -231,8 +241,8 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="dashboard_physical_relocation",
             state="resolved" if dashboard_relocated else "regression",
             stage=55,
-            evidence="canonical Dashboard models, catalog, repository and service with compatibility-only legacy re-exports",
-            action="Keep Dashboard contracts, catalog constants, repository cache and service implementation physically canonical.",
+            evidence="app/dashboard contracts, catalog, service/router plus app/infra/db persistence",
+            action="Keep Dashboard read-model composition physically canonical and prevent legacy dashboard modules from returning.",
         ),
         DebtItem(
             id="analysis_physical_relocation",

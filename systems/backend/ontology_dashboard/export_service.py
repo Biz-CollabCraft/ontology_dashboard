@@ -20,10 +20,12 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from .dashboard_service import DashboardService
+from app.dashboard.dashboard_service import DashboardService
+from app.infra.db.dashboard_repository import DashboardRepository
 from .export_models import ExportArtifact, ExportCheckpoint, ExportRequest
 from .export_repository import ExportRepository
 from app.identity import Principal
+from .project_context import SQLiteProjectContextResolver
 from .role_workflow_service import RoleWorkflowService
 from .service import FactorySignalService
 
@@ -49,7 +51,12 @@ class ExportService:
     ) -> None:
         self.legacy_service = legacy_service
         repository_location = legacy_service.repository.path
-        self.dashboards = dashboards or DashboardService(str(repository_location))
+        self.dashboards = dashboards or DashboardService(
+            repository=DashboardRepository(
+                repository_location,
+                project_context=SQLiteProjectContextResolver(repository_location),
+            )
+        )
         self.role_workflows = role_workflows or RoleWorkflowService(legacy_service)
         self.repository = repository or ExportRepository(repository_location)
         self._font_name, self._unicode_font = self._register_font()

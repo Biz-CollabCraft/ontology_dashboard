@@ -20,8 +20,8 @@ from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
 
-from .dashboard_catalog import seed_templates
-from .dashboard_repository import DashboardRepository
+from app.dashboard.catalog import seed_templates
+from app.infra.db.dashboard_repository import DashboardRepository
 from .export_repository import ExportRepository
 from app.infra.db.identity_repository import IdentityRepository as SQLIdentityRepository
 from .ontology_repository import OntologyActionRepository

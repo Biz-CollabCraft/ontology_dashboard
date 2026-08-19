@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .contracts import ReportRequest
-from .dashboard_models import DashboardTemplatePublishRequest
-from .dashboard_service import DashboardService
+from app.dashboard.dashboard_schema import DashboardTemplatePublishRequest
+from app.dashboard.dashboard_service import DashboardService
+from app.infra.db.dashboard_repository import DashboardRepository
 from app.identity import AuthError, Principal
+from .project_context import SQLiteProjectContextResolver
 from .ontology import registry_payload
 from .ontology_service import OntologyService
 from .role_workflow_models import (
@@ -40,7 +42,12 @@ class RoleWorkflowService:
         repository_location = legacy_service.repository.path
         self.repository = repository or RoleWorkflowRepository(repository_location)
         self.ontology = ontology or OntologyService(legacy_service)
-        self.dashboards = dashboards or DashboardService(str(repository_location))
+        self.dashboards = dashboards or DashboardService(
+            repository=DashboardRepository(
+                repository_location,
+                project_context=SQLiteProjectContextResolver(repository_location),
+            )
+        )
 
     @staticmethod
     def _now() -> str:

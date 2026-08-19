@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.dashboard_models import SavedViewCreateRequest
-from ontology_dashboard.dashboard_service import DashboardService
+from app.dashboard.dashboard_schema import SavedViewCreateRequest
+from app.dashboard.dashboard_service import DashboardService
+from app.infra.db.dashboard_repository import DashboardRepository
 from ontology_dashboard.dependencies import get_project_service
 from ontology_dashboard.export_repository import ExportRepository
 from app.identity import CSRF_COOKIE, IdentityService
@@ -202,7 +203,9 @@ def test_operational_records_are_isolated_between_projects(database_path: Path) 
         manager_user["id"],
         active_project_id="azure-fleet-maintenance-project",
     )
-    dashboards = DashboardService(database_path)
+    dashboards = DashboardService(
+        repository=DashboardRepository(database_path)
+    )
     template = dashboards.current_template(
         workspace_id="azure-fleet-maintenance",
         role_code="process_manager",

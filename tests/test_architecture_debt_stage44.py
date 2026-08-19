@@ -72,25 +72,16 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
 
 
 def test_dashboard_modules_load_from_canonical_directory() -> None:
-    module_names = (
-        "dashboard_models",
-        "dashboard_catalog",
-        "dashboard_repository",
-        "dashboard_service",
-    )
-    canonical_root = ROOT / "systems" / "backend" / "ontology_dashboard"
-    for name in module_names:
-        module = importlib.import_module(f"ontology_dashboard.{name}")
-        assert Path(module.__file__).resolve().parent == canonical_root.resolve()
-
-    dashboard_repository = importlib.import_module("ontology_dashboard.dashboard_repository")
-    dashboard_service = importlib.import_module("ontology_dashboard.dashboard_service")
+    dashboard_repository = importlib.import_module("app.infra.db.dashboard_repository")
+    dashboard_service = importlib.import_module("app.dashboard.dashboard_service")
     postgresql_repositories = importlib.import_module("ontology_dashboard.postgresql_repositories")
-    assert dashboard_service.DashboardRepository is dashboard_repository.DashboardRepository
     assert issubclass(
         postgresql_repositories.PostgreSQLDashboardRepository,
         dashboard_repository.DashboardRepository,
     )
+    assert dashboard_service.DashboardService
+    assert not (ROOT / "systems/backend/ontology_dashboard/dashboard_service.py").exists()
+    assert not (ROOT / "systems/backend/ontology_dashboard/routers/dashboards.py").exists()
 
 
 def test_analysis_modules_load_from_canonical_directory() -> None:

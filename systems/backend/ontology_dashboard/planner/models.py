@@ -4,8 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..dashboard_models import DashboardParameterDefinition, DashboardTab
-from ..visualizations.models import FieldProfile, VisualizationCandidate
+from app.dashboard.dashboard_schema import DashboardParameterDefinition, DashboardTab
+from app.dashboard.visualizations.models import FieldProfile, VisualizationCandidate
 
 PlannerMode = Literal["deterministic", "llm", "deterministic_fallback"]
 FilterOperator = Literal["eq", "contains", "gte", "lte"]

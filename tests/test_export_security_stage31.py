@@ -15,7 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
-from ontology_dashboard.dashboard_service import DashboardService
+from app.dashboard.dashboard_service import DashboardService
+from app.infra.db.dashboard_repository import DashboardRepository
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.main import (
@@ -376,7 +377,9 @@ def test_dashboard_with_ten_boards_meets_performance_budget(
         if item["email"] == "engineer@ontology.local"
     )
     principal = identity.repository.principal(user["id"])
-    dashboards = DashboardService(str(service.repository.path))
+    dashboards = DashboardService(
+        repository=DashboardRepository(service.repository.path)
+    )
     resolved = dashboards.resolve(principal=principal, workspace_id=WORKSPACE)
     board_count = sum(len(tab.boards) for tab in resolved.tabs)
     assert board_count >= 10

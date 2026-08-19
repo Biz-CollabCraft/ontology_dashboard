@@ -57,7 +57,7 @@
 | `closed_loop/__init__.py`, `closed_loop/domain.py`, `closed_loop/integration.py`, `closed_loop/models.py`, `closed_loop/repository.py` | Recommendation, Decision, WorkOrder, MaintenanceAction/Event, persistence, integration | `MOVE` | `app/maintenance` public contracts/domain + `app/infra/db` persistence로 수렴 | #59 |
 | `contracts.py` | Maintenance, Report, Dashboard, HTTP DTO 혼재 | `SPLIT` | 의미 소유 도메인별 schema로 분해, 공통 오류만 `common` | #59~#63 |
 | `service.py`, `repository.py`, `context.py`, `conversation.py` | 제조 Facade, Audit, Project3 fallback, follow-up | `SPLIT` | Equipment/Maintenance/Report/Dashboard/Governance/Planner로 분해하거나 canonical 구현으로 대체 | #56, #59~#63 |
-| `dashboard_catalog.py`, `dashboard_models.py`, `dashboard_repository.py`, `dashboard_service.py`, `visualizations/*` | Dashboard/read-model composition | `MOVE` | `app/dashboard`; upstream 의미를 재계산하지 않음 | #60 |
+| `dashboard_catalog.py`, `dashboard_models.py`, `dashboard_repository.py`, `dashboard_service.py`, `visualizations/__init__.py`, `visualizations/models.py`, `visualizations/profiler.py`, `visualizations/recommender.py`, `visualizations/semantic.py` | Dashboard/read-model composition | `MOVE` | `app/dashboard` + persistence `app/infra/db`; upstream 의미를 재계산하지 않음 | #60 |
 | `reports.py`, `export_models.py`, `export_repository.py`, `export_service.py` | Report와 Export | `MOVE` | `app/report` | #61 |
 | `planner/*`, `ontology_planner_models.py`, `ontology_planner_service.py` | 자연어 Planner와 UI plan | `MOVE` | `app/planner`, provider는 Infra port로 소비 | #62 |
 | `orchestration/*` | 범용 multi-store Agent orchestration | `REMOVE` | Agent는 MVP 제외 범위. Planner/Report는 필요한 public port를 각 도메인에서 새로 정의하고 legacy Agent runtime을 재사용하지 않음 | #62, #63, #68 |
@@ -264,6 +264,16 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `governance/models.py` | `systems/backend/app/governance/governance_schema.py` | `MIGRATED` |
 | `governance/service.py` | `systems/backend/app/governance/governance_service.py`, `systems/backend/app/governance/ports.py` | `MIGRATED` |
 | `routers/governance.py` | `systems/backend/app/governance/governance_router.py` | `MIGRATED` |
+| `dashboard_models.py` | `systems/backend/app/dashboard/dashboard_schema.py` | `MIGRATED` |
+| `dashboard_catalog.py` | `systems/backend/app/dashboard/catalog.py` | `MIGRATED` |
+| `dashboard_repository.py` | `systems/backend/app/dashboard/ports.py`, `systems/backend/app/infra/db/dashboard_repository.py` | `MIGRATED` |
+| `dashboard_service.py` | `systems/backend/app/dashboard/dashboard_service.py`, `systems/backend/app/dashboard/ports.py` | `MIGRATED` |
+| `visualizations/__init__.py` | `systems/backend/app/dashboard/visualizations/__init__.py` | `MIGRATED` |
+| `visualizations/models.py` | `systems/backend/app/dashboard/visualizations/models.py` | `MIGRATED` |
+| `visualizations/profiler.py` | `systems/backend/app/dashboard/visualizations/profiler.py` | `MIGRATED` |
+| `visualizations/recommender.py` | `systems/backend/app/dashboard/visualizations/recommender.py` | `MIGRATED` |
+| `visualizations/semantic.py` | `systems/backend/app/dashboard/visualizations/semantic.py` | `MIGRATED` |
+| `routers/dashboards.py` | `systems/backend/app/dashboard/dashboard_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
@@ -306,3 +316,9 @@ Phase 12 / #63에서는 Dataset projection, approval/audit와 artifact retention
 `app/governance`로 수렴했다. Generic Agent run/trace detail과 Governance Agent endpoint는
 #68 REMOVE 처분에 따라 canonical contract에서 제거했으며, 모델 릴리즈 후보 메타데이터는
 Diagnosis-owned `ModelReleaseCandidateQueryPort`를 통해 소비하도록 경계를 고정한다.
+
+Phase 9 / #60에서는 Dashboard schema/catalog/service/router/visualization read-model 책임을
+`app/dashboard`로 이관하고 persistence를 `app/infra/db/dashboard_repository.py`로 분리했다.
+Equipment/Diagnosis/Maintenance 의미를 Dashboard에서 재계산하지 않으며 각 owner의 public
+query contract를 소비하기 위한 `EquipmentStatusQueryPort`, `DiagnosisReadModelQueryPort`,
+`MaintenanceQueryPort`를 canonical Dashboard boundary에 둔다.

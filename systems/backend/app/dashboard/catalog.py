@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .dashboard_models import (
+from .dashboard_schema import (
     BoardCatalogDefinition,
     DashboardBoard,
     DashboardBoardLayout,

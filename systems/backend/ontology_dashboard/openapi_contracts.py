@@ -37,7 +37,7 @@ from .automation_runtime import AutomationSnapshot
 from .branching_lineage import BranchDiff, BranchingLineageSnapshot, PolicyDecision
 from .contracts import GroundedReport, UILayout
 from .connectors import ConnectorSnapshot
-from .dashboard_models import (
+from app.dashboard.dashboard_schema import (
     DashboardSharePayload,
     DashboardTemplateSnapshot,
     ReportDraftRecord,
@@ -676,12 +676,12 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.platform.project_distributed_job_events": DurableJobEventPage,
     "ontology_dashboard.routers.platform.cancel_distributed_job": DurableJob,
     "ontology_dashboard.routers.platform.replay_distributed_job": DurableJob,
-    "ontology_dashboard.routers.dashboards.get_report_draft": ReportDraftResponse,
-    "ontology_dashboard.routers.dashboards.dashboard_template_versions": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.dashboards.request_dashboard_template_publish": WorkflowRequestResponse,
-    "ontology_dashboard.routers.dashboards.query_dashboard_board": DashboardBoardQueryResponse,
-    "ontology_dashboard.routers.dashboards.list_dashboard_saved_views": ItemsResponse[SavedViewRecord],
-    "ontology_dashboard.routers.dashboards.resolve_dashboard_share": DashboardSharePayload,
+    "app.dashboard.dashboard_router.get_report_draft": ReportDraftResponse,
+    "app.dashboard.dashboard_router.dashboard_template_versions": ItemsResponse[dict[str, Any]],
+    "app.dashboard.dashboard_router.request_dashboard_template_publish": WorkflowRequestResponse,
+    "app.dashboard.dashboard_router.query_dashboard_board": DashboardBoardQueryResponse,
+    "app.dashboard.dashboard_router.list_dashboard_saved_views": ItemsResponse[SavedViewRecord],
+    "app.dashboard.dashboard_router.resolve_dashboard_share": DashboardSharePayload,
     "ontology_dashboard.routers.exports.list_export_checkpoints": ItemsResponse[ExportCheckpoint],
     "app.governance.governance_router.governance_overview": GovernanceOverview,
     "app.governance.governance_router.retry_projection": ProjectionRetryResult,
@@ -733,7 +733,7 @@ _EXPLICIT_MEDIA_EXAMPLES: dict[str, dict[str, Any]] = {
 
 _NO_CONTENT_ENDPOINTS = {
     "app.identity.identity_router.logout",
-    "ontology_dashboard.routers.dashboards.delete_dashboard_saved_view",
+    "app.dashboard.dashboard_router.delete_dashboard_saved_view",
 }
 
 _BINARY_ENDPOINTS = {"ontology_dashboard.routers.exports.create_export"}

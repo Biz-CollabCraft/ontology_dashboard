@@ -26,7 +26,7 @@ from ..planner import (
 )
 from ..predictive_maintenance_runtime import PredictiveMaintenanceRuntimeService
 
-from ..visualizations import SemanticVisualizationPlanRequest
+from app.dashboard.visualizations import SemanticVisualizationPlanRequest
 
 router = APIRouter(prefix="/api/planner", tags=["planner"])
 

@@ -8,8 +8,9 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from ontology_dashboard.dashboard_models import DashboardPreferenceSaveRequest
-from ontology_dashboard.dashboard_service import DashboardService
+from app.dashboard.dashboard_schema import DashboardPreferenceSaveRequest
+from app.dashboard.dashboard_service import DashboardService
+from app.infra.db.dashboard_repository import DashboardRepository
 from ontology_dashboard.dependencies import get_predictive_maintenance_runtime_service
 from app.identity import (
     CSRF_COOKIE,
@@ -33,7 +34,7 @@ from app.diagnosis.runtime_schema import (
     SemanticQueryCapability,
 )
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
-from ontology_dashboard.visualizations import (
+from app.dashboard.visualizations import (
     CATALOG_VERSION,
     DERIVED_EXPRESSION_REGISTRY,
     FieldProfile,
@@ -729,7 +730,9 @@ def test_semantic_visualization_override_saves_and_restores_through_dashboard_pr
     user, _, _, _ = identity.login(
         LoginRequest(email="manager@ontology.local", password="Manager!2026")
     )
-    dashboards = DashboardService(str(database_path))
+    dashboards = DashboardService(
+        repository=DashboardRepository(database_path)
+    )
     resolved = dashboards.resolve(principal=user, workspace_id="manufacturing-demo")
     target = resolved.tabs[0].boards[0]
     override = VisualizationOverride(
@@ -764,7 +767,9 @@ def test_semantic_visualization_override_saves_and_restores_through_dashboard_pr
         saved_board.settings["semantic_visualization_override"]
     ) == override
 
-    reloaded = DashboardService(str(database_path)).resolve(
+    reloaded = DashboardService(
+        repository=DashboardRepository(database_path)
+    ).resolve(
         principal=user,
         workspace_id="manufacturing-demo",
     )

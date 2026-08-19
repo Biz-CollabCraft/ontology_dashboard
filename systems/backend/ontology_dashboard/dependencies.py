@@ -40,7 +40,8 @@ from .application_runtime import ApplicationRuntimeRepository
 from .artifact_storage import ArtifactGovernanceService, build_artifact_service
 from .branching_lineage import BranchingLineageRepository
 from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorAdapter
-from .dashboard_service import DashboardService
+from app.dashboard.dashboard_service import DashboardService
+from app.infra.db.dashboard_repository import DashboardRepository
 from .distributed_runtime import DurableJobRepository
 from .export_service import ExportService
 from app.governance import GovernanceService
@@ -373,10 +374,14 @@ def get_dashboard_service(
     target = str(service.repository.path)
     if is_postgresql(target):
         return DashboardService(
-            target,
             repository=PostgreSQLDashboardRepository(target),
         )
-    return DashboardService(target)
+    return DashboardService(
+        repository=DashboardRepository(
+            target,
+            project_context=SQLiteProjectContextResolver(target),
+        )
+    )
 
 
 def get_role_workflow_service(

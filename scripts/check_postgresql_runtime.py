@@ -13,7 +13,7 @@ from argon2 import PasswordHasher
 
 from app.dataset.ingestion import DatasetManifest
 from ontology_dashboard.adapters.models import PredictionResult
-from ontology_dashboard.dashboard_service import DashboardService
+from app.dashboard.dashboard_service import DashboardService
 from app.identity import IdentityService, LoginRequest
 from ontology_dashboard.outbox import default_outbox_worker
 from app.infra.db.pool import close_pools
@@ -203,7 +203,6 @@ def main() -> int:
 
             dashboard_repository = PostgreSQLDashboardRepository(database_url)
             dashboard = DashboardService(
-                database_url,
                 repository=dashboard_repository,
             ).resolve(principal=restored, workspace_id="manufacturing-demo")
             assert dashboard.workspace_id == "manufacturing-demo"

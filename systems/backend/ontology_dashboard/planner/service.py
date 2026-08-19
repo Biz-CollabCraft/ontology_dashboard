@@ -7,9 +7,11 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..dashboard_models import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
-from ..dashboard_service import DashboardService
+from app.dashboard.dashboard_schema import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
+from app.dashboard.dashboard_service import DashboardService
+from app.infra.db.dashboard_repository import DashboardRepository
 from app.identity import AuthError, Principal
+from ..project_context import SQLiteProjectContextResolver
 from app.infra.llm import LLMProvider
 from ..ontology import OBJECT_TYPE_BY_ID
 from ..ontology_service import OntologyService
@@ -20,7 +22,7 @@ from app.diagnosis.runtime_service import (
     V3_1_SOURCE_VERSION,
 )
 from ..service import ManufacturingPredictiveMaintenanceService
-from ..visualizations import (
+from app.dashboard.visualizations import (
     VISUALIZATION_REGISTRY,
     SemanticVisualizationPlanRequest,
     SemanticVisualizationPlanResponse,
@@ -101,7 +103,12 @@ class OntologyDashboardPlannerService:
     ) -> None:
         self.legacy_service = legacy_service
         self.ontology = ontology or OntologyService(legacy_service)
-        self.dashboards = dashboards or DashboardService(str(legacy_service.repository.path))
+        self.dashboards = dashboards or DashboardService(
+            repository=DashboardRepository(
+                legacy_service.repository.path,
+                project_context=SQLiteProjectContextResolver(legacy_service.repository.path),
+            )
+        )
         self.provider = provider
 
     @staticmethod
