@@ -102,7 +102,7 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
                                        'rotational_speed_rpm',h.rotational_speed_rpm,
                                        'torque_nm',h.torque_nm,
                                        'tool_wear_min',h.tool_wear_min
-                                   ) ORDER BY h.observed_at DESC
+                                   ) ORDER BY h.observed_at ASC
                                )
                                FROM cnc_ranked h
                                WHERE h.asset_id=o.asset_id AND h.observed_at < o.observed_at
@@ -137,7 +137,7 @@ def _runtime_candidates(connection: Any, dataset_version_id: str) -> list[dict[s
                                        'vibration_raw',h.vibration_raw,
                                        'relative_vibration_z',h.relative_vibration_z,
                                        'relative_vibration_zone',h.relative_vibration_zone
-                                   ) ORDER BY h.observed_at DESC
+                                   ) ORDER BY h.observed_at ASC
                                )
                                FROM compressor_ranked h
                                WHERE h.asset_id=o.asset_id AND h.observed_at < o.observed_at
