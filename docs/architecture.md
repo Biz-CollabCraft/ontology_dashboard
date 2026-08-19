@@ -306,12 +306,13 @@ read model을 사용해 대상 설비의 정비 후 예정 Canonical 행이 Over
 
 ### 5.4 Backend 도메인 및 구조 규칙
 
-- **Domain-First 구조**: 각 도메인은 독립된 업무 단위를 형성하며, 계층 파일은 `{도메인}_{계층}.py` 형식을 따른다 (`{domain}_domain.py`, `{domain}_schema.py`, `{domain}_service.py`, `{domain}_repository.py`, `{domain}_router.py`, `exception.py`).
+- **Domain-First 구조**: 각 도메인은 독립된 업무 단위를 형성하며, 계층 파일은 `{도메인}_{계층}.py` 형식을 따른다 (`{domain}_domain.py`, `{domain}_schema.py`, `{domain}_service.py`, `{domain}_repository.py`, `{domain}_router.py`, `{domain}_exception.py`).
+  - Domain-First 계층 파일 규칙(`{domain}_{layer}.py`)은 Service, Repository, Schema, Router, Exception 등 표준 계층 파일에만 적용한다. 특정 domain 내부에서 해당 domain만을 위해 사용하는 세부 기능 모듈(예: `app/diagnosis/evidence.py`, `predictor.py`, `artifact_provider.py`, `feature_executor.py`, `model_registry.py`, `contracts.py`, `evidence_baseline.py`, `evidence_enrichment.py`)은 이 규칙의 적용 대상이 아니며 별도 naming 제한을 두지 않는다.
 - **도메인 간 서비스/레포지토리 직접 참조 금지**: 도메인 간 임의 `*_service.py` 또는 `*_repository.py`/`*_adapter.py` direct import를 금지한다. 다른 도메인과의 조합이 필요하면 public port/interface 또는 application query/read-model 경유로 결합한다.
 - **기술 중심 최상위 패키지 금지**: `routers/`, `adapters/`, `orchestration/`, `integrations/`, `modeling/`, `domain_packs/`, `predictive_maintenance_runtime/`, `closed_loop/` 등을 업무 package 최상위로 남기지 않는다.
 - **`infra/` 구조 및 기술 격리**: `infra/{db, storage, external, llm, messaging, observability}`로 구성하며 순수 기술 구현(DB 연결, 외부 API 클라이언트, 스토리지 드라이버 등)만 포함한다. 업무 도메인 로직을 포함하거나 domain service를 import해서는 안 된다.
 - **Exception 정책**:
-  - 도메인 전용 예외는 각 도메인의 `exception.py`에 정의한다.
+  - 도메인 전용 예외는 각 도메인의 `{domain}_exception.py`(예: `identity_exception.py`, `diagnosis_exception.py`, `maintenance_exception.py`)에 정의한다.
   - 범도메인 공통 예외는 `common/exceptions.py`로 정의한다.
   - 도메인 서비스 레이어(`*_service.py`, domain logic)에서 `FastAPI`의 `HTTPException`을 직접 import하거나 발생시키는 것을 금지한다.
   - 흐름: 도메인 오류 발생 (`DomainException`) → Router/Presentation 레이어 또는 app exception handler에서 포착 → HTTP 응답 변환.
@@ -413,7 +414,7 @@ Domain-First 구조 전환 및 완전 수렴을 위해 다음 12개 Architecture
 8. **`infra` → domain service import 금지**: 인프라 계층의 상위 비즈니스 로직 역의존 금지
 9. **Backend → `systems.generator` direct import 금지**: 시스템 간 코드 직접 참조 금지
 10. **`main.py` business logic 포함 제한**: FastAPI 초기화, lifespan, middleware, exception handler, router include, DI 조립만 유지
-11. **domain exception / common exception 경계 검사**: 도메인별 `exception.py`와 `common/exceptions.py` 책임 분리
+11. **domain exception / common exception 경계 검사**: 도메인별 `{domain}_exception.py`와 `common/exceptions.py` 책임 분리
 12. **신규 top-level 기술 중심 패키지 생성 방지**: 최상위에 `routers/`, `adapters/`, `closed_loop/` 등 생성 금지
 
 > 위 12개 항목은 Architecture invariant 전체 목록이며, 기계적으로 안정적으로 검출 가능한 항목(예: 1, 2, 4, 5, 6, 8, 9)은 `verify_architecture.py`에 정적 검사로 구현하고, 의미 판단이 필요한 항목(예: 10 `main.py` business logic 포함 제한, 11 exception ownership 경계, 12 신규 기술 중심 package 여부)은 AI/code review checklist 및 테스트로 보완한다. CI가 regex 기반 정적 검사만으로 12개 전부를 완벽 판정하려 하지 않는다.

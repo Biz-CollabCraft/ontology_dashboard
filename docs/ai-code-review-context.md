@@ -123,7 +123,8 @@ API / systems/frontend / Report
 35. 레거시 Source는 [`backend-migration-map.md`](./backend-migration-map.md)의
     `MOVE | SPLIT | REPLACE | REMOVE | DEFER` 처분을 따라야 한다. 현재 import·테스트된다는
     이유만으로 자동 이관하지 않으며, Phase 14 전에는 미배정·`UNDECIDED`·`DEFER`를 0건으로 해소한다.
-
+36. 도메인 전용 예외는 각 도메인의 `{domain}_exception.py`에 정의하고, 범도메인 공통 예외는 `common/exceptions.py`로 정의하며, 도메인 레이어에서 `FastAPI`의 `HTTPException`을 직접 import/발생시키지 않는다.
+37. `systems/backend/ontology_dashboard/modeling`과 `ml/src/factory_signal_ml`은 compatibility port/adapter일 수 있으나 semantic mapping, feature build, model training 또는 runtime inference의 canonical owner가 되면 안 된다.
 
 15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.
 
@@ -142,6 +143,11 @@ Closed-loop Domain/API/UI를 변경하는 PR에서 적용한다.
 
 29번은 [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
 근거로 하며 정비 후 Observation/Prediction handoff를 변경하는 PR에서 적용한다.
+
+30~36번은 `docs/architecture.md` §5 Backend Domain-First 구조 계약, §9 Architecture CI 목표 및 [`backend-migration-map.md`](./backend-migration-map.md)를 근거로 한다.
+
+37번은 §4 Model Artifact/Result Artifact 구분과 §5 Backend ownership 계약을 근거로 한다.
+
 
 ## 4. Model Artifact / Result Artifact 구분
 

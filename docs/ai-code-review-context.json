@@ -11,7 +11,7 @@
       ]
     },
     "architecture": {
-      "paths": ["systems/**", "infra/**", "scripts/**", ".github/workflows/**", "render.yaml", "contracts/**", "schemas/**", "docs/architecture*.md", "docs/backend-migration-map.*", "systems/backend/README.md"],
+      "paths": ["systems/**", "infra/**", "scripts/**", ".github/workflows/**", "render.yaml", "contracts/**", "contracts/schemas/**", "docs/architecture*.md", "docs/backend-migration-map.*", "systems/backend/README.md"],
       "context": [
         "docs/architecture.md",
         "docs/backend-migration-map.md",

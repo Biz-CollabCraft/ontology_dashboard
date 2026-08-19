@@ -41,7 +41,7 @@ DEFAULT_CONTEXT_ROUTING: dict[str, dict[str, list[str]]] = {
             ".github/workflows/**",
             "render.yaml",
             "contracts/**",
-            "schemas/**",
+            "contracts/schemas/**",
             "docs/architecture*.md",
             "docs/backend-migration-map.*",
             "systems/backend/README.md",
