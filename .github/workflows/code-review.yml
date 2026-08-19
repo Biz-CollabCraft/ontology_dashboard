@@ -136,24 +136,41 @@ jobs:
           : > /tmp/architecture-job.log
 
           if [[ "$ARCHITECTURE_JOB_RESULT" == "success" ]]; then
-            echo "architecture job completed successfully; detailed failure log not required" > /tmp/architecture-job.log
+            echo "architecture validation completed successfully; detailed failure log not required" > /tmp/architecture-job.log
           else
-            architecture_job_id="$(
+            # `architecture` is the required aggregate job. The actual failure
+            # can be in any parallel child, so preserve each failed job's log
+            # for the review prompt instead of only downloading the aggregate.
+            mapfile -t failed_architecture_jobs < <(
               gh api --paginate \
                 "repos/${GITHUB_REPOSITORY}/actions/runs/${WORKFLOW_RUN_ID}/jobs" \
-                --jq '.jobs[] | select(.name == "architecture") | .id' \
-                | head -n 1
-            )"
-            if [[ -n "$architecture_job_id" ]]; then
-              if ! gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${architecture_job_id}/logs" \
-                > /tmp/architecture-job.log 2>/tmp/architecture-log-error.txt; then
-                {
-                  echo "architecture job log download failed"
-                  cat /tmp/architecture-log-error.txt
-                } > /tmp/architecture-job.log
-              fi
+                --jq '.jobs[]
+                  | select(
+                      (.name == "Classify architecture scope"
+                      or .name == "Fast validation"
+                      or .name == "Playwright MVP E2E"
+                      or .name == "Docker runtime smoke"
+                      or .name == "architecture")
+                      and (.conclusion != "success" and .conclusion != "skipped")
+                    )
+                  | [.name, .id, .conclusion] | @tsv'
+            )
+
+            if [[ "${#failed_architecture_jobs[@]}" -eq 0 ]]; then
+              echo "architecture job lookup found no failed validation job" > /tmp/architecture-job.log
             else
-              echo "architecture job log lookup failed: no architecture job id found" > /tmp/architecture-job.log
+              for job in "${failed_architecture_jobs[@]}"; do
+                IFS=$'\t' read -r architecture_job_name architecture_job_id architecture_job_conclusion <<< "$job"
+                {
+                  echo "===== ${architecture_job_name} (${architecture_job_conclusion}) ====="
+                  if ! gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${architecture_job_id}/logs" \
+                    2>/tmp/architecture-log-error.txt; then
+                    echo "log download failed"
+                    cat /tmp/architecture-log-error.txt
+                  fi
+                  echo
+                } >> /tmp/architecture-job.log
+              done
             fi
           fi
 
