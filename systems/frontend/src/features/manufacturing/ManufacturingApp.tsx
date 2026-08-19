@@ -183,7 +183,6 @@ export function ManufacturingApp({ initialWorkspaceView, analysisId = "risk-even
     events: fixtureEvents,
     projects,
     workspaces,
-    domainPacks,
     selectedProjectId,
     setSelectedProjectId,
     selectedWorkspaceId,
@@ -277,7 +276,7 @@ export function ManufacturingApp({ initialWorkspaceView, analysisId = "risk-even
   const [datasetItems, setDatasetItems] = useState<DatasetCatalogItem[]>([]);
   const [datasetDetails, setDatasetDetails] = useState<DatasetCatalogDetail[]>([]);
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
-  const selectedPack = domainPacks.find((pack) => pack.workspace_ids.includes(selectedWorkspaceId));
+  const selectedPack = undefined;
   const adaptiveProfile = useMemo(
     () => deriveAdaptiveExperience(selectedProjectId, selectedProject, selectedPack, datasetItems, datasetDetails),
     [datasetDetails, datasetItems, selectedPack, selectedProject, selectedProjectId],

@@ -6,7 +6,7 @@ import hashlib
 from typing import Protocol
 
 from app.infra.external.project3 import Project3Client
-from ..ontology_service import OntologyService
+from app.ontology.ontology_service import OntologyService
 from .models import AgentState, EvidenceItem
 
 

@@ -50,10 +50,6 @@ from app.dataset.dataset_schema import (
     MaterializationRecord,
     OntologyMappingRecord,
 )
-from .domain_packs.models import (
-    DomainPackDefinition as PlatformDomainPackDefinition,
-    ProjectApplicationDefinition,
-)
 from app.identity import EnterpriseIdentityReadiness
 from .deployment import DeploymentReadiness, ProcessProbe, ReadinessProbe, StartupProbe
 from .distributed_runtime import (
@@ -77,14 +73,15 @@ from .modeling.models import (
     ModelingContractSummary,
     ModelVersion,
 )
-from .ontology import (
+from app.ontology.ontology_domain import (
+    ActionExecutionResult,
     ActionTypeDefinition,
-    DomainPackDefinition,
     LinkTypeDefinition,
     ObjectRecord,
     ObjectTypeDefinition,
+    OntologyTraversal,
 )
-from .ontology_primitives import ActionPreview, FunctionExecution, PrimitiveSnapshot
+from app.ontology.primitives import ActionPreview, FunctionExecution, PrimitiveSnapshot
 from app.infra.observability.runtime import ObservabilityReadiness
 from .orchestration.models import AgentRunResponse
 from .predictive_maintenance_runtime.models import (
@@ -221,7 +218,6 @@ class PredictionResultRecord(ContractModel):
 
 
 class OntologyRegistryResponse(ContractModel):
-    domain_packs: list[DomainPackDefinition]
     object_types: list[ObjectTypeDefinition]
     link_types: list[LinkTypeDefinition]
     action_types: list[ActionTypeDefinition]
@@ -229,7 +225,7 @@ class OntologyRegistryResponse(ContractModel):
 
 class OntologyObjectPage(ContractModel):
     workspace_id: str
-    domain_pack: str
+    projection_id: str
     object_type: str | None = None
     dataset_version_id: str | None = None
     search: str | None = None
@@ -632,21 +628,21 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "app.dataset.dataset_router.create_dataset_version": DatasetVersionRecord,
     "app.dataset.dataset_router.save_ontology_mapping": OntologyMappingRecord,
     "app.dataset.dataset_router.create_materialization": MaterializationRecord,
-    "ontology_dashboard.routers.ontology.list_workspaces": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.ontology.list_domain_packs": ItemsResponse[DomainPackDefinition],
-    "ontology_dashboard.routers.ontology.ontology_registry": OntologyRegistryResponse,
-    "ontology_dashboard.routers.ontology.list_object_types": ItemsResponse[ObjectTypeDefinition],
-    "ontology_dashboard.routers.ontology.list_link_types": ItemsResponse[LinkTypeDefinition],
-    "ontology_dashboard.routers.ontology.list_action_types": ItemsResponse[ActionTypeDefinition],
-    "ontology_dashboard.routers.ontology.query_ontology_objects": OntologyObjectPage,
-    "ontology_dashboard.routers.ontology.aggregate_ontology_objects": OntologyAggregateResponse,
-    "ontology_dashboard.routers.ontology.list_ontology_action_invocations": ItemsResponse[ActionInvocationRecord],
+    "app.ontology.ontology_router.list_workspaces": ItemsResponse[dict[str, Any]],
+    "app.ontology.ontology_router.ontology_registry": OntologyRegistryResponse,
+    "app.ontology.ontology_router.list_object_types": ItemsResponse[ObjectTypeDefinition],
+    "app.ontology.ontology_router.list_link_types": ItemsResponse[LinkTypeDefinition],
+    "app.ontology.ontology_router.list_action_types": ItemsResponse[ActionTypeDefinition],
+    "app.ontology.ontology_router.query_ontology_objects": OntologyObjectPage,
+    "app.ontology.ontology_router.aggregate_ontology_objects": OntologyAggregateResponse,
+    "app.ontology.ontology_router.get_ontology_object": ObjectRecord,
+    "app.ontology.ontology_router.traverse_ontology_object": OntologyTraversal,
+    "app.ontology.ontology_router.list_ontology_action_invocations": ItemsResponse[ActionInvocationRecord],
+    "app.ontology.ontology_router.invoke_ontology_action": ActionExecutionResult,
     "ontology_dashboard.routers.analyses.queue_analysis_run": AnalysisRunResult,
     "app.project.project_router.list_projects": ProjectListResponse,
     "app.project.project_router.list_project_workspaces": ItemsResponse[dict[str, Any]],
     "app.project.project_router.list_project_events": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.platform.domain_pack_catalog": ItemsResponse[PlatformDomainPackDefinition],
-    "ontology_dashboard.routers.platform.project_v4_application": ProjectApplicationDefinition,
     "ontology_dashboard.routers.platform.project_persistence_readiness": PersistenceReadiness,
     "ontology_dashboard.routers.platform.project_enterprise_identity": EnterpriseIdentityReadiness,
     "ontology_dashboard.routers.platform.project_deployment_readiness": DeploymentReadiness,

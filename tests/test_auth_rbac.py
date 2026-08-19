@@ -312,7 +312,7 @@ def test_ontology_registry_is_domain_neutral_foundation(client: TestClient) -> N
     registry = client.get("/api/ontology/registry")
     assert registry.status_code == 200
     payload = registry.json()
-    assert payload["domain_packs"][0]["display_name"] == "Manufacturing Predictive Maintenance Pack"
+    assert "domain_packs" not in payload
     assert {item["id"] for item in payload["object_types"]} >= {"equipment", "risk_event", "inspection"}
     assert {item["id"] for item in payload["link_types"]} >= {"equipment_has_risk_event"}
     assert {item["id"] for item in payload["action_types"]} >= {"record_operational_decision"}

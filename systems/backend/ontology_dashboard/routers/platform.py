@@ -52,18 +52,16 @@ from ..distributed_runtime import (
     JobOperatorRequest,
     distributed_runtime_readiness,
 )
-from ..domain_packs import ProjectApplicationDefinition, list_domain_packs, resolve_domain_pack
-from app.identity import enterprise_identity_readiness
+from app.identity import Principal, enterprise_identity_readiness
 from ..deployment import deployment_readiness
-from app.identity import Principal
-from ..ontology_primitives import (
+from app.ontology.primitives import (
     ActionPreview,
     ActionPreviewRequest,
     FunctionExecution,
     FunctionExecutionRequest,
-    OntologyPrimitiveRepository,
     PrimitiveSnapshot,
 )
+from app.infra.db.ontology_primitives import OntologyPrimitiveRepository
 from ..pipeline_runtime import PipelinePlan, PipelinePlanRequest, plan_pipeline, sample_pipeline
 from ..mlops_runtime import DriftEvaluationRequest, MLOpsSnapshot, evaluate_drift, mlops_snapshot
 from ..automation_runtime import (
@@ -78,31 +76,6 @@ from app.infra.observability.runtime import ObservabilityReadiness, observabilit
 from app.common.runtime_settings import project_root
 
 router = APIRouter(prefix="/api/platform", tags=["platform"])
-
-
-@router.get("/domain-packs")
-def domain_pack_catalog(
-    _: Principal = Depends(require_permission("app.access")),
-):
-    return {"items": [item.model_dump(mode="json") for item in list_domain_packs()]}
-
-
-@router.get("/projects/{project_id}/applications/v4")
-def project_v4_application(
-    project_id: str,
-    principal: Principal = Depends(require_permission("app.access")),
-    projects: ProjectService = Depends(get_project_service),
-):
-    project = projects.get_for_principal(principal, project_id)
-    workspaces = projects.list_workspaces(principal, project_id)
-    domain_pack, configuration_source = resolve_domain_pack(project.domain_pack_code)
-    return ProjectApplicationDefinition(
-        application_id="ontology-commercial-v4",
-        project_id=project.id,
-        workspace_ids=tuple(item["id"] for item in workspaces),
-        domain_pack=domain_pack,
-        configuration_source=configuration_source,
-    ).model_dump(mode="json")
 
 
 @router.get("/projects/{project_id}/persistence-readiness")

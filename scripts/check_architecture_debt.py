@@ -98,10 +98,6 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         "conversation",
         "llm",
         "reports",
-        "ontology",
-        "ontology_adapter",
-        "ontology_repository",
-        "ontology_service",
         "ontology_planner_models",
         "ontology_planner_service",
     )
@@ -186,6 +182,24 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     ontology_compatibility_relocated = all(
         _canonical_with_optional_legacy_shim(root, module)
         for module in ontology_compatibility_modules
+    ) and all(
+        (root / path).is_file()
+        for path in (
+            "systems/backend/app/ontology/ontology_domain.py",
+            "systems/backend/app/ontology/projection.py",
+            "systems/backend/app/ontology/ports.py",
+            "systems/backend/app/ontology/ontology_service.py",
+            "systems/backend/app/infra/db/ontology_action_repository.py",
+            "systems/backend/app/infra/db/ontology_instance_repository.py",
+        )
+    ) and all(
+        not (root / path).exists()
+        for path in (
+            "systems/backend/ontology_dashboard/ontology.py",
+            "systems/backend/ontology_dashboard/ontology_adapter.py",
+            "systems/backend/ontology_dashboard/ontology_repository.py",
+            "systems/backend/ontology_dashboard/ontology_service.py",
+        )
     )
 
     return [

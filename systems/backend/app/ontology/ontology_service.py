@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
-from .contracts import DecisionRequest, NoteRequest
-from app.identity import AuthError, Principal
-from .ontology import (
+from .ontology_domain import (
     ACTION_TYPE_BY_ID,
     LINK_TYPE_BY_ID,
     OBJECT_TYPE_BY_ID,
@@ -19,37 +17,82 @@ from .ontology import (
     ObjectRecord,
     OntologyTraversal,
 )
-from .ontology_adapter import (
+from .ports import (
+    OntologyActionRepositoryPort,
+    OntologyEventCommandPort,
+    OntologyFieldActionPort,
+    OntologyInstanceRepositoryPort,
+)
+from .projection import (
     ManufacturingOntologyAdapter,
+    PredictiveMaintenanceProjectionSource,
     source_identifier,
 )
-from .ontology_repository import OntologyActionRepository
-from .role_workflow_repository import RoleWorkflowRepository
-from .service import EventNotFound, FactorySignalService
-from ontology_dashboard.ontology_instance_repository import OntologyInstanceRepository
 
 TraversalDirection = Literal["outgoing", "incoming", "both"]
+
+
+class OntologyRuntimeSource(
+    PredictiveMaintenanceProjectionSource,
+    OntologyEventCommandPort,
+    Protocol,
+):
+    """Narrow bridge used while upstream owner domains finish their own migration."""
+
+
+class PrincipalLike(Protocol):
+    user_id: str
+    display_name: str
+    organization_id: str
+    project_scopes: set[str]
+    workspace_scopes: set[str]
+    permissions: set[str]
+    active_project_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionCommand:
+    actor: str
+    decision: str
+    note: str
+
+
+@dataclass(frozen=True, slots=True)
+class NoteCommand:
+    actor: str
+    body: str
+
+
+class OntologyNotFound(KeyError):
+    """Raised when an Ontology workspace or object is not available."""
+
+
+class OntologyAccessError(RuntimeError):
+    """Domain authorization/idempotency error translated by the HTTP adapter."""
+
+    def __init__(self, status_code: int, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.code = code
+        self.detail = detail
 
 
 class OntologyService:
     def __init__(
         self,
-        legacy_service: FactorySignalService,
+        source: OntologyRuntimeSource,
         *,
-        action_repository: OntologyActionRepository | None = None,
-        instance_repository: OntologyInstanceRepository | None = None,
-        role_workflow_repository: RoleWorkflowRepository | None = None,
+        action_repository: OntologyActionRepositoryPort,
+        instance_repository: OntologyInstanceRepositoryPort,
+        field_actions: OntologyFieldActionPort | None = None,
     ) -> None:
-        self.legacy_service = legacy_service
-        repository_location = legacy_service.repository.path
-        self.action_repository = action_repository or OntologyActionRepository(repository_location)
-        self.instance_repository = instance_repository or OntologyInstanceRepository(repository_location)
-        self.role_workflow_repository = role_workflow_repository or RoleWorkflowRepository(
-            repository_location
-        )
+        self.source = source
+        self.action_repository = action_repository
+        self.instance_repository = instance_repository
+        self.field_actions = field_actions
         self.adapter = ManufacturingOntologyAdapter(
-            legacy_service,
-            role_workflow_repository=self.role_workflow_repository,
+            source,
+            field_actions=field_actions,
         )
 
     def _require_workspace(self, workspace_id: str) -> None:
@@ -58,9 +101,9 @@ class OntologyService:
         try:
             items = self.instance_repository.list_objects(workspace_id=workspace_id)
         except Exception as exc:
-            raise EventNotFound(workspace_id) from exc
+            raise OntologyNotFound(workspace_id) from exc
         if not items:
-            raise EventNotFound(workspace_id)
+            raise OntologyNotFound(workspace_id)
 
     def _sync_workspace(self, workspace_id: str) -> None:
         """Materialize the domain adapter snapshot into the persistent instance store."""
@@ -70,8 +113,8 @@ class OntologyService:
         snapshot = self.adapter.snapshot()
         self.instance_repository.replace_source_snapshot(
             workspace_id=workspace_id,
-            source_system="manufacturing-predictive-maintenance-pack",
-            source_revision="fixture-and-operational-v1",
+            source_system=snapshot.source_system,
+            source_revision=snapshot.source_revision,
             objects=snapshot.objects,
             links=snapshot.links,
         )
@@ -111,7 +154,7 @@ class OntologyService:
         page = items[offset : offset + limit]
         return {
             "workspace_id": workspace_id,
-            "domain_pack": self.adapter.domain_pack,
+            "projection_id": self.adapter.projection_id,
             "object_type": object_type,
             "dataset_version_id": dataset_version_id,
             "search": search,
@@ -257,12 +300,12 @@ class OntologyService:
             object_id=object_id,
         )
         if item is None:
-            raise EventNotFound(object_id)
+            raise OntologyNotFound(object_id)
         if (
             dataset_version_id is not None
             and item.properties.get("dataset_version_id") != dataset_version_id
         ):
-            raise EventNotFound(object_id)
+            raise OntologyNotFound(object_id)
         return item
 
     def traverse(
@@ -291,7 +334,7 @@ class OntologyService:
         try:
             root = object_index[object_id]
         except KeyError as exc:
-            raise EventNotFound(object_id) from exc
+            raise OntologyNotFound(object_id) from exc
 
         candidate_edges = self.instance_repository.list_links(
             workspace_id=workspace_id,
@@ -344,24 +387,24 @@ class OntologyService:
             return edge.source_object_id
         return None
 
-    def invoke(self, invocation: ActionInvocation, principal: Principal) -> ActionExecutionResult:
+    def invoke(self, invocation: ActionInvocation, principal: PrincipalLike) -> ActionExecutionResult:
         self._require_workspace(invocation.workspace_id)
-        scope = self.action_repository.project_context.resolve(invocation.workspace_id)
+        scope = self.action_repository.resolve_scope(invocation.workspace_id)
         if scope.organization_id != principal.organization_id:
-            raise AuthError(403, "tenant_scope_denied", "다른 조직의 resource에는 접근할 수 없습니다.")
+            raise OntologyAccessError(403, "tenant_scope_denied", "다른 조직의 resource에는 접근할 수 없습니다.")
         if scope.project_id not in principal.project_scopes:
-            raise AuthError(403, "project_scope_denied", "해당 Project에 접근할 수 없습니다.")
+            raise OntologyAccessError(403, "project_scope_denied", "해당 Project에 접근할 수 없습니다.")
         if principal.active_project_id and scope.project_id != principal.active_project_id:
-            raise AuthError(409, "active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
+            raise OntologyAccessError(409, "active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
         if invocation.workspace_id not in principal.workspace_scopes:
-            raise AuthError(403, "workspace_scope_denied", "해당 workspace에 접근할 수 없습니다.")
+            raise OntologyAccessError(403, "workspace_scope_denied", "해당 workspace에 접근할 수 없습니다.")
 
         action_type = ACTION_TYPE_BY_ID.get(invocation.action_type)
         if action_type is None:
             raise ValueError(f"unknown action_type: {invocation.action_type}")
         for permission in action_type.required_permissions:
             if permission not in principal.permissions:
-                raise AuthError(403, "permission_denied", f"권한이 필요합니다: {permission}")
+                raise OntologyAccessError(403, "permission_denied", f"권한이 필요합니다: {permission}")
 
         target_type = self._target_object_type(invocation)
         if target_type != action_type.object_type:
@@ -395,7 +438,7 @@ class OntologyService:
 
         try:
             event_id, result = self._execute(invocation, principal)
-            audit = self.legacy_service.repository.record_audit(
+            audit = self.source.repository.record_audit(
                 event_id=event_id,
                 run_id=reserved["id"],
                 action=f"ontology.action.{invocation.action_type}",
@@ -433,7 +476,7 @@ class OntologyService:
                 workspace_id=invocation.workspace_id,
                 object_id=invocation.object_id,
             ).object_type
-        except EventNotFound:
+        except OntologyNotFound:
             work_order_actions = {
                 "record_work_order_note",
                 "complete_work_order",
@@ -463,13 +506,13 @@ class OntologyService:
     def _execute(
         self,
         invocation: ActionInvocation,
-        principal: Principal,
+        principal: PrincipalLike,
     ) -> tuple[str, dict[str, Any]]:
         if invocation.action_type == "record_operational_decision":
             event_id = source_identifier(invocation.object_id, "risk_event")
-            result = self.legacy_service.decide(
+            result = self.source.decide(
                 event_id,
-                DecisionRequest(
+                DecisionCommand(
                     actor=principal.display_name,
                     decision=invocation.parameters["decision"],
                     note=invocation.parameters.get("note", ""),
@@ -483,9 +526,9 @@ class OntologyService:
         }
         if invocation.action_type in note_action_types:
             event_id = source_identifier(invocation.object_id, note_action_types[invocation.action_type])
-            result = self.legacy_service.note(
+            result = self.source.note(
                 event_id,
-                NoteRequest(
+                NoteCommand(
                     actor=principal.display_name,
                     body=invocation.parameters["body"],
                 ),
@@ -503,14 +546,16 @@ class OntologyService:
         if invocation.action_type in field_action_by_type:
             action, object_type = field_action_by_type[invocation.action_type]
             event_id = source_identifier(invocation.object_id, object_type)
-            self.legacy_service._fixture(event_id)
+            self.source._fixture(event_id)
             checklist = invocation.parameters.get("checklist", [])
             note = invocation.parameters.get("note", "")
             if action == "complete" and not checklist:
                 raise ValueError("complete_inspection requires at least one checklist item")
             if action in {"issue_found", "blocked"} and not note.strip():
                 raise ValueError(f"{invocation.action_type} requires a note")
-            result = self.role_workflow_repository.record_field_action(
+            if self.field_actions is None:
+                raise RuntimeError("ontology field-action port is not configured")
+            result = self.field_actions.record_field_action(
                 workspace_id=invocation.workspace_id,
                 event_id=event_id,
                 action=action,
@@ -585,7 +630,7 @@ class OntologyService:
         request_hash: str,
     ) -> ActionExecutionResult:
         if existing["request_hash"] != request_hash:
-            raise AuthError(
+            raise OntologyAccessError(
                 409,
                 "idempotency_key_conflict",
                 "같은 idempotency_key가 다른 Action 요청에 이미 사용되었습니다.",
@@ -593,8 +638,8 @@ class OntologyService:
         if existing["state"] == "succeeded":
             return self._execution_result(existing, replayed=True)
         if existing["state"] == "running":
-            raise AuthError(409, "action_in_progress", "동일한 Action 요청이 처리 중입니다.")
-        raise AuthError(
+            raise OntologyAccessError(409, "action_in_progress", "동일한 Action 요청이 처리 중입니다.")
+        raise OntologyAccessError(
             409,
             "prior_action_failed",
             "동일한 idempotency_key의 이전 Action 실행이 실패했습니다.",

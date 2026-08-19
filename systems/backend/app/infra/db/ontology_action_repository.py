@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from app.infra.db.project_repository import SQLiteProjectContextResolver, ensure_scope_columns
+from app.project.project_domain import ProjectContext, ProjectContextResolverPort
 
 
 InvocationState = Literal["running", "succeeded", "failed"]
@@ -19,11 +19,19 @@ RecoveryState = Literal[
 class OntologyActionRepository:
     """Persists ontology Action invocation state and idempotent results."""
 
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(
+        self,
+        database_path: str | Path,
+        *,
+        project_context: ProjectContextResolverPort,
+    ) -> None:
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.project_context = SQLiteProjectContextResolver(self.path)
+        self.project_context = project_context
         self._initialize()
+
+    def resolve_scope(self, workspace_id: str) -> ProjectContext:
+        return self.project_context.resolve(workspace_id)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -68,7 +76,10 @@ class OntologyActionRepository:
                     ON ontology_action_invocations(created_at);
                 """
             )
-            ensure_scope_columns(connection, table="ontology_action_invocations")
+            self.project_context.ensure_scope_columns(
+                connection,
+                table="ontology_action_invocations",
+            )
 
     @staticmethod
     def _decode(row: sqlite3.Row | None) -> dict[str, Any] | None:

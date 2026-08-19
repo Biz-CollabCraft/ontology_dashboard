@@ -16,7 +16,7 @@ from ..dependencies import (
     require_permission,
 )
 from app.identity import IdentityService, Principal
-from ..ontology_service import OntologyService
+from app.ontology.ontology_service import OntologyService
 from ..distributed_runtime import DurableJobRepository, QueueSaturated
 
 router = APIRouter(tags=["analyses"])

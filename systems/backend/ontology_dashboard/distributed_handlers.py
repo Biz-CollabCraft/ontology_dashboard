@@ -12,7 +12,10 @@ from app.dataset import DatasetMaterializationSource
 from app.infra.db.dataset_repository import DatasetRepository
 from .distributed_runtime import DurableJob, DurableJobRepository
 from app.identity import Principal
-from .ontology_service import OntologyService
+from app.project import SQLiteProjectContextResolver
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.ontology.ontology_service import OntologyService
 from .postgresql_ontology_repository import PostgreSQLOntologyInstanceRepository
 from .postgresql_repositories import (
     PostgreSQLOntologyActionRepository,
@@ -39,10 +42,23 @@ def analysis_handler(database: str, root: Path) -> Callable[[DurableJob], dict[s
                     organization_id=job.organization_id,
                     project_id=job.project_id,
                 ),
-                role_workflow_repository=PostgreSQLRoleWorkflowRepository(database),
+                field_actions=PostgreSQLRoleWorkflowRepository(database),
             )
         else:
-            ontology = OntologyService(service)
+            field_actions = PostgreSQLRoleWorkflowRepository(database) if is_postgresql(database) else None
+            project_context = SQLiteProjectContextResolver(database)
+            ontology = OntologyService(
+                service,
+                action_repository=OntologyActionRepository(
+                    database,
+                    project_context=project_context,
+                ),
+                instance_repository=OntologyInstanceRepository(
+                    database,
+                    project_context=project_context,
+                ),
+                field_actions=field_actions,
+            )
         result = analyses.execute_queued_run(
             run_id=str(job.payload["run_id"]),
             request=request,

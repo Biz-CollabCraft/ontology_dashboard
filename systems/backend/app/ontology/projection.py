@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable, Mapping, Protocol
 
-from .ontology import LinkRecord, ObjectRecord
-from .role_workflow_repository import RoleWorkflowRepository
-from .service import FactorySignalService
+from .ontology_domain import LinkRecord, ObjectRecord
 
-MANUFACTURING_DOMAIN_PACK = "manufacturing-predictive-maintenance"
+PREDICTIVE_MAINTENANCE_PROJECTION_ID = "manufacturing-predictive-maintenance"
 MANUFACTURING_WORKSPACE = "manufacturing-demo"
+
+
+class ProjectionActivityRepository(Protocol):
+    def event_activity(self, event_id: str) -> dict[str, list[dict[str, Any]]]: ...
+
+
+class PredictiveMaintenanceProjectionSource(Protocol):
+    fixtures: Mapping[str, dict[str, Any]]
+    repository: ProjectionActivityRepository
+
+    def evidence_snapshot(self, event_id: str) -> dict[str, Any]: ...
+
+
+class FieldActionProjectionSource(Protocol):
+    def list_field_actions(self, *, workspace_id: str, event_id: str) -> list[dict[str, Any]]: ...
 
 
 def equipment_object_id(equipment_id: str) -> str:
@@ -44,35 +57,40 @@ def source_identifier(object_id: str, expected_type: str) -> str:
 
 
 @dataclass(frozen=True)
-class OntologySnapshot:
+class OntologyProjectionInput:
+    """Ontology-owned input contract for one idempotent projection snapshot."""
+
+    workspace_id: str
+    source_system: str
+    source_revision: str
     objects: tuple[ObjectRecord, ...]
     links: tuple[LinkRecord, ...]
 
 
 class ManufacturingOntologyAdapter:
-    """Projects existing manufacturing fixtures and activity into ontology records."""
+    """PdM projection adapter consuming only the Ontology projection input ports."""
 
-    domain_pack = MANUFACTURING_DOMAIN_PACK
+    projection_id = PREDICTIVE_MAINTENANCE_PROJECTION_ID
     workspace_id = MANUFACTURING_WORKSPACE
 
     def __init__(
         self,
-        legacy_service: FactorySignalService,
-        role_workflow_repository: RoleWorkflowRepository | None = None,
+        source: PredictiveMaintenanceProjectionSource,
+        field_actions: FieldActionProjectionSource | None = None,
     ) -> None:
-        self.legacy_service = legacy_service
-        self.role_workflow_repository = role_workflow_repository
+        self.source = source
+        self.field_actions = field_actions
 
     def supports_workspace(self, workspace_id: str) -> bool:
         return workspace_id == self.workspace_id
 
-    def snapshot(self) -> OntologySnapshot:
+    def snapshot(self) -> OntologyProjectionInput:
         objects: list[ObjectRecord] = []
         links: list[LinkRecord] = []
         seen_equipment: set[str] = set()
 
-        for event_id, fixture in sorted(self.legacy_service.fixtures.items()):
-            evidence = self.legacy_service.evidence_snapshot(event_id)
+        for event_id, fixture in sorted(self.source.fixtures.items()):
+            evidence = self.source.evidence_snapshot(event_id)
             equipment = fixture["equipment"]
             equipment_id = equipment["equipment_id"]
             equipment_oid = equipment_object_id(equipment_id)
@@ -155,13 +173,13 @@ class ManufacturingOntologyAdapter:
                 ]
             )
 
-            activity = self.legacy_service.repository.event_activity(event_id)
+            activity = self.source.repository.event_activity(event_id)
             activity["field_actions"] = (
-                self.role_workflow_repository.list_field_actions(
+                self.field_actions.list_field_actions(
                     workspace_id=self.workspace_id,
                     event_id=event_id,
                 )
-                if self.role_workflow_repository is not None
+                if self.field_actions is not None
                 else []
             )
             inspection_required = evidence["recommended_decision"] in {
@@ -245,7 +263,13 @@ class ManufacturingOntologyAdapter:
                     links=links,
                 )
 
-        return OntologySnapshot(objects=tuple(objects), links=tuple(links))
+        return OntologyProjectionInput(
+            workspace_id=self.workspace_id,
+            source_system="manufacturing-predictive-maintenance",
+            source_revision="fixture-and-operational-v1",
+            objects=tuple(objects),
+            links=tuple(links),
+        )
 
     def _append_activity_objects(
         self,
