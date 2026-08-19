@@ -32,7 +32,17 @@ class EquipmentRepository(Protocol):
 
 
 class FixtureEquipmentRepository:
-    """Fixture-backed adapter for the existing manufacturing showcase host."""
+    """Fixture-backed adapter for the existing manufacturing showcase host.
+
+    Current-state storage and compare-and-set locking are intentionally
+    process-local and non-durable. They are sufficient for the single-process
+    showcase adapter only; distributed/durable Equipment state persistence is
+    owned by the follow-up Maintenance persistence work (#59).
+
+    Master fixtures are validated eagerly at composition time so malformed
+    canonical fixture data fails fast instead of producing partially usable
+    Equipment master state.
+    """
 
     def __init__(
         self,

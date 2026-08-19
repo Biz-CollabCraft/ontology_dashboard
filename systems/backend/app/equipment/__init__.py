@@ -12,18 +12,30 @@ from .equipment_exception import (
     EquipmentStateVersionConflictError,
     InvalidEquipmentStatePatchError,
 )
-from .equipment_repository import EquipmentRepository
-from .equipment_schema import EquipmentCurrentStateQuery, EquipmentStatePatchPort
+from .equipment_repository import EquipmentRepository, FixtureEquipmentRepository
+from .equipment_schema import (
+    EquipmentCurrentStatePayload,
+    EquipmentCurrentStateQuery,
+    EquipmentMasterPayload,
+    EquipmentStatePatchCommand,
+    EquipmentStatePatchPort,
+)
+from .equipment_service import EquipmentService
 
 __all__ = [
     "EquipmentCurrentState",
+    "EquipmentCurrentStatePayload",
+    "EquipmentCurrentStateQuery",
     "EquipmentError",
     "EquipmentMaster",
+    "EquipmentMasterPayload",
     "EquipmentNotFoundError",
     "EquipmentRepository",
-    "EquipmentCurrentStateQuery",
+    "EquipmentService",
+    "EquipmentStatePatchCommand",
     "EquipmentStatePatchPort",
     "EquipmentStateVersionConflictError",
+    "FixtureEquipmentRepository",
     "InvalidEquipmentStatePatchError",
     "apply_state_patch",
     "next_state_version",

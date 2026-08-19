@@ -7,7 +7,7 @@ class EquipmentError(Exception):
     """Base class for Equipment domain/application failures."""
 
 
-class EquipmentNotFoundError(EquipmentError, KeyError):
+class EquipmentNotFoundError(EquipmentError):
     """Raised when an Equipment master does not exist in the requested scope."""
 
 
@@ -22,5 +22,5 @@ class EquipmentStateVersionConflictError(EquipmentError):
         self.actual = actual
 
 
-class InvalidEquipmentStatePatchError(EquipmentError, ValueError):
+class InvalidEquipmentStatePatchError(EquipmentError):
     """Raised when a state patch violates Equipment-owned mutation rules."""

@@ -7,15 +7,17 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from app.equipment import (
+    EquipmentCurrentStateQuery,
     EquipmentNotFoundError,
+    EquipmentService,
+    EquipmentStatePatchPort,
     EquipmentStateVersionConflictError,
+    FixtureEquipmentRepository,
     InvalidEquipmentStatePatchError,
     apply_state_patch,
     next_state_version,
 )
-from app.equipment.equipment_repository import FixtureEquipmentRepository
 from app.equipment.equipment_router import register_equipment_routes
-from app.equipment.equipment_service import EquipmentService
 
 
 RESET_TOOL_WEAR = {
@@ -60,6 +62,25 @@ def test_equipment_master_is_deduplicated_sorted_and_project_scoped() -> None:
     assert service.equipment("EQ-001", "project-b")["display_name"] == "Other project"
     with pytest.raises(EquipmentNotFoundError):
         service.equipment("UNKNOWN", "project-a")
+
+
+def test_equipment_public_facade_exposes_service_and_ports() -> None:
+    service = _service()
+    query_port: EquipmentCurrentStateQuery = service
+    patch_port: EquipmentStatePatchPort = service
+
+    assert query_port.equipment_current_state("EQ-001", "project-a") is None
+    assert patch_port.patch_equipment_state(
+        "EQ-001",
+        project_id="project-a",
+        expected_state_version=None,
+        state_patch=RESET_TOOL_WEAR,
+    )["state_version"] == 1
+
+
+def test_equipment_domain_exceptions_do_not_alias_builtin_lookup_or_validation_errors() -> None:
+    assert not issubclass(EquipmentNotFoundError, KeyError)
+    assert not issubclass(InvalidEquipmentStatePatchError, ValueError)
 
 
 def test_equipment_state_patch_stores_state_not_command_syntax() -> None:
@@ -177,4 +198,9 @@ def test_equipment_router_preserves_existing_read_contract() -> None:
 
         missing = client.get("/api/equipment/UNKNOWN")
         assert missing.status_code == 404
-        assert missing.json()["detail"] == "equipment not found"
+        assert missing.json() == {
+            "error": {
+                "code": "not_found",
+                "message": "resource not found: UNKNOWN",
+            }
+        }
