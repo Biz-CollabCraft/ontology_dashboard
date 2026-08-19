@@ -7,34 +7,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..dashboard_models import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
-from ..dashboard_service import DashboardService
 from app.identity import AuthError, Principal
-from app.infra.db.project_repository import SQLiteProjectContextResolver
-from app.infra.db.ontology_action_repository import OntologyActionRepository
-from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
-from app.infra.llm import LLMProvider
-from app.ontology.ontology_domain import OBJECT_TYPE_BY_ID
-from app.ontology.ontology_service import OntologyService
-from ..predictive_maintenance_runtime.models import DatasetVersionRuntimeContext
-from ..predictive_maintenance_runtime.service import (
-    V3_1_MODEL_VERSION,
-    V3_1_RESULT_SCHEMA,
-    V3_1_SOURCE_VERSION,
-)
-from ..service import ManufacturingPredictiveMaintenanceService
-from ..visualizations import (
-    VISUALIZATION_REGISTRY,
-    SemanticVisualizationPlanRequest,
-    SemanticVisualizationPlanResponse,
-    build_typed_query_plan,
-    build_v3_1_semantic_catalog,
-    compile_postgresql_query,
-    context_from_source,
-    validate_override,
-    validate_override_channel_mapping,
-)
-from .models import (
+from app.ontology.ports import OntologyObjectQueryPort
+
+from .planner_schema import (
     BoardRecommendationItem,
     BoardRecommendationRequest,
     BoardRecommendationResponse,
@@ -49,6 +25,12 @@ from .models import (
     ObjectQueryPlanResponse,
     VisualizationPlannerResponse,
     VisualizationRecommendationRequest,
+)
+from .ports import (
+    PlannerDashboardPort,
+    PlannerEvidencePort,
+    PlannerLLMPort,
+    PlannerVisualizationPort,
 )
 
 STATUS_TERMS = {
@@ -96,32 +78,21 @@ class OntologyDashboardPlannerService:
 
     def __init__(
         self,
-        legacy_service: ManufacturingPredictiveMaintenanceService,
+        evidence: PlannerEvidencePort,
         *,
-        provider: LLMProvider | None = None,
-        ontology: OntologyService | None = None,
-        dashboards: DashboardService | None = None,
+        ontology: OntologyObjectQueryPort,
+        dashboards: PlannerDashboardPort,
+        visualizations: PlannerVisualizationPort,
+        provider: PlannerLLMPort | None = None,
     ) -> None:
-        self.legacy_service = legacy_service
-        if ontology is None:
-            project_context = SQLiteProjectContextResolver(legacy_service.repository.path)
-            ontology = OntologyService(
-                legacy_service,
-                action_repository=OntologyActionRepository(
-                    legacy_service.repository.path,
-                    project_context=project_context,
-                ),
-                instance_repository=OntologyInstanceRepository(
-                    legacy_service.repository.path,
-                    project_context=project_context,
-                ),
-            )
+        self.evidence = evidence
         self.ontology = ontology
-        self.dashboards = dashboards or DashboardService(str(legacy_service.repository.path))
+        self.dashboards = dashboards
+        self.visualizations = visualizations
         self.provider = provider
 
     @staticmethod
-    def _provider_name(provider: LLMProvider | None) -> str:
+    def _provider_name(provider: PlannerLLMPort | None) -> str:
         return getattr(provider, "name", "none") if provider is not None else "none"
 
     @staticmethod
@@ -201,7 +172,7 @@ class OntologyDashboardPlannerService:
         )
 
     def _validate_query_intent(self, intent: ObjectQueryIntent) -> None:
-        definition = OBJECT_TYPE_BY_ID.get(intent.object_type)
+        definition = self.ontology.object_type_registry().get(intent.object_type)
         if definition is None:
             raise ValueError(f"planner requested unknown object_type: {intent.object_type}")
         allowed_fields = {item.id for item in definition.properties}
@@ -267,7 +238,7 @@ class OntologyDashboardPlannerService:
                             "workspace_id": request.workspace_id,
                             "registered_object_types": [
                                 {"id": item.id, "properties": [prop.id for prop in item.properties]}
-                                for item in OBJECT_TYPE_BY_ID.values()
+                                for item in self.ontology.object_type_registry().values()
                             ],
                             "deterministic_candidate": deterministic.model_dump(mode="json"),
                             "limit": request.limit,
@@ -454,12 +425,22 @@ class OntologyDashboardPlannerService:
             current_board_ids=current_ids,
         )
 
-    @staticmethod
-    def _validate_visualization_candidates(request: VisualizationRecommendationRequest) -> None:
-        registry = {item.kind for item in VISUALIZATION_REGISTRY}
-        fields = {item.id for item in request.field_profile}
+    def _validate_visualization_candidates(
+        self,
+        request: VisualizationRecommendationRequest,
+    ) -> tuple[list[Any], list[Any]]:
+        profiles = [
+            self.visualizations.parse_field_profile(item)
+            for item in request.field_profile
+        ]
+        candidates = [
+            self.visualizations.parse_candidate(item)
+            for item in request.deterministic_candidates
+        ]
+        registry = self.visualizations.registry_kinds
+        fields = {item.id for item in profiles}
         seen: set[str] = set()
-        for candidate in request.deterministic_candidates:
+        for candidate in candidates:
             if candidate.kind not in registry:
                 raise ValueError(f"planner requested unregistered visualization: {candidate.kind}")
             if candidate.kind in seen:
@@ -473,6 +454,7 @@ class OntologyDashboardPlannerService:
             unknown = mapped_fields - fields
             if unknown:
                 raise ValueError(f"visualization candidate references unknown fields: {sorted(unknown)}")
+        return profiles, candidates
 
     def visualization_recommendation(
         self,
@@ -480,8 +462,8 @@ class OntologyDashboardPlannerService:
         principal: Principal,
         request: VisualizationRecommendationRequest,
     ) -> VisualizationPlannerResponse:
-        self._validate_visualization_candidates(request)
-        candidates = sorted(request.deterministic_candidates, key=lambda item: item.score, reverse=True)
+        profiles, validated_candidates = self._validate_visualization_candidates(request)
+        candidates = sorted(validated_candidates, key=lambda item: item.score, reverse=True)
         selected_kind = candidates[0].kind
         selected_rationale = candidates[0].rationale
         mode = "deterministic"
@@ -504,7 +486,7 @@ class OntologyDashboardPlannerService:
                             "workspace_id": request.workspace_id,
                             "dashboard_id": request.dashboard_id,
                             "board_id": request.board_id,
-                            "field_profile": [item.model_dump(mode="json") for item in request.field_profile],
+                            "field_profile": [item.model_dump(mode="json") for item in profiles],
                             "candidates": [item.model_dump(mode="json") for item in candidates],
                         },
                     )
@@ -548,9 +530,10 @@ class OntologyDashboardPlannerService:
         self,
         *,
         principal: Principal,
-        request: SemanticVisualizationPlanRequest,
-        runtime_context: DatasetVersionRuntimeContext,
-    ) -> SemanticVisualizationPlanResponse:
+        request: Any,
+        runtime_context: Any,
+    ) -> Any:
+        request = self.parse_semantic_request(request)
         source = request.source
         if source.organization_id != principal.organization_id:
             raise AuthError(403, "organization_scope_denied", "Organization 범위를 벗어난 source입니다.")
@@ -584,11 +567,14 @@ class OntologyDashboardPlannerService:
             raise ValueError("semantic source source_version does not match the server Dataset Version")
         if source.bundle_checksum_sha256 != runtime_context.bundle_checksum_sha256:
             raise ValueError("semantic source checksum does not match the server Dataset Version")
-        if runtime_context.source_version != V3_1_SOURCE_VERSION:
+        if runtime_context.source_version != self.visualizations.source_version:
             raise ValueError("Semantic Visualization Planner only supports V3.1 Dataset Versions")
-        if source.model_version not in {None, V3_1_MODEL_VERSION}:
+        if source.model_version not in {None, self.visualizations.model_version}:
             raise ValueError("semantic source model_version does not match the V3.1 model contract")
-        if source.result_artifact_schema_version not in {None, V3_1_RESULT_SCHEMA}:
+        if source.result_artifact_schema_version not in {
+            None,
+            self.visualizations.result_schema_version,
+        }:
             raise ValueError(
                 "semantic source Result Artifact schema does not match the V3.1 contract"
             )
@@ -597,8 +583,8 @@ class OntologyDashboardPlannerService:
                 "dataset_version": runtime_context.source_version,
                 "source_version": runtime_context.source_version,
                 "bundle_checksum_sha256": runtime_context.bundle_checksum_sha256,
-                "model_version": V3_1_MODEL_VERSION,
-                "result_artifact_schema_version": V3_1_RESULT_SCHEMA,
+                "model_version": self.visualizations.model_version,
+                "result_artifact_schema_version": self.visualizations.result_schema_version,
                 "release_gates": runtime_context.governance.model_dump(mode="json"),
                 "graph_readiness": runtime_context.graph.status,
                 "relational_fallback_capability": not runtime_context.graph.required_for_runtime,
@@ -606,15 +592,24 @@ class OntologyDashboardPlannerService:
         )
         request = request.model_copy(update={"source": source})
         if source.source_role == "result_artifact" and (
-            source.result_artifact_schema_version != V3_1_RESULT_SCHEMA
+            source.result_artifact_schema_version != self.visualizations.result_schema_version
         ):
             raise ValueError("Result Artifact schema version is incompatible with the V3.1 catalog")
 
-        catalog = build_v3_1_semantic_catalog(context_from_source(source))
-        deterministic_plan, candidates = build_typed_query_plan(request, catalog)
+        catalog = self.visualizations.build_semantic_catalog(
+            self.visualizations.context_from_source(source)
+        )
+        deterministic_plan, candidates = self.visualizations.build_typed_query_plan(
+            request,
+            catalog,
+        )
         base_plan = deterministic_plan
         base_candidates = candidates
-        override = validate_override(request.saved_override, deterministic_plan, catalog)
+        override = self.visualizations.validate_override(
+            request.saved_override,
+            deterministic_plan,
+            catalog,
+        )
         override_applied = False
         if request.saved_override is not None and override.status == "compatible":
             overridden_request = request.model_copy(
@@ -626,11 +621,14 @@ class OntologyDashboardPlannerService:
                 }
             )
             try:
-                deterministic_plan, candidates = build_typed_query_plan(
+                deterministic_plan, candidates = self.visualizations.build_typed_query_plan(
                     overridden_request,
                     catalog,
                 )
-                validate_override_channel_mapping(request.saved_override, deterministic_plan)
+                self.visualizations.validate_override_channel_mapping(
+                    request.saved_override,
+                    deterministic_plan,
+                )
                 deterministic_plan = deterministic_plan.model_copy(
                     update={
                         "channel_mapping": request.saved_override.channel_mapping,
@@ -701,18 +699,18 @@ class OntologyDashboardPlannerService:
         if override_applied:
             plan = deterministic_plan
         else:
-            plan, candidates = build_typed_query_plan(
+            plan, candidates = self.visualizations.build_typed_query_plan(
                 request,
                 catalog,
                 selected_kind=selected_kind,
             )
             plan = plan.model_copy(update={"selection_reason": selected_rationale})
-        compiled = compile_postgresql_query(
+        compiled = self.visualizations.compile_query(
             plan,
             catalog,
             clamp_limits=request.clamp_limits,
         )
-        return SemanticVisualizationPlanResponse(
+        return self.visualizations.make_semantic_response(
             mode=mode,
             provider=provider,
             fallback_reason=fallback_reason,
@@ -730,7 +728,8 @@ class OntologyDashboardPlannerService:
                 "scope_enforced": True,
                 "dataset_version_enforced": True,
                 "result_artifact_schema_enforced": source.source_role != "result_artifact"
-                or source.result_artifact_schema_version == V3_1_RESULT_SCHEMA,
+                or source.result_artifact_schema_version
+                == self.visualizations.result_schema_version,
                 "release_gates_governance_only": True,
                 "binary_failure_class_preserved": True,
                 "evaluation_truth_available": False,
@@ -742,6 +741,11 @@ class OntologyDashboardPlannerService:
                 "server_authoritative_dataset_context": True,
             },
         )
+
+    def parse_semantic_request(self, request: Any) -> Any:
+        """Normalize API/test inputs through the visualization owner's typed contract."""
+
+        return self.visualizations.parse_semantic_request(request)
 
     def dashboard_draft(
         self,
@@ -812,17 +816,17 @@ class OntologyDashboardPlannerService:
                     provider = self._provider_name(self.provider)
                     fallback_reason = type(exc).__name__
 
-        tabs = [DashboardTab.model_validate(item.model_dump(mode="python")) for item in current.tabs]
+        tabs = [copy.deepcopy(item) for item in current.tabs]
         if selected_ids:
             suffix = hashlib.sha256(
                 f"{request.target_role}:{request.goal}".encode("utf-8")
             ).hexdigest()[:8]
             new_tab_id = f"planner:{request.target_role}:{suffix}"
-            new_boards: list[DashboardBoard] = []
+            new_boards: list[Any] = []
             for index, definition_id in enumerate(selected_ids):
                 definition = catalog[definition_id]
                 new_boards.append(
-                    DashboardBoard(
+                    self.dashboards.make_board(
                         id=f"{new_tab_id}:{definition_id}:{index}",
                         definition_id=definition_id,
                         title=definition.display_name,
@@ -834,7 +838,7 @@ class OntologyDashboardPlannerService:
                     )
                 )
             tabs.append(
-                DashboardTab(
+                self.dashboards.make_tab(
                     id=new_tab_id,
                     title=tab_title,
                     order=len(tabs),
@@ -844,7 +848,7 @@ class OntologyDashboardPlannerService:
                 )
             )
 
-        publish_request = DashboardTemplatePublishRequest(
+        publish_request = self.dashboards.make_publish_request(
             workspace_id=request.workspace_id,
             display_name=f"{request.target_role} Planner Draft",
             tabs=tabs,
@@ -972,7 +976,7 @@ class OntologyDashboardPlannerService:
         principal: Principal,
         request: GroundedNarrativeRequest,
     ) -> GroundedNarrativeResponse:
-        evidence = self.legacy_service.evidence_snapshot(request.event_id)
+        evidence = self.evidence.evidence_snapshot(request.event_id)
         deterministic = self._deterministic_narrative(request, evidence)
         narrative = deterministic
         if request.use_llm:

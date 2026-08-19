@@ -8,8 +8,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from ..contracts import AppLocale, GroundedReport, Intent, Role, UIBlock, UILayout
-from app.infra.llm import LLMProvider
+from .ports import PlannerLLMPort
+from .state import AppLocale, Intent, Role, UIBlock, UILayout
 
 BLOCK_REGISTRY: dict[str, tuple[str, list[str]]] = {
     "StatusSummary": ("현재 상태", ["status", "confidence", "predicted_failure_type"]),
@@ -57,7 +57,7 @@ ENGINEER_DEFAULT = [
 
 
 class LayoutPlanner:
-    def __init__(self, project_root: str | Path, provider: LLMProvider | None = None) -> None:
+    def __init__(self, project_root: str | Path, provider: PlannerLLMPort | None = None) -> None:
         self.root = Path(project_root)
         self.provider = provider
         self.schema = json.loads(
@@ -169,7 +169,7 @@ class LayoutPlanner:
     def plan(
         self,
         evidence: dict[str, Any],
-        report: GroundedReport,
+        report: Any,
         role: Role,
         intent: Intent,
         *,

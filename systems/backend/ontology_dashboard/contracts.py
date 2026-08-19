@@ -7,17 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Role = Literal["manager", "engineer"]
-AppLocale = Literal["ko-KR", "en-US"]
-Intent = Literal[
-    "overview",
-    "explain-risk",
-    "compare",
-    "summarize-manager",
-    "detail-engineer",
-    "recommend-check",
-    "show-model-details",
-]
+from app.planner.state import AppLocale, Intent, Role, UIBlock, UILayout
 
 
 class OperationalDecisionKind(StrEnum):
@@ -64,43 +54,6 @@ class GroundedReport(StrictModel):
     actions: list[ReportAction]
     citations: list[str]
     limitations: list[str]
-    generated_at: str
-
-
-class UIBlock(StrictModel):
-    block_id: str
-    type: Literal[
-        "StatusSummary",
-        "RiskKpi",
-        "PriorityList",
-        "ImpactSummary",
-        "ManagerDecisionCard",
-        "SensorLineChart",
-        "AnomalyTimeline",
-        "FactorContribution",
-        "EvidenceTable",
-        "RecommendedActions",
-        "EngineerChecklist",
-        "DataQualityWarning",
-        "ModelDetails",
-        "ConversationThread",
-    ]
-    title: str
-    order: int = Field(ge=1)
-    emphasis: Literal["primary", "secondary", "detail"]
-    data_fields: list[str]
-    collapsed: bool = False
-
-
-class UILayout(StrictModel):
-    schema_version: Literal["1.0"] = "1.0"
-    layout_id: str
-    event_id: str
-    role: Role
-    locale: AppLocale = "ko-KR"
-    intent: Intent
-    mode: Literal["deterministic", "llm", "deterministic_fallback"]
-    blocks: list[UIBlock]
     generated_at: str
 
 

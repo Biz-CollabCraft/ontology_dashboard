@@ -48,6 +48,7 @@ from .application_runtime import ApplicationRuntimeRepository
 from .artifact_storage import ArtifactGovernanceService, build_artifact_service
 from .branching_lineage import BranchingLineageRepository
 from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorAdapter
+from .dashboard_models import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
 from .dashboard_service import DashboardService
 from .distributed_runtime import DurableJobRepository
 from .export_service import ExportService
@@ -56,7 +57,7 @@ from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService
 from app.project import ProjectService
 from .modeling import ModelingService
 from .migrations import migrate
-from .planner import OntologyDashboardPlannerService
+from app.planner import OntologyDashboardPlannerService
 from .orchestration import AgentRunRepository, MultiStoreOrchestrator
 from .orchestration.ports import Project3GraphPort, Project3VectorPort, RelationalOntologyPort
 from .postgresql_repositories import (
@@ -76,9 +77,27 @@ from .predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeRepository,
     PredictiveMaintenanceRuntimeService,
 )
+from .predictive_maintenance_runtime.service import (
+    V3_1_MODEL_VERSION,
+    V3_1_RESULT_SCHEMA,
+    V3_1_SOURCE_VERSION,
+)
 from .role_workflow_repository import RoleWorkflowRepository
 from .role_workflow_service import RoleWorkflowService
 from .service import ManufacturingPredictiveMaintenanceService
+from .visualizations import (
+    FieldProfile,
+    SemanticVisualizationPlanRequest,
+    SemanticVisualizationPlanResponse,
+    VISUALIZATION_REGISTRY,
+    VisualizationCandidate,
+    build_typed_query_plan,
+    build_v3_1_semantic_catalog,
+    compile_postgresql_query,
+    context_from_source,
+    validate_override,
+    validate_override_channel_mapping,
+)
 
 ROOT = project_root()
 MANUFACTURING_WORKSPACE = "manufacturing-demo"
@@ -464,6 +483,126 @@ def get_multistore_orchestrator(
     )
 
 
+class DashboardPlannerAdapter:
+    """Composition adapter exposing only the Dashboard operations Planner consumes."""
+
+    def __init__(self, service: DashboardService) -> None:
+        self.service = service
+
+    def resolve(self, *, principal: Principal, workspace_id: str):
+        return self.service.resolve(principal=principal, workspace_id=workspace_id)
+
+    def catalog(self, *, principal: Principal, role_code: str):
+        return self.service.catalog(principal=principal, role_code=role_code)
+
+    def current_template(self, *, workspace_id: str, role_code: str):
+        return self.service.current_template(workspace_id=workspace_id, role_code=role_code)
+
+    @staticmethod
+    def make_board(**values):
+        return DashboardBoard(**values)
+
+    @staticmethod
+    def make_tab(**values):
+        return DashboardTab(**values)
+
+    @staticmethod
+    def make_publish_request(**values):
+        return DashboardTemplatePublishRequest(**values)
+
+    def validate_template_draft(self, *, role_code: str, template, request):
+        return self.service.validate_template_draft(
+            role_code=role_code,
+            template=template,
+            request=request,
+        )
+
+
+class VisualizationPlannerAdapter:
+    """Composition adapter for the typed visualization capability consumed by Planner."""
+
+    source_version = V3_1_SOURCE_VERSION
+    model_version = V3_1_MODEL_VERSION
+    result_schema_version = V3_1_RESULT_SCHEMA
+    registry_kinds = frozenset(item.kind for item in VISUALIZATION_REGISTRY)
+
+    @staticmethod
+    def _payload(value):
+        return value.model_dump(mode="python") if hasattr(value, "model_dump") else value
+
+    def parse_field_profile(self, value):
+        return FieldProfile.model_validate(self._payload(value))
+
+    def parse_candidate(self, value):
+        return VisualizationCandidate.model_validate(self._payload(value))
+
+    def parse_semantic_request(self, value):
+        if isinstance(value, SemanticVisualizationPlanRequest):
+            return value
+        return SemanticVisualizationPlanRequest.model_validate(self._payload(value))
+
+    @staticmethod
+    def context_from_source(source):
+        return context_from_source(source)
+
+    @staticmethod
+    def build_semantic_catalog(context):
+        return build_v3_1_semantic_catalog(context)
+
+    @staticmethod
+    def build_typed_query_plan(request, catalog, *, selected_kind=None):
+        return build_typed_query_plan(request, catalog, selected_kind=selected_kind)
+
+    @staticmethod
+    def validate_override(override, plan, catalog):
+        return validate_override(override, plan, catalog)
+
+    @staticmethod
+    def validate_override_channel_mapping(override, plan) -> None:
+        validate_override_channel_mapping(override, plan)
+
+    @staticmethod
+    def compile_query(plan, catalog, *, clamp_limits: bool):
+        return compile_postgresql_query(plan, catalog, clamp_limits=clamp_limits)
+
+    @staticmethod
+    def make_semantic_response(**values):
+        return SemanticVisualizationPlanResponse(**values)
+
+
+def build_ontology_planner_service(
+    service: ManufacturingPredictiveMaintenanceService,
+    *,
+    provider=None,
+    ontology: OntologyService | None = None,
+    dashboards: DashboardService | None = None,
+) -> OntologyDashboardPlannerService:
+    """Compose the canonical Planner for API wiring and focused tests."""
+
+    target = str(service.repository.path)
+    if ontology is None:
+        project_context = SQLiteProjectContextResolver(target)
+        ontology = OntologyService(
+            service,
+            action_repository=OntologyActionRepository(
+                target,
+                project_context=project_context,
+            ),
+            instance_repository=OntologyInstanceRepository(
+                target,
+                project_context=project_context,
+            ),
+        )
+    dashboards = dashboards or DashboardService(target)
+    return OntologyDashboardPlannerService(
+        service,
+        provider=provider,
+        ontology=ontology,
+        dashboards=DashboardPlannerAdapter(dashboards),
+        visualizations=VisualizationPlannerAdapter(),
+    )
+
+
 @lru_cache(maxsize=1)
 def get_rate_limiter() -> RateLimiter:
     redis_url = os.getenv("ONTOLOGY_DASHBOARD_REDIS_URL", "").strip()
@@ -479,7 +618,7 @@ def get_ontology_planner_service(
 ) -> OntologyDashboardPlannerService:
     provider_name = os.getenv("LLM_PROVIDER", "deterministic").strip().lower()
     provider = None if provider_name in {"", "none", "deterministic", "offline"} else configured_provider()
-    return OntologyDashboardPlannerService(
+    return build_ontology_planner_service(
         service,
         provider=provider,
         ontology=ontology,

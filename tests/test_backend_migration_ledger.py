@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from scripts.check_backend_migration_ledger import LedgerValidationError, validate_ledger
+from scripts.check_backend_migration_ledger import (
+    LedgerValidationError,
+    _migration_progress,
+    validate_ledger,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]

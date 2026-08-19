@@ -262,6 +262,14 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `domain_packs/predictive_maintenance/__init__.py` | `systems/backend/app/infra/db/predictive_maintenance_ontology_projection.py` | `MIGRATED` |
 | `domain_packs/predictive_maintenance/materialization.py` | `systems/backend/app/ontology/projection.py`, `systems/backend/app/infra/db/predictive_maintenance_ontology_projection.py` | `MIGRATED` |
 | `postgresql_ontology_repository.py` | `systems/backend/app/infra/db/postgresql_ontology_instance_repository.py` | `MIGRATED` |
+| `conversation.py` | `systems/backend/app/planner/conversation.py`, `systems/backend/app/planner/state.py` | `MIGRATED` |
+| `planner/__init__.py` | `systems/backend/app/planner/__init__.py` | `MIGRATED` |
+| `planner/layout.py` | `systems/backend/app/planner/layout.py`, `systems/backend/app/planner/state.py` | `MIGRATED` |
+| `planner/models.py` | `systems/backend/app/planner/planner_schema.py` | `MIGRATED` |
+| `planner/service.py` | `systems/backend/app/planner/planner_service.py`, `systems/backend/app/planner/ports.py` | `MIGRATED` |
+| `ontology_planner_models.py` | `systems/backend/app/planner/planner_schema.py` | `MIGRATED` |
+| `ontology_planner_service.py` | `systems/backend/app/planner/planner_service.py` | `MIGRATED` |
+| `routers/planner.py` | `systems/backend/app/planner/planner_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
@@ -285,3 +293,11 @@ public Equipment contract를 통해 소비하고, 기존 `closed_loop` persisten
 `adapters/__init__.py`, `adapters/models.py`, `adapters/service.py`,
 `adapters/prediction_repository.py`에는 #58 Diagnosis가 소유할 Prediction persistence 계약만
 남아 있다. Dataset manifest/bundle/CSV ingestion 책임은 위 source 단위로 #57에서 분리 완료했다.
+
+Phase 11 / #62에서는 자연어 Object query, Dashboard draft/recommendation, grounded narrative,
+semantic visualization UI plan, deterministic layout 및 conversation intent를 `app/planner`로
+물리 이관했다. Planner는 `OntologyObjectQueryPort`, `PlannerDashboardPort`,
+`PlannerEvidencePort`, `PlannerVisualizationPort`, `PlannerLLMPort`만 소비하며 concrete
+Infra/다른 Domain implementation은 legacy composition root에서 주입한다. `orchestration/*`와
+`routers/agent.py`의 generic multi-store Agent runtime은 Planner-owned 기능이 아니므로 이번
+MIGRATED 목록에 포함하지 않았고 Section 3/5의 `REMOVE` disposition을 그대로 유지한다.

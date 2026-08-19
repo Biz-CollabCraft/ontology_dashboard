@@ -1,16 +1,10 @@
-"""Canonical ontology-aware planning package.
-
-The legacy event-layout planner still imports ``ontology_dashboard.planner.LayoutPlanner``
-through the historical namespace alias.  Keep that symbol available without eagerly
-importing the dashboard planner service, which would create a service composition cycle.
-"""
+"""Canonical Planner application capability and public contracts."""
 
 from __future__ import annotations
 
-from typing import Any
-
+from .conversation import IntentResult, IntentRouter, deterministic_answer
 from .layout import LayoutPlanner
-from .models import (
+from .planner_schema import (
     BoardRecommendationItem,
     BoardRecommendationRequest,
     BoardRecommendationResponse,
@@ -26,14 +20,15 @@ from .models import (
     VisualizationPlannerResponse,
     VisualizationRecommendationRequest,
 )
-
-
-def __getattr__(name: str) -> Any:
-    if name == "OntologyDashboardPlannerService":
-        from .service import OntologyDashboardPlannerService
-
-        return OntologyDashboardPlannerService
-    raise AttributeError(name)
+from .planner_service import OntologyDashboardPlannerService
+from .planner_router import build_planner_router
+from .ports import (
+    PlannerDashboardPort,
+    PlannerEvidencePort,
+    PlannerLLMPort,
+    PlannerVisualizationPort,
+)
+from .state import AppLocale, Intent, Role, UIBlock, UILayout
 
 
 __all__ = [
@@ -45,6 +40,8 @@ __all__ = [
     "GroundedNarrativeClaim",
     "GroundedNarrativeRequest",
     "GroundedNarrativeResponse",
+    "IntentResult",
+    "IntentRouter",
     "LayoutPlanner",
     "NaturalLanguageObjectQueryRequest",
     "ObjectQueryFilter",
@@ -53,4 +50,15 @@ __all__ = [
     "VisualizationPlannerResponse",
     "VisualizationRecommendationRequest",
     "OntologyDashboardPlannerService",
+    "build_planner_router",
+    "PlannerDashboardPort",
+    "PlannerEvidencePort",
+    "PlannerLLMPort",
+    "PlannerVisualizationPort",
+    "AppLocale",
+    "Intent",
+    "Role",
+    "UIBlock",
+    "UILayout",
+    "deterministic_answer",
 ]

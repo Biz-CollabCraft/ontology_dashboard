@@ -10,6 +10,7 @@ from app.dataset.dataset_router import create_dataset_router
 
 from .application import create_app
 from .dependencies import (
+    build_ontology_planner_service,
     client_ip,
     current_principal,
     get_dataset_catalog_service,
@@ -17,6 +18,7 @@ from .dependencies import (
     get_ontology_service,
     get_ontology_planner_service,
     get_project_service,
+    get_predictive_maintenance_runtime_service,
     get_rate_limiter,
     get_service,
     rate_limit_subject,
@@ -39,7 +41,7 @@ from .routers.governance import router as governance_router
 from .routers.manufacturing import router as manufacturing_router
 from .routers.modeling import router as modeling_router
 from app.ontology.ontology_router import create_ontology_router
-from .routers.planner import router as planner_router
+from app.planner.planner_router import build_planner_router
 from .routers.platform import router as platform_router
 from .routers.project3 import router as project3_router
 from .routers.predictive_maintenance_runtime import (
@@ -83,6 +85,15 @@ projects_router = build_project_router(
     get_event_query=get_service,
     require_permission=require_permission,
     require_csrf=require_csrf,
+)
+planner_router = build_planner_router(
+    get_identity_service=get_identity_service,
+    get_planner_service=get_ontology_planner_service,
+    get_runtime_service=get_predictive_maintenance_runtime_service,
+    get_rate_limiter=get_rate_limiter,
+    rate_limit_subject=rate_limit_subject,
+    require_csrf=require_csrf,
+    require_permission=require_permission,
 )
 
 
@@ -245,6 +256,7 @@ for feature_router in (
 
 __all__ = [
     "app",
+    "build_ontology_planner_service",
     "get_identity_service",
     "get_ontology_planner_service",
     "get_rate_limiter",

@@ -21,11 +21,11 @@ from app.identity import (
 from identity_test_support import build_identity_service
 from ontology_dashboard.main import (
     app,
+    build_ontology_planner_service,
     get_identity_service,
     get_ontology_planner_service,
     get_service,
 )
-from ontology_dashboard.planner import OntologyDashboardPlannerService
 from ontology_dashboard.predictive_maintenance_runtime.models import (
     DatasetVersionRuntimeContext,
     GovernanceProvenance,
@@ -843,7 +843,7 @@ def test_llm_outside_candidate_falls_back_and_project_scope_is_enforced(tmp_path
         database_path=tmp_path / "semantic-planner.db",
     )
     provider = FakeProvider({"kind": "sankey", "rationale": "invented chart"})
-    planner = OntologyDashboardPlannerService(
+    planner = build_ontology_planner_service(
         service,
         provider=provider,
     )
@@ -923,7 +923,7 @@ def test_compatible_saved_override_applies_mapping_and_invalid_override_falls_ba
     database_path = tmp_path / "semantic-override-planner.db"
     build_identity_service(database_path, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
-    planner = OntologyDashboardPlannerService(service)
+    planner = build_ontology_planner_service(service)
     compatible = VisualizationOverride(
         catalog_version=CATALOG_VERSION,
         dataset_version="canonical-ai4i-physics-v3.1",
@@ -987,7 +987,7 @@ def test_server_dataset_context_rejects_spoofed_provenance_and_replaces_runtime_
     database_path = tmp_path / "semantic-authority.db"
     build_identity_service(database_path, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
-    planner = OntologyDashboardPlannerService(service)
+    planner = build_ontology_planner_service(service)
     request = semantic_request(
         "prediction_timeline",
         intent="trend",
@@ -1032,7 +1032,7 @@ def test_semantic_visualization_plan_api_contract_is_project_scoped_and_serializ
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_service] = lambda: service
-    app.dependency_overrides[get_ontology_planner_service] = lambda: OntologyDashboardPlannerService(
+    app.dependency_overrides[get_ontology_planner_service] = lambda: build_ontology_planner_service(
         service
     )
     app.dependency_overrides[get_predictive_maintenance_runtime_service] = (

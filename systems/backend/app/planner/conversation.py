@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .contracts import AppLocale, Intent
+from .state import AppLocale, Intent
 
 
 @dataclass(frozen=True)

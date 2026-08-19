@@ -12,11 +12,11 @@ from app.identity import CSRF_COOKIE, IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.main import (
     app,
+    build_ontology_planner_service,
     get_identity_service,
     get_ontology_planner_service,
     get_service,
 )
-from ontology_dashboard.planner import OntologyDashboardPlannerService
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +54,7 @@ def service(database_path: Path) -> FactorySignalService:
 def client(identity: IdentityService, service: FactorySignalService):
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_service] = lambda: service
-    app.dependency_overrides[get_ontology_planner_service] = lambda: OntologyDashboardPlannerService(service)
+    app.dependency_overrides[get_ontology_planner_service] = lambda: build_ontology_planner_service(service)
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -120,7 +120,7 @@ def test_malicious_llm_object_query_cannot_invent_object_or_property(
             "source_terms": ["password"],
         }
     ])
-    app.dependency_overrides[get_ontology_planner_service] = lambda: OntologyDashboardPlannerService(
+    app.dependency_overrides[get_ontology_planner_service] = lambda: build_ontology_planner_service(
         service,
         provider=provider,
     )
@@ -173,7 +173,7 @@ def test_fde_dashboard_draft_is_catalog_validated_preview_and_provider_failure_k
             "board_definition_ids": ["arbitrary-code-execution-board"],
         }
     ])
-    app.dependency_overrides[get_ontology_planner_service] = lambda: OntologyDashboardPlannerService(
+    app.dependency_overrides[get_ontology_planner_service] = lambda: build_ontology_planner_service(
         service,
         provider=provider,
     )
@@ -248,7 +248,7 @@ def test_grounded_narrative_rejects_unknown_references_and_forbidden_claims(
             "citations": ["secret.password_hash"],
         }
     ])
-    app.dependency_overrides[get_ontology_planner_service] = lambda: OntologyDashboardPlannerService(
+    app.dependency_overrides[get_ontology_planner_service] = lambda: build_ontology_planner_service(
         service,
         provider=provider,
     )

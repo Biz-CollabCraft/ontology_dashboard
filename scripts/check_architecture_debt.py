@@ -61,7 +61,7 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     canonical_composition_root = root / "systems" / "backend" / "ontology_dashboard" / "main.py"
     legacy_package = root / "systems" / "backend" / "factory_signal_board"
     legacy_composition_shim = root / "systems" / "backend" / "factory_signal_board" / "main.py"
-    planner_router = root / "systems" / "backend" / "ontology_dashboard" / "routers" / "planner.py"
+    planner_router = root / "systems" / "backend" / "app" / "planner" / "planner_router.py"
     dependencies = root / "systems" / "backend" / "ontology_dashboard" / "dependencies.py"
     feature_flags = root / "systems" / "frontend" / "src" / "featureFlags.ts"
     dashboard_shell = root / "systems" / "frontend" / "src" / "features" / "dashboard" / "DashboardShell.tsx"
@@ -95,11 +95,8 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         "role_workflow_service",
     )
     ontology_compatibility_modules = (
-        "conversation",
         "llm",
         "reports",
-        "ontology_planner_models",
-        "ontology_planner_service",
     )
 
     legacy_path_extension = _contains(canonical_init, "__path__.append")
@@ -114,6 +111,8 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         _contains(path, token)
         for path in (planner_router, dependencies)
         for token in (
+            "ontology_dashboard.planner",
+            "ontology_dashboard.ontology_planner",
             "from ..ontology_planner_",
             "from .ontology_planner_",
             "import ontology_planner_models",
@@ -201,6 +200,28 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             "systems/backend/ontology_dashboard/ontology_service.py",
         )
     )
+    planner_relocated = all(
+        (root / path).is_file()
+        for path in (
+            "systems/backend/app/planner/__init__.py",
+            "systems/backend/app/planner/planner_schema.py",
+            "systems/backend/app/planner/planner_service.py",
+            "systems/backend/app/planner/planner_router.py",
+            "systems/backend/app/planner/ports.py",
+            "systems/backend/app/planner/state.py",
+            "systems/backend/app/planner/conversation.py",
+            "systems/backend/app/planner/layout.py",
+        )
+    ) and all(
+        not (root / path).exists()
+        for path in (
+            "systems/backend/ontology_dashboard/conversation.py",
+            "systems/backend/ontology_dashboard/ontology_planner_models.py",
+            "systems/backend/ontology_dashboard/ontology_planner_service.py",
+            "systems/backend/ontology_dashboard/planner",
+            "systems/backend/ontology_dashboard/routers/planner.py",
+        )
+    )
 
     return [
         DebtItem(
@@ -225,7 +246,14 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             state="regression" if forbidden_planner_import else "resolved",
             stage=45,
             evidence="planner router and dependency composition",
-            action="Import planner contracts only from ontology_dashboard.planner.",
+            action="Compose Planner through app.planner public contracts; never reintroduce legacy planner modules.",
+        ),
+        DebtItem(
+            id="planner_physical_relocation",
+            state="resolved" if planner_relocated else "regression",
+            stage=55,
+            evidence="canonical app/planner capability with public ports, state and HTTP adapter",
+            action="Keep Planner-owned natural-language planning and conversation state in app/planner while generic Agent orchestration remains excluded.",
         ),
         DebtItem(
             id="validated_project3_query_boundary",
@@ -266,7 +294,7 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="ontology_compatibility_physical_relocation",
             state="resolved" if ontology_compatibility_relocated else "regression",
             stage=55,
-            evidence="canonical Ontology, provider, report, conversation and planner compatibility modules",
+            evidence="canonical Ontology plus remaining provider/report compatibility modules",
             action="Keep registry constants, ontology repositories/services, deterministic fallback and planner compatibility physically canonical.",
         ),
         DebtItem(

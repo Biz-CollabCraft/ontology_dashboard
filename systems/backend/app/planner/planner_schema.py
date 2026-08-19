@@ -4,9 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..dashboard_models import DashboardParameterDefinition, DashboardTab
-from ..visualizations.models import FieldProfile, VisualizationCandidate
-
 PlannerMode = Literal["deterministic", "llm", "deterministic_fallback"]
 FilterOperator = Literal["eq", "contains", "gte", "lte"]
 
@@ -92,8 +89,8 @@ class DashboardDraftResponse(StrictModel):
     workspace_id: str
     target_role: str
     display_name: str
-    tabs: list[DashboardTab]
-    parameter_definitions: list[DashboardParameterDefinition]
+    tabs: list[Any]
+    parameter_definitions: list[Any]
     recommended_definition_ids: list[str]
     validation: dict[str, Any]
     requires_approval: bool = True
@@ -105,8 +102,8 @@ class VisualizationRecommendationRequest(StrictModel):
     dashboard_id: str
     board_id: str
     goal: str = Field(min_length=2, max_length=700)
-    field_profile: list[FieldProfile]
-    deterministic_candidates: list[VisualizationCandidate] = Field(min_length=1, max_length=10)
+    field_profile: list[Any]
+    deterministic_candidates: list[Any] = Field(min_length=1, max_length=10)
     use_llm: bool = True
 
 
@@ -118,8 +115,8 @@ class VisualizationPlannerResponse(StrictModel):
     dashboard_id: str
     board_id: str
     goal: str
-    recommended: VisualizationCandidate
-    alternatives: list[VisualizationCandidate]
+    recommended: Any
+    alternatives: list[Any]
     validation: dict[str, Any]
     requires_approval: bool = False
 

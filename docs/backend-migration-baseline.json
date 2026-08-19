@@ -26,7 +26,6 @@
     "connectors.py",
     "context.py",
     "contracts.py",
-    "conversation.py",
     "dashboard_catalog.py",
     "dashboard_models.py",
     "dashboard_repository.py",
@@ -60,8 +59,6 @@
     "modeling/repository.py",
     "modeling/schema.py",
     "modeling/service.py",
-    "ontology_planner_models.py",
-    "ontology_planner_service.py",
     "openapi_contracts.py",
     "orchestration/__init__.py",
     "orchestration/models.py",
@@ -71,10 +68,6 @@
     "outbox.py",
     "persistence_readiness.py",
     "pipeline_runtime.py",
-    "planner/__init__.py",
-    "planner/layout.py",
-    "planner/models.py",
-    "planner/service.py",
     "polyglot/__init__.py",
     "polyglot/health.py",
     "polyglot/settings.py",
@@ -100,7 +93,6 @@
     "routers/governance.py",
     "routers/manufacturing.py",
     "routers/modeling.py",
-    "routers/planner.py",
     "routers/platform.py",
     "routers/predictive_maintenance_runtime.py",
     "routers/project3.py",
@@ -883,11 +875,6 @@
     {
       "source": "tests/test_mvp.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.planner"
-    },
-    {
-      "source": "tests/test_mvp.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.service"
     },
     {
@@ -929,11 +916,6 @@
       "source": "tests/test_ontology_planner_stage30.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
-    },
-    {
-      "source": "tests/test_ontology_planner_stage30.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.planner"
     },
     {
       "source": "tests/test_ontology_planner_stage30.py",
@@ -1079,11 +1061,6 @@
       "source": "tests/test_predictive_maintenance_visualization_planner.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_visualization_planner.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.planner"
     },
     {
       "source": "tests/test_predictive_maintenance_visualization_planner.py",
