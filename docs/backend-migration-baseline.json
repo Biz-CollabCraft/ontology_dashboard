@@ -404,11 +404,6 @@
       "target": "ontology_dashboard.demo_predictive_maintenance_bootstrap"
     },
     {
-      "source": "systems/frontend/playwright.config.ts",
-      "kind": "runtime_entrypoint",
-      "target": "ontology_dashboard.main:app"
-    },
-    {
       "source": "systems/generator/feature/workbench.py",
       "kind": "static_import",
       "target": "ontology_dashboard.modeling.models"
