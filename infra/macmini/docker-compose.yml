@@ -130,7 +130,7 @@ services:
       GEN_DATA_RUNTIME_OUTPUT_ROOT: /gen-data-runtime
       LIVE_PM_POLL_SECONDS: ${LIVE_PM_POLL_SECONDS:-5}
       LOG_LEVEL: ${LIVE_PM_LOG_LEVEL:-INFO}
-    command: ["python", "-m", "ontology_dashboard.live_predictive_maintenance"]
+    command: ["python", "-m", "app.live_predictive_maintenance"]
     volumes:
       - ${ONTOLOGY_DATA_ROOT}/artifacts:/artifacts:ro
       - ${GEN_DATA_RUNTIME_OUTPUT_ROOT}:/gen-data-runtime:ro

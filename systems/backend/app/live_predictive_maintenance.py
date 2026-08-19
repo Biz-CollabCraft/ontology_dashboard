@@ -20,25 +20,28 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from app.common.runtime_settings import project_root
 from app.diagnosis.evidence import build_product_result_artifact
 from app.diagnosis.predictor import configured_predictor
-
-from .demo_predictive_maintenance_bootstrap import (
-    ORGANIZATION_ID,
-    PROJECT_ID,
-    WORKSPACE_ID,
-    _cnc_runtime_history,
-    _compressor_runtime_history,
-    _materialize_runtime_results,
-    _normalize_database_url,
-    _runtime_fixture,
-    _set_scope,
+from app.infra.db.predictive_maintenance_ontology_projection import (
+    PredictiveMaintenanceOntologyMaterializer,
 )
-from .dependencies import database_target
-from .domain_packs.predictive_maintenance import PredictiveMaintenanceOntologyMaterializer
+from app.infra.db.settings import database_location
 
 
 LOGGER = logging.getLogger(__name__)
+ORGANIZATION_ID = "org-ontology-demo"
+PROJECT_ID = "manufacturing-demo-project"
+WORKSPACE_ID = "manufacturing-demo"
+SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
+RUNTIME_SELECTION_STRATEGY = "latest_observation_per_asset_v1"
+RUNTIME_MATERIALIZATION_PROFILE = "cnc_and_compressor_artifact_current_state_v3"
+OUTPUT_ROLES = {
+    "prediction_snapshot",
+    "prediction_factor",
+    "prediction_timeline",
+    "result_artifact",
+}
 LIVE_SOURCE_VERSION = "gen-data-wall-clock-live-v2"
 LEGACY_ACCELERATED_SOURCE_VERSION = "gen-data-live-v1"
 LIVE_MATERIALIZATION_PROFILE = "gen_data_wall_clock_live_current_state_v2"
@@ -50,6 +53,10 @@ LIVE_STATIC_LINEAGE_ROLES = ("asset_master", "asset_relation")
 LIVE_SENSOR_ROLES = ("cnc_sensor_observation", "compressor_sensor_observation")
 
 
+def database_target() -> str:
+    return database_location(project_root())
+
+
 def _postgres_modules():
     try:
         import psycopg
@@ -58,6 +65,588 @@ def _postgres_modules():
     except ImportError as exc:  # pragma: no cover - deployment packaging guard
         raise RuntimeError("live predictive-maintenance ingestion requires backend[postgres]") from exc
     return psycopg, dict_row, Jsonb
+
+
+def _normalize_database_url(value: str) -> str:
+    normalized = value.replace("postgresql+psycopg://", "postgresql://", 1)
+    if not normalized.startswith("postgresql://"):
+        raise ValueError("live predictive-maintenance ingestion requires PostgreSQL")
+    return normalized
+
+
+def _set_scope(connection: Any) -> None:
+    connection.execute("SELECT set_config('app.organization_id',%s,true)", (ORGANIZATION_ID,))
+    connection.execute("SELECT set_config('app.project_id',%s,true)", (PROJECT_ID,))
+
+
+def _runtime_candidates(
+    connection: Any,
+    dataset_version_id: str,
+    *,
+    excluded_asset_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Select the latest observation for every canonical equipment asset."""
+
+    excluded = sorted(excluded_asset_ids or set())
+    return list(
+        connection.execute(
+            """
+            WITH cnc_ranked AS (
+                SELECT o.*,
+                       ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC) AS row_number
+                FROM pm_cnc_observations o
+                WHERE o.dataset_version_id=%s
+                  AND NOT (o.asset_id = ANY(%s))
+            ), latest_cnc AS (
+                SELECT o.asset_id,o.observed_at,o.source_sha256,'cnc'::text AS asset_type,
+                       jsonb_build_object(
+                           'product_type',o.product_type,
+                           'air_temperature_k',o.air_temperature_k,
+                           'process_temperature_k',o.process_temperature_k,
+                           'rotational_speed_rpm',o.rotational_speed_rpm,
+                           'torque_nm',o.torque_nm,
+                           'tool_wear_min',o.tool_wear_min
+                       ) AS observation,
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'timestamp',h.observed_at,
+                                       'product_type',h.product_type,
+                                       'air_temperature_k',h.air_temperature_k,
+                                       'process_temperature_k',h.process_temperature_k,
+                                       'rotational_speed_rpm',h.rotational_speed_rpm,
+                                       'torque_nm',h.torque_nm,
+                                       'tool_wear_min',h.tool_wear_min
+                                   ) ORDER BY h.observed_at ASC
+                               )
+                               FROM cnc_ranked h
+                               WHERE h.asset_id=o.asset_id AND h.observed_at < o.observed_at
+                           ),
+                           '[]'::jsonb
+                       ) AS history
+                FROM cnc_ranked o
+                WHERE o.row_number=1
+            ), compressor_ranked AS (
+                SELECT o.*,
+                       ROW_NUMBER() OVER (PARTITION BY o.asset_id ORDER BY o.observed_at DESC) AS row_number
+                FROM pm_compressor_observations o
+                WHERE o.dataset_version_id=%s
+                  AND NOT (o.asset_id = ANY(%s))
+            ), latest_compressor AS (
+                SELECT o.asset_id,o.observed_at,o.source_sha256,'compressor'::text AS asset_type,
+                       jsonb_build_object(
+                           'voltage_raw',o.voltage_raw,
+                           'rotation_raw',o.rotation_raw,
+                           'pressure_raw',o.pressure_raw,
+                           'vibration_raw',o.vibration_raw,
+                           'relative_vibration_z',o.relative_vibration_z,
+                           'relative_vibration_zone',o.relative_vibration_zone
+                       ) AS observation,
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'timestamp',h.observed_at,
+                                       'voltage_raw',h.voltage_raw,
+                                       'rotation_raw',h.rotation_raw,
+                                       'pressure_raw',h.pressure_raw,
+                                       'vibration_raw',h.vibration_raw,
+                                       'relative_vibration_z',h.relative_vibration_z,
+                                       'relative_vibration_zone',h.relative_vibration_zone
+                                   ) ORDER BY h.observed_at ASC
+                               )
+                               FROM compressor_ranked h
+                               WHERE h.asset_id=o.asset_id AND h.observed_at < o.observed_at
+                           ),
+                           '[]'::jsonb
+                       ) AS history
+                FROM compressor_ranked o
+                WHERE o.row_number=1
+            )
+            SELECT * FROM latest_cnc
+            UNION ALL
+            SELECT * FROM latest_compressor
+            ORDER BY asset_id
+            """,
+            (dataset_version_id, excluded, dataset_version_id, excluded),
+        ).fetchall()
+    )
+
+
+def _artifact_checksum(artifact: dict[str, Any]) -> str:
+    rendered = json.dumps(
+        artifact,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(rendered).hexdigest()
+
+
+def _compressor_runtime_history(
+    connection: Any,
+    dataset_version_id: str,
+    asset_id: str,
+    observed_at: Any,
+) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        """
+        SELECT observed_at,voltage_raw,rotation_raw,pressure_raw,vibration_raw,
+               relative_vibration_z,relative_vibration_zone
+        FROM pm_compressor_observations
+        WHERE dataset_version_id=%s AND asset_id=%s AND observed_at < %s
+        ORDER BY observed_at DESC
+        LIMIT 35
+        """,
+        (dataset_version_id, asset_id, observed_at),
+    ).fetchall()
+    ordered = list(reversed(rows))
+    return [
+        {
+            "timestamp": item["observed_at"].isoformat(),
+            "voltage_raw": float(item["voltage_raw"]),
+            "rotation_raw": float(item["rotation_raw"]),
+            "pressure_raw": float(item["pressure_raw"]),
+            "vibration_raw": float(item["vibration_raw"]),
+            "relative_vibration_z": float(item["relative_vibration_z"]),
+            "relative_vibration_zone": str(item["relative_vibration_zone"]),
+        }
+        for item in ordered
+    ]
+
+
+def _cnc_runtime_history(
+    connection: Any,
+    dataset_version_id: str,
+    asset_id: str,
+    observed_at: Any,
+) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        """
+        SELECT observed_at,product_type,air_temperature_k,process_temperature_k,
+               rotational_speed_rpm,torque_nm,tool_wear_min
+        FROM pm_cnc_observations
+        WHERE dataset_version_id=%s AND asset_id=%s AND observed_at < %s
+        ORDER BY observed_at DESC
+        LIMIT 35
+        """,
+        (dataset_version_id, asset_id, observed_at),
+    ).fetchall()
+    ordered = list(reversed(rows))
+    return [
+        {
+            "timestamp": item["observed_at"].isoformat(),
+            "product_type": item["product_type"],
+            "air_temperature_k": float(item["air_temperature_k"]),
+            "process_temperature_k": float(item["process_temperature_k"]),
+            "rotational_speed_rpm": float(item["rotational_speed_rpm"]),
+            "torque_nm": float(item["torque_nm"]),
+            "tool_wear_min": float(item["tool_wear_min"]),
+        }
+        for item in ordered
+    ]
+
+
+def _runtime_fixture(
+    row: dict[str, Any],
+    *,
+    history: list[dict[str, Any]] | None = None,
+    source_version: str = SOURCE_VERSION,
+) -> dict[str, Any]:
+    observed_at = row["observed_at"].isoformat()
+    asset_id = str(row["asset_id"])
+    asset_type = str(row["asset_type"])
+    source = dict(row["observation"])
+    if asset_type == "compressor":
+        observation = {
+            "timestamp": observed_at,
+            "voltage_raw": float(source["voltage_raw"]),
+            "rotation_raw": float(source["rotation_raw"]),
+            "pressure_raw": float(source["pressure_raw"]),
+            "vibration_raw": float(source["vibration_raw"]),
+            "relative_vibration_z": float(source["relative_vibration_z"]),
+            "relative_vibration_zone": str(source["relative_vibration_zone"]),
+        }
+    else:
+        observation = {
+            "timestamp": observed_at,
+            "product_type": source.get("product_type"),
+            "air_temperature_k": float(source["air_temperature_k"]),
+            "process_temperature_k": float(source["process_temperature_k"]),
+            "rotational_speed_rpm": float(source["rotational_speed_rpm"]),
+            "torque_nm": float(source["torque_nm"]),
+            "tool_wear_min": float(source["tool_wear_min"]),
+        }
+    return {
+        "schema_version": "1.0",
+        "event_id": f"runtime-{asset_id}-{observed_at}",
+        "scenario_id": f"canonical-v3.1-runtime:{asset_id}",
+        "dataset_version": source_version,
+        "asset_type": asset_type,
+        "equipment": {
+            "equipment_id": asset_id,
+            "criticality": "medium",
+        },
+        "observation": observation,
+        "history": list(history if history is not None else row.get("history") or []),
+    }
+
+
+def _materialize_runtime_results(
+    database_url: str,
+    dataset_version_id: str,
+    *,
+    source_version: str = SOURCE_VERSION,
+    materialization_profile: str = RUNTIME_MATERIALIZATION_PROFILE,
+    excluded_asset_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    psycopg, dict_row, Jsonb = _postgres_modules()
+    cnc_predictor = configured_predictor("cnc")
+    compressor_predictor = configured_predictor("compressor")
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        with connection.transaction():
+            _set_scope(connection)
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                (f"demo-runtime:{PROJECT_ID}:{dataset_version_id}",),
+            )
+            roles = {
+                str(row["role"])
+                for row in connection.execute(
+                    "SELECT role FROM dataset_files WHERE dataset_version_id=%s",
+                    (dataset_version_id,),
+                ).fetchall()
+            }
+            unexpected = sorted(roles & OUTPUT_ROLES)
+            if unexpected:
+                raise RuntimeError(
+                    "refusing to overwrite fixture-backed predictive outputs: "
+                    + ", ".join(unexpected)
+                )
+            candidates = _runtime_candidates(
+                connection,
+                dataset_version_id,
+                excluded_asset_ids=excluded_asset_ids,
+            )
+            if not candidates:
+                raise RuntimeError("canonical source ingestion produced no equipment observations")
+
+            existing = connection.execute(
+                """
+                SELECT COUNT(*) AS count,
+                       COUNT(*) FILTER (
+                           WHERE provenance->>'source_type'='product_runtime_inference'
+                       ) AS runtime_count,
+                       COUNT(*) FILTER (
+                           WHERE provenance->>'selection_strategy'=%s
+                       ) AS current_selection_count,
+                       COUNT(*) FILTER (
+                           WHERE provenance->>'materialization_profile'=%s
+                       ) AS current_profile_count,
+                       MAX(observed_at) AS latest_observed_at
+                FROM pm_result_artifacts
+                WHERE dataset_version_id=%s
+                """,
+                (
+                    RUNTIME_SELECTION_STRATEGY,
+                    materialization_profile,
+                    dataset_version_id,
+                ),
+            ).fetchone()
+            latest_candidate_observed_at = max(row["observed_at"] for row in candidates)
+            if (
+                int(existing["count"] or 0) == len(candidates)
+                and int(existing["runtime_count"] or 0) == len(candidates)
+                and int(existing["current_selection_count"] or 0) == len(candidates)
+                and int(existing["current_profile_count"] or 0) == len(candidates)
+                and existing["latest_observed_at"] == latest_candidate_observed_at
+            ):
+                return {
+                    "model_versions": sorted({cnc_predictor.model_version, compressor_predictor.model_version}),
+                    "result_artifact_count": len(candidates),
+                    "selection_strategy": RUNTIME_SELECTION_STRATEGY,
+                    "materialization_profile": materialization_profile,
+                    "reused": True,
+                }
+
+            prepared: list[tuple[dict[str, Any], dict[str, Any]]] = []
+            held_assets: list[dict[str, Any]] = []
+            for row in candidates:
+                asset_type = str(row["asset_type"])
+                predictor = compressor_predictor if asset_type == "compressor" else cnc_predictor
+                history = (
+                    _compressor_runtime_history(
+                        connection,
+                        dataset_version_id,
+                        str(row["asset_id"]),
+                        row["observed_at"],
+                    )
+                    if asset_type == "compressor"
+                    else _cnc_runtime_history(
+                        connection,
+                        dataset_version_id,
+                        str(row["asset_id"]),
+                        row["observed_at"],
+                    )
+                )
+                artifact = build_product_result_artifact(
+                    _runtime_fixture(row, history=history, source_version=source_version),
+                    predictor=predictor,
+                )
+                if artifact.get("failure_probability") is None:
+                    held_assets.append(
+                        {
+                            "asset_id": str(row["asset_id"]),
+                            "asset_type": asset_type,
+                            "observed_at": row["observed_at"].isoformat(),
+                            "quality_warnings": list(artifact.get("data_quality_warnings") or []),
+                        }
+                    )
+                    continue
+                prepared.append((row, artifact))
+
+            ready_asset_ids = sorted({str(row["asset_id"]) for row, _artifact in prepared})
+            if ready_asset_ids:
+                previous = connection.execute(
+                    """
+                    SELECT prediction_id,prediction_result_id
+                    FROM pm_prediction_snapshots
+                    WHERE dataset_version_id=%s AND asset_id = ANY(%s)
+                    """,
+                    (dataset_version_id, ready_asset_ids),
+                ).fetchall()
+                previous_prediction_ids = [str(item["prediction_id"]) for item in previous]
+                previous_result_ids = [str(item["prediction_result_id"]) for item in previous]
+                connection.execute(
+                    "DELETE FROM pm_result_artifacts WHERE dataset_version_id=%s AND asset_id = ANY(%s)",
+                    (dataset_version_id, ready_asset_ids),
+                )
+                if previous_prediction_ids:
+                    connection.execute(
+                        "DELETE FROM pm_prediction_factors WHERE dataset_version_id=%s AND prediction_id = ANY(%s)",
+                        (dataset_version_id, previous_prediction_ids),
+                    )
+                    connection.execute(
+                        "DELETE FROM pm_prediction_timeline WHERE dataset_version_id=%s AND prediction_id = ANY(%s)",
+                        (dataset_version_id, previous_prediction_ids),
+                    )
+                connection.execute(
+                    "DELETE FROM pm_prediction_snapshots WHERE dataset_version_id=%s AND asset_id = ANY(%s)",
+                    (dataset_version_id, ready_asset_ids),
+                )
+                if previous_result_ids:
+                    connection.execute(
+                        "DELETE FROM prediction_results WHERE prediction_id = ANY(%s)",
+                        (previous_result_ids,),
+                    )
+
+            for row, artifact in prepared:
+                asset_type = str(row["asset_type"])
+                probability = float(artifact["failure_probability"])
+                diagnostic_type = str(artifact["predicted_failure_type"])
+                if asset_type == "compressor" and diagnostic_type in {"failure_risk", "none"}:
+                    binary_type = (
+                        "failure_risk" if diagnostic_type == "failure_risk" else "no_significant_risk"
+                    )
+                else:
+                    binary_type = "failure_risk" if probability >= 0.5 else "no_significant_risk"
+                provenance = dict(artifact["provenance"])
+                provenance.update(
+                    {
+                        "dataset_version_id": dataset_version_id,
+                        "source_version": source_version,
+                        "source_observation_sha256": str(row["source_sha256"]),
+                        "diagnostic_failure_type": diagnostic_type,
+                        "selection_strategy": RUNTIME_SELECTION_STRATEGY,
+                        "materialization_profile": materialization_profile,
+                    }
+                )
+                prediction_id = str(provenance["prediction_id"])
+                prediction_result_id = f"pmrt-{uuid.uuid5(uuid.NAMESPACE_URL, f'{dataset_version_id}:{prediction_id}')}"
+                artifact_checksum = _artifact_checksum({**artifact, "provenance": provenance})
+                confidence = float(artifact["confidence"])
+                status = str(artifact["status_grade"])
+                feature_scope = [str(item["feature"]) for item in artifact["top_factors"]]
+                result_payload = {
+                    **artifact,
+                    "predicted_failure_type": binary_type,
+                    "provenance": provenance,
+                    "dataset_version_id": dataset_version_id,
+                    "source_type": "product_runtime_inference",
+                }
+
+                connection.execute(
+                    """
+                    INSERT INTO prediction_results(
+                        prediction_id,organization_id,project_id,workspace_id,
+                        subject_object_type,subject_object_id,prediction_status,
+                        model_version,dataset_version,payload_json,created_at,received_at
+                    ) VALUES (%s,%s,%s,%s,'equipment',%s,%s,%s,%s,%s,%s,now())
+                    """,
+                    (
+                        prediction_result_id,
+                        ORGANIZATION_ID,
+                        PROJECT_ID,
+                        WORKSPACE_ID,
+                        row["asset_id"],
+                        status,
+                        artifact["provenance"]["model_version"],
+                        source_version,
+                        Jsonb(result_payload),
+                        row["observed_at"],
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO pm_prediction_snapshots(
+                        organization_id,project_id,workspace_id,dataset_version_id,
+                        prediction_id,prediction_result_id,asset_id,asset_type,observed_at,
+                        prediction_horizon_hours,failure_probability,predicted_failure_type,
+                        confidence,status,model_version,feature_scope,source_sha256
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,24,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (
+                        ORGANIZATION_ID,
+                        PROJECT_ID,
+                        WORKSPACE_ID,
+                        dataset_version_id,
+                        prediction_id,
+                        prediction_result_id,
+                        row["asset_id"],
+                        asset_type,
+                        row["observed_at"],
+                        probability,
+                        binary_type,
+                        confidence,
+                        status,
+                        artifact["provenance"]["model_version"],
+                        Jsonb(feature_scope),
+                        artifact_checksum,
+                    ),
+                )
+                for factor in artifact["top_factors"]:
+                    signed = float(factor["signed_contribution"])
+                    connection.execute(
+                        """
+                        INSERT INTO pm_prediction_factors(
+                            organization_id,project_id,workspace_id,dataset_version_id,
+                            prediction_id,rank,feature,feature_value,signed_contribution,
+                            absolute_contribution,direction,explanation_method,source_type,source_sha256
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                                  'product_runtime_inference',%s)
+                        """,
+                        (
+                            ORGANIZATION_ID,
+                            PROJECT_ID,
+                            WORKSPACE_ID,
+                            dataset_version_id,
+                            prediction_id,
+                            int(factor["rank"]),
+                            factor["feature"],
+                            float(factor["feature_value"]),
+                            signed,
+                            abs(signed),
+                            factor["direction"],
+                            factor["explanation_method"],
+                            artifact_checksum,
+                        ),
+                    )
+                connection.execute(
+                    """
+                    INSERT INTO pm_prediction_timeline(
+                        organization_id,project_id,workspace_id,dataset_version_id,
+                        prediction_id,asset_id,asset_type,observed_at,
+                        prediction_horizon_hours,failure_probability,status,top_factors,
+                        model_version,feature_scope,source_type,source_sha256
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,24,%s,%s,%s,%s,%s,
+                              'product_runtime_inference',%s)
+                    """,
+                    (
+                        ORGANIZATION_ID,
+                        PROJECT_ID,
+                        WORKSPACE_ID,
+                        dataset_version_id,
+                        prediction_id,
+                        row["asset_id"],
+                        asset_type,
+                        row["observed_at"],
+                        probability,
+                        status,
+                        Jsonb(artifact["top_factors"]),
+                        artifact["provenance"]["model_version"],
+                        Jsonb(feature_scope),
+                        artifact_checksum,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO pm_result_artifacts(
+                        organization_id,project_id,workspace_id,dataset_version_id,
+                        artifact_id,prediction_id,prediction_result_id,asset_id,asset_type,
+                        observed_at,prediction_horizon_hours,prediction_task,
+                        failure_probability,predicted_failure_type,status_grade,confidence,
+                        top_factors,recommended_action,provenance,schema_version,
+                        model_version,source_sha256
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,24,
+                              'binary_failure_within_horizon',%s,%s,%s,%s,%s,%s,%s,
+                              'result-artifact-v1.0',%s,%s)
+                    """,
+                    (
+                        ORGANIZATION_ID,
+                        PROJECT_ID,
+                        WORKSPACE_ID,
+                        dataset_version_id,
+                        artifact["artifact_id"],
+                        prediction_id,
+                        prediction_result_id,
+                        row["asset_id"],
+                        asset_type,
+                        row["observed_at"],
+                        probability,
+                        binary_type,
+                        status,
+                        confidence,
+                        Jsonb(artifact["top_factors"]),
+                        Jsonb(artifact["recommended_action"]),
+                        Jsonb(provenance),
+                        artifact["provenance"]["model_version"],
+                        artifact_checksum,
+                    ),
+                )
+
+            final_rows = connection.execute(
+                """
+                SELECT status_grade,asset_type,COUNT(*) AS count
+                FROM pm_result_artifacts
+                WHERE dataset_version_id=%s
+                GROUP BY status_grade,asset_type
+                """,
+                (dataset_version_id,),
+            ).fetchall()
+            status_counts: dict[str, int] = {}
+            asset_type_counts: dict[str, int] = {}
+            result_artifact_count = 0
+            for item in final_rows:
+                count = int(item["count"])
+                result_artifact_count += count
+                status = str(item["status_grade"])
+                family = str(item["asset_type"])
+                status_counts[status] = status_counts.get(status, 0) + count
+                asset_type_counts[family] = asset_type_counts.get(family, 0) + count
+
+            return {
+                "model_versions": sorted({cnc_predictor.model_version, compressor_predictor.model_version}),
+                "result_artifact_count": result_artifact_count,
+                "status_counts": status_counts,
+                "asset_type_counts": asset_type_counts,
+                "selection_strategy": RUNTIME_SELECTION_STRATEGY,
+                "materialization_profile": materialization_profile,
+                "held_asset_count": len(held_assets),
+                "held_assets": held_assets,
+                "reused": False,
+            }
 
 
 def _parse_observed_at(value: object) -> datetime:

@@ -2,13 +2,25 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
-from ontology_dashboard.live_predictive_maintenance import (
+from app.live_predictive_maintenance import (
     LIVE_SOURCE_VERSION,
     active_overlay_asset_ids,
     read_complete_ticks,
     read_overlay_available_events,
 )
+
+
+def test_macmini_compose_runs_canonical_live_worker() -> None:
+    root = Path(__file__).resolve().parents[1]
+    compose = (root / "infra" / "macmini" / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert 'command: ["python", "-m", "app.live_predictive_maintenance"]' in compose
+    assert "ontology_dashboard.live_predictive_maintenance" not in compose
+    assert not (
+        root / "systems" / "backend" / "ontology_dashboard" / "live_predictive_maintenance.py"
+    ).exists()
 
 
 def _write(path, rows):

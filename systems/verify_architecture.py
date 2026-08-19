@@ -21,6 +21,7 @@ SYSTEMS = ROOT / "systems"
 
 BACKEND_COMPOSITION_ROOT_FILES = {
     Path("main.py"),
+    Path("live_predictive_maintenance.py"),
     Path("dependencies.py"),
     Path("settings.py"),
     Path("health.py"),
