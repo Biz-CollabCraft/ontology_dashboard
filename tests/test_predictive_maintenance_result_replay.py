@@ -24,7 +24,7 @@ from ontology_dashboard.predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeRepository,
     PredictiveMaintenanceRuntimeService,
 )
-from ontology_dashboard.predictive_maintenance_runtime import service as runtime_service
+from app.diagnosis import runtime_service
 from ontology_dashboard.dependencies import (
     get_identity_service,
     get_predictive_maintenance_runtime_service,
