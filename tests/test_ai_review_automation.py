@@ -13,7 +13,9 @@ from scripts.ci.ai_review import (
     human_technical_feedback,
     idempotency_decision,
     is_trusted_comment_author,
+    review_profile,
     route_context,
+    should_run_full_review,
 )
 
 
@@ -145,6 +147,24 @@ class AiReviewAutomationTests(unittest.TestCase):
         self.assertEqual(classify_comment("approve 입니다"), "approval")
         self.assertEqual(classify_comment("확인했습니다"), "acknowledgement")
         self.assertEqual(classify_comment("감사합니다"), "acknowledgement")
+        self.assertEqual(classify_comment("/ai-review"), "full_review_request")
+
+    def test_review_profile_routes_docs_to_flash_lite_and_code_to_reasoning(self):
+        docs = review_profile(["docs/architecture.md"])
+        code = review_profile(["systems/backend/app/main.py"])
+        self.assertEqual(docs["model_id"], "gemini-3.5-flash-lite")
+        self.assertEqual(docs["max_output_tokens"], 4000)
+        self.assertEqual(code["model_id"], "gemini-3.7-flash")
+        self.assertEqual(code["max_output_tokens"], 6000)
+
+    def test_docs_only_review_skips_unless_explicit(self):
+        paths = ["docs/architecture.md", "README.md"]
+        run, reason = should_run_full_review("HEAD", "HEAD", paths)
+        self.assertFalse(run)
+        self.assertIn("documentation-only", reason)
+        run, reason = should_run_full_review("HEAD", "HEAD", paths, explicit=True)
+        self.assertTrue(run)
+        self.assertIn("explicit", reason)
 
     def test_comment_event_ignores_automated_marker_and_bot_loop(self):
         event = {
@@ -183,6 +203,80 @@ class AiReviewAutomationTests(unittest.TestCase):
         info = event_to_comment(event)
         self.assertTrue(info.authorized)
         self.assertTrue(info.eligible)
+
+    def test_member_ai_review_command_can_enter_repo_gate_without_comment_vertex_review(self):
+        event = {
+            "action": "created",
+            "issue": {"number": 43, "pull_request": {"url": "x"}},
+            "comment": {
+                "id": 203,
+                "body": "/ai-review",
+                "author_association": "MEMBER",
+                "user": {"login": "KOR-GANG", "type": "User"},
+            },
+        }
+        info = event_to_comment(event)
+        self.assertEqual(info.classification, "full_review_request")
+        self.assertTrue(info.authorized)
+        self.assertTrue(info.eligible)
+
+    def test_member_request_changes_review_uses_authoritative_rest_metadata(self):
+        event = {
+            "action": "submitted",
+            "pull_request": {"number": 23},
+            "review": {
+                "id": 4959998844,
+                "body": "[P1] canonical contract blocker가 남아 있습니다",
+                "state": "changes_requested",
+                # pull_request_review webhook payloads must not be trusted to
+                # carry the association used by the credential gate.
+                "user": {"login": "oosuhada", "type": "User"},
+            },
+        }
+        authoritative_review = {
+            "id": 4959998844,
+            "body": "[P1] canonical contract blocker가 남아 있습니다",
+            "state": "CHANGES_REQUESTED",
+            "author_association": "MEMBER",
+            "user": {"login": "oosuhada", "type": "User"},
+        }
+
+        webhook_only = event_to_comment(event)
+        self.assertEqual(webhook_only.classification, "actionable_review")
+        self.assertFalse(webhook_only.authorized)
+        self.assertFalse(webhook_only.eligible)
+
+        hydrated = event_to_comment(event, authoritative_review=authoritative_review)
+        self.assertEqual(hydrated.source_kind, "review")
+        self.assertEqual(hydrated.source_id, "4959998844")
+        self.assertEqual(hydrated.author_association, "MEMBER")
+        self.assertEqual(hydrated.classification, "actionable_review")
+        self.assertTrue(hydrated.authorized)
+        self.assertTrue(hydrated.eligible)
+
+    def test_external_request_changes_review_remains_blocked_after_hydration(self):
+        event = {
+            "action": "submitted",
+            "pull_request": {"number": 23},
+            "review": {
+                "id": 99,
+                "body": "[P1] 버그가 있습니다",
+                "state": "changes_requested",
+                "user": {"login": "external-user", "type": "User"},
+            },
+        }
+        authoritative_review = {
+            "id": 99,
+            "body": "[P1] 버그가 있습니다",
+            "state": "CHANGES_REQUESTED",
+            "author_association": "NONE",
+            "user": {"login": "external-user", "type": "User"},
+        }
+
+        info = event_to_comment(event, authoritative_review=authoritative_review)
+        self.assertEqual(info.classification, "actionable_review")
+        self.assertFalse(info.authorized)
+        self.assertFalse(info.eligible)
 
     def test_external_technical_comment_is_classified_but_cannot_enter_oidc_job(self):
         event = {

@@ -59,6 +59,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      issues: write
       id-token: write
       pull-requests: write
     steps:
@@ -84,7 +85,46 @@ jobs:
             echo "REVIEWER_CODE_SOURCE=head:rollout-bootstrap" >> "$GITHUB_ENV"
           fi
 
+      - name: Plan AI review spend
+        id: plan
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          EXPLICIT_REVIEW: ${{ contains(github.event.pull_request.labels.*.name, 'ai-review') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python3 /tmp/trusted-ai-review.py review-plan --help >/dev/null 2>&1; then
+            python3 /tmp/trusted-ai-review.py review-plan \
+              --base "$BASE_SHA" \
+              --head "$HEAD_SHA" \
+              --explicit "$EXPLICIT_REVIEW" >> "$GITHUB_OUTPUT"
+          else
+            # Rollout compatibility for the PR that introduces review-plan.
+            {
+              echo "run=true"
+              echo "reason=rollout compatibility"
+              echo "tier=reasoning"
+              echo "model_id=gemini-3.7-flash"
+              echo "model_display_name=Gemini 3.7 Flash"
+              echo "max_output_tokens=6000"
+              echo "thinking_level=MEDIUM"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure selected review tier
+        if: steps.plan.outputs.run == 'true'
+        shell: bash
+        run: |
+          {
+            echo "GEMINI_REVIEW_MODEL=${{ steps.plan.outputs.model_id }}"
+            echo "GEMINI_REVIEW_MODEL_DISPLAY_NAME=${{ steps.plan.outputs.model_display_name }}"
+            echo "GEMINI_REVIEW_MAX_OUTPUT_TOKENS=${{ steps.plan.outputs.max_output_tokens }}"
+            echo "GEMINI_REVIEW_THINKING_LEVEL=${{ steps.plan.outputs.thinking_level }}"
+          } >> "$GITHUB_ENV"
+
       - name: Collect deterministic CI and human feedback evidence
+        if: steps.plan.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           ARCHITECTURE_JOB_RESULT: ${{ inputs.architecture_result }}
@@ -130,6 +170,7 @@ jobs:
           jq '[.[][]]' /tmp/review-comments-pages.json > /tmp/review-comments.json
 
       - name: Prepare project-aware review context
+        if: steps.plan.outputs.run == 'true'
         env:
           ARCHITECTURE_JOB_RESULT: ${{ inputs.architecture_result }}
           DOCKER_RUNTIME_REQUIRED: ${{ inputs.docker_runtime_required }}
@@ -165,6 +206,7 @@ jobs:
             --output /tmp/code-review-prompt.md
 
       - name: Authenticate to Google Cloud with GitHub OIDC
+        if: steps.plan.outputs.run == 'true'
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -176,6 +218,7 @@ jobs:
           create_credentials_file: false
 
       - name: Review project intent with ${{ env.GEMINI_REVIEW_MODEL_DISPLAY_NAME }} on Vertex AI
+        if: steps.plan.outputs.run == 'true'
         env:
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
@@ -205,6 +248,7 @@ jobs:
             --output /tmp/code-review.md
 
       - name: Publish GitHub pull request review
+        if: steps.plan.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
@@ -213,3 +257,14 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --comment \
             --body-file /tmp/code-review.md
+
+      - name: Consume one-shot ai-review label
+        if: always() && contains(github.event.pull_request.labels.*.name, 'ai-review')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        shell: bash
+        run: |
+          gh api --method DELETE \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/ai-review" \
+            >/dev/null 2>&1 || true
