@@ -212,6 +212,24 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --output /tmp/comment-review.md
 
+          {
+            echo "### Free technical-comment review"
+            echo "- route: Gemini 3.5 Flash-Lite draft → Gemma 4 26B A4B verifier"
+            echo "- result: accepted without Vertex fallback"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record free-review fallback
+        if: >-
+          steps.idem.outputs.action != 'noop' &&
+          steps.route.outputs.reasoning != 'true' &&
+          steps.free_review.outcome == 'failure'
+        run: |
+          {
+            echo "### Free technical-comment review"
+            echo "- result: fallback to Vertex Gemini 3.7 Flash"
+            echo "- reason: free model quota/API/format/quality gate did not produce a publishable response"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Authenticate to Google Cloud with GitHub OIDC
         if: >-
           steps.idem.outputs.action != 'noop' &&
@@ -256,6 +274,12 @@ jobs:
             --model-id "$GEMINI_REVIEW_MODEL" \
             --vertex-location "$VERTEX_LOCATION" \
             --output /tmp/comment-review.md
+
+          {
+            echo "### Technical-comment review escalation"
+            echo "- result: Vertex Gemini 3.7 Flash fallback"
+            echo "- reason: decisive/high-risk routing or free-tier quality/quota fallback"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish or update one response for the source comment
         if: steps.idem.outputs.action != 'noop'
