@@ -9,6 +9,11 @@ from systems.generator.app.feature.feature_exception import (
     FeatureError,
     ExtractionPlanNotReadyError,
     ExtractionPlanVersionMismatchError,
+    OntologyMappingNotReadyError,
+    OntologyMappingVersionMismatchError,
+    FailureDataNotReadyError,
+    LabelContractInvalidError,
+    LabelAnchorNotFoundError,
     FeatureBuildError,
     LabelBuildError,
     FeatureSchemaMismatchError,
@@ -19,6 +24,10 @@ from systems.generator.app.feature.feature_exception import (
     FeatureConflictError,
 )
 from systems.generator.app.feature.feature_repository import FeatureRepository
+from systems.generator.app.feature.feature_schema_provider import (
+    FeatureSchemaProvider,
+    FeatureSchemaDefinition,
+)
 from systems.generator.app.feature.feature_service import FeatureService
 from systems.generator.app.feature.feature_router import router as feature_router
 
@@ -29,6 +38,11 @@ __all__ = [
     "FeatureError",
     "ExtractionPlanNotReadyError",
     "ExtractionPlanVersionMismatchError",
+    "OntologyMappingNotReadyError",
+    "OntologyMappingVersionMismatchError",
+    "FailureDataNotReadyError",
+    "LabelContractInvalidError",
+    "LabelAnchorNotFoundError",
     "FeatureBuildError",
     "LabelBuildError",
     "FeatureSchemaMismatchError",
@@ -38,6 +52,8 @@ __all__ = [
     "NpyPublishError",
     "FeatureConflictError",
     "FeatureRepository",
+    "FeatureSchemaProvider",
+    "FeatureSchemaDefinition",
     "FeatureService",
     "feature_router",
 ]

@@ -42,7 +42,7 @@ from systems.generator.generator_llm_client import (
     validate_or_transform_pydantic,
     ColumnMappingResponse,
 )
-from systems.generator.extraction.extraction_profiler import load_family_registry
+from systems.generator.app.extraction.extraction_profiler import load_family_registry
 
 logger = logging.getLogger(__name__)
 

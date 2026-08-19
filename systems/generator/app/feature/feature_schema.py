@@ -10,12 +10,12 @@ class FeatureRequest(BaseModel):
     dataset_id: str = Field(..., min_length=1, description="Dataset identifier")
     dataset_version: str = Field(..., min_length=1, description="Dataset version string")
     extraction_plan_version: str = Field(..., min_length=1, description="Extraction plan version string")
+    mapping_version: str = Field(..., min_length=1, description="Ontology mapping version string")
     feature_schema_version: str = Field(..., min_length=1, description="Feature schema version string")
     label_schema_version: str = Field(..., min_length=1, description="Label schema version string")
     prediction_horizon_hours: int = Field(24, gt=0, description="Prediction horizon in hours (must be > 0)")
     rebuild_npy: bool = Field(True, description="Whether to build/rebuild NPY outputs")
     force: bool = Field(False, description="Force overwrite existing feature outputs")
-    idempotency_key: Optional[str] = Field(None, description="Optional idempotency key")
 
     @model_validator(mode="after")
     def _validate_request(self) -> "FeatureRequest":
@@ -42,6 +42,7 @@ class FeatureResponse(BaseModel):
     dataset_id: str
     dataset_version: str
     extraction_plan_version: str
+    mapping_version: str
     feature_schema_version: str
     label_schema_version: str
     outputs: FeatureOutputsPayload

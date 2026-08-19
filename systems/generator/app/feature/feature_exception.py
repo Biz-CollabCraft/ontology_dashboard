@@ -53,6 +53,86 @@ class ExtractionPlanVersionMismatchError(FeatureError):
         )
 
 
+class OntologyMappingNotReadyError(FeatureError):
+    """Raised when the required Ontology Mapping does not exist in repository."""
+
+    def __init__(
+        self,
+        message: str = "요청한 Ontology Mapping이 없습니다. 먼저 POST /extraction을 실행해 주세요.",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="ONTOLOGY_MAPPING_NOT_READY",
+            status_code=404,
+            details=details,
+        )
+
+
+class OntologyMappingVersionMismatchError(FeatureError):
+    """Raised when the requested mapping version does not match the stored mapping."""
+
+    def __init__(
+        self,
+        message: str = "요청한 Ontology Mapping 버전과 실제 저장된 Mapping 버전이 일치하지 않습니다.",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="ONTOLOGY_MAPPING_VERSION_MISMATCH",
+            status_code=422,
+            details=details,
+        )
+
+
+class FailureDataNotReadyError(FeatureError):
+    """Raised when failure events dataset or label history cannot be found."""
+
+    def __init__(
+        self,
+        message: str = "학습에 필요한 고장 이력(Failure Data)을 찾을 수 없습니다.",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="FAILURE_DATA_NOT_READY",
+            status_code=404,
+            details=details,
+        )
+
+
+class LabelContractInvalidError(FeatureError):
+    """Raised when label column values or format violate contract."""
+
+    def __init__(
+        self,
+        message: str = "라벨 계약이 올바르지 않습니다 (label 컬럼 누락 또는 {0,1} 외 값).",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="LABEL_CONTRACT_INVALID",
+            status_code=422,
+            details=details,
+        )
+
+
+class LabelAnchorNotFoundError(FeatureError):
+    """Raised when ID, timestamp, or failure anchor cannot be determined."""
+
+    def __init__(
+        self,
+        message: str = "라벨 생성을 위한 ID, timestamp 또는 anchor(failure_point)를 결정할 수 없습니다.",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="LABEL_ANCHOR_NOT_FOUND",
+            status_code=422,
+            details=details,
+        )
+
+
 class FeatureBuildError(FeatureError):
     """Raised when time-series feature calculation fails."""
 
@@ -102,11 +182,11 @@ class FeatureSchemaMismatchError(FeatureError):
 
 
 class InsufficientTrainingDataError(FeatureError):
-    """Raised when rows or feature columns are insufficient after cleaning."""
+    """Raised when rows, positive samples, or feature columns are insufficient."""
 
     def __init__(
         self,
-        message: str = "학습에 필요한 유효 피처/데이터 행이 부족합니다.",
+        message: str = "학습에 필요한 유효 피처, 데이터 행 또는 positive 샘플이 부족합니다.",
         details: list[Any] | None = None,
     ) -> None:
         super().__init__(

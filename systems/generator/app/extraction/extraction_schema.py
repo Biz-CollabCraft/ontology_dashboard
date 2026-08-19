@@ -67,7 +67,6 @@ class ExtractionRequest(BaseModel):
     force_reanalyze: bool = Field(False, description="Force re-analyzing plan even if cached")
     duplicate_policy: Literal["error", "aggregate"] = Field("error", description="Duplicate handling policy")
     aggregation: Optional[Literal["mean", "first", "sum"]] = Field(None, description="Aggregation function if duplicate_policy='aggregate'")
-    idempotency_key: Optional[str] = Field(None, description="Optional idempotency key")
 
     @model_validator(mode="after")
     def _validate_duplicate_aggregation(self) -> "ExtractionRequest":
@@ -86,6 +85,7 @@ class ExtractionResultPayload(BaseModel):
     value_column: Optional[str] = None
     duplicate_policy: str = "error"
     aggregation: Optional[str] = None
+    mapping_version: str
     mapping_uri: str
 
 
@@ -99,13 +99,7 @@ class ExtractionResponse(BaseModel):
     result: ExtractionResultPayload
 
 
-# --- Error Envelope Schemas ---
-
-class ErrorDetail(BaseModel):
-    loc: list[str | int] = Field(default_factory=list)
-    msg: str
-    type: str
-
+# --- Standard Error Envelope ---
 
 class ErrorEnvelopeBody(BaseModel):
     code: str
