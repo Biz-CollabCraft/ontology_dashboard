@@ -15,6 +15,7 @@ from .dependencies import (
     client_ip,
     current_principal,
     get_dataset_catalog_service,
+    get_governance_service,
     get_identity_service,
     get_maintenance_application_service,
     get_ontology_planner_service,
@@ -27,6 +28,7 @@ from .dependencies import (
     require_permission,
     set_auth_cookies,
 )
+from app.governance import build_governance_router
 from app.identity import AuthError
 from app.identity.identity_router import build_identity_router, identity_http_status
 from app.project import ProjectError
@@ -38,7 +40,6 @@ from .routers.admin import router as admin_router
 from .routers.analyses import router as analyses_router
 from .routers.dashboards import router as dashboards_router
 from .routers.exports import router as exports_router
-from .routers.governance import router as governance_router
 from .routers.manufacturing import router as manufacturing_router
 from .routers.modeling import router as modeling_router
 from .routers.ontology import router as ontology_router
@@ -83,6 +84,12 @@ datasets_router = create_dataset_router(
 projects_router = build_project_router(
     get_project_service=get_project_service,
     get_event_query=get_service,
+    require_permission=require_permission,
+    require_csrf=require_csrf,
+)
+
+governance_router = build_governance_router(
+    get_governance_service=get_governance_service,
     require_permission=require_permission,
     require_csrf=require_csrf,
 )

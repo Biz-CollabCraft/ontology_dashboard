@@ -62,7 +62,7 @@ from .distributed_runtime import (
     DurableJobEventPage,
 )
 from .export_models import ExportCheckpoint
-from .governance.models import GovernanceAgentRunDetail, ProjectionRetryResult
+from app.governance.governance_schema import GovernanceOverview, ProjectionRetryResult
 from app.identity import DisplayPreferenceUpdateRequest, Principal
 from app.infra.external.project3.models import Project3IntegrationSnapshot
 from .modeling.models import (
@@ -683,8 +683,8 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.dashboards.list_dashboard_saved_views": ItemsResponse[SavedViewRecord],
     "ontology_dashboard.routers.dashboards.resolve_dashboard_share": DashboardSharePayload,
     "ontology_dashboard.routers.exports.list_export_checkpoints": ItemsResponse[ExportCheckpoint],
-    "ontology_dashboard.routers.governance.governance_agent_run": GovernanceAgentRunDetail,
-    "ontology_dashboard.routers.governance.retry_projection": ProjectionRetryResult,
+    "app.governance.governance_router.governance_overview": GovernanceOverview,
+    "app.governance.governance_router.retry_projection": ProjectionRetryResult,
     "ontology_dashboard.routers.project3.project3_status": Project3IntegrationSnapshot,
     "app.diagnosis.diagnosis_router.prediction_timeline": TimelineResponse,
     "ontology_dashboard.routers.modeling.modeling_contracts": ModelingContractsResponse,

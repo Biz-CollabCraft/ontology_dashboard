@@ -43,7 +43,7 @@ from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorA
 from .dashboard_service import DashboardService
 from .distributed_runtime import DurableJobRepository
 from .export_service import ExportService
-from .governance import GovernanceService
+from app.governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.project import ProjectService
 from app.infra.db.project_repository import (
@@ -440,8 +440,7 @@ def get_governance_service(
     migrate(target)
     return GovernanceService(
         datasets=datasets.repository,
-        agents=AgentRunRepository(target),
-        workflows=workflows,
+        approvals=workflows.repository,
     )
 
 

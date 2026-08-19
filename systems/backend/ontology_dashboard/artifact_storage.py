@@ -34,6 +34,11 @@ from app.infra.storage import (
     deterministic_object_key,
     safe_segment,
 )
+from app.governance.artifact_policy import (
+    RetentionClass,
+    RetentionPolicyInput,
+    evaluate_retention,
+)
 
 from .postgresql_compat import postgres_repository_connection
 from .postgresql_repositories import is_postgresql
@@ -48,7 +53,6 @@ ArtifactState = Literal[
     "retention_pending",
     "deleted",
 ]
-RetentionClass = Literal["ephemeral", "standard", "regulated", "backup", "legal_hold"]
 class ArtifactIntegrityError(ArtifactStorageError):
     pass
 
@@ -687,23 +691,22 @@ class ArtifactGovernanceService:
             project_id=project_id,
             limit=500,
         ):
-            if artifact.legal_hold or artifact.retention_class == "legal_hold":
-                action: Literal["retain", "delete", "skip_legal_hold"] = "skip_legal_hold"
-                reason = "legal hold blocks deletion"
-            elif artifact.retain_until is not None and artifact.retain_until <= current:
-                action = "delete"
-                reason = "retention period expired"
-            else:
-                action = "retain"
-                reason = "retention period remains active"
+            decision = evaluate_retention(
+                RetentionPolicyInput(
+                    retention_class=artifact.retention_class,
+                    retain_until=artifact.retain_until,
+                    legal_hold=artifact.legal_hold,
+                ),
+                now=current,
+            )
             candidates.append(ArtifactRetentionCandidate(
                 artifact_id=artifact.id,
                 object_key=artifact.object_key,
                 retention_class=artifact.retention_class,
                 retain_until=artifact.retain_until,
                 legal_hold=artifact.legal_hold,
-                action=action,
-                reason=reason,
+                action=decision.action,
+                reason=decision.reason,
             ))
         return tuple(candidates)
 

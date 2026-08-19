@@ -5,14 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.infra.db.dataset_repository import DatasetRepository
-from app.identity import AuthError, Principal
-from ..orchestration.repository import AgentRunRepository
-from ..role_workflow_service import RoleWorkflowService
-from .models import (
+from .governance_exception import GovernanceAccessError
+from .governance_schema import (
     GovernanceAccess,
-    GovernanceAgentRun,
-    GovernanceAgentRunDetail,
     GovernanceApproval,
     GovernanceCounts,
     GovernanceLineage,
@@ -20,28 +15,27 @@ from .models import (
     GovernanceProjection,
     ProjectionRetryResult,
 )
+from .ports import GovernanceApprovalPort, GovernanceDatasetPort, GovernancePrincipal
 
 
 class GovernanceService:
     def __init__(
         self,
         *,
-        datasets: DatasetRepository,
-        agents: AgentRunRepository,
-        workflows: RoleWorkflowService,
+        datasets: GovernanceDatasetPort,
+        approvals: GovernanceApprovalPort,
     ) -> None:
         self.datasets = datasets
-        self.agents = agents
-        self.workflows = workflows
+        self.approvals = approvals
 
     @staticmethod
-    def _require_scope(principal: Principal, project_id: str, workspace_id: str) -> None:
+    def _require_scope(principal: GovernancePrincipal, project_id: str, workspace_id: str) -> None:
         if project_id not in principal.project_scopes:
-            raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
+            raise GovernanceAccessError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
         if principal.active_project_id and principal.active_project_id != project_id:
-            raise AuthError(409, "active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
+            raise GovernanceAccessError(409, "active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
         if workspace_id not in principal.workspace_scopes:
-            raise AuthError(403, "workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
+            raise GovernanceAccessError(403, "workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
 
     @staticmethod
     def _projection(record: dict[str, Any], *, can_retry: bool) -> GovernanceProjection:
@@ -65,7 +59,7 @@ class GovernanceService:
     def overview(
         self,
         *,
-        principal: Principal,
+        principal: GovernancePrincipal,
         project_id: str,
         workspace_id: str,
     ) -> GovernanceOverview:
@@ -85,27 +79,6 @@ class GovernanceService:
             workspace_id=workspace_id,
         )
         projections = [self._projection(item, can_retry=can_retry) for item in projection_rows]
-        runs = self.agents.list_runs(
-            organization_id=principal.organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            limit=100,
-        )
-        agent_runs = [
-            GovernanceAgentRun(
-                run_id=item.run_id,
-                workspace_id=item.workspace_id,
-                question=item.question,
-                route=item.route,
-                status=item.status,
-                evidence_count=len(item.evidence),
-                claim_count=len(item.claims),
-                checkpoint_sequence=item.checkpoint_sequence,
-                caveats=item.caveats,
-                error=item.error,
-            )
-            for item in runs
-        ]
         approvals = self._approvals(
             principal=principal,
             project_id=project_id,
@@ -157,8 +130,6 @@ class GovernanceService:
             projections=len(projections),
             failed_projections=sum(item.status == "failed" for item in projections),
             pending_projections=sum(item.status in {"pending", "indexing"} for item in projections),
-            agent_runs=len(agent_runs),
-            failed_agent_runs=sum(item.status == "failed" for item in agent_runs),
             pending_approvals=sum(item.status == "pending_approval" for item in approvals),
         )
         return GovernanceOverview(
@@ -174,28 +145,27 @@ class GovernanceService:
             ),
             counts=counts,
             projections=projections,
-            agent_runs=agent_runs,
             approvals=approvals,
             lineage=lineage,
             policy_boundaries=[
                 "이 화면은 Project governance만 다루며 사용자 계정·비밀번호·tenant admin 제어는 포함하지 않습니다.",
-                "Agent claim은 저장된 evidence ID와 trace가 연결된 경우에만 재구성합니다.",
                 "Graph/vector projection이 stale 또는 failed이면 relational source와 동일한 fresh 상태로 표현하지 않습니다.",
                 "Projection retry는 governance.projection.retry 권한이 있는 FDE 또는 tenant admin만 수행할 수 있습니다.",
+                "Generic Agent run/trace는 승인된 Governance capability가 아니므로 이 API에서 제공하지 않습니다.",
             ],
         )
 
     def _approvals(
         self,
         *,
-        principal: Principal,
+        principal: GovernancePrincipal,
         project_id: str,
         workspace_id: str,
     ) -> list[GovernanceApproval]:
         rows: list[dict[str, Any]] = []
         for table in ("template_publish_requests", "model_release_requests"):
             rows.extend(
-                self.workflows.repository.list_workflow_requests(
+                self.approvals.list_workflow_requests(
                     table=table,
                     organization_id=principal.organization_id,
                     project_id=project_id,
@@ -220,54 +190,24 @@ class GovernanceService:
             for item in rows
         ]
 
-    def agent_run(
-        self,
-        *,
-        principal: Principal,
-        project_id: str,
-        workspace_id: str,
-        run_id: str,
-    ) -> GovernanceAgentRunDetail:
-        self._require_scope(principal, project_id, workspace_id)
-        state = self.agents.get(
-            organization_id=principal.organization_id,
-            project_id=project_id,
-            run_id=run_id,
-        )
-        if state.workspace_id != workspace_id:
-            raise AuthError(403, "workspace_scope_denied", "Agent run은 다른 workspace에 속합니다.")
-        return GovernanceAgentRunDetail(
-            state=state,
-            traces=self.agents.traces(
-                organization_id=principal.organization_id,
-                project_id=project_id,
-                run_id=run_id,
-            ),
-            checkpoints=self.agents.checkpoints(
-                organization_id=principal.organization_id,
-                project_id=project_id,
-                run_id=run_id,
-            ),
-        )
-
     def retry_projection(
         self,
         *,
-        principal: Principal,
+        principal: GovernancePrincipal,
         project_id: str,
         workspace_id: str,
         projection_id: str,
     ) -> ProjectionRetryResult:
         self._require_scope(principal, project_id, workspace_id)
         if "governance.projection.retry" not in principal.permissions:
-            raise AuthError(403, "permission_denied", "Projection retry 권한이 없습니다.")
+            raise GovernanceAccessError(403, "permission_denied", "Projection retry 권한이 없습니다.")
         projection = self.datasets.get_projection(
             organization_id=principal.organization_id,
             project_id=project_id,
             projection_id=projection_id,
         )
         if projection["workspace_id"] != workspace_id:
-            raise AuthError(403, "workspace_scope_denied", "Projection은 다른 workspace에 속합니다.")
+            raise GovernanceAccessError(403, "workspace_scope_denied", "Projection은 다른 workspace에 속합니다.")
         self.datasets.retry_projection(
             organization_id=principal.organization_id,
             project_id=project_id,

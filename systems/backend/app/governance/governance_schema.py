@@ -7,9 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..orchestration.models import AgentState, AgentTraceRecord
-
-
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -32,8 +29,6 @@ class GovernanceCounts(StrictModel):
     projections: int = 0
     failed_projections: int = 0
     pending_projections: int = 0
-    agent_runs: int = 0
-    failed_agent_runs: int = 0
     pending_approvals: int = 0
 
 
@@ -52,19 +47,6 @@ class GovernanceProjection(StrictModel):
     last_error: str | None = None
     updated_at: datetime
     can_retry: bool = False
-
-
-class GovernanceAgentRun(StrictModel):
-    run_id: str
-    workspace_id: str
-    question: str
-    route: str
-    status: str
-    evidence_count: int
-    claim_count: int
-    checkpoint_sequence: int
-    caveats: list[str] = Field(default_factory=list)
-    error: str | None = None
 
 
 class GovernanceApproval(StrictModel):
@@ -96,16 +78,9 @@ class GovernanceOverview(StrictModel):
     access: GovernanceAccess
     counts: GovernanceCounts
     projections: list[GovernanceProjection]
-    agent_runs: list[GovernanceAgentRun]
     approvals: list[GovernanceApproval]
     lineage: list[GovernanceLineage]
     policy_boundaries: list[str]
-
-
-class GovernanceAgentRunDetail(StrictModel):
-    state: AgentState
-    traces: list[AgentTraceRecord]
-    checkpoints: list[dict[str, Any]]
 
 
 class ProjectionRetryResult(StrictModel):

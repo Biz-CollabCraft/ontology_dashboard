@@ -12,13 +12,11 @@ from app.dataset import (
 )
 from app.infra.db.dataset_repository import DatasetRepository
 from ontology_dashboard.dependencies import get_governance_service
-from ontology_dashboard.governance import GovernanceService
+from app.governance import GovernanceAccessError, GovernanceService
 from app.identity import CSRF_COOKIE, AuthError, IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.orchestration import AgentRunRepository
-from ontology_dashboard.orchestration.models import AgentState, EvidenceItem, GroundedClaim
 from ontology_dashboard.role_workflow_service import RoleWorkflowService
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 
@@ -33,9 +31,8 @@ def setup(tmp_path: Path):
     domain = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
     datasets = DatasetRepository(database)
     catalog = DatasetCatalogService(datasets)
-    agents = AgentRunRepository(database)
     workflows = RoleWorkflowService(domain)
-    service = GovernanceService(datasets=datasets, agents=agents, workflows=workflows)
+    service = GovernanceService(datasets=datasets, approvals=workflows.repository)
 
     fde_user = identity.repository.authenticate("fde@ontology.local", "FDE!2026")
     fde = identity.repository.principal(
@@ -93,54 +90,10 @@ def setup(tmp_path: Path):
         error_message="neo4j fixture unavailable",
     )
 
-    evidence = EvidenceItem(
-        evidence_id="ev-governance-1",
-        store="postgresql",
-        reference="dataset:ds-governance-fixture",
-        project_id=dataset.project_id,
-        workspace_id="manufacturing-demo",
-        dataset_version_id=version.id,
-        object_id="equipment:M-014",
-        title="Risk event",
-        content="M-014 risk event evidence",
-        score=0.94,
-    )
-    state = AgentState(
-        run_id="agent-run-governance",
-        organization_id=fde.organization_id,
-        project_id=dataset.project_id,
-        workspace_id="manufacturing-demo",
-        user_id=fde.user_id,
-        question="Show M-014 evidence",
-        route="hybrid",
-        status="succeeded",
-        evidence=[evidence],
-        claims=[
-            GroundedClaim(
-                claim_id="claim-1",
-                text="M-014 has a recorded risk event.",
-                evidence_ids=[evidence.evidence_id],
-                confidence="high",
-            )
-        ],
-        answer="M-014 has a recorded risk event. [ev-governance-1]",
-    )
-    checkpointed = agents.create(state)
-    agents.trace(
-        checkpointed,
-        step_name="execute_relational",
-        store_kind="relational",
-        status="succeeded",
-        input_payload={"query_id": "equipment-risk-events"},
-        output_payload={"evidence_ids": [evidence.evidence_id]},
-        latency_ms=12,
-    )
-    agents.finish(checkpointed)
-
     return database, identity, domain, service, fde, quality, graph["id"], version.id
 
 
-def test_governance_overview_reconstructs_projection_agent_and_lineage(setup) -> None:
+def test_governance_overview_reconstructs_projection_approval_and_lineage_without_agent_surface(setup) -> None:
     _, _, _, service, _, quality, projection_id, version_id = setup
     overview = service.overview(
         principal=quality,
@@ -151,32 +104,21 @@ def test_governance_overview_reconstructs_projection_agent_and_lineage(setup) ->
     assert overview.counts.datasets == 1
     assert overview.counts.dataset_versions == 1
     assert overview.counts.failed_projections == 1
-    assert overview.counts.agent_runs == 1
     assert overview.access.can_retry_projection is False
     failed = next(item for item in overview.projections if item.id == projection_id)
     assert failed.status == "failed"
     assert failed.dataset_version_id == version_id
     assert failed.can_retry is False
-    assert overview.agent_runs[0].run_id == "agent-run-governance"
-    assert overview.agent_runs[0].evidence_count == 1
     assert overview.lineage[0].latest_version_id == version_id
     assert overview.access.tenant_admin_controls_excluded is True
-
-    detail = service.agent_run(
-        principal=quality,
-        project_id="manufacturing-demo-project",
-        workspace_id="manufacturing-demo",
-        run_id="agent-run-governance",
-    )
-    assert detail.state.claims[0].evidence_ids == ["ev-governance-1"]
-    assert detail.traces[0].step_name == "execute_relational"
-    assert detail.checkpoints[0]["node_name"] == "start"
+    assert not hasattr(overview, "agent_runs")
+    assert not hasattr(service, "agent_run")
 
 
 def test_projection_retry_requires_governance_permission_and_scope(setup) -> None:
     _, _, _, service, fde, quality, projection_id, _ = setup
 
-    with pytest.raises(AuthError) as denied:
+    with pytest.raises(GovernanceAccessError) as denied:
         service.retry_projection(
             principal=quality,
             project_id="manufacturing-demo-project",
@@ -193,7 +135,7 @@ def test_projection_retry_requires_governance_permission_and_scope(setup) -> Non
     )
     assert result.projection.status == "pending"
 
-    with pytest.raises(AuthError) as scope_error:
+    with pytest.raises(GovernanceAccessError) as scope_error:
         service.overview(
             principal=fde,
             project_id="azure-fleet-maintenance-project",
@@ -229,11 +171,10 @@ def test_governance_routes_are_project_scoped_and_retry_is_fde_only(client: Test
     )
     assert overview.status_code == 200, overview.text
     assert overview.json()["counts"]["failed_projections"] == 1
-    run = client.get(
+    removed_agent_surface = client.get(
         "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/governance/agent-runs/agent-run-governance"
     )
-    assert run.status_code == 200
-    assert run.json()["state"]["claims"][0]["validated"] is True
+    assert removed_agent_surface.status_code == 404
     denied = client.post(
         f"/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/governance/projections/{projection_id}/retry"
     )

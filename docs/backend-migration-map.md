@@ -61,7 +61,7 @@
 | `reports.py`, `export_models.py`, `export_repository.py`, `export_service.py` | Report와 Export | `MOVE` | `app/report` | #61 |
 | `planner/*`, `ontology_planner_models.py`, `ontology_planner_service.py` | 자연어 Planner와 UI plan | `MOVE` | `app/planner`, provider는 Infra port로 소비 | #62 |
 | `orchestration/*` | 범용 multi-store Agent orchestration | `REMOVE` | Agent는 MVP 제외 범위. Planner/Report는 필요한 public port를 각 도메인에서 새로 정의하고 legacy Agent runtime을 재사용하지 않음 | #62, #63, #68 |
-| `governance/*` | Agent trace와 projection governance | `SPLIT` | Dataset/projection/audit/approval governance만 `app/governance`; Agent run/trace surface는 Agent 제거와 함께 종료 | #63, #68 |
+| `governance/__init__.py`, `governance/models.py`, `governance/service.py` | Agent trace와 projection governance | `SPLIT` | Dataset/projection/audit/approval governance만 `app/governance`; Agent run/trace surface는 Agent 제거와 함께 종료 | #63, #68 |
 | `role_workflow_models.py`, `role_workflow_repository.py`, `role_workflow_service.py` | Field task, 역할별 read model, template/model 승인, audit | `SPLIT` | `maintenance`, `dashboard`, `governance` | #59, #60, #63 |
 | `automation_runtime.py` | Platform automation simulation | `REMOVE` | Human Decision 기반 Closed-loop와 다른 Commercial V4 simulation. 자동 설비 정지/Work Order도 MVP 제외 | #59, #68 |
 | `branching_lineage.py` | Platform change/merge/marking policy branch | `REMOVE` | `maintenance_replay_overlay`와 무관한 generic resource branch. marking policy도 승인된 MVP 계약이 없어 branch와 함께 종료 | #63, #68 |
@@ -260,6 +260,10 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `closed_loop/integration.py` | `systems/backend/app/maintenance/integration.py` | `MIGRATED` |
 | `closed_loop/models.py` | `systems/backend/app/maintenance/maintenance_schema.py`, `systems/backend/app/maintenance/ports.py` | `MIGRATED` |
 | `closed_loop/repository.py` | `systems/backend/app/infra/db/maintenance_repository.py` | `MIGRATED` |
+| `governance/__init__.py` | `systems/backend/app/governance/__init__.py` | `MIGRATED` |
+| `governance/models.py` | `systems/backend/app/governance/governance_schema.py` | `MIGRATED` |
+| `governance/service.py` | `systems/backend/app/governance/governance_service.py`, `systems/backend/app/governance/ports.py` | `MIGRATED` |
+| `routers/governance.py` | `systems/backend/app/governance/governance_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
@@ -297,3 +301,8 @@ MaintenanceEvent 상태 흐름과 integration event schema를 `app/maintenance`�
 DB/RLS persistence는 `app/infra/db/maintenance_repository.py`로 분리했으며,
 Diagnosis Product Result/Evidence와 Equipment state patch/state-version은 각각 public
 inbound port로만 소비한다.
+
+Phase 12 / #63에서는 Dataset projection, approval/audit와 artifact retention policy만
+`app/governance`로 수렴했다. Generic Agent run/trace detail과 Governance Agent endpoint는
+#68 REMOVE 처분에 따라 canonical contract에서 제거했으며, 모델 릴리즈 후보 메타데이터는
+Diagnosis-owned `ModelReleaseCandidateQueryPort`를 통해 소비하도록 경계를 고정한다.
