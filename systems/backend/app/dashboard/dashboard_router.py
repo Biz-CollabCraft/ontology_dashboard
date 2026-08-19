@@ -15,7 +15,6 @@ from .dashboard_schema import (
     DashboardShareCreateRequest,
     DashboardTemplatePublishRequest,
     DashboardTemplatePublishRequestCreate,
-    ReportDraftSaveRequest,
     SavedViewCreateRequest,
 )
 from .dashboard_service import DashboardService
@@ -48,36 +47,6 @@ def build_dashboard_router(
             "role_context_denied",
             "다른 역할의 Dashboard template을 조회할 수 없습니다.",
         )
-
-    @router.get("/api/reports/draft")
-    def get_report_draft(
-        workspace_id: str,
-        event_id: str,
-        role: Role = Query(default="engineer"),
-        locale: AppLocale = Query(default="ko-KR"),
-        principal: Any = Depends(require_permission("events.read")),
-        identity: Any = Depends(get_identity_service),
-        dashboards: DashboardService = Depends(get_dashboard_service),
-    ):
-        identity.require_workspace(principal, workspace_id)
-        draft = dashboards.get_report_draft(
-            workspace_id=workspace_id,
-            event_id=event_id,
-            role=role,
-            locale=locale,
-        )
-        return {"draft": draft.model_dump(mode="json") if draft is not None else None}
-
-    @router.put("/api/reports/draft")
-    def save_report_draft(
-        request: ReportDraftSaveRequest,
-        principal: Any = Depends(require_permission("events.note")),
-        _: None = Depends(require_csrf),
-        identity: Any = Depends(get_identity_service),
-        dashboards: DashboardService = Depends(get_dashboard_service),
-    ):
-        identity.require_workspace(principal, request.workspace_id)
-        return dashboards.save_report_draft(principal=principal, request=request).model_dump(mode="json")
 
     @router.get("/api/dashboards/resolved")
     def resolved_dashboard(

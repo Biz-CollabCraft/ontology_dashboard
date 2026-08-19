@@ -81,17 +81,12 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
         "analysis_service",
     )
     export_workflow_modules = (
-        "export_models",
-        "export_repository",
-        "export_service",
         "role_workflow_models",
         "role_workflow_repository",
         "role_workflow_service",
     )
     ontology_compatibility_modules = (
         "conversation",
-        "llm",
-        "reports",
         "ontology",
         "ontology_adapter",
         "ontology_repository",
@@ -192,6 +187,27 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
     export_workflow_relocated = all(
         _canonical_with_optional_legacy_shim(root, module)
         for module in export_workflow_modules
+    ) and all(
+        (root / path).is_file()
+        for path in (
+            "systems/backend/app/report/report_schema.py",
+            "systems/backend/app/report/report_service.py",
+            "systems/backend/app/report/report_router.py",
+            "systems/backend/app/report/generation.py",
+            "systems/backend/app/report/generation_provider.py",
+            "systems/backend/app/report/ports.py",
+            "systems/backend/app/infra/db/report_repository.py",
+        )
+    ) and all(
+        not (root / path).exists()
+        for path in (
+            "systems/backend/ontology_dashboard/export_models.py",
+            "systems/backend/ontology_dashboard/export_repository.py",
+            "systems/backend/ontology_dashboard/export_service.py",
+            "systems/backend/ontology_dashboard/reports.py",
+            "systems/backend/ontology_dashboard/llm.py",
+            "systems/backend/ontology_dashboard/routers/exports.py",
+        )
     )
     ontology_compatibility_relocated = all(
         _canonical_with_optional_legacy_shim(root, module)
@@ -255,8 +271,8 @@ def collect_architecture_debt(root: Path) -> list[DebtItem]:
             id="export_workflow_physical_relocation",
             state="resolved" if export_workflow_relocated else "regression",
             stage=55,
-            evidence="canonical Export and Role Workflow models, repositories and services with compatibility-only legacy re-exports",
-            action="Keep export checkpoints, approval workflows, field actions and transactional outbox repository identities physically canonical.",
+            evidence="canonical app/report generation/export plus existing Role Workflow migration slice",
+            action="Keep Report generation/drafts/export checkpoints in app/report and technical persistence in app/infra/db.",
         ),
         DebtItem(
             id="ontology_compatibility_physical_relocation",

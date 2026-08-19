@@ -35,14 +35,14 @@ from .artifact_storage import (
 )
 from .automation_runtime import AutomationSnapshot
 from .branching_lineage import BranchDiff, BranchingLineageSnapshot, PolicyDecision
-from .contracts import GroundedReport, UILayout
+from .contracts import UILayout
 from .connectors import ConnectorSnapshot
 from app.dashboard.dashboard_schema import (
     DashboardSharePayload,
     DashboardTemplateSnapshot,
-    ReportDraftRecord,
     SavedViewRecord,
 )
+from app.report.report_schema import ExportCheckpoint, GroundedReport, ReportDraftRecord
 from app.dataset.dataset_schema import (
     DatasetDetail,
     DatasetPage,
@@ -61,7 +61,6 @@ from .distributed_runtime import (
     DurableJob,
     DurableJobEventPage,
 )
-from .export_models import ExportCheckpoint
 from app.governance.governance_schema import GovernanceOverview, ProjectionRetryResult
 from app.identity import DisplayPreferenceUpdateRequest, Principal
 from app.infra.external.project3.models import Project3IntegrationSnapshot
@@ -676,13 +675,13 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.platform.project_distributed_job_events": DurableJobEventPage,
     "ontology_dashboard.routers.platform.cancel_distributed_job": DurableJob,
     "ontology_dashboard.routers.platform.replay_distributed_job": DurableJob,
-    "app.dashboard.dashboard_router.get_report_draft": ReportDraftResponse,
+    "app.report.report_router.get_report_draft": ReportDraftResponse,
     "app.dashboard.dashboard_router.dashboard_template_versions": ItemsResponse[dict[str, Any]],
     "app.dashboard.dashboard_router.request_dashboard_template_publish": WorkflowRequestResponse,
     "app.dashboard.dashboard_router.query_dashboard_board": DashboardBoardQueryResponse,
     "app.dashboard.dashboard_router.list_dashboard_saved_views": ItemsResponse[SavedViewRecord],
     "app.dashboard.dashboard_router.resolve_dashboard_share": DashboardSharePayload,
-    "ontology_dashboard.routers.exports.list_export_checkpoints": ItemsResponse[ExportCheckpoint],
+    "app.report.report_router.list_export_checkpoints": ItemsResponse[ExportCheckpoint],
     "app.governance.governance_router.governance_overview": GovernanceOverview,
     "app.governance.governance_router.retry_projection": ProjectionRetryResult,
     "ontology_dashboard.routers.project3.project3_status": Project3IntegrationSnapshot,
@@ -736,7 +735,7 @@ _NO_CONTENT_ENDPOINTS = {
     "app.dashboard.dashboard_router.delete_dashboard_saved_view",
 }
 
-_BINARY_ENDPOINTS = {"ontology_dashboard.routers.exports.create_export"}
+_BINARY_ENDPOINTS = {"app.report.report_router.create_export"}
 _SSE_ENDPOINTS = {"app.diagnosis.diagnosis_router.replay_events"}
 
 

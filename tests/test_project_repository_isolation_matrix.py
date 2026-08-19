@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.infra.db.dashboard_repository import DashboardRepository
-from ontology_dashboard.export_repository import ExportRepository
+from app.infra.db.report_repository import ExportRepository
 from app.identity import IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate

@@ -102,9 +102,6 @@ def test_analysis_modules_load_from_canonical_directory() -> None:
 
 def test_export_workflow_modules_load_from_canonical_directory() -> None:
     module_names = (
-        "export_models",
-        "export_repository",
-        "export_service",
         "role_workflow_models",
         "role_workflow_repository",
         "role_workflow_service",
@@ -114,17 +111,19 @@ def test_export_workflow_modules_load_from_canonical_directory() -> None:
         module = importlib.import_module(f"ontology_dashboard.{name}")
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()
 
-    export_repository = importlib.import_module("ontology_dashboard.export_repository")
-    export_service = importlib.import_module("ontology_dashboard.export_service")
+    export_repository = importlib.import_module("app.infra.db.report_repository")
+    export_service = importlib.import_module("app.report.report_service")
     workflow_repository = importlib.import_module("ontology_dashboard.role_workflow_repository")
     workflow_service = importlib.import_module("ontology_dashboard.role_workflow_service")
     postgresql_repositories = importlib.import_module("ontology_dashboard.postgresql_repositories")
-    assert export_service.ExportRepository is export_repository.ExportRepository
+    assert export_service.ReportService
     assert workflow_service.RoleWorkflowRepository is workflow_repository.RoleWorkflowRepository
     assert issubclass(
         postgresql_repositories.PostgreSQLExportRepository,
         export_repository.ExportRepository,
     )
+    assert not (ROOT / "systems/backend/ontology_dashboard/export_service.py").exists()
+    assert not (ROOT / "systems/backend/ontology_dashboard/routers/exports.py").exists()
     assert issubclass(
         postgresql_repositories.PostgreSQLRoleWorkflowRepository,
         workflow_repository.RoleWorkflowRepository,
@@ -134,8 +133,6 @@ def test_export_workflow_modules_load_from_canonical_directory() -> None:
 def test_ontology_compatibility_modules_load_from_canonical_directory() -> None:
     module_names = (
         "conversation",
-        "llm",
-        "reports",
         "ontology",
         "ontology_adapter",
         "ontology_repository",

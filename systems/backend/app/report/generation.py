@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .contracts import AppLocale, GroundedReport, ReportAction, ReportSection, Role
+from .report_schema import AppLocale, GroundedReport, ReportAction, ReportSection, Role
 
 STATUS_LABELS: dict[AppLocale, dict[str, str]] = {
     "ko-KR": {

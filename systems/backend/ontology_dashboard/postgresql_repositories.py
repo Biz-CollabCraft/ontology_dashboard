@@ -22,7 +22,7 @@ from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRe
 
 from app.dashboard.catalog import seed_templates
 from app.infra.db.dashboard_repository import DashboardRepository
-from .export_repository import ExportRepository
+from app.infra.db.report_repository import ExportRepository
 from app.infra.db.identity_repository import IdentityRepository as SQLIdentityRepository
 from .ontology_repository import OntologyActionRepository
 from .repository import AuditRepository

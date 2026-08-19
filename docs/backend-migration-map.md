@@ -274,10 +274,17 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `visualizations/recommender.py` | `systems/backend/app/dashboard/visualizations/recommender.py` | `MIGRATED` |
 | `visualizations/semantic.py` | `systems/backend/app/dashboard/visualizations/semantic.py` | `MIGRATED` |
 | `routers/dashboards.py` | `systems/backend/app/dashboard/dashboard_router.py` | `MIGRATED` |
+| `reports.py` | `systems/backend/app/report/generation.py`, `systems/backend/app/report/report_schema.py` | `MIGRATED` |
+| `llm.py` | `systems/backend/app/report/generation_provider.py`, `systems/backend/app/report/ports.py`, `systems/backend/app/infra/llm/provider.py` | `MIGRATED` |
+| `export_models.py` | `systems/backend/app/report/report_schema.py` | `MIGRATED` |
+| `export_repository.py` | `systems/backend/app/report/ports.py`, `systems/backend/app/infra/db/report_repository.py` | `MIGRATED` |
+| `export_service.py` | `systems/backend/app/report/report_service.py`, `systems/backend/app/report/ports.py` | `MIGRATED` |
+| `routers/exports.py` | `systems/backend/app/report/report_router.py` | `MIGRATED` |
 
-`artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
-각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
-Governance/Report 책임이 남아 있으므로 파일 자체를 `MIGRATED`로 표시하지 않는다.
+`artifact_storage.py`의 object-storage driver/key 생성 책임은 `app/infra/storage`로
+분리됐지만 legacy Source에는 아직 Governance catalog/service 책임이 남아 있으므로 파일
+자체를 `MIGRATED`로 표시하지 않는다. `llm.py`는 Infra provider와 Report generation
+consumer가 모두 canonical owner로 분리되어 Phase 10에서 완전히 이관됐다.
 
 Phase 3 / #54에서 `identity.py`에 남아 있던 Project membership lifecycle과
 `projects/*`, `project_context.py`, `routers/projects.py`를 `app/project`로 물리 이관했다.
@@ -322,3 +329,10 @@ Phase 9 / #60에서는 Dashboard schema/catalog/service/router/visualization rea
 Equipment/Diagnosis/Maintenance 의미를 Dashboard에서 재계산하지 않으며 각 owner의 public
 query contract를 소비하기 위한 `EquipmentStatusQueryPort`, `DiagnosisReadModelQueryPort`,
 `MaintenanceQueryPort`를 canonical Dashboard boundary에 둔다.
+
+Phase 10 / #61에서는 grounded Report generation, localized draft, export snapshot/checkpoint와
+HTTP API를 `app/report`로 수렴하고 SQLite/PostgreSQL persistence를
+`app/infra/db/report_repository.py`로 분리했다. LLM 호출은 Report-owned
+`ReportGenerationProviderPort` 뒤에서만 소비하며, Diagnosis Evidence와 Maintenance history,
+Dashboard snapshot은 composition adapter가 각 owner public contract를 Report inbound port에
+연결한다. `/api/reports/draft`도 Dashboard router에서 Report router로 ownership을 이동했다.

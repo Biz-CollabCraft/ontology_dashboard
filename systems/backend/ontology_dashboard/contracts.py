@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.report.report_schema import GroundedReport, ReportAction, ReportRequest, ReportSection
 
 Role = Literal["manager", "engineer"]
 AppLocale = Literal["ko-KR", "en-US"]
@@ -24,40 +25,6 @@ from app.maintenance.maintenance_schema import DecisionRequest, NoteRequest, Ope
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-class ReportSection(StrictModel):
-    section_id: str
-    title: str
-    body: str
-    evidence_field_ids: list[str] = Field(default_factory=list)
-
-
-class ReportAction(StrictModel):
-    action_id: str
-    label: str
-    kind: Literal["monitor", "inspect", "review_shutdown", "verify_data", "report"]
-    requires_human_approval: bool = True
-    source_refs: list[str] = Field(default_factory=list)
-
-
-class GroundedReport(StrictModel):
-    schema_version: Literal["1.0"] = "1.0"
-    report_id: str
-    event_id: str
-    role: Role
-    locale: AppLocale = "ko-KR"
-    mode: Literal["deterministic", "llm", "deterministic_fallback"]
-    headline: str
-    summary: str
-    status: str
-    confidence: str
-    recommended_decision: str
-    sections: list[ReportSection]
-    actions: list[ReportAction]
-    citations: list[str]
-    limitations: list[str]
-    generated_at: str
 
 
 class UIBlock(StrictModel):
@@ -95,12 +62,6 @@ class UILayout(StrictModel):
     mode: Literal["deterministic", "llm", "deterministic_fallback"]
     blocks: list[UIBlock]
     generated_at: str
-
-
-class ReportRequest(StrictModel):
-    role: Role
-    locale: AppLocale = "ko-KR"
-    use_llm: bool = True
 
 
 class LayoutRequest(StrictModel):

@@ -33,7 +33,7 @@ from .contracts import (
 from .conversation import IntentRouter, deterministic_answer
 from app.infra.llm import configured_provider
 
-from .llm import ReportAgent
+from app.report.generation_provider import ReportAgent
 from .planner import LayoutPlanner
 from app.diagnosis.evidence_projection import (
     event_evidence_projection_to_legacy_evidence,

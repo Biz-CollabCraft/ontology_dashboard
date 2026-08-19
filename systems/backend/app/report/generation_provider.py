@@ -6,16 +6,19 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from app.infra.llm import LLMProvider, OpenAICompatibleProvider
-
-from .contracts import AppLocale, GroundedReport, Role
-from .reports import render_report
+from .generation import render_report
+from .ports import ReportGenerationProviderPort
+from .report_schema import AppLocale, GroundedReport, Role
 
 
 class ReportAgent:
-    def __init__(self, project_root: str | Path, provider: LLMProvider | None = None) -> None:
+    def __init__(
+        self,
+        project_root: str | Path,
+        provider: ReportGenerationProviderPort | None = None,
+    ) -> None:
         self.root = Path(project_root)
-        self.provider = provider or OpenAICompatibleProvider()
+        self.provider = provider
         self.report_schema = json.loads((self.root / "contracts" / "schemas" / "report.schema.json").read_text(encoding="utf-8"))
 
     def _prompt(self, role: Role, locale: AppLocale) -> str:
@@ -91,7 +94,7 @@ class ReportAgent:
     ) -> tuple[GroundedReport, dict[str, Any]]:
         if not use_llm:
             return render_report(evidence, role, locale=locale, mode="deterministic"), {"provider": "none", "fallback": False}
-        if not provider_available:
+        if not provider_available or self.provider is None:
             return render_report(evidence, role, locale=locale, mode="deterministic_fallback"), {
                 "provider": getattr(self.provider, "name", "unknown"),
                 "fallback": True,

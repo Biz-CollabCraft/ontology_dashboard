@@ -43,7 +43,8 @@ from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorA
 from app.dashboard.dashboard_service import DashboardService
 from app.infra.db.dashboard_repository import DashboardRepository
 from .distributed_runtime import DurableJobRepository
-from .export_service import ExportService
+from app.infra.db.report_repository import ReportRepository
+from app.report.report_service import ExportService, ReportService
 from app.governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.project import ProjectService
@@ -400,20 +401,109 @@ def get_role_workflow_service(
     return RoleWorkflowService(service)
 
 
+class _DashboardReportSnapshotAdapter:
+    def __init__(self, dashboards: DashboardService) -> None:
+        self.dashboards = dashboards
+
+    def dashboard_snapshot(self, *, principal: Principal, workspace_id: str) -> dict[str, Any]:
+        return self.dashboards.resolve(
+            principal=principal,
+            workspace_id=workspace_id,
+        ).model_dump(mode="json")
+
+
+class _DiagnosisReportSnapshotAdapter:
+    def __init__(self, service: ManufacturingPredictiveMaintenanceService) -> None:
+        self.service = service
+
+    def event_report_snapshot(self, *, event_id: str, principal: Principal) -> dict[str, Any]:
+        return {
+            "event": self.service.event(event_id),
+            "evidence": self.service.evidence_snapshot(event_id),
+            "activity": self.service.repository.event_activity(event_id),
+        }
+
+
+class _RoleWorkspaceReportAdapter:
+    def __init__(
+        self,
+        *,
+        workflows: RoleWorkflowService,
+        service: ManufacturingPredictiveMaintenanceService,
+        dashboards: DashboardService,
+    ) -> None:
+        self.workflows = workflows
+        self.service = service
+        self.dashboards = dashboards
+
+    def role_workspace_snapshot(self, *, principal: Principal, workspace_id: str) -> dict[str, Any]:
+        role = principal.roles[0] if principal.roles else "process_manager"
+        if role in {"executive_viewer", "tenant_admin"}:
+            return self.workflows.executive_overview(
+                principal=principal,
+                workspace_id=workspace_id,
+            ).model_dump(mode="json")
+        if role == "quality_auditor":
+            event_id = next(iter(sorted(self.service.fixtures)))
+            return self.workflows.audit_reconstruction(
+                principal=principal,
+                workspace_id=workspace_id,
+                event_id=event_id,
+            ).model_dump(mode="json")
+        if role in {"maintenance_technician", "process_engineer"}:
+            return self.workflows.field_workspace(
+                principal=principal,
+                workspace_id=workspace_id,
+            ).model_dump(mode="json")
+        if role == "fde":
+            return self.workflows.fde_workbench(
+                principal=principal,
+                workspace_id=workspace_id,
+            ).model_dump(mode="json")
+        if role == "ml_validator":
+            return self.workflows.model_console(
+                principal=principal,
+                workspace_id=workspace_id,
+            ).model_dump(mode="json")
+        return self.dashboards.resolve(
+            principal=principal,
+            workspace_id=workspace_id,
+        ).model_dump(mode="json")
+
+
+class _ReportAuditAdapter:
+    def __init__(self, service: ManufacturingPredictiveMaintenanceService) -> None:
+        self.service = service
+
+    def record_report_audit(self, **command: Any) -> dict[str, Any]:
+        return self.service.repository.record_audit(**command)
+
+
 def get_export_service(
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
     dashboards: DashboardService = Depends(get_dashboard_service),
     role_workflows: RoleWorkflowService = Depends(get_role_workflow_service),
 ) -> ExportService:
     target = str(service.repository.path)
-    if is_postgresql(target):
-        return ExportService(
-            service,
-            dashboards=dashboards,
-            role_workflows=role_workflows,
-            repository=PostgreSQLExportRepository(target),
+    repository = (
+        PostgreSQLExportRepository(target)
+        if is_postgresql(target)
+        else ReportRepository(
+            target,
+            project_context=SQLiteProjectContextResolver(target),
         )
-    return ExportService(service)
+    )
+    return ReportService(
+        repository=repository,
+        dashboard=_DashboardReportSnapshotAdapter(dashboards),
+        diagnosis=_DiagnosisReportSnapshotAdapter(service),
+        maintenance=_RoleWorkspaceReportAdapter(
+            workflows=role_workflows,
+            service=service,
+            dashboards=dashboards,
+        ),
+        audit=_ReportAuditAdapter(service),
+    )
 
 
 @lru_cache(maxsize=1)

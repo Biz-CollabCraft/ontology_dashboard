@@ -1,17 +1,33 @@
-"""
-report 도메인 패키지 초기화 파일
-"""
+"""Canonical Report generation, draft, and export package."""
 
-from .report_router import router, ReportRouter
-from .report_service import ReportService
-from .report_generator import ReportGenerator
-from .report_schema import ReportGenerateRequest, ReportResponse
+from .generation import render_report
+from .generation_provider import ReportAgent
+from .report_exception import ReportConflictError, ReportNotFoundError
+from .report_router import build_report_router
+from .report_schema import (
+    ExportArtifact,
+    ExportCheckpoint,
+    ExportRequest,
+    GroundedReport,
+    ReportDraftRecord,
+    ReportDraftSaveRequest,
+    ReportRequest,
+)
+from .report_service import ExportService, ReportService
 
 __all__ = [
-    "router",
-    "ReportRouter",
+    "ExportArtifact",
+    "ExportCheckpoint",
+    "ExportRequest",
+    "ExportService",
+    "GroundedReport",
+    "ReportAgent",
+    "ReportConflictError",
+    "ReportDraftRecord",
+    "ReportDraftSaveRequest",
+    "ReportNotFoundError",
+    "ReportRequest",
     "ReportService",
-    "ReportGenerator",
-    "ReportGenerateRequest",
-    "ReportResponse",
+    "build_report_router",
+    "render_report",
 ]

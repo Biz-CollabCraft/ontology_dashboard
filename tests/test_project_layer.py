@@ -10,7 +10,7 @@ from app.dashboard.dashboard_schema import SavedViewCreateRequest
 from app.dashboard.dashboard_service import DashboardService
 from app.infra.db.dashboard_repository import DashboardRepository
 from ontology_dashboard.dependencies import get_project_service
-from ontology_dashboard.export_repository import ExportRepository
+from app.infra.db.report_repository import ExportRepository
 from app.identity import CSRF_COOKIE, IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service

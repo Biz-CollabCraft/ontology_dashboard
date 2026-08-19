@@ -16,6 +16,7 @@ from .dependencies import (
     current_principal,
     get_dataset_catalog_service,
     get_dashboard_service,
+    get_export_service,
     get_governance_service,
     get_identity_service,
     get_maintenance_application_service,
@@ -31,6 +32,7 @@ from .dependencies import (
     require_permission,
     set_auth_cookies,
 )
+from app.report import build_report_router
 from app.dashboard import (
     DashboardAccessError,
     DashboardNotFoundError,
@@ -46,7 +48,6 @@ from .routers.adapters import router as adapters_router
 from .routers.agent import router as agent_router
 from .routers.admin import router as admin_router
 from .routers.analyses import router as analyses_router
-from .routers.exports import router as exports_router
 from .routers.manufacturing import router as manufacturing_router
 from .routers.modeling import router as modeling_router
 from .routers.ontology import router as ontology_router
@@ -101,6 +102,14 @@ dashboards_router = build_dashboard_router(
     get_ontology_service=get_ontology_service,
     get_role_workflow_service=get_role_workflow_service,
     get_event_query_service=get_service,
+    require_csrf=require_csrf,
+    require_permission=require_permission,
+)
+exports_router = build_report_router(
+    get_report_service=get_export_service,
+    get_identity_service=get_identity_service,
+    get_rate_limiter=get_rate_limiter,
+    rate_limit_subject=rate_limit_subject,
     require_csrf=require_csrf,
     require_permission=require_permission,
 )
