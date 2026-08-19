@@ -12,6 +12,9 @@ import pytest
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator, FormatChecker
 
+from systems.backend.app.diagnosis.contracts import load_fixture
+from systems.backend.app.diagnosis.evidence import build_product_result_artifact
+from systems.backend.app.diagnosis.predictor import HeuristicPredictor
 from ontology_dashboard.adapters import (
     BundleFileAdapter,
     PostgreSQLPredictiveMaintenanceBundleIngestor,
@@ -21,6 +24,7 @@ from ontology_dashboard.predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeRepository,
     PredictiveMaintenanceRuntimeService,
 )
+from ontology_dashboard.predictive_maintenance_runtime import service as runtime_service
 from ontology_dashboard.dependencies import (
     get_identity_service,
     get_predictive_maintenance_runtime_service,
@@ -103,6 +107,82 @@ class RuntimeIdentity:
 class ConnectedRequest:
     async def is_disconnected(self) -> bool:
         return False
+
+
+def test_runtime_uses_the_stored_producer_artifact_payload() -> None:
+    fixture = load_fixture(
+        Path(__file__).resolve().parents[1] / "data" / "fixtures" / "GS-002-tool-wear-warning.json"
+    )
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    row = {
+        "artifact_id": artifact["artifact_id"],
+        "asset_id": artifact["asset_id"],
+        "asset_type": artifact["asset_type"],
+        "schema_version": artifact["schema_version"],
+        "prediction_id": artifact["provenance"]["prediction_id"],
+        "prediction_result_payload": artifact,
+    }
+
+    stored = PredictiveMaintenanceRuntimeService._stored_producer_artifact(row)
+
+    assert stored is artifact
+    assert stored["evidence_payload"] == artifact["evidence_payload"]
+    assert stored["ranked_factor_evidence"] == artifact["ranked_factor_evidence"]
+
+
+def test_snapshot_compatibility_does_not_require_dashboard_evidence_detail() -> None:
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "prediction_snapshot_compatibility"
+    ) is False
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "result_artifact",
+        {"evidence_payload": {"sensor_evidence": {}}},
+    ) is True
+
+
+def test_legacy_factor_labels_are_localized_without_changing_raw_units() -> None:
+    factors = [
+        {
+            "evidence_field_id": "factor.1.voltage_raw",
+            "feature": "voltage_raw",
+            "display_name": "전압 신호",
+            "unit": "raw",
+            "normal_range": "295.0–305.0",
+        }
+    ]
+
+    localized = runtime_service._localize_legacy_top_factors(factors, "en-US")
+
+    assert localized[0]["display_name"] == "Voltage signal"
+    assert localized[0]["unit"] == "raw"
+    assert localized[0]["normal_range"] == "295.0–305.0"
+
+    fallback = runtime_service._localize_legacy_top_factors(
+        [{**factors[0], "normal_range": "근거 부족"}],
+        "en-US",
+    )
+    assert fallback[0]["normal_range"] == "See governed model contract"
+
+
+def test_compatibility_payload_is_not_validated_as_a_producer_artifact() -> None:
+    payload = {
+        "contract_version": "1.0",
+        "source_prediction_id": "prediction-1",
+        "dataset_version_id": "dataset-version-1",
+        "observed_at": "2026-08-01T00:00:00+00:00",
+        "prediction_horizon_hours": 24,
+        "failure_probability": 0.8,
+        "predicted_failure_type": "failure_risk",
+        "confidence": 0.9,
+        "feature_scope": {"tool_wear_min": "raw"},
+    }
+
+    assert PredictiveMaintenanceRuntimeService._stored_producer_artifact(
+        {"prediction_result_payload": payload}
+    ) is None
+    assert PredictiveMaintenanceRuntimeService._supports_dashboard_evidence_detail(
+        "result_artifact", payload
+    ) is False
 
 
 def _append_csv(path: Path, row: dict[str, object]) -> None:

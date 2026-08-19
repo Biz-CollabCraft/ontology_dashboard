@@ -86,7 +86,7 @@ jobs:
 
       - name: Install Backend contract test dependencies
         if: steps.changes.outputs.run_contract == 'true'
-        run: python -m pip install -e ./ml -e './systems/backend[dev]' -r systems/generator/requirements.txt
+        run: python -m pip install -e ./ml -e './systems/backend[dev,postgres]' -r systems/generator/requirements.txt
 
       - name: Validate JSON Schema documents
         if: steps.changes.outputs.run_contract == 'true'
