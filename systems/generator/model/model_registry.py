@@ -380,3 +380,84 @@ def has_any_trained_model(store_dir: str | Path | None = None) -> bool:
         if get_latest_model_path(model_name, root) is not None:
             return True
     return False
+
+
+def validate_model_artifact_directory(artifact_dir: Path | str) -> dict[str, Any]:
+    """Validate that a directory contains a complete, immutable model-artifact-v1.0 package."""
+    dir_path = Path(artifact_dir).resolve()
+    manifest_path = dir_path / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(f"manifest.json not found in {dir_path}")
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"manifest.json in {dir_path} is not valid JSON") from exc
+
+    validate_manifest(manifest)
+
+    artifact_files = manifest.get("artifact_files")
+    if not isinstance(artifact_files, list) or not artifact_files:
+        raise ValueError("artifact_files must be a non-empty list")
+
+    declared_roles: list[str] = []
+    declared_paths: list[str] = []
+    for item in artifact_files:
+        if not isinstance(item, dict):
+            raise ValueError(f"invalid artifact file entry: {item}")
+        role = item.get("role")
+        rel_path_str = item.get("path")
+        expected_sha = item.get("sha256")
+        if not role or not rel_path_str or not expected_sha:
+            raise ValueError(f"artifact file entry missing required keys (role, path, sha256): {item}")
+
+        declared_roles.append(role)
+        declared_paths.append(rel_path_str)
+
+        # Path safety containment check
+        raw_path = Path(rel_path_str)
+        if raw_path.is_absolute() or raw_path.drive:
+            raise ValueError(f"artifact path must be relative: {rel_path_str!r}")
+        candidate = (dir_path / raw_path).resolve()
+        try:
+            candidate.relative_to(dir_path)
+        except ValueError as exc:
+            raise ValueError(f"artifact path escapes artifact root: {rel_path_str!r}") from exc
+
+        if not candidate.is_file():
+            raise ValueError(f"declared artifact file does not exist on disk: {rel_path_str}")
+
+        actual_sha = _sha256(candidate)
+        if actual_sha != expected_sha:
+            raise ValueError(f"checksum mismatch for {rel_path_str}: expected {expected_sha}, got {actual_sha}")
+
+    # Role completeness and uniqueness check
+    missing_roles = sorted(set(REQUIRED_ARTIFACT_ROLES) - set(declared_roles))
+    if missing_roles:
+        raise ValueError(f"missing required artifact roles: {missing_roles}")
+    if len(declared_roles) != len(set(declared_roles)):
+        raise ValueError(f"duplicate artifact roles found: {declared_roles}")
+    if len(declared_paths) != len(set(declared_paths)):
+        raise ValueError(f"duplicate artifact paths found: {declared_paths}")
+
+    return manifest
+
+
+def has_any_published_model_artifact(artifact_uri: str | Path | None = None) -> bool:
+    """Check if any valid, immutable Model Artifact exists under the artifact root according to model-artifact-v1.0."""
+    try:
+        root = _local_root(artifact_uri or os.getenv("MODEL_ARTIFACT_URI") or (_get_default_store_dir() / "artifacts"))
+        if not root.exists():
+            return False
+
+        for manifest_path in root.glob("*/*/manifest.json"):
+            if not manifest_path.is_file():
+                continue
+            try:
+                validate_model_artifact_directory(manifest_path.parent)
+                return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return False

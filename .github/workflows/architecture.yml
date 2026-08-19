@@ -147,7 +147,12 @@ jobs:
         working-directory: systems/generator
         run: python -c "import extraction; import ontology_mapping; import topology; import feature; import model; import common"
 
+      - name: Generator daemon tests
+        if: steps.changes.outputs.generator == 'true'
+        run: python -m pytest -q tests/test_generator_daemon.py
+
       - name: Backend import and health
+
         if: steps.changes.outputs.backend == 'true'
         working-directory: systems/backend
         run: |
