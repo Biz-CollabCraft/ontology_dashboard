@@ -168,6 +168,40 @@ def test_shared_report_draft_is_editable_by_practitioner_and_readable_by_manager
     assert denied.status_code == 403
 
 
+def test_report_revision_conflict_preserves_standard_error_envelope(client: TestClient) -> None:
+    login(client, "engineer@ontology.local", "Engineer!2026")
+    headers = csrf_headers(client)
+    payload = {
+        "workspace_id": WORKSPACE,
+        "event_id": "EVT-REVISION-CONFLICT",
+        "base_revision": 0,
+        "headline": "First revision",
+        "summary": "Initial report state.",
+        "sections": [
+            {
+                "section_id": "finding",
+                "title": "Finding",
+                "body": "Initial body",
+                "evidence_field_ids": [],
+            }
+        ],
+    }
+    assert client.put("/api/reports/draft", headers=headers, json=payload).status_code == 200
+
+    conflict = client.put(
+        "/api/reports/draft",
+        headers=headers,
+        json={**payload, "headline": "Stale overwrite"},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json() == {
+        "error": {
+            "code": "report_revision_conflict",
+            "message": "다른 사용자가 보고서를 수정했습니다. 최신 revision을 다시 불러오세요.",
+        }
+    }
+
+
 def test_report_drafts_are_isolated_by_role_and_locale(client: TestClient) -> None:
     login(client, "engineer@ontology.local", "Engineer!2026")
     headers = csrf_headers(client)

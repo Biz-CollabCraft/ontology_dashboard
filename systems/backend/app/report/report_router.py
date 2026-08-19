@@ -5,11 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.common.rate_limit import EXPORT_RATE, RateLimiter
 
-from .report_exception import ReportConflictError
 from .report_schema import AppLocale, ExportRequest, ReportDraftSaveRequest, Role
 from .report_service import ReportService
 
@@ -53,13 +52,7 @@ def build_report_router(
         reports: ReportService = Depends(get_report_service),
     ):
         identity.require_workspace(principal, request.workspace_id)
-        try:
-            return reports.save_draft(principal=principal, request=request).model_dump(mode="json")
-        except ReportConflictError as error:
-            raise HTTPException(
-                status_code=409,
-                detail="다른 사용자가 보고서를 수정했습니다. 최신 revision을 다시 불러오세요.",
-            ) from error
+        return reports.save_draft(principal=principal, request=request).model_dump(mode="json")
 
     @router.post("/api/exports")
     def create_export(

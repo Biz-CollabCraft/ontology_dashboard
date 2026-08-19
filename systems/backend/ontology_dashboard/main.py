@@ -32,7 +32,7 @@ from .dependencies import (
     require_permission,
     set_auth_cookies,
 )
-from app.report import build_report_router
+from app.report import ReportConflictError, build_report_router
 from app.dashboard import (
     DashboardAccessError,
     DashboardNotFoundError,
@@ -236,6 +236,14 @@ async def maintenance_access_error_handler(
 
 @app.exception_handler(GovernanceAccessError)
 async def governance_access_error_handler(_: Request, exc: GovernanceAccessError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
+
+@app.exception_handler(ReportConflictError)
+async def report_conflict_error_handler(_: Request, exc: ReportConflictError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": exc.code, "message": exc.message}},
