@@ -18,10 +18,45 @@ from scripts.ci.ai_review import (
     route_context,
     should_run_full_review,
 )
+from scripts.ci.free_comment_review import _compact_verifier_evidence, _verifier_prompt
 from scripts.ci.free_comment_review import _draft_is_well_formed, _parse_verifier
 
 
 class AiReviewAutomationTests(unittest.TestCase):
+    def test_free_verifier_context_is_compact_even_for_large_review_prompt(self):
+        prompt = """header
+
+SOURCE
+comment=""" + ("human technical comment " * 500) + """
+
+PR
+number=72
+title=architecture migration
+
+INTENT_RISK_HINTS (verify before relying on them)
+["architecture"]
+
+TRUSTED_BASE_CONTEXT
+""" + ("trusted contract " * 3000) + """
+
+CHANGED_FILES
+M\tsystems/backend/app/main.py
+
+CHANGED_HEAD_SOURCE_CONTEXT
+""" + ("source code " * 5000) + """
+
+DIFF
+""" + ("+changed line\n" * 8000)
+
+        compact = _compact_verifier_evidence(prompt)
+        verifier = _verifier_prompt(prompt, "타당 — repository evidence와 일치합니다.")
+
+        self.assertLessEqual(len(compact), 28_000)
+        self.assertLess(len(verifier), 40_000)
+        self.assertIn("SOURCE", compact)
+        self.assertIn("CHANGED_FILES", compact)
+        self.assertIn("DIFF", compact)
+
     def test_context_router_selects_backend_and_domain_docs(self):
         categories = route_context(
             ["systems/backend/ontology_dashboard/closed_loop/domain.py"]

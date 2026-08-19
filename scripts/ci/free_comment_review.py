@@ -31,7 +31,13 @@ VERIFIER_DISPLAY = "Gemma 4 26B A4B"
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
-def _request(model: str, api_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _request(
+    model: str,
+    api_key: str,
+    payload: dict[str, Any],
+    *,
+    retry_quota: bool = True,
+) -> dict[str, Any]:
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
         f"{API_ROOT}/{model}:generateContent",
@@ -50,6 +56,8 @@ def _request(model: str, api_key: str, payload: dict[str, Any]) -> dict[str, Any
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")[:500]
             last_error = f"HTTP {exc.code}: {body}"
+            if exc.code == 429 and not retry_quota:
+                break
             if exc.code not in {429, 500, 502, 503, 504}:
                 break
         except (urllib.error.URLError, TimeoutError) as exc:
@@ -91,14 +99,63 @@ def _draft_is_well_formed(text: str) -> bool:
     return 80 <= len(text) <= 18_000 and any(verdict in text[:1200] for verdict in verdicts)
 
 
+def _section(text: str, start: str, end: str | None = None) -> str:
+    marker = f"\n{start}\n"
+    index = text.find(marker)
+    if index < 0:
+        return ""
+    body_start = index + len(marker)
+    if end is None:
+        return text[body_start:]
+    end_marker = f"\n{end}\n"
+    end_index = text.find(end_marker, body_start)
+    return text[body_start:] if end_index < 0 else text[body_start:end_index]
+
+
+def _compact_verifier_evidence(source_prompt: str) -> str:
+    """Build a verifier-only fact bundle that stays well below Gemma free TPM.
+
+    The primary reviewer can still see the richer prompt. Gemma is only a
+    publication gate, so it gets the source comment, deterministic metadata,
+    risk hints, a small trusted-contract excerpt and focused changed-code
+    evidence. This avoids spending Gemma's comparatively small free input-token
+    allowance on a second copy of the entire review prompt.
+    """
+
+    chunks = [
+        ("SOURCE", _section(source_prompt, "SOURCE", "PR"), 5_000),
+        ("PR", _section(source_prompt, "PR", "INTENT_RISK_HINTS (verify before relying on them)"), 3_000),
+        (
+            "INTENT_RISK_HINTS",
+            _section(
+                source_prompt,
+                "INTENT_RISK_HINTS (verify before relying on them)",
+                "TRUSTED_BASE_CONTEXT",
+            ),
+            2_500,
+        ),
+        ("TRUSTED_BASE_CONTEXT", _section(source_prompt, "TRUSTED_BASE_CONTEXT", "CHANGED_FILES"), 4_000),
+        ("CHANGED_FILES", _section(source_prompt, "CHANGED_FILES", "CHANGED_HEAD_SOURCE_CONTEXT"), 3_500),
+        (
+            "CHANGED_HEAD_SOURCE_CONTEXT",
+            _section(source_prompt, "CHANGED_HEAD_SOURCE_CONTEXT", "DIFF"),
+            7_000,
+        ),
+        ("DIFF", _section(source_prompt, "DIFF"), 7_000),
+    ]
+    blocks: list[str] = []
+    for label, content, limit in chunks:
+        content = content.strip()
+        if content:
+            blocks.append(f"===== {label} =====\n{content[:limit]}")
+    evidence = "\n\n".join(blocks)
+    # Final hard guard. About 28k chars plus the candidate/instructions remains
+    # well below the 16k-token/min Gemma free-tier ceiling observed in CI.
+    return evidence[:28_000]
+
+
 def _verifier_prompt(source_prompt: str, draft: str) -> str:
-    # Keep the second opinion cheap in quota terms while retaining both the
-    # policy/source front and diff/source tail of the evidence prompt.
-    evidence = source_prompt if len(source_prompt) <= 55_000 else (
-        source_prompt[:32_000]
-        + "\n\n[... middle omitted for verifier ...]\n\n"
-        + source_prompt[-23_000:]
-    )
+    evidence = _compact_verifier_evidence(source_prompt)
     return f"""You are an independent quality gate for an automated pull-request technical-comment response.
 
 The candidate response was drafted by another model. Do not rewrite it. Decide only whether it is safe to publish without a stronger reasoning-model fallback.
@@ -120,7 +177,7 @@ REVIEW EVIDENCE AND POLICY
 {evidence}
 
 CANDIDATE RESPONSE
-{draft[:14_000]}
+{draft[:8_000]}
 """
 
 
@@ -185,7 +242,14 @@ def run(args: argparse.Namespace) -> None:
                 "thinkingConfig": {"thinkingLevel": "MINIMAL"},
             },
         }
-        verifier_raw = _request(VERIFIER_MODEL, api_key, verifier_payload)
+        verifier_prompt = _verifier_prompt(prompt, draft)
+        verifier_payload["contents"][0]["parts"][0]["text"] = verifier_prompt
+        verifier_raw = _request(
+            VERIFIER_MODEL,
+            api_key,
+            verifier_payload,
+            retry_quota=False,
+        )
         verifier_text, verifier_usage = _visible_text(verifier_raw)
         decision, confidence, reason = _parse_verifier(verifier_text)
         if decision != "ACCEPT" or confidence < 0.70:
@@ -212,6 +276,7 @@ def run(args: argparse.Namespace) -> None:
         "free review accepted:",
         f"primary_prompt={primary_usage.get('promptTokenCount')}",
         f"primary_output={primary_usage.get('candidatesTokenCount')}",
+        f"verifier_chars={len(verifier_prompt)}",
         f"verifier_prompt={verifier_usage.get('promptTokenCount')}",
         f"verifier_output={verifier_usage.get('candidatesTokenCount')}",
         f"verifier_confidence={confidence:.2f}",
