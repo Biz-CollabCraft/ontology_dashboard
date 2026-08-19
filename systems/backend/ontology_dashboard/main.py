@@ -28,7 +28,7 @@ from .dependencies import (
     require_permission,
     set_auth_cookies,
 )
-from app.governance import build_governance_router
+from app.governance import GovernanceAccessError, build_governance_router
 from app.identity import AuthError
 from app.identity.identity_router import build_identity_router, identity_http_status
 from app.project import ProjectError
@@ -187,6 +187,14 @@ async def maintenance_access_error_handler(
     _: Request,
     exc: MaintenanceAccessError,
 ) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
+
+@app.exception_handler(GovernanceAccessError)
+async def governance_access_error_handler(_: Request, exc: GovernanceAccessError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": exc.code, "message": exc.message}},

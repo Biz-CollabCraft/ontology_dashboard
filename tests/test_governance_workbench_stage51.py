@@ -171,6 +171,11 @@ def test_governance_routes_are_project_scoped_and_retry_is_fde_only(client: Test
     )
     assert overview.status_code == 200, overview.text
     assert overview.json()["counts"]["failed_projections"] == 1
+    scope_denied = client.get(
+        "/api/projects/manufacturing-demo-project/workspaces/not-assigned/governance"
+    )
+    assert scope_denied.status_code == 403
+    assert scope_denied.json()["error"]["code"] == "workspace_scope_denied"
     removed_agent_surface = client.get(
         "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/governance/agent-runs/agent-run-governance"
     )
@@ -179,6 +184,7 @@ def test_governance_routes_are_project_scoped_and_retry_is_fde_only(client: Test
         f"/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/governance/projections/{projection_id}/retry"
     )
     assert denied.status_code == 403
+    assert set(denied.json()["error"]) >= {"code", "message"}
 
     client.post("/api/auth/logout")
     csrf = login(client, "fde@ontology.local", "FDE!2026")

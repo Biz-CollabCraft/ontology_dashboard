@@ -5,7 +5,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .governance_exception import GovernanceAccessError
 from .governance_service import GovernanceService
 
 
@@ -27,14 +26,11 @@ def build_governance_router(
         principal: Any = Depends(require_permission("governance.read")),
         service: GovernanceService = Depends(get_governance_service),
     ):
-        try:
-            return service.overview(
-                principal=principal,
-                project_id=project_id,
-                workspace_id=workspace_id,
-            ).model_dump(mode="json")
-        except GovernanceAccessError as error:
-            raise HTTPException(status_code=error.status_code, detail=error.message) from error
+        return service.overview(
+            principal=principal,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        ).model_dump(mode="json")
 
     @router.post("/projections/{projection_id}/retry")
     def retry_projection(
@@ -52,8 +48,6 @@ def build_governance_router(
                 workspace_id=workspace_id,
                 projection_id=projection_id,
             )
-        except GovernanceAccessError as error:
-            raise HTTPException(status_code=error.status_code, detail=error.message) from error
         except KeyError as error:
             raise HTTPException(status_code=404, detail=f"projection not found: {error.args[0]}") from error
         except RuntimeError as error:

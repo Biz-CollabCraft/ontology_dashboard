@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping
 from urllib.parse import quote, unquote
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.infra.storage import (
     ArtifactBackend,
@@ -36,6 +36,7 @@ from app.infra.storage import (
 )
 from app.governance.artifact_policy import (
     RetentionClass,
+    RetentionPolicyDecision,
     RetentionPolicyInput,
     evaluate_retention,
 )
@@ -691,14 +692,19 @@ class ArtifactGovernanceService:
             project_id=project_id,
             limit=500,
         ):
-            decision = evaluate_retention(
-                RetentionPolicyInput(
+            try:
+                policy = RetentionPolicyInput(
                     retention_class=artifact.retention_class,
                     retain_until=artifact.retain_until,
                     legal_hold=artifact.legal_hold,
-                ),
-                now=current,
-            )
+                )
+            except ValidationError:
+                decision = RetentionPolicyDecision(
+                    action="retain",
+                    reason="unknown retention class is retained conservatively",
+                )
+            else:
+                decision = evaluate_retention(policy, now=current)
             candidates.append(ArtifactRetentionCandidate(
                 artifact_id=artifact.id,
                 object_key=artifact.object_key,

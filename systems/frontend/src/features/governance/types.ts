@@ -1,5 +1,3 @@
-import type { AgentEvidenceItem } from "../agent/types";
-
 export interface GovernanceProjection {
   id: string;
   dataset_id: string;
@@ -15,19 +13,6 @@ export interface GovernanceProjection {
   last_error: string | null;
   updated_at: string;
   can_retry: boolean;
-}
-
-export interface GovernanceAgentRun {
-  run_id: string;
-  workspace_id: string;
-  question: string;
-  route: string;
-  status: string;
-  evidence_count: number;
-  claim_count: number;
-  checkpoint_sequence: number;
-  caveats: string[];
-  error: string | null;
 }
 
 export interface GovernanceApproval {
@@ -73,58 +58,12 @@ export interface GovernanceOverview {
     projections: number;
     failed_projections: number;
     pending_projections: number;
-    agent_runs: number;
-    failed_agent_runs: number;
     pending_approvals: number;
   };
   projections: GovernanceProjection[];
-  agent_runs: GovernanceAgentRun[];
   approvals: GovernanceApproval[];
   lineage: GovernanceLineage[];
   policy_boundaries: string[];
-}
-
-export interface GovernanceAgentRunDetail {
-  state: {
-    run_id: string;
-    project_id: string;
-    workspace_id: string;
-    question: string;
-    route: string;
-    status: string;
-    evidence: AgentEvidenceItem[];
-    claims: Array<{
-      claim_id: string;
-      text: string;
-      evidence_ids: string[];
-      confidence: string;
-      validated: boolean;
-    }>;
-    answer: string;
-    caveats: string[];
-    error: string | null;
-    checkpoint_sequence: number;
-  };
-  traces: Array<{
-    id: string;
-    run_id: string;
-    step_name: string;
-    store_kind: string | null;
-    status: string;
-    input: Record<string, unknown>;
-    output: Record<string, unknown>;
-    latency_ms: number | null;
-    created_at: string;
-  }>;
-  checkpoints: Array<{
-    id: string;
-    run_id: string;
-    workspace_id: string;
-    sequence: number;
-    node_name: string;
-    state: Record<string, unknown>;
-    created_at: string;
-  }>;
 }
 
 export interface ProjectionRetryResult {

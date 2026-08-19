@@ -2,7 +2,7 @@ import { Button, Callout, Card, HTMLSelect, InputGroup, Spinner, Tag } from "@bl
 import { ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  getGovernanceAgentRun,
+  getAgentRun,
   getGovernanceOverview,
   listAgentRuns,
   retryGovernanceProjection,
@@ -16,11 +16,10 @@ import { WorkbenchHeader } from "../../ui/foundry/WorkbenchChrome";
 import { useMediaQuery } from "../../ui/foundry/useMediaQuery";
 import { WorkbenchState } from "../../ui/foundry/WorkbenchState";
 import { useI18n } from "../../ui/i18n/I18nProvider";
-import type { AgentRunPage } from "../agent/types";
+import type { AgentRunPage, AgentRunResponse } from "../agent/types";
 import { agentOutcomeIntent, agentOutcomeLabel, deriveAgentOutcome } from "../agent/agentOutcome";
 import { GovernanceRecordInspector } from "./GovernanceRecordInspector";
 import type {
-  GovernanceAgentRunDetail,
   GovernanceApproval,
   GovernanceOverview,
   GovernanceProjection,
@@ -85,7 +84,7 @@ export function GovernanceWorkbenchPage({ projectId, workspaceId }: GovernanceWo
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedProjectionId, setSelectedProjectionId] = useState<string | null>(null);
   const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
-  const [runDetail, setRunDetail] = useState<GovernanceAgentRunDetail | null>(null);
+  const [runDetail, setRunDetail] = useState<AgentRunResponse | null>(null);
   const [runPage, setRunPage] = useState<AgentRunPage>({ items: [], offset: 0, limit: 20, total: 0 });
   const [runSearch, setRunSearch] = useState("");
   const [runStatus, setRunStatus] = useState("");
@@ -129,7 +128,6 @@ export function GovernanceWorkbenchPage({ projectId, workspaceId }: GovernanceWo
     try {
       const payload = await getGovernanceOverview(projectId, workspaceId);
       setOverview(payload);
-      setSelectedRunId((current) => current ?? payload.agent_runs[0]?.run_id ?? null);
       setSelectedProjectionId((current) => current && payload.projections.some((item) => item.id === current) ? current : payload.projections[0]?.id ?? null);
       setSelectedApprovalId((current) => current && payload.approvals.some((item) => item.id === current) ? current : payload.approvals[0]?.id ?? null);
       setError("");
@@ -157,7 +155,7 @@ export function GovernanceWorkbenchPage({ projectId, workspaceId }: GovernanceWo
     }
     let cancelled = false;
     setRunLoading(true);
-    getGovernanceAgentRun(projectId, workspaceId, selectedRunId)
+    getAgentRun(projectId, workspaceId, selectedRunId)
       .then((payload) => {
         if (!cancelled) setRunDetail(payload);
       })
@@ -179,8 +177,8 @@ export function GovernanceWorkbenchPage({ projectId, workspaceId }: GovernanceWo
     [overview],
   );
   const noEvidenceRuns = useMemo(
-    () => overview?.agent_runs.filter((run) => deriveAgentOutcome({ status: run.status, evidenceCount: run.evidence_count, claimCount: run.claim_count, caveats: run.caveats }) === "no_evidence").length ?? 0,
-    [overview],
+    () => runPage.items.filter((run) => deriveAgentOutcome({ status: run.status, evidenceCount: run.evidence_count, claimCount: run.claim_count }) === "no_evidence").length,
+    [runPage.items],
   );
   const permissionGroups = useMemo(() => {
     const groups = new Map<string, string[]>();
@@ -244,7 +242,7 @@ export function GovernanceWorkbenchPage({ projectId, workspaceId }: GovernanceWo
           <MetricStrip className="governance-kpi-grid" metrics={[
             { id: "ready-projections", label: locale === "ko-KR" ? "정상 Projection" : "Ready projections", value: overview.projections.filter((item) => item.status === "ready").length, detail: `${overview.counts.projections} total`, tone: "success" },
             { id: "projection-attention", label: locale === "ko-KR" ? "Projection 조치 필요" : "Projection attention", value: failedProjections.length + pendingProjections.length, detail: `${failedProjections.length} failed · ${pendingProjections.length} pending`, tone: failedProjections.length ? "danger" : pendingProjections.length ? "warning" : "success" },
-            { id: "agent-evidence", label: locale === "ko-KR" ? "근거 없는 Agent 실행" : "Runs without evidence", value: noEvidenceRuns, detail: `${overview.counts.agent_runs} total runs`, tone: noEvidenceRuns ? "warning" : "success" },
+            { id: "agent-evidence", label: locale === "ko-KR" ? "근거 없는 Agent 실행" : "Runs without evidence", value: noEvidenceRuns, detail: `${runPage.total} total runs`, tone: noEvidenceRuns ? "warning" : "success" },
             { id: "approvals", label: locale === "ko-KR" ? "승인 대기" : "Pending approvals", value: overview.counts.pending_approvals, detail: locale === "ko-KR" ? "검토 대기" : "pending review", tone: overview.counts.pending_approvals ? "warning" : "success" },
             { id: "datasets", label: "Datasets", value: overview.counts.datasets, detail: `${overview.counts.dataset_versions} versions` },
           ]} />
@@ -252,13 +250,13 @@ export function GovernanceWorkbenchPage({ projectId, workspaceId }: GovernanceWo
             <section className="governance-panel">
               <div className="governance-panel-heading"><div><small>RECENT AGENT RUNS</small><strong>Grounded execution trace</strong></div><Button minimal small onClick={() => setActiveTab("agent-runs")}>Inspect all</Button></div>
               <div className="governance-run-list compact">
-                {overview.agent_runs.slice(0, 6).map((run) => (
+                {runPage.items.slice(0, 6).map((run) => (
                   <button key={run.run_id} type="button" onClick={() => { setSelectedRunId(run.run_id); setActiveTab("agent-runs"); }}>
                     <div><strong>{run.question}</strong><small>{run.run_id}</small></div>
                     <div><Tag minimal>{run.route}</Tag><Tag minimal intent={agentTagIntent({ status: run.status, evidenceCount: run.evidence_count, claimCount: run.claim_count })}>{agentOutcomeLabel(deriveAgentOutcome({ status: run.status, evidenceCount: run.evidence_count, claimCount: run.claim_count }), locale)}</Tag></div>
                   </button>
                 ))}
-                {!overview.agent_runs.length ? <p className="governance-empty">아직 저장된 agent run이 없습니다.</p> : null}
+                {!runPage.items.length ? <p className="governance-empty">아직 저장된 agent run이 없습니다.</p> : null}
               </div>
             </section>
             <section className="governance-panel">
@@ -320,7 +318,6 @@ export function GovernanceWorkbenchPage({ projectId, workspaceId }: GovernanceWo
                   <section className="governance-detail-section"><header><small>VALIDATED CLAIMS</small><strong>{runDetail.state.claims.length}</strong></header>{runDetail.state.claims.map((claim) => <article key={claim.claim_id} className="governance-claim"><div><Tag minimal intent={claim.validated ? "success" : "danger"}>{claim.validated ? "validated" : "unvalidated"}</Tag><Tag minimal>{claim.confidence}</Tag></div><p>{claim.text}</p><small>{claim.evidence_ids.join(" · ")}</small></article>)}</section>
                   <section className="governance-detail-section"><header><small>EVIDENCE SOURCES</small><strong>{runDetail.state.evidence.length}</strong></header><div className="governance-evidence-grid">{runDetail.state.evidence.map((item) => <Card key={item.evidence_id} elevation={0}><div><Tag minimal>{item.store}</Tag>{item.dataset_version_id ? <Tag minimal>{item.dataset_version_id}</Tag> : null}</div><strong>{item.title}</strong><p>{item.content}</p><small>{item.reference}</small></Card>)}</div></section>
                   <section className="governance-detail-section"><header><small>EXECUTION TRACE</small><strong>{runDetail.traces.length}</strong></header><div className="governance-trace-table">{runDetail.traces.map((trace) => <article key={trace.id}><div><strong>{trace.step_name}</strong><small>{trace.store_kind ?? "orchestrator"} · {trace.latency_ms ?? 0} ms · {formatDate(trace.created_at)}</small></div><Tag intent={statusIntent(trace.status)}>{trace.status}</Tag><details><summary>Validated metadata</summary><JsonPreview value={{ input: trace.input, output: trace.output }} /></details></article>)}</div></section>
-                  <section className="governance-detail-section"><header><small>CHECKPOINTS</small><strong>{runDetail.checkpoints.length}</strong></header><div className="governance-checkpoint-list">{runDetail.checkpoints.map((checkpoint) => <article key={checkpoint.id}><strong>#{checkpoint.sequence} · {checkpoint.node_name}</strong><span>{formatDate(checkpoint.created_at)}</span></article>)}</div></section>
                 </div>
               </>
             ) : <p className="governance-empty">Agent run을 선택하세요.</p>}

@@ -25,7 +25,6 @@ import type {
   DatasetCatalogPage,
 } from "./features/datasets/types";
 import type {
-  GovernanceAgentRunDetail,
   GovernanceOverview,
   ProjectionRetryResult,
 } from "./features/governance/types";
@@ -624,16 +623,6 @@ export function getGovernanceOverview(
 ): Promise<GovernanceOverview> {
   return request<GovernanceOverview>(
     `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/governance`,
-  );
-}
-
-export function getGovernanceAgentRun(
-  projectId: string,
-  workspaceId: string,
-  runId: string,
-): Promise<GovernanceAgentRunDetail> {
-  return request<GovernanceAgentRunDetail>(
-    `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/governance/agent-runs/${encodeURIComponent(runId)}`,
   );
 }
 
