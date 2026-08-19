@@ -87,7 +87,7 @@ from .ontology import (
 from .ontology_primitives import ActionPreview, FunctionExecution, PrimitiveSnapshot
 from app.infra.observability.runtime import ObservabilityReadiness
 from .orchestration.models import AgentRunResponse
-from .predictive_maintenance_runtime.models import (
+from app.diagnosis.runtime_schema import (
     DatasetVersionRuntimeContext,
     ReplaySessionSnapshot,
     TimelinePrediction,

@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.dataset import DatasetCatalogService
 from app.dataset.ingestion import DatasetIngestionService
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository

@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from ..contracts import AppLocale
-from ..product_result_evidence_projection import (
-    event_evidence_projection_to_legacy_evidence,
-    product_result_artifact_to_event_evidence_projection,
-)
-from ..adapters.models import (
+from .diagnosis_schema import (
     DataQuality,
     EvidenceSource,
     PredictionEvidence,
@@ -19,7 +14,12 @@ from ..adapters.models import (
     PredictionValue,
     RecommendedAction,
 )
-from .models import (
+from .evidence import validate_product_result_artifact
+from .evidence_projection import (
+    event_evidence_projection_to_legacy_evidence,
+    product_result_artifact_to_event_evidence_projection,
+)
+from .runtime_schema import (
     DashboardDataSource,
     DashboardEquipment,
     DashboardEventDetail,
@@ -45,8 +45,9 @@ from .models import (
     SnapshotDrilldown,
     TimelinePrediction,
 )
-from .repository import PredictiveMaintenanceRuntimeRepository
-from app.diagnosis.evidence import validate_product_result_artifact
+from .ports import ALLOWED_DERIVED_MEASURES, DiagnosisRuntimeRepositoryPort
+
+AppLocale = Literal["ko-KR", "en-US"]
 
 
 V3_1_SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
@@ -182,7 +183,7 @@ def _list(value: Any) -> list[Any]:
 
 
 class PredictiveMaintenanceRuntimeService:
-    def __init__(self, repository: PredictiveMaintenanceRuntimeRepository) -> None:
+    def __init__(self, repository: DiagnosisRuntimeRepositoryPort) -> None:
         self.repository = repository
 
     @staticmethod

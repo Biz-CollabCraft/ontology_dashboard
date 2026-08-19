@@ -5,14 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Sequence
 
 from app.infra.db.pool import pooled_tenant_connection
-from ..postgresql_repositories import is_postgresql
-
-
-ALLOWED_DERIVED_MEASURES = {
-    "power_w",
-    "temperature_gap_k",
-    "overstrain_load",
-}
+from app.infra.db.settings import is_postgresql_url
+from app.diagnosis.ports import ALLOWED_DERIVED_MEASURES
 
 
 class PredictiveMaintenanceRuntimeRepository:
@@ -25,7 +19,7 @@ class PredictiveMaintenanceRuntimeRepository:
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         normalized = database_url.replace("postgresql+psycopg://", "postgresql://", 1)
-        if not is_postgresql(normalized):
+        if not is_postgresql_url(normalized):
             raise ValueError("predictive-maintenance replay requires PostgreSQL")
         self.database_url = normalized
         self.clock = clock or (lambda: datetime.now(timezone.utc))

@@ -249,6 +249,11 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `projects/repository.py` | `systems/backend/app/project/project_repository.py` | `MIGRATED` |
 | `projects/service.py` | `systems/backend/app/project/project_service.py` | `MIGRATED` |
 | `routers/projects.py` | `systems/backend/app/project/project_router.py` | `MIGRATED` |
+| `adapters/prediction_repository.py` | `systems/backend/app/diagnosis/ports.py`, `systems/backend/app/infra/db/prediction_result_repository.py` | `MIGRATED` |
+| `predictive_maintenance_runtime/models.py` | `systems/backend/app/diagnosis/runtime_schema.py` | `MIGRATED` |
+| `predictive_maintenance_runtime/repository.py` | `systems/backend/app/diagnosis/ports.py`, `systems/backend/app/infra/db/diagnosis_runtime_repository.py` | `MIGRATED` |
+| `predictive_maintenance_runtime/service.py` | `systems/backend/app/diagnosis/runtime_service.py` | `MIGRATED` |
+| `product_result_evidence_projection.py` | `systems/backend/app/diagnosis/evidence_projection.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
@@ -274,3 +279,9 @@ public Equipment contract를 통해 소비하고, 기존 `closed_loop` persisten
 `adapters/__init__.py`, `adapters/models.py`, `adapters/service.py`,
 `adapters/prediction_repository.py`에는 #58 Diagnosis가 소유할 Prediction persistence 계약만
 남아 있다. Dataset manifest/bundle/CSV ingestion 책임은 위 source 단위로 #57에서 분리 완료했다.
+
+Phase 7 / #58에서 Product Result/Evidence와 PostgreSQL runtime read/replay 책임을
+`app/diagnosis` public contract와 `app/infra/db` adapter로 분리했다. Dataset/Equipment
+구현을 Diagnosis가 직접 import하지 않고 `ObservationDatasetQueryPort`와
+`EquipmentSnapshotQueryPort` inbound boundary로 연결하며, modeling Workbench의
+학습/실험/feature-learning 책임은 이관하지 않는다.

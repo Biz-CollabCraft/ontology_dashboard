@@ -11,8 +11,8 @@ from jsonschema import Draft202012Validator
 
 from app.dataset.ingestion import DatasetManifest, FileAdapter
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
-from ontology_dashboard.adapters.models import PredictionResult
-from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
+from app.diagnosis.diagnosis_schema import PredictionResult
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.identity import IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate

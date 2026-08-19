@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from app.identity import AuthError, Principal
-
-from .models import PredictionResult
-from .prediction_repository import PredictionResultRepository
+from app.diagnosis.diagnosis_schema import PredictionResult
+from app.infra.db.prediction_result_repository import PredictionResultRepository
+from ..project_context import SQLiteProjectContextResolver
 
 
 class AdapterService:
@@ -26,7 +26,10 @@ class AdapterService:
             if self.database.startswith(("postgresql://", "postgresql+psycopg://"))
             else Path(self.database)
         )
-        self.predictions = prediction_repository or PredictionResultRepository(self.path)
+        self.predictions = prediction_repository or PredictionResultRepository(
+            self.path,
+            project_context=SQLiteProjectContextResolver(self.path),
+        )
 
     @staticmethod
     def _require_permission(principal: Principal, permission: str) -> None:

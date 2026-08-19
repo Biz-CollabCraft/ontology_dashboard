@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..adapters.models import PredictionResult
+from .diagnosis_schema import PredictionResult
 
 
 SHA256_PATTERN = r"^[a-f0-9]{64}$"

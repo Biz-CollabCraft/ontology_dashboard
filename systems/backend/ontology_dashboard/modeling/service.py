@@ -19,7 +19,7 @@ from ..adapters.models import (
     PredictionValue,
     RecommendedAction,
 )
-from ..adapters.prediction_repository import PredictionResultRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 from .artifacts import ArtifactStoreBlocked, LocalArtifactStore
 from .intake import DatasetIntakeProfiler, IntakeLLMProvider, draft_from_profile
 from .mapping import (
@@ -1603,7 +1603,7 @@ class ModelingService:
             calibration_method=None,
             calibration_artifact=None,
             confidence_status="unavailable_uncalibrated",
-            threshold_policy=threshold_policy,
+            threshold_policy=threshold_policy.model_dump(mode="python"),
             explanation_provider=explanation_provider,
             explanation_provider_version="1",
             limitations=list(report.get("limitations", [])),

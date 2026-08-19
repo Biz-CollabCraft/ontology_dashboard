@@ -18,13 +18,13 @@ from ..dependencies import (
     require_permission,
 )
 from app.identity import IdentityService, Principal
-from ..predictive_maintenance_runtime import (
+from app.diagnosis.runtime_schema import (
     DatasetVersionSelectionRequest,
-    PredictiveMaintenanceRuntimeService,
     ReplayControlRequest,
     ReplayStartRequest,
 )
-from ..predictive_maintenance_runtime.repository import ALLOWED_DERIVED_MEASURES
+from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
+from app.diagnosis.ports import ALLOWED_DERIVED_MEASURES
 
 router = APIRouter(
     prefix="/api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance",

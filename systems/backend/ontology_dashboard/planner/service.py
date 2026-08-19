@@ -13,8 +13,8 @@ from app.identity import AuthError, Principal
 from app.infra.llm import LLMProvider
 from ..ontology import OBJECT_TYPE_BY_ID
 from ..ontology_service import OntologyService
-from ..predictive_maintenance_runtime.models import DatasetVersionRuntimeContext
-from ..predictive_maintenance_runtime.service import (
+from app.diagnosis.runtime_schema import DatasetVersionRuntimeContext
+from app.diagnosis.runtime_service import (
     V3_1_MODEL_VERSION,
     V3_1_RESULT_SCHEMA,
     V3_1_SOURCE_VERSION,

@@ -3,17 +3,37 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from app.infra.db.project_repository import SQLiteProjectContextResolver
+from app.diagnosis.diagnosis_schema import PredictionResult
 
-from .models import PredictionResult
+
+class ProjectScope(Protocol):
+    organization_id: str
+    project_id: str
+    workspace_id: str
+
+
+class ProjectContextResolverPort(Protocol):
+    def resolve(
+        self,
+        workspace_id: str,
+        *,
+        expected_organization_id: str | None = None,
+        expected_project_id: str | None = None,
+        connection: sqlite3.Connection | None = None,
+    ) -> ProjectScope: ...
 
 
 class PredictionResultRepository:
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(
+        self,
+        database_path: str | Path,
+        *,
+        project_context: ProjectContextResolverPort | None = None,
+    ) -> None:
         self.path = Path(database_path)
-        self.project_context = SQLiteProjectContextResolver(self.path)
+        self.project_context = project_context
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -27,11 +47,15 @@ class PredictionResultRepository:
 
     def save(self, result: PredictionResult) -> dict[str, Any]:
         with self._connect() as connection:
-            scope = self.project_context.resolve(
-                result.workspace_id,
-                expected_organization_id=result.organization_id,
-                expected_project_id=result.project_id,
-                connection=connection,
+            scope = (
+                self.project_context.resolve(
+                    result.workspace_id,
+                    expected_organization_id=result.organization_id,
+                    expected_project_id=result.project_id,
+                    connection=connection,
+                )
+                if self.project_context is not None
+                else result
             )
             connection.execute(
                 """
@@ -91,12 +115,13 @@ class PredictionResultRepository:
         parameters: list[Any] = [organization_id, project_id]
         if workspace_id is not None:
             with self._connect() as connection:
-                self.project_context.resolve(
-                    workspace_id,
-                    expected_organization_id=organization_id,
-                    expected_project_id=project_id,
-                    connection=connection,
-                )
+                if self.project_context is not None:
+                    self.project_context.resolve(
+                        workspace_id,
+                        expected_organization_id=organization_id,
+                        expected_project_id=project_id,
+                        connection=connection,
+                    )
             clauses.append("workspace_id=?")
             parameters.append(workspace_id)
         parameters.append(limit)
