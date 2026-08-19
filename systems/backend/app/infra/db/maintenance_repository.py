@@ -1481,6 +1481,4 @@ class PostgreSQLMaintenanceRepository(MaintenanceRepository):
         )
 
 
-# Transitional class name retained for callers while the legacy package disappears.
-ClosedLoopRepository = MaintenanceRepository
-PostgreSQLClosedLoopRepository = PostgreSQLMaintenanceRepository
+__all__ = ["MaintenanceRepository", "PostgreSQLMaintenanceRepository"]

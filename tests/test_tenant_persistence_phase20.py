@@ -3,8 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import ontology_dashboard.migrations as migration_module
-from ontology_dashboard.migrations import migrate, migration_status
+import app.infra.db.migrations as migration_module
+from app.infra.db.migrations import migrate, migration_status
 from ontology_dashboard.ontology_repository import OntologyActionRepository
 from ontology_dashboard.persistence_readiness import (
     persistence_readiness,

@@ -1210,11 +1210,6 @@
     {
       "source": "tests/test_tenant_persistence_phase20.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "tests/test_tenant_persistence_phase20.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.ontology_repository"
     },
     {
