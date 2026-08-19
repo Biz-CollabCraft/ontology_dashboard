@@ -269,8 +269,10 @@ def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
     try:
         with psycopg.connect(postgresql_database, autocommit=True) as admin:
             admin.execute(
-                sql.SQL("CREATE ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
-                ("runtime-test-password",),
+                sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                    sql.Identifier(role),
+                    sql.Literal("runtime-test-password"),
+                )
             )
             admin.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(role)))
             admin.execute(
@@ -369,8 +371,10 @@ def test_postgresql_adaptive_modeling_repository_jsonb_idempotency_and_rls(
     try:
         with psycopg.connect(postgresql_database, autocommit=True) as admin:
             admin.execute(
-                sql.SQL("CREATE ROLE {} LOGIN PASSWORD %s").format(sql.Identifier(role)),
-                ("runtime-test-password",),
+                sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                    sql.Identifier(role),
+                    sql.Literal("runtime-test-password"),
+                )
             )
             admin.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(role)))
             admin.execute(
