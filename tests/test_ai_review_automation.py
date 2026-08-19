@@ -13,7 +13,9 @@ from scripts.ci.ai_review import (
     human_technical_feedback,
     idempotency_decision,
     is_trusted_comment_author,
+    review_profile,
     route_context,
+    should_run_full_review,
 )
 
 
@@ -132,6 +134,24 @@ class AiReviewAutomationTests(unittest.TestCase):
         self.assertEqual(classify_comment("approve 입니다"), "approval")
         self.assertEqual(classify_comment("확인했습니다"), "acknowledgement")
         self.assertEqual(classify_comment("감사합니다"), "acknowledgement")
+        self.assertEqual(classify_comment("/ai-review"), "full_review_request")
+
+    def test_review_profile_routes_docs_to_flash_lite_and_code_to_reasoning(self):
+        docs = review_profile(["docs/architecture.md"])
+        code = review_profile(["systems/backend/app/main.py"])
+        self.assertEqual(docs["model_id"], "gemini-3.5-flash-lite")
+        self.assertEqual(docs["max_output_tokens"], 4000)
+        self.assertEqual(code["model_id"], "gemini-3.7-flash")
+        self.assertEqual(code["max_output_tokens"], 6000)
+
+    def test_docs_only_review_skips_unless_explicit(self):
+        paths = ["docs/architecture.md", "README.md"]
+        run, reason = should_run_full_review("HEAD", "HEAD", paths)
+        self.assertFalse(run)
+        self.assertIn("documentation-only", reason)
+        run, reason = should_run_full_review("HEAD", "HEAD", paths, explicit=True)
+        self.assertTrue(run)
+        self.assertIn("explicit", reason)
 
     def test_comment_event_ignores_automated_marker_and_bot_loop(self):
         event = {
@@ -168,6 +188,22 @@ class AiReviewAutomationTests(unittest.TestCase):
             },
         }
         info = event_to_comment(event)
+        self.assertTrue(info.authorized)
+        self.assertTrue(info.eligible)
+
+    def test_member_ai_review_command_can_enter_repo_gate_without_comment_vertex_review(self):
+        event = {
+            "action": "created",
+            "issue": {"number": 43, "pull_request": {"url": "x"}},
+            "comment": {
+                "id": 203,
+                "body": "/ai-review",
+                "author_association": "MEMBER",
+                "user": {"login": "KOR-GANG", "type": "User"},
+            },
+        }
+        info = event_to_comment(event)
+        self.assertEqual(info.classification, "full_review_request")
         self.assertTrue(info.authorized)
         self.assertTrue(info.eligible)
 
