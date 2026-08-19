@@ -16,6 +16,7 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from app.common.rate_limit import RateLimiter
 from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
 from app.infra.db.settings import database_location
+from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
 from app.infra.external.project3 import Project3Client
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.infra.llm import configured_provider
@@ -121,8 +122,16 @@ def get_identity_service() -> IdentityService:
             password_hasher=password_hasher,
             seed_reference_data=seed_runtime_reference_data(),
         )
-        return IdentityService(target, repository=repository)
-    return IdentityService(target)
+        return IdentityService(repository, rate_limit_namespace=f"identity:{target}")
+    password_hasher = PasswordHasher(
+        time_cost=2,
+        memory_cost=19456,
+        parallelism=1,
+        hash_len=32,
+        salt_len=16,
+    )
+    repository = SQLiteIdentityRepository(target, password_hasher=password_hasher)
+    return IdentityService(repository, rate_limit_namespace=f"identity:{target}")
 
 
 def get_project_identity_service(

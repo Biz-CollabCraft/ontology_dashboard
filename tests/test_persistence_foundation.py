@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from app.identity import IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.ontology_instance_repository import OntologyInstanceRepository
 from ontology_dashboard.ontology_service import OntologyService
@@ -97,7 +98,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
 
 def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Path) -> None:
     database = tmp_path / "ontology.db"
-    IdentityService(database, app_env="test", seed_demo=True)
+    build_identity_service(database, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
     ontology = OntologyService(service)
 
@@ -118,7 +119,7 @@ def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Pa
 
 def test_field_action_and_outbox_are_committed_together(tmp_path: Path) -> None:
     database = tmp_path / "outbox.db"
-    IdentityService(database, app_env="test", seed_demo=True)
+    build_identity_service(database, app_env="test", seed_demo=True)
     migrate(str(database))
     repository = RoleWorkflowRepository(database)
 

@@ -18,7 +18,7 @@ from .dependencies import (
     set_auth_cookies,
 )
 from app.identity import AuthError
-from app.identity.identity_router import build_identity_router
+from app.identity.identity_router import build_identity_router, identity_http_status
 from .openapi_contracts import apply_response_contracts
 from .routers.adapters import router as adapters_router
 from .routers.agent import router as agent_router
@@ -72,7 +72,7 @@ async def not_found_handler(_: Request, exc: EventNotFound) -> JSONResponse:
 @app.exception_handler(AuthError)
 async def auth_error_handler(_: Request, exc: AuthError) -> JSONResponse:
     return JSONResponse(
-        status_code=exc.status_code,
+        status_code=identity_http_status(exc),
         content={"error": {"code": exc.code, "message": exc.message}},
     )
 

@@ -14,6 +14,7 @@ from ontology_dashboard.datasets import (
 from ontology_dashboard.dependencies import get_governance_service
 from ontology_dashboard.governance import GovernanceService
 from app.identity import CSRF_COOKIE, AuthError, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.orchestration import AgentRunRepository
@@ -28,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def setup(tmp_path: Path):
     database = tmp_path / "governance.db"
     migrate(str(database))
-    identity = IdentityService(database, app_env="test", seed_demo=True)
+    identity = build_identity_service(database, app_env="test", seed_demo=True)
     domain = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
     datasets = DatasetRepository(database)
     catalog = DatasetCatalogService(datasets)

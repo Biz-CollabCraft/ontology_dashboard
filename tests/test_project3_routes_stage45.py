@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from ontology_dashboard.dependencies import get_project3_client
 from app.identity import CSRF_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from app.infra.external.project3 import (
     Project3GraphSchema,
     Project3Health,
@@ -100,7 +101,7 @@ class DegradedProject3Client:
 @pytest.fixture()
 def client(tmp_path: Path):
     database_path = tmp_path / "project3-routes.db"
-    identity = IdentityService(database_path, app_env="test", seed_demo=True)
+    identity = build_identity_service(database_path, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_service] = lambda: service

@@ -18,6 +18,7 @@ from app.identity import (
     preview_group_mapping,
 )
 from app.identity import AuthError, IdentityService, LoginRequest
+from identity_test_support import build_identity_service
 
 
 NOW = datetime(2026, 8, 6, 2, 45, tzinfo=timezone.utc)
@@ -220,8 +221,8 @@ def test_enterprise_readiness_is_not_configured_without_external_secrets(monkeyp
 
 def test_session_revocation_is_visible_across_identity_service_instances(tmp_path: Path) -> None:
     database = tmp_path / "phase21-session.db"
-    first = IdentityService(database, app_env="test", seed_demo=True)
-    second = IdentityService(database, app_env="test", seed_demo=False)
+    first = build_identity_service(database, app_env="test", seed_demo=True)
+    second = build_identity_service(database, app_env="test", seed_demo=False)
     _, token, _, _ = first.login(
         LoginRequest(email="manager@ontology.local", password="Manager!2026")
     )

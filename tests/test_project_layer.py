@@ -11,6 +11,7 @@ from ontology_dashboard.dashboard_service import DashboardService
 from ontology_dashboard.dependencies import get_project_service
 from ontology_dashboard.export_repository import ExportRepository
 from app.identity import CSRF_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.projects import ProjectRepository, ProjectService
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
@@ -25,7 +26,7 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def client(database_path: Path):
-    identity = IdentityService(database_path, app_env="test", seed_demo=True)
+    identity = build_identity_service(database_path, app_env="test", seed_demo=True)
     domain_service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
     project_service = ProjectService(ProjectRepository(database_path))
     app.dependency_overrides[get_identity_service] = lambda: identity
@@ -191,7 +192,7 @@ def test_archived_project_is_removed_from_routes_and_cannot_be_activated(
 
 
 def test_operational_records_are_isolated_between_projects(database_path: Path) -> None:
-    identity = IdentityService(database_path, app_env="test", seed_demo=True)
+    identity = build_identity_service(database_path, app_env="test", seed_demo=True)
     manager_user = identity.repository.authenticate(
         "manager@ontology.local",
         "Manager!2026",

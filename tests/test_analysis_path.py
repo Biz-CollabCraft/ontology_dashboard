@@ -10,6 +10,7 @@ from ontology_dashboard.analysis_service import AnalysisService
 from ontology_dashboard.distributed_handlers import configured_handlers
 from ontology_dashboard.distributed_runtime import DurableJobRepository, DurableWorker
 from app.identity import CSRF_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 
@@ -25,7 +26,7 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def identity(database_path: Path) -> IdentityService:
-    return IdentityService(database_path, app_env="test", seed_demo=True)
+    return build_identity_service(database_path, app_env="test", seed_demo=True)
 
 
 @pytest.fixture()

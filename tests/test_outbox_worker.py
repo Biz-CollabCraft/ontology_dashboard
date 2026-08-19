@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.identity import IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.outbox import OutboxRepository, OutboxWorker, default_outbox_worker
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
@@ -15,13 +16,13 @@ from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
 def setup_database(tmp_path: Path) -> Path:
     database = tmp_path / "outbox.db"
     migrate(str(database))
-    IdentityService(database, app_env="test", seed_demo=True)
+    build_identity_service(database, app_env="test", seed_demo=True)
     return database
 
 
 def test_outbox_worker_processes_project_scoped_field_event_once(tmp_path: Path) -> None:
     database = setup_database(tmp_path)
-    identity = IdentityService(database, app_env="test", seed_demo=True)
+    identity = build_identity_service(database, app_env="test", seed_demo=True)
     user = identity.repository.authenticate("engineer@ontology.local", "Engineer!2026")
     principal = identity.repository.principal(user["id"])
     workflows = RoleWorkflowRepository(database)

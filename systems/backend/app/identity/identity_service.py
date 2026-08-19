@@ -7,11 +7,9 @@ import hmac
 import os
 import secrets
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Literal
 
-from argon2 import PasswordHasher
-
+from .identity_exception import AuthError
 from .identity_schema import (
     CSRF_COOKIE,
     DEMO_ACCOUNTS,
@@ -24,7 +22,6 @@ from .identity_schema import (
     PUBLIC_COMPARISON_PASSWORD,
     ActiveProjectRequest,
     AdminUserUpdateRequest,
-    AuthError,
     DisplayPreferenceUpdateRequest,
     LoginRequest,
     Principal,
@@ -37,25 +34,16 @@ from .identity_repository import IdentityRepository
 class IdentityService:
     def __init__(
         self,
-        database_path: str | Path,
+        repository: IdentityRepository,
         *,
         app_env: str | None = None,
         seed_demo: bool | None = None,
-        repository: IdentityRepository | None = None,
+        rate_limit_namespace: str = "identity",
     ) -> None:
         self.app_env = (app_env or os.getenv("APP_ENV", "development")).lower()
         self.secure_cookies = self.app_env == "production"
-        self.password_hasher = PasswordHasher(
-            time_cost=2,
-            memory_cost=19456,
-            parallelism=1,
-            hash_len=32,
-            salt_len=16,
-        )
-        self.repository = repository or IdentityRepository(
-            database_path,
-            password_hasher=self.password_hasher,
-        )
+        self.repository = repository
+        self.rate_limit_namespace = rate_limit_namespace
         should_seed = seed_demo
         if should_seed is None:
             configured = os.getenv("SEED_DEMO_ACCOUNTS")
@@ -109,7 +97,7 @@ class IdentityService:
             else self.app_env in {"development", "demo", "test"}
         )
         if not public_enabled:
-            raise AuthError(404, "public_comparison_disabled", "공개 비교 화면을 사용할 수 없습니다.")
+            raise AuthError("public_comparison_disabled", "공개 비교 화면을 사용할 수 없습니다.")
         return self.login(
             LoginRequest(
                 email=PUBLIC_COMPARISON_EMAIL,
@@ -178,7 +166,6 @@ class IdentityService:
     def verify_csrf(cookie_value: str | None, header_value: str | None) -> None:
         if not cookie_value or not header_value or not hmac.compare_digest(cookie_value, header_value):
             raise AuthError(
-                403,
                 "csrf_validation_failed",
                 "요청 검증에 실패했습니다. 페이지를 새로고침한 뒤 다시 시도하세요.",
             )
@@ -186,7 +173,7 @@ class IdentityService:
     @staticmethod
     def require_permission(principal: Principal, permission: str) -> None:
         if permission not in principal.permissions:
-            raise AuthError(403, "permission_denied", "이 작업을 수행할 권한이 없습니다.")
+            raise AuthError("permission_denied", "이 작업을 수행할 권한이 없습니다.")
 
     def set_active_project(
         self,
@@ -209,11 +196,11 @@ class IdentityService:
     @staticmethod
     def require_project(principal: Principal, project_id: str) -> None:
         if project_id not in principal.project_scopes:
-            raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
+            raise AuthError("project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
 
     def require_workspace(self, principal: Principal, workspace_id: str) -> None:
         if workspace_id not in principal.workspace_scopes:
-            raise AuthError(403, "workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
+            raise AuthError("workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
         workspace = next(
             (
                 item
@@ -225,12 +212,12 @@ class IdentityService:
             None,
         )
         if workspace is None:
-            raise AuthError(403, "workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
+            raise AuthError("workspace_scope_denied", "허용된 workspace 범위를 벗어난 요청입니다.")
         project_id = workspace.get("project_id")
         if not project_id or project_id not in principal.project_scopes:
-            raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
+            raise AuthError("project_scope_denied", "허용된 Project 범위를 벗어난 요청입니다.")
         if principal.active_project_id and project_id != principal.active_project_id:
-            raise AuthError(409, "active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
+            raise AuthError("active_project_mismatch", "먼저 해당 Project를 활성화해야 합니다.")
 
     @staticmethod
     def legacy_dashboard_role(
@@ -252,8 +239,14 @@ class IdentityService:
         }
         resolved = mapping.get(role, "manager")
         if requested_role is not None and requested_role != resolved:
-            raise AuthError(403, "role_context_denied", "현재 역할에 허용되지 않은 화면 관점입니다.")
+            raise AuthError("role_context_denied", "현재 역할에 허용되지 않은 화면 관점입니다.")
         return resolved
+
+    def get_display_preferences(self, *, user_id: str) -> dict[str, Any] | None:
+        return self.repository.get_display_preferences(user_id=user_id)
+
+    def save_display_preferences(self, *, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.repository.save_display_preferences(user_id=user_id, payload=payload)
 
 
 __all__ = [

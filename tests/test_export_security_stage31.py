@@ -17,6 +17,7 @@ from jsonschema import Draft202012Validator
 
 from ontology_dashboard.dashboard_service import DashboardService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import (
     app,
     get_identity_service,
@@ -38,7 +39,7 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def identity(database_path: Path) -> IdentityService:
-    return IdentityService(database_path, app_env="test", seed_demo=True)
+    return build_identity_service(database_path, app_env="test", seed_demo=True)
 
 
 @pytest.fixture()

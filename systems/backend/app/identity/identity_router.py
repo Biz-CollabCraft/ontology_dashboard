@@ -13,17 +13,67 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from app.common.rate_limit import LOGIN_RATE, SESSION_RATE, RateLimiter
 
+from .identity_exception import AuthError
 from .identity_schema import (
     CSRF_COOKIE,
     SESSION_COOKIE,
     ActiveProjectRequest,
-    AuthError,
     DisplayPreferenceUpdateRequest,
     LoginRequest,
     Principal,
     RegisterRequest,
 )
 from .identity_service import IdentityService
+
+
+_IDENTITY_HTTP_STATUS_BY_CODE = {
+    "authentication_required": 401,
+    "invalid_credentials": 401,
+    "session_expired": 401,
+    "session_idle_timeout": 401,
+    "session_client_mismatch": 401,
+    "account_disabled": 403,
+    "account_inactive": 403,
+    "board_role_denied": 403,
+    "csrf_validation_failed": 403,
+    "organization_required": 403,
+    "organization_scope_denied": 403,
+    "pending_approval": 403,
+    "permission_denied": 403,
+    "project_scope_denied": 403,
+    "role_context_denied": 403,
+    "tenant_scope_denied": 403,
+    "workspace_scope_denied": 403,
+    "notification_not_found": 404,
+    "project_not_found": 404,
+    "public_comparison_disabled": 404,
+    "user_not_found": 404,
+    "action_in_progress": 409,
+    "active_project_mismatch": 409,
+    "active_project_required": 409,
+    "analysis_version_conflict": 409,
+    "dashboard_revision_conflict": 409,
+    "email_already_registered": 409,
+    "idempotency_key_conflict": 409,
+    "mandatory_board_required": 409,
+    "prior_action_failed": 409,
+    "project_slug_conflict": 409,
+    "report_revision_conflict": 409,
+    "self_lockout_blocked": 409,
+    "invalid_default_workspace": 422,
+    "invalid_permission": 422,
+    "invalid_role": 422,
+    "invalid_workspace_scope": 422,
+    "project_action_not_configured": 422,
+    "project_context_mismatch": 422,
+    "role_required": 422,
+}
+
+
+def identity_http_status(error: AuthError) -> int:
+    """Map Identity application error codes to HTTP at the presentation edge."""
+
+    return _IDENTITY_HTTP_STATUS_BY_CODE.get(error.code, 400)
 
 
 def build_identity_router(
@@ -63,7 +113,9 @@ def build_identity_router(
         limiter.check(
             bucket="auth.login",
             subject=rate_limit_subject(
-                str(identity.repository.path), client_ip(request), payload.email.lower()
+                identity.rate_limit_namespace,
+                client_ip(request),
+                payload.email.lower(),
             ),
             rule=LOGIN_RATE,
         )
@@ -90,7 +142,7 @@ def build_identity_router(
     ):
         limiter.check(
             bucket="auth.public_blueprint_comparison",
-            subject=rate_limit_subject(str(identity.repository.path), client_ip(request)),
+            subject=rate_limit_subject(identity.rate_limit_namespace, client_ip(request)),
             rule=SESSION_RATE,
         )
         principal, token, expires_at, csrf_token = identity.open_public_comparison_session(
@@ -131,9 +183,7 @@ def build_identity_router(
         principal: Principal = Depends(current_principal),
         identity: IdentityService = Depends(get_identity_service),
     ):
-        return {
-            "preferences": identity.repository.get_display_preferences(user_id=principal.user_id)
-        }
+        return {"preferences": identity.get_display_preferences(user_id=principal.user_id)}
 
     @router.put("/display-preferences")
     def save_display_preferences(
@@ -142,7 +192,7 @@ def build_identity_router(
         _: None = Depends(require_csrf),
         identity: IdentityService = Depends(get_identity_service),
     ):
-        return identity.repository.save_display_preferences(
+        return identity.save_display_preferences(
             user_id=principal.user_id,
             payload=payload.model_dump(mode="json"),
         )
@@ -157,7 +207,7 @@ def build_identity_router(
     ):
         token = request.cookies.get(SESSION_COOKIE)
         if not token:
-            raise AuthError(401, "authentication_required", "로그인이 필요합니다.")
+            raise AuthError("authentication_required", "로그인이 필요합니다.")
         updated = identity.set_active_project(
             token=token,
             principal=principal,
@@ -175,7 +225,7 @@ def build_identity_router(
     ):
         token = request.cookies.get(SESSION_COOKIE)
         if not token:
-            raise AuthError(401, "authentication_required", "로그인이 필요합니다.")
+            raise AuthError("authentication_required", "로그인이 필요합니다.")
         limiter.check(
             bucket="auth.refresh",
             subject=rate_limit_subject(token),
@@ -203,7 +253,7 @@ def build_identity_router(
     ):
         token = request.cookies.get(SESSION_COOKIE)
         if not token:
-            raise AuthError(401, "authentication_required", "로그인이 필요합니다.")
+            raise AuthError("authentication_required", "로그인이 필요합니다.")
         return {"items": identity.active_sessions(principal=principal, current_token=token)}
 
     @router.delete("/sessions/others")
@@ -216,7 +266,7 @@ def build_identity_router(
     ):
         token = request.cookies.get(SESSION_COOKIE)
         if not token:
-            raise AuthError(401, "authentication_required", "로그인이 필요합니다.")
+            raise AuthError("authentication_required", "로그인이 필요합니다.")
         limiter.check(
             bucket="auth.sessions.revoke_others",
             subject=rate_limit_subject(principal.user_id),
@@ -232,4 +282,4 @@ def build_identity_router(
     return router
 
 
-__all__ = ["build_identity_router"]
+__all__ = ["build_identity_router", "identity_http_status"]

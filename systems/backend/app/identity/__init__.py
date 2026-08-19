@@ -20,6 +20,7 @@ from .enterprise_identity import (
     preview_group_mapping,
 )
 from .identity_repository import IdentityRepository
+from .identity_exception import AuthError
 from .identity_schema import (
     CSRF_COOKIE,
     DEMO_ACCOUNTS,
@@ -35,7 +36,6 @@ from .identity_schema import (
     SESSION_TTL_HOURS,
     ActiveProjectRequest,
     AdminUserUpdateRequest,
-    AuthError,
     DisplayPreferenceUpdateRequest,
     LoginRequest,
     Principal,
