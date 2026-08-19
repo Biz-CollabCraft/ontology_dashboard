@@ -12,9 +12,9 @@
 | `SPLIT` | 한 Source의 책임을 둘 이상의 소유자에게 분해한 뒤 레거시 삭제 |
 | `REPLACE` | 새 canonical 구현 또는 명시적 bootstrap으로 대체한 뒤 레거시 삭제 |
 | `REMOVE` | 승인된 제품 범위가 아니므로 API·테스트 종료 기준을 확인하고 삭제 |
-| `DEFER` | 제품 범위 결정 전에는 이관하지 않음. Phase 14 전 반드시 다른 상태로 해소 |
+| `DEFER` | 제품 범위 결정 전에는 이관하지 않음. Phase 0.5(#68) 완료 전 반드시 다른 상태로 해소 |
 
-모든 레거시 Python Source는 아래 Ledger의 패턴 하나 이상에 포함되어야 한다.
+모든 레거시 Python Source는 아래 Ledger의 정확히 하나의 행에 포함되어야 한다.
 `UNDECIDED`, 미배정 Source 또는 해소되지 않은 `DEFER`가 하나라도 있으면
 `systems/backend/ontology_dashboard`를 삭제할 수 없다.
 
@@ -61,7 +61,7 @@
 | `reports.py`, `export_models.py`, `export_repository.py`, `export_service.py` | Report와 Export | `MOVE` | `app/report` | #61 |
 | `planner/*`, `ontology_planner_models.py`, `ontology_planner_service.py` | 자연어 Planner와 UI plan | `MOVE` | `app/planner`, provider는 Infra port로 소비 | #62 |
 | `orchestration/*` | 범용 multi-store Agent orchestration | `DEFER` | 실제 Planner/Report consumer와 승인 계약이 있을 때만 분해 이관 | #62, #63, #68 |
-| `governance/*` | Agent trace와 projection governance | `MOVE`/`SPLIT` | 승인된 governance 책임만 `app/governance` | #63, #68 |
+| `governance/*` | Agent trace와 projection governance | `SPLIT` | 승인된 governance 책임만 `app/governance`로 이관하고 나머지는 #68에서 처분 확정 | #63, #68 |
 | `role_workflow_models.py`, `role_workflow_repository.py`, `role_workflow_service.py` | Field task, 역할별 read model, template/model 승인, audit | `SPLIT` | `maintenance`, `dashboard`, `governance` | #59, #60, #63 |
 | `automation_runtime.py` | Platform automation simulation | `DEFER` | Maintenance runtime으로 간주하지 않음 | #68 |
 | `branching_lineage.py` | Platform change/merge/policy branch | `DEFER` | `maintenance_replay_overlay`와 다른 개념. Governance 필요성 판정 | #68 |
@@ -81,25 +81,28 @@
 | `routers/planner.py`, `routers/agent.py` | Planner와 Agent API | `SPLIT` | Planner는 이관, Agent orchestration은 #68 결정 후 처리 | #62, #68 |
 | `routers/governance.py` | Governance API | `MOVE` | `app/governance` | #63 |
 | `routers/admin.py`, `routers/role_workspaces.py` | Identity, Dashboard, Governance, Maintenance API 혼재 | `SPLIT` | endpoint별 의미 소유 도메인으로 분해 | #53, #59, #60, #63 |
-| `routers/project3.py` | Project 3 passthrough API | `DEFER`/`SPLIT` | 유지 시 external adapter와 consumer port로 분리 | #52, #55, #62, #68 |
-| `routers/platform.py` | 31개 Platform capability API 집합 | `DEFER`/`SPLIT` | endpoint별 consumer와 제품 근거를 #68에서 판정 | #52, #63, #68 |
+| `routers/project3.py` | Project 3 passthrough API | `DEFER` | 유지 여부와 유지 시 external adapter·consumer port 분리 범위를 #68에서 판정 | #52, #55, #62, #68 |
+| `routers/platform.py` | 31개 Platform capability API 집합 | `DEFER` | endpoint별 consumer와 제품 근거를 #68에서 판정 | #52, #63, #68 |
 | `routers/system.py` | health와 polyglot health | `SPLIT` | 표준 health는 composition/Infra, polyglot은 #68 판정 | #52, #64, #68 |
 | `routers/analyses.py` | Analysis API | `DEFER` | `analysis_*` 결정과 함께 처리 | #68 |
-| `routers/modeling.py` | Backend 학습/실험/registry API | `DEFER`/`SPLIT` | Runtime·governance 최소 기능 외에는 Generator 소유권과 비교 후 제거 | #58, #63, #68 |
+| `routers/modeling.py` | Backend 학습/실험/registry API | `DEFER` | Runtime·governance 최소 기능의 유지 여부를 Generator 소유권과 비교해 #68에서 판정 | #58, #63, #68 |
 | `routers/__init__.py` | 기술 중심 Router package export | `REPLACE` | 각 도메인 Router와 `app/main.py` 등록으로 대체 | #64 |
 
 ## 4. Phase별 적용 규칙
+
+실행 순서는 `#51 Phase 0 → #68 capability disposition → #73 Architecture CI Ratchet → #52~#64 Domain/Infra migration → #65 legacy deletion → #66 final strict CI`로 고정한다.
 
 1. 각 Phase PR은 자기 Source 행의 세부 파일 목록과 최종 처분을 PR 본문에 기록한다.
 2. `SPLIT`은 각 책임의 새 owner와 public port를 확인한 뒤 레거시 Source를 삭제한다.
 3. `REPLACE`는 새 구현의 회귀 테스트와 deployment entrypoint가 통과한 뒤 삭제한다.
 4. `REMOVE`는 삭제되는 API/테스트/문서 참조를 함께 정리한다.
-5. `DEFER`는 임의 target으로 옮기지 않는다. #68 결정 전에는 Phase 이슈의 DoD를 닫을 수 없다.
+5. `DEFER`는 임의 target으로 옮기지 않는다. #68 완료 전에는 Phase 1~13 구현을 시작하지 않고, #73 Ratchet 통과 전에는 해당 Phase 이슈의 DoD를 닫을 수 없다.
 6. Phase 14(#65)는 Ledger의 미배정 Source, `UNDECIDED`, `DEFER`가 모두 0건일 때만 시작한다.
 
 ## 5. Architecture CI Ratchet
 
-- Phase 0~13: 레거시 존재 자체는 허용하되 신규 레거시 파일 및 신규 레거시 import 증가를 금지한다.
-- 각 Phase: 이미 이관 완료로 선언한 Source의 재생성과 `app`에서 레거시로 향하는 신규 import를 금지한다.
+- Phase 0.6(#73): #68의 최종 처분 원장을 기준으로 레거시 Source/import baseline과 감소 전용 Ratchet을 먼저 도입한다.
+- Phase 1~13: 레거시 존재 자체는 허용하되 신규 레거시 파일, 신규 레거시 import, baseline 증가를 금지한다.
+- 각 Phase: 이미 이관 완료로 선언한 Source의 재생성과 `app`에서 레거시로 향하는 신규 import를 금지하고 baseline을 감소시킨다.
 - Phase 14: `systems/backend/ontology_dashboard`와 모든 import/실행 참조가 0건인지 검사한다.
-- Phase 15: 최종 strict invariant를 유지하고 이후 회귀를 차단한다.
+- Phase 15(#66): baseline 비교가 아닌 최종 strict invariant를 유지하고 이후 회귀를 차단한다.
