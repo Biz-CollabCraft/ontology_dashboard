@@ -71,8 +71,6 @@
     "identity_repository.py",
     "integrations/__init__.py",
     "integrations/project3/__init__.py",
-    "integrations/project3/client.py",
-    "integrations/project3/models.py",
     "integrations/project3/projection.py",
     "llm.py",
     "main.py",
@@ -89,7 +87,6 @@
     "modeling/repository.py",
     "modeling/schema.py",
     "modeling/service.py",
-    "observability.py",
     "ontology.py",
     "ontology_adapter.py",
     "ontology_instance_repository.py",
@@ -114,10 +111,8 @@
     "polyglot/__init__.py",
     "polyglot/health.py",
     "polyglot/settings.py",
-    "postgresql.py",
     "postgresql_compat.py",
     "postgresql_ontology_repository.py",
-    "postgresql_pool.py",
     "postgresql_repositories.py",
     "predictive_maintenance_runtime/__init__.py",
     "predictive_maintenance_runtime/models.py",
@@ -154,9 +149,7 @@
     "routers/projects.py",
     "routers/role_workspaces.py",
     "routers/system.py",
-    "security.py",
     "service.py",
-    "settings.py",
     "visualizations/__init__.py",
     "visualizations/models.py",
     "visualizations/profiler.py",
@@ -181,11 +174,6 @@
       "target": "ontology_dashboard.worker"
     },
     {
-      "source": "scripts/backup_database.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
-    },
-    {
       "source": "scripts/check_postgresql_runtime.py",
       "kind": "static_import",
       "target": "ontology_dashboard.adapters.models"
@@ -204,11 +192,6 @@
       "source": "scripts/check_postgresql_runtime.py",
       "kind": "static_import",
       "target": "ontology_dashboard.outbox"
-    },
-    {
-      "source": "scripts/check_postgresql_runtime.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.postgresql_pool"
     },
     {
       "source": "scripts/check_postgresql_runtime.py",
@@ -251,11 +234,6 @@
       "target": "ontology_dashboard.migrations"
     },
     {
-      "source": "scripts/ingest_dataset.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
-    },
-    {
       "source": "scripts/ingest_predictive_maintenance_bundle.py",
       "kind": "static_import",
       "target": "ontology_dashboard.adapters"
@@ -274,11 +252,6 @@
       "source": "scripts/migrate_database.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "scripts/migrate_database.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
     },
     {
       "source": "scripts/project_predictive_maintenance_graph.py",
@@ -301,11 +274,6 @@
       "target": "ontology_dashboard.app:app"
     },
     {
-      "source": "scripts/restore_database.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
-    },
-    {
       "source": "scripts/run_durable_worker.py",
       "kind": "static_import",
       "target": "ontology_dashboard.distributed_handlers"
@@ -319,11 +287,6 @@
       "source": "scripts/run_durable_worker.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "scripts/run_durable_worker.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
     },
     {
       "source": "scripts/run_local.sh",
@@ -351,11 +314,6 @@
       "target": "ontology_dashboard.outbox"
     },
     {
-      "source": "scripts/run_outbox_worker.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
-    },
-    {
       "source": "scripts/run_public_api.sh",
       "kind": "runtime_entrypoint",
       "target": "ontology_dashboard.app:app"
@@ -364,11 +322,6 @@
       "source": "scripts/seed_demo_accounts.py",
       "kind": "static_import",
       "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "scripts/seed_demo_accounts.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
     },
     {
       "source": "scripts/seed_demo_dataset_catalog.py",
@@ -401,11 +354,6 @@
       "target": "ontology_dashboard.service"
     },
     {
-      "source": "scripts/seed_demo_dataset_catalog.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
-    },
-    {
       "source": "scripts/verify_adaptive_modeling_release.py",
       "kind": "static_import",
       "target": "ontology_dashboard.modeling.schema"
@@ -424,11 +372,6 @@
       "source": "scripts/verify_tenant_isolation.py",
       "kind": "static_import",
       "target": "ontology_dashboard.persistence_readiness"
-    },
-    {
-      "source": "scripts/verify_tenant_isolation.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
     },
     {
       "source": "systems/backend/Dockerfile",
@@ -951,11 +894,6 @@
       "target": "ontology_dashboard.routers.system"
     },
     {
-      "source": "tests/test_deployment_foundation_phase22.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
-    },
-    {
       "source": "tests/test_distributed_runtime_phase23.py",
       "kind": "static_import",
       "target": "ontology_dashboard.distributed_runtime"
@@ -969,11 +907,6 @@
       "source": "tests/test_distributed_runtime_phase23.py",
       "kind": "static_import",
       "target": "ontology_dashboard.projects"
-    },
-    {
-      "source": "tests/test_distributed_runtime_phase23.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.security"
     },
     {
       "source": "tests/test_domain_pack_platform_phase19.py",
@@ -1029,11 +962,6 @@
       "source": "tests/test_export_security_stage31.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
-    },
-    {
-      "source": "tests/test_export_security_stage31.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.security"
     },
     {
       "source": "tests/test_export_security_stage31.py",
@@ -1238,11 +1166,6 @@
     {
       "source": "tests/test_mvp.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.llm"
-    },
-    {
-      "source": "tests/test_mvp.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
@@ -1254,11 +1177,6 @@
       "source": "tests/test_mvp.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_observability_phase25.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.observability"
     },
     {
       "source": "tests/test_observability_phase25.py",
@@ -1416,11 +1334,6 @@
       "target": "ontology_dashboard.polyglot.settings"
     },
     {
-      "source": "tests/test_postgresql_pool.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard"
-    },
-    {
       "source": "tests/test_predictive_maintenance_bundle_adapter.py",
       "kind": "static_import",
       "target": "ontology_dashboard.adapters"
@@ -1429,11 +1342,6 @@
       "source": "tests/test_predictive_maintenance_bundle_contract.py",
       "kind": "static_import",
       "target": "ontology_dashboard.adapters.bundle_models"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_bundle_contract.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.integrations.project3"
     },
     {
       "source": "tests/test_predictive_maintenance_graph_projection.py",
@@ -1474,11 +1382,6 @@
       "source": "tests/test_predictive_maintenance_postgresql.py",
       "kind": "static_import",
       "target": "ontology_dashboard.modeling.repository"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_postgresql.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.postgresql_pool"
     },
     {
       "source": "tests/test_predictive_maintenance_projection.py",
@@ -1586,11 +1489,6 @@
       "target": "ontology_dashboard.product_result_evidence_projection"
     },
     {
-      "source": "tests/test_project3_client_stage45.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.integrations.project3"
-    },
-    {
       "source": "tests/test_project3_routes_stage45.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
@@ -1599,11 +1497,6 @@
       "source": "tests/test_project3_routes_stage45.py",
       "kind": "static_import",
       "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_project3_routes_stage45.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.integrations.project3"
     },
     {
       "source": "tests/test_project3_routes_stage45.py",
@@ -1704,11 +1597,6 @@
       "source": "tests/test_runtime_settings.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
-    },
-    {
-      "source": "tests/test_runtime_settings.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.settings"
     },
     {
       "source": "tests/test_tenant_isolation.py",

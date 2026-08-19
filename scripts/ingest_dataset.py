@@ -11,7 +11,7 @@ from pathlib import Path
 from ontology_dashboard.adapters.file_adapter import FileAdapter
 from ontology_dashboard.adapters.models import DatasetManifest
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.settings import database_location
+from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]
 

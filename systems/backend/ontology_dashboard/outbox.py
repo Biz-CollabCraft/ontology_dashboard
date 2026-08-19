@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .postgresql_compat import postgres_repository_connection
-from .postgresql_pool import pooled_identity_connection
+from app.infra.db.pool import pooled_identity_connection
 from .postgresql_repositories import is_postgresql
 
 
@@ -520,10 +520,8 @@ def default_outbox_worker(
         not in {"0", "false", "no"}
     )
     if worker.repository.postgresql and enabled:
-        from .integrations.project3 import (
-            PredictiveMaintenanceProject3ProjectionHandler,
-            Project3Client,
-        )
+        from app.infra.external.project3 import Project3Client
+        from .integrations.project3.projection import PredictiveMaintenanceProject3ProjectionHandler
 
         client = project3_client or Project3Client.from_environment()
         handler = PredictiveMaintenanceProject3ProjectionHandler(

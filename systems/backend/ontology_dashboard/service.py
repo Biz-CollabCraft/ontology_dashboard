@@ -14,7 +14,7 @@ from app.diagnosis.evidence import (
     build_product_result_artifact,
 )
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.settings import database_location
+from app.infra.db.settings import database_location
 
 from .context import ResilientContextProvider
 from .contracts import (
@@ -29,7 +29,9 @@ from .contracts import (
     UILayout,
 )
 from .conversation import IntentRouter, deterministic_answer
-from .llm import ReportAgent, configured_provider
+from app.infra.llm import configured_provider
+
+from .llm import ReportAgent
 from .planner import LayoutPlanner
 from .product_result_evidence_projection import (
     event_evidence_projection_to_legacy_evidence,

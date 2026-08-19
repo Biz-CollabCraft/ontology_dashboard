@@ -11,7 +11,7 @@ from ontology_dashboard.persistence_readiness import (
     persistence_readiness,
     verify_rls_migration_evidence,
 )
-from ontology_dashboard.settings import database_location
+from app.infra.db.settings import database_location
 
 
 ROOT = Path(__file__).resolve().parents[1]

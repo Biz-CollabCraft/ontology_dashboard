@@ -35,7 +35,7 @@ from .routers.predictive_maintenance_runtime import (
 from .routers.projects import router as projects_router
 from .routers.role_workspaces import router as role_workspaces_router
 from .routers.system import router as system_router
-from .security import RateLimitExceeded
+from app.common.exceptions import RateLimitExceeded
 from .service import EventNotFound
 
 app = create_app()

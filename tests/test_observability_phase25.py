@@ -9,7 +9,7 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.observability import (
+from app.infra.observability.runtime import (
     METRICS,
     JsonLogFormatter,
     MetricsRegistry,
@@ -126,6 +126,31 @@ def test_production_metrics_endpoint_requires_bearer_token(monkeypatch) -> None:
             "/metrics",
             headers={"Authorization": "Bearer metrics-secret"},
         ).status_code == 200
+
+
+@pytest.mark.parametrize("environment", ["demo", "staging"])
+def test_deployed_nonproduction_metrics_endpoint_requires_token(
+    monkeypatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", environment)
+    monkeypatch.delenv("ONTOLOGY_DASHBOARD_METRICS_TOKEN", raising=False)
+    app = FastAPI()
+    app.include_router(system_router)
+    with TestClient(app) as client:
+        assert client.get("/metrics").status_code == 401
+
+
+def test_deployment_manifests_wire_metrics_token() -> None:
+    render = yaml.safe_load((ROOT / "render.yaml").read_text(encoding="utf-8"))
+    api_service = next(
+        service for service in render["services"] if service["name"] == "ontology-dashboard-demo-api"
+    )
+    env_vars = {item["key"]: item for item in api_service["envVars"]}
+    assert env_vars["ONTOLOGY_DASHBOARD_METRICS_TOKEN"]["sync"] is False
+
+    compose_text = (ROOT / "infra/docker-compose.yml").read_text(encoding="utf-8")
+    assert "ONTOLOGY_DASHBOARD_METRICS_TOKEN: ${ONTOLOGY_DASHBOARD_METRICS_TOKEN:-}" in compose_text
 
 
 def test_readiness_and_alert_rules_are_honest_and_parseable(monkeypatch) -> None:

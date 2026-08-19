@@ -64,7 +64,7 @@ from .distributed_runtime import (
 from .export_models import ExportCheckpoint
 from .governance.models import GovernanceAgentRunDetail, ProjectionRetryResult
 from .identity_models import DisplayPreferenceUpdateRequest, Principal
-from .integrations.project3.models import Project3IntegrationSnapshot
+from app.infra.external.project3.models import Project3IntegrationSnapshot
 from .modeling.models import (
     CapabilityEvaluation,
     ExperimentRun,
@@ -85,7 +85,7 @@ from .ontology import (
     ObjectTypeDefinition,
 )
 from .ontology_primitives import ActionPreview, FunctionExecution, PrimitiveSnapshot
-from .observability import ObservabilityReadiness
+from app.infra.observability.runtime import ObservabilityReadiness
 from .orchestration.models import AgentRunResponse
 from .predictive_maintenance_runtime.models import (
     DatasetVersionRuntimeContext,
@@ -872,6 +872,12 @@ def apply_response_contracts(router: APIRouter) -> None:
     rebuilt: list[Any] = []
     for route in router.routes:
         if not isinstance(route, APIRoute):
+            rebuilt.append(route)
+            continue
+
+        # Internal/operational endpoints intentionally excluded from OpenAPI
+        # (for example Prometheus metrics) are not public JSON API contracts.
+        if not route.include_in_schema:
             rebuilt.append(route)
             continue
 

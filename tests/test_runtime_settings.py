@@ -6,13 +6,13 @@ import pytest
 from starlette.requests import Request
 
 from ontology_dashboard.dependencies import client_ip
-from ontology_dashboard.settings import (
+from app.common.runtime_settings import (
     allowed_origin_regex,
     allowed_origins,
-    database_location,
     project_root,
-    validate_runtime_environment,
 )
+from app.infra.db.settings import database_location
+from app.infra.observability.runtime_validation import validate_runtime_environment
 
 
 def test_explicit_allowed_origin_regex_supports_preview_hosts(

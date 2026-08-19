@@ -6,7 +6,7 @@ import os
 from contextlib import contextmanager
 from typing import Iterator
 
-from .postgresql_pool import pooled_tenant_connection, require_psycopg_pool
+from .pool import pooled_tenant_connection, require_psycopg_pool
 
 
 def require_psycopg():

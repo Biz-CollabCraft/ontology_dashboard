@@ -17,7 +17,7 @@ from ontology_dashboard.adapters import (
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.modeling.models import DatasetIntakeProfile, canonical_checksum
 from ontology_dashboard.modeling.repository import ModelingRepository
-from ontology_dashboard.postgresql_pool import close_pools
+from app.infra.db.pool import close_pools
 from tests.test_predictive_maintenance_bundle_adapter import (
     build_manifest,
     create_small_package,

@@ -18,6 +18,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEMS = ROOT / "systems"
 
+BACKEND_COMPOSITION_ROOT_FILES = {
+    Path("main.py"),
+    Path("dependencies.py"),
+    Path("settings.py"),
+    Path("health.py"),
+    Path("error_handlers.py"),
+}
+DOMAIN_IMPLEMENTATION_SUFFIXES = ("_service", "_repository", "_adapter")
+
 REQUIRED_PATHS = (
     SYSTEMS / "generator" / "extraction" / "extraction_service.py",
     SYSTEMS / "generator" / "ontology_mapping" / "mapping_service.py",
@@ -33,6 +42,13 @@ REQUIRED_PATHS = (
     SYSTEMS / "backend" / "app" / "diagnosis" / "model_registry.py",
     SYSTEMS / "backend" / "app" / "diagnosis" / "predictor.py",
     SYSTEMS / "backend" / "app" / "diagnosis" / "evidence.py",
+    SYSTEMS / "backend" / "app" / "common" / "runtime_settings.py",
+    SYSTEMS / "backend" / "app" / "common" / "rate_limit.py",
+    SYSTEMS / "backend" / "app" / "infra" / "db" / "pool.py",
+    SYSTEMS / "backend" / "app" / "infra" / "db" / "connection.py",
+    SYSTEMS / "backend" / "app" / "infra" / "storage" / "object_storage.py",
+    SYSTEMS / "backend" / "app" / "infra" / "external" / "project3" / "client.py",
+    SYSTEMS / "backend" / "app" / "infra" / "llm" / "provider.py",
     SYSTEMS / "backend" / "app" / "main.py",
     SYSTEMS / "backend" / "ontology_dashboard" / "main.py",
     SYSTEMS / "backend" / "migrations",
@@ -43,12 +59,39 @@ REQUIRED_PATHS = (
 )
 
 
-def _module_names(node: ast.AST) -> list[str]:
+def _module_names(node: ast.AST, *, package: str | None = None) -> list[str]:
     if isinstance(node, ast.Import):
         return [alias.name for alias in node.names]
-    if isinstance(node, ast.ImportFrom) and node.module:
-        return [node.module]
+    if isinstance(node, ast.ImportFrom):
+        module = node.module or ""
+        if node.level and package:
+            package_parts = package.split(".")
+            keep = len(package_parts) - node.level + 1
+            if keep <= 0:
+                return [module] if module else []
+            resolved_parts = package_parts[:keep]
+            if module:
+                resolved_parts.extend(module.split("."))
+                resolved = ".".join(part for part in resolved_parts if part)
+                return [resolved] if resolved else []
+
+            resolved_modules: list[str] = []
+            for alias in node.names:
+                alias_parts = list(resolved_parts)
+                if alias.name != "*":
+                    alias_parts.extend(alias.name.split("."))
+                resolved = ".".join(part for part in alias_parts if part)
+                if resolved:
+                    resolved_modules.append(resolved)
+            return resolved_modules
+        if module:
+            return [module]
     return []
+
+
+def _backend_app_package(path: Path, app_root: Path) -> str:
+    parent = path.parent.relative_to(app_root)
+    return ".".join(("app", *parent.parts))
 
 
 def check_required_structure(errors: list[str]) -> None:
@@ -133,25 +176,105 @@ def check_generator_package_import_masking(errors: list[str]) -> None:
 
 def check_backend_domain_dependencies(errors: list[str]) -> None:
     app_root = SYSTEMS / "backend" / "app"
-    implementation_suffixes = ("_service", "_repository", "_adapter")
     for path in app_root.glob("*/*.py"):
         current_domain = path.parent.name
+        package = _backend_app_package(path, app_root)
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except SyntaxError:
             continue
         for node in ast.walk(tree):
-            for module in _module_names(node):
+            for module in _module_names(node, package=package):
                 parts = module.split(".")
                 if len(parts) < 3 or parts[0] != "app":
                     continue
                 target_domain = parts[1]
                 if target_domain == current_domain:
                     continue
-                if parts[-1].endswith(implementation_suffixes):
+                if parts[-1].endswith(DOMAIN_IMPLEMENTATION_SUFFIXES):
                     errors.append(
                         f"backend domain implementation import: {path.relative_to(ROOT)} imports {module}"
                     )
+
+
+def check_backend_domain_first_ratchet(errors: list[str]) -> None:
+    """Prevent Phase 1 physical convergence from drifting back toward legacy layout."""
+
+    app_root = SYSTEMS / "backend" / "app"
+    forbidden_top_level = {
+        "routers",
+        "adapters",
+        "orchestration",
+        "integrations",
+        "modeling",
+        "domain_packs",
+        "predictive_maintenance_runtime",
+        "closed_loop",
+    }
+    for name in sorted(forbidden_top_level):
+        if (app_root / name).exists():
+            errors.append(f"backend technical top-level package is forbidden: systems/backend/app/{name}")
+
+    allowed_legacy_imports = {
+        Path("systems/backend/app/main.py"): {"ontology_dashboard.app"},
+        Path("systems/backend/app/diagnosis/model_registry.py"): {
+            "ontology_dashboard.modeling.models"
+        },
+    }
+
+    for path in app_root.rglob("*.py"):
+        relative = path.relative_to(ROOT)
+        relative_to_app = path.relative_to(app_root)
+        is_composition_root = relative_to_app in BACKEND_COMPOSITION_ROOT_FILES
+        package = _backend_app_package(path, app_root)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as exc:
+            errors.append(f"cannot parse {relative}: {exc}")
+            continue
+
+        domain = relative_to_app.parts[0]
+        for node in ast.walk(tree):
+            for module in _module_names(node, package=package):
+                if module == "ontology_dashboard" or module.startswith("ontology_dashboard."):
+                    allowed = allowed_legacy_imports.get(relative, set())
+                    if module not in allowed:
+                        errors.append(
+                            f"new canonical-to-legacy Backend import is forbidden: {relative} imports {module}"
+                        )
+
+                # Phase #64 composition modules are intentionally allowed to
+                # assemble FastAPI and concrete Infra adapters. Keep the legacy
+                # import ratchet above active until Phase #65 removes it.
+                if is_composition_root:
+                    continue
+
+                if domain == "common" and module.startswith("app.") and not module.startswith(
+                    "app.common"
+                ):
+                    errors.append(f"backend common reverse dependency: {relative} imports {module}")
+
+                if domain == "infra":
+                    if module == "ontology_dashboard" or module.startswith("ontology_dashboard."):
+                        errors.append(f"backend infra imports legacy package: {relative} imports {module}")
+                    parts = module.split(".")
+                    if len(parts) >= 3 and parts[0] == "app" and parts[1] not in {
+                        "common",
+                        "infra",
+                    } and parts[-1].endswith(DOMAIN_IMPLEMENTATION_SUFFIXES):
+                        errors.append(
+                            f"backend infra imports domain implementation: {relative} imports {module}"
+                        )
+
+                if domain not in {"common", "infra"} and module.startswith("app.infra"):
+                    errors.append(f"backend domain imports infra implementation: {relative} imports {module}")
+
+                if (
+                    domain not in {"common", "infra"}
+                    and not path.name.endswith("_router.py")
+                    and (module == "fastapi" or module.startswith("fastapi."))
+                ):
+                    errors.append(f"backend domain layer imports FastAPI: {relative} imports {module}")
 
 
 def check_product_api_dependency(errors: list[str]) -> None:
@@ -351,6 +474,7 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'needs: [changes, fast_validation, mvp_e2e, docker_runtime]',
         'assert_required_success "MVP Playwright E2E"',
         'assert_required_success "Docker runtime smoke"',
+        'python -m unittest tests.test_backend_domain_first_architecture',
         'needs: architecture',
         '${{ always() &&',
         'uses: ./.github/workflows/code-review.yml',
@@ -509,6 +633,7 @@ def main() -> int:
     check_cross_system_imports(errors)
     check_generator_package_import_masking(errors)
     check_backend_domain_dependencies(errors)
+    check_backend_domain_first_ratchet(errors)
     check_product_api_dependency(errors)
     check_artifact_injection(errors)
     check_legacy_ml_is_compatibility_only(errors)
@@ -538,6 +663,7 @@ def main() -> int:
     print("- generator/backend direct Python imports are absent")
     print("- Generator package facades do not mask required import failures")
     print("- backend domains do not import other domains' implementation modules")
+    print("- Backend Phase 1 common/infra and canonical-to-legacy import ratchets are enforced")
     print("- product API has no static generator implementation import")
     print("- legacy ML/backend modeling compatibility paths are ports, not ML owners")
     print("- Model Artifact location is injected through MODEL_ARTIFACT_URI")

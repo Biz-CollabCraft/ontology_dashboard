@@ -7,9 +7,9 @@ import argparse
 import json
 from pathlib import Path
 
+from app.infra.external.project3 import Project3Client
 from ontology_dashboard.integrations.project3 import (
     PredictiveMaintenanceProject3ProjectionHandler,
-    Project3Client,
 )
 from ontology_dashboard.outbox import OutboxMessage, OutboxRepository
 

@@ -14,7 +14,7 @@ from ..dependencies import (
     require_permission,
 )
 from ..identity import AuthError, IdentityService, Principal
-from ..integrations.project3 import (
+from app.infra.external.project3 import (
     Project3Client,
     Project3ContractError,
     Project3IntegrationSnapshot,

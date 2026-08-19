@@ -425,7 +425,7 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 | `systems/backend/app/equipment/` public port | Equipment identity와 적용된 운영 상태 연결 | 우수, 호범 |
 | `systems/backend/app/ontology/` public port | Closed-loop Object/Link/Action projection | 우수, 호범 |
 | `systems/backend/app/infra/db/` 및 Maintenance repository adapter | 운영 상태 persistence | 우수 |
-| `systems/backend/app/infra/messaging/` 및 Maintenance integration port | Outbox retry·idempotency | 우수 |
+| `systems/backend/app/infra/`의 실제 Maintenance messaging adapter 및 Maintenance integration port | Outbox retry·idempotency; 구현이 생길 때 구체 package 경로 확정 | 우수 |
 | `systems/backend/migrations/` | Closed-loop 운영 레코드 migration | 우수 |
 | `systems/backend/app/diagnosis/` public contract | Evidence 의미 변경 없이 Product Result/Evidence 식별자만 소비 | 호범 계약 확정·검토 후 |
 | `systems/backend/app/maintenance/maintenance_router.py` | 응답 계약과 HTTP 변환 | 우수 |

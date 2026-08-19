@@ -19,7 +19,7 @@ from ontology_dashboard.adapters.bundle_models import (
     PredictiveMaintenanceSourceContract,
     compute_bundle_checksum,
 )
-from ontology_dashboard.integrations.project3 import (
+from app.infra.external.project3 import (
     Project3GraphProjectionRequest,
     Project3GraphProjectionResponse,
     Project3GovernanceArtifactReference,

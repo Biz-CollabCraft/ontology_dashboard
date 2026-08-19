@@ -165,12 +165,22 @@ jobs:
         run: python systems/verify_architecture.py
 
       - name: Backend migration ratchet negative fixtures
-        run: python -m unittest tests.test_backend_migration_ratchet
+        run: |
+          python -m unittest tests.test_backend_migration_ratchet
+          python -m unittest tests.test_backend_domain_first_architecture
 
       - name: Install Python dependencies
         if: needs.changes.outputs.generator == 'true' || needs.changes.outputs.backend == 'true'
         run: |
           python -m pip install -e ./ml -e './systems/backend[dev]' -r systems/generator/requirements.txt
+
+      - name: Backend migration architecture regressions
+        if: needs.changes.outputs.backend == 'true'
+        run: |
+          python -m pytest -q \
+            tests/test_backend_migration_map.py \
+            tests/test_backend_migration_ledger.py \
+            tests/test_architecture_debt_stage44.py
 
       - name: Generator import smoke
         if: needs.changes.outputs.generator == 'true'
@@ -219,7 +229,7 @@ jobs:
           from ontology_dashboard.application import ROOT as application_root
           from ontology_dashboard.dependencies import ROOT as dependencies_root
           from ontology_dashboard.routers import platform, system
-          from ontology_dashboard.settings import project_root
+          from app.common.runtime_settings import project_root
 
           expected = Path(os.environ["ONTOLOGY_DASHBOARD_PROJECT_ROOT"]).resolve()
           installed_package = Path(ontology_dashboard.__file__).resolve()

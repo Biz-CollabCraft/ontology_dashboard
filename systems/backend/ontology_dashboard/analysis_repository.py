@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ontology_dashboard.postgresql_pool import pooled_tenant_connection
+from app.infra.db.pool import pooled_tenant_connection
 from ontology_dashboard.postgresql_repositories import is_postgresql
 
 from .analysis_models import AnalysisEdgeSnapshot, AnalysisNodeSnapshot, AnalysisSnapshot

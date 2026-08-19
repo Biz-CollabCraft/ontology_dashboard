@@ -40,7 +40,6 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     module_names = (
         "context",
         "contracts",
-        "security",
         "identity_models",
         "identity_repository",
         "identity",
@@ -51,6 +50,16 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     for name in module_names:
         module = importlib.import_module(f"ontology_dashboard.{name}")
         assert Path(module.__file__).resolve().parent == canonical_root.resolve()
+
+    common_rate_limit = importlib.import_module("app.common.rate_limit")
+    infra_rate_limit = importlib.import_module("app.infra.rate_limit")
+    assert Path(common_rate_limit.__file__).resolve().is_relative_to(
+        (ROOT / "systems" / "backend" / "app" / "common").resolve()
+    )
+    assert Path(infra_rate_limit.__file__).resolve().is_relative_to(
+        (ROOT / "systems" / "backend" / "app" / "infra").resolve()
+    )
+    assert not (canonical_root / "security.py").exists()
 
     identity = importlib.import_module("ontology_dashboard.identity")
     identity_repository = importlib.import_module("ontology_dashboard.identity_repository")

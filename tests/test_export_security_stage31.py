@@ -23,7 +23,8 @@ from ontology_dashboard.main import (
     get_rate_limiter,
     get_service,
 )
-from ontology_dashboard.security import InMemoryRateLimiter, RateLimitExceeded, RateLimitRule
+from app.common.rate_limit import RateLimitExceeded, RateLimitRule
+from app.infra.rate_limit import InMemoryRateLimiter
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 
 ROOT = Path(__file__).resolve().parents[1]

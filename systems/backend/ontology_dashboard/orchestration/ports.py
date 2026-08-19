@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Protocol
 
-from ..integrations.project3 import Project3Client
+from app.infra.external.project3 import Project3Client
 from ..ontology_service import OntologyService
 from .models import AgentState, EvidenceItem
 

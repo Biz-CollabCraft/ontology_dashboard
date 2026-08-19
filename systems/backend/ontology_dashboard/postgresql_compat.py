@@ -17,7 +17,7 @@ from datetime import date, datetime
 from typing import Any, Iterable, Sequence
 
 from .project_context import ProjectContext, ProjectContextError
-from .postgresql_pool import (
+from app.infra.db.pool import (
     pooled_identity_connection,
     pooled_system_connection,
     pooled_tenant_connection,

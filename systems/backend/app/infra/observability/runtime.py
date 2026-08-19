@@ -241,6 +241,7 @@ class MetricsRegistry:
 
 METRICS = MetricsRegistry()
 LOGGER = logging.getLogger("ontology_dashboard.runtime")
+OPEN_METRICS_ENVIRONMENTS = {"development", "test"}
 
 
 def parse_traceparent(value: str | None) -> tuple[str, str] | None:
@@ -530,7 +531,7 @@ def observability_readiness() -> ObservabilityReadiness:
 def metrics_authorized(request: Request) -> bool:
     environment = os.getenv("APP_ENV", "development").strip().lower()
     expected = os.getenv("ONTOLOGY_DASHBOARD_METRICS_TOKEN", "").strip()
-    if environment != "production" and not expected:
+    if environment in OPEN_METRICS_ENVIRONMENTS and not expected:
         return True
     provided = request.headers.get("authorization", "")
     return bool(expected) and hmac_compare(provided, f"Bearer {expected}")

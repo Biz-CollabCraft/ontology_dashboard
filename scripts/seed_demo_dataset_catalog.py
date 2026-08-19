@@ -32,7 +32,7 @@ from ontology_dashboard.identity import IdentityService
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.postgresql_repositories import PostgreSQLIdentityRepository
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
-from ontology_dashboard.settings import database_location
+from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]
 ORGANIZATION_ID = "org-ontology-demo"

@@ -15,7 +15,7 @@ from ontology_dashboard.adapters.models import DatasetManifest, PredictionResult
 from ontology_dashboard.dashboard_service import DashboardService
 from ontology_dashboard.identity import IdentityService, LoginRequest
 from ontology_dashboard.outbox import default_outbox_worker
-from ontology_dashboard.postgresql_pool import close_pools
+from app.infra.db.pool import close_pools
 from ontology_dashboard.postgresql_repositories import (
     PostgreSQLAdapterRepository,
     PostgreSQLAuditRepository,

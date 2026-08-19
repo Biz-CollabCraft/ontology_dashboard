@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from .ontology import LinkRecord, ObjectRecord
-from .postgresql import tenant_connection
+from app.infra.db.connection import tenant_connection
 
 
 class PostgreSQLOntologyInstanceRepository:

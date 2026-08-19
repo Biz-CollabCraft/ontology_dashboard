@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from ontology_dashboard.identity import DEMO_ACCOUNTS, IdentityService
-from ontology_dashboard.settings import database_location
+from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]
 

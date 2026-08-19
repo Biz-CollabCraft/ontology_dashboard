@@ -201,3 +201,25 @@ Baseline 갱신은 `python scripts/check_backend_migration_ratchet.py --write-ba
 수행한다. 이 명령으로 증가를 승인할 수는 없으며, Architecture CI가 dependency 설치 전에
 `github.event.pull_request.base.sha`의 baseline과 비교한다. baseline 자체를 바꾸는 docs-only PR도
 동일 검사를 우회하지 않는다.
+
+## 8. Physical migration progress
+
+이 표는 처분 자체를 바꾸는 두 번째 Ledger가 아니라, Section 3의 결정을 실제 물리
+이동으로 완료한 Source를 되돌리지 않기 위한 **CI ratchet**이다. `MIGRATED` Source는
+더 이상 `systems/backend/ontology_dashboard` 아래에 존재해서는 안 되며, 기록된 canonical
+target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source는 이 표에 올라온 파일 단위 책임만 완료된
+것이며, 같은 Section 3 행의 다른 Source까지 완료됐다는 의미는 아니다.
+
+| Legacy Source | Canonical target(s) | State |
+|---|---|---|
+| `settings.py` | `systems/backend/app/common/runtime_settings.py`, `systems/backend/app/infra/db/settings.py`, `systems/backend/app/infra/observability/runtime_validation.py` | `MIGRATED` |
+| `security.py` | `systems/backend/app/common/exceptions.py`, `systems/backend/app/common/rate_limit.py`, `systems/backend/app/infra/rate_limit.py` | `MIGRATED` |
+| `postgresql.py` | `systems/backend/app/infra/db/connection.py` | `MIGRATED` |
+| `postgresql_pool.py` | `systems/backend/app/infra/db/pool.py` | `MIGRATED` |
+| `observability.py` | `systems/backend/app/infra/observability/runtime.py` | `MIGRATED` |
+| `integrations/project3/client.py` | `systems/backend/app/infra/external/project3/client.py` | `MIGRATED` |
+| `integrations/project3/models.py` | `systems/backend/app/infra/external/project3/models.py` | `MIGRATED` |
+
+`artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
+각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
+Governance/Report 책임이 남아 있으므로 파일 자체를 `MIGRATED`로 표시하지 않는다.

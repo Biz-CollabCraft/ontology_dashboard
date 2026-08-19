@@ -13,7 +13,7 @@ from ontology_dashboard.deployment import (
     readiness_probe,
     verify_deployment_files,
 )
-from ontology_dashboard.settings import validate_runtime_environment
+from app.infra.observability.runtime_validation import validate_runtime_environment
 from ontology_dashboard.routers.platform import project_deployment_readiness
 
 
