@@ -135,7 +135,15 @@ class ManufacturingPredictiveMaintenanceService:
         for event_id, fixture in self.project_fixtures.items():
             if self._fixture_project_id(fixture) != project_id:
                 continue
-            evidence = build_evidence_package(fixture, context_provider=self._context_provider(fixture))
+            try:
+                evidence = build_evidence_package(fixture, context_provider=self._context_provider(fixture))
+            except RuntimeError as error:
+                # MODEL_ARTIFACT_URI is often intentionally absent in some deployment
+                # states. Keep the fleet visible by serving a safe event-level fallback
+                # instead of failing the whole dashboard bootstrap.
+                if "MODEL_ARTIFACT_URI is required" not in str(error):
+                    raise
+                evidence = self._fallback_event_summary(fixture, reason=str(error))
             rows.append(
                 {
                     "event_id": event_id,
@@ -149,6 +157,23 @@ class ManufacturingPredictiveMaintenanceService:
                 }
             )
         return sorted(rows, key=lambda row: (RISK_PRIORITY[row["status"]], -(row["failure_probability"] or 0.0)))
+
+    def _fallback_event_summary(self, fixture: dict[str, Any], reason: str) -> dict[str, Any]:
+        expected = fixture.get("expected", {})
+        return {
+            "event_id": fixture["event_id"],
+            "scenario_id": fixture["scenario_id"],
+            "equipment": fixture["equipment"],
+            "status": "data_quality_hold",
+            "failure_probability": None,
+            "confidence": "unavailable",
+            "predicted_failure_type": expected.get("predicted_failure_type", "unavailable"),
+            "recommended_decision": "hold_for_data_check",
+            "observed_at": fixture.get("observation", {}).get("timestamp"),
+            "dataset_version_id": str(fixture.get("dataset_version") or "mvp-fallback-v1"),
+            "ontology_object_id": None,
+            "notes": reason,
+        }
 
     def list_equipment(self, project_id: str = "manufacturing-demo-project") -> list[dict[str, Any]]:
         unique: dict[str, dict[str, Any]] = {}

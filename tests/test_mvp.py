@@ -59,6 +59,27 @@ def client(service: FactorySignalService, identity: IdentityService):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture()
+def service_without_model_artifact(database_path: Path, monkeypatch: pytest.MonkeyPatch) -> FactorySignalService:
+    monkeypatch.delenv("MODEL_ARTIFACT_URI", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", "0")
+    return FactorySignalService(ROOT, database_path=database_path)
+
+
+@pytest.fixture()
+def client_without_model_artifact(
+    service_without_model_artifact: FactorySignalService,
+    identity: IdentityService,
+):
+    app.dependency_overrides[get_service] = lambda: service_without_model_artifact
+    app.dependency_overrides[get_identity_service] = lambda: identity
+    with TestClient(app) as test_client:
+        login_as(test_client, "manager@ontology.local", "Manager!2026")
+        yield test_client
+    app.dependency_overrides.clear()
+
+
 def test_eight_gold_fixtures_exist_and_validate() -> None:
     assert len(FIXTURES) == 8
     for path in FIXTURES:
@@ -279,6 +300,26 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     service.reset()
     cleared = client.get("/api/events/EVT-GS-002/activity").json()
     assert cleared == {"decisions": [], "notes": [], "conversations": []}
+
+
+def test_list_events_is_usable_without_model_artifact(
+    service_without_model_artifact: FactorySignalService,
+) -> None:
+    events = service_without_model_artifact.list_events()
+    assert len(events) == 8
+    assert all(row["status"] == "data_quality_hold" for row in events)
+    assert all(row["failure_probability"] is None for row in events)
+    assert all(row["recommended_decision"] == "hold_for_data_check" for row in events)
+
+
+def test_events_endpoint_degrades_with_missing_model_artifact(
+    client_without_model_artifact: TestClient,
+) -> None:
+    response = client_without_model_artifact.get("/api/events")
+    assert response.status_code == 200
+    events = response.json()["items"]
+    assert len(events) == 8
+    assert all(item["status"] == "data_quality_hold" for item in events)
 
 
 def test_follow_up_reconfigures_layout_and_rejects_injection(client: TestClient) -> None:
