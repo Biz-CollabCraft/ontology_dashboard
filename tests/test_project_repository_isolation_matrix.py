@@ -10,7 +10,7 @@ from app.identity import IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
 from app.infra.db.ontology_action_repository import OntologyActionRepository
-from app.project import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
 
 

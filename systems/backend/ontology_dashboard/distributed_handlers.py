@@ -12,7 +12,7 @@ from app.dataset import DatasetMaterializationSource
 from app.infra.db.dataset_repository import DatasetRepository
 from .distributed_runtime import DurableJob, DurableJobRepository
 from app.identity import Principal
-from app.project import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from app.ontology.ontology_service import OntologyService

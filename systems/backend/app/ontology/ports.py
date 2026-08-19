@@ -75,6 +75,21 @@ class OntologyInstanceRepositoryPort(Protocol):
     ) -> list[LinkRecord]: ...
 
 
+class OntologyObjectQueryPort(Protocol):
+    """Public Ontology read contract consumed by Planner and other query clients."""
+
+    def query_objects(
+        self,
+        *,
+        workspace_id: str,
+        object_type: str | None = None,
+        search: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]: ...
+
+    def object_type_registry(self) -> dict[str, Any]: ...
+
+
 class OntologyAuditPort(Protocol):
     def record_audit(
         self,
@@ -118,4 +133,5 @@ __all__ = [
     "OntologyEventCommandPort",
     "OntologyFieldActionPort",
     "OntologyInstanceRepositoryPort",
+    "OntologyObjectQueryPort",
 ]

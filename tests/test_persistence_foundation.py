@@ -9,7 +9,7 @@ from ontology_dashboard.migrations import migrate
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from app.ontology.ontology_service import OntologyService
-from app.project import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 
