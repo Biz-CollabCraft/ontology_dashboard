@@ -1,4 +1,4 @@
-"""Repository for immutable versioned Feature, Label, and NPY storage with atomic publishing."""
+"""Repository for immutable versioned Feature, Label, and NPY storage with containment safety."""
 
 from __future__ import annotations
 
@@ -33,13 +33,30 @@ class FeatureRepository:
         return PATHS.models_store / "cache" / "features"
 
     def _feature_dirname(self, dataset_id: str, dataset_version: str, feature_dataset_version: str) -> str:
+        if ".." in dataset_id or "/" in dataset_id or "\\" in dataset_id:
+            raise NpyValidationError(f"잘못된 dataset_id 식별자입니다: {dataset_id!r}", code="INVALID_ARTIFACT_PATH")
+        if ".." in dataset_version or "/" in dataset_version or "\\" in dataset_version:
+            raise NpyValidationError(f"잘못된 dataset_version 식별자입니다: {dataset_version!r}", code="INVALID_ARTIFACT_PATH")
+        if ".." in feature_dataset_version or "/" in feature_dataset_version or "\\" in feature_dataset_version:
+            raise NpyValidationError(f"잘못된 feature_dataset_version 식별자입니다: {feature_dataset_version!r}", code="INVALID_ARTIFACT_PATH")
+
         safe_id = dataset_id.replace("/", "_").replace("\\", "_")
         safe_ver = dataset_version.replace("/", "_").replace("\\", "_")
         safe_fver = feature_dataset_version.replace("/", "_").replace("\\", "_")
         return f"{safe_id}-{safe_ver}-{safe_fver}"
 
     def get_feature_dir(self, dataset_id: str, dataset_version: str, feature_dataset_version: str) -> Path:
-        return self.base_dir / self._feature_dirname(dataset_id, dataset_version, feature_dataset_version)
+        base = self.base_dir.resolve()
+        dirname = self._feature_dirname(dataset_id, dataset_version, feature_dataset_version)
+        target = (self.base_dir / dirname).resolve()
+        try:
+            target.relative_to(base)
+        except ValueError as exc:
+            raise NpyValidationError(
+                f"Feature 저장 디렉터리가 루트 디렉터리를 벗어납니다: {target}",
+                code="INVALID_ARTIFACT_PATH",
+            ) from exc
+        return target
 
     def find_feature_outputs(
         self,

@@ -43,9 +43,7 @@ from systems.generator.app.feature.feature_exception import (
 )
 from systems.generator.app.feature.feature_repository import FeatureRepository
 from systems.generator.app.feature.feature_schema_provider import FeatureSchemaProvider
-from systems.generator.feature.feature_builder import build_features
 from systems.generator.feature.feature_catalog import load_catalog
-from systems.generator.feature.feature_label_service import build_labels
 from systems.generator.ontology_mapping.mapping_cache import MappingStore, MappingRecord
 from systems.generator.app.extraction.extraction_profiler import load_family_registry
 
@@ -193,6 +191,9 @@ class FeatureService:
             )
 
         # 7. Build time-series features using loaded mappings (NO map_all_sources call!)
+        from systems.generator.feature.feature_builder import build_features
+        from systems.generator.feature.feature_label_service import build_labels
+
         catalog = load_catalog()
         try:
             features_df = build_features(features_input_df, dataset_store, catalog, plan=plan)
@@ -211,6 +212,8 @@ class FeatureService:
                 prediction_horizon_hours=request.prediction_horizon_hours,
                 plan=plan,
             )
+        except (FailureDataNotReadyError, LabelContractInvalidError, LabelAnchorNotFoundError, InsufficientTrainingDataError):
+            raise
         except Exception as exc:
             logger.exception(f"[FeatureService] Label building failed: {exc}")
             raise LabelBuildError(f"라벨링 생성 중 오류가 발생했습니다: {exc}") from exc

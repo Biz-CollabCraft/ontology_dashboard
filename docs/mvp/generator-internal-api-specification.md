@@ -28,7 +28,7 @@
 - `PredictionOutput` 등 Backend runtime 응답 형식 노출
 - Frontend의 Generator 직접 호출
 
-> **참고**: Runtime inference와 Product Result Artifact/Evidence의 소유자는 `systems/backend/app/diagnosis`이다.
+---
 
 ## 3. Endpoint
 
@@ -40,6 +40,8 @@
 | POST | `/train` | 다중 ML 모델 학습 및 Model Artifact 발행 | **후속 PR 대상 (미구현)** |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | 완료 |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 완료 |
+
+---
 
 ## 4. 요청/응답 계약
 
@@ -58,12 +60,12 @@
 
 ### 4.2 `POST /extraction`
 
-> **단계 범위 및 내용 기반 버전(Content-Addressed) 정책 명시**:
-> - `/extraction`은 Extraction Plan 및 Ontology Mapping 수립·검증·영속화 전용 엔드포인트입니다.
-> - Plan과 Mapping의 canonical JSON에 대한 SHA-256 fingerprint 앞 16자리를 실제 식별 버전(`extraction-plan-<hash>`, `ontology-mapping-<hash>`)으로 사용합니다.
-> - 매핑 생성 실패 시 `/extraction` 요청은 실패 처리됩니다.
-> - Plan 및 Mapping은 불변(immutable)으로 저장되며 동일 버전을 덮어쓰지 않습니다.
-> - Feature·Label·NPY 생성(`/feature`) 및 모델 학습·Artifact 발행(`/train`)은 후속 단계이며, `/extraction`이 후속 단계를 자동 실행하지 않습니다.
+> **단계 범위, 식별자 검증 및 부분 발행 정책**:
+> - `source_uri`는 `PATHS.data_dir` 또는 `PATHS.data_preprocessed` 내부의 상대경로만 허용되며 절대경로 및 traversal(`..`)은 `DATASET_PATH_NOT_ALLOWED` (422)로 거절됩니다.
+> - `dataset_id` 및 `dataset_version`은 `^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$` 정규식으로 검증됩니다.
+> - Plan과 Mapping은 canonical JSON에 대한 SHA-256 fingerprint 앞 16자리를 실제 식별 버전(`extraction-plan-<hash>`, `ontology-mapping-<hash>`)으로 독립 저장합니다.
+> - `/extraction` 성공은 두 버전이 모두 정상 생성되어 응답에 반환된 경우를 의미합니다. Plan만 존재하면 `/feature` 단계는 거부됩니다.
+> - 매핑 생성 시 전역 `mapping_cache.json`을 수정하지 않습니다.
 
 **요청 본문:**
 
@@ -71,7 +73,7 @@
 {
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "source_uri": "data_preprocessed/ai4i/input.csv",
+  "source_uri": "ai4i/input.csv",
   "force_reanalyze": false,
   "duplicate_policy": "error",
   "aggregation": null
@@ -106,13 +108,12 @@
 
 ### 4.3 `POST /feature`
 
-> **단계 범위 및 안전 원칙 명시**:
-> - `POST /feature`는 이미 발행된 `ExtractionPlan` 및 `OntologyMapping`을 조회·무결성 검증하여 소비합니다.
-> - `feature_schema_version`으로 Feature Schema를 조회하여 선언된 `feature_names` allowlist에 따라 X 행렬을 구성합니다 (알파벳 정렬 금지, 선언 순서 유지, 선언 외 숫자 컬럼 배제).
-> - `(dataset_id, dataset_version, extraction_plan_version, mapping_version, feature_schema_version, label_schema_version, prediction_horizon_hours)` 계약에 대한 SHA-256 해시로 `feature-dataset-{fingerprint}` 버전을 결정합니다.
-> - 원본 데이터셋의 기존 label 컬럼을 신뢰하지 않고 공식 failure event 데이터셋을 기준으로 `[anchor - horizon, anchor)` 구간을 계산합니다.
-> - 고장 데이터 누락 시 `FAILURE_DATA_NOT_READY` (404), Positive 고장 샘플 0건 시 `INSUFFICIENT_POSITIVE_SAMPLES` (422)로 fail-fast합니다.
-> - 불변 디렉터리 구조로 원자적 publish를 수행하며 기존 동일 버전 디렉터리를 선삭제하거나 덮어쓰지 않습니다 (계약 불일치 시 409 `FEATURE_DATASET_CONFLICT`).
+> **안전 원칙 및 Label Fail-Fast 정책**:
+> - `extraction_plan_version`(`^extraction-plan-[0-9a-f]{16}$`) 및 `mapping_version`(`^ontology-mapping-[0-9a-f]{16}$`)을 검증하고 파일 내용 해시 무결성을 교차 확인합니다.
+> - `feature_schema_version`으로 allowlist를 로드하고 Schema 선언 순서를 엄격히 유지합니다.
+> - 원본 데이터셋의 기존 `label` 컬럼을 신뢰하지 않고 공식 failure event 데이터셋을 기준으로 `[anchor - horizon, anchor)` 구간을 계산합니다.
+> - 필수 고장 데이터/컬럼 결측 시 조용한 0 채움 fallback 없이 즉시 실패(`FAILURE_DATA_NOT_READY`, `LABEL_CONTRACT_INVALID`, `LABEL_ANCHOR_NOT_FOUND`, `INSUFFICIENT_POSITIVE_SAMPLES`)합니다.
+> - 7대 계약 SHA-256 지문(`feature-dataset-{fingerprint}`) 디렉터리로 불변 발행하며 동일 버전 계약 불일치 시 409 `FEATURE_DATASET_CONFLICT`를 반환합니다 (`force` 덮어쓰기 파라미터 제거).
 
 **요청 본문:**
 
@@ -177,14 +178,14 @@
 
 ### 4.5 공통 표준 오류 응답 (`ErrorEnvelope`)
 
-모든 에러 응답(4xx, 5xx)은 FastAPI 기본 `{"detail": ...}` 구조 대신 일관된 `ErrorEnvelope` 포맷을 반환합니다:
+모든 에러 응답(4xx, 5xx)은 일관된 `ErrorEnvelope` 포맷을 반환합니다:
 
 ```json
 {
   "error": {
-    "code": "ONTOLOGY_MAPPING_NOT_READY",
-    "message": "요청한 Ontology Mapping이 없습니다 (dataset_id='ai4i', version='canonical-ai4i-physics-v3.1'). 먼저 POST /extraction을 실행해 주세요.",
-    "path": "/feature",
+    "code": "DATASET_PATH_NOT_ALLOWED",
+    "message": "source_uri는 허용된 데이터 루트 내 상대경로 파일이어야 하며 절대경로/상위경로(..)는 허용되지 않습니다.",
+    "path": "/extraction",
     "request_id": "req-9c8f2a1b",
     "error_id": "err-7a8b9c0d",
     "details": []
@@ -196,20 +197,22 @@
 
 | HTTP 상태 코드 | 도메인 오류 코드 (`code`) | 원인 및 설명 |
 |---|---|---|
-| 400 / 422 | `REQUEST_VALIDATION_ERROR` | 요청 JSON 스키마 필드 누락 또는 형식 불일치 |
+| 400 / 422 | `REQUEST_VALIDATION_ERROR` | 식별자 형식 위반, 필드 누락 또는 형식 불일치 |
 | 404 | `DATASET_NOT_FOUND` | 요청한 dataset_id 또는 source_uri 파일 부재 |
-| 404 | `EXTRACTION_PLAN_NOT_READY` | `/feature` 실행 전 필수 `/extraction` 산출물 부재 |
-| 404 | `ONTOLOGY_MAPPING_NOT_READY` | `/feature` 실행 전 필수 Ontology Mapping 산출물 부재 |
-| 404 | `FAILURE_DATA_NOT_READY` | 학습 라벨링에 필요한 고장 이력 데이터 부재 |
+| 404 | `EXTRACTION_PLAN_NOT_READY` | `/feature` 실행 전 필수 Extraction Plan 파일 부재 |
+| 404 | `ONTOLOGY_MAPPING_NOT_READY` | `/feature` 실행 전 필수 Ontology Mapping 파일 부재 |
+| 404 | `FAILURE_DATA_NOT_READY` | 학습 라벨링에 필요한 고장 이력 데이터 부재 또는 비어 있음 |
 | 405 | `METHOD_NOT_ALLOWED` | 허용되지 않은 HTTP 메서드 호출 |
 | 409 | `FEATURE_DATASET_CONFLICT` | 동일 Feature Dataset 버전 디렉터리가 이미 존재하나 계약 내용이 불일치함 |
+| 422 | `DATASET_PATH_NOT_ALLOWED` | source_uri가 절대경로, 상위경로 탐색(..) 또는 허용 루트 밖 경로임 |
+| 422 | `INVALID_ARTIFACT_PATH` | Plan/Mapping/Feature 저장 디렉터리가 루트 디렉터리를 벗어남 |
 | 422 | `EXTRACTION_PLAN_INTEGRITY_ERROR` | Extraction Plan의 내용 해시와 요청된 버전 불일치 |
 | 422 | `ONTOLOGY_MAPPING_INTEGRITY_ERROR` | Ontology Mapping의 내용 해시와 요청된 버전 불일치 |
 | 422 | `EXTRACTION_PLAN_CONTRACT_INVALID` | Extraction Plan 파일 손상 또는 스키마 위반 |
 | 422 | `ONTOLOGY_MAPPING_CONTRACT_INVALID` | Ontology Mapping 파일 손상 또는 스키마 위반 |
 | 422 | `FEATURE_SCHEMA_MISMATCH` | Feature Schema 미존재, allowlist 컬럼 부재, 누수 컬럼 포함 등 |
-| 422 | `LABEL_CONTRACT_INVALID` | 라벨 컬럼 부재 또는 값이 `{0, 1}` 범위를 벗어남 |
-| 422 | `LABEL_ANCHOR_NOT_FOUND` | id, time 또는 failure anchor 결정을 할 수 없음 |
+| 422 | `LABEL_CONTRACT_INVALID` | 라벨 컬럼/ID/timestamp 부재 또는 라벨 값이 `{0, 1}` 범위를 벗어남 |
+| 422 | `LABEL_ANCHOR_NOT_FOUND` | 고장 데이터에서 anchor(failure_point)를 찾을 수 없거나 전체 결측치(NaT)임 |
 | 422 | `INSUFFICIENT_POSITIVE_SAMPLES` | 고장 예측 구간 내 Positive 고장 샘플 0건 |
 | 422 | `INSUFFICIENT_TRAINING_DATA` | 유효 데이터 행 수 0건 등 학습 데이터 부족 |
 | 422 | `NPY_VALIDATION_ERROR` | NPY 행렬 shape, dtype, NaN/Inf 불일치 |

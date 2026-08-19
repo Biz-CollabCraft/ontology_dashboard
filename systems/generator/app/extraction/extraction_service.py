@@ -237,18 +237,45 @@ class ExtractionService:
         self.repository = repository or ExtractionRepository()
 
     def _resolve_dataset_path(self, request: ExtractionRequest) -> Path:
-        """Resolve dataset_id / dataset_version / source_uri to a concrete readable file path."""
+        """Resolve dataset_id / dataset_version / source_uri to a concrete readable file path with containment security."""
+        allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
+
         if request.source_uri:
-            p = Path(request.source_uri)
-            if p.is_file():
-                return p
-            root_p = PATHS.models_store.parent / request.source_uri
-            if root_p.is_file():
-                return root_p
-            for base in (PATHS.data_dir, PATHS.data_preprocessed):
-                candidate = base / request.source_uri
+            source_str = str(request.source_uri).strip()
+            # 1. Reject absolute paths or path traversal sequences
+            if Path(source_str).is_absolute() or source_str.startswith("/") or source_str.startswith("\\") or ":" in source_str or ".." in source_str:
+                raise DatasetContractError(
+                    f"source_uri는 허용된 데이터 루트 내 상대경로 파일이어야 하며 절대경로/상위경로(..)는 허용되지 않습니다: {request.source_uri!r}",
+                    code="DATASET_PATH_NOT_ALLOWED",
+                )
+
+            found = False
+            for root in allowed_roots:
+                candidate = (root / source_str).resolve()
+                try:
+                    candidate.relative_to(root)
+                except ValueError:
+                    raise DatasetContractError(
+                        f"source_uri가 허용된 데이터 디렉터리 범위를 벗어납니다: {request.source_uri}",
+                        code="DATASET_PATH_NOT_ALLOWED",
+                    )
+
                 if candidate.is_file():
+                    if candidate.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                        raise DatasetContractError(
+                            f"지원하지 않는 파일 형식입니다: {candidate.suffix}",
+                            code="DATASET_PATH_NOT_ALLOWED",
+                        )
                     return candidate
+                elif candidate.is_dir():
+                    raise DatasetContractError(
+                        f"source_uri는 디렉터리가 아닌 단일 파일이어야 합니다: {request.source_uri}",
+                        code="DATASET_PATH_NOT_ALLOWED",
+                    )
+
+            raise DatasetNotFoundError(
+                f"지정한 source_uri 파일을 찾을 수 없습니다: {request.source_uri}"
+            )
 
         candidates = [
             PATHS.data_dir / request.dataset_id / f"{request.dataset_version}.csv",
@@ -262,12 +289,18 @@ class ExtractionService:
         ]
 
         for cand in candidates:
-            if cand.is_file():
-                return cand
-            if cand.is_dir():
-                for child in sorted(cand.iterdir()):
+            resolved_cand = cand.resolve()
+            # Verify containment in allowed roots
+            in_allowed = any(resolved_cand.is_relative_to(root) for root in allowed_roots)
+            if not in_allowed:
+                continue
+
+            if resolved_cand.is_file() and resolved_cand.suffix.lower() in SUPPORTED_EXTENSIONS:
+                return resolved_cand
+            if resolved_cand.is_dir():
+                for child in sorted(resolved_cand.iterdir()):
                     if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
-                        return child
+                        return child.resolve()
 
         raise DatasetNotFoundError(
             f"데이터셋을 찾을 수 없습니다: dataset_id='{request.dataset_id}', "
@@ -341,7 +374,7 @@ class ExtractionService:
         except Exception as exc:
             raise ExtractionPlanValidationError(f"추출 계획 실행 검증 실패: {exc}") from exc
 
-        # Perform & Persist Ontology Mapping (Mandatory for /extraction)
+        # Perform & Persist Ontology Mapping (persist=False to avoid global cache mutation)
         from systems.generator.ontology_mapping.mapping_cache import MappingStore
         from systems.generator.ontology_mapping.mapping_agent import map_all_sources
 
@@ -349,7 +382,7 @@ class ExtractionService:
         source_key = os.path.splitext(dataset_path.name)[0]
         sources_dict = {source_key: extracted_df}
         try:
-            map_all_sources(sources_dict, store=dataset_store)
+            map_all_sources(sources_dict, store=dataset_store, persist=False)
         except Exception as exc:
             logger.exception(f"[ExtractionService] Ontology mapping generation failed: {exc}")
             raise ExtractionPlanPublishError(f"온톨로지 매핑 생성에 실패했습니다: {exc}") from exc

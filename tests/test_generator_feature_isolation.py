@@ -188,7 +188,8 @@ def test_anchor_missing_and_exclusion_drop():
     for t in excluded_times:
         assert t not in labeled_df["observed_at"].values, f"Expected {t} to be dropped from labeled_df"
 
-    # anchor 부재 케이스 (maintenance_end만 존재)
+    # anchor 부재 케이스 (maintenance_end만 존재) -> fail-fast LabelAnchorNotFoundError
+    from systems.generator.app.feature.feature_exception import LabelAnchorNotFoundError
     bad_failures_df = pd.DataFrame({
         "asset_id": ["ASSET_A"],
         "maint_end": [pd.Timestamp("2026-01-02 18:00:00")]
@@ -198,9 +199,8 @@ def test_anchor_missing_and_exclusion_drop():
             {"name": "maint_end", "semantic": "maintenance_end"}
         ]
     }
-    bad_labeled_df = build_labels(features_df, bad_failures_df, failure_meta=bad_meta, prediction_horizon_hours=24)
-    # anchor 부재 시 maintenance_end를 anchor로 쓰지 않으므로 positive가 발생하지 않음
-    assert (bad_labeled_df["label"] == 0).all()
+    with pytest.raises(LabelAnchorNotFoundError):
+        build_labels(features_df, bad_failures_df, failure_meta=bad_meta, prediction_horizon_hours=24)
 
 
 def test_degradation_start_target_leakage_protection():

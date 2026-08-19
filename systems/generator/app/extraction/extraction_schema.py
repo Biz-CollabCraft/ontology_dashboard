@@ -1,24 +1,70 @@
-"""Pydantic schemas and contract definitions for extraction domain."""
+"""Pydantic schemas and contract models for Extraction domain."""
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-# --- Extraction Plan LLM Schemas ---
+IDENTIFIER_PATTERN = r"^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$"
+
+
+def _validate_safe_identifier(val: str, field_name: str) -> str:
+    if not re.match(IDENTIFIER_PATTERN, val) or ".." in val or "/" in val or "\\" in val:
+        raise ValueError(f"{field_name} contains invalid characters or path traversal sequences: {val!r}")
+    return val
+
+
+class ExtractionRequest(BaseModel):
+    dataset_id: str = Field(..., min_length=1, max_length=128, description="Dataset identifier")
+    dataset_version: str = Field(..., min_length=1, max_length=64, description="Dataset version string")
+    source_uri: Optional[str] = Field(None, description="Relative path under allowed data roots")
+    force_reanalyze: bool = Field(False, description="Whether to bypass cache and force re-analysis")
+    duplicate_policy: Literal["error", "aggregate"] = Field(
+        "error",
+        description="Policy when duplicate time index entries occur",
+    )
+    aggregation: Optional[Literal["mean", "first", "sum"]] = Field(
+        None,
+        description="Aggregation function when duplicate_policy is aggregate",
+    )
+
+    @field_validator("dataset_id")
+    @classmethod
+    def validate_dataset_id(cls, v: str) -> str:
+        return _validate_safe_identifier(v, "dataset_id")
+
+    @field_validator("dataset_version")
+    @classmethod
+    def validate_dataset_version(cls, v: str) -> str:
+        return _validate_safe_identifier(v, "dataset_version")
+
+    @model_validator(mode="after")
+    def _validate_duplicate_policy_and_aggregation(self) -> "ExtractionRequest":
+        if self.duplicate_policy == "aggregate" and not self.aggregation:
+            raise ValueError("aggregation must be specified when duplicate_policy is 'aggregate'")
+        if self.duplicate_policy == "error" and self.aggregation:
+            raise ValueError("aggregation cannot be specified when duplicate_policy is 'error'")
+        return self
+
 
 class ExtractionStructureResponse(BaseModel):
-    structure_type: str = "tabular_column_as_attribute"
-    reason: Optional[str] = None
+    structure_type: Literal["tabular_column_as_attribute", "tabular_row_as_attribute", "wide_pivot"]
+    confidence: float = 1.0
+    reason: str = ""
 
 
 class ExtractionColumnsResponse(BaseModel):
     selected_columns: list[str] = Field(default_factory=list)
+    id_column: Optional[str] = None
+    time_column: Optional[str] = None
+    attribute_column: Optional[str] = None
+    value_column: Optional[str] = None
 
 
 class ExtractionPlanResponse(BaseModel):
-    structure_type: str = "tabular_column_as_attribute"
+    structure_type: Literal["tabular_column_as_attribute", "tabular_row_as_attribute", "wide_pivot"] = "tabular_column_as_attribute"
     selected_columns: list[str] = Field(default_factory=list)
     id_column: Optional[str] = None
     time_column: Optional[str] = None
@@ -26,54 +72,13 @@ class ExtractionPlanResponse(BaseModel):
     value_column: Optional[str] = None
     duplicate_policy: Literal["error", "aggregate"] = "error"
     aggregation: Optional[Literal["mean", "first", "sum"]] = None
-    reason: Optional[str] = None
 
     @model_validator(mode="after")
-    def _validate_contract_rules(self) -> "ExtractionPlanResponse":
-        if self.duplicate_policy == "aggregate" and self.aggregation is None:
-            raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation")
-        if self.duplicate_policy == "error" and self.aggregation is not None:
-            raise ValueError("duplicate_policy='error' must not specify an aggregation")
-
-        if self.structure_type == "tabular_row_as_attribute":
-            if not self.id_column or not str(self.id_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'id_column'")
-            if not self.attribute_column or not str(self.attribute_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'attribute_column'")
-            if not self.value_column or not str(self.value_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'value_column'")
-
-            roles = [self.id_column, self.attribute_column, self.value_column]
-            if self.time_column and str(self.time_column).strip():
-                roles.append(self.time_column)
-
-            if len(roles) != len(set(roles)):
-                raise ValueError(f"Long-format role columns must be unique and cannot overlap: {roles}")
-
-            if self.selected_columns:
-                missing_in_selected = [r for r in roles if r not in self.selected_columns]
-                if missing_in_selected:
-                    raise ValueError(f"Long-format role columns {missing_in_selected} must be present in selected_columns")
-
-        return self
-
-
-# --- API Request & Response Schemas ---
-
-class ExtractionRequest(BaseModel):
-    dataset_id: str = Field(..., min_length=1, description="Dataset identifier")
-    dataset_version: str = Field(..., min_length=1, description="Dataset version string")
-    source_uri: Optional[str] = Field(None, description="Optional relative source URI or dataset path")
-    force_reanalyze: bool = Field(False, description="Force re-analyzing plan even if cached")
-    duplicate_policy: Literal["error", "aggregate"] = Field("error", description="Duplicate handling policy")
-    aggregation: Optional[Literal["mean", "first", "sum"]] = Field(None, description="Aggregation function if duplicate_policy='aggregate'")
-
-    @model_validator(mode="after")
-    def _validate_duplicate_aggregation(self) -> "ExtractionRequest":
-        if self.duplicate_policy == "aggregate" and self.aggregation is None:
-            raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation ('mean', 'first', or 'sum')")
-        if self.duplicate_policy == "error" and self.aggregation is not None:
-            raise ValueError("duplicate_policy='error' must not specify an aggregation")
+    def _validate_duplicate_policy(self) -> "ExtractionPlanResponse":
+        if self.duplicate_policy == "aggregate" and not self.aggregation:
+            raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation function")
+        if self.duplicate_policy == "error" and self.aggregation:
+            raise ValueError("duplicate_policy='error' must not specify an aggregation function")
         return self
 
 
@@ -83,7 +88,7 @@ class ExtractionResultPayload(BaseModel):
     time_column: Optional[str] = None
     attribute_column: Optional[str] = None
     value_column: Optional[str] = None
-    duplicate_policy: str = "error"
+    duplicate_policy: str
     aggregation: Optional[str] = None
     mapping_version: str
     mapping_uri: str
@@ -98,8 +103,6 @@ class ExtractionResponse(BaseModel):
     extraction_plan_version: str
     result: ExtractionResultPayload
 
-
-# --- Standard Error Envelope ---
 
 class ErrorEnvelopeBody(BaseModel):
     code: str

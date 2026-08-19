@@ -1,4 +1,4 @@
-"""Repository for immutable content-addressed Extraction Plan and Ontology Mapping storage."""
+"""Repository for immutable content-addressed Extraction Plan and Ontology Mapping storage with containment safety."""
 
 from __future__ import annotations
 
@@ -104,13 +104,23 @@ class ExtractionRepository:
             return self._custom_mappings_dir
         return PATHS.models_store / "cache" / "mappings"
 
-    def _safe_name(self, s: str) -> str:
-        return s.replace("/", "_").replace("\\", "_")
-
     # --- Extraction Plan Management ---
 
     def get_plan_path(self, dataset_id: str, dataset_version: str, extraction_plan_version: str) -> Path:
-        return self.base_dir / self._safe_name(dataset_id) / self._safe_name(dataset_version) / f"{extraction_plan_version}.json"
+        if ".." in dataset_id or "/" in dataset_id or "\\" in dataset_id or ".." in dataset_version or "/" in dataset_version or "\\" in dataset_version or ".." in extraction_plan_version or "/" in extraction_plan_version or "\\" in extraction_plan_version:
+            raise ExtractionPlanContractInvalidError("식별자에 부적절한 경로 탈출 시퀀스가 포함되어 있습니다.", code="INVALID_ARTIFACT_PATH")
+
+        base = self.base_dir.resolve()
+        target = (self.base_dir / dataset_id / dataset_version / f"{extraction_plan_version}.json").resolve()
+
+        try:
+            target.relative_to(base)
+        except ValueError as exc:
+            raise ExtractionPlanContractInvalidError(
+                f"Extraction Plan 저장 경로가 루트 디렉터리를 벗어납니다: {target}",
+                code="INVALID_ARTIFACT_PATH",
+            ) from exc
+        return target
 
     def get_plan_uri(self, dataset_id: str, dataset_version: str, extraction_plan_version: str) -> str:
         plan_path = self.get_plan_path(dataset_id, dataset_version, extraction_plan_version)
@@ -118,7 +128,7 @@ class ExtractionRepository:
             repo_root = PATHS.models_store.parent
             return str(plan_path.relative_to(repo_root).as_posix())
         except Exception:
-            return f"models_store/cache/extraction_plans/{self._safe_name(dataset_id)}/{self._safe_name(dataset_version)}/{extraction_plan_version}.json"
+            return f"models_store/cache/extraction_plans/{dataset_id}/{dataset_version}/{extraction_plan_version}.json"
 
     def find_plan(self, dataset_id: str, dataset_version: str, extraction_plan_version: str) -> dict[str, Any]:
         """Find and strictly verify content hash integrity of Extraction Plan."""
@@ -169,13 +179,28 @@ class ExtractionRepository:
                     temp_path.unlink()
                 except Exception:
                     pass
+            if isinstance(exc, ExtractionPlanContractInvalidError):
+                raise
             logger.exception(f"[ExtractionRepository] Failed to publish plan: {exc}")
             raise ExtractionPlanPublishError(f"추출 계획 저장에 실패했습니다: {exc}") from exc
 
     # --- Ontology Mapping Management ---
 
     def get_mapping_path(self, dataset_id: str, dataset_version: str, mapping_version: str) -> Path:
-        return self.mappings_dir / self._safe_name(dataset_id) / self._safe_name(dataset_version) / f"{mapping_version}.json"
+        if ".." in dataset_id or "/" in dataset_id or "\\" in dataset_id or ".." in dataset_version or "/" in dataset_version or "\\" in dataset_version or ".." in mapping_version or "/" in mapping_version or "\\" in mapping_version:
+            raise OntologyMappingContractInvalidError("식별자에 부적절한 경로 탈출 시퀀스가 포함되어 있습니다.", code="INVALID_ARTIFACT_PATH")
+
+        base = self.mappings_dir.resolve()
+        target = (self.mappings_dir / dataset_id / dataset_version / f"{mapping_version}.json").resolve()
+
+        try:
+            target.relative_to(base)
+        except ValueError as exc:
+            raise OntologyMappingContractInvalidError(
+                f"Ontology Mapping 저장 경로가 루트 디렉터리를 벗어납니다: {target}",
+                code="INVALID_ARTIFACT_PATH",
+            ) from exc
+        return target
 
     def get_mapping_uri(self, dataset_id: str, dataset_version: str, mapping_version: str) -> str:
         mapping_path = self.get_mapping_path(dataset_id, dataset_version, mapping_version)
@@ -183,7 +208,7 @@ class ExtractionRepository:
             repo_root = PATHS.models_store.parent
             return str(mapping_path.relative_to(repo_root).as_posix())
         except Exception:
-            return f"models_store/cache/mappings/{self._safe_name(dataset_id)}/{self._safe_name(dataset_version)}/{mapping_version}.json"
+            return f"models_store/cache/mappings/{dataset_id}/{dataset_version}/{mapping_version}.json"
 
     def find_mapping(self, dataset_id: str, dataset_version: str, mapping_version: str) -> dict[str, Any]:
         """Find and strictly verify content hash integrity and schema of Ontology Mapping."""
@@ -243,5 +268,7 @@ class ExtractionRepository:
                     temp_path.unlink()
                 except Exception:
                     pass
+            if isinstance(exc, OntologyMappingContractInvalidError):
+                raise
             logger.exception(f"[ExtractionRepository] Failed to publish mapping: {exc}")
             raise ExtractionPlanPublishError(f"온톨로지 매핑 저장에 실패했습니다: {exc}") from exc

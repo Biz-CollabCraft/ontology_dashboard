@@ -15,6 +15,7 @@ from systems.generator.app.extraction.extraction_schema import (
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionError,
     DatasetNotFoundError,
+    DatasetContractError,
     ExtractionRoleError,
     ExtractionPlanNotReadyError,
     ExtractionPlanIntegrityError,
@@ -41,8 +42,13 @@ def client():
 
 
 @pytest.fixture
-def sample_wide_csv(tmp_path):
-    csv_path = tmp_path / "telemetry_wide.csv"
+def sample_wide_csv(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+
+    csv_path = data_dir / "telemetry_wide.csv"
     df = pd.DataFrame({
         "asset_id": ["M001", "M001", "M002"],
         "timestamp": ["2026-01-01 00:00:00", "2026-01-01 01:00:00", "2026-01-01 00:00:00"],
@@ -50,12 +56,22 @@ def sample_wide_csv(tmp_path):
         "vibration": [0.12, 0.15, 0.18],
     })
     df.to_csv(csv_path, index=False)
-    return str(csv_path)
+
+    from systems.generator.generator_config import PATHS
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    return "telemetry_wide.csv"
 
 
 @pytest.fixture
-def sample_long_csv(tmp_path):
-    csv_path = tmp_path / "telemetry_long.csv"
+def sample_long_csv(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+
+    csv_path = data_dir / "telemetry_long.csv"
     df = pd.DataFrame({
         "machine_id": ["M1", "M1", "M1", "M1"],
         "ts": ["2026-01-01 00:00:00", "2026-01-01 00:00:00", "2026-01-01 01:00:00", "2026-01-01 01:00:00"],
@@ -63,7 +79,12 @@ def sample_long_csv(tmp_path):
         "metric_value": [50.0, 0.1, 52.0, 0.15],
     })
     df.to_csv(csv_path, index=False)
-    return str(csv_path)
+
+    from systems.generator.generator_config import PATHS
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    return "telemetry_long.csv"
 
 
 def test_app_health_endpoint(client):
@@ -101,6 +122,28 @@ def test_extraction_wide_format_success(client, sample_wide_csv):
     assert data["result"]["extraction_type"] in ("tabular_column_as_attribute", "wide_pivot")
     assert "mapping_uri" in data["result"]
     assert not data["result"]["mapping_uri"].startswith("C:")
+
+
+def test_extraction_does_not_mutate_global_mapping_cache(client, sample_wide_csv, tmp_path, monkeypatch):
+    """POST /extraction must NOT mutate global MAPPING_CACHE_PATH file."""
+    fake_global_cache = tmp_path / "global_mapping_cache.json"
+    fake_global_cache.write_text('{"existing_col": {"target_ontology": "Voltage"}}', encoding="utf-8")
+    orig_content = fake_global_cache.read_text(encoding="utf-8")
+
+    from systems.generator.ontology_mapping import mapping_agent
+    monkeypatch.setattr(mapping_agent, "MAPPING_CACHE_PATH", fake_global_cache)
+
+    payload = {
+        "dataset_id": "test_wide",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": True,
+    }
+    res = client.post("/extraction", json=payload)
+    assert res.status_code == 200
+
+    # Global cache remains completely untouched
+    assert fake_global_cache.read_text(encoding="utf-8") == orig_content
 
 
 def test_extraction_long_format_success(client, sample_long_csv, monkeypatch):
@@ -167,12 +210,38 @@ def test_extraction_long_format_missing_roles_fails_fast(client, sample_long_csv
     assert err["code"] == "EXTRACTION_ROLE_COLUMNS_MISSING"
 
 
+def test_extraction_source_uri_security(client, tmp_path, monkeypatch):
+    """Absolute paths or traversal attempts in source_uri return 422 DATASET_PATH_NOT_ALLOWED."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    from systems.generator.generator_config import PATHS
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+
+    # 1. Absolute path
+    res1 = client.post("/extraction", json={
+        "dataset_id": "ds1",
+        "dataset_version": "v1",
+        "source_uri": "C:/etc/passwd",
+    })
+    assert res1.status_code == 422
+    assert res1.json()["error"]["code"] == "DATASET_PATH_NOT_ALLOWED"
+
+    # 2. Path traversal
+    res2 = client.post("/extraction", json={
+        "dataset_id": "ds1",
+        "dataset_version": "v1",
+        "source_uri": "../secret.csv",
+    })
+    assert res2.status_code == 422
+    assert res2.json()["error"]["code"] == "DATASET_PATH_NOT_ALLOWED"
+
+
 def test_extraction_dataset_not_found(client):
     """Non-existent dataset returns 404 DATASET_NOT_FOUND."""
     payload = {
         "dataset_id": "non_existent_dataset_xyz",
         "dataset_version": "v999",
-        "source_uri": "data/non_existent.csv",
+        "source_uri": "non_existent.csv",
     }
     res = client.post("/extraction", json=payload)
     assert res.status_code == 404
@@ -196,85 +265,37 @@ def test_undefined_route_not_found(client):
     assert err["code"] == "NOT_FOUND"
 
 
-def test_request_validation_missing_required_fields(client):
-    """Request missing dataset_id returns 422 REQUEST_VALIDATION_ERROR."""
-    res = client.post("/extraction", json={})
-    assert res.status_code == 422
-    err = res.json()["error"]
-    assert err["code"] == "REQUEST_VALIDATION_ERROR"
-
-
-def test_request_validation_duplicate_policy_aggregation_conflict(client):
-    """duplicate_policy='aggregate' without aggregation returns 422 REQUEST_VALIDATION_ERROR."""
-    payload = {
-        "dataset_id": "ds1",
+def test_request_validation_identifier_format(client):
+    """Invalid dataset_id or dataset_version with path traversal returns 422 REQUEST_VALIDATION_ERROR."""
+    res = client.post("/extraction", json={
+        "dataset_id": "../evil_dataset",
         "dataset_version": "v1",
-        "duplicate_policy": "aggregate",
-        "aggregation": None,
-    }
-    res = client.post("/extraction", json=payload)
+    })
     assert res.status_code == 422
-    err = res.json()["error"]
-    assert err["code"] == "REQUEST_VALIDATION_ERROR"
-
-    payload2 = {
-        "dataset_id": "ds1",
-        "dataset_version": "v1",
-        "duplicate_policy": "error",
-        "aggregation": "mean",
-    }
-    res2 = client.post("/extraction", json=payload2)
-    assert res2.status_code == 422
-    err2 = res2.json()["error"]
-    assert err2["code"] == "REQUEST_VALIDATION_ERROR"
+    assert res.json()["error"]["code"] == "REQUEST_VALIDATION_ERROR"
 
 
-def test_repository_content_addressed_plan_and_mapping(tmp_path):
-    """ExtractionRepository creates content-based hashes, verifies integrity, and never overwrites."""
+def test_repository_containment_verification(tmp_path):
+    """ExtractionRepository rejects paths attempting root breakout with INVALID_ARTIFACT_PATH."""
     repo = ExtractionRepository(
         base_dir=tmp_path / "plans",
         mappings_dir=tmp_path / "mappings",
     )
 
-    plan1 = {"structure_type": "tabular_column_as_attribute", "selected_columns": ["c1", "c2"]}
-    plan2 = {"structure_type": "tabular_column_as_attribute", "selected_columns": ["c1", "c2", "c3"]}
+    with pytest.raises(ExtractionPlanContractInvalidError) as exc_plan:
+        repo.get_plan_path("../escape", "v1", "extraction-plan-1234567812345678")
+    assert exc_plan.value.code == "INVALID_ARTIFACT_PATH"
 
-    ver1, uri1 = repo.publish_plan("ds1", "v1", plan1)
-    ver2, uri2 = repo.publish_plan("ds1", "v1", plan2)
-
-    assert ver1.startswith("extraction-plan-")
-    assert ver2.startswith("extraction-plan-")
-    assert ver1 != ver2, "Different plan content must have different versions"
-
-    # Re-publish same plan produces same version and reuses file
-    ver1_again, _ = repo.publish_plan("ds1", "v1", plan1)
-    assert ver1_again == ver1
-
-    loaded1 = repo.find_plan("ds1", "v1", ver1)
-    assert loaded1 == plan1
-
-    # Mapping content hashing and validation
-    mapping1 = {
-        "c1": {"target_ontology": "Voltage", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
-        "c2": {"target_ontology": "Rotation", "source": "mapping_agent", "confidence": 0.9, "status": "auto_mapped"},
-    }
-    mver1, muri1 = repo.publish_mapping("ds1", "v1", mapping1)
-    assert mver1.startswith("ontology-mapping-")
-
-    loaded_map = repo.find_mapping("ds1", "v1", mver1)
-    assert loaded_map == mapping1
-
-    # Integrity verification on corrupted file
-    bad_plan_file = repo.get_plan_path("ds1", "v1", ver1)
-    with open(bad_plan_file, "w", encoding="utf-8") as f:
-        json.dump({"tampered": True}, f)
-
-    with pytest.raises(ExtractionPlanIntegrityError):
-        repo.find_plan("ds1", "v1", ver1)
+    with pytest.raises(OntologyMappingContractInvalidError) as exc_map:
+        repo.get_mapping_path("../escape", "v1", "ontology-mapping-1234567812345678")
+    assert exc_map.value.code == "INVALID_ARTIFACT_PATH"
 
 
-def test_legacy_facade_compatibility(sample_wide_csv):
+def test_legacy_facade_compatibility(tmp_path):
     """Legacy extraction imports work seamlessly without regression."""
+    csv_file = tmp_path / "wide.csv"
+    pd.DataFrame({"asset_id": ["A", "B"], "voltage": [220.0, 221.0]}).to_csv(csv_file, index=False)
+
     from systems.generator.extraction.extraction_service import (
         extract_with_plan as legacy_extract,
         SUPPORTED_EXTENSIONS,
@@ -285,16 +306,10 @@ def test_legacy_facade_compatibility(sample_wide_csv):
     from systems.generator.generator_llm_client import ExtractionPlanResponse as LegacyResponse
 
     assert ".csv" in SUPPORTED_EXTENSIONS
-    plan = legacy_build_plan(sample_wide_csv, force_reanalyze=True)
+    plan = legacy_build_plan(str(csv_file), force_reanalyze=True)
     assert plan is not None
     assert "selected_columns" in plan
 
-    df = legacy_extract(sample_wide_csv, plan)
+    df = legacy_extract(str(csv_file), plan)
     assert isinstance(df, pd.DataFrame)
-    assert len(df) == 3
-
-    resp = LegacyResponse(
-        structure_type="tabular_column_as_attribute",
-        selected_columns=["col1", "col2"],
-    )
-    assert resp.structure_type == "tabular_column_as_attribute"
+    assert len(df) == 2

@@ -3,27 +3,16 @@ feature_label_service.py
 
 담당 기능:
 - 추출된 피처 데이터프레임과 고장 이력 데이터프레임을 조인하여 머신러닝 지도학습 라벨(label 0/1)을 생성하는 모듈.
-- canonicalize_timestamp_series를 통해 시간 컬럼을 표준형(datetime64[ns])으로 정규화한 후, failure metadata에서 anchor(failure_point)와 exclusion_end(period_end/maintenance_end)를 분리해 단일 공식 positive = [anchor-horizon, anchor)으로 라벨링한다. anchor~exclusion_end 구간(active failure)은 label=0이 아니라 행 자체를 제거한다.
-- degradation_start(period_start)는 failure metadata에서 라벨 계산에 사용하지 않으며 결과 DataFrame에 새로 추가하지 않는다. 다만 features_df에 이미 degradation_start 계열 컬럼이 존재하는 경우 이 함수는 그 컬럼을 1차로 제거(drop)한다 — 최종 target leakage 방어는 이 함수 및 PR #22의 Feature Schema allowlist 양쪽에서 이루어진다.
+- canonicalize_timestamp_series를 통해 시간 컬럼을 표준형(datetime64[ns])으로 정규화한 후, failure metadata에서 anchor(failure_point)와 exclusion_end(period_end/maintenance_end)를 분리해 단일 공식 positive = [anchor-horizon, anchor)으로 라벨링한다.
+- anchor~exclusion_end 구간(active failure)은 label=0이 아니라 행 자체를 제거(drop)한다.
+- degradation_start(period_start)는 failure metadata에서 라벨 계산에 사용하지 않으며 결과 DataFrame에 새로 추가하지 않는다. features_df에 존재하는 경우 1차로 제거(drop)한다.
 
-입력:
-- features_df(pd.DataFrame): 피처 데이터프레임
-- failures_df(pd.DataFrame): 고장 데이터프레임
-- failure_meta(dict, optional): Stage 0 고장 데이터셋 메타데이터
-- prediction_horizon_hours(int): 예측 호라이즌시간 (기본값 24시간)
-- plan(dict, optional): ExtractionPlan 정보 (id_column, time_column 등)
-
-출력:
-- df(pd.DataFrame): label 컬럼이 추가되고 1차 누수 컬럼이 정제된 데이터프레임
-
-의존 모듈:
-- pandas, numpy
-- systems.generator.common.timestamp_canonicalizer.canonicalize_timestamp_series
-
-예외/경계 상황:
-- id/time 컬럼 자체를 찾지 못한 경우 label을 전부 0으로 채우고 경고 로그를 남긴다.
-- anchor_col(failure_point)을 metadata에서 찾지 못한 경우 라벨링을 수행하지 않고 (전체 label=0) 경고 로그를 남긴다.
-- 개별 고장 이벤트의 anchor 값이 결측(NaT)이면 해당 이벤트만 건너뛴다.
+예외/경계 상황 (Fail-Fast 정책):
+- 필수 failure event 데이터, ID, timestamp 또는 anchor 계약을 충족하지 못하면 학습 데이터 오염 방지를 위해 조용한 fallback(전체 0 채움) 없이 명시적으로 실패한다:
+  - failures_df 부재 또는 비어 있음: FailureDataNotReadyError
+  - ID 또는 timestamp 컬럼 부재: LabelContractInvalidError
+  - anchor(failure_point) 부재 또는 전체 NaT: LabelAnchorNotFoundError
+  - 라벨 값이 {0, 1} 외 값: LabelContractInvalidError
 
 설계 원칙과의 연결:
 - docs/architecture.md 및 contracts/schemas/product-result-artifact.schema.json의 'prediction_task: binary_failure_within_horizon' 계약을 준수한다.
@@ -33,6 +22,11 @@ import logging
 import pandas as pd
 import numpy as np
 from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
+from systems.generator.app.feature.feature_exception import (
+    FailureDataNotReadyError,
+    LabelContractInvalidError,
+    LabelAnchorNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +48,9 @@ def build_labels(
     Active Failure 제거 구간:
         [failure_point, exclusion_end] (exclusion_end: period_end 또는 maintenance_end)
     """
+    if failures_df is None or failures_df.empty:
+        raise FailureDataNotReadyError("고장 이력 데이터(failures_df)가 비어 있거나 존재하지 않습니다.")
+
     df = features_df.copy()
     f_df = failures_df.copy()
 
@@ -92,30 +89,35 @@ def build_labels(
                 fail_id_col = candidate
                 break
 
-    if time_col and time_col in df.columns:
-        df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
+    if not id_col or id_col not in df.columns:
+        raise LabelContractInvalidError("Feature 데이터프레임에서 ID 컬럼을 찾을 수 없습니다.")
+    if not time_col or time_col not in df.columns:
+        raise LabelContractInvalidError("Feature 데이터프레임에서 timestamp 컬럼을 찾을 수 없습니다.")
+    if not fail_id_col or fail_id_col not in f_df.columns:
+        raise LabelContractInvalidError("고장 데이터프레임에서 ID 컬럼을 찾을 수 없습니다.")
 
+    df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
     df["label"] = 0
-
-    if not (id_col and fail_id_col and time_col):
-        logger.warning("[LabelBuilder] id/time 컬럼을 찾지 못해 label을 전부 0으로 채웁니다.")
-        return df
 
     # anchor_col (failure_point) 및 exclusion_end_col (period_end / maintenance_end) 탐지
     anchor_col = next((c["name"] for c in time_cols_meta if c.get("semantic") == "failure_point"), None)
-    if not anchor_col:
+    if not anchor_col or anchor_col not in f_df.columns:
+        anchor_col = None
         for candidate in ("observed_at", "datetime", "timestamp", "time", "ts", "date", "failure_point"):
             if candidate in f_df.columns:
                 anchor_col = candidate
                 break
 
-    exclusion_end_col = next((c["name"] for c in time_cols_meta if c.get("semantic") in ("period_end", "maintenance_end")), None)
-
     if not anchor_col or anchor_col not in f_df.columns:
-        logger.warning("[LabelBuilder] anchor_col(failure_point)를 찾지 못해 고장 이벤트를 라벨링에서 제외합니다.")
-        return df
+        raise LabelAnchorNotFoundError("고장 데이터프레임에서 anchor(failure_point) 컬럼을 찾을 수 없습니다.")
 
     f_df[anchor_col] = canonicalize_timestamp_series(f_df[anchor_col], col_name=anchor_col)
+    if f_df[anchor_col].isna().all():
+        raise LabelAnchorNotFoundError("고장 데이터프레임의 모든 anchor(failure_point) 값이 NaT/결측치입니다.")
+
+    exclusion_end_col = next((c["name"] for c in time_cols_meta if c.get("semantic") in ("period_end", "maintenance_end")), None)
+    if exclusion_end_col and exclusion_end_col not in f_df.columns:
+        exclusion_end_col = None
     if exclusion_end_col and exclusion_end_col in f_df.columns:
         f_df[exclusion_end_col] = canonicalize_timestamp_series(f_df[exclusion_end_col], col_name=exclusion_end_col)
 
@@ -131,30 +133,29 @@ def build_labels(
 
         # 1. Positive Labeling: [f_time - horizon, f_time)
         pos_mask = (
-            (df[id_col] == row[fail_id_col]) &
-            (df[time_col] >= h_start) &
-            (df[time_col] < f_time)
+            (df[id_col] == row[fail_id_col])
+            & (df[time_col] >= h_start)
+            & (df[time_col] < f_time)
         )
         df.loc[pos_mask, "label"] = 1
 
-        # 2. Active Failure Exclusion: [f_time, exclusion_end] 또는 [f_time, f_time]
-        if exclusion_end_col and exclusion_end_col in row and pd.notna(row[exclusion_end_col]):
-            ex_end = row[exclusion_end_col]
-            ex_mask = (
-                (df[id_col] == row[fail_id_col]) &
-                (df[time_col] >= f_time) &
-                (df[time_col] <= ex_end)
-            )
-        else:
-            ex_mask = (
-                (df[id_col] == row[fail_id_col]) &
-                (df[time_col] == f_time)
-            )
-        rows_to_drop_mask |= ex_mask
+        # 2. Active Failure Dropping: [f_time, exclusion_end]
+        ex_end = row[exclusion_end_col] if exclusion_end_col and not pd.isna(row[exclusion_end_col]) else f_time
+        drop_mask = (
+            (df[id_col] == row[fail_id_col])
+            & (df[time_col] >= f_time)
+            & (df[time_col] <= ex_end)
+        )
+        rows_to_drop_mask = rows_to_drop_mask | drop_mask
 
-    # Active Failure 구간 행 제거 (Drop)
-    df = df[~rows_to_drop_mask].reset_index(drop=True)
+    # Active failure 구간 행 제거
+    if rows_to_drop_mask.any():
+        logger.info(f"[LabelBuilder] Dropping {rows_to_drop_mask.sum()} active failure rows.")
+        df = df[~rows_to_drop_mask].reset_index(drop=True)
 
-    pos_count = (df["label"] == 1).sum()
-    logger.info(f"[LabelBuilder] 라벨링 완료. 최종 {len(df)}행 중 positive: {pos_count}행")
+    # Final label sanity check
+    if not set(pd.unique(df["label"])).issubset({0, 1}):
+        raise LabelContractInvalidError(f"생성된 라벨 값이 {{0, 1}} 범위를 벗어납니다: {pd.unique(df['label'])}")
+
+    logger.info(f"[LabelBuilder] Labeling complete: shape={df.shape}, positive_labels={(df['label'] == 1).sum()}")
     return df

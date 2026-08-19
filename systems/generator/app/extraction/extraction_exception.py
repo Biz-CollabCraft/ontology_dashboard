@@ -27,8 +27,14 @@ class DatasetNotFoundError(ExtractionError):
 
 
 class DatasetContractError(ExtractionError):
-    def __init__(self, message: str = "데이터셋 계약 형식이 올바르지 않습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="DATASET_CONTRACT_ERROR", status_code=422, details=details)
+    def __init__(
+        self,
+        message: str = "데이터셋 계약 형식이 올바르지 않습니다.",
+        code: str = "DATASET_CONTRACT_ERROR",
+        status_code: int = 422,
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, status_code=status_code, details=details)
 
 
 class ExtractionRoleError(ExtractionError):
@@ -67,8 +73,13 @@ class ExtractionPlanIntegrityError(ExtractionError):
 
 
 class ExtractionPlanContractInvalidError(ExtractionError):
-    def __init__(self, message: str = "Extraction Plan JSON 파일이 손상되었거나 계약 형식이 올바르지 않습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="EXTRACTION_PLAN_CONTRACT_INVALID", status_code=422, details=details)
+    def __init__(
+        self,
+        message: str = "Extraction Plan JSON 파일이 손상되었거나 계약 형식이 올바르지 않습니다.",
+        code: str = "EXTRACTION_PLAN_CONTRACT_INVALID",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
 
 
 class OntologyMappingNotReadyError(ExtractionError):
@@ -82,5 +93,10 @@ class OntologyMappingIntegrityError(ExtractionError):
 
 
 class OntologyMappingContractInvalidError(ExtractionError):
-    def __init__(self, message: str = "Ontology Mapping JSON 파일이 손상되었거나 스키마 규칙을 위반했습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="ONTOLOGY_MAPPING_CONTRACT_INVALID", status_code=422, details=details)
+    def __init__(
+        self,
+        message: str = "Ontology Mapping JSON 파일이 손상되었거나 스키마 규칙을 위반했습니다.",
+        code: str = "ONTOLOGY_MAPPING_CONTRACT_INVALID",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)

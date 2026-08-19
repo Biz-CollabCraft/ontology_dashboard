@@ -163,7 +163,13 @@ def map_column(column_name: str, sample_values: list, store: MappingStore, file_
     return record
 
 
-def map_all_sources(sources: dict, store: MappingStore = None) -> MappingStore:
+def map_all_sources(
+    sources: dict,
+    store: MappingStore | None = None,
+    *,
+    persist: bool = True,
+    output_path: Path | None = None,
+) -> MappingStore:
     """모든 소스 데이터셋의 컬럼들을 순회하며 미매핑된 컬럼을 LLM으로 매핑한다."""
     logger.info("[MappingAgent] Starting agent-based mapping for all sources (with Stage 0 file metadata context)...")
     if store is None:
@@ -191,9 +197,10 @@ def map_all_sources(sources: dict, store: MappingStore = None) -> MappingStore:
             map_column(col, sample, store, file_metadata=file_meta)
             updated = True
 
-    if updated:
-        store.save_to_file(MAPPING_CACHE_PATH)
-        logger.info(f"[MappingAgent] Updated mapping file saved to '{MAPPING_CACHE_PATH}'.")
+    if updated and persist:
+        target_file = output_path if output_path is not None else MAPPING_CACHE_PATH
+        store.save_to_file(target_file)
+        logger.info(f"[MappingAgent] Updated mapping file saved to '{target_file}'.")
 
     logger.info(f"[MappingAgent] Completed agent mapping. Total mappings in store: {len(store.get_all())}")
     return store
