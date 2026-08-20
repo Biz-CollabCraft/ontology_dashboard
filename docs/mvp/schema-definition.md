@@ -351,6 +351,12 @@ Overview와 Objects 목록의 공통 행이다.
 
 객체명: `AssetDetailReportViewModel` · 상태: V2 변경 제안.
 
+계약 객체명에는 `Mvp` 같은 구현 네임스페이스 접두어를 붙이지 않는다. 현행
+프론트엔드의 `MvpEventDetailModel`, `MvpAsset`, `MvpReportModel`은 기존
+구현의 기준 필드 확인용이며, API/schema 계약명은 `AssetDetail`,
+`AssetDetailReportViewModel`, `AssetReportFeature`처럼 접두어 없는 도메인
+객체명으로 유지한다.
+
 설비 상세 리포트와 `map-report` 계열 그래프 UI를 위한 composition ViewModel이다. Product Result Artifact, Evidence Payload, Observation series, runtime prediction series, Activity/Maintenance source를 Backend adapter에서 병합해 제공한다. 프론트엔드는 raw JSONL, `gen_data` model output fixture, prototype adapter를 직접 파싱하지 않는다.
 
 | 필드 | 타입 | 필수 | 출처 | 상태 |

@@ -149,6 +149,11 @@ flowchart LR
 
 `map-report-ui-prototype`을 MVP 리포트 화면에 이식할 때 필요한 공식 경계는 프론트 컴포넌트 계약이 아니라 Backend composition 계약이다. 프론트엔드는 Product Result Artifact, Observation API, runtime prediction series, maintenance/activity source를 직접 조합하지 않고, `AssetDetailReportViewModel`을 소비한다.
 
+계약 객체명에는 `Mvp` 접두어를 붙이지 않는다. 기존 MVP 프론트엔드의 `Mvp*`
+타입은 현재 화면이 소비 중인 필드 기준선을 조사하기 위한 구현명으로만 사용하고,
+신규 Product API/View 계약은 `AssetDetailReportViewModel`처럼 접두어 없는
+도메인 객체명으로 정의한다.
+
 상태: V2 변경 제안. 현행 Event Report API를 대체하지 않으며, 설비 상세 리포트와 요약 리포트의 피쳐 그래프 연결을 위한 후보 계약이다.
 
 최종 흐름은 다음과 같다. 센서 그래프는 Observation 계열에서 오고, 위험도 그래프와 현재 판단은 Backend Diagnosis가 만든 runtime Result/Evidence 계열에서 온다. 두 계열은 Product API/Report adapter에서만 합쳐진다.
