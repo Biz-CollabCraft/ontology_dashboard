@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from app.maintenance import ProducerRecommendation
+
+POLICY_VERSION = "recommendation-policy-v1"
+
+
+class RecommendationPolicyError(ValueError):
+    """Raised when source evidence cannot produce an executable recommendation."""
+
+
+@dataclass(frozen=True)
+class RecommendationPolicyInput:
+    source_product_result_id: str
+    source_evidence_id: str
+    source_schema_version: str
+    status: str
+    equipment: dict[str, Any]
+    basis: tuple[str, ...]
+    source_fields: tuple[str, ...]
+    data_quality_hold: bool = False
+    source_action_id: str | None = None
+    policy_version: str = POLICY_VERSION
+
+
+def load_recommendation_policy(path: Path | None = None) -> dict[str, Any]:
+    source = path or Path(__file__).with_name("recommendation_policy.json")
+    policy = json.loads(source.read_text(encoding="utf-8"))
+    if policy.get("version") != POLICY_VERSION:
+        raise RecommendationPolicyError("unexpected recommendation policy version")
+    return policy
+
+
+def evaluate_recommendation_policy(
+    policy_input: RecommendationPolicyInput,
+    *,
+    policy: dict[str, Any] | None = None,
+) -> ProducerRecommendation:
+    """Return a producer-owned recommendation without consulting Maintenance state."""
+
+    policy = policy or load_recommendation_policy()
+    _require_identity(policy_input)
+    action_key = _action_key(policy_input, policy)
+    action = policy["actions"][action_key]
+    source_action_id = policy_input.source_action_id or f"{POLICY_VERSION}:{action_key}"
+    basis = policy_input.basis
+    if action_key == "unavailable":
+        basis = ("policy.unavailable",)
+    elif action_key == "hold_for_data_check" and not basis:
+        basis = ("policy.data_quality_hold",)
+    return ProducerRecommendation(
+        source_action_id=source_action_id,
+        source_product_result_id=policy_input.source_product_result_id,
+        source_evidence_id=policy_input.source_evidence_id,
+        source_schema_version=policy_input.source_schema_version,
+        source_policy_version=policy_input.policy_version,
+        label=str(action["label"]),
+        kind=str(action["kind"]),
+        requires_human_approval=bool(action["requires_human_approval"]),
+        basis=basis,
+    )
+
+
+def recommendation_policy_input_from_artifact(artifact: dict[str, Any]) -> RecommendationPolicyInput:
+    evidence_payload = artifact.get("evidence_payload") or {}
+    actions = evidence_payload.get("recommended_actions") or []
+    first_action = actions[0] if actions else {}
+    source_fields = tuple(str(field.get("field_id")) for field in evidence_payload.get("source_fields") or [])
+    return RecommendationPolicyInput(
+        source_product_result_id=str(artifact.get("artifact_id") or ""),
+        source_evidence_id=str((artifact.get("provenance") or {}).get("evidence_payload_reference", {}).get("reference") or ""),
+        source_schema_version=str(artifact.get("schema_version") or ""),
+        status=str(artifact.get("status_grade") or ""),
+        equipment=dict(artifact.get("equipment") or {}),
+        basis=tuple(str(item) for item in first_action.get("basis") or ()),
+        source_fields=source_fields,
+        data_quality_hold=str(artifact.get("status_grade") or "") == "data_quality_hold"
+        or bool(artifact.get("data_quality_warnings")),
+    )
+
+
+def _require_identity(policy_input: RecommendationPolicyInput) -> None:
+    required = {
+        "source_product_result_id": policy_input.source_product_result_id,
+        "source_evidence_id": policy_input.source_evidence_id,
+        "source_schema_version": policy_input.source_schema_version,
+        "status": policy_input.status,
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        raise RecommendationPolicyError(f"missing recommendation source identity: {missing}")
+
+
+def _action_key(policy_input: RecommendationPolicyInput, policy: dict[str, Any]) -> str:
+    if policy_input.data_quality_hold or policy_input.status == "data_quality_hold":
+        return "hold_for_data_check"
+    if not policy_input.basis:
+        return "unavailable"
+    unresolved = sorted(set(policy_input.basis) - set(policy_input.source_fields))
+    if unresolved:
+        return "unavailable"
+    criticality = str(policy_input.equipment.get("criticality") or "")
+    if criticality not in set(policy["allowed_criticality"]):
+        return "unavailable"
+    for rule in policy["rules"]:
+        if rule["status"] == policy_input.status and rule.get("criticality") == criticality:
+            return str(rule["action"])
+    return "unavailable"

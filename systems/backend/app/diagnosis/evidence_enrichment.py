@@ -33,11 +33,11 @@ _COMPONENT_BY_FEATURE = {
     "voltage_raw": ("electrical_supply", "전원 계통"),
 }
 _ACTION_BY_STATUS = {
-    "critical": ("inspect_and_stop_review", "긴급 점검 및 정지 검토", "stop_review"),
-    "warning": ("inspect_current_shift", "현재 교대 내 점검", "inspect"),
-    "attention": ("request_inspection", "점검 요청", "inspect"),
-    "normal": ("continue_monitoring", "모니터링 지속", "monitor"),
-    "data_quality_hold": ("hold_for_data_check", "데이터 확인 후 판단", "data_quality"),
+    "critical": ("review_shutdown", "정지 검토", "review_shutdown"),
+    "warning": ("request_inspection", "점검 요청", "request_inspection"),
+    "attention": ("request_inspection", "점검 요청", "request_inspection"),
+    "normal": ("continue_monitoring", "모니터링 지속", "continue_monitoring"),
+    "data_quality_hold": ("hold_for_data_check", "데이터 확인 후 판단", "hold_for_data_check"),
 }
 _UNIT_FALLBACKS = {
     "voltage_raw": "raw",

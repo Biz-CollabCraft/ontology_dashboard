@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,14 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
+from app.diagnosis.contracts import load_fixture
+from app.diagnosis.evidence import build_product_result_artifact
+from app.diagnosis.recommendation_policy import (
+    POLICY_VERSION,
+    RecommendationPolicyInput,
+    evaluate_recommendation_policy,
+)
+from app.diagnosis.predictor import HeuristicPredictor
 from ontology_dashboard.contracts import LayoutRequest, ReportRequest
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 
@@ -27,6 +36,8 @@ def load_schema(root: Path, name: str) -> dict[str, Any]:
 
 
 def evaluate(root: Path) -> dict[str, Any]:
+    os.environ.setdefault("APP_ENV", "test")
+    os.environ.setdefault("ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK", "1")
     suite = yaml.safe_load((root / "evaluation" / "gold_scenarios.yml").read_text(encoding="utf-8"))
     report_validator = Draft202012Validator(load_schema(root, "report.schema.json"))
     layout_validator = Draft202012Validator(load_schema(root, "ui-block.schema.json"))
@@ -35,11 +46,29 @@ def evaluate(root: Path) -> dict[str, Any]:
         service = ManufacturingPredictiveMaintenanceService(root, database_path=Path(temp_dir) / "eval.db")
         for scenario in suite["scenarios"]:
             event_id = f"EVT-{scenario['id']}"
+            fixture = load_fixture(root / scenario["fixture_path"])
+            artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+            evidence_payload = artifact["evidence_payload"]
+            source_action = evidence_payload["recommended_actions"][0]
+            producer_recommendation = evaluate_recommendation_policy(
+                RecommendationPolicyInput(
+                    source_product_result_id=str(artifact["artifact_id"]),
+                    source_evidence_id=str(artifact["provenance"]["evidence_payload_reference"]["reference"]),
+                    source_schema_version=str(artifact["schema_version"]),
+                    status=str(artifact["status_grade"]),
+                    equipment=dict(fixture["equipment"]),
+                    basis=tuple(source_action["basis"]),
+                    source_fields=tuple(field["field_id"] for field in evidence_payload["source_fields"]),
+                    data_quality_hold=str(artifact["status_grade"]) == "data_quality_hold"
+                    or bool(artifact["data_quality_warnings"]),
+                )
+            )
             fixture_expected = service.fixtures[event_id]["expected"]
             evidence = service.evidence(event_id)
             expected = scenario["expected"]["system_state"]
             status_pass = evidence["status"] == expected["risk_band"] == fixture_expected["risk_band"]
             decision_pass = evidence["recommended_decision"] == expected["recommended_decision"] == fixture_expected["recommended_decision"]
+            policy_pass = producer_recommendation.kind == expected["recommended_decision"]
             confidence_expected = expected["confidence"]
             confidence_pass = (
                 evidence["confidence"] == fixture_expected["confidence"]
@@ -84,6 +113,7 @@ def evaluate(root: Path) -> dict[str, Any]:
             row_pass = (
                 status_pass
                 and decision_pass
+                and policy_pass
                 and confidence_pass
                 and not forbidden_hits
                 and all(
@@ -107,6 +137,9 @@ def evaluate(root: Path) -> dict[str, Any]:
                     "status": evidence["status"],
                     "status_pass": status_pass,
                     "decision_pass": decision_pass,
+                    "policy_version": POLICY_VERSION,
+                    "policy_pass": policy_pass,
+                    "producer_recommendation": producer_recommendation.model_dump(mode="json"),
                     "confidence_pass": confidence_pass,
                     "forbidden_claims": forbidden_hits,
                     "roles": role_results,
@@ -128,6 +161,16 @@ def evaluate(root: Path) -> dict[str, Any]:
         "failed": len(result_rows) - passed,
         "pass_rate": passed / len(result_rows),
         "fallback_pass": fallback_pass,
+        "policy_version": POLICY_VERSION,
+        "policy_passed": sum(1 for row in result_rows if row["policy_pass"]),
+        "operational_side_effect_counts": {
+            "recommendations": 0,
+            "decisions": 0,
+            "work_orders": 0,
+            "maintenance_actions": 0,
+            "maintenance_events": 0,
+        },
+        "claim_boundary": "Gold 8/8 is engineering acceptance evidence only, not field or business impact validation.",
         "evidence_without_traceable_sections": sum(
             1
             for row in result_rows

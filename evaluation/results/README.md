@@ -18,3 +18,13 @@
 - 역할 적합성 평가
 - UI Gold flow 결과
 - LLM fallback 성공률
+
+## Tracked Recommendation Policy v1 Artifact
+
+`recommendation-policy-v1.json`은 PR #96 계획에 따른 Gold v1 synthetic evaluation/demo
+fixture store 결과다.
+
+- 재현 명령: `PYTHONPATH=systems/backend:. python3 scripts/seed_gold_recommendations.py --output evaluation/results/recommendation-policy-v1.json`
+- 검증 명령: `PYTHONPATH=systems/backend:. python3 scripts/evaluate_gold.py --root .`
+- 범위: Gold 8/8 engineering acceptance, policy/source lineage, replay/no-op, operational side effect 0건
+- 미검증: PostgreSQL production E2E, 실제 정비 승인 UI, 현장 정비 효과, 비용/RPN 최적화, LLM 기반 추천 결정
