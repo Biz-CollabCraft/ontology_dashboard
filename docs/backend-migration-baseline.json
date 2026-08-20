@@ -78,7 +78,6 @@
     "polyglot/health.py",
     "polyglot/settings.py",
     "postgresql_compat.py",
-    "postgresql_ontology_repository.py",
     "postgresql_repositories.py",
     "predictive_maintenance_runtime/__init__.py",
     "reports.py",
@@ -1009,11 +1008,6 @@
       "source": "tests/test_predictive_maintenance_postgresql.py",
       "kind": "static_import",
       "target": "ontology_dashboard.modeling.repository"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.postgresql_ontology_repository"
     },
     {
       "source": "tests/test_predictive_maintenance_result_replay.py",

@@ -267,6 +267,7 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `domain_packs/registry.py` | `systems/backend/app/ontology/ontology_domain.py` | `MIGRATED` |
 | `domain_packs/predictive_maintenance/__init__.py` | `systems/backend/app/infra/db/predictive_maintenance_ontology_projection.py` | `MIGRATED` |
 | `domain_packs/predictive_maintenance/materialization.py` | `systems/backend/app/ontology/projection.py`, `systems/backend/app/infra/db/predictive_maintenance_ontology_projection.py` | `MIGRATED` |
+| `postgresql_ontology_repository.py` | `systems/backend/app/infra/db/postgresql_ontology_instance_repository.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직

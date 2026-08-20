@@ -1,4 +1,4 @@
-"""PostgreSQL implementation of the Project-scoped ontology instance repository."""
+"""PostgreSQL implementation of the Project-scoped Ontology instance repository."""
 
 from __future__ import annotations
 
