@@ -8,7 +8,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
-from ontology_dashboard.adapters.service import AdapterService
+from app.dataset import DatasetCatalogService
+from app.dataset.ingestion import DatasetIngestionService
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
+from app.infra.db.dataset_repository import DatasetRepository
 from app.identity import Principal
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.modeling.models import (
@@ -188,10 +191,10 @@ def test_adaptive_modeling_governed_end_to_end(tmp_path: Path, monkeypatch) -> N
         intake_roots=[source_root],
         prediction_repository=prediction_repository,
     )
-    adapters = AdapterService(
-        database,
-        root=tmp_path,
-        prediction_repository=prediction_repository,
+    dataset_ingestion = DatasetIngestionService(
+        repository=DatasetIngestionRepository(database),
+        dataset_catalog=DatasetCatalogService(DatasetRepository(database)),
+        allowed_roots=[source_root],
     )
     principal = _principal()
 
@@ -239,9 +242,9 @@ def test_adaptive_modeling_governed_end_to_end(tmp_path: Path, monkeypatch) -> N
             dataset_version="source-v1",
         ),
     )
-    ingestion = adapters.ingest(principal, "project-e2e", manifest)
+    ingestion = dataset_ingestion.ingest(principal, "project-e2e", manifest)
     assert ingestion.status == "completed"
-    detail = adapters.dataset_catalog.detail(
+    detail = dataset_ingestion.dataset_catalog.detail(
         principal=principal,
         project_id="project-e2e",
         dataset_id=manifest.manifest_id,

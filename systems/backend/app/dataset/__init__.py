@@ -5,7 +5,10 @@ from .materialization import (
     AnalysisMaterializationRequest,
     AnalysisMaterializationResult,
 )
-from .models import (
+from .dataset_domain import DatasetPrincipal, ObservationDatasetQuery
+from .dataset_exception import DatasetAccessError
+from .dataset_repository import DatasetRepositoryPort
+from .dataset_schema import (
     CanonicalObjectEnvelope,
     DatasetCreateRequest,
     DatasetDetail,
@@ -21,8 +24,7 @@ from .models import (
     ProjectionStatus,
     StoreKind,
 )
-from .repository import DatasetRepository
-from .service import DatasetCatalogService
+from .dataset_service import DatasetCatalogService
 from .source import DatasetMaterializationSource
 
 __all__ = [
@@ -30,6 +32,7 @@ __all__ = [
     "AnalysisMaterializationRequest",
     "AnalysisMaterializationResult",
     "CanonicalObjectEnvelope",
+    "DatasetAccessError",
     "DatasetCatalogService",
     "DatasetCreateRequest",
     "DatasetDetail",
@@ -37,12 +40,14 @@ __all__ = [
     "DatasetFileRecord",
     "DatasetMaterializationSource",
     "DatasetPage",
+    "DatasetPrincipal",
     "DatasetRecord",
-    "DatasetRepository",
+    "DatasetRepositoryPort",
     "DatasetVersionCreateRequest",
     "DatasetVersionRecord",
     "MaterializationCreateRequest",
     "OntologyMappingCreateRequest",
+    "ObservationDatasetQuery",
     "ProjectionRecord",
     "ProjectionStatus",
     "StoreKind",

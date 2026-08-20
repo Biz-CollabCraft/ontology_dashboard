@@ -20,14 +20,14 @@ from urllib.parse import urlparse
 
 from argon2 import PasswordHasher
 
-from ontology_dashboard.datasets.models import (
+from app.dataset.dataset_schema import (
     DatasetCreateRequest,
     DatasetFileCreate,
     DatasetVersionCreateRequest,
     MaterializationCreateRequest,
     OntologyMappingCreateRequest,
 )
-from ontology_dashboard.datasets.repository import DatasetRepository
+from app.infra.db.dataset_repository import DatasetRepository
 from app.identity import IdentityService
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
 from ontology_dashboard.migrations import migrate

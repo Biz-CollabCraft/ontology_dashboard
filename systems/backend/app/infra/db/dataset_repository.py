@@ -1,4 +1,4 @@
-"""Tenant/project-scoped repository for Dataset Catalog and store projections."""
+"""Database adapter for the Dataset repository port."""
 
 from __future__ import annotations
 
@@ -10,9 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from app.infra.db.connection import tenant_connection
-from ..postgresql_repositories import is_postgresql
-from .models import (
+from app.dataset.dataset_schema import (
     DatasetCreateRequest,
     DatasetFileCreate,
     DatasetVersionCreateRequest,
@@ -21,12 +19,14 @@ from .models import (
     ProjectionStatus,
     StoreKind,
 )
+from app.infra.db.connection import tenant_connection
+from app.infra.db.settings import is_postgresql_url
 
 
 class DatasetRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
-        self.postgresql = is_postgresql(self.database)
+        self.postgresql = is_postgresql_url(self.database)
         if not self.postgresql:
             Path(self.database).parent.mkdir(parents=True, exist_ok=True)
 

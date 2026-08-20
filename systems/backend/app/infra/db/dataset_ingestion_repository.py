@@ -7,16 +7,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ontology_dashboard.project_context import SQLiteProjectContextResolver
-
-from .models import DatasetManifest, IngestionResult, QuarantinedRecord
+from app.dataset.ingestion.ingestion_schema import DatasetManifest, QuarantinedRecord
 
 
-class AdapterRepository:
+DEFAULT_ORGANIZATION_ID = "org-ontology-demo"
+DEFAULT_PROJECT_ID = "manufacturing-demo-project"
+DEFAULT_WORKSPACE_ID = "manufacturing-demo"
+
+
+class DatasetIngestionRepository:
     def __init__(self, database_path: str | Path) -> None:
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.project_context = SQLiteProjectContextResolver(self.path)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -28,13 +30,53 @@ class AdapterRepository:
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    def _resolve_scope(
+        self,
+        connection: Any,
+        workspace_id: str,
+        *,
+        expected_organization_id: str,
+        expected_project_id: str,
+    ) -> tuple[str, str, str]:
+        resolver = getattr(self, "project_context", None)
+        if resolver is not None:
+            scope = resolver.resolve(
+                workspace_id,
+                expected_organization_id=expected_organization_id,
+                expected_project_id=expected_project_id,
+                connection=connection,
+            )
+            return scope.organization_id, scope.project_id, scope.workspace_id
+        row = None
+        table_exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspaces'"
+        ).fetchone()
+        if table_exists:
+            row = connection.execute(
+                "SELECT organization_id,project_id FROM workspaces WHERE id=?",
+                (workspace_id,),
+            ).fetchone()
+        if row is None:
+            if workspace_id != DEFAULT_WORKSPACE_ID:
+                raise ValueError(f"workspace {workspace_id!r} is not assigned to an accessible Project")
+            organization_id = DEFAULT_ORGANIZATION_ID
+            project_id = DEFAULT_PROJECT_ID
+        else:
+            organization_id = str(row["organization_id"] or "").strip()
+            project_id = str(row["project_id"] or "").strip()
+        if organization_id != expected_organization_id:
+            raise ValueError("workspace organization scope does not match the request context")
+        if project_id != expected_project_id:
+            raise ValueError("workspace project scope does not match the request context")
+        return organization_id, project_id, workspace_id
+
     def save_manifest(self, manifest: DatasetManifest) -> None:
         with self._connect() as connection:
-            scope = self.project_context.resolve(
+            organization_id, project_id, workspace_id = self._resolve_scope(
+                connection,
                 manifest.workspace_id,
                 expected_organization_id=manifest.organization_id,
                 expected_project_id=manifest.project_id,
-                connection=connection,
             )
             now = self._now()
             connection.execute(
@@ -55,9 +97,9 @@ class AdapterRepository:
                 """,
                 (
                     manifest.manifest_id,
-                    scope.organization_id,
-                    scope.project_id,
-                    scope.workspace_id,
+                    organization_id,
+                    project_id,
+                    workspace_id,
                     manifest.adapter_code,
                     manifest.dataset_name,
                     manifest.dataset_version,
@@ -74,11 +116,11 @@ class AdapterRepository:
     def start_run(self, manifest: DatasetManifest) -> str:
         run_id = str(uuid.uuid4())
         with self._connect() as connection:
-            self.project_context.resolve(
+            self._resolve_scope(
+                connection,
                 manifest.workspace_id,
                 expected_organization_id=manifest.organization_id,
                 expected_project_id=manifest.project_id,
-                connection=connection,
             )
             connection.execute(
                 """

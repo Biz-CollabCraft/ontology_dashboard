@@ -8,17 +8,15 @@ from io import StringIO
 
 import pandas as pd
 
+from app.dataset.ingestion import DatasetManifest, DatasetSchema, DatasetSource, QualityRule
+
 from ..adapters.models import (
-    DatasetManifest,
-    DatasetSchema,
-    DatasetSource,
     EvidenceSource,
     PredictionEvidence,
     PredictionModel,
     PredictionResult,
     PredictionSubject,
     PredictionValue,
-    QualityRule,
     RecommendedAction,
 )
 from ..adapters.prediction_repository import PredictionResultRepository

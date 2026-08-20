@@ -1,4 +1,4 @@
-"""Full Analysis-result materialization into immutable Parquet-backed Dataset Versions."""
+"""Dataset-owned immutable materialization helpers and compatibility orchestration."""
 
 from __future__ import annotations
 
@@ -7,15 +7,12 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..analysis_models import AnalysisRunRequest
-from ..analysis_service import AnalysisService
-from app.identity import Principal
-from ..ontology_service import OntologyService
-from .models import (
+from .dataset_domain import DatasetPrincipal
+from .dataset_schema import (
     DatasetCreateRequest,
     DatasetFileCreate,
     DatasetRecord,
@@ -24,7 +21,21 @@ from .models import (
     MaterializationCreateRequest,
     MaterializationRecord,
 )
-from .service import DatasetCatalogService
+from .dataset_service import DatasetCatalogService
+
+
+class AnalysisRunnerPort(Protocol):
+    def run(
+        self,
+        *,
+        analysis_id: str,
+        request: Any,
+        principal: DatasetPrincipal,
+        ontology: Any,
+    ) -> Any: ...
+
+
+AnalysisRequestFactory = Callable[..., Any]
 
 
 class AnalysisMaterializationRequest(BaseModel):
@@ -65,15 +76,17 @@ class AnalysisDatasetMaterializer:
     def __init__(
         self,
         *,
-        analysis: AnalysisService,
-        ontology: OntologyService,
+        analysis: AnalysisRunnerPort,
+        ontology: Any,
         datasets: DatasetCatalogService,
+        analysis_request_factory: AnalysisRequestFactory,
         artifact_root: str | Path | None = None,
         parquet_writer: ParquetWriter | None = None,
     ) -> None:
         self.analysis = analysis
         self.ontology = ontology
         self.datasets = datasets
+        self.analysis_request_factory = analysis_request_factory
         configured = os.getenv("ONTOLOGY_DASHBOARD_MATERIALIZATION_ROOT", "").strip()
         self.artifact_root = Path(artifact_root or configured or "data/materializations").resolve()
         self.parquet_writer = parquet_writer or write_parquet
@@ -81,7 +94,7 @@ class AnalysisDatasetMaterializer:
     def materialize(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         analysis_id: str,
         request: AnalysisMaterializationRequest,
     ) -> AnalysisMaterializationResult:
@@ -92,7 +105,7 @@ class AnalysisDatasetMaterializer:
 
         preview = self.analysis.run(
             analysis_id=analysis_id,
-            request=AnalysisRunRequest(
+            request=self.analysis_request_factory(
                 workspace_id=request.workspace_id,
                 version_policy=request.version_policy,
                 version=request.version,
@@ -109,7 +122,7 @@ class AnalysisDatasetMaterializer:
 
         full_run = self.analysis.run(
             analysis_id=analysis_id,
-            request=AnalysisRunRequest(
+            request=self.analysis_request_factory(
                 workspace_id=request.workspace_id,
                 version_policy="pinned",
                 version=preview.analysis_version,
@@ -240,7 +253,7 @@ class AnalysisDatasetMaterializer:
     def _ensure_dataset(
         self,
         *,
-        principal: Principal,
+        principal: DatasetPrincipal,
         project_id: str,
         workspace_id: str,
         dataset_id: str,
@@ -276,11 +289,12 @@ class AnalysisDatasetMaterializer:
         node_id: str,
     ) -> Path:
         safe_node = slugify(node_id)
+        safe_run = slugify(run_id)
         return (
             self.artifact_root
             / slugify(project_id)
             / slugify(dataset_id)
-            / f"analysis-v{analysis_version}-{run_id}-{safe_node}.parquet"
+            / f"analysis-v{analysis_version}-{safe_run}-{safe_node}.parquet"
         )
 
 
@@ -338,6 +352,8 @@ __all__ = [
     "AnalysisDatasetMaterializer",
     "AnalysisMaterializationRequest",
     "AnalysisMaterializationResult",
+    "AnalysisRequestFactory",
+    "AnalysisRunnerPort",
     "deterministic_dataset_id",
     "infer_schema",
     "sha256_file",

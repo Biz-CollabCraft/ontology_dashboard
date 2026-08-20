@@ -49,7 +49,7 @@
 | `projects/*`, `project_context.py` | Project lifecycle/context | `MOVE` | `app/project` | #54 |
 | `ontology.py`, `ontology_primitives.py`, `ontology_repository.py`, `ontology_instance_repository.py`, `ontology_service.py`, `ontology_adapter.py` | Ontology registry, instance, action, projection | `SPLIT` | `app/ontology`; 다른 도메인 의미는 public port로 소비 | #55 |
 | `domain_packs/*` | 범용 Domain Pack registry와 PdM materialization | `SPLIT` | PdM projection은 `ontology`/`dataset`; 범용 registry 유지 여부는 별도 판정 | #55, #57, #68 |
-| `datasets/*` | Dataset catalog/source/projection/materialization | `MOVE` | `app/dataset`, Generator 학습 책임은 제외 | #57 |
+| `datasets/__init__.py`, `datasets/materialization.py`, `datasets/models.py`, `datasets/projection.py`, `datasets/repository.py`, `datasets/service.py`, `datasets/source.py` | Dataset catalog/source/projection/materialization | `MOVE` | `app/dataset`, Generator 학습 책임은 제외 | #57 |
 | `adapters/*` | Dataset ingestion, file/DB adapter, Prediction repository가 혼재 | `SPLIT` | bundle·CSV·canonical ingestion은 `dataset`, Prediction persistence는 `diagnosis`, 기술 I/O는 `infra` | #52, #57, #58 |
 | `predictive_maintenance_runtime/*`, `product_result_evidence_projection.py` | Runtime result/read model/replay | `SPLIT` | inference·Result/Evidence·history readiness는 `diagnosis`; Overlay 생성은 `gen_data` | #58 |
 | `modeling/*` | intake, mapping, feature, experiment, model registry/runtime DTO 혼재 | `SPLIT` | Backend runtime consumer 최소 계약만 `diagnosis`/`governance`; 학습·feature 생성은 Generator로 대체 후 Backend에서 삭제 | #58, #63, #68 |
@@ -223,6 +223,25 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `identity_repository.py` | `systems/backend/app/identity/identity_repository.py` | `MIGRATED` |
 | `enterprise_identity.py` | `systems/backend/app/identity/enterprise_identity.py` | `MIGRATED` |
 | `routers/auth.py` | `systems/backend/app/identity/identity_router.py` | `MIGRATED` |
+| `datasets/__init__.py` | `systems/backend/app/dataset/__init__.py` | `MIGRATED` |
+| `datasets/materialization.py` | `systems/backend/app/dataset/materialization.py` | `MIGRATED` |
+| `datasets/models.py` | `systems/backend/app/dataset/dataset_schema.py` | `MIGRATED` |
+| `datasets/projection.py` | `systems/backend/app/dataset/projection.py` | `MIGRATED` |
+| `datasets/repository.py` | `systems/backend/app/dataset/dataset_repository.py`, `systems/backend/app/infra/db/dataset_repository.py` | `MIGRATED` |
+| `datasets/service.py` | `systems/backend/app/dataset/dataset_service.py` | `MIGRATED` |
+| `datasets/source.py` | `systems/backend/app/dataset/source.py` | `MIGRATED` |
+| `adapters/azure_fleet.py` | `systems/backend/app/dataset/ingestion/azure_fleet.py` | `MIGRATED` |
+| `adapters/bundle_file_adapter.py` | `systems/backend/app/dataset/ingestion/bundle_file_adapter.py` | `MIGRATED` |
+| `adapters/bundle_models.py` | `systems/backend/app/dataset/ingestion/bundle_models.py` | `MIGRATED` |
+| `adapters/file_adapter.py` | `systems/backend/app/dataset/ingestion/file_adapter.py` | `MIGRATED` |
+| `adapters/governed_tabular.py` | `systems/backend/app/dataset/ingestion/governed_tabular.py` | `MIGRATED` |
+| `adapters/metropt.py` | `systems/backend/app/dataset/ingestion/metropt.py` | `MIGRATED` |
+| `adapters/postgresql_bundle_ingestion.py` | `systems/backend/app/infra/db/postgresql_bundle_ingestion.py` | `MIGRATED` |
+| `adapters/predictive_maintenance_v2.py` | `systems/backend/app/dataset/ingestion/predictive_maintenance_v2.py` | `MIGRATED` |
+| `adapters/protocol.py` | `systems/backend/app/dataset/ingestion/protocol.py` | `MIGRATED` |
+| `adapters/registry.py` | `systems/backend/app/dataset/ingestion/registry.py` | `MIGRATED` |
+| `adapters/repository.py` | `systems/backend/app/dataset/ingestion/repository.py`, `systems/backend/app/infra/db/dataset_ingestion_repository.py` | `MIGRATED` |
+| `routers/datasets.py` | `systems/backend/app/dataset/dataset_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
@@ -243,3 +262,6 @@ Source로 올리지 않으며 Section 3의 `SPLIT` disposition도 유지한다. 
 state patch 적용 규칙과 `state_version` compare-and-set 계약은 이후 Maintenance/Dashboard가
 public Equipment contract를 통해 소비하고, 기존 `closed_loop` persistence 연결은 #59에서
 그 port에 맞춰 수렴시킨다.
+`adapters/__init__.py`, `adapters/models.py`, `adapters/service.py`,
+`adapters/prediction_repository.py`에는 #58 Diagnosis가 소유할 Prediction persistence 계약만
+남아 있다. Dataset manifest/bundle/CSV ingestion 책임은 위 source 단위로 #57에서 분리 완료했다.

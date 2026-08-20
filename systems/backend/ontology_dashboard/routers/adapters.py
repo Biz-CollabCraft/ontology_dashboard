@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from ..adapters.models import DatasetManifest, PredictionResult
+from app.dataset.ingestion import DatasetIngestionService, DatasetManifest
+
+from ..adapters.models import PredictionResult
 from ..adapters.service import AdapterService
-from ..dependencies import current_principal, get_adapter_service, require_csrf
+from ..dependencies import (
+    current_principal,
+    get_adapter_service,
+    get_dataset_ingestion_service,
+    require_csrf,
+)
 from app.identity import Principal
 
 router = APIRouter(tags=["datasets", "predictions"])
@@ -15,7 +22,7 @@ router = APIRouter(tags=["datasets", "predictions"])
 @router.get("/api/adapters")
 def list_adapters(
     principal: Principal = Depends(current_principal),
-    adapters: AdapterService = Depends(get_adapter_service),
+    adapters: DatasetIngestionService = Depends(get_dataset_ingestion_service),
 ):
     return {"items": adapters.list_adapters(principal)}
 
@@ -24,7 +31,7 @@ def list_adapters(
 def list_project_datasets(
     project_id: str,
     principal: Principal = Depends(current_principal),
-    adapters: AdapterService = Depends(get_adapter_service),
+    adapters: DatasetIngestionService = Depends(get_dataset_ingestion_service),
 ):
     return {"items": adapters.list_manifests(principal, project_id)}
 
@@ -35,7 +42,7 @@ def ingest_project_dataset(
     manifest: DatasetManifest,
     principal: Principal = Depends(current_principal),
     _: None = Depends(require_csrf),
-    adapters: AdapterService = Depends(get_adapter_service),
+    adapters: DatasetIngestionService = Depends(get_dataset_ingestion_service),
 ):
     return adapters.ingest(principal, project_id, manifest).model_dump(mode="json")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from ..datasets.repository import DatasetRepository
+from app.infra.db.dataset_repository import DatasetRepository
 from app.identity import AuthError, Principal
 from ..orchestration.repository import AgentRunRepository
 from ..role_workflow_service import RoleWorkflowService

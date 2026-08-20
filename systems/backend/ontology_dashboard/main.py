@@ -5,16 +5,21 @@ from __future__ import annotations
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.dataset import DatasetAccessError
+from app.dataset.dataset_router import create_dataset_router
+
 from .application import create_app
 from .dependencies import (
     client_ip,
     current_principal,
+    get_dataset_catalog_service,
     get_identity_service,
     get_ontology_planner_service,
     get_rate_limiter,
     get_service,
     rate_limit_subject,
     require_csrf,
+    require_permission,
     set_auth_cookies,
 )
 from app.identity import AuthError
@@ -25,7 +30,6 @@ from .routers.agent import router as agent_router
 from .routers.admin import router as admin_router
 from .routers.analyses import router as analyses_router
 from .routers.dashboards import router as dashboards_router
-from .routers.datasets import router as datasets_router
 from .routers.exports import router as exports_router
 from .routers.governance import router as governance_router
 from .routers.manufacturing import router as manufacturing_router
@@ -58,6 +62,12 @@ auth_router = build_identity_router(
     client_ip=client_ip,
     rate_limit_subject=rate_limit_subject,
     set_auth_cookies=set_auth_cookies,
+)
+
+datasets_router = create_dataset_router(
+    get_dataset_catalog_service=get_dataset_catalog_service,
+    require_csrf=require_csrf,
+    require_permission=require_permission,
 )
 
 
@@ -123,6 +133,14 @@ async def invalid_equipment_state_patch_handler(
 async def auth_error_handler(_: Request, exc: AuthError) -> JSONResponse:
     return JSONResponse(
         status_code=identity_http_status(exc),
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
+
+@app.exception_handler(DatasetAccessError)
+async def dataset_access_error_handler(_: Request, exc: DatasetAccessError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
         content={"error": {"code": exc.code, "message": exc.message}},
     )
 

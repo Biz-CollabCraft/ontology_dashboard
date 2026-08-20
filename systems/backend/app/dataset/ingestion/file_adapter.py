@@ -9,9 +9,9 @@ from urllib.parse import unquote, urlparse
 
 from openpyxl import load_workbook
 
-from .models import DatasetManifest, IngestionResult, QualityRule, QuarantinedRecord
+from .ingestion_schema import DatasetManifest, IngestionResult, QualityRule, QuarantinedRecord
 from .registry import AdapterRegistry, default_adapter_registry
-from .repository import AdapterRepository
+from .repository import IngestionRepositoryPort
 
 
 class FileAccessPolicy:
@@ -35,21 +35,24 @@ class FileAccessPolicy:
 class FileAdapter:
     def __init__(
         self,
-        database_path: str | Path,
         *,
         allowed_roots: Iterable[str | Path],
         registry: AdapterRegistry | None = None,
-        repository: AdapterRepository | None = None,
+        repository: IngestionRepositoryPort,
     ) -> None:
-        self.repository = repository or AdapterRepository(database_path)
+        self.repository = repository
         self.registry = registry or default_adapter_registry()
         self.policy = FileAccessPolicy(allowed_roots)
 
     @staticmethod
     def _source_path(uri: str) -> Path:
+        if len(uri) >= 3 and uri[0].isalpha() and uri[1] == ":" and uri[2] in {"/", "\\"}:
+            return Path(uri)
         parsed = urlparse(uri)
         if parsed.scheme in {"", "file"}:
             value = unquote(parsed.path) if parsed.scheme == "file" else uri
+            if parsed.scheme == "file" and len(value) >= 3 and value[0] == "/" and value[1].isalpha() and value[2] == ":":
+                value = value[1:]
             return Path(value)
         raise ValueError("File Adapter only supports local file paths and file:// URIs")
 

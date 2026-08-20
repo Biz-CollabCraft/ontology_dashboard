@@ -43,7 +43,7 @@ from .dashboard_models import (
     ReportDraftRecord,
     SavedViewRecord,
 )
-from .datasets.models import (
+from app.dataset.dataset_schema import (
     DatasetDetail,
     DatasetPage,
     DatasetVersionRecord,
@@ -627,11 +627,11 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.adapters.list_project_datasets": ItemsResponse[dict[str, Any]],
     "ontology_dashboard.routers.adapters.list_project_predictions": ItemsResponse[PredictionResultRecord],
     "ontology_dashboard.routers.adapters.ingest_prediction_result": PredictionResultRecord,
-    "ontology_dashboard.routers.datasets.list_datasets": DatasetPage,
-    "ontology_dashboard.routers.datasets.dataset_detail": DatasetDetail,
-    "ontology_dashboard.routers.datasets.create_dataset_version": DatasetVersionRecord,
-    "ontology_dashboard.routers.datasets.save_ontology_mapping": OntologyMappingRecord,
-    "ontology_dashboard.routers.datasets.create_materialization": MaterializationRecord,
+    "app.dataset.dataset_router.list_datasets": DatasetPage,
+    "app.dataset.dataset_router.dataset_detail": DatasetDetail,
+    "app.dataset.dataset_router.create_dataset_version": DatasetVersionRecord,
+    "app.dataset.dataset_router.save_ontology_mapping": OntologyMappingRecord,
+    "app.dataset.dataset_router.create_materialization": MaterializationRecord,
     "ontology_dashboard.routers.ontology.list_workspaces": ItemsResponse[dict[str, Any]],
     "ontology_dashboard.routers.ontology.list_domain_packs": ItemsResponse[DomainPackDefinition],
     "ontology_dashboard.routers.ontology.ontology_registry": OntologyRegistryResponse,
