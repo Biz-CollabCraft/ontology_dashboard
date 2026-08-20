@@ -35,7 +35,6 @@ from app.project import (
     DEFAULT_PROJECT_ID,
     DEFAULT_WORKSPACE_ID,
     ProjectContextError,
-    SQLiteProjectContextResolver,
 )
 
 

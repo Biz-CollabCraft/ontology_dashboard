@@ -21,19 +21,19 @@ def register_equipment_routes(
 
     @router.get("/equipment")
     def list_equipment(
-        _: Any = Depends(authorization_dependency),
+        principal: Any = Depends(authorization_dependency),
         service: Any = Depends(service_dependency),
     ) -> dict[str, Any]:
-        return {"items": service.list_equipment()}
+        return {"items": service.list_equipment(principal.active_project_id)}
 
     @router.get("/equipment/{equipment_id}")
     def get_equipment(
         equipment_id: str,
-        _: Any = Depends(authorization_dependency),
+        principal: Any = Depends(authorization_dependency),
         service: Any = Depends(service_dependency),
     ) -> Any:
         try:
-            return service.equipment(equipment_id)
+            return service.equipment(equipment_id, principal.active_project_id)
         except EquipmentNotFoundError:
             # Preserve the pre-migration application error envelope rather than
             # leaking FastAPI's transport-specific {"detail": ...} response.

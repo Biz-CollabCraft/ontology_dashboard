@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import inspect
+from types import SimpleNamespace
 
 import pytest
 from fastapi import APIRouter, FastAPI
@@ -76,6 +78,18 @@ def test_equipment_public_facade_exposes_service_and_ports() -> None:
         expected_state_version=None,
         state_patch=RESET_TOOL_WEAR,
     )["state_version"] == 1
+
+
+def test_equipment_public_ports_require_explicit_project_scope() -> None:
+    query_signature = inspect.signature(EquipmentCurrentStateQuery.equipment_current_state)
+    patch_signature = inspect.signature(EquipmentStatePatchPort.patch_equipment_state)
+    service_query_signature = inspect.signature(EquipmentService.equipment_current_state)
+    service_patch_signature = inspect.signature(EquipmentService.patch_equipment_state)
+
+    assert query_signature.parameters["project_id"].default is inspect.Parameter.empty
+    assert patch_signature.parameters["project_id"].default is inspect.Parameter.empty
+    assert service_query_signature.parameters["project_id"].default is inspect.Parameter.empty
+    assert service_patch_signature.parameters["project_id"].default is inspect.Parameter.empty
 
 
 def test_equipment_domain_exceptions_do_not_alias_builtin_lookup_or_validation_errors() -> None:
@@ -180,7 +194,9 @@ def test_equipment_router_preserves_existing_read_contract() -> None:
     register_equipment_routes(
         router,
         service_dependency=lambda: service,
-        authorization_dependency=lambda: object(),
+        authorization_dependency=lambda: SimpleNamespace(
+            active_project_id="manufacturing-demo-project"
+        ),
     )
     app.include_router(router)
 

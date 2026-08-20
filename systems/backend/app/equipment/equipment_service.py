@@ -12,20 +12,17 @@ from .equipment_exception import (
 from .equipment_repository import EquipmentRepository
 
 
-DEFAULT_PROJECT_ID = "manufacturing-demo-project"
-
-
 class EquipmentService:
     """Own Equipment identity, current-state reads, and state mutation semantics."""
 
     def __init__(self, repository: EquipmentRepository) -> None:
         self.repository = repository
 
-    def list_equipment(self, project_id: str = DEFAULT_PROJECT_ID) -> list[dict[str, Any]]:
+    def list_equipment(self, project_id: str) -> list[dict[str, Any]]:
         return [master.as_dict() for master in self.repository.list_masters(project_id=project_id)]
 
     def equipment(
-        self, equipment_id: str, project_id: str = DEFAULT_PROJECT_ID
+        self, equipment_id: str, project_id: str
     ) -> dict[str, Any]:
         master = self.repository.get_master(project_id=project_id, equipment_id=equipment_id)
         if master is None:
@@ -33,7 +30,7 @@ class EquipmentService:
         return master.as_dict()
 
     def equipment_current_state(
-        self, equipment_id: str, project_id: str = DEFAULT_PROJECT_ID
+        self, equipment_id: str, project_id: str
     ) -> dict[str, Any] | None:
         self._require_master(project_id=project_id, equipment_id=equipment_id)
         snapshot = self.repository.get_current_state(
@@ -48,7 +45,7 @@ class EquipmentService:
         *,
         expected_state_version: int | None,
         state_patch: Mapping[str, Any],
-        project_id: str = DEFAULT_PROJECT_ID,
+        project_id: str,
     ) -> dict[str, Any]:
         self._require_master(project_id=project_id, equipment_id=equipment_id)
         current = self.repository.get_current_state(

@@ -28,7 +28,7 @@ class EquipmentCurrentStateQuery(Protocol):
     def equipment_current_state(
         self,
         equipment_id: str,
-        project_id: str = "manufacturing-demo-project",
+        project_id: str,
     ) -> EquipmentCurrentStatePayload | None: ...
 
 
@@ -41,5 +41,5 @@ class EquipmentStatePatchPort(Protocol):
         *,
         expected_state_version: int | None,
         state_patch: Mapping[str, Any],
-        project_id: str = "manufacturing-demo-project",
+        project_id: str,
     ) -> EquipmentCurrentStatePayload: ...
