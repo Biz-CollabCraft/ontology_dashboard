@@ -108,6 +108,32 @@ DIFF
                 force, _reason = review_force_vertex([path])
                 self.assertTrue(force)
 
+    def test_review_workflows_use_latest_head_wins_queue_guards(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        architecture = (repository_root / ".github/workflows/architecture.yml").read_text(
+            encoding="utf-8"
+        )
+        full_review = (repository_root / ".github/workflows/code-review.yml").read_text(
+            encoding="utf-8"
+        )
+        comment_review = (
+            repository_root / ".github/workflows/pr-comment-review.yml"
+        ).read_text(encoding="utf-8")
+
+        review_section = architecture.split("\n  review:\n", 1)[1]
+        self.assertIn("${{ !cancelled() &&", review_section)
+        self.assertNotIn("${{ always() &&", review_section.split("\n    uses:", 1)[0])
+
+        self.assertIn("name: Claim latest-head review slot", full_review)
+        self.assertIn("stale review discarded before model spend", full_review)
+        self.assertIn("PR advanced before Vertex spend", full_review)
+        self.assertIn("stale completed review discarded before publish", full_review)
+        self.assertIn("steps.freshness.outputs.current == 'true'", full_review)
+
+        self.assertIn("stale comment review discarded before model spend", comment_review)
+        self.assertIn("PR advanced before Vertex spend", comment_review)
+        self.assertIn("stale completed response discarded before publish", comment_review)
+
     def test_local_review_output_escalates_blockers_but_not_clean_reviews(self):
         force, reason = local_review_requires_vertex(
             "### 발견 사항\n[P1] domain boundary violation\n\n### Merge Readiness\nNot Ready",

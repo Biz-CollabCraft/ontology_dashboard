@@ -495,7 +495,7 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'assert_required_success "Docker runtime smoke"',
         'python -m unittest tests.test_backend_domain_first_architecture',
         'needs: architecture',
-        '${{ always() &&',
+        '${{ !cancelled() &&',
         'uses: ./.github/workflows/code-review.yml',
         'docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}',
         'frontend_unit_verified: ${{ needs.architecture.outputs.frontend_unit_verified }}',
