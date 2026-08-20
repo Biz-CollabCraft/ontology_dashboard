@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, Sequence
 
+from .dashboard_schema import DashboardDiagnosisSummary
+
 
 class DashboardPrincipal(Protocol):
     user_id: str
@@ -39,7 +41,7 @@ class EquipmentStatusQueryPort(Protocol):
 
 
 class DiagnosisReadModelQueryPort(Protocol):
-    def diagnosis_read_model(self, **query: Any) -> Sequence[dict[str, Any]]: ...
+    def diagnosis_read_model(self, **query: Any) -> Sequence[DashboardDiagnosisSummary]: ...
 
 
 class MaintenanceQueryPort(Protocol):

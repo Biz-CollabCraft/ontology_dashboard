@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -14,6 +15,24 @@ ReportContentOrigin = Literal["generated", "edited", "translated"]
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class DashboardDiagnosisSummary(StrictModel):
+    """Dashboard-owned projection of a Diagnosis persistence summary.
+
+    The shape intentionally omits persistence-only fields such as
+    ``received_at`` and renames storage column names into the stable read-model
+    vocabulary consumed by Dashboard.
+    """
+
+    result_id: str
+    workspace_id: str
+    subject_type: str
+    subject_id: str
+    status: str
+    model_version: str
+    dataset_version: str
+    created_at: datetime
 
 
 class DashboardTemplatePublishRequestCreate(StrictModel):
