@@ -194,6 +194,8 @@ GitHub Actions
   ├─ Playwright E2E
   └─ Backend / architecture checks
         ↓ main + architecture green
+Mac mini release watcher
+        ↓ outbound pull
 Mac mini
   ├─ Frontend :8120
   ├─ Backend  :8110
@@ -201,6 +203,7 @@ Mac mini
 ```
 
 - GitHub Actions: PR/frontend CI와 main 검증을 담당하며 Preview 배포를 생성하지 않습니다.
+- Mac mini release watcher: `main` SHA의 `architecture` CI 성공을 확인한 뒤 검증된 SHA만 pull합니다.
 - Mac mini: 실제 제품 Frontend/Backend runtime 및 단일 공개 진입점을 담당합니다.
 - Cloudflare Tunnel: `https://ontology.oosu.dev/`을 Mac mini Frontend로 연결합니다.
 - Model Artifact: 사전에 학습·검증한 Artifact를 영속 위치에 발행하고 Mac mini Backend에
