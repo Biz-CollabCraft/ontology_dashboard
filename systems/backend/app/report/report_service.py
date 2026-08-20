@@ -159,7 +159,7 @@ class ReportService:
             content = self.diagnosis.event_report_snapshot(
                 event_id=request.event_id,
                 principal=principal,
-            )
+            ).model_dump(mode="json")
         else:
             content = self.maintenance.role_workspace_snapshot(
                 principal=principal,

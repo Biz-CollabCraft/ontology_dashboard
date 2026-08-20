@@ -4,6 +4,8 @@ from .generation import render_report
 from .generation_provider import ReportAgent
 from .report_exception import ReportConflictError
 from .report_router import build_report_router
+from .diagnosis_projection import project_diagnosis_evidence_snapshot
+from .report_schema import ReportDiagnosisEvidenceSnapshot
 from .report_schema import (
     ExportArtifact,
     ExportCheckpoint,
@@ -28,5 +30,7 @@ __all__ = [
     "ReportRequest",
     "ReportService",
     "build_report_router",
+    "project_diagnosis_evidence_snapshot",
+    "ReportDiagnosisEvidenceSnapshot",
     "render_report",
 ]

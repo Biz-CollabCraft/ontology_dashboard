@@ -16,6 +16,90 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ReportDiagnosisEquipment(StrictModel):
+    equipment_id: str
+    display_name: str | None = None
+    line: str | None = None
+    criticality: str | None = None
+    assigned_engineer: str | None = None
+
+
+class ReportDiagnosisFactor(StrictModel):
+    evidence_field_id: str
+    feature: str
+    display_name: str
+    value: str | int | float | bool | None = None
+    unit: str | None = None
+    direction: str | None = None
+    contribution: float | None = None
+    source_type: str | None = None
+
+
+class ReportDiagnosisEvidence(StrictModel):
+    evidence_id: str
+    event_id: str
+    status: str
+    recommended_decision: str
+    confidence: str
+    failure_probability: float | None = None
+    threshold: float | None = None
+    predicted_failure_type: str | None = None
+    model_version: str | None = None
+    policy_version: str | None = None
+    dataset_version: str | None = None
+    detected_interval_start: str | None = None
+    detected_interval_end: str | None = None
+    top_factors: list[ReportDiagnosisFactor] = Field(default_factory=list)
+    data_quality_warnings: list[str] = Field(default_factory=list)
+    generated_at: str | None = None
+
+
+class ReportDecisionActivity(StrictModel):
+    id: str
+    actor: str
+    decision: str
+    note: str
+    created_at: str
+
+
+class ReportNoteActivity(StrictModel):
+    id: str
+    actor: str
+    body: str
+    created_at: str
+
+
+class ReportConversationActivity(StrictModel):
+    id: str
+    thread_id: str
+    role: str
+    question: str
+    intent: str
+    answer: str
+    created_at: str
+
+
+class ReportDiagnosisActivity(StrictModel):
+    decisions: list[ReportDecisionActivity] = Field(default_factory=list)
+    notes: list[ReportNoteActivity] = Field(default_factory=list)
+    conversations: list[ReportConversationActivity] = Field(default_factory=list)
+
+
+class ReportDiagnosisEvidenceSnapshot(StrictModel):
+    """Report-owned projection of Diagnosis evidence and event activity.
+
+    The export/report boundary deliberately excludes raw observations, runtime
+    configuration, persistence payloads, and full Diagnosis history.
+    """
+
+    event_id: str
+    project_id: str
+    scenario_id: str
+    equipment: ReportDiagnosisEquipment
+    evidence: ReportDiagnosisEvidence
+    activity: ReportDiagnosisActivity
+
+
 class ReportSection(StrictModel):
     section_id: str
     title: str

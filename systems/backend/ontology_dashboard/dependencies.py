@@ -45,6 +45,8 @@ from app.infra.db.dashboard_repository import DashboardRepository
 from .distributed_runtime import DurableJobRepository
 from app.infra.db.report_repository import ReportRepository
 from app.report.report_service import ExportService, ReportService
+from app.report.diagnosis_projection import project_diagnosis_evidence_snapshot
+from app.report.report_schema import ReportDiagnosisEvidenceSnapshot
 from app.governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.project import ProjectService
@@ -416,12 +418,17 @@ class _DiagnosisReportSnapshotAdapter:
     def __init__(self, service: ManufacturingPredictiveMaintenanceService) -> None:
         self.service = service
 
-    def event_report_snapshot(self, *, event_id: str, principal: Principal) -> dict[str, Any]:
-        return {
-            "event": self.service.event(event_id),
-            "evidence": self.service.evidence_snapshot(event_id),
-            "activity": self.service.repository.event_activity(event_id),
-        }
+    def event_report_snapshot(
+        self,
+        *,
+        event_id: str,
+        principal: Principal,
+    ) -> ReportDiagnosisEvidenceSnapshot:
+        return project_diagnosis_evidence_snapshot(
+            event=self.service.event(event_id),
+            evidence=self.service.evidence_snapshot(event_id),
+            activity=self.service.repository.event_activity(event_id),
+        )
 
 
 class _RoleWorkspaceReportAdapter:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, Sequence
 
+from .report_schema import ReportDiagnosisEvidenceSnapshot
+
 
 class ReportPrincipal(Protocol):
     user_id: str
@@ -31,7 +33,12 @@ class DashboardSnapshotPort(Protocol):
 
 
 class DiagnosisEvidencePort(Protocol):
-    def event_report_snapshot(self, *, event_id: str, principal: ReportPrincipal) -> dict[str, Any]: ...
+    def event_report_snapshot(
+        self,
+        *,
+        event_id: str,
+        principal: ReportPrincipal,
+    ) -> ReportDiagnosisEvidenceSnapshot: ...
 
 
 class MaintenanceHistoryPort(Protocol):

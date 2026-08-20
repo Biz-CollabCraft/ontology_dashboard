@@ -31,13 +31,9 @@
     "domain_packs/predictive_maintenance/__init__.py",
     "domain_packs/predictive_maintenance/materialization.py",
     "domain_packs/registry.py",
-    "export_models.py",
-    "export_repository.py",
-    "export_service.py",
     "integrations/__init__.py",
     "integrations/project3/__init__.py",
     "integrations/project3/projection.py",
-    "llm.py",
     "main.py",
     "migrations.py",
     "mlops_runtime.py",
@@ -80,7 +76,6 @@
     "postgresql_ontology_repository.py",
     "postgresql_repositories.py",
     "predictive_maintenance_runtime/__init__.py",
-    "reports.py",
     "repository.py",
     "role_workflow_models.py",
     "role_workflow_repository.py",
@@ -90,7 +85,6 @@
     "routers/admin.py",
     "routers/agent.py",
     "routers/analyses.py",
-    "routers/exports.py",
     "routers/manufacturing.py",
     "routers/modeling.py",
     "routers/ontology.py",
@@ -432,16 +426,6 @@
       "source": "tests/test_architecture_debt_stage44.py",
       "kind": "dynamic_import",
       "target": "ontology_dashboard.analysis_service"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.export_repository"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.export_service"
     },
     {
       "source": "tests/test_architecture_debt_stage44.py",
@@ -1071,22 +1055,12 @@
     {
       "source": "tests/test_project_layer.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.export_repository"
-    },
-    {
-      "source": "tests/test_project_layer.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
       "source": "tests/test_project_layer.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_project_repository_isolation_matrix.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.export_repository"
     },
     {
       "source": "tests/test_project_repository_isolation_matrix.py",
