@@ -36,6 +36,7 @@
 | RPT-02 | Report 출력 JSON | 부분 일치 | `결정 완료` |
 | RPT-03 | 문장 안전 규칙 | 현행 구현 계약 | `결정 완료` |
 | RPT-04 | 실패 대체 | 현행 구현 계약 | `결정 완료` |
+| RPT-05 | Asset Detail Report View 계약 | 부분 일치 | `결정 완료` — ADR-003 및 PR #95 기준 |
 
 이 분류는 팀 결정의 대체물이 아니다. `현행 구현 계약`은 코드 사실을 확정하며,
 그 계약을 제품 기준으로 계속 유지할지는 팀이 결정한다.
@@ -227,6 +228,33 @@ Closed-loop 결정 상태: 완료
 - 담당: 팀원4 Report API.
 - 분류: `현행 구현 계약`
 - 결정 상태: `완료` (2026-08-07)
+
+### RPT-05 — Asset Detail Report View 계약
+
+- 현행: MVP 상세 화면은 `MvpEventDetailModel`, `MvpAsset`, `MvpReportModel` 구현
+  타입을 통해 asset, 현재 risk/status/action, 현재 센서값, top factors, activity,
+  report section, provenance를 소비한다.
+- 결정: Product API/schema 계약 객체명에는 `Mvp` 접두어를 붙이지 않는다. 기존
+  `Mvp*` 타입은 현재 화면의 기준 필드 확인용 구현명으로만 사용하고, 설비 상세
+  리포트 후보 계약은 `AssetDetailReportViewModel`로 표기한다.
+- 결정: 기존 MVP 상세 필드는 기준선으로 유지한다. `map-report-ui-prototype`에서
+  필요한 feature 그래프, risk 그래프, crossing marker, 전체 설비 이력은 기준선에
+  추가되는 필드이며 단일 Event Evidence만으로 채운다고 가정하지 않는다.
+- 결정: `features[].series`는 Observation series 또는 gen_data Layer 2 `_log.jsonl`
+  정규화 결과에서 파생하고, `risk_series`는 Backend Diagnosis runtime
+  prediction/result timeline에서 파생한다. gen_data `model_outputs/*` fixture는
+  runtime truth로 직접 소비하지 않는다.
+- 결정: 시계열 point와 baseline은 화면 표시용 `number[]`만 반환하지 않고
+  `observed_at`, source reference, quality/status, prediction/result/artifact
+  reference 또는 evidence field reference를 보존한다.
+- 코드 영향: 후속 구현에서 Backend composition adapter, fixture contract,
+  frontend ViewModel builder, Playwright source/gap 검증이 필요하다. 이번 PR은 문서
+  계약만 변경한다.
+- 근거: [ADR-003](../../../architecture-decisions/ADR-003-asset-detail-report-view-contract.md),
+  [API 명세](../../api-specification.md), [스키마 정의](../../schema-definition.md),
+  [PDM Evidence/Report UI 통합 계획](../../pdm-evidence-report-ui-integration-plan.md).
+- 분류: `부분 일치`
+- 결정 상태: `완료` (2026-08-20)
 
 ## 6.1 팀원2·3 — Generator Feature/Label/Artifact 계약 (PR #21~#24)
 
