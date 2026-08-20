@@ -5,12 +5,12 @@ from pathlib import Path
 
 import ontology_dashboard.migrations as migration_module
 from ontology_dashboard.migrations import migrate, migration_status
-from ontology_dashboard.ontology_repository import OntologyActionRepository
+from app.infra.db.ontology_action_repository import OntologyActionRepository
 from ontology_dashboard.persistence_readiness import (
     persistence_readiness,
     verify_rls_migration_evidence,
 )
-from ontology_dashboard.projects import ProjectRepository
+from app.infra.db.project_repository import ProjectRepository, SQLiteProjectContextResolver
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +21,10 @@ def test_phase20_additive_migration_and_recovery_state(tmp_path: Path) -> None:
     migrate(str(database))
     assert "0019_tenant_transaction_convergence" in migration_status(str(database))["available"]
     ProjectRepository(database)
-    repository = OntologyActionRepository(database)
+    repository = OntologyActionRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     invocation, created = repository.reserve(
         idempotency_key="phase20-recovery",
         workspace_id="manufacturing-demo",

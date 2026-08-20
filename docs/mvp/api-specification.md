@@ -150,12 +150,54 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 설비 유형에 존재하지 않는 센서 key는 400으로 처리한다.
 
-### 4.6 Operations
+### 4.6 `GET /objects/{asset_id}/report-detail`
+
+상태: V2 변경 제안. 현행 Event Report API나 `/objects/{asset_id}`를 대체하지 않는다.
+
+응답: `AssetDetailReportViewModel`.
+
+계약 객체명에는 구현 네임스페이스 접두어를 붙이지 않는다. 현행 프론트엔드의
+`Mvp*` 타입명은 기존 MVP 화면 구현명으로만 참고하고, Product API 계약명은
+`AssetDetail`, `AssetDetailReportViewModel`처럼 도메인 객체명으로 표기한다.
+
+설비 상세 리포트, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint 후보이다. Backend adapter가 Product Result Artifact/Evidence, canonical 또는 overlay Observation series, Backend Diagnosis runtime prediction/result series, Activity/Maintenance source를 병합한다.
+
+필수 Query: `from`, `to`. 선택 Query: `dataset_version_id`, `grain=raw|10m|1h`.
+
+```json
+{
+  "asset": {},
+  "risk": {},
+  "risk_series": [],
+  "features": [],
+  "equipment_history": [],
+  "evidence": {
+    "artifact_id": null,
+    "source_kind": "runtime_inference",
+    "gaps": []
+  },
+  "data_status": {}
+}
+```
+
+`features[].series`는 versioned Observation contract에서 파생할 수 있다. gen_data Layer 1/Layer 2/_log.jsonl 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target이며, Product API 계약은 내부 파일명이 아니라 canonical/overlay Observation API shape에 의존한다. `risk_series`는 Backend Diagnosis가 후속 runtime result/prediction history로 materialize하는 운영 Result/Prediction source에서 파생해야 하며, `gen_data`의 `model_outputs/prediction_timeline.jsonl` 또는 legacy `precomputed_prediction_timeline`을 최신 운영 결과처럼 직접 읽어 대체하지 않는다.
+
+기존 MVP 상세 화면이 이미 소비하는 필드(asset, 현재 risk/status/action, 현재 센서값,
+top factors, report section, provenance)는 기준선으로 유지한다. `map-report`
+이식에 필요한 그래프·피쳐 이력 필드는 이 기준선에 추가되는 필드이며, 단일 Event
+Evidence만으로 채울 수 있다고 가정하지 않는다.
+
+근거 추적을 위해 시계열 point와 baseline에는 최소 `observed_at`, source reference,
+quality/status 정보를 보존한다. 화면 표시용 `number[]`만 반환하지 않는다.
+
+없는 값은 합성하지 않고 null, 빈 배열, `evidence.gaps[]`, `data_status.warnings[]`로 표현한다.
+
+### 4.7 Operations
 
 `GET /operations`는 같은 필터의 생산·정비 목록 합계와 일치하는 요약을 반환한다.
 생산 행의 위험 등급은 `cnc_asset_id`와 동일 snapshot Artifact를 결합한 파생값이다.
 
-### 4.7 `POST /reports/executive`
+### 4.8 `POST /reports/executive`
 
 현행은 `POST /api/events/{event_id}/report`에서
 `ReportRequest(role, locale, use_llm)`와 role-aware grounded report를 사용한다.

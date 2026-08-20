@@ -8,11 +8,11 @@ import json
 import os
 from pathlib import Path
 
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
-    PostgreSQLPredictiveMaintenanceBundleIngestor,
     PredictiveMaintenanceCanonicalV2Adapter,
 )
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from ontology_dashboard.migrations import migrate
 
 

@@ -1,6 +1,6 @@
 """Governed Result Artifact and PostgreSQL replay vertical."""
 
-from .models import (
+from app.diagnosis.runtime_schema import (
     DatasetVersionSelectionRequest,
     DatasetVersionOption,
     DatasetVersionOptions,
@@ -12,8 +12,8 @@ from .models import (
     ReplaySessionSnapshot,
     ReplayStartRequest,
 )
-from .repository import PredictiveMaintenanceRuntimeRepository
-from .service import PredictiveMaintenanceRuntimeService
+from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
+from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 
 __all__ = [
     "DatasetVersionOption",

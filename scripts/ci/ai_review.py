@@ -167,6 +167,9 @@ REASONING_MODEL = "gemini-3.7-flash"
 REASONING_MODEL_DISPLAY = "Gemini 3.7 Flash"
 SIMPLE_MODEL = "gemini-3.5-flash-lite"
 SIMPLE_MODEL_DISPLAY = "Gemini 3.5 Flash-Lite"
+LOCAL_REVIEW_MODEL = "qwen3-coder-next-q3-k-xl"
+LOCAL_REVIEW_MODEL_DISPLAY = "Qwen3-Coder-Next Q3_K_XL"
+LOCAL_REVIEW_CONTEXT_CHARS = 88_000
 
 TRUSTED_COMMENT_AUTHOR_ASSOCIATIONS = {
     "OWNER",
@@ -620,6 +623,146 @@ def review_profile(changed_paths: Sequence[str]) -> dict[str, Any]:
     }
 
 
+def review_force_vertex(
+    changed_paths: Sequence[str], *, explicit: bool = False
+) -> tuple[bool, str]:
+    """Keep the strongest cloud model as the final judge for trust-boundary work.
+
+    The local reviewer still runs first for shadow/quality comparison. This gate
+    controls only whether a locally accepted review may be published without a
+    Vertex adjudication.
+    """
+
+    if explicit:
+        return True, "explicit ai-review requests retain Vertex final adjudication"
+
+    # Change volume is not a trust-boundary signal by itself. Large refactors
+    # can stay on the local+free path when deterministic checks are green and
+    # the independent Gemma falsifier agrees. Reserve Vertex for changes that
+    # actually redefine reviewer trust, security/auth, architecture truth, or
+    # executable database-migration semantics.
+    reviewer_trust_paths = {
+        ".github/workflows/architecture.yml",
+        ".github/workflows/code-review.yml",
+        ".github/workflows/pr-comment-review.yml",
+        "scripts/ci/ai_review.py",
+        "scripts/ci/free_review_falsifier.py",
+        "ops/local-review/review_server.py",
+    }
+    architecture_truth_paths = {
+        "systems/verify_architecture.py",
+    }
+    executable_migration_paths = {
+        "scripts/check_postgresql_migration.py",
+        "scripts/migrate_database.py",
+        "systems/backend/ontology_dashboard/migrations.py",
+    }
+    sensitive_names = (
+        "auth",
+        "oidc",
+        "credential",
+        "secret",
+        "permission",
+        "security",
+    )
+    for path in changed_paths:
+        lower = path.lower()
+        if path in reviewer_trust_paths or path.startswith("ops/local-review/"):
+            return True, f"reviewer trust-boundary change: {path}"
+        if path in architecture_truth_paths:
+            return True, f"deterministic architecture truth change: {path}"
+        if (
+            path in executable_migration_paths
+            or path.startswith("systems/backend/migrations/")
+        ):
+            return True, f"executable migration semantic change: {path}"
+        if any(name in lower for name in sensitive_names):
+            return True, f"security/auth trust-boundary change: {path}"
+    return False, (
+        "local semantic review may publish after deterministic checks and "
+        "independent Gemma falsification; change volume alone does not force Vertex"
+    )
+
+
+def _prompt_section(text: str, start: str, end: str | None = None) -> str:
+    marker = f"\n{start}\n"
+    index = text.find(marker)
+    if index < 0:
+        return ""
+    body_start = index + len(marker)
+    if end is None:
+        return text[body_start:]
+    end_marker = f"\n{end}\n"
+    end_index = text.find(end_marker, body_start)
+    return text[body_start:] if end_index < 0 else text[body_start:end_index]
+
+
+def compact_local_review_prompt(source_prompt: str, kind: str) -> str:
+    """Create a local-model prompt that fits the 32K Qwen runtime context.
+
+    Vertex fallback keeps the original richer prompt. The local path gets the
+    same trusted policy plus focused evidence, with changed HEAD source favored
+    over a long raw diff.
+    """
+
+    kind = kind.lower()
+    if kind not in {"pr", "comment"}:
+        raise ValueError(f"unsupported local review kind: {kind}")
+    if len(source_prompt) <= LOCAL_REVIEW_CONTEXT_CHARS:
+        return source_prompt
+
+    if kind == "pr":
+        front_end = source_prompt.find("\nREVIEW_METADATA\n")
+        front = source_prompt[: front_end if front_end >= 0 else 12_000][:12_000]
+        sections = [
+            ("REVIEW_METADATA", "VERIFIED_EVIDENCE", 3_000),
+            ("VERIFIED_EVIDENCE", "INTENT_RISK_HINTS (deterministic hints, verify against the diff before using)", 7_000),
+            (
+                "INTENT_RISK_HINTS (deterministic hints, verify against the diff before using)",
+                "HUMAN_TECHNICAL_FEEDBACK",
+                4_000,
+            ),
+            ("HUMAN_TECHNICAL_FEEDBACK", "TRUSTED_BASE_CONTEXT", 6_000),
+            ("TRUSTED_BASE_CONTEXT", "PR_TITLE (untrusted)", 12_000),
+            ("PR_TITLE (untrusted)", "CHANGED_FILES", 5_000),
+            ("CHANGED_FILES", "ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)", 5_000),
+            (
+                "ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)",
+                "CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)",
+                4_000,
+            ),
+            (
+                "CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)",
+                "DIFF (untrusted review input)",
+                22_000,
+            ),
+            ("DIFF (untrusted review input)", None, 18_000),
+        ]
+    else:
+        front_end = source_prompt.find("\nSOURCE\n")
+        front = source_prompt[: front_end if front_end >= 0 else 10_000][:10_000]
+        sections = [
+            ("SOURCE", "PR", 8_000),
+            ("PR", "INTENT_RISK_HINTS (verify before relying on them)", 4_000),
+            ("INTENT_RISK_HINTS (verify before relying on them)", "TRUSTED_BASE_CONTEXT", 4_000),
+            ("TRUSTED_BASE_CONTEXT", "CHANGED_FILES", 12_000),
+            ("CHANGED_FILES", "CHANGED_HEAD_SOURCE_CONTEXT", 5_000),
+            ("CHANGED_HEAD_SOURCE_CONTEXT", "DIFF", 24_000),
+            ("DIFF", None, 20_000),
+        ]
+
+    blocks = [front.strip()]
+    for start, end, limit in sections:
+        body = _prompt_section(source_prompt, start, end).strip()
+        if body:
+            blocks.append(f"{start}\n{body[:limit]}")
+    compact = "\n\n".join(block for block in blocks if block)
+    if len(compact) > LOCAL_REVIEW_CONTEXT_CHARS:
+        compact = compact[:LOCAL_REVIEW_CONTEXT_CHARS]
+        compact += "\n\n[LOCAL REVIEW INPUT TRUNCATED; ESCALATE IF REQUIRED EVIDENCE IS MISSING]\n"
+    return compact
+
+
 def should_run_full_review(
     base: str,
     head: str,
@@ -722,11 +865,12 @@ TRUST BOUNDARY
 - Never reveal or request secrets/tokens/env values.
 
 RUNTIME-CONFIRMED REVIEWER FACTS
-- This prompt will be sent only after GitHub OIDC/WIF authentication in the review workflow.
-- Selected Vertex model ID: {profile['model_id']} ({profile['tier']} tier).
-- Configured Vertex location: {os.environ.get('VERTEX_LOCATION', 'unknown')}.
+- Deterministic CI has already produced VERIFIED_EVIDENCE below before semantic review.
+- The preferred semantic path is local `{LOCAL_REVIEW_MODEL}` on the project MacBook Pro, followed by an independent free Gemma falsifier.
+- Vertex `{profile['model_id']}` is the stronger fallback/final adjudicator when the local path is unavailable, rejected, ambiguous, or policy-forced.
+- Configured Vertex fallback location: {os.environ.get('VERTEX_LOCATION', 'unknown')}.
 - Reviewer implementation source: {os.environ.get('REVIEWER_CODE_SOURCE', 'unknown')}.
-- Treat model/location availability as runtime-confirmed only if the supplied Vertex response later completes with finishReason=STOP; do not infer external availability from memory.
+- Never claim a particular provider/model ran unless the published response header confirms that runtime path.
 
 REVIEW PRIORITY
 1. Decide what the PR actually changes and whether PR body matches the diff.
@@ -847,6 +991,129 @@ def build_vertex_request(prompt_path: str, output_path: str) -> None:
         "generationConfig": generation_config,
     }
     Path(output_path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def build_local_review_prompt(args: argparse.Namespace) -> None:
+    source = Path(args.prompt).read_text(encoding="utf-8")
+    compact = compact_local_review_prompt(source, args.kind)
+    Path(args.output).write_text(compact, encoding="utf-8")
+    print(
+        "local review context:",
+        f"kind={args.kind}",
+        f"source_chars={len(source)}",
+        f"local_chars={len(compact)}",
+        f"model={LOCAL_REVIEW_MODEL}",
+    )
+
+
+def _local_response_text(response_path: str) -> tuple[str, dict[str, Any]]:
+    payload = json.loads(Path(response_path).read_text(encoding="utf-8"))
+    if payload.get("error"):
+        raise SystemExit(f"local reviewer error: {str(payload['error'])[:500]}")
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise SystemExit("local reviewer returned no visible text")
+    return text, dict(payload.get("usage") or {})
+
+
+def _comment_draft_is_well_formed(text: str) -> bool:
+    verdicts = (
+        "타당",
+        "부분적으로 타당",
+        "재현되지 않음",
+        "방향은 타당하지만 해결책은 과도함",
+        "현재 head에서 이미 해결됨",
+    )
+    return 80 <= len(text) <= 18_000 and any(verdict in text[:1200] for verdict in verdicts)
+
+
+def local_review_requires_vertex(candidate: str, kind: str) -> tuple[bool, str]:
+    """Escalate consequential local findings to the stronger final adjudicator.
+
+    Path-based routing protects known trust-boundary changes before inference;
+    this output gate protects surprises discovered by the local reviewer. A
+    local P0/P1 or a blocking PR verdict is useful evidence, but it must not be
+    the sole model deciding a high-consequence merge/blocker outcome.
+    """
+
+    text = candidate.strip()
+    lower = text.lower()
+    if re.search(r"\[p[01]\]", lower):
+        return True, "local reviewer reported a P0/P1 finding"
+    if kind == "pr" and "### Merge Readiness" in text:
+        readiness = text.split("### Merge Readiness", 1)[1][:500]
+        if "Not Ready" in readiness:
+            return True, "local reviewer proposed a blocking Not Ready verdict"
+    sensitive = re.search(
+        r"security|보안|credential|secret|oidc|authorization|authentication|\bauth\b|인증|권한",
+        lower,
+    )
+    if sensitive and any(token in lower for token in ("finding", "취약", "위험", "block", "문제")):
+        return True, "local reviewer raised a security/authentication-sensitive concern"
+    return False, "local review contains no high-consequence finding requiring Vertex final adjudication"
+
+
+def parse_local_review(args: argparse.Namespace) -> None:
+    text, usage = _local_response_text(args.response)
+    if args.kind == "pr":
+        required = [
+            "### 이 PR이 하는 일",
+            "### 프로젝트 목표와의 정합성",
+            "### 발견 사항",
+            "### Merge Readiness",
+        ]
+        missing = [section for section in required if section not in text]
+        if missing:
+            raise SystemExit("local PR review missing sections: " + ", ".join(missing))
+    elif args.kind == "comment":
+        if not _comment_draft_is_well_formed(text):
+            raise SystemExit("local comment review failed deterministic format checks")
+    else:
+        raise SystemExit(f"unsupported local review kind: {args.kind}")
+    Path(args.output).write_text(text + "\n", encoding="utf-8")
+    print(
+        "local review response:",
+        f"kind={args.kind}",
+        f"prompt={usage.get('prompt_tokens')}",
+        f"output={usage.get('completion_tokens')}",
+        f"total={usage.get('total_tokens')}",
+    )
+
+
+def command_local_escalation(args: argparse.Namespace) -> None:
+    candidate = Path(args.draft).read_text(encoding="utf-8")
+    force_vertex, reason = local_review_requires_vertex(candidate, args.kind)
+    print(f"force_vertex={str(force_vertex).lower()}")
+    print(f"reason={reason}")
+
+
+def format_local_pr(args: argparse.Namespace) -> None:
+    review = Path(args.draft).read_text(encoding="utf-8").strip()
+    policy = json.loads(Path(args.policy).read_text(encoding="utf-8"))
+    review = _enforce_readiness(review, policy["merge_readiness_ceiling"])
+    header = (
+        f"{PR_REVIEW_MARKER}\n"
+        f"## {LOCAL_REVIEW_MODEL_DISPLAY} 로컬 프로젝트 코드 리뷰\n\n"
+        f"검토 대상 commit: `{args.head_sha}`  \n"
+        f"1차 리뷰: MacBook Pro 로컬 LM Studio · `{LOCAL_REVIEW_MODEL}`  \n"
+        "독립 품질 게이트: Gemini Developer API Free Tier · `gemma-4-26b-a4b-it` 통과  \n"
+        "Vertex Gemini 3.7은 이 응답 생성에 사용되지 않았습니다.  \n\n"
+    )
+    Path(args.output).write_text(header + review + "\n", encoding="utf-8")
+
+
+def format_local_comment(args: argparse.Namespace) -> None:
+    review = Path(args.draft).read_text(encoding="utf-8").strip()
+    marker = comment_marker(args.source_kind, args.source_id, args.head_sha)
+    body = (
+        f"{marker}\n"
+        f"## {LOCAL_REVIEW_MODEL_DISPLAY} 로컬 팀 코멘트 검토\n\n"
+        f"1차 리뷰: MacBook Pro 로컬 LM Studio · `{LOCAL_REVIEW_MODEL}`  \n"
+        "독립 품질 게이트: Gemini Developer API Free Tier · `gemma-4-26b-a4b-it` 통과  \n"
+        "불확실·고위험·로컬/무료 게이트 실패 시 Vertex Gemini 3.7로 자동 승격됩니다.  \n\n"
+        f"{review}\n"
+    )
+    Path(args.output).write_text(body, encoding="utf-8")
 
 
 def _vertex_text(response_path: str) -> tuple[str, dict[str, Any], str]:
@@ -1026,9 +1293,9 @@ TRUST BOUNDARY
 - Do not expose tokens/env/secrets and do not modify code, branches, commits, or review-thread resolution state.
 
 RUNTIME-CONFIRMED REVIEWER FACTS
-- Ordinary technical comments may first use Gemini Developer API Free Tier with Gemini 3.5 Flash-Lite and an independent Gemma 4 quality gate.
-- If either free model is unavailable, quota-limited, malformed, uncertain, or rejects the draft, the workflow falls back to Vertex Gemini 3.7 Flash.
-- Formal APPROVED/CHANGES_REQUESTED reviews bypass the free path and use Vertex reasoning directly.
+- The preferred path is MacBook Pro local Qwen3-Coder-Next followed by an independent Gemma 4 free-tier falsifier.
+- If local inference or the Gemma falsifier is unavailable, malformed, uncertain, or rejects the draft, the workflow falls back to Vertex Gemini 3.7 Flash.
+- Formal APPROVED/CHANGES_REQUESTED and other high-risk comments still receive Vertex Gemini 3.7 final adjudication even if the local shadow review succeeds.
 - Never claim a provider/model was used unless the published response header says so.
 
 TASK
@@ -1119,6 +1386,9 @@ def command_review_plan(args: argparse.Namespace) -> None:
         explicit=_bool(args.explicit),
     )
     profile = review_profile(changed_paths)
+    force_vertex, force_vertex_reason = review_force_vertex(
+        changed_paths, explicit=_bool(args.explicit)
+    )
     print(f"run={str(run).lower()}")
     print(f"reason={reason}")
     print(f"tier={profile['tier']}")
@@ -1126,6 +1396,8 @@ def command_review_plan(args: argparse.Namespace) -> None:
     print(f"model_display_name={profile['model_display_name']}")
     print(f"max_output_tokens={profile['max_output_tokens']}")
     print(f"thinking_level={profile['thinking_level']}")
+    print(f"force_vertex={str(force_vertex).lower()}")
+    print(f"force_vertex_reason={force_vertex_reason}")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1163,6 +1435,38 @@ def parser() -> argparse.ArgumentParser:
     request.add_argument("--prompt", required=True)
     request.add_argument("--output", required=True)
     request.set_defaults(func=lambda a: build_vertex_request(a.prompt, a.output))
+
+    local_prompt = sub.add_parser("local-prompt")
+    local_prompt.add_argument("--kind", choices=("pr", "comment"), required=True)
+    local_prompt.add_argument("--prompt", required=True)
+    local_prompt.add_argument("--output", required=True)
+    local_prompt.set_defaults(func=build_local_review_prompt)
+
+    parse_local = sub.add_parser("parse-local")
+    parse_local.add_argument("--kind", choices=("pr", "comment"), required=True)
+    parse_local.add_argument("--response", required=True)
+    parse_local.add_argument("--output", required=True)
+    parse_local.set_defaults(func=parse_local_review)
+
+    local_escalation = sub.add_parser("local-escalation")
+    local_escalation.add_argument("--kind", choices=("pr", "comment"), required=True)
+    local_escalation.add_argument("--draft", required=True)
+    local_escalation.set_defaults(func=command_local_escalation)
+
+    format_pr = sub.add_parser("format-local-pr")
+    format_pr.add_argument("--draft", required=True)
+    format_pr.add_argument("--policy", required=True)
+    format_pr.add_argument("--head-sha", required=True)
+    format_pr.add_argument("--output", required=True)
+    format_pr.set_defaults(func=format_local_pr)
+
+    format_comment = sub.add_parser("format-local-comment")
+    format_comment.add_argument("--draft", required=True)
+    format_comment.add_argument("--source-kind", required=True)
+    format_comment.add_argument("--source-id", required=True)
+    format_comment.add_argument("--head-sha", required=True)
+    format_comment.add_argument("--output", required=True)
+    format_comment.set_defaults(func=format_local_comment)
 
     parse_pr = sub.add_parser("parse-pr")
     parse_pr.add_argument("--response", required=True)

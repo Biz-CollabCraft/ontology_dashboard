@@ -1,24 +1,41 @@
-"""
-equipment 도메인 패키지 초기화 파일
-"""
+"""Public contract for the Equipment bounded context."""
 
-from .equipment_router import router, EquipmentRouter
-from .equipment_service import EquipmentService
+from .equipment_domain import (
+    EquipmentCurrentState,
+    EquipmentMaster,
+    apply_state_patch,
+    next_state_version,
+)
+from .equipment_exception import (
+    EquipmentError,
+    EquipmentNotFoundError,
+    EquipmentStateVersionConflictError,
+    InvalidEquipmentStatePatchError,
+)
 from .equipment_repository import EquipmentRepository
 from .equipment_schema import (
-    EquipmentCreateRequest,
-    EquipmentUpdateRequest,
-    EquipmentResponse,
+    EquipmentCurrentStatePayload,
+    EquipmentCurrentStateQuery,
+    EquipmentMasterPayload,
+    EquipmentStatePatchCommand,
+    EquipmentStatePatchPort,
 )
-from .equipment_exception import EquipmentNotFoundError
+from .equipment_service import EquipmentService
 
 __all__ = [
-    "router",
-    "EquipmentRouter",
-    "EquipmentService",
-    "EquipmentRepository",
-    "EquipmentCreateRequest",
-    "EquipmentUpdateRequest",
-    "EquipmentResponse",
+    "EquipmentCurrentState",
+    "EquipmentCurrentStatePayload",
+    "EquipmentCurrentStateQuery",
+    "EquipmentError",
+    "EquipmentMaster",
+    "EquipmentMasterPayload",
     "EquipmentNotFoundError",
+    "EquipmentRepository",
+    "EquipmentService",
+    "EquipmentStatePatchCommand",
+    "EquipmentStatePatchPort",
+    "EquipmentStateVersionConflictError",
+    "InvalidEquipmentStatePatchError",
+    "apply_state_patch",
+    "next_state_version",
 ]

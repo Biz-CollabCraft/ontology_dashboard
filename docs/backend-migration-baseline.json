@@ -5,19 +5,7 @@
   "legacy_sources": [
     "__init__.py",
     "adapters/__init__.py",
-    "adapters/azure_fleet.py",
-    "adapters/bundle_file_adapter.py",
-    "adapters/bundle_models.py",
-    "adapters/file_adapter.py",
-    "adapters/governed_tabular.py",
-    "adapters/metropt.py",
     "adapters/models.py",
-    "adapters/postgresql_bundle_ingestion.py",
-    "adapters/prediction_repository.py",
-    "adapters/predictive_maintenance_v2.py",
-    "adapters/protocol.py",
-    "adapters/registry.py",
-    "adapters/repository.py",
     "adapters/service.py",
     "analysis_models.py",
     "analysis_repository.py",
@@ -42,33 +30,17 @@
     "dashboard_models.py",
     "dashboard_repository.py",
     "dashboard_service.py",
-    "datasets/__init__.py",
-    "datasets/materialization.py",
-    "datasets/models.py",
-    "datasets/projection.py",
-    "datasets/repository.py",
-    "datasets/service.py",
-    "datasets/source.py",
     "demo_predictive_maintenance_bootstrap.py",
     "dependencies.py",
     "deployment.py",
     "distributed_handlers.py",
     "distributed_runtime.py",
-    "domain_packs/__init__.py",
-    "domain_packs/models.py",
-    "domain_packs/predictive_maintenance/__init__.py",
-    "domain_packs/predictive_maintenance/materialization.py",
-    "domain_packs/registry.py",
-    "enterprise_identity.py",
     "export_models.py",
     "export_repository.py",
     "export_service.py",
     "governance/__init__.py",
     "governance/models.py",
     "governance/service.py",
-    "identity.py",
-    "identity_models.py",
-    "identity_repository.py",
     "integrations/__init__.py",
     "integrations/project3/__init__.py",
     "integrations/project3/projection.py",
@@ -87,14 +59,8 @@
     "modeling/repository.py",
     "modeling/schema.py",
     "modeling/service.py",
-    "ontology.py",
-    "ontology_adapter.py",
-    "ontology_instance_repository.py",
     "ontology_planner_models.py",
     "ontology_planner_service.py",
-    "ontology_primitives.py",
-    "ontology_repository.py",
-    "ontology_service.py",
     "openapi_contracts.py",
     "orchestration/__init__.py",
     "orchestration/models.py",
@@ -112,18 +78,8 @@
     "polyglot/health.py",
     "polyglot/settings.py",
     "postgresql_compat.py",
-    "postgresql_ontology_repository.py",
     "postgresql_repositories.py",
     "predictive_maintenance_runtime/__init__.py",
-    "predictive_maintenance_runtime/models.py",
-    "predictive_maintenance_runtime/repository.py",
-    "predictive_maintenance_runtime/service.py",
-    "product_result_evidence_projection.py",
-    "project_context.py",
-    "projects/__init__.py",
-    "projects/models.py",
-    "projects/repository.py",
-    "projects/service.py",
     "reports.py",
     "repository.py",
     "role_workflow_models.py",
@@ -134,19 +90,14 @@
     "routers/admin.py",
     "routers/agent.py",
     "routers/analyses.py",
-    "routers/auth.py",
     "routers/dashboards.py",
-    "routers/datasets.py",
     "routers/exports.py",
     "routers/governance.py",
     "routers/manufacturing.py",
     "routers/modeling.py",
-    "routers/ontology.py",
     "routers/planner.py",
     "routers/platform.py",
-    "routers/predictive_maintenance_runtime.py",
     "routers/project3.py",
-    "routers/projects.py",
     "routers/role_workspaces.py",
     "routers/system.py",
     "service.py",
@@ -186,22 +137,12 @@
     {
       "source": "scripts/check_postgresql_runtime.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "scripts/check_postgresql_runtime.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.outbox"
     },
     {
       "source": "scripts/check_postgresql_runtime.py",
       "kind": "static_import",
       "target": "ontology_dashboard.postgresql_repositories"
-    },
-    {
-      "source": "scripts/check_postgresql_runtime.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
     },
     {
       "source": "scripts/evaluate_gold.py",
@@ -221,32 +162,12 @@
     {
       "source": "scripts/ingest_dataset.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.adapters.file_adapter"
-    },
-    {
-      "source": "scripts/ingest_dataset.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters.models"
-    },
-    {
-      "source": "scripts/ingest_dataset.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.migrations"
     },
     {
       "source": "scripts/ingest_predictive_maintenance_bundle.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
-    },
-    {
-      "source": "scripts/ingest_predictive_maintenance_bundle.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "scripts/materialize_predictive_maintenance_ontology.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs.predictive_maintenance"
     },
     {
       "source": "scripts/migrate_database.py",
@@ -319,26 +240,6 @@
       "target": "ontology_dashboard.app:app"
     },
     {
-      "source": "scripts/seed_demo_accounts.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "scripts/seed_demo_dataset_catalog.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.datasets.models"
-    },
-    {
-      "source": "scripts/seed_demo_dataset_catalog.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.datasets.repository"
-    },
-    {
-      "source": "scripts/seed_demo_dataset_catalog.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
       "source": "scripts/seed_demo_dataset_catalog.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
@@ -364,11 +265,6 @@
       "target": "ontology_dashboard.deployment"
     },
     {
-      "source": "scripts/verify_predictive_maintenance_ingestion.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
-    },
-    {
       "source": "scripts/verify_tenant_isolation.py",
       "kind": "static_import",
       "target": "ontology_dashboard.persistence_readiness"
@@ -377,11 +273,6 @@
       "source": "systems/backend/Dockerfile",
       "kind": "runtime_entrypoint",
       "target": "ontology_dashboard.app:app"
-    },
-    {
-      "source": "systems/backend/app/diagnosis/model_registry.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.modeling.models"
     },
     {
       "source": "systems/backend/app/main.py",
@@ -404,11 +295,6 @@
       "target": "ontology_dashboard.demo_predictive_maintenance_bootstrap"
     },
     {
-      "source": "systems/frontend/playwright.config.ts",
-      "kind": "runtime_entrypoint",
-      "target": "ontology_dashboard.main:app"
-    },
-    {
       "source": "systems/generator/feature/workbench.py",
       "kind": "static_import",
       "target": "ontology_dashboard.modeling.models"
@@ -424,11 +310,6 @@
       "target": "ontology_dashboard.modeling.models"
     },
     {
-      "source": "systems/generator/ontology_mapping/workbench.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology"
-    },
-    {
       "source": "tests/test_adapter_api.py",
       "kind": "static_import",
       "target": "ontology_dashboard.adapters.service"
@@ -441,42 +322,12 @@
     {
       "source": "tests/test_adapter_api.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_adapter_api.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
       "source": "tests/test_adapter_api.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
-      "source": "tests/test_adapter_api.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_adapter_layer.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters.file_adapter"
-    },
-    {
-      "source": "tests/test_adapter_layer.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters.models"
-    },
-    {
-      "source": "tests/test_adapter_layer.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters.prediction_repository"
-    },
-    {
-      "source": "tests/test_adapter_layer.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_adapter_layer.py",
@@ -516,21 +367,6 @@
     {
       "source": "tests/test_adaptive_modeling_e2e.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.adapters.prediction_repository"
-    },
-    {
-      "source": "tests/test_adaptive_modeling_e2e.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters.service"
-    },
-    {
-      "source": "tests/test_adaptive_modeling_e2e.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity_models"
-    },
-    {
-      "source": "tests/test_adaptive_modeling_e2e.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.migrations"
     },
     {
@@ -562,11 +398,6 @@
       "source": "tests/test_analysis_path.py",
       "kind": "static_import",
       "target": "ontology_dashboard.distributed_runtime"
-    },
-    {
-      "source": "tests/test_analysis_path.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_analysis_path.py",
@@ -626,36 +457,6 @@
     {
       "source": "tests/test_architecture_debt_stage44.py",
       "kind": "dynamic_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.identity_repository"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology_adapter"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology_repository"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology_service"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
       "target": "ontology_dashboard.postgresql_repositories"
     },
     {
@@ -682,21 +483,6 @@
       "source": "tests/test_artifact_storage_phase24.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "tests/test_artifact_storage_phase24.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
-      "source": "tests/test_auth_rbac.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_auth_rbac.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity_models"
     },
     {
       "source": "tests/test_auth_rbac.py",
@@ -754,11 +540,6 @@
       "target": "ontology_dashboard.closed_loop.repository"
     },
     {
-      "source": "tests/test_closed_loop_persistence.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.project_context"
-    },
-    {
       "source": "tests/test_connectors_phase26.py",
       "kind": "static_import",
       "target": "ontology_dashboard.connectors"
@@ -774,16 +555,6 @@
       "target": "ontology_dashboard.migrations"
     },
     {
-      "source": "tests/test_connectors_phase26.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
-      "source": "tests/test_dashboard_stages20_24.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
       "source": "tests/test_dashboard_stages20_24.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
@@ -792,11 +563,6 @@
       "source": "tests/test_dashboard_stages20_24.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_dataset_catalog_contract_models.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.datasets.models"
     },
     {
       "source": "tests/test_dataset_intake.py",
@@ -826,22 +592,7 @@
     {
       "source": "tests/test_dataset_projection_stage47.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.datasets"
-    },
-    {
-      "source": "tests/test_dataset_projection_stage47.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.datasets.projection"
-    },
-    {
-      "source": "tests/test_dataset_projection_stage47.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
-    },
-    {
-      "source": "tests/test_dataset_projection_stage47.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_dataset_projection_stage47.py",
@@ -857,16 +608,6 @@
       "source": "tests/test_dataset_projection_stage47.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_demo_dataset_bootstrap.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.datasets.repository"
-    },
-    {
-      "source": "tests/test_demo_predictive_maintenance_bootstrap.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
     },
     {
       "source": "tests/test_demo_predictive_maintenance_bootstrap.py",
@@ -904,24 +645,9 @@
       "target": "ontology_dashboard.migrations"
     },
     {
-      "source": "tests/test_distributed_runtime_phase23.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
       "source": "tests/test_domain_pack_platform_phase19.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
-    },
-    {
-      "source": "tests/test_domain_pack_platform_phase19.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs"
-    },
-    {
-      "source": "tests/test_domain_pack_platform_phase19.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_domain_pack_platform_phase19.py",
@@ -931,32 +657,12 @@
     {
       "source": "tests/test_domain_pack_platform_phase19.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.projects"
-    },
-    {
-      "source": "tests/test_domain_pack_platform_phase19.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_enterprise_identity_phase21.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.enterprise_identity"
-    },
-    {
-      "source": "tests/test_enterprise_identity_phase21.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_export_security_stage31.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dashboard_service"
-    },
-    {
-      "source": "tests/test_export_security_stage31.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_export_security_stage31.py",
@@ -1006,22 +712,12 @@
     {
       "source": "tests/test_governance_workbench_stage51.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.datasets"
-    },
-    {
-      "source": "tests/test_governance_workbench_stage51.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
     },
     {
       "source": "tests/test_governance_workbench_stage51.py",
       "kind": "static_import",
       "target": "ontology_dashboard.governance"
-    },
-    {
-      "source": "tests/test_governance_workbench_stage51.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_governance_workbench_stage51.py",
@@ -1126,11 +822,6 @@
     {
       "source": "tests/test_multistore_orchestrator_stage49.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_multistore_orchestrator_stage49.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
@@ -1157,11 +848,6 @@
       "source": "tests/test_mvp.py",
       "kind": "static_import",
       "target": "ontology_dashboard.contracts"
-    },
-    {
-      "source": "tests/test_mvp.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_mvp.py",
@@ -1216,11 +902,6 @@
     {
       "source": "tests/test_ontology_planner_stage30.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_ontology_planner_stage30.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
@@ -1237,16 +918,6 @@
       "source": "tests/test_ontology_primitives_phase27.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "tests/test_ontology_primitives_phase27.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology_primitives"
-    },
-    {
-      "source": "tests/test_ontology_stage19.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_ontology_stage19.py",
@@ -1266,11 +937,6 @@
     {
       "source": "tests/test_outbox_worker.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_outbox_worker.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.migrations"
     },
     {
@@ -1286,22 +952,7 @@
     {
       "source": "tests/test_persistence_foundation.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_persistence_foundation.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "tests/test_persistence_foundation.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology_instance_repository"
-    },
-    {
-      "source": "tests/test_persistence_foundation.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology_service"
     },
     {
       "source": "tests/test_persistence_foundation.py",
@@ -1334,26 +985,6 @@
       "target": "ontology_dashboard.polyglot.settings"
     },
     {
-      "source": "tests/test_predictive_maintenance_bundle_adapter.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_bundle_contract.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters.bundle_models"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_graph_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_graph_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs.predictive_maintenance"
-    },
-    {
       "source": "tests/test_predictive_maintenance_graph_projection.py",
       "kind": "static_import",
       "target": "ontology_dashboard.integrations.project3"
@@ -1362,11 +993,6 @@
       "source": "tests/test_predictive_maintenance_graph_projection.py",
       "kind": "static_import",
       "target": "ontology_dashboard.outbox"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_postgresql.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
     },
     {
       "source": "tests/test_predictive_maintenance_postgresql.py",
@@ -1384,34 +1010,9 @@
       "target": "ontology_dashboard.modeling.repository"
     },
     {
-      "source": "tests/test_predictive_maintenance_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs.predictive_maintenance"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.postgresql_ontology_repository"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_result_replay.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
-    },
-    {
       "source": "tests/test_predictive_maintenance_result_replay.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_result_replay.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_predictive_maintenance_result_replay.py",
@@ -1424,19 +1025,9 @@
       "target": "ontology_dashboard.predictive_maintenance_runtime"
     },
     {
-      "source": "tests/test_predictive_maintenance_result_replay.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.routers.predictive_maintenance_runtime"
-    },
-    {
       "source": "tests/test_predictive_maintenance_runtime_capability.py",
       "kind": "static_import",
       "target": "ontology_dashboard"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_v3_compatibility.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.adapters"
     },
     {
       "source": "tests/test_predictive_maintenance_visualization_planner.py",
@@ -1456,22 +1047,12 @@
     {
       "source": "tests/test_predictive_maintenance_visualization_planner.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_visualization_planner.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
       "source": "tests/test_predictive_maintenance_visualization_planner.py",
       "kind": "static_import",
       "target": "ontology_dashboard.planner"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_visualization_planner.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.predictive_maintenance_runtime.models"
     },
     {
       "source": "tests/test_predictive_maintenance_visualization_planner.py",
@@ -1484,19 +1065,9 @@
       "target": "ontology_dashboard.visualizations"
     },
     {
-      "source": "tests/test_product_result_evidence_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.product_result_evidence_projection"
-    },
-    {
       "source": "tests/test_project3_routes_stage45.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
-    },
-    {
-      "source": "tests/test_project3_routes_stage45.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_project3_routes_stage45.py",
@@ -1531,17 +1102,7 @@
     {
       "source": "tests/test_project_layer.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_project_layer.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
-    },
-    {
-      "source": "tests/test_project_layer.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
     },
     {
       "source": "tests/test_project_layer.py",
@@ -1561,27 +1122,12 @@
     {
       "source": "tests/test_project_repository_isolation_matrix.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_project_repository_isolation_matrix.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.migrations"
     },
     {
       "source": "tests/test_project_repository_isolation_matrix.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.ontology_repository"
-    },
-    {
-      "source": "tests/test_project_repository_isolation_matrix.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.role_workflow_repository"
-    },
-    {
-      "source": "tests/test_role_workspaces_stages25_29.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.identity"
     },
     {
       "source": "tests/test_role_workspaces_stages25_29.py",
@@ -1601,11 +1147,6 @@
     {
       "source": "tests/test_tenant_isolation.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.identity"
-    },
-    {
-      "source": "tests/test_tenant_isolation.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
@@ -1621,17 +1162,7 @@
     {
       "source": "tests/test_tenant_persistence_phase20.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.ontology_repository"
-    },
-    {
-      "source": "tests/test_tenant_persistence_phase20.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.persistence_readiness"
-    },
-    {
-      "source": "tests/test_tenant_persistence_phase20.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.projects"
     }
   ]
 }

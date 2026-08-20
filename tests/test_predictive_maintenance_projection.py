@@ -7,15 +7,15 @@ from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
-    PostgreSQLPredictiveMaintenanceBundleIngestor,
     PredictiveMaintenanceCanonicalV2Adapter,
 )
-from ontology_dashboard.domain_packs.predictive_maintenance import (
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
+from app.infra.db.predictive_maintenance_ontology_projection import (
     PredictiveMaintenanceOntologyMaterializer,
 )
-from ontology_dashboard.postgresql_ontology_repository import (
+from app.infra.db.postgresql_ontology_instance_repository import (
     PostgreSQLOntologyInstanceRepository,
 )
 from predictive_maintenance_v3_helpers import create_small_v3_package

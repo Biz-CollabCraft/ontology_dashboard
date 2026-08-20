@@ -24,9 +24,9 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import AuthError, IdentityService, Principal
-from ..ontology_adapter import risk_event_object_id
-from ..ontology_service import OntologyService
+from app.identity import AuthError, IdentityService, Principal
+from app.ontology.projection import risk_event_object_id
+from app.ontology.ontology_service import OntologyService
 from ..role_workflow_models import TemplatePublishRequestCreate
 from ..role_workflow_service import RoleWorkflowService
 from ..service import ManufacturingPredictiveMaintenanceService

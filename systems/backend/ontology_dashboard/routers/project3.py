@@ -13,7 +13,7 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import AuthError, IdentityService, Principal
+from app.identity import AuthError, IdentityService, Principal
 from app.infra.external.project3 import (
     Project3Client,
     Project3ContractError,

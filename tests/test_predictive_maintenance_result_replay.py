@@ -15,23 +15,22 @@ from jsonschema import Draft202012Validator, FormatChecker
 from systems.backend.app.diagnosis.contracts import load_fixture
 from systems.backend.app.diagnosis.evidence import build_product_result_artifact
 from systems.backend.app.diagnosis.predictor import HeuristicPredictor
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
-    PostgreSQLPredictiveMaintenanceBundleIngestor,
     PredictiveMaintenanceCanonicalV2Adapter,
 )
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from ontology_dashboard.predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeRepository,
     PredictiveMaintenanceRuntimeService,
 )
-from ontology_dashboard.predictive_maintenance_runtime import service as runtime_service
+from app.diagnosis import runtime_service
 from ontology_dashboard.dependencies import (
     get_identity_service,
     get_predictive_maintenance_runtime_service,
 )
-from ontology_dashboard.identity import AuthError, CSRF_COOKIE, Principal, SESSION_COOKIE
-from ontology_dashboard.main import app
-from ontology_dashboard.routers.predictive_maintenance_runtime import replay_events
+from app.identity import AuthError, CSRF_COOKIE, Principal, SESSION_COOKIE
+from ontology_dashboard.main import app, predictive_maintenance_runtime_router
 from predictive_maintenance_v3_helpers import (
     create_small_v3_package,
     refresh_v3_contracts,
@@ -41,6 +40,13 @@ from test_predictive_maintenance_bundle_adapter import (
     refresh_contracts,
 )
 from test_predictive_maintenance_postgresql import postgresql_database
+
+
+replay_events = next(
+    route.endpoint
+    for route in predictive_maintenance_runtime_router.routes
+    if getattr(route, "name", None) == "replay_events"
+)
 
 
 REAL_V3_ROOT = (

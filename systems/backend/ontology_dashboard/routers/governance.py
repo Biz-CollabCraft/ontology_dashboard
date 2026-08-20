@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..dependencies import get_governance_service, require_csrf, require_permission
 from ..governance import GovernanceService
-from ..identity import Principal
+from app.identity import Principal
 
 router = APIRouter(prefix="/api/projects/{project_id}/workspaces/{workspace_id}/governance", tags=["governance"])
 

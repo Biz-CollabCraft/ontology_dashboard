@@ -101,6 +101,12 @@ def _source_files(root: Path) -> list[Path]:
     allowed = {".py", ".ts", ".tsx", ".js", ".mjs", ".css", ".sql"}
     files: list[Path] = []
     for path in _tracked_files(root):
+        # ``git ls-files`` still reports an unstaged deletion. Migration
+        # validation must describe the working tree that will be committed,
+        # not fail while trying to read a source that has been physically
+        # removed in the current change.
+        if not path.is_file():
+            continue
         if path.suffix not in allowed:
             continue
         relative = path.relative_to(root)

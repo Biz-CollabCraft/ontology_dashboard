@@ -18,13 +18,15 @@ from typing import Any
 from app.diagnosis.evidence import build_product_result_artifact
 from app.diagnosis.predictor import CompressorHeuristicPredictor, configured_predictor
 
-from .adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
-    PostgreSQLPredictiveMaintenanceBundleIngestor,
     PredictiveMaintenanceCanonicalV3SourceAdapter,
 )
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from .dependencies import database_target
-from .domain_packs.predictive_maintenance import PredictiveMaintenanceOntologyMaterializer
+from app.infra.db.predictive_maintenance_ontology_projection import (
+    PredictiveMaintenanceOntologyMaterializer,
+)
 
 
 ORGANIZATION_ID = "org-ontology-demo"

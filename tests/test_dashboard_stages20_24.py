@@ -8,7 +8,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.identity import CSRF_COOKIE, AdminUserUpdateRequest, IdentityService
+from app.identity import CSRF_COOKIE, AdminUserUpdateRequest, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 
@@ -23,7 +24,7 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def identity(database_path: Path) -> IdentityService:
-    return IdentityService(database_path, app_env="test", seed_demo=True)
+    return build_identity_service(database_path, app_env="test", seed_demo=True)
 
 
 @pytest.fixture()

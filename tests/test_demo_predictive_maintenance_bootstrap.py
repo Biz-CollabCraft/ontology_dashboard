@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ontology_dashboard.adapters import (
+from app.dataset.ingestion import (
     BundleFileAdapter,
     PredictiveMaintenanceCanonicalV3SourceAdapter,
     default_adapter_registry,

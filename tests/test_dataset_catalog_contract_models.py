@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ontology_dashboard.datasets.models import (
+from app.dataset.dataset_schema import (
     DatasetFileRecord,
     DatasetVersionRecord,
     AdapterIngestionRunRecord,

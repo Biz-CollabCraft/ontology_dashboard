@@ -40,9 +40,6 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     module_names = (
         "context",
         "contracts",
-        "identity_models",
-        "identity_repository",
-        "identity",
         "repository",
         "service",
     )
@@ -61,9 +58,17 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     )
     assert not (canonical_root / "security.py").exists()
 
-    identity = importlib.import_module("ontology_dashboard.identity")
-    identity_repository = importlib.import_module("ontology_dashboard.identity_repository")
+    identity = importlib.import_module("app.identity.identity_service")
+    identity_repository = importlib.import_module("app.identity.identity_repository")
     assert identity.IdentityRepository is identity_repository.IdentityRepository
+
+    project = importlib.import_module("app.project.project_service")
+    project_repository = importlib.import_module("app.project.project_repository")
+    assert project.ProjectRepository is project_repository.ProjectRepository
+    assert Path(project.__file__).resolve().is_relative_to(
+        (ROOT / "systems" / "backend" / "app" / "project").resolve()
+    )
+    assert not (canonical_root / "identity.py").exists()
 
 
 def test_dashboard_modules_load_from_canonical_directory() -> None:
@@ -135,30 +140,17 @@ def test_export_workflow_modules_load_from_canonical_directory() -> None:
     )
 
 
-def test_ontology_compatibility_modules_load_from_canonical_directory() -> None:
-    module_names = (
-        "conversation",
-        "llm",
-        "reports",
-        "ontology",
-        "ontology_adapter",
-        "ontology_repository",
-        "ontology_service",
-        "ontology_planner_models",
-        "ontology_planner_service",
-    )
-    canonical_root = ROOT / "systems" / "backend" / "ontology_dashboard"
-    for name in module_names:
-        module = importlib.import_module(f"ontology_dashboard.{name}")
-        assert Path(module.__file__).resolve().parent == canonical_root.resolve()
-
-    ontology = importlib.import_module("ontology_dashboard.ontology")
-    ontology_adapter = importlib.import_module("ontology_dashboard.ontology_adapter")
-    ontology_repository = importlib.import_module("ontology_dashboard.ontology_repository")
-    ontology_service = importlib.import_module("ontology_dashboard.ontology_service")
+def test_ontology_modules_load_from_domain_first_directory() -> None:
+    ontology = importlib.import_module("app.ontology.ontology_domain")
+    ontology_adapter = importlib.import_module("app.ontology.projection")
+    ontology_repository = importlib.import_module("app.infra.db.ontology_action_repository")
+    ontology_service = importlib.import_module("app.ontology.ontology_service")
     postgresql_repositories = importlib.import_module("ontology_dashboard.postgresql_repositories")
+    canonical_root = ROOT / "systems" / "backend" / "app" / "ontology"
+    assert Path(ontology.__file__).resolve().parent == canonical_root.resolve()
+    assert Path(ontology_adapter.__file__).resolve().parent == canonical_root.resolve()
+    assert Path(ontology_service.__file__).resolve().parent == canonical_root.resolve()
     assert ontology_adapter.ObjectRecord is ontology.ObjectRecord
-    assert ontology_service.OntologyActionRepository is ontology_repository.OntologyActionRepository
     assert issubclass(
         postgresql_repositories.PostgreSQLOntologyActionRepository,
         ontology_repository.OntologyActionRepository,

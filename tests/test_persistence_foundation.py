@@ -3,10 +3,13 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.ontology_instance_repository import OntologyInstanceRepository
-from ontology_dashboard.ontology_service import OntologyService
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.ontology.ontology_service import OntologyService
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 
@@ -97,9 +100,21 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
 
 def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Path) -> None:
     database = tmp_path / "ontology.db"
-    IdentityService(database, app_env="test", seed_demo=True)
+    build_identity_service(database, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
-    ontology = OntologyService(service)
+    project_context = SQLiteProjectContextResolver(database)
+    ontology = OntologyService(
+        service,
+        action_repository=OntologyActionRepository(
+            database,
+            project_context=project_context,
+        ),
+        instance_repository=OntologyInstanceRepository(
+            database,
+            project_context=project_context,
+        ),
+        field_actions=RoleWorkflowRepository(database),
+    )
 
     result = ontology.query_objects(
         workspace_id=WORKSPACE,
@@ -108,17 +123,20 @@ def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Pa
     )
     assert result["total"] == 8
 
-    repository = OntologyInstanceRepository(database)
+    repository = OntologyInstanceRepository(
+        database,
+        project_context=project_context,
+    )
     assert len(repository.list_objects(workspace_id=WORKSPACE)) >= 8
     assert len(repository.list_links(workspace_id=WORKSPACE)) >= 8
     ingestion = repository.latest_ingestion(workspace_id=WORKSPACE)
     assert ingestion is not None
-    assert ingestion["source_system"] == "manufacturing-predictive-maintenance-pack"
+    assert ingestion["source_system"] == "manufacturing-predictive-maintenance"
 
 
 def test_field_action_and_outbox_are_committed_together(tmp_path: Path) -> None:
     database = tmp_path / "outbox.db"
-    IdentityService(database, app_env="test", seed_demo=True)
+    build_identity_service(database, app_env="test", seed_demo=True)
     migrate(str(database))
     repository = RoleWorkflowRepository(database)
 

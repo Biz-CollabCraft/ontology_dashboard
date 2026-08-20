@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from ontology_dashboard.domain_packs.predictive_maintenance import (
+from app.infra.db.predictive_maintenance_ontology_projection import (
     PredictiveMaintenanceOntologyMaterializer,
 )
 

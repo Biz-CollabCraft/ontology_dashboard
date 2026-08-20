@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -88,6 +89,23 @@ def _module_names(node: ast.AST, *, package: str | None = None) -> list[str]:
             return [module]
     return []
 
+
+
+def _playwright_backend_webserver_command(playwright_text: str) -> str | None:
+    """Extract the actual uvicorn command configured in Playwright webServer."""
+
+    matches = list(re.finditer(r"^(?P<indent>\s*)webServer\s*:", playwright_text, flags=re.MULTILINE))
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    indent = match.group("indent")
+    following = playwright_text[match.end():]
+    next_property = re.search(rf"^{re.escape(indent)}[A-Za-z_$][A-Za-z0-9_$]*\s*:", following, flags=re.MULTILINE)
+    end = match.end() + next_property.start() if next_property is not None else len(playwright_text)
+    block = playwright_text[match.start():end]
+    commands = re.findall(r"^\s*command:\s*`([^`]*)`", block, flags=re.MULTILINE | re.DOTALL)
+    backend = [command for command in commands if re.search(r"\buvicorn\b", command)]
+    return backend[0] if len(backend) == 1 else None
 
 def _backend_app_package(path: Path, app_root: Path) -> str:
     parent = path.parent.relative_to(app_root)
@@ -477,7 +495,7 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
         'assert_required_success "Docker runtime smoke"',
         'python -m unittest tests.test_backend_domain_first_architecture',
         'needs: architecture',
-        '${{ always() &&',
+        '${{ !cancelled() &&',
         'uses: ./.github/workflows/code-review.yml',
         'docker_runtime_verified: ${{ needs.architecture.outputs.docker_runtime_verified }}',
         'frontend_unit_verified: ${{ needs.architecture.outputs.frontend_unit_verified }}',
@@ -581,6 +599,19 @@ def check_docker_runtime_ci(errors: list[str]) -> None:
             "Playwright backend bootstrap must allow CI to inject a Python executable instead of requiring a local .venv"
         )
 
+    playwright_backend_command = _playwright_backend_webserver_command(playwright_text)
+    if playwright_backend_command is None:
+        errors.append("MVP Playwright must define exactly one uvicorn backend command inside the webServer block")
+    else:
+        if not re.search(r"\buvicorn\s+app\.main:app(?:\s|$)", playwright_backend_command):
+            errors.append("MVP Playwright backend webServer must launch the canonical systems/backend app.main:app entrypoint")
+        if "ontology_dashboard.main:app" in playwright_backend_command:
+            errors.append("MVP Playwright backend webServer must not launch ontology_dashboard.main:app directly")
+        if not re.search(r"--app-dir\s+\.\./\.\./systems/backend(?:\s|$)", playwright_backend_command):
+            errors.append("MVP Playwright backend webServer must pin module resolution with --app-dir ../../systems/backend")
+        if "PYTHONPATH=../..:" in playwright_backend_command:
+            errors.append("MVP Playwright backend webServer must not put the repository root ahead of systems/backend on PYTHONPATH")
+
 
 def check_git_conflict_markers(errors: list[str]) -> None:
     conflict_prefixes = ("<<<<<<<", "=======", ">>>>>>>")
@@ -665,6 +696,7 @@ def main() -> int:
     print("- frontend Docker context ignores and Compose/nginx runtime port are converged")
     print("- backend runtime asset root is explicit and independent of site-packages depth")
     print("- architecture CI builds and boots backend/frontend Docker runtime hosts")
+    print("- MVP Playwright launches the canonical systems/backend app.main:app entrypoint")
     print("- generator owns semantic/feature/training and Model Artifact publication")
     print("- backend diagnosis owns runtime inference and Result Artifact/Evidence")
     print("- generator/backend direct Python imports are absent")

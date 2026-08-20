@@ -15,13 +15,36 @@ from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.common.rate_limit import RateLimiter
 from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
+from app.dataset import (
+    AnalysisDatasetMaterializer,
+    DatasetCatalogService,
+    DatasetMaterializationSource,
+)
+from app.dataset.ingestion import DatasetIngestionService
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
+from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.settings import database_location
+from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.infra.db.postgresql_ontology_instance_repository import (
+    PostgreSQLOntologyInstanceRepository,
+)
+from app.infra.db.ontology_primitives import OntologyPrimitiveRepository
+from app.infra.db.project_repository import (
+    ProjectRepository as SQLiteProjectRepository,
+    SQLiteProjectContextResolver,
+)
 from app.infra.external.project3 import Project3Client
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.infra.llm import configured_provider
+from app.ontology.ontology_service import OntologyService
 
 from .adapters.service import AdapterService
-from .adapters.prediction_repository import PredictionResultRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
+from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
+from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
+from .analysis_models import AnalysisRunRequest
 from .analysis_service import AnalysisService
 from .application_runtime import ApplicationRuntimeRepository
 from .artifact_storage import ArtifactGovernanceService, build_artifact_service
@@ -29,23 +52,19 @@ from .branching_lineage import BranchingLineageRepository
 from .connectors import ConnectorRepository, ConnectorService, FixtureConnectorAdapter
 from .dashboard_service import DashboardService
 from .distributed_runtime import DurableJobRepository
-from .datasets import (
-    AnalysisDatasetMaterializer,
-    DatasetCatalogService,
-    DatasetMaterializationSource,
-    DatasetRepository,
-)
 from .export_service import ExportService
 from .governance import GovernanceService
-from .identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
+from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
+from app.project import ProjectService
+from app.infra.db.project_repository import (
+    ProjectRepository as SQLiteProjectRepository,
+    SQLiteProjectContextResolver,
+)
 from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
-from .ontology_service import OntologyService
-from .ontology_primitives import OntologyPrimitiveRepository
 from .orchestration import AgentRunRepository, MultiStoreOrchestrator
 from .orchestration.ports import Project3GraphPort, Project3VectorPort, RelationalOntologyPort
-from .postgresql_ontology_repository import PostgreSQLOntologyInstanceRepository
 from .postgresql_repositories import (
     PostgreSQLAdapterRepository,
     PostgreSQLAuditRepository,
@@ -59,17 +78,14 @@ from .postgresql_repositories import (
     is_postgresql,
     seed_runtime_reference_data,
 )
-from .projects import ProjectRepository, ProjectService
-from .predictive_maintenance_runtime import (
-    PredictiveMaintenanceRuntimeRepository,
-    PredictiveMaintenanceRuntimeService,
-)
 from .role_workflow_service import RoleWorkflowService
+from .role_workflow_repository import RoleWorkflowRepository
 from .service import ManufacturingPredictiveMaintenanceService
 
 ROOT = project_root()
 MANUFACTURING_WORKSPACE = "manufacturing-demo"
 _MIGRATION_LOCK = Lock()
+_SERVICE_LOCK = Lock()
 
 
 def database_target() -> str:
@@ -91,7 +107,7 @@ def ensure_database_migrations() -> tuple[str, ...]:
 
 
 @lru_cache(maxsize=1)
-def get_service() -> ManufacturingPredictiveMaintenanceService:
+def _get_service_cached() -> ManufacturingPredictiveMaintenanceService:
     ensure_database_migrations()
     target = database_target()
     if is_postgresql(target):
@@ -101,6 +117,16 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
             repository=PostgreSQLAuditRepository(target),
         )
     return ManufacturingPredictiveMaintenanceService(ROOT, database_path=target)
+
+
+def get_service() -> ManufacturingPredictiveMaintenanceService:
+    """Return the process-local showcase service without duplicate cache misses."""
+
+    # lru_cache may execute concurrent misses more than once. Serialize access
+    # around the cache lookup itself so only one Equipment in-memory repository
+    # can be constructed inside a process.
+    with _SERVICE_LOCK:
+        return _get_service_cached()
 
 
 @lru_cache(maxsize=1)
@@ -120,8 +146,16 @@ def get_identity_service() -> IdentityService:
             password_hasher=password_hasher,
             seed_reference_data=seed_runtime_reference_data(),
         )
-        return IdentityService(target, repository=repository)
-    return IdentityService(target)
+        return IdentityService(repository, rate_limit_namespace=f"identity:{target}")
+    password_hasher = PasswordHasher(
+        time_cost=2,
+        memory_cost=19456,
+        parallelism=1,
+        hash_len=32,
+        salt_len=16,
+    )
+    repository = SQLiteIdentityRepository(target, password_hasher=password_hasher)
+    return IdentityService(repository, rate_limit_namespace=f"identity:{target}")
 
 
 @lru_cache(maxsize=1)
@@ -131,9 +165,9 @@ def get_project_service() -> ProjectService:
     repository = (
         PostgreSQLProjectRepository(target)
         if is_postgresql(target)
-        else ProjectRepository(target)
+        else SQLiteProjectRepository(target)
     )
-    return ProjectService(repository)
+    return ProjectService(repository, audit_port=get_identity_service().repository)
 
 
 @lru_cache(maxsize=1)
@@ -143,11 +177,29 @@ def get_adapter_service() -> AdapterService:
     if is_postgresql(target):
         return AdapterService(
             target,
-            root=ROOT,
-            repository=PostgreSQLAdapterRepository(target),
             prediction_repository=PostgreSQLPredictionResultRepository(target),
         )
-    return AdapterService(target, root=ROOT)
+    return AdapterService(target)
+
+
+@lru_cache(maxsize=1)
+def get_dataset_ingestion_service() -> DatasetIngestionService:
+    ensure_database_migrations()
+    target = database_target()
+    configured = os.getenv("ONTOLOGY_DASHBOARD_DATA_ROOTS", "")
+    roots = [Path(value) for value in configured.split(os.pathsep) if value.strip()]
+    if not roots:
+        roots = [ROOT / "data" / "raw", ROOT / "data" / "fixtures"]
+    repository = (
+        PostgreSQLAdapterRepository(target)
+        if is_postgresql(target)
+        else DatasetIngestionRepository(target)
+    )
+    return DatasetIngestionService(
+        repository=repository,
+        dataset_catalog=get_dataset_catalog_service(),
+        allowed_roots=roots,
+    )
 
 
 def _ontology_principal(
@@ -187,9 +239,21 @@ def get_ontology_service(
                 organization_id=principal.organization_id,
                 project_id=project_id,
             ),
-            role_workflow_repository=PostgreSQLRoleWorkflowRepository(target),
+            field_actions=PostgreSQLRoleWorkflowRepository(target),
         )
-    return OntologyService(service)
+    project_context = SQLiteProjectContextResolver(target)
+    return OntologyService(
+        service,
+        action_repository=OntologyActionRepository(
+            target,
+            project_context=project_context,
+        ),
+        instance_repository=OntologyInstanceRepository(
+            target,
+            project_context=project_context,
+        ),
+        field_actions=RoleWorkflowRepository(target),
+    )
 
 
 def get_analysis_service(
@@ -318,6 +382,7 @@ def get_analysis_materializer(
         analysis=analyses,
         ontology=ontology,
         datasets=datasets,
+        analysis_request_factory=AnalysisRunRequest,
         artifact_root=ROOT / "data" / "materializations",
     )
 
@@ -371,7 +436,10 @@ def get_modeling_service() -> ModelingService:
     prediction_repository = (
         PostgreSQLPredictionResultRepository(target)
         if is_postgresql(target)
-        else PredictionResultRepository(target)
+        else PredictionResultRepository(
+            target,
+            project_context=SQLiteProjectContextResolver(target),
+        )
     )
     return ModelingService.configured(
         target,

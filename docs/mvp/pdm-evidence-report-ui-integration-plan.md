@@ -141,6 +141,202 @@ flowchart LR
 - 이 작업에서 현행 Event Report 계약을 V2 기간 기반 Executive Report 계약으로 대체하지 않는다.
 - `pdm-mvp`가 `근거 부족`으로 남기는 optional context를 producer-side enrichment 또는 dashboard projection layer가 임의 수치나 정상 상태로 보정하지 않는다.
 - `failure_type_candidates`는 측정값에 대한 규칙 기반 조건 판정이며 모델 출력이 아니다. `predicted_failure_type` 또는 root cause처럼 취급하지 않는다.
+- `map-report-ui-prototype`의 그래프 생성 로직, fixture series, prototype adapter를 제품 runtime source로 승격하지 않는다. UI는 공식 ViewModel에 있는 series만 그리며, 없는 그래프는 `evidence_gap` 또는 `data_status.warnings`로 표시한다.
+- `gen_data`의 raw/simulation/synthetic Observation은 센서 시계열의 source fact로 사용할 수 있지만, `gen_data/canonical/model_outputs/*`의 `prediction_timeline`, `prediction_snapshot`, `result_artifact`는 운영 최신 결과가 아니라 compatibility/regression/migration fixture다. 제품 화면에서 위험도 시계열로 직접 소비하지 않는다.
+- `gen_data`의 최종 저장 형식은 곧바로 Product API ViewModel이 아니다. `.raw`는 프로토콜 원본, Layer 1 `output/sensor/.../{센서명}`은 최신값 overwrite, Layer 2 `output/sensor/.../_log.jsonl`은 append-only 센서 시계열이다. 이 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target으로 보고, Asset Detail Report의 실제 의존성은 내부 파일명이 아니라 versioned Observation contract에 둔다. 피쳐 그래프는 Layer 2를 `asset_id`, `sensor_key`, `observed_at`, `measurements` 형태로 정규화한 Observation API shape에서 파생한다.
+
+### 3.1 Asset Detail Report ViewModel 계약 후보
+
+`map-report-ui-prototype`을 MVP 리포트 화면에 이식할 때 필요한 공식 경계는 프론트 컴포넌트 계약이 아니라 Backend composition 계약이다. 프론트엔드는 Product Result Artifact, Observation API, runtime prediction series, maintenance/activity source를 직접 조합하지 않고, `AssetDetailReportViewModel`을 소비한다.
+
+계약 객체명에는 `Mvp` 접두어를 붙이지 않는다. 기존 MVP 프론트엔드의 `Mvp*`
+타입은 현재 화면이 소비 중인 필드 기준선을 조사하기 위한 구현명으로만 사용하고,
+신규 Product API/View 계약은 `AssetDetailReportViewModel`처럼 접두어 없는
+도메인 객체명으로 정의한다.
+
+상태: V2 변경 제안. 현행 Event Report API를 대체하지 않으며, 설비 상세 리포트와 요약 리포트의 피쳐 그래프 연결을 위한 후보 계약이다.
+
+최종 흐름은 다음과 같다. 센서 그래프는 Observation 계열에서 오고, 위험도 그래프와 현재 판단은 Backend Diagnosis가 만든 runtime Result/Evidence 계열에서 온다. 두 계열은 Product API/Report adapter에서만 합쳐진다.
+
+```mermaid
+flowchart TD
+  GD["gen_data\nraw/simulation/synthetic source"] --> RAW["Layer 0 .raw\nprotocol capture / audit"]
+  GD --> L1["Layer 1 sensor latest\noutput/sensor/.../{sensor}\noverwrite current value"]
+  GD --> L2["Layer 2 sensor log\noutput/sensor/.../_log.jsonl\nappend time series"]
+  L2 --> ING["Observation ingestion adapter\nnode_id split / timestamp normalize\npivot sensor rows into measurements"]
+  ING --> OBS["Observation Store\ncanonical / overlay observations"]
+  GD -. "reference only\nmodel_outputs prediction/result fixtures" .-> REF["compatibility / regression fixtures"]
+
+  GEN["systems/generator\nfeature engineering / training"] --> MA["Model Artifact\nmodel-artifact-v1.0\nfeature schema / history requirement / provenance"]
+
+  OBS --> DIA["Backend Diagnosis\nhistory window load\nModel Artifact validation\nruntime inference"]
+  MA --> DIA
+  DIA --> RA["Product Result Artifact\nresult-artifact-v1.0\ncurrent risk / status / top factors"]
+  DIA --> EV["Evidence Payload\nsensor evidence / baseline / gaps / provenance"]
+  DIA --> RTS["Runtime Prediction/Result Timeline\nrisk_series source"]
+
+  OBS --> API["Product API / Report Adapter\nAssetDetailReportViewModel composition"]
+  RA --> API
+  EV --> API
+  RTS --> API
+  ACT["Activity / Decision / Maintenance source"] --> API
+
+  API --> UI["MVP Report UI\nsummary / asset detail / feature graphs"]
+
+  RAW -. "not a report graph source" .-> API
+  L1 -. "current-value only\nnot history series" .-> API
+  REF -. "must not replace runtime risk_series" .-> API
+```
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant GD as gen_data
+  participant GEN as systems/generator
+  participant DIA as Backend Diagnosis
+  participant API as Product API / Report Adapter
+  participant UI as MVP Report UI
+
+  GD->>API: Layer 2 _log.jsonl available through ingestion adapter
+  API->>API: split node_id, normalize source_timestamp, pivot measurements
+  GEN->>DIA: publish Model Artifact
+  DIA->>DIA: load history window from Observation store
+  DIA->>DIA: validate Model Artifact and run runtime inference
+  DIA->>API: Product Result Artifact + Evidence Payload
+  DIA->>API: runtime prediction/result timeline
+  UI->>API: request AssetDetailReportViewModel(asset_id, from, to)
+  API->>API: merge asset, risk, risk_series, features, baseline, gaps
+  API->>UI: return official ViewModel
+```
+
+```ts
+type AssetDetailReportViewModel = {
+  asset: {
+    asset_id: string
+    asset_type: "compressor" | "cnc"
+    display_name?: string
+    site_id?: string
+    cell_id?: string
+    observed_at: string
+  }
+  risk: {
+    current: number | null
+    threshold: number | null
+    status_grade: "normal" | "attention" | "warning" | "critical"
+    prediction_horizon_hours: number | null
+  }
+  risk_series: Array<{
+    observed_at: string
+    failure_probability: number
+    status_grade: string
+    prediction_id: string
+    source_kind: "runtime_inference" | "compatibility_fallback"
+    source_ref?: string
+  }>
+  features: Array<{
+    key: string
+    label: string
+    unit: string
+    current: number | null
+    baseline?: {
+      mean: number
+      std: number
+      lower: number
+      upper: number
+      reference: string
+    }
+    series: Array<{
+      observed_at: string
+      value: number | null
+      quality_status?: "good" | "bad" | "unknown"
+      source_ref?: string
+    }>
+    top_factor?: {
+      rank: number
+      contribution: number
+      direction: "risk_up" | "risk_down"
+      explanation_method: string
+      evidence_field_id?: string
+    }
+  }>
+  equipment_history: Array<{
+    occurred_at: string
+    kind: string
+    tone: "critical" | "warning" | "attention" | "normal" | "hold"
+    description: string
+    source: string
+    memo?: string
+  }>
+  evidence: {
+    artifact_id: string | null
+    evidence_payload_reference?: string
+    model_version: string | null
+    dataset_version: string | null
+    source_kind: "runtime_inference" | "compatibility_fallback"
+    gaps: Array<{
+      field: string
+      reason: string
+      owner_domain: "diagnosis" | "dataset" | "maintenance" | "report" | "frontend"
+    }>
+  }
+  data_status: {
+    source: "canonical" | "fallback"
+    is_stale: boolean
+    is_data_quality_hold: boolean
+    warnings: string[]
+  }
+}
+```
+
+필드 산출 책임은 다음과 같이 나눈다.
+
+| 필드 묶음 | 공식 원천 | 책임 | 없는 경우 |
+|---|---|---|---|
+| `asset`, 표시명, line/cell | Asset/Object read model | Dataset/Equipment API | 필드 생략 또는 `data_status.warnings` |
+| `features[].series` | gen_data Layer 2 `_log.jsonl`을 정규화한 canonical Observation 또는 Runtime Overlay Observation | Dataset/Observation API | 빈 배열과 `evidence.gaps[]` |
+| `risk.current`, `top_factor`, `baseline` | Product Result Artifact와 `evidence_payload.sensor_evidence` | `systems/backend/app/diagnosis` | null과 `evidence.gaps[]` |
+| `risk_series` | Backend Diagnosis가 생성할 runtime prediction/result timeline | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
+| `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
+
+`risk_series`의 runtime prediction/result timeline은 기존 legacy `/timeline`의
+`precomputed_prediction_timeline`을 제품 runtime source로 승격하는 뜻이 아니다. 이는
+Backend Diagnosis가 runtime inference 결과를 versioned result/prediction history로
+materialize하는 후속 target이다.
+
+현재 Evidence만으로 채울 수 있는 범위와 추가로 필요한 source는 다음과 같다.
+
+| 화면 요구 | 현재 Evidence로 충족 | 필요한 추가 source | 계약 처리 |
+|---|---|---|---|
+| 기존 MVP 상세 정보 | 가능 | 없음 | 기존 Event detail 기준선 유지 |
+| 현재 risk/status/action | 가능 | 없음 | Product Result Artifact 사용 |
+| 현재 센서 카드 | 가능 | 없음 | `observation` 또는 `sensor_evidence` 사용 |
+| top factor와 report 근거 | 가능 | 없음 | `evidence_field_id` 유지 |
+| feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
+| 피쳐별 그래프 | 불가 | Observation series | `features[].series=[]`와 gap 표시 |
+| 위험도 그래프 | 불가 | runtime prediction/result timeline | `risk_series=[]`와 gap 표시 |
+| 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
+| 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
+
+Layer 2 정규화 adapter의 최소 규칙은 다음과 같다.
+
+- `node_id`는 `{asset_id}.{sensor_key}`로 해석한다. 예: `CNC-S01-L01-01.torque_nm`.
+- `source_timestamp`는 canonical `observed_at` 후보이며, `server_timestamp`가 있으면 ingestion/provenance 필드로 보존한다.
+- 같은 `asset_id`와 `source_timestamp`에 속한 센서 row는 하나의 Observation으로 pivot해 `measurements` map을 만든다.
+- `status_code=Bad`, `value=null`, `reason`은 0 또는 정상값으로 보정하지 않고 null value와 data-quality warning/gap으로 전달한다.
+- gen_data의 센서 key와 Product feature key가 다를 수 있으므로 `rpm` -> `rotational_speed_rpm` 같은 feature catalog 또는 ingestion mapping을 별도 계약으로 둔다.
+- Layer 1 최신값은 `latest_observation` 또는 현재값 보조 확인에는 사용할 수 있지만, `features[].series`의 history source로 사용하지 않는다.
+- `.raw`는 protocol audit/debug provenance로 보존할 수 있으나 report graph source가 아니다.
+
+### 3.2 구현 순서
+
+1. `AssetDetailReportViewModel` 문서 계약과 테스트 fixture를 먼저 추가한다.
+2. gen_data Layer 2 `_log.jsonl` 샘플을 Observation API shape로 정규화하는 ingestion/adapter fixture를 추가한다.
+3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 contract test로 고정한다.
+4. Backend adapter가 Result Artifact/Evidence, normalized Observation series, runtime prediction series를 병합한다.
+5. Product API endpoint는 현행 compatibility path에 바로 고정하지 않고 `/objects/{asset_id}/report-detail` 후보로 둔다.
+6. 프론트 report UI는 단일 ViewModel을 소비하도록 전환한다.
+7. `map-report-ui-prototype`에서 임시로 가져온 synthetic graph fallback은 제거한다.
+8. E2E는 그래프가 존재하는지만 보지 않고 `source_kind`, `evidence.gaps`, series source를 함께 검증한다.
 
 ## 4. Producer-side Enrichment 계약 설계
 

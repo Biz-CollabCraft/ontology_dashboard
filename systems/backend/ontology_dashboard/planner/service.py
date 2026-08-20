@@ -9,12 +9,15 @@ from pydantic import ValidationError
 
 from ..dashboard_models import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
 from ..dashboard_service import DashboardService
-from ..identity import AuthError, Principal
+from app.identity import AuthError, Principal
+from app.infra.db.project_repository import SQLiteProjectContextResolver
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from app.infra.llm import LLMProvider
-from ..ontology import OBJECT_TYPE_BY_ID
-from ..ontology_service import OntologyService
-from ..predictive_maintenance_runtime.models import DatasetVersionRuntimeContext
-from ..predictive_maintenance_runtime.service import (
+from app.ontology.ontology_domain import OBJECT_TYPE_BY_ID
+from app.ontology.ontology_service import OntologyService
+from app.diagnosis.runtime_schema import DatasetVersionRuntimeContext
+from app.diagnosis.runtime_service import (
     V3_1_MODEL_VERSION,
     V3_1_RESULT_SCHEMA,
     V3_1_SOURCE_VERSION,
@@ -100,7 +103,20 @@ class OntologyDashboardPlannerService:
         dashboards: DashboardService | None = None,
     ) -> None:
         self.legacy_service = legacy_service
-        self.ontology = ontology or OntologyService(legacy_service)
+        if ontology is None:
+            project_context = SQLiteProjectContextResolver(legacy_service.repository.path)
+            ontology = OntologyService(
+                legacy_service,
+                action_repository=OntologyActionRepository(
+                    legacy_service.repository.path,
+                    project_context=project_context,
+                ),
+                instance_repository=OntologyInstanceRepository(
+                    legacy_service.repository.path,
+                    project_context=project_context,
+                ),
+            )
+        self.ontology = ontology
         self.dashboards = dashboards or DashboardService(str(legacy_service.repository.path))
         self.provider = provider
 

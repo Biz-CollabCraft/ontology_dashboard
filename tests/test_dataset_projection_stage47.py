@@ -5,19 +5,22 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.datasets import (
+from app.dataset import (
     DatasetCatalogService,
     DatasetCreateRequest,
-    DatasetRepository,
+    DatasetMaterializationSource,
     DatasetVersionCreateRequest,
+    ObservationDatasetQuery,
     OntologyMappingCreateRequest,
 )
-from ontology_dashboard.datasets.projection import (
+from app.dataset.projection import (
     DatasetProjectionCoordinator,
     InMemoryProjectionPort,
 )
+from app.infra.db.dataset_repository import DatasetRepository
 from ontology_dashboard.dependencies import get_dataset_catalog_service
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
@@ -30,7 +33,7 @@ CHECKSUM = "a" * 64
 def setup(tmp_path: Path):
     database_path = tmp_path / "dataset-projection.db"
     migrate(str(database_path))
-    identity = IdentityService(database_path, app_env="test", seed_demo=True)
+    identity = build_identity_service(database_path, app_env="test", seed_demo=True)
     repository = DatasetRepository(database_path)
     catalog = DatasetCatalogService(repository)
     user = identity.repository.authenticate("fde@ontology.local", "FDE!2026")
@@ -89,6 +92,12 @@ def create_catalog_fixture(catalog: DatasetCatalogService, principal):
         ),
     )
     return dataset, version, mapping
+
+
+def test_materialization_source_implements_observation_dataset_query_contract(setup) -> None:
+    _, _, repository, _, _ = setup
+    source = DatasetMaterializationSource(repository)
+    assert isinstance(source, ObservationDatasetQuery)
 
 
 def test_dataset_version_creates_three_pending_store_projections(setup) -> None:

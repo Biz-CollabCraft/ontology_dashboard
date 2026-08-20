@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   getAuditWorkspace,
-  getDomainPacks,
   getEvidence,
   getExecutiveWorkspace,
   getFDEWorkspace,
@@ -17,7 +16,6 @@ import {
 import type { PredictiveMaintenanceDashboardResponse } from "../predictive-maintenance/types";
 import type {
   AppRole,
-  DomainPack,
   Evidence,
   EventSummary,
   FollowUp,
@@ -39,15 +37,14 @@ export function useWorkspaceCatalog(
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [domainPacks, setDomainPacks] = useState<DomainPack[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [selectedEventId, setSelectedEventId] = useState("");
 
   useEffect(() => {
     let active = true;
-    Promise.all([getProjects(), getDomainPacks()])
-      .then(([projectItems, packItems]) => {
+    getProjects()
+      .then((projectItems) => {
         if (!active) return;
         const routeProjectId = window.location.pathname.match(/^\/app\/projects\/([^/]+)/)?.[1];
         const decodedRouteProjectId = routeProjectId ? decodeURIComponent(routeProjectId) : "";
@@ -57,7 +54,6 @@ export function useWorkspaceCatalog(
             ? activeProjectId ?? ""
             : projectItems[0]?.id ?? "";
         setProjects(projectItems);
-        setDomainPacks(packItems);
         setSelectedProjectId(initialProjectId);
       })
       .catch((reason: Error) => active && onError(reason.message));
@@ -105,7 +101,6 @@ export function useWorkspaceCatalog(
     events,
     projects,
     workspaces,
-    domainPacks,
     selectedProjectId,
     setSelectedProjectId,
     selectedWorkspaceId,

@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.identity import IdentityService, RegisterRequest
+from app.identity import IdentityService, RegisterRequest
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
 
@@ -20,7 +21,7 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def identity(database_path: Path) -> IdentityService:
-    service = IdentityService(database_path, app_env="test", seed_demo=True)
+    service = build_identity_service(database_path, app_env="test", seed_demo=True)
     second = service.repository.create_pending_user(
         RegisterRequest(
             display_name="Tenant B Admin",

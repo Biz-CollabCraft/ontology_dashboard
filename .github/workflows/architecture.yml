@@ -462,7 +462,7 @@ jobs:
   review:
     needs: architecture
     if: >-
-      ${{ always() &&
+      ${{ !cancelled() &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action != 'labeled' || github.event.label.name == 'ai-review') &&
@@ -489,3 +489,5 @@ jobs:
       head_sha: ${{ github.event.pull_request.head.sha }}
       pr_title: ${{ github.event.pull_request.title }}
       pr_body: ${{ github.event.pull_request.body }}
+    secrets:
+      local_review_token: ${{ secrets.LOCAL_REVIEW_TOKEN }}

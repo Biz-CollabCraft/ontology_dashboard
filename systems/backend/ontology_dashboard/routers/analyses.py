@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ..analysis_models import AnalysisCreateRequest, AnalysisRunRequest, AnalysisUpdateRequest
-from ..datasets import AnalysisDatasetMaterializer, AnalysisMaterializationRequest
+from app.dataset import AnalysisDatasetMaterializer, AnalysisMaterializationRequest
 from ..analysis_repository import AnalysisVersionConflict
 from ..analysis_service import AnalysisNotFound, AnalysisService
 from ..dependencies import (
@@ -15,8 +15,8 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import IdentityService, Principal
-from ..ontology_service import OntologyService
+from app.identity import IdentityService, Principal
+from app.ontology.ontology_service import OntologyService
 from ..distributed_runtime import DurableJobRepository, QueueSaturated
 
 router = APIRouter(tags=["analyses"])
@@ -78,7 +78,7 @@ def update_analysis(
 
         raise EventNotFound(str(exc.args[0])) from exc
     except AnalysisVersionConflict as exc:
-        from ..identity import AuthError
+        from app.identity import AuthError
 
         raise AuthError(409, "analysis_version_conflict", str(exc)) from exc
 

@@ -13,6 +13,8 @@ from app.diagnosis.evidence import (
     build_evidence_package,
     build_product_result_artifact,
 )
+from app.equipment import EquipmentService
+from app.equipment.adapters import FixtureEquipmentRepository
 from ontology_dashboard.migrations import migrate
 from app.infra.db.settings import database_location
 
@@ -33,7 +35,7 @@ from app.infra.llm import configured_provider
 
 from .llm import ReportAgent
 from .planner import LayoutPlanner
-from .product_result_evidence_projection import (
+from app.diagnosis.evidence_projection import (
     event_evidence_projection_to_legacy_evidence,
     product_result_artifact_to_event_evidence_projection,
 )
@@ -73,6 +75,14 @@ class ManufacturingPredictiveMaintenanceService:
             for event_id, fixture in self.project_fixtures.items()
             if self._fixture_project_id(fixture) == "manufacturing-demo-project"
         }
+        self.equipment_service = EquipmentService(
+            FixtureEquipmentRepository(
+                (
+                    (self._fixture_project_id(fixture), fixture["equipment"])
+                    for fixture in self.project_fixtures.values()
+                )
+            )
+        )
         database = database_path or database_location(self.root)
         if repository is None:
             migrate(str(database))
@@ -151,20 +161,36 @@ class ManufacturingPredictiveMaintenanceService:
         return sorted(rows, key=lambda row: (RISK_PRIORITY[row["status"]], -(row["failure_probability"] or 0.0)))
 
     def list_equipment(self, project_id: str = "manufacturing-demo-project") -> list[dict[str, Any]]:
-        unique: dict[str, dict[str, Any]] = {}
-        for fixture in self.project_fixtures.values():
-            if self._fixture_project_id(fixture) != project_id:
-                continue
-            equipment = fixture["equipment"]
-            unique[equipment["equipment_id"]] = equipment
-        return sorted(unique.values(), key=lambda item: item["equipment_id"])
+        return self.equipment_service.list_equipment(project_id)
 
     def equipment(self, equipment_id: str, project_id: str = "manufacturing-demo-project") -> dict[str, Any]:
-        for item in self.list_equipment(project_id):
-            if item["equipment_id"] == equipment_id:
-                events = [event for event in self.list_events(project_id) if event["equipment"]["equipment_id"] == equipment_id]
-                return {**item, "events": events}
-        raise EventNotFound(equipment_id)
+        item = self.equipment_service.equipment(equipment_id, project_id)
+        events = [
+            event
+            for event in self.list_events(project_id)
+            if event["equipment"]["equipment_id"] == equipment_id
+        ]
+        return {**item, "events": events}
+
+    def equipment_current_state(
+        self, equipment_id: str, project_id: str = "manufacturing-demo-project"
+    ) -> dict[str, Any] | None:
+        return self.equipment_service.equipment_current_state(equipment_id, project_id)
+
+    def patch_equipment_state(
+        self,
+        equipment_id: str,
+        *,
+        expected_state_version: int | None,
+        state_patch: dict[str, Any],
+        project_id: str = "manufacturing-demo-project",
+    ) -> dict[str, Any]:
+        return self.equipment_service.patch_equipment_state(
+            equipment_id,
+            expected_state_version=expected_state_version,
+            state_patch=state_patch,
+            project_id=project_id,
+        )
 
     def event(self, event_id: str) -> dict[str, Any]:
         fixture = self._fixture(event_id)

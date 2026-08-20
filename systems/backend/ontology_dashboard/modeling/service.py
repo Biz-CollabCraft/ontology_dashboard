@@ -8,20 +8,18 @@ from io import StringIO
 
 import pandas as pd
 
+from app.dataset.ingestion import DatasetManifest, DatasetSchema, DatasetSource, QualityRule
+
 from ..adapters.models import (
-    DatasetManifest,
-    DatasetSchema,
-    DatasetSource,
     EvidenceSource,
     PredictionEvidence,
     PredictionModel,
     PredictionResult,
     PredictionSubject,
     PredictionValue,
-    QualityRule,
     RecommendedAction,
 )
-from ..adapters.prediction_repository import PredictionResultRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 from .artifacts import ArtifactStoreBlocked, LocalArtifactStore
 from .intake import DatasetIntakeProfiler, IntakeLLMProvider, draft_from_profile
 from .mapping import (

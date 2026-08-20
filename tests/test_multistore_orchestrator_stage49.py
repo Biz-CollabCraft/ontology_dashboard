@@ -6,7 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ontology_dashboard.dependencies import get_multistore_orchestrator
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.orchestration import (
@@ -56,7 +57,7 @@ class FixturePort:
 def orchestration_setup(tmp_path: Path):
     database = tmp_path / "agent-orchestration.db"
     migrate(str(database))
-    identity = IdentityService(database, app_env="test", seed_demo=True)
+    identity = build_identity_service(database, app_env="test", seed_demo=True)
     user = identity.repository.authenticate("fde@ontology.local", "FDE!2026")
     principal = identity.repository.principal(
         user["id"],

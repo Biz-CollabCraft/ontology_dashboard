@@ -6,10 +6,14 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
-from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
-from ontology_dashboard.adapters.service import AdapterService
-from ontology_dashboard.identity_models import Principal
+from app.infra.db.prediction_result_repository import PredictionResultRepository
+from app.dataset import DatasetCatalogService
+from app.dataset.ingestion import DatasetIngestionService
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
+from app.infra.db.dataset_repository import DatasetRepository
+from app.identity import Principal
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.modeling.models import (
     ExperimentCreateRequest,
@@ -31,6 +35,30 @@ from ontology_dashboard.modeling.models import (
     canonical_checksum,
 )
 from ontology_dashboard.modeling.service import ModelingService
+
+
+class _StaticProjectContextResolver:
+    def resolve(
+        self,
+        workspace_id: str,
+        *,
+        expected_organization_id: str | None = None,
+        expected_project_id: str | None = None,
+        connection=None,
+    ):
+        if workspace_id != "workspace-e2e":
+            raise ValueError(f"workspace {workspace_id!r} is not assigned to an accessible Project")
+        organization_id = "org-e2e"
+        project_id = "project-e2e"
+        if expected_organization_id and expected_organization_id != organization_id:
+            raise ValueError("workspace organization scope does not match the request context")
+        if expected_project_id and expected_project_id != project_id:
+            raise ValueError("workspace project scope does not match the request context")
+        return SimpleNamespace(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
 
 
 def _seed_scope(database: Path) -> None:
@@ -181,17 +209,20 @@ def test_adaptive_modeling_governed_end_to_end(tmp_path: Path, monkeypatch) -> N
     database = tmp_path / "adaptive-e2e.db"
     migrate(str(database))
     _seed_scope(database)
-    prediction_repository = PredictionResultRepository(database)
+    prediction_repository = PredictionResultRepository(
+        database,
+        project_context=_StaticProjectContextResolver(),
+    )
     modeling = ModelingService.configured(
         str(database),
         tmp_path / "artifacts",
         intake_roots=[source_root],
         prediction_repository=prediction_repository,
     )
-    adapters = AdapterService(
-        database,
-        root=tmp_path,
-        prediction_repository=prediction_repository,
+    dataset_ingestion = DatasetIngestionService(
+        repository=DatasetIngestionRepository(database),
+        dataset_catalog=DatasetCatalogService(DatasetRepository(database)),
+        allowed_roots=[source_root],
     )
     principal = _principal()
 
@@ -239,9 +270,9 @@ def test_adaptive_modeling_governed_end_to_end(tmp_path: Path, monkeypatch) -> N
             dataset_version="source-v1",
         ),
     )
-    ingestion = adapters.ingest(principal, "project-e2e", manifest)
+    ingestion = dataset_ingestion.ingest(principal, "project-e2e", manifest)
     assert ingestion.status == "completed"
-    detail = adapters.dataset_catalog.detail(
+    detail = dataset_ingestion.dataset_catalog.detail(
         principal=principal,
         project_id="project-e2e",
         dataset_id=manifest.manifest_id,

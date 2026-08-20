@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Iterable
 from typing import Any
 
-from ..identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from .models import (
     AgentQueryRequest,
     AgentRoute,

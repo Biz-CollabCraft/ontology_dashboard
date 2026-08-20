@@ -43,18 +43,14 @@ from .dashboard_models import (
     ReportDraftRecord,
     SavedViewRecord,
 )
-from .datasets.models import (
+from app.dataset.dataset_schema import (
     DatasetDetail,
     DatasetPage,
     DatasetVersionRecord,
     MaterializationRecord,
     OntologyMappingRecord,
 )
-from .domain_packs.models import (
-    DomainPackDefinition as PlatformDomainPackDefinition,
-    ProjectApplicationDefinition,
-)
-from .enterprise_identity import EnterpriseIdentityReadiness
+from app.identity import EnterpriseIdentityReadiness
 from .deployment import DeploymentReadiness, ProcessProbe, ReadinessProbe, StartupProbe
 from .distributed_runtime import (
     DistributedRuntimeSnapshot,
@@ -63,7 +59,7 @@ from .distributed_runtime import (
 )
 from .export_models import ExportCheckpoint
 from .governance.models import GovernanceAgentRunDetail, ProjectionRetryResult
-from .identity_models import DisplayPreferenceUpdateRequest, Principal
+from app.identity import DisplayPreferenceUpdateRequest, Principal
 from app.infra.external.project3.models import Project3IntegrationSnapshot
 from .modeling.models import (
     CapabilityEvaluation,
@@ -77,17 +73,18 @@ from .modeling.models import (
     ModelingContractSummary,
     ModelVersion,
 )
-from .ontology import (
+from app.ontology.ontology_domain import (
+    ActionExecutionResult,
     ActionTypeDefinition,
-    DomainPackDefinition,
     LinkTypeDefinition,
     ObjectRecord,
     ObjectTypeDefinition,
+    OntologyTraversal,
 )
-from .ontology_primitives import ActionPreview, FunctionExecution, PrimitiveSnapshot
+from app.ontology.primitives import ActionPreview, FunctionExecution, PrimitiveSnapshot
 from app.infra.observability.runtime import ObservabilityReadiness
 from .orchestration.models import AgentRunResponse
-from .predictive_maintenance_runtime.models import (
+from app.diagnosis.runtime_schema import (
     DatasetVersionRuntimeContext,
     ReplaySessionSnapshot,
     TimelinePrediction,
@@ -95,7 +92,7 @@ from .predictive_maintenance_runtime.models import (
 from .persistence_readiness import PersistenceReadiness
 from .pipeline_runtime import PipelinePlan
 from .mlops_runtime import MLOpsSnapshot
-from .projects.models import Project
+from app.project import Project
 
 
 class ContractModel(BaseModel):
@@ -221,7 +218,6 @@ class PredictionResultRecord(ContractModel):
 
 
 class OntologyRegistryResponse(ContractModel):
-    domain_packs: list[DomainPackDefinition]
     object_types: list[ObjectTypeDefinition]
     link_types: list[LinkTypeDefinition]
     action_types: list[ActionTypeDefinition]
@@ -229,7 +225,7 @@ class OntologyRegistryResponse(ContractModel):
 
 class OntologyObjectPage(ContractModel):
     workspace_id: str
-    domain_pack: str
+    projection_id: str
     object_type: str | None = None
     dataset_version_id: str | None = None
     search: str | None = None
@@ -612,41 +608,41 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.system.health_ready": ReadinessProbe,
     "ontology_dashboard.routers.system.polyglot_health": PolyglotHealthResponse,
     "ontology_dashboard.routers.system.openapi_contract": dict[str, Any],
-    "ontology_dashboard.routers.auth.register": RegisterResponse,
-    "ontology_dashboard.routers.auth.login": AuthSessionResponse,
-    "ontology_dashboard.routers.auth.public_blueprint_comparison": AuthSessionResponse,
-    "ontology_dashboard.routers.auth.me": CurrentUserResponse,
-    "ontology_dashboard.routers.auth.get_display_preferences": DisplayPreferencesResponse,
-    "ontology_dashboard.routers.auth.save_display_preferences": DisplayPreferenceRecord,
-    "ontology_dashboard.routers.auth.set_active_project": ActiveProjectResponse,
-    "ontology_dashboard.routers.auth.refresh_session": AuthSessionResponse,
-    "ontology_dashboard.routers.auth.list_sessions": ItemsResponse[SessionRecord],
-    "ontology_dashboard.routers.auth.revoke_other_sessions": RevokedSessionsResponse,
+    "app.identity.identity_router.register": RegisterResponse,
+    "app.identity.identity_router.login": AuthSessionResponse,
+    "app.identity.identity_router.public_blueprint_comparison": AuthSessionResponse,
+    "app.identity.identity_router.me": CurrentUserResponse,
+    "app.identity.identity_router.get_display_preferences": DisplayPreferencesResponse,
+    "app.identity.identity_router.save_display_preferences": DisplayPreferenceRecord,
+    "app.identity.identity_router.set_active_project": ActiveProjectResponse,
+    "app.identity.identity_router.refresh_session": AuthSessionResponse,
+    "app.identity.identity_router.list_sessions": ItemsResponse[SessionRecord],
+    "app.identity.identity_router.revoke_other_sessions": RevokedSessionsResponse,
     "ontology_dashboard.routers.agent.inspect_agent_run": AgentRunResponse,
     "ontology_dashboard.routers.adapters.list_adapters": ItemsResponse[dict[str, str]],
     "ontology_dashboard.routers.adapters.list_project_datasets": ItemsResponse[dict[str, Any]],
     "ontology_dashboard.routers.adapters.list_project_predictions": ItemsResponse[PredictionResultRecord],
     "ontology_dashboard.routers.adapters.ingest_prediction_result": PredictionResultRecord,
-    "ontology_dashboard.routers.datasets.list_datasets": DatasetPage,
-    "ontology_dashboard.routers.datasets.dataset_detail": DatasetDetail,
-    "ontology_dashboard.routers.datasets.create_dataset_version": DatasetVersionRecord,
-    "ontology_dashboard.routers.datasets.save_ontology_mapping": OntologyMappingRecord,
-    "ontology_dashboard.routers.datasets.create_materialization": MaterializationRecord,
-    "ontology_dashboard.routers.ontology.list_workspaces": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.ontology.list_domain_packs": ItemsResponse[DomainPackDefinition],
-    "ontology_dashboard.routers.ontology.ontology_registry": OntologyRegistryResponse,
-    "ontology_dashboard.routers.ontology.list_object_types": ItemsResponse[ObjectTypeDefinition],
-    "ontology_dashboard.routers.ontology.list_link_types": ItemsResponse[LinkTypeDefinition],
-    "ontology_dashboard.routers.ontology.list_action_types": ItemsResponse[ActionTypeDefinition],
-    "ontology_dashboard.routers.ontology.query_ontology_objects": OntologyObjectPage,
-    "ontology_dashboard.routers.ontology.aggregate_ontology_objects": OntologyAggregateResponse,
-    "ontology_dashboard.routers.ontology.list_ontology_action_invocations": ItemsResponse[ActionInvocationRecord],
+    "app.dataset.dataset_router.list_datasets": DatasetPage,
+    "app.dataset.dataset_router.dataset_detail": DatasetDetail,
+    "app.dataset.dataset_router.create_dataset_version": DatasetVersionRecord,
+    "app.dataset.dataset_router.save_ontology_mapping": OntologyMappingRecord,
+    "app.dataset.dataset_router.create_materialization": MaterializationRecord,
+    "app.ontology.ontology_router.list_workspaces": ItemsResponse[dict[str, Any]],
+    "app.ontology.ontology_router.ontology_registry": OntologyRegistryResponse,
+    "app.ontology.ontology_router.list_object_types": ItemsResponse[ObjectTypeDefinition],
+    "app.ontology.ontology_router.list_link_types": ItemsResponse[LinkTypeDefinition],
+    "app.ontology.ontology_router.list_action_types": ItemsResponse[ActionTypeDefinition],
+    "app.ontology.ontology_router.query_ontology_objects": OntologyObjectPage,
+    "app.ontology.ontology_router.aggregate_ontology_objects": OntologyAggregateResponse,
+    "app.ontology.ontology_router.get_ontology_object": ObjectRecord,
+    "app.ontology.ontology_router.traverse_ontology_object": OntologyTraversal,
+    "app.ontology.ontology_router.list_ontology_action_invocations": ItemsResponse[ActionInvocationRecord],
+    "app.ontology.ontology_router.invoke_ontology_action": ActionExecutionResult,
     "ontology_dashboard.routers.analyses.queue_analysis_run": AnalysisRunResult,
-    "ontology_dashboard.routers.projects.list_projects": ProjectListResponse,
-    "ontology_dashboard.routers.projects.list_project_workspaces": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.projects.list_project_events": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.platform.domain_pack_catalog": ItemsResponse[PlatformDomainPackDefinition],
-    "ontology_dashboard.routers.platform.project_v4_application": ProjectApplicationDefinition,
+    "app.project.project_router.list_projects": ProjectListResponse,
+    "app.project.project_router.list_project_workspaces": ItemsResponse[dict[str, Any]],
+    "app.project.project_router.list_project_events": ItemsResponse[dict[str, Any]],
     "ontology_dashboard.routers.platform.project_persistence_readiness": PersistenceReadiness,
     "ontology_dashboard.routers.platform.project_enterprise_identity": EnterpriseIdentityReadiness,
     "ontology_dashboard.routers.platform.project_deployment_readiness": DeploymentReadiness,
@@ -686,7 +682,7 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.governance.governance_agent_run": GovernanceAgentRunDetail,
     "ontology_dashboard.routers.governance.retry_projection": ProjectionRetryResult,
     "ontology_dashboard.routers.project3.project3_status": Project3IntegrationSnapshot,
-    "ontology_dashboard.routers.predictive_maintenance_runtime.prediction_timeline": TimelineResponse,
+    "app.diagnosis.diagnosis_router.prediction_timeline": TimelineResponse,
     "ontology_dashboard.routers.modeling.modeling_contracts": ModelingContractsResponse,
     "ontology_dashboard.routers.modeling.approved_manifest_payload": ApprovedManifestResponse,
     "ontology_dashboard.routers.modeling.ingest_approved_manifest_draft": ManifestIngestionResponse,
@@ -700,8 +696,8 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.modeling.modeling_workbench": ModelingWorkbenchResponse,
     "ontology_dashboard.routers.role_workspaces.create_audit_export_checkpoint": AuditExportCheckpointResponse,
     "ontology_dashboard.routers.role_workspaces.create_model_release_request": WorkflowRequestResponse,
-    "ontology_dashboard.routers.manufacturing.list_equipment": ItemsResponse[dict[str, Any]],
-    "ontology_dashboard.routers.manufacturing.get_equipment": EquipmentResponse,
+    "app.equipment.equipment_router.list_equipment": ItemsResponse[dict[str, Any]],
+    "app.equipment.equipment_router.get_equipment": EquipmentResponse,
     "ontology_dashboard.routers.manufacturing.list_events": ItemsResponse[dict[str, Any]],
     "ontology_dashboard.routers.manufacturing.get_event": EventResponse,
     "ontology_dashboard.routers.manufacturing.get_evidence": EvidenceResponse | EventEvidenceProjectionResponse,
@@ -727,19 +723,17 @@ _EXPLICIT_MODELS: dict[str, Any] = {
 
 
 _EXPLICIT_MEDIA_EXAMPLES: dict[str, dict[str, Any]] = {
-    "ontology_dashboard.routers.projects.list_projects": PROJECT_LIST_EXAMPLE,
+    "app.project.project_router.list_projects": PROJECT_LIST_EXAMPLE,
 }
 
 
 _NO_CONTENT_ENDPOINTS = {
-    "ontology_dashboard.routers.auth.logout",
+    "app.identity.identity_router.logout",
     "ontology_dashboard.routers.dashboards.delete_dashboard_saved_view",
 }
 
 _BINARY_ENDPOINTS = {"ontology_dashboard.routers.exports.create_export"}
-_SSE_ENDPOINTS = {
-    "ontology_dashboard.routers.predictive_maintenance_runtime.replay_events"
-}
+_SSE_ENDPOINTS = {"app.diagnosis.diagnosis_router.replay_events"}
 
 
 def _safe_type_hints(target: Any) -> dict[str, Any]:

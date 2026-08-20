@@ -16,15 +16,15 @@ from typing import Any
 
 from argon2 import PasswordHasher
 
-from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
-from ontology_dashboard.adapters.repository import AdapterRepository
-from ontology_dashboard.projects.repository import ProjectRepository
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
 
 from .dashboard_catalog import seed_templates
 from .dashboard_repository import DashboardRepository
 from .export_repository import ExportRepository
-from .identity_repository import IdentityRepository
-from .ontology_repository import OntologyActionRepository
+from app.infra.db.identity_repository import IdentityRepository as SQLIdentityRepository
 from .repository import AuditRepository
 from .role_workflow_repository import RoleWorkflowRepository
 from .postgresql_compat import (
@@ -33,7 +33,7 @@ from .postgresql_compat import (
 )
 
 
-class PostgreSQLIdentityRepository(IdentityRepository):
+class PostgreSQLIdentityRepository(SQLIdentityRepository):
     def __init__(
         self,
         database_url: str,
@@ -54,7 +54,7 @@ class PostgreSQLIdentityRepository(IdentityRepository):
         return None
 
 
-class PostgreSQLProjectRepository(ProjectRepository):
+class PostgreSQLProjectRepository(SQLiteProjectRepository):
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
         self.path = database_url
@@ -189,7 +189,7 @@ class PostgreSQLExportRepository(ExportRepository):
         return None
 
 
-class PostgreSQLAdapterRepository(AdapterRepository):
+class PostgreSQLAdapterRepository(DatasetIngestionRepository):
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
         self.path = database_url

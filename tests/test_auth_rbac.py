@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ontology_dashboard.identity import CSRF_COOKIE, DEMO_ACCOUNTS, AuthError, IdentityService
-from ontology_dashboard.identity_models import PUBLIC_COMPARISON_EMAIL
+from app.identity import CSRF_COOKIE, DEMO_ACCOUNTS, AuthError, IdentityService, PUBLIC_COMPARISON_EMAIL
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 
@@ -20,7 +20,7 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def identity(database_path: Path) -> IdentityService:
-    return IdentityService(database_path, app_env="test", seed_demo=True)
+    return build_identity_service(database_path, app_env="test", seed_demo=True)
 
 
 @pytest.fixture()
@@ -312,17 +312,17 @@ def test_ontology_registry_is_domain_neutral_foundation(client: TestClient) -> N
     registry = client.get("/api/ontology/registry")
     assert registry.status_code == 200
     payload = registry.json()
-    assert payload["domain_packs"][0]["display_name"] == "Manufacturing Predictive Maintenance Pack"
+    assert "domain_packs" not in payload
     assert {item["id"] for item in payload["object_types"]} >= {"equipment", "risk_event", "inspection"}
     assert {item["id"] for item in payload["link_types"]} >= {"equipment_has_risk_event"}
     assert {item["id"] for item in payload["action_types"]} >= {"record_operational_decision"}
 
 
 def test_production_forbids_demo_seed(database_path: Path) -> None:
-    production = IdentityService(database_path, app_env="production", seed_demo=False)
+    production = build_identity_service(database_path, app_env="production", seed_demo=False)
     assert production.repository.list_users() == []
     with pytest.raises(AuthError):
         production.repository.authenticate("admin@ontology.local", "OntologyAdmin!2026")
 
     with pytest.raises(RuntimeError, match="forbidden"):
-        IdentityService(database_path.with_name("forbidden.db"), app_env="production", seed_demo=True)
+        build_identity_service(database_path.with_name("forbidden.db"), app_env="production", seed_demo=True)

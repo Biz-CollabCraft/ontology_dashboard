@@ -15,8 +15,8 @@
 
 | 화면 | 현행 입력/API | 구현 위치 | 검증 위치 | 상태 |
 |---|---|---|---|---|
-| Overview | `GET /dashboard` | `systems/frontend/src/features/mvp/overview/MvpOverviewPage.tsx`, `systems/backend/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
-| Objects | `GET /results/latest` | `systems/frontend/src/features/mvp/objects/MvpObjectsPage.tsx`, `systems/backend/ontology_dashboard/routers/predictive_maintenance_runtime.py` | `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts`, `tests/test_predictive_maintenance_result_replay.py` | 현행 |
+| Overview | `GET /dashboard` | `systems/frontend/src/features/mvp/overview/MvpOverviewPage.tsx`, `systems/backend/app/diagnosis/diagnosis_router.py` | `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
+| Objects | `GET /results/latest` | `systems/frontend/src/features/mvp/objects/MvpObjectsPage.tsx`, `systems/backend/app/diagnosis/diagnosis_router.py` | `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts`, `tests/test_predictive_maintenance_result_replay.py` | 현행 |
 | Operations | Event evidence/decision/notes/activity API | `systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx`, `systems/backend/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
 | Executive Report | `POST /api/events/{event_id}/report` | `systems/frontend/src/features/mvp/report/MvpExecutiveReportPage.tsx`, `systems/backend/ontology_dashboard/routers/manufacturing.py` | `tests/test_mvp.py`, `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts` | 현행 |
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from ontology_dashboard.product_result_evidence_projection import (
+from app.diagnosis.evidence_projection import (
     EVENT_EVIDENCE_CONTRACT_TYPE,
     EVENT_EVIDENCE_SCHEMA_VERSION,
     event_evidence_projection_to_legacy_evidence,

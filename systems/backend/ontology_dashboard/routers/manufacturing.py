@@ -8,6 +8,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 
+from app.equipment.equipment_router import register_equipment_routes
+
 from ..contracts import DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
 from ..dependencies import (
     MANUFACTURING_WORKSPACE,
@@ -18,13 +20,18 @@ from ..dependencies import (
     require_manufacturing_scope,
     require_permission,
 )
-from ..identity import AuthError, IdentityService, Principal
-from ..ontology import ActionInvocation
-from ..ontology_adapter import inspection_object_id, risk_event_object_id
-from ..ontology_service import OntologyService
+from app.identity import AuthError, IdentityService, Principal
+from app.ontology.ontology_domain import ActionInvocation
+from app.ontology.projection import inspection_object_id, risk_event_object_id
+from app.ontology.ontology_service import OntologyService
 from ..service import ManufacturingPredictiveMaintenanceService
 
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])
+register_equipment_routes(
+    router,
+    service_dependency=get_service,
+    authorization_dependency=require_manufacturing_scope,
+)
 
 
 def _require_active_event_project(
@@ -47,23 +54,6 @@ def _require_configured_action_project(project_id: str) -> None:
             "project_action_not_configured",
             "이 showcase Project는 현재 Evidence 조회 전용입니다. Action mapping을 먼저 게시해야 합니다.",
         )
-
-
-@router.get("/equipment")
-def list_equipment(
-    _: Principal = Depends(require_manufacturing_scope),
-    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
-):
-    return {"items": service.list_equipment()}
-
-
-@router.get("/equipment/{equipment_id}")
-def get_equipment(
-    equipment_id: str,
-    _: Principal = Depends(require_manufacturing_scope),
-    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
-):
-    return service.equipment(equipment_id)
 
 
 @router.get("/events")

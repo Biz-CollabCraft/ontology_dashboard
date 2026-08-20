@@ -5,11 +5,8 @@ from pathlib import Path
 import pytest
 
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.ontology_primitives import (
-    ActionPreviewRequest,
-    FunctionExecutionRequest,
-    OntologyPrimitiveRepository,
-)
+from app.infra.db.ontology_primitives import OntologyPrimitiveRepository
+from app.ontology.primitives import ActionPreviewRequest, FunctionExecutionRequest
 
 
 ORG = "org-ontology-demo"
