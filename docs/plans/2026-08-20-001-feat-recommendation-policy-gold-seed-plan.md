@@ -9,12 +9,14 @@ date: 2026-08-20
 
 ## Summary
 
-Product Result/Evidence에서 운영 추천 후보를 결정론적으로 만들고, 고정 Gold 시나리오를
-`proposed` 상태의 개발용 추천 데이터로 멱등하게 materialize한다. 추천은 실행 명령이
-아니며, 사람의 판단·승인 전에는 WorkOrder나 MaintenanceAction을 만들지 않는다.
+Diagnosis producer가 Product Result/Evidence에서 운영 추천 후보를 결정론적으로 만들고,
+고정 Gold 시나리오는 operational recommendation table 밖의 evaluation/demo fixture로
+멱등하게 적재한다. 추천은 실행 명령이 아니며, 사람의 판단·승인 전에는 WorkOrder나
+MaintenanceAction을 만들지 않는다.
 
-이 계획은 기존 Closed-loop 상태 머신을 다시 만들지 않고, 호범의 producer
-recommendation과 광우의 Operational RecommendedAction 경계를 연결하는 범위만 다룬다.
+이 계획은 기존 Closed-loop 상태 머신을 다시 만들지 않고, Diagnosis의 producer
+recommendation과 canonical Maintenance의 Operational RecommendedAction 경계를 연결하는
+범위만 다룬다. Gold fixture는 운영 상태와 분리한다.
 
 ## Problem Frame
 
@@ -22,10 +24,12 @@ recommendation과 광우의 Operational RecommendedAction 경계를 연결하는
 WorkOrder의 타입·상태·lineage·멱등성 계약이 이미 있다. 그러나 다음 두 연결이 별도
 계획으로 고정되어 있지 않다.
 
-- `status`, `criticality`, `data_quality_hold`를 어떤 우선순위 규칙으로 추천 후보에
-  매핑할지
-- `evaluation/gold_scenarios.yml`을 이용해 추천을 미리 쌓되, 현장 정비 데이터나
-  실제 WorkOrder로 오인하지 않도록 어떻게 격리할지
+- Diagnosis producer가 `status`, `criticality`, `data_quality_hold`를 어떤 우선순위
+  규칙으로 추천 후보에 매핑할지
+- `evaluation/gold_scenarios.yml`을 이용해 평가 fixture를 미리 쌓되, operational
+  recommendation이나 실제 WorkOrder로 오인하지 않도록 어떻게 격리할지
+- imported precomputed 결과와 runtime-generated 결과가 같은 Result read boundary를
+  사용하면서도 writer 의미와 Evidence 가용성을 섞지 않도록 어떻게 migration할지
 
 현재 Gold 8개는 정상·경고·심각·저신뢰·데이터 품질 보류·LLM 장애를 다루는 내부 회귀
 기준이다. 이는 현장 정답이나 비즈니스 효과의 증거가 아니므로, 계획 산출물에는 Gold의
@@ -35,9 +39,10 @@ WorkOrder의 타입·상태·lineage·멱등성 계약이 이미 있다. 그러�
 
 ### Policy and lineage
 
-- R1. 추천 정책은 `recommendation-policy-v1`로 버전 고정하고, `status`와
-  `data_quality_hold`를 우선 평가한 뒤 필요한 경우 `equipment.criticality`를 사용한다.
-  데이터셋에 없는 확률·RPN·검출도 점수를 새로 발명하지 않는다.
+- R1. 추천 정책은 Diagnosis producer 소유의 `recommendation-policy-v1`로 버전 고정하고,
+  `status`와 `data_quality_hold`를 우선 평가한 뒤 명시적으로 전달된
+  `equipment.criticality`를 운영 맥락으로 사용한다. 데이터셋에 없는 확률·RPN·검출
+  점수를 새로 발명하지 않는다.
 - R2. 정책 결과는 기존 `ProducerRecommendation`과
   `OperationalRecommendedAction` 계약을 재사용하며, `source_action_id`,
   `source_product_result_id`, `source_evidence_id`, schema/policy version, 원본 basis를
@@ -51,12 +56,16 @@ WorkOrder의 타입·상태·lineage·멱등성 계약이 이미 있다. 그러�
 
 - R5. Gold fixture는 실행 시 재생성하지 않고 버전과 checksum이 고정된 입력·기대 결과로
   사용한다. 기존 Gold 8개를 `Gold v1` 기준셋으로 유지한다.
-- R6. pre-seed는 추천을 `status=proposed`로만 저장하고, `gold_fixture` 출처와
-  `do_not_operationalize=true` 의미를 audit/provenance에 남긴다.
+- R6. Gold pre-seed는 operational recommendation table이 아닌 evaluation/demo fixture
+  store에만 `proposed` 결과로 저장한다. Gold fixture를 operational recommendation으로
+  자동 승격하지 않으며, 별도 운영 승격 계약 없이는 Decision·WorkOrder 경로에 연결하지
+  않는다.
 - R7. 동일 `source_product_result_id + source_action_id` 재처리는 no-op 또는 동일
-  결과 replay가 되어야 하며, 새 artifact revision은 새 recommendation lineage를 만든다.
-- R8. Gold seed 경로에서는 RecommendationDecision, WorkOrder, MaintenanceAction,
-  MaintenanceEvent를 생성하지 않는다.
+  결과 replay가 되어야 한다. `source_policy_version`은 provenance이며 materialization
+  key에 포함하지 않는다. 새 artifact revision은 새 recommendation lineage를 만든다.
+- R8. Gold seed 경로에서는 operational RecommendationDecision, WorkOrder,
+  MaintenanceAction, MaintenanceEvent를 생성하지 않는다. 이 조건은 문구가 아니라
+  fixture store와 operational repository의 저장 경계로 보장한다.
 
 ### Evaluation and claims
 
@@ -71,46 +80,74 @@ WorkOrder의 타입·상태·lineage·멱등성 계약이 이미 있다. 그러�
   `synthetic evaluation set`으로 표현한다. 현장 정확도, 정비 시간 절감, 고장률 개선은
   실제 정비 이력·도메인 검토 없이는 주장하지 않는다.
 
+### Migration boundaries
+
+- R13. 신규 구현은 `systems/backend/app/diagnosis`, `systems/backend/app/maintenance`,
+  `systems/backend/app/infra/db` canonical 경로에만 둔다. 제거 대상
+  `systems/backend/ontology_dashboard`에는 새 기능·새 파일을 추가하지 않는다.
+- R14. `materialization_strategy=runtime_generated|imported_precomputed`를 내부 writer
+  provenance로 보존한다. 한 Dataset Version에서 두 writer를 동시에 사용하지 않고,
+  runtime 실패를 imported 결과로 자동 fallback하지 않는다.
+- R15. imported Result Artifact에 Evidence detail이 없으면 Result·추천·schema는 보존하고
+  detail만 unavailable로 표시한다. consumer가 synthetic Evidence나 추천 근거를 재생성하지
+  않는다.
+
 ## Key Technical Decisions
 
-- KTD1. **기존 Domain 객체 재사용:** 새 `Recommendation` aggregate나 새 상태 머신을
-  만들지 않고 기존 `ProducerRecommendation` → `OperationalRecommendedAction` 변환과
-  `ClosedLoopRepository.save_recommendation`을 사용한다. 기존 계약과 중복 저장소를
-  만들지 않기 위한 결정이다.
+- KTD1. **Producer ownership:** 추천 정책 evaluator는
+  `systems/backend/app/diagnosis`가 소유한다. Maintenance는 ProducerRecommendation의
+  의미를 재계산하지 않고 validation/materialization만 수행한다. Operations가 독자 추천을
+  만들 경우 producer projection과 다른 `origin`·policy/version을 갖는 별도 계약으로
+  분리한다.
 - KTD2. **정책 순서 고정:** `data_quality_hold/identity failure`를 가장 먼저 차단하고,
-  그 다음 `critical`/`warning`/`attention`/`normal`을 처리한다. criticality는 위험도를
-  재계산하는 값이 아니라 추천 우선순위를 보조하는 운영 맥락으로만 사용한다.
-- KTD3. **추천과 실행 분리:** `request_inspection`과 `review_shutdown`은 사람이 검토할
+  그 다음 `critical`/`warning`/`attention`/`normal`을 처리한다. criticality는 Diagnosis가
+  equipment public port 또는 명시적 projection으로 받은 경우에만 사용하며, 별도
+  Maintenance DB를 직접 조회하지 않는다.
+- KTD3. **Canonical migration path:** 구현 target은 `app/diagnosis`·`app/maintenance`·
+  `app/infra/db`다. 현재 `ontology_dashboard/closed_loop` 구현은 #92 convergence가
+  정한 canonical target으로 수렴할 때까지 migration input으로만 취급한다.
+- KTD4. **추천과 실행 분리:** `request_inspection`과 `review_shutdown`은 사람이 검토할
   후보이며 자동 shutdown이나 maintenance 승인이 아니다. 기존 Domain 계약의
   `RecommendationDecision`과 WorkOrder 승인 경계를 그대로 따른다.
-- KTD4. **Gold 고정, seed는 provenance:** 정적 Gold fixture에는 실행 seed를 요구하지
+- KTD5. **Gold 고정, seed는 provenance:** 정적 Gold fixture에는 실행 seed를 요구하지
   않는다. 합성 데이터 생성에 seed가 사용된 경우에는 생성 metadata와 checksum에만
   기록하고, Gold 기대 결과를 현재 모델 출력으로 재생성하지 않는다.
-- KTD5. **개발용 seed 격리:** Gold pre-seed는 local/test/demo fixture 경로에서만 허용하고
-  production 환경의 operational recommendation seed와 분리한다. pre-seed 레코드는
-  사람이 승인하지 않은 제안으로만 남는다.
-- KTD6. **결정론적 ID와 revision:** recommendation ID는 source result/action/policy
-  lineage에서 재현 가능해야 한다. random UUID를 deduplication 기준으로 사용하지 않는다.
+- KTD6. **Gold fixture 격리:** Gold pre-seed는 local/test/demo evaluation fixture store에만
+  허용한다. operational recommendation table에 `gold_fixture`나
+  `do_not_operationalize` 문자열만 추가해 안전을 보장하지 않는다. 운영 테이블에 Gold를
+  넣는 선택은 별도 schema·authorization·promotion 계약으로 후속 결정한다.
+- KTD7. **결정론적 ID와 policy re-evaluation:** materialization key는 현재 계약인
+  `source_product_result_id + source_action_id`를 유지하고, policy version은 provenance로
+  기록한다. 같은 source를 policy v2로 다시 평가할 때 operational recommendation을
+  새로 만들지 않고 별도 evaluation artifact로 저장한다. 새 Product Result revision은
+  새 source ID를 가지므로 새 lineage를 허용한다.
+- KTD8. **Writer migration:** imported precomputed와 runtime-generated writer를 내부
+  strategy로 구분하되 public API/UI mode로 노출하지 않는다. Evidence 부재는 detail
+  unavailable이며 runtime 실패의 imported fallback 사유가 아니다.
 
 ## High-Level Technical Design
 
 ```mermaid
 flowchart LR
-  A[Product Result / Event Evidence] --> B{Quality and identity gate}
+  A[Observation / Result Artifact] --> B[Diagnosis producer quality gate]
   B -->|hold or invalid| C[Unavailable / hold_for_data_check]
-  B -->|valid| D[Recommendation Policy v1]
+  B -->|valid| D[Diagnosis Recommendation Policy v1]
   D --> E[ProducerRecommendation]
-  E --> F[OperationalRecommendedAction proposed]
-  F --> G[Gold evaluator and seed manifest]
-  G --> H[(Closed-loop repository)]
+  E --> F[Gold evaluation fixture store]
+  E --> G[Maintenance validation/materialization]
+  G --> H[OperationalRecommendedAction proposed]
   H --> I[Human RecommendationDecision]
   I --> J[Existing WorkOrder boundary]
   J -. excluded from this plan .-> K[Maintenance execution]
+  L[imported_precomputed] --> M[Common Result read boundary]
+  N[runtime_generated] --> M
+  M -. no synthetic Evidence .-> C
 ```
 
-정책 판단은 구조화된 evidence의 기존 필드만 읽는다. Gold seed는 `F`까지의 경로를
-검증하지만, `I` 이후의 승인·작업·정비 상태는 기존 Closed-loop 계획과 담당자의
-구현 범위로 남긴다.
+정책 판단은 Diagnosis가 명시적으로 받은 구조화된 입력만 읽는다. Gold seed는 `F`의
+evaluation fixture 경로를 검증하고, runtime producer 경로만 `G` 이후 Maintenance
+materialization으로 연결한다. `I` 이후의 승인·작업·정비 상태는 기존 Closed-loop 계획과
+담당자의 구현 범위로 남긴다.
 
 ## Scope Boundaries
 
@@ -119,7 +156,8 @@ flowchart LR
 - Recommendation Policy v1 규칙·버전·basis 계약
 - Product Result/Evidence에서 ProducerRecommendation으로의 결정론적 매핑
 - Gold v1 평가 확장과 정책 경계 테스트
-- `proposed` 추천 pre-seed, provenance, 멱등성, replay 검증
+- Gold evaluation/demo fixture pre-seed, provenance, 멱등성, replay 검증
+- runtime/imported writer strategy와 Evidence unavailable migration gate
 - 발표용 평가 artifact와 제한된 주장 문구
 
 ### Deferred to Follow-Up Work
@@ -141,17 +179,17 @@ flowchart LR
 
 ### U1. Recommendation policy contract and deterministic evaluator
 
-- **Goal:** 기존 producer action과 evidence field를 사용해 정책 버전과 우선순위 규칙을
-  결정론적으로 평가한다.
+- **Goal:** Diagnosis producer가 명시적으로 받은 evidence와 equipment context를 사용해
+  정책 버전과 우선순위 규칙을 결정론적으로 평가하고 ProducerRecommendation을 생성한다.
 - **Requirements:** R1, R2, R3, R4, KTD1, KTD2, KTD3
 - **Dependencies:** 없음
 - **Files:**
   - `systems/backend/app/diagnosis/recommendation_policy.json`
-  - `systems/backend/ontology_dashboard/closed_loop/recommendation_policy.py`
-  - `systems/backend/ontology_dashboard/closed_loop/models.py`
+  - `systems/backend/app/diagnosis/recommendation_policy.py`
+  - `systems/backend/app/diagnosis/diagnosis_schema.py`
   - `systems/backend/app/diagnosis/evidence_enrichment.py`
   - `tests/test_recommendation_policy.py`
-  - `tests/test_evidence_enrichment.py`
+  - `tests/test_product_result_evidence_enrichment.py`
 - **Approach:** 정책 파일은 version, input fields, ordered rules, output action kind,
   approval requirement, basis field IDs를 선언한다. evaluator는 evidence validation을
   통과한 projection만 받고, existing `ProducerRecommendation`으로 반환한다. 기존
@@ -159,13 +197,15 @@ flowchart LR
   통합한다.
 - **Patterns to follow:** `systems/backend/app/diagnosis/threshold_policy.json`,
   `systems/backend/app/diagnosis/evidence.py`,
-  `systems/backend/ontology_dashboard/closed_loop/domain.py`.
+  `systems/backend/app/diagnosis/evidence_enrichment.py`.
 - **Test scenarios:**
   - normal/medium은 `continue_monitoring` 후보와 monitor basis를 반환한다.
   - warning/high와 warning/medium은 inspection 후보를 반환하되 approval requirement를
     보존한다.
   - critical/high는 shutdown review 후보를 반환하고 자동 shutdown 명령을 만들지 않는다.
   - data-quality-hold/high는 실행성 추천이 아니라 data check hold로 끝난다.
+  - criticality가 Diagnosis public input/projection에 없으면 Maintenance DB를 조회하지 않고
+    unavailable/reject로 끝난다.
   - criticality 또는 source basis가 누락되면 unavailable/reject로 끝난다.
   - LLM/provider가 비활성화되어도 policy output은 동일하다.
 - **Verification:** 같은 evidence snapshot과 policy version에서 동일한 action ID,
@@ -198,56 +238,71 @@ flowchart LR
 - **Verification:** Gold v1 pass artifact에 scenario count, policy version, seed source,
   rejected mutation count, side-effect count가 기록된다.
 
-### U3. Deterministic Gold pre-seed and idempotent persistence
+### U3. Gold evaluation fixture seed and runtime materialization boundary
 
-- **Goal:** Gold 입력으로부터 개발용 `proposed` recommendation을 미리 쌓고 재실행·revision
-  규칙을 입증한다.
-- **Requirements:** R5, R6, R7, R8, KTD5, KTD6
+- **Goal:** Gold 입력을 operational recommendation table 밖에 미리 쌓고, runtime producer
+  경로에서만 canonical Maintenance materialization 계약을 검증한다.
+- **Requirements:** R5, R6, R7, R8, R14, R15, KTD5, KTD6, KTD7, KTD8
 - **Dependencies:** U1, U2
 - **Files:**
   - `scripts/seed_gold_recommendations.py`
-  - `systems/backend/ontology_dashboard/closed_loop/repository.py`
-  - `systems/backend/ontology_dashboard/closed_loop/models.py`
+  - `evaluation/results/recommendation-policy-v1.json`
+  - `systems/backend/app/maintenance/maintenance_schema.py`
+  - `systems/backend/app/maintenance/maintenance_domain.py`
+  - `systems/backend/app/infra/db/maintenance_repository.py`
   - `tests/test_gold_recommendation_seed.py`
-  - `tests/test_closed_loop_persistence.py`
-- **Approach:** seed 입력은 Gold scenario ID와 고정 fixture revision을 사용한다. 저장 시
-  recommendation origin, policy/schema version, fixture checksum, `proposed` status를
-  기록한다. 같은 source result/action은 기존 row를 replay하고, 새 result revision은
-  새 lineage로 저장한다. seed 경로는 decision/work-order API를 호출하지 않는다.
-- **Patterns to follow:** `ClosedLoopRepository.save_recommendation`,
-  `tests/test_closed_loop_persistence.py`, demo seed의 production guard 패턴.
+  - `tests/test_maintenance_recommendation_materialization.py`
+- **Approach:** seed 입력은 Gold scenario ID와 고정 fixture revision을 사용해 evaluation
+  result/fixture store에만 기록한다. operational repository를 호출하지 않으며, runtime
+  ProducerRecommendation만 canonical Maintenance validation/materialization 경계를
+  통과한다. materialization key는 source result/action을 유지하고 policy version은
+  provenance로만 남긴다. 새 result revision은 새 lineage로 저장한다.
+- **Patterns to follow:** `systems/backend/app/diagnosis` public producer contract,
+  `systems/backend/app/maintenance` canonical target, `docs/backend-migration-map.md`,
+  demo seed의 production guard 패턴.
 - **Test scenarios:**
-  - 빈 DB에 Gold seed를 실행하면 expected count의 proposed recommendation만 저장된다.
-  - 동일 seed를 두 번 실행해도 recommendation row와 audit/outbox side effect가 중복되지
-    않는다.
-  - 동일 event의 새 artifact revision은 기존 추천을 덮지 않고 새 source lineage를 만든다.
-  - Gold seed에서 WorkOrder, Decision, MaintenanceAction row가 생성되지 않는다.
+  - 빈 evaluation store에 Gold seed를 실행하면 expected count의 fixture recommendation만
+    저장되고 operational recommendation row는 0개다.
+  - 동일 seed를 두 번 실행해도 fixture row가 중복되지 않는다.
+  - 동일 source를 policy v2로 재평가해도 operational recommendation은 새로 만들지 않고
+    별도 evaluation artifact로 저장된다.
+  - 동일 event의 새 Product Result revision은 기존 추천을 덮지 않고 새 source lineage를
+    만든다.
+  - runtime failure가 imported_precomputed 결과로 자동 fallback하지 않는다.
+  - imported Result Artifact에 Evidence가 없으면 Result와 추천은 보존하고 detail만
+    unavailable로 반환한다.
   - 다른 workspace scope의 Gold source는 저장되지 않거나 권한 오류가 난다.
-- **Verification:** seed 결과 manifest와 DB count가 일치하고, repeat run delta가 0이며,
-  모든 row가 `proposed`·`gold_fixture` provenance를 가진다.
+- **Verification:** seed 결과 manifest와 fixture count가 일치하고, repeat run delta가 0이며,
+  operational recommendation/Decision/WorkOrder side effect가 0이다. canonical target은
+  `app/maintenance`와 `app/infra/db`에만 존재한다.
 
 ### U4. Evaluation artifact, documentation, and handoff boundary
 
 - **Goal:** Gold 결과를 현장 효과로 과장하지 않고 발표·리뷰에서 재현 가능한 artifact로
   남긴다.
-- **Requirements:** R9, R12, KTD4, KTD5
+- **Requirements:** R9, R12, R13, R14, R15, KTD3, KTD4, KTD5, KTD8
 - **Dependencies:** U2, U3
 - **Files:**
   - `evaluation/results/README.md`
   - `evaluation/results/recommendation-policy-v1.json`
+  - `docs/architecture.md`
+  - `docs/backend-migration-map.md`
   - `docs/closed-loop-implementation-plan.md`
   - `docs/closed-loop-domain-contract.md`
   - `docs/mvp/pdm-evidence-report-ui-integration-plan.md`
 - **Approach:** 결과 artifact에 Gold version, fixture checksum, policy/schema/model
-  version, evaluator version, run timestamp, scenario count, pass/fail, mutation rejection,
-  side-effect count, known limitations를 기록한다. 기존 Closed-loop 문서에는 새 정책의
-  ownership과 seed 경계만 연결하고 상태 머신 설명을 복제하지 않는다.
+  version, evaluator version, writer strategy, run timestamp, scenario count, pass/fail,
+  mutation rejection, operational side-effect count, known limitations를 기록한다. 기존
+  Closed-loop 문서에는 Diagnosis ownership, canonical Maintenance target, fixture 격리,
+  imported/runtime writer 경계만 연결하고 상태 머신 설명을 복제하지 않는다.
 - **Patterns to follow:** `evaluation/results/README.md`, `docs/closed-loop-*`,
   `docs/mvp/report-specification.md`의 claim/limitation 원칙.
 - **Test scenarios:**
   - 결과 JSON이 schema와 required provenance를 만족한다.
   - Gold 8/8 통과와 field/business validation 미실시가 동시에 표현된다.
   - policy version 또는 fixture checksum이 바뀌면 결과가 다른 run으로 분리된다.
+  - `runtime_generated`와 `imported_precomputed`가 한 Dataset Version에서 동시에 writer로
+    선택되지 않는다.
 - **Verification:** reviewer가 결과 artifact만 보고 Gold acceptance와 현장 효과 주장을
   구분할 수 있다.
 
@@ -256,7 +311,8 @@ flowchart LR
 - AE1. **정상 설비**
   - **Given:** GS-001, valid evidence, medium criticality
   - **When:** policy v1 evaluates the snapshot
-  - **Then:** `continue_monitoring` proposed recommendation이 생성되고 WorkOrder는 0개다.
+  - **Then:** `continue_monitoring` fixture recommendation이 evaluation store에 생성되고,
+    operational recommendation row와 WorkOrder는 모두 0개다.
 
 - AE2. **데이터 품질 보류**
   - **Given:** GS-007, invalid sensor data, any criticality
@@ -267,22 +323,33 @@ flowchart LR
 - AE3. **재처리 멱등성**
   - **Given:** 동일 event/product-result/action을 이미 seed했다.
   - **When:** 같은 Gold seed를 다시 실행한다.
-  - **Then:** 기존 recommendation을 replay하고 새 row나 side effect를 만들지 않는다.
+  - **Then:** 기존 fixture recommendation을 replay하고 fixture delta와 operational side effect를
+    모두 만들지 않는다.
 
 - AE4. **새 결과 revision**
   - **Given:** 같은 asset/event에 새 product result revision이 도착했다.
   - **When:** policy v1과 seed를 재실행한다.
-  - **Then:** 구 revision을 덮지 않고 새 source lineage의 proposed recommendation을 만든다.
+  - **Then:** 구 revision을 덮지 않고 새 source lineage의 fixture recommendation을 만든다.
+
+- AE5. **Imported detail unavailable**
+  - **Given:** `imported_precomputed` Result Artifact에 Evidence detail이 없다.
+  - **When:** 공통 Result read boundary가 결과를 조회한다.
+  - **Then:** Result·recommendation·schema는 보존하고 detail만 unavailable로 반환하며,
+    runtime-generated Evidence나 추천을 합성하지 않는다.
 
 ## System-Wide Impact
 
-- **호범 / Diagnosis:** Product Result/Evidence에서 판단 후보와 basis를 제공한다. risk,
-  probability, failure type을 Closed-loop가 재계산하지 않는다.
-- **광우 / Closed-loop:** ProducerRecommendation을 OperationalRecommendedAction으로
-  materialize하고, 이후 사람의 Decision·WorkOrder 상태를 소유한다.
+- **호범 / Diagnosis:** Product Result/Evidence에서 판단 후보와 basis를 제공하고
+  `recommendation-policy-v1`을 소유한다. risk, probability, failure type을 Maintenance가
+  재계산하지 않는다.
+- **광우 / Maintenance/Closed-loop:** canonical `app/maintenance` 경계에서
+  ProducerRecommendation을 OperationalRecommendedAction으로 validation/materialization하고,
+  이후 사람의 Decision·WorkOrder 상태를 소유한다. 기존 `ontology_dashboard/closed_loop`는
+  #92 convergence 전까지 migration input으로만 읽는다.
 - **우수 / Product API/UI:** 추천을 read-only proposed 상태로 표시하고 Backend의
   `available_actions`를 소비한다. Frontend가 추천 규칙이나 ID를 합성하지 않는다.
-- **Evaluation:** Gold runner와 seed manifest는 개발·CI·demo fixture에 한정한다.
+- **Evaluation:** Gold runner와 seed manifest는 개발·CI·demo fixture store에 한정하며
+  operational recommendation repository를 호출하지 않는다.
   PostgreSQL Runtime consumer 연결은 별도 E2E로 검증될 때까지 미입증으로 표시한다.
 
 ## Risks and Dependencies
@@ -291,9 +358,12 @@ flowchart LR
 | --- | --- |
 | Gold expected action이 현재 fixture와 불일치 | U2에서 fixture expected와 policy output을 분리 비교하고 변경 시 Gold version을 올린다. |
 | criticality를 실제 확률처럼 해석 | policy 문서에서 criticality는 운영 우선순위 맥락으로만 명시한다. |
-| pre-seed가 실제 업무로 오인 | `gold_fixture`, `proposed`, `do_not_operationalize` provenance와 production guard를 강제한다. |
+| Gold pre-seed가 실제 업무로 오인 | Gold는 evaluation/demo fixture store에만 저장하고 operational repository를 호출하지 않는다. 운영 승격은 별도 schema·authorization·promotion 계약 없이는 불가하다. |
 | source policy/evidence ID 누락 | 기존 Domain 계약처럼 unknown 기본값을 만들지 않고 fail-fast한다. |
 | seed replay 중 중복 audit/outbox | source lineage 기반 idempotency와 repeat-run count 테스트를 둔다. |
+| policy v2 재평가가 operational row를 중복 생성 | policy version은 provenance로만 기록하고 동일 source key는 replay한다. v2 결과는 별도 evaluation artifact로 저장한다. |
+| runtime/imported 이중 writer 또는 잘못된 fallback | Dataset Version별 writer를 하나로 선택하고 strategy를 provenance에 기록한다. runtime 실패를 imported로 자동 전환하지 않는다. |
+| #92 전환 중 legacy 경로에 새 코드 추가 | 계획과 구현 파일을 `app/diagnosis`, `app/maintenance`, `app/infra/db`로 고정하고 legacy package는 migration input으로만 사용한다. |
 | 8개 Gold를 현장 대표성으로 과장 | acceptance artifact에 synthetic/internal authority와 external validation 미실시를 기록한다. |
 
 ## Sources and Research
@@ -307,7 +377,13 @@ flowchart LR
 - `docs/closed-loop-product-consumption-contract.md`: 역할별 추천 소비,
   `available_actions`, Backend 권한 검증
 - `docs/mvp/pdm-evidence-report-ui-integration-plan.md`: producer action/basis grounding,
-  recommendation과 WorkOrder 분리
+  recommendation과 WorkOrder 분리, runtime/imported writer 선택과 Evidence unavailable 경계
+- `docs/architecture.md`: `systems/backend/ontology_dashboard` legacy migration source 및
+  신규 기능 추가 금지 원칙
+- `docs/backend-migration-map.md`: `closed_loop/*`를 `app/maintenance`로 이동하는 canonical
+  target map
+- `systems/backend/app/diagnosis/evidence_enrichment.py`: 기존 Diagnosis producer의
+  status 기반 action 매핑과 통합 대상
 - `evaluation/gold_scenarios.yml`: Gold v1 8개 시나리오, 안전·fallback·역할별 기대값
 - `scripts/evaluate_gold.py`: 현재 Gold runner가 검증하는 상태·결정·신뢰도·보고서·layout 범위
 - `tests/test_closed_loop_domain_contract.py` and `tests/test_closed_loop_persistence.py`:
@@ -341,6 +417,9 @@ flowchart LR
 - data-quality-hold에서 inspection/shutdown WorkOrder 생성 0건
 - 동일 seed replay의 신규 recommendation·Decision·WorkOrder side effect 0건
 - 새 artifact revision이 구 revision을 덮어쓴 사례 0건
-- 모든 seeded recommendation이 `proposed`와 `gold_fixture` provenance를 보유
+- Gold fixture store의 fixture count가 manifest와 일치하고 repeat seed delta가 0건
+- Gold seed가 operational recommendation/Decision/WorkOrder row를 0건 생성
+- 동일 source의 policy v2 재평가가 operational recommendation을 추가하지 않음
+- Dataset Version당 writer가 정확히 1개이며 runtime 실패 시 imported fallback이 0건
 - 결과 artifact에 scenario count, policy/schema version, checksum, evaluator version,
   limitation이 기록됨
