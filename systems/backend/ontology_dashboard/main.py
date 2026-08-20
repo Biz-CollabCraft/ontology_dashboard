@@ -36,6 +36,11 @@ from .routers.projects import router as projects_router
 from .routers.role_workspaces import router as role_workspaces_router
 from .routers.system import router as system_router
 from app.common.exceptions import RateLimitExceeded
+from app.equipment import (
+    EquipmentNotFoundError,
+    EquipmentStateVersionConflictError,
+    InvalidEquipmentStatePatchError,
+)
 from .service import EventNotFound
 
 app = create_app()
@@ -49,6 +54,51 @@ async def not_found_handler(_: Request, exc: EventNotFound) -> JSONResponse:
             "error": {
                 "code": "not_found",
                 "message": f"resource not found: {exc.args[0]}",
+            }
+        },
+    )
+
+
+@app.exception_handler(EquipmentNotFoundError)
+async def equipment_not_found_handler(
+    _: Request, exc: EquipmentNotFoundError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "code": "not_found",
+                "message": f"resource not found: {exc.args[0]}",
+            }
+        },
+    )
+
+
+@app.exception_handler(EquipmentStateVersionConflictError)
+async def equipment_state_version_conflict_handler(
+    _: Request, exc: EquipmentStateVersionConflictError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "error": {
+                "code": "equipment_state_version_conflict",
+                "message": str(exc),
+            }
+        },
+    )
+
+
+@app.exception_handler(InvalidEquipmentStatePatchError)
+async def invalid_equipment_state_patch_handler(
+    _: Request, exc: InvalidEquipmentStatePatchError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "invalid_equipment_state_patch",
+                "message": str(exc),
             }
         },
     )

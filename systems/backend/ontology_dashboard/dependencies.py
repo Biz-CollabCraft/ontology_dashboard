@@ -70,6 +70,7 @@ from .service import ManufacturingPredictiveMaintenanceService
 ROOT = project_root()
 MANUFACTURING_WORKSPACE = "manufacturing-demo"
 _MIGRATION_LOCK = Lock()
+_SERVICE_LOCK = Lock()
 
 
 def database_target() -> str:
@@ -91,7 +92,7 @@ def ensure_database_migrations() -> tuple[str, ...]:
 
 
 @lru_cache(maxsize=1)
-def get_service() -> ManufacturingPredictiveMaintenanceService:
+def _get_service_cached() -> ManufacturingPredictiveMaintenanceService:
     ensure_database_migrations()
     target = database_target()
     if is_postgresql(target):
@@ -101,6 +102,16 @@ def get_service() -> ManufacturingPredictiveMaintenanceService:
             repository=PostgreSQLAuditRepository(target),
         )
     return ManufacturingPredictiveMaintenanceService(ROOT, database_path=target)
+
+
+def get_service() -> ManufacturingPredictiveMaintenanceService:
+    """Return the process-local showcase service without duplicate cache misses."""
+
+    # lru_cache may execute concurrent misses more than once. Serialize access
+    # around the cache lookup itself so only one Equipment in-memory repository
+    # can be constructed inside a process.
+    with _SERVICE_LOCK:
+        return _get_service_cached()
 
 
 @lru_cache(maxsize=1)
