@@ -10,7 +10,7 @@ from ontology_dashboard.persistence_readiness import (
     persistence_readiness,
     verify_rls_migration_evidence,
 )
-from ontology_dashboard.projects import ProjectRepository
+from app.infra.db.project_repository import ProjectRepository
 
 
 ROOT = Path(__file__).resolve().parents[1]

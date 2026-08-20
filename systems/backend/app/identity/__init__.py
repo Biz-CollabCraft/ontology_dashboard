@@ -39,7 +39,6 @@ from .identity_schema import (
     DisplayPreferenceUpdateRequest,
     LoginRequest,
     Principal,
-    ProjectMembershipUpdateRequest,
     RegisterRequest,
     UserStatus,
 )
@@ -73,7 +72,6 @@ __all__ = [
     "PUBLIC_COMPARISON_WORKSPACE_ID",
     "Principal",
     "PrincipalContext",
-    "ProjectMembershipUpdateRequest",
     "ROLE_DEFINITIONS",
     "ROLE_PERMISSIONS",
     "RegisterRequest",

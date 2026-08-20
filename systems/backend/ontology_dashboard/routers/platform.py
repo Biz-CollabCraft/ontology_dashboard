@@ -72,7 +72,7 @@ from ..automation_runtime import (
     automation_snapshot,
     simulate_automation,
 )
-from ..projects import ProjectService
+from app.project import ProjectService
 from ..persistence_readiness import persistence_readiness
 from app.infra.observability.runtime import ObservabilityReadiness, observability_readiness
 from app.common.runtime_settings import project_root

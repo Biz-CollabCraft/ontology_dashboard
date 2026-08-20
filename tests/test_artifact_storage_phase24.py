@@ -15,7 +15,7 @@ from ontology_dashboard.artifact_storage import (
     build_artifact_service,
 )
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.projects import ProjectRepository
+from app.infra.db.project_repository import ProjectRepository
 
 
 ORG = "org-ontology-demo"

@@ -18,7 +18,7 @@ from argon2 import PasswordHasher
 
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
-from ontology_dashboard.projects.repository import ProjectRepository
+from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
 
 from .dashboard_catalog import seed_templates
 from .dashboard_repository import DashboardRepository
@@ -54,7 +54,7 @@ class PostgreSQLIdentityRepository(SQLIdentityRepository):
         return None
 
 
-class PostgreSQLProjectRepository(ProjectRepository):
+class PostgreSQLProjectRepository(SQLiteProjectRepository):
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
         self.path = database_url

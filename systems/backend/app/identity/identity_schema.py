@@ -229,13 +229,6 @@ class ActiveProjectRequest(BaseModel):
     project_id: str = Field(min_length=1, max_length=128)
 
 
-class ProjectMembershipUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    status: Literal["active", "suspended"] = "active"
-    roles: list[str] = Field(min_length=1)
-
-
 class AdminUserUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

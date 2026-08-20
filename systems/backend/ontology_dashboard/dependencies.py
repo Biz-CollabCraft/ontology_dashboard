@@ -42,7 +42,8 @@ from .distributed_runtime import DurableJobRepository
 from .export_service import ExportService
 from .governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
-from .identity import ProjectIdentityService
+from app.project import ProjectService
+from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
 from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
@@ -64,7 +65,6 @@ from .postgresql_repositories import (
     is_postgresql,
     seed_runtime_reference_data,
 )
-from .projects import ProjectRepository, ProjectService
 from .predictive_maintenance_runtime import (
     PredictiveMaintenanceRuntimeRepository,
     PredictiveMaintenanceRuntimeService,
@@ -148,12 +148,6 @@ def get_identity_service() -> IdentityService:
     return IdentityService(repository, rate_limit_namespace=f"identity:{target}")
 
 
-def get_project_identity_service(
-    identity: IdentityService = Depends(get_identity_service),
-) -> ProjectIdentityService:
-    return ProjectIdentityService(identity.repository)
-
-
 @lru_cache(maxsize=1)
 def get_project_service() -> ProjectService:
     ensure_database_migrations()
@@ -161,9 +155,9 @@ def get_project_service() -> ProjectService:
     repository = (
         PostgreSQLProjectRepository(target)
         if is_postgresql(target)
-        else ProjectRepository(target)
+        else SQLiteProjectRepository(target)
     )
-    return ProjectService(repository)
+    return ProjectService(repository, audit_port=get_identity_service().repository)
 
 
 @lru_cache(maxsize=1)

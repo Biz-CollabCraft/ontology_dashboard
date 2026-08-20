@@ -16,7 +16,7 @@ from contextlib import AbstractContextManager
 from datetime import date, datetime
 from typing import Any, Iterable, Sequence
 
-from .project_context import ProjectContext, ProjectContextError
+from app.project import ProjectContext, ProjectContextError
 from app.infra.db.pool import (
     pooled_identity_connection,
     pooled_system_connection,

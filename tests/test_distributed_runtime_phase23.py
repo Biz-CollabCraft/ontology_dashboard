@@ -16,7 +16,7 @@ from ontology_dashboard.distributed_runtime import (
     distributed_runtime_readiness,
 )
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.projects import ProjectRepository
+from app.infra.db.project_repository import ProjectRepository
 from app.common.rate_limit import RateLimitExceeded
 
 

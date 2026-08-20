@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ontology_dashboard.project_context import SQLiteProjectContextResolver, ensure_scope_columns
+from app.infra.db.project_repository import SQLiteProjectContextResolver, ensure_scope_columns
 
 
 class ExportRepository:

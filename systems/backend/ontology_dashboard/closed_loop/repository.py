@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 from ..migrations import migrate
 from ..postgresql_compat import PostgreSQLProjectContextResolver, postgres_repository_connection
-from ..project_context import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from .domain import (
     IdempotencyConflict,
     InvalidTransition,

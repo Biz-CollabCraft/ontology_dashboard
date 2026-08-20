@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from ..dependencies import (
     get_identity_service,
-    get_project_identity_service,
+    get_project_service,
     get_role_workflow_service,
     require_csrf,
     require_permission,
@@ -13,9 +13,8 @@ from app.identity import (
     AdminUserUpdateRequest,
     IdentityService,
     Principal,
-    ProjectMembershipUpdateRequest,
 )
-from ..identity import ProjectIdentityService
+from app.project import ProjectMembershipUpdateRequest, ProjectService
 from ..role_workflow_models import ApprovalDecisionRequest
 from ..role_workflow_service import RoleWorkflowService
 
@@ -95,10 +94,10 @@ def admin_users(
 def admin_project_members(
     project_id: str,
     principal: Principal = Depends(require_permission("admin.users.read")),
-    project_identity: ProjectIdentityService = Depends(get_project_identity_service),
+    projects: ProjectService = Depends(get_project_service),
 ):
     return {
-        "items": project_identity.list_project_members(
+        "items": projects.list_project_members(
             principal=principal,
             project_id=project_id,
         )
@@ -112,9 +111,9 @@ def admin_update_project_membership(
     request: ProjectMembershipUpdateRequest,
     principal: Principal = Depends(require_permission("admin.users.manage")),
     _: None = Depends(require_csrf),
-    project_identity: ProjectIdentityService = Depends(get_project_identity_service),
+    projects: ProjectService = Depends(get_project_service),
 ):
-    return project_identity.update_project_membership(
+    return projects.update_project_membership(
         principal=principal,
         project_id=project_id,
         target_user_id=user_id,
