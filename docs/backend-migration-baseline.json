@@ -132,7 +132,6 @@
     "routers/agent.py",
     "routers/analyses.py",
     "routers/dashboards.py",
-    "routers/datasets.py",
     "routers/exports.py",
     "routers/governance.py",
     "routers/manufacturing.py",

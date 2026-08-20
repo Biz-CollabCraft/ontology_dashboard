@@ -241,6 +241,7 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `adapters/protocol.py` | `systems/backend/app/dataset/ingestion/protocol.py` | `MIGRATED` |
 | `adapters/registry.py` | `systems/backend/app/dataset/ingestion/registry.py` | `MIGRATED` |
 | `adapters/repository.py` | `systems/backend/app/dataset/ingestion/repository.py`, `systems/backend/app/infra/db/dataset_ingestion_repository.py` | `MIGRATED` |
+| `routers/datasets.py` | `systems/backend/app/dataset/dataset_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
