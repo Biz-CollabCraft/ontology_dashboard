@@ -7,8 +7,8 @@ from typing import Any
 
 from app.identity import AuthError, Principal
 from app.diagnosis.diagnosis_schema import PredictionResult
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from app.infra.db.prediction_result_repository import PredictionResultRepository
-from ..project_context import SQLiteProjectContextResolver
 
 
 class AdapterService:
