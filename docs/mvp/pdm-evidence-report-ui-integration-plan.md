@@ -777,12 +777,12 @@ Status 값은 다음만 사용한다.
 
 ### 8.5 후속 PR: Frontend ViewModel and UI
 
-목표는 기존 4-screen MVP 사이드탭 구조에 영어 Static Report 탭을 추가하고, `map-report-ui-prototype`의 report UI 패턴을 제품 런타임 dependency 없이 정적 화면으로 재구현하는 것이다. 이 단계는 2주차 producer-side enrichment의 필수 완료 조건이 아니며, live report projection 연결과 기간/전체 설비 집계 화면은 후속 PR로 진행한다.
+목표는 기존 4-screen MVP 사이드탭 구조에 `Static Report` 탭을 추가하고, `map-report-ui-prototype`의 한글 점검 요청 리포트 UI를 제품 런타임 dependency 없이 사이드탭 화면으로 재구현하는 것이다. 이 단계는 2주차 producer-side enrichment의 필수 완료 조건이 아니며, live report projection 연결과 기간/전체 설비 집계 화면은 후속 PR로 진행한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
 | 19 | In Progress | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | local `npm run lint`, `npm run test -- src/features/mvp/context/MvpSelectionContext.test.ts src/features/mvp/api/mvpAdapters.test.ts` |
-| 20 | In Progress | map-report prototype의 report header, KPI, manager brief, equipment sketch, sensor evidence, evidence trace 패턴을 dashboard side tab용 영어 Static Report component로 재구현한다. `MapReportView`, live 설비상세, 요약/집계 탭은 V2로 보류한다. | MVP static report component | local `npm run build`; `/tmp/mvp-static-report.png` screenshot 확인 |
+| 20 | In Progress | map-report prototype의 한글 점검 요청 report header, KPI, manager brief, equipment sketch, sensor evidence, evidence trace 패턴을 dashboard side tab용 Static Report component로 재구현한다. `MapReportView`, live 설비상세, 요약/집계 탭은 V2로 보류한다. | MVP static report component | local `npm run build`; `/tmp/mvp-map-report-korean.png` screenshot 확인 |
 | 21 | In Progress | Static Report는 product runtime dependency나 raw producer payload 파싱 없이 MVP route에 연결한다. | static side-tab UI flow | 기존 MVP shell route `view=inspection-report` 아래 `Static Report` 탭으로 노출 |
 | 22 | In Progress | 최소 static report UI flow에 Playwright coverage를 추가한다. | E2E test | `PLAYWRIGHT_PYTHON_BIN=python3 PLAYWRIGHT_API_PORT=8210 PLAYWRIGHT_WEB_PORT=3210 npm run test:e2e:mvp` → 통과 12개 |
 

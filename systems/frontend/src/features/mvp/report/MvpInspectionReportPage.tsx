@@ -1,135 +1,382 @@
-import { AlertTriangle, ArrowLeft, Database, FileText, Gauge, History, ShieldCheck, Wrench } from "lucide-react";
+import { useState } from "react";
+import {
+  AlertTriangle,
+  ClipboardCheck,
+  Clock3,
+  DatabaseZap,
+  FileText,
+  Gauge,
+  RotateCcw,
+  ShieldCheck,
+  Volume2,
+  Wrench,
+  Zap,
+} from "lucide-react";
 
-export function MvpInspectionReportPage({
-  onBackToOverview,
-}: {
-  onBackToOverview: () => void;
-}) {
+const statusMeta = {
+  critical: { label: "위험", tone: "critical", sentence: "즉시 점검이 필요한 위험 신호" },
+  warning: { label: "경고", tone: "warning", sentence: "우선순위 점검 후보" },
+  attention: { label: "주의", tone: "attention", sentence: "추가 관찰 필요" },
+} as const;
+
+const reportText = {
+  inspectionEyebrow: "점검 요청 보고서",
+  reportTypeLabel: "보고서 종류",
+  inspectionReportType: "예지보전 점검 요청",
+  generationMethod: "규칙 기반 생성",
+};
+
+const featureDisplayMap: Record<string, { label: string; checkLabel: string; plainReason: string; category: string }> = {
+  rotation_raw_6h_mean: {
+    label: "회전 상태 평균값",
+    checkLabel: "회전부 속도 저하 여부 확인",
+    plainReason: "최근 회전 상태가 평소 기준보다 낮게 나타났습니다. 벨트, 축, 모터 부하와 이물 걸림을 우선 확인합니다.",
+    category: "회전 계통",
+  },
+  rotation_raw_6h_abs_mean: {
+    label: "회전 변동 크기",
+    checkLabel: "회전 변화가 갑자기 커졌는지 확인",
+    plainReason: "회전값이 일정하게 유지되지 않고 변동 폭이 커졌습니다. 부하 변화, 압력 변화, 운전 조건 변경 여부를 함께 봅니다.",
+    category: "회전 계통",
+  },
+  rotation_raw_6h_std: {
+    label: "회전 불안정성",
+    checkLabel: "이상음·진동 동반 여부 확인",
+    plainReason: "회전값 흔들림이 위험 근거로 잡혔습니다. 현장에서 소음, 떨림, 체결 상태를 확인합니다.",
+    category: "회전 계통",
+  },
+  pressure_raw_6h_abs_mean: {
+    label: "압력 변동 크기",
+    checkLabel: "배관·밸브 압력 변동 확인",
+    plainReason: "압력 변화 폭이 커졌습니다. 압축부와 배관·밸브 구간의 압력계 표시, 연결부 누설 여부를 확인합니다.",
+    category: "압력 계통",
+  },
+  pressure_raw_current: {
+    label: "현재 압력",
+    checkLabel: "현재 압력계와 탱크 압력 확인",
+    plainReason: "현재 압력값이 판단 근거에 포함됐습니다. 압력계 표시와 탱크 압력 상태를 우선 확인합니다.",
+    category: "압력 계통",
+  },
+  vibration_raw_6h_mean: {
+    label: "진동 평균값",
+    checkLabel: "압축부 고정부 진동 확인",
+    plainReason: "최근 진동 수준이 평소와 다르게 나타났습니다. 압축부 고정부, 베이스, 체결 상태를 확인합니다.",
+    category: "진동 계통",
+  },
+  vibration_raw_6h_std: {
+    label: "진동 불안정성",
+    checkLabel: "간헐적 떨림과 체결 풀림 확인",
+    plainReason: "진동의 흔들림 폭이 커졌습니다. 모터, 축·벨트, 압축부의 간헐적 떨림과 체결 풀림을 확인합니다.",
+    category: "진동 계통",
+  },
+  voltage_raw_6h_mean: {
+    label: "전압 평균값",
+    checkLabel: "모터 전원 공급 상태 확인",
+    plainReason: "최근 전압 흐름이 평소와 다르게 나타났습니다. 모터 전원 공급과 전압 저하 여부를 확인합니다.",
+    category: "전기 계통",
+  },
+};
+
+const inspectionLocationMap: Record<string, { range: string; note: string; className: string }> = {
+  rotation_raw_6h_mean: { range: "모터-축/벨트", note: "회전 힘 전달과 속도 저하 확인", className: "loc-motor-drive" },
+  rotation_raw_6h_abs_mean: { range: "축/벨트-압축부", note: "회전 변화와 부하 변동 확인", className: "loc-drive-pump" },
+  rotation_raw_6h_std: { range: "모터-축/벨트-압축부", note: "흔들림과 체결 상태 확인", className: "loc-drive-zone" },
+  pressure_raw_6h_abs_mean: { range: "압축부-배관/밸브", note: "압력 변동과 누설 확인", className: "loc-pump-valve" },
+  pressure_raw_current: { range: "압력계-압력 탱크", note: "현재 압력과 탱크 압력 확인", className: "loc-valve-tank" },
+  vibration_raw_6h_mean: { range: "압축부 고정부", note: "고정부 진동과 베이스 상태 확인", className: "loc-pump-base" },
+  vibration_raw_6h_std: { range: "모터-축/벨트-압축부", note: "간헐적 떨림과 체결 풀림 확인", className: "loc-drive-zone" },
+  voltage_raw_6h_mean: { range: "모터 전원부", note: "전원 공급과 전압 저하 확인", className: "loc-motor-power" },
+};
+
+const sensorDisplayMap: Record<string, { label: string; plainNote: string }> = {
+  rotation_raw: { label: "회전 상태", plainNote: "회전 계통의 최근 평균 관측값" },
+  pressure_raw: { label: "압력", plainNote: "압축기 압력의 최근 평균 관측값" },
+  vibration_raw: { label: "진동", plainNote: "진동 센서의 최근 평균 관측값" },
+  voltage_raw: { label: "전압", plainNote: "전압 센서의 최근 평균 관측값" },
+};
+
+const sourceFieldLabels: Record<string, { label: string; description: string }> = {
+  "model_prediction.status_grade": { label: "위험 상태 판단", description: "모델이 이 설비를 위험, 경고, 주의, 정상 중 어디로 봤는지입니다." },
+  "model_prediction.probability": { label: "위험 예측 확률", description: "향후 24시간 안에 고장 위험이 있다고 본 정도입니다." },
+  "model_prediction.confidence": { label: "예측 신뢰도", description: "예측 판단이 한쪽으로 얼마나 뚜렷하게 기울었는지 보여주는 보조 정보입니다." },
+  "sensor_evidence.window.start": { label: "센서 확인 시작 시각", description: "위험 판단에 사용한 센서 데이터의 시작 시각입니다." },
+  "sensor_evidence.window.end": { label: "센서 확인 종료 시각", description: "위험 판단에 사용한 센서 데이터의 마지막 시각입니다." },
+  "sensor_evidence.window_rows": { label: "사용한 센서 데이터 수", description: "이번 판단에 포함된 센서 기록 개수입니다." },
+  "top_factors[0..2]": { label: "위험을 크게 올린 상위 근거", description: "모델이 위험 판단에 가장 크게 반영한 센서 패턴 3개입니다." },
+  "sensor_evidence.sensors.rotation_raw": { label: "회전 상태 센서 기록", description: "회전부 속도 저하와 흔들림을 확인하기 위해 사용한 센서 기록입니다." },
+  "sensor_evidence.sensors": { label: "센서 기록 묶음", description: "압력, 회전, 진동, 전압 등 설비 상태를 보여주는 최근 센서 기록입니다." },
+};
+
+const inspectionReport = {
+  assetId: "CMP-S03-L03-01",
+  displayName: "공기압축기 03구역 03라인 1호기",
+  locationLabel: "03구역 / 03라인",
+  assetTypeLabel: "공기압축기",
+  observedAt: "2026-08-29 23:00",
+  horizon: "24시간",
+  status: "critical" as keyof typeof statusMeta,
+  probability: 0.824661,
+  confidence: 0.649322,
+  evidenceLabel: "공기압축기 03구역 03라인 1호기의 예측 근거 묶음",
+  predictionLabel: "2026년 8월 29일 오후 11시 기준 예측 결과",
+  datasetLabel: "AI4I 기반 합성 예지보전 데이터셋 v3.1",
+  sensorWindowLabel: "8월 28일 오후 11시 10분 ~ 8월 29일 오후 11시",
+  sensorWindowSummary: "최근 약 24시간 동안 수집된 센서 데이터 144건을 기준으로 산출했습니다.",
+  targets: [
+    { rank: 1, feature: "rotation_raw_6h_mean", contributionLabel: "매우 높음" },
+    { rank: 2, feature: "rotation_raw_6h_abs_mean", contributionLabel: "높음" },
+    { rank: 3, feature: "rotation_raw_6h_std", contributionLabel: "높음" },
+  ],
+  sensors: [
+    { key: "rotation_raw", current: 420.1058, average: 455.2, deltaLabel: "34.9 낮음", deltaTone: "down", zScoreLabel: "평소 변동폭의 2.9배 낮음", interpretation: "평소보다 크게 낮아 우선 확인이 필요합니다." },
+    { key: "pressure_raw", current: 96.3931, average: 100.0, deltaLabel: "3.6 낮음", deltaTone: "down", zScoreLabel: "평소 변동폭의 0.8배 낮음", interpretation: "평소 변동 범위 안의 낮은 변화입니다." },
+    { key: "vibration_raw", current: 39.8073, average: 36.8, deltaLabel: "3.0 높음", deltaTone: "up", zScoreLabel: "평소 변동폭의 1.6배 높음", interpretation: "평소보다 다소 높아 함께 확인합니다." },
+    { key: "voltage_raw", current: 175.0854, average: 176.0, deltaLabel: "0.9 낮음", deltaTone: "neutral", zScoreLabel: "평소 변동폭의 0.2배 낮음", interpretation: "평소 범위에 가까운 변화입니다." },
+  ],
+  evidenceCards: [
+    { id: "model-risk", groupLabel: "모델 예측 결과", title: "위험 상태 등급", value: "위험", description: "모델이 이 설비를 즉시 점검이 필요한 위험 상태로 분류했습니다.", rawFields: ["model_prediction.status_grade", "model_prediction.probability", "model_prediction.confidence"] },
+    { id: "sensor-window", groupLabel: "센서 데이터 범위", title: "최근 센서 관측 범위", value: "센서 데이터 144건", description: "8월 28일 오후 11시 10분부터 8월 29일 오후 11시까지의 센서 데이터 144건을 사용했습니다. 약 24시간 기준입니다.", rawFields: ["sensor_evidence.window.start", "sensor_evidence.window.end", "sensor_evidence.window_rows"] },
+    { id: "risk-factors", groupLabel: "주요 위험 근거", title: "회전 계통 위험 신호", value: "회전 상태 평균값, 회전 변동 크기, 회전 불안정성", description: "회전 관련 센서 패턴이 위험 예측에 크게 기여했습니다.", rawFields: ["top_factors[0..2]", "sensor_evidence.sensors.rotation_raw"] },
+  ],
+};
+
+const inspectionAssetOptions = [
+  inspectionReport,
+  { ...inspectionReport, assetId: "CMP-S03-L03-02", displayName: "공기압축기 03구역 03라인 2호기", status: "warning" as const, probability: 0.612, confidence: 0.704, targets: [
+    { rank: 1, feature: "pressure_raw_6h_abs_mean", contributionLabel: "높음" },
+    { rank: 2, feature: "vibration_raw_6h_std", contributionLabel: "중간" },
+    { rank: 3, feature: "pressure_raw_current", contributionLabel: "중간" },
+  ] },
+  { ...inspectionReport, assetId: "CMP-S03-L03-05", displayName: "공기압축기 03구역 03라인 5호기", status: "attention" as const, probability: 0.382, confidence: 0.762, targets: [
+    { rank: 1, feature: "vibration_raw_6h_mean", contributionLabel: "중간" },
+    { rank: 2, feature: "voltage_raw_6h_mean", contributionLabel: "낮음" },
+    { rank: 3, feature: "rotation_raw_6h_std", contributionLabel: "낮음" },
+  ] },
+];
+
+const targetIcons: Record<string, typeof RotateCcw> = {
+  rotation_raw_6h_mean: RotateCcw,
+  rotation_raw_6h_abs_mean: Gauge,
+  rotation_raw_6h_std: Volume2,
+  pressure_raw_6h_abs_mean: Gauge,
+  pressure_raw_current: Gauge,
+  vibration_raw_6h_mean: Volume2,
+  vibration_raw_6h_std: Volume2,
+  voltage_raw_6h_mean: Zap,
+};
+
+function percent(value: number | null) {
+  return value === null ? "-" : `${Math.round(value * 100)}%`;
+}
+
+function formatOneDecimal(value: number) {
+  return Number(value).toFixed(1);
+}
+
+function featureLabel(feature: string) {
+  return featureDisplayMap[feature]?.label ?? feature;
+}
+
+function featureCheckLabel(feature: string) {
+  return featureDisplayMap[feature]?.checkLabel ?? "관련 설비 상태 확인";
+}
+
+function featureReason(feature: string) {
+  return featureDisplayMap[feature]?.plainReason ?? "모델이 주요 위험 근거로 선택한 항목입니다.";
+}
+
+function inspectionLocation(feature: string) {
+  return inspectionLocationMap[feature] ?? { range: "설비 주요 연결부", note: "현장 점검 위치 확인", className: "loc-generic" };
+}
+
+function contributionTone(label: string) {
+  if (label === "매우 높음") return "critical";
+  if (label === "높음") return "high";
+  if (label === "중간") return "medium";
+  return "low";
+}
+
+function sensorMeta(key: string) {
+  return sensorDisplayMap[key] ?? { label: key, plainNote: "센서 관측값" };
+}
+
+function sourceFieldMeta(field: string) {
+  return sourceFieldLabels[field] ?? { label: "추가 근거 정보", description: "이 판단에 사용된 내부 추적 정보입니다." };
+}
+
+function Kpi({ icon: Icon, label, value, detail, tone = "" }: { icon: typeof Gauge; label: string; value: string; detail: string; tone?: string }) {
   return (
-    <div className="mvp-page mvp-static-report-page" data-testid="mvp-static-report">
-      <div className="mvp-report-toolbar">
-        <button type="button" className="mvp-button secondary" onClick={onBackToOverview}><ArrowLeft size={14} />Overview</button>
-        <div><span className="mvp-report-mode mode-template-fallback">Static report</span><strong>Map-report UI prototype embedded as a side tab.</strong></div>
-        <button type="button" className="mvp-button secondary"><FileText size={15} />Export draft</button>
-      </div>
+    <article className={`kpi ${tone}`}>
+      <Icon size={18} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
+}
 
-      <section className="mvp-static-report-shell">
-        <header className="mvp-static-report-topbar">
-          <div>
-            <span>Inspection report</span>
-            <h1>Compressor Station 03 predictive maintenance report</h1>
-            <p>Static English report view adapted from the map-report UI prototype. This tab does not parse raw producer payloads or import prototype runtime code.</p>
+function StatusBadge({ status }: { status: keyof typeof statusMeta }) {
+  const meta = statusMeta[status];
+  return <span className={`status-badge ${meta.tone}`}>{meta.label}</span>;
+}
+
+export function MvpInspectionReportPage() {
+  const [activeAssetId, setActiveAssetId] = useState("CMP-S03-L03-02");
+  const activeAsset = inspectionAssetOptions.find((asset) => asset.assetId === activeAssetId) ?? inspectionAssetOptions[0];
+  const riskFactorLabels = activeAsset.targets.map((target) => featureLabel(target.feature)).join(", ");
+  const primaryCategory = featureDisplayMap[activeAsset.targets[0]?.feature]?.category ?? "주요 계통";
+  const activeReport = {
+    ...inspectionReport,
+    ...activeAsset,
+    evidenceLabel: `${activeAsset.displayName}의 예측 근거 묶음`,
+    evidenceCards: inspectionReport.evidenceCards.map((card) => {
+      if (card.id === "model-risk") {
+        return { ...card, value: statusMeta[activeAsset.status].label, description: `모델이 이 설비를 ${statusMeta[activeAsset.status].sentence}로 분류했습니다.` };
+      }
+      if (card.id === "risk-factors") {
+        return { ...card, title: `${primaryCategory} 위험 신호`, value: riskFactorLabels, description: `${primaryCategory} 관련 센서 패턴이 이번 예측 근거에 포함됐습니다.`, rawFields: ["top_factors[0..2]", "sensor_evidence.sensors"] };
+      }
+      return card;
+    }),
+  };
+  const sameLineAssets = inspectionAssetOptions.filter((asset) => asset.locationLabel === activeAsset.locationLabel);
+
+  return (
+    <div className="mvp-page map-report-prototype" data-testid="mvp-static-report">
+      <header className="topbar">
+        <div>
+          <span>{reportText.inspectionEyebrow}</span>
+          <h1>예지보전 점검 요청 보고서</h1>
+          <p>모델 예측과 근거 자료를 바탕으로 현장 확인이 필요한 항목만 분리해 보여줍니다.</p>
+        </div>
+        <div className="report-meta">
+          <small>{reportText.reportTypeLabel}</small>
+          <strong>{reportText.inspectionReportType}</strong>
+          <span>{reportText.generationMethod}</span>
+        </div>
+      </header>
+
+      <section className="inspection-hero">
+        <div>
+          <span>대상 설비</span>
+          <h2>{activeReport.displayName}</h2>
+          <p>{activeReport.assetTypeLabel} · {activeReport.locationLabel}</p>
+          <p>내부 ID {activeReport.assetId}</p>
+          <p>{activeReport.observedAt} 기준 · {activeReport.horizon} 예측</p>
+        </div>
+        <div className="asset-switcher">
+          <label htmlFor="inspection-asset-select">다른 설비 보기</label>
+          <select id="inspection-asset-select" value={activeAssetId} onChange={(event) => setActiveAssetId(event.target.value)}>
+            {inspectionAssetOptions.map((asset) => (
+              <option key={asset.assetId} value={asset.assetId}>{asset.displayName} · {statusMeta[asset.status].label}</option>
+            ))}
+          </select>
+          <div className="asset-switcher-chips" aria-label="같은 라인 설비 바로 보기">
+            {sameLineAssets.map((asset) => (
+              <button key={asset.assetId} type="button" className={asset.assetId === activeAssetId ? "active" : ""} onClick={() => setActiveAssetId(asset.assetId)}>
+                {asset.assetId.split("-").at(-1)}호
+              </button>
+            ))}
           </div>
-          <aside className="mvp-static-report-meta">
-            <span>Report status</span>
-            <strong>Human review requested</strong>
-            <small>Observed at 2026-08-29 23:00 KST</small>
-          </aside>
-        </header>
+        </div>
+        <StatusBadge status={activeReport.status} />
+      </section>
 
-        <section className="mvp-static-kpis" aria-label="Report summary">
-          <article><Gauge size={18} /><span>24h risk</span><strong>82.4%</strong><small>Warning threshold 70%</small></article>
-          <article className="warm"><AlertTriangle size={18} /><span>Primary signal</span><strong>Rotation drop</strong><small>420.1 rpm, below normal band</small></article>
-          <article><Database size={18} /><span>Evidence mode</span><strong>Static prototype</strong><small>No runtime dependency</small></article>
-          <article className="hold"><ShieldCheck size={18} /><span>Decision boundary</span><strong>Review only</strong><small>No automatic shutdown command</small></article>
+      <section className="kpis report-kpis" aria-label="점검 요청 핵심 지표">
+        <Kpi icon={AlertTriangle} label="위험 예측 확률" value={percent(activeReport.probability)} detail="고장 확정 아님" tone="warm" />
+        <Kpi icon={Gauge} label="예측 신뢰도" value={percent(activeReport.confidence)} detail="예측 판단의 확실한 정도" />
+        <Kpi icon={Clock3} label="예측 기간" value={activeReport.horizon} detail={activeReport.observedAt} />
+        <Kpi icon={ShieldCheck} label="판단 상태" value="미확정" detail="현장 확인 후 승격" />
+      </section>
+
+      <details className="formula-disclosure">
+        <summary>위험 예측 확률이 만들어지는 방식 보기</summary>
+        <div>
+          <strong>위험도 = 기준 위험도 + Σ(센서 패턴 × 중요하게 본 정도)</strong>
+          <strong>위험 예측 확률 = 위험도를 0~100%로 바꾼 값</strong>
+          <dl>
+            <div><dt>기준 위험도</dt><dd>모델이 판단을 시작할 때 사용하는 기본 기준입니다.</dd></div>
+            <div><dt>센서 패턴</dt><dd>최근 센서 흐름을 요약한 값입니다.</dd></div>
+            <div><dt>중요하게 본 정도</dt><dd>모델이 어떤 센서 흐름을 더 중요하게 봤는지입니다.</dd></div>
+            <div><dt>위험도를 올린 정도</dt><dd>해당 센서 흐름이 최종 위험 판단에 보탠 정도입니다.</dd></div>
+          </dl>
+          <p>이 리포트 화면은 확률을 새로 계산하지 않고, 모델이 이미 계산해 둔 위험 예측 결과를 보여줍니다.</p>
+        </div>
+      </details>
+
+      <div className="inspection-layout">
+        <section className="report-panel manager-brief">
+          <div className="panel-heading compact"><div><span>MANAGER BLOCK</span><h2>관리자 판단</h2></div></div>
+          <p className="lead-text">{activeReport.displayName}는 향후 {activeReport.horizon} 내 위험 예측 확률이 {percent(activeReport.probability)}로 {statusMeta[activeReport.status].label} 상태입니다. 아래 항목은 저장되는 결정이 아니라 관리자가 검토할 후속 판단 후보입니다.</p>
+          <div className="decision-stack">
+            <article><ClipboardCheck size={16} /><div><strong>현장 점검 요청</strong><span>현장 담당자가 회전, 진동, 압력 상태를 확인해야 합니다.</span></div></article>
+            <article><AlertTriangle size={16} /><div><strong>생산 영향 시 정지 검토</strong><span>자동 정지가 아니라, 생산 영향이 큰 경우 검토 안건으로 올립니다.</span></div></article>
+            <article><DatabaseZap size={16} /><div><strong>근거 품질 확인</strong><span>센서 데이터 범위와 근거 패키지가 판단에 충분한지 확인합니다.</span></div></article>
+          </div>
         </section>
 
-        <div className="mvp-static-report-grid">
-          <main className="mvp-static-report-main">
-            <section className="mvp-static-panel mvp-static-manager-brief">
-              <header className="mvp-static-panel-heading">
-                <div><span>Manager brief</span><h2>Inspection request summary</h2></div>
-                <strong className="mvp-static-status critical">Critical</strong>
-              </header>
-              <p className="mvp-static-lead">The compressor shows a high probability of failure within the next 24 hours. The report requests field inspection of the motor-drive-pump assembly before issuing any production stop decision.</p>
-              <div className="mvp-static-decision-stack">
-                <article><Wrench size={17} /><div><strong>Record field inspection</strong><span>Log vibration, rotation, and belt tension observations in Operations.</span></div></article>
-                <article><ShieldCheck size={17} /><div><strong>Keep decision human-reviewed</strong><span>The recommended action is a review request, not an automated equipment command.</span></div></article>
-              </div>
-            </section>
+        <section className="report-panel">
+          <div className="panel-heading compact"><div><span>ENGINEER BLOCK</span><h2>점검 항목</h2></div></div>
+          <div className="equipment-sketch" aria-label="공기압축기 점검 위치 안내">
+            <div className="compressor-visual" aria-hidden="true">
+              <span className="vibration-zone" /><span className="pipe pipe-1" /><span className="pipe pipe-2" /><span className="pipe pipe-3" /><span className="pipe pipe-4" />
+              <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
+              {activeReport.targets.map((target) => <mark key={target.feature} className={`callout ${inspectionLocation(target.feature).className}`}>{target.rank}</mark>)}
+            </div>
+            <div>
+              <strong>공기압축기 점검 위치</strong>
+              <ul className="sketch-legend">
+                {activeReport.targets.map((target) => {
+                  const location = inspectionLocation(target.feature);
+                  return <li key={target.feature}><b>{target.rank}</b>{location.range}: {location.note}</li>;
+                })}
+              </ul>
+            </div>
+          </div>
+          <div className="target-list">
+            {activeReport.targets.map((target) => {
+              const TargetIcon = targetIcons[target.feature] ?? Wrench;
+              return (
+                <article key={target.feature}>
+                  <b>{target.rank}</b><i><TargetIcon size={18} /></i>
+                  <div><strong>{featureCheckLabel(target.feature)}</strong><p>{featureReason(target.feature)}</p></div>
+                  <span className={`target-severity ${contributionTone(target.contributionLabel)}`}>{target.contributionLabel}</span>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
 
-            <section className="mvp-static-panel">
-              <header className="mvp-static-panel-heading compact">
-                <div><span>Target equipment</span><h2>Compressor assembly focus areas</h2></div>
-              </header>
-              <div className="mvp-static-equipment-sketch">
-                <div>
-                  <strong>CMP-S03-L03-01 · Rotary compressor</strong>
-                  <p>Prototype-style equipment sketch highlights the components that need on-site inspection. The markers are static report annotations.</p>
-                  <ol className="mvp-static-sketch-legend">
-                    <li><b>1</b><span>Motor to drive coupling: check rotation loss and belt tension.</span></li>
-                    <li><b>2</b><span>Drive to pump shaft: inspect vibration transfer and alignment.</span></li>
-                    <li><b>3</b><span>Pump outlet path: confirm pressure stability before escalation.</span></li>
-                  </ol>
-                </div>
-                <div className="mvp-static-compressor-visual" aria-label="Static compressor inspection diagram">
-                  <span className="vibration-zone" />
-                  <span className="motor">MOTOR</span>
-                  <span className="shaft drive">DRIVE</span>
-                  <span className="pump">PUMP</span>
-                  <span className="valve">OUTLET<br />VALVE</span>
-                  <span className="tank">AIR TANK</span>
-                  <span className="power-unit">PWR</span>
-                  <span className="pipe pipe-1" />
-                  <span className="pipe pipe-2" />
-                  <span className="pipe pipe-3" />
-                  <span className="pipe pipe-4" />
-                  <b className="callout loc-motor-drive">1</b>
-                  <b className="callout loc-drive-pump">2</b>
-                  <b className="callout loc-pump-valve">3</b>
-                </div>
-              </div>
-              <div className="mvp-static-target-list">
-                <article><b>1</b><i>R</i><div><strong>Rotation mean</strong><p>Current value is below the expected operating band.</p><code>sensor.rotation_raw</code></div><span className="target-severity critical">High</span></article>
-                <article><b>2</b><i>V</i><div><strong>Vibration mean</strong><p>Vibration is above baseline and should be checked at the drive-pump interface.</p><code>sensor.vibration_raw</code></div><span className="target-severity high">Med</span></article>
-              </div>
-            </section>
-          </main>
+      <div className="inspection-layout lower">
+        <section className="map-panel">
+          <div className="panel-heading"><div><span>SENSOR EVIDENCE</span><h2>센서 참고값</h2></div><span className="status-badge attention">최근 144건</span></div>
+          <div className="sensor-window"><strong>{activeReport.sensorWindowLabel}</strong><p>{activeReport.sensorWindowSummary}</p></div>
+          <div className="sensor-table">
+            {activeReport.sensors.map((sensor) => {
+              const meta = sensorMeta(sensor.key);
+              return <div key={sensor.key}><span>{meta.label}</span><strong>현재값: {formatOneDecimal(sensor.current)}</strong><small>{meta.plainNote}</small><div className={`sensor-delta ${sensor.deltaTone}`}><b>평균값: {formatOneDecimal(sensor.average)}</b><em>{sensor.deltaLabel}</em></div><div className={`variation-note ${sensor.deltaTone}`}><strong>평균 대비: {sensor.zScoreLabel}</strong><p>{sensor.interpretation}</p></div></div>;
+            })}
+          </div>
+        </section>
 
-          <aside className="mvp-static-report-side">
-            <section className="mvp-static-panel">
-              <header className="mvp-static-panel-heading compact">
-                <div><span>Sensor evidence</span><h2>Reference values</h2></div>
-              </header>
-              <div className="mvp-static-sensor-window">
-                <strong>Six-hour inspection window</strong>
-                <p>Values are static prototype content for UI evaluation only.</p>
-              </div>
-              <div className="mvp-static-sensor-table">
-                <div><code>rotation_raw</code><strong>420.1 rpm</strong><span>Below baseline</span><small>Normal band 448-462 rpm</small></div>
-                <div><code>vibration_raw</code><strong>39.8 mm/s</strong><span>Above baseline</span><small>Normal band 35.4-37.8 mm/s</small></div>
-                <div><code>risk_score</code><strong>82.4%</strong><span>Above warning threshold</span><small>Threshold 70%</small></div>
-                <div><code>confidence</code><strong>0.78</strong><span>Moderate confidence</span><small>Requires field confirmation</small></div>
-              </div>
-            </section>
+        <aside className="report-panel">
+          <div className="panel-heading compact"><div><span>EVIDENCE TRACE</span><h2>근거 추적</h2></div></div>
+          <div className="evidence-card-list">
+            {activeReport.evidenceCards.map((card) => (
+              <article key={card.id}>
+                <span>{card.groupLabel}</span><strong>{card.title}: {card.value}</strong><p>{card.description}</p>
+                <details><summary>사용한 근거 보기</summary><div className="source-field-list">{card.rawFields.map((field) => { const meta = sourceFieldMeta(field); return <div key={field}><strong>{meta.label}</strong><p>{meta.description}</p></div>; })}</div></details>
+              </article>
+            ))}
+          </div>
+          <div className="trace-meta"><span>근거 묶음</span><strong>{activeReport.evidenceLabel}</strong><span>예측 기록</span><strong>{activeReport.predictionLabel}</strong><span>사용 데이터</span><strong>{activeReport.datasetLabel}</strong></div>
+        </aside>
+      </div>
 
-            <section className="mvp-static-panel">
-              <header className="mvp-static-panel-heading compact">
-                <div><span>Evidence trace</span><h2>Grounding chain</h2></div>
-              </header>
-              <div className="mvp-static-evidence-list">
-                <article><span>Model factor</span><strong>Rotation drop contributed 43% of the risk score.</strong><p>The report treats this as a signal to inspect, not as confirmed root cause.</p></article>
-                <article><span>Maintenance context</span><strong>Recent belt tension adjustment is relevant to the inspection scope.</strong><p>The static report keeps this as provenance context and avoids creating a work order.</p></article>
-              </div>
-              <dl className="mvp-static-trace-meta">
-                <div><dt>Source boundary</dt><dd>Static map-report UI reference</dd></div>
-                <div><dt>Runtime dependency</dt><dd>None</dd></div>
-              </dl>
-            </section>
-
-            <section className="mvp-static-panel">
-              <header className="mvp-static-panel-heading compact">
-                <div><span>History</span><h2>Recent inspection timeline</h2></div>
-                <History size={17} />
-              </header>
-              <div className="mvp-static-history-list">
-                <article><time>2026-08-29 23:00</time><strong>Predictive alarm</strong><p>24h risk exceeded warning threshold.</p></article>
-                <article><time>2026-08-12 10:30</time><strong>Scheduled maintenance</strong><p>Belt tension adjusted and drive lubrication completed.</p></article>
-                <article><time>2026-07-28 17:30</time><strong>Failure record</strong><p>Prior stop event recorded; root cause is not asserted in this UI.</p></article>
-              </div>
-            </section>
-          </aside>
-        </div>
+      <section className="priority-panel warning-strip">
+        <ShieldCheck size={18} />
+        <p>이 리포트는 점검 요청 산출물입니다. 고장 발생, 고장 원인, 정비 필요 여부, 자동 설비 정지를 확정하지 않습니다.</p>
       </section>
     </div>
   );

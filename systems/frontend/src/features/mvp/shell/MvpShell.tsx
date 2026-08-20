@@ -45,7 +45,7 @@ export function MvpShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const active = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
   const headingDetail = activeView === "inspection-report"
-    ? "Static English report adapted from the map-report UI prototype."
+    ? "map-report UI prototype의 점검 요청 리포트 화면을 사이드탭에 표시합니다."
     : role === "process_manager"
       ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
       : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
