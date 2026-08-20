@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/asset-detail-report-view-model.schema.json",
+  "title": "Asset Detail Report ViewModel (candidate contract)",
+  "description": "Candidate contract for GET /objects/{asset_id}/report-detail, as documented in docs/mvp/pdm-evidence-report-ui-integration-plan.md §3.1 and docs/mvp/schema-definition.md §5.3. Status: V2 change proposal. Does not replace the current Event Report API. This object name is deliberately not prefixed with `Mvp` — see docs/mvp/asset-detail-report-viewmodel-frontend-field-audit.md.",
+  "type": "object",
+  "required": ["asset", "risk", "risk_series", "features", "equipment_history", "evidence", "data_status"],
+  "additionalProperties": false,
+  "properties": {
+    "asset": {
+      "type": "object",
+      "required": ["asset_id", "asset_type", "observed_at"],
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {"type": "string"},
+        "asset_type": {"enum": ["compressor", "cnc"]},
+        "display_name": {"type": "string"},
+        "site_id": {"type": "string"},
+        "cell_id": {"type": "string"},
+        "observed_at": {"type": "string"}
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["current", "threshold", "status_grade", "prediction_horizon_hours"],
+      "additionalProperties": false,
+      "properties": {
+        "current": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "threshold": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "status_grade": {
+          "enum": ["normal", "attention", "warning", "critical"],
+          "description": "Exactly 4 grades. data_quality_hold is not a status_grade value here; it is represented separately at data_status.is_data_quality_hold."
+        },
+        "prediction_horizon_hours": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "risk_series": {
+      "type": "array",
+      "description": "Backend Diagnosis runtime prediction/result timeline target. Must not be populated by promoting legacy /timeline or precomputed_prediction_timeline.",
+      "items": {
+        "type": "object",
+        "required": ["observed_at", "failure_probability", "status_grade", "prediction_id", "source_kind"],
+        "additionalProperties": false,
+        "properties": {
+          "observed_at": {"type": "string"},
+          "failure_probability": {"type": "number", "minimum": 0, "maximum": 1},
+          "status_grade": {"type": "string"},
+          "prediction_id": {"type": "string"},
+          "source_kind": {"enum": ["runtime_inference", "compatibility_fallback"]},
+          "source_ref": {"type": "string"}
+        }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "label", "unit", "current", "series"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {"type": "string"},
+          "label": {"type": "string"},
+          "unit": {"type": "string"},
+          "current": {"type": ["number", "null"]},
+          "baseline": {
+            "type": ["object", "null"],
+            "required": ["mean", "std", "lower", "upper", "reference"],
+            "additionalProperties": false,
+            "properties": {
+              "mean": {"type": "number"},
+              "std": {"type": "number"},
+              "lower": {"type": "number"},
+              "upper": {"type": "number"},
+              "reference": {"type": "string"}
+            }
+          },
+          "series": {
+            "type": "array",
+            "description": "Derived from the versioned Observation contract (canonical/overlay Observation API), not from gen_data internal file layout (Layer 0/1/2, _log.jsonl) directly.",
+            "items": {
+              "type": "object",
+              "required": ["observed_at", "value"],
+              "additionalProperties": false,
+              "properties": {
+                "observed_at": {"type": "string"},
+                "value": {"type": ["number", "null"]},
+                "quality_status": {"enum": ["good", "bad", "unknown"]},
+                "source_ref": {"type": "string"}
+              }
+            }
+          },
+          "top_factor": {
+            "type": ["object", "null"],
+            "required": ["rank", "contribution", "direction", "explanation_method"],
+            "additionalProperties": false,
+            "properties": {
+              "rank": {"type": "integer", "minimum": 1},
+              "contribution": {"type": "number"},
+              "direction": {"enum": ["risk_up", "risk_down"]},
+              "explanation_method": {"type": "string"},
+              "evidence_field_id": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "equipment_history": {
+      "type": "array",
+      "description": "Sourced from Activity/Decision/Maintenance, not synthesized from Event Evidence alone.",
+      "items": {
+        "type": "object",
+        "required": ["occurred_at", "kind", "tone", "description", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "occurred_at": {"type": "string"},
+          "kind": {"type": "string"},
+          "tone": {"enum": ["critical", "warning", "attention", "normal", "hold"]},
+          "description": {"type": "string"},
+          "source": {"type": "string"},
+          "memo": {"type": "string"}
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["artifact_id", "model_version", "dataset_version", "source_kind", "gaps"],
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {"type": ["string", "null"]},
+        "evidence_payload_reference": {"type": "string"},
+        "model_version": {"type": ["string", "null"]},
+        "dataset_version": {"type": ["string", "null"]},
+        "source_kind": {"enum": ["runtime_inference", "compatibility_fallback"]},
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "reason", "owner_domain"],
+            "additionalProperties": false,
+            "properties": {
+              "field": {"type": "string"},
+              "reason": {"type": "string"},
+              "owner_domain": {"enum": ["diagnosis", "dataset", "maintenance", "report", "frontend"]}
+            }
+          }
+        }
+      }
+    },
+    "data_status": {
+      "type": "object",
+      "required": ["source", "is_stale", "is_data_quality_hold", "warnings"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {"enum": ["canonical", "fallback"]},
+        "is_stale": {"type": "boolean"},
+        "is_data_quality_hold": {"type": "boolean"},
+        "last_updated_at": {"type": "string"},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
