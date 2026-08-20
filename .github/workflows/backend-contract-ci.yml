@@ -114,9 +114,10 @@ jobs:
           APP_ENV: test
         run: >
           pytest -q
-          tests/test_demo_predictive_maintenance_bootstrap.py
+          tests/test_canonical_runtime_smoke.py
           tests/test_product_result_artifact_evidence_contract.py
           tests/test_product_result_evidence_enrichment.py
+          tests/test_predictive_maintenance_projection.py
           tests/test_predictive_maintenance_postgresql.py
           tests/test_predictive_maintenance_result_replay.py
           tests/test_backend_entrypoint_convergence.py

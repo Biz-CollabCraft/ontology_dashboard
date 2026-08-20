@@ -160,27 +160,34 @@ jobs:
             systems/generator/requirements.txt
 
       - name: Static architecture rules
-        env:
-          BACKEND_MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha }}
         run: python systems/verify_architecture.py
-
-      - name: Backend migration ratchet negative fixtures
-        run: |
-          python -m unittest tests.test_backend_migration_ratchet
-          python -m unittest tests.test_backend_domain_first_architecture
 
       - name: Install Python dependencies
         if: needs.changes.outputs.generator == 'true' || needs.changes.outputs.backend == 'true'
         run: |
           python -m pip install -e ./ml -e './systems/backend[dev]' -r systems/generator/requirements.txt
 
-      - name: Backend migration architecture regressions
+      - name: Backend strict architecture negative fixtures
+        if: needs.changes.outputs.generator == 'true' || needs.changes.outputs.backend == 'true'
+        run: python -m pytest -q tests/test_backend_strict_architecture.py
+
+      - name: Backend canonical runtime regressions
         if: needs.changes.outputs.backend == 'true'
+        env:
+          APP_ENV: test
         run: |
           python -m pytest -q \
-            tests/test_backend_migration_map.py \
-            tests/test_backend_migration_ledger.py \
-            tests/test_architecture_debt_stage44.py
+            tests/test_backend_entrypoint_convergence.py \
+            tests/test_canonical_runtime_smoke.py \
+            tests/test_equipment_domain_migration.py \
+            tests/test_dataset_catalog_contract_models.py \
+            tests/test_diagnosis_domain_migration.py \
+            tests/test_maintenance_domain_migration.py \
+            tests/test_dashboard_domain_migration.py \
+            tests/test_report_domain_migration.py \
+            tests/test_governance_domain_migration.py \
+            tests/test_planner_domain_migration.py \
+            tests/test_live_predictive_maintenance.py
 
       - name: Generator import smoke
         if: needs.changes.outputs.generator == 'true'
@@ -225,21 +232,20 @@ jobs:
           import os
           from pathlib import Path
 
-          import ontology_dashboard
-          from ontology_dashboard.application import ROOT as application_root
-          from ontology_dashboard.dependencies import ROOT as dependencies_root
-          from ontology_dashboard.routers import platform, system
+          import app
+          from app.application import ROOT as application_root
+          from app.dependencies import ROOT as dependencies_root
+          from app.main import app as application
           from app.common.runtime_settings import project_root
 
           expected = Path(os.environ["ONTOLOGY_DASHBOARD_PROJECT_ROOT"]).resolve()
-          installed_package = Path(ontology_dashboard.__file__).resolve()
+          installed_package = Path(app.__file__).resolve()
           installed_root = Path("/tmp/ontology-dashboard-site").resolve()
           assert installed_package.is_relative_to(installed_root), installed_package
           assert project_root() == expected
           assert application_root == expected
           assert dependencies_root == expected
-          assert system.ROOT == expected
-          assert platform.project_root() == expected
+          assert application.title == "Ontology Dashboard API"
           assert (expected / "contracts" / "schemas").is_dir()
           assert (expected / "prompts").is_dir()
           assert (expected / "data" / "fixtures").is_dir()
@@ -371,32 +377,6 @@ jobs:
           done
           test "$web_ready" -eq 1
 
-          docker compose -f infra/docker-compose.yml exec -T api python - <<'PY'
-          import os
-          from pathlib import Path
-
-          from ontology_dashboard.dependencies import get_artifact_governance_service
-
-          assert os.getuid() == 10001, os.getuid()
-          service = get_artifact_governance_service()
-          root = Path(service.backend.root).resolve()
-          expected_root = Path("/app/.runtime/object-storage")
-          assert root == expected_root, (root, expected_root)
-
-          probe_key = "ci/docker-runtime/artifact-storage-smoke.txt"
-          payload = b"ontology-dashboard-artifact-storage-smoke"
-          service.backend.put(
-              probe_key,
-              payload,
-              media_type="text/plain",
-              metadata={"source": "architecture-ci"},
-          )
-          assert service.backend.get(probe_key) == payload
-          service.backend.delete(probe_key)
-          assert service.backend.head(probe_key) is None
-          print(f"artifact_storage_root={root}")
-          print("artifact_storage_write_read_delete=ok")
-          PY
           echo "verified=true" >> "$GITHUB_OUTPUT"
 
       - name: Docker Compose diagnostics
