@@ -38,9 +38,6 @@
     "export_models.py",
     "export_repository.py",
     "export_service.py",
-    "governance/__init__.py",
-    "governance/models.py",
-    "governance/service.py",
     "integrations/__init__.py",
     "integrations/project3/__init__.py",
     "integrations/project3/projection.py",
@@ -99,7 +96,6 @@
     "routers/analyses.py",
     "routers/dashboards.py",
     "routers/exports.py",
-    "routers/governance.py",
     "routers/manufacturing.py",
     "routers/modeling.py",
     "routers/ontology.py",
@@ -735,27 +731,12 @@
     {
       "source": "tests/test_governance_workbench_stage51.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.governance"
-    },
-    {
-      "source": "tests/test_governance_workbench_stage51.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.main"
     },
     {
       "source": "tests/test_governance_workbench_stage51.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "tests/test_governance_workbench_stage51.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.orchestration"
-    },
-    {
-      "source": "tests/test_governance_workbench_stage51.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.orchestration.models"
     },
     {
       "source": "tests/test_governance_workbench_stage51.py",
