@@ -27,6 +27,9 @@ from app.infra.db.settings import database_location
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.infra.db.postgresql_ontology_instance_repository import (
+    PostgreSQLOntologyInstanceRepository,
+)
 from app.infra.db.ontology_primitives import OntologyPrimitiveRepository
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
@@ -56,7 +59,6 @@ from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
 from .orchestration import AgentRunRepository, MultiStoreOrchestrator
 from .orchestration.ports import Project3GraphPort, Project3VectorPort, RelationalOntologyPort
-from .postgresql_ontology_repository import PostgreSQLOntologyInstanceRepository
 from .postgresql_repositories import (
     PostgreSQLAdapterRepository,
     PostgreSQLAuditRepository,

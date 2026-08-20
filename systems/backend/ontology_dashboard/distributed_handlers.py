@@ -15,8 +15,10 @@ from app.identity import Principal
 from app.infra.db.project_repository import SQLiteProjectContextResolver
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.infra.db.postgresql_ontology_instance_repository import (
+    PostgreSQLOntologyInstanceRepository,
+)
 from app.ontology.ontology_service import OntologyService
-from .postgresql_ontology_repository import PostgreSQLOntologyInstanceRepository
 from .postgresql_repositories import (
     PostgreSQLOntologyActionRepository,
     PostgreSQLRoleWorkflowRepository,
