@@ -25,7 +25,7 @@ from app.infra.db.dashboard_repository import DashboardRepository
 from .export_models import ExportArtifact, ExportCheckpoint, ExportRequest
 from .export_repository import ExportRepository
 from app.identity import Principal
-from .project_context import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from .role_workflow_service import RoleWorkflowService
 from .service import FactorySignalService
 

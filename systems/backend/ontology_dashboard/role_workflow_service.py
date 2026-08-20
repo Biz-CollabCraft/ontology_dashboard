@@ -10,7 +10,7 @@ from app.dashboard.dashboard_schema import DashboardTemplatePublishRequest
 from app.dashboard.dashboard_service import DashboardService
 from app.infra.db.dashboard_repository import DashboardRepository
 from app.identity import AuthError, Principal
-from .project_context import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from .ontology import registry_payload
 from .ontology_service import OntologyService
 from .role_workflow_models import (

@@ -11,7 +11,7 @@ from app.dashboard.dashboard_schema import DashboardBoard, DashboardTab, Dashboa
 from app.dashboard.dashboard_service import DashboardService
 from app.infra.db.dashboard_repository import DashboardRepository
 from app.identity import AuthError, Principal
-from ..project_context import SQLiteProjectContextResolver
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from app.infra.llm import LLMProvider
 from ..ontology import OBJECT_TYPE_BY_ID
 from ..ontology_service import OntologyService
