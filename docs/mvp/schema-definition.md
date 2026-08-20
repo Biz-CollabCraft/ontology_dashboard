@@ -383,6 +383,30 @@ Overview와 Objects 목록의 공통 행이다.
 
 `features[].series`는 센서 관측 시계열이므로 `gen_data` canonical Observation 또는 Runtime Overlay Observation에서 파생할 수 있다. 반면 `risk_series`는 제품 runtime inference 결과의 누적이어야 하며, `gen_data/canonical/model_outputs/prediction_timeline.jsonl`을 최신 운영 결과처럼 직접 소비하지 않는다.
 
+기존 MVP 상세 화면이 사용하던 Event detail 필드(asset, 현재 센서값, top factors,
+threshold, data quality warning, activity, report, provenance)는 이 계약의 기준선이다.
+아래 필드는 기준선에 추가되는 상세 리포트 필드이며, 단일 Product Result Evidence만으로
+모두 채워진다고 가정하지 않는다.
+
+| 필드 묶음 | 현재 Evidence만으로 산출 | 추가 source | 비고 |
+|---|---|---|---|
+| 현재 asset/risk/status/action | 가능 | 없음 | 최신 Product Result Artifact 기준 |
+| 현재 센서값 | 가능 | 없음 | `observation` 또는 `sensor_evidence.sensors` |
+| top factors/report citations | 가능 | 없음 | `top_factors`, `report.sections[].evidenceFieldIds` |
+| feature baseline | 부분 가능 | Evidence Payload 노출 필요 | `sensor_evidence.sensors[*].basis`가 있는 feature만 가능 |
+| feature 시계열 | 불가 | Observation API 또는 gen_data Layer 2 정규화 결과 | 단일 Event Evidence는 현재값 중심 |
+| risk 시계열 | 불가 | Backend Diagnosis runtime prediction/result timeline | gen_data model output fixture 대체 금지 |
+| crossing marker/history row | 불가 또는 부분 가능 | Observation series, baseline, Activity/Maintenance source | 합성 금지 |
+
+시계열과 baseline의 최소 추적 필드는 다음과 같다.
+
+| 객체 | 필수 추적 필드 |
+|---|---|
+| PredictionSeriesPoint | `observed_at`, `failure_probability`, `status_grade`, `prediction_id` 또는 result/artifact reference, `source_kind` |
+| ObservationSeriesPoint | `observed_at`, `value`, `quality_status`, observation row/source reference |
+| Baseline | `mean`, `std`, `lower`, `upper`, `reference`, evidence field/source reference |
+| EquipmentHistoryRow | `occurred_at`, `kind`, `source`, activity/maintenance reference |
+
 값이 없으면 UI 표시를 위해 합성 series나 임의 baseline을 만들지 않는다. Backend adapter는 빈 배열, null, `evidence.gaps[]`, `data_status.warnings[]`로 unavailable 상태를 표현한다.
 
 ### 5.4 DataStatus

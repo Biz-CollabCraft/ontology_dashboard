@@ -230,6 +230,8 @@ type AssetDetailReportViewModel = {
     failure_probability: number
     status_grade: string
     prediction_id: string
+    source_kind: "runtime_inference" | "compatibility_fallback"
+    source_ref?: string
   }>
   features: Array<{
     key: string
@@ -246,12 +248,15 @@ type AssetDetailReportViewModel = {
     series: Array<{
       observed_at: string
       value: number | null
+      quality_status?: "good" | "bad" | "unknown"
+      source_ref?: string
     }>
     top_factor?: {
       rank: number
       contribution: number
       direction: "risk_up" | "risk_down"
       explanation_method: string
+      evidence_field_id?: string
     }
   }>
   equipment_history: Array<{
@@ -291,6 +296,20 @@ type AssetDetailReportViewModel = {
 | `risk.current`, `top_factor`, `baseline` | Product Result Artifact와 `evidence_payload.sensor_evidence` | `systems/backend/app/diagnosis` | null과 `evidence.gaps[]` |
 | `risk_series` | Backend Diagnosis가 생성한 runtime prediction/result timeline | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
 | `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
+
+현재 Evidence만으로 채울 수 있는 범위와 추가로 필요한 source는 다음과 같다.
+
+| 화면 요구 | 현재 Evidence로 충족 | 필요한 추가 source | 계약 처리 |
+|---|---|---|---|
+| 기존 MVP 상세 정보 | 가능 | 없음 | 기존 Event detail 기준선 유지 |
+| 현재 risk/status/action | 가능 | 없음 | Product Result Artifact 사용 |
+| 현재 센서 카드 | 가능 | 없음 | `observation` 또는 `sensor_evidence` 사용 |
+| top factor와 report 근거 | 가능 | 없음 | `evidence_field_id` 유지 |
+| feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
+| 피쳐별 그래프 | 불가 | Observation series | `features[].series=[]`와 gap 표시 |
+| 위험도 그래프 | 불가 | runtime prediction/result timeline | `risk_series=[]`와 gap 표시 |
+| 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
+| 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
 
 Layer 2 정규화 adapter의 최소 규칙은 다음과 같다.
 

@@ -182,6 +182,14 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 `features[].series`는 Observation source에서 파생할 수 있다. `risk_series`는 운영 Result/Prediction runtime source에서 파생해야 하며, `gen_data`의 `model_outputs/prediction_timeline.jsonl`을 최신 운영 결과처럼 직접 읽어 대체하지 않는다.
 
+기존 MVP 상세 화면이 이미 소비하는 필드(asset, 현재 risk/status/action, 현재 센서값,
+top factors, report section, provenance)는 기준선으로 유지한다. `map-report`
+이식에 필요한 그래프·피쳐 이력 필드는 이 기준선에 추가되는 필드이며, 단일 Event
+Evidence만으로 채울 수 있다고 가정하지 않는다.
+
+근거 추적을 위해 시계열 point와 baseline에는 최소 `observed_at`, source reference,
+quality/status 정보를 보존한다. 화면 표시용 `number[]`만 반환하지 않는다.
+
 없는 값은 합성하지 않고 null, 빈 배열, `evidence.gaps[]`, `data_status.warnings[]`로 표현한다.
 
 ### 4.7 Operations
