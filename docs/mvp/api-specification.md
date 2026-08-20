@@ -150,12 +150,42 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 설비 유형에 존재하지 않는 센서 key는 400으로 처리한다.
 
-### 4.6 Operations
+### 4.6 `GET /objects/{asset_id}/report-detail`
+
+상태: V2 변경 제안. 현행 Event Report API나 `/objects/{asset_id}`를 대체하지 않는다.
+
+응답: `AssetDetailReportViewModel`.
+
+설비 상세 리포트, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint 후보이다. Backend adapter가 Product Result Artifact/Evidence, canonical 또는 overlay Observation series, Backend Diagnosis runtime prediction/result series, Activity/Maintenance source를 병합한다.
+
+필수 Query: `from`, `to`. 선택 Query: `dataset_version_id`, `grain=raw|10m|1h`.
+
+```json
+{
+  "asset": {},
+  "risk": {},
+  "risk_series": [],
+  "features": [],
+  "equipment_history": [],
+  "evidence": {
+    "artifact_id": null,
+    "source_kind": "runtime_inference",
+    "gaps": []
+  },
+  "data_status": {}
+}
+```
+
+`features[].series`는 Observation source에서 파생할 수 있다. `risk_series`는 운영 Result/Prediction runtime source에서 파생해야 하며, `gen_data`의 `model_outputs/prediction_timeline.jsonl`을 최신 운영 결과처럼 직접 읽어 대체하지 않는다.
+
+없는 값은 합성하지 않고 null, 빈 배열, `evidence.gaps[]`, `data_status.warnings[]`로 표현한다.
+
+### 4.7 Operations
 
 `GET /operations`는 같은 필터의 생산·정비 목록 합계와 일치하는 요약을 반환한다.
 생산 행의 위험 등급은 `cnc_asset_id`와 동일 snapshot Artifact를 결합한 파생값이다.
 
-### 4.7 `POST /reports/executive`
+### 4.8 `POST /reports/executive`
 
 현행은 `POST /api/events/{event_id}/report`에서
 `ReportRequest(role, locale, use_llm)`와 role-aware grounded report를 사용한다.

@@ -347,7 +347,39 @@ Overview와 Objects 목록의 공통 행이다.
 예측 또는 관측이 없으면 객체를 임의 값으로 채우지 않고 null과 `data_status`로
 이유를 전달한다.
 
-### 5.3 DataStatus
+### 5.3 AssetDetailReportViewModel
+
+객체명: `AssetDetailReportViewModel` · 상태: V2 변경 제안.
+
+설비 상세 리포트와 `map-report` 계열 그래프 UI를 위한 composition ViewModel이다. Product Result Artifact, Evidence Payload, Observation series, runtime prediction series, Activity/Maintenance source를 Backend adapter에서 병합해 제공한다. 프론트엔드는 raw JSONL, `gen_data` model output fixture, prototype adapter를 직접 파싱하지 않는다.
+
+| 필드 | 타입 | 필수 | 출처 | 상태 |
+|---|---|:---:|---|---|
+| `asset` | Asset summary | Y | Asset/Object read model | 제안 |
+| `risk` | object | Y | Product Result Artifact | 제안 |
+| `risk.current` | number 또는 null | Y | Product Result Artifact `failure_probability` | 제안 |
+| `risk.threshold` | number 또는 null | Y | Artifact root `threshold` 또는 policy | 제안 |
+| `risk.status_grade` | string | Y | Product Result Artifact `status_grade` | 제안 |
+| `risk.prediction_horizon_hours` | integer 또는 null | Y | Product Result Artifact | 제안 |
+| `risk_series` | PredictionSeriesPoint[] | Y | Backend Diagnosis runtime prediction/result timeline | 제안 |
+| `features` | AssetReportFeature[] | Y | Feature catalog + Observation + Evidence | 제안 |
+| `features[].key` | string | Y | Feature catalog | 제안 |
+| `features[].label` | string | Y | Feature catalog 또는 display projection | 제안 |
+| `features[].unit` | string | Y | Feature catalog 또는 Evidence sensor unit | 제안 |
+| `features[].current` | number 또는 null | Y | Product Result Artifact observation 또는 sensor evidence | 제안 |
+| `features[].baseline` | Baseline 또는 null | N | `evidence_payload.sensor_evidence.sensors[*].basis` | 제안 |
+| `features[].series` | ObservationSeriesPoint[] | Y | canonical/overlay Observation API | 제안 |
+| `features[].top_factor` | Factor summary 또는 null | N | Product Result Artifact `top_factors` | 제안 |
+| `equipment_history` | EquipmentHistoryRow[] | Y | Activity/Decision/Maintenance source | 제안 |
+| `evidence` | ReportEvidenceStatus | Y | Artifact/Evidence provenance | 제안 |
+| `evidence.gaps` | EvidenceGap[] | Y | Backend adapter | 제안 |
+| `data_status` | DataStatus | Y | API | 제안 |
+
+`features[].series`는 센서 관측 시계열이므로 `gen_data` canonical Observation 또는 Runtime Overlay Observation에서 파생할 수 있다. 반면 `risk_series`는 제품 runtime inference 결과의 누적이어야 하며, `gen_data/canonical/model_outputs/prediction_timeline.jsonl`을 최신 운영 결과처럼 직접 소비하지 않는다.
+
+값이 없으면 UI 표시를 위해 합성 series나 임의 baseline을 만들지 않는다. Backend adapter는 빈 배열, null, `evidence.gaps[]`, `data_status.warnings[]`로 unavailable 상태를 표현한다.
+
+### 5.4 DataStatus
 
 | 필드 | 타입 | 필수 | 설명 | 상태 |
 |---|---|:---:|---|---|
@@ -361,7 +393,7 @@ Overview와 Objects 목록의 공통 행이다.
 위험등급 표시를 보류하는 ViewModel 상태이며 `DataStatus` 또는 별도 품질 필드에서
 표현한다. 화면은 이를 위험등급보다 우선해 `데이터 확인`으로 표시할 수 있다.
 
-### 5.4 OverviewSummary
+### 5.5 OverviewSummary
 
 | 필드 | 타입 | 필수 | 계산 기준 | 상태 |
 |---|---|:---:|---|---|
