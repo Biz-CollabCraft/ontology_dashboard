@@ -22,6 +22,7 @@ import { MvpObjectsPage } from "./objects/MvpObjectsPage";
 import { MvpOperationsPage } from "./operations/MvpOperationsPage";
 import { MvpOverviewPage } from "./overview/MvpOverviewPage";
 import { MvpExecutiveReportPage } from "./report/MvpExecutiveReportPage";
+import { MvpInspectionReportPage } from "./report/MvpInspectionReportPage";
 import { MvpShell } from "./shell/MvpShell";
 import "./mvp.css";
 
@@ -124,7 +125,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   const openView = useCallback((view: MvpView) => {
     const patch: Parameters<typeof updateSelection>[0] = { view };
-    if ((view === "operations" || view === "executive-report") && !selection.eventId && model?.events[0]) {
+    if ((view === "operations" || view === "executive-report" || view === "inspection-report") && !selection.eventId && model?.events[0]) {
       patch.eventId = model.events[0].eventId;
       patch.assetId = model.events[0].assetId;
     }
@@ -196,6 +197,8 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     content = <MvpOperationsPage model={model} selectedEventId={selection.eventId} detail={detail} detailLoading={detailLoading} detailError={detailError} canDecide={canDecide} canNote={canNote} onSelectEvent={selectEvent} onOpenAsset={openEventAsset} onOpenReport={openEventReport} onDecision={submitDecision} onNote={submitNote} onRetryDetail={retryDetail} />;
   } else if (selection.view === "executive-report") {
     content = <MvpExecutiveReportPage model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
+  } else if (selection.view === "inspection-report") {
+    content = <MvpInspectionReportPage model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onOpenExecutiveReport={(event) => openReport(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else {
     content = <MvpOverviewPage model={model} onOpenAsset={openAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }

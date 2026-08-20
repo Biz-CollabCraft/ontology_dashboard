@@ -1,4 +1,4 @@
-export type MvpView = "overview" | "objects" | "operations" | "executive-report";
+export type MvpView = "overview" | "objects" | "operations" | "executive-report" | "inspection-report";
 export type MvpRoleLens = "process_manager" | "field_operator";
 export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "data_quality_hold";
 export type MvpConfidence = "high" | "medium" | "low" | "unavailable";
