@@ -1,51 +1,40 @@
-# Free demo deployment baseline
+# Mac mini demo deployment baseline
 
-Week 2/MVP 공유 환경은 다음 세 서비스를 사용한다.
-
-```text
-GitHub
-  ├─ Vercel: systems/frontend (PR Preview + main Production)
-  └─ Render: systems/backend (main, CI checks pass 후 자동 배포)
-        └─ Neon PostgreSQL
-```
-
-## Vercel
-
-- Git repository: `Biz-CollabCraft/ontology_dashboard`
-- Root Directory: `systems/frontend`
-- Framework: Vite
-- Build: `npm run build`
-- Output: `dist`
-- Production branch: `main`
-- Environment variable: `VITE_API_BASE_URL=<Render public URL>`
-
-`systems/frontend/vercel.json`은 SPA deep-link fallback을 보장한다.
-
-## Render
-
-루트 `render.yaml`을 Blueprint로 사용한다. Backend는
-`systems/backend/Dockerfile`을 그대로 빌드하며 `/health/live`를 health check로 사용한다.
-
-비밀값은 저장소에 커밋하지 않는다. Render Dashboard에서 다음 Secret Env Var를 직접
-입력한다.
+공유 환경의 정본은 Vercel Preview가 아니라 Mac mini의
+`https://ontology.oosu.dev/`이다.
 
 ```text
-ONTOLOGY_DASHBOARD_DATABASE_URL=<Neon direct PostgreSQL connection string>
+pull_request
+  └─ GitHub-hosted Actions: unit / build / Playwright / architecture
+
+main push
+  └─ architecture workflow green
+       └─ deploy-macmini-frontend workflow
+            └─ Mac mini production runner
+                 └─ Frontend container :8120
+                      └─ Cloudflare Tunnel → ontology.oosu.dev
 ```
 
-무료 demo 환경은 `APP_ENV=demo`를 사용한다. 이는 Week 2 fixture 및 explicit heuristic
-fallback을 허용하기 위한 설정이며 production security profile을 의미하지 않는다.
+## CI and CD ownership
 
-## Neon
+- PR은 GitHub-hosted runner에서 검증하고 외부 Preview deployment를 만들지 않는다.
+- `architecture` workflow가 `main` push에 대해 성공한 SHA만 Mac mini CD가 소비한다.
+- Production runner는 `macmini-production` 전용 label로 등록하며 PR workflow에서는 사용하지 않는다.
+- Frontend 입력(`systems/frontend`, `docs`)이 마지막 평가 SHA 이후 바뀌지 않았다면 배포를 건너뛴다.
+- 배포 실패 시 직전 Frontend image로 rollback하고 workflow를 실패 처리한다.
 
-Neon의 direct PostgreSQL connection string을 Render Secret Env Var로만 전달한다.
-Migration/bootstrap은 Backend 시작 시 idempotent하게 실행된다.
+## Mac mini runtime
 
-## CORS
+- Public URL: `https://ontology.oosu.dev/`
+- Frontend origin: `127.0.0.1:8120`
+- Backend origin: `127.0.0.1:8110`
+- Frontend container는 기존 `ontology-dashboard-macmini_private` network에 연결되어
+  same-origin `/api/*` 요청을 `api:8000`으로 proxy한다.
+- Cloudflare Tunnel과 Backend/PostgreSQL/Redis/live ingestion runtime은 Frontend CD가
+  재생성하거나 중단하지 않는다.
 
-Vercel Preview URL은 매 PR마다 달라지므로 Backend는
-`ONTOLOGY_DASHBOARD_ALLOWED_ORIGIN_REGEX`를 지원한다. Demo Blueprint는
-`^https://.*\\.vercel\\.app$`만 허용한다.
+## Secrets
 
-Production으로 승격할 때는 고정 HTTPS origin을 `ONTOLOGY_DASHBOARD_ALLOWED_ORIGINS`에
-추가하고 preview regex 범위를 재검토한다.
+Frontend CD는 GitHub secret을 Mac mini로 전송하지 않는다. 배포 job은 Mac mini에서
+이미 실행 중인 Docker/OrbStack과 production network만 사용한다. Backend/database/model
+secrets는 기존 Mac mini production runtime의 로컬 secret/environment 관리 범위에 남긴다.
