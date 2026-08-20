@@ -9,7 +9,7 @@ from ..dependencies import (
     get_modeling_service,
     require_permission,
 )
-from ..identity import IdentityService, Principal
+from app.identity import IdentityService, Principal
 from ..modeling import ModelingService
 from ..modeling.models import (
     IntakeProfileRequest,

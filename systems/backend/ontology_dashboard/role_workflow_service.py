@@ -8,7 +8,7 @@ from typing import Any
 from .contracts import ReportRequest
 from .dashboard_models import DashboardTemplatePublishRequest
 from .dashboard_service import DashboardService
-from .identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from .ontology import registry_payload
 from .ontology_service import OntologyService
 from .role_workflow_models import (

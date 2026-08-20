@@ -10,7 +10,8 @@ from pydantic import ValidationError
 
 from ontology_dashboard.context import Project3HttpContextProvider, ResilientContextProvider
 from ontology_dashboard.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from app.infra.llm import VertexAIProvider, configured_provider
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.planner import LayoutPlanner
@@ -34,7 +35,7 @@ def service(database_path: Path) -> FactorySignalService:
 
 @pytest.fixture()
 def identity(database_path: Path) -> IdentityService:
-    return IdentityService(database_path, app_env="test", seed_demo=True)
+    return build_identity_service(database_path, app_env="test", seed_demo=True)
 
 
 def login_as(client: TestClient, email: str, password: str) -> dict:

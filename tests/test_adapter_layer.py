@@ -12,7 +12,8 @@ from jsonschema import Draft202012Validator
 from ontology_dashboard.adapters.file_adapter import FileAdapter
 from ontology_dashboard.adapters.models import DatasetManifest, PredictionResult
 from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,7 +65,7 @@ def manifest_for(
 def adapter_database(tmp_path: Path) -> Path:
     database = tmp_path / "adapter.db"
     migrate(str(database))
-    IdentityService(database, app_env="test", seed_demo=True)
+    build_identity_service(database, app_env="test", seed_demo=True)
     return database
 
 

@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 
 from ontology_dashboard.adapters.service import AdapterService
 from ontology_dashboard.dependencies import get_adapter_service, get_project_service
-from ontology_dashboard.identity import CSRF_COOKIE, IdentityService
+from app.identity import CSRF_COOKIE, IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app, get_identity_service, get_service
 from ontology_dashboard.projects import ProjectRepository, ProjectService
 from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
@@ -22,7 +23,7 @@ def adapter_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     data_root = tmp_path / "datasets"
     data_root.mkdir()
     monkeypatch.setenv("ONTOLOGY_DASHBOARD_DATA_ROOTS", str(data_root))
-    identity = IdentityService(database, app_env="test", seed_demo=True)
+    identity = build_identity_service(database, app_env="test", seed_demo=True)
     domain_service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
     project_service = ProjectService(ProjectRepository(database))
     adapter_service = AdapterService(database, root=ROOT)

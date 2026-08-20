@@ -11,13 +11,14 @@ from pydantic import ValidationError
 from ontology_dashboard.dashboard_models import DashboardPreferenceSaveRequest
 from ontology_dashboard.dashboard_service import DashboardService
 from ontology_dashboard.dependencies import get_predictive_maintenance_runtime_service
-from ontology_dashboard.identity import (
+from app.identity import (
     CSRF_COOKIE,
     AuthError,
     IdentityService,
     LoginRequest,
     Principal,
 )
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import (
     app,
     get_identity_service,
@@ -724,7 +725,7 @@ def test_semantic_visualization_override_saves_and_restores_through_dashboard_pr
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "semantic-override.db"
-    identity = IdentityService(database_path, app_env="test", seed_demo=True)
+    identity = build_identity_service(database_path, app_env="test", seed_demo=True)
     user, _, _, _ = identity.login(
         LoginRequest(email="manager@ontology.local", password="Manager!2026")
     )
@@ -836,7 +837,7 @@ def principal() -> Principal:
 
 
 def test_llm_outside_candidate_falls_back_and_project_scope_is_enforced(tmp_path: Path) -> None:
-    IdentityService(tmp_path / "semantic-planner.db", app_env="test", seed_demo=True)
+    build_identity_service(tmp_path / "semantic-planner.db", app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(
         ROOT,
         database_path=tmp_path / "semantic-planner.db",
@@ -881,7 +882,7 @@ def test_llm_outside_candidate_falls_back_and_project_scope_is_enforced(tmp_path
             request=cross_project,
             runtime_context=authoritative_runtime_context(cross_project.source),
         )
-    assert error.value.status_code == 403
+    assert error.value.code == "project_scope_denied"
 
     cross_organization = request.model_copy(
         update={
@@ -897,7 +898,7 @@ def test_llm_outside_candidate_falls_back_and_project_scope_is_enforced(tmp_path
             request=cross_organization,
             runtime_context=authoritative_runtime_context(cross_organization.source),
         )
-    assert error.value.status_code == 403
+    assert error.value.code == "organization_scope_denied"
 
     cross_workspace = request.model_copy(
         update={
@@ -913,14 +914,14 @@ def test_llm_outside_candidate_falls_back_and_project_scope_is_enforced(tmp_path
             request=cross_workspace,
             runtime_context=authoritative_runtime_context(cross_workspace.source),
         )
-    assert error.value.status_code == 403
+    assert error.value.code == "workspace_scope_denied"
 
 
 def test_compatible_saved_override_applies_mapping_and_invalid_override_falls_back(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "semantic-override-planner.db"
-    IdentityService(database_path, app_env="test", seed_demo=True)
+    build_identity_service(database_path, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
     planner = OntologyDashboardPlannerService(service)
     compatible = VisualizationOverride(
@@ -984,7 +985,7 @@ def test_server_dataset_context_rejects_spoofed_provenance_and_replaces_runtime_
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "semantic-authority.db"
-    IdentityService(database_path, app_env="test", seed_demo=True)
+    build_identity_service(database_path, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
     planner = OntologyDashboardPlannerService(service)
     request = semantic_request(
@@ -1027,7 +1028,7 @@ def test_semantic_visualization_plan_api_contract_is_project_scoped_and_serializ
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "semantic-plan-api.db"
-    identity = IdentityService(database_path, app_env="test", seed_demo=True)
+    identity = build_identity_service(database_path, app_env="test", seed_demo=True)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_service] = lambda: service

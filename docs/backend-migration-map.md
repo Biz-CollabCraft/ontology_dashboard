@@ -219,11 +219,20 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `observability.py` | `systems/backend/app/infra/observability/runtime.py` | `MIGRATED` |
 | `integrations/project3/client.py` | `systems/backend/app/infra/external/project3/client.py` | `MIGRATED` |
 | `integrations/project3/models.py` | `systems/backend/app/infra/external/project3/models.py` | `MIGRATED` |
+| `identity_models.py` | `systems/backend/app/identity/identity_schema.py`, `systems/backend/app/identity/ports.py` | `MIGRATED` |
+| `identity_repository.py` | `systems/backend/app/identity/identity_repository.py` | `MIGRATED` |
+| `enterprise_identity.py` | `systems/backend/app/identity/enterprise_identity.py` | `MIGRATED` |
+| `routers/auth.py` | `systems/backend/app/identity/identity_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직
 Governance/Report 책임이 남아 있으므로 파일 자체를 `MIGRATED`로 표시하지 않는다.
 
+`identity.py`는 IAM service 책임을 `app/identity/identity_service.py`로 분리했지만,
+Project membership lifecycle 책임이 #54 소유로 남아 있으므로 legacy Source 자체는
+아직 `MIGRATED`로 표시하지 않는다. `app/identity`는 `PrincipalContext`와
+`WorkspaceScope` public port를 제공하고 Project membership lifecycle은 이 source에
+남겨 다음 Phase에서 `app/project`로 이관한다.
 Phase 5(#56)는 공유 Source를 삭제하지 않고 Equipment 책임만 물리적으로 분리한다.
 `service.py`의 Equipment master application 책임과
 `routers/manufacturing.py`의 `/api/equipment*` route 정의는

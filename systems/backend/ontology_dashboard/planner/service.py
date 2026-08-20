@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from ..dashboard_models import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
 from ..dashboard_service import DashboardService
-from ..identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from app.infra.llm import LLMProvider
 from ..ontology import OBJECT_TYPE_BY_ID
 from ..ontology_service import OntologyService

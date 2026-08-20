@@ -53,9 +53,9 @@ from ..distributed_runtime import (
     distributed_runtime_readiness,
 )
 from ..domain_packs import ProjectApplicationDefinition, list_domain_packs, resolve_domain_pack
-from ..enterprise_identity import enterprise_identity_readiness
+from app.identity import enterprise_identity_readiness
 from ..deployment import deployment_readiness
-from ..identity import Principal
+from app.identity import Principal
 from ..ontology_primitives import (
     ActionPreview,
     ActionPreviewRequest,

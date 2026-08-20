@@ -13,7 +13,7 @@ from argon2 import PasswordHasher
 
 from ontology_dashboard.adapters.models import DatasetManifest, PredictionResult
 from ontology_dashboard.dashboard_service import DashboardService
-from ontology_dashboard.identity import IdentityService, LoginRequest
+from app.identity import IdentityService, LoginRequest
 from ontology_dashboard.outbox import default_outbox_worker
 from app.infra.db.pool import close_pools
 from ontology_dashboard.postgresql_repositories import (
@@ -139,10 +139,10 @@ def main() -> int:
                 seed_reference_data=True,
             )
             identity = IdentityService(
-                database_url,
+                identity_repository,
                 app_env="test",
                 seed_demo=True,
-                repository=identity_repository,
+                rate_limit_namespace=f"identity:{database_url}",
             )
             principal, token, _, _ = identity.login(
                 LoginRequest(email="manager@ontology.local", password="Manager!2026"),

@@ -16,7 +16,7 @@ from ..dependencies import (
 )
 from ..export_models import ExportRequest
 from ..export_service import ExportService
-from ..identity import IdentityService, Principal
+from app.identity import IdentityService, Principal
 
 router = APIRouter(prefix="/api/exports", tags=["exports"])
 

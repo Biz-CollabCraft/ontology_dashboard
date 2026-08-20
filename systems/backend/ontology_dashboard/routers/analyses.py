@@ -15,7 +15,7 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import IdentityService, Principal
+from app.identity import IdentityService, Principal
 from ..ontology_service import OntologyService
 from ..distributed_runtime import DurableJobRepository, QueueSaturated
 
@@ -78,7 +78,7 @@ def update_analysis(
 
         raise EventNotFound(str(exc.args[0])) from exc
     except AnalysisVersionConflict as exc:
-        from ..identity import AuthError
+        from app.identity import AuthError
 
         raise AuthError(409, "analysis_version_conflict", str(exc)) from exc
 

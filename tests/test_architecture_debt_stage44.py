@@ -40,8 +40,6 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     module_names = (
         "context",
         "contracts",
-        "identity_models",
-        "identity_repository",
         "identity",
         "repository",
         "service",
@@ -61,8 +59,8 @@ def test_foundation_identity_modules_load_from_canonical_directory() -> None:
     )
     assert not (canonical_root / "security.py").exists()
 
-    identity = importlib.import_module("ontology_dashboard.identity")
-    identity_repository = importlib.import_module("ontology_dashboard.identity_repository")
+    identity = importlib.import_module("app.identity.identity_service")
+    identity_repository = importlib.import_module("app.identity.identity_repository")
     assert identity.IdentityRepository is identity_repository.IdentityRepository
 
 

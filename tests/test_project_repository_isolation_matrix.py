@@ -6,7 +6,8 @@ import pytest
 
 from ontology_dashboard.dashboard_repository import DashboardRepository
 from ontology_dashboard.export_repository import ExportRepository
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
 from ontology_dashboard.ontology_repository import OntologyActionRepository
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
@@ -23,7 +24,7 @@ USER_ID = "project-isolation-user"
 def database_path(tmp_path: Path) -> Path:
     path = tmp_path / "project-isolation-matrix.db"
     migrate(str(path))
-    IdentityService(path, app_env="test", seed_demo=True)
+    build_identity_service(path, app_env="test", seed_demo=True)
     return path
 
 

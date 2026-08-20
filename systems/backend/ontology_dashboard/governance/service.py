@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..datasets.repository import DatasetRepository
-from ..identity import AuthError, Principal
+from app.identity import AuthError, Principal
 from ..orchestration.repository import AgentRunRepository
 from ..role_workflow_service import RoleWorkflowService
 from .models import (

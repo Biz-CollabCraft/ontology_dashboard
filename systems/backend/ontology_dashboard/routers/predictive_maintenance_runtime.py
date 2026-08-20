@@ -17,7 +17,7 @@ from ..dependencies import (
     require_csrf,
     require_permission,
 )
-from ..identity import IdentityService, Principal
+from app.identity import IdentityService, Principal
 from ..predictive_maintenance_runtime import (
     DatasetVersionSelectionRequest,
     PredictiveMaintenanceRuntimeService,

@@ -1,4 +1,4 @@
-"""Canonical identity and project-membership repository implementation."""
+"""SQLite identity persistence adapter."""
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ from typing import Any
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
-from .identity_models import (
+from app.identity.identity_exception import AuthError
+from app.identity.identity_schema import (
     DEMO_ACCOUNTS,
     PERMISSION_DEFINITIONS,
     ROLE_DEFINITIONS,
@@ -22,7 +23,6 @@ from .identity_models import (
     SESSION_IDLE_MINUTES,
     SESSION_TTL_HOURS,
     AdminUserUpdateRequest,
-    AuthError,
     Principal,
     RegisterRequest,
 )
@@ -40,7 +40,6 @@ class IdentityRepository:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
-
     @staticmethod
     def _now() -> datetime:
         return datetime.now(timezone.utc)

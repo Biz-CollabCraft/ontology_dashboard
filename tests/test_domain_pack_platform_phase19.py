@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 
 from ontology_dashboard.dependencies import get_project_service
 from ontology_dashboard.domain_packs import resolve_domain_pack
-from ontology_dashboard.identity import IdentityService
+from app.identity import IdentityService
+from identity_test_support import build_identity_service
 from ontology_dashboard.main import app
 from ontology_dashboard.main import get_identity_service, get_service
 from ontology_dashboard.projects import ProjectRepository, ProjectService
@@ -20,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture()
 def client(tmp_path: Path):
     database = tmp_path / "phase19.db"
-    identity = IdentityService(database, app_env="test", seed_demo=True)
+    identity = build_identity_service(database, app_env="test", seed_demo=True)
     domain_service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
     project_service = ProjectService(ProjectRepository(database))
     app.dependency_overrides[get_identity_service] = lambda: identity
