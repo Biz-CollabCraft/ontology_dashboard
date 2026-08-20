@@ -40,3 +40,38 @@ Frontend CD는 GitHub secret을 Mac mini로 전송하지 않는다. Release watc
 API를 읽기만 하고 Mac mini에서 이미 실행 중인 Docker/OrbStack과 production network만 사용한다.
 Backend/database/model secrets는 기존 Mac mini production runtime의 로컬 secret/environment
 관리 범위에 남긴다.
+
+## Release watcher polling and GitHub rate limits
+
+Release watcher의 기본 `launchd` 간격은 `StartInterval=60`이다. 같은 `main` SHA를 이미
+평가한 정상 상태에서는 `git ls-remote` 뒤 즉시 종료하고 GitHub Actions REST API를 호출하지
+않으므로 이 간격을 유지한다.
+
+새 `main` SHA의 Architecture CI가 장시간 pending/failure 상태이면 같은 SHA의 Actions 상태를
+60초마다 다시 확인할 수 있다. 이때 GitHub가 `403` 또는 `429`를 반환하면 수동으로 즉시 반복
+호출하지 않는다.
+
+- 응답에 `Retry-After`가 있으면 그 시간이 지난 뒤 다시 확인한다.
+- `X-RateLimit-Reset`이 있으면 reset 시각 이후 다시 확인한다.
+- 반복적인 rate limit이 발생하거나 Mac mini에 다른 GitHub polling 자동화를 추가한다면 전체
+  unauthenticated API 호출량을 다시 검토하고 watcher 간격을 임시로 300초로 늘린다.
+- Architecture CI 실패가 장시간 유지될 때는
+  `$HOME/Library/Logs/dev.oosu.ontology-dashboard-release-watcher/` 로그를 먼저 확인하고,
+  원인 해소 전에는 polling 간격 확대를 우선한다.
+
+300초로 전환할 때는 설치된 LaunchAgent의 `StartInterval`만 변경하고 다시 로드한다.
+
+```bash
+PLIST="$HOME/Library/LaunchAgents/dev.oosu.ontology-dashboard-release-watcher.plist"
+DOMAIN="gui/$(id -u)"
+
+/usr/libexec/PlistBuddy -c 'Set :StartInterval 300' "$PLIST"
+plutil -lint "$PLIST"
+launchctl bootout "$DOMAIN" "$PLIST" >/dev/null 2>&1 || true
+launchctl bootstrap "$DOMAIN" "$PLIST"
+launchctl kickstart -k "$DOMAIN/dev.oosu.ontology-dashboard-release-watcher"
+```
+
+rate limit 원인이 해소되고 전체 GitHub polling 사용량에 여유가 있음을 확인한 뒤 같은 절차로
+`StartInterval`을 `60`으로 되돌린다. `infra/macmini/install-release-watcher.sh`를 다시 실행하면
+기본값 `60`으로 설치된다는 점도 함께 확인한다.
