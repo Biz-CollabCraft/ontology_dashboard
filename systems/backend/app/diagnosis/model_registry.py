@@ -10,7 +10,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from ontology_dashboard.modeling.models import (
+from .model_contracts import (
     ArtifactReference,
     ExplanationArtifact,
     ExplanationFactor,

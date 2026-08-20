@@ -26,7 +26,7 @@ from ontology_dashboard.main import (
     get_service,
 )
 from ontology_dashboard.planner import OntologyDashboardPlannerService
-from ontology_dashboard.predictive_maintenance_runtime.models import (
+from app.diagnosis.runtime_schema import (
     DatasetVersionRuntimeContext,
     GovernanceProvenance,
     GraphReadiness,

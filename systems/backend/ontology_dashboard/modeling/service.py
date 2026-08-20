@@ -19,7 +19,7 @@ from ..adapters.models import (
     PredictionValue,
     RecommendedAction,
 )
-from ..adapters.prediction_repository import PredictionResultRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 from .artifacts import ArtifactStoreBlocked, LocalArtifactStore
 from .intake import DatasetIntakeProfiler, IntakeLLMProvider, draft_from_profile
 from .mapping import (

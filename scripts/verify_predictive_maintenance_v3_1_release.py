@@ -232,7 +232,7 @@ def project_checks(project_root: Path) -> list[Check]:
         "contracts/schemas/prediction-result.schema.json",
         "contracts/schemas/project3-graph-projection.schema.json",
         "systems/backend/ontology_dashboard/predictive_maintenance_runtime/service.py",
-        "systems/backend/ontology_dashboard/routers/predictive_maintenance_runtime.py",
+        "systems/backend/app/diagnosis/diagnosis_router.py",
         "systems/frontend/src/features/predictive-maintenance/PredictiveMaintenanceReplayPanel.tsx",
         "tests/test_predictive_maintenance_v3_compatibility.py",
         "tests/test_predictive_maintenance_projection.py",

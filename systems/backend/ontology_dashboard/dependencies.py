@@ -30,7 +30,9 @@ from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.infra.llm import configured_provider
 
 from .adapters.service import AdapterService
-from .adapters.prediction_repository import PredictionResultRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
+from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
+from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from .analysis_models import AnalysisRunRequest
 from .analysis_service import AnalysisService
 from .application_runtime import ApplicationRuntimeRepository
@@ -43,7 +45,10 @@ from .export_service import ExportService
 from .governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.project import ProjectService
-from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
+from app.infra.db.project_repository import (
+    ProjectRepository as SQLiteProjectRepository,
+    SQLiteProjectContextResolver,
+)
 from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
@@ -64,10 +69,6 @@ from .postgresql_repositories import (
     PostgreSQLRoleWorkflowRepository,
     is_postgresql,
     seed_runtime_reference_data,
-)
-from .predictive_maintenance_runtime import (
-    PredictiveMaintenanceRuntimeRepository,
-    PredictiveMaintenanceRuntimeService,
 )
 from .role_workflow_service import RoleWorkflowService
 from .service import ManufacturingPredictiveMaintenanceService
@@ -414,7 +415,10 @@ def get_modeling_service() -> ModelingService:
     prediction_repository = (
         PostgreSQLPredictionResultRepository(target)
         if is_postgresql(target)
-        else PredictionResultRepository(target)
+        else PredictionResultRepository(
+            target,
+            project_context=SQLiteProjectContextResolver(target),
+        )
     )
     return ModelingService.configured(
         target,

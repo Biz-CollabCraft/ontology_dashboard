@@ -36,9 +36,19 @@ from ..modeling.models import (
     ModelVersionCreateRequest,
 )
 from ..modeling.experiments import dependency_capabilities
-from .predictive_maintenance_runtime import require_scope
 
 router = APIRouter(prefix="/api/modeling", tags=["modeling"])
+
+
+def require_scope(
+    *,
+    principal: Principal,
+    identity: IdentityService,
+    project_id: str,
+    workspace_id: str,
+) -> None:
+    identity.require_project(principal, project_id)
+    identity.require_workspace(principal, workspace_id)
 
 
 def require_roles(principal: Principal, *roles: str) -> None:

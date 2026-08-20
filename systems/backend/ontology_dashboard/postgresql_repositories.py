@@ -17,7 +17,7 @@ from typing import Any
 from argon2 import PasswordHasher
 
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
-from ontology_dashboard.adapters.prediction_repository import PredictionResultRepository
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.infra.db.project_repository import ProjectRepository as SQLiteProjectRepository
 
 from .dashboard_catalog import seed_templates

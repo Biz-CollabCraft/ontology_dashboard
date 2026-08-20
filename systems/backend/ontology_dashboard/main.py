@@ -16,6 +16,7 @@ from .dependencies import (
     get_identity_service,
     get_ontology_planner_service,
     get_project_service,
+    get_predictive_maintenance_runtime_service,
     get_rate_limiter,
     get_service,
     rate_limit_subject,
@@ -41,12 +42,10 @@ from .routers.ontology import router as ontology_router
 from .routers.planner import router as planner_router
 from .routers.platform import router as platform_router
 from .routers.project3 import router as project3_router
-from .routers.predictive_maintenance_runtime import (
-    router as predictive_maintenance_runtime_router,
-)
 from .routers.role_workspaces import router as role_workspaces_router
 from .routers.system import router as system_router
 from app.common.exceptions import RateLimitExceeded
+from app.diagnosis.diagnosis_router import create_diagnosis_router
 from app.equipment import (
     EquipmentNotFoundError,
     EquipmentStateVersionConflictError,
@@ -55,6 +54,12 @@ from app.equipment import (
 from .service import EventNotFound
 
 app = create_app()
+predictive_maintenance_runtime_router = create_diagnosis_router(
+    require_permission=require_permission,
+    get_identity_service=get_identity_service,
+    get_runtime_service=get_predictive_maintenance_runtime_service,
+    require_csrf=require_csrf,
+)
 
 auth_router = build_identity_router(
     get_identity_service=get_identity_service,
