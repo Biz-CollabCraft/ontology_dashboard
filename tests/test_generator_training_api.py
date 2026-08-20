@@ -287,8 +287,18 @@ def test_train_concurrency_lock_returns_409(client, sample_feature_bundle):
 
 def test_train_feature_bundle_integrity_violations(tmp_path, monkeypatch):
     """Training repository strictly rejects corrupted Feature Bundles with FEATURE_DATASET_INTEGRITY_ERROR."""
-    repo = TrainingRepository(features_base_dir=tmp_path / "features_cache")
-    bundle_dir = tmp_path / "features_cache" / "ds1" / "v1" / "feature-dataset-7739990fb1d3be02"
+    import hashlib
+    def sha(p):
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        return h.hexdigest()
+
+    cache_dir = tmp_path / "features_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    repo = TrainingRepository(features_base_dir=cache_dir)
+    bundle_dir = cache_dir / "ds1-v1-feature-dataset-7739990fb1d3be02"
     bundle_dir.mkdir(parents=True, exist_ok=True)
 
     contract = {
@@ -303,65 +313,304 @@ def test_train_feature_bundle_integrity_violations(tmp_path, monkeypatch):
         "prediction_horizon_hours": 24,
     }
     cols = ["col1", "col2"]
-    meta = {
-        "contract": contract,
-        "dataset_id": "ds1",
-        "dataset_version": "v1",
-        "feature_dataset_version": "feature-dataset-7739990fb1d3be02",
-        "feature_columns": cols,
-        "row_count": 6,
-        "feature_count": 2,
-        "split_indices": {"train": [0, 1, 2, 3], "val": [4], "test": [5]},
-    }
     X = np.ones((6, 2), dtype=np.float64)
     y = np.array([0, 1, 0, 1, 0, 1], dtype=np.int64)
 
     np.save(bundle_dir / "features.npy", X)
     np.save(bundle_dir / "labels.npy", y)
-    with open(bundle_dir / "feature_columns.json", "w") as f:
+    with open(bundle_dir / "feature_columns.json", "w", encoding="utf-8") as f:
         json.dump(cols, f)
-    with open(bundle_dir / "feature_metadata.json", "w") as f:
+
+    checksum = {
+        "algorithm": "sha256",
+        "files": {
+            "features.npy": sha(bundle_dir / "features.npy"),
+            "labels.npy": sha(bundle_dir / "labels.npy"),
+            "feature_columns.json": sha(bundle_dir / "feature_columns.json"),
+        },
+    }
+
+    meta = {
+        "contract": contract,
+        "dataset_id": "ds1",
+        "dataset_version": "v1",
+        "feature_dataset_version": "feature-dataset-7739990fb1d3be02",
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "feature_columns": cols,
+        "row_count": 6,
+        "feature_count": 2,
+        "checksum": checksum,
+        "split_indices": {"train": [0, 1, 2, 3], "val": [4], "test": [5]},
+    }
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
         json.dump(meta, f)
 
     # 1. Normal load succeeds
     loaded_X, loaded_y, loaded_cols, loaded_meta, _ = repo.load_feature_bundle("feature-dataset-7739990fb1d3be02")
     assert loaded_X.shape == (6, 2)
 
-    # 2. Corrupt features.npy with NaN
-    X_nan = np.copy(X)
-    X_nan[0, 0] = np.nan
-    np.save(bundle_dir / "features.npy", X_nan)
-    with pytest.raises(FeatureDatasetIntegrityError, match="NaN 또는 무한대"):
+    # 2. Corrupt features.npy with modified bytes (checksum mismatch)
+    X_mod = np.copy(X)
+    X_mod[0, 0] = 999.0
+    np.save(bundle_dir / "features.npy", X_mod)
+    with pytest.raises(FeatureDatasetIntegrityError, match="체크섬이 일치하지 않습니다"):
         repo.load_feature_bundle("feature-dataset-7739990fb1d3be02")
     np.save(bundle_dir / "features.npy", X)
 
-    # 3. Single-class label (only 0s)
-    np.save(bundle_dir / "labels.npy", np.zeros(6, dtype=np.int64))
-    with pytest.raises(InsufficientTrainingDataError, match="Positive 및 Negative"):
+    # 3. Missing checksum in metadata
+    meta_no_cs = meta.copy()
+    meta_no_cs.pop("checksum")
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta_no_cs, f)
+    with pytest.raises(FeatureDatasetIntegrityError, match="필수 필드가 누락되었습니다"):
         repo.load_feature_bundle("feature-dataset-7739990fb1d3be02")
-    np.save(bundle_dir / "labels.npy", y)
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta, f)
+
+    # 4. Missing mandatory field (feature_schema_version)
+    meta_no_ver = meta.copy()
+    meta_no_ver.pop("feature_schema_version")
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta_no_ver, f)
+    with pytest.raises(FeatureDatasetIntegrityError, match="필수 필드가 누락되었습니다"):
+        repo.load_feature_bundle("feature-dataset-7739990fb1d3be02")
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta, f)
 
 
 def test_train_split_metadata_missing_raises_error(tmp_path, sample_feature_bundle, monkeypatch):
     """Missing chronological split metadata in feature bundle raises TRAINING_SPLIT_METADATA_MISSING."""
+    import hashlib
+    def sha(p):
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        return h.hexdigest()
+
     fver = sample_feature_bundle["feature_dataset_version"]
     repo = TrainingRepository()
     bundle_dir = repo.find_feature_bundle_dir(fver)
     meta_file = bundle_dir / "feature_metadata.json"
 
-    # Remove split_indices from metadata and remove row_metadata.json if present
+    # Remove split_indices from metadata and update checksum
     with open(meta_file, "r", encoding="utf-8") as f:
         meta = json.load(f)
     meta.pop("split_indices", None)
-    with open(meta_file, "w", encoding="utf-8") as f:
-        json.dump(meta, f)
 
     row_meta_file = bundle_dir / "row_metadata.json"
     if row_meta_file.exists():
         row_meta_file.unlink()
+    if "row_metadata.json" in meta.get("checksum", {}).get("files", {}):
+        meta["checksum"]["files"].pop("row_metadata.json")
+
+    with open(meta_file, "w", encoding="utf-8") as f:
+        json.dump(meta, f)
 
     c = TestClient(app)
     res = c.post("/train/random_forest", json={"feature_dataset_version": fver})
     assert res.status_code == 422
     err = res.json()["error"]
     assert err["code"] == "TRAINING_SPLIT_METADATA_MISSING"
+
+
+def test_split_indices_validation_rules():
+    """Test strict split indices validation rules: disjoint, complete, in-bounds, and chronological."""
+    from systems.generator.app.training.training_service import validate_split_indices
+
+    # 1. Valid split
+    validate_split_indices(
+        split_indices={"train": [0, 1, 2], "val": [3], "test": [4]},
+        total_rows=5,
+        asset_ids=["M1", "M1", "M1", "M1", "M1"],
+        timestamps=["2026-01-01 01:00:00", "2026-01-01 02:00:00", "2026-01-01 03:00:00", "2026-01-01 04:00:00", "2026-01-01 05:00:00"],
+    )
+
+    # 2. Overlapping split
+    with pytest.raises(TrainingSplitMetadataMissingError, match="overlap"):
+        validate_split_indices(
+            split_indices={"train": [0, 1, 2], "val": [2, 3], "test": [4]},
+            total_rows=5,
+        )
+
+    # 3. Duplicate within split
+    with pytest.raises(TrainingSplitMetadataMissingError, match="duplicate"):
+        validate_split_indices(
+            split_indices={"train": [0, 1, 1], "val": [2, 3], "test": [4]},
+            total_rows=5,
+        )
+
+    # 4. Incomplete union (missing row 4)
+    with pytest.raises(TrainingSplitMetadataMissingError, match="cover all rows"):
+        validate_split_indices(
+            split_indices={"train": [0, 1], "val": [2], "test": [3]},
+            total_rows=5,
+        )
+
+    # 5. Out of bounds index
+    with pytest.raises(TrainingSplitMetadataMissingError, match="out of bounds"):
+        validate_split_indices(
+            split_indices={"train": [0, 1, 2], "val": [3], "test": [10]},
+            total_rows=5,
+        )
+
+    # 6. Chronological violation (train time > val time for same asset)
+    with pytest.raises(TrainingSplitMetadataMissingError, match="train timestamp"):
+        validate_split_indices(
+            split_indices={"train": [2], "val": [0], "test": [1]},
+            total_rows=3,
+            asset_ids=["M1", "M1", "M1"],
+            timestamps=["2026-01-01 01:00:00", "2026-01-01 05:00:00", "2026-01-01 10:00:00"],
+        )
+
+
+def test_feature_schema_exact_order_check(client, sample_feature_bundle, monkeypatch):
+    """If feature columns are in different order than declared in Feature Schema, reject with FEATURE_SCHEMA_MISMATCH."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    repo = TrainingRepository()
+    bundle_dir = repo.find_feature_bundle_dir(fver)
+    cols_file = bundle_dir / "feature_columns.json"
+    meta_file = bundle_dir / "feature_metadata.json"
+
+    with open(cols_file, "r", encoding="utf-8") as f:
+        cols = json.load(f)
+    # Reverse column order
+    reversed_cols = list(reversed(cols))
+    with open(cols_file, "w", encoding="utf-8") as f:
+        json.dump(reversed_cols, f)
+
+    # Update metadata and checksum
+    import hashlib
+    def sha(p):
+        h = hashlib.sha256()
+        with open(p, "rb") as fh:
+            while chunk := fh.read(65536):
+                h.update(chunk)
+        return h.hexdigest()
+
+    with open(meta_file, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    meta["feature_columns"] = reversed_cols
+    meta["checksum"]["files"]["feature_columns.json"] = sha(cols_file)
+    with open(meta_file, "w", encoding="utf-8") as f:
+        json.dump(meta, f)
+
+    res = client.post("/train/random_forest", json={"feature_dataset_version": fver})
+    assert res.status_code == 422
+    err = res.json()["error"]
+    assert err["code"] == "FEATURE_SCHEMA_MISMATCH"
+
+
+def test_latest_pointer_and_registry_updated_on_success(client, sample_feature_bundle):
+    """When a model is trained successfully, its latest.json pointer is atomically updated."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    res = client.post("/train/random_forest", json={"feature_dataset_version": fver})
+    assert res.status_code == 200
+    data = res.json()
+    model_version = data["results"][0]["model_version"]
+
+    models_store = sample_feature_bundle["models_store"]
+    latest_file = models_store / "artifacts" / "random_forest" / "latest.json"
+    assert latest_file.is_file()
+
+    with open(latest_file, "r", encoding="utf-8") as f:
+        pointer = json.load(f)
+    assert pointer["model_id"] == "random_forest"
+    assert pointer["latest_version"] == model_version
+    assert "artifact_uri" in pointer
+    assert "updated_at" in pointer
+
+
+def test_canonical_and_legacy_lock_sharing(sample_feature_bundle):
+    """Holding _training_lock prevents both canonical /train and legacy /internal/train."""
+    from systems.generator.generator_main import app as legacy_app
+    from fastapi.testclient import TestClient
+
+    fver = sample_feature_bundle["feature_dataset_version"]
+    c_canonical = TestClient(app)
+    c_legacy = TestClient(legacy_app)
+
+    acquired = _training_lock.acquire(blocking=False)
+    assert acquired is True
+
+    try:
+        # Canonical returns 409
+        res_canon = c_canonical.post("/train", json={"feature_dataset_version": fver})
+        assert res_canon.status_code == 409
+        assert res_canon.json()["error"]["code"] == "TRAINING_ALREADY_RUNNING"
+
+        # Legacy returns 409
+        res_leg = c_legacy.post("/internal/train", json={})
+        assert res_leg.status_code == 409
+        assert "이미 진행 중" in res_leg.json()["detail"]
+    finally:
+        _training_lock.release()
+
+
+def test_multiple_candidate_directories_rejected(tmp_path):
+    """If two directories contain the same feature_dataset_version, raise FeatureDatasetIntegrityError."""
+    cache_dir = tmp_path / "features_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    repo = TrainingRepository(features_base_dir=cache_dir)
+
+    dir1 = cache_dir / "ds1-v1-feature-dataset-conflict1"
+    dir2 = cache_dir / "ds1-v2-feature-dataset-conflict1"
+    dir1.mkdir(parents=True, exist_ok=True)
+    dir2.mkdir(parents=True, exist_ok=True)
+
+    meta = {"feature_dataset_version": "feature-dataset-conflict1"}
+    with open(dir1 / "feature_metadata.json", "w") as f:
+        json.dump(meta, f)
+    with open(dir2 / "feature_metadata.json", "w") as f:
+        json.dump(meta, f)
+
+    with pytest.raises(FeatureDatasetIntegrityError, match="복수의 디렉터리"):
+        repo.find_feature_bundle_dir("feature-dataset-conflict1")
+
+
+def test_history_requirement_calculation():
+    """Test dynamic history requirement inference from telemetry and feature names."""
+    from systems.generator.model.model_training import infer_history_requirement
+
+    # 1. 1-hour cadence telemetry
+    df = pd.DataFrame({
+        "asset_id": ["A", "A", "A", "A", "B", "B", "B", "B"],
+        "timestamp": [
+            "2026-01-01 00:00:00",
+            "2026-01-01 01:00:00",
+            "2026-01-01 02:00:00",
+            "2026-01-01 03:00:00",
+            "2026-01-01 00:00:00",
+            "2026-01-01 01:00:00",
+            "2026-01-01 02:00:00",
+            "2026-01-01 03:00:00",
+        ],
+    })
+    req = infer_history_requirement(
+        df,
+        id_col="asset_id",
+        time_col="timestamp",
+        feature_names=[
+            "voltage__Voltage__rolling_mean__window_5",
+            "rotation__Rotation__ema__span_10",
+        ],
+    )
+    assert req["expected_sampling_interval_seconds"] == 3600
+    assert req["minimum_history_rows"] == 10  # max(5, 10) = 10
+    # lookback_hours = ceil((10 - 1) * 3600 / 3600) = 9 hours
+    assert req["maximum_lookback_hours"] == 9
+
+    # 2. Non-positive or single-row cadence fails
+    df_single = pd.DataFrame({
+        "asset_id": ["A"],
+        "timestamp": ["2026-01-01 00:00:00"],
+    })
+    with pytest.raises(ValueError, match="cannot infer positive telemetry cadence"):
+        infer_history_requirement(
+            df_single,
+            id_col="asset_id",
+            time_col="timestamp",
+            feature_names=["voltage__Voltage__rolling_mean__window_5"],
+        )

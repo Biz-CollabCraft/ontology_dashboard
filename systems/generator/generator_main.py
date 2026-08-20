@@ -19,10 +19,9 @@ from pydantic import BaseModel
 from systems.generator.generator_config import load_config
 from systems.generator.model.model_registry import has_any_published_model_artifact
 from systems.generator.model.model_training import train_all
+from systems.generator.app.training.training_service import _training_lock
 
 logger = logging.getLogger(__name__)
-
-_training_lock = asyncio.Lock()
 
 
 def _validate_data_dir(data_dir: str | None) -> None:
@@ -41,16 +40,18 @@ def _validate_data_dir(data_dir: str | None) -> None:
 async def _execute_training(*, data_dir: str | None, force_reanalyze: bool) -> dict:
     """Execute model training under process-wide concurrency lock."""
     _validate_data_dir(data_dir)
-    if _training_lock.locked():
+    acquired = _training_lock.acquire(blocking=False)
+    if not acquired:
         raise HTTPException(status_code=409, detail="모델 학습이 이미 진행 중입니다.")
-    async with _training_lock:
-        try:
-            return await asyncio.to_thread(train_all, data_dir=data_dir, force_reanalyze=force_reanalyze)
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.exception("[GeneratorDaemon] Training failed")
-            raise HTTPException(status_code=500, detail="모델 학습에 실패했습니다.") from exc
+    try:
+        return await asyncio.to_thread(train_all, data_dir=data_dir, force_reanalyze=force_reanalyze)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("[GeneratorDaemon] Training failed")
+        raise HTTPException(status_code=500, detail="모델 학습에 실패했습니다.") from exc
+    finally:
+        _training_lock.release()
 
 
 async def _run_initial_training() -> None:

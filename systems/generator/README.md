@@ -94,17 +94,23 @@ systems/generator/
         ↓
 
 [3단계: POST /train 및 POST /train/{base_model}]
-  → 프로세스 전역 학습 Lock 획득 (중복 요청 시 TRAINING_ALREADY_RUNNING 409)
-  → Feature Dataset Bundle 무결성 10대 항목 전수 검증 (shape, dtype, NaN/Inf 부재, {0,1} 라벨)
-  → 설비 ID/타임스탬프 기반 시간순 분할 (asset_time_split, 미래 누수 방지)
+  → 프로세스 전역 학습 Lock 획득 (단일 워커 제한, 중복 요청 시 TRAINING_ALREADY_RUNNING 409)
+  → Feature Dataset Bundle SHA-256 체크섬 및 무결성 전수 검증 (shape, dtype, NaN/Inf 부재, {0,1} 라벨)
+  → Feature Schema 열 순서 및 스키마 메타데이터 엄격 검증 (FEATURE_SCHEMA_MISMATCH 422)
+  → 설비 ID/타임스탬프 원본 인덱스 기반 시간순 분할 및 정합성 검증 (asset_time_split, split_indices)
+  → 관측 주기 기반 동적 History Requirement 계산 (lookback, minimum history rows)
   → 등록 모델(lightgbm, xgboost, random_forest) 학습 및 평가 지표 산출 (모델별 실패 격리)
   → 불변 Model Artifact v1.0 패키지(manifest.json, model.joblib, schemas, metrics) 원자적 발행
-  → 발행 직후 validator 검증 및 모델별 결과 반환 (succeeded / partially_succeeded)
+  → 발행 직후 validator 검증 및 성공 모델에 대한 latest.json 활성 포인터 원자적 갱신
+  → 모델별 결과 반환 (succeeded / partially_succeeded)
 ```
 
-1. **Feature Bundle 무결성 전수 검증**:
-   - 학습 전 `features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`의 존재, shape, dtype, NaN/Inf 부재, `{0, 1}` 값 범위, 계약 지문 일치를 전수 검증합니다.
-2. **미래 데이터 누수 방지 시간순 분할 (`asset_time_split`)**:
-   - 무작위 분할(random shuffle)을 엄격히 금지하며, 설비 식별 체계와 시간순 정렬에 기반하여 분할합니다.
-3. **독립된 불변 Model Artifact v1.0 발행**:
-   - Generator의 책임 끝점은 Model Artifact v1.0 발행이며, Runtime Inference(예측), Evidence, Result Artifact 발행은 Backend Diagnosis의 책임입니다.
+1. **Feature Bundle SHA-256 체크섬 및 무결성 전수 검증**:
+   - 학습 전 `features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`, `row_metadata.json`의 SHA-256 체크섬을 재계산하여 선언값과 비교하고 shape, dtype, NaN/Inf 부재, `{0, 1}` 값 범위, 계약 지문 일치를 전수 검증합니다.
+2. **미래 데이터 누수 방지 시간순 분할 및 정합성 보장 (`asset_time_split`)**:
+   - 원본 행 식별자(`_row_index`)를 기반으로 설비별 시간순 분할 인덱스(`split_indices: {"train": [...], "val": [...], "test": [...]}`)를 생성·검증합니다.
+   - 상호 배타성, 중복 부재, 전체 커버리지, 설비별 시간순(train <= val <= test)을 만족해야 합니다.
+3. **독립된 불변 Model Artifact v1.0 발행 및 Active Version 연결**:
+   - Generator의 책임 끝점은 Model Artifact v1.0 발행 및 `<models_store>/artifacts/<model_id>/latest.json` 활성 버전 갱신이며, Runtime Inference(예측), Evidence, Result Artifact 발행은 Backend Diagnosis의 책임입니다.
+4. **단일 워커 제한 및 동시성 제어**:
+   - Generator 데몬은 단일 프로세스/단일 워커 환경을 전제로 하며, canonical `/train` 및 legacy `/internal/train`, `/internal/retrain`은 프로세스 전역 `_training_lock`을 공유하여 동시 실행을 방지합니다.

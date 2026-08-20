@@ -295,6 +295,9 @@ def test_feature_bundle_validation_exhaustive(tmp_path):
         "dataset_id": "ds1",
         "dataset_version": "v1",
         "feature_dataset_version": fver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
         "feature_columns": cols,
         "row_count": 5,
         "feature_count": 2,
@@ -311,23 +314,23 @@ def test_feature_bundle_validation_exhaustive(tmp_path):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
     np.save(target_dir / "labels.npy", y)
 
-    # 3. Shape mismatch (X rows != y rows)
+    # 3. Shape / byte mismatch (modified labels.npy triggers checksum mismatch)
     np.save(target_dir / "labels.npy", np.array([0, 1], dtype=np.int64))
-    with pytest.raises(FeatureDatasetIntegrityError, match="일치하지 않습니다"):
+    with pytest.raises(FeatureDatasetIntegrityError, match="체크섬이 일치하지 않습니다"):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
     np.save(target_dir / "labels.npy", y)
 
-    # 4. NaN in X
+    # 4. Modified features.npy (triggers checksum mismatch)
     X_nan = np.copy(X)
-    X_nan[0, 0] = np.nan
+    X_nan[0, 0] = 999.0
     np.save(target_dir / "features.npy", X_nan)
-    with pytest.raises(FeatureDatasetIntegrityError, match="NaN 또는 무한대"):
+    with pytest.raises(FeatureDatasetIntegrityError, match="체크섬이 일치하지 않습니다"):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
     np.save(target_dir / "features.npy", X)
 
-    # 5. Invalid label value (e.g. 5)
+    # 5. Invalid label value (triggers checksum mismatch)
     np.save(target_dir / "labels.npy", np.array([0, 5, 0, 1, 0], dtype=np.int64))
-    with pytest.raises(FeatureDatasetIntegrityError, match="이외의 라벨 값"):
+    with pytest.raises(FeatureDatasetIntegrityError, match="체크섬이 일치하지 않습니다"):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
     np.save(target_dir / "labels.npy", y)
 

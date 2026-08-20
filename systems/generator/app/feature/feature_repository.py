@@ -22,6 +22,15 @@ from systems.generator.app.feature.feature_exception import (
 logger = logging.getLogger(__name__)
 
 
+def compute_file_sha256(filepath: Path) -> str:
+    """Compute SHA-256 hash of a file on disk."""
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 class FeatureRepository:
     """Manages immutable versioned storage and atomic publishing for Feature, Label, and NPY artifacts."""
 
@@ -97,6 +106,57 @@ class FeatureRepository:
                 f"feature_metadata.json 파싱 실패: {exc}",
                 code="FEATURE_DATASET_INTEGRITY_ERROR",
             ) from exc
+
+        # 2.1 Check mandatory metadata fields
+        mandatory_fields = [
+            "feature_dataset_version",
+            "dataset_id",
+            "dataset_version",
+            "feature_schema_version",
+            "label_schema_version",
+            "prediction_horizon_hours",
+            "contract",
+            "checksum",
+        ]
+        for field_name in mandatory_fields:
+            if field_name not in metadata:
+                raise FeatureDatasetIntegrityError(
+                    f"feature_metadata.json에 필수 필드가 누락되었습니다: '{field_name}'",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+
+        # 2.2 SHA-256 Checksum validation
+        checksum_info = metadata["checksum"]
+        if not isinstance(checksum_info, dict) or checksum_info.get("algorithm") != "sha256":
+            raise FeatureDatasetIntegrityError(
+                "feature_metadata.json에 유효한 SHA-256 체크섬 정보가 누락되었습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        declared_files = checksum_info.get("files", {})
+        if not declared_files or not isinstance(declared_files, dict):
+            raise FeatureDatasetIntegrityError(
+                "체크섬 파일 목록이 비어 있거나 올바른 형식이 아닙니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        for req_name in ("features.npy", "labels.npy", "feature_columns.json"):
+            if req_name not in declared_files:
+                raise FeatureDatasetIntegrityError(
+                    f"필수 파일 '{req_name}'의 체크섬이 선언되지 않았습니다.",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+        for fname, expected_hash in declared_files.items():
+            fpath = target_dir / fname
+            if not fpath.is_file():
+                raise FeatureDatasetIntegrityError(
+                    f"체크섬 검증 대상 파일 '{fname}'이 존재하지 않습니다.",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+            actual_hash = compute_file_sha256(fpath)
+            if actual_hash != expected_hash:
+                raise FeatureDatasetIntegrityError(
+                    f"파일 '{fname}'의 SHA-256 체크섬이 일치하지 않습니다 (선언={expected_hash}, 실제={actual_hash}).",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
 
         # 3. Check columns parseable
         try:
@@ -299,13 +359,25 @@ class FeatureRepository:
             with open(cols_file, "w", encoding="utf-8") as f:
                 json.dump(feature_names, f, ensure_ascii=False, indent=2)
 
-            with open(meta_file, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            checksum_files = {
+                "features.npy": compute_file_sha256(features_file),
+                "labels.npy": compute_file_sha256(labels_file),
+                "feature_columns.json": compute_file_sha256(cols_file),
+            }
 
             if row_metadata is not None:
                 row_meta_file = temp_dir / "row_metadata.json"
                 with open(row_meta_file, "w", encoding="utf-8") as f:
                     json.dump(row_metadata, f, ensure_ascii=False, indent=2)
+                checksum_files["row_metadata.json"] = compute_file_sha256(row_meta_file)
+
+            metadata["checksum"] = {
+                "algorithm": "sha256",
+                "files": checksum_files,
+            }
+
+            with open(meta_file, "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
 
             # 4. Post-write disk validation
             X_read = np.load(features_file, allow_pickle=False)

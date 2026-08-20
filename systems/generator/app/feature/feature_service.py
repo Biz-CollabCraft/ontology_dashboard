@@ -280,6 +280,8 @@ class FeatureService:
             raise InsufficientTrainingDataError("학습에 유효한 데이터 행이 0건입니다.", code="INSUFFICIENT_TRAINING_DATA")
 
         # 10. Prepare metadata and compute chronological split indices
+        from systems.generator.model.model_training import compute_asset_time_split_indices
+
         id_col = plan.get("id_column") or "asset_id"
         time_col = plan.get("time_column") or "timestamp"
         split_indices = None
@@ -287,11 +289,13 @@ class FeatureService:
 
         if id_col in labeled_df.columns and time_col in labeled_df.columns:
             try:
-                train_sub, val_sub, test_sub = asset_time_split(labeled_df, id_col=id_col, time_col=time_col)
+                train_idx, val_idx, test_idx = compute_asset_time_split_indices(
+                    labeled_df, id_col=id_col, time_col=time_col
+                )
                 split_indices = {
-                    "train": train_sub.index.tolist(),
-                    "val": val_sub.index.tolist(),
-                    "test": test_sub.index.tolist(),
+                    "train": train_idx,
+                    "val": val_idx,
+                    "test": test_idx,
                 }
                 row_metadata = {
                     "asset_ids": labeled_df[id_col].astype(str).tolist(),

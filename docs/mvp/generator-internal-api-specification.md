@@ -165,12 +165,13 @@
 ### 4.4 `POST /train` 및 `POST /train/{base_model}` (Canonical API)
 
 > **학습 오케스트레이션 및 Model Artifact 발행 원칙**:
-> - 불변 Feature Dataset Bundle(`features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`)의 무결성을 전수 검증한 후 학습을 진행합니다.
-> - 설비 식별자(`asset_id`)와 타임스탬프(`timestamp`) 기반의 시간순 데이터 분할(`asset_time_split`)을 수행하여 미래 데이터 누수를 방지합니다 (`TRAINING_SPLIT_METADATA_MISSING`, 422).
-> - `POST /train`은 등록된 전체 모델(`lightgbm`, `xgboost`, `random_forest`)을 각각 독립적으로 실행하며, 한 모델의 실패가 다른 모델의 학습을 중단시키지 않고 부분 성공(`partially_succeeded`, 200)으로 격리 처리합니다.
-> - `POST /train/{base_model}`은 지정된 단일 모델만 학습하며 실패 시 500 오류를 반환합니다.
-> - 성공한 모델마다 `contracts/schemas/model-artifact.schema.json`을 준수하는 불변 Model Artifact v1.0 패키지(`manifest.json`, `model.joblib`, `feature_schema.json`, `label_schema.json`, `history_requirement.json`, `metrics.json`)를 원자적으로 발행합니다.
-> - 프로세스 단위 학습 Lock을 적용하여 동시 중복 학습을 방지합니다 (`TRAINING_ALREADY_RUNNING`, 409).
+> - **Feature Bundle 무결성 및 Checksum 검증**: Feature Dataset Bundle(`features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`, `row_metadata.json`)의 SHA-256 체크섬을 재계산하여 메타데이터 선언값과 100% 일치하는지 전수 검증합니다 (`FEATURE_DATASET_INTEGRITY_ERROR`, 422). 체크섬 누락 또는 손상된 번들은 덮어쓰거나 재사용하지 않고 즉시 거부합니다.
+> - **엄격한 시간순 데이터 분할(`asset_time_split`)**: 원본 행 식별자(`_row_index`)를 기반으로 설비별 시간순 분할 인덱스(`split_indices: {"train": [...], "val": [...], "test": [...]}`)를 검증 및 사용합니다. `train`, `val`, `test`는 상호 배타적(교집합 0), 중복 없음, `0 <= idx < row_count`, 합집합 일치, 설비별 시간순(train <= val <= test)을 만족해야 합니다 (`TRAINING_SPLIT_METADATA_MISSING`, 422).
+> - **Feature Schema 열 순서 및 버전 엄격 검증**: Feature Schema 선언 열 이름과 순서가 `feature_columns.json`과 정확히 일치해야 합니다 (`FEATURE_SCHEMA_MISMATCH`, 422). 메타데이터의 `dataset_id`, `dataset_version`, `feature_schema_version`, `label_schema_version`, `prediction_horizon_hours` 누락 시 기본값 대체 없이 즉시 거부됩니다.
+> - **동적 History Requirement 계산**: 하드코딩 없이 `row_metadata`의 실제 관측 주기(sampling cadence median)와 Feature Schema의 rolling window, EMA span, lag, gradient 최대 요구 행수를 기반으로 `expected_sampling_interval_seconds`, `minimum_history_rows`, `maximum_lookback_hours`를 동적 산출합니다. 관측 주기 계산이 불가능한 경우 fail-fast 처리합니다.
+> - **격리된 다중 모델 학습 및 실패 격리**: `POST /train`은 등록된 전체 모델(`lightgbm`, `xgboost`, `random_forest`)을 각각 독립적으로 실행하며, 한 모델의 실패가 다른 모델의 학습을 중단시키지 않고 부분 성공(`partially_succeeded`, 200)으로 격리 처리합니다. `POST /train/{base_model}`은 지정된 단일 모델만 학습하며 실패 시 500 오류를 반환합니다.
+> - **불변 Model Artifact v1.0 원자적 발행 및 Active Version 연결**: 성공적으로 검증된 모델만 불변 Model Artifact v1.0 패키지(`manifest.json`, `model.joblib`, `feature_schema.json`, `label_schema.json`, `history_requirement.json`, `metrics.json`)를 발행하고, `<models_store>/artifacts/<model_id>/latest.json` 포인터를 원자적으로 갱신합니다. 실패한 모델은 latest 포인터를 절대 갱신하지 않습니다.
+> - **통합 Concurrency Lock**: 단일 워커 제한 환경에서 프로세스 전역 `_training_lock`을 canonical(`/train`)과 legacy(`/internal/train`, `/internal/retrain`)가 공유하여 중복 학습을 방지합니다 (`TRAINING_ALREADY_RUNNING`, 409).
 
 **요청 본문:**
 

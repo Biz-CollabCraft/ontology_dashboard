@@ -122,14 +122,14 @@ def get_model_class(name: str) -> type[Any]:
     return REGISTERED_MODELS[name]
 
 
-def asset_time_split(
+def compute_asset_time_split_indices(
     df: pd.DataFrame,
     id_col: str | None = None,
     time_col: str | None = None,
     test_size: float = 0.20,
     val_size: float = 0.20,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Perform chronological asset-time split preventing future observations from leaking into past training data."""
+) -> tuple[list[int], list[int], list[int]]:
+    """Compute original row indices for train, val, and test splits preventing future leakage."""
     if df.empty:
         raise ValueError("Cannot split empty DataFrame.")
 
@@ -148,12 +148,16 @@ def asset_time_split(
                 break
 
     work_df = df.copy()
-    if resolved_time_col and resolved_time_col in work_df.columns:
-        work_df[resolved_time_col] = canonicalize_timestamp_series(work_df[resolved_time_col], col_name=resolved_time_col)
+    work_df["_row_index"] = list(range(len(work_df)))
 
-    train_chunks: list[pd.DataFrame] = []
-    val_chunks: list[pd.DataFrame] = []
-    test_chunks: list[pd.DataFrame] = []
+    if resolved_time_col and resolved_time_col in work_df.columns:
+        work_df[resolved_time_col] = canonicalize_timestamp_series(
+            work_df[resolved_time_col], col_name=resolved_time_col
+        )
+
+    train_indices: list[int] = []
+    val_indices: list[int] = []
+    test_indices: list[int] = []
 
     if resolved_id_col and resolved_id_col in work_df.columns:
         asset_groups = work_df.groupby(resolved_id_col, group_keys=False)
@@ -162,13 +166,13 @@ def asset_time_split(
 
     for _, asset_df in asset_groups:
         if resolved_time_col and resolved_time_col in asset_df.columns:
-            sorted_asset_df = asset_df.sort_values(by=resolved_time_col).reset_index(drop=True)
+            sorted_asset_df = asset_df.sort_values(by=resolved_time_col)
         else:
-            sorted_asset_df = asset_df.reset_index(drop=True)
+            sorted_asset_df = asset_df
 
         n = len(sorted_asset_df)
         if n < 3:
-            train_chunks.append(sorted_asset_df)
+            train_indices.extend(sorted_asset_df["_row_index"].tolist())
             continue
 
         n_test = max(1, int(round(n * test_size)))
@@ -180,15 +184,33 @@ def asset_time_split(
         else:
             n_train = n - n_val - n_test
 
-        train_chunks.append(sorted_asset_df.iloc[:n_train])
-        val_chunks.append(sorted_asset_df.iloc[n_train : n_train + n_val])
-        test_chunks.append(sorted_asset_df.iloc[n_train + n_val :])
+        train_indices.extend(sorted_asset_df.iloc[:n_train]["_row_index"].tolist())
+        val_indices.extend(sorted_asset_df.iloc[n_train : n_train + n_val]["_row_index"].tolist())
+        test_indices.extend(sorted_asset_df.iloc[n_train + n_val :]["_row_index"].tolist())
 
-    train_df = pd.concat(train_chunks, ignore_index=True) if train_chunks else work_df.iloc[0:0]
-    val_df = pd.concat(val_chunks, ignore_index=True) if val_chunks else work_df.iloc[0:0]
-    test_df = pd.concat(test_chunks, ignore_index=True) if test_chunks else work_df.iloc[0:0]
+    return train_indices, val_indices, test_indices
 
-    return train_df, val_df, test_df
+
+def asset_time_split(
+    df: pd.DataFrame,
+    id_col: str | None = None,
+    time_col: str | None = None,
+    test_size: float = 0.20,
+    val_size: float = 0.20,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Perform chronological asset-time split preserving original row references."""
+    train_idx, val_idx, test_idx = compute_asset_time_split_indices(
+        df=df,
+        id_col=id_col,
+        time_col=time_col,
+        test_size=test_size,
+        val_size=val_size,
+    )
+    return (
+        df.iloc[train_idx].copy().reset_index(drop=True),
+        df.iloc[val_idx].copy().reset_index(drop=True),
+        df.iloc[test_idx].copy().reset_index(drop=True),
+    )
 
 
 def _calculate_metrics(y_true: pd.Series | np.ndarray, probabilities: np.ndarray, threshold: float = 0.5) -> dict[str, Any]:
