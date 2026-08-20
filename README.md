@@ -187,26 +187,29 @@ CI의 목적은 다른 담당자의 구현을 대신 수정하는 것이 아니�
 팀 공유 및 발표 환경은 다음 구조를 사용합니다.
 
 ```text
-사전 학습 또는 CI
-검증된 Model Artifact 영속 발행
-        ↓ MODEL_ARTIFACT_URI
-Render
-FastAPI Backend
-        ↑
-Vercel
-Frontend
-        ↓
-Neon
-PostgreSQL
+PR / branch
+  ↓
+GitHub Actions
+  ├─ Frontend unit/build
+  ├─ Playwright E2E
+  └─ Backend / architecture checks
+        ↓ main + architecture green
+Mac mini release watcher
+        ↓ outbound pull
+Mac mini
+  ├─ Frontend :8120
+  ├─ Backend  :8110
+  └─ Cloudflare Tunnel → https://ontology.oosu.dev/
 ```
 
-- Vercel: Frontend 배포 및 사용자 진입점
-- Render: FastAPI Backend runtime
-- Neon: PostgreSQL 데이터 영속화
-- Model Artifact: 사전에 학습·검증한 Artifact를 영속 위치에 발행하고 Render에
-  `MODEL_ARTIFACT_URI`로 주입합니다. Render의 임시 파일시스템을 Artifact 정본으로 사용하지 않습니다.
+- GitHub Actions: PR/frontend CI와 main 검증을 담당하며 Preview 배포를 생성하지 않습니다.
+- Mac mini release watcher: `main` SHA의 `architecture` CI 성공을 확인한 뒤 검증된 SHA만 pull합니다.
+- Mac mini: 실제 제품 Frontend/Backend runtime 및 단일 공개 진입점을 담당합니다.
+- Cloudflare Tunnel: `https://ontology.oosu.dev/`을 Mac mini Frontend로 연결합니다.
+- Model Artifact: 사전에 학습·검증한 Artifact를 영속 위치에 발행하고 Mac mini Backend에
+  `MODEL_ARTIFACT_URI`로 주입합니다. Runtime 컨테이너 내부 파일시스템을 Artifact 정본으로 사용하지 않습니다.
 
-자세한 기준은 [Vercel + Render + Neon demo stack](./docs/deployment/free-demo-stack.md)을 참고합니다.
+자세한 기준은 [Mac mini demo deployment baseline](./docs/deployment/free-demo-stack.md)을 참고합니다.
 
 ## 9. 주요 문서
 
@@ -244,4 +247,4 @@ Canonical V3.1
 → LLM Dynamic Report
 ```
 
-이 흐름이 CI, E2E, Vercel·Render·Neon 배포 환경에서 일관되게 동작하는 것을 최종 목표로 합니다.
+이 흐름이 CI, E2E와 Mac mini 공개 배포 환경에서 일관되게 동작하는 것을 최종 목표로 합니다.
