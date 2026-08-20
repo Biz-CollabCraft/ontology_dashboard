@@ -12,15 +12,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from .ontology import LinkRecord, ObjectRecord
-from app.infra.db.project_repository import SQLiteProjectContextResolver, ensure_scope_columns
+from app.ontology.ontology_domain import LinkRecord, ObjectRecord
+from app.project.project_domain import ProjectContextResolverPort
 
 
 class OntologyInstanceRepository:
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(
+        self,
+        database_path: str | Path,
+        *,
+        project_context: ProjectContextResolverPort,
+    ) -> None:
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.project_context = SQLiteProjectContextResolver(self.path)
+        self.project_context = project_context
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -85,7 +90,7 @@ class OntologyInstanceRepository:
                 """
             )
             for table in ("ontology_objects", "ontology_links", "ontology_ingestion_runs"):
-                ensure_scope_columns(connection, table=table)
+                self.project_context.ensure_scope_columns(connection, table=table)
 
     def replace_source_snapshot(
         self,

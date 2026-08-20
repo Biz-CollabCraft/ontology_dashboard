@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ...ontology import LinkRecord, ObjectRecord
+from app.ontology.ontology_domain import LinkRecord, ObjectRecord
 
 
 DEFAULT_MAPPING_VERSION = "predictive-maintenance-v3.1"

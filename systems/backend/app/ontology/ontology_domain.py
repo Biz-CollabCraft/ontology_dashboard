@@ -131,17 +131,6 @@ class DashboardDefinition(BaseModel):
     version: int = 1
 
 
-class DomainPackDefinition(BaseModel):
-    id: str
-    display_name: str
-    description: str
-    workspace_ids: list[str]
-    object_type_ids: list[str]
-    link_type_ids: list[str]
-    action_type_ids: list[str]
-    status: Literal["active", "draft", "disabled"] = "active"
-
-
 OBJECT_TYPES: tuple[ObjectTypeDefinition, ...] = (
     ObjectTypeDefinition(
         id="telemetry_observation",
@@ -534,21 +523,17 @@ OBJECT_TYPE_BY_ID = {item.id: item for item in OBJECT_TYPES}
 LINK_TYPE_BY_ID = {item.id: item for item in LINK_TYPES}
 ACTION_TYPE_BY_ID = {item.id: item for item in ACTION_TYPES}
 
-
-MANUFACTURING_PACK = DomainPackDefinition(
-    id="manufacturing-predictive-maintenance",
-    display_name="Manufacturing Predictive Maintenance Pack",
-    description="초기 제조 예지보전 vertical slice를 유지하는 Ontology Dashboard의 첫 domain pack입니다.",
-    workspace_ids=["manufacturing-demo"],
-    object_type_ids=[item.id for item in OBJECT_TYPES],
-    link_type_ids=[item.id for item in LINK_TYPES],
-    action_type_ids=[item.id for item in ACTION_TYPES],
-)
+PREDICTIVE_MAINTENANCE_ONTOLOGY_ID = "manufacturing-predictive-maintenance"
 
 
 def registry_payload() -> dict[str, Any]:
+    """Return the Ontology-owned Object/Link/Action registry.
+
+    Generic domain-pack discovery and multi-pack selection were explicitly retired
+    by the Phase 0.5 disposition.  The registry therefore exposes only Ontology
+    concepts; PdM projection selection is a composition concern, not a registry.
+    """
     return {
-        "domain_packs": [MANUFACTURING_PACK.model_dump(mode="json")],
         "object_types": [item.model_dump(mode="json") for item in OBJECT_TYPES],
         "link_types": [item.model_dump(mode="json") for item in LINK_TYPES],
         "action_types": [item.model_dump(mode="json") for item in ACTION_TYPES],

@@ -1,4 +1,4 @@
-"""PostgreSQL implementation of the Project-scoped ontology instance repository."""
+"""PostgreSQL implementation of the Project-scoped Ontology instance repository."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Iterable
 
-from .ontology import LinkRecord, ObjectRecord
+from app.ontology.ontology_domain import LinkRecord, ObjectRecord
 from app.infra.db.connection import tenant_connection
 
 

@@ -9,7 +9,8 @@ from ontology_dashboard.export_repository import ExportRepository
 from app.identity import IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
-from ontology_dashboard.ontology_repository import OntologyActionRepository
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.project_repository import SQLiteProjectContextResolver
 from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
 
 
@@ -58,7 +59,10 @@ def test_dashboard_preferences_are_partitioned_by_project_workspace(database_pat
 
 
 def test_ontology_action_state_cannot_cross_project_boundary(database_path: Path) -> None:
-    repository = OntologyActionRepository(database_path)
+    repository = OntologyActionRepository(
+        database_path,
+        project_context=SQLiteProjectContextResolver(database_path),
+    )
     reserved, created = repository.reserve(
         idempotency_key="project-isolation-action",
         workspace_id=AZURE_WORKSPACE,

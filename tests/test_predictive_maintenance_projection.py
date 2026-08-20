@@ -12,10 +12,10 @@ from app.dataset.ingestion import (
     PredictiveMaintenanceCanonicalV2Adapter,
 )
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
-from ontology_dashboard.domain_packs.predictive_maintenance import (
+from app.infra.db.predictive_maintenance_ontology_projection import (
     PredictiveMaintenanceOntologyMaterializer,
 )
-from ontology_dashboard.postgresql_ontology_repository import (
+from app.infra.db.postgresql_ontology_instance_repository import (
     PostgreSQLOntologyInstanceRepository,
 )
 from predictive_maintenance_v3_helpers import create_small_v3_package

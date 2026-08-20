@@ -35,11 +35,6 @@
     "deployment.py",
     "distributed_handlers.py",
     "distributed_runtime.py",
-    "domain_packs/__init__.py",
-    "domain_packs/models.py",
-    "domain_packs/predictive_maintenance/__init__.py",
-    "domain_packs/predictive_maintenance/materialization.py",
-    "domain_packs/registry.py",
     "export_models.py",
     "export_repository.py",
     "export_service.py",
@@ -64,14 +59,8 @@
     "modeling/repository.py",
     "modeling/schema.py",
     "modeling/service.py",
-    "ontology.py",
-    "ontology_adapter.py",
-    "ontology_instance_repository.py",
     "ontology_planner_models.py",
     "ontology_planner_service.py",
-    "ontology_primitives.py",
-    "ontology_repository.py",
-    "ontology_service.py",
     "openapi_contracts.py",
     "orchestration/__init__.py",
     "orchestration/models.py",
@@ -89,7 +78,6 @@
     "polyglot/health.py",
     "polyglot/settings.py",
     "postgresql_compat.py",
-    "postgresql_ontology_repository.py",
     "postgresql_repositories.py",
     "predictive_maintenance_runtime/__init__.py",
     "reports.py",
@@ -107,7 +95,6 @@
     "routers/governance.py",
     "routers/manufacturing.py",
     "routers/modeling.py",
-    "routers/ontology.py",
     "routers/planner.py",
     "routers/platform.py",
     "routers/project3.py",
@@ -181,11 +168,6 @@
       "source": "scripts/ingest_predictive_maintenance_bundle.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "scripts/materialize_predictive_maintenance_ontology.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs.predictive_maintenance"
     },
     {
       "source": "scripts/migrate_database.py",
@@ -326,11 +308,6 @@
       "source": "systems/generator/ontology_mapping/workbench.py",
       "kind": "static_import",
       "target": "ontology_dashboard.modeling.models"
-    },
-    {
-      "source": "systems/generator/ontology_mapping/workbench.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology"
     },
     {
       "source": "tests/test_adapter_api.py",
@@ -476,26 +453,6 @@
       "source": "tests/test_architecture_debt_stage44.py",
       "kind": "dynamic_import",
       "target": "ontology_dashboard.export_service"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology_adapter"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology_repository"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.ontology_service"
     },
     {
       "source": "tests/test_architecture_debt_stage44.py",
@@ -691,11 +648,6 @@
       "source": "tests/test_domain_pack_platform_phase19.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
-    },
-    {
-      "source": "tests/test_domain_pack_platform_phase19.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs"
     },
     {
       "source": "tests/test_domain_pack_platform_phase19.py",
@@ -968,11 +920,6 @@
       "target": "ontology_dashboard.migrations"
     },
     {
-      "source": "tests/test_ontology_primitives_phase27.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology_primitives"
-    },
-    {
       "source": "tests/test_ontology_stage19.py",
       "kind": "static_import",
       "target": "ontology_dashboard.main"
@@ -1010,16 +957,6 @@
     {
       "source": "tests/test_persistence_foundation.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.ontology_instance_repository"
-    },
-    {
-      "source": "tests/test_persistence_foundation.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology_service"
-    },
-    {
-      "source": "tests/test_persistence_foundation.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.role_workflow_repository"
     },
     {
@@ -1050,11 +987,6 @@
     {
       "source": "tests/test_predictive_maintenance_graph_projection.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs.predictive_maintenance"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_graph_projection.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.integrations.project3"
     },
     {
@@ -1076,16 +1008,6 @@
       "source": "tests/test_predictive_maintenance_postgresql.py",
       "kind": "static_import",
       "target": "ontology_dashboard.modeling.repository"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.domain_packs.predictive_maintenance"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_projection.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.postgresql_ontology_repository"
     },
     {
       "source": "tests/test_predictive_maintenance_result_replay.py",
@@ -1205,11 +1127,6 @@
     {
       "source": "tests/test_project_repository_isolation_matrix.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.ontology_repository"
-    },
-    {
-      "source": "tests/test_project_repository_isolation_matrix.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.role_workflow_repository"
     },
     {
@@ -1241,11 +1158,6 @@
       "source": "tests/test_tenant_persistence_phase20.py",
       "kind": "static_import",
       "target": "ontology_dashboard.migrations"
-    },
-    {
-      "source": "tests/test_tenant_persistence_phase20.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.ontology_repository"
     },
     {
       "source": "tests/test_tenant_persistence_phase20.py",

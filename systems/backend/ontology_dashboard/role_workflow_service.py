@@ -9,8 +9,11 @@ from .contracts import ReportRequest
 from .dashboard_models import DashboardTemplatePublishRequest
 from .dashboard_service import DashboardService
 from app.identity import AuthError, Principal
-from .ontology import registry_payload
-from .ontology_service import OntologyService
+from app.infra.db.project_repository import SQLiteProjectContextResolver
+from app.ontology.ontology_domain import registry_payload
+from app.ontology.ontology_service import OntologyService
+from app.infra.db.ontology_action_repository import OntologyActionRepository
+from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from .role_workflow_models import (
     ApprovalDecisionRequest,
     AuditExportCheckpointRequest,
@@ -39,7 +42,21 @@ class RoleWorkflowService:
         self.legacy_service = legacy_service
         repository_location = legacy_service.repository.path
         self.repository = repository or RoleWorkflowRepository(repository_location)
-        self.ontology = ontology or OntologyService(legacy_service)
+        if ontology is None:
+            project_context = SQLiteProjectContextResolver(repository_location)
+            ontology = OntologyService(
+                legacy_service,
+                action_repository=OntologyActionRepository(
+                    repository_location,
+                    project_context=project_context,
+                ),
+                instance_repository=OntologyInstanceRepository(
+                    repository_location,
+                    project_context=project_context,
+                ),
+                field_actions=self.repository,
+            )
+        self.ontology = ontology
         self.dashboards = dashboards or DashboardService(str(repository_location))
 
     @staticmethod

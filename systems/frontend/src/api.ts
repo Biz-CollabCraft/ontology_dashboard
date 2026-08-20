@@ -76,7 +76,6 @@ import type {
   AdminUser,
   AppRole,
   AuthUser,
-  DomainPack,
   Evidence,
   EventSummary,
   FollowUp,
@@ -332,10 +331,6 @@ export async function getProjectEvents(projectId: string): Promise<EventSummary[
 
 export async function getWorkspaces(): Promise<Workspace[]> {
   return (await request<{ items: Workspace[] }>("/api/workspaces")).items;
-}
-
-export async function getDomainPacks(): Promise<DomainPack[]> {
-  return (await request<{ items: DomainPack[] }>("/api/domain-packs")).items;
 }
 
 export function getOntologyRegistry(): Promise<OntologyRegistry> {
