@@ -28,11 +28,11 @@ from app.dataset.dataset_schema import (
     OntologyMappingCreateRequest,
 )
 from app.infra.db.dataset_repository import DatasetRepository
-from app.identity import IdentityService
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
-from ontology_dashboard.migrations import migrate
-from ontology_dashboard.postgresql_repositories import PostgreSQLIdentityRepository
-from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
+from app.identity import IdentityService
+from app.infra.db.migrations import migrate
+from app.infra.db.postgresql_repositories import PostgreSQLIdentityRepository
+from app.mvp.service import ManufacturingPredictiveMaintenanceService
 from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-import ontology_dashboard.closed_loop as closed_loop_contract
-from ontology_dashboard.closed_loop import (
+import app.maintenance as closed_loop_contract
+from app.maintenance import (
     ActionInProgress,
     IdempotencyConflict,
     IdempotencyOutcome,
@@ -41,7 +41,7 @@ from ontology_dashboard.closed_loop import (
     transition_risk_event,
     transition_work_order,
 )
-from ontology_dashboard.contracts import DecisionRequest
+from app.mvp.contracts import DecisionRequest
 
 
 def equipment_identity():

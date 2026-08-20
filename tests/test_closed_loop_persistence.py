@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ontology_dashboard.closed_loop import (
+from app.maintenance import (
     EquipmentIdentity,
     IdempotencyConflict,
     InvalidTransition,
@@ -22,22 +22,23 @@ from ontology_dashboard.closed_loop import (
     plan_maintenance_action,
     transition_work_order,
 )
-from ontology_dashboard.closed_loop.integration import (
+from app.maintenance.integration import (
     MaintenanceCause,
     MaintenanceCompletedEvent,
     MaintenanceReplayRequestedEvent,
     MaintenanceStartedEvent,
 )
-from ontology_dashboard.closed_loop.repository import ClosedLoopRepository
-from app.project import (
+from app.infra.db.maintenance_repository import MaintenanceRepository
+from app.infra.db.project_repository import (
     DEFAULT_ORGANIZATION_ID,
     DEFAULT_PROJECT_ID,
     DEFAULT_WORKSPACE_ID,
     ProjectContextError,
+    SQLiteProjectContextResolver,
 )
 
 
-def _recommendation_setup(repository: ClosedLoopRepository):
+def _recommendation_setup(repository: MaintenanceRepository):
     identity = EquipmentIdentity(
         organization_id=DEFAULT_ORGANIZATION_ID,
         project_id=DEFAULT_PROJECT_ID,
@@ -94,7 +95,7 @@ def _recommendation_setup(repository: ClosedLoopRepository):
     return recommendation, accepted, decision, requested_work_order, cause
 
 
-def _foundation(repository: ClosedLoopRepository):
+def _foundation(repository: MaintenanceRepository):
     _, accepted, decision, requested_work_order, cause = _recommendation_setup(repository)
     decision_result = repository.decide_recommendation(
         recommendation=accepted,
@@ -162,7 +163,7 @@ def _completed(action, cause, started_at, completed_at):
 def test_accept_decision_and_requested_work_order_are_one_idempotent_transaction(
     tmp_path: Path,
 ) -> None:
-    class FailingWorkOrderRepository(ClosedLoopRepository):
+    class FailingWorkOrderRepository(MaintenanceRepository):
         fail_work_order = True
 
         def _insert_work_order(self, connection, *, work_order, now):
@@ -171,7 +172,10 @@ def test_accept_decision_and_requested_work_order_are_one_idempotent_transaction
             return super()._insert_work_order(connection, work_order=work_order, now=now)
 
     database = tmp_path / "accept-atomic.db"
-    repository = FailingWorkOrderRepository(database)
+    repository = FailingWorkOrderRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     _, accepted, decision, requested_work_order, _ = _recommendation_setup(repository)
     command = {
         "recommendation": accepted,
@@ -211,7 +215,7 @@ def test_accept_decision_and_requested_work_order_are_one_idempotent_transaction
 def test_work_order_approval_and_planned_action_are_one_idempotent_transaction(
     tmp_path: Path,
 ) -> None:
-    class FailingActionRepository(ClosedLoopRepository):
+    class FailingActionRepository(MaintenanceRepository):
         fail_action = True
 
         def _insert_maintenance_action(
@@ -234,7 +238,10 @@ def test_work_order_approval_and_planned_action_are_one_idempotent_transaction(
             )
 
     database = tmp_path / "approval-atomic.db"
-    repository = FailingActionRepository(database)
+    repository = FailingActionRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     _, accepted, decision, requested_work_order, _ = _recommendation_setup(repository)
     repository.decide_recommendation(
         recommendation=accepted,
@@ -292,7 +299,10 @@ def test_work_order_approval_and_planned_action_are_one_idempotent_transaction(
 
 def test_closed_loop_completion_is_atomic_and_does_not_auto_request_replay(tmp_path: Path) -> None:
     database = tmp_path / "closed-loop.db"
-    repository = ClosedLoopRepository(database)
+    repository = MaintenanceRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     completed_at = started_at + timedelta(minutes=20)
@@ -388,7 +398,11 @@ def test_closed_loop_completion_is_atomic_and_does_not_auto_request_replay(tmp_p
 
 
 def test_closed_loop_commands_replay_same_result_and_conflict_on_changed_payload(tmp_path: Path) -> None:
-    repository = ClosedLoopRepository(tmp_path / "idempotency.db")
+    database = tmp_path / "idempotency.db"
+    repository = MaintenanceRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     event = _started(action, cause, started_at)
@@ -435,7 +449,11 @@ def test_closed_loop_commands_replay_same_result_and_conflict_on_changed_payload
 
 
 def test_distinct_request_key_cannot_repeat_an_already_started_transition(tmp_path: Path) -> None:
-    repository = ClosedLoopRepository(tmp_path / "transition-race.db")
+    database = tmp_path / "transition-race.db"
+    repository = MaintenanceRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     first_event = _started(action, cause, started_at)
@@ -475,7 +493,11 @@ def test_distinct_request_key_cannot_repeat_an_already_started_transition(tmp_pa
 def test_closed_loop_mutation_requires_authenticated_workspace_scope_and_exact_lineage(
     tmp_path: Path,
 ) -> None:
-    repository = ClosedLoopRepository(tmp_path / "scope-and-lineage.db")
+    database = tmp_path / "scope-and-lineage.db"
+    repository = MaintenanceRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     event = _started(action, cause, started_at)
@@ -513,7 +535,7 @@ def test_closed_loop_mutation_requires_authenticated_workspace_scope_and_exact_l
 
 
 def test_completion_rolls_back_state_activity_outbox_and_idempotency_together(tmp_path: Path) -> None:
-    class FailingOutboxRepository(ClosedLoopRepository):
+    class FailingOutboxRepository(MaintenanceRepository):
         fail_enqueue = False
 
         def _enqueue(self, connection, *, scope, event, payload, now):
@@ -528,7 +550,10 @@ def test_completion_rolls_back_state_activity_outbox_and_idempotency_together(tm
             )
 
     database = tmp_path / "rollback.db"
-    repository = FailingOutboxRepository(database)
+    repository = FailingOutboxRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     repository.start_maintenance(
@@ -572,7 +597,11 @@ def test_completion_rolls_back_state_activity_outbox_and_idempotency_together(tm
 
 
 def test_equipment_state_compare_and_swap_rejects_stale_update_and_insert(tmp_path: Path) -> None:
-    repository = ClosedLoopRepository(tmp_path / "equipment-state-cas.db")
+    database = tmp_path / "equipment-state-cas.db"
+    repository = MaintenanceRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     completed_at = started_at + timedelta(minutes=20)
@@ -630,12 +659,15 @@ def test_equipment_state_compare_and_swap_rejects_stale_update_and_insert(tmp_pa
 
 
 def test_equipment_state_concurrency_conflict_rolls_back_completion(tmp_path: Path) -> None:
-    class ConflictingEquipmentStateRepository(ClosedLoopRepository):
+    class ConflictingEquipmentStateRepository(MaintenanceRepository):
         def _persist_equipment_state(self, *args, **kwargs):
             raise InvalidTransition("equipment state was changed concurrently")
 
     database = tmp_path / "equipment-state-conflict.db"
-    repository = ConflictingEquipmentStateRepository(database)
+    repository = ConflictingEquipmentStateRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     repository.start_maintenance(
@@ -681,7 +713,11 @@ def test_equipment_state_concurrency_conflict_rolls_back_completion(tmp_path: Pa
 
 
 def test_replay_request_requires_completion_and_advances_lifecycle_version(tmp_path: Path) -> None:
-    repository = ClosedLoopRepository(tmp_path / "replay.db")
+    database = tmp_path / "replay.db"
+    repository = MaintenanceRepository(
+        database,
+        project_context=SQLiteProjectContextResolver(database),
+    )
     action, cause = _foundation(repository)
     started_at = datetime(2026, 8, 18, 1, 10, tzinfo=timezone.utc)
     completed_at = started_at + timedelta(minutes=20)

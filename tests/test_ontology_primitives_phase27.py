@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ontology_dashboard.migrations import migrate
+from app.infra.db.migrations import migrate
 from app.infra.db.ontology_primitives import OntologyPrimitiveRepository
 from app.ontology.primitives import ActionPreviewRequest, FunctionExecutionRequest
 

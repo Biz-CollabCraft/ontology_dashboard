@@ -164,7 +164,7 @@ def main() -> None:
             web_environment["PLAYWRIGHT_API_URL"] = api_url
             web_environment["PLAYWRIGHT_EXTERNAL_SERVERS"] = "1"
             api_process = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "ontology_dashboard.app:app", "--host", "127.0.0.1", "--port", str(api_port)],
+                [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(api_port)],
                 cwd=root,
                 env=environment,
                 stdout=subprocess.DEVNULL,
@@ -238,7 +238,7 @@ def main() -> None:
                             sys.executable,
                             "-m",
                             "uvicorn",
-                            "ontology_dashboard.app:app",
+                            "app.main:app",
                             "--host",
                             "127.0.0.1",
                             "--port",

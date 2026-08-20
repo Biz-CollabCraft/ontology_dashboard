@@ -42,7 +42,8 @@ function staleFrom(observedAt: string | null): boolean {
   if (!observedAt) return false;
   const value = Date.parse(observedAt);
   if (!Number.isFinite(value)) return false;
-  return Date.now() - value > 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  return now - value > 24 * 60 * 60 * 1000 || value - now > 15 * 60 * 1000;
 }
 
 function warningMessage(reason: unknown, fallback: string): string {

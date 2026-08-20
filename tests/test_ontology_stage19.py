@@ -9,8 +9,9 @@ from fastapi.testclient import TestClient
 
 from app.identity import AdminUserUpdateRequest, CSRF_COOKIE, IdentityService
 from identity_test_support import build_identity_service
-from ontology_dashboard.main import app, get_identity_service, get_service
-from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
+from app.main import app
+from app.dependencies import get_identity_service, get_service
+from app.mvp.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = "manufacturing-demo"

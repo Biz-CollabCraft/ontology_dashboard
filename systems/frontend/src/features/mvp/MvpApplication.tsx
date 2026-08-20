@@ -62,6 +62,13 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   }, [logout]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      setRefreshVersion((value) => value + 1);
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [projectId, selection.workspaceId]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -73,6 +80,9 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
         const selectedAsset = payload.assets.find((item) => item.assetId === selection.assetId) ?? null;
         const patch: Parameters<typeof updateSelection>[0] = {};
         if (!selection.workspaceId) patch.workspaceId = payload.context.workspaceId;
+        if (selection.eventId && !selectedEvent && selectedAsset?.eventId) {
+          patch.eventId = selectedAsset.eventId;
+        }
         if (!selection.eventId && selectedAsset?.eventId) patch.eventId = selectedAsset.eventId;
         if (!selection.assetId && selectedEvent) patch.assetId = selectedEvent.assetId;
         if (!selection.assetId && !selection.eventId && payload.events[0]) {

@@ -10,8 +10,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
-from ontology_dashboard.contracts import LayoutRequest, ReportRequest
-from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
+from app.mvp.contracts import LayoutRequest, ReportRequest
+from app.mvp.service import ManufacturingPredictiveMaintenanceService
 
 FORBIDDEN_PHRASES = [
     "자동 정지 완료",

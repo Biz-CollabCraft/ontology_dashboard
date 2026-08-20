@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from starlette.requests import Request
 
-from ontology_dashboard.dependencies import client_ip
+from app.dependencies import client_ip
 from app.common.runtime_settings import (
     allowed_origin_regex,
     allowed_origins,

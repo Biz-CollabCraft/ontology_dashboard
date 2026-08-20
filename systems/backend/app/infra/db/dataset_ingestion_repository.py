@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from app.dataset.ingestion.ingestion_schema import DatasetManifest, QuarantinedRecord
-from app.infra.db.project_repository import SQLiteProjectContextResolver
 
 
 DEFAULT_ORGANIZATION_ID = "org-ontology-demo"
@@ -20,7 +19,6 @@ class DatasetIngestionRepository:
     def __init__(self, database_path: str | Path) -> None:
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.project_context = SQLiteProjectContextResolver(self.path)
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)

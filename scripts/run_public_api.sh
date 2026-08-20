@@ -21,6 +21,6 @@ API_PORT="${API_PORT:-8100}"
 # the project .env.
 "${ROOT_DIR}/.venv/bin/python" "${ROOT_DIR}/scripts/migrate_database.py"
 
-exec "${ROOT_DIR}/.venv/bin/python" -m uvicorn ontology_dashboard.app:app \
+exec "${ROOT_DIR}/.venv/bin/python" -m uvicorn app.main:app \
   --host "${API_HOST}" \
   --port "${API_PORT}"
