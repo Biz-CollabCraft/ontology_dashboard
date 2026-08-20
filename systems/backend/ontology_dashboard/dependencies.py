@@ -79,6 +79,7 @@ from .postgresql_repositories import (
     seed_runtime_reference_data,
 )
 from .role_workflow_service import RoleWorkflowService
+from .role_workflow_repository import RoleWorkflowRepository
 from .service import ManufacturingPredictiveMaintenanceService
 
 ROOT = project_root()
