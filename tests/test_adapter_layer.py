@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from openpyxl import Workbook
@@ -16,6 +17,33 @@ from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.identity import IdentityService
 from identity_test_support import build_identity_service
 from ontology_dashboard.migrations import migrate
+
+
+class _StaticProjectContextResolver:
+    def __init__(self, scopes: dict[str, tuple[str, str]]) -> None:
+        self.scopes = scopes
+
+    def resolve(
+        self,
+        workspace_id: str,
+        *,
+        expected_organization_id: str | None = None,
+        expected_project_id: str | None = None,
+        connection=None,
+    ):
+        scope = self.scopes.get(workspace_id)
+        if scope is None:
+            raise ValueError(f"workspace {workspace_id!r} is not assigned to an accessible Project")
+        organization_id, project_id = scope
+        if expected_organization_id and organization_id != expected_organization_id:
+            raise ValueError("workspace organization scope does not match the request context")
+        if expected_project_id and project_id != expected_project_id:
+            raise ValueError("workspace project scope does not match the request context")
+        return SimpleNamespace(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -195,10 +223,9 @@ def test_prediction_contract_requires_evidence_and_project_scope(adapter_databas
         workspace_id="azure-fleet-maintenance",
     )
     result = PredictionResult.model_validate(payload)
-    context = FileAdapter(
-        adapter_database,
-        allowed_roots=[adapter_database.parent],
-    ).repository.project_context
+    context = _StaticProjectContextResolver(
+        {"azure-fleet-maintenance": ("org-ontology-demo", "azure-fleet-maintenance-project")}
+    )
     repository = PredictionResultRepository(adapter_database, project_context=context)
     saved = repository.save(result)
     assert saved["project_id"] == "azure-fleet-maintenance-project"

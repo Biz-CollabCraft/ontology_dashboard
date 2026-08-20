@@ -6,6 +6,7 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.dataset import DatasetCatalogService
@@ -34,6 +35,30 @@ from ontology_dashboard.modeling.models import (
     canonical_checksum,
 )
 from ontology_dashboard.modeling.service import ModelingService
+
+
+class _StaticProjectContextResolver:
+    def resolve(
+        self,
+        workspace_id: str,
+        *,
+        expected_organization_id: str | None = None,
+        expected_project_id: str | None = None,
+        connection=None,
+    ):
+        if workspace_id != "workspace-e2e":
+            raise ValueError(f"workspace {workspace_id!r} is not assigned to an accessible Project")
+        organization_id = "org-e2e"
+        project_id = "project-e2e"
+        if expected_organization_id and expected_organization_id != organization_id:
+            raise ValueError("workspace organization scope does not match the request context")
+        if expected_project_id and expected_project_id != project_id:
+            raise ValueError("workspace project scope does not match the request context")
+        return SimpleNamespace(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
 
 
 def _seed_scope(database: Path) -> None:
@@ -184,7 +209,10 @@ def test_adaptive_modeling_governed_end_to_end(tmp_path: Path, monkeypatch) -> N
     database = tmp_path / "adaptive-e2e.db"
     migrate(str(database))
     _seed_scope(database)
-    prediction_repository = PredictionResultRepository(database)
+    prediction_repository = PredictionResultRepository(
+        database,
+        project_context=_StaticProjectContextResolver(),
+    )
     modeling = ModelingService.configured(
         str(database),
         tmp_path / "artifacts",
