@@ -635,28 +635,53 @@ def review_force_vertex(
 
     if explicit:
         return True, "explicit ai-review requests retain Vertex final adjudication"
-    if len(changed_paths) > 30:
-        return True, "large change set retains Vertex final adjudication"
-    high_risk_prefixes = (
-        ".github/workflows/",
-        "systems/backend/app/infra/",
-        "systems/backend/migrations/",
-    )
-    high_risk_names = (
+
+    # Change volume is not a trust-boundary signal by itself. Large refactors
+    # can stay on the local+free path when deterministic checks are green and
+    # the independent Gemma falsifier agrees. Reserve Vertex for changes that
+    # actually redefine reviewer trust, security/auth, architecture truth, or
+    # executable database-migration semantics.
+    reviewer_trust_paths = {
+        ".github/workflows/architecture.yml",
+        ".github/workflows/code-review.yml",
+        ".github/workflows/pr-comment-review.yml",
+        "scripts/ci/ai_review.py",
+        "scripts/ci/free_review_falsifier.py",
+        "ops/local-review/review_server.py",
+    }
+    architecture_truth_paths = {
+        "systems/verify_architecture.py",
+    }
+    executable_migration_paths = {
+        "scripts/check_postgresql_migration.py",
+        "scripts/migrate_database.py",
+        "systems/backend/ontology_dashboard/migrations.py",
+    }
+    sensitive_names = (
         "auth",
         "oidc",
         "credential",
         "secret",
         "permission",
         "security",
-        "migration",
-        "verify_architecture",
     )
     for path in changed_paths:
         lower = path.lower()
-        if path.startswith(high_risk_prefixes) or any(name in lower for name in high_risk_names):
-            return True, f"high-risk trust/architecture path: {path}"
-    return False, "local semantic review may publish after independent Gemma falsification"
+        if path in reviewer_trust_paths or path.startswith("ops/local-review/"):
+            return True, f"reviewer trust-boundary change: {path}"
+        if path in architecture_truth_paths:
+            return True, f"deterministic architecture truth change: {path}"
+        if (
+            path in executable_migration_paths
+            or path.startswith("systems/backend/migrations/")
+        ):
+            return True, f"executable migration semantic change: {path}"
+        if any(name in lower for name in sensitive_names):
+            return True, f"security/auth trust-boundary change: {path}"
+    return False, (
+        "local semantic review may publish after deterministic checks and "
+        "independent Gemma falsification; change volume alone does not force Vertex"
+    )
 
 
 def _prompt_section(text: str, start: str, end: str | None = None) -> str:

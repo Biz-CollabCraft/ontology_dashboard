@@ -73,7 +73,39 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Claim latest-head review slot
+        id: freshness
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          TARGET_HEAD_SHA: ${{ inputs.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > /tmp/current-pr.json
+          CURRENT_HEAD_SHA="$(jq -r '.head.sha' /tmp/current-pr.json)"
+          CURRENT_STATE="$(jq -r '.state' /tmp/current-pr.json)"
+          if [[ "$CURRENT_STATE" != "open" || "$CURRENT_HEAD_SHA" != "$TARGET_HEAD_SHA" ]]; then
+            {
+              echo "current=false"
+              echo "current_head_sha=$CURRENT_HEAD_SHA"
+            } >> "$GITHUB_OUTPUT"
+            {
+              echo "### Review queue"
+              echo "- result: stale review discarded before model spend"
+              echo "- target head: \`$TARGET_HEAD_SHA\`"
+              echo "- current head: \`$CURRENT_HEAD_SHA\`"
+              echo "- PR state: \`$CURRENT_STATE\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "current=true"
+            echo "current_head_sha=$CURRENT_HEAD_SHA"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Select base-trusted reviewer implementation
+        if: steps.freshness.outputs.current == 'true'
         env:
           BASE_SHA: ${{ inputs.base_sha }}
         shell: bash
@@ -105,6 +137,7 @@ jobs:
           fi
 
       - name: Plan AI review spend
+        if: steps.freshness.outputs.current == 'true'
         id: plan
         env:
           BASE_SHA: ${{ inputs.base_sha }}
@@ -288,6 +321,7 @@ jobs:
             '{kind:$kind, request_id:$request_id, prompt:$prompt}' \
             > /tmp/local-review-request.json
           if ! curl --fail-with-body --silent --show-error \
+            --retry 1 --retry-all-errors --retry-delay 2 --retry-max-time 90 \
             --connect-timeout 4 --max-time 220 \
             -H "Authorization: Bearer ${LOCAL_REVIEW_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -492,12 +526,20 @@ jobs:
         env:
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token || steps.free_auth.outputs.access_token }}
           REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         shell: bash
         run: |
           set -euo pipefail
           python3 /tmp/trusted-ai-review.py build-request \
             --prompt /tmp/code-review-prompt.md \
             --output /tmp/vertex-request.json
+
+          CURRENT_HEAD_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
+          if [[ "$CURRENT_HEAD_SHA" != "$REVIEW_HEAD_SHA" ]]; then
+            echo "PR advanced before Vertex spend; discard stale target ${REVIEW_HEAD_SHA} (current ${CURRENT_HEAD_SHA})"
+            exit 0
+          fi
 
           curl --fail-with-body --silent --show-error \
             --retry 3 --retry-delay 2 \
@@ -522,14 +564,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+        shell: bash
         run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > /tmp/publish-pr.json
+          CURRENT_HEAD_SHA="$(jq -r '.head.sha' /tmp/publish-pr.json)"
+          CURRENT_STATE="$(jq -r '.state' /tmp/publish-pr.json)"
+          if [[ "$CURRENT_STATE" != "open" || "$CURRENT_HEAD_SHA" != "$REVIEW_HEAD_SHA" ]]; then
+            {
+              echo "### Review queue"
+              echo "- result: stale completed review discarded before publish"
+              echo "- target head: \`$REVIEW_HEAD_SHA\`"
+              echo "- current head: \`$CURRENT_HEAD_SHA\`"
+              echo "- PR state: \`$CURRENT_STATE\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           gh pr review "$PR_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --comment \
             --body-file /tmp/code-review.md
 
       - name: Consume one-shot ai-review label
-        if: always() && contains(github.event.pull_request.labels.*.name, 'ai-review')
+        if: >-
+          always() &&
+          steps.freshness.outputs.current == 'true' &&
+          contains(github.event.pull_request.labels.*.name, 'ai-review')
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number }}

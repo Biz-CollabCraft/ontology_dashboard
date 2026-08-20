@@ -148,7 +148,27 @@ jobs:
 
       - name: Decide idempotent create/update/no-op before Vertex call
         id: idem
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          CURRENT_HEAD_SHA="$(jq -r '.head.sha' /tmp/pr.json)"
+          CURRENT_STATE="$(jq -r '.state' /tmp/pr.json)"
+          if [[ "$CURRENT_STATE" != "open" || "$CURRENT_HEAD_SHA" != "$HEAD_SHA" ]]; then
+            {
+              echo "action=noop"
+              echo "existing_id="
+              echo "stale=true"
+            } >> "$GITHUB_OUTPUT"
+            {
+              echo "### Technical-comment review queue"
+              echo "- result: stale comment review discarded before model spend"
+              echo "- target head: \`$HEAD_SHA\`"
+              echo "- current head: \`$CURRENT_HEAD_SHA\`"
+              echo "- PR state: \`$CURRENT_STATE\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           python3 scripts/ci/ai_review.py idempotency \
             --comments-json /tmp/comments.json \
             --source-kind "$SOURCE_KIND" \
@@ -201,6 +221,7 @@ jobs:
             '{kind:$kind, request_id:$request_id, prompt:$prompt}' \
             > /tmp/local-comment-review-request.json
           if ! curl --fail-with-body --silent --show-error \
+            --retry 1 --retry-all-errors --retry-delay 2 --retry-max-time 90 \
             --connect-timeout 4 --max-time 220 \
             -H "Authorization: Bearer ${LOCAL_REVIEW_TOKEN}" \
             -H "Content-Type: application/json" \
@@ -346,11 +367,18 @@ jobs:
            steps.local_gate.outcome != 'success')
         env:
           GCP_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 scripts/ci/ai_review.py build-request \
             --prompt /tmp/comment-review-prompt.md \
             --output /tmp/vertex-request.json
+
+          CURRENT_HEAD_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
+          if [[ "$CURRENT_HEAD_SHA" != "$HEAD_SHA" ]]; then
+            echo "PR advanced before Vertex spend; discard stale target ${HEAD_SHA} (current ${CURRENT_HEAD_SHA})"
+            exit 0
+          fi
 
           curl --fail-with-body --silent --show-error \
             --retry 3 --retry-delay 2 \
@@ -385,6 +413,19 @@ jobs:
           EXISTING_ID: ${{ steps.idem.outputs.existing_id }}
         run: |
           set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" > /tmp/publish-pr.json
+          CURRENT_HEAD_SHA="$(jq -r '.head.sha' /tmp/publish-pr.json)"
+          CURRENT_STATE="$(jq -r '.state' /tmp/publish-pr.json)"
+          if [[ "$CURRENT_STATE" != "open" || "$CURRENT_HEAD_SHA" != "$HEAD_SHA" ]]; then
+            {
+              echo "### Technical-comment review queue"
+              echo "- result: stale completed response discarded before publish"
+              echo "- target head: \`$HEAD_SHA\`"
+              echo "- current head: \`$CURRENT_HEAD_SHA\`"
+              echo "- PR state: \`$CURRENT_STATE\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           jq -n --rawfile body /tmp/comment-review.md '{body: $body}' > /tmp/comment-payload.json
           if [[ "$ACTION" == "update" ]]; then
             gh api --method PATCH \
