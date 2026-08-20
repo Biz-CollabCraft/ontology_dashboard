@@ -280,17 +280,28 @@ def seed(
             salt_len=16,
         )
         IdentityService(
-            database,
-            app_env="demo",
-            seed_demo=True,
-            repository=PostgreSQLIdentityRepository(
+            PostgreSQLIdentityRepository(
                 database,
                 password_hasher=password_hasher,
                 seed_reference_data=True,
             ),
+            app_env="demo",
+            seed_demo=True,
         )
     else:
-        IdentityService(database, app_env="demo", seed_demo=True)
+        password_hasher = PasswordHasher(
+            time_cost=2,
+            memory_cost=19456,
+            parallelism=1,
+            hash_len=32,
+            salt_len=16,
+        )
+        IdentityService(
+            SQLiteIdentityRepository(database, password_hasher=password_hasher),
+            app_env="demo",
+            seed_demo=True,
+            rate_limit_namespace=f"identity:{database}",
+        )
     repository = DatasetRepository(database)
     service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
     existing = {

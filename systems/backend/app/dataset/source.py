@@ -63,7 +63,10 @@ class DatasetMaterializationSource:
         parsed = urlparse(uri)
         if parsed.scheme != "file":
             raise ValueError("only registered file:// materialization artifacts can be Dataset inputs")
-        path = Path(unquote(parsed.path)).resolve()
+        value = unquote(parsed.path)
+        if len(value) >= 3 and value[0] == "/" and value[1].isalpha() and value[2] == ":":
+            value = value[1:]
+        path = Path(value).resolve()
         if not path.exists() or not path.is_file():
             raise FileNotFoundError(f"materialization artifact is unavailable: {path}")
         return path

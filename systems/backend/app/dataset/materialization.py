@@ -289,11 +289,12 @@ class AnalysisDatasetMaterializer:
         node_id: str,
     ) -> Path:
         safe_node = slugify(node_id)
+        safe_run = slugify(run_id)
         return (
             self.artifact_root
             / slugify(project_id)
             / slugify(dataset_id)
-            / f"analysis-v{analysis_version}-{run_id}-{safe_node}.parquet"
+            / f"analysis-v{analysis_version}-{safe_run}-{safe_node}.parquet"
         )
 
 
