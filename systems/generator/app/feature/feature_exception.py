@@ -129,3 +129,23 @@ class NpyPublishError(FeatureError):
 class FeatureConflictError(FeatureError):
     def __init__(self, message: str = "동일한 Feature 버전이 이미 존재하거나 충돌이 발생했습니다.", code: str = "FEATURE_DATASET_CONFLICT", details: list[Any] | None = None) -> None:
         super().__init__(message=message, code=code, status_code=409, details=details)
+
+
+class SourceDatasetIntegrityError(FeatureError):
+    def __init__(self, message: str = "Sensor 원본 데이터셋의 내용 해시(SHA-256) 검증에 실패했습니다.", code: str = "SOURCE_DATASET_INTEGRITY_ERROR", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
+
+
+class SourceDatasetVersionMismatchError(FeatureError):
+    def __init__(self, message: str = "요청한 Sensor 원본 데이터셋 버전과 실제 파일 정보가 일치하지 않습니다.", code: str = "SOURCE_DATASET_VERSION_MISMATCH", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
+
+
+class FailureDatasetVersionMismatchError(FeatureError):
+    def __init__(self, message: str = "요청한 Failure 데이터셋 버전과 실제 파일 정보가 일치하지 않습니다.", code: str = "FAILURE_DATASET_VERSION_MISMATCH", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
+
+
+class TrainingSplitMetadataMissingError(FeatureError):
+    def __init__(self, message: str = "시간순 데이터 분할(asset_time_split)을 위한 메타데이터(ID, timestamp 등)가 누락되었거나 분할 계산에 실패했습니다.", code: str = "TRAINING_SPLIT_METADATA_MISSING", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)

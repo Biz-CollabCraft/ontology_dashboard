@@ -525,6 +525,8 @@ class TrainingService:
                     "dataset_version": dataset_version,
                     "failure_dataset_id": metadata.get("failure_dataset_id"),
                     "failure_dataset_version": metadata.get("failure_dataset_version"),
+                    "source_dataset": metadata.get("source_dataset", {}),
+                    "failure_dataset": metadata.get("failure_dataset", {}),
                 }
             }
 
@@ -535,7 +537,7 @@ class TrainingService:
                 "python": ">=3.11",
             }
 
-            # Stage: artifact_publish & artifact_validation & latest_pointer_update
+            # Stage: artifact_publish
             logger.info(
                 f"[TrainingService] stage=artifact_publish request_id={request_id} run_id={run_id} "
                 f"feature_dataset_version={request.feature_dataset_version} base_model={name} "
@@ -566,11 +568,37 @@ class TrainingService:
                 compatibility=compatibility_payload,
             )
 
-            logger.info(
-                f"[TrainingService] stage=latest_pointer_update request_id={request_id} run_id={run_id} "
-                f"feature_dataset_version={request.feature_dataset_version} base_model={name} "
-                f"model_id={model_id} model_version={model_version}"
-            )
+            # Stage: activation handling based on activation_policy
+            prev_pointer = self.repository.get_active_model_pointer(model_id)
+            prev_version = prev_pointer.get("latest_version") if prev_pointer else None
+
+            activation_policy = getattr(request, "activation_policy", "latest")
+            model_status = "succeeded"
+            if activation_policy == "latest":
+                try:
+                    logger.info(
+                        f"[TrainingService] stage=latest_pointer_update request_id={request_id} run_id={run_id} "
+                        f"feature_dataset_version={request.feature_dataset_version} base_model={name} "
+                        f"model_id={model_id} model_version={model_version}"
+                    )
+                    self.repository.update_latest_pointer(model_id, model_version, Path(artifact_path))
+                    activation_status = "activated"
+                    active_model_version = model_version
+                except Exception as exc:
+                    logger.exception(
+                        f"[TrainingService] stage=latest_pointer_update_failed request_id={request_id} run_id={run_id} "
+                        f"base_model={name}: {exc}"
+                    )
+                    activation_status = "activation_failed"
+                    active_model_version = prev_version
+                    model_status = "failed"
+            else:
+                logger.info(
+                    f"[TrainingService] stage=manual_activation_skipped request_id={request_id} run_id={run_id} "
+                    f"base_model={name} model_version={model_version}"
+                )
+                activation_status = "published_only"
+                active_model_version = prev_version
 
             # Return logical relative artifact URI
             try:
@@ -580,10 +608,43 @@ class TrainingService:
 
             return ModelResultItem(
                 base_model=name,
-                status="succeeded",
+                status=model_status,
                 model_id=model_id,
                 model_version=model_version,
                 artifact_uri=rel_uri,
+                activation_status=activation_status,
+                active_model_version=active_model_version,
             )
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def activate_model(self, base_model: str, model_version: str) -> Any:
+        """Manually activate an immutable model version pointer."""
+        if base_model not in REGISTERED_MODELS:
+            raise ModelNotRegisteredError(f"지원하지 않는 모델 알고리즘입니다: {base_model}")
+        res = self.repository.activate_model_version(base_model, model_version)
+        from systems.generator.app.training.training_schema import ModelActivationResponse
+        return ModelActivationResponse(
+            base_model=base_model,
+            previous_model_version=res.get("previous_model_version"),
+            active_model_version=res["active_model_version"],
+            status="activated",
+        )
+
+    def get_active_model(self, base_model: str) -> Any:
+        """Query currently active model version pointer."""
+        if base_model not in REGISTERED_MODELS:
+            raise ModelNotRegisteredError(f"지원하지 않는 모델 알고리즘입니다: {base_model}")
+        pointer = self.repository.get_active_model_pointer(base_model)
+        if not pointer or not pointer.get("latest_version"):
+            from systems.generator.app.training.training_exception import ActiveModelNotFoundError
+            raise ActiveModelNotFoundError(
+                f"모델 '{base_model}'에 대해 활성화된 Model Artifact 버전(latest.json)이 존재하지 않습니다."
+            )
+        from systems.generator.app.training.training_schema import ActiveModelResponse
+        return ActiveModelResponse(
+            base_model=base_model,
+            active_model_version=pointer["latest_version"],
+            artifact_uri=pointer.get("artifact_uri", ""),
+            updated_at=pointer.get("updated_at", ""),
+        )

@@ -29,8 +29,12 @@ from systems.generator.app.feature.feature_exception import (
     NpyValidationError,
     FeatureConflictError,
     FeatureDatasetIntegrityError,
+    SourceDatasetIntegrityError,
+    SourceDatasetVersionMismatchError,
+    FailureDatasetVersionMismatchError,
+    TrainingSplitMetadataMissingError,
 )
-from systems.generator.app.feature.feature_repository import FeatureRepository
+from systems.generator.app.feature.feature_repository import FeatureRepository, ALLOWED_FEATURE_BUNDLE_FILES
 from systems.generator.app.feature.feature_schema_provider import (
     FeatureSchemaProvider,
     FeatureSchemaDefinition,
@@ -73,8 +77,9 @@ def sample_dataset_with_failures(tmp_path, monkeypatch):
             })
     pd.DataFrame(records).to_csv(telemetry_file, index=False)
 
-    # 2. Create failure events CSV
-    failure_file = data_dir / "sample_failures.csv"
+    # 2. Create failure events CSV in versioned path
+    failure_file = data_dir / "sample_failures" / "v1.0.csv"
+    failure_file.parent.mkdir(parents=True, exist_ok=True)
     failures = pd.DataFrame([
         {
             "asset_id": "M001",
@@ -270,7 +275,7 @@ def test_feature_end_to_end_and_reuse_integrity(client, sample_dataset_with_fail
 
 
 def test_feature_bundle_validation_exhaustive(tmp_path):
-    """Exhaustive test for validate_feature_bundle checking all integrity violations."""
+    """Exhaustive test for validate_feature_bundle checking all integrity and path safety violations."""
     repo = FeatureRepository(base_dir=tmp_path / "features_cache")
 
     contract = {
@@ -290,6 +295,15 @@ def test_feature_bundle_validation_exhaustive(tmp_path):
     X = np.ones((5, 2), dtype=np.float64)
     y = np.array([0, 1, 0, 1, 0], dtype=np.int64)
     cols = ["col1", "col2"]
+    split_indices = {
+        "train": [0, 1, 2],
+        "val": [3],
+        "test": [4],
+    }
+    row_metadata = {
+        "asset_ids": ["M1", "M1", "M1", "M1", "M1"],
+        "timestamps": ["2026-01-01 00:00:00", "2026-01-01 01:00:00", "2026-01-01 02:00:00", "2026-01-01 03:00:00", "2026-01-01 04:00:00"],
+    }
     meta = {
         "contract": contract,
         "dataset_id": "ds1",
@@ -301,10 +315,11 @@ def test_feature_bundle_validation_exhaustive(tmp_path):
         "feature_columns": cols,
         "row_count": 5,
         "feature_count": 2,
+        "split_indices": split_indices,
     }
 
-    # 1. Normal publish
-    repo.publish_feature_bundle("ds1", "v1", fver, X, y, cols, meta)
+    # 1. Normal publish with row_metadata
+    repo.publish_feature_bundle("ds1", "v1", fver, X, y, cols, meta, row_metadata=row_metadata)
     validated = repo.validate_feature_bundle("ds1", "v1", fver, contract)
     assert validated["row_count"] == 5
 
@@ -314,25 +329,34 @@ def test_feature_bundle_validation_exhaustive(tmp_path):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
     np.save(target_dir / "labels.npy", y)
 
-    # 3. Shape / byte mismatch (modified labels.npy triggers checksum mismatch)
-    np.save(target_dir / "labels.npy", np.array([0, 1], dtype=np.int64))
-    with pytest.raises(FeatureDatasetIntegrityError, match="체크섬이 일치하지 않습니다"):
+    # 3. Path traversal in checksum files (e.g. "../secret.txt")
+    with open(target_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
+        meta_corrupted = json.load(f)
+    meta_corrupted["checksum"]["files"]["../secret.txt"] = "abc"
+    with open(target_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta_corrupted, f)
+    with pytest.raises(FeatureDatasetIntegrityError, match="유효하지 않은 문자나 상위/하위 경로"):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
-    np.save(target_dir / "labels.npy", y)
 
-    # 4. Modified features.npy (triggers checksum mismatch)
-    X_nan = np.copy(X)
-    X_nan[0, 0] = 999.0
-    np.save(target_dir / "features.npy", X_nan)
-    with pytest.raises(FeatureDatasetIntegrityError, match="체크섬이 일치하지 않습니다"):
+    # 4. Unlisted file in checksum files
+    with open(target_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
+        meta_corrupted = json.load(f)
+    meta_corrupted["checksum"]["files"].pop("../secret.txt", None)
+    meta_corrupted["checksum"]["files"]["unauthorized.exe"] = "abc"
+    with open(target_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta_corrupted, f)
+    with pytest.raises(FeatureDatasetIntegrityError, match="허용되지 않은 체크섬 대상 파일명"):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
-    np.save(target_dir / "features.npy", X)
 
-    # 5. Invalid label value (triggers checksum mismatch)
-    np.save(target_dir / "labels.npy", np.array([0, 5, 0, 1, 0], dtype=np.int64))
-    with pytest.raises(FeatureDatasetIntegrityError, match="체크섬이 일치하지 않습니다"):
+    # 5. Missing row_metadata.json from checksum when file exists
+    with open(target_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
+        meta_corrupted = json.load(f)
+    meta_corrupted["checksum"]["files"].pop("unauthorized.exe", None)
+    meta_corrupted["checksum"]["files"].pop("row_metadata.json", None)
+    with open(target_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta_corrupted, f)
+    with pytest.raises(FeatureDatasetIntegrityError, match="필수 파일 'row_metadata.json'의 체크섬이 선언되지 않았습니다"):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
-    np.save(target_dir / "labels.npy", y)
 
 
 def test_failure_dataset_explicit_association_and_fingerprint_change(client, tmp_path, monkeypatch):
@@ -354,26 +378,32 @@ def test_failure_dataset_explicit_association_and_fingerprint_change(client, tmp
         "rotation": [1500.0, 1510.0, 1505.0, 1515.0],
     }).to_csv(data_dir / "telem.csv", index=False)
 
-    # 2. Failure dataset v1
+    # 2. Failure dataset v1 (version in filename)
+    f1_file = data_dir / "failures_v1" / "v1.0.csv"
+    f1_file.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([{
         "asset_id": "A1",
         "observed_at": "2026-01-01 01:30:00",
         "failure_type": "Overheat",
-    }]).to_csv(data_dir / "failures_v1.csv", index=False)
+    }]).to_csv(f1_file, index=False)
 
-    # 3. Failure dataset v2
+    # 3. Failure dataset v2 (version in filename)
+    f2_file = data_dir / "failures_v2" / "v2.0.csv"
+    f2_file.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([{
         "asset_id": "A2",
         "observed_at": "2026-01-01 01:30:00",
         "failure_type": "Vibration",
-    }]).to_csv(data_dir / "failures_v2.csv", index=False)
+    }]).to_csv(f2_file, index=False)
 
-    # 4. Incompatible Failure dataset (different asset ID scheme)
+    # 4. Incompatible Failure dataset
+    fincompat_file = data_dir / "failures_incompat" / "v1.0.csv"
+    fincompat_file.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([{
         "asset_id": "CAR_999",
         "observed_at": "2026-01-01 01:30:00",
         "failure_type": "Engine",
-    }]).to_csv(data_dir / "failures_incompat.csv", index=False)
+    }]).to_csv(fincompat_file, index=False)
 
     ext_res = client.post("/extraction", json={
         "dataset_id": "telem",
@@ -435,7 +465,7 @@ def test_failure_dataset_explicit_association_and_fingerprint_change(client, tmp
     assert res_incompat.status_code == 422
     assert res_incompat.json()["error"]["code"] == "LABEL_CONTRACT_INVALID"
 
-    # Run with non-existent failure dataset -> fails with 404 FAILURE_DATA_NOT_READY
+    # Run with non-existent failure dataset -> fails with 422 FAILURE_DATASET_VERSION_MISMATCH
     res_missing = client.post("/feature", json={
         "dataset_id": "telem",
         "dataset_version": "v1.0",
@@ -448,5 +478,122 @@ def test_failure_dataset_explicit_association_and_fingerprint_change(client, tmp
         "prediction_horizon_hours": 24,
         "rebuild_npy": True,
     })
-    assert res_missing.status_code == 404
-    assert res_missing.json()["error"]["code"] == "FAILURE_DATA_NOT_READY"
+    assert res_missing.status_code == 422
+    assert res_missing.json()["error"]["code"] == "FAILURE_DATASET_VERSION_MISMATCH"
+
+
+def test_feature_sensor_source_hash_integrity_mismatch(client, tmp_path, monkeypatch):
+    """If the raw sensor dataset on disk is modified after /extraction, /feature rejects it with SOURCE_DATASET_INTEGRITY_ERROR."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+
+    from systems.generator.generator_config import PATHS
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    telem_path = data_dir / "telem_tamper.csv"
+    pd.DataFrame({
+        "asset_id": ["A1", "A1"],
+        "timestamp": ["2026-01-01 00:00:00", "2026-01-01 01:00:00"],
+        "voltage": [220.0, 222.0],
+        "rotation": [1500.0, 1510.0],
+    }).to_csv(telem_path, index=False)
+
+    fail_path = data_dir / "fail" / "v1.0.csv"
+    fail_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{
+        "asset_id": "A1",
+        "observed_at": "2026-01-01 01:30:00",
+        "failure_type": "Overheat",
+    }]).to_csv(fail_path, index=False)
+
+    ext_res = client.post("/extraction", json={
+        "dataset_id": "telem_tamper",
+        "dataset_version": "v1.0",
+        "source_uri": "telem_tamper.csv",
+        "force_reanalyze": True,
+    })
+    assert ext_res.status_code == 200
+    plan_ver = ext_res.json()["extraction_plan_version"]
+    map_ver = ext_res.json()["result"]["mapping_version"]
+
+    # Tamper with the telemetry CSV on disk
+    with open(telem_path, "a") as f:
+        f.write("A1,2026-01-01 02:00:00,999.0,9999.0\n")
+
+
+    res = client.post("/feature", json={
+        "dataset_id": "telem_tamper",
+        "dataset_version": "v1.0",
+        "failure_dataset_id": "fail",
+        "failure_dataset_version": "v1.0",
+        "extraction_plan_version": plan_ver,
+        "mapping_version": map_ver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "SOURCE_DATASET_INTEGRITY_ERROR"
+
+
+def test_feature_split_metadata_fail_fast_on_missing_id_or_time_column(client, tmp_path, monkeypatch):
+    """If ID column or time column is missing, /feature fails fast with TRAINING_SPLIT_METADATA_MISSING."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+
+    from systems.generator.generator_config import PATHS
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    telem_path = data_dir / "split_fail.csv"
+    pd.DataFrame({
+        "asset_id": ["A1", "A1", "A1", "A1"],
+        "timestamp": ["2026-01-01 00:00:00", "2026-01-01 01:00:00", "2026-01-01 02:00:00", "2026-01-01 03:00:00"],
+        "voltage": [220.0, 222.0, 221.0, 225.0],
+        "rotation": [1500.0, 1510.0, 1505.0, 1515.0],
+    }).to_csv(telem_path, index=False)
+
+    fail_path = data_dir / "fail" / "v1.0.csv"
+    fail_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame([{
+        "asset_id": "A1",
+        "observed_at": "2026-01-01 01:30:00",
+        "failure_type": "Overheat",
+    }]).to_csv(fail_path, index=False)
+
+    ext_repo = ExtractionRepository()
+    # Plan specifying a missing id_column
+    plan_data = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["asset_id", "timestamp", "voltage", "rotation"],
+        "id_column": "non_existent_id_column",
+        "time_column": "timestamp",
+        "duplicate_policy": "error",
+    }
+    plan_ver, _ = ext_repo.publish_plan("split_fail", "v1.0", plan_data)
+    mapping_data = {
+        "voltage": {"target_ontology": "Voltage", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
+        "rotation": {"target_ontology": "Rotation", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
+    }
+    map_ver, _ = ext_repo.publish_mapping("split_fail", "v1.0", mapping_data)
+
+    res = client.post("/feature", json={
+        "dataset_id": "split_fail",
+        "dataset_version": "v1.0",
+        "failure_dataset_id": "fail",
+        "failure_dataset_version": "v1.0",
+        "extraction_plan_version": plan_ver,
+        "mapping_version": map_ver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "TRAINING_SPLIT_METADATA_MISSING"

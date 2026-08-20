@@ -22,6 +22,14 @@ from systems.generator.app.feature.feature_exception import (
 logger = logging.getLogger(__name__)
 
 
+ALLOWED_FEATURE_BUNDLE_FILES = {
+    "features.npy",
+    "labels.npy",
+    "feature_columns.json",
+    "row_metadata.json",
+}
+
+
 def compute_file_sha256(filepath: Path) -> str:
     """Compute SHA-256 hash of a file on disk."""
     h = hashlib.sha256()
@@ -88,6 +96,7 @@ class FeatureRepository:
         labels_path = target_dir / "labels.npy"
         cols_path = target_dir / "feature_columns.json"
         meta_path = target_dir / "feature_metadata.json"
+        row_meta_path = target_dir / "row_metadata.json"
 
         # 1. Check all 4 required files exist
         for required_path in (features_path, labels_path, cols_path, meta_path):
@@ -117,6 +126,7 @@ class FeatureRepository:
             "prediction_horizon_hours",
             "contract",
             "checksum",
+            "split_indices",
         ]
         for field_name in mandatory_fields:
             if field_name not in metadata:
@@ -125,7 +135,34 @@ class FeatureRepository:
                     code="FEATURE_DATASET_INTEGRITY_ERROR",
                 )
 
-        # 2.2 SHA-256 Checksum validation
+        # 2.2 Validate split_indices completeness
+        split_indices = metadata["split_indices"]
+        if not isinstance(split_indices, dict) or not all(k in split_indices for k in ("train", "val", "test")):
+            raise FeatureDatasetIntegrityError(
+                "feature_metadata.json의 split_indices 구조가 유효하지 않습니다 (train/val/test 필수).",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 2.3 Check row_metadata.json existence and integrity
+        if not row_meta_path.is_file():
+            raise FeatureDatasetIntegrityError(
+                "Feature Bundle 필수 파일인 row_metadata.json이 존재하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        try:
+            with open(row_meta_path, "r", encoding="utf-8") as f:
+                row_meta = json.load(f)
+            if not isinstance(row_meta, dict) or "asset_ids" not in row_meta or "timestamps" not in row_meta:
+                raise FeatureDatasetIntegrityError(
+                    "row_metadata.json에 asset_ids 또는 timestamps가 누락되었습니다.",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+        except FeatureDatasetIntegrityError:
+            raise
+        except Exception as exc:
+            raise FeatureDatasetIntegrityError(f"row_metadata.json 파싱 실패: {exc}", code="FEATURE_DATASET_INTEGRITY_ERROR") from exc
+
+        # 2.4 SHA-256 Checksum validation with path containment and allowlist
         checksum_info = metadata["checksum"]
         if not isinstance(checksum_info, dict) or checksum_info.get("algorithm") != "sha256":
             raise FeatureDatasetIntegrityError(
@@ -138,14 +175,41 @@ class FeatureRepository:
                 "체크섬 파일 목록이 비어 있거나 올바른 형식이 아닙니다.",
                 code="FEATURE_DATASET_INTEGRITY_ERROR",
             )
-        for req_name in ("features.npy", "labels.npy", "feature_columns.json"):
+
+        # Ensure mandatory files are declared
+        for req_name in ("features.npy", "labels.npy", "feature_columns.json", "row_metadata.json"):
             if req_name not in declared_files:
                 raise FeatureDatasetIntegrityError(
                     f"필수 파일 '{req_name}'의 체크섬이 선언되지 않았습니다.",
                     code="FEATURE_DATASET_INTEGRITY_ERROR",
                 )
+
+        target_dir_resolved = target_dir.resolve()
         for fname, expected_hash in declared_files.items():
-            fpath = target_dir / fname
+            if not isinstance(fname, str) or not fname:
+                raise FeatureDatasetIntegrityError("체크섬 파일 이름이 올바르지 않습니다.", code="FEATURE_DATASET_INTEGRITY_ERROR")
+
+            # Check rules: no absolute path, no .., no slashes, must be in allowlist
+            if Path(fname).is_absolute() or ".." in fname or "/" in fname or "\\" in fname:
+                raise FeatureDatasetIntegrityError(
+                    f"체크섬 파일 경로에 유효하지 않은 문자나 상위/하위 경로가 포함되어 있습니다: {fname!r}",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+            if fname not in ALLOWED_FEATURE_BUNDLE_FILES:
+                raise FeatureDatasetIntegrityError(
+                    f"허용되지 않은 체크섬 대상 파일명입니다: {fname!r}",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+
+            fpath = (target_dir / fname).resolve()
+            try:
+                fpath.relative_to(target_dir_resolved)
+            except ValueError:
+                raise FeatureDatasetIntegrityError(
+                    f"체크섬 파일 경로가 번들 루트를 벗어납니다: {fname!r}",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+
             if not fpath.is_file():
                 raise FeatureDatasetIntegrityError(
                     f"체크섬 검증 대상 파일 '{fname}'이 존재하지 않습니다.",

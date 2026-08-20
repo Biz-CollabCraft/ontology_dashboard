@@ -397,6 +397,34 @@ class ExtractionService:
             for k, v in dataset_store.get_all().items()
         }
 
+        # Compute source sha256 and attach source provenance to plan
+        import hashlib
+        def compute_file_sha256(filepath: Path) -> str:
+            h = hashlib.sha256()
+            with open(filepath, "rb") as f:
+                while chunk := f.read(65536):
+                    h.update(chunk)
+            return h.hexdigest()
+
+        source_sha256 = compute_file_sha256(dataset_path)
+        allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
+        rel_source_uri = None
+        for root in allowed_roots:
+            try:
+                rel_source_uri = str(dataset_path.relative_to(root).as_posix())
+                break
+            except ValueError:
+                pass
+        if not rel_source_uri:
+            rel_source_uri = str(request.source_uri or dataset_path.name)
+
+        plan_dict["source"] = {
+            "dataset_id": request.dataset_id,
+            "dataset_version": request.dataset_version,
+            "source_uri": rel_source_uri,
+            "sha256": source_sha256,
+        }
+
         # Publish content-addressed plan and mapping
         plan_version, plan_uri = self.repository.publish_plan(
             request.dataset_id,

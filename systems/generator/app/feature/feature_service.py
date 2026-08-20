@@ -42,6 +42,10 @@ from systems.generator.app.feature.feature_exception import (
     FeatureSchemaMismatchError,
     LabelSchemaMismatchError,
     FeatureDatasetIntegrityError,
+    SourceDatasetIntegrityError,
+    SourceDatasetVersionMismatchError,
+    FailureDatasetVersionMismatchError,
+    TrainingSplitMetadataMissingError,
 )
 from systems.generator.app.feature.feature_repository import FeatureRepository
 from systems.generator.app.feature.feature_schema_provider import FeatureSchemaProvider
@@ -192,14 +196,60 @@ class FeatureService:
                 ),
             )
 
-        # 5. Extract telemetry data using plan
-        from systems.generator.app.extraction.extraction_schema import ExtractionRequest
-        dummy_req = ExtractionRequest(
-            dataset_id=request.dataset_id,
-            dataset_version=request.dataset_version,
-            force_reanalyze=False,
-        )
-        dataset_path = self.extraction_service._resolve_dataset_path(dummy_req)
+        # 5. Verify Sensor Source and Extract telemetry data using plan
+        allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
+        plan_source = plan.get("source")
+        if plan_source and isinstance(plan_source, dict):
+            if plan_source.get("dataset_id") != request.dataset_id or plan_source.get("dataset_version") != request.dataset_version:
+                raise SourceDatasetVersionMismatchError(
+                    f"Extraction Plan의 source 정보({plan_source.get('dataset_id')}/{plan_source.get('dataset_version')})가 "
+                    f"요청({request.dataset_id}/{request.dataset_version})과 일치하지 않습니다."
+                )
+
+            source_uri_declared = plan_source.get("source_uri")
+            if not source_uri_declared or ".." in source_uri_declared or Path(source_uri_declared).is_absolute() or ":" in source_uri_declared:
+                raise SourceDatasetIntegrityError(f"Extraction Plan의 source_uri가 유효하지 않습니다: {source_uri_declared!r}")
+
+            source_file = None
+            for root in allowed_roots:
+                cand = (root / source_uri_declared).resolve()
+                try:
+                    cand.relative_to(root)
+                    if cand.is_file():
+                        source_file = cand
+                        break
+                except ValueError:
+                    continue
+
+            if not source_file:
+                raise SourceDatasetIntegrityError(f"Extraction Plan에 선언된 원본 파일 '{source_uri_declared}'을 찾을 수 없습니다.")
+
+            from systems.generator.app.feature.feature_repository import compute_file_sha256
+            actual_source_sha = compute_file_sha256(source_file)
+            expected_source_sha = plan_source.get("sha256")
+            if expected_source_sha and actual_source_sha != expected_source_sha:
+                raise SourceDatasetIntegrityError(
+                    f"Sensor 원본 파일 '{source_uri_declared}'의 SHA-256 해시가 일치하지 않습니다 "
+                    f"(선언={expected_source_sha}, 실제={actual_source_sha})."
+                )
+            dataset_path = source_file
+            source_sha256 = actual_source_sha
+            source_uri_clean = source_uri_declared
+        else:
+            from systems.generator.app.extraction.extraction_schema import ExtractionRequest
+            dummy_req = ExtractionRequest(
+                dataset_id=request.dataset_id,
+                dataset_version=request.dataset_version,
+                force_reanalyze=False,
+            )
+            dataset_path = self.extraction_service._resolve_dataset_path(dummy_req)
+            from systems.generator.app.feature.feature_repository import compute_file_sha256
+            source_sha256 = compute_file_sha256(dataset_path)
+            try:
+                source_uri_clean = str(dataset_path.relative_to(PATHS.data_dir.resolve()).as_posix())
+            except ValueError:
+                source_uri_clean = dataset_path.name
+
         extracted_df = extract_with_plan(str(dataset_path), plan)
 
         # Drop any preexisting label column from extracted_df before official horizon labeling
@@ -230,12 +280,20 @@ class FeatureService:
             raise FeatureBuildError(f"시계열 피처 생성 중 오류가 발생했습니다: {exc}") from exc
 
         # 8. Resolve explicit failure dataset and build horizon labels
-        failures_df, failure_meta = self._resolve_failure_dataset(
+        failures_df, failure_meta, found_failure_path, failure_sha256 = self._resolve_failure_dataset(
             failure_dataset_id=request.failure_dataset_id,
             failure_dataset_version=request.failure_dataset_version,
             telemetry_df=features_input_df,
             plan=plan,
         )
+
+        try:
+            failure_uri_clean = str(found_failure_path.relative_to(PATHS.data_dir.resolve()).as_posix())
+        except ValueError:
+            try:
+                failure_uri_clean = str(found_failure_path.relative_to(PATHS.data_preprocessed.resolve()).as_posix())
+            except ValueError:
+                failure_uri_clean = found_failure_path.name
 
         try:
             labeled_df = build_labels(
@@ -245,7 +303,7 @@ class FeatureService:
                 prediction_horizon_hours=request.prediction_horizon_hours,
                 plan=plan,
             )
-        except (FailureDataNotReadyError, LabelContractInvalidError, LabelAnchorNotFoundError, InsufficientTrainingDataError):
+        except (FailureDataNotReadyError, LabelContractInvalidError, LabelAnchorNotFoundError, InsufficientTrainingDataError, FailureDatasetVersionMismatchError):
             raise
         except Exception as exc:
             logger.exception(f"[FeatureService] Label building failed: {exc}")
@@ -279,30 +337,57 @@ class FeatureService:
         if X.shape[0] == 0:
             raise InsufficientTrainingDataError("학습에 유효한 데이터 행이 0건입니다.", code="INSUFFICIENT_TRAINING_DATA")
 
-        # 10. Prepare metadata and compute chronological split indices
+        # 10. Prepare metadata and compute chronological split indices (FAIL-FAST)
         from systems.generator.model.model_training import compute_asset_time_split_indices
+        from systems.generator.app.training.training_service import validate_split_indices
 
         id_col = plan.get("id_column") or "asset_id"
         time_col = plan.get("time_column") or "timestamp"
-        split_indices = None
-        row_metadata = None
 
-        if id_col in labeled_df.columns and time_col in labeled_df.columns:
-            try:
-                train_idx, val_idx, test_idx = compute_asset_time_split_indices(
-                    labeled_df, id_col=id_col, time_col=time_col
-                )
-                split_indices = {
-                    "train": train_idx,
-                    "val": val_idx,
-                    "test": test_idx,
-                }
-                row_metadata = {
-                    "asset_ids": labeled_df[id_col].astype(str).tolist(),
-                    "timestamps": labeled_df[time_col].astype(str).tolist(),
-                }
-            except Exception as exc:
-                logger.warning(f"[FeatureService] Could not precompute asset_time_split indices: {exc}")
+        if id_col not in labeled_df.columns or time_col not in labeled_df.columns:
+            raise TrainingSplitMetadataMissingError(
+                f"시간순 분할에 필요한 ID 컬럼('{id_col}') 또는 Timestamp 컬럼('{time_col}')이 데이터셋에 존재하지 않습니다."
+            )
+
+        try:
+            train_idx, val_idx, test_idx = compute_asset_time_split_indices(
+                labeled_df, id_col=id_col, time_col=time_col
+            )
+        except Exception as exc:
+            raise TrainingSplitMetadataMissingError(
+                f"시간순 데이터 분할(asset_time_split) 계산에 실패했습니다: {exc}"
+            ) from exc
+
+        split_indices = {
+            "train": train_idx,
+            "val": val_idx,
+            "test": test_idx,
+        }
+        asset_ids_list = labeled_df[id_col].astype(str).tolist()
+        timestamps_list = labeled_df[time_col].astype(str).tolist()
+
+        if len(asset_ids_list) != int(X.shape[0]) or len(timestamps_list) != int(X.shape[0]):
+            raise TrainingSplitMetadataMissingError(
+                f"row_metadata 행 수({len(asset_ids_list)})와 Feature 행 수({X.shape[0]})가 일치하지 않습니다."
+            )
+
+        # Validate split indices
+        try:
+            validate_split_indices(
+                split_indices=split_indices,
+                total_rows=int(X.shape[0]),
+                asset_ids=asset_ids_list,
+                timestamps=timestamps_list,
+            )
+        except Exception as exc:
+            raise TrainingSplitMetadataMissingError(
+                f"생성된 split_indices 유효성 검증 실패: {exc}"
+            ) from exc
+
+        row_metadata = {
+            "asset_ids": asset_ids_list,
+            "timestamps": timestamps_list,
+        }
 
         metadata = {
             "contract": contract_payload,
@@ -321,19 +406,30 @@ class FeatureService:
             "feature_count": int(X.shape[1]),
             "positive_count": positive_count,
             "dtype": str(X.dtype),
-            "id_column": plan.get("id_column"),
-            "time_column": plan.get("time_column"),
+            "id_column": id_col,
+            "time_column": time_col,
+            "split_indices": split_indices,
+            "source_dataset": {
+                "dataset_id": request.dataset_id,
+                "dataset_version": request.dataset_version,
+                "source_uri": source_uri_clean,
+                "sha256": source_sha256,
+            },
+            "failure_dataset": {
+                "dataset_id": request.failure_dataset_id,
+                "dataset_version": request.failure_dataset_version,
+                "source_uri": failure_uri_clean,
+                "sha256": failure_sha256,
+            },
             "created_at": datetime.now(timezone.utc).isoformat(),
             "run_id": run_id,
         }
-        if split_indices:
-            metadata["split_indices"] = split_indices
 
         # 11. Atomic publish via repository
         uris = self.feature_repo.publish_feature_bundle(
-            request.dataset_id,
-            request.dataset_version,
-            feature_dataset_version,
+            dataset_id=request.dataset_id,
+            dataset_version=request.dataset_version,
+            feature_dataset_version=feature_dataset_version,
             X=X,
             y=y,
             feature_names=feature_names,
@@ -368,24 +464,28 @@ class FeatureService:
         failure_dataset_id: str,
         failure_dataset_version: str,
         telemetry_df: pd.DataFrame,
-        plan: dict | None = None,
-    ) -> tuple[pd.DataFrame, dict[str, Any]]:
-        """Explicitly resolve and validate failure dataset with equipment identifier compatibility."""
+        plan: Optional[dict[str, Any]] = None,
+    ) -> tuple[pd.DataFrame, dict[str, Any], Path, str]:
+        """Strictly locate and load explicit failure history dataset with exact version matching."""
         allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
 
-        candidates: list[Path] = [
+        if not failure_dataset_id or ".." in failure_dataset_id or "/" in failure_dataset_id or "\\" in failure_dataset_id:
+            raise FailureDataNotReadyError(f"잘못된 failure_dataset_id 식별자입니다: {failure_dataset_id!r}")
+        if not failure_dataset_version or ".." in failure_dataset_version or "/" in failure_dataset_version or "\\" in failure_dataset_version:
+            raise FailureDataNotReadyError(f"잘못된 failure_dataset_version 식별자입니다: {failure_dataset_version!r}")
+
+        # Strictly require version in the path
+        candidates = [
             PATHS.data_dir / failure_dataset_id / f"{failure_dataset_version}.csv",
             PATHS.data_dir / failure_dataset_id / f"{failure_dataset_version}.xlsx",
             PATHS.data_dir / failure_dataset_id / f"{failure_dataset_version}.xls",
+            PATHS.data_dir / failure_dataset_id / failure_dataset_version / "input.csv",
+            PATHS.data_preprocessed / failure_dataset_id / failure_dataset_version / "input.csv",
             PATHS.data_preprocessed / failure_dataset_id / f"{failure_dataset_version}.csv",
             PATHS.data_preprocessed / failure_dataset_id / f"{failure_dataset_version}.xlsx",
             PATHS.data_preprocessed / failure_dataset_id / f"{failure_dataset_version}.xls",
             PATHS.data_dir / f"{failure_dataset_id}_{failure_dataset_version}.csv",
             PATHS.data_preprocessed / f"{failure_dataset_id}_{failure_dataset_version}.csv",
-            PATHS.data_dir / f"{failure_dataset_id}.csv",
-            PATHS.data_preprocessed / f"{failure_dataset_id}.csv",
-            PATHS.data_dir / failure_dataset_id / "input.csv",
-            PATHS.data_preprocessed / failure_dataset_id / "input.csv",
         ]
 
         found_path: Optional[Path] = None
@@ -395,23 +495,13 @@ class FeatureService:
                 found_path = cand
                 break
 
-        meta: dict[str, Any] = {}
-        if not found_path:
-            # Check family registry for exact failure dataset key
-            registry = load_family_registry()
-            if failure_dataset_id in registry:
-                fail_rel = failure_dataset_id
-                meta = registry.get(failure_dataset_id, {})
-                for root in allowed_roots:
-                    cand = root / fail_rel
-                    if cand.is_file():
-                        found_path = cand
-                        break
-
         if not found_path or not found_path.is_file():
-            raise FailureDataNotReadyError(
-                f"요청한 Failure 데이터셋 '{failure_dataset_id}' (버전 '{failure_dataset_version}')을 찾을 수 없습니다."
+            raise FailureDatasetVersionMismatchError(
+                f"요청한 Failure 데이터셋 '{failure_dataset_id}' (버전 '{failure_dataset_version}')에 해당하는 파일을 찾을 수 없습니다."
             )
+
+        from systems.generator.app.feature.feature_repository import compute_file_sha256
+        failure_sha256 = compute_file_sha256(found_path)
 
         try:
             if found_path.suffix.lower() in (".xlsx", ".xls"):
@@ -438,13 +528,11 @@ class FeatureService:
             raise LabelContractInvalidError(f"Failure 데이터셋에서 설비 ID 컬럼을 찾을 수 없습니다 (사용 가능한 컬럼: {list(f_df.columns)}).")
 
         # Identify Failure anchor column
-        time_cols_meta = meta.get("time_columns", [])
-        anchor_col = next((c["name"] for c in time_cols_meta if c.get("semantic") == "failure_point"), None)
-        if not anchor_col or anchor_col not in f_df.columns:
-            for candidate in ("observed_at", "datetime", "timestamp", "time", "ts", "date", "failure_point"):
-                if candidate in f_df.columns:
-                    anchor_col = candidate
-                    break
+        anchor_col = None
+        for candidate in ("observed_at", "datetime", "timestamp", "time", "ts", "date", "failure_point"):
+            if candidate in f_df.columns:
+                anchor_col = candidate
+                break
 
         if not anchor_col or anchor_col not in f_df.columns:
             raise LabelAnchorNotFoundError(f"Failure 데이터셋에서 anchor(failure_point) 컬럼을 찾을 수 없습니다 (사용 가능한 컬럼: {list(f_df.columns)}).")
@@ -466,4 +554,8 @@ class FeatureService:
                     f"(Telemetry: {list(telem_assets)[:3]}, Failure: {list(fail_assets)[:3]})"
                 )
 
-        return f_df, meta
+        meta = {
+            "failure_id_column": fail_id_col,
+            "anchor_column": anchor_col,
+        }
+        return f_df, meta, found_path, failure_sha256

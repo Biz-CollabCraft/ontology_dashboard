@@ -14,7 +14,10 @@ from systems.generator.app.extraction.extraction_router import router as extract
 from systems.generator.app.extraction.extraction_exception import ExtractionError
 from systems.generator.app.feature.feature_router import router as feature_router
 from systems.generator.app.feature.feature_exception import FeatureError
-from systems.generator.app.training.training_router import router as training_router
+from systems.generator.app.training.training_router import (
+    router as training_router,
+    models_router,
+)
 from systems.generator.app.training.training_exception import TrainingError
 from systems.generator.app.extraction.extraction_schema import ErrorEnvelope, ErrorEnvelopeBody
 
@@ -172,3 +175,4 @@ def health() -> dict[str, str]:
 app.include_router(extraction_router)
 app.include_router(feature_router)
 app.include_router(training_router)
+app.include_router(models_router)

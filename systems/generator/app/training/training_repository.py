@@ -26,9 +26,20 @@ from systems.generator.app.training.training_exception import (
     InsufficientTrainingDataError,
     ModelArtifactConflictError,
     ModelArtifactPublishFailedError,
+    ModelArtifactNotFoundError,
+    ModelArtifactIntegrityError,
+    ActiveModelNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
+
+
+ALLOWED_FEATURE_BUNDLE_FILES = {
+    "features.npy",
+    "labels.npy",
+    "feature_columns.json",
+    "row_metadata.json",
+}
 
 
 def compute_file_sha256(filepath: Path) -> str:
@@ -158,6 +169,7 @@ class TrainingRepository:
             "prediction_horizon_hours",
             "contract",
             "checksum",
+            "split_indices",
         ]
         for field_name in mandatory_fields:
             if field_name not in metadata:
@@ -166,7 +178,34 @@ class TrainingRepository:
                     code="FEATURE_DATASET_INTEGRITY_ERROR",
                 )
 
-        # 2.2 SHA-256 Checksum validation
+        # 2.2 Validate split_indices completeness
+        split_indices = metadata["split_indices"]
+        if not isinstance(split_indices, dict) or not all(k in split_indices for k in ("train", "val", "test")):
+            raise FeatureDatasetIntegrityError(
+                "feature_metadata.json의 split_indices 구조가 유효하지 않습니다 (train/val/test 필수).",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 2.3 Check row_metadata.json existence and integrity
+        if not row_meta_path.is_file():
+            raise FeatureDatasetIntegrityError(
+                "Feature Bundle 필수 파일인 row_metadata.json이 존재하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        try:
+            with open(row_meta_path, "r", encoding="utf-8") as f:
+                row_metadata = json.load(f)
+            if not isinstance(row_metadata, dict) or "asset_ids" not in row_metadata or "timestamps" not in row_metadata:
+                raise FeatureDatasetIntegrityError(
+                    "row_metadata.json에 asset_ids 또는 timestamps가 누락되었습니다.",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+        except FeatureDatasetIntegrityError:
+            raise
+        except Exception as exc:
+            raise FeatureDatasetIntegrityError(f"row_metadata.json 파싱 실패: {exc}", code="FEATURE_DATASET_INTEGRITY_ERROR") from exc
+
+        # 2.4 SHA-256 Checksum validation with path containment and allowlist
         checksum_info = metadata["checksum"]
         if not isinstance(checksum_info, dict) or checksum_info.get("algorithm") != "sha256":
             raise FeatureDatasetIntegrityError(
@@ -179,14 +218,40 @@ class TrainingRepository:
                 "체크섬 파일 목록이 비어 있거나 올바른 형식이 아닙니다.",
                 code="FEATURE_DATASET_INTEGRITY_ERROR",
             )
-        for req_name in ("features.npy", "labels.npy", "feature_columns.json"):
+
+        for req_name in ("features.npy", "labels.npy", "feature_columns.json", "row_metadata.json"):
             if req_name not in declared_files:
                 raise FeatureDatasetIntegrityError(
                     f"필수 파일 '{req_name}'의 체크섬이 선언되지 않았습니다.",
                     code="FEATURE_DATASET_INTEGRITY_ERROR",
                 )
+
+        bundle_dir_resolved = bundle_dir.resolve()
         for fname, expected_hash in declared_files.items():
-            fpath = bundle_dir / fname
+            if not isinstance(fname, str) or not fname:
+                raise FeatureDatasetIntegrityError("체크섬 파일 이름이 올바르지 않습니다.", code="FEATURE_DATASET_INTEGRITY_ERROR")
+
+            # Check rules: no absolute path, no .., no slashes, must be in allowlist
+            if Path(fname).is_absolute() or ".." in fname or "/" in fname or "\\" in fname:
+                raise FeatureDatasetIntegrityError(
+                    f"체크섬 파일 경로에 유효하지 않은 문자나 상위/하위 경로가 포함되어 있습니다: {fname!r}",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+            if fname not in ALLOWED_FEATURE_BUNDLE_FILES:
+                raise FeatureDatasetIntegrityError(
+                    f"허용되지 않은 체크섬 대상 파일명입니다: {fname!r}",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+
+            fpath = (bundle_dir / fname).resolve()
+            try:
+                fpath.relative_to(bundle_dir_resolved)
+            except ValueError:
+                raise FeatureDatasetIntegrityError(
+                    f"체크섬 파일 경로가 번들 루트를 벗어납니다: {fname!r}",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+
             if not fpath.is_file():
                 raise FeatureDatasetIntegrityError(
                     f"체크섬 검증 대상 파일 '{fname}'이 존재하지 않습니다.",
@@ -350,6 +415,74 @@ class TrainingRepository:
         tmp_file.replace(pointer_file)
         return pointer_file
 
+    def get_active_model_pointer(self, model_id: str) -> dict[str, Any] | None:
+        """Retrieve active model version info from latest.json if present."""
+        local_root = self._resolve_local_artifact_root()
+        pointer_file = local_root / model_id / "latest.json"
+        if not pointer_file.is_file():
+            return None
+        try:
+            with open(pointer_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "latest_version" in data:
+                return data
+            return None
+        except Exception:
+            return None
+
+    def activate_model_version(self, base_model: str, model_version: str) -> dict[str, Any]:
+        """Strictly validate and atomically activate a published model version pointer."""
+        if not base_model or ".." in base_model or "/" in base_model or "\\" in base_model:
+            raise ModelArtifactIntegrityError(f"유효하지 않은 base_model입니다: {base_model!r}")
+        if not model_version or ".." in model_version or "/" in model_version or "\\" in model_version:
+            raise ModelArtifactIntegrityError(f"유효하지 않은 model_version입니다: {model_version!r}")
+
+        local_root = self._resolve_local_artifact_root()
+        target_dir = local_root / base_model / model_version
+        if not target_dir.is_dir():
+            raise ModelArtifactNotFoundError(
+                f"Model Artifact '{base_model}/{model_version}'을 찾을 수 없습니다."
+            )
+
+        # Validate full artifact package integrity
+        try:
+            validate_model_artifact_directory(target_dir)
+        except Exception as exc:
+            raise ModelArtifactIntegrityError(
+                f"Model Artifact '{base_model}/{model_version}' 무결성 검증 실패: {exc}"
+            ) from exc
+
+        # Check manifest contents
+        manifest_path = target_dir / "manifest.json"
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            if manifest.get("model_id") != base_model or manifest.get("model_version") != model_version:
+                raise ModelArtifactIntegrityError(
+                    f"manifest.json의 식별자({manifest.get('model_id')}/{manifest.get('model_version')})가 "
+                    f"요청({base_model}/{model_version})과 일치하지 않습니다."
+                )
+        except ModelArtifactIntegrityError:
+            raise
+        except Exception as exc:
+            raise ModelArtifactIntegrityError(f"manifest.json 파싱 실패: {exc}") from exc
+
+        prev_pointer = self.get_active_model_pointer(base_model)
+        prev_version = prev_pointer.get("latest_version") if prev_pointer else None
+
+        # Atomically update pointer
+        try:
+            self.update_latest_pointer(base_model, model_version, target_dir)
+        except Exception as exc:
+            raise ModelArtifactPublishFailedError(f"latest.json 포인터 갱신 실패: {exc}") from exc
+
+        return {
+            "base_model": base_model,
+            "previous_model_version": prev_version,
+            "active_model_version": model_version,
+            "status": "activated",
+        }
+
     def publish_model_artifact(
         self,
         *,
@@ -369,7 +502,7 @@ class TrainingRepository:
         model_runtime: dict[str, Any] | None = None,
         extra_files: dict[str, Path] | None = None,
     ) -> Path:
-        """Atomically publish immutable Model Artifact package, validate it, and update active version pointer."""
+        """Atomically publish immutable Model Artifact package and validate it."""
         local_root = self._resolve_local_artifact_root()
         target_dir = local_root / model_id / model_version
         if target_dir.exists():
@@ -396,12 +529,8 @@ class TrainingRepository:
                 model_runtime=model_runtime,
                 extra_files={k: str(v) for k, v in (extra_files or {}).items()},
             )
-            # 1. Validate output package
+            # Validate output package
             validate_model_artifact_directory(artifact_path)
-
-            # 2. Atomically update latest active version pointer
-            self.update_latest_pointer(model_id, model_version, Path(artifact_path))
-
             return artifact_path
         except FileExistsError as exc:
             raise ModelArtifactConflictError(str(exc)) from exc

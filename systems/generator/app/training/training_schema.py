@@ -17,6 +17,10 @@ class TrainingRequest(BaseModel):
         description="불변 Feature Dataset 식별자 (예: feature-dataset-c3d4e5f678901234)",
         examples=["feature-dataset-c3d4e5f678901234"],
     )
+    activation_policy: Literal["latest", "manual"] = Field(
+        default="latest",
+        description="학습 성공 후 Model Artifact 활성화 정책 (기본값: latest)",
+    )
 
     @field_validator("feature_dataset_version")
     @classmethod
@@ -35,6 +39,14 @@ class ModelResultItem(BaseModel):
     model_id: str
     model_version: str
     artifact_uri: str
+    activation_status: Literal["activated", "published_only", "activation_failed"] = Field(
+        default="activated",
+        description="Model Artifact 활성화 상태",
+    )
+    active_model_version: str | None = Field(
+        default=None,
+        description="현재 활성화된 모델 버전",
+    )
 
 
 class FailedModelItem(BaseModel):
@@ -50,3 +62,17 @@ class TrainingResponse(BaseModel):
     feature_dataset_version: str
     results: list[ModelResultItem] = Field(default_factory=list)
     failed_models: list[FailedModelItem] = Field(default_factory=list)
+
+
+class ModelActivationResponse(BaseModel):
+    base_model: str
+    previous_model_version: str | None = None
+    active_model_version: str
+    status: Literal["activated"] = "activated"
+
+
+class ActiveModelResponse(BaseModel):
+    base_model: str
+    active_model_version: str
+    artifact_uri: str
+    updated_at: str

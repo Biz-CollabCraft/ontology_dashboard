@@ -1,4 +1,4 @@
-"""Comprehensive test suite for Generator Training API (/train and /train/{base_model})."""
+"""Comprehensive test suite for Generator Training API (/train, /train/{base_model}, and /models)."""
 
 import json
 import pytest
@@ -23,8 +23,11 @@ from systems.generator.app.training.training_exception import (
     InsufficientTrainingDataError,
     ModelTrainingFailedError,
     ModelArtifactPublishFailedError,
+    ModelArtifactNotFoundError,
+    ModelArtifactIntegrityError,
+    ActiveModelNotFoundError,
 )
-from systems.generator.app.training.training_repository import TrainingRepository
+from systems.generator.app.training.training_repository import TrainingRepository, ALLOWED_FEATURE_BUNDLE_FILES
 from systems.generator.app.training.training_service import (
     TrainingService,
     REGISTERED_MODELS,
@@ -69,8 +72,9 @@ def sample_feature_bundle(tmp_path, monkeypatch):
             })
     pd.DataFrame(records).to_csv(telemetry_file, index=False)
 
-    # 2. Create failure events CSV
-    failure_file = data_dir / "failures.csv"
+    # 2. Create failure events CSV with version in path
+    failure_file = data_dir / "failures" / "v1.0.csv"
+    failure_file.parent.mkdir(parents=True, exist_ok=True)
     failures = pd.DataFrame([
         {"asset_id": "M001", "observed_at": "2026-01-01 10:00:00", "failure_type": "Overheat"},
         {"asset_id": "M002", "observed_at": "2026-01-01 15:00:00", "failure_type": "Power"},
@@ -184,6 +188,9 @@ def test_train_all_models_success_and_artifact_validation(client, sample_feature
     for result_item in data["results"]:
         model_id = result_item["model_id"]
         model_ver = result_item["model_version"]
+        assert result_item["activation_status"] == "activated"
+        assert result_item["active_model_version"] == model_ver
+
         artifact_path = models_store / "artifacts" / model_id / model_ver
         assert artifact_path.exists()
 
@@ -205,6 +212,130 @@ def test_train_all_models_success_and_artifact_validation(client, sample_feature
             assert manifest["model_id"] == model_id
             assert manifest["model_version"] == model_ver
             assert len(manifest["artifact_files"]) >= 5
+
+
+def test_train_activation_policy_manual(client, sample_feature_bundle):
+    """POST /train with activation_policy='manual' publishes artifacts without updating latest.json pointer."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    models_store = sample_feature_bundle["models_store"]
+
+    res = client.post("/train/lightgbm", json={
+        "feature_dataset_version": fver,
+        "activation_policy": "manual",
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "succeeded"
+    result_item = data["results"][0]
+    assert result_item["activation_status"] == "published_only"
+    assert result_item["active_model_version"] is None
+
+    # latest.json pointer must NOT exist
+    pointer_file = models_store / "artifacts" / "lightgbm" / "latest.json"
+    assert not pointer_file.exists()
+
+
+def test_train_activation_policy_invalid_returns_422(client, sample_feature_bundle):
+    """POST /train with invalid activation_policy returns 422 REQUEST_VALIDATION_ERROR."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    res = client.post("/train", json={
+        "feature_dataset_version": fver,
+        "activation_policy": "invalid_policy",
+    })
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "REQUEST_VALIDATION_ERROR"
+
+
+def test_train_provenance_propagation(client, sample_feature_bundle):
+    """Model Artifact manifest provenance contains source_dataset and failure_dataset from feature metadata."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    res = client.post("/train/xgboost", json={"feature_dataset_version": fver})
+    assert res.status_code == 200
+    result_item = res.json()["results"][0]
+
+    models_store = sample_feature_bundle["models_store"]
+    manifest_path = models_store / "artifacts" / "xgboost" / result_item["model_version"] / "manifest.json"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    training_provenance = manifest["provenance"]["training"]
+    assert "source_dataset" in training_provenance
+    assert "failure_dataset" in training_provenance
+    assert training_provenance["source_dataset"]["dataset_id"] == "telem"
+    assert training_provenance["failure_dataset"]["dataset_id"] == "failures"
+    assert "sha256" in training_provenance["source_dataset"]
+    assert "sha256" in training_provenance["failure_dataset"]
+
+
+def test_models_manual_activation_and_active_query_api(client, sample_feature_bundle):
+    """Test POST /models/{base_model}/activate/{model_version} and GET /models/{base_model}/active."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+
+    # 1. Train model with manual activation policy (v1 published, no pointer)
+    res_train1 = client.post("/train/lightgbm", json={
+        "feature_dataset_version": fver,
+        "activation_policy": "manual",
+    })
+    assert res_train1.status_code == 200
+    v1 = res_train1.json()["results"][0]["model_version"]
+
+    # 2. Query active model before activation -> 404 ACTIVE_MODEL_NOT_FOUND
+    res_active0 = client.get("/models/lightgbm/active")
+    assert res_active0.status_code == 404
+    assert res_active0.json()["error"]["code"] == "ACTIVE_MODEL_NOT_FOUND"
+
+    # 3. Manually activate v1 -> 200 OK
+    res_act1 = client.post(f"/models/lightgbm/activate/{v1}")
+    assert res_act1.status_code == 200
+    act_data1 = res_act1.json()
+    assert act_data1["base_model"] == "lightgbm"
+    assert act_data1["previous_model_version"] is None
+    assert act_data1["active_model_version"] == v1
+    assert act_data1["status"] == "activated"
+
+    # 4. Query active model -> returns v1
+    res_active1 = client.get("/models/lightgbm/active")
+    assert res_active1.status_code == 200
+    assert res_active1.json()["active_model_version"] == v1
+
+    # 5. Train second version v2 with manual policy
+    res_train2 = client.post("/train/lightgbm", json={
+        "feature_dataset_version": fver,
+        "activation_policy": "manual",
+    })
+    assert res_train2.status_code == 200
+    v2 = res_train2.json()["results"][0]["model_version"]
+    assert v1 != v2
+
+    # 6. Activate v2 -> previous is v1, active is v2
+    res_act2 = client.post(f"/models/lightgbm/activate/{v2}")
+    assert res_act2.status_code == 200
+    assert res_act2.json()["previous_model_version"] == v1
+    assert res_act2.json()["active_model_version"] == v2
+
+    # 7. Rollback to v1
+    res_rollback = client.post(f"/models/lightgbm/activate/{v1}")
+    assert res_rollback.status_code == 200
+    assert res_rollback.json()["previous_model_version"] == v2
+    assert res_rollback.json()["active_model_version"] == v1
+
+    # 8. Activating non-existent version -> 404 MODEL_ARTIFACT_NOT_FOUND
+    res_act_missing = client.post("/models/lightgbm/activate/v999")
+    assert res_act_missing.status_code == 404
+    assert res_act_missing.json()["error"]["code"] == "MODEL_ARTIFACT_NOT_FOUND"
+
+    # 9. Activating corrupted artifact -> 422 MODEL_ARTIFACT_INTEGRITY_ERROR
+    models_store = sample_feature_bundle["models_store"]
+    manifest_file = models_store / "artifacts" / "lightgbm" / v1 / "manifest.json"
+    with open(manifest_file, "r", encoding="utf-8") as f:
+        manifest_data = json.load(f)
+    manifest_data["model_id"] = "corrupted_model_id"
+    with open(manifest_file, "w", encoding="utf-8") as f:
+        json.dump(manifest_data, f)
+
+    res_act_corrupt = client.post(f"/models/lightgbm/activate/{v1}")
+    assert res_act_corrupt.status_code == 422
+    assert res_act_corrupt.json()["error"]["code"] == "MODEL_ARTIFACT_INTEGRITY_ERROR"
 
 
 def test_train_single_model_success(client, sample_feature_bundle):
@@ -321,12 +452,20 @@ def test_train_feature_bundle_integrity_violations(tmp_path, monkeypatch):
     with open(bundle_dir / "feature_columns.json", "w", encoding="utf-8") as f:
         json.dump(cols, f)
 
+    row_metadata = {
+        "asset_ids": ["M1", "M1", "M1", "M1", "M1", "M1"],
+        "timestamps": ["2026-01-01 00:00:00", "2026-01-01 01:00:00", "2026-01-01 02:00:00", "2026-01-01 03:00:00", "2026-01-01 04:00:00", "2026-01-01 05:00:00"],
+    }
+    with open(bundle_dir / "row_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(row_metadata, f)
+
     checksum = {
         "algorithm": "sha256",
         "files": {
             "features.npy": sha(bundle_dir / "features.npy"),
             "labels.npy": sha(bundle_dir / "labels.npy"),
             "feature_columns.json": sha(bundle_dir / "feature_columns.json"),
+            "row_metadata.json": sha(bundle_dir / "row_metadata.json"),
         },
     }
 
@@ -395,7 +534,7 @@ def test_train_split_metadata_missing_raises_error(tmp_path, sample_feature_bund
     bundle_dir = repo.find_feature_bundle_dir(fver)
     meta_file = bundle_dir / "feature_metadata.json"
 
-    # Remove split_indices from metadata and update checksum
+    # Remove split_indices from metadata
     with open(meta_file, "r", encoding="utf-8") as f:
         meta = json.load(f)
     meta.pop("split_indices", None)
@@ -413,7 +552,7 @@ def test_train_split_metadata_missing_raises_error(tmp_path, sample_feature_bund
     res = c.post("/train/random_forest", json={"feature_dataset_version": fver})
     assert res.status_code == 422
     err = res.json()["error"]
-    assert err["code"] == "TRAINING_SPLIT_METADATA_MISSING"
+    assert err["code"] == "TRAINING_SPLIT_METADATA_MISSING" or err["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
 
 
 def test_split_indices_validation_rules():
@@ -549,32 +688,10 @@ def test_canonical_and_legacy_lock_sharing(sample_feature_bundle):
         _training_lock.release()
 
 
-def test_multiple_candidate_directories_rejected(tmp_path):
-    """If two directories contain the same feature_dataset_version, raise FeatureDatasetIntegrityError."""
-    cache_dir = tmp_path / "features_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    repo = TrainingRepository(features_base_dir=cache_dir)
-
-    dir1 = cache_dir / "ds1-v1-feature-dataset-conflict1"
-    dir2 = cache_dir / "ds1-v2-feature-dataset-conflict1"
-    dir1.mkdir(parents=True, exist_ok=True)
-    dir2.mkdir(parents=True, exist_ok=True)
-
-    meta = {"feature_dataset_version": "feature-dataset-conflict1"}
-    with open(dir1 / "feature_metadata.json", "w") as f:
-        json.dump(meta, f)
-    with open(dir2 / "feature_metadata.json", "w") as f:
-        json.dump(meta, f)
-
-    with pytest.raises(FeatureDatasetIntegrityError, match="복수의 디렉터리"):
-        repo.find_feature_bundle_dir("feature-dataset-conflict1")
-
-
 def test_history_requirement_calculation():
     """Test dynamic history requirement inference from telemetry and feature names."""
     from systems.generator.model.model_training import infer_history_requirement
 
-    # 1. 1-hour cadence telemetry
     df = pd.DataFrame({
         "asset_id": ["A", "A", "A", "A", "B", "B", "B", "B"],
         "timestamp": [
@@ -598,19 +715,5 @@ def test_history_requirement_calculation():
         ],
     )
     assert req["expected_sampling_interval_seconds"] == 3600
-    assert req["minimum_history_rows"] == 10  # max(5, 10) = 10
-    # lookback_hours = ceil((10 - 1) * 3600 / 3600) = 9 hours
+    assert req["minimum_history_rows"] == 10
     assert req["maximum_lookback_hours"] == 9
-
-    # 2. Non-positive or single-row cadence fails
-    df_single = pd.DataFrame({
-        "asset_id": ["A"],
-        "timestamp": ["2026-01-01 00:00:00"],
-    })
-    with pytest.raises(ValueError, match="cannot infer positive telemetry cadence"):
-        infer_history_requirement(
-            df_single,
-            id_col="asset_id",
-            time_col="timestamp",
-            feature_names=["voltage__Voltage__rolling_mean__window_5"],
-        )

@@ -31,12 +31,12 @@ systems/generator/
 │  │  ├─ label_schema_provider.py   # Label Schema 조회 및 prediction_task/horizon/anchor 검증기
 │  │  ├─ feature_repository.py# 불변 디렉터리 기반 NPY 및 메타데이터 원자적 Staging, Publish 및 재사용 무결성 검증
 │  │  └─ feature_exception.py # Feature 도메인 예외 계층
-│  └─ training/               # Training 도메인 (Feature Bundle 소비, 모델 학습, Model Artifact 발행)
+│  └─ training/               # Training 도메인 (Feature Bundle 소비, 모델 학습, Model Artifact 발행, 활성화)
 │     ├─ __init__.py
-│     ├─ training_router.py   # POST /train 및 POST /train/{base_model} HTTP 엔드포인트
-│     ├─ training_schema.py   # TrainingRequest, TrainingResponse, ModelResultItem, FailedModelItem
-│     ├─ training_service.py  # Bundle 검증, asset_time_split, 모델별 학습 격리, Artifact 발행 orchestration
-│     ├─ training_repository.py # Feature Bundle 로드/무결성 전수 검증, Model Artifact 불변 발행/검증
+│     ├─ training_router.py   # POST /train, POST /train/{base_model}, POST /models/.../activate, GET /models/.../active
+│     ├─ training_schema.py   # TrainingRequest, TrainingResponse, ModelResultItem, ModelActivationResponse, ActiveModelResponse
+│     ├─ training_service.py  # Bundle 검증, asset_time_split, 모델별 학습 격리, Artifact 발행 및 활성화 orchestration
+│     ├─ training_repository.py # Feature Bundle 로드/무결성 전수 검증, Model Artifact 불변 발행/검증, latest.json 관리
 │     └─ training_exception.py# Training 도메인 예외 계층
 ├─ extraction/                # [Compatibility Facade] 하위 호환 re-export 제공
 ├─ ontology_mapping/          # 온톨로지 매핑 도메인 (전역 캐시 오염 방지)
@@ -55,8 +55,10 @@ systems/generator/
 | GET | `/health` | Generator 데몬 상태 및 시스템 식별자 확인 | 완료 |
 | POST | `/extraction` | 데이터셋 분석 및 내용 기반 해시 Extraction Plan/Mapping 수립·검증·불변 영속화 | 완료 (1단계) |
 | POST | `/feature` | Extraction Plan/Mapping 및 명시적 Failure 데이터 소비, Feature·Label 생성 및 NPY/메타데이터 불변 발행 | 완료 (2단계) |
-| POST | `/train` | 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 | **완료 (3단계, Canonical API)** |
-| POST | `/train/{base_model}` | 지정된 개별 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 | **완료 (3단계, Canonical API)** |
+| POST | `/train` | 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 및 활성화 | **완료 (3단계, Canonical API)** |
+| POST | `/train/{base_model}` | 지정된 개별 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 및 활성화 | **완료 (3단계, Canonical API)** |
+| POST | `/models/{base_model}/activate/{model_version}` | 지정된 모델 버전을 수동 활성화하고 latest.json 포인터 갱신 | **완료 (활성화 제어 API)** |
+| GET | `/models/{base_model}/active` | 현재 활성화된 모델 버전 및 아티팩트 정보 조회 | **완료 (활성화 조회 API)** |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (단일 Lock 제어) | 기존 legacy 호환 API |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 Lock 제어) | 기존 legacy 호환 API |
 
@@ -71,7 +73,7 @@ systems/generator/
 ```text
 [1단계: POST /extraction]
   → 데이터셋 경로 보안 검증 (허용된 루트 내 상대경로, 절대경로/상위경로 거부)
-  → 데이터셋 분석
+  → 데이터셋 분석 및 Sensor 원본 SHA-256 해시 계산
   → Extraction Plan 생성·검증 (기존 파일 존재 시 무결성 검증 후 재사용)
   → Ontology Mapping 생성·검증 (전역 캐시 미오염 persist=False, 기존 파일 무결성 검증 후 재사용)
   → 내용 기반 해시(SHA-256) 버전 산출 (extraction-plan-<hash>, ontology-mapping-<hash>)
@@ -80,16 +82,18 @@ systems/generator/
         ↓
 
 [2단계: POST /feature]
+  → Sensor 원본 데이터셋 SHA-256 해시 일치 검증 (SOURCE_DATASET_INTEGRITY_ERROR)
   → Label Schema 실제 로드 및 검증 (prediction_task, horizon, anchor, positive_class)
   → 기존 Extraction Plan 및 Ontology Mapping 무결성 검증 및 조회
-  → 명시적 Failure 데이터셋(failure_dataset_id, failure_dataset_version) 연결 및 설비 ID 호환성 검증
+  → 명시적 Failure 데이터셋(버전 경로 고정, versionless fallback 배제) 연결 및 설비 ID 호환성 검증
   → 9대 계약 요소 SHA-256 지문(feature-dataset-<fingerprint>) 산출
   → 기존 Feature Bundle 존재 시 전체 4개 파일/차원/dtype/NaN 무결성 검증(FEATURE_DATASET_INTEGRITY_ERROR) 후 재사용
   → 원본 데이터 추출 (기존 label 컬럼 배제)
   → 시계열 Feature 계산 (build_features)
   → 공식 고장 이력 기반 Label 생성 (build_labels, positive 0건 및 결측치 fail-fast)
   → Feature Schema allowlist 검증 및 선언 순서 유지
-  → 불변 NPY 및 메타데이터 원자적 발행
+  → split_indices 및 row_metadata.json 검증 및 생성 (실패 시 TRAINING_SPLIT_METADATA_MISSING fail-fast)
+  → 체크섬 allowlist(ALLOWED_FEATURE_BUNDLE_FILES) 검증 및 불변 NPY 및 메타데이터 원자적 발행
 
         ↓
 
@@ -101,7 +105,7 @@ systems/generator/
   → 관측 주기 기반 동적 History Requirement 계산 (lookback, minimum history rows)
   → 등록 모델(lightgbm, xgboost, random_forest) 학습 및 평가 지표 산출 (모델별 실패 격리)
   → 불변 Model Artifact v1.0 패키지(manifest.json, model.joblib, schemas, metrics) 원자적 발행
-  → 발행 직후 validator 검증 및 성공 모델에 대한 latest.json 활성 포인터 원자적 갱신
+  → 발행 직후 validator 검증 및 activation_policy(latest/manual)에 따른 latest.json 활성 포인터 원자적 갱신
   → 모델별 결과 반환 (succeeded / partially_succeeded)
 ```
 

@@ -129,3 +129,43 @@ class ModelArtifactPublishFailedError(TrainingError):
         details: list[Any] | None = None,
     ) -> None:
         super().__init__(message=message, code=code, status_code=500, details=details)
+
+
+class ModelArtifactNotFoundError(TrainingError):
+    def __init__(
+        self,
+        message: str = "지정한 Model Artifact 버전을 찾을 수 없습니다.",
+        code: str = "MODEL_ARTIFACT_NOT_FOUND",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, status_code=404, details=details)
+
+
+class ModelArtifactIntegrityError(TrainingError):
+    def __init__(
+        self,
+        message: str = "Model Artifact 패키지 파일 또는 체크섬 무결성 검증에 실패했습니다.",
+        code: str = "MODEL_ARTIFACT_INTEGRITY_ERROR",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
+
+
+class ActiveModelNotFoundError(TrainingError):
+    def __init__(
+        self,
+        message: str = "해당 모델에 대해 활성화된 Model Artifact 버전(latest.json)이 존재하지 않습니다.",
+        code: str = "ACTIVE_MODEL_NOT_FOUND",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, status_code=404, details=details)
+
+
+class ModelActivationFailedError(TrainingError):
+    def __init__(
+        self,
+        message: str = "Model Artifact 활성화(pointer 갱신)에 실패했습니다.",
+        code: str = "MODEL_ACTIVATION_FAILED",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, status_code=500, details=details)
