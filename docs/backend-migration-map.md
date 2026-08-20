@@ -254,6 +254,7 @@ target이 실제로 존재하고 비어 있지 않아야 한다. `SPLIT` Source�
 | `predictive_maintenance_runtime/repository.py` | `systems/backend/app/diagnosis/ports.py`, `systems/backend/app/infra/db/diagnosis_runtime_repository.py` | `MIGRATED` |
 | `predictive_maintenance_runtime/service.py` | `systems/backend/app/diagnosis/runtime_service.py` | `MIGRATED` |
 | `product_result_evidence_projection.py` | `systems/backend/app/diagnosis/evidence_projection.py` | `MIGRATED` |
+| `routers/predictive_maintenance_runtime.py` | `systems/backend/app/diagnosis/diagnosis_router.py` | `MIGRATED` |
 
 `artifact_storage.py`의 object-storage driver/key 생성 책임과 `llm.py`의 provider 책임도
 각각 `app/infra/storage`와 `app/infra/llm`으로 분리됐지만, 두 legacy Source에는 아직

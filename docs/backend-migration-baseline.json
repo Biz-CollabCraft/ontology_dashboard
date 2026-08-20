@@ -115,7 +115,6 @@
     "routers/ontology.py",
     "routers/planner.py",
     "routers/platform.py",
-    "routers/predictive_maintenance_runtime.py",
     "routers/project3.py",
     "routers/role_workspaces.py",
     "routers/system.py",
@@ -1127,11 +1126,6 @@
       "source": "tests/test_predictive_maintenance_result_replay.py",
       "kind": "static_import",
       "target": "ontology_dashboard.predictive_maintenance_runtime"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_result_replay.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.routers.predictive_maintenance_runtime"
     },
     {
       "source": "tests/test_predictive_maintenance_runtime_capability.py",

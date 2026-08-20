@@ -24,6 +24,7 @@ def test_diagnosis_runtime_sources_are_physically_canonical() -> None:
         "predictive_maintenance_runtime/service.py",
         "product_result_evidence_projection.py",
         "adapters/prediction_repository.py",
+        "routers/predictive_maintenance_runtime.py",
     ):
         assert not (LEGACY / relative).exists(), relative
 
@@ -33,6 +34,7 @@ def test_diagnosis_runtime_sources_are_physically_canonical() -> None:
         "ports.py",
         "evidence_projection.py",
         "model_contracts.py",
+        "diagnosis_router.py",
     ):
         assert (APP_DIAGNOSIS / relative).is_file(), relative
 

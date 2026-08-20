@@ -686,7 +686,7 @@ _EXPLICIT_MODELS: dict[str, Any] = {
     "ontology_dashboard.routers.governance.governance_agent_run": GovernanceAgentRunDetail,
     "ontology_dashboard.routers.governance.retry_projection": ProjectionRetryResult,
     "ontology_dashboard.routers.project3.project3_status": Project3IntegrationSnapshot,
-    "ontology_dashboard.routers.predictive_maintenance_runtime.prediction_timeline": TimelineResponse,
+    "app.diagnosis.diagnosis_router.prediction_timeline": TimelineResponse,
     "ontology_dashboard.routers.modeling.modeling_contracts": ModelingContractsResponse,
     "ontology_dashboard.routers.modeling.approved_manifest_payload": ApprovedManifestResponse,
     "ontology_dashboard.routers.modeling.ingest_approved_manifest_draft": ManifestIngestionResponse,
@@ -737,9 +737,7 @@ _NO_CONTENT_ENDPOINTS = {
 }
 
 _BINARY_ENDPOINTS = {"ontology_dashboard.routers.exports.create_export"}
-_SSE_ENDPOINTS = {
-    "ontology_dashboard.routers.predictive_maintenance_runtime.replay_events"
-}
+_SSE_ENDPOINTS = {"app.diagnosis.diagnosis_router.replay_events"}
 
 
 def _safe_type_hints(target: Any) -> dict[str, Any]:
