@@ -288,6 +288,7 @@ jobs:
             '{kind:$kind, request_id:$request_id, prompt:$prompt}' \
             > /tmp/local-review-request.json
           if ! curl --fail-with-body --silent --show-error \
+            --retry 1 --retry-all-errors --retry-delay 2 --retry-max-time 90 \
             --connect-timeout 4 --max-time 220 \
             -H "Authorization: Bearer ${LOCAL_REVIEW_TOKEN}" \
             -H "Content-Type: application/json" \

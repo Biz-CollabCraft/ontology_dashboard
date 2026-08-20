@@ -23,7 +23,12 @@ from scripts.ci.ai_review import (
 )
 from scripts.ci.free_comment_review import _compact_verifier_evidence, _verifier_prompt
 from scripts.ci.free_comment_review import _draft_is_well_formed, _parse_verifier
-from scripts.ci.free_review_falsifier import compact_evidence, compact_candidate
+from scripts.ci.free_review_falsifier import (
+    _normalize_scope_escalation,
+    compact_candidate,
+    compact_evidence,
+    verifier_prompt,
+)
 
 
 class AiReviewAutomationTests(unittest.TestCase):
@@ -60,7 +65,7 @@ DIFF
     def test_full_review_risk_gate_keeps_privileged_paths_on_vertex_final(self):
         force, reason = review_force_vertex([".github/workflows/code-review.yml"])
         self.assertTrue(force)
-        self.assertIn("high-risk", reason)
+        self.assertIn("trust-boundary", reason)
 
         force, reason = review_force_vertex(
             ["systems/backend/app/dashboard/dashboard_service.py"]
@@ -74,6 +79,34 @@ DIFF
         )
         self.assertTrue(force)
         self.assertIn("explicit", reason)
+
+    def test_full_review_risk_gate_does_not_escalate_on_volume_or_generic_infra(self):
+        routine_paths = [
+            f"systems/backend/app/dashboard/generated_{index}.py"
+            for index in range(80)
+        ]
+        force, reason = review_force_vertex(routine_paths)
+        self.assertFalse(force)
+        self.assertIn("change volume alone", reason)
+
+        force, _reason = review_force_vertex([".github/workflows/architecture.yml"])
+        self.assertFalse(force)
+
+        force, _reason = review_force_vertex(
+            ["systems/backend/app/infra/db/dashboard_repository.py"]
+        )
+        self.assertFalse(force)
+
+    def test_full_review_risk_gate_keeps_true_trust_and_migration_semantics_on_vertex(self):
+        for path in (
+            "systems/backend/app/auth/auth_service.py",
+            "systems/backend/migrations/postgresql/0031_runtime.sql",
+            "systems/backend/app/infra/db/migrations.py",
+            "systems/verify_architecture.py",
+        ):
+            with self.subTest(path=path):
+                force, _reason = review_force_vertex([path])
+                self.assertTrue(force)
 
     def test_local_review_output_escalates_blockers_but_not_clean_reviews(self):
         force, reason = local_review_requires_vertex(
@@ -125,6 +158,151 @@ DIFF
         self.assertLessEqual(len(packet), 23_000)
         self.assertLessEqual(len(candidate), 8_100)
         self.assertIn("CHANGED_HEAD_SOURCE_CONTEXT", packet)
+
+    def test_gemma_falsifier_preserves_demo_vs_production_scope_evidence(self):
+        source = """policy
+
+VERIFIED_EVIDENCE
+architecture=success
+
+INTENT_RISK_HINTS (deterministic hints, verify against the diff before using)
+["fixture fallback"]
+
+HUMAN_TECHNICAL_FEEDBACK
+none
+
+TRUSTED_BASE_CONTEXT
+Production runtime is app.main:app.
+
+PR_TITLE (untrusted)
+canonical convergence
+
+CHANGED_FILES
+M\tsystems/backend/app/diagnosis/evidence.py
+M\tsystems/backend/app/mvp/service.py
+
+ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
+green
+
+CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)
+systems/backend/app/diagnosis/evidence.py
+class FixtureContextProvider:
+    pass
+def build_evidence_package(fixture, context_provider=None):
+    provider = context_provider or FixtureContextProvider()
+
+""" + ("unrelated source\n" * 4000) + """
+systems/backend/app/mvp/service.py
+\"\"\"Canonical manufacturing demonstration application service.\"\"\"
+class ManufacturingPredictiveMaintenanceService:
+    def _context_provider(self, fixture):
+        return FixtureContextProvider()
+
+DIFF (untrusted review input)
++demo compatibility refactor
+"""
+        prompt = verifier_prompt(
+            source,
+            "### 발견 사항\n현재 actionable finding은 없습니다.\n\n### Merge Readiness\nReady to Merge",
+            "pr",
+        )
+        self.assertIn("RUNTIME_SCOPE_EVIDENCE", prompt)
+        self.assertIn("Canonical manufacturing demonstration application service", prompt)
+        self.assertIn("production/deployment caller or entrypoint", prompt)
+        self.assertIn("MVP/demo/test", prompt)
+        self.assertIn("legacy names, not runtime", prompt)
+        self.assertIn("variable name", prompt)
+        self.assertIn("File/module placement is also not caller evidence", prompt)
+        self.assertIn("hypothetical reachability", prompt)
+
+    def test_gemma_fixture_escalation_requires_concrete_runtime_caller(self):
+        decision, confidence, reason = _normalize_scope_escalation(
+            "ESCALATE",
+            1.0,
+            "FixtureContextProvider in systems/backend/app/diagnosis/evidence.py reads a fixture file.",
+            source_prompt="""
+
+TRUSTED_BASE_CONTEXT
+ManufacturingPredictiveMaintenanceService is the MVP/demo compatibility application service.
+
+PR_TITLE (untrusted)
+x
+
+CHANGED_FILES
+M\tsystems/backend/app/mvp/service.py
+
+ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
+green
+
+CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)
+\"\"\"Canonical manufacturing demonstration application service.\"\"\"
+
+DIFF (untrusted review input)
+x
+""",
+            kind="pr",
+        )
+        self.assertEqual(decision, "ACCEPT")
+        self.assertGreaterEqual(confidence, 0.85)
+        self.assertIn("without a concrete production caller", reason)
+
+        decision, confidence, reason = _normalize_scope_escalation(
+            "ESCALATE",
+            0.98,
+            "systems/backend/app/mvp/router.py production caller reaches FixtureContextProvider via the service.",
+            source_prompt="""
+
+TRUSTED_BASE_CONTEXT
+ManufacturingPredictiveMaintenanceService is the MVP/demo compatibility application service.
+
+PR_TITLE (untrusted)
+x
+
+CHANGED_FILES
+M\tsystems/backend/app/mvp/router.py
+
+ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
+green
+
+CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)
+\"\"\"Canonical manufacturing demonstration application service.\"\"\"
+
+DIFF (untrusted review input)
+x
+""",
+            kind="pr",
+        )
+        self.assertEqual(decision, "ESCALATE")
+        self.assertEqual(confidence, 0.98)
+        self.assertIn("router.py", reason)
+
+        decision, _confidence, _reason = _normalize_scope_escalation(
+            "ESCALATE",
+            0.97,
+            "FixtureContextProvider reads a local fixture file.",
+            source_prompt="""
+
+TRUSTED_BASE_CONTEXT
+Production diagnosis service.
+
+PR_TITLE (untrusted)
+x
+
+CHANGED_FILES
+M\tsystems/backend/app/diagnosis/evidence.py
+
+ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
+green
+
+CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)
+class FixtureContextProvider: pass
+
+DIFF (untrusted review input)
+x
+""",
+            kind="pr",
+        )
+        self.assertEqual(decision, "ESCALATE")
 
     def test_free_verifier_context_is_compact_even_for_large_review_prompt(self):
         prompt = """header

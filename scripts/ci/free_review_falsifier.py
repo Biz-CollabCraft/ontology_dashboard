@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -26,6 +27,19 @@ VERIFIER_MODEL = "gemma-4-26b-a4b-it"
 VERIFIER_DISPLAY = "Gemma 4 26B A4B"
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 MIN_CONFIDENCE = 0.85
+SCOPE_LINE_RE = re.compile(
+    r"(?i)(fixture|demo|\bmvp\b|test|production|deployment|runtime|entrypoint|"
+    r"context_provider|build_evidence_package|resilientcontextprovider|fixturecontextprovider)"
+)
+CONCRETE_RUNTIME_CALLER_RE = re.compile(
+    r"(?i)(app\.main|main\.py|router\.py|runtime_router\.py|worker\.py|"
+    r"render_start|docker-compose|compose\.ya?ml|entrypoint|composition root|"
+    r"production caller|deployment caller)"
+)
+EXPLICIT_DEMO_BOUNDARY_RE = re.compile(
+    r"(?is)(?:demo|demonstration|\bmvp\b).{0,120}(?:boundary|compatibility|service)"
+    r"|(?:boundary|compatibility|service).{0,120}(?:demo|demonstration|\bmvp\b)"
+)
 
 
 def _request(model: str, api_key: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -92,13 +106,62 @@ def _section(text: str, start: str, end: str | None = None) -> str:
     return text[body_start:] if end_index < 0 else text[body_start:end_index]
 
 
+def _runtime_scope_evidence(source_prompt: str, kind: str) -> str:
+    """Extract caller/scope clues before the general evidence packet is sliced.
+
+    Large reviews often contain a fixture/demo helper near the start of changed
+    source while the caller that proves it is demo-only appears much later. A
+    plain prefix slice can therefore make a verifier invent production
+    reachability. Preserve a tiny, deterministic set of nearby lines that lets
+    Gemma distinguish demo/MVP compatibility code from deployment runtime.
+    """
+
+    if kind == "comment":
+        sources = (
+            _section(source_prompt, "TRUSTED_BASE_CONTEXT", "CHANGED_FILES"),
+            _section(source_prompt, "CHANGED_HEAD_SOURCE_CONTEXT", "DIFF"),
+            _section(source_prompt, "CHANGED_FILES", "CHANGED_HEAD_SOURCE_CONTEXT"),
+        )
+    elif kind == "pr":
+        sources = (
+            _section(source_prompt, "TRUSTED_BASE_CONTEXT", "PR_TITLE (untrusted)"),
+            _section(
+                source_prompt,
+                "CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)",
+                "DIFF (untrusted review input)",
+            ),
+            _section(
+                source_prompt,
+                "CHANGED_FILES",
+                "ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)",
+            ),
+        )
+    else:
+        raise ValueError(f"unsupported review kind: {kind}")
+
+    lines = "\n".join(part for part in sources if part).splitlines()
+    selected: list[str] = []
+    seen: set[int] = set()
+    for index, line in enumerate(lines):
+        if not SCOPE_LINE_RE.search(line):
+            continue
+        for nearby in range(max(0, index - 2), min(len(lines), index + 3)):
+            if nearby in seen:
+                continue
+            seen.add(nearby)
+            selected.append(lines[nearby])
+            if sum(len(item) + 1 for item in selected) >= 3_400:
+                return "\n".join(selected)[:3_500]
+    return "\n".join(selected)[:3_500]
+
+
 def compact_evidence(source_prompt: str, kind: str) -> str:
     """Build a verifier packet well below the observed ~16K free input TPM."""
 
     if kind == "comment":
         chunks = [
-            ("SOURCE", _section(source_prompt, "SOURCE", "PR"), 4_000),
-            ("PR", _section(source_prompt, "PR", "INTENT_RISK_HINTS (verify before relying on them)"), 2_500),
+            ("SOURCE", _section(source_prompt, "SOURCE", "PR"), 3_000),
+            ("PR", _section(source_prompt, "PR", "INTENT_RISK_HINTS (verify before relying on them)"), 2_000),
             (
                 "INTENT_RISK_HINTS",
                 _section(
@@ -106,16 +169,17 @@ def compact_evidence(source_prompt: str, kind: str) -> str:
                     "INTENT_RISK_HINTS (verify before relying on them)",
                     "TRUSTED_BASE_CONTEXT",
                 ),
-                2_000,
+                1_500,
             ),
-            ("TRUSTED_BASE_CONTEXT", _section(source_prompt, "TRUSTED_BASE_CONTEXT", "CHANGED_FILES"), 3_000),
-            ("CHANGED_FILES", _section(source_prompt, "CHANGED_FILES", "CHANGED_HEAD_SOURCE_CONTEXT"), 2_000),
+            ("TRUSTED_BASE_CONTEXT", _section(source_prompt, "TRUSTED_BASE_CONTEXT", "CHANGED_FILES"), 2_500),
+            ("CHANGED_FILES", _section(source_prompt, "CHANGED_FILES", "CHANGED_HEAD_SOURCE_CONTEXT"), 1_500),
+            ("RUNTIME_SCOPE_EVIDENCE", _runtime_scope_evidence(source_prompt, kind), 3_500),
             ("CHANGED_HEAD_SOURCE_CONTEXT", _section(source_prompt, "CHANGED_HEAD_SOURCE_CONTEXT", "DIFF"), 5_000),
-            ("DIFF", _section(source_prompt, "DIFF"), 5_000),
+            ("DIFF", _section(source_prompt, "DIFF"), 3_000),
         ]
     elif kind == "pr":
         chunks = [
-            ("VERIFIED_EVIDENCE", _section(source_prompt, "VERIFIED_EVIDENCE", "INTENT_RISK_HINTS (deterministic hints, verify against the diff before using)"), 3_500),
+            ("VERIFIED_EVIDENCE", _section(source_prompt, "VERIFIED_EVIDENCE", "INTENT_RISK_HINTS (deterministic hints, verify against the diff before using)"), 3_000),
             (
                 "INTENT_RISK_HINTS",
                 _section(
@@ -123,11 +187,12 @@ def compact_evidence(source_prompt: str, kind: str) -> str:
                     "INTENT_RISK_HINTS (deterministic hints, verify against the diff before using)",
                     "HUMAN_TECHNICAL_FEEDBACK",
                 ),
-                2_000,
+                1_500,
             ),
-            ("HUMAN_TECHNICAL_FEEDBACK", _section(source_prompt, "HUMAN_TECHNICAL_FEEDBACK", "TRUSTED_BASE_CONTEXT"), 2_500),
-            ("TRUSTED_BASE_CONTEXT", _section(source_prompt, "TRUSTED_BASE_CONTEXT", "PR_TITLE (untrusted)"), 3_500),
-            ("CHANGED_FILES", _section(source_prompt, "CHANGED_FILES", "ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)"), 2_000),
+            ("HUMAN_TECHNICAL_FEEDBACK", _section(source_prompt, "HUMAN_TECHNICAL_FEEDBACK", "TRUSTED_BASE_CONTEXT"), 2_000),
+            ("TRUSTED_BASE_CONTEXT", _section(source_prompt, "TRUSTED_BASE_CONTEXT", "PR_TITLE (untrusted)"), 3_000),
+            ("CHANGED_FILES", _section(source_prompt, "CHANGED_FILES", "ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)"), 1_500),
+            ("RUNTIME_SCOPE_EVIDENCE", _runtime_scope_evidence(source_prompt, kind), 3_500),
             (
                 "CHANGED_HEAD_SOURCE_CONTEXT",
                 _section(
@@ -137,7 +202,7 @@ def compact_evidence(source_prompt: str, kind: str) -> str:
                 ),
                 5_000,
             ),
-            ("DIFF", _section(source_prompt, "DIFF (untrusted review input)"), 4_000),
+            ("DIFF", _section(source_prompt, "DIFF (untrusted review input)"), 2_500),
         ]
     else:
         raise ValueError(f"unsupported review kind: {kind}")
@@ -192,6 +257,26 @@ Important falsification rule:
 - Missing evidence alone is not proof of a missed finding. ESCALATE for missing
   evidence only when the candidate makes a consequential positive claim that
   cannot be checked without it, or when supplied evidence directly conflicts.
+- The existence of a fixture/demo/test provider is NOT by itself evidence that
+  production runtime can reach it. Before escalating a fixture/demo fallback as
+  P0/P1/P2, identify a concrete production/deployment caller or entrypoint in
+  the supplied evidence. If the visible caller is explicitly an MVP/demo/test
+  compatibility boundary, treat that scope as authoritative unless other
+  supplied source proves production reachability.
+- Identifiers such as `fixture`, `demo`, or `test` are legacy names, not runtime
+  provenance. Do not infer that a dictionary/parameter is mock data merely from
+  its variable name. A fixture-leak finding needs a concrete data source or
+  fallback (for example a fixture file read, hard-coded demo payload, or a
+  production caller that selects a fixture provider).
+- File/module placement is also not caller evidence: being defined under
+  `app/diagnosis` (or another product package) does not prove an optional
+  fallback is reachable from the deployed runtime. For fixture/demo leakage,
+  require a concrete call/wiring chain from a production router, composition
+  root, worker, deployment entrypoint, or another supplied production caller.
+  If that chain is absent from the supplied evidence, do not escalate solely on
+  hypothetical reachability.
+- Conversely, if deployment/runtime source does reach a fixture fallback,
+  escalate it; do not let a demo label excuse an actual production caller.
 
 Otherwise ESCALATE. Require a concrete counterexample or a clearly identified
 unverifiable consequential claim; do not escalate on speculative possibilities.
@@ -229,6 +314,43 @@ def _parse_decision(text: str) -> tuple[str, float, str]:
     return decision, confidence, reason
 
 
+def _normalize_scope_escalation(
+    decision: str,
+    confidence: float,
+    reason: str,
+    *,
+    source_prompt: str = "",
+    kind: str = "pr",
+) -> tuple[str, float, str]:
+    """Reject a known class of speculative Gemma fixture escalations.
+
+    The falsifier is intentionally adversarial, but in shadow runs it treated
+    the mere presence of a fixture-backed helper inside ``app/diagnosis`` as
+    proof of production reachability. That defeats the caller-chain rule above
+    and creates expensive false escalations. For fixture/demo leakage only,
+    require the model's own reason to cite a concrete deployed caller surface.
+    High-risk paths are still independently forced through Vertex by the routing
+    policy, so this normalization only prevents a speculative free-model veto.
+    """
+
+    lower = reason.lower()
+    scope_claim = any(token in lower for token in ("fixture", "demo", "mock", "test data"))
+    scope_evidence = _runtime_scope_evidence(source_prompt, kind) if source_prompt else ""
+    explicit_demo_boundary = bool(EXPLICIT_DEMO_BOUNDARY_RE.search(scope_evidence))
+    if (
+        decision == "ESCALATE"
+        and scope_claim
+        and explicit_demo_boundary
+        and not CONCRETE_RUNTIME_CALLER_RE.search(reason)
+    ):
+        return (
+            "ACCEPT",
+            max(confidence, MIN_CONFIDENCE),
+            "ignored speculative fixture/demo reachability escalation without a concrete production caller",
+        )
+    return decision, confidence, reason
+
+
 def run(args: argparse.Namespace) -> None:
     api_key = os.getenv("GEMINI_FREE_API_KEY", "").strip()
     if not api_key:
@@ -249,6 +371,13 @@ def run(args: argparse.Namespace) -> None:
         raw = _request(VERIFIER_MODEL, api_key, payload)
         text, usage = _visible_text(raw)
         decision, confidence, reason = _parse_decision(text)
+        decision, confidence, reason = _normalize_scope_escalation(
+            decision,
+            confidence,
+            reason,
+            source_prompt=source_prompt,
+            kind=args.kind,
+        )
     except Exception as exc:
         raise SystemExit(f"free falsifier unavailable; use Vertex fallback: {exc}")
 
