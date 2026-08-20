@@ -146,6 +146,50 @@ def test_extraction_does_not_mutate_global_mapping_cache(client, sample_wide_csv
     assert fake_global_cache.read_text(encoding="utf-8") == orig_content
 
 
+def test_extraction_reuse_valid_and_reject_corrupted_plan_and_mapping(tmp_path):
+    """ExtractionRepository reuses valid plans/mappings and rejects corrupted/tampered files without overwriting."""
+    repo = ExtractionRepository(
+        base_dir=tmp_path / "plans",
+        mappings_dir=tmp_path / "mappings",
+    )
+
+    plan_data = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["colA", "colB"],
+        "id_column": "colA",
+        "duplicate_policy": "error",
+    }
+    mapping_data = {
+        "colB": {"target_ontology": "Voltage", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"}
+    }
+
+    # 1. Publish first time
+    plan_ver, _ = repo.publish_plan("ds1", "v1", plan_data)
+    map_ver, _ = repo.publish_mapping("ds1", "v1", mapping_data)
+
+    # 2. Re-publish valid -> returns same version and reuses cleanly
+    plan_ver2, _ = repo.publish_plan("ds1", "v1", plan_data)
+    map_ver2, _ = repo.publish_mapping("ds1", "v1", mapping_data)
+    assert plan_ver == plan_ver2
+    assert map_ver == map_ver2
+
+    # 3. Corrupt plan on disk (tampered content)
+    plan_file = repo.get_plan_path("ds1", "v1", plan_ver)
+    with open(plan_file, "w", encoding="utf-8") as f:
+        json.dump({"tampered": True, "structure_type": "invalid_type"}, f)
+
+    with pytest.raises(ExtractionPlanContractInvalidError):
+        repo.publish_plan("ds1", "v1", plan_data)
+
+    # 4. Corrupt mapping on disk (tampered content)
+    map_file = repo.get_mapping_path("ds1", "v1", map_ver)
+    with open(map_file, "w", encoding="utf-8") as f:
+        json.dump({"colB": {"invalid_format": True}}, f)
+
+    with pytest.raises(OntologyMappingContractInvalidError):
+        repo.publish_mapping("ds1", "v1", mapping_data)
+
+
 def test_extraction_long_format_success(client, sample_long_csv, monkeypatch):
     """POST /extraction on long format data plans roles and pivots successfully."""
     from systems.generator.app.extraction.extraction_planner import ExtractionPlanner

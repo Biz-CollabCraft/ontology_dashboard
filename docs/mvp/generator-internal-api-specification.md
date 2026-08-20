@@ -14,11 +14,16 @@
 ### 허용 범위
 - `GET /health` (데몬 상태 확인)
 - `POST /extraction` (데이터셋 분석 및 내용 기반 해시 Extraction Plan/Mapping 수립·검증·불변 영속화)
-- `POST /feature` (Extraction Plan/Mapping 소비, Feature·Label 생성 및 NPY 불변 발행)
-- `POST /train` (다중 모델 학습 및 Model Artifact 발행 - 후속 구현 대상)
-- `POST /internal/train` (파이프라인 최초 학습 실행, 단일 프로세스 Lock 하에 실행)
-- `POST /internal/retrain` (새 버전 재학습 실행, 기존 모델을 덮어쓰지 않고 새 버전으로 저장)
+- `POST /feature` (Extraction Plan/Mapping 및 명시적 Failure 데이터셋 소비, Feature·Label 생성 및 NPY 불변 발행)
+- `POST /train` (신규 canonical ML 학습 및 Model Artifact 발행 API - 후속 PR에서 구현)
+- `POST /internal/train` (기존 legacy 호환 API: 파이프라인 최초 학습 실행, 단일 프로세스 Lock 하에 실행)
+- `POST /internal/retrain` (기존 legacy 호환 API: 새 버전 재학습 실행, 기존 모델을 덮어쓰지 않고 새 버전으로 저장)
 - 학습 job 상태 또는 Model Artifact publish 상태(`published_artifacts`, `artifact_uri`, `has_any_published_model_artifact`, `run_id`) 조회
+
+> **학습 API 경로 상태 및 전환 원칙**:
+> - 신규 호출자는 향후 canonical API인 `POST /train` 계약을 사용해야 합니다.
+> - `POST /internal/train` 및 `POST /internal/retrain`은 현재 main 브랜치의 기존 기능 호환을 위한 레거시 경로이며, 후속 `/train` 구현 및 검증이 완료되기 전까지 유지됩니다.
+> - 세 경로를 장기적으로 영구 병행 운영하는 계약이 아니며, 이번 Feature 브랜치에서는 학습 API 코드를 변경하지 않습니다.
 
 ### 금지 범위
 - `POST /internal/predict`, `POST /internal/predict/file`
@@ -36,10 +41,10 @@
 |---|---|---|---|
 | GET | `/health` | 데몬 프로세스 상태 확인 | 완료 |
 | POST | `/extraction` | 데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·불변 영속화 (1단계) | 완료 |
-| POST | `/feature` | Extraction Plan/Mapping 소비, Feature·Label 생성 및 NPY/메타데이터 불변 발행 (2단계) | 완료 |
-| POST | `/train` | 다중 ML 모델 학습 및 Model Artifact 발행 | **후속 PR 대상 (미구현)** |
-| POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | 완료 |
-| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 완료 |
+| POST | `/feature` | Extraction Plan/Mapping 및 Failure 데이터 소비, Feature·Label 생성 및 NPY/메타데이터 불변 발행 (2단계) | 완료 |
+| POST | `/train` | 다중 ML 모델 학습 및 Model Artifact 발행 | **신규 canonical API (후속 PR 구현 대상)** |
+| POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | **기존 legacy 호환 API** |
+| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | **기존 legacy 호환 API** |
 
 ---
 
@@ -64,8 +69,9 @@
 > - `source_uri`는 `PATHS.data_dir` 또는 `PATHS.data_preprocessed` 내부의 상대경로만 허용되며 절대경로 및 traversal(`..`)은 `DATASET_PATH_NOT_ALLOWED` (422)로 거절됩니다.
 > - `dataset_id` 및 `dataset_version`은 `^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$` 정규식으로 검증됩니다.
 > - Plan과 Mapping은 canonical JSON에 대한 SHA-256 fingerprint 앞 16자리를 실제 식별 버전(`extraction-plan-<hash>`, `ontology-mapping-<hash>`)으로 독립 저장합니다.
+> - 기존 파일이 존재할 경우 내용 해시 및 스키마 무결성을 검증한 후 일치할 때만 재사용하며, 손상된 파일은 덮어쓰지 않고 에러를 반환합니다.
 > - `/extraction` 성공은 두 버전이 모두 정상 생성되어 응답에 반환된 경우를 의미합니다. Plan만 존재하면 `/feature` 단계는 거부됩니다.
-> - 매핑 생성 시 전역 `mapping_cache.json`을 수정하지 않습니다.
+> - 매핑 생성 시 전역 `mapping_cache.json`을 수정하지 않습니다 (`persist=False`).
 
 **요청 본문:**
 
@@ -108,12 +114,11 @@
 
 ### 4.3 `POST /feature`
 
-> **안전 원칙 및 Label Fail-Fast 정책**:
-> - `extraction_plan_version`(`^extraction-plan-[0-9a-f]{16}$`) 및 `mapping_version`(`^ontology-mapping-[0-9a-f]{16}$`)을 검증하고 파일 내용 해시 무결성을 교차 확인합니다.
-> - `feature_schema_version`으로 allowlist를 로드하고 Schema 선언 순서를 엄격히 유지합니다.
-> - 원본 데이터셋의 기존 `label` 컬럼을 신뢰하지 않고 공식 failure event 데이터셋을 기준으로 `[anchor - horizon, anchor)` 구간을 계산합니다.
-> - 필수 고장 데이터/컬럼 결측 시 조용한 0 채움 fallback 없이 즉시 실패(`FAILURE_DATA_NOT_READY`, `LABEL_CONTRACT_INVALID`, `LABEL_ANCHOR_NOT_FOUND`, `INSUFFICIENT_POSITIVE_SAMPLES`)합니다.
-> - 7대 계약 SHA-256 지문(`feature-dataset-{fingerprint}`) 디렉터리로 불변 발행하며 동일 버전 계약 불일치 시 409 `FEATURE_DATASET_CONFLICT`를 반환합니다 (`force` 덮어쓰기 파라미터 제거).
+> **안전 원칙, Failure 데이터 명시적 연결 및 Label Schema 검증**:
+> - `failure_dataset_id` 및 `failure_dataset_version`을 요청 본문에 필수 지정하여 telemetry 데이터와 명시적으로 매핑합니다 (이름에 failure/maint가 들어간 첫 파일 임의 선택 금지).
+> - `label_schema_version`으로 등록된 Label Schema를 실제 로드하고 `prediction_task`, `positive_class`, `prediction_horizon_hours`, `anchor_semantic` 등의 계약을 사전 검증합니다 (`LABEL_SCHEMA_MISMATCH`, 422).
+> - Feature Dataset fingerprint는 9개 계약 요소의 canonical JSON SHA-256 해시 지문(`feature-dataset-{fingerprint}`)으로 산출됩니다.
+> - 기존 Feature Bundle 디렉터리가 존재할 경우 필수 4개 파일(`features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`), 행/열 차원, shape, dtype, NaN/Inf 부재, `{0,1}` 라벨 값, 계약 및 지문 일치 여부를 전수 검증(`FEATURE_DATASET_INTEGRITY_ERROR`, 422)한 후 온전한 경우에만 재사용합니다 (손상된 번들 덮어쓰기 금지).
 
 **요청 본문:**
 
@@ -121,6 +126,8 @@
 {
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
+  "failure_dataset_id": "ai4i-failures",
+  "failure_dataset_version": "canonical-ai4i-failures-v1",
   "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
   "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
   "feature_schema_version": "ai4i-feature-v1",
@@ -139,6 +146,8 @@
   "status": "succeeded",
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
+  "failure_dataset_id": "ai4i-failures",
+  "failure_dataset_version": "canonical-ai4i-failures-v1",
   "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
   "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
   "feature_schema_version": "ai4i-feature-v1",
@@ -156,7 +165,7 @@
 
 ---
 
-### 4.4 `POST /internal/train` 및 `POST /internal/retrain`
+### 4.4 `POST /internal/train` 및 `POST /internal/retrain` (Legacy 호환용)
 
 **성공 응답 본문:**
 
@@ -201,7 +210,7 @@
 | 404 | `DATASET_NOT_FOUND` | 요청한 dataset_id 또는 source_uri 파일 부재 |
 | 404 | `EXTRACTION_PLAN_NOT_READY` | `/feature` 실행 전 필수 Extraction Plan 파일 부재 |
 | 404 | `ONTOLOGY_MAPPING_NOT_READY` | `/feature` 실행 전 필수 Ontology Mapping 파일 부재 |
-| 404 | `FAILURE_DATA_NOT_READY` | 학습 라벨링에 필요한 고장 이력 데이터 부재 또는 비어 있음 |
+| 404 | `FAILURE_DATA_NOT_READY` | 요청한 Failure 데이터셋 파일 부재 또는 비어 있음 |
 | 405 | `METHOD_NOT_ALLOWED` | 허용되지 않은 HTTP 메서드 호출 |
 | 409 | `FEATURE_DATASET_CONFLICT` | 동일 Feature Dataset 버전 디렉터리가 이미 존재하나 계약 내용이 불일치함 |
 | 422 | `DATASET_PATH_NOT_ALLOWED` | source_uri가 절대경로, 상위경로 탐색(..) 또는 허용 루트 밖 경로임 |
@@ -211,11 +220,13 @@
 | 422 | `EXTRACTION_PLAN_CONTRACT_INVALID` | Extraction Plan 파일 손상 또는 스키마 위반 |
 | 422 | `ONTOLOGY_MAPPING_CONTRACT_INVALID` | Ontology Mapping 파일 손상 또는 스키마 위반 |
 | 422 | `FEATURE_SCHEMA_MISMATCH` | Feature Schema 미존재, allowlist 컬럼 부재, 누수 컬럼 포함 등 |
+| 422 | `LABEL_SCHEMA_MISMATCH` | Label Schema 미존재, 버전 불일치, horizon/positive_class/anchor 불일치 |
 | 422 | `LABEL_CONTRACT_INVALID` | 라벨 컬럼/ID/timestamp 부재 또는 라벨 값이 `{0, 1}` 범위를 벗어남 |
 | 422 | `LABEL_ANCHOR_NOT_FOUND` | 고장 데이터에서 anchor(failure_point)를 찾을 수 없거나 전체 결측치(NaT)임 |
 | 422 | `INSUFFICIENT_POSITIVE_SAMPLES` | 고장 예측 구간 내 Positive 고장 샘플 0건 |
 | 422 | `INSUFFICIENT_TRAINING_DATA` | 유효 데이터 행 수 0건 등 학습 데이터 부족 |
 | 422 | `NPY_VALIDATION_ERROR` | NPY 행렬 shape, dtype, NaN/Inf 불일치 |
+| 422 | `FEATURE_DATASET_INTEGRITY_ERROR` | 기존 Feature Dataset 번들 필수 파일 누락, 손상, shape/dtype 불일치 등 |
 | 500 | `EXTRACTION_PLAN_PUBLISH_ERROR` | 추출 계획 또는 온톨로지 매핑 파일 저장 실패 |
 | 500 | `NPY_PUBLISH_ERROR` | NPY 산출물 디렉터리 저장 실패 |
 | 500 | `INTERNAL_SERVER_ERROR` | 처리 중 발생한 예기치 않은 서버 내부 오류 |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
@@ -15,6 +16,7 @@ from systems.generator.app.feature.feature_exception import (
     NpyValidationError,
     NpyPublishError,
     FeatureConflictError,
+    FeatureDatasetIntegrityError,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,168 @@ class FeatureRepository:
                 code="INVALID_ARTIFACT_PATH",
             ) from exc
         return target
+
+    def validate_feature_bundle(
+        self,
+        dataset_id: str,
+        dataset_version: str,
+        feature_dataset_version: str,
+        expected_contract: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Strictly validate the complete integrity of an existing feature bundle before reuse."""
+        target_dir = self.get_feature_dir(dataset_id, dataset_version, feature_dataset_version)
+        if not target_dir.exists():
+            raise FeatureDatasetIntegrityError(
+                f"Feature Dataset 디렉터리가 존재하지 않습니다: {target_dir}",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        features_path = target_dir / "features.npy"
+        labels_path = target_dir / "labels.npy"
+        cols_path = target_dir / "feature_columns.json"
+        meta_path = target_dir / "feature_metadata.json"
+
+        # 1. Check all 4 required files exist
+        for required_path in (features_path, labels_path, cols_path, meta_path):
+            if not required_path.is_file():
+                raise FeatureDatasetIntegrityError(
+                    f"Feature Bundle 필수 파일이 누락되었습니다: {required_path.name}",
+                    code="FEATURE_DATASET_INTEGRITY_ERROR",
+                )
+
+        # 2. Check metadata parseable
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+        except Exception as exc:
+            raise FeatureDatasetIntegrityError(
+                f"feature_metadata.json 파싱 실패: {exc}",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            ) from exc
+
+        # 3. Check columns parseable
+        try:
+            with open(cols_path, "r", encoding="utf-8") as f:
+                feature_columns = json.load(f)
+        except Exception as exc:
+            raise FeatureDatasetIntegrityError(
+                f"feature_columns.json 파싱 실패: {exc}",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            ) from exc
+
+        if not isinstance(feature_columns, list) or not feature_columns:
+            raise FeatureDatasetIntegrityError(
+                "feature_columns.json이 비어 있거나 올바른 리스트 형식이 아닙니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 4. Check NPY files loadable
+        try:
+            X = np.load(features_path, allow_pickle=False)
+        except Exception as exc:
+            raise FeatureDatasetIntegrityError(
+                f"features.npy 로드 실패: {exc}",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            ) from exc
+
+        try:
+            y = np.load(labels_path, allow_pickle=False)
+        except Exception as exc:
+            raise FeatureDatasetIntegrityError(
+                f"labels.npy 로드 실패: {exc}",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            ) from exc
+
+        # 5. Dimension and shape checks
+        if X.ndim != 2:
+            raise FeatureDatasetIntegrityError(
+                f"features.npy는 2차원 행렬이어야 합니다 (현재: {X.ndim}D, shape={X.shape}).",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if y.ndim != 1:
+            raise FeatureDatasetIntegrityError(
+                f"labels.npy는 1차원 배열이어야 합니다 (현재: {y.ndim}D, shape={y.shape}).",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if X.shape[0] != y.shape[0]:
+            raise FeatureDatasetIntegrityError(
+                f"X 행 수({X.shape[0]})와 y 행 수({y.shape[0]})가 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if X.shape[1] != len(feature_columns):
+            raise FeatureDatasetIntegrityError(
+                f"X 열 수({X.shape[1]})와 feature_columns 수({len(feature_columns)})가 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 6. Feature names order and metadata match
+        if metadata.get("feature_columns") != feature_columns:
+            raise FeatureDatasetIntegrityError(
+                "feature_columns.json과 feature_metadata.json의 feature_columns 목록/순서가 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if metadata.get("row_count") != X.shape[0]:
+            raise FeatureDatasetIntegrityError(
+                f"metadata row_count({metadata.get('row_count')})가 실제 X 행 수({X.shape[0]})와 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if metadata.get("feature_count") != X.shape[1]:
+            raise FeatureDatasetIntegrityError(
+                f"metadata feature_count({metadata.get('feature_count')})가 실제 X 열 수({X.shape[1]})와 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 7. Dtype checks
+        if not np.issubdtype(X.dtype, np.floating):
+            raise FeatureDatasetIntegrityError(
+                f"features.npy의 dtype({X.dtype})이 부동소수점 형식이 아닙니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if not np.issubdtype(y.dtype, np.integer):
+            raise FeatureDatasetIntegrityError(
+                f"labels.npy의 dtype({y.dtype})이 정수 형식이 아닙니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 8. NaN / Inf / value checks
+        if not np.isfinite(X).all():
+            raise FeatureDatasetIntegrityError(
+                "features.npy에 NaN 또는 무한대(Inf) 값이 포함되어 있습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if not np.isfinite(y).all():
+            raise FeatureDatasetIntegrityError(
+                "labels.npy에 NaN 또는 무한대(Inf) 값이 포함되어 있습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if not set(np.unique(y)).issubset({0, 1}):
+            raise FeatureDatasetIntegrityError(
+                f"labels.npy에 {{0, 1}} 이외의 라벨 값이 포함되어 있습니다: {np.unique(y)}",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 9. Contract and version matches
+        if metadata.get("contract") != expected_contract:
+            raise FeatureDatasetIntegrityError(
+                "feature_metadata.json의 계약이 요청 계약과 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+        if metadata.get("feature_dataset_version") != feature_dataset_version:
+            raise FeatureDatasetIntegrityError(
+                f"feature_metadata.json의 버전('{metadata.get('feature_dataset_version')}')이 경로 버전('{feature_dataset_version}')과 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        # 10. Recalculate fingerprint from expected_contract
+        canonical_json = json.dumps(expected_contract, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        expected_ver = f"feature-dataset-{hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()[:16]}"
+        if expected_ver != feature_dataset_version:
+            raise FeatureDatasetIntegrityError(
+                f"요청 계약으로 재계산한 버전('{expected_ver}')이 feature_dataset_version('{feature_dataset_version}')과 일치하지 않습니다.",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
+
+        return metadata
 
     def find_feature_outputs(
         self,
@@ -105,26 +269,16 @@ class FeatureRepository:
         if X.shape[0] == 0:
             raise NpyValidationError("Cannot publish empty feature dataset (row_count=0)")
 
-        # 2. Immutable existence check: never overwrite!
+        # 2. Immutable existence check with full validation before reuse: never overwrite!
         if target_dir.exists():
-            meta_path = target_dir / "feature_metadata.json"
-            if meta_path.exists():
-                try:
-                    with open(meta_path, "r", encoding="utf-8") as f:
-                        existing_meta = json.load(f)
-                    if (
-                        existing_meta.get("contract") == metadata.get("contract")
-                        and existing_meta.get("feature_dataset_version") == feature_dataset_version
-                    ):
-                        logger.info(f"[FeatureRepository] Target feature directory {target_dir} exists with exact contract match, returning existing bundle.")
-                        return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
-                except Exception:
-                    pass
-            # If target_dir exists but contract doesn't match or corrupted -> 409 conflict
-            raise FeatureConflictError(
-                f"동일한 Feature Dataset 디렉터리 '{target_dir.name}'가 이미 존재하지만 계약 또는 내용이 일치하지 않습니다. "
-                f"기존 산출물은 불변(immutable)이므로 덮어쓸 수 없습니다."
+            self.validate_feature_bundle(
+                dataset_id=dataset_id,
+                dataset_version=dataset_version,
+                feature_dataset_version=feature_dataset_version,
+                expected_contract=metadata.get("contract", {}),
             )
+            logger.info(f"[FeatureRepository] Target feature directory {target_dir} verified and exists with exact contract match, returning existing bundle.")
+            return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
 
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -166,7 +320,7 @@ class FeatureRepository:
         except Exception as exc:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
-            if isinstance(exc, (NpyValidationError, FeatureConflictError)):
+            if isinstance(exc, (NpyValidationError, FeatureConflictError, FeatureDatasetIntegrityError)):
                 raise
             logger.exception(f"[FeatureRepository] Failed to publish feature bundle: {exc}")
             raise NpyPublishError(f"Feature NPY 산출물 저장에 실패했습니다: {exc}") from exc

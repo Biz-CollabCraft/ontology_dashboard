@@ -21,6 +21,8 @@ def _validate_safe_identifier(val: str, field_name: str) -> str:
 class FeatureRequest(BaseModel):
     dataset_id: str = Field(..., min_length=1, max_length=128, description="Dataset identifier")
     dataset_version: str = Field(..., min_length=1, max_length=64, description="Dataset version string")
+    failure_dataset_id: str = Field(..., min_length=1, max_length=128, description="Failure events dataset identifier")
+    failure_dataset_version: str = Field(..., min_length=1, max_length=64, description="Failure events dataset version string")
     extraction_plan_version: str = Field(
         ...,
         pattern=PLAN_VERSION_PATTERN,
@@ -45,6 +47,16 @@ class FeatureRequest(BaseModel):
     @classmethod
     def validate_dataset_version(cls, v: str) -> str:
         return _validate_safe_identifier(v, "dataset_version")
+
+    @field_validator("failure_dataset_id")
+    @classmethod
+    def validate_failure_dataset_id(cls, v: str) -> str:
+        return _validate_safe_identifier(v, "failure_dataset_id")
+
+    @field_validator("failure_dataset_version")
+    @classmethod
+    def validate_failure_dataset_version(cls, v: str) -> str:
+        return _validate_safe_identifier(v, "failure_dataset_version")
 
     @field_validator("feature_schema_version")
     @classmethod
@@ -80,6 +92,8 @@ class FeatureResponse(BaseModel):
     status: Literal["succeeded", "failed"] = "succeeded"
     dataset_id: str
     dataset_version: str
+    failure_dataset_id: str
+    failure_dataset_version: str
     extraction_plan_version: str
     mapping_version: str
     feature_schema_version: str

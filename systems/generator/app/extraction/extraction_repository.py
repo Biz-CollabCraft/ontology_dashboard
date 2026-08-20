@@ -45,6 +45,25 @@ def compute_mapping_version(mapping_data: dict[str, Any]) -> str:
     return f"ontology-mapping-{compute_mapping_fingerprint(mapping_data)}"
 
 
+def validate_extraction_plan_payload(plan_data: dict[str, Any]) -> None:
+    """Validate structure, fields, and policy pairs of Extraction Plan."""
+    if not isinstance(plan_data, dict) or not plan_data:
+        raise ExtractionPlanContractInvalidError("Extraction Plan이 비어 있거나 올바른 dict 구조가 아닙니다.")
+    struct_type = plan_data.get("structure_type")
+    if struct_type not in ("tabular_column_as_attribute", "tabular_row_as_attribute", "wide_pivot"):
+        raise ExtractionPlanContractInvalidError(f"유효하지 않은 structure_type입니다: '{struct_type}'")
+    selected_cols = plan_data.get("selected_columns")
+    if not isinstance(selected_cols, list):
+        raise ExtractionPlanContractInvalidError(f"selected_columns가 list 형식이 아닙니다: {type(selected_cols)}")
+    dup_policy = plan_data.get("duplicate_policy", "error")
+    if dup_policy not in ("error", "aggregate"):
+        raise ExtractionPlanContractInvalidError(f"유효하지 않은 duplicate_policy입니다: '{dup_policy}'")
+    if dup_policy == "aggregate" and not plan_data.get("aggregation"):
+        raise ExtractionPlanContractInvalidError("duplicate_policy가 'aggregate'일 때 aggregation 함수가 필수입니다.")
+    if dup_policy == "error" and plan_data.get("aggregation"):
+        raise ExtractionPlanContractInvalidError("duplicate_policy가 'error'일 때 aggregation 함수를 지정할 수 없습니다.")
+
+
 def validate_ontology_mapping_payload(
     mapping_data: dict[str, Any],
     extracted_columns: Optional[list[str]] = None,
@@ -131,7 +150,7 @@ class ExtractionRepository:
             return f"models_store/cache/extraction_plans/{dataset_id}/{dataset_version}/{extraction_plan_version}.json"
 
     def find_plan(self, dataset_id: str, dataset_version: str, extraction_plan_version: str) -> dict[str, Any]:
-        """Find and strictly verify content hash integrity of Extraction Plan."""
+        """Find and strictly verify content hash integrity and schema of Extraction Plan."""
         path = self.get_plan_path(dataset_id, dataset_version, extraction_plan_version)
         if not path.exists():
             raise ExtractionPlanNotReadyError(
@@ -145,6 +164,8 @@ class ExtractionRepository:
         except Exception as exc:
             raise ExtractionPlanContractInvalidError(f"Extraction Plan 파일({path}) 파싱에 실패했습니다: {exc}") from exc
 
+        validate_extraction_plan_payload(data)
+
         # Verify content hash matches version
         actual_ver = compute_plan_version(data)
         if actual_ver != extraction_plan_version:
@@ -155,13 +176,16 @@ class ExtractionRepository:
         return data
 
     def publish_plan(self, dataset_id: str, dataset_version: str, plan_data: dict[str, Any]) -> tuple[str, str]:
-        """Atomically publish immutable content-addressed extraction plan JSON."""
+        """Atomically publish immutable content-addressed extraction plan JSON with integrity check."""
+        validate_extraction_plan_payload(plan_data)
         plan_version = compute_plan_version(plan_data)
         target_path = self.get_plan_path(dataset_id, dataset_version, plan_version)
         target_dir = target_path.parent
 
         if target_path.exists():
-            logger.info(f"[ExtractionRepository] Immutable plan already exists at {target_path}, reusing without overwrite.")
+            # Strictly verify existing file before reuse; do not overwrite if corrupted
+            self.find_plan(dataset_id, dataset_version, plan_version)
+            logger.info(f"[ExtractionRepository] Immutable plan already exists and is valid at {target_path}, reusing without overwrite.")
             return plan_version, self.get_plan_uri(dataset_id, dataset_version, plan_version)
 
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -179,7 +203,7 @@ class ExtractionRepository:
                     temp_path.unlink()
                 except Exception:
                     pass
-            if isinstance(exc, ExtractionPlanContractInvalidError):
+            if isinstance(exc, (ExtractionPlanContractInvalidError, ExtractionPlanIntegrityError)):
                 raise
             logger.exception(f"[ExtractionRepository] Failed to publish plan: {exc}")
             raise ExtractionPlanPublishError(f"추출 계획 저장에 실패했습니다: {exc}") from exc
@@ -225,6 +249,8 @@ class ExtractionRepository:
         except Exception as exc:
             raise OntologyMappingContractInvalidError(f"Ontology Mapping 파일({path}) 파싱에 실패했습니다: {exc}") from exc
 
+        validate_ontology_mapping_payload(data)
+
         # Verify content hash matches version
         actual_ver = compute_mapping_version(data)
         if actual_ver != mapping_version:
@@ -233,7 +259,6 @@ class ExtractionRepository:
                 f"요청된 버전({mapping_version})이 일치하지 않습니다."
             )
 
-        validate_ontology_mapping_payload(data)
         return data
 
     def publish_mapping(
@@ -243,14 +268,16 @@ class ExtractionRepository:
         mapping_data: dict[str, Any],
         extracted_columns: Optional[list[str]] = None,
     ) -> tuple[str, str]:
-        """Validate and atomically publish immutable content-addressed ontology mapping JSON."""
+        """Validate and atomically publish immutable content-addressed ontology mapping JSON with integrity check."""
         validate_ontology_mapping_payload(mapping_data, extracted_columns=extracted_columns)
         mapping_version = compute_mapping_version(mapping_data)
         target_path = self.get_mapping_path(dataset_id, dataset_version, mapping_version)
         target_dir = target_path.parent
 
         if target_path.exists():
-            logger.info(f"[ExtractionRepository] Immutable mapping already exists at {target_path}, reusing without overwrite.")
+            # Strictly verify existing file before reuse; do not overwrite if corrupted
+            self.find_mapping(dataset_id, dataset_version, mapping_version)
+            logger.info(f"[ExtractionRepository] Immutable mapping already exists and is valid at {target_path}, reusing without overwrite.")
             return mapping_version, self.get_mapping_uri(dataset_id, dataset_version, mapping_version)
 
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -268,7 +295,7 @@ class ExtractionRepository:
                     temp_path.unlink()
                 except Exception:
                     pass
-            if isinstance(exc, OntologyMappingContractInvalidError):
+            if isinstance(exc, (OntologyMappingContractInvalidError, OntologyMappingIntegrityError)):
                 raise
             logger.exception(f"[ExtractionRepository] Failed to publish mapping: {exc}")
             raise ExtractionPlanPublishError(f"온톨로지 매핑 저장에 실패했습니다: {exc}") from exc

@@ -87,8 +87,13 @@ class LabelBuildError(FeatureError):
 
 
 class FeatureSchemaMismatchError(FeatureError):
-    def __init__(self, message: str = "Feature Schema 버전 또는 allowlist 검증에 실패했습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="FEATURE_SCHEMA_MISMATCH", status_code=422, details=details)
+    def __init__(self, message: str = "Feature Schema 버전 또는 allowlist 검증에 실패했습니다.", code: str = "FEATURE_SCHEMA_MISMATCH", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
+
+
+class LabelSchemaMismatchError(FeatureError):
+    def __init__(self, message: str = "Label Schema 버전 또는 계약 검증에 실패했습니다.", code: str = "LABEL_SCHEMA_MISMATCH", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
 
 
 class InsufficientTrainingDataError(FeatureError):
@@ -102,20 +107,25 @@ class InsufficientTrainingDataError(FeatureError):
 
 
 class NpyBuildError(FeatureError):
-    def __init__(self, message: str = "NPY 행렬 직렬화 중 오류가 발생했습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="NPY_BUILD_ERROR", status_code=500, details=details)
+    def __init__(self, message: str = "NPY 행렬 직렬화 중 오류가 발생했습니다.", code: str = "NPY_BUILD_ERROR", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=500, details=details)
 
 
 class NpyValidationError(FeatureError):
-    def __init__(self, message: str = "생성된 NPY 행렬 및 메타데이터 유효성 검증에 실패했습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="NPY_VALIDATION_ERROR", status_code=422, details=details)
+    def __init__(self, message: str = "생성된 NPY 행렬 및 메타데이터 유효성 검증에 실패했습니다.", code: str = "NPY_VALIDATION_ERROR", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
+
+
+class FeatureDatasetIntegrityError(FeatureError):
+    def __init__(self, message: str = "기존 Feature Dataset 번들의 무결성 검증에 실패했습니다.", code: str = "FEATURE_DATASET_INTEGRITY_ERROR", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=422, details=details)
 
 
 class NpyPublishError(FeatureError):
-    def __init__(self, message: str = "NPY 산출물 저장 및 발행에 실패했습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="NPY_PUBLISH_ERROR", status_code=500, details=details)
+    def __init__(self, message: str = "NPY 산출물 저장 및 발행에 실패했습니다.", code: str = "NPY_PUBLISH_ERROR", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=500, details=details)
 
 
 class FeatureConflictError(FeatureError):
-    def __init__(self, message: str = "동일한 Feature 버전이 이미 존재하거나 충돌이 발생했습니다.", details: list[Any] | None = None) -> None:
-        super().__init__(message=message, code="FEATURE_DATASET_CONFLICT", status_code=409, details=details)
+    def __init__(self, message: str = "동일한 Feature 버전이 이미 존재하거나 충돌이 발생했습니다.", code: str = "FEATURE_DATASET_CONFLICT", details: list[Any] | None = None) -> None:
+        super().__init__(message=message, code=code, status_code=409, details=details)
