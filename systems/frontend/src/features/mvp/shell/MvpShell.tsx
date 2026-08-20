@@ -17,7 +17,7 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
   { id: "overview", label: "Overview", description: "위험 현황과 우선순위", icon: LayoutDashboard },
   { id: "objects", label: "Objects", description: "설비 목록과 근거", icon: Boxes },
   { id: "operations", label: "Operations", description: "점검·판단 업무", icon: ClipboardCheck },
-  { id: "inspection-report", label: "Inspection Report", description: "점검 요청과 근거 추적", icon: ClipboardList },
+  { id: "inspection-report", label: "Static Report", description: "Map-report UI reference", icon: ClipboardList },
   { id: "executive-report", label: "Event Executive Brief", description: "선택 Event 보고와 출력", icon: FileText },
 ];
 
@@ -44,6 +44,11 @@ export function MvpShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const active = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
+  const headingDetail = activeView === "inspection-report"
+    ? "Static English report adapted from the map-report UI prototype."
+    : role === "process_manager"
+      ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
+      : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
   return (
     <main className="mvp-app">
       <header className="mvp-global-header">
@@ -88,7 +93,7 @@ export function MvpShell({
           <div className="mvp-nav-footnote"><strong>Analysis 제외</strong><span>모델 탐색·Canvas·관리자 Surface는 이번 MVP 범위가 아닙니다.</span></div>
         </aside>
         <section className="mvp-main">
-          <header className="mvp-page-heading"><span>{active.label}</span><h1>{active.description}</h1><p>{role === "process_manager" ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다." : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다."}</p></header>
+          <header className="mvp-page-heading"><span>{active.label}</span><h1>{active.description}</h1><p>{headingDetail}</p></header>
           {children}
         </section>
       </div>

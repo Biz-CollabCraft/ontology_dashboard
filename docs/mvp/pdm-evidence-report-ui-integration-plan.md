@@ -777,19 +777,19 @@ Status 값은 다음만 사용한다.
 
 ### 8.5 후속 PR: Frontend ViewModel and UI
 
-목표는 점검 요청과 evidence trace 화면을 typed ViewModel으로 연결하는 것이다. 이 단계는 2주차 producer-side enrichment의 필수 완료 조건이 아니며, report projection contract가 안정화된 뒤 후속 PR로 진행한다. 상태 요약, 요약 보고서, Operations 기간 집계 화면은 포함하지 않는다.
+목표는 기존 4-screen MVP 사이드탭 구조에 영어 Static Report 탭을 추가하고, `map-report-ui-prototype`의 report UI 패턴을 제품 런타임 dependency 없이 정적 화면으로 재구현하는 것이다. 이 단계는 2주차 producer-side enrichment의 필수 완료 조건이 아니며, live report projection 연결과 기간/전체 설비 집계 화면은 후속 PR로 진행한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
 | 19 | In Progress | frontend 점검 요청/Evidence trace ViewModel builder를 `systems/frontend/src/features/mvp/` 아래에 추가한다. | typed ViewModel builder | local `npm run lint`, `npm run test -- src/features/mvp/context/MvpSelectionContext.test.ts src/features/mvp/api/mvpAdapters.test.ts` |
-| 20 | In Progress | map-report prototype의 Inspection Request, Evidence Trace, Sensor Evidence 패턴만 dashboard side tab용 typed component로 재구현한다. `MapReportView`, 설비상세, 요약/집계 탭은 V2로 보류한다. | MVP report components | local `npm run build`; screenshot/Playwright는 후속 |
-| 21 | In Progress | component를 API data에 연결한다. | fixture 또는 live-backed UI flow | 기존 MVP `MvpEventDetailModel` 소비; browser 확인은 후속 |
-| 22 | In Progress | 최소 report UI flow에 Playwright coverage를 추가한다. | E2E test | `PLAYWRIGHT_PYTHON_BIN=python3 PLAYWRIGHT_API_PORT=8210 PLAYWRIGHT_WEB_PORT=3210 npm run test:e2e:mvp` → 통과 12개 |
+| 20 | In Progress | map-report prototype의 report header, KPI, manager brief, equipment sketch, sensor evidence, evidence trace 패턴을 dashboard side tab용 영어 Static Report component로 재구현한다. `MapReportView`, live 설비상세, 요약/집계 탭은 V2로 보류한다. | MVP static report component | local `npm run build`; `/tmp/mvp-static-report.png` screenshot 확인 |
+| 21 | In Progress | Static Report는 product runtime dependency나 raw producer payload 파싱 없이 MVP route에 연결한다. | static side-tab UI flow | 기존 MVP shell route `view=inspection-report` 아래 `Static Report` 탭으로 노출 |
+| 22 | In Progress | 최소 static report UI flow에 Playwright coverage를 추가한다. | E2E test | `PLAYWRIGHT_PYTHON_BIN=python3 PLAYWRIGHT_API_PORT=8210 PLAYWRIGHT_WEB_PORT=3210 npm run test:e2e:mvp` → 통과 12개 |
 
 5차 PR 완료 조건은 다음과 같다.
 
 - frontend는 raw JSONL이나 raw producer payload를 직접 파싱하지 않는다.
-- UI는 typed ViewModel 또는 `report_projection`만 사용한다.
+- Static Report UI는 정적 reference content만 사용하고, live UI는 typed ViewModel 또는 `report_projection`만 사용한다.
 - `/Users/hb/Documents/final/map-report-ui-prototype`은 참조 출처일 뿐 제품 runtime dependency로 import하지 않는다.
 - 정비이력 추가는 최소 action descriptor로만 제공되며 Work Order 생성이나 Operations 기간 집계를 만들지 않는다.
 

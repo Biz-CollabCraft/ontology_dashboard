@@ -198,7 +198,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "executive-report") {
     content = <MvpExecutiveReportPage model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else if (selection.view === "inspection-report") {
-    content = <MvpInspectionReportPage model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onOpenExecutiveReport={(event) => openReport(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
+    content = <MvpInspectionReportPage onBackToOverview={() => openView("overview")} />;
   } else {
     content = <MvpOverviewPage model={model} onOpenAsset={openAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }

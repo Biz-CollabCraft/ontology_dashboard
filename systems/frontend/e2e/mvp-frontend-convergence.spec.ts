@@ -84,35 +84,28 @@ test("completes Overview to Objects to Operations to Event Executive Brief witho
   expect(query.get("event_id")).toBeTruthy();
 });
 
-test("covers Inspection Report side-tab flow and action links", async ({ page }) => {
+test("covers Static Report side-tab flow", async ({ page }) => {
   await login(page, `${MVP_PATH}?view=inspection-report`);
-  await expect(page.getByTestId("mvp-inspection-report")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "점검 요청", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "센서 참고값", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "근거 추적", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "한계와 provenance", exact: true })).toBeVisible();
-  await expect(page.locator(".mvp-inspection-lead")).toBeVisible();
-  await expect(page.locator(".mvp-inspection-lead")).toHaveText(/현재 위험도|데이터 품질|보류/);
-  await expect(page.getByText(/센서|표시 가능한 sensor card/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Operations에서 기록하기", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Executive Brief", exact: true })).toBeVisible();
+  await expect(page.getByTestId("mvp-static-report")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compressor Station 03 predictive maintenance report", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inspection request summary", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compressor assembly focus areas", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reference values", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Grounding chain", exact: true })).toBeVisible();
+  await expect(page.getByText("Static map-report UI reference")).toBeVisible();
+  await expect(page.locator(".mvp-static-compressor-visual")).toBeVisible();
 
   const query = new URL(page.url()).searchParams;
   expect(query.get("view")).toBe("inspection-report");
   expect(query.get("asset_id")).toBeTruthy();
   expect(query.get("event_id")).toBeTruthy();
 
-  await page.getByRole("button", { name: "Operations에서 기록하기", exact: true }).click();
-  await expect(page).toHaveURL(/view=operations/);
-  await expect(page.getByTestId("mvp-operations")).toBeVisible();
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await expect(page).toHaveURL(/view=overview/);
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
 
-  await page.getByRole("button", { name: /Inspection Report/ }).click();
-  await expect(page.getByTestId("mvp-inspection-report")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Operations에서 기록하기", exact: true })).toBeVisible();
-
-  await page.getByRole("button", { name: "Executive Brief", exact: true }).click();
-  await expect(page).toHaveURL(/view=executive-report/);
-  await expect(page.getByTestId("mvp-executive-report")).toBeVisible();
+  await page.getByRole("button", { name: /Static Report/ }).click();
+  await expect(page.getByTestId("mvp-static-report")).toBeVisible();
 });
 
 test("separates manager decisions from field-operator notes using real permissions", async ({ page }) => {
@@ -163,7 +156,7 @@ test("uses the verified report template when both LLM and deterministic report A
   await expect(page.getByText(/모델 확률은 실제 고장 발생을 확정하지 않습니다/)).toBeVisible();
 });
 
-test("shows a safe fallback in Inspection Report when predictive or report APIs fail", async ({ page }) => {
+test("keeps Static Report available when predictive or report APIs fail", async ({ page }) => {
   await page.route("**/api/projects/*/workspaces/*/predictive-maintenance/dashboard**", async (route) => {
     await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "runtime_unavailable", message: "runtime unavailable in test" } }) });
   });
@@ -174,10 +167,9 @@ test("shows a safe fallback in Inspection Report when predictive or report APIs 
     await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "report_unavailable", message: "report unavailable in test" } }) });
   });
   await login(page, `${MVP_PATH}?view=inspection-report`);
-  await expect(page.getByTestId("mvp-inspection-report")).toBeVisible();
-  await expect(page.locator(".mvp-report-mode")).toContainText("Template fallback");
-  await expect(page.getByRole("heading", { name: "근거 추적", exact: true })).toBeVisible();
-  await expect(page.getByText("Evidence gap으로 처리합니다.")).toBeVisible();
+  await expect(page.getByTestId("mvp-static-report")).toBeVisible();
+  await expect(page.locator(".mvp-report-mode")).toContainText("Static report");
+  await expect(page.getByText("This tab does not parse raw producer payloads or import prototype runtime code.")).toBeVisible();
 });
 
 test("keeps all MVP views inside a 390px mobile viewport and exposes compact navigation", async ({ page }) => {
@@ -187,7 +179,7 @@ test("keeps all MVP views inside a 390px mobile viewport and exposes compact nav
 
   await page.getByRole("button", { name: "메뉴 열기" }).click();
   await expect(page.locator(".mvp-navigation")).toHaveClass(/is-open/);
-  for (const label of ["Overview", "Objects", "Operations", "Inspection Report", "Event Executive Brief"]) {
+  for (const label of ["Overview", "Objects", "Operations", "Static Report", "Event Executive Brief"]) {
     await page.locator(".mvp-navigation nav").getByRole("button", { name: new RegExp(label) }).first().click();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     if (label !== "Event Executive Brief") await page.getByRole("button", { name: "메뉴 열기" }).click();
