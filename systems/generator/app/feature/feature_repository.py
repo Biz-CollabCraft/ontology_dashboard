@@ -247,6 +247,7 @@ class FeatureRepository:
         y: np.ndarray,
         feature_names: list[str],
         metadata: dict[str, Any],
+        row_metadata: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """Atomically stage, validate, and publish NPY arrays and metadata into immutable directory."""
         target_dir = self.get_feature_dir(dataset_id, dataset_version, feature_dataset_version)
@@ -300,6 +301,11 @@ class FeatureRepository:
 
             with open(meta_file, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
+
+            if row_metadata is not None:
+                row_meta_file = temp_dir / "row_metadata.json"
+                with open(row_meta_file, "w", encoding="utf-8") as f:
+                    json.dump(row_metadata, f, ensure_ascii=False, indent=2)
 
             # 4. Post-write disk validation
             X_read = np.load(features_file, allow_pickle=False)

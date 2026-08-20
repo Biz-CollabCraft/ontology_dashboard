@@ -15,15 +15,16 @@
 - `GET /health` (데몬 상태 확인)
 - `POST /extraction` (데이터셋 분석 및 내용 기반 해시 Extraction Plan/Mapping 수립·검증·불변 영속화)
 - `POST /feature` (Extraction Plan/Mapping 및 명시적 Failure 데이터셋 소비, Feature·Label 생성 및 NPY 불변 발행)
-- `POST /train` (신규 canonical ML 학습 및 Model Artifact 발행 API - 후속 PR에서 구현)
+- `POST /train` (등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행)
+- `POST /train/{base_model}` (지정된 단일 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행)
 - `POST /internal/train` (기존 legacy 호환 API: 파이프라인 최초 학습 실행, 단일 프로세스 Lock 하에 실행)
 - `POST /internal/retrain` (기존 legacy 호환 API: 새 버전 재학습 실행, 기존 모델을 덮어쓰지 않고 새 버전으로 저장)
 - 학습 job 상태 또는 Model Artifact publish 상태(`published_artifacts`, `artifact_uri`, `has_any_published_model_artifact`, `run_id`) 조회
 
 > **학습 API 경로 상태 및 전환 원칙**:
-> - 신규 호출자는 향후 canonical API인 `POST /train` 계약을 사용해야 합니다.
-> - `POST /internal/train` 및 `POST /internal/retrain`은 현재 main 브랜치의 기존 기능 호환을 위한 레거시 경로이며, 후속 `/train` 구현 및 검증이 완료되기 전까지 유지됩니다.
-> - 세 경로를 장기적으로 영구 병행 운영하는 계약이 아니며, 이번 Feature 브랜치에서는 학습 API 코드를 변경하지 않습니다.
+> - 신규 호출자는 canonical API인 `POST /train` 및 `POST /train/{base_model}` 계약을 사용해야 합니다.
+> - `POST /internal/train` 및 `POST /internal/retrain`은 기존 기능 호환을 위한 레거시 경로이며, canonical 서비스와 동일한 학습 Lock을 공유합니다.
+> - 장기적으로 레거시 경로는 후속 리팩터링 PR에서 정리될 예정입니다.
 
 ### 금지 범위
 - `POST /internal/predict`, `POST /internal/predict/file`
@@ -42,9 +43,10 @@
 | GET | `/health` | 데몬 프로세스 상태 확인 | 완료 |
 | POST | `/extraction` | 데이터셋 분석 및 Extraction Plan/Mapping 수립·검증·불변 영속화 (1단계) | 완료 |
 | POST | `/feature` | Extraction Plan/Mapping 및 Failure 데이터 소비, Feature·Label 생성 및 NPY/메타데이터 불변 발행 (2단계) | 완료 |
-| POST | `/train` | 다중 ML 모델 학습 및 Model Artifact 발행 | **신규 canonical API (후속 PR 구현 대상)** |
-| POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | **기존 legacy 호환 API** |
-| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | **기존 legacy 호환 API** |
+| POST | `/train` | 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 (3단계) | 완료 |
+| POST | `/train/{base_model}` | 지정된 개별 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 (3단계) | 완료 |
+| POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | 기존 legacy 호환 API |
+| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 기존 legacy 호환 API |
 
 ---
 
@@ -98,12 +100,7 @@
   "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
   "result": {
     "extraction_type": "tabular_column_as_attribute",
-    "id_column": "UDI",
-    "time_column": null,
-    "attribute_column": null,
-    "value_column": null,
-    "duplicate_policy": "error",
-    "aggregation": null,
+    "selected_columns": ["Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"],
     "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
     "mapping_uri": "models_store/cache/mappings/ai4i/canonical-ai4i-physics-v3.1/ontology-mapping-b2c3d4e5f6789012.json"
   }
@@ -114,11 +111,11 @@
 
 ### 4.3 `POST /feature`
 
-> **안전 원칙, Failure 데이터 명시적 연결 및 Label Schema 검증**:
-> - `failure_dataset_id` 및 `failure_dataset_version`을 요청 본문에 필수 지정하여 telemetry 데이터와 명시적으로 매핑합니다 (이름에 failure/maint가 들어간 첫 파일 임의 선택 금지).
-> - `label_schema_version`으로 등록된 Label Schema를 실제 로드하고 `prediction_task`, `positive_class`, `prediction_horizon_hours`, `anchor_semantic` 등의 계약을 사전 검증합니다 (`LABEL_SCHEMA_MISMATCH`, 422).
-> - Feature Dataset fingerprint는 9개 계약 요소의 canonical JSON SHA-256 해시 지문(`feature-dataset-{fingerprint}`)으로 산출됩니다.
-> - 기존 Feature Bundle 디렉터리가 존재할 경우 필수 4개 파일(`features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`), 행/열 차원, shape, dtype, NaN/Inf 부재, `{0,1}` 라벨 값, 계약 및 지문 일치 여부를 전수 검증(`FEATURE_DATASET_INTEGRITY_ERROR`, 422)한 후 온전한 경우에만 재사용합니다 (손상된 번들 덮어쓰기 금지).
+> **Feature 계약, 무결성 검증 및 재사용 정책**:
+> - `POST /feature`는 이미 발행된 `extraction_plan_version`과 `mapping_version`을 조회 및 검증하고, 요청에 명시된 `failure_dataset_id`, `failure_dataset_version`을 소비합니다.
+> - 요청 전 `LabelSchemaProvider`를 통해 `label_schema_version`의 실제 정의를 로드하고 `prediction_task`, `prediction_horizon_hours`, `positive_class`, `anchor_semantic`을 사전 검증합니다 (`LABEL_SCHEMA_MISMATCH`, 422).
+> - 9개 계약 요소(`dataset_id`, `dataset_version`, `failure_dataset_id`, `failure_dataset_version`, `extraction_plan_version`, `mapping_version`, `feature_schema_version`, `label_schema_version`, `prediction_horizon_hours`)를 기반으로 SHA-256 fingerprint 앞 16자리를 계산하여 불변 `feature_dataset_version`(`feature-dataset-<fingerprint>`)을 부여합니다.
+> - 기존 디렉터리가 존재할 경우 `validate_feature_bundle`을 실행하여 4개 필수 파일 존재, NPY shape, dtype, NaN/Inf 부재, `{0, 1}` 값 범위, 9개 계약 일치, fingerprint 재계산 일치를 전수 검증합니다 (`FEATURE_DATASET_INTEGRITY_ERROR`, 422).
 
 **요청 본문:**
 
@@ -126,7 +123,7 @@
 {
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "failure_dataset_id": "ai4i-failures",
+  "failure_dataset_id": "ai4i_failures",
   "failure_dataset_version": "canonical-ai4i-failures-v1",
   "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
   "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
@@ -142,11 +139,11 @@
 ```json
 {
   "request_id": "req-9c8f2a1b",
-  "run_id": "feature-7b8c9d0e",
+  "run_id": "feature-5e6f7a8b",
   "status": "succeeded",
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "failure_dataset_id": "ai4i-failures",
+  "failure_dataset_id": "ai4i_failures",
   "failure_dataset_version": "canonical-ai4i-failures-v1",
   "extraction_plan_version": "extraction-plan-a1b2c3d4e5f67890",
   "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
@@ -165,7 +162,96 @@
 
 ---
 
-### 4.4 `POST /internal/train` 및 `POST /internal/retrain` (Legacy 호환용)
+### 4.4 `POST /train` 및 `POST /train/{base_model}` (Canonical API)
+
+> **학습 오케스트레이션 및 Model Artifact 발행 원칙**:
+> - 불변 Feature Dataset Bundle(`features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`)의 무결성을 전수 검증한 후 학습을 진행합니다.
+> - 설비 식별자(`asset_id`)와 타임스탬프(`timestamp`) 기반의 시간순 데이터 분할(`asset_time_split`)을 수행하여 미래 데이터 누수를 방지합니다 (`TRAINING_SPLIT_METADATA_MISSING`, 422).
+> - `POST /train`은 등록된 전체 모델(`lightgbm`, `xgboost`, `random_forest`)을 각각 독립적으로 실행하며, 한 모델의 실패가 다른 모델의 학습을 중단시키지 않고 부분 성공(`partially_succeeded`, 200)으로 격리 처리합니다.
+> - `POST /train/{base_model}`은 지정된 단일 모델만 학습하며 실패 시 500 오류를 반환합니다.
+> - 성공한 모델마다 `contracts/schemas/model-artifact.schema.json`을 준수하는 불변 Model Artifact v1.0 패키지(`manifest.json`, `model.joblib`, `feature_schema.json`, `label_schema.json`, `history_requirement.json`, `metrics.json`)를 원자적으로 발행합니다.
+> - 프로세스 단위 학습 Lock을 적용하여 동시 중복 학습을 방지합니다 (`TRAINING_ALREADY_RUNNING`, 409).
+
+**요청 본문:**
+
+```json
+{
+  "feature_dataset_version": "feature-dataset-c3d4e5f678901234"
+}
+```
+
+**전체 성공 응답 본문 (HTTP 200):**
+
+```json
+{
+  "request_id": "req-9c8f2a1b",
+  "run_id": "train-20260820051216-3ba9f9",
+  "status": "succeeded",
+  "feature_dataset_version": "feature-dataset-c3d4e5f678901234",
+  "results": [
+    {
+      "base_model": "lightgbm",
+      "status": "succeeded",
+      "model_id": "lightgbm",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/lightgbm/v1"
+    },
+    {
+      "base_model": "xgboost",
+      "status": "succeeded",
+      "model_id": "xgboost",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/xgboost/v1"
+    },
+    {
+      "base_model": "random_forest",
+      "status": "succeeded",
+      "model_id": "random_forest",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/random_forest/v1"
+    }
+  ],
+  "failed_models": []
+}
+```
+
+**일부 모델 실패 응답 본문 (HTTP 200, `partially_succeeded`):**
+
+```json
+{
+  "request_id": "req-9c8f2a1b",
+  "run_id": "train-20260820051216-3ba9f9",
+  "status": "partially_succeeded",
+  "feature_dataset_version": "feature-dataset-c3d4e5f678901234",
+  "results": [
+    {
+      "base_model": "xgboost",
+      "status": "succeeded",
+      "model_id": "xgboost",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/xgboost/v1"
+    },
+    {
+      "base_model": "random_forest",
+      "status": "succeeded",
+      "model_id": "random_forest",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/random_forest/v1"
+    }
+  ],
+  "failed_models": [
+    {
+      "base_model": "lightgbm",
+      "code": "MODEL_TRAINING_FAILED",
+      "error_id": "err-7a8b9c0d"
+    }
+  ]
+}
+```
+
+---
+
+### 4.5 `POST /internal/train` 및 `POST /internal/retrain` (Legacy 호환용)
 
 **성공 응답 본문:**
 
@@ -185,7 +271,7 @@
 
 ---
 
-### 4.5 공통 표준 오류 응답 (`ErrorEnvelope`)
+### 4.6 공통 표준 오류 응답 (`ErrorEnvelope`)
 
 모든 에러 응답(4xx, 5xx)은 일관된 `ErrorEnvelope` 포맷을 반환합니다:
 
@@ -210,9 +296,13 @@
 | 404 | `DATASET_NOT_FOUND` | 요청한 dataset_id 또는 source_uri 파일 부재 |
 | 404 | `EXTRACTION_PLAN_NOT_READY` | `/feature` 실행 전 필수 Extraction Plan 파일 부재 |
 | 404 | `ONTOLOGY_MAPPING_NOT_READY` | `/feature` 실행 전 필수 Ontology Mapping 파일 부재 |
+| 404 | `FEATURE_DATASET_NOT_FOUND` | 요청한 Feature Dataset Bundle 부재 |
+| 404 | `MODEL_NOT_REGISTERED` | 지원하지 않는 base model 알고리즘 |
 | 404 | `FAILURE_DATA_NOT_READY` | 요청한 Failure 데이터셋 파일 부재 또는 비어 있음 |
 | 405 | `METHOD_NOT_ALLOWED` | 허용되지 않은 HTTP 메서드 호출 |
 | 409 | `FEATURE_DATASET_CONFLICT` | 동일 Feature Dataset 버전 디렉터리가 이미 존재하나 계약 내용이 불일치함 |
+| 409 | `TRAINING_ALREADY_RUNNING` | 중복 학습 요청 (이미 학습 진행 중) |
+| 409 | `MODEL_ARTIFACT_CONFLICT` | 동일한 Model Artifact 버전이 이미 존재하여 덮어쓰기 거부 |
 | 422 | `DATASET_PATH_NOT_ALLOWED` | source_uri가 절대경로, 상위경로 탐색(..) 또는 허용 루트 밖 경로임 |
 | 422 | `INVALID_ARTIFACT_PATH` | Plan/Mapping/Feature 저장 디렉터리가 루트 디렉터리를 벗어남 |
 | 422 | `EXTRACTION_PLAN_INTEGRITY_ERROR` | Extraction Plan의 내용 해시와 요청된 버전 불일치 |
@@ -221,12 +311,15 @@
 | 422 | `ONTOLOGY_MAPPING_CONTRACT_INVALID` | Ontology Mapping 파일 손상 또는 스키마 위반 |
 | 422 | `FEATURE_SCHEMA_MISMATCH` | Feature Schema 미존재, allowlist 컬럼 부재, 누수 컬럼 포함 등 |
 | 422 | `LABEL_SCHEMA_MISMATCH` | Label Schema 미존재, 버전 불일치, horizon/positive_class/anchor 불일치 |
+| 422 | `TRAINING_SPLIT_METADATA_MISSING` | 시간순 데이터 분할(asset_time_split)을 위한 메타데이터 누락 |
 | 422 | `LABEL_CONTRACT_INVALID` | 라벨 컬럼/ID/timestamp 부재 또는 라벨 값이 `{0, 1}` 범위를 벗어남 |
 | 422 | `LABEL_ANCHOR_NOT_FOUND` | 고장 데이터에서 anchor(failure_point)를 찾을 수 없거나 전체 결측치(NaT)임 |
 | 422 | `INSUFFICIENT_POSITIVE_SAMPLES` | 고장 예측 구간 내 Positive 고장 샘플 0건 |
-| 422 | `INSUFFICIENT_TRAINING_DATA` | 유효 데이터 행 수 0건 등 학습 데이터 부족 |
+| 422 | `INSUFFICIENT_TRAINING_DATA` | 유효 데이터 행 수 0건 또는 단일 클래스 라벨 등 학습 데이터 부족 |
 | 422 | `NPY_VALIDATION_ERROR` | NPY 행렬 shape, dtype, NaN/Inf 불일치 |
 | 422 | `FEATURE_DATASET_INTEGRITY_ERROR` | 기존 Feature Dataset 번들 필수 파일 누락, 손상, shape/dtype 불일치 등 |
 | 500 | `EXTRACTION_PLAN_PUBLISH_ERROR` | 추출 계획 또는 온톨로지 매핑 파일 저장 실패 |
 | 500 | `NPY_PUBLISH_ERROR` | NPY 산출물 디렉터리 저장 실패 |
+| 500 | `MODEL_TRAINING_FAILED` | 모델 학습 실행 실패 |
+| 500 | `MODEL_ARTIFACT_PUBLISH_FAILED` | Model Artifact 불변 패키지 발행 실패 |
 | 500 | `INTERNAL_SERVER_ERROR` | 처리 중 발생한 예기치 않은 서버 내부 오류 |

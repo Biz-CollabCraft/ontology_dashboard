@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from systems.generator.generator_config import PATHS
+from systems.generator.model.model_training import asset_time_split
 from systems.generator.app.extraction.extraction_service import (
     ExtractionService,
     extract_with_plan,
@@ -278,7 +279,27 @@ class FeatureService:
         if X.shape[0] == 0:
             raise InsufficientTrainingDataError("학습에 유효한 데이터 행이 0건입니다.", code="INSUFFICIENT_TRAINING_DATA")
 
-        # 10. Prepare metadata
+        # 10. Prepare metadata and compute chronological split indices
+        id_col = plan.get("id_column") or "asset_id"
+        time_col = plan.get("time_column") or "timestamp"
+        split_indices = None
+        row_metadata = None
+
+        if id_col in labeled_df.columns and time_col in labeled_df.columns:
+            try:
+                train_sub, val_sub, test_sub = asset_time_split(labeled_df, id_col=id_col, time_col=time_col)
+                split_indices = {
+                    "train": train_sub.index.tolist(),
+                    "val": val_sub.index.tolist(),
+                    "test": test_sub.index.tolist(),
+                }
+                row_metadata = {
+                    "asset_ids": labeled_df[id_col].astype(str).tolist(),
+                    "timestamps": labeled_df[time_col].astype(str).tolist(),
+                }
+            except Exception as exc:
+                logger.warning(f"[FeatureService] Could not precompute asset_time_split indices: {exc}")
+
         metadata = {
             "contract": contract_payload,
             "dataset_id": request.dataset_id,
@@ -301,6 +322,8 @@ class FeatureService:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "run_id": run_id,
         }
+        if split_indices:
+            metadata["split_indices"] = split_indices
 
         # 11. Atomic publish via repository
         uris = self.feature_repo.publish_feature_bundle(
@@ -311,6 +334,7 @@ class FeatureService:
             y=y,
             feature_names=feature_names,
             metadata=metadata,
+            row_metadata=row_metadata,
         )
 
         return FeatureResponse(

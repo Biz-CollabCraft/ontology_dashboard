@@ -14,13 +14,15 @@ from systems.generator.app.extraction.extraction_router import router as extract
 from systems.generator.app.extraction.extraction_exception import ExtractionError
 from systems.generator.app.feature.feature_router import router as feature_router
 from systems.generator.app.feature.feature_exception import FeatureError
+from systems.generator.app.training.training_router import router as training_router
+from systems.generator.app.training.training_exception import TrainingError
 from systems.generator.app.extraction.extraction_schema import ErrorEnvelope, ErrorEnvelopeBody
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Generator Domain API",
-    description="Generator control-plane, extraction, and feature generation API",
+    description="Generator control-plane, extraction, feature generation, and training API",
     version="1.0.0",
 )
 
@@ -77,6 +79,20 @@ async def extraction_error_handler(request: Request, exc: ExtractionError) -> JS
 async def feature_error_handler(request: Request, exc: FeatureError) -> JSONResponse:
     req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
     logger.warning(f"[GeneratorAPI] FeatureError: {exc.code} - {exc.message}")
+    return _build_error_response(
+        status_code=exc.status_code,
+        code=exc.code,
+        message=exc.message,
+        path=request.url.path,
+        request_id=req_id,
+        details=exc.details,
+    )
+
+
+@app.exception_handler(TrainingError)
+async def training_error_handler(request: Request, exc: TrainingError) -> JSONResponse:
+    req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
+    logger.warning(f"[GeneratorAPI] TrainingError: {exc.code} - {exc.message}")
     return _build_error_response(
         status_code=exc.status_code,
         code=exc.code,
@@ -155,3 +171,4 @@ def health() -> dict[str, str]:
 
 app.include_router(extraction_router)
 app.include_router(feature_router)
+app.include_router(training_router)

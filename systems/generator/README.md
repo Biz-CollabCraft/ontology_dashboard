@@ -22,19 +22,26 @@ systems/generator/
 │  │  ├─ extraction_repository.py # Plan/Mapping 내용 기반 해시 버전 영속화 및 재사용 전 무결성 검증
 │  │  ├─ extraction_profiler.py # Stage 0 파일 프로파일링
 │  │  └─ extraction_exception.py# Extraction 도메인 예외 계층
-│  └─ feature/                # Feature 도메인 (Plan/Mapping/Failure 소비, Feature·Label·NPY 생성)
+│  ├─ feature/                # Feature 도메인 (Plan/Mapping/Failure 소비, Feature·Label·NPY 생성)
+│  │  ├─ __init__.py
+│  │  ├─ feature_router.py    # POST /feature HTTP 엔드포인트
+│  │  ├─ feature_schema.py    # FeatureRequest, FeatureResponse, FeatureOutputsPayload 등 (식별자 검증)
+│  │  ├─ feature_service.py   # Plan/Mapping/Failure 조회/검증, Feature 계산, Label 생성, allowlist 적용
+│  │  ├─ feature_schema_provider.py # Feature Schema allowlist 조회 및 선언 순서 보장 검증기
+│  │  ├─ label_schema_provider.py   # Label Schema 조회 및 prediction_task/horizon/anchor 검증기
+│  │  ├─ feature_repository.py# 불변 디렉터리 기반 NPY 및 메타데이터 원자적 Staging, Publish 및 재사용 무결성 검증
+│  │  └─ feature_exception.py # Feature 도메인 예외 계층
+│  └─ training/               # Training 도메인 (Feature Bundle 소비, 모델 학습, Model Artifact 발행)
 │     ├─ __init__.py
-│     ├─ feature_router.py    # POST /feature HTTP 엔드포인트
-│     ├─ feature_schema.py    # FeatureRequest, FeatureResponse, FeatureOutputsPayload 등 (식별자 검증)
-│     ├─ feature_service.py   # Plan/Mapping/Failure 조회/검증, Feature 계산, Label 생성, allowlist 적용
-│     ├─ feature_schema_provider.py # Feature Schema allowlist 조회 및 선언 순서 보장 검증기
-│     ├─ label_schema_provider.py   # Label Schema 조회 및 prediction_task/horizon/anchor 검증기
-│     ├─ feature_repository.py# 불변 디렉터리 기반 NPY 및 메타데이터 원자적 Staging, Publish 및 재사용 무결성 검증
-│     └─ feature_exception.py # Feature 도메인 예외 계층
+│     ├─ training_router.py   # POST /train 및 POST /train/{base_model} HTTP 엔드포인트
+│     ├─ training_schema.py   # TrainingRequest, TrainingResponse, ModelResultItem, FailedModelItem
+│     ├─ training_service.py  # Bundle 검증, asset_time_split, 모델별 학습 격리, Artifact 발행 orchestration
+│     ├─ training_repository.py # Feature Bundle 로드/무결성 전수 검증, Model Artifact 불변 발행/검증
+│     └─ training_exception.py# Training 도메인 예외 계층
 ├─ extraction/                # [Compatibility Facade] 하위 호환 re-export 제공
 ├─ ontology_mapping/          # 온톨로지 매핑 도메인 (전역 캐시 오염 방지)
 ├─ feature/                   # Feature 엔지니어링 계산 모듈 (feature_builder, feature_label_service 등)
-├─ model/                     # 모델 학습 및 Artifact 발행 도메인 (후속 /train 단계 대상)
+├─ model/                     # 모델 알고리즘 구현 (LightGBM, XGBoost, RandomForest) 및 Registry
 ├─ common/                    # 공통 에이전트 및 타임스탬프 정규화 유틸리티
 └─ generator_config.py        # 시스템 전역 경로 및 환경설정 싱글톤
 ```
@@ -48,14 +55,14 @@ systems/generator/
 | GET | `/health` | Generator 데몬 상태 및 시스템 식별자 확인 | 완료 |
 | POST | `/extraction` | 데이터셋 분석 및 내용 기반 해시 Extraction Plan/Mapping 수립·검증·불변 영속화 | 완료 (1단계) |
 | POST | `/feature` | Extraction Plan/Mapping 및 명시적 Failure 데이터 소비, Feature·Label 생성 및 NPY/메타데이터 불변 발행 | 완료 (2단계) |
-| POST | `/train` | 다중 머신러닝 모델 학습 및 Model Artifact 발행 | **신규 canonical API (후속 PR 구현 대상)** |
-| POST | `/internal/train` | 데몬 최초 학습 실행 (단일 Lock 제어) | **기존 legacy 호환 API** |
-| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 Lock 제어) | **기존 legacy 호환 API** |
+| POST | `/train` | 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 | **완료 (3단계, Canonical API)** |
+| POST | `/train/{base_model}` | 지정된 개별 머신러닝 모델 학습 및 불변 Model Artifact v1.0 패키지 발행 | **완료 (3단계, Canonical API)** |
+| POST | `/internal/train` | 데몬 최초 학습 실행 (단일 Lock 제어) | 기존 legacy 호환 API |
+| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 Lock 제어) | 기존 legacy 호환 API |
 
 > **학습 API 경로 상태 구분**:
-> - 신규 호출자는 `/train` 계약을 사용해야 하며, `/internal/train`, `/internal/retrain`은 현재 main의 기존 기능 호환용입니다.
-> - 후속 `/train` 구현과 검증이 완료되기 전에는 legacy 경로를 제거하지 않으며, 장기적으로 세 경로를 병행 운영하지 않습니다.
-> - 이번 Feature 브랜치에서는 학습 API 코드를 변경하지 않습니다.
+> - 신규 호출자는 `/train` 및 `/train/{base_model}` 계약을 사용해야 하며, `/internal/train`, `/internal/retrain`은 기존 기능 호환용입니다.
+> - 두 계층은 동일한 프로세스 전역 학습 Lock을 공유하여 중복 실행 충돌을 방지합니다.
 
 ---
 
@@ -86,20 +93,18 @@ systems/generator/
 
         ↓
 
-[3단계: POST /train]
-  → (후속 PR) NPY/메타데이터 소비 ➔ ML 모델 학습 ➔ Model Artifact 발행
+[3단계: POST /train 및 POST /train/{base_model}]
+  → 프로세스 전역 학습 Lock 획득 (중복 요청 시 TRAINING_ALREADY_RUNNING 409)
+  → Feature Dataset Bundle 무결성 10대 항목 전수 검증 (shape, dtype, NaN/Inf 부재, {0,1} 라벨)
+  → 설비 ID/타임스탬프 기반 시간순 분할 (asset_time_split, 미래 누수 방지)
+  → 등록 모델(lightgbm, xgboost, random_forest) 학습 및 평가 지표 산출 (모델별 실패 격리)
+  → 불변 Model Artifact v1.0 패키지(manifest.json, model.joblib, schemas, metrics) 원자적 발행
+  → 발행 직후 validator 검증 및 모델별 결과 반환 (succeeded / partially_succeeded)
 ```
 
-1. **기존 번들 및 Plan/Mapping 재사용 무결성 검증**:
-   - 기존 Feature Bundle 재사용 전 4개 필수 파일(`features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`), 2D/1D shape, dtype, NaN/Inf 부재, `{0,1}` 값, 9대 계약 일치, SHA-256 지문 일치를 전수 검증하며 위반 시 `FEATURE_DATASET_INTEGRITY_ERROR` (422)를 반환하고 덮어쓰지 않습니다.
-   - Plan과 Mapping 또한 기존 파일 재사용 전 canonical 해시 및 스키마 검증을 수행합니다.
-2. **명시적 Failure 데이터셋 연결 및 9대 계약 지문**:
-   - `failure_dataset_id`, `failure_dataset_version`을 요청에 필수 지정하며, telemetry와의 설비 식별 체계 호환성을 검증합니다.
-   - Feature Dataset fingerprint는 9개 계약 요소의 SHA-256 해시 지문으로 확장되었습니다.
-3. **Label Schema 실제 검증**:
-   - `label_schema_provider.py`를 통해 요청된 Label Schema를 실제 로드하고 `prediction_task`, `horizon`, `anchor_semantic` 등의 계약을 사전 검증합니다.
-4. **저장소 디렉터리 격리 및 Root Containment**:
-   - 모든 식별자 및 파일 경로는 `is_relative_to(base_dir)` 검증을 거쳐 `INVALID_ARTIFACT_PATH` (422)로 경로 탈출을 원천 방어합니다.
-   - `source_uri`는 `PATHS.data_dir` 및 `PATHS.data_preprocessed` 내부의 유효한 상대경로 파일만 허용하며 절대경로 및 traversal(`..`)은 `DATASET_PATH_NOT_ALLOWED` (422)로 거절됩니다.
-5. **전역 매핑 캐시 비오염 원칙**:
-   - `/extraction`은 데이터셋별 격리된 `MappingStore`를 사용하며 `persist=False`로 실행되어 전역 `mapping_cache.json`을 수정하지 않습니다.
+1. **Feature Bundle 무결성 전수 검증**:
+   - 학습 전 `features.npy`, `labels.npy`, `feature_columns.json`, `feature_metadata.json`의 존재, shape, dtype, NaN/Inf 부재, `{0, 1}` 값 범위, 계약 지문 일치를 전수 검증합니다.
+2. **미래 데이터 누수 방지 시간순 분할 (`asset_time_split`)**:
+   - 무작위 분할(random shuffle)을 엄격히 금지하며, 설비 식별 체계와 시간순 정렬에 기반하여 분할합니다.
+3. **독립된 불변 Model Artifact v1.0 발행**:
+   - Generator의 책임 끝점은 Model Artifact v1.0 발행이며, Runtime Inference(예측), Evidence, Result Artifact 발행은 Backend Diagnosis의 책임입니다.
