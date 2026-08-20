@@ -1,0 +1,45 @@
+name: deploy-macmini-frontend
+
+on:
+  workflow_run:
+    workflows: [architecture]
+    types: [completed]
+
+concurrency:
+  group: macmini-production-frontend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy frontend to Mac mini
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: macmini-production
+    timeout-minutes: 30
+    environment:
+      name: macmini-production
+      url: https://ontology.oosu.dev/
+    steps:
+      - name: Checkout verified main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify deployment commit
+        shell: bash
+        env:
+          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: test "$(git rev-parse HEAD)" = "$VERIFIED_SHA"
+
+      - name: Deploy verified frontend
+        shell: bash
+        env:
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: bash scripts/deploy_macmini_frontend.sh
