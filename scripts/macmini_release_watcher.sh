@@ -89,8 +89,8 @@ git -C "$SOURCE_ROOT" checkout --detach --force "$TARGET_SHA"
 git -C "$SOURCE_ROOT" clean -ffd
 
 if [[ ! -x "$SOURCE_ROOT/scripts/deploy_macmini_frontend.sh" ]]; then
-  echo "verified main does not contain the Mac mini frontend deployment script" >&2
-  exit 1
+  echo "verified main does not contain the Mac mini frontend deployment script yet; waiting"
+  exit 0
 fi
 
 echo "Deploying CI-verified main $TARGET_SHA"
