@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
+from app.dataset.dataset_domain import ObservationDatasetQuery
 from app.diagnosis.diagnosis_schema import PredictionResult
 from app.diagnosis.ports import (
     DiagnosisRuntimeRepositoryPort,
     EquipmentSnapshotQueryPort,
     ObservationDatasetQueryPort,
+    PredictionResultRepositoryPort,
 )
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
+from app.equipment.equipment_schema import EquipmentCurrentStateQuery
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,5 +66,14 @@ def test_diagnosis_public_contracts_are_importable() -> None:
     assert PredictionResult.model_fields["prediction_id"]
     assert PredictiveMaintenanceRuntimeService
     assert DiagnosisRuntimeRepositoryPort
-    assert EquipmentSnapshotQueryPort
-    assert ObservationDatasetQueryPort
+    assert EquipmentSnapshotQueryPort is EquipmentCurrentStateQuery
+    assert ObservationDatasetQueryPort is ObservationDatasetQuery
+
+
+def test_prediction_result_repository_port_matches_migrated_adapter_surface() -> None:
+    for method_name in ("save", "get_payload", "list"):
+        port_method = getattr(PredictionResultRepositoryPort, method_name)
+        implementation_method = getattr(PredictionResultRepository, method_name)
+        assert tuple(inspect.signature(port_method).parameters) == tuple(
+            inspect.signature(implementation_method).parameters
+        )

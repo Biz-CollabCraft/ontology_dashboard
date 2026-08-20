@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Protocol, Sequence
 
+from app.dataset.dataset_domain import ObservationDatasetQuery
+from app.equipment.equipment_schema import EquipmentCurrentStateQuery
+
 from .diagnosis_schema import PredictionResult
 
 
@@ -36,21 +39,36 @@ class DiagnosisRuntimeRepositoryPort(Protocol):
 
 
 class PredictionResultRepositoryPort(Protocol):
-    def save(self, result: PredictionResult) -> PredictionResult: ...
-    def get(self, prediction_id: str, **kwargs: Any) -> PredictionResult | None: ...
-    def list(self, **kwargs: Any) -> Sequence[PredictionResult]: ...
+    """Persistence contract matching the migrated prediction repository API.
+
+    ``save``/``list`` expose scoped persistence summary rows for the existing
+    adapter surface, while ``get_payload`` returns the canonical Diagnosis
+    product-result model.
+    """
+
+    def save(self, result: PredictionResult) -> dict[str, Any]: ...
+    def get_payload(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        prediction_id: str,
+    ) -> PredictionResult | None: ...
+    def list(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str | None = None,
+        limit: int = 100,
+    ) -> Sequence[dict[str, Any]]: ...
 
 
-class EquipmentSnapshotQueryPort(Protocol):
-    """Inbound port; implemented by Equipment without importing its implementation."""
-
-    def current_equipment(self, equipment_id: str, **scope: Any) -> dict[str, Any]: ...
-
-
-class ObservationDatasetQueryPort(Protocol):
-    """Inbound port; implemented by Dataset for governed observation reads."""
-
-    def observations(self, *, dataset_version_id: str, **query: Any) -> Sequence[dict[str, Any]]: ...
+# Compatibility names retained for Diagnosis consumers, but the contracts are
+# owned by the provider domains. Re-exporting the canonical public protocols
+# prevents the same Dataset/Equipment boundary from drifting into two shapes.
+EquipmentSnapshotQueryPort = EquipmentCurrentStateQuery
+ObservationDatasetQueryPort = ObservationDatasetQuery
 
 
 __all__ = [

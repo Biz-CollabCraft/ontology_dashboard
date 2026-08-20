@@ -94,6 +94,8 @@ class PredictionResult(StrictModel):
 
 
 # Existing public names retained while the legacy API surface is converged.
+# DiagnosisPredictRequest is intentionally a transitional mapping alias, not a
+# DTO/Pydantic model constructor; callers should pass an ordinary dict payload.
 DiagnosisPredictRequest = dict[str, Any]
 DiagnosisPredictResponse = PredictionResult
 
