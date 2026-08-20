@@ -18,6 +18,25 @@ class OperationalDecisionKind(StrEnum):
     HOLD_FOR_DATA_CHECK = "hold_for_data_check"
 
 
+class DecisionRequest(BaseModel):
+    """Compatibility HTTP command owned by Maintenance transport."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    actor: str = Field(min_length=1)
+    decision: OperationalDecisionKind
+    note: str = ""
+
+
+class NoteRequest(BaseModel):
+    """Inspection note command owned by Maintenance transport."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    actor: str = Field(min_length=1)
+    body: str = Field(min_length=1, max_length=4000)
+
+
 class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

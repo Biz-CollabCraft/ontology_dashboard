@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 
 from app.dataset import DatasetAccessError
 from app.dataset.dataset_router import create_dataset_router
+from app.maintenance import MaintenanceAccessError
+from app.maintenance.maintenance_router import build_maintenance_router
 
 from .application import create_app
 from .dependencies import (
@@ -14,6 +16,7 @@ from .dependencies import (
     current_principal,
     get_dataset_catalog_service,
     get_identity_service,
+    get_maintenance_application_service,
     get_ontology_planner_service,
     get_project_service,
     get_predictive_maintenance_runtime_service,
@@ -80,6 +83,12 @@ datasets_router = create_dataset_router(
 projects_router = build_project_router(
     get_project_service=get_project_service,
     get_event_query=get_service,
+    require_permission=require_permission,
+    require_csrf=require_csrf,
+)
+
+maintenance_router = build_maintenance_router(
+    get_maintenance_service=get_maintenance_application_service,
     require_permission=require_permission,
     require_csrf=require_csrf,
 )
@@ -166,6 +175,16 @@ async def project_error_handler(_: Request, exc: ProjectError) -> JSONResponse:
         content={"error": {"code": exc.code, "message": exc.message}},
     )
 
+@app.exception_handler(MaintenanceAccessError)
+async def maintenance_access_error_handler(
+    _: Request,
+    exc: MaintenanceAccessError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
 
 @app.exception_handler(ValueError)
 async def validation_handler(_: Request, exc: ValueError) -> JSONResponse:
@@ -214,6 +233,7 @@ for feature_router in (
     predictive_maintenance_runtime_router,
     modeling_router,
     role_workspaces_router,
+    maintenance_router,
     manufacturing_router,
     admin_router,
 ):

@@ -3,8 +3,13 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.maintenance import MaintenanceEvent, WorkOrder
-from app.maintenance.ports import DiagnosisResultQueryPort, EquipmentStatePatchPort
+from app.maintenance import MaintenanceApplicationService, MaintenanceEvent, WorkOrder
+from app.maintenance.ports import (
+    DiagnosisResultQueryPort,
+    EquipmentStatePatchPort,
+    MaintenanceActionExecutionPort,
+    MaintenanceEventAccessPort,
+)
 from app.infra.db.maintenance_repository import MaintenanceRepository
 
 
@@ -19,6 +24,9 @@ def test_closed_loop_package_is_physically_migrated() -> None:
         "__init__.py",
         "maintenance_domain.py",
         "maintenance_schema.py",
+        "maintenance_service.py",
+        "maintenance_router.py",
+        "maintenance_exception.py",
         "integration.py",
         "ports.py",
     ):
@@ -50,5 +58,27 @@ def test_maintenance_public_contracts_are_importable() -> None:
     assert WorkOrder.model_fields["work_order_id"]
     assert MaintenanceEvent.model_fields["maintenance_event_id"]
     assert MaintenanceRepository
+    assert MaintenanceApplicationService
     assert DiagnosisResultQueryPort
     assert EquipmentStatePatchPort
+    assert MaintenanceActionExecutionPort
+    assert MaintenanceEventAccessPort
+
+
+def test_shared_manufacturing_router_no_longer_owns_maintenance_endpoints() -> None:
+    source = (
+        ROOT
+        / "systems"
+        / "backend"
+        / "ontology_dashboard"
+        / "routers"
+        / "manufacturing.py"
+    ).read_text(encoding="utf-8")
+    assert '"/events/{event_id}/decision"' not in source
+    assert '"/events/{event_id}/notes"' not in source
+    assert '"/events/{event_id}/activity"' not in source
+
+    router = (MAINTENANCE / "maintenance_router.py").read_text(encoding="utf-8")
+    assert '"/events/{event_id}/decision"' in router
+    assert '"/events/{event_id}/notes"' in router
+    assert '"/events/{event_id}/activity"' in router

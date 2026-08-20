@@ -1,6 +1,8 @@
 """Pure domain contracts for the predictive-maintenance closed loop."""
 
-from .maintenance_schema import OperationalDecisionKind
+from .maintenance_exception import MaintenanceAccessError
+from .maintenance_schema import DecisionRequest, NoteRequest, OperationalDecisionKind
+from .maintenance_service import MaintenanceApplicationService
 from .maintenance_domain import (
     ActionInProgress,
     IdempotencyConflict,
@@ -51,7 +53,11 @@ __all__ = [
     "InvalidTransition",
     "MaintenanceAction",
     "MaintenanceActionStatus",
+    "MaintenanceAccessError",
+    "MaintenanceApplicationService",
     "MaintenanceEvent",
+    "DecisionRequest",
+    "NoteRequest",
     "OperationalDecisionKind",
     "OperationalRecommendedAction",
     "PriorActionFailed",

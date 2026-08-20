@@ -28,6 +28,7 @@ from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentit
 from app.infra.external.project3 import Project3Client
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.infra.llm import configured_provider
+from app.maintenance import MaintenanceApplicationService
 
 from .adapters.service import AdapterService
 from app.infra.db.prediction_result_repository import PredictionResultRepository
@@ -53,6 +54,8 @@ from .modeling import ModelingService
 from .migrations import migrate
 from .planner import OntologyDashboardPlannerService
 from .ontology_service import OntologyService
+from .ontology import ActionInvocation
+from .ontology_adapter import inspection_object_id, risk_event_object_id
 from .ontology_primitives import OntologyPrimitiveRepository
 from .orchestration import AgentRunRepository, MultiStoreOrchestrator
 from .orchestration.ports import Project3GraphPort, Project3VectorPort, RelationalOntologyPort
@@ -233,6 +236,69 @@ def get_ontology_service(
             role_workflow_repository=PostgreSQLRoleWorkflowRepository(target),
         )
     return OntologyService(service)
+
+
+class _MaintenanceEventAccessAdapter:
+    """Composition adapter over the still-shared manufacturing event facade."""
+
+    def __init__(self, service: ManufacturingPredictiveMaintenanceService) -> None:
+        self.service = service
+
+    def project_id_for_event(self, event_id: str) -> str:
+        return self.service.project_id_for_event(event_id)
+
+    def ensure_event(self, event_id: str) -> None:
+        self.service.event(event_id)
+
+    def event_activity(self, event_id: str) -> list[dict[str, object]]:
+        return self.service.repository.event_activity(event_id)
+
+
+class _MaintenanceActionExecutionAdapter:
+    """Composition adapter from Maintenance commands to governed Ontology actions."""
+
+    def __init__(self, ontology: OntologyService) -> None:
+        self.ontology = ontology
+
+    def execute(
+        self,
+        *,
+        action_type: str,
+        target_kind: str,
+        target_id: str,
+        workspace_id: str,
+        parameters: dict[str, object],
+        idempotency_key: str,
+        principal: Principal,
+    ) -> dict[str, object]:
+        object_id = (
+            risk_event_object_id(target_id)
+            if target_kind == "risk_event"
+            else inspection_object_id(target_id)
+        )
+        execution = self.ontology.invoke(
+            ActionInvocation(
+                action_type=action_type,
+                object_id=object_id,
+                workspace_id=workspace_id,
+                parameters=parameters,
+                idempotency_key=idempotency_key,
+            ),
+            principal,
+        )
+        return execution.result
+
+
+def get_maintenance_application_service(
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+    ontology: OntologyService = Depends(get_ontology_service),
+) -> MaintenanceApplicationService:
+    return MaintenanceApplicationService(
+        events=_MaintenanceEventAccessAdapter(service),
+        actions=_MaintenanceActionExecutionAdapter(ontology),
+        workspace_id=MANUFACTURING_WORKSPACE,
+        configured_action_project_id="manufacturing-demo-project",
+    )
 
 
 def get_analysis_service(

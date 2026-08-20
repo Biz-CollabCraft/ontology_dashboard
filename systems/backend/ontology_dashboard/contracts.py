@@ -19,7 +19,7 @@ Intent = Literal[
 ]
 
 
-from app.maintenance.maintenance_schema import OperationalDecisionKind
+from app.maintenance.maintenance_schema import DecisionRequest, NoteRequest, OperationalDecisionKind
 
 
 class StrictModel(BaseModel):
@@ -108,17 +108,6 @@ class LayoutRequest(StrictModel):
     locale: AppLocale = "ko-KR"
     intent: Intent = "overview"
     use_llm: bool = True
-
-
-class DecisionRequest(StrictModel):
-    actor: str = Field(min_length=1)
-    decision: OperationalDecisionKind
-    note: str = ""
-
-
-class NoteRequest(StrictModel):
-    actor: str = Field(min_length=1)
-    body: str = Field(min_length=1, max_length=4000)
 
 
 class FollowUpRequest(StrictModel):
