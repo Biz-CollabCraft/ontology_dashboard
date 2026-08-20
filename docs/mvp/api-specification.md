@@ -180,7 +180,7 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 }
 ```
 
-`features[].series`는 Observation source에서 파생할 수 있다. `risk_series`는 운영 Result/Prediction runtime source에서 파생해야 하며, `gen_data`의 `model_outputs/prediction_timeline.jsonl`을 최신 운영 결과처럼 직접 읽어 대체하지 않는다.
+`features[].series`는 versioned Observation contract에서 파생할 수 있다. gen_data Layer 1/Layer 2/_log.jsonl 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target이며, Product API 계약은 내부 파일명이 아니라 canonical/overlay Observation API shape에 의존한다. `risk_series`는 Backend Diagnosis가 후속 runtime result/prediction history로 materialize하는 운영 Result/Prediction source에서 파생해야 하며, `gen_data`의 `model_outputs/prediction_timeline.jsonl` 또는 legacy `precomputed_prediction_timeline`을 최신 운영 결과처럼 직접 읽어 대체하지 않는다.
 
 기존 MVP 상세 화면이 이미 소비하는 필드(asset, 현재 risk/status/action, 현재 센서값,
 top factors, report section, provenance)는 기준선으로 유지한다. `map-report`

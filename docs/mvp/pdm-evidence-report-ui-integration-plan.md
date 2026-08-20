@@ -143,7 +143,7 @@ flowchart LR
 - `failure_type_candidates`는 측정값에 대한 규칙 기반 조건 판정이며 모델 출력이 아니다. `predicted_failure_type` 또는 root cause처럼 취급하지 않는다.
 - `map-report-ui-prototype`의 그래프 생성 로직, fixture series, prototype adapter를 제품 runtime source로 승격하지 않는다. UI는 공식 ViewModel에 있는 series만 그리며, 없는 그래프는 `evidence_gap` 또는 `data_status.warnings`로 표시한다.
 - `gen_data`의 raw/simulation/synthetic Observation은 센서 시계열의 source fact로 사용할 수 있지만, `gen_data/canonical/model_outputs/*`의 `prediction_timeline`, `prediction_snapshot`, `result_artifact`는 운영 최신 결과가 아니라 compatibility/regression/migration fixture다. 제품 화면에서 위험도 시계열로 직접 소비하지 않는다.
-- `gen_data`의 최종 저장 형식은 곧바로 Product API ViewModel이 아니다. `.raw`는 프로토콜 원본, Layer 1 `output/sensor/.../{센서명}`은 최신값 overwrite, Layer 2 `output/sensor/.../_log.jsonl`은 append-only 센서 시계열이다. 피쳐 그래프는 Layer 2를 `asset_id`, `sensor_key`, `observed_at`, `measurements` 형태로 정규화한 Observation API shape에서 파생한다.
+- `gen_data`의 최종 저장 형식은 곧바로 Product API ViewModel이 아니다. `.raw`는 프로토콜 원본, Layer 1 `output/sensor/.../{센서명}`은 최신값 overwrite, Layer 2 `output/sensor/.../_log.jsonl`은 append-only 센서 시계열이다. 이 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target으로 보고, Asset Detail Report의 실제 의존성은 내부 파일명이 아니라 versioned Observation contract에 둔다. 피쳐 그래프는 Layer 2를 `asset_id`, `sensor_key`, `observed_at`, `measurements` 형태로 정규화한 Observation API shape에서 파생한다.
 
 ### 3.1 Asset Detail Report ViewModel 계약 후보
 
@@ -222,7 +222,7 @@ type AssetDetailReportViewModel = {
   risk: {
     current: number | null
     threshold: number | null
-    status_grade: "normal" | "attention" | "warning" | "critical" | "data_quality_hold"
+    status_grade: "normal" | "attention" | "warning" | "critical"
     prediction_horizon_hours: number | null
   }
   risk_series: Array<{
@@ -280,8 +280,9 @@ type AssetDetailReportViewModel = {
     }>
   }
   data_status: {
-    source: "canonical" | "runtime_inference" | "compatibility_fallback"
+    source: "canonical" | "fallback"
     is_stale: boolean
+    is_data_quality_hold: boolean
     warnings: string[]
   }
 }
@@ -294,8 +295,13 @@ type AssetDetailReportViewModel = {
 | `asset`, 표시명, line/cell | Asset/Object read model | Dataset/Equipment API | 필드 생략 또는 `data_status.warnings` |
 | `features[].series` | gen_data Layer 2 `_log.jsonl`을 정규화한 canonical Observation 또는 Runtime Overlay Observation | Dataset/Observation API | 빈 배열과 `evidence.gaps[]` |
 | `risk.current`, `top_factor`, `baseline` | Product Result Artifact와 `evidence_payload.sensor_evidence` | `systems/backend/app/diagnosis` | null과 `evidence.gaps[]` |
-| `risk_series` | Backend Diagnosis가 생성한 runtime prediction/result timeline | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
+| `risk_series` | Backend Diagnosis가 생성할 runtime prediction/result timeline | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
 | `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
+
+`risk_series`의 runtime prediction/result timeline은 기존 legacy `/timeline`의
+`precomputed_prediction_timeline`을 제품 runtime source로 승격하는 뜻이 아니다. 이는
+Backend Diagnosis가 runtime inference 결과를 versioned result/prediction history로
+materialize하는 후속 target이다.
 
 현재 Evidence만으로 채울 수 있는 범위와 추가로 필요한 source는 다음과 같다.
 
