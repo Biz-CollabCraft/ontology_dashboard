@@ -21,10 +21,6 @@
     "context.py",
     "contracts.py",
     "conversation.py",
-    "dashboard_catalog.py",
-    "dashboard_models.py",
-    "dashboard_repository.py",
-    "dashboard_service.py",
     "demo_predictive_maintenance_bootstrap.py",
     "dependencies.py",
     "deployment.py",
@@ -94,7 +90,6 @@
     "routers/admin.py",
     "routers/agent.py",
     "routers/analyses.py",
-    "routers/dashboards.py",
     "routers/exports.py",
     "routers/manufacturing.py",
     "routers/modeling.py",
@@ -105,11 +100,6 @@
     "routers/role_workspaces.py",
     "routers/system.py",
     "service.py",
-    "visualizations/__init__.py",
-    "visualizations/models.py",
-    "visualizations/profiler.py",
-    "visualizations/recommender.py",
-    "visualizations/semantic.py",
     "worker.py"
   ],
   "transitional_references": [
@@ -132,11 +122,6 @@
       "source": "scripts/check_postgresql_runtime.py",
       "kind": "static_import",
       "target": "ontology_dashboard.adapters.models"
-    },
-    {
-      "source": "scripts/check_postgresql_runtime.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.dashboard_service"
     },
     {
       "source": "scripts/check_postgresql_runtime.py",
@@ -451,16 +436,6 @@
     {
       "source": "tests/test_architecture_debt_stage44.py",
       "kind": "dynamic_import",
-      "target": "ontology_dashboard.dashboard_repository"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
-      "target": "ontology_dashboard.dashboard_service"
-    },
-    {
-      "source": "tests/test_architecture_debt_stage44.py",
-      "kind": "dynamic_import",
       "target": "ontology_dashboard.export_repository"
     },
     {
@@ -672,11 +647,6 @@
       "source": "tests/test_domain_pack_platform_phase19.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_export_security_stage31.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.dashboard_service"
     },
     {
       "source": "tests/test_export_security_stage31.py",
@@ -1061,16 +1031,6 @@
     {
       "source": "tests/test_predictive_maintenance_visualization_planner.py",
       "kind": "static_import",
-      "target": "ontology_dashboard.dashboard_models"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_visualization_planner.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.dashboard_service"
-    },
-    {
-      "source": "tests/test_predictive_maintenance_visualization_planner.py",
-      "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
     },
     {
@@ -1089,11 +1049,6 @@
       "target": "ontology_dashboard.service"
     },
     {
-      "source": "tests/test_predictive_maintenance_visualization_planner.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.visualizations"
-    },
-    {
       "source": "tests/test_project3_routes_stage45.py",
       "kind": "static_import",
       "target": "ontology_dashboard.dependencies"
@@ -1107,16 +1062,6 @@
       "source": "tests/test_project3_routes_stage45.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_project_layer.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.dashboard_models"
-    },
-    {
-      "source": "tests/test_project_layer.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.dashboard_service"
     },
     {
       "source": "tests/test_project_layer.py",
@@ -1137,11 +1082,6 @@
       "source": "tests/test_project_layer.py",
       "kind": "static_import",
       "target": "ontology_dashboard.service"
-    },
-    {
-      "source": "tests/test_project_repository_isolation_matrix.py",
-      "kind": "static_import",
-      "target": "ontology_dashboard.dashboard_repository"
     },
     {
       "source": "tests/test_project_repository_isolation_matrix.py",
