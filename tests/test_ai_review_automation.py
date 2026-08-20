@@ -89,9 +89,6 @@ DIFF
         self.assertFalse(force)
         self.assertIn("change volume alone", reason)
 
-        force, _reason = review_force_vertex([".github/workflows/architecture.yml"])
-        self.assertFalse(force)
-
         force, _reason = review_force_vertex(
             ["systems/backend/app/infra/db/dashboard_repository.py"]
         )
@@ -99,9 +96,12 @@ DIFF
 
     def test_full_review_risk_gate_keeps_true_trust_and_migration_semantics_on_vertex(self):
         for path in (
+            ".github/workflows/architecture.yml",
             "systems/backend/app/auth/auth_service.py",
             "systems/backend/migrations/postgresql/0031_runtime.sql",
-            "systems/backend/app/infra/db/migrations.py",
+            "systems/backend/ontology_dashboard/migrations.py",
+            "scripts/check_postgresql_migration.py",
+            "scripts/migrate_database.py",
             "systems/verify_architecture.py",
         ):
             with self.subTest(path=path):
@@ -329,6 +329,66 @@ x
             kind="pr",
         )
         self.assertEqual(decision, "ESCALATE")
+
+        decision, confidence, reason = _normalize_scope_escalation(
+            "ESCALATE",
+            0.7,
+            "Fixture provider is returned by get_provider used in the deployed API.",
+            source_prompt="""
+
+TRUSTED_BASE_CONTEXT
+Production diagnosis service.
+
+PR_TITLE (untrusted)
+x
+
+CHANGED_FILES
+M\tsystems/backend/app/diagnosis/evidence.py
+
+ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
+green
+
+CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)
+# demo compatibility boundary: fixture provider retained for MVP
+
+DIFF (untrusted review input)
++ # demo compatibility boundary: fixture provider retained for MVP
+""",
+            kind="pr",
+        )
+        self.assertEqual(decision, "ESCALATE")
+        self.assertEqual(confidence, 0.7)
+        self.assertIn("deployed API", reason)
+
+        decision, confidence, reason = _normalize_scope_escalation(
+            "ESCALATE",
+            0.96,
+            "The fixture fallback is wired through ontology_dashboard/dependencies.py and reached on every deployed request.",
+            source_prompt="""
+
+TRUSTED_BASE_CONTEXT
+ManufacturingPredictiveMaintenanceService is the MVP/demo compatibility application service.
+
+PR_TITLE (untrusted)
+x
+
+CHANGED_FILES
+M\tsystems/backend/ontology_dashboard/dependencies.py
+
+ARCHITECTURE_JOB_LOG (untrusted execution output; consult mainly on failure)
+green
+
+CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)
+x
+
+DIFF (untrusted review input)
+x
+""",
+            kind="pr",
+        )
+        self.assertEqual(decision, "ESCALATE")
+        self.assertEqual(confidence, 0.96)
+        self.assertIn("dependencies.py", reason)
 
     def test_free_verifier_context_is_compact_even_for_large_review_prompt(self):
         prompt = """header

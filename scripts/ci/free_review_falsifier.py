@@ -33,6 +33,7 @@ SCOPE_LINE_RE = re.compile(
 )
 CONCRETE_RUNTIME_CALLER_RE = re.compile(
     r"(?i)(app\.main|main\.py|router\.py|runtime_router\.py|worker\.py|"
+    r"dependenc(?:y|ies)\.py|\bdepends\b|\binject(?:ion|ed|or)?\b|"
     r"render_start|docker-compose|compose\.ya?ml|entrypoint|composition root|"
     r"production caller|deployment caller)"
 )
@@ -106,7 +107,9 @@ def _section(text: str, start: str, end: str | None = None) -> str:
     return text[body_start:] if end_index < 0 else text[body_start:end_index]
 
 
-def _runtime_scope_evidence(source_prompt: str, kind: str) -> str:
+def _runtime_scope_evidence(
+    source_prompt: str, kind: str, *, trusted_only: bool = False
+) -> str:
     """Extract caller/scope clues before the general evidence packet is sliced.
 
     Large reviews often contain a fixture/demo helper near the start of changed
@@ -117,14 +120,16 @@ def _runtime_scope_evidence(source_prompt: str, kind: str) -> str:
     """
 
     if kind == "comment":
-        sources = (
-            _section(source_prompt, "TRUSTED_BASE_CONTEXT", "CHANGED_FILES"),
+        trusted = _section(source_prompt, "TRUSTED_BASE_CONTEXT", "CHANGED_FILES")
+        sources = (trusted,) if trusted_only else (
+            trusted,
             _section(source_prompt, "CHANGED_HEAD_SOURCE_CONTEXT", "DIFF"),
             _section(source_prompt, "CHANGED_FILES", "CHANGED_HEAD_SOURCE_CONTEXT"),
         )
     elif kind == "pr":
-        sources = (
-            _section(source_prompt, "TRUSTED_BASE_CONTEXT", "PR_TITLE (untrusted)"),
+        trusted = _section(source_prompt, "TRUSTED_BASE_CONTEXT", "PR_TITLE (untrusted)")
+        sources = (trusted,) if trusted_only else (
+            trusted,
             _section(
                 source_prompt,
                 "CHANGED_HEAD_SOURCE_CONTEXT (untrusted changed source; prioritized before truncated diff)",
@@ -335,7 +340,14 @@ def _normalize_scope_escalation(
 
     lower = reason.lower()
     scope_claim = any(token in lower for token in ("fixture", "demo", "mock", "test data"))
-    scope_evidence = _runtime_scope_evidence(source_prompt, kind) if source_prompt else ""
+    # Only base-owned context may authorize this deterministic downgrade. The
+    # general verifier packet intentionally contains untrusted changed source,
+    # but a PR must not be able to write its own demo-boundary exemption.
+    scope_evidence = (
+        _runtime_scope_evidence(source_prompt, kind, trusted_only=True)
+        if source_prompt
+        else ""
+    )
     explicit_demo_boundary = bool(EXPLICIT_DEMO_BOUNDARY_RE.search(scope_evidence))
     if (
         decision == "ESCALATE"

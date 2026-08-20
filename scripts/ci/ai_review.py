@@ -642,6 +642,7 @@ def review_force_vertex(
     # actually redefine reviewer trust, security/auth, architecture truth, or
     # executable database-migration semantics.
     reviewer_trust_paths = {
+        ".github/workflows/architecture.yml",
         ".github/workflows/code-review.yml",
         ".github/workflows/pr-comment-review.yml",
         "scripts/ci/ai_review.py",
@@ -652,8 +653,9 @@ def review_force_vertex(
         "systems/verify_architecture.py",
     }
     executable_migration_paths = {
+        "scripts/check_postgresql_migration.py",
         "scripts/migrate_database.py",
-        "systems/backend/app/infra/db/migrations.py",
+        "systems/backend/ontology_dashboard/migrations.py",
     }
     sensitive_names = (
         "auth",
