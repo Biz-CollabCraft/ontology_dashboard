@@ -69,7 +69,7 @@ def build_evidence_package(
     predictor: Predictor | None = None,
     context_provider: ContextProvider | None = None,
 ) -> dict[str, Any]:
-    model = predictor or configured_predictor()
+    model = predictor or configured_predictor(str(fixture.get("asset_type") or "cnc"))
     prediction: Prediction = model.predict(fixture)
     provider = context_provider or FixtureContextProvider()
     observation = fixture["observation"]

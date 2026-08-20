@@ -15,7 +15,7 @@ from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMainten
 from app.infra.db.predictive_maintenance_ontology_projection import (
     PredictiveMaintenanceOntologyMaterializer,
 )
-from app.infra.db.postgresql_ontology_instance_repository import (
+from app.infra.db.postgresql_ontology_repository import (
     PostgreSQLOntologyInstanceRepository,
 )
 from predictive_maintenance_v3_helpers import create_small_v3_package
@@ -45,12 +45,13 @@ def ingest(database_url: str, root: Path):
     ).ingest_validated_bundle(manifest=manifest, validation=validation)
 
 
-def _dsn_for_user(database_url: str, user: str) -> str:
+def _dsn_for_user(database_url: str, user: str, password: str | None = None) -> str:
     parsed = urlsplit(database_url)
     host = parsed.hostname or "127.0.0.1"
     if parsed.port:
         host = f"{host}:{parsed.port}"
-    return urlunsplit(("postgresql", f"{user}@{host}", parsed.path, parsed.query, ""))
+    credentials = user if not password else f"{user}:{password}"
+    return urlunsplit(("postgresql", f"{credentials}@{host}", parsed.path, parsed.query, ""))
 
 
 def test_v2_v3_materialization_is_versioned_governed_and_idempotent(
@@ -145,7 +146,7 @@ def test_v2_v3_materialization_is_versioned_governed_and_idempotent(
     assert outbox_payload["release_gates"]["tool_wear_continuity"]["pass"] is True
     assert outbox_payload["release_gates"]["tool_wear_continuity"][
         "tool_replacement_event_count"
-    ] == 731
+    ] == 1_075
     assert outbox_payload["release_gates"]["agent_example_evaluation"][
         "maintenance_evidence_accuracy"
     ] == 1.0
@@ -272,12 +273,21 @@ def test_v2_v3_materialization_is_versioned_governed_and_idempotent(
         ) == 1
 
     role = f"pm_projection_rls_{uuid.uuid4().hex[:10]}"
+    role_password = "runtime-test-password"
     try:
         with psycopg.connect(postgresql_database, autocommit=True) as admin:
-            admin.execute(sql.SQL("CREATE ROLE {} LOGIN").format(sql.Identifier(role)))
+            admin.execute(
+                sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                    sql.Identifier(role),
+                    sql.Literal(role_password),
+                )
+            )
             admin.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(role)))
             admin.execute(sql.SQL("GRANT SELECT ON ontology_objects TO {}").format(sql.Identifier(role)))
-        with psycopg.connect(_dsn_for_user(postgresql_database, role), row_factory=dict_row) as scoped:
+        with psycopg.connect(
+            _dsn_for_user(postgresql_database, role, role_password),
+            row_factory=dict_row,
+        ) as scoped:
             scoped.execute("SELECT set_config('app.organization_id','org-test',false)")
             scoped.execute("SELECT set_config('app.project_id','project-test',false)")
             visible = int(scoped.execute("SELECT COUNT(*) AS count FROM ontology_objects").fetchone()["count"])

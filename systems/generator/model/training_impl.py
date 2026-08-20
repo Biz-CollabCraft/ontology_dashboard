@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +41,25 @@ NUMERIC_FEATURES = [
 ]
 CATEGORICAL_FEATURES = ["product_type"]
 ALL_FEATURES = [*CATEGORICAL_FEATURES, *NUMERIC_FEATURES]
+
+
+def _training_n_jobs() -> int:
+    """Bound tree-model parallelism for shared production hosts.
+
+    The previous ``n_jobs=-1`` default consumed every host CPU. The Generator is
+    a batch workload and shares the Mac mini with databases and unrelated
+    services, so production defaults to two workers while remaining explicitly
+    configurable for CI/developer machines.
+    """
+
+    raw = os.getenv("GENERATOR_TRAINING_N_JOBS", "2").strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("GENERATOR_TRAINING_N_JOBS must be an integer") from exc
+    if value == 0 or value < -1:
+        raise ValueError("GENERATOR_TRAINING_N_JOBS must be -1 or a positive integer")
+    return value
 
 
 @dataclass(frozen=True)
@@ -112,7 +132,7 @@ def build_candidates() -> dict[str, Pipeline]:
                         n_estimators=300,
                         min_samples_leaf=2,
                         class_weight="balanced_subsample",
-                        n_jobs=-1,
+                        n_jobs=_training_n_jobs(),
                         random_state=RANDOM_SEED,
                     ),
                 ),

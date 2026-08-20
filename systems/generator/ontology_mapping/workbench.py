@@ -7,7 +7,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.ontology.ontology_domain import OBJECT_TYPE_BY_ID
-from ontology_dashboard.modeling.models import (
+from model.contracts import (
     CapabilityEvaluation,
     CapabilityStatus,
     DatasetIntakeProfile,

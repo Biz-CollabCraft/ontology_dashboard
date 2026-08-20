@@ -84,7 +84,7 @@ class LocalModelArtifactProvider:
 
         compatibility = manifest.get("compatibility") or {}
         runtime = compatibility.get("runtime")
-        if runtime not in {None, "ontology_dashboard.systems.backend.diagnosis"}:
+        if runtime not in {None, "app.diagnosis"}:
             raise ValueError(f"Model Artifact is incompatible with diagnosis runtime: {runtime}")
 
         root = manifest_path.parent

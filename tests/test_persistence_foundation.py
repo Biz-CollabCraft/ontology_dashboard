@@ -4,14 +4,14 @@ import sqlite3
 from pathlib import Path
 
 from app.identity import IdentityService
-from identity_test_support import build_identity_service
-from ontology_dashboard.migrations import migrate
+from app.infra.db.migrations import migrate
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
-from app.ontology.ontology_service import OntologyService
 from app.infra.db.project_repository import SQLiteProjectContextResolver
-from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
-from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
+from app.ontology.ontology_service import OntologyService
+from app.infra.db.role_workflow_repository import RoleWorkflowRepository
+from app.mvp.service import ManufacturingPredictiveMaintenanceService
+from identity_test_support import build_identity_service
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = "manufacturing-demo"
@@ -105,15 +105,8 @@ def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Pa
     project_context = SQLiteProjectContextResolver(database)
     ontology = OntologyService(
         service,
-        action_repository=OntologyActionRepository(
-            database,
-            project_context=project_context,
-        ),
-        instance_repository=OntologyInstanceRepository(
-            database,
-            project_context=project_context,
-        ),
-        field_actions=RoleWorkflowRepository(database),
+        action_repository=OntologyActionRepository(database, project_context=project_context),
+        instance_repository=OntologyInstanceRepository(database, project_context=project_context),
     )
 
     result = ontology.query_objects(
@@ -123,10 +116,7 @@ def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Pa
     )
     assert result["total"] == 8
 
-    repository = OntologyInstanceRepository(
-        database,
-        project_context=project_context,
-    )
+    repository = OntologyInstanceRepository(database, project_context=project_context)
     assert len(repository.list_objects(workspace_id=WORKSPACE)) >= 8
     assert len(repository.list_links(workspace_id=WORKSPACE)) >= 8
     ingestion = repository.latest_ingestion(workspace_id=WORKSPACE)

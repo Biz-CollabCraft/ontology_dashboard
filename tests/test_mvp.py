@@ -8,14 +8,15 @@ from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from ontology_dashboard.context import Project3HttpContextProvider, ResilientContextProvider
-from ontology_dashboard.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
+from app.mvp.context import Project3HttpContextProvider, ResilientContextProvider
+from app.mvp.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
 from app.identity import CSRF_COOKIE, IdentityService
-from identity_test_support import build_identity_service
 from app.infra.llm import VertexAIProvider, configured_provider
-from ontology_dashboard.main import app, get_identity_service, get_service
-from ontology_dashboard.planner import LayoutPlanner
-from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
+from app.main import app
+from app.dependencies import get_identity_service, get_service
+from app.planner import LayoutPlanner
+from app.mvp.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
+from identity_test_support import build_identity_service
 from ontology_dashboard_manufacturing_ml import HeuristicPredictor, build_evidence_package, load_fixture
 from ontology_dashboard_manufacturing_ml.contracts import FAILURE_MODE_COLUMNS, TARGET_COLUMN, assert_no_leakage, audit_fixture
 

@@ -48,7 +48,7 @@ def _create_valid_artifact(dest: Path, model_id: str = "pdm-cnc-tool-wear-lightg
         training_config={"algorithm": "lightgbm", "framework": "lightgbm"},
         metrics={"metrics_schema_version": "pdm-metrics-v1", "validation_metrics": {"f1": 0.85}},
         provenance={"publisher": "systems/generator"},
-        compatibility={"runtime": "ontology_dashboard.systems.backend.diagnosis"},
+        compatibility={"runtime": "app.diagnosis"},
     )
 
 

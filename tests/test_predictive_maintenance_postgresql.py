@@ -9,15 +9,10 @@ from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 
-from app.dataset.ingestion import (
-    BundleFileAdapter,
-    DatasetBundleManifestV2,
-    compute_bundle_checksum,
-)
+from app.dataset.bundle_contract import DatasetBundleManifestV2, compute_bundle_checksum
+from app.dataset.ingestion.bundle_file_adapter import BundleFileAdapter
+from app.infra.db.migrations import migrate
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
-from ontology_dashboard.migrations import migrate
-from ontology_dashboard.modeling.models import DatasetIntakeProfile, canonical_checksum
-from ontology_dashboard.modeling.repository import ModelingRepository
 from app.infra.db.pool import close_pools
 from tests.test_predictive_maintenance_bundle_adapter import (
     build_manifest,
@@ -89,6 +84,7 @@ def postgresql_database():
         applied = migrate(dsn)
         assert "0029_governed_event_automation" in applied
         assert "0030_closed_loop_operations" in applied
+        assert "0031_predictive_maintenance_runtime_overlay" in applied
         assert migrate(dsn) == []
         import psycopg
 
@@ -296,6 +292,7 @@ def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
             admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role)))
 
 
+@pytest.mark.skip(reason="Adaptive Modeling Workbench was removed from the MVP runtime")
 def test_postgresql_adaptive_modeling_repository_jsonb_idempotency_and_rls(
     postgresql_database: str,
 ) -> None:

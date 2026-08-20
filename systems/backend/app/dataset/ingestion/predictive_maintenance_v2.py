@@ -230,21 +230,22 @@ V3_1_MODEL_VERSION = "independent-logreg-v3.1"
 V3_1_EXPECTED_PACKAGE_COUNTS = {
     "assets": 100,
     "relations": 80,
-    "compressor_observations": 86_400,
-    "cnc_observations": 345_600,
-    "production_cycles": 170_875,
-    "maintenance_events": 790,
-    "prediction_timeline_rows": 68_208,
+    "compressor_observations": 123_840,
+    "cnc_observations": 495_360,
+    "production_cycles": 244_929,
+    "maintenance_events": 1_151,
+    "prediction_timeline_rows": 99_150,
     "result_artifact_rows": 100,
 }
 V3_1_EXPECTED_SOURCE_COUNTS = {
     "assets": 100,
     "relations": 80,
-    "compressor_observations": 86_400,
-    "cnc_observations": 345_600,
-    "production_cycles": 170_875,
-    "maintenance_events": 790,
+    "compressor_observations": 123_840,
+    "cnc_observations": 495_360,
+    "production_cycles": 244_929,
+    "maintenance_events": 1_151,
 }
+V3_1_EXPECTED_TOOL_REPLACEMENT_COUNT = 1_075
 V3_1_RELEASE_PASS_FIELDS = (
     "canonical_source_separation",
     "canonical_checksum_integrity",
@@ -356,8 +357,8 @@ class PredictiveMaintenanceCanonicalV2Adapter:
             "pass": True,
             "running_reset_count": 0,
             "maximum_allowed": 0,
-            "tool_replacement_event_count": 731,
-            "aligned_reset_transition_count": 731,
+            "tool_replacement_event_count": V3_1_EXPECTED_TOOL_REPLACEMENT_COUNT,
+            "aligned_reset_transition_count": V3_1_EXPECTED_TOOL_REPLACEMENT_COUNT,
             "reset_without_matching_maintenance_count": 0,
             "replacement_without_reset_count": 0,
         }
@@ -492,8 +493,8 @@ class PredictiveMaintenanceCanonicalV2Adapter:
         required_continuity = {
             "running_reset_count": 0,
             "maximum_allowed": 0,
-            "tool_replacement_event_count": 731,
-            "aligned_reset_transition_count": 731,
+            "tool_replacement_event_count": V3_1_EXPECTED_TOOL_REPLACEMENT_COUNT,
+            "aligned_reset_transition_count": V3_1_EXPECTED_TOOL_REPLACEMENT_COUNT,
             "reset_without_matching_maintenance_count": 0,
             "replacement_without_reset_count": 0,
         }

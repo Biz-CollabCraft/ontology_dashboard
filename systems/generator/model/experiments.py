@@ -34,7 +34,7 @@ from sklearn.metrics import (
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from ontology_dashboard.modeling.models import (
+from model.contracts import (
     ArtifactReference,
     CandidateResult,
     ExperimentRun,

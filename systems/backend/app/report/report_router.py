@@ -1,42 +1,106 @@
-"""
-report_router.py
+"""Report draft, export artifact, and checkpoint HTTP adapter."""
 
-담당 기능:
-- 진단 결과 기반 리포트 생성 및 조회 API 엔드포인트를 라우팅한다.
-  GET /api/v1/report/{id}, POST /api/v1/report/generate 등을 다룬다.
+from __future__ import annotations
 
-입력:
-- ReportGenerateRequest / HTTP 경로 파라미터.
+from collections.abc import Callable
+from typing import Any
 
-출력:
-- ReportResponse (리포트 본문 및 통계 템플릿 정보).
+from fastapi import APIRouter, Depends, Query, Response
 
-의존 모듈:
-- report_service.py, report_schema.py
+from app.common.rate_limit import EXPORT_RATE, RateLimiter
 
-예외/경계 상황:
-- 단독 실행 비대상 파일이다.
-
-설계 원칙과의 연결:
-- docs/architecture.md 4장의 'report' 도메인 역할을 적용한다.
-"""
-
-import sys
-from fastapi import APIRouter
-
-router = APIRouter(prefix="/report", tags=["Report"])
+from .report_schema import AppLocale, ExportRequest, ReportDraftSaveRequest, Role
+from .report_service import ReportService
 
 
-class ReportRouter:
-    """Report 라우터 클래스 스켈레톤"""
+def build_report_router(
+    *,
+    get_report_service: Callable[..., ReportService],
+    get_identity_service: Callable[..., Any],
+    get_rate_limiter: Callable[..., RateLimiter],
+    rate_limit_subject: Callable[..., str],
+    require_csrf: Callable[..., None],
+    require_permission: Callable[[str], Any],
+) -> APIRouter:
+    router = APIRouter(tags=["reports", "exports"])
 
-    pass
+    @router.get("/api/reports/draft")
+    def get_report_draft(
+        workspace_id: str,
+        event_id: str,
+        role: Role = Query(default="engineer"),
+        locale: AppLocale = Query(default="ko-KR"),
+        principal: Any = Depends(require_permission("events.read")),
+        identity: Any = Depends(get_identity_service),
+        reports: ReportService = Depends(get_report_service),
+    ):
+        identity.require_workspace(principal, workspace_id)
+        draft = reports.get_draft(
+            workspace_id=workspace_id,
+            event_id=event_id,
+            role=role,
+            locale=locale,
+        )
+        return {"draft": draft.model_dump(mode="json") if draft is not None else None}
+
+    @router.put("/api/reports/draft")
+    def save_report_draft(
+        request: ReportDraftSaveRequest,
+        principal: Any = Depends(require_permission("events.note")),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        reports: ReportService = Depends(get_report_service),
+    ):
+        identity.require_workspace(principal, request.workspace_id)
+        return reports.save_draft(principal=principal, request=request).model_dump(mode="json")
+
+    @router.post("/api/exports")
+    def create_export(
+        request: ExportRequest,
+        principal: Any = Depends(require_permission("exports.create")),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        reports: ReportService = Depends(get_report_service),
+        limiter: RateLimiter = Depends(get_rate_limiter),
+    ):
+        limiter.check(
+            bucket="exports.create",
+            subject=rate_limit_subject(principal.user_id),
+            rule=EXPORT_RATE,
+        )
+        identity.require_workspace(principal, request.workspace_id)
+        artifact = reports.create_export(principal=principal, request=request)
+        checkpoint = artifact.checkpoint
+        return Response(
+            content=artifact.content,
+            media_type=checkpoint.media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{checkpoint.filename}"',
+                "X-Export-Checkpoint-ID": checkpoint.id,
+                "X-Content-SHA256": checkpoint.content_hash,
+                "X-Snapshot-SHA256": checkpoint.snapshot_hash,
+                "Cache-Control": "no-store",
+            },
+        )
+
+    @router.get("/api/exports/checkpoints")
+    def list_export_checkpoints(
+        workspace_id: str,
+        limit: int = Query(default=100, ge=1, le=200),
+        principal: Any = Depends(require_permission("exports.read_own")),
+        identity: Any = Depends(get_identity_service),
+        reports: ReportService = Depends(get_report_service),
+    ):
+        identity.require_workspace(principal, workspace_id)
+        return {
+            "items": reports.list_checkpoints(
+                principal=principal,
+                workspace_id=workspace_id,
+                limit=limit,
+            )
+        }
+
+    return router
 
 
-if __name__ == "__main__":
-    print(
-        "[ERROR] report_router.py는 단독 실행 대상이 아닙니다. "
-        "app.main:app 컨텍스트에서 실행하십시오.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+__all__ = ["build_report_router"]

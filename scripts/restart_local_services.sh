@@ -51,7 +51,7 @@ stop_service() {
   done < <(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null | sort -u)
 }
 
-stop_service "${API_PID_FILE}" "${API_PORT}" "uvicorn ontology_dashboard.app:app"
+stop_service "${API_PID_FILE}" "${API_PORT}" "uvicorn app.main:app"
 stop_service "${WEB_PID_FILE}" "${WEB_PORT}" "vite"
 sleep 0.5
 
@@ -66,7 +66,7 @@ fi
 
 API_PID="$(lsof -tiTCP:"${API_PORT}" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
 if [[ -z "${API_PID}" ]]; then
-  nohup "${ROOT_DIR}/.venv/bin/python" -m uvicorn ontology_dashboard.app:app \
+  nohup "${ROOT_DIR}/.venv/bin/python" -m uvicorn app.main:app \
     --host "${API_HOST}" --port "${API_PORT}" >> "${API_LOG}" 2>&1 &
   API_PID=$!
 fi
