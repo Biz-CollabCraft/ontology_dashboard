@@ -43,6 +43,7 @@
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (운영 중) |
 | POST | `/preprocessing` | Observation Dataset 분석 및 Preprocessing Plan/Mapping 수립·발행 (2단계) | Current (운영 중) |
+| POST | `/feature` | Observation + Failure + Plan/Mapping을 소비하여 Feature/Label 생성 및 불변 Feature Dataset Bundle(5개 파일) 원자적 발행 (3단계) | Current (구현 완료) |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | Current (운영 중) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | Current (운영 중) |
 
@@ -57,7 +58,7 @@
 | GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
 | POST | `/extraction` | protocol provenance → Observation Dataset / Authorized Truth Source → Failure Dataset (신규 1단계) | Target — 미병합 |
 | POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Current (구현 완료) |
-| POST | `/feature` | Observation + Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/feature` | Observation + Failure + Plan/Mapping을 소비하여 Feature/Label 및 Feature Bundle 발행 (신규 3단계) | Current (구현 완료) |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
