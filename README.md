@@ -1,11 +1,30 @@
-# 온톨로지 기반 설비 예지보전 플랫폼 (`ontology_dashboard`)
+# Ontology-based Predictive Maintenance Platform (`ontology_dashboard`)
 
-제조 설비의 센서·정비·예측 데이터를 온톨로지 기반으로 연결하고, 같은 분석 결과를
-Dashboard, Operations, Executive Brief, API에서 일관되게 활용하기 위한 팀 프로젝트입니다.
+## Why I built it
 
-이 저장소는 단순 예측 모델 저장소가 아니라 `Biz-CollabCraft/gen_data`가 생성한 source data를
-소비해 Feature/Model Artifact, runtime inference, Product Result Artifact/Evidence, 업무 Action,
-Frontend와 Report까지 연결하는 제품 실행 저장소입니다.
+In many manufacturing AI projects, building a prediction model is only the beginning.
+The harder problem is turning a model output into a decision that engineers and operators
+can actually trust and act on.
+
+I built this platform to explore the gap between **"a model predicts a failure risk"** and
+**"a maintenance team knows what happened, why it matters, and what action to take."**
+
+Instead of treating prediction results as isolated numbers, this project connects sensor data,
+model artifacts, evidence, ontology states, recommended actions, and user-facing dashboards
+into one traceable product workflow.
+
+## Project overview
+
+`ontology_dashboard` is a product-oriented predictive maintenance platform that connects
+manufacturing sensor data, ML lifecycle artifacts, runtime inference, ontology-based reasoning,
+and operational decision flows.
+
+The goal is not only to answer **"when might equipment fail?"** but also:
+
+- What evidence supports this risk?
+- Which equipment state changed?
+- What action should an operator take next?
+- How can the decision history be traced later?
 
 ## 1. 프로젝트 목표
 
