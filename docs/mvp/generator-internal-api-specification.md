@@ -5,7 +5,9 @@
 이 문서는 `systems/generator`가 노출하는 **내부 전용 제어 API**의 계약이다. [API 명세서](./api-specification.md)가 `backend`의 제품 API(사용자·프론트엔드가 소비)를 다루는 것과 달리, 이 문서는 `backend`(또는 운영자)가 `generator` 데몬을 제어하기 위한 API를 다룬다. **외부(프론트엔드)에는 노출되지 않는다.**
 
 - Base path: (별도 접두사 없음, `generator` 프로세스가 단독으로 사용)
-- 책임: `generator` 파이프라인(추출/매핑/feature/학습 및 Model Artifact 발행) 구현 담당자
+- 책임: `generator` 파이프라인(추출/매핑/feature/학습 및 Model Artifact 발행, 활성 버전 포인터 관리) 구현 담당자
+
+---
 
 ## 2. 책임 경계 (허용 / 금지 범위)
 
@@ -13,9 +15,13 @@
 
 ### 허용 범위
 - `GET /health` (데몬 상태 확인)
-- `POST /internal/train` (최초 학습 실행)
-- `POST /internal/retrain` (새 버전 재학습 실행)
-- 학습 job 상태 또는 Model Artifact publish 상태 조회
+- `POST /internal/train` (기존 main 제어 API: 최초 학습 실행, 단일 프로세스 Lock 하에 실행)
+- `POST /internal/retrain` (기존 main 제어 API: 새 버전 재학습 실행, 단일 프로세스 Lock 하에 실행)
+- Target 제어 API: 후속 구조 개편 시 정의될 단계별 엔드포인트(`POST /extraction`, `POST /preprocessing`, `POST /feature`, `POST /train`, `POST /train/{base_model}`, `POST /models/...`)
+
+> **Backend 연계 책임 경계**:
+> - Generator의 책임 끝점은 Model Artifact 발행 및 canonical active-version pointer(`latest.json`)의 원자적 관리까지입니다.
+> - Backend 런타임에서 `latest.json`을 읽어 진단 모델을 리로드(reload)하고 소비하는 연계 작업은 Generator 구현 완료 조건에 포함하지 않으며, 별도의 Backend 연계 작업으로 진행됩니다.
 
 ### 금지 범위
 - `POST /internal/predict`, `POST /internal/predict/file`
@@ -25,19 +31,59 @@
 - `PredictionOutput` 등 Backend runtime 응답 형식 노출
 - Frontend의 Generator 직접 호출
 
-> **참고**: Runtime inference와 Product Result Artifact/Evidence의 소유자는 `systems/backend/app/diagnosis`이다.
+---
 
-## 3. Endpoint
+## 3. 엔드포인트 목록 및 Migration 매핑
 
-| Method | Path | 목적 |
+### 3.1 Current API (현재 main 구현 상태)
+
+현재 `main` 브랜치의 Generator 데몬에 실제로 구현되어 동작하는 엔드포인트입니다.
+
+| Method | Path | 현재 의미 | 상태 |
+|---|---|---|---|
+| GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (운영 중) |
+| POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | Current (운영 중) |
+| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | Current (운영 중) |
+
+> **참고**: 기존 `/internal/train`, `/internal/retrain`의 향후 폐기 또는 compatibility shim 유지 여부는 후속 migration 시점에 결정됩니다.
+
+### 3.2 Target API (후속 목표 설계)
+
+후속 구조 개편(4대 파이프라인 단계별 책임 분리)이 완료된 후 도입될 목표 엔드포인트입니다 (`/ingestion`, `/observations` 같은 파일 수신 엔드포인트는 도입하지 않으며 파일 handoff 방식을 유지함).
+
+| Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
+|---|---|---|---|
+| GET | `/health` | Generator 데몬 상태 확인 | Target (유지) |
+| POST | `/extraction` | `gen_data` Layer 2 프로토콜 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target (후속 구현) |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target (기존 기능 이전) |
+| POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target (후속 구현/정리) |
+| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target (후속 구현/정리) |
+| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target (후속 구현/정리) |
+| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target (후속 구현/정리) |
+| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target (후속 구현/정리) |
+
+### 3.3 기존 명칭 Migration 매핑표
+
+| Current (현재 main 대상) | Target (후속 목표 대상) | Migration 계획 및 비고 |
 |---|---|---|
-| GET | `/health` | 데몬 프로세스 상태 확인 |
-| POST | `/internal/train` | 파이프라인 최초 학습 실행 (단일 프로세스 Lock 하에 실행) |
-| POST | `/internal/retrain` | 재학습 실행, 기존 모델을 덮어쓰지 않고 새 버전으로 저장 (Lock 하에 실행) |
+| 기존 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (기존 기능 이전) |
+| `ExtractionPlan` | `PreprocessingPlan` | Pydantic 스키마 변경 |
+| `ExtractionPlanResponse` | `PreprocessingPlanResponse` | 응답 스키마 변경 |
+| `extraction_plan_version` | `preprocessing_plan_version` | 식별자 및 메타데이터 키 변경 |
+| `ExtractionService` | `PreprocessingService` | 서비스 클래스 변경 |
+| `ExtractionRepository` | `PreprocessingRepository` | 저장소 클래스 변경 |
+| `ExtractionPlanner` | `PreprocessingPlanner` | LLM 계획기 클래스 변경 |
+| `ExtractionProfiler` | `PreprocessingProfiler` | 프로파일러 클래스 변경 |
+| (신규 구현) | `POST /extraction` | 신규 Layer 2 프로토콜 로그 추출 엔드포인트 |
+| (신규 구현) | `ExtractionService` | 신규 Observation/Failure Dataset 발행 서비스 |
 
-## 4. 요청/응답 계약
+---
+
+## 4. Current 요청/응답 계약
 
 ### 4.1 `GET /health`
+
+**성공 응답 본문:**
 
 ```json
 {
@@ -48,7 +94,7 @@
 
 ### 4.2 `POST /internal/train`, `POST /internal/retrain`
 
-요청:
+**요청 본문:**
 
 ```json
 {
@@ -57,110 +103,160 @@
 }
 ```
 
-응답:
+**성공 응답 본문:**
 
 ```json
 {
-  "capabilities": {
-    "EquipmentMonitoring": true,
-    "SensorAnalytics": true,
-    "MaintenanceHistory": false,
-    "FailurePrediction": true,
-    "ErrorTracking": false
-  },
-  "mappings": {
-    "voltage_raw": {
-      "source_field": "voltage_raw",
-      "target_ontology": "Voltage",
-      "source": "mapping_agent",
-      "confidence": 0.8,
-      "status": "auto_mapped"
+  "run_id": "train-run-001",
+  "status": "succeeded",
+  "published_artifacts": [
+    {
+      "model_id": "pdm-cnc-tool-wear-lightgbm",
+      "model_version": "v1.0",
+      "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-lightgbm/v1.0"
     }
-  },
-  "registry": {
-    "run_version": 3,
-    "run_id": "run-v3-20260818070000",
-    "trained_at": "2026-08-18T07:00:00+00:00",
-    "models": {
-      "lightgbm": {
-        "model_id": "pdm-cnc-tool-wear-lightgbm",
-        "model_version": "v3",
-        "local_path": "models_store/lightgbm/model_v3.joblib",
-        "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-lightgbm/v3",
-        "train_positive_rate": 0.0507,
-        "validation_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 },
-        "test_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 }
-      },
-      "xgboost": {
-        "model_id": "pdm-cnc-tool-wear-xgboost",
-        "model_version": "v3",
-        "local_path": "models_store/xgboost/model_v3.joblib",
-        "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-xgboost/v3",
-        "train_positive_rate": 0.0507,
-        "validation_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 },
-        "test_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 }
-      },
-      "random_forest": {
-        "model_id": "pdm-cnc-tool-wear-random_forest",
-        "model_version": "v3",
-        "local_path": "models_store/random_forest/model_v3.joblib",
-        "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-random_forest/v3",
-        "train_positive_rate": 0.0507,
-        "validation_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 },
-        "test_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 }
-      }
-    },
-    "failed_models": null,
-    "published_artifacts": {
-      "lightgbm": "models_store/artifacts/pdm-cnc-tool-wear-lightgbm/v3",
-      "xgboost": "models_store/artifacts/pdm-cnc-tool-wear-xgboost/v3",
-      "random_forest": "models_store/artifacts/pdm-cnc-tool-wear-random_forest/v3"
-    }
+  ]
+}
+```
+
+---
+
+## 5. Target Contract 예시 (후속 목표 설계)
+
+> **주의**: 본 절의 계약 내용은 후속 구현 시 적용될 **목표 계약 예시(Target Contract)**이며, 현재 `main`에 구현된 코드가 아닙니다.
+
+### 5.1 `POST /preprocessing` (Target Contract 예시 — 기존 Extraction 기능 이전)
+
+```json
+// 요청 예시 (Target)
+{
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "source_uri": "ai4i/input.csv",
+  "force_reanalyze": false,
+  "duplicate_policy": "error",
+  "aggregation": null
+}
+
+// 응답 예시 (Target)
+{
+  "request_id": "req-9c8f2a1b",
+  "run_id": "preprocessing-3d4e5f6a",
+  "status": "succeeded",
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "preprocessing_plan_version": "preprocessing-plan-a1b2c3d4e5f67890",
+  "result": {
+    "extraction_type": "tabular_column_as_attribute",
+    "selected_columns": ["Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"],
+    "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
+    "mapping_uri": "models_store/cache/mappings/ai4i/canonical-ai4i-physics-v3.1/ontology-mapping-b2c3d4e5f6789012.json"
   }
 }
 ```
 
-- `models[name]`은 모델별 식별자(`model_id`, `model_version`) 및 공식 발행 위치인 **`artifact_uri`**(immutable `model-artifact-v1.0`)를 포함한다. `local_path`는 Generator 내부 캐시 경로일 뿐 외부 소비용 공식 계약이 아니다.
-- `failed_models`는 일부 모델 학습이 실패했을 때 실패한 모델명과 에러 메시지가 채워지며, 성공한 모델의 `artifact_uri`는 `published_artifacts`에 정상 등록된다.
+### 5.2 `POST /feature` (Target Contract 예시)
 
-## 5. 오류 Envelope 및 HTTP 상태 코드
+```json
+// 요청 예시 (Target)
+{
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "failure_dataset_id": "ai4i_failures",
+  "failure_dataset_version": "canonical-ai4i-failures-v1",
+  "preprocessing_plan_version": "preprocessing-plan-a1b2c3d4e5f67890",
+  "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
+  "feature_schema_version": "ai4i-feature-v1",
+  "label_schema_version": "ai4i-label-v1",
+  "prediction_horizon_hours": 24,
+  "rebuild_npy": true
+}
 
-`generator`는 내부 전용 API이므로 FastAPI 기본 에러 형식(`{"detail": "..."}`)을 사용한다.
+// 응답 예시 (Target)
+{
+  "request_id": "req-9c8f2a1b",
+  "run_id": "feature-5e6f7a8b",
+  "status": "succeeded",
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "failure_dataset_id": "ai4i_failures",
+  "failure_dataset_version": "canonical-ai4i-failures-v1",
+  "preprocessing_plan_version": "preprocessing-plan-a1b2c3d4e5f67890",
+  "mapping_version": "ontology-mapping-b2c3d4e5f6789012",
+  "feature_schema_version": "ai4i-feature-v1",
+  "label_schema_version": "ai4i-label-v1",
+  "outputs": {
+    "feature_dataset_version": "feature-dataset-c3d4e5f678901234",
+    "row_count": 10000,
+    "feature_count": 5,
+    "features_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-c3d4e5f678901234/features.npy",
+    "labels_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-c3d4e5f678901234/labels.npy",
+    "metadata_uri": "models_store/cache/features/ai4i-canonical-ai4i-physics-v3.1-feature-dataset-c3d4e5f678901234/feature_metadata.json"
+  }
+}
+```
 
-| HTTP Status | 조건 및 세부 내용 |
-|---:|---|
-| **400** | 입력 `data_dir`가 존재하지 않거나, 디렉터리가 아니거나(파일), 비어 있는 경우 |
-| **409** | startup 자동 학습 또는 다른 train/retrain 요청이 이미 진행 중인 경우 (`모델 학습이 이미 진행 중입니다.`) |
-| **422** | 요청 JSON 스키마 검증 실패 (FastAPI 기본 동작) |
-| **500** | 모든 모델 학습 실패 또는 파이프라인 내부 예외 (스택 트레이스는 은폐하고 `모델 학습에 실패했습니다.` 반환) |
+### 5.3 `POST /train` 및 `POST /train/{base_model}` (Target Contract 예시)
 
-## 6. 모델 버전 관리 및 아티팩트 발행 계약
+```json
+// 요청 예시 (Target)
+{
+  "feature_dataset_version": "feature-dataset-c3d4e5f678901234",
+  "activation_policy": "latest"
+}
 
-- 학습 성공 모델은 `model_id`/`model_version` 단위의 immutable `model-artifact-v1.0` 패키지로 `systems/generator/model/model_registry.py:publish_model_artifact()`를 통해 원자적으로 발행된다.
-- 발행 위치는 `MODEL_ARTIFACT_URI` 환경변수 또는 주입된 `artifact_uri`로 결정된다.
-- 동일 `model_id`/`model_version` 조합은 덮어쓰지 않는다 (재발행 시 `FileExistsError`).
-- Run Registry(`models_store/registry.json`)는 학습 실행 이력을 기록하는 보조 인덱스이며, Backend가 소비하는 canonical 계약 단위는 `registry.json`이 아니라 Manifest와 5개 Role 파일이 포함된 [Model Artifact](./model-artifact-publish-contract.md) 디렉터리다.
-- 일부 모델이 실패해도 성공한 모델의 Artifact만 발행되며, registry의 `run_version`은 해당 run에서 성공한 모델에 대해서만 유효하게 취급된다.
+// 전체 성공 응답 예시 (Target)
+{
+  "request_id": "req-9c8f2a1b",
+  "run_id": "train-20260820051216-3ba9f9",
+  "status": "succeeded",
+  "feature_dataset_version": "feature-dataset-c3d4e5f678901234",
+  "results": [
+    {
+      "base_model": "lightgbm",
+      "status": "succeeded",
+      "model_id": "lightgbm",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/lightgbm/v1",
+      "activation_status": "activated",
+      "active_model_version": "v1"
+    },
+    {
+      "base_model": "xgboost",
+      "status": "succeeded",
+      "model_id": "xgboost",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/xgboost/v1",
+      "activation_status": "activated",
+      "active_model_version": "v1"
+    },
+    {
+      "base_model": "random_forest",
+      "status": "succeeded",
+      "model_id": "random_forest",
+      "model_version": "v1",
+      "artifact_uri": "models_store/artifacts/random_forest/v1",
+      "activation_status": "activated",
+      "active_model_version": "v1"
+    }
+  ],
+  "failed_models": []
+}
+```
 
-## 7. Startup, Shutdown 및 동시성 제어 정책
+---
 
-- **Non-blocking Startup**: Generator 데몬 기동 시 유효하게 발행된 Model Artifact가 없으면(`has_any_published_model_artifact() == False`), 초기 학습을 ASGI startup(`lifespan` yield)을 블로킹하지 않고 백그라운드 태스크(`asyncio.create_task`)로 예약한다. 따라서 `/health` 응답과 서버 기동은 즉시 완료된다.
-- **Graceful Shutdown Worker 수명 보장**: 데몬 종료 시 실행 중인 초기 학습 worker thread를 가짜로 `cancel()`하지 않고 실제 worker 작업이 안전하게 끝날 때까지 `await task`로 대기한다. 이를 통해 worker와 `_training_lock`의 수명을 완벽히 일치시키고, shutdown 이후에 파일(Artifact/Registry)이 불완전하게 쓰이는 문제를 방지한다.
-- **동시성 Lock**: 프로세스 내 전역 `asyncio.Lock`을 두어 startup 백그라운드 학습과 수동 `/internal/train`, `/internal/retrain` 호출이 상호 배타적으로 실행되며, 중복 요청은 즉시 `409 Conflict`로 거부된다.
-- **`has_any_published_model_artifact()` 판정 기준**: `has_any_published_model_artifact()`는 현재 실행 가능한 개발 초안 Manifest의 필수 필드를 검증하고, 필수 Role 5개(`model`, `feature_schema`, `label_schema`, `history_requirement`, `metrics`), Role·Path 중복 금지, Artifact 루트 내부 상대경로, 선언 파일 존재 및 `artifact_files[*].sha256` 일치를 모두 확인한다. 이 검증을 통과한 Artifact가 하나 이상 있을 때만 시작 시 자동 학습을 생략한다. 확정된 공식 17필드 구조로의 전체 전환은 Generator publisher, Backend loader, JSON Schema 및 round-trip 테스트를 함께 변경하는 후속 통합 작업에서 수행한다.
+## 6. 공통 표준 오류 응답 (`ErrorEnvelope` — Target 규격)
 
-
-## 8. 결정 반영과 후속 확인
-
-
-### Week 2 결정 완료
-- `generator` 내부 API는 프론트엔드에 직접 노출하지 않는다.
-- `generator` 데몬은 runtime predict를 노출하지 않으며(ADR-002 Invariant 22·23), 런타임 추론은 Backend Diagnosis가 전담한다.
-- 모델은 덮어쓰기가 아닌 immutable Model Artifact 버전 관리 방식으로 보존한다.
-- startup 학습은 non-blocking 백그라운드로 실행하고, shutdown 시에는 진행 중인 worker가 끝날 때까지 graceful 대기하며, 프로세스 내 동시 학습은 409로 방어한다.
-- 모델 존재 판정은 raw 파일이 아닌 유효하게 발행된 Model Artifact 존재 여부를 기준으로 한다.
-
-### 후속 확인 (별도 이슈 이관)
-- 다중 프로세스/Worker 배포 환경을 위한 분산 Lock 또는 Job Queue 도입 검토 (단일 프로세스 `asyncio.Lock` 한계 보완)
-- 학습 상태 조회를 위한 `GET /internal/training/status` 엔드포인트 신설 여부
-- 장시간 실행되는 학습의 강제 취소가 필요한 경우를 위한 별도 Process/Job Runner 분리
+```json
+{
+  "error": {
+    "code": "DATASET_PATH_NOT_ALLOWED",
+    "message": "source_uri는 허용된 데이터 루트 내 상대경로 파일이어야 하며 절대경로/상위경로(..)는 허용되지 않습니다.",
+    "path": "/preprocessing",
+    "request_id": "req-9c8f2a1b",
+    "error_id": "err-7a8b9c0d",
+    "details": []
+  }
+}
+```
