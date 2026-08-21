@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
+from typing import Protocol
 
 
 FORBIDDEN_FEATURE_SOURCE_MARKERS = (
@@ -15,6 +18,144 @@ FORBIDDEN_RISK_SOURCE_MARKERS = (
     "gen_data/canonical/model_outputs",
     "/timeline",
 )
+
+
+class AssetDetailReportReadPort(Protocol):
+    """Read boundary for the candidate AssetDetailReportViewModel.
+
+    Implementations may use repositories or external services, but they must
+    provide already-contracted data. They must not expose raw gen_data paths,
+    canonical CSV rows, or legacy timeline fixtures to this composer.
+    """
+
+    def asset_summary(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+    ) -> dict[str, Any] | None: ...
+
+    def latest_result_artifact(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        dataset_version_id: str | None,
+    ) -> dict[str, Any] | None: ...
+
+    def feature_series(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        start: datetime,
+        end: datetime,
+        dataset_version_id: str | None,
+        grain: str,
+    ) -> dict[str, list[dict[str, Any]]]: ...
+
+    def risk_prediction_results(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        start: datetime,
+        end: datetime,
+        dataset_version_id: str | None,
+    ) -> list[dict[str, Any]]: ...
+
+    def equipment_history(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[dict[str, Any]]: ...
+
+
+@dataclass(frozen=True)
+class AssetDetailReportRequest:
+    organization_id: str
+    project_id: str
+    workspace_id: str
+    asset_id: str
+    start: datetime
+    end: datetime
+    dataset_version_id: str | None = None
+    grain: str = "raw"
+
+
+class AssetDetailReportViewModelService:
+    def __init__(self, read_port: AssetDetailReportReadPort) -> None:
+        self.read_port = read_port
+
+    def report_detail(self, request: AssetDetailReportRequest) -> dict[str, Any]:
+        asset = self.read_port.asset_summary(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+        )
+        artifact = self.read_port.latest_result_artifact(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+            dataset_version_id=request.dataset_version_id,
+        )
+        if artifact is None:
+            raise KeyError(f"result artifact not found for asset_id={request.asset_id}")
+        if str(artifact.get("asset_id")) != request.asset_id:
+            raise ValueError("result artifact asset_id does not match request asset_id")
+        feature_series = self.read_port.feature_series(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+            start=request.start,
+            end=request.end,
+            dataset_version_id=request.dataset_version_id,
+            grain=request.grain,
+        )
+        risk_history = self.read_port.risk_prediction_results(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+            start=request.start,
+            end=request.end,
+            dataset_version_id=request.dataset_version_id,
+        )
+        history = self.read_port.equipment_history(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+            start=request.start,
+            end=request.end,
+        )
+        return compose_asset_detail_report_view_model(
+            asset=asset or {
+                "asset_id": request.asset_id,
+                "asset_type": artifact["asset_type"],
+                "observed_at": artifact["observed_at"],
+            },
+            result_artifact=artifact,
+            feature_series=feature_series,
+            risk_prediction_results=risk_history,
+            equipment_history=history,
+        )
 
 
 def compose_asset_detail_report_view_model(
