@@ -210,26 +210,55 @@ class PreprocessingService:
 
     def _resolve_dataset_path(self, request: PreprocessingRequest) -> Path:
         """Resolve dataset_id / dataset_version / source_uri to a concrete readable file path."""
+        allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
+
         # 1. Direct source_uri if provided
         if request.source_uri:
             raw_uri = str(request.source_uri).strip()
-            # Security checks: relative path only, no directory traversal
             p = Path(raw_uri)
+            # Security checks: relative path only, no directory traversal
             if p.is_absolute() or ".." in p.parts:
                 raise DatasetContractError(
-                    "source_uri는 허용된 데이터 루트 내 상대경로 파일이어야 하며 절대경로/상위경로(..)는 허용되지 않습니다."
+                    "source_uri는 허용된 데이터 루트(data_dir, data_preprocessed) 내 상대경로 파일이어야 하며 절대경로/상위경로(..)는 허용되지 않습니다."
                 )
 
-            # Try candidate relative paths
-            if p.is_file():
-                return p.resolve()
-            root_p = (PATHS.models_store.parent / raw_uri).resolve()
-            if root_p.is_file():
-                return root_p
-            for base in (PATHS.data_dir, PATHS.data_preprocessed):
+            found_path: Optional[Path] = None
+            for base in allowed_roots:
                 candidate = (base / raw_uri).resolve()
-                if candidate.is_file():
-                    return candidate
+                try:
+                    candidate.relative_to(base)
+                    if candidate.is_file():
+                        found_path = candidate
+                        break
+                except ValueError:
+                    pass
+
+            if not found_path:
+                repo_root = PATHS.models_store.parent.resolve()
+                repo_candidate = (repo_root / raw_uri).resolve()
+                for base in allowed_roots:
+                    try:
+                        repo_candidate.relative_to(base)
+                        if repo_candidate.is_file():
+                            found_path = repo_candidate
+                            break
+                    except ValueError:
+                        pass
+
+            if found_path:
+                return found_path
+
+            # Check if file exists outside allowed roots (e.g. repository root files)
+            repo_root = PATHS.models_store.parent.resolve()
+            outside_candidate = (repo_root / raw_uri).resolve()
+            if outside_candidate.is_file():
+                raise DatasetContractError(
+                    f"source_uri '{request.source_uri}'는 허용된 데이터 루트 외부의 파일입니다. 데이터 루트 내부 상대경로만 허용됩니다."
+                )
+
+            raise DatasetNotFoundError(
+                f"지정한 source_uri 파일을 허용된 데이터 루트에서 찾을 수 없습니다: '{request.source_uri}'"
+            )
 
         # 2. Lookup by dataset_id and dataset_version
         candidates = [
@@ -244,16 +273,25 @@ class PreprocessingService:
         ]
 
         for cand in candidates:
-            if cand.is_file():
-                return cand.resolve()
-            if cand.is_dir():
-                for child in sorted(cand.iterdir()):
-                    if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
-                        return child.resolve()
+            resolved_cand = cand.resolve()
+            is_allowed = any(
+                str(resolved_cand).startswith(str(root))
+                for root in allowed_roots
+            )
+            if not is_allowed:
+                continue
+
+            if resolved_cand.is_file():
+                return resolved_cand
+            if resolved_cand.is_dir():
+                for child in sorted(resolved_cand.iterdir()):
+                    child_resolved = child.resolve()
+                    if child_resolved.is_file() and child_resolved.suffix.lower() in SUPPORTED_EXTENSIONS:
+                        return child_resolved
 
         raise DatasetNotFoundError(
             f"데이터셋을 찾을 수 없습니다: dataset_id='{request.dataset_id}', "
-            f"version='{request.dataset_version}', source_uri='{request.source_uri}'"
+            f"version='{request.dataset_version}'"
         )
 
     def validate_plan(self, df_preview: pd.DataFrame, plan: dict[str, Any]) -> None:

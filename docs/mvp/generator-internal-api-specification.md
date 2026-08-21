@@ -80,6 +80,10 @@
 | (신규 구현) | `POST /extraction` | 신규 Observation / Failure 추출 엔드포인트 |
 | (신규 구현) | `ExtractionService` | 신규 Observation / Failure 추출 서비스 |
 
+> **캐시 전환 및 필드 참고 사항**:
+> - **캐시 전환 영향**: Extraction Plan에서 Preprocessing Plan으로 계약과 저장 경로(`models_store/cache/preprocessing_plans/`)가 변경되므로 기존 캐시는 호환 대상으로 간주하지 않으며 재생성합니다.
+> - **`idempotency_key` 필드**: `PreprocessingRequest`의 `idempotency_key`는 후속 멱등성 추적 구현을 위한 예약 필드(Reserved field)입니다.
+
 ---
 
 ## 4. Current 요청/응답 및 런타임 동작 계약
