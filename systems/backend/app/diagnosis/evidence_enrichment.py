@@ -6,6 +6,7 @@ from typing import Any
 from .contracts import DISPLAY_NAMES, UNITS
 from .evidence_baseline import build_history_baseline_window, numeric_observation
 from .predictor import FactorScore, Prediction
+from .recommendation_policy import resolve_status_criticality_action
 
 GENERATED_BY = "systems.backend.app.diagnosis.evidence_enrichment"
 
@@ -32,6 +33,11 @@ _COMPONENT_BY_FEATURE = {
     "pressure_raw": ("air_supply", "압력/공압 계통"),
     "voltage_raw": ("electrical_supply", "전원 계통"),
 }
+# Status-only fallback used when equipment criticality is unavailable. When
+# criticality IS available, _recommended_actions defers to
+# recommendation_policy.resolve_status_criticality_action instead, so this
+# table never becomes a second, diverging copy of the status x criticality
+# rules owned by recommendation-policy-v1 (see recommendation_policy.json).
 _ACTION_BY_STATUS = {
     "critical": ("review_shutdown", "정지 검토", "review_shutdown"),
     "warning": ("request_inspection", "점검 요청", "request_inspection"),
@@ -69,7 +75,8 @@ def build_product_result_evidence_payload(
     source_fields = _factor_source_fields(artifact)
     source_fields.extend(_sensor_source_fields(sensor_evidence))
     component_hypotheses = _component_hypotheses(artifact, sensor_evidence)
-    recommended_actions = _recommended_actions(artifact, component_hypotheses)
+    criticality = (fixture or {}).get("equipment", {}).get("criticality")
+    recommended_actions = _recommended_actions(artifact, component_hypotheses, criticality=criticality)
     evidence_gaps = _evidence_gaps(artifact, maintenance_context, prediction)
 
     payload: dict[str, Any] = {
@@ -221,9 +228,18 @@ def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, A
     return list(hypotheses.values())
 
 
-def _recommended_actions(artifact: dict[str, Any], hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _recommended_actions(
+    artifact: dict[str, Any],
+    hypotheses: list[dict[str, Any]],
+    *,
+    criticality: str | None = None,
+) -> list[dict[str, Any]]:
     status = str(artifact.get("status_grade") or "attention")
-    action_id, label, kind = _ACTION_BY_STATUS.get(status, _ACTION_BY_STATUS["attention"])
+    resolved = resolve_status_criticality_action(status, criticality)
+    if resolved is not None:
+        action_id, label, kind = resolved
+    else:
+        action_id, label, kind = _ACTION_BY_STATUS.get(status, _ACTION_BY_STATUS["attention"])
     basis: list[str] = []
     for hypothesis in hypotheses[:2]:
         basis.extend(hypothesis.get("basis", []))

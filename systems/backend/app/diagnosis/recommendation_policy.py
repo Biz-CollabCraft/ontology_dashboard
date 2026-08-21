@@ -96,6 +96,38 @@ def _require_identity(policy_input: RecommendationPolicyInput) -> None:
         raise RecommendationPolicyError(f"missing recommendation source identity: {missing}")
 
 
+def resolve_status_criticality_action(
+    status: str,
+    criticality: str | None,
+    *,
+    policy: dict[str, Any] | None = None,
+) -> tuple[str, str, str] | None:
+    """Look up the recommendation-policy-v1 action for a status/criticality pair.
+
+    This is the single source of truth for status x criticality -> action
+    mapping. It backs both the operational policy evaluator below and any
+    display-facing code (e.g. Diagnosis evidence enrichment) that needs to show
+    a status/criticality-consistent action without going through the full
+    identity/basis-gated ``evaluate_recommendation_policy`` contract. Returns
+    ``None`` when criticality is missing, not an allowed value, or no rule
+    matches, so callers fall back to their own default instead of fabricating
+    a policy action from partial context.
+    """
+
+    if not criticality:
+        return None
+    policy = policy or load_recommendation_policy()
+    normalized_criticality = str(criticality)
+    if normalized_criticality not in set(policy["allowed_criticality"]):
+        return None
+    for rule in policy["rules"]:
+        if rule["status"] == status and rule.get("criticality") == normalized_criticality:
+            action_key = str(rule["action"])
+            action = policy["actions"][action_key]
+            return action_key, str(action["label"]), str(action["kind"])
+    return None
+
+
 def _action_key(policy_input: RecommendationPolicyInput, policy: dict[str, Any]) -> str:
     if policy_input.data_quality_hold or policy_input.status == "data_quality_hold":
         return "hold_for_data_check"
@@ -105,9 +137,8 @@ def _action_key(policy_input: RecommendationPolicyInput, policy: dict[str, Any])
     if unresolved:
         return "unavailable"
     criticality = str(policy_input.equipment.get("criticality") or "")
-    if criticality not in set(policy["allowed_criticality"]):
+    resolved = resolve_status_criticality_action(policy_input.status, criticality, policy=policy)
+    if resolved is None:
         return "unavailable"
-    for rule in policy["rules"]:
-        if rule["status"] == policy_input.status and rule.get("criticality") == criticality:
-            return str(rule["action"])
-    return "unavailable"
+    action_key, _label, _kind = resolved
+    return action_key

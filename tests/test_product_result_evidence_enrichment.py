@@ -14,6 +14,10 @@ from systems.backend.app.diagnosis.evidence_enrichment import (
     validate_evidence_payload_invariants,
 )
 from systems.backend.app.diagnosis.predictor import FactorScore, HeuristicPredictor, Prediction
+from systems.backend.app.diagnosis.recommendation_policy import (
+    RecommendationPolicyInput,
+    evaluate_recommendation_policy,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -122,6 +126,67 @@ def test_evidence_payload_preserves_pdm_mvp_reference_semantics_without_copying_
     assert set(payload["recommended_actions"][0]) == set(semantic_reference["recommended_actions"][0])
     assert payload["source_fields"][0]["field_id"].startswith("factor.1.")
     assert any(field["field_id"].startswith("sensor_evidence.sensors.") for field in payload["source_fields"])
+
+
+@pytest.mark.parametrize(
+    ("criticality", "expected_kind"),
+    [
+        ("high", "review_shutdown"),
+        ("medium", "request_inspection"),
+        ("low", "request_inspection"),
+    ],
+)
+def test_evidence_payload_recommended_action_is_criticality_aware_for_critical_status(
+    criticality: str,
+    expected_kind: str,
+) -> None:
+    """evidence_payload.recommended_actions must not diverge from recommendation-policy-v1.
+
+    Regression test for a status-only _ACTION_BY_STATUS table that used to
+    always report "review_shutdown" for status=critical regardless of
+    equipment criticality, even though recommendation-policy-v1 only reviews
+    shutdown for critical+high and asks for inspection at critical+medium/low.
+    """
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-004-power-overstrain-critical.json")
+    fixture["equipment"]["criticality"] = criticality
+
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+
+    assert artifact["status_grade"] == "critical"
+    action = artifact["evidence_payload"]["recommended_actions"][0]
+    assert action["kind"] == expected_kind
+
+    # Cross-check directly against the operational policy evaluator so the
+    # display-facing evidence_payload can never show a different action than
+    # what would actually be materialized for the same status/criticality.
+    payload = artifact["evidence_payload"]
+    policy_recommendation = evaluate_recommendation_policy(
+        RecommendationPolicyInput(
+            source_product_result_id=artifact["artifact_id"],
+            source_evidence_id=artifact["provenance"]["evidence_payload_reference"]["reference"],
+            source_schema_version=artifact["schema_version"],
+            status=artifact["status_grade"],
+            equipment=fixture["equipment"],
+            basis=tuple(action["basis"]),
+            source_fields=tuple(field["field_id"] for field in payload["source_fields"]),
+        )
+    )
+    assert policy_recommendation.kind == expected_kind == action["kind"]
+
+
+def test_evidence_payload_recommended_action_falls_back_to_status_only_table_without_criticality() -> None:
+    from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
+
+    fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-004-power-overstrain-critical.json")
+    prediction = HeuristicPredictor().predict(fixture)
+    artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+    fixture_without_criticality = json.loads(json.dumps(fixture))
+    fixture_without_criticality["equipment"].pop("criticality", None)
+
+    payload = build_product_result_evidence_payload(artifact, fixture_without_criticality, prediction)
+
+    assert artifact["status_grade"] == "critical"
+    assert payload["recommended_actions"][0]["kind"] == "review_shutdown"
 
 
 def test_product_result_artifact_excludes_non_numeric_observation_values_from_sensor_evidence() -> None:
