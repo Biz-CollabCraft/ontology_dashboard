@@ -122,6 +122,7 @@ class OperationalRecommendedAction(ScopedRecord):
     )
     asset_id: str = Field(min_length=1, max_length=240)
     equipment_id: str = Field(min_length=1, max_length=240)
+    asset_type: str = Field(min_length=1, max_length=160)
     event_id: str = Field(min_length=1, max_length=240)
     source_action_id: str = Field(min_length=1, max_length=240)
     source_product_result_id: str = Field(min_length=1, max_length=240)
@@ -244,6 +245,7 @@ class WorkOrder(ScopedRecord):
     event_id: str = Field(min_length=1, max_length=240)
     asset_id: str = Field(min_length=1, max_length=240)
     equipment_id: str = Field(min_length=1, max_length=240)
+    asset_type: str = Field(min_length=1, max_length=160)
     work_type: WorkOrderType
     status: WorkOrderStatus = WorkOrderStatus.REQUESTED
     idempotency_key: str = Field(min_length=8, max_length=200)
@@ -278,6 +280,7 @@ class InspectionResult(ScopedRecord):
     event_id: str = Field(min_length=1, max_length=240)
     asset_id: str = Field(min_length=1, max_length=240)
     equipment_id: str = Field(min_length=1, max_length=240)
+    asset_type: str = Field(min_length=1, max_length=160)
     outcome: InspectionOutcome
     checklist: tuple[InspectionChecklistItem, ...] = Field(min_length=1)
     measurements: tuple[InspectionMeasurement, ...] = ()

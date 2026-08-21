@@ -117,15 +117,6 @@ def client_for(role: str) -> tuple[TestClient, Service]:
 BASE = "/api/projects/project-1/workspaces/workspace-1/maintenance"
 INSPECTION = {
     "event_id": "EVT-1",
-    "asset_id": "CNC-1",
-    "equipment_id": "CNC-1",
-    "asset_type": "cnc",
-    "operational_decision_kind": "request_inspection",
-    "source_product_result_id": "RESULT-1",
-    "source_evidence_id": "EVIDENCE-1",
-    "source_action_id": "ACTION-1",
-    "source_schema_version": "product-result-artifact-v1",
-    "source_policy_version": "recommendation-policy-v1",
 }
 RESULT = {
     "outcome": "maintenance_recommended",
@@ -155,6 +146,24 @@ def test_manager_can_request_and_decide_but_idempotency_header_is_required() -> 
     assert requested.status_code == 200
     assert decided.status_code == 200
     assert [name for name, _ in service.calls] == ["request", "decision"]
+
+
+def test_inspection_request_rejects_caller_supplied_authorization_lineage() -> None:
+    client, service = client_for("process_manager")
+    forged = {
+        **INSPECTION,
+        "operational_decision_kind": "review_shutdown",
+        "source_product_result_id": "FORGED-RESULT",
+    }
+
+    response = client.post(
+        f"{BASE}/inspection-work-orders",
+        json=forged,
+        headers={"Idempotency-Key": "inspection-request-001"},
+    )
+
+    assert response.status_code == 422
+    assert service.calls == []
 
 
 def test_process_engineer_can_record_inspection_result() -> None:

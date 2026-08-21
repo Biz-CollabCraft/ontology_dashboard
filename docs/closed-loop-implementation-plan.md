@@ -572,7 +572,10 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 2. 동일 Equipment의 RiskEvent에 근거를 연결한다.
 3. Diagnosis producer recommendation의 `kind`는 opaque로 보존하고 Event Evidence Projection의
    별도 `operational_decision_kind=request_inspection|review_shutdown`을 근거로
-   `process_manager`가 inspection WorkOrder를 요청·승인한다.
+   `process_manager`가 `event_id`만 제출해 inspection WorkOrder를 요청·승인한다. Backend는
+   같은 scope의 Diagnosis public query에서 canonical Projection을 다시 조회하여 Product
+   Result/Evidence/Action ID, schema/policy version, Equipment identity와 decision을 서버에서
+   확정하며 클라이언트가 제출한 lineage나 decision은 받지 않는다.
 4. `process_engineer`가 inspection WorkOrder를 시작하고 checklist, measurements, findings,
    outcome, note를 포함한 불변 Inspection Result를 기록한다. 이 완료는 MaintenanceEvent나
    정비 승인이 아니다.

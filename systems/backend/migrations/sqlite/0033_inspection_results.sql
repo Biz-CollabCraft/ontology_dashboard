@@ -1,3 +1,6 @@
+ALTER TABLE closed_loop_work_orders
+  ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'legacy_unknown';
+
 CREATE TABLE closed_loop_inspection_results (
   inspection_result_id TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL,
@@ -7,6 +10,7 @@ CREATE TABLE closed_loop_inspection_results (
   event_id TEXT NOT NULL,
   asset_id TEXT NOT NULL,
   equipment_id TEXT NOT NULL,
+  asset_type TEXT NOT NULL,
   outcome TEXT NOT NULL CHECK(
     outcome IN ('no_action_required','maintenance_recommended','data_check_required')
   ),

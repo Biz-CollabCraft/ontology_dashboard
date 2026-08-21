@@ -359,6 +359,22 @@ RecommendationDecision → maintenance WorkOrder와 `activities[].work_type`을 
 Inspection 완료 응답의 `maintenance_event_id`는 null이며 별도 추천 승인 전에는 maintenance
 WorkOrder를 만들지 않는다.
 
+Inspection WorkOrder 요청 본문은 `event_id`만 받는다. `asset_id`, `equipment_id`, `asset_type`,
+`operational_decision_kind`, Product Result/Evidence/Action ID와 schema/policy version은
+클라이언트 입력을 신뢰하지 않는다. Backend가 동일 organization/project/workspace scope의
+Diagnosis public query로 canonical Event Evidence Projection을 조회하고, 다음 조건을 모두
+검증한 뒤 WorkOrder authorization과 lineage를 서버에서 구성한다.
+
+- Event와 scope가 실제 canonical Product Result에 존재한다.
+- Projection의 `asset_id = equipment_id`이고 subject/artifact의 `asset_type`이 일치한다.
+- `assessment.operational_decision_kind`가 `request_inspection` 또는 `review_shutdown`이다.
+- 단일 `recommended_actions[0].action_id`가 operational decision과 일치한다.
+- Product Result/Evidence/Action ID와 schema/policy version이 Projection에 존재한다.
+
+존재하지 않거나 scope가 다른 Event는 not found로, 누락·불일치·비허용 결정은 fail-fast
+계약 오류로 처리한다. WorkOrder와 Inspection Result에는 Projection에서 얻은 `asset_type`을
+보존하며, Operations manual recommendation이 이를 이어받는다.
+
 ## 8. Product aggregation / identity 계약
 
 Product aggregation root는 `event_id`다.

@@ -924,6 +924,46 @@ class PredictiveMaintenanceRuntimeService:
     def _dashboard_event_id(result: GovernedProductResult) -> str:
         return result.artifact_id or result.provenance.prediction_id
 
+    def event_evidence_projection(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+    ) -> dict[str, Any] | None:
+        """Resolve the canonical, scoped authorization projection for Maintenance."""
+
+        row = self.repository.result_artifact_row(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            artifact_id=event_id,
+        )
+        if row is None:
+            return None
+        context = self.context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=str(row["dataset_version_id"]),
+        )
+        result = self._product_result(
+            context=context,
+            row=row,
+            source_contract="result_artifact",
+        )
+        if result.producer_artifact is None:
+            raise ValueError("runtime Result Artifact does not include producer evidence payload")
+        projection = product_result_artifact_to_event_evidence_projection(
+            result.producer_artifact
+        )
+        canonical_event_id = self._dashboard_event_id(result)
+        projection["event_id"] = canonical_event_id
+        projection["evidence_id"] = f"EVD-{canonical_event_id}"
+        projection["artifact_reference"]["event_id"] = canonical_event_id
+        return projection
+
     @staticmethod
     def _dashboard_equipment(
         result: GovernedProductResult,

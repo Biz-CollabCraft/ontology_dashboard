@@ -9,6 +9,7 @@ CREATE TABLE closed_loop_recommendations_v2 (
   event_id TEXT NOT NULL,
   asset_id TEXT NOT NULL,
   equipment_id TEXT NOT NULL,
+  asset_type TEXT NOT NULL,
   recommendation_origin TEXT NOT NULL CHECK(
     recommendation_origin IN ('product_result_projection','operations_manual')
   ),
@@ -56,7 +57,7 @@ CREATE TABLE closed_loop_recommendations_v2 (
 
 INSERT INTO closed_loop_recommendations_v2 (
   recommendation_id,organization_id,project_id,workspace_id,event_id,
-  asset_id,equipment_id,recommendation_origin,status,materialization_strategy,
+  asset_id,equipment_id,asset_type,recommendation_origin,status,materialization_strategy,
   source_action_id,source_product_result_id,source_evidence_id,source_schema_version,
   source_policy_version,label,kind,requires_human_approval,basis_json,
   source_inspection_work_order_id,source_inspection_reference,action_code,
@@ -64,7 +65,7 @@ INSERT INTO closed_loop_recommendations_v2 (
 )
 SELECT
   recommendation_id,organization_id,project_id,workspace_id,event_id,
-  asset_id,equipment_id,recommendation_origin,status,materialization_strategy,
+  asset_id,equipment_id,'legacy_unknown',recommendation_origin,status,materialization_strategy,
   source_action_id,source_product_result_id,source_evidence_id,source_schema_version,
   source_policy_version,label,kind,requires_human_approval,basis_json,
   NULL,NULL,NULL,NULL,NULL,created_at,updated_at

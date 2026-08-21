@@ -428,7 +428,10 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             target,
             project_context=RuntimeProjectContextResolver(target),
         )
-    return MaintenanceLoopService(repository)
+    return MaintenanceLoopService(
+        repository,
+        event_evidence_query=get_predictive_maintenance_runtime_service(),
+    )
 
 
 class DashboardPlannerAdapter:

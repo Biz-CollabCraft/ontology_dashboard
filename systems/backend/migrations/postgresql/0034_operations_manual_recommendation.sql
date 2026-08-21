@@ -5,6 +5,7 @@ ALTER TABLE closed_loop_recommendations
   DROP CONSTRAINT IF EXISTS closed_loop_recommendations_recommendation_origin_check;
 
 ALTER TABLE closed_loop_recommendations
+  ADD COLUMN IF NOT EXISTS asset_type text NOT NULL DEFAULT 'legacy_unknown',
   ADD COLUMN IF NOT EXISTS source_inspection_work_order_id text,
   ADD COLUMN IF NOT EXISTS source_inspection_reference text,
   ADD COLUMN IF NOT EXISTS action_code text,

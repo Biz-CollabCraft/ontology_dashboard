@@ -10,7 +10,6 @@ from .maintenance_schema import (
     InspectionChecklistItem,
     InspectionMeasurement,
     InspectionOutcome,
-    OperationalDecisionKind,
     RecommendationDisposition,
 )
 
@@ -20,16 +19,14 @@ class StrictCommand(BaseModel):
 
 
 class InspectionWorkOrderCreateRequest(StrictCommand):
+    """Request an inspection for an existing canonical Diagnosis event.
+
+    Every authorization and equipment-lineage field is resolved server-side
+    from the Diagnosis-owned Event Evidence Projection.  Accepting those
+    fields from a caller would let the caller forge the authorization basis.
+    """
+
     event_id: str = Field(min_length=1, max_length=240)
-    asset_id: str = Field(min_length=1, max_length=240)
-    equipment_id: str = Field(min_length=1, max_length=240)
-    asset_type: Literal["cnc"] = "cnc"
-    operational_decision_kind: OperationalDecisionKind
-    source_product_result_id: str = Field(min_length=1, max_length=240)
-    source_evidence_id: str = Field(min_length=1, max_length=240)
-    source_action_id: str = Field(min_length=1, max_length=240)
-    source_schema_version: str = Field(min_length=1, max_length=160)
-    source_policy_version: str = Field(min_length=1, max_length=160)
 
 
 class InspectionResultCreateRequest(StrictCommand):

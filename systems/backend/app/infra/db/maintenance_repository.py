@@ -111,13 +111,13 @@ class MaintenanceRepository:
                 """
                 INSERT OR IGNORE INTO closed_loop_recommendations (
                     recommendation_id,organization_id,project_id,workspace_id,event_id,
-                    asset_id,equipment_id,recommendation_origin,status,materialization_strategy,
+                    asset_id,equipment_id,asset_type,recommendation_origin,status,materialization_strategy,
                     source_action_id,
                     source_product_result_id,source_evidence_id,source_schema_version,
                     source_policy_version,label,kind,requires_human_approval,basis_json,
                     source_inspection_work_order_id,source_inspection_reference,
                     action_code,authored_by,authored_at,created_at,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     recommendation.recommendation_id,
@@ -127,6 +127,7 @@ class MaintenanceRepository:
                     recommendation.event_id,
                     recommendation.asset_id,
                     recommendation.equipment_id,
+                    recommendation.asset_type,
                     recommendation.recommendation_origin,
                     recommendation.status.value,
                     recommendation.materialization_strategy.value,
@@ -245,13 +246,13 @@ class MaintenanceRepository:
                 """
                 INSERT OR IGNORE INTO closed_loop_recommendations (
                     recommendation_id,organization_id,project_id,workspace_id,event_id,
-                    asset_id,equipment_id,recommendation_origin,status,materialization_strategy,
+                    asset_id,equipment_id,asset_type,recommendation_origin,status,materialization_strategy,
                     source_action_id,source_product_result_id,source_evidence_id,
                     source_schema_version,source_policy_version,label,kind,
                     requires_human_approval,basis_json,source_inspection_work_order_id,
                     source_inspection_reference,action_code,authored_by,authored_at,
                     created_at,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     recommendation.recommendation_id,
@@ -261,6 +262,7 @@ class MaintenanceRepository:
                     recommendation.event_id,
                     recommendation.asset_id,
                     recommendation.equipment_id,
+                    recommendation.asset_type,
                     recommendation.recommendation_origin,
                     recommendation.status.value,
                     recommendation.materialization_strategy.value,
@@ -331,6 +333,7 @@ class MaintenanceRepository:
                 "recommendation_origin",
                 "asset_id",
                 "equipment_id",
+                "asset_type",
                 "event_id",
                 "source_action_id",
                 "source_product_result_id",
@@ -607,6 +610,7 @@ class MaintenanceRepository:
                 "event_id",
                 "asset_id",
                 "equipment_id",
+                "asset_type",
             ):
                 if getattr(inspection_result, field) != getattr(work_order, field):
                     raise ValueError(
@@ -634,10 +638,10 @@ class MaintenanceRepository:
                 """
                 INSERT INTO closed_loop_inspection_results (
                     inspection_result_id,organization_id,project_id,workspace_id,
-                    work_order_id,event_id,asset_id,equipment_id,outcome,
+                    work_order_id,event_id,asset_id,equipment_id,asset_type,outcome,
                     checklist_json,measurements_json,findings_json,note,
                     recorded_by,recorded_at,created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     inspection_result.inspection_result_id,
@@ -648,6 +652,7 @@ class MaintenanceRepository:
                     inspection_result.event_id,
                     inspection_result.asset_id,
                     inspection_result.equipment_id,
+                    inspection_result.asset_type,
                     inspection_result.outcome.value,
                     self._json(
                         [item.model_dump(mode="json") for item in inspection_result.checklist]
@@ -1540,9 +1545,9 @@ class MaintenanceRepository:
             """
             INSERT INTO closed_loop_work_orders (
                 work_order_id,organization_id,project_id,workspace_id,event_id,
-                asset_id,equipment_id,work_type,status,idempotency_key,
+                asset_id,equipment_id,asset_type,work_type,status,idempotency_key,
                 authorization_json,created_at,updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 work_order.work_order_id,
@@ -1552,6 +1557,7 @@ class MaintenanceRepository:
                 work_order.event_id,
                 work_order.asset_id,
                 work_order.equipment_id,
+                work_order.asset_type,
                 work_order.work_type.value,
                 work_order.status.value,
                 work_order.idempotency_key,
@@ -1774,6 +1780,7 @@ class MaintenanceRepository:
             event_id=row["event_id"],
             asset_id=row["asset_id"],
             equipment_id=row["equipment_id"],
+            asset_type=row["asset_type"],
             work_type=row["work_type"],
             status=row["status"],
             idempotency_key=row["idempotency_key"],
@@ -1792,6 +1799,7 @@ class MaintenanceRepository:
             materialization_strategy=row["materialization_strategy"],
             asset_id=row["asset_id"],
             equipment_id=row["equipment_id"],
+            asset_type=row["asset_type"],
             event_id=row["event_id"],
             source_action_id=row["source_action_id"],
             source_product_result_id=row["source_product_result_id"],
@@ -1820,6 +1828,7 @@ class MaintenanceRepository:
             event_id=row["event_id"],
             asset_id=row["asset_id"],
             equipment_id=row["equipment_id"],
+            asset_type=row["asset_type"],
             outcome=row["outcome"],
             checklist=tuple(cls._decoded(row["checklist_json"])),
             measurements=tuple(cls._decoded(row["measurements_json"])),

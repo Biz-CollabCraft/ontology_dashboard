@@ -7,6 +7,7 @@
     "schema_version",
     "contract_type",
     "event_id",
+    "evidence_id",
     "subject",
     "artifact_reference",
     "assessment",
@@ -19,9 +20,33 @@
     "schema_version": {"const": "event-evidence-projection-v1"},
     "contract_type": {"const": "event_evidence_projection"},
     "event_id": {"type": "string", "minLength": 1},
+    "evidence_id": {"type": "string", "minLength": 1},
     "scenario_id": {"type": ["string", "null"]},
-    "subject": {"type": "object"},
-    "artifact_reference": {"type": "object"},
+    "subject": {
+      "type": "object",
+      "required": ["equipment_id", "asset_type"],
+      "properties": {
+        "equipment_id": {"type": "string", "minLength": 1},
+        "asset_type": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact_reference": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "artifact_id",
+        "artifact_schema_version",
+        "asset_id",
+        "asset_type"
+      ],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "artifact_id": {"type": "string", "minLength": 1},
+        "artifact_schema_version": {"type": "string", "minLength": 1},
+        "asset_id": {"type": "string", "minLength": 1},
+        "asset_type": {"type": "string", "minLength": 1}
+      }
+    },
     "assessment": {
       "type": "object",
       "required": [
@@ -58,8 +83,36 @@
         "data_quality_warnings": {"type": "array"}
       }
     },
-    "report_projection": {"type": "object"},
-    "provenance": {"type": "object"},
+    "report_projection": {
+      "type": "object",
+      "required": ["recommended_actions"],
+      "properties": {
+        "recommended_actions": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["action_id"],
+            "properties": {
+              "action_id": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["lineage"],
+      "properties": {
+        "lineage": {
+          "type": "object",
+          "required": ["policy_version"],
+          "properties": {
+            "policy_version": {"type": ["string", "null"], "minLength": 1}
+          }
+        }
+      }
+    },
     "limitations": {"type": "array", "items": {"type": "string"}},
     "generated_at": {"type": ["string", "null"]}
   }

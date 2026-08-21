@@ -46,9 +46,11 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
         "schema_version": EVENT_EVIDENCE_SCHEMA_VERSION,
         "contract_type": EVENT_EVIDENCE_CONTRACT_TYPE,
         "event_id": event_id,
+        "evidence_id": f"EVD-{event_id}",
         "scenario_id": None,
         "subject": _subject(clean_artifact),
         "artifact_reference": {
+            "event_id": event_id,
             "artifact_id": clean_artifact.get("artifact_id"),
             "artifact_type": clean_artifact.get("artifact_type"),
             "artifact_schema_version": clean_artifact.get("schema_version"),
@@ -130,7 +132,7 @@ def event_evidence_projection_to_legacy_evidence(
 
     legacy = {
         "schema_version": "1.0",
-        "evidence_id": f"EVD-{projection['event_id']}",
+        "evidence_id": projection["evidence_id"],
         "event_id": projection["event_id"],
         "scenario_id": projection.get("scenario_id") or lineage.get("fixture_id") or "unknown",
         "equipment": projection.get("subject", {}),

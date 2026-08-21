@@ -5,8 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
+
+from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 
 from .api_schema import (
     InspectionResultCreateRequest,
@@ -25,6 +28,7 @@ from .maintenance_schema import (
     EquipmentIdentity,
     InspectionOutcome,
     InspectionResult,
+    OperationalDecisionKind,
     RecommendationDecision,
     RecommendationDisposition,
     WorkOrderStatus,
@@ -34,8 +38,14 @@ from .ports import MaintenanceCommandRepositoryPort
 
 
 class MaintenanceLoopService:
-    def __init__(self, repository: MaintenanceCommandRepositoryPort) -> None:
+    def __init__(
+        self,
+        repository: MaintenanceCommandRepositoryPort,
+        *,
+        event_evidence_query: EventEvidenceProjectionQueryPort,
+    ) -> None:
         self.repository = repository
+        self.event_evidence_query = event_evidence_query
 
     @staticmethod
     def _stable_id(prefix: str, *parts: str) -> str:
@@ -67,6 +77,112 @@ class MaintenanceLoopService:
             if getattr(record, field) != expected:
                 raise ValueError(f"{field} scope mismatch")
 
+    @staticmethod
+    def _required_text(values: Mapping[str, Any], field: str) -> str:
+        value = values.get(field)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"Event Evidence Projection requires {field}")
+        return value
+
+    def _inspection_source(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+    ) -> tuple[EquipmentIdentity, OperationalDecisionKind, dict[str, str]]:
+        projection = self.event_evidence_query.event_evidence_projection(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_id=event_id,
+        )
+        if projection is None:
+            raise KeyError(event_id)
+        if projection.get("contract_type") != "event_evidence_projection":
+            raise ValueError("Diagnosis query returned a non-canonical evidence contract")
+        if projection.get("schema_version") != "event-evidence-projection-v1":
+            raise ValueError("unsupported Event Evidence Projection schema version")
+        if self._required_text(projection, "event_id") != event_id:
+            raise ValueError("Event Evidence Projection event_id mismatch")
+
+        subject = projection.get("subject")
+        artifact = projection.get("artifact_reference")
+        assessment = projection.get("assessment")
+        report = projection.get("report_projection")
+        provenance = projection.get("provenance")
+        if not all(
+            isinstance(value, Mapping)
+            for value in (subject, artifact, assessment, report, provenance)
+        ):
+            raise ValueError("Event Evidence Projection is missing authorization sections")
+
+        asset_id = self._required_text(artifact, "asset_id")
+        asset_type = self._required_text(artifact, "asset_type")
+        if self._required_text(artifact, "event_id") != event_id:
+            raise ValueError("Event Evidence Projection artifact event_id mismatch")
+        equipment_id = self._required_text(subject, "equipment_id")
+        if equipment_id != asset_id:
+            raise ValueError("Event Evidence Projection equipment identity mismatch")
+        subject_asset_type = self._required_text(subject, "asset_type")
+        if subject_asset_type != asset_type:
+            raise ValueError("Event Evidence Projection asset_type mismatch")
+
+        decision_raw = assessment.get("operational_decision_kind")
+        try:
+            decision = OperationalDecisionKind(decision_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Event Evidence Projection has no supported operational decision"
+            ) from exc
+        if decision not in {
+            OperationalDecisionKind.REQUEST_INSPECTION,
+            OperationalDecisionKind.REVIEW_SHUTDOWN,
+        }:
+            raise ValueError(
+                "Event Evidence Projection does not authorize an inspection"
+            )
+
+        actions = report.get("recommended_actions")
+        if not isinstance(actions, list) or len(actions) != 1:
+            raise ValueError(
+                "Event Evidence Projection requires one canonical recommendation"
+            )
+        action = actions[0]
+        if not isinstance(action, Mapping):
+            raise ValueError("Event Evidence Projection recommendation must be an object")
+        source_action_id = self._required_text(action, "action_id")
+        if source_action_id != decision.value:
+            raise ValueError(
+                "Event Evidence Projection decision does not match its source action"
+            )
+
+        lineage = provenance.get("lineage")
+        if not isinstance(lineage, Mapping):
+            raise ValueError("Event Evidence Projection provenance.lineage is required")
+        source = {
+            "source_product_result_id": self._required_text(artifact, "artifact_id"),
+            "source_evidence_id": self._required_text(projection, "evidence_id"),
+            "source_action_id": source_action_id,
+            "source_schema_version": self._required_text(
+                artifact, "artifact_schema_version"
+            ),
+            "source_policy_version": self._required_text(lineage, "policy_version"),
+        }
+        return (
+            EquipmentIdentity(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=asset_id,
+                equipment_id=equipment_id,
+                asset_type=asset_type,
+            ),
+            decision,
+            source,
+        )
+
     def request_inspection(
         self,
         *,
@@ -78,13 +194,11 @@ class MaintenanceLoopService:
         actor_display_name: str,
         idempotency_key: str,
     ) -> dict[str, Any]:
-        identity = EquipmentIdentity(
+        identity, operational_decision, source = self._inspection_source(
             organization_id=organization_id,
             project_id=project_id,
             workspace_id=workspace_id,
-            asset_id=payload.asset_id,
-            equipment_id=payload.equipment_id,
-            asset_type=payload.asset_type,
+            event_id=payload.event_id,
         )
         work_order_id = self._stable_id(
             "INSPECTION-WO",
@@ -92,20 +206,20 @@ class MaintenanceLoopService:
             project_id,
             workspace_id,
             payload.event_id,
-            payload.equipment_id,
-            payload.source_product_result_id,
-            payload.source_action_id,
+            identity.equipment_id,
+            source["source_product_result_id"],
+            source["source_action_id"],
         )
         work_order = create_inspection_work_order(
             work_order_id=work_order_id,
             identity=identity,
             event_id=payload.event_id,
-            operational_decision=payload.operational_decision_kind,
-            source_product_result_id=payload.source_product_result_id,
-            source_evidence_id=payload.source_evidence_id,
-            source_action_id=payload.source_action_id,
-            source_schema_version=payload.source_schema_version,
-            source_policy_version=payload.source_policy_version,
+            operational_decision=operational_decision,
+            source_product_result_id=source["source_product_result_id"],
+            source_evidence_id=source["source_evidence_id"],
+            source_action_id=source["source_action_id"],
+            source_schema_version=source["source_schema_version"],
+            source_policy_version=source["source_policy_version"],
             idempotency_key=idempotency_key,
         )
         return self.repository.create_inspection_work_order(
@@ -214,6 +328,7 @@ class MaintenanceLoopService:
             event_id=work_order.event_id,
             asset_id=work_order.asset_id,
             equipment_id=work_order.equipment_id,
+            asset_type=work_order.asset_type,
             outcome=payload.outcome,
             checklist=payload.checklist,
             measurements=payload.measurements,
@@ -280,7 +395,7 @@ class MaintenanceLoopService:
                 workspace_id=workspace_id,
                 asset_id=inspection_result.asset_id,
                 equipment_id=inspection_result.equipment_id,
-                asset_type="cnc",
+                asset_type=inspection_result.asset_type,
             ),
             event_id=inspection_result.event_id,
             source_product_result_id=str(authorization.source_product_result_id),
