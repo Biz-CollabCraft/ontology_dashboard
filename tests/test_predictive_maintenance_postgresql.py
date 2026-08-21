@@ -12,6 +12,9 @@ import pytest
 
 from app.dataset.bundle_contract import DatasetBundleManifestV2, compute_bundle_checksum
 from app.dataset.ingestion.bundle_file_adapter import BundleFileAdapter
+from app.infra.db.diagnosis_runtime_repository import (
+    PredictiveMaintenanceRuntimeRepository,
+)
 from app.infra.db.migrations import migrate
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from app.infra.db.pool import close_pools
@@ -191,7 +194,7 @@ def test_product_results_remain_append_only_across_maintenance_overlay(
                 source["asset_type"],
                 source["observed_at"],
                 source["failure_probability"],
-                source["status"],
+                "critical",
                 source["confidence"],
                 Jsonb(
                     {
@@ -272,6 +275,42 @@ def test_product_results_remain_append_only_across_maintenance_overlay(
                 (ingestion.dataset_version_id,),
             ).fetchone()["count"]
             assert int(count) == 2
+
+    repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    source_contract, total, latest_rows = repository.latest_result_rows(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        dataset_version_id=ingestion.dataset_version_id,
+        asset_id="CNC-001",
+        site_id=None,
+        cell_id=None,
+        asset_type=None,
+        status_grade=None,
+        offset=0,
+        limit=100,
+    )
+    assert source_contract == "result_artifact"
+    assert total == 1
+    assert [row["artifact_id"] for row in latest_rows] == [
+        "product-result-after-maintenance"
+    ]
+
+    _, critical_total, critical_rows = repository.latest_result_rows(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        dataset_version_id=ingestion.dataset_version_id,
+        asset_id="CNC-001",
+        site_id=None,
+        cell_id=None,
+        asset_type=None,
+        status_grade="critical",
+        offset=0,
+        limit=100,
+    )
+    assert critical_total == 0
+    assert critical_rows == []
 
 
 def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
