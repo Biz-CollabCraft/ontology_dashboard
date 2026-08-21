@@ -83,6 +83,16 @@ class AssetDetailReportReadPort(Protocol):
         end: datetime,
     ) -> list[dict[str, Any]]: ...
 
+    def data_status(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        dataset_version_id: str | None,
+    ) -> dict[str, Any] | None: ...
+
 
 @dataclass(frozen=True)
 class AssetDetailReportRequest:
@@ -145,6 +155,13 @@ class AssetDetailReportViewModelService:
             start=request.start,
             end=request.end,
         )
+        data_status = self.read_port.data_status(
+            organization_id=request.organization_id,
+            project_id=request.project_id,
+            workspace_id=request.workspace_id,
+            asset_id=request.asset_id,
+            dataset_version_id=request.dataset_version_id,
+        )
         return compose_asset_detail_report_view_model(
             asset=asset or {
                 "asset_id": request.asset_id,
@@ -155,6 +172,7 @@ class AssetDetailReportViewModelService:
             feature_series=feature_series,
             risk_prediction_results=risk_history,
             equipment_history=history,
+            data_status=data_status,
         )
 
 
@@ -165,12 +183,13 @@ def compose_asset_detail_report_view_model(
     feature_series: dict[str, list[dict[str, Any]]] | None = None,
     risk_prediction_results: list[dict[str, Any]] | None = None,
     equipment_history: list[dict[str, Any]] | None = None,
+    data_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compose the candidate AssetDetailReportViewModel from canonical contracts.
 
-    The composer accepts Generator-produced Observation/Feature series and
-    Diagnosis-produced prediction_results history. It intentionally never reads
-    raw gen_data files, canonical CSVs, or legacy timeline fixtures.
+    The composer accepts Backend Observation/Feature Executor series and
+    Diagnosis Runtime Prediction History Query results. It intentionally never
+    reads raw gen_data files, canonical CSVs, or legacy timeline fixtures.
     """
 
     feature_series = feature_series or {}
@@ -178,7 +197,7 @@ def compose_asset_detail_report_view_model(
     equipment_history = equipment_history or []
     evidence_payload = result_artifact.get("evidence_payload") or {}
     provenance = result_artifact.get("provenance") or {}
-    gaps = list(evidence_payload.get("evidence_gaps") or [])
+    gaps = [_view_model_gap(gap) for gap in evidence_payload.get("evidence_gaps") or []]
     if "recommended_actions" in evidence_payload and not evidence_payload.get("recommended_actions"):
         gaps.append(
             {
@@ -188,12 +207,13 @@ def compose_asset_detail_report_view_model(
             }
         )
 
-    features = _features_from_artifact(result_artifact, feature_series)
+    features, feature_gaps = _features_from_artifact(result_artifact, feature_series)
+    gaps.extend(feature_gaps)
     if not any(feature["series"] for feature in features):
         gaps.append(
             {
                 "field": "features[].series",
-                "reason": "Generator Observation/Feature series is not connected yet",
+                "reason": "Backend Observation/Feature Executor series is not connected yet",
                 "owner_domain": "dataset",
             }
         )
@@ -202,7 +222,7 @@ def compose_asset_detail_report_view_model(
         gaps.append(
             {
                 "field": "risk_series",
-                "reason": "Backend Diagnosis prediction_results runtime history is not materialized yet",
+                "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet",
                 "owner_domain": "diagnosis",
             }
         )
@@ -241,21 +261,14 @@ def compose_asset_detail_report_view_model(
             else "compatibility_fallback",
             "gaps": _dedupe_gaps(gaps),
         },
-        "data_status": {
-            "source": "canonical",
-            "is_stale": False,
-            "is_data_quality_hold": result_artifact.get("status_grade") == "data_quality_hold"
-            or bool(result_artifact.get("data_quality_warnings")),
-            "last_updated_at": result_artifact.get("observed_at"),
-            "warnings": list(result_artifact.get("data_quality_warnings") or []),
-        },
+        "data_status": _data_status(result_artifact, provenance, data_status),
     }
 
 
 def _features_from_artifact(
     result_artifact: dict[str, Any],
     feature_series: dict[str, list[dict[str, Any]]],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     evidence_payload = result_artifact.get("evidence_payload") or {}
     sensors = (evidence_payload.get("sensor_evidence") or {}).get("sensors") or {}
     top_factors = {
@@ -265,56 +278,76 @@ def _features_from_artifact(
         str(item.get("feature")): item for item in result_artifact.get("ranked_factor_evidence") or []
     }
     feature_keys = list(dict.fromkeys([*sensors.keys(), *top_factors.keys(), *feature_series.keys()]))
-    return [
-        _feature(
+    features = []
+    gaps = []
+    for index, key in enumerate(feature_keys):
+        feature, gap = _feature(
             key,
+            index=index,
             sensor=sensors.get(key) or {},
             top_factor=top_factors.get(key),
             factor_evidence=factor_evidence.get(key),
             series=feature_series.get(key) or [],
         )
-        for key in feature_keys
-    ]
+        features.append(feature)
+        if gap is not None:
+            gaps.append(gap)
+    return features, gaps
 
 
 def _feature(
     key: str,
     *,
+    index: int,
     sensor: dict[str, Any],
     top_factor: dict[str, Any] | None,
     factor_evidence: dict[str, Any] | None,
     series: list[dict[str, Any]],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, str] | None]:
     checked_series = [_feature_series_point(point) for point in series]
     basis = sensor.get("basis") or {}
     baseline = None
+    gap = None
     if basis:
         mean = basis.get("baseline_mean")
         std = basis.get("baseline_std")
-        baseline = {
-            "mean": mean,
-            "std": std,
-            "lower": mean - (2 * std),
-            "upper": mean + (2 * std),
-            "reference": str(basis.get("baseline_reference") or ""),
-        }
-    return {
-        "key": key,
-        "label": str(sensor.get("display_name") or (factor_evidence or {}).get("display_name") or key),
-        "unit": str(sensor.get("unit") or (factor_evidence or {}).get("unit") or ""),
-        "current": sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value"),
-        "baseline": baseline,
-        "series": checked_series,
-        "top_factor": None
-        if top_factor is None
-        else {
-            "rank": top_factor["rank"],
-            "contribution": top_factor.get("signed_contribution", top_factor.get("contribution")),
-            "direction": top_factor["direction"],
-            "explanation_method": top_factor["explanation_method"],
-            "evidence_field_id": (factor_evidence or {}).get("evidence_field_id"),
+        if _is_number(mean) and _is_number(std):
+            baseline = {
+                "mean": mean,
+                "std": std,
+                "lower": mean - (2 * std),
+                "upper": mean + (2 * std),
+                "reference": str(basis.get("baseline_reference") or ""),
+            }
+        else:
+            gap = {
+                "field": f"features[{index}].baseline",
+                "reason": (
+                    "baseline basis is incomplete; both baseline_mean and baseline_std "
+                    "are required to compute range"
+                ),
+                "owner_domain": "diagnosis",
+            }
+    return (
+        {
+            "key": key,
+            "label": str(sensor.get("display_name") or (factor_evidence or {}).get("display_name") or key),
+            "unit": str(sensor.get("unit") or (factor_evidence or {}).get("unit") or ""),
+            "current": sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value"),
+            "baseline": baseline,
+            "series": checked_series,
+            "top_factor": None
+            if top_factor is None
+            else {
+                "rank": top_factor["rank"],
+                "contribution": top_factor.get("signed_contribution", top_factor.get("contribution")),
+                "direction": top_factor["direction"],
+                "explanation_method": top_factor["explanation_method"],
+                "evidence_field_id": (factor_evidence or {}).get("evidence_field_id"),
+            },
         },
-    }
+        gap,
+    )
 
 
 def _feature_series_point(point: dict[str, Any]) -> dict[str, Any]:
@@ -329,8 +362,6 @@ def _feature_series_point(point: dict[str, Any]) -> dict[str, Any]:
 
 def _risk_point(point: dict[str, Any]) -> dict[str, Any]:
     source_ref = str(point.get("source_ref") or "")
-    if not source_ref.startswith("prediction-results://prediction_results/"):
-        raise ValueError("risk_series source_ref must use prediction_results")
     _reject_source_ref(source_ref, forbidden=FORBIDDEN_RISK_SOURCE_MARKERS)
     return {
         "observed_at": str(point["observed_at"]),
@@ -342,11 +373,78 @@ def _risk_point(point: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _status_grade(source: dict[str, Any]) -> str:
+def _status_grade(source: dict[str, Any]) -> str | None:
     status = str(source.get("status_grade") or source.get("status") or "")
     if status == "data_quality_hold":
-        return "critical"
+        return None
     return status
+
+
+def _view_model_gap(gap: dict[str, Any]) -> dict[str, str]:
+    owner_domain = str(gap.get("owner_domain") or "report")
+    if owner_domain in {"dashboard", "operations", "aggregate", "unknown"}:
+        owner_domain = "report"
+    return {
+        "field": str(gap.get("field") or "unknown"),
+        "reason": _gap_reason(gap),
+        "owner_domain": owner_domain,
+    }
+
+
+def _gap_reason(gap: dict[str, Any]) -> str:
+    reason = str(gap.get("reason") or "unavailable")
+    required_source = gap.get("required_source")
+    display_policy = gap.get("display_policy")
+    details = []
+    if required_source:
+        details.append(f"required_source={required_source}")
+    if display_policy:
+        details.append(f"display_policy={display_policy}")
+    if details:
+        return f"{reason} ({', '.join(details)})"
+    return reason
+
+
+def _data_status(
+    result_artifact: dict[str, Any],
+    provenance: dict[str, Any],
+    data_status: dict[str, Any] | None,
+) -> dict[str, Any]:
+    explicit = data_status or result_artifact.get("data_status") or {}
+    source = explicit.get("source")
+    if source not in {"canonical", "fallback"}:
+        source = (
+            "canonical"
+            if provenance.get("source_type") == "product_runtime_inference"
+            else "fallback"
+        )
+    warnings = [
+        str(warning)
+        for warning in [
+            *list(result_artifact.get("data_quality_warnings") or []),
+            *list(explicit.get("warnings") or []),
+        ]
+    ]
+    if "is_stale" in explicit:
+        is_stale = bool(explicit["is_stale"])
+    elif "is_stale" in result_artifact:
+        is_stale = bool(result_artifact["is_stale"])
+    else:
+        is_stale = False
+        warnings.append("data_status freshness fact unavailable; is_stale uses candidate default")
+    return {
+        "source": source,
+        "is_stale": is_stale,
+        "is_data_quality_hold": result_artifact.get("status_grade") == "data_quality_hold"
+        or bool(result_artifact.get("data_quality_warnings"))
+        or bool(explicit.get("is_data_quality_hold")),
+        "last_updated_at": explicit.get("last_updated_at") or result_artifact.get("observed_at"),
+        "warnings": list(dict.fromkeys(warnings)),
+    }
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _reject_source_ref(source_ref: str, *, forbidden: tuple[str, ...]) -> None:

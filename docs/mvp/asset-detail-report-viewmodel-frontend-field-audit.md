@@ -62,7 +62,7 @@ export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "d
 | 위험도 시계열 | 없음 | `risk_series[]` (`observed_at`, `failure_probability`, `status_grade`, `prediction_id`, `source_kind`) | **불가** — 단일 Event Evidence는 현재값 중심 | Backend Diagnosis가 `prediction_results`에서 만들 runtime result/prediction history. `gen_data/canonical/model_outputs/prediction_timeline.jsonl`이나 legacy `precomputed_prediction_timeline` 승격 금지 |
 | 센서 현재값 | `MvpSensorValue[]` (카드형 flat 목록, 자산 유형별 하드코딩) | `features[].key/label/unit/current` | 가능 — `observation` 또는 `evidence_payload.sensor_evidence.sensors` | 없음 |
 | 센서 baseline | 없음 | `features[].baseline`(`mean/std/lower/upper/reference`) | 부분 가능 — `evidence_payload.sensor_evidence.sensors[*].basis`가 있는 feature만 | 없는 feature는 baseline 없이 현재값만 표시, `evidence.gaps[]`에 기록 |
-| 센서 시계열 | 없음 | `features[].series[]` (`observed_at`, `value`, `quality_status`, `source_ref`) | **불가** | Generator가 산출한 versioned Observation/Feature series contract. gen_data Layer 1/Layer 2/`_log.jsonl` 내부 저장 형태는 Product API의 직접 의존 대상이 아니라 Issue #6 Source Data Producer 수렴 target |
+| 센서 시계열 | 없음 | `features[].series[]` (`observed_at`, `value`, `quality_status`, `source_ref`) | **불가** | Backend branch-aware Observation read contract와 Backend Feature Executor result. Generator는 Feature Schema/History Requirement/transform/Model Artifact owner이며, gen_data Layer 1/Layer 2/`_log.jsonl` 내부 저장 형태는 Product API의 직접 의존 대상이 아니다 |
 | Top factor | `MvpFactor[]` (flat 목록, `id/feature/label/value/unit/contribution/direction/explanationMethod`) | `features[].top_factor`(`rank/contribution/direction/explanation_method/evidence_field_id`), feature 단위로 결합 | 가능 — `top_factors`/`ranked_factor_evidence` | 없음 |
 | 설비 이력 | `MvpActivityItem[]` (Event activity/note/decision만, 단일 Event 범위) | `equipment_history[]`(`occurred_at/kind/tone/description/source/memo`) | 부분 가능 — 현재 activity 범위만. **전체** 정비/점검 이력은 Event Evidence만으로 합성 금지 | Activity/Decision/Maintenance/WorkOrder source(Operations/Maintenance API, 이번 주 범위 아님) |
 | Evidence 상태 | `provenance`, `loadedSources`, `warnings`, `dataQualityWarnings` | `evidence.artifact_id/evidence_payload_reference/model_version/dataset_version/source_kind/gaps[]` | 가능 — Artifact/provenance에서 파생 | 없음 |
@@ -76,23 +76,23 @@ export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "d
 |---|---|---|
 | `current-evidence-only.json` | Product Result Artifact + `evidence_payload`만 존재 (Observation/runtime timeline/Maintenance 미연동) | 현재 asset/risk/센서값/top factor/baseline(있는 feature만)은 채워지고, `features[].series`·`risk_series`·`equipment_history`는 빈 값 + `evidence.gaps[]`로 표시 |
 | `observation-series-present.json` | 위 + Observation API 연동 | `features[].series`가 채워지고 관련 gap이 사라짐. `risk_series`/`equipment_history` gap은 유지 |
-| `risk-timeline-present.json` | 위 + Backend Diagnosis `prediction_results` 기반 runtime result/prediction history 연동 | `risk_series`가 `source_kind=runtime_inference`와 `prediction-results://prediction_results/...` source_ref로 채워지고 관련 gap이 사라짐. `equipment_history` gap만 남음 |
+| `risk-timeline-present.json` | 위 + Backend Diagnosis Runtime Prediction History Query 연동 | `risk_series`가 `source_kind=runtime_inference`와 `diagnosis-runtime-history://...` source_ref로 채워지고 관련 gap이 사라짐. `equipment_history` gap만 남음 |
 | `baseline-partially-missing.json` | risk/series는 있으나 특정 feature의 baseline만 없음(baseline window 산출 불가) | 현재값·series는 그대로 유지되고 baseline만 `null` + `evidence.gaps[]`에 `features[N].baseline` 기록. 값 자체를 0/정상으로 보정하지 않음 |
 
 `tests/test_asset_detail_report_view_model_contract.py`가 검증하는 계약 규칙:
 
 - `risk.status_grade`는 `normal|attention|warning|critical` 4값만 허용(스키마 enum), `data_quality_hold`는 `data_status.is_data_quality_hold`에만 존재.
 - `runtime_inference|compatibility_fallback`은 `evidence.source_kind`와 `risk_series[].source_kind`에만 존재하고 `data_status.source`(`canonical|fallback`)나 `features[].series[].quality_status`(`good|bad|unknown`)에는 섞이지 않는다.
-- `risk_series[].source_ref`가 `prediction-results://prediction_results/...` 계열이며, legacy `precomputed_prediction_timeline`, `/timeline`, `gen_data/canonical/model_outputs`를 직접 가리키지 않는다.
+- `risk_series[].source_ref`는 Backend Diagnosis Runtime Prediction History Query의 source reference이며, legacy `precomputed_prediction_timeline`, `/timeline`, `gen_data/canonical/model_outputs`를 직접 가리키지 않는다. 내부 저장 테이블명(`prediction_results`)을 public URI prefix처럼 고정하지 않는다.
 - PR #97 이후 `evidence_payload.recommended_actions=[]`는 실행성 추천 부재를 뜻한다. Asset Detail Report composer는 이를 `evidence.gaps[]`로 전달하고 `available_actions`나 synthetic recommendation을 만들지 않는다.
 - 스키마 root와 각 하위 객체는 `additionalProperties: false`이므로 `Mvp` 접두어를 포함한 임의 필드를 추가하면 실패한다.
 - gap으로 기록된 필드(`risk_series`, `equipment_history`, `features[].series`)는 항상 빈 배열이며 합성값으로 채워지지 않는다.
 
 ## 6. 아직 gap으로 남긴 항목
 
-- `GET /objects/{asset_id}/report-detail` 엔드포인트와 Product API 결합(§3.2 step 5)은 구현하지 않았다 — 여전히 `V2 변경 제안` 상태다. 다만 `systems/backend/app/report/asset_detail_report_view_model.py`의 순수 composer가 Product Result Artifact/Evidence, Generator Observation/Feature series, `prediction_results` risk history를 병합하는 계약을 고정한다.
+- `GET /objects/{asset_id}/report-detail` 엔드포인트와 Product API 결합(§3.2 step 5)은 구현하지 않았다 — 여전히 `V2 변경 제안` 상태다. 다만 `systems/backend/app/report/asset_detail_report_view_model.py`의 순수 composer가 Product Result Artifact/Evidence, Backend Observation/Feature Executor series, Diagnosis Runtime Prediction History Query result를 병합하는 계약을 고정한다.
 - Production Observation ingestion adapter(§3.2 step 2, `node_id` 파싱/pivot/`status_code` 매핑, §3.1 마지막 문단)는 구현하지 않았다. 이번 후속 커밋의 Layer 2 샘플 정규화는 `tests/test_gen_data_layer2_observation_adapter.py` 안의 fixture-only normalizer로만 존재하며, Backend production module이나 Product API dependency가 아니다.
-- Backend Diagnosis의 `prediction_results` 기반 runtime result/prediction history materialization(`risk_series` 공식 소스)은 아직 없다. `risk-timeline-present.json`은 이 소스가 존재한다고 가정한 fixture이며, 실제 producer 구현은 후속 작업이다.
+- Backend Diagnosis Runtime Prediction History Query(`risk_series` 공식 소스)는 아직 없다. `risk-timeline-present.json`은 이 소스가 존재한다고 가정한 fixture이며, 실제 producer/query 구현은 후속 작업이다.
 - frontend ViewModel builder와 UI 이식(§6, §8.5 step 19~22)은 시작하지 않았다. §3.1에서 지적한 `MvpRiskStatus` 5값 모델과의 충돌(§3.1)은 그 작업에서 반드시 해결해야 한다.
 - `equipment_history`의 전체 정비/점검 이력을 위한 Activity/Decision/Maintenance/WorkOrder 결합은 이번 범위에 포함하지 않았다(Operations 도메인 후속 계약).
 - `features[].baseline`이 없는 feature에 대해 UI가 범위 이탈(crossing) 마커를 어떻게 표시할지는 아직 정의하지 않았다 — 현재 스키마/fixture는 "표시하지 않음"만 보장한다.

@@ -20,7 +20,7 @@
       "status_grade": "attention",
       "prediction_id": "CNC-S01-L01-01#2026-07-31T21:00:00+09:00",
       "source_kind": "runtime_inference",
-      "source_ref": "prediction-results://prediction_results/CNC-S01-L01-01/2026-07-31T21:00:00+09:00"
+      "source_ref": "diagnosis-runtime-history://CNC-S01-L01-01/2026-07-31T21:00:00+09:00"
     },
     {
       "observed_at": "2026-08-01T00:00:00+09:00",
@@ -28,7 +28,7 @@
       "status_grade": "attention",
       "prediction_id": "CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
       "source_kind": "runtime_inference",
-      "source_ref": "prediction-results://prediction_results/CNC-S01-L01-01/2026-08-01T00:00:00+09:00"
+      "source_ref": "diagnosis-runtime-history://CNC-S01-L01-01/2026-08-01T00:00:00+09:00"
     }
   ],
   "features": [

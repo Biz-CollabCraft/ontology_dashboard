@@ -31,10 +31,10 @@ SCENARIO_FILES = {
     "baseline_partially_missing": "baseline-partially-missing.json",
 }
 
-# risk.status_grade must only ever carry these 4 grades. data_quality_hold is
-# represented separately at data_status.is_data_quality_hold, not as a 5th
-# status_grade value (unlike the raw Product Result Artifact's status_grade,
-# which still includes data_quality_hold at the producer level).
+# risk.status_grade must only ever carry these 4 grades when available.
+# data_quality_hold is represented separately at data_status.is_data_quality_hold,
+# not as a 5th status_grade value (unlike the raw Product Result Artifact's
+# status_grade, which still includes data_quality_hold at the producer level).
 ALLOWED_STATUS_GRADES = {"normal", "attention", "warning", "critical"}
 
 # runtime_inference/compatibility_fallback is only meaningful as a source
@@ -69,7 +69,7 @@ def test_fixture_matches_asset_detail_report_view_model_schema(scenario: str) ->
 def test_fixture_status_grade_is_one_of_four_grades(scenario: str) -> None:
     payload = fixture(scenario)
 
-    assert payload["risk"]["status_grade"] in ALLOWED_STATUS_GRADES
+    assert payload["risk"]["status_grade"] in ALLOWED_STATUS_GRADES | {None}
     assert "data_quality_hold" not in ALLOWED_STATUS_GRADES
 
 
@@ -77,7 +77,13 @@ def test_schema_keeps_data_quality_hold_out_of_status_grade_enum() -> None:
     properties = schema()["properties"]
 
     assert "data_quality_hold" not in properties["risk"]["properties"]["status_grade"]["enum"]
-    assert properties["risk"]["properties"]["status_grade"]["enum"] == sorted(ALLOWED_STATUS_GRADES, key=["normal", "attention", "warning", "critical"].index)
+    assert properties["risk"]["properties"]["status_grade"]["enum"] == [
+        "normal",
+        "attention",
+        "warning",
+        "critical",
+        None,
+    ]
 
 
 def test_schema_separates_data_quality_hold_into_data_status() -> None:
@@ -152,11 +158,11 @@ def test_risk_series_source_ref_does_not_point_at_legacy_precomputed_timeline() 
             assert "gen_data/canonical/model_outputs" not in source_ref
 
 
-def test_risk_series_source_ref_is_prediction_results_backed() -> None:
+def test_risk_series_source_ref_uses_runtime_history_contract() -> None:
     for scenario in SCENARIO_FILES:
         payload = fixture(scenario)
         for point in payload["risk_series"]:
-            assert point["source_ref"].startswith("prediction-results://prediction_results/")
+            assert point["source_ref"].startswith("diagnosis-runtime-history://")
 
 
 def test_baseline_partially_missing_keeps_current_value_and_series_but_gaps_baseline() -> None:

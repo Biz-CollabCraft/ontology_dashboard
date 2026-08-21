@@ -35,7 +35,7 @@ class FakeAssetDetailReportReadPort:
         self,
         *,
         artifact: dict[str, Any] | None = ARTIFACT,
-        risk_source_ref: str = "prediction-results://prediction_results/CMP-S03-L03-01/2026-08-01T00:00:00+09:00",
+        risk_source_ref: str = "diagnosis-runtime-history://CMP-S03-L03-01/2026-08-01T00:00:00+09:00",
     ) -> None:
         self.artifact = artifact
         self.risk_source_ref = risk_source_ref
@@ -86,6 +86,15 @@ class FakeAssetDetailReportReadPort:
         self.calls.append(("equipment_history", kwargs))
         return []
 
+    def data_status(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("data_status", kwargs))
+        return {
+            "source": "canonical",
+            "is_stale": False,
+            "last_updated_at": "2026-08-01T00:00:00+09:00",
+            "warnings": [],
+        }
+
 
 def _request() -> AssetDetailReportRequest:
     return AssetDetailReportRequest(
@@ -113,6 +122,7 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
         "feature_series",
         "risk_prediction_results",
         "equipment_history",
+        "data_status",
     ]
     feature_call = dict(port.calls)["feature_series"]
     risk_call = dict(port.calls)["risk_prediction_results"]
@@ -179,15 +189,19 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
                 "status_grade": "critical",
                 "prediction_id": "CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
                 "source_kind": "runtime_inference",
-                "source_ref": "prediction-results://prediction_results/CMP-S03-L03-01/2026-08-01T00:00:00+09:00",
+                "source_ref": "diagnosis-runtime-history://CMP-S03-L03-01/2026-08-01T00:00:00+09:00",
             }
         ],
+        data_status={
+            "source": "canonical",
+            "is_stale": False,
+            "last_updated_at": "2026-08-01T00:00:00+09:00",
+            "warnings": [],
+        },
     )
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
-    assert payload["risk_series"][0]["source_ref"].startswith(
-        "prediction-results://prediction_results/"
-    )
+    assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
     assert "features[].series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
     assert "risk_series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
 
@@ -202,7 +216,7 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
     ],
 )
 def test_composer_rejects_non_prediction_results_risk_series_sources(source_ref: str) -> None:
-    with pytest.raises(ValueError, match="prediction_results|unsupported"):
+    with pytest.raises(ValueError, match="unsupported"):
         compose_asset_detail_report_view_model(
             asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
             result_artifact=ARTIFACT,
@@ -216,6 +230,102 @@ def test_composer_rejects_non_prediction_results_risk_series_sources(source_ref:
                 }
             ],
         )
+
+
+def test_composer_keeps_data_quality_hold_out_of_risk_status_grade() -> None:
+    artifact = json.loads(json.dumps(ARTIFACT))
+    artifact["status_grade"] = "data_quality_hold"
+    artifact["data_quality_warnings"] = ["sensor packet failed identity validation"]
+
+    payload = compose_asset_detail_report_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=artifact,
+        risk_prediction_results=[
+            {
+                "observed_at": "2026-08-01T00:00:00+09:00",
+                "failure_probability": 0.92,
+                "status_grade": "data_quality_hold",
+                "prediction_id": "prediction-hold",
+                "source_kind": "runtime_inference",
+                "source_ref": "diagnosis-runtime-history://CMP-S03-L03-01/2026-08-01T00:00:00+09:00",
+            }
+        ],
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["risk"]["status_grade"] is None
+    assert payload["risk_series"][0]["status_grade"] is None
+    assert payload["data_status"]["is_data_quality_hold"] is True
+
+
+def test_composer_projects_canonical_evidence_gaps_to_view_model_schema() -> None:
+    artifact = json.loads(json.dumps(ARTIFACT))
+    artifact["evidence_payload"]["evidence_gaps"] = [
+        {
+            "gap_id": "gap.recommended_actions.unavailable",
+            "field": "evidence_payload.recommended_actions",
+            "reason": "missing_source",
+            "required_source": "recommendation_policy_input",
+            "owner_domain": "diagnosis",
+            "display_policy": "show_limitation",
+        },
+        {
+            "gap_id": "gap.operations.unavailable",
+            "field": "equipment_history",
+            "reason": "not_in_week2_scope",
+            "required_source": "operations_activity_api",
+            "owner_domain": "operations",
+            "display_policy": "show_as_unavailable",
+        },
+    ]
+
+    payload = compose_asset_detail_report_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=artifact,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    gap = next(
+        gap
+        for gap in payload["evidence"]["gaps"]
+        if gap["field"] == "evidence_payload.recommended_actions"
+    )
+    assert set(gap) == {"field", "reason", "owner_domain"}
+    assert "required_source=recommendation_policy_input" in gap["reason"]
+    operations_gap = next(
+        gap for gap in payload["evidence"]["gaps"] if gap["field"] == "equipment_history"
+    )
+    assert operations_gap["owner_domain"] == "report"
+
+
+def test_composer_preserves_nullable_baseline_as_gap_without_type_error() -> None:
+    artifact = json.loads(json.dumps(ARTIFACT))
+    sensor = artifact["evidence_payload"]["sensor_evidence"]["sensors"]["rotation_raw"]
+    sensor["basis"]["baseline_mean"] = None
+    sensor["basis"]["baseline_std"] = None
+
+    payload = compose_asset_detail_report_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=artifact,
+        feature_series={
+            "rotation_raw": [
+                {
+                    "observed_at": "2026-08-01T00:00:00+09:00",
+                    "value": 1820.0,
+                    "quality_status": "good",
+                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00",
+                }
+            ]
+        },
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    rotation = next(feature for feature in payload["features"] if feature["key"] == "rotation_raw")
+    assert rotation["baseline"] is None
+    assert any(gap["field"] == "features[0].baseline" for gap in payload["evidence"]["gaps"])
 
 
 def test_composer_rejects_raw_generator_feature_series_sources() -> None:

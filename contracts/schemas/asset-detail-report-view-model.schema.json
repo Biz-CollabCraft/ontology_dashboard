@@ -28,15 +28,16 @@
         "current": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
         "threshold": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
         "status_grade": {
-          "enum": ["normal", "attention", "warning", "critical"],
-          "description": "Exactly 4 grades. data_quality_hold is not a status_grade value here; it is represented separately at data_status.is_data_quality_hold."
+          "type": ["string", "null"],
+          "enum": ["normal", "attention", "warning", "critical", null],
+          "description": "Exactly 4 grades when available. data_quality_hold is not a status_grade value here; it is represented separately at data_status.is_data_quality_hold. Null means the producer held risk grading for data-quality reasons or no independent risk grade is available."
         },
         "prediction_horizon_hours": {"type": ["integer", "null"], "minimum": 1}
       }
     },
     "risk_series": {
       "type": "array",
-      "description": "Backend Diagnosis prediction_results-backed runtime result/prediction history target. Must not be populated by promoting legacy /timeline, precomputed_prediction_timeline, or gen_data model_outputs fixtures.",
+      "description": "Backend Diagnosis Runtime Prediction History Query result. Must not be populated by promoting legacy /timeline, precomputed_prediction_timeline, or gen_data model_outputs fixtures.",
       "items": {
         "type": "object",
         "required": ["observed_at", "failure_probability", "status_grade", "prediction_id", "source_kind"],
@@ -44,7 +45,10 @@
         "properties": {
           "observed_at": {"type": "string"},
           "failure_probability": {"type": "number", "minimum": 0, "maximum": 1},
-          "status_grade": {"type": "string"},
+          "status_grade": {
+            "type": ["string", "null"],
+            "enum": ["normal", "attention", "warning", "critical", null]
+          },
           "prediction_id": {"type": "string"},
           "source_kind": {"enum": ["runtime_inference", "compatibility_fallback"]},
           "source_ref": {"type": "string"}

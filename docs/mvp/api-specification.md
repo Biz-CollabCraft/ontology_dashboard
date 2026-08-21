@@ -160,7 +160,7 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 `Mvp*` 타입명은 기존 MVP 화면 구현명으로만 참고하고, Product API 계약명은
 `AssetDetail`, `AssetDetailReportViewModel`처럼 도메인 객체명으로 표기한다.
 
-설비 상세 리포트, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint 후보이다. Backend adapter가 Product Result Artifact/Evidence, Generator Observation/Feature series, Backend Diagnosis `prediction_results` 기반 runtime prediction/result series, Activity/Maintenance source를 병합한다.
+설비 상세 리포트, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint 후보이다. Backend adapter가 Product Result Artifact/Evidence, Backend Observation read/Feature Executor series, Backend Diagnosis Runtime Prediction History Query result, Activity/Maintenance source를 병합한다.
 
 필수 Query: `from`, `to`. 선택 Query: `dataset_version_id`, `grain=raw|10m|1h`.
 
@@ -184,7 +184,7 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 검증·조립·feature화한 versioned Observation/Feature series contract에서 파생할 수 있다.
 Product API 계약은 `gen_data` 내부 파일명이나 canonical CSV를 직접 의존하지 않는다.
 `risk_series`는 Backend Diagnosis가 Generator 결과로 Product Result/Prediction을 생성해
-`prediction_results`에 materialize하는 운영 Result/Prediction source에서 파생해야 하며,
+Backend Diagnosis Runtime Prediction History Query가 반환하는 운영 Result/Prediction source에서 파생해야 하며,
 `pm_prediction_timeline`, `gen_data`의 `model_outputs/prediction_timeline.jsonl` 또는 legacy
 `precomputed_prediction_timeline`을 최신 운영 결과처럼 직접 읽어 대체하지 않는다.
 

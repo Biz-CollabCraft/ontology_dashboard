@@ -316,12 +316,14 @@ runtime risk source로 승격하지 않는다.
 | 현재 센서 카드 | 가능 | 없음 | `observation` 또는 `sensor_evidence` 사용 |
 | top factor와 report 근거 | 가능 | 없음 | `evidence_field_id` 유지 |
 | feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
-| 피쳐별 그래프 | 불가 | Generator Observation/Feature series | `features[].series=[]`와 gap 표시 |
-| 위험도 그래프 | 불가 | Backend Diagnosis `prediction_results` 기반 runtime result/prediction history | `risk_series=[]`와 gap 표시 |
+| 피쳐별 그래프 | 불가 | Backend Observation read contract / Feature Executor result | `features[].series=[]`와 gap 표시 |
+| 위험도 그래프 | 불가 | Backend Diagnosis Runtime Prediction History Query result | `risk_series=[]`와 gap 표시 |
 | 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
 | 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
 
-Generator Observation/Feature series 계약의 최소 규칙은 다음과 같다.
+Backend Observation/Feature series 계약의 최소 규칙은 다음과 같다. Generator는 Feature Schema,
+History Requirement, transform, Model Artifact를 소유하고 Product API는 Backend read/query
+contract를 소비한다.
 
 - `node_id`는 `{asset_id}.{sensor_key}`로 해석한다. 예: `CNC-S01-L01-01.torque_nm`.
 - `source_timestamp`는 canonical `observed_at` 후보이며, `server_timestamp`가 있으면 ingestion/provenance 필드로 보존한다.
@@ -334,9 +336,9 @@ Generator Observation/Feature series 계약의 최소 규칙은 다음과 같다
 ### 3.2 구현 순서
 
 1. `AssetDetailReportViewModel` 문서 계약과 테스트 fixture를 먼저 추가한다.
-2. `gen_data` source/protocol record 샘플을 Generator Observation/Feature series shape로 정규화하는 fixture를 추가한다.
-3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 Generator contract test로 고정한다.
-4. Backend adapter가 Result Artifact/Evidence, Generator Observation/Feature series, `prediction_results` 기반 runtime prediction series를 병합한다.
+2. `gen_data` source/protocol record 샘플을 Backend Observation/Feature series read shape로 정규화하는 fixture를 추가한다.
+3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 fixture-only contract test로 고정한다.
+4. Backend adapter가 Result Artifact/Evidence, Backend Observation/Feature Executor series, Diagnosis Runtime Prediction History Query result를 병합한다.
 5. Product API endpoint는 현행 compatibility path에 바로 고정하지 않고 `/objects/{asset_id}/report-detail` 후보로 둔다.
 6. 프론트 report UI는 단일 ViewModel을 소비하도록 전환한다.
 7. `map-report-ui-prototype`에서 임시로 가져온 synthetic graph fallback은 제거한다.
