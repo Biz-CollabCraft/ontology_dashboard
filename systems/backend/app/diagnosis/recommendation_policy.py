@@ -45,7 +45,11 @@ def evaluate_recommendation_policy(
 
     policy = policy or load_recommendation_policy()
     _require_identity(policy_input)
-    action_key = _action_key(policy_input, policy)
+    action_key = (
+        "unavailable"
+        if policy_input.policy_version != policy["version"]
+        else _action_key(policy_input, policy)
+    )
     action = policy["actions"][action_key]
     source_action_id = policy_input.source_action_id or f"{POLICY_VERSION}:{action_key}"
     basis = policy_input.basis

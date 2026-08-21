@@ -96,6 +96,16 @@ def test_recommendation_policy_does_not_pass_unavailable_or_unknown_basis_as_exe
     assert recommendation.basis == ("policy.unavailable",)
 
 
+def test_policy_version_mismatch_does_not_pass_as_executable_recommendation() -> None:
+    recommendation = evaluate_recommendation_policy(
+        _input("warning", "high", policy_version="recommendation-policy-v2")
+    )
+
+    assert recommendation.source_policy_version == "recommendation-policy-v2"
+    assert recommendation.kind == "unavailable"
+    assert recommendation.basis == ("policy.unavailable",)
+
+
 def test_recommendation_policy_is_independent_from_llm_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     before = evaluate_recommendation_policy(_input("critical", "high"))
     monkeypatch.setenv("LLM_PROVIDER", "off")
@@ -103,4 +113,3 @@ def test_recommendation_policy_is_independent_from_llm_provider(monkeypatch: pyt
     after = evaluate_recommendation_policy(_input("critical", "high"))
 
     assert after == before
-

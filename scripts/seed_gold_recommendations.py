@@ -40,13 +40,13 @@ def _producer_for_fixture(root: Path, scenario: dict[str, Any], *, policy_versio
         source_fields=tuple(field["field_id"] for field in evidence_payload["source_fields"]),
         data_quality_hold=str(artifact["status_grade"]) == "data_quality_hold"
         or bool(artifact["data_quality_warnings"]),
-        policy_version=policy_version,
     )
     producer = evaluate_recommendation_policy(policy_input)
     return producer.model_copy(
         update={
             "source_product_result_id": f"{producer.source_product_result_id}#{scenario['id']}",
             "source_evidence_id": f"{producer.source_evidence_id}#{scenario['id']}",
+            "source_policy_version": policy_version,
         }
     )
 
