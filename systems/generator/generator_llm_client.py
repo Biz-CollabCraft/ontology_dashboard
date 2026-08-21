@@ -42,6 +42,14 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from systems.generator.generator_config import load_config
+from systems.generator.app.preprocessing.preprocessing_schema import (
+    PreprocessingStructureResponse,
+    PreprocessingColumnsResponse,
+    PreprocessingPlanResponse,
+    PreprocessingStructureResponse as ExtractionStructureResponse,
+    PreprocessingColumnsResponse as ExtractionColumnsResponse,
+    PreprocessingPlanResponse as ExtractionPlanResponse,
+)
 
 logger = logging.getLogger(__name__)
 

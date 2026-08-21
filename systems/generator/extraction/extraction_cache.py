@@ -1,13 +1,13 @@
 """Compatibility facade for legacy extraction_cache imports.
 
 .. deprecated::
-    Use `systems.generator.app.extraction.extraction_repository` or `extraction_planner` instead.
+    Use `systems.generator.app.preprocessing.preprocessing_repository` or `preprocessing_planner` instead.
 """
 
 from __future__ import annotations
 
-from systems.generator.app.extraction.extraction_planner import ExtractionPlanner
-from systems.generator.app.extraction.extraction_repository import ExtractionRepository
+from systems.generator.app.preprocessing.preprocessing_planner import PreprocessingPlanner as ExtractionPlanner
+from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository as ExtractionRepository
 
 _default_planner = ExtractionPlanner()
 _default_repo = ExtractionRepository()
@@ -18,7 +18,6 @@ def compute_fingerprint(df_preview) -> str:
 
 
 def load_plan_cache() -> dict:
-    # return empty or find
     return {}
 
 

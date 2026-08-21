@@ -10,15 +10,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from systems.generator.app.extraction.extraction_router import router as extraction_router
-from systems.generator.app.extraction.extraction_exception import ExtractionError
-from systems.generator.app.extraction.extraction_schema import ErrorEnvelope, ErrorEnvelopeBody
+from systems.generator.app.preprocessing.preprocessing_router import router as preprocessing_router
+from systems.generator.app.preprocessing.preprocessing_exception import PreprocessingError
+from systems.generator.app.preprocessing.preprocessing_schema import ErrorEnvelope, ErrorEnvelopeBody
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Generator Domain API",
-    description="Generator control-plane and dataset extraction API",
+    description="Generator control-plane and dataset preprocessing API",
     version="1.0.0",
 )
 
@@ -57,10 +57,10 @@ def _build_error_response(
     return JSONResponse(status_code=status_code, content=envelope.model_dump())
 
 
-@app.exception_handler(ExtractionError)
-async def extraction_error_handler(request: Request, exc: ExtractionError) -> JSONResponse:
+@app.exception_handler(PreprocessingError)
+async def preprocessing_error_handler(request: Request, exc: PreprocessingError) -> JSONResponse:
     req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
-    logger.warning(f"[ExtractionAPI] ExtractionError: {exc.code} - {exc.message}")
+    logger.warning(f"[PreprocessingAPI] PreprocessingError: {exc.code} - {exc.message}")
     return _build_error_response(
         status_code=exc.status_code,
         code=exc.code,
@@ -81,7 +81,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
             "msg": err.get("msg", ""),
             "type": err.get("type", ""),
         })
-    logger.warning(f"[ExtractionAPI] Request validation error: {details}")
+    logger.warning(f"[PreprocessingAPI] Request validation error: {details}")
     return _build_error_response(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         code="REQUEST_VALIDATION_ERROR",
@@ -117,7 +117,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
-    logger.exception(f"[ExtractionAPI] Unhandled server error: {exc}")
+    logger.exception(f"[PreprocessingAPI] Unhandled server error: {exc}")
     return _build_error_response(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         code="INTERNAL_SERVER_ERROR",
@@ -137,4 +137,4 @@ def health() -> dict[str, str]:
 
 # --- Include Routers ---
 
-app.include_router(extraction_router)
+app.include_router(preprocessing_router)
