@@ -38,11 +38,6 @@
       "label": "데이터 확인 후 판단",
       "kind": "hold_for_data_check",
       "requires_human_approval": true
-    },
-    "unavailable": {
-      "label": "추천 근거 확인 필요",
-      "kind": "unavailable",
-      "requires_human_approval": true
     }
   },
   "rules": [

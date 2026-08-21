@@ -68,7 +68,10 @@ def evaluate(root: Path) -> dict[str, Any]:
             expected = scenario["expected"]["system_state"]
             status_pass = evidence["status"] == expected["risk_band"] == fixture_expected["risk_band"]
             decision_pass = evidence["recommended_decision"] == expected["recommended_decision"] == fixture_expected["recommended_decision"]
-            policy_pass = producer_recommendation.kind == expected["recommended_decision"]
+            policy_pass = (
+                producer_recommendation is not None
+                and producer_recommendation.kind == expected["recommended_decision"]
+            )
             confidence_expected = expected["confidence"]
             confidence_pass = (
                 evidence["confidence"] == fixture_expected["confidence"]
@@ -139,7 +142,11 @@ def evaluate(root: Path) -> dict[str, Any]:
                     "decision_pass": decision_pass,
                     "policy_version": POLICY_VERSION,
                     "policy_pass": policy_pass,
-                    "producer_recommendation": producer_recommendation.model_dump(mode="json"),
+                    "producer_recommendation": (
+                        producer_recommendation.model_dump(mode="json")
+                        if producer_recommendation is not None
+                        else None
+                    ),
                     "confidence_pass": confidence_pass,
                     "forbidden_claims": forbidden_hits,
                     "roles": role_results,

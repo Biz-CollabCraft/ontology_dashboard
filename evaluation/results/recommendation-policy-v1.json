@@ -20,6 +20,7 @@
   "fixture_checksum_sha256": "2febf489eb0dd2c3fefd4d84b79f475119d5e48d4e4e02b17c0e986044c1482c",
   "inserted": 0,
   "replayed": 8,
+  "not_recommended": 0,
   "operational_side_effect_counts": {
     "recommendations": 0,
     "decisions": 0,
@@ -223,5 +224,6 @@
         "sensor_evidence.sensors.torque_nm"
       ]
     }
-  ]
+  ],
+  "fixture_non_recommendations": []
 }

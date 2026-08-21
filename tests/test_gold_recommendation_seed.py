@@ -48,7 +48,8 @@ def test_gold_seed_policy_v2_re_evaluation_is_separate_evaluation_artifact(tmp_p
 
     assert v1["policy_version"] == "recommendation-policy-v1"
     assert v2["policy_version"] == "recommendation-policy-v2"
-    assert len(v2["fixture_recommendations"]) == 8
+    assert len(v2["fixture_recommendations"]) == 0
+    assert len(v2["fixture_non_recommendations"]) == 8
     assert set(v2["operational_side_effect_counts"].values()) == {0}
 
 

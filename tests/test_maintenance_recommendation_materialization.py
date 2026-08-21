@@ -54,6 +54,20 @@ def _producer(policy_version: str = "recommendation-policy-v1") -> ProducerRecom
     )
 
 
+def _unavailable_producer() -> ProducerRecommendation:
+    return ProducerRecommendation(
+        source_action_id="recommendation-policy-v1:unavailable",
+        source_product_result_id="RESULT#M-001#2026-08-01T00:00:00+09:00",
+        source_evidence_id="EVD#M-001#2026-08-01T00:00:00+09:00",
+        source_schema_version="result-artifact-v1.0",
+        source_policy_version="recommendation-policy-v1",
+        label="추천 근거 확인 필요",
+        kind="unavailable",
+        requires_human_approval=True,
+        basis=("policy.unavailable",),
+    )
+
+
 def _identity(workspace_id: str = "workspace-1") -> EquipmentIdentity:
     return EquipmentIdentity(
         organization_id="org-1",
@@ -93,6 +107,15 @@ def test_materialization_rejects_imported_precomputed_as_operational_source() ->
             identity=_identity(),
             event_id="EVT-GS-002",
             materialization_strategy=MaterializationStrategy.IMPORTED_PRECOMPUTED,
+        )
+
+
+def test_materialization_rejects_unavailable_kind_as_empty_recommendation() -> None:
+    with pytest.raises(ValueError, match="unavailable is not a recommendation kind"):
+        materialize_recommended_action(
+            _unavailable_producer(),
+            identity=_identity(),
+            event_id="EVT-GS-002",
         )
 
 
@@ -147,4 +170,3 @@ def test_imported_result_without_evidence_preserves_result_and_marks_detail_unav
         "status": "unavailable",
         "reason": "imported_result_artifact_missing_evidence_detail",
     }
-

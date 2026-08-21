@@ -171,6 +171,7 @@ def test_evidence_payload_recommended_action_is_criticality_aware_for_critical_s
             source_fields=tuple(field["field_id"] for field in payload["source_fields"]),
         )
     )
+    assert policy_recommendation is not None
     assert policy_recommendation.kind == expected_kind == action["kind"]
 
 

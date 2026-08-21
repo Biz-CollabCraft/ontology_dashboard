@@ -40,22 +40,24 @@ def evaluate_recommendation_policy(
     policy_input: RecommendationPolicyInput,
     *,
     policy: dict[str, Any] | None = None,
-) -> ProducerRecommendation:
-    """Return a producer-owned recommendation without consulting Maintenance state."""
+) -> ProducerRecommendation | None:
+    """Return a producer-owned recommendation without consulting Maintenance state.
+
+    ``None`` means the policy could not create a recommendation. That is an
+    evidence availability state, not a recommendation kind to materialize.
+    """
 
     policy = policy or load_recommendation_policy()
     _require_identity(policy_input)
-    action_key = (
-        "unavailable"
-        if policy_input.policy_version != policy["version"]
-        else _action_key(policy_input, policy)
-    )
+    if policy_input.policy_version != policy["version"]:
+        return None
+    action_key = _action_key(policy_input, policy)
+    if action_key is None:
+        return None
     action = policy["actions"][action_key]
     source_action_id = policy_input.source_action_id or f"{POLICY_VERSION}:{action_key}"
     basis = policy_input.basis
-    if action_key == "unavailable":
-        basis = ("policy.unavailable",)
-    elif action_key == "hold_for_data_check" and not basis:
+    if action_key == "hold_for_data_check" and not basis:
         basis = ("policy.data_quality_hold",)
     return ProducerRecommendation(
         source_action_id=source_action_id,
@@ -132,17 +134,17 @@ def resolve_status_criticality_action(
     return None
 
 
-def _action_key(policy_input: RecommendationPolicyInput, policy: dict[str, Any]) -> str:
+def _action_key(policy_input: RecommendationPolicyInput, policy: dict[str, Any]) -> str | None:
     if policy_input.data_quality_hold or policy_input.status == "data_quality_hold":
         return "hold_for_data_check"
     if not policy_input.basis:
-        return "unavailable"
+        return None
     unresolved = sorted(set(policy_input.basis) - set(policy_input.source_fields))
     if unresolved:
-        return "unavailable"
+        return None
     criticality = str(policy_input.equipment.get("criticality") or "")
     resolved = resolve_status_criticality_action(policy_input.status, criticality, policy=policy)
     if resolved is None:
-        return "unavailable"
+        return None
     action_key, _label, _kind = resolved
     return action_key

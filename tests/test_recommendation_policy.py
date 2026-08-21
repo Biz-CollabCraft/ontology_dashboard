@@ -41,6 +41,7 @@ def test_recommendation_policy_v1_maps_status_and_explicit_criticality(
 ) -> None:
     recommendation = evaluate_recommendation_policy(_input(status, criticality))
 
+    assert recommendation is not None
     assert recommendation.source_policy_version == POLICY_VERSION
     assert recommendation.kind == expected
     assert recommendation.source_product_result_id.startswith("RESULT#")
@@ -61,6 +62,7 @@ def test_data_quality_hold_fails_closed_before_criticality() -> None:
         )
     )
 
+    assert recommendation is not None
     assert recommendation.kind == "hold_for_data_check"
     assert recommendation.basis == ("policy.data_quality_hold",)
 
@@ -90,10 +92,7 @@ def test_recommendation_policy_does_not_pass_unavailable_or_unknown_basis_as_exe
     updates: dict,
 ) -> None:
     criticality = updates.pop("criticality", "medium")
-    recommendation = evaluate_recommendation_policy(_input("warning", criticality, **updates))
-
-    assert recommendation.kind == "unavailable"
-    assert recommendation.basis == ("policy.unavailable",)
+    assert evaluate_recommendation_policy(_input("warning", criticality, **updates)) is None
 
 
 def test_policy_version_mismatch_does_not_pass_as_executable_recommendation() -> None:
@@ -101,9 +100,7 @@ def test_policy_version_mismatch_does_not_pass_as_executable_recommendation() ->
         _input("warning", "high", policy_version="recommendation-policy-v2")
     )
 
-    assert recommendation.source_policy_version == "recommendation-policy-v2"
-    assert recommendation.kind == "unavailable"
-    assert recommendation.basis == ("policy.unavailable",)
+    assert recommendation is None
 
 
 def test_recommendation_policy_is_independent_from_llm_provider(monkeypatch: pytest.MonkeyPatch) -> None:

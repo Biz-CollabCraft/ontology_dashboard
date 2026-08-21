@@ -24,7 +24,7 @@ def _checksum(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _producer_for_fixture(root: Path, scenario: dict[str, Any], *, policy_version: str) -> ProducerRecommendation:
+def _producer_for_fixture(root: Path, scenario: dict[str, Any], *, policy_version: str) -> ProducerRecommendation | None:
     fixture_path = root / scenario["fixture_path"]
     fixture = load_fixture(fixture_path)
     artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
@@ -40,8 +40,11 @@ def _producer_for_fixture(root: Path, scenario: dict[str, Any], *, policy_versio
         source_fields=tuple(field["field_id"] for field in evidence_payload["source_fields"]),
         data_quality_hold=str(artifact["status_grade"]) == "data_quality_hold"
         or bool(artifact["data_quality_warnings"]),
+        policy_version=policy_version,
     )
     producer = evaluate_recommendation_policy(policy_input)
+    if producer is None:
+        return None
     return producer.model_copy(
         update={
             "source_product_result_id": f"{producer.source_product_result_id}#{scenario['id']}",
@@ -61,6 +64,7 @@ def seed_gold_recommendations(
     suite = yaml.safe_load(suite_path.read_text(encoding="utf-8"))
     existing = json.loads(output.read_text(encoding="utf-8")) if output.exists() else {}
     existing_rows = existing.get("fixture_recommendations") or []
+    existing_non_recommendations = existing.get("fixture_non_recommendations") or []
     by_key = {
         (
             row["source_product_result_id"],
@@ -70,10 +74,40 @@ def seed_gold_recommendations(
         for row in existing_rows
     }
     rows = list(existing_rows)
+    non_recommendations = list(existing_non_recommendations)
+    non_recommendation_keys = {
+        (row["scenario_id"], row["source_product_result_id"], row["policy_version"])
+        for row in existing_non_recommendations
+    }
     inserted = 0
     replayed = 0
+    skipped = 0
     for scenario in suite["scenarios"]:
         producer = _producer_for_fixture(root, scenario, policy_version=policy_version)
+        if producer is None:
+            fixture_path = root / scenario["fixture_path"]
+            fixture = load_fixture(fixture_path)
+            artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+            key = (scenario["id"], str(artifact["artifact_id"]), policy_version)
+            if key in non_recommendation_keys:
+                skipped += 1
+                continue
+            non_recommendations.append(
+                {
+                    "scenario_id": scenario["id"],
+                    "fixture_path": scenario["fixture_path"],
+                    "fixture_checksum_sha256": _checksum(fixture_path),
+                    "source_product_result_id": str(artifact["artifact_id"]),
+                    "policy_version": policy_version,
+                    "status": "not_recommended",
+                    "reason": "policy_recommendation_unavailable",
+                    "store": "evaluation_demo_fixture",
+                    "do_not_operationalize": True,
+                }
+            )
+            non_recommendation_keys.add(key)
+            skipped += 1
+            continue
         key = (
             producer.source_product_result_id,
             producer.source_action_id,
@@ -117,6 +151,7 @@ def seed_gold_recommendations(
         "fixture_checksum_sha256": _checksum(suite_path),
         "inserted": inserted,
         "replayed": replayed,
+        "not_recommended": skipped,
         "operational_side_effect_counts": {
             "recommendations": 0,
             "decisions": 0,
@@ -144,6 +179,7 @@ def seed_gold_recommendations(
             ],
         },
         "fixture_recommendations": rows,
+        "fixture_non_recommendations": non_recommendations,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

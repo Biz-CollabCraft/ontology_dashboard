@@ -35,4 +35,5 @@ def test_gold_v1_policy_outputs_match_expected_decisions() -> None:
             )
         )
 
+        assert recommendation is not None
         assert recommendation.kind == scenario["expected"]["system_state"]["recommended_decision"]

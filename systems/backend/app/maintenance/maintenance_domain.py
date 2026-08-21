@@ -30,6 +30,8 @@ def materialize_recommended_action(
 
     if materialization_strategy is not MaterializationStrategy.RUNTIME_GENERATED:
         raise ValueError("only runtime_generated producer recommendations can be operationalized")
+    if producer.kind == "unavailable":
+        raise ValueError("unavailable is not a recommendation kind to materialize")
     if producer.materialization_key in existing_materialization_keys:
         raise ValueError(f"recommendation already materialized: {producer.materialization_key}")
     return OperationalRecommendedAction(
@@ -77,4 +79,3 @@ def imported_result_detail_view(result_artifact: dict, *, evidence_detail: dict 
         if evidence_detail is not None
         else {"status": "unavailable", "reason": "imported_result_artifact_missing_evidence_detail"},
     }
-
