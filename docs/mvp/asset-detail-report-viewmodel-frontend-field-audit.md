@@ -89,7 +89,7 @@ export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "d
 
 ## 6. 아직 gap으로 남긴 항목
 
-- `GET /objects/{asset_id}/report-detail` 엔드포인트, Backend adapter(§3.2 step 4), Product API 결합(§3.2 step 5)은 구현하지 않았다 — 여전히 `V2 변경 제안` 상태.
+- `GET /objects/{asset_id}/report-detail` 엔드포인트와 Product API 결합(§3.2 step 5)은 구현하지 않았다 — 여전히 `V2 변경 제안` 상태다. 다만 `systems/backend/app/report/asset_detail_report_view_model.py`의 순수 composer가 Product Result Artifact/Evidence, Generator Observation/Feature series, `prediction_results` risk history를 병합하는 계약을 고정한다.
 - Production Observation ingestion adapter(§3.2 step 2, `node_id` 파싱/pivot/`status_code` 매핑, §3.1 마지막 문단)는 구현하지 않았다. 이번 후속 커밋의 Layer 2 샘플 정규화는 `tests/test_gen_data_layer2_observation_adapter.py` 안의 fixture-only normalizer로만 존재하며, Backend production module이나 Product API dependency가 아니다.
 - Backend Diagnosis의 `prediction_results` 기반 runtime result/prediction history materialization(`risk_series` 공식 소스)은 아직 없다. `risk-timeline-present.json`은 이 소스가 존재한다고 가정한 fixture이며, 실제 producer 구현은 후속 작업이다.
 - frontend ViewModel builder와 UI 이식(§6, §8.5 step 19~22)은 시작하지 않았다. §3.1에서 지적한 `MvpRiskStatus` 5값 모델과의 충돌(§3.1)은 그 작업에서 반드시 해결해야 한다.

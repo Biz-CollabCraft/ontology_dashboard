@@ -143,7 +143,7 @@ flowchart LR
 - `failure_type_candidates`는 측정값에 대한 규칙 기반 조건 판정이며 모델 출력이 아니다. `predicted_failure_type` 또는 root cause처럼 취급하지 않는다.
 - `map-report-ui-prototype`의 그래프 생성 로직, fixture series, prototype adapter를 제품 runtime source로 승격하지 않는다. UI는 공식 ViewModel에 있는 series만 그리며, 없는 그래프는 `evidence_gap` 또는 `data_status.warnings`로 표시한다.
 - `gen_data`의 raw/simulation/synthetic Observation은 센서 시계열의 source fact로 사용할 수 있지만, `gen_data/canonical/model_outputs/*`의 `prediction_timeline`, `prediction_snapshot`, `result_artifact`는 운영 최신 결과가 아니라 compatibility/regression/migration fixture다. 제품 화면에서 위험도 시계열로 직접 소비하지 않는다.
-- `gen_data`의 최종 저장 형식은 곧바로 Product API ViewModel이 아니다. `.raw`는 프로토콜 원본, Layer 1 `output/sensor/.../{센서명}`은 최신값 overwrite, Layer 2 `output/sensor/.../_log.jsonl`은 append-only 센서 시계열이다. 이 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target으로 보고, Asset Detail Report의 실제 의존성은 내부 파일명이 아니라 versioned Observation contract에 둔다. 피쳐 그래프는 Layer 2를 `asset_id`, `sensor_key`, `observed_at`, `measurements` 형태로 정규화한 Observation API shape에서 파생한다.
+- `gen_data`의 최종 저장 형식은 곧바로 Product API ViewModel이 아니다. `.raw`는 프로토콜 원본, Layer 1 `output/sensor/.../{센서명}`은 최신값 overwrite, Layer 2 `output/sensor/.../_log.jsonl`은 append-only 센서 시계열이다. 이 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target으로 보고, Asset Detail Report의 실제 의존성은 내부 파일명이 아니라 versioned Observation/Feature series contract에 둔다. 피쳐 그래프는 Backend가 raw JSONL이나 canonical CSV를 직접 파싱해 만들지 않고, `gen_data`의 source/protocol record를 `systems/generator`가 검증·조립·feature화한 Observation/Feature series에서 파생한다.
 
 ### 3.1 Asset Detail Report ViewModel 계약 후보
 
@@ -293,15 +293,19 @@ type AssetDetailReportViewModel = {
 | 필드 묶음 | 공식 원천 | 책임 | 없는 경우 |
 |---|---|---|---|
 | `asset`, 표시명, line/cell | Asset/Object read model | Dataset/Equipment API | 필드 생략 또는 `data_status.warnings` |
-| `features[].series` | Generator가 산출한 canonical/overlay Observation 또는 Feature series contract | Dataset/Observation API | 빈 배열과 `evidence.gaps[]` |
+| `features[].series` | `gen_data` source/protocol record를 `systems/generator`가 검증·조립·feature화한 versioned Observation/Feature series | `systems/generator` | 빈 배열과 `evidence.gaps[]` |
 | `risk.current`, `top_factor`, `baseline` | Product Result Artifact와 `evidence_payload.sensor_evidence` | `systems/backend/app/diagnosis` | null과 `evidence.gaps[]` |
-| `risk_series` | Backend Diagnosis가 `prediction_results`에서 생성할 runtime result/prediction history | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
+| `risk_series` | (미구현) Backend Diagnosis가 Generator 결과로 Product Result/Prediction을 생성해 `prediction_results`에 materialize할 runtime result/prediction history | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; `pm_prediction_timeline`, `precomputed_prediction_timeline`, gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
 | `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
 
-`risk_series`의 `prediction_results` 기반 runtime result/prediction history는 기존 legacy `/timeline`의
-`precomputed_prediction_timeline`을 제품 runtime source로 승격하는 뜻이 아니다. 이는
-Backend Diagnosis가 runtime inference 결과를 `prediction_results`에 연결된 versioned result/prediction history로
-materialize하는 후속 target이다.
+`features[].series`는 센서/피처 시계열이고, `risk_series`는 runtime inference 결과의
+누적이다. 따라서 `features[].series`는 `gen_data`의 source/protocol record를
+`systems/generator`가 운영 입력으로 검증·조립·feature화한 계약에서 파생하고,
+`risk_series`는 Backend Diagnosis가 그 결과로 Product Result Artifact/Evidence를 생성한
+뒤 `prediction_results`에 저장한 result/prediction history에서 파생한다. 기존 legacy
+`/timeline`의 `precomputed_prediction_timeline`, PostgreSQL `pm_prediction_timeline`,
+`gen_data/canonical/model_outputs/*`는 compatibility/regression/migration fixture이며 제품
+runtime risk source로 승격하지 않는다.
 
 현재 Evidence만으로 채울 수 있는 범위와 추가로 필요한 source는 다음과 같다.
 
@@ -313,11 +317,11 @@ materialize하는 후속 target이다.
 | top factor와 report 근거 | 가능 | 없음 | `evidence_field_id` 유지 |
 | feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
 | 피쳐별 그래프 | 불가 | Generator Observation/Feature series | `features[].series=[]`와 gap 표시 |
-| 위험도 그래프 | 불가 | Backend Diagnosis `prediction_results` history | `risk_series=[]`와 gap 표시 |
+| 위험도 그래프 | 불가 | Backend Diagnosis `prediction_results` 기반 runtime result/prediction history | `risk_series=[]`와 gap 표시 |
 | 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
 | 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
 
-Layer 2 정규화 adapter의 최소 규칙은 다음과 같다.
+Generator Observation/Feature series 계약의 최소 규칙은 다음과 같다.
 
 - `node_id`는 `{asset_id}.{sensor_key}`로 해석한다. 예: `CNC-S01-L01-01.torque_nm`.
 - `source_timestamp`는 canonical `observed_at` 후보이며, `server_timestamp`가 있으면 ingestion/provenance 필드로 보존한다.
@@ -330,9 +334,9 @@ Layer 2 정규화 adapter의 최소 규칙은 다음과 같다.
 ### 3.2 구현 순서
 
 1. `AssetDetailReportViewModel` 문서 계약과 테스트 fixture를 먼저 추가한다.
-2. gen_data Layer 2 `_log.jsonl` 샘플을 Observation API shape로 정규화하는 ingestion/adapter fixture를 추가한다.
-3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 contract test로 고정한다.
-4. Backend adapter가 Result Artifact/Evidence, normalized Observation series, runtime prediction series를 병합한다.
+2. `gen_data` source/protocol record 샘플을 Generator Observation/Feature series shape로 정규화하는 fixture를 추가한다.
+3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 Generator contract test로 고정한다.
+4. Backend adapter가 Result Artifact/Evidence, Generator Observation/Feature series, `prediction_results` 기반 runtime prediction series를 병합한다.
 5. Product API endpoint는 현행 compatibility path에 바로 고정하지 않고 `/objects/{asset_id}/report-detail` 후보로 둔다.
 6. 프론트 report UI는 단일 ViewModel을 소비하도록 전환한다.
 7. `map-report-ui-prototype`에서 임시로 가져온 synthetic graph fallback은 제거한다.
