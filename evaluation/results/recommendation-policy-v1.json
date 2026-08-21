@@ -3,10 +3,23 @@
   "suite_id": "ontology-dashboard-manufacturing-gold-v1",
   "gold_version": "gold-v1",
   "policy_version": "recommendation-policy-v1",
+  "evaluator": {
+    "name": "seed_gold_recommendations.py",
+    "version": "recommendation-policy-gold-seed-v1"
+  },
+  "schema_versions": {
+    "producer_recommendation": "ProducerRecommendation",
+    "source_schema_version": "result-artifact-v1.0"
+  },
+  "writer_strategy_boundary": {
+    "fixture_store": "evaluation_demo_fixture",
+    "operational_materialization": "runtime_generated_only",
+    "imported_precomputed": "preserve_result_and_recommendation_detail_unavailable"
+  },
   "fixture_count": 8,
   "fixture_checksum_sha256": "2febf489eb0dd2c3fefd4d84b79f475119d5e48d4e4e02b17c0e986044c1482c",
-  "inserted": 8,
-  "replayed": 0,
+  "inserted": 0,
+  "replayed": 8,
   "operational_side_effect_counts": {
     "recommendations": 0,
     "decisions": 0,
@@ -15,6 +28,24 @@
     "maintenance_events": 0
   },
   "claim_boundary": "Gold 8/8 is engineering acceptance evidence only, not field or business impact validation.",
+  "validation_scope": {
+    "verified": [
+      "Gold v1 8/8 recommendation policy acceptance",
+      "fixture checksum and per-scenario source lineage",
+      "seed replay/no-op",
+      "policy-v2 re-evaluation stored as separate evaluation artifact",
+      "new Product Result revision stored as new source lineage",
+      "operational recommendation/Decision/WorkOrder/Maintenance side effects remain zero"
+    ],
+    "not_verified": [
+      "PostgreSQL production E2E",
+      "human approval UI",
+      "automatic maintenance execution",
+      "field or business impact validation",
+      "cost/RPN optimization",
+      "LLM-based recommendation decisions"
+    ]
+  },
   "fixture_recommendations": [
     {
       "scenario_id": "GS-001",

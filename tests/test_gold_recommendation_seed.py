@@ -23,6 +23,17 @@ def test_gold_seed_writes_evaluation_fixture_store_without_operational_side_effe
     assert "engineering acceptance evidence only" in second["claim_boundary"]
     stored = json.loads(output.read_text(encoding="utf-8"))
     assert stored["fixture_checksum_sha256"]
+    assert stored["evaluator"] == {
+        "name": "seed_gold_recommendations.py",
+        "version": "recommendation-policy-gold-seed-v1",
+    }
+    assert stored["schema_versions"]["source_schema_version"] == "result-artifact-v1.0"
+    assert stored["writer_strategy_boundary"] == {
+        "fixture_store": "evaluation_demo_fixture",
+        "operational_materialization": "runtime_generated_only",
+        "imported_precomputed": "preserve_result_and_recommendation_detail_unavailable",
+    }
+    assert "field or business impact validation" in stored["validation_scope"]["not_verified"]
     assert all(row["store"] == "evaluation_demo_fixture" for row in stored["fixture_recommendations"])
     assert all(row["do_not_operationalize"] is True for row in stored["fixture_recommendations"])
 
@@ -55,4 +66,3 @@ def test_gold_seed_new_artifact_revision_creates_new_source_lineage(tmp_path: Pa
     assert first["inserted"] == 8
     assert len(replay["fixture_recommendations"]) == 9
     assert replay["inserted"] == 0
-

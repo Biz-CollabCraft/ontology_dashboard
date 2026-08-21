@@ -100,6 +100,19 @@ def seed_gold_recommendations(
         "suite_id": suite["suite_id"],
         "gold_version": "gold-v1",
         "policy_version": policy_version,
+        "evaluator": {
+            "name": "seed_gold_recommendations.py",
+            "version": "recommendation-policy-gold-seed-v1",
+        },
+        "schema_versions": {
+            "producer_recommendation": "ProducerRecommendation",
+            "source_schema_version": "result-artifact-v1.0",
+        },
+        "writer_strategy_boundary": {
+            "fixture_store": "evaluation_demo_fixture",
+            "operational_materialization": "runtime_generated_only",
+            "imported_precomputed": "preserve_result_and_recommendation_detail_unavailable",
+        },
         "fixture_count": len(suite["scenarios"]),
         "fixture_checksum_sha256": _checksum(suite_path),
         "inserted": inserted,
@@ -112,6 +125,24 @@ def seed_gold_recommendations(
             "maintenance_events": 0,
         },
         "claim_boundary": "Gold 8/8 is engineering acceptance evidence only, not field or business impact validation.",
+        "validation_scope": {
+            "verified": [
+                "Gold v1 8/8 recommendation policy acceptance",
+                "fixture checksum and per-scenario source lineage",
+                "seed replay/no-op",
+                "policy-v2 re-evaluation stored as separate evaluation artifact",
+                "new Product Result revision stored as new source lineage",
+                "operational recommendation/Decision/WorkOrder/Maintenance side effects remain zero",
+            ],
+            "not_verified": [
+                "PostgreSQL production E2E",
+                "human approval UI",
+                "automatic maintenance execution",
+                "field or business impact validation",
+                "cost/RPN optimization",
+                "LLM-based recommendation decisions",
+            ],
+        },
         "fixture_recommendations": rows,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
