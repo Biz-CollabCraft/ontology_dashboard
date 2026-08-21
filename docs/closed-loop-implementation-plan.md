@@ -223,6 +223,12 @@ MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않�
   Closed-loop 실행 객체로 직접 승격하지 않는다.
 - Operational RecommendedAction은 workflow용 `recommendation_id`와 상태를 추가하되
   원본 `action_id`, label, kind, `requires_human_approval`, basis를 변경하지 않는다.
+- Producer `kind`는 opaque string으로 보존하고 Closed-loop enum으로 재해석하지 않는다.
+  `request_inspection`과 `review_shutdown`을 운영 Decision으로 연결해야 할 때는
+  Event Evidence Projection이 제공하는 별도 `operational_decision_kind`만 소비한다.
+- `unavailable`은 recommendation `kind`가 아니라 추천 미생성 상태다. 근거 부족이나
+  unresolved basis 때문에 정책 추천을 만들 수 없으면 Operational RecommendedAction을
+  materialize하지 않고 Evidence gap 또는 limitation으로 남긴다.
 - 최소한 `recommendation_origin=product_result_projection`, `source_action_id`,
   `source_product_result_id=artifact_id`, `source_evidence_id`, `source_schema_version`,
   `source_policy_version`과 원본 basis를 보존한다.
@@ -372,6 +378,9 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 - 호범의 실제 Product Result/Evidence ID를 payload 복사 없이 RiskEvent에 연결
 - `evidence_payload.recommended_actions[]`를 원본 의미·ID·provenance를 보존한
   Operational RecommendedAction으로 materialize
+- Producer `kind`를 직접 OperationalDecisionKind로 변환하지 않고
+  `operational_decision_kind` projection이 있는 경우에만 inspection WorkOrder 결정에 사용
+- `unavailable`은 빈 추천으로 materialize하지 않고 추천 미생성 + Evidence gap으로 표현
 - `asset_id = equipment_id`와 stable equipment key를 검증하고 실패 시 fail-fast
 - 호범 계약의 Evidence 필드·근거 의미를 보존한 채
   Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계만 projection
@@ -519,6 +528,8 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 
 - Evidence 없는 Recommendation 생성 거부
 - producer recommendation의 action ID·label·kind·approval requirement·basis 불변
+- producer `kind`를 OperationalDecisionKind로 직접 재해석하지 않는지 확인
+- `unavailable` recommendation materialization 거부
 - 같은 Product Result/action ID의 중복 materialization 방지
 - Operations 독자 recommendation과 producer projection origin 혼용 거부
 - asset mapping 누락·중복·type 불일치 fail-fast
@@ -552,21 +563,24 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 
 1. CNC 위험 Product Result/Evidence를 조회한다.
 2. 동일 Equipment의 RiskEvent에 근거를 연결한다.
-3. producer의 `TOOL_REPLACEMENT` recommendation이 원본 ID·근거를 보존한 운영
-   RecommendedAction으로 한 번만 materialize됐는지 확인한다.
+3. Diagnosis producer recommendation이 `request_inspection` 또는 `review_shutdown`으로
+   inspection WorkOrder를 요청하고, Producer `kind`는 opaque로 보존한다.
 4. `process_engineer`가 Event/Equipment/Evidence를 확인하고 점검·분석 결과와 판단 근거를 기록한다.
-5. `process_manager`가 Evidence와 엔지니어 결과를 확인하고 Recommendation을 승인·거절·보류한다.
-6. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.
-7. `maintenance_technician`이 배정된 WorkOrder/MaintenanceAction을 시작하고 체크리스트·측정값·note와
+5. 점검 결과 정비가 필요하면 Operations가 `origin=operations_manual` 추천으로
+   `TOOL_REPLACEMENT`를 등록한다.
+6. `process_manager`가 Evidence와 엔지니어 결과를 확인하고 Operations recommendation을
+   승인·거절·보류한다.
+7. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.
+8. `maintenance_technician`이 배정된 WorkOrder/MaintenanceAction을 시작하고 체크리스트·측정값·note와
    함께 완료한다.
-8. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
-9. 동일 mutation을 replay해 idempotency가 보장되는지 확인한다.
-10. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay는 계속 진행한다.
-11. `gen_data`가 Overlay Observation을 지속 생성하고 Backend가 각 available
+9. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
+10. 동일 mutation을 replay해 idempotency가 보장되는지 확인한다.
+11. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay는 계속 진행한다.
+12. `gen_data`가 Overlay Observation을 지속 생성하고 Backend가 각 available
     Observation의 `history_requirement`을 검증하며, 부족하면 다음 Observation을 기다린다.
-12. Backend가 `ready`로 판정한 첫 inference-ready Observation으로 별도의 새 Product
+13. Backend가 `ready`로 판정한 첫 inference-ready Observation으로 별도의 새 Product
     Result/Evidence가 생성된다.
-13. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
+14. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
 
 ## 11. 완료 정의
 

@@ -58,7 +58,13 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 - Producer의 action/result/evidence/schema/policy ID와 label, kind, approval requirement,
   basis는 materialization 과정에서 변경하지 않는다.
 - Producer가 소유하는 `kind`는 Closed-loop enum으로 재해석하지 않고 opaque string으로
-  그대로 보존한다. 운영 Decision은 Event Evidence Projection의 별도 계약을 사용한다.
+  그대로 보존한다. 운영 Decision은 Event Evidence Projection의 별도
+  `operational_decision_kind` 계약을 사용한다. Producer `kind` 문자열이 기존
+  OperationalDecisionKind와 같아도 Maintenance는 이를 직접 변환하지 않는다.
+- `unavailable`은 recommendation `kind`가 아니라 추천 미생성 상태다. Producer가
+  근거 부족, unresolved basis, criticality 누락 등으로 추천을 만들 수 없으면 빈
+  Operational RecommendedAction을 materialize하지 않고 `evidence_gap` 또는 limitation으로
+  표현한다. `hold_for_data_check`는 데이터 확인 전 보류 recommendation으로 유지한다.
 - 동일 idempotency key와 동일 요청이 성공한 경우 기존 결과를 replay한다.
 - 동일 key에 다른 요청을 사용하면 conflict, 기존 요청이 실행 중이거나 실패했다면 각각
   명시적인 `action_in_progress`, `prior_action_failed` 상태로 처리한다.
