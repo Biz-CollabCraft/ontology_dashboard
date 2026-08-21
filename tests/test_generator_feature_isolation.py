@@ -381,26 +381,26 @@ def test_build_labels_with_plan_wiring():
     assert "custom_ts" in labeled_df.columns
 
 
-def test_extraction_plan_response_literal_and_pair_validation():
-    """테스트 12: ExtractionPlanResponse duplicate_policy / aggregation Literal 및 Pair validation."""
+def test_preprocessing_plan_response_literal_and_pair_validation():
+    """테스트 12: PreprocessingPlanResponse duplicate_policy / aggregation Literal 및 Pair validation."""
     from pydantic import ValidationError
-    from systems.generator.generator_llm_client import ExtractionPlanResponse
+    from systems.generator.app.preprocessing.preprocessing_schema import PreprocessingPlanResponse
 
-    valid_plan = ExtractionPlanResponse(duplicate_policy="aggregate", aggregation="mean")
+    valid_plan = PreprocessingPlanResponse(duplicate_policy="aggregate", aggregation="mean")
     assert valid_plan.duplicate_policy == "aggregate"
     assert valid_plan.aggregation == "mean"
 
     # invalid literal
     with pytest.raises(ValidationError):
-        ExtractionPlanResponse(duplicate_policy="invalid_policy")
+        PreprocessingPlanResponse(duplicate_policy="invalid_policy")
 
     # duplicate_policy='aggregate' without aggregation -> ValidationError
     with pytest.raises(ValidationError, match="requires a non-null aggregation"):
-        ExtractionPlanResponse(duplicate_policy="aggregate", aggregation=None)
+        PreprocessingPlanResponse(duplicate_policy="aggregate", aggregation=None)
 
     # duplicate_policy='error' with aggregation -> ValidationError
     with pytest.raises(ValidationError, match="must not specify an aggregation"):
-        ExtractionPlanResponse(duplicate_policy="error", aggregation="mean")
+        PreprocessingPlanResponse(duplicate_policy="error", aggregation="mean")
 
 
 def test_build_labels_removes_preexisting_leakage_columns():

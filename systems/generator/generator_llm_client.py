@@ -34,7 +34,7 @@ import sys
 import json
 import re
 import logging
-from typing import Any, TypeVar, Optional, Literal
+from typing import Any, TypeVar, Optional
 from pydantic import BaseModel, Field
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -42,14 +42,6 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from systems.generator.generator_config import load_config
-from systems.generator.app.preprocessing.preprocessing_schema import (
-    PreprocessingStructureResponse,
-    PreprocessingColumnsResponse,
-    PreprocessingPlanResponse,
-    PreprocessingStructureResponse as ExtractionStructureResponse,
-    PreprocessingColumnsResponse as ExtractionColumnsResponse,
-    PreprocessingPlanResponse as ExtractionPlanResponse,
-)
 
 logger = logging.getLogger(__name__)
 

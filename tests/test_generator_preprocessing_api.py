@@ -219,6 +219,20 @@ def test_preprocessing_absolute_path_traversal_rejection(client):
     assert res_abs.json()["error"]["code"] == "DATASET_CONTRACT_ERROR"
 
 
+def test_preprocessing_outside_allowed_root_rejection(client):
+    """POST /preprocessing rejects source_uri that exists in repo but is outside allowed data roots."""
+    payload = {
+        "dataset_id": "test_ds",
+        "dataset_version": "v1.0",
+        "source_uri": "docs/architecture.md",
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 422
+    data = res.json()
+    assert "error" in data
+    assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
+
+
 def test_preprocessing_plan_cache_and_reuse(client, sample_wide_csv, tmp_path):
     """POST /preprocessing reuses cached plan when force_reanalyze=False and regenerates when True."""
     repo = PreprocessingRepository(base_dir=tmp_path / "plans")
