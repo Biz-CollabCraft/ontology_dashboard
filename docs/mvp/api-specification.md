@@ -186,8 +186,9 @@ transform contract, Model Artifact publish를 소유하지만, Product API가 �
 series를 publish하지 않는다. Product API 계약은 `gen_data` 내부 파일명이나 canonical CSV를 직접
 의존하지 않는다.
 `risk_series`는 Backend Diagnosis Runtime Prediction History Query Contract에서 파생해야 한다.
-현재 구현 anchor는 Backend Diagnosis가 Product Result/Prediction을 생성해 저장하는
-`prediction_results`이지만, public Product API는 내부 테이블 shape를 직접 노출하지 않는다.
+현재 canonical source는 Backend Diagnosis가 생성한 `pm_result_artifacts`의 asset별 append-only
+Product Result history다. 상세 payload가 실제로 필요한 경우에만 `prediction_result_id`로
+`prediction_results`를 조회한다. public Product API는 내부 테이블 shape를 직접 노출하지 않는다.
 `pm_prediction_timeline`, `gen_data`의 `model_outputs/prediction_timeline.jsonl` 또는 legacy
 `precomputed_prediction_timeline`을 최신 운영 결과처럼 직접 읽어 대체하지 않는다.
 

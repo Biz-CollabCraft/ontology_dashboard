@@ -367,7 +367,7 @@ Overview와 Objects 목록의 공통 행이다.
 | `risk.threshold` | number 또는 null | Y | Artifact root `threshold` 또는 policy | 제안 |
 | `risk.status_grade` | string | Y | Product Result Artifact `status_grade` | 제안 |
 | `risk.prediction_horizon_hours` | integer 또는 null | Y | Product Result Artifact | 제안 |
-| `risk_series` | PredictionSeriesPoint[] | Y | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. 현재 구현 anchor는 `prediction_results` | 제안 |
+| `risk_series` | PredictionSeriesPoint[] | Y | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. canonical source는 `pm_result_artifacts` append-only Product Result history이며, detail payload가 필요할 때만 `prediction_result_id`로 `prediction_results`를 join | 제안 |
 | `features` | AssetReportFeature[] | Y | Feature catalog + Observation + Evidence | 제안 |
 | `features[].key` | string | Y | Feature catalog | 제안 |
 | `features[].label` | string | Y | Feature catalog 또는 display projection | 제안 |
@@ -388,9 +388,10 @@ versioned Feature Schema/transform contract를 적용한 Backend Feature Executo
 `systems/generator`는 Feature/Label 의미, History Requirement, transform contract, Model Artifact
 publish를 소유하지만 제품 runtime series를 Product API source로 publish하지 않는다. 반면
 `risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend Diagnosis Runtime
-Prediction History Query Contract에서 파생하는 후속 target이다. 현재 구현 anchor는 Backend
-Diagnosis가 Product Result/Prediction을 저장하는 `prediction_results`이지만, Product API는
-내부 테이블 shape를 직접 노출하지 않는다. `pm_prediction_timeline`,
+Prediction History Query Contract에서 파생하는 후속 target이다. 현재 canonical source는 Backend
+Diagnosis가 생성한 `pm_result_artifacts`의 asset별 append-only Product Result history이며, 상세
+payload가 실제로 필요한 경우에만 `prediction_result_id`로 `prediction_results`를 조회한다. Product
+API는 내부 테이블 shape를 직접 노출하지 않는다. `pm_prediction_timeline`,
 `gen_data/canonical/model_outputs/prediction_timeline.jsonl`, legacy `precomputed_prediction_timeline`을
 최신 운영 결과처럼 직접 소비하지 않는다.
 
