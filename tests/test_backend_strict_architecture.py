@@ -15,7 +15,7 @@ def _write(path: Path, text: str = "") -> None:
 @pytest.fixture()
 def strict_tree(tmp_path: Path) -> Path:
     app = tmp_path / "systems/backend/app"
-    for name in DOMAINS | {"common", "infra"}:
+    for name in DOMAINS | {"common", "infra", "mvp"}:
         (app / name).mkdir(parents=True, exist_ok=True)
         _write(app / name / "__init__.py")
     _write(app / "main.py", "from app.application import create_app\napp = create_app()\n")
@@ -49,7 +49,27 @@ def strict_tree(tmp_path: Path) -> Path:
             "from app.report.report_service import ReportService\n",
             "ARC005",
         ),
+        (
+            "systems/backend/app/dashboard/bad.py",
+            "from app.report.report_repository import ReportRepository\n",
+            "ARC005",
+        ),
+        (
+            "systems/backend/app/diagnosis/bad.py",
+            "from app.equipment.adapters.fixture_repository import FixtureEquipmentRepository\n",
+            "ARC005",
+        ),
         ("systems/backend/app/diagnosis/bad.py", "import fastapi\n", "ARC006"),
+        (
+            "systems/backend/app/dataset/bad.py",
+            "from app.infra.db.dataset_repository import DatasetRepository\n",
+            "ARC014",
+        ),
+        (
+            "systems/backend/app/mvp/bad.py",
+            "from app.infra.db.dashboard_repository import DashboardRepository\n",
+            "ARC013",
+        ),
         (
             "systems/backend/app/infra/bad.py",
             "from app.diagnosis.diagnosis_service import DiagnosisService\n",
@@ -134,3 +154,19 @@ def test_strict_verifier_rejects_repo_root_first_playwright_pythonpath(strict_tr
         item.rule == "ARC011" and "repository root" in item.detail
         for item in violations
     ), [str(item) for item in violations]
+
+
+def test_strict_verifier_allows_public_cross_context_boundaries(strict_tree: Path) -> None:
+    _write(
+        strict_tree / "systems/backend/app/mvp/good.py",
+        "\n".join(
+            [
+                "from app.diagnosis.ports import PredictionResultRepositoryPort",
+                "from app.diagnosis.schemas import PredictionResult",
+                "from app.ontology.ontology_domain import ObjectRecord",
+                "from app.report import ReportService",
+                "",
+            ]
+        ),
+    )
+    assert verify(strict_tree) == []

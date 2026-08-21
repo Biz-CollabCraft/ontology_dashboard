@@ -12,6 +12,7 @@ from identity_test_support import build_identity_service
 from app.main import app
 from app.dependencies import get_identity_service, get_service
 from app.mvp.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
+from app.dependencies import build_manufacturing_service
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = "manufacturing-demo"
@@ -29,7 +30,7 @@ def identity(database_path: Path) -> IdentityService:
 
 @pytest.fixture()
 def service(database_path: Path) -> FactorySignalService:
-    return FactorySignalService(ROOT, database_path=database_path)
+    return build_manufacturing_service(database_path, root=ROOT)
 
 
 @pytest.fixture()

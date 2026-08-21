@@ -5,11 +5,15 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import get_identity_service, get_project_service, get_service
+from app.dependencies import (
+    build_manufacturing_service,
+    get_identity_service,
+    get_project_service,
+    get_service,
+)
 from app.infra.db.project_repository import ProjectRepository
 from app.main import app
 from app.project import ProjectService
-from app.mvp.service import ManufacturingPredictiveMaintenanceService
 from identity_test_support import build_identity_service
 
 
@@ -20,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def client(tmp_path: Path):
     database = tmp_path / "canonical-runtime-smoke.db"
     identity = build_identity_service(database, app_env="test", seed_demo=True)
-    service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
+    service = build_manufacturing_service(database, root=ROOT)
     projects = ProjectService(ProjectRepository(database))
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_service] = lambda: service

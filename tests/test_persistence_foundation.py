@@ -10,7 +10,7 @@ from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from app.infra.db.project_repository import SQLiteProjectContextResolver
 from app.ontology.ontology_service import OntologyService
 from app.infra.db.role_workflow_repository import RoleWorkflowRepository
-from app.mvp.service import ManufacturingPredictiveMaintenanceService
+from app.dependencies import build_manufacturing_service
 from identity_test_support import build_identity_service
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,7 +101,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
 def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Path) -> None:
     database = tmp_path / "ontology.db"
     build_identity_service(database, app_env="test", seed_demo=True)
-    service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
+    service = build_manufacturing_service(database, root=ROOT)
     project_context = SQLiteProjectContextResolver(database)
     ontology = OntologyService(
         service,

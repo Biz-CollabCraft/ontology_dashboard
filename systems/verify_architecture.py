@@ -32,7 +32,8 @@ DOMAINS = {
     "planner",
     "governance",
 }
-REQUIRED_APP_DIRS = DOMAINS | {"common", "infra"}
+BOUNDARY_CONTEXTS = DOMAINS | {"mvp"}
+REQUIRED_APP_DIRS = DOMAINS | {"common", "infra", "mvp"}
 FORBIDDEN_APP_TOP_LEVEL = {
     "runtime",
     "routers",
@@ -44,7 +45,8 @@ FORBIDDEN_APP_TOP_LEVEL = {
     "domain_packs",
     "predictive_maintenance_runtime",
 }
-DOMAIN_IMPLEMENTATION_SUFFIXES = ("_service", "_repository", "_adapter")
+PUBLIC_BOUNDARY_MODULES = {"domain", "ports", "contracts", "schemas"}
+PUBLIC_BOUNDARY_SUFFIXES = ("_domain", "_schema", "_contracts")
 TECHNICAL_IMPORT_PREFIXES = (
     "fastapi",
     "sqlite3",
@@ -174,6 +176,31 @@ def _rel(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
+def _is_public_context_import(module: str, *, source_context: str) -> bool:
+    """Return whether a cross-context app import uses an explicit public seam.
+
+    Package roots are public facades.  Deeper cross-context imports must target
+    a domain/port/contract/schema module rather than implementation naming
+    conventions such as repositories, adapters, providers, or services.
+    """
+
+    parts = module.split(".")
+    if len(parts) < 2 or parts[0] != "app":
+        return True
+    target = parts[1]
+    if target == source_context or target in {"common", "infra"}:
+        return True
+    if target not in BOUNDARY_CONTEXTS:
+        return True
+    if len(parts) == 2:
+        return True
+    public_module = parts[2]
+    return (
+        public_module in PUBLIC_BOUNDARY_MODULES
+        or public_module.endswith(PUBLIC_BOUNDARY_SUFFIXES)
+    )
+
+
 def verify(root: Path = ROOT) -> list[Violation]:
     errors: list[Violation] = []
     app_root = root / APP
@@ -196,6 +223,7 @@ def verify(root: Path = ROOT) -> list[Violation]:
         relative = path.relative_to(app_root)
         top = relative.parts[0] if relative.parts else ""
         is_domain = top in DOMAINS
+        is_boundary_context = top in BOUNDARY_CONTEXTS
         is_router = path.name.endswith("router.py")
         is_composition = len(relative.parts) == 1 and path.name in COMPOSITION_FILES
         try:
@@ -210,14 +238,28 @@ def verify(root: Path = ROOT) -> list[Violation]:
             if top == "common" and any(module == f"app.{d}" or module.startswith(f"app.{d}.") for d in DOMAINS):
                 errors.append(Violation("ARC004", location))
 
-            # ARC005 one domain may use another domain's public contract, not its implementation module.
-            if is_domain and module.startswith("app."):
-                parts = module.split(".")
-                if len(parts) >= 3 and parts[1] in DOMAINS and parts[1] != top and parts[-1].endswith(DOMAIN_IMPLEMENTATION_SUFFIXES):
-                    errors.append(Violation("ARC005", location))
+            # ARC005 cross-context dependency inversion is allowlist based:
+            # only public domain/port/contract/schema seams may be imported.
+            if (
+                is_boundary_context
+                and not is_router
+                and module.startswith("app.")
+                and not _is_public_context_import(module, source_context=top)
+            ):
+                errors.append(Violation("ARC005", location))
+
+            # ARC013 MVP is an application boundary, never an infrastructure
+            # composition location.  Concrete adapters belong in dependencies.py.
+            if top == "mvp" and module.startswith("app.infra"):
+                errors.append(Violation("ARC013", location))
+
+            # ARC014 domain application/core code may not reach infrastructure
+            # implementations directly; ports are implemented from the outside.
+            if is_domain and not is_router and module.startswith("app.infra"):
+                errors.append(Violation("ARC014", location))
 
             # ARC006/007 domain use-case/domain/schema files stay framework/SDK free.
-            domain_core = is_domain and not is_router and not path.name.startswith("__init__")
+            domain_core = is_boundary_context and not is_router and not path.name.startswith("__init__")
             if domain_core and any(module == prefix or module.startswith(prefix + ".") for prefix in TECHNICAL_IMPORT_PREFIXES):
                 errors.append(Violation("ARC006", location))
 
@@ -320,6 +362,8 @@ def main() -> int:
     print("- systems/backend/app is the only Backend package root")
     print("- legacy package/import/entrypoint reintroduction is blocked")
     print("- canonical domain/common/infra boundaries are statically guarded")
+    print("- cross-context imports use public domain/ports/contracts/schemas only")
+    print("- app/mvp and domain code cannot import infrastructure implementations")
     print("- app.main:app is the runtime host")
     print("- Playwright pins canonical app.main:app with systems/backend app-dir")
     print("- Backend-to-Generator direct imports and unsafe sibling paths are blocked")

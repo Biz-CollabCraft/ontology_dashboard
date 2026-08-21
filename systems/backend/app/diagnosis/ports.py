@@ -38,6 +38,18 @@ class DiagnosisRuntimeRepositoryPort(Protocol):
     def update_session(self, **kwargs: Any) -> dict[str, Any]: ...
 
 
+class ContextProvider(Protocol):
+    """Maintenance-context boundary used while building diagnosis evidence."""
+
+    provider_name: str
+
+    def get_context(
+        self,
+        equipment_id: str,
+        failure_type: str,
+    ) -> dict[str, Any] | None: ...
+
+
 class PredictionResultRepositoryPort(Protocol):
     """Persistence contract matching the migrated prediction repository API.
 
@@ -73,6 +85,7 @@ ObservationDatasetQueryPort = ObservationDatasetQuery
 
 __all__ = [
     "ALLOWED_DERIVED_MEASURES",
+    "ContextProvider",
     "DiagnosisRuntimeRepositoryPort",
     "EquipmentSnapshotQueryPort",
     "ObservationDatasetQueryPort",

@@ -7,14 +7,9 @@ from typing import Any
 
 from .contracts import ReportRequest
 from app.dashboard.dashboard_schema import DashboardTemplatePublishRequest
-from app.dashboard.dashboard_service import DashboardService
-from app.infra.db.dashboard_repository import DashboardRepository
-from app.infra.db.ontology_action_repository import OntologyActionRepository
-from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.dashboard import DashboardService
 from app.identity import AuthError, Principal
-from app.infra.db.project_repository import SQLiteProjectContextResolver
-from app.ontology.ontology_domain import registry_payload
-from app.ontology.ontology_service import OntologyService
+from app.ontology import OntologyService, registry_payload
 from .role_workflow_models import (
     ApprovalDecisionRequest,
     AuditExportCheckpointRequest,
@@ -27,7 +22,7 @@ from .role_workflow_models import (
     ModelReleaseRequestCreate,
     TemplatePublishRequestCreate,
 )
-from app.infra.db.role_workflow_repository import RoleWorkflowRepository
+from .ports import RoleWorkflowRepositoryPort
 from .service import EventNotFound, FactorySignalService, RISK_PRIORITY
 
 
@@ -36,34 +31,14 @@ class RoleWorkflowService:
         self,
         legacy_service: FactorySignalService,
         *,
-        repository: RoleWorkflowRepository | None = None,
-        ontology: OntologyService | None = None,
-        dashboards: DashboardService | None = None,
+        repository: RoleWorkflowRepositoryPort,
+        ontology: OntologyService,
+        dashboards: DashboardService,
     ) -> None:
         self.legacy_service = legacy_service
-        repository_location = legacy_service.repository.path
-        self.repository = repository or RoleWorkflowRepository(repository_location)
-        if ontology is None:
-            project_context = SQLiteProjectContextResolver(repository_location)
-            ontology = OntologyService(
-                legacy_service,
-                action_repository=OntologyActionRepository(
-                    repository_location,
-                    project_context=project_context,
-                ),
-                instance_repository=OntologyInstanceRepository(
-                    repository_location,
-                    project_context=project_context,
-                ),
-                field_actions=self.repository,
-            )
+        self.repository = repository
         self.ontology = ontology
-        self.dashboards = dashboards or DashboardService(
-            repository=DashboardRepository(
-                repository_location,
-                project_context=SQLiteProjectContextResolver(repository_location),
-            )
-        )
+        self.dashboards = dashboards
 
     @staticmethod
     def _now() -> str:

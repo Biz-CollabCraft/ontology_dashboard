@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.live_predictive_maintenance import (
+from app.infra.live_predictive_maintenance_runtime import (
     LIVE_SOURCE_VERSION,
     active_overlay_asset_ids,
     read_complete_ticks,

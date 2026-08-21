@@ -8,12 +8,13 @@ from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from app.mvp.context import Project3HttpContextProvider, ResilientContextProvider
+from app.diagnosis.evidence import FixtureContextProvider
+from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.mvp.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
 from app.identity import CSRF_COOKIE, IdentityService
 from app.infra.llm import VertexAIProvider, configured_provider
 from app.main import app
-from app.dependencies import get_identity_service, get_service
+from app.dependencies import build_manufacturing_service, get_identity_service, get_service
 from app.planner import LayoutPlanner
 from app.mvp.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 from identity_test_support import build_identity_service
@@ -31,7 +32,7 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def service(database_path: Path) -> FactorySignalService:
-    return FactorySignalService(ROOT, database_path=database_path)
+    return build_manufacturing_service(database_path, root=ROOT)
 
 
 @pytest.fixture()
@@ -317,7 +318,10 @@ def test_follow_up_reconfigures_layout_and_rejects_injection(client: TestClient)
 
 
 def test_project3_context_failure_falls_back() -> None:
-    provider = ResilientContextProvider(Project3HttpContextProvider(base_url="http://127.0.0.1:1", timeout_seconds=0.01))
+    provider = ResilientContextProvider(
+        Project3HttpContextProvider(base_url="http://127.0.0.1:1", timeout_seconds=0.01),
+        FixtureContextProvider(),
+    )
     context = provider.get_context("M-014", "tool_wear_failure")
     assert context["provider"] == "fixture_fallback"
     assert context["source_refs"]

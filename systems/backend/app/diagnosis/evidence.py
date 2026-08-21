@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from jsonschema import Draft202012Validator
 
@@ -15,6 +15,7 @@ from .evidence_enrichment import (
     validate_evidence_payload_invariants,
 )
 from .predictor import Prediction, Predictor, configured_predictor
+from .ports import ContextProvider
 
 NORMAL_RANGES = {
     "air_temperature_k": "295.0–305.0",
@@ -26,12 +27,6 @@ NORMAL_RANGES = {
     "overstrain_index": "0–11,000",
     "torque_nm": "10–60",
 }
-
-
-class ContextProvider(Protocol):
-    provider_name: str
-
-    def get_context(self, equipment_id: str, failure_type: str) -> dict[str, Any] | None: ...
 
 
 class FixtureContextProvider:

@@ -10,6 +10,7 @@ import ipaddress
 import os
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
 from threading import Lock
 from typing import Any, Callable
 
@@ -34,35 +35,45 @@ from app.dashboard.visualizations import (
     validate_override_channel_mapping,
 )
 from app.dataset import DatasetCatalogService
+from app.diagnosis.evidence import FixtureContextProvider
 from app.diagnosis.runtime_service import (
     PredictiveMaintenanceRuntimeService,
     V3_1_MODEL_VERSION,
     V3_1_RESULT_SCHEMA,
     V3_1_SOURCE_VERSION,
 )
+from app.diagnosis.contracts import load_fixture
 from app.governance import GovernanceService
 from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.infra.db.dashboard_repository import DashboardRepository
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
 from app.infra.db.migrations import migrate
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
+from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
+from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
     SQLiteProjectContextResolver,
 )
 from app.infra.db.report_repository import ReportRepository
 from app.infra.db.settings import database_location
+from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.infra.llm import configured_provider
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
+from app.maintenance.live_service import LivePredictiveMaintenanceService
 from app.ontology import OntologyService
-from app.planner import OntologyDashboardPlannerService
+from app.planner import LayoutPlanner, OntologyDashboardPlannerService
 from app.project import ProjectService
 from app.report import ReportService
+from app.report.generation_provider import ReportAgent
 
 from app.dataset.ingestion.api_service import AdapterService
+from app.equipment import EquipmentService
+from app.equipment.adapters import FixtureEquipmentRepository
 from app.infra.db.postgresql_ontology_repository import PostgreSQLOntologyInstanceRepository
 from app.infra.db.postgresql_repositories import (
     PostgreSQLAdapterRepository,
@@ -79,6 +90,7 @@ from app.infra.db.postgresql_repositories import (
 )
 from app.infra.db.project_repository import SQLiteProjectContextResolver as RuntimeProjectContextResolver
 from app.infra.db.role_workflow_repository import RoleWorkflowRepository
+from app.infra.db.mvp_audit_repository import AuditRepository
 from app.mvp.role_workflow_service import RoleWorkflowService
 from app.mvp.service import ManufacturingPredictiveMaintenanceService
 
@@ -98,12 +110,59 @@ def ensure_database_migrations() -> tuple[str, ...]:
         return tuple(migrate(database_target()))
 
 
+def _mvp_fixture_masters(root: Path) -> list[tuple[str, dict[str, Any]]]:
+    fixture_root = root / "data" / "fixtures"
+    masters: list[tuple[str, dict[str, Any]]] = []
+    for pattern in ("GS-*.json", "AZ-*.json", "MPT-*.json"):
+        for path in fixture_root.glob(pattern):
+            fixture = load_fixture(path)
+            masters.append(
+                (
+                    str(fixture.get("project_id") or "manufacturing-demo-project"),
+                    fixture["equipment"],
+                )
+            )
+    return masters
+
+
+def _mvp_context_provider(fixture: dict[str, Any]):
+    fallback = FixtureContextProvider()
+    if fixture["runtime"]["context_provider"] == "project3_http":
+        return ResilientContextProvider(Project3HttpContextProvider(), fallback)
+    return fallback
+
+
+def build_manufacturing_service(
+    database_path: str | Path,
+    *,
+    root: Path = ROOT,
+) -> ManufacturingPredictiveMaintenanceService:
+    """Compose the MVP application service with concrete runtime adapters."""
+
+    target = str(database_path)
+    migrate(target)
+    audit_repository = (
+        PostgreSQLAuditRepository(target)
+        if is_postgresql(target)
+        else AuditRepository(target)
+    )
+    provider = configured_provider()
+    equipment_service = EquipmentService(
+        FixtureEquipmentRepository(_mvp_fixture_masters(root))
+    )
+    return ManufacturingPredictiveMaintenanceService(
+        root,
+        repository=audit_repository,
+        equipment_service=equipment_service,
+        report_agent=ReportAgent(root, provider),
+        layout_planner=LayoutPlanner(root, provider),
+        context_provider_factory=_mvp_context_provider,
+    )
+
+
 @lru_cache(maxsize=1)
 def get_service() -> ManufacturingPredictiveMaintenanceService:
-    ensure_database_migrations()
-    target = database_target()
-    repository = PostgreSQLAuditRepository(target) if is_postgresql(target) else None
-    return ManufacturingPredictiveMaintenanceService(ROOT, database_path=target, repository=repository)
+    return build_manufacturing_service(database_target())
 
 
 def _password_hasher() -> PasswordHasher:
@@ -136,16 +195,49 @@ def get_project_service() -> ProjectService:
 
 @lru_cache(maxsize=1)
 def get_adapter_service() -> AdapterService:
-    ensure_database_migrations()
-    target = database_target()
+    return build_adapter_service(database_target())
+
+
+def build_adapter_service(
+    database_path: str | Path,
+    *,
+    root: Path = ROOT,
+) -> AdapterService:
+    """Compose Dataset ingestion with persistence and Diagnosis ports."""
+
+    target = str(database_path)
+    migrate(target)
     if is_postgresql(target):
-        return AdapterService(
+        repository = PostgreSQLAdapterRepository(target)
+        predictions = PostgreSQLPredictionResultRepository(target)
+    else:
+        repository = DatasetIngestionRepository(target)
+        predictions = PredictionResultRepository(
             target,
-            root=ROOT,
-            repository=PostgreSQLAdapterRepository(target),
-            prediction_repository=PostgreSQLPredictionResultRepository(target),
+            project_context=RuntimeProjectContextResolver(target),
         )
-    return AdapterService(target, root=ROOT)
+    return AdapterService(
+        target,
+        root=root,
+        repository=repository,
+        prediction_repository=predictions,
+        dataset_catalog=DatasetCatalogService(DatasetRepository(target)),
+        bundle_ingestor_factory=PostgreSQLPredictiveMaintenanceBundleIngestor,
+    )
+
+
+def build_live_predictive_maintenance_service(
+    database_url: str | None = None,
+) -> LivePredictiveMaintenanceService:
+    """Compose the live worker application service with its infrastructure adapter."""
+
+    from app.infra.live_predictive_maintenance_runtime import (
+        LivePredictiveMaintenanceRuntime,
+    )
+
+    return LivePredictiveMaintenanceService(
+        LivePredictiveMaintenanceRuntime(database_url or database_target())
+    )
 
 
 def _ontology_principal(

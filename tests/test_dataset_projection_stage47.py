@@ -16,11 +16,15 @@ from app.dataset.projection import (
     DatasetProjectionCoordinator,
     InMemoryProjectionPort,
 )
-from app.dependencies import get_dataset_catalog_service, get_identity_service, get_service
+from app.dependencies import (
+    build_manufacturing_service,
+    get_dataset_catalog_service,
+    get_identity_service,
+    get_service,
+)
 from app.identity import CSRF_COOKIE, IdentityService
 from app.main import app
 from app.infra.db.migrations import migrate
-from app.mvp.service import ManufacturingPredictiveMaintenanceService
 from identity_test_support import build_identity_service
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -233,7 +237,7 @@ def test_projection_failure_is_recorded_and_retryable(setup) -> None:
 @pytest.fixture()
 def api_client(setup):
     database_path, identity, _, catalog, _ = setup
-    domain_service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database_path)
+    domain_service = build_manufacturing_service(database_path, root=ROOT)
     app.dependency_overrides[get_identity_service] = lambda: identity
     app.dependency_overrides[get_service] = lambda: domain_service
     app.dependency_overrides[get_dataset_catalog_service] = lambda: catalog

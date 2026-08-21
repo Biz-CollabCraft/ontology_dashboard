@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 from argon2 import PasswordHasher
 
+from app.dependencies import build_manufacturing_service
 from app.dataset.dataset_schema import (
     DatasetCreateRequest,
     DatasetFileCreate,
@@ -32,7 +33,6 @@ from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentit
 from app.identity import IdentityService
 from app.infra.db.migrations import migrate
 from app.infra.db.postgresql_repositories import PostgreSQLIdentityRepository
-from app.mvp.service import ManufacturingPredictiveMaintenanceService
 from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -303,7 +303,7 @@ def seed(
             rate_limit_namespace=f"identity:{database}",
         )
     repository = DatasetRepository(database)
-    service = ManufacturingPredictiveMaintenanceService(ROOT, database_path=database)
+    service = build_manufacturing_service(database, root=ROOT)
     existing = {
         item["id"]: item
         for item in repository.list_datasets(

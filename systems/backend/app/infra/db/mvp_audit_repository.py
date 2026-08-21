@@ -1,4 +1,4 @@
-"""Canonical audit repository for the manufacturing demo runtime."""
+"""SQLite persistence adapter for the manufacturing MVP audit trail port."""
 
 from __future__ import annotations
 

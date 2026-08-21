@@ -8,17 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from app.diagnosis.contracts import load_fixture
-from app.diagnosis.evidence import (
-    FixtureContextProvider,
+from app.diagnosis.domain import (
     build_evidence_package,
     build_product_result_artifact,
+    event_evidence_projection_to_legacy_evidence,
+    product_result_artifact_to_event_evidence_projection,
 )
 from app.equipment import EquipmentService
-from app.equipment.adapters import FixtureEquipmentRepository
-from app.infra.db.migrations import migrate
-from app.infra.db.settings import database_location
 
-from .context import ResilientContextProvider
+from .context import ContextProviderFactory
 from .contracts import (
     DecisionRequest,
     FollowUpRequest,
@@ -30,16 +28,8 @@ from .contracts import (
     ReportRequest,
     UILayout,
 )
-from app.planner.conversation import IntentRouter, deterministic_answer
-from app.infra.llm import configured_provider
-
-from app.report.generation_provider import ReportAgent
-from app.planner.layout import LayoutPlanner
-from app.diagnosis.evidence_projection import (
-    event_evidence_projection_to_legacy_evidence,
-    product_result_artifact_to_event_evidence_projection,
-)
-from .repository import AuditRepository
+from app.planner import IntentRouter, deterministic_answer
+from .ports import AuditRepositoryPort, LayoutPlannerPort, ReportAgentPort
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
 
@@ -53,8 +43,11 @@ class ManufacturingPredictiveMaintenanceService:
         self,
         root: str | Path,
         *,
-        database_path: str | Path | None = None,
-        repository: AuditRepository | None = None,
+        repository: AuditRepositoryPort,
+        equipment_service: EquipmentService,
+        report_agent: ReportAgentPort,
+        layout_planner: LayoutPlannerPort,
+        context_provider_factory: ContextProviderFactory,
     ) -> None:
         self.root = Path(root)
         fixture_root = self.root / "data" / "fixtures"
@@ -75,22 +68,11 @@ class ManufacturingPredictiveMaintenanceService:
             for event_id, fixture in self.project_fixtures.items()
             if self._fixture_project_id(fixture) == "manufacturing-demo-project"
         }
-        self.equipment_service = EquipmentService(
-            FixtureEquipmentRepository(
-                (
-                    (self._fixture_project_id(fixture), fixture["equipment"])
-                    for fixture in self.project_fixtures.values()
-                )
-            )
-        )
-        database = database_path or database_location(self.root)
-        if repository is None:
-            migrate(str(database))
-            repository = AuditRepository(database)
+        self.equipment_service = equipment_service
         self.repository = repository
-        self.provider = configured_provider()
-        self.report_agent = ReportAgent(self.root, self.provider)
-        self.layout_planner = LayoutPlanner(self.root, self.provider)
+        self.report_agent = report_agent
+        self.layout_planner = layout_planner
+        self.context_provider_factory = context_provider_factory
         self.intent_router = IntentRouter()
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
@@ -100,9 +82,7 @@ class ManufacturingPredictiveMaintenanceService:
             raise EventNotFound(event_id) from exc
 
     def _context_provider(self, fixture: dict[str, Any]):
-        if fixture["runtime"]["context_provider"] == "project3_http":
-            return ResilientContextProvider()
-        return FixtureContextProvider()
+        return self.context_provider_factory(fixture)
 
     @staticmethod
     def _fixture_project_id(fixture: dict[str, Any]) -> str:

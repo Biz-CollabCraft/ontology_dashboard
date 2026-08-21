@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.dataset import (
     DatasetCatalogService,
@@ -11,8 +11,9 @@ from app.dataset import (
     DatasetFileCreate,
     DatasetVersionCreateRequest,
 )
+from app.diagnosis.ports import PredictionResultRepositoryPort
+from app.diagnosis.schemas import PredictionResult
 from app.identity import AuthError, IdentityService, Principal
-from app.infra.db.dataset_repository import DatasetRepository
 
 from app.dataset.ingestion.file_adapter import FileAdapter
 from app.dataset.ingestion.bundle_file_adapter import BundleFileAdapter
@@ -23,12 +24,9 @@ from app.dataset.bundle_contract import (
 )
 from app.dataset.ingestion.ingestion_schema import DatasetManifest
 from app.dataset.ingestion.file_adapter import IngestionResult
-from app.diagnosis.diagnosis_schema import PredictionResult
-from app.infra.db.prediction_result_repository import PredictionResultRepository
-from app.infra.db.project_repository import SQLiteProjectContextResolver
-from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
+from app.dataset.ingestion.protocol import ValidatedBundleIngestionPort
 from app.dataset.ingestion.registry import AdapterRegistry, default_adapter_registry
-from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository as AdapterRepository
+from app.dataset.ingestion.repository import IngestionRepositoryPort
 
 
 class AdapterService:
@@ -38,9 +36,10 @@ class AdapterService:
         *,
         root: str | Path,
         registry: AdapterRegistry | None = None,
-        repository: AdapterRepository | None = None,
-        prediction_repository: PredictionResultRepository | None = None,
-        dataset_catalog: DatasetCatalogService | None = None,
+        repository: IngestionRepositoryPort,
+        prediction_repository: PredictionResultRepositoryPort,
+        dataset_catalog: DatasetCatalogService,
+        bundle_ingestor_factory: Callable[[str], ValidatedBundleIngestionPort],
     ) -> None:
         self.database = str(database_path)
         self.path = (
@@ -54,14 +53,10 @@ class AdapterService:
         roots = [Path(value) for value in configured.split(os.pathsep) if value.strip()]
         if not roots:
             roots = [self.root / "data" / "raw", self.root / "data" / "fixtures"]
-        self.repository = repository or AdapterRepository(self.path)
-        self.predictions = prediction_repository or PredictionResultRepository(
-            self.path,
-            project_context=SQLiteProjectContextResolver(self.path),
-        )
-        self.dataset_catalog = dataset_catalog or DatasetCatalogService(
-            DatasetRepository(self.database)
-        )
+        self.repository = repository
+        self.predictions = prediction_repository
+        self.dataset_catalog = dataset_catalog
+        self.bundle_ingestor_factory = bundle_ingestor_factory
         self.file_adapter = FileAdapter(
             allowed_roots=roots,
             registry=self.registry,
@@ -167,9 +162,7 @@ class AdapterService:
                     "project_context_mismatch",
                     "Bundle Manifest의 Project가 요청 경로와 일치하지 않습니다.",
                 )
-        return PostgreSQLPredictiveMaintenanceBundleIngestor(
-            database_url
-        ).ingest_validated_bundle(
+        return self.bundle_ingestor_factory(database_url).ingest_validated_bundle(
             manifest=manifest,
             validation=checked,
         )
