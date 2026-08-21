@@ -233,6 +233,59 @@ def test_preprocessing_outside_allowed_root_rejection(client):
     assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
 
 
+def test_preprocessing_dataset_id_path_traversal_rejection(client):
+    """POST /preprocessing rejects dataset_id with path traversal (..)."""
+    payload = {
+        "dataset_id": "../../../etc/passwd",
+        "dataset_version": "v1.0",
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 422
+    data = res.json()
+    assert "error" in data
+    assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
+
+
+def test_preprocessing_dataset_version_path_traversal_rejection(client):
+    """POST /preprocessing rejects dataset_version with path traversal (..)."""
+    payload = {
+        "dataset_id": "valid_ds",
+        "dataset_version": "../../../etc/shadow",
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 422
+    data = res.json()
+    assert "error" in data
+    assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
+
+
+def test_preprocessing_dataset_id_lookup_success(client):
+    """POST /preprocessing successfully finds file by dataset_id within PATHS.data_dir."""
+    # Ensure test file exists in data/
+    test_file = PATHS.data_dir / "lookup_test_dataset" / "v1.0.csv"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame({"asset_id": ["A1"], "timestamp": ["2026-01-01 00:00:00"], "val": [10.0]})
+    df.to_csv(test_file, index=False)
+
+    try:
+        payload = {
+            "dataset_id": "lookup_test_dataset",
+            "dataset_version": "v1.0",
+            "force_reanalyze": True,
+        }
+        res = client.post("/preprocessing", json=payload)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "succeeded"
+        assert data["dataset_id"] == "lookup_test_dataset"
+        assert data["dataset_version"] == "v1.0"
+    finally:
+        if test_file.exists():
+            test_file.unlink()
+        if test_file.parent.exists():
+            test_file.parent.rmdir()
+
+
 def test_preprocessing_plan_cache_and_reuse(client, sample_wide_csv, tmp_path):
     """POST /preprocessing reuses cached plan when force_reanalyze=False and regenerates when True."""
     repo = PreprocessingRepository(base_dir=tmp_path / "plans")

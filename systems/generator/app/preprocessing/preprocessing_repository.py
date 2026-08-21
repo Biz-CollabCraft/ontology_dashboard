@@ -22,8 +22,8 @@ class PreprocessingRepository:
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def _plan_filename(self, dataset_id: str, dataset_version: str) -> str:
-        safe_id = dataset_id.replace("/", "_").replace("\\", "_")
-        safe_ver = dataset_version.replace("/", "_").replace("\\", "_")
+        safe_id = dataset_id.replace("/", "_").replace("\\", "_").replace("..", "_").replace(":", "_")
+        safe_ver = dataset_version.replace("/", "_").replace("\\", "_").replace("..", "_").replace(":", "_")
         return f"{safe_id}-{safe_ver}.json"
 
     def get_plan_path(self, dataset_id: str, dataset_version: str) -> Path:
