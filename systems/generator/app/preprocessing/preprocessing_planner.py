@@ -1,4 +1,4 @@
-"""Planner for data structure classification and column extraction rules."""
+"""Planner for data structure classification and column preprocessing rules."""
 
 from __future__ import annotations
 
@@ -9,19 +9,19 @@ from typing import Any, Optional
 import pandas as pd
 
 import systems.generator.generator_llm_client as generator_llm_client
-from systems.generator.app.extraction.extraction_schema import (
-    ExtractionStructureResponse,
-    ExtractionPlanResponse,
+from systems.generator.app.preprocessing.preprocessing_schema import (
+    PreprocessingStructureResponse,
+    PreprocessingPlanResponse,
 )
-from systems.generator.app.extraction.extraction_exception import (
-    ExtractionRoleError,
-    ExtractionPlanningError,
+from systems.generator.app.preprocessing.preprocessing_exception import (
+    PreprocessingRoleError,
+    PreprocessingPlanningError,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class ExtractionPlanner:
+class PreprocessingPlanner:
     """Handles 2-stage analysis (structure classification & column planning) with strict validation."""
 
     def compute_fingerprint(self, df_preview: pd.DataFrame) -> str:
@@ -43,12 +43,12 @@ class ExtractionPlanner:
 
         try:
             raw_res = generator_llm_client.call_llm(prompt, system=system_prompt)
-            res = generator_llm_client.validate_or_transform_pydantic(raw_res, ExtractionStructureResponse)
+            res = generator_llm_client.validate_or_transform_pydantic(raw_res, PreprocessingStructureResponse)
             st_type = res.structure_type if res else "tabular_column_as_attribute"
-            logger.info(f"[ExtractionPlanner] Stage 1 structure classification for '{filepath}': {st_type}")
+            logger.info(f"[PreprocessingPlanner] Stage 1 structure classification for '{filepath}': {st_type}")
             return st_type
         except Exception as e:
-            logger.warning(f"[ExtractionPlanner] Stage 1 classification fallback: {e}")
+            logger.warning(f"[PreprocessingPlanner] Stage 1 classification fallback: {e}")
             return "tabular_column_as_attribute"
 
     def plan_columns(
@@ -59,11 +59,11 @@ class ExtractionPlanner:
         duplicate_policy: str = "error",
         aggregation: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Stage 2: Determine column roles and extraction mapping."""
+        """Stage 2: Determine column roles and preprocessing mapping."""
         avail_cols = list(df_preview.columns)
         if structure_type == "tabular_row_as_attribute":
             system_prompt = (
-                "You are a dataset extraction planner for long-format (tabular_row_as_attribute) manufacturing sensor data.\n"
+                "You are a dataset preprocessing planner for long-format (tabular_row_as_attribute) manufacturing sensor data.\n"
                 "Analyze the columns and sample data, then specify the exact role for each column:\n"
                 "- id_column: The asset/machine identifier column.\n"
                 "- time_column: The timestamp column (if present, else null).\n"
@@ -96,13 +96,13 @@ class ExtractionPlanner:
 
         try:
             raw_res = generator_llm_client.call_llm(prompt, system=system_prompt)
-            res = generator_llm_client.validate_or_transform_pydantic(raw_res, ExtractionPlanResponse)
+            res = generator_llm_client.validate_or_transform_pydantic(raw_res, PreprocessingPlanResponse)
             if res:
                 if structure_type == "tabular_row_as_attribute":
                     roles = [res.id_column, res.attribute_column, res.value_column]
                     if not all(roles) or not all(r in avail_cols for r in roles):
-                        raise ExtractionRoleError(
-                            f"Long-format extraction requires explicit id, attribute, and value columns; "
+                        raise PreprocessingRoleError(
+                            f"Long-format preprocessing requires explicit id, attribute, and value columns; "
                             f"roles {roles} not fully found in columns {avail_cols}"
                         )
                 cols = res.selected_columns if res.selected_columns else avail_cols
@@ -115,19 +115,19 @@ class ExtractionPlanner:
                     "duplicate_policy": duplicate_policy or res.duplicate_policy or "error",
                     "aggregation": aggregation or res.aggregation,
                 }
-        except ExtractionRoleError:
+        except PreprocessingRoleError:
             raise
         except Exception as e:
-            logger.warning(f"[ExtractionPlanner] Stage 2 column selection LLM call failed: {e}")
+            logger.warning(f"[PreprocessingPlanner] Stage 2 column selection LLM call failed: {e}")
             if structure_type == "tabular_row_as_attribute":
-                raise ExtractionRoleError(
-                    f"Long-format extraction requires explicit role columns (id, attribute, value). "
+                raise PreprocessingRoleError(
+                    f"Long-format preprocessing requires explicit role columns (id, attribute, value). "
                     f"Planning failed: {e}"
                 ) from e
 
         if structure_type == "tabular_row_as_attribute":
-            raise ExtractionRoleError(
-                f"Long-format extraction requires explicit id, attribute, and value columns for '{filepath}'"
+            raise PreprocessingRoleError(
+                f"Long-format preprocessing requires explicit id, attribute, and value columns for '{filepath}'"
             )
 
         return {
@@ -163,7 +163,7 @@ class ExtractionPlanner:
         duplicate_policy: str = "error",
         aggregation: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Build extraction plan from preview data and LLM analysis."""
+        """Build preprocessing plan from preview data and LLM analysis."""
         ext = os.path.splitext(filepath)[1].lower()
         if ext == ".csv":
             df_preview = pd.read_csv(filepath, nrows=5)
@@ -177,7 +177,7 @@ class ExtractionPlanner:
 
         structure_type = self.classify_structure(filepath, df_preview)
         if structure_type == "unsupported":
-            raise ExtractionPlanningError(f"File '{filepath}' classified as unsupported format.")
+            raise PreprocessingPlanningError(f"File '{filepath}' classified as unsupported format.")
 
         stage2_plan = self.plan_columns(
             filepath,

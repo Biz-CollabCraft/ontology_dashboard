@@ -1,4 +1,4 @@
-"""Orchestration service for dataset resolution, planning, validation, and extraction."""
+"""Orchestration service for dataset resolution, planning, validation, and preprocessing."""
 
 from __future__ import annotations
 
@@ -11,22 +11,22 @@ import pandas as pd
 
 from systems.generator.generator_config import PATHS
 from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
-from systems.generator.app.extraction.extraction_profiler import build_family_registry, load_family_registry
-from systems.generator.app.extraction.extraction_schema import (
-    ExtractionRequest,
-    ExtractionResponse,
-    ExtractionResultPayload,
-    ExtractionPlanResponse,
+from systems.generator.app.preprocessing.preprocessing_profiler import build_family_registry, load_family_registry
+from systems.generator.app.preprocessing.preprocessing_schema import (
+    PreprocessingRequest,
+    PreprocessingResponse,
+    PreprocessingResultPayload,
+    PreprocessingPlanResponse,
 )
-from systems.generator.app.extraction.extraction_exception import (
+from systems.generator.app.preprocessing.preprocessing_exception import (
     DatasetNotFoundError,
     DatasetContractError,
-    ExtractionRoleError,
-    ExtractionPlanValidationError,
-    ExtractionPlanningError,
+    PreprocessingRoleError,
+    PreprocessingPlanValidationError,
+    PreprocessingPlanningError,
 )
-from systems.generator.app.extraction.extraction_planner import ExtractionPlanner
-from systems.generator.app.extraction.extraction_repository import ExtractionRepository
+from systems.generator.app.preprocessing.preprocessing_planner import PreprocessingPlanner
+from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,10 @@ SUPPORTED_EXTENSIONS = (".csv", ".xlsx", ".xls")
 _last_plans: dict[str, Any] = {}
 
 
-def extract_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
-    """Execute dataframe loading and transformation based on the validated plan."""
+def preprocess_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
+    """Execute dataframe loading and transformation based on the validated preprocessing plan."""
     ext = os.path.splitext(filepath)[1].lower()
-    logger.info(f"[Extractor] Reading file '{filepath}' (ext: {ext})...")
+    logger.info(f"[Preprocessor] Reading file '{filepath}' (ext: {ext})...")
 
     if ext == ".csv":
         df = pd.read_csv(filepath)
@@ -52,7 +52,7 @@ def extract_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
     if structure_type == "tabular_column_as_attribute":
         valid_cols = [c for c in selected_cols if c in df.columns]
         if not valid_cols:
-            logger.warning(f"[Extractor] None of selected columns {selected_cols} exist in '{filepath}'. Keeping all.")
+            logger.warning(f"[Preprocessor] None of selected columns {selected_cols} exist in '{filepath}'. Keeping all.")
             valid_cols = list(df.columns)
 
         extracted_df = df[valid_cols].copy()
@@ -90,11 +90,11 @@ def extract_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
                         f"aggregation function, or deduplicate the source data"
                     )
 
-        logger.info(f"[Extractor] Successfully extracted {len(valid_cols)} columns from '{filepath}'. Output shape: {extracted_df.shape}")
+        logger.info(f"[Preprocessor] Successfully processed {len(valid_cols)} columns from '{filepath}'. Output shape: {extracted_df.shape}")
         return extracted_df
 
     elif structure_type == "tabular_row_as_attribute":
-        logger.info(f"[Extractor] Performing contract-driven tabular_row_as_attribute transform for '{filepath}'...")
+        logger.info(f"[Preprocessor] Performing contract-driven tabular_row_as_attribute transform for '{filepath}'...")
         id_col = plan.get("id_column")
         time_col = plan.get("time_column")
         attr_col = plan.get("attribute_column")
@@ -109,8 +109,8 @@ def extract_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
             missing_roles.append("value_column")
 
         if missing_roles:
-            raise ExtractionRoleError(
-                f"Long-format extraction for '{filepath}' failed: missing required role(s) {missing_roles}. "
+            raise PreprocessingRoleError(
+                f"Long-format preprocessing for '{filepath}' failed: missing required role(s) {missing_roles}. "
                 f"Specified roles: id_column={id_col!r}, attribute_column={attr_col!r}, value_column={val_col!r}, time_column={time_col!r}."
             )
 
@@ -119,16 +119,16 @@ def extract_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
             missing_cols.append(time_col)
 
         if missing_cols:
-            raise ExtractionPlanValidationError(
-                f"Long-format extraction for '{filepath}' failed: specified role columns {missing_cols} not found in DataFrame."
+            raise PreprocessingPlanValidationError(
+                f"Long-format preprocessing for '{filepath}' failed: specified role columns {missing_cols} not found in DataFrame."
             )
 
         roles = [id_col, attr_col, val_col]
         if time_col:
             roles.append(time_col)
         if len(roles) != len(set(roles)):
-            raise ExtractionPlanValidationError(
-                f"Long-format extraction for '{filepath}' failed: role columns must be unique and cannot overlap: {roles}."
+            raise PreprocessingPlanValidationError(
+                f"Long-format preprocessing for '{filepath}' failed: role columns must be unique and cannot overlap: {roles}."
             )
 
         if time_col and time_col in df.columns:
@@ -145,7 +145,7 @@ def extract_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
 
         if has_duplicates:
             if dup_policy == "aggregate" and aggfunc:
-                logger.info(f"[Extractor] Duplicate entries found in long-format '{filepath}'. Aggregating using '{aggfunc}'...")
+                logger.info(f"[Preprocessor] Duplicate entries found in long-format '{filepath}'. Aggregating using '{aggfunc}'...")
                 pivoted = df.pivot_table(index=index_cols, columns=attr_col, values=val_col, aggfunc=aggfunc).reset_index()
                 return pivoted
             else:
@@ -156,14 +156,17 @@ def extract_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
 
         pivoted = df.pivot(index=index_cols, columns=attr_col, values=val_col).reset_index()
         pivoted.columns.name = None
-        logger.info(f"[Extractor] Successfully pivoted long-format dataset '{filepath}'. Output shape: {pivoted.shape}")
+        logger.info(f"[Preprocessor] Successfully pivoted long-format dataset '{filepath}'. Output shape: {pivoted.shape}")
         return pivoted
 
     elif structure_type == "wide_pivot":
         return df
 
     else:
-        raise NotImplementedError(f"Extraction for structure type '{structure_type}' is not implemented.")
+        raise NotImplementedError(f"Preprocessing for structure type '{structure_type}' is not implemented.")
+
+
+extract_with_plan = preprocess_with_plan
 
 
 def load_all_sources(data_dir: str, force_reanalyze: bool = False) -> dict[str, pd.DataFrame]:
@@ -173,7 +176,7 @@ def load_all_sources(data_dir: str, force_reanalyze: bool = False) -> dict[str, 
         raise ValueError(f"Directory missing: {data_dir}")
 
     build_family_registry(data_dir)
-    planner = ExtractionPlanner()
+    planner = PreprocessingPlanner()
     sources = {}
     plans = {}
     for filename in sorted(os.listdir(data_dir)):
@@ -182,7 +185,7 @@ def load_all_sources(data_dir: str, force_reanalyze: bool = False) -> dict[str, 
             filepath = os.path.join(data_dir, filename)
             key = os.path.splitext(filename)[0]
             plan = planner.build_plan(filepath, force_reanalyze=force_reanalyze)
-            df = extract_with_plan(filepath, plan)
+            df = preprocess_with_plan(filepath, plan)
             sources[key] = df
             plans[key] = plan
 
@@ -194,31 +197,37 @@ def get_last_plans() -> dict[str, Any]:
     return _last_plans
 
 
-class ExtractionService:
-    """Orchestrates extraction requests end-to-end."""
+class PreprocessingService:
+    """Orchestrates preprocessing requests end-to-end."""
 
     def __init__(
         self,
-        planner: Optional[ExtractionPlanner] = None,
-        repository: Optional[ExtractionRepository] = None,
+        planner: Optional[PreprocessingPlanner] = None,
+        repository: Optional[PreprocessingRepository] = None,
     ) -> None:
-        self.planner = planner or ExtractionPlanner()
-        self.repository = repository or ExtractionRepository()
+        self.planner = planner or PreprocessingPlanner()
+        self.repository = repository or PreprocessingRepository()
 
-    def _resolve_dataset_path(self, request: ExtractionRequest) -> Path:
+    def _resolve_dataset_path(self, request: PreprocessingRequest) -> Path:
         """Resolve dataset_id / dataset_version / source_uri to a concrete readable file path."""
         # 1. Direct source_uri if provided
         if request.source_uri:
-            p = Path(request.source_uri)
+            raw_uri = str(request.source_uri).strip()
+            # Security checks: relative path only, no directory traversal
+            p = Path(raw_uri)
+            if p.is_absolute() or ".." in p.parts:
+                raise DatasetContractError(
+                    "source_uri는 허용된 데이터 루트 내 상대경로 파일이어야 하며 절대경로/상위경로(..)는 허용되지 않습니다."
+                )
+
+            # Try candidate relative paths
             if p.is_file():
-                return p
-            # Try relative to repo root
-            root_p = PATHS.models_store.parent / request.source_uri
+                return p.resolve()
+            root_p = (PATHS.models_store.parent / raw_uri).resolve()
             if root_p.is_file():
                 return root_p
-            # Try relative to data_dir or data_preprocessed
             for base in (PATHS.data_dir, PATHS.data_preprocessed):
-                candidate = base / request.source_uri
+                candidate = (base / raw_uri).resolve()
                 if candidate.is_file():
                     return candidate
 
@@ -236,12 +245,11 @@ class ExtractionService:
 
         for cand in candidates:
             if cand.is_file():
-                return cand
+                return cand.resolve()
             if cand.is_dir():
-                # find first supported file inside
                 for child in sorted(cand.iterdir()):
                     if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
-                        return child
+                        return child.resolve()
 
         raise DatasetNotFoundError(
             f"데이터셋을 찾을 수 없습니다: dataset_id='{request.dataset_id}', "
@@ -249,7 +257,7 @@ class ExtractionService:
         )
 
     def validate_plan(self, df_preview: pd.DataFrame, plan: dict[str, Any]) -> None:
-        """Validate extraction plan against actual dataframe preview."""
+        """Validate preprocessing plan against actual dataframe preview."""
         cols = list(df_preview.columns)
         st_type = plan.get("structure_type", "tabular_column_as_attribute")
 
@@ -260,8 +268,8 @@ class ExtractionService:
             time_col = plan.get("time_column")
 
             if not id_col or not attr_col or not val_col:
-                raise ExtractionRoleError(
-                    "Long-format extraction requires explicit id_column, attribute_column, and value_column."
+                raise PreprocessingRoleError(
+                    "Long-format preprocessing requires explicit id_column, attribute_column, and value_column."
                 )
 
             roles = [id_col, attr_col, val_col]
@@ -269,13 +277,13 @@ class ExtractionService:
                 roles.append(time_col)
 
             if len(roles) != len(set(roles)):
-                raise ExtractionPlanValidationError(
+                raise PreprocessingPlanValidationError(
                     f"Long-format role columns must be unique and cannot overlap: {roles}"
                 )
 
             missing = [r for r in roles if r not in cols]
             if missing:
-                raise ExtractionPlanValidationError(
+                raise PreprocessingPlanValidationError(
                     f"Declared role columns {missing} not found in dataset columns: {cols}"
                 )
 
@@ -283,18 +291,18 @@ class ExtractionService:
         if selected:
             valid_selected = [c for c in selected if c in cols]
             if not valid_selected:
-                raise ExtractionPlanValidationError(
+                raise PreprocessingPlanValidationError(
                     f"None of the selected columns {selected} exist in dataset: {cols}"
                 )
 
-    def run_extraction(self, request: ExtractionRequest, request_id: Optional[str] = None) -> ExtractionResponse:
-        """Execute full extraction workflow and return structured ExtractionResponse."""
+    def run_preprocessing(self, request: PreprocessingRequest, request_id: Optional[str] = None) -> PreprocessingResponse:
+        """Execute full preprocessing workflow and return structured PreprocessingResponse."""
         req_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
-        run_id = f"extraction-{uuid.uuid4().hex[:12]}"
+        run_id = f"preprocessing-{uuid.uuid4().hex[:12]}"
 
         # 1. Resolve dataset
         dataset_path = self._resolve_dataset_path(request)
-        logger.info(f"[ExtractionService] Resolved dataset path: '{dataset_path.name}' for {request.dataset_id}")
+        logger.info(f"[PreprocessingService] Resolved dataset path: '{dataset_path.name}' for {request.dataset_id}")
 
         # 2. Preview dataset
         ext = dataset_path.suffix.lower()
@@ -311,10 +319,10 @@ class ExtractionService:
         # 3. Check existing plan or generate new plan
         existing_plan = None if request.force_reanalyze else self.repository.find_plan(request.dataset_id, request.dataset_version)
         if existing_plan:
-            logger.info(f"[ExtractionService] Reusing existing plan for {request.dataset_id}:{request.dataset_version}")
+            logger.info(f"[PreprocessingService] Reusing existing plan for {request.dataset_id}:{request.dataset_version}")
             plan = existing_plan
         else:
-            logger.info(f"[ExtractionService] Generating new extraction plan for {request.dataset_id}:{request.dataset_version}")
+            logger.info(f"[PreprocessingService] Generating new preprocessing plan for {request.dataset_id}:{request.dataset_version}")
             plan = self.planner.build_plan(
                 str(dataset_path),
                 force_reanalyze=request.force_reanalyze,
@@ -333,20 +341,21 @@ class ExtractionService:
             overwrite=request.force_reanalyze,
         )
 
-        # 6. Execute extraction test run with plan
-        extract_with_plan(str(dataset_path), plan)
+        # 6. Execute preprocessing test run with plan
+        preprocess_with_plan(str(dataset_path), plan)
 
-        plan_version = f"extraction-plan-{request.dataset_id}-{request.dataset_version}"
+        plan_version = f"preprocessing-plan-{request.dataset_id}-{request.dataset_version}"
 
-        return ExtractionResponse(
+        return PreprocessingResponse(
             request_id=req_id,
             run_id=run_id,
             status="succeeded",
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
-            extraction_plan_version=plan_version,
-            result=ExtractionResultPayload(
+            preprocessing_plan_version=plan_version,
+            result=PreprocessingResultPayload(
                 extraction_type=plan.get("structure_type", "tabular_column_as_attribute"),
+                structure_type=plan.get("structure_type", "tabular_column_as_attribute"),
                 id_column=plan.get("id_column"),
                 time_column=plan.get("time_column"),
                 attribute_column=plan.get("attribute_column"),
@@ -356,3 +365,6 @@ class ExtractionService:
                 mapping_uri=mapping_uri,
             ),
         )
+
+
+ExtractionService = PreprocessingService

@@ -1,4 +1,4 @@
-"""Pydantic schemas and contract definitions for extraction domain."""
+"""Pydantic schemas and contract definitions for preprocessing domain."""
 
 from __future__ import annotations
 
@@ -6,18 +6,18 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
-# --- Extraction Plan LLM Schemas ---
+# --- Preprocessing Plan LLM Schemas ---
 
-class ExtractionStructureResponse(BaseModel):
+class PreprocessingStructureResponse(BaseModel):
     structure_type: str = "tabular_column_as_attribute"
     reason: Optional[str] = None
 
 
-class ExtractionColumnsResponse(BaseModel):
+class PreprocessingColumnsResponse(BaseModel):
     selected_columns: list[str] = Field(default_factory=list)
 
 
-class ExtractionPlanResponse(BaseModel):
+class PreprocessingPlanResponse(BaseModel):
     structure_type: str = "tabular_column_as_attribute"
     selected_columns: list[str] = Field(default_factory=list)
     id_column: Optional[str] = None
@@ -29,7 +29,7 @@ class ExtractionPlanResponse(BaseModel):
     reason: Optional[str] = None
 
     @model_validator(mode="after")
-    def _validate_contract_rules(self) -> "ExtractionPlanResponse":
+    def _validate_contract_rules(self) -> "PreprocessingPlanResponse":
         if self.duplicate_policy == "aggregate" and self.aggregation is None:
             raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation")
         if self.duplicate_policy == "error" and self.aggregation is not None:
@@ -37,11 +37,11 @@ class ExtractionPlanResponse(BaseModel):
 
         if self.structure_type == "tabular_row_as_attribute":
             if not self.id_column or not str(self.id_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'id_column'")
+                raise ValueError("Long-format preprocessing (tabular_row_as_attribute) requires an explicit 'id_column'")
             if not self.attribute_column or not str(self.attribute_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'attribute_column'")
+                raise ValueError("Long-format preprocessing (tabular_row_as_attribute) requires an explicit 'attribute_column'")
             if not self.value_column or not str(self.value_column).strip():
-                raise ValueError("Long-format extraction (tabular_row_as_attribute) requires an explicit 'value_column'")
+                raise ValueError("Long-format preprocessing (tabular_row_as_attribute) requires an explicit 'value_column'")
 
             roles = [self.id_column, self.attribute_column, self.value_column]
             if self.time_column and str(self.time_column).strip():
@@ -60,7 +60,7 @@ class ExtractionPlanResponse(BaseModel):
 
 # --- API Request & Response Schemas ---
 
-class ExtractionRequest(BaseModel):
+class PreprocessingRequest(BaseModel):
     dataset_id: str = Field(..., min_length=1, description="Dataset identifier")
     dataset_version: str = Field(..., min_length=1, description="Dataset version string")
     source_uri: Optional[str] = Field(None, description="Optional relative source URI or dataset path")
@@ -70,7 +70,7 @@ class ExtractionRequest(BaseModel):
     idempotency_key: Optional[str] = Field(None, description="Optional idempotency key")
 
     @model_validator(mode="after")
-    def _validate_duplicate_aggregation(self) -> "ExtractionRequest":
+    def _validate_duplicate_aggregation(self) -> "PreprocessingRequest":
         if self.duplicate_policy == "aggregate" and self.aggregation is None:
             raise ValueError("duplicate_policy='aggregate' requires a non-null aggregation ('mean', 'first', or 'sum')")
         if self.duplicate_policy == "error" and self.aggregation is not None:
@@ -78,8 +78,9 @@ class ExtractionRequest(BaseModel):
         return self
 
 
-class ExtractionResultPayload(BaseModel):
-    extraction_type: str
+class PreprocessingResultPayload(BaseModel):
+    extraction_type: str = "tabular_column_as_attribute"
+    structure_type: Optional[str] = None
     id_column: Optional[str] = None
     time_column: Optional[str] = None
     attribute_column: Optional[str] = None
@@ -89,14 +90,14 @@ class ExtractionResultPayload(BaseModel):
     mapping_uri: str
 
 
-class ExtractionResponse(BaseModel):
+class PreprocessingResponse(BaseModel):
     request_id: str
     run_id: str
     status: Literal["succeeded", "failed"] = "succeeded"
     dataset_id: str
     dataset_version: str
-    extraction_plan_version: str
-    result: ExtractionResultPayload
+    preprocessing_plan_version: str
+    result: PreprocessingResultPayload
 
 
 # --- Error Envelope Schemas ---

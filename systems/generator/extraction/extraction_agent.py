@@ -1,12 +1,12 @@
 """Compatibility facade for legacy extraction_agent imports.
 
 .. deprecated::
-    Use `systems.generator.app.extraction.extraction_planner` instead.
+    Use `systems.generator.app.preprocessing.preprocessing_planner` instead.
 """
 
 from __future__ import annotations
 
-from systems.generator.app.extraction.extraction_planner import ExtractionPlanner
+from systems.generator.app.preprocessing.preprocessing_planner import PreprocessingPlanner as ExtractionPlanner
 
 _default_planner = ExtractionPlanner()
 

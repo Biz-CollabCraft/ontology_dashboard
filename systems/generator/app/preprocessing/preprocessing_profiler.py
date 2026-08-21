@@ -1,8 +1,8 @@
 """
-extraction_profiler.py
+preprocessing_profiler.py
 
 담당 기능:
-- Stage 0 소스 데이터셋 파일 역할(role) 및 계열 메타데이터 프로파일링 모듈.
+- 소스 데이터셋 파일 역할(role) 및 계열 메타데이터 프로파일링 모듈.
 - LLM 및 Pydantic 스키마 검증기(FileProfileResponse)를 사용하여 소스 파일의 역할, 계열 시그니처, 타임스탬프 세맨틱을 프로파일링하고 source_family_registry.json에 저장한다.
 
 입력:
@@ -11,23 +11,17 @@ extraction_profiler.py
 
 출력:
 - registry(dict): 파일명 키별 프로파일링 메타데이터 딕셔너리
-
-의존 모듈:
-- systems.generator.generator_llm_client.call_llm, validate_or_transform_pydantic, FileProfileResponse: 프로파일링 및 스키마 검증.
-- pandas: 데이터셋 헤더 및 샘플 10행 파싱.
-
-예외/경계 상황:
-- LLM 장애 또는 파싱 실패 시 룰 기반(Rule-based) 프로파일링 폴백으로 안전하게 가동한다.
-
-설계 원칙과의 연결:
-- docs/architecture.md의 'Stage 0 동적 계열 분류' 및 '절대 경로 캐시' 원칙에 따른다.
 """
+
+from __future__ import annotations
 
 import os
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 import pandas as pd
+
 from systems.generator.generator_config import PATHS
 from systems.generator.generator_llm_client import (
     call_llm,
@@ -58,8 +52,8 @@ def compute_family_id(id_col: str | None, time_col: str | None) -> str:
     return f"{id_col or 'unknown'}::{time_col or 'unknown'}"
 
 
-def profile_source_file_with_llm(filepath: str, filename: str, df_preview: pd.DataFrame) -> dict:
-    """Stage 0: LLM을 통해 파일의 역할(role)과 컬럼 메타데이터를 프로파일링한다."""
+def profile_source_file_with_llm(filepath: str, filename: str, df_preview: pd.DataFrame) -> dict[str, Any]:
+    """LLM을 통해 파일의 역할(role)과 컬럼 메타데이터를 프로파일링한다."""
     all_columns = [str(c) for c in df_preview.columns]
     sample_json = df_preview.head(10).to_json(orient="records", date_format="iso")
 
@@ -158,9 +152,9 @@ def profile_source_file_with_llm(filepath: str, filename: str, df_preview: pd.Da
         }
 
 
-def build_family_registry(data_dir: str, force_reprofile: bool = False) -> dict:
-    """Stage 0 파이프라인: data_dir 내 모든 지원 파일의 전체 컬럼과 구조를 스캔하여 메타데이터를 구축한다."""
-    logger.info(f"[SourceFamily] Building Stage 0 family registry for data_dir: '{data_dir}' (force_reprofile={force_reprofile})...")
+def build_family_registry(data_dir: str, force_reprofile: bool = False) -> dict[str, Any]:
+    """data_dir 내 모든 지원 파일의 전체 컬럼과 구조를 스캔하여 메타데이터를 구축한다."""
+    logger.info(f"[SourceFamily] Building family registry for data_dir: '{data_dir}' (force_reprofile={force_reprofile})...")
     if not os.path.exists(data_dir):
         logger.warning(f"[SourceFamily] Directory '{data_dir}' missing. Returning empty registry.")
         return {}
@@ -177,7 +171,7 @@ def build_family_registry(data_dir: str, force_reprofile: bool = False) -> dict:
 
         existing_meta = registry.get(filename)
         if not force_reprofile and existing_meta and "role" in existing_meta and "all_columns" in existing_meta:
-            logger.info(f"[SourceFamily] Cache Hit for '{filename}' -> keeping Stage 0 metadata.")
+            logger.info(f"[SourceFamily] Cache Hit for '{filename}' -> keeping metadata.")
             continue
 
         filepath = os.path.join(data_dir, filename)
@@ -186,7 +180,7 @@ def build_family_registry(data_dir: str, force_reprofile: bool = False) -> dict:
             meta = profile_source_file_with_llm(filepath, filename, preview)
             registry[filename] = meta
             updated_count += 1
-            logger.info(f"[SourceFamily] Stage 0 Profiled '{filename}': role='{meta.get('role')}', cols={len(meta.get('all_columns', []))}, confidence={meta.get('confidence')}")
+            logger.info(f"[SourceFamily] Profiled '{filename}': role='{meta.get('role')}', cols={len(meta.get('all_columns', []))}, confidence={meta.get('confidence')}")
         except Exception as e:
             logger.warning(f"[SourceFamily] Failed to profile '{filename}': {e}")
 
@@ -195,12 +189,12 @@ def build_family_registry(data_dir: str, force_reprofile: bool = False) -> dict:
     with open(registry_file_path, "w", encoding="utf-8") as f:
         json.dump(registry, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"[SourceFamily] Stage 0 Family registry saved to '{FAMILY_REGISTRY_PATH}' with {len(registry)} entries ({updated_count} profiled).")
+    logger.info(f"[SourceFamily] Family registry saved to '{FAMILY_REGISTRY_PATH}' with {len(registry)} entries ({updated_count} profiled).")
     return registry
 
 
-def load_family_registry() -> dict:
-    """레지스트리 파일에서 Stage 0 프로파일링 결과를 조회한다."""
+def load_family_registry() -> dict[str, Any]:
+    """레지스트리 파일에서 프로파일링 결과를 조회한다."""
     if not FAMILY_REGISTRY_PATH.exists():
         return {}
     with open(FAMILY_REGISTRY_PATH, "r", encoding="utf-8") as f:
