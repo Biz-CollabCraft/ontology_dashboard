@@ -240,7 +240,7 @@
 | `status_grade` | enum | Y | `normal`, `attention`, `warning`, `critical` | 전체 |
 | `confidence` | number | Y | 0~1 | Objects, Report |
 | `top_factors` | array | Y | 정확히 3개 | Objects, Report |
-| `recommended_action` | object | Y | 정책 권고 | 전체 |
+| `recommended_action` | object | Y | 정책 권고. 추천 미생성 상태 표현은 후속 schema version에서 nullable 또는 optional 전환 필요 | 전체 |
 | `provenance` | object | Y | 데이터·모델·결과 출처 | 전체 |
 
 `predicted_failure_type`은 PWF, HDF, OSF, TWF 등의 고장 모드 분류 결과가 아니다.
@@ -330,7 +330,7 @@ Overview와 Objects 목록의 공통 행이다.
 | `predicted_failure_type` | enum | Y | Artifact | 확정 |
 | `status_grade` | enum | Y | Artifact | 확정 |
 | `confidence` | number | Y | Artifact | 확정 |
-| `recommended_action` | RecommendedAction | Y | Artifact | 확정 |
+| `recommended_action` | RecommendedAction | Y | Artifact. 추천 미생성 상태 표현은 후속 schema version에서 nullable 또는 optional 전환 필요 | 확정 |
 | `dataset_version` | string | Y | Artifact provenance | 파생 |
 | `model_version` | string | Y | Artifact provenance | 파생 |
 | `artifact_schema_version` | string | Y | Artifact | 파생 |
@@ -369,21 +369,40 @@ Overview와 Objects 목록의 공통 행이다.
 | `risk.threshold` | number 또는 null | Y | Artifact root `threshold` 또는 policy | 제안 |
 | `risk.status_grade` | string | Y | Product Result Artifact `status_grade` | 제안 |
 | `risk.prediction_horizon_hours` | integer 또는 null | Y | Product Result Artifact | 제안 |
-| `risk_series` | PredictionSeriesPoint[] | Y | Backend Diagnosis runtime prediction/result timeline target | 제안 |
+| `risk_series` | PredictionSeriesPoint[] | Y | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. canonical source는 `pm_result_artifacts` append-only Product Result history이며, detail payload가 필요할 때만 `prediction_result_id`로 `prediction_results`를 join | 제안 |
 | `features` | AssetReportFeature[] | Y | Feature catalog + Observation + Evidence | 제안 |
 | `features[].key` | string | Y | Feature catalog | 제안 |
 | `features[].label` | string | Y | Feature catalog 또는 display projection | 제안 |
 | `features[].unit` | string | Y | Feature catalog 또는 Evidence sensor unit | 제안 |
 | `features[].current` | number 또는 null | Y | Product Result Artifact observation 또는 sensor evidence | 제안 |
 | `features[].baseline` | Baseline 또는 null | N | `evidence_payload.sensor_evidence.sensors[*].basis` | 제안 |
-| `features[].series` | ObservationSeriesPoint[] | Y | canonical/overlay Observation API | 제안 |
+| `features[].series` | ObservationSeriesPoint[] | Y | Backend Observation read contract + Backend Feature Executor result | 제안 |
 | `features[].top_factor` | Factor summary 또는 null | N | Product Result Artifact `top_factors` | 제안 |
 | `equipment_history` | EquipmentHistoryRow[] | Y | Activity/Decision/Maintenance source | 제안 |
 | `evidence` | ReportEvidenceStatus | Y | Artifact/Evidence provenance | 제안 |
 | `evidence.gaps` | EvidenceGap[] | Y | Backend adapter | 제안 |
 | `data_status` | DataStatus | Y | API | 제안 |
 
-`features[].series`는 센서 관측 시계열이므로 versioned Observation contract에서 파생한다. gen_data Layer 1/Layer 2/_log.jsonl 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target이며, Product API 계약의 직접 의존성은 내부 파일명이 아니라 canonical/overlay Observation API shape다. 반면 `risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend Diagnosis가 runtime result/prediction history로 materialize하는 후속 target이다. `gen_data/canonical/model_outputs/prediction_timeline.jsonl`이나 legacy `precomputed_prediction_timeline`을 최신 운영 결과처럼 직접 소비하지 않는다.
+`features[].series`는 센서 Observation과 파생 Feature 시계열이므로 Product API가 `gen_data`
+raw JSONL이나 canonical CSV를 직접 파싱해 만들지 않는다. 센서 Observation series는 Backend의
+canonical/overlay branch-aware Observation read contract에서 읽고, 파생 Feature series는
+versioned Feature Schema/transform contract를 적용한 Backend Feature Executor 결과로 제공한다.
+`systems/generator`는 Feature/Label 의미, History Requirement, transform contract, Model Artifact
+publish를 소유하지만 제품 runtime series를 Product API source로 publish하지 않는다. 반면
+`risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend Diagnosis Runtime
+Prediction History Query Contract에서 파생하는 후속 target이다. 현재 canonical source는 Backend
+Diagnosis가 생성한 `pm_result_artifacts`의 asset별 append-only Product Result history이며, 상세
+payload가 실제로 필요한 경우에만 `prediction_result_id`로 `prediction_results`를 조회한다. Product
+API는 내부 테이블 shape를 직접 노출하지 않는다. `pm_prediction_timeline`,
+`gen_data/canonical/model_outputs/prediction_timeline.jsonl`, legacy `precomputed_prediction_timeline`을
+최신 운영 결과처럼 직접 소비하지 않는다.
+
+추천 미생성 상태는 기존 Product Result Artifact schema와 별도 정렬이 필요하다. 현행
+`recommended_action` 필수 object 계약은 그대로 유지하되, `unavailable`을 kind로 넣어
+빈 추천 객체를 만들지 않는다. 근거 부족, unresolved basis, criticality 누락은 우선
+`evidence_payload.recommended_actions=[]`와 `evidence_payload.evidence_gaps[]`로 표현하고,
+Product Result root의 `recommended_action` nullable/optional 전환은 후속 schema version
+변경으로 확정한다.
 
 기존 MVP 상세 화면이 사용하던 Event detail 필드(asset, 현재 센서값, top factors,
 threshold, data quality warning, activity, report, provenance)는 이 계약의 기준선이다.

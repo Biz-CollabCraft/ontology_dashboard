@@ -223,6 +223,19 @@ MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않�
   Closed-loop 실행 객체로 직접 승격하지 않는다.
 - Operational RecommendedAction은 workflow용 `recommendation_id`와 상태를 추가하되
   원본 `action_id`, label, kind, `requires_human_approval`, basis를 변경하지 않는다.
+- Producer `kind`는 opaque string으로 보존하고 Closed-loop enum으로 재해석하지 않는다.
+  `request_inspection`과 `review_shutdown`을 운영 Decision으로 연결해야 할 때는
+  Event Evidence Projection이 제공하는 별도 `operational_decision_kind`만 소비한다.
+- `operational_decision_kind`는 Event Evidence Projection `assessment`에 추가할 Target/Open
+  Gate field다. 현행 projection/schema/fixture/test의 `assessment.recommended_decision`은 이
+  계약을 충족한 필드가 아니다. Target 허용 값은 `continue_monitoring`,
+  `request_inspection`, `review_shutdown`, `hold_for_data_check`이며, 추천 미생성 또는
+  policy 입력 부족 상태에서는 null/absent로 둔다. Producer `kind` 문자열 비교나 기존
+  `recommended_decision` mapping으로 생성하지 않고, 별도 schema/fixture/code/test 정렬 후
+  공식 policy/version projection으로만 생성한다.
+- `unavailable`은 recommendation `kind`가 아니라 추천 미생성 상태다. 근거 부족이나
+  unresolved basis 때문에 정책 추천을 만들 수 없으면 Operational RecommendedAction을
+  materialize하지 않고 Evidence gap 또는 limitation으로 남긴다.
 - 최소한 `recommendation_origin=product_result_projection`, `source_action_id`,
   `source_product_result_id=artifact_id`, `source_evidence_id`, `source_schema_version`,
   `source_policy_version`과 원본 basis를 보존한다.
@@ -372,6 +385,10 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 - 호범의 실제 Product Result/Evidence ID를 payload 복사 없이 RiskEvent에 연결
 - `evidence_payload.recommended_actions[]`를 원본 의미·ID·provenance를 보존한
   Operational RecommendedAction으로 materialize
+- Producer `kind`를 직접 OperationalDecisionKind로 변환하지 않고, Target/Open Gate인
+  `operational_decision_kind` projection이 schema/fixture/code/test로 정렬된 뒤에만
+  inspection WorkOrder 결정에 사용
+- `unavailable`은 빈 추천으로 materialize하지 않고 추천 미생성 + Evidence gap으로 표현
 - `asset_id = equipment_id`와 stable equipment key를 검증하고 실패 시 fail-fast
 - 호범 계약의 Evidence 필드·근거 의미를 보존한 채
   Equipment–RiskEvent–Evidence–WorkOrder–MaintenanceAction 관계만 projection
@@ -519,6 +536,8 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 
 - Evidence 없는 Recommendation 생성 거부
 - producer recommendation의 action ID·label·kind·approval requirement·basis 불변
+- producer `kind`를 OperationalDecisionKind로 직접 재해석하지 않는지 확인
+- `unavailable` recommendation materialization 거부
 - 같은 Product Result/action ID의 중복 materialization 방지
 - Operations 독자 recommendation과 producer projection origin 혼용 거부
 - asset mapping 누락·중복·type 불일치 fail-fast
@@ -548,25 +567,43 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 - 정비 전 Product Result와 정비 후 새 Product Result가 모두 보존
 - Activity만으로 누가 언제 무엇을 판단·실행했는지 재구성
 
-### 최종 E2E acceptance scenario
+### Target E2E scenario와 Open Gate
 
 1. CNC 위험 Product Result/Evidence를 조회한다.
 2. 동일 Equipment의 RiskEvent에 근거를 연결한다.
-3. producer의 `TOOL_REPLACEMENT` recommendation이 원본 ID·근거를 보존한 운영
-   RecommendedAction으로 한 번만 materialize됐는지 확인한다.
+3. Diagnosis producer recommendation이 `request_inspection` 또는 `review_shutdown`으로
+   직접 inspection WorkOrder를 만들지 않는다. Event Evidence Projection의
+   `operational_decision_kind`는 Target/Open Gate이며, 별도 schema/fixture/code/test가
+   정렬되기 전에는 inspection WorkOrder 요청 command의 완료 계약으로 보지 않는다.
+   Producer `kind`는 opaque로 보존한다.
 4. `process_engineer`가 Event/Equipment/Evidence를 확인하고 점검·분석 결과와 판단 근거를 기록한다.
-5. `process_manager`가 Evidence와 엔지니어 결과를 확인하고 Recommendation을 승인·거절·보류한다.
-6. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.
-7. `maintenance_technician`이 배정된 WorkOrder/MaintenanceAction을 시작하고 체크리스트·측정값·note와
+5. 점검 결과 정비가 필요할 때 사람이 입력하는 `origin=operations_manual`
+   `TOOL_REPLACEMENT` 추천은 Issue #99 Open Gate다. MVP 완료 계약에 포함하려면 단일
+   owner, command/API, actor/permission, field name, idempotency/dedupe key를 먼저 확정한다.
+6. `process_manager`가 Evidence와 엔지니어 결과를 확인하고 Operations recommendation을
+   승인·거절·보류한다.
+7. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.
+8. `maintenance_technician`이 배정된 WorkOrder/MaintenanceAction을 시작하고 체크리스트·측정값·note와
    함께 완료한다.
-8. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
-9. 동일 mutation을 replay해 idempotency가 보장되는지 확인한다.
-10. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay는 계속 진행한다.
-11. `gen_data`가 Overlay Observation을 지속 생성하고 Backend가 각 available
-    Observation의 `history_requirement`을 검증하며, 부족하면 다음 Observation을 기다린다.
-12. Backend가 `ready`로 판정한 첫 inference-ready Observation으로 별도의 새 Product
+
+`operations_manual` 추천은 Diagnosis ProducerRecommendation과 같은 객체가 아니다. 현재 문서는
+이 계약을 완료로 주장하지 않는다. Issue #99에서 최소한 다음 항목을 단일 값으로 확정해야 한다:
+Operations-owned create command/API, 작성 가능한 actor/permission, stable source action field,
+inspection result/activity reference field, `action_code=TOOL_REPLACEMENT`,
+manual policy/version field, 작성자/작성 시각, basis, `requires_human_approval=true`,
+idempotency/dedupe key. 이 계약이 확정되기 전에는 `RecommendationDecision(accept)`와
+Maintenance WorkOrder 생성을 최종 E2E 완료 경로로 보지 않는다.
+
+Open Gate 확정 후 Target continuation은 다음과 같다.
+
+1. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
+2. 동일 mutation을 replay해 idempotency가 보장되는지 확인한다.
+3. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay는 계속 진행한다.
+4. `gen_data`가 Overlay Observation을 지속 생성하고 Backend가 각 available
+   Observation의 `history_requirement`을 검증하며, 부족하면 다음 Observation을 기다린다.
+5. Backend가 `ready`로 판정한 첫 inference-ready Observation으로 별도의 새 Product
     Result/Evidence가 생성된다.
-13. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
+6. 정비 전 Result → Decision → Action → 정비 후 Result를 끝까지 추적한다.
 
 ## 11. 완료 정의
 
