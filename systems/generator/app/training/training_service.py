@@ -50,6 +50,7 @@ from systems.generator.app.training.training_exception import (
     InsufficientTrainingDataError,
     ModelTrainingFailedError,
     ModelArtifactPublishFailedError,
+    ModelActivationFailedError,
 )
 from systems.generator.app.training.training_repository import TrainingRepository
 from systems.generator.app.training.training_schema import (
@@ -318,7 +319,36 @@ class TrainingService:
                     request_id=request_id,
                     run_id=run_id,
                 )
-                results.append(result_item)
+                if result_item.status == "failed" or result_item.activation_status == "activation_failed":
+                    err_id = f"err-{uuid.uuid4().hex[:8]}"
+                    logger.warning(
+                        f"[TrainingService] stage=model_activation_failed request_id={request_id} run_id={run_id} "
+                        f"base_model={name} error_id={err_id}"
+                    )
+                    failed_models.append(
+                        FailedModelItem(
+                            base_model=name,
+                            code="MODEL_ACTIVATION_FAILED",
+                            error_id=err_id,
+                        )
+                    )
+                    if base_model is not None:
+                        raise ModelActivationFailedError(
+                            f"모델 '{name}' 활성화(pointer 갱신)에 실패했습니다. (error_id: {err_id})",
+                            details=[{
+                                "error_id": err_id,
+                                "base_model": name,
+                                "model_id": result_item.model_id,
+                                "model_version": result_item.model_version,
+                                "artifact_uri": result_item.artifact_uri,
+                                "previous_active_version": result_item.active_model_version,
+                                "activation_status": result_item.activation_status,
+                            }],
+                        )
+                else:
+                    results.append(result_item)
+            except (ModelTrainingFailedError, ModelActivationFailedError):
+                raise
             except Exception as exc:
                 err_id = f"err-{uuid.uuid4().hex[:8]}"
                 logger.exception(

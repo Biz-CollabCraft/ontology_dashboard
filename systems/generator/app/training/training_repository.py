@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -403,17 +404,24 @@ class TrainingRepository:
         model_dir.mkdir(parents=True, exist_ok=True)
         pointer_file = model_dir / "latest.json"
 
-        tmp_file = model_dir / f".tmp_latest_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{os.getpid()}.json"
-        data = {
-            "model_id": model_id,
-            "latest_version": model_version,
-            "artifact_uri": str(artifact_path.as_posix()),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        tmp_file.replace(pointer_file)
-        return pointer_file
+        tmp_file = model_dir / f".tmp_latest_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{os.getpid()}_{uuid.uuid4().hex[:6]}.json"
+        try:
+            data = {
+                "model_id": model_id,
+                "latest_version": model_version,
+                "artifact_uri": str(artifact_path.as_posix()),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            tmp_file.replace(pointer_file)
+            return pointer_file
+        finally:
+            if tmp_file.exists():
+                try:
+                    tmp_file.unlink()
+                except OSError:
+                    pass
 
     def get_active_model_pointer(self, model_id: str) -> dict[str, Any] | None:
         """Retrieve active model version info from latest.json if present."""

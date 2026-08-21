@@ -121,7 +121,8 @@
 ### 4.3 `POST /feature`
 
 > **Feature 계약, 무결성 검증, 소스 고정 및 fail-fast 정책**:
-> - **Sensor 원본 고정**: Extraction Plan에 저장된 `source` 객체(`source_uri`, `sha256`)를 조회하고 디스크의 실제 파일 해시와 비교 검증합니다. 불일치 시 `SOURCE_DATASET_INTEGRITY_ERROR` (422)로 즉시 거절합니다.
+> - **Extraction Plan source 필수 계약 및 구형 Plan 거절**: Extraction Plan의 `source` 객체(`dataset_id`, `dataset_version`, `source_uri`, `sha256`)는 필수 계약이며, `source` 누락, 필드 누락, 64자리 hex 정규식 위반, 상위/절대경로 탐색 시 `SOURCE_DATASET_INTEGRITY_ERROR` (422)로 즉시 거부됩니다. 구형 Plan fallback은 완전히 배제되며 `/extraction` 재수행이 필요합니다.
+> - **기존 Feature Bundle 재사용 전 원본 재검증**: 기존 번들이 존재하더라도 즉시 반환하지 않고, Extraction Plan 계약 검증 → Sensor 실제 파일 SHA-256 검증 → Failure 버전 경로 및 SHA-256 계산 → 기존 번들 메타데이터의 `source_dataset` / `failure_dataset` 8대 필드와 전수 비교를 선행합니다. 불일치 시 자동 덮어쓰기 없이 `SOURCE_DATASET_INTEGRITY_ERROR` 또는 `FEATURE_DATASET_INTEGRITY_ERROR` (422)를 반환합니다.
 > - **Failure 버전 고정**: 버전 없는 fallback(`{id}.csv`, `{id}/input.csv`)을 완전히 제거하고, 요청된 버전이 경로에 포함된 파일만 허용하며 SHA-256을 계산합니다. 불일치 시 `FAILURE_DATASET_VERSION_MISMATCH` (422)를 반환합니다.
 > - **Feature Bundle 학습 가능성 보장**: 설비 ID 및 Timestamp 컬럼 존재, timestamp 정규화, `compute_asset_time_split_indices`, `validate_split_indices`를 반드시 실행하여 `split_indices`와 `row_metadata.json`을 생성합니다. 산출 실패 시 Bundle을 발행하지 않고 `TRAINING_SPLIT_METADATA_MISSING` (422)으로 fail-fast 처리합니다.
 > - **체크섬 경로 안전성 (`ALLOWED_FEATURE_BUNDLE_FILES`)**: 체크섬 파일 목록은 `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`만 허용되며, `..`, 절대경로, 하위 디렉터리가 포함되거나 미허용 파일이 포함되면 `FEATURE_DATASET_INTEGRITY_ERROR` (422)로 거절됩니다. `row_metadata.json` 파일이 존재할 경우 체크섬 선언이 필수입니다.
@@ -178,7 +179,12 @@
 > - **활성화 정책 (`activation_policy`)**:
 >   - `latest` (기본값): 학습 및 검증 완료 후 `<models_store>/artifacts/<model_id>/latest.json` 활성 버전 포인터를 원자적으로 자동 갱신합니다 (`activation_status: "activated"`).
 >   - `manual`: Model Artifact는 정상 발행 및 검증되지만 `latest.json` 포인터를 갱신하지 않습니다 (`activation_status: "published_only"`).
-> - **포인터 갱신 실패 격리**: `activation_policy='latest'`에서 포인터 파일 쓰기가 실패할 경우 기존 `latest.json`을 보존하고, 해당 모델의 `status: "failed"`, `activation_status: "activation_failed"`를 반환합니다. 발행된 아티팩트는 보존되며 추후 수동 활성화 API로 활성화할 수 있습니다.
+> - **포인터 갱신 실패 격리 및 복구**:
+>   - `activation_policy='latest'`에서 포인터 갱신 실패 시 기존 `latest.json`을 보존하고 임시 포인터 파일을 정리합니다.
+>   - 다중 모델 학습(`POST /train`): 해당 모델 `status: "failed"`, `activation_status: "activation_failed"`로 분류되어 `failed_models`에 `MODEL_ACTIVATION_FAILED` 코드로 기록되며 전체 상태는 `partially_succeeded`로 반환됩니다.
+>   - 단일 모델 학습(`POST /train/{base_model}`): 성공으로 위장되지 않고 HTTP 500 `MODEL_ACTIVATION_FAILED`를 반환합니다.
+>   - 발행된 Model Artifact 패키지는 보존되므로, 사용자는 `POST /models/{base_model}/activate/{model_version}`을 호출하여 재학습 없이 수동 활성화로 복구할 수 있습니다.
+> - **Backend 런타임 연계 후속 작업**: Generator는 `latest.json` 활성 버전 포인터를 Canonical하게 유지·관리하며, Backend Runtime의 동적 모델 리로드 및 추론 연계는 후속 작업으로 진행됩니다.
 > - **Provenance 전파**: Feature 메타데이터의 `source_dataset` 및 `failure_dataset` 정보(ID, version, source_uri, sha256)를 Model Artifact의 `manifest.json` `provenance.training`에 온전히 전파합니다.
 > - **통합 Concurrency Lock**: 단일 워커 제한 환경에서 프로세스 전역 `_training_lock`을 공유하여 중복 학습을 방지합니다 (`TRAINING_ALREADY_RUNNING`, 409).
 

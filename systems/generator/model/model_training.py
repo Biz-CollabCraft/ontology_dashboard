@@ -191,6 +191,88 @@ def compute_asset_time_split_indices(
     return train_indices, val_indices, test_indices
 
 
+def validate_split_indices(
+    split_indices: dict[str, list[int]],
+    total_rows: int,
+    asset_ids: list[str] | None = None,
+    timestamps: list[Any] | None = None,
+) -> None:
+    """Validate that split indices are disjoint, complete, in-bounds, and chronological per asset."""
+    train_idx = split_indices.get("train", [])
+    val_idx = split_indices.get("val", [])
+    test_idx = split_indices.get("test", [])
+
+    train_set = set(train_idx)
+    val_set = set(val_idx)
+    test_set = set(test_idx)
+
+    # 1. No duplicates within each split
+    if len(train_idx) != len(train_set):
+        raise ValueError("Train split contains duplicate indices.")
+    if len(val_idx) != len(val_set):
+        raise ValueError("Validation split contains duplicate indices.")
+    if len(test_idx) != len(test_set):
+        raise ValueError("Test split contains duplicate indices.")
+
+    # 2. No overlap between splits
+    if train_set & val_set:
+        raise ValueError("Train and Validation split indices overlap.")
+    if train_set & test_set:
+        raise ValueError("Train and Test split indices overlap.")
+    if val_set & test_set:
+        raise ValueError("Validation and Test split indices overlap.")
+
+    # 3. All indices are within [0, total_rows)
+    all_indices = train_set | val_set | test_set
+    for idx in all_indices:
+        if idx < 0 or idx >= total_rows:
+            raise ValueError(f"Split index {idx} out of bounds for total_rows={total_rows}.")
+
+    # 4. Union of all splits covers all rows
+    if len(all_indices) != total_rows:
+        missing_count = total_rows - len(all_indices)
+        raise ValueError(f"Split indices do not cover all rows (missing {missing_count} rows).")
+
+    # 5. Verify chronological order per asset if metadata provided
+    if asset_ids is not None and timestamps is not None:
+        if len(asset_ids) == total_rows and len(timestamps) == total_rows:
+            # Build asset -> split -> timestamps mapping
+            asset_train_max: dict[str, Any] = {}
+            asset_val_min: dict[str, Any] = {}
+            asset_val_max: dict[str, Any] = {}
+            asset_test_min: dict[str, Any] = {}
+
+            for idx in train_idx:
+                a = asset_ids[idx]
+                t = str(timestamps[idx])
+                if a not in asset_train_max or t > asset_train_max[a]:
+                    asset_train_max[a] = t
+
+            for idx in val_idx:
+                a = asset_ids[idx]
+                t = str(timestamps[idx])
+                if a not in asset_val_min or t < asset_val_min[a]:
+                    asset_val_min[a] = t
+                if a not in asset_val_max or t > asset_val_max[a]:
+                    asset_val_max[a] = t
+
+            for idx in test_idx:
+                a = asset_ids[idx]
+                t = str(timestamps[idx])
+                if a not in asset_test_min or t < asset_test_min[a]:
+                    asset_test_min[a] = t
+
+            for a in asset_train_max:
+                if a in asset_val_min and asset_train_max[a] > asset_val_min[a]:
+                    raise ValueError(f"Asset '{a}' train timestamp ({asset_train_max[a]}) > val timestamp ({asset_val_min[a]}).")
+                if a in asset_test_min and asset_train_max[a] > asset_test_min[a]:
+                    raise ValueError(f"Asset '{a}' train timestamp ({asset_train_max[a]}) > test timestamp ({asset_test_min[a]}).")
+
+            for a in asset_val_max:
+                if a in asset_test_min and asset_val_max[a] > asset_test_min[a]:
+                    raise ValueError(f"Asset '{a}' val timestamp ({asset_val_max[a]}) > test timestamp ({asset_test_min[a]}).")
+
+
 def asset_time_split(
     df: pd.DataFrame,
     id_col: str | None = None,

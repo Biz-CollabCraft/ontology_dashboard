@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +14,6 @@ import numpy as np
 import pandas as pd
 
 from systems.generator.generator_config import PATHS
-from systems.generator.model.model_training import asset_time_split
 from systems.generator.app.extraction.extraction_service import (
     ExtractionService,
     extract_with_plan,
@@ -47,7 +47,7 @@ from systems.generator.app.feature.feature_exception import (
     FailureDatasetVersionMismatchError,
     TrainingSplitMetadataMissingError,
 )
-from systems.generator.app.feature.feature_repository import FeatureRepository
+from systems.generator.app.feature.feature_repository import FeatureRepository, compute_file_sha256
 from systems.generator.app.feature.feature_schema_provider import FeatureSchemaProvider
 from systems.generator.app.feature.label_schema_provider import (
     LabelSchemaProvider,
@@ -123,14 +123,83 @@ class FeatureService:
             request.extraction_plan_version,
         )
 
-        # 2. Retrieve & validate Ontology Mapping (content-addressed hash verification)
+        # 2. Mandatory Extraction Plan source contract validation (no legacy fallback)
+        plan_source = plan.get("source") if isinstance(plan, dict) else None
+        if not plan_source or not isinstance(plan_source, dict):
+            raise SourceDatasetIntegrityError(
+                "Extraction Plan에 필수 메타데이터인 'source' 객체가 누락되었습니다. "
+                "구형 Extraction Plan은 지원되지 않으므로 POST /extraction을 다시 실행해 주세요."
+            )
+
+        for required_key in ("dataset_id", "dataset_version", "source_uri", "sha256"):
+            if not plan_source.get(required_key):
+                raise SourceDatasetIntegrityError(
+                    f"Extraction Plan의 source에 필수 필드 '{required_key}'가 누락되었습니다."
+                )
+
+        if (
+            plan_source.get("dataset_id") != request.dataset_id
+            or plan_source.get("dataset_version") != request.dataset_version
+        ):
+            raise SourceDatasetVersionMismatchError(
+                f"Extraction Plan의 source 정보({plan_source.get('dataset_id')}/{plan_source.get('dataset_version')})가 "
+                f"요청({request.dataset_id}/{request.dataset_version})과 일치하지 않습니다."
+            )
+
+        source_uri_declared = plan_source.get("source_uri")
+        if (
+            not source_uri_declared
+            or ".." in source_uri_declared
+            or Path(source_uri_declared).is_absolute()
+            or ":" in source_uri_declared
+        ):
+            raise SourceDatasetIntegrityError(f"Extraction Plan의 source_uri가 유효하지 않습니다: {source_uri_declared!r}")
+
+        sha256_declared = plan_source.get("sha256")
+        if not sha256_declared or not re.fullmatch(r"^[0-9a-f]{64}$", str(sha256_declared)):
+            raise SourceDatasetIntegrityError(
+                f"Extraction Plan의 source sha256 형식이 유효하지 않습니다 (64자리 소문자 hex 필요): {sha256_declared!r}"
+            )
+
+        allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
+        source_file = None
+        for root in allowed_roots:
+            cand = (root / source_uri_declared).resolve()
+            try:
+                cand.relative_to(root)
+                if cand.is_file():
+                    source_file = cand
+                    break
+            except ValueError:
+                continue
+
+        if not source_file:
+            raise SourceDatasetIntegrityError(f"Extraction Plan에 선언된 원본 파일 '{source_uri_declared}'을 찾을 수 없습니다.")
+
+        actual_source_sha = compute_file_sha256(source_file)
+        if actual_source_sha != sha256_declared:
+            raise SourceDatasetIntegrityError(
+                f"Sensor 원본 파일 '{source_uri_declared}'의 SHA-256 해시가 일치하지 않습니다 "
+                f"(선언={sha256_declared}, 실제={actual_source_sha})."
+            )
+
+        source_sha256 = actual_source_sha
+        source_uri_clean = source_uri_declared
+
+        # 3. Locate & validate Failure Dataset file and compute SHA-256
+        failure_file, failure_sha256, failure_uri_clean = self._locate_failure_file(
+            request.failure_dataset_id,
+            request.failure_dataset_version,
+        )
+
+        # 4. Retrieve & validate Ontology Mapping (content-addressed hash verification)
         mapping_data = self.extraction_repo.find_mapping(
             request.dataset_id,
             request.dataset_version,
             request.mapping_version,
         )
 
-        # 3. Compute contract fingerprint for feature_dataset_version (9 contract keys)
+        # 5. Compute contract fingerprint for feature_dataset_version (9 contract keys)
         feature_dataset_version = compute_feature_dataset_version(
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
@@ -155,7 +224,7 @@ class FeatureService:
             "prediction_horizon_hours": request.prediction_horizon_hours,
         }
 
-        # 4. Check existing immutable feature dataset with full bundle validation
+        # 6. Check existing immutable feature dataset with full bundle validation AND raw sources re-verification
         target_dir = self.feature_repo.get_feature_dir(
             request.dataset_id,
             request.dataset_version,
@@ -168,7 +237,32 @@ class FeatureService:
                 feature_dataset_version,
                 expected_contract=contract_payload,
             )
-            logger.info(f"[FeatureService] Exact contract match and bundle validated, reusing feature outputs for {feature_dataset_version}")
+
+            # Re-verify raw source provenance in existing bundle metadata
+            src_meta = existing_meta.get("source_dataset", {})
+            fail_meta = existing_meta.get("failure_dataset", {})
+
+            if (
+                src_meta.get("dataset_id") != plan_source["dataset_id"]
+                or src_meta.get("dataset_version") != plan_source["dataset_version"]
+                or src_meta.get("source_uri") != plan_source["source_uri"]
+                or src_meta.get("sha256") != actual_source_sha
+            ):
+                raise SourceDatasetIntegrityError(
+                    "기존 Feature Bundle의 Sensor 원본 메타데이터(source_dataset)가 현재 Sensor 원본 파일 또는 Extraction Plan과 일치하지 않습니다."
+                )
+
+            if (
+                fail_meta.get("dataset_id") != request.failure_dataset_id
+                or fail_meta.get("dataset_version") != request.failure_dataset_version
+                or fail_meta.get("source_uri") != failure_uri_clean
+                or fail_meta.get("sha256") != failure_sha256
+            ):
+                raise FeatureDatasetIntegrityError(
+                    "기존 Feature Bundle의 Failure 원본 메타데이터(failure_dataset)가 현재 Failure 파일과 일치하지 않습니다."
+                )
+
+            logger.info(f"[FeatureService] Exact contract match, bundle validated, and raw sources re-verified, reusing feature outputs for {feature_dataset_version}")
             uris = self.feature_repo._build_logical_uris(
                 request.dataset_id,
                 request.dataset_version,
@@ -196,166 +290,127 @@ class FeatureService:
                 ),
             )
 
-        # 5. Verify Sensor Source and Extract telemetry data using plan
-        allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
-        plan_source = plan.get("source")
-        if plan_source and isinstance(plan_source, dict):
-            if plan_source.get("dataset_id") != request.dataset_id or plan_source.get("dataset_version") != request.dataset_version:
-                raise SourceDatasetVersionMismatchError(
-                    f"Extraction Plan의 source 정보({plan_source.get('dataset_id')}/{plan_source.get('dataset_version')})가 "
-                    f"요청({request.dataset_id}/{request.dataset_version})과 일치하지 않습니다."
-                )
-
-            source_uri_declared = plan_source.get("source_uri")
-            if not source_uri_declared or ".." in source_uri_declared or Path(source_uri_declared).is_absolute() or ":" in source_uri_declared:
-                raise SourceDatasetIntegrityError(f"Extraction Plan의 source_uri가 유효하지 않습니다: {source_uri_declared!r}")
-
-            source_file = None
-            for root in allowed_roots:
-                cand = (root / source_uri_declared).resolve()
-                try:
-                    cand.relative_to(root)
-                    if cand.is_file():
-                        source_file = cand
-                        break
-                except ValueError:
-                    continue
-
-            if not source_file:
-                raise SourceDatasetIntegrityError(f"Extraction Plan에 선언된 원본 파일 '{source_uri_declared}'을 찾을 수 없습니다.")
-
-            from systems.generator.app.feature.feature_repository import compute_file_sha256
-            actual_source_sha = compute_file_sha256(source_file)
-            expected_source_sha = plan_source.get("sha256")
-            if expected_source_sha and actual_source_sha != expected_source_sha:
-                raise SourceDatasetIntegrityError(
-                    f"Sensor 원본 파일 '{source_uri_declared}'의 SHA-256 해시가 일치하지 않습니다 "
-                    f"(선언={expected_source_sha}, 실제={actual_source_sha})."
-                )
-            dataset_path = source_file
-            source_sha256 = actual_source_sha
-            source_uri_clean = source_uri_declared
-        else:
-            from systems.generator.app.extraction.extraction_schema import ExtractionRequest
-            dummy_req = ExtractionRequest(
-                dataset_id=request.dataset_id,
-                dataset_version=request.dataset_version,
-                force_reanalyze=False,
-            )
-            dataset_path = self.extraction_service._resolve_dataset_path(dummy_req)
-            from systems.generator.app.feature.feature_repository import compute_file_sha256
-            source_sha256 = compute_file_sha256(dataset_path)
-            try:
-                source_uri_clean = str(dataset_path.relative_to(PATHS.data_dir.resolve()).as_posix())
-            except ValueError:
-                source_uri_clean = dataset_path.name
-
-        extracted_df = extract_with_plan(str(dataset_path), plan)
+        # 7. Extract telemetry data using verified plan and sensor source
+        extracted_df = extract_with_plan(str(source_file), plan)
 
         # Drop any preexisting label column from extracted_df before official horizon labeling
         features_input_df = extracted_df.drop(columns=["label"], errors="ignore")
 
-        # 6. Load dataset-scoped MappingStore from published mapping file
+        # 8. Load dataset-scoped MappingStore from published mapping file
         dataset_store = MappingStore()
         for source_field, rec_data in mapping_data.items():
-            dataset_store.add_mapping(
-                MappingRecord(
-                    source_field=source_field,
-                    target_ontology=rec_data["target_ontology"],
-                    source=rec_data.get("source", "mapping_agent"),
-                    confidence=float(rec_data.get("confidence", 1.0)),
-                    status=rec_data.get("status", "auto_mapped"),
-                )
+            rec = MappingRecord(
+                source_field=source_field,
+                target_ontology=rec_data.get("target_ontology", source_field),
+                source=rec_data.get("source", "mapping_agent"),
+                confidence=float(rec_data.get("confidence", 1.0)),
+                status=rec_data.get("status", "auto_mapped"),
             )
+            dataset_store.add_mapping(rec)
 
-        # 7. Build time-series features using loaded mappings (NO map_all_sources call!)
-        from systems.generator.feature.feature_builder import build_features
-        from systems.generator.feature.feature_label_service import build_labels
-
-        catalog = load_catalog()
+        # 9. Build features
         try:
-            features_df = build_features(features_input_df, dataset_store, catalog, plan=plan)
+            from systems.generator.feature.feature_builder import build_features
+            catalog = load_catalog()
+            features_df = build_features(
+                features_input_df,
+                store=dataset_store,
+                catalog=catalog,
+                plan=plan,
+            )
         except Exception as exc:
-            logger.exception(f"[FeatureService] Feature building failed: {exc}")
-            raise FeatureBuildError(f"시계열 피처 생성 중 오류가 발생했습니다: {exc}") from exc
+            raise FeatureBuildError(f"Feature 추출 실행 실패: {exc}") from exc
 
-        # 8. Resolve explicit failure dataset and build horizon labels
-        failures_df, failure_meta, found_failure_path, failure_sha256 = self._resolve_failure_dataset(
-            failure_dataset_id=request.failure_dataset_id,
-            failure_dataset_version=request.failure_dataset_version,
-            telemetry_df=features_input_df,
+        # 10. Load and validate Failure dataset DataFrame
+        failures_df, fail_meta = self._load_and_validate_failure_df(
+            failure_file,
             plan=plan,
+            telemetry_df=features_input_df,
         )
 
+        # 11. Build labels
         try:
-            failure_uri_clean = str(found_failure_path.relative_to(PATHS.data_dir.resolve()).as_posix())
-        except ValueError:
-            try:
-                failure_uri_clean = str(found_failure_path.relative_to(PATHS.data_preprocessed.resolve()).as_posix())
-            except ValueError:
-                failure_uri_clean = found_failure_path.name
-
-        try:
+            from systems.generator.feature.feature_label_service import build_labels
             labeled_df = build_labels(
-                features_df,
-                failures_df,
-                failure_meta=failure_meta,
+                features_df=features_df,
+                failures_df=failures_df,
+                failure_meta=fail_meta,
                 prediction_horizon_hours=request.prediction_horizon_hours,
                 plan=plan,
             )
-        except (FailureDataNotReadyError, LabelContractInvalidError, LabelAnchorNotFoundError, InsufficientTrainingDataError, FailureDatasetVersionMismatchError):
+        except (InsufficientTrainingDataError, LabelContractInvalidError, LabelAnchorNotFoundError, LabelSchemaMismatchError):
             raise
         except Exception as exc:
-            logger.exception(f"[FeatureService] Label building failed: {exc}")
-            raise LabelBuildError(f"라벨링 생성 중 오류가 발생했습니다: {exc}") from exc
+            raise LabelBuildError(f"고장 라벨 생성 실행 실패: {exc}") from exc
 
-        # Validate label column
-        if "label" not in labeled_df.columns:
-            raise LabelContractInvalidError("라벨링 결과에 필수 'label' 컬럼이 존재하지 않습니다.")
+        if labeled_df.empty:
+            raise InsufficientTrainingDataError("라벨링 후 데이터셋이 비어 있습니다.")
 
-        label_values = set(pd.unique(labeled_df["label"]))
-        if not label_values.issubset({0, 1}):
-            raise LabelContractInvalidError(f"라벨 컬럼 값이 {{0, 1}} 범위를 벗어납니다: {label_values}")
+        # Strict Feature Schema allowlist & exact order validation directly on labeled_df
+        feature_names, filtered_features_df = self.schema_provider.validate_and_filter_features(
+            request.feature_schema_version,
+            labeled_df,
+            plan=plan,
+        )
+        X = filtered_features_df.values.astype(np.float64)
 
-        positive_count = int((labeled_df["label"] == 1).sum())
+        if np.isnan(X).any() or np.isinf(X).any():
+            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        y = labeled_df["label"].values.astype(np.int64)
+        positive_count = int(np.sum(y == 1))
         if positive_count == 0:
             raise InsufficientTrainingDataError(
-                f"고장 예측 구간(horizon={request.prediction_horizon_hours}h) 내에 발생한 Positive 고장 샘플이 0건입니다 (최소 1건 이상의 고장 데이터 필요).",
+                f"고장 예측 구간(horizon={request.prediction_horizon_hours}h) 내 발생한 Positive 고장 샘플이 0건입니다 (최소 1건 이상 발생 필요).",
                 code="INSUFFICIENT_POSITIVE_SAMPLES",
             )
 
-        # 9. Apply Feature Schema allowlist & exact order
-        feature_names, filtered_features_df = self.schema_provider.validate_and_filter_features(
-            schema_version=request.feature_schema_version,
-            available_df=labeled_df,
-            plan=plan,
-        )
-
-        X = filtered_features_df.to_numpy(dtype=np.float64)
-        y = labeled_df["label"].to_numpy(dtype=np.int64)
-
-        if X.shape[0] == 0:
-            raise InsufficientTrainingDataError("학습에 유효한 데이터 행이 0건입니다.", code="INSUFFICIENT_TRAINING_DATA")
-
-        # 10. Prepare metadata and compute chronological split indices (FAIL-FAST)
-        from systems.generator.model.model_training import compute_asset_time_split_indices
-        from systems.generator.app.training.training_service import validate_split_indices
-
-        id_col = plan.get("id_column") or "asset_id"
-        time_col = plan.get("time_column") or "timestamp"
-
-        if id_col not in labeled_df.columns or time_col not in labeled_df.columns:
+        # 12. Compute strict chronological asset-time split indices and row metadata
+        id_col = plan.get("id_column") if plan and isinstance(plan, dict) else None
+        if id_col and id_col not in labeled_df.columns:
             raise TrainingSplitMetadataMissingError(
-                f"시간순 분할에 필요한 ID 컬럼('{id_col}') 또는 Timestamp 컬럼('{time_col}')이 데이터셋에 존재하지 않습니다."
+                f"Extraction Plan에 명시된 ID 컬럼 '{id_col}'을 데이터에서 찾을 수 없습니다."
             )
+        if not id_col:
+            for cand in ("asset_id", "machineID", "equipment_id", "machine_id", "device_id", "UDI", "Product ID", "id", "asset", "machine"):
+                if cand in labeled_df.columns:
+                    id_col = cand
+                    break
+
+        time_col = plan.get("time_column") if plan and isinstance(plan, dict) else None
+        if time_col and time_col not in labeled_df.columns:
+            raise TrainingSplitMetadataMissingError(
+                f"Extraction Plan에 명시된 타임스탬프 컬럼 '{time_col}'을 데이터에서 찾을 수 없습니다."
+            )
+        if not time_col:
+            for cand in ("observed_at", "datetime", "timestamp", "time", "date", "ts"):
+                if cand in labeled_df.columns:
+                    time_col = cand
+                    break
+
+        if not id_col or id_col not in labeled_df.columns:
+            raise TrainingSplitMetadataMissingError(
+                "설비 분할(asset_time_split)에 필요한 ID 컬럼을 데이터에서 찾을 수 없습니다."
+            )
+        if not time_col or time_col not in labeled_df.columns:
+            raise TrainingSplitMetadataMissingError(
+                "시간순 분할(asset_time_split)에 필요한 타임스탬프 컬럼을 데이터에서 찾을 수 없습니다."
+            )
+
+        from systems.generator.model.model_training import (
+            compute_asset_time_split_indices,
+            validate_split_indices,
+        )
 
         try:
             train_idx, val_idx, test_idx = compute_asset_time_split_indices(
-                labeled_df, id_col=id_col, time_col=time_col
+                labeled_df,
+                id_col=id_col,
+                time_col=time_col,
             )
         except Exception as exc:
             raise TrainingSplitMetadataMissingError(
-                f"시간순 데이터 분할(asset_time_split) 계산에 실패했습니다: {exc}"
+                f"설비별 시간순 분할 인덱스(asset_time_split) 산출 실패: {exc}"
             ) from exc
 
         split_indices = {
@@ -425,7 +480,7 @@ class FeatureService:
             "run_id": run_id,
         }
 
-        # 11. Atomic publish via repository
+        # 13. Atomic publish via repository
         uris = self.feature_repo.publish_feature_bundle(
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
@@ -459,20 +514,19 @@ class FeatureService:
             ),
         )
 
-    def _resolve_failure_dataset(
+    def _locate_failure_file(
         self,
         failure_dataset_id: str,
         failure_dataset_version: str,
-        telemetry_df: pd.DataFrame,
-        plan: Optional[dict[str, Any]] = None,
-    ) -> tuple[pd.DataFrame, dict[str, Any], Path, str]:
-        """Strictly locate and load explicit failure history dataset with exact version matching."""
+    ) -> tuple[Path, str, str]:
+        """Locate the failure dataset file adhering to exact version path conventions and calculate its SHA-256."""
         allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
 
-        if not failure_dataset_id or ".." in failure_dataset_id or "/" in failure_dataset_id or "\\" in failure_dataset_id:
+        if not failure_dataset_id or ".." in failure_dataset_id or "/" in failure_dataset_id or "\\" in failure_dataset_id or ":" in failure_dataset_id:
             raise FailureDataNotReadyError(f"잘못된 failure_dataset_id 식별자입니다: {failure_dataset_id!r}")
-        if not failure_dataset_version or ".." in failure_dataset_version or "/" in failure_dataset_version or "\\" in failure_dataset_version:
+        if not failure_dataset_version or ".." in failure_dataset_version or "/" in failure_dataset_version or "\\" in failure_dataset_version or ":" in failure_dataset_version:
             raise FailureDataNotReadyError(f"잘못된 failure_dataset_version 식별자입니다: {failure_dataset_version!r}")
+
 
         # Strictly require version in the path
         candidates = [
@@ -500,19 +554,34 @@ class FeatureService:
                 f"요청한 Failure 데이터셋 '{failure_dataset_id}' (버전 '{failure_dataset_version}')에 해당하는 파일을 찾을 수 없습니다."
             )
 
-        from systems.generator.app.feature.feature_repository import compute_file_sha256
         failure_sha256 = compute_file_sha256(found_path)
-
         try:
-            if found_path.suffix.lower() in (".xlsx", ".xls"):
-                f_df = pd.read_excel(found_path)
+            failure_uri_clean = str(found_path.relative_to(PATHS.data_dir.resolve()).as_posix())
+        except ValueError:
+            try:
+                failure_uri_clean = str(found_path.relative_to(PATHS.data_preprocessed.resolve()).as_posix())
+            except ValueError:
+                failure_uri_clean = found_path.name
+
+        return found_path, failure_sha256, failure_uri_clean
+
+    def _load_and_validate_failure_df(
+        self,
+        failure_file: Path,
+        plan: dict[str, Any],
+        telemetry_df: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, dict[str, Any]]:
+        """Load and validate failure dataframe columns and asset ID compatibility."""
+        try:
+            if failure_file.suffix.lower() in (".xlsx", ".xls"):
+                f_df = pd.read_excel(failure_file)
             else:
-                f_df = pd.read_csv(found_path)
+                f_df = pd.read_csv(failure_file)
         except Exception as exc:
-            raise FailureDataNotReadyError(f"Failure 데이터셋 파일({found_path}) 로드 실패: {exc}") from exc
+            raise FailureDataNotReadyError(f"Failure 데이터셋 파일({failure_file}) 로드 실패: {exc}") from exc
 
         if f_df.empty:
-            raise FailureDataNotReadyError(f"Failure 데이터셋 '{failure_dataset_id}'이 비어 있습니다.")
+            raise FailureDataNotReadyError("Failure 데이터셋이 비어 있습니다.")
 
         # Identify Failure ID column
         fail_id_col = None
@@ -558,4 +627,4 @@ class FeatureService:
             "failure_id_column": fail_id_col,
             "anchor_column": anchor_col,
         }
-        return f_df, meta, found_path, failure_sha256
+        return f_df, meta

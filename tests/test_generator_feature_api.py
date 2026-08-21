@@ -1,6 +1,7 @@
 """Comprehensive test suite for Generator Feature API (/feature) conforming to Phase 2 immutable contract."""
 
 import json
+import re
 import pytest
 import numpy as np
 import pandas as pd
@@ -34,7 +35,7 @@ from systems.generator.app.feature.feature_exception import (
     FailureDatasetVersionMismatchError,
     TrainingSplitMetadataMissingError,
 )
-from systems.generator.app.feature.feature_repository import FeatureRepository, ALLOWED_FEATURE_BUNDLE_FILES
+from systems.generator.app.feature.feature_repository import FeatureRepository, ALLOWED_FEATURE_BUNDLE_FILES, compute_file_sha256
 from systems.generator.app.feature.feature_schema_provider import (
     FeatureSchemaProvider,
     FeatureSchemaDefinition,
@@ -182,12 +183,19 @@ def test_feature_label_schema_validation_failure(client, sample_dataset_with_fai
 def test_feature_plan_and_mapping_integrity_error(client, sample_dataset_with_failures):
     """Tampered plan or mapping on disk returns 422 INTEGRITY_ERROR."""
     ext_repo = ExtractionRepository()
+    sensor_sha = compute_file_sha256(Path(sample_dataset_with_failures["csv_path"]))
     plan_data = {
         "structure_type": "tabular_column_as_attribute",
         "selected_columns": ["asset_id", "timestamp", "voltage", "rotation"],
         "id_column": "asset_id",
         "time_column": "timestamp",
         "duplicate_policy": "error",
+        "source": {
+            "dataset_id": sample_dataset_with_failures["dataset_id"],
+            "dataset_version": sample_dataset_with_failures["dataset_version"],
+            "source_uri": sample_dataset_with_failures["csv_rel_path"],
+            "sha256": sensor_sha,
+        },
     }
     plan_ver, _ = ext_repo.publish_plan(sample_dataset_with_failures["dataset_id"], sample_dataset_with_failures["dataset_version"], plan_data)
     mapping_data = {
@@ -274,6 +282,92 @@ def test_feature_end_to_end_and_reuse_integrity(client, sample_dataset_with_fail
     assert feat_res3.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
 
 
+def test_feature_bundle_reuse_fails_when_sensor_file_modified_after_bundle_creation(client, sample_dataset_with_failures):
+    """If the raw sensor dataset is modified after bundle creation, subsequent /feature call rejects reuse with SOURCE_DATASET_INTEGRITY_ERROR."""
+    dataset_id = sample_dataset_with_failures["dataset_id"]
+    dataset_version = sample_dataset_with_failures["dataset_version"]
+    failure_id = sample_dataset_with_failures["failure_dataset_id"]
+    failure_ver = sample_dataset_with_failures["failure_dataset_version"]
+
+    ext_res = client.post("/extraction", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "source_uri": sample_dataset_with_failures["csv_rel_path"],
+        "force_reanalyze": True,
+    })
+    assert ext_res.status_code == 200
+    plan_ver = ext_res.json()["extraction_plan_version"]
+    map_ver = ext_res.json()["result"]["mapping_version"]
+
+    feat_payload = {
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "failure_dataset_id": failure_id,
+        "failure_dataset_version": failure_ver,
+        "extraction_plan_version": plan_ver,
+        "mapping_version": map_ver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    }
+    # 1. First run creates bundle
+    feat_res1 = client.post("/feature", json=feat_payload)
+    assert feat_res1.status_code == 200
+
+    # 2. Modify raw sensor CSV file
+    with open(sample_dataset_with_failures["csv_path"], "a", encoding="utf-8") as f:
+        f.write("M001,2026-01-01 10:00:00,299.0,1999.0\n")
+
+    # 3. Second run must reject reuse because raw sensor SHA-256 changed!
+    feat_res2 = client.post("/feature", json=feat_payload)
+    assert feat_res2.status_code == 422
+    assert feat_res2.json()["error"]["code"] == "SOURCE_DATASET_INTEGRITY_ERROR"
+
+
+def test_feature_bundle_reuse_fails_when_failure_file_modified_after_bundle_creation(client, sample_dataset_with_failures):
+    """If the failure dataset is modified after bundle creation, subsequent /feature call rejects reuse with FEATURE_DATASET_INTEGRITY_ERROR."""
+    dataset_id = sample_dataset_with_failures["dataset_id"]
+    dataset_version = sample_dataset_with_failures["dataset_version"]
+    failure_id = sample_dataset_with_failures["failure_dataset_id"]
+    failure_ver = sample_dataset_with_failures["failure_dataset_version"]
+
+    ext_res = client.post("/extraction", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "source_uri": sample_dataset_with_failures["csv_rel_path"],
+        "force_reanalyze": True,
+    })
+    assert ext_res.status_code == 200
+    plan_ver = ext_res.json()["extraction_plan_version"]
+    map_ver = ext_res.json()["result"]["mapping_version"]
+
+    feat_payload = {
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "failure_dataset_id": failure_id,
+        "failure_dataset_version": failure_ver,
+        "extraction_plan_version": plan_ver,
+        "mapping_version": map_ver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    }
+    # 1. First run creates bundle
+    feat_res1 = client.post("/feature", json=feat_payload)
+    assert feat_res1.status_code == 200
+
+    # 2. Modify failure CSV file
+    with open(sample_dataset_with_failures["failure_csv"], "a", encoding="utf-8") as f:
+        f.write("M001,2026-01-01 10:00:00,Overheat\n")
+
+    # 3. Second run must reject reuse because failure SHA-256 changed!
+    feat_res2 = client.post("/feature", json=feat_payload)
+    assert feat_res2.status_code == 422
+    assert feat_res2.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+
+
 def test_feature_bundle_validation_exhaustive(tmp_path):
     """Exhaustive test for validate_feature_bundle checking all integrity and path safety violations."""
     repo = FeatureRepository(base_dir=tmp_path / "features_cache")
@@ -357,6 +451,110 @@ def test_feature_bundle_validation_exhaustive(tmp_path):
         json.dump(meta_corrupted, f)
     with pytest.raises(FeatureDatasetIntegrityError, match="필수 파일 'row_metadata.json'의 체크섬이 선언되지 않았습니다"):
         repo.validate_feature_bundle("ds1", "v1", fver, contract)
+
+
+def test_feature_plan_missing_source_rejected(client, sample_dataset_with_failures):
+    """Extraction Plan lacking 'source' contract is rejected with SOURCE_DATASET_INTEGRITY_ERROR."""
+    ext_repo = ExtractionRepository()
+    plan_no_source = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["asset_id", "timestamp", "voltage", "rotation"],
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "duplicate_policy": "error",
+    }
+    plan_ver, _ = ext_repo.publish_plan(sample_dataset_with_failures["dataset_id"], sample_dataset_with_failures["dataset_version"], plan_no_source)
+    mapping_data = {
+        "voltage": {"target_ontology": "Voltage", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
+        "rotation": {"target_ontology": "Rotation", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
+    }
+    map_ver, _ = ext_repo.publish_mapping(sample_dataset_with_failures["dataset_id"], sample_dataset_with_failures["dataset_version"], mapping_data)
+
+    res = client.post("/feature", json={
+        "dataset_id": sample_dataset_with_failures["dataset_id"],
+        "dataset_version": sample_dataset_with_failures["dataset_version"],
+        "failure_dataset_id": sample_dataset_with_failures["failure_dataset_id"],
+        "failure_dataset_version": sample_dataset_with_failures["failure_dataset_version"],
+        "extraction_plan_version": plan_ver,
+        "mapping_version": map_ver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "SOURCE_DATASET_INTEGRITY_ERROR"
+
+
+def test_feature_plan_source_field_and_format_validations(client, sample_dataset_with_failures):
+    """Extraction Plan source with missing fields, bad SHA-256 format, or traversal paths is rejected."""
+    ext_repo = ExtractionRepository()
+    sensor_sha = compute_file_sha256(Path(sample_dataset_with_failures["csv_path"]))
+    mapping_data = {
+        "voltage": {"target_ontology": "Voltage", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
+        "rotation": {"target_ontology": "Rotation", "source": "mapping_agent", "confidence": 1.0, "status": "auto_mapped"},
+    }
+    map_ver, _ = ext_repo.publish_mapping(sample_dataset_with_failures["dataset_id"], sample_dataset_with_failures["dataset_version"], mapping_data)
+
+    # 1. Invalid SHA-256 hex format (uppercase or bad length)
+    plan_bad_sha = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["asset_id", "timestamp", "voltage", "rotation"],
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "duplicate_policy": "error",
+        "source": {
+            "dataset_id": sample_dataset_with_failures["dataset_id"],
+            "dataset_version": sample_dataset_with_failures["dataset_version"],
+            "source_uri": sample_dataset_with_failures["csv_rel_path"],
+            "sha256": "NOT_A_VALID_HEX_64_CHARS",
+        },
+    }
+    p_ver1, _ = ext_repo.publish_plan(sample_dataset_with_failures["dataset_id"], sample_dataset_with_failures["dataset_version"], plan_bad_sha)
+    res1 = client.post("/feature", json={
+        "dataset_id": sample_dataset_with_failures["dataset_id"],
+        "dataset_version": sample_dataset_with_failures["dataset_version"],
+        "failure_dataset_id": sample_dataset_with_failures["failure_dataset_id"],
+        "failure_dataset_version": sample_dataset_with_failures["failure_dataset_version"],
+        "extraction_plan_version": p_ver1,
+        "mapping_version": map_ver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert res1.status_code == 422
+    assert res1.json()["error"]["code"] == "SOURCE_DATASET_INTEGRITY_ERROR"
+
+    # 2. Traversal path in source_uri
+    plan_traversal = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["asset_id", "timestamp", "voltage", "rotation"],
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "duplicate_policy": "error",
+        "source": {
+            "dataset_id": sample_dataset_with_failures["dataset_id"],
+            "dataset_version": sample_dataset_with_failures["dataset_version"],
+            "source_uri": "../secret.csv",
+            "sha256": sensor_sha,
+        },
+    }
+    p_ver2, _ = ext_repo.publish_plan(sample_dataset_with_failures["dataset_id"], sample_dataset_with_failures["dataset_version"], plan_traversal)
+    res2 = client.post("/feature", json={
+        "dataset_id": sample_dataset_with_failures["dataset_id"],
+        "dataset_version": sample_dataset_with_failures["dataset_version"],
+        "failure_dataset_id": sample_dataset_with_failures["failure_dataset_id"],
+        "failure_dataset_version": sample_dataset_with_failures["failure_dataset_version"],
+        "extraction_plan_version": p_ver2,
+        "mapping_version": map_ver,
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "pdm-label-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert res2.status_code == 422
+    assert res2.json()["error"]["code"] == "SOURCE_DATASET_INTEGRITY_ERROR"
 
 
 def test_failure_dataset_explicit_association_and_fingerprint_change(client, tmp_path, monkeypatch):
@@ -482,64 +680,6 @@ def test_failure_dataset_explicit_association_and_fingerprint_change(client, tmp
     assert res_missing.json()["error"]["code"] == "FAILURE_DATASET_VERSION_MISMATCH"
 
 
-def test_feature_sensor_source_hash_integrity_mismatch(client, tmp_path, monkeypatch):
-    """If the raw sensor dataset on disk is modified after /extraction, /feature rejects it with SOURCE_DATASET_INTEGRITY_ERROR."""
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    models_store = tmp_path / "models_store"
-    models_store.mkdir(parents=True, exist_ok=True)
-
-    from systems.generator.generator_config import PATHS
-    monkeypatch.setattr(PATHS, "data_dir", data_dir)
-    monkeypatch.setattr(PATHS, "models_store", models_store)
-
-    telem_path = data_dir / "telem_tamper.csv"
-    pd.DataFrame({
-        "asset_id": ["A1", "A1"],
-        "timestamp": ["2026-01-01 00:00:00", "2026-01-01 01:00:00"],
-        "voltage": [220.0, 222.0],
-        "rotation": [1500.0, 1510.0],
-    }).to_csv(telem_path, index=False)
-
-    fail_path = data_dir / "fail" / "v1.0.csv"
-    fail_path.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame([{
-        "asset_id": "A1",
-        "observed_at": "2026-01-01 01:30:00",
-        "failure_type": "Overheat",
-    }]).to_csv(fail_path, index=False)
-
-    ext_res = client.post("/extraction", json={
-        "dataset_id": "telem_tamper",
-        "dataset_version": "v1.0",
-        "source_uri": "telem_tamper.csv",
-        "force_reanalyze": True,
-    })
-    assert ext_res.status_code == 200
-    plan_ver = ext_res.json()["extraction_plan_version"]
-    map_ver = ext_res.json()["result"]["mapping_version"]
-
-    # Tamper with the telemetry CSV on disk
-    with open(telem_path, "a") as f:
-        f.write("A1,2026-01-01 02:00:00,999.0,9999.0\n")
-
-
-    res = client.post("/feature", json={
-        "dataset_id": "telem_tamper",
-        "dataset_version": "v1.0",
-        "failure_dataset_id": "fail",
-        "failure_dataset_version": "v1.0",
-        "extraction_plan_version": plan_ver,
-        "mapping_version": map_ver,
-        "feature_schema_version": "pdm-feature-v1",
-        "label_schema_version": "pdm-label-v1",
-        "prediction_horizon_hours": 24,
-        "rebuild_npy": True,
-    })
-    assert res.status_code == 422
-    assert res.json()["error"]["code"] == "SOURCE_DATASET_INTEGRITY_ERROR"
-
-
 def test_feature_split_metadata_fail_fast_on_missing_id_or_time_column(client, tmp_path, monkeypatch):
     """If ID column or time column is missing, /feature fails fast with TRAINING_SPLIT_METADATA_MISSING."""
     data_dir = tmp_path / "data"
@@ -568,13 +708,19 @@ def test_feature_split_metadata_fail_fast_on_missing_id_or_time_column(client, t
     }]).to_csv(fail_path, index=False)
 
     ext_repo = ExtractionRepository()
-    # Plan specifying a missing id_column
+    sensor_sha = compute_file_sha256(telem_path)
     plan_data = {
         "structure_type": "tabular_column_as_attribute",
         "selected_columns": ["asset_id", "timestamp", "voltage", "rotation"],
         "id_column": "non_existent_id_column",
         "time_column": "timestamp",
         "duplicate_policy": "error",
+        "source": {
+            "dataset_id": "split_fail",
+            "dataset_version": "v1.0",
+            "source_uri": "split_fail.csv",
+            "sha256": sensor_sha,
+        },
     }
     plan_ver, _ = ext_repo.publish_plan("split_fail", "v1.0", plan_data)
     mapping_data = {

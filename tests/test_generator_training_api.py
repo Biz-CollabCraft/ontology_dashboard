@@ -717,3 +717,112 @@ def test_history_requirement_calculation():
     assert req["expected_sampling_interval_seconds"] == 3600
     assert req["minimum_history_rows"] == 10
     assert req["maximum_lookback_hours"] == 9
+
+
+def test_activation_policy_default_latest(client, sample_feature_bundle):
+    """Omitting activation_policy defaults to 'latest' and updates pointer."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    res = client.post("/train/random_forest", json={"feature_dataset_version": fver})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["results"][0]["activation_status"] == "activated"
+    v = data["results"][0]["model_version"]
+
+    latest_res = client.get("/models/random_forest/active")
+    assert latest_res.status_code == 200
+    assert latest_res.json()["active_model_version"] == v
+
+
+def test_activation_policy_manual_publishes_without_pointer_update(client, sample_feature_bundle):
+    """activation_policy='manual' publishes immutable artifact with status 'published_only' without updating latest.json pointer."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    res = client.post("/train/xgboost", json={
+        "feature_dataset_version": fver,
+        "activation_policy": "manual",
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "succeeded"
+    assert data["results"][0]["activation_status"] == "published_only"
+    assert data["results"][0]["active_model_version"] is None
+
+    # Pointer should NOT exist
+    active_res = client.get("/models/xgboost/active")
+    assert active_res.status_code == 404
+    assert active_res.json()["error"]["code"] == "ACTIVE_MODEL_NOT_FOUND"
+
+
+def test_activation_policy_invalid_rejected(client, sample_feature_bundle):
+    """Invalid activation_policy is rejected with 422 REQUEST_VALIDATION_ERROR."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    res = client.post("/train/random_forest", json={
+        "feature_dataset_version": fver,
+        "activation_policy": "invalid_policy",
+    })
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "REQUEST_VALIDATION_ERROR"
+
+
+def test_activation_pointer_failure_in_train_all_returns_partially_succeeded(client, sample_feature_bundle, monkeypatch):
+    """In multi-model POST /train, pointer update failure isolates failure and records MODEL_ACTIVATION_FAILED in failed_models."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    repo = TrainingRepository()
+
+    orig_update = repo.update_latest_pointer
+    def mock_update(model_id, model_version, artifact_path):
+        if model_id == "lightgbm":
+            raise RuntimeError("Simulated pointer IO error for lightgbm")
+        return orig_update(model_id, model_version, artifact_path)
+
+    monkeypatch.setattr(TrainingRepository, "update_latest_pointer", staticmethod(mock_update))
+
+    res = client.post("/train", json={"feature_dataset_version": fver, "activation_policy": "latest"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "partially_succeeded"
+    failed = data["failed_models"]
+    assert len(failed) == 1
+    assert failed[0]["base_model"] == "lightgbm"
+    assert failed[0]["code"] == "MODEL_ACTIVATION_FAILED"
+    assert failed[0]["error_id"].startswith("err-")
+
+    # LightGBM artifact still exists on disk
+    lgb_dir = repo._resolve_local_artifact_root() / "lightgbm"
+    assert lgb_dir.is_dir()
+
+
+def test_activation_pointer_failure_in_train_single_model_returns_500_and_recovery(client, sample_feature_bundle, monkeypatch):
+    """In single model POST /train/{base_model}, pointer update failure returns 500 MODEL_ACTIVATION_FAILED and can be recovered via manual activation."""
+    fver = sample_feature_bundle["feature_dataset_version"]
+    repo = TrainingRepository()
+    orig_update = TrainingRepository.update_latest_pointer
+
+    # 1. Simulate pointer failure
+    def mock_update_fail(self, model_id, model_version, artifact_path):
+        raise OSError("Permission denied updating latest.json")
+
+    monkeypatch.setattr(TrainingRepository, "update_latest_pointer", mock_update_fail)
+
+    res = client.post("/train/random_forest", json={"feature_dataset_version": fver, "activation_policy": "latest"})
+    assert res.status_code == 500
+    err = res.json()["error"]
+    assert err["code"] == "MODEL_ACTIVATION_FAILED"
+    assert "error_id" in err["details"][0]
+    assert err["details"][0]["base_model"] == "random_forest"
+    assert err["details"][0]["activation_status"] == "activation_failed"
+    published_ver = err["details"][0]["model_version"]
+
+    # 2. Restore normal update function
+    monkeypatch.setattr(TrainingRepository, "update_latest_pointer", orig_update)
+
+    # 3. Recovery: call manual activation endpoint for the published version without retraining!
+    act_res = client.post(f"/models/random_forest/activate/{published_ver}")
+    assert act_res.status_code == 200
+    act_data = act_res.json()
+    assert act_data["status"] == "activated"
+    assert act_data["active_model_version"] == published_ver
+
+    # 4. Active model query confirms recovery
+    active_res = client.get("/models/random_forest/active")
+    assert active_res.status_code == 200
+    assert active_res.json()["active_model_version"] == published_ver

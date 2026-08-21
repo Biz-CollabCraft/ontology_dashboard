@@ -82,12 +82,12 @@ systems/generator/
         ↓
 
 [2단계: POST /feature]
-  → Sensor 원본 데이터셋 SHA-256 해시 일치 검증 (SOURCE_DATASET_INTEGRITY_ERROR)
+  → Extraction Plan source 객체 필수 검증 및 구형 Plan 거부 (SOURCE_DATASET_INTEGRITY_ERROR)
+  → Sensor 원본 파일 존재 및 SHA-256 해시 일치 검증 (SOURCE_DATASET_INTEGRITY_ERROR)
+  → Failure 데이터셋(버전 경로 고정) 연결 및 SHA-256 해시 계산 (FAILURE_DATASET_VERSION_MISMATCH)
+  → 기존 Feature Bundle 존재 시 번들 무결성 + 원본 source/failure provenance 전수 비교 후 일치 시에만 재사용
   → Label Schema 실제 로드 및 검증 (prediction_task, horizon, anchor, positive_class)
-  → 기존 Extraction Plan 및 Ontology Mapping 무결성 검증 및 조회
-  → 명시적 Failure 데이터셋(버전 경로 고정, versionless fallback 배제) 연결 및 설비 ID 호환성 검증
   → 9대 계약 요소 SHA-256 지문(feature-dataset-<fingerprint>) 산출
-  → 기존 Feature Bundle 존재 시 전체 4개 파일/차원/dtype/NaN 무결성 검증(FEATURE_DATASET_INTEGRITY_ERROR) 후 재사용
   → 원본 데이터 추출 (기존 label 컬럼 배제)
   → 시계열 Feature 계산 (build_features)
   → 공식 고장 이력 기반 Label 생성 (build_labels, positive 0건 및 결측치 fail-fast)
@@ -106,7 +106,8 @@ systems/generator/
   → 등록 모델(lightgbm, xgboost, random_forest) 학습 및 평가 지표 산출 (모델별 실패 격리)
   → 불변 Model Artifact v1.0 패키지(manifest.json, model.joblib, schemas, metrics) 원자적 발행
   → 발행 직후 validator 검증 및 activation_policy(latest/manual)에 따른 latest.json 활성 포인터 원자적 갱신
-  → 모델별 결과 반환 (succeeded / partially_succeeded)
+  → 활성화 실패 시 failed_models 반영 (partially_succeeded 또는 500 MODEL_ACTIVATION_FAILED), 아티팩트 보존 및 수동 복구 지원
+  → Generator는 latest.json 포인터를 관리하며 Backend 런타임 핸드오버는 후속 작업으로 수행
 ```
 
 1. **Feature Bundle SHA-256 체크섬 및 무결성 전수 검증**:
