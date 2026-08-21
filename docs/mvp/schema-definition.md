@@ -365,7 +365,7 @@ Overview와 Objects 목록의 공통 행이다.
 | `risk` | object | Y | Product Result Artifact | 제안 |
 | `risk.current` | number 또는 null | Y | Product Result Artifact `failure_probability` | 제안 |
 | `risk.threshold` | number 또는 null | Y | Artifact root `threshold` 또는 policy | 제안 |
-| `risk.status_grade` | string | Y | Product Result Artifact `status_grade` | 제안 |
+| `risk.status_grade` | string 또는 null | Y | Product Result Artifact `status_grade`; `data_quality_hold`는 `data_status`로 분리 | 제안 |
 | `risk.prediction_horizon_hours` | integer 또는 null | Y | Product Result Artifact | 제안 |
 | `risk_series` | PredictionSeriesPoint[] | Y | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. canonical source는 `pm_result_artifacts` append-only Product Result history이며, detail payload가 필요할 때만 `prediction_result_id`로 `prediction_results`를 join | 제안 |
 | `features` | AssetReportFeature[] | Y | Feature catalog + Observation + Evidence | 제안 |
@@ -413,8 +413,8 @@ threshold, data quality warning, activity, report, provenance)는 이 계약의 
 | 현재 센서값 | 가능 | 없음 | `observation` 또는 `sensor_evidence.sensors` |
 | top factors/report citations | 가능 | 없음 | `top_factors`, `report.sections[].evidenceFieldIds` |
 | feature baseline | 부분 가능 | Evidence Payload 노출 필요 | `sensor_evidence.sensors[*].basis`가 있는 feature만 가능 |
-| feature 시계열 | 불가 | Observation API 또는 gen_data Layer 2 정규화 결과 | 단일 Event Evidence는 현재값 중심 |
-| risk 시계열 | 불가 | Backend Diagnosis runtime prediction/result timeline | gen_data model output fixture 대체 금지 |
+| feature 시계열 | 불가 | Backend Observation/Feature Executor series | 단일 Event Evidence는 현재값 중심 |
+| risk 시계열 | 불가 | Backend Diagnosis Runtime Prediction History Query result | gen_data model output fixture 대체 금지 |
 | crossing marker/history row | 불가 또는 부분 가능 | Observation series, baseline, Activity/Maintenance source | 합성 금지 |
 
 시계열과 baseline의 최소 추적 필드는 다음과 같다.

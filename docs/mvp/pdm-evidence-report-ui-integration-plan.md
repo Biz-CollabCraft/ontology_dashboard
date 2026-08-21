@@ -382,6 +382,7 @@ Producer-side `evidence_payload` 후보 필드는 다음과 같다.
 - `evidence_payload.status_flags`: `multiple_risk_factors`, `insufficient_data` 표시 보조 flag. step 7 contract에서는 임의 flag 확장을 허용하지 않는다
 - `evidence_payload.maintenance_context`: 단일 설비 정비 문맥. 기간 정비 집계가 아니며, 원천이 없으면 생략하거나 `null`로 두고 `evidence_gaps[]`에 기록한다
 - `evidence_payload.recommended_actions[].basis`: action 문구의 출처
+- `evidence_payload.recommended_actions=[]`: PR #97 이후 `unavailable` 추천 종류가 아니라 추천 부재 상태다. consumer는 이를 실행성 추천으로 재생성하지 않고 `evidence_gaps[]` 또는 unavailable 표시로 전달한다.
 - `evidence_payload.source_fields`: report/evidence trace에서 참조할 source field ID
 - `evidence_payload.evidence_gaps[]`: producer가 산출할 수 없는 값의 명시적 결손 기록
 - `provenance.evidence_payload_reference`: 근거 산출 기준과 reference fixture 비교 기준
