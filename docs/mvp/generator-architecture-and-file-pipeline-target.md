@@ -1,6 +1,6 @@
 # Generator 목표 아키텍처 및 파일 가공 파이프라인 명세서
 
-> **문서 상태**: `Proposed Target` (제안된 목표 설계)  
+> **문서 상태**: `Proposed Target` (제안된 목표 설계)
 > **주의**: 본 문서는 현재 `main`에 구현된 코드를 설명하는 문서가 아닙니다. 본 문서는 향후 진행될 Generator 구조 개편, 단계별 책임 분리, API 명칭 전환 및 파일 가공 파이프라인 Migration 작업의 단일 기준이 되는 **목표 설계(Target Specification) 문서**입니다.
 
 ---
@@ -15,9 +15,9 @@
    - `gen_data` Layer 2 프로토콜 로그 입력 fixture(`sample_log.jsonl`)와 기대 Observation fixture(`expected_observations.json`)가 도입되었습니다.
    - 현재 Generator 내부에는 이 파일 가공 흐름을 표준적·안정적으로 수행할 공식 파일 처리 계층이 아직 구현되어 있지 않으므로, 목표 구조와 가공 규칙을 먼저 문서로 확정합니다.
 
-3. **기존 `Extraction` 단계와의 의미 충돌 해소**:
-   - 현재 Generator의 `/extraction`은 원본 데이터셋 분석(Profiling), 추출 계획(Plan) 수립 및 온톨로지 매핑(Mapping)의 의미로 사용되고 있어, `gen_data` 프로토콜 로그 파일에서 시계열 데이터를 추출·가공하는 실제 `Extraction` 단계와 용어 충돌이 발생합니다.
-   - 이에 따라 단계 명칭을 4단계(`Extraction` → `Preprocessing` → `Feature` → `Training`)로 재정의하고, 기존 구현 기능을 보존하면서 새로운 구조로 이전하는 계획을 확정합니다.
+3. **단계 명칭 정립 및 선행 API화 작업 연계**:
+   - 별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다.
+   - Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 `gen_data` Layer 2 프로토콜 로그 가공에 사용하도록 4대 파이프라인 단계(`Extraction` → `Preprocessing` → `Feature` → `Training`)의 역할을 명확히 확정합니다.
 
 ---
 
@@ -29,7 +29,7 @@
 
 ```text
 systems/generator/
-├─ generator_main.py          # 데몬 진입점 및 FastAPI 애플리케이션 (Legacy /internal 엔드포인트)
+├─ generator_main.py          # 데몬 진입점 및 FastAPI 애플리케이션 (현재 /internal 엔드포인트)
 ├─ generator_config.py        # 전역 경로 및 설정 싱글톤
 ├─ extraction/                # 데이터셋 프로파일링, 추출 계획 수립 (LLM)
 ├─ feature/                   # 피처 계산 모듈 (feature_builder 등)
@@ -188,19 +188,19 @@ Backend Report
 | GET | `/health` | Generator 데몬 상태 확인 | Generator 데몬 상태 확인 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
-| POST | `/extraction` | (미구현 / 구현 브랜치 작업 중) | **gen_data 프로토콜 로그를 Observation/Failure Dataset으로 추출 (신규 1단계)** |
-| POST | `/preprocessing` | (미구현) | **Observation Dataset 분석 및 Preprocessing Plan/Mapping 발행 (신규 2단계)** |
-| POST | `/feature` | (미구현 / 구현 브랜치 작업 중) | **Feature/Label/Series 및 Feature Dataset Bundle 발행 (신규 3단계)** |
-| POST | `/train` | (미구현 / 구현 브랜치 작업 중) | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
-| POST | `/train/{base_model}` | (미구현 / 구현 브랜치 작업 중) | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
-| POST | `/models/{base_model}/activate/{model_version}` | (미구현 / 구현 브랜치 작업 중) | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
-| GET | `/models/{base_model}/active` | (미구현 / 구현 브랜치 작업 중) | **현재 활성화된 Model Artifact 정보 조회** |
+| POST | `/extraction` | Target — 미병합 | **gen_data 프로토콜 로그를 Observation/Failure Dataset으로 추출 (신규 1단계)** |
+| POST | `/preprocessing` | Target — 미병합 | **Observation Dataset 분석 및 Preprocessing Plan/Mapping 발행 (신규 2단계)** |
+| POST | `/feature` | Target — 미병합 | **Feature/Label/Series 및 Feature Dataset Bundle 발행 (신규 3단계)** |
+| POST | `/train` | Target — 미병합 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/train/{base_model}` | Target — 미병합 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
+| GET | `/models/{base_model}/active` | Target — 미병합 | **현재 활성화된 Model Artifact 정보 조회** |
 
 ### 4.2 타입 및 클래스 Migration Mapping 계획
 
-| Current 구현 대상 | Target 목표 대상 | Migration 계획 및 비고 |
+| 선행 API화 작업 대상 (Migration source) | Target (후속 목표 대상) | Migration 계획 및 비고 |
 |---|---|---|
-| 기존 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (기존 기능 이전) |
+| 선행 API 설계 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (데이터셋 분석 및 Plan/Mapping 기능을 /preprocessing으로 이전) |
 | `ExtractionPlan` | `PreprocessingPlan` | Pydantic 스키마 변경 |
 | `ExtractionPlanResponse` | `PreprocessingPlanResponse` | 응답 스키마 변경 |
 | `extraction_plan_version` | `preprocessing_plan_version` | 식별자 및 메타데이터 키 변경 |
@@ -247,18 +247,18 @@ Backend Report
 | 계약 대상 | 상태 | 설명 |
 |---|---|---|
 | Observation Reference Fixture | 참고 fixture 존재 | `tests/fixtures/gen_data_layer2_observation/` (참고용) |
-| `generator-observation.schema.json` | **Target — 미작성** | 후속 Extraction 구현 PR에서 작성 예정 |
-| `generator-failure-event.schema.json` | **Target — 미작성** | 후속 Extraction 구현 PR에서 작성 예정 |
-| `generator-extraction-result.schema.json` | **Target — 미작성** | 후속 Extraction 구현 PR에서 작성 예정 |
+| `generator-observation.schema.json` | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| `generator-failure-event.schema.json` | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| `generator-extraction-result.schema.json` | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | `generator-preprocessing-plan.schema.json` | **Target — 이전 예정** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
-| `generator-feature-series.schema.json` | **Target — 미작성** | 후속 Feature 구현 PR에서 작성 예정 |
+| `generator-feature-series.schema.json` | **Target — 미작성** | Feature 구현 단계에서 작성 예정 |
 | Feature Dataset Bundle | **Target — 검토 필요** | 기존 `dataset-bundle-manifest.schema.json` 재사용·확장 여부 검토 |
 
-> **주의**: 본 문서 브랜치에서는 빈 스키마 파일이나 placeholder JSON을 일체 생성하지 않습니다.
+> **주의**: 본 문서 변경 범위에서는 빈 스키마 파일이나 placeholder JSON을 일체 생성하지 않습니다.
 
-### 6.2 스키마 이관 브랜치 rebase 후 수행할 정합성 검증 항목
+### 6.2 스키마 물리 이관 완료 후 수행할 정합성 검증 항목
 
-별도 스키마 물리 이관 작업이 완료되고 본 브랜치가 rebase된 후에는 다음 검증을 순차적으로 수행합니다:
+별도 스키마 물리 이관 작업이 완료된 후에는 다음 검증을 순차적으로 수행합니다:
 1. 실제 `contracts/schemas/` 파일 목록과 문서 내 참조 목록의 1:1 일치 여부 비교
 2. 문서 내 `미작성`, `이전 예정` 상태 태그 현행화
 3. 스키마 `$id` 식별자 및 내부 `$ref` 경로 유효성 검증
@@ -268,10 +268,10 @@ Backend Report
 
 ---
 
-## 7. 후속 구현 로드맵 (3단계 PR 계획)
+## 7. 후속 구현 로드맵 (단계별 계획)
 
 ```text
-[후속 PR 1: 구조 개편 및 기존 기능 Migration]
+[구조 migration 단계]
   ├─ 공통 기반 모듈(settings.py, paths.py, errors.py, file_integrity.py, atomic_publish.py) 구성
   ├─ FastAPI Application Factory (app/main.py create_app) 및 Router Composition
   ├─ 기존 Extraction 도메인 → Preprocessing 도메인 rename 및 이전
@@ -281,7 +281,7 @@ Backend Report
 
         ↓
 
-[후속 PR 2: gen_data Extraction 파일 가공 구현]
+[프로토콜 로그 Extraction 구현 단계]
   ├─ Layer 2 append-only JSONL 파서 구현
   ├─ node_id 분리, timestamp 정규화 및 다중 센서 행 피벗
   ├─ quality/reason 메타데이터 보존 및 Failure truth 분리
@@ -290,7 +290,7 @@ Backend Report
 
         ↓
 
-[후속 PR 3: 전체 파이프라인 E2E 연결 및 CI 강화]
+[파이프라인 통합·검증 단계]
   ├─ Extraction 산출물 → Preprocessing 파이프라인 연결
   ├─ Preprocessing Plan/Mapping → Feature 파이프라인 연결
   ├─ Feature Dataset Bundle → Training 파이프라인 연결

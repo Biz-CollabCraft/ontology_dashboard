@@ -71,13 +71,13 @@ systems/generator/
 | Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Target (유지) |
-| POST | `/extraction` | `gen_data` Layer 2 프로토콜 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target (후속 구현) |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target (기존 기능 이전) |
-| POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target (후속 구현/정리) |
-| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target (후속 구현/정리) |
-| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target (후속 구현/정리) |
-| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target (후속 구현/정리) |
-| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target (후속 구현/정리) |
+| POST | `/extraction` | `gen_data` Layer 2 프로토콜 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target — 미병합 |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target — 미병합 |
+| POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
+| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
+| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
+| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
 
 ### 2.3 Target 4대 파이프라인 전환 요약
 
@@ -88,7 +88,7 @@ systems/generator/
 4. Training      : Feature Dataset Bundle → Immutable Model Artifact (latest.json pointer)
 ```
 
-상세한 Target 아키텍처, 단계별 책임 명세, Migration 매핑 및 3단계 후속 PR 계획은 [`docs/mvp/generator-architecture-and-file-pipeline-target.md`](../../docs/mvp/generator-architecture-and-file-pipeline-target.md)를 단일 기준으로 따릅니다.
+상세한 Target 아키텍처, 단계별 책임 명세, Migration 매핑 및 단계별 후속 계획은 [`docs/mvp/generator-architecture-and-file-pipeline-target.md`](../../docs/mvp/generator-architecture-and-file-pipeline-target.md)를 단일 기준으로 따릅니다.
 
 ---
 

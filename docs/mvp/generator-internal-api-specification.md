@@ -37,7 +37,7 @@
 
 ### 3.1 Current API (현재 main 구현 상태)
 
-현재 `main` 브랜치의 Generator 데몬에 실제로 구현되어 동작하는 엔드포인트입니다.
+현재 `main` 브랜치의 Generator 데몬에 실제로 구현되어 동작하는 엔드포인트는 다음 3개입니다.
 
 | Method | Path | 현재 의미 | 상태 |
 |---|---|---|---|
@@ -54,19 +54,21 @@
 | Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Target (유지) |
-| POST | `/extraction` | `gen_data` Layer 2 프로토콜 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target (후속 구현) |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target (기존 기능 이전) |
-| POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target (후속 구현/정리) |
-| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target (후속 구현/정리) |
-| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target (후속 구현/정리) |
-| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target (후속 구현/정리) |
-| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target (후속 구현/정리) |
+| POST | `/extraction` | `gen_data` Layer 2 프로토콜 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target — 미병합 |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target — 미병합 |
+| POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
+| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
+| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
+| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
 
 ### 3.3 기존 명칭 Migration 매핑표
 
-| Current (현재 main 대상) | Target (후속 목표 대상) | Migration 계획 및 비고 |
+별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다. Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 `gen_data` Layer 2 프로토콜 로그 가공에 사용합니다.
+
+| 선행 API화 작업 대상 (Migration source) | Target (후속 목표 대상) | Migration 계획 및 비고 |
 |---|---|---|
-| 기존 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (기존 기능 이전) |
+| 선행 API 설계 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (데이터셋 분석 및 Plan/Mapping 기능을 /preprocessing으로 이전) |
 | `ExtractionPlan` | `PreprocessingPlan` | Pydantic 스키마 변경 |
 | `ExtractionPlanResponse` | `PreprocessingPlanResponse` | 응답 스키마 변경 |
 | `extraction_plan_version` | `preprocessing_plan_version` | 식별자 및 메타데이터 키 변경 |
@@ -103,19 +105,59 @@
 }
 ```
 
-**성공 응답 본문:**
+**성공 응답 본문 (현재 main의 `train_all()` 실제 반환 구조):**
 
 ```json
 {
-  "run_id": "train-run-001",
-  "status": "succeeded",
-  "published_artifacts": [
-    {
-      "model_id": "pdm-cnc-tool-wear-lightgbm",
-      "model_version": "v1.0",
-      "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-lightgbm/v1.0"
+  "capabilities": {
+    "EquipmentMonitoring": true,
+    "SensorAnalytics": true,
+    "MaintenanceHistory": false,
+    "FailurePrediction": true,
+    "ErrorTracking": false
+  },
+  "mappings": {
+    "voltage_raw": {
+      "source_field": "voltage_raw",
+      "target_ontology": "Voltage",
+      "source": "mapping_agent",
+      "confidence": 0.8,
+      "status": "auto_mapped"
     }
-  ]
+  },
+  "registry": {
+    "run_version": 3,
+    "run_id": "run-v3-20260818070000",
+    "trained_at": "2026-08-18T07:00:00+00:00",
+    "models": {
+      "lightgbm": {
+        "model_id": "pdm-cnc-tool-wear-lightgbm",
+        "model_version": "v3",
+        "local_path": "models_store/lightgbm/model_v3.joblib",
+        "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-lightgbm/v3",
+        "train_positive_rate": 0.0507,
+        "validation_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 },
+        "test_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 }
+      },
+      "xgboost": {
+        "model_id": "pdm-cnc-tool-wear-xgboost",
+        "model_version": "v3",
+        "local_path": "models_store/xgboost/model_v3.joblib",
+        "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-xgboost/v3",
+        "train_positive_rate": 0.0507,
+        "validation_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 },
+        "test_metrics": { "average_precision": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0 }
+      }
+    },
+    "failed_models": null,
+    "published_artifacts": {
+      "pdm-cnc-tool-wear-lightgbm": {
+        "model_id": "pdm-cnc-tool-wear-lightgbm",
+        "model_version": "v3",
+        "artifact_uri": "models_store/artifacts/pdm-cnc-tool-wear-lightgbm/v3"
+      }
+    }
+  }
 }
 ```
 
