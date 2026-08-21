@@ -12,14 +12,15 @@
 Biz-CollabCraft/gen_data
 Source Data Producer
 raw / simulation / synthetic sensor data
-Layer 2 protocol append-only log files
+SensorRecord v2 protocol provenance files
 source/reference/test fixtures
 seed reproducibility + source lineage
-        ↓ Layer 2 protocol log contract (file handoff)
+        ↓ protocol provenance contract (file handoff)
 ontology_dashboard/systems/generator
-Extraction (protocol log → Observation/Failure Dataset)
+Observation Extraction (protocol provenance → Observation Dataset)
+Failure Extraction (Authorized Training Truth Source → Failure Dataset)
 → Preprocessing (Observation → Plan/Ontology Mapping)
-→ Feature (Observation/Failure + Plan/Mapping → Feature/Label/Series)
+→ Feature (Observation + Failure + Plan/Mapping → Feature/Label/Series)
 → Training (Feature Dataset → Model Artifact)
 → versioned Model Artifact (latest.json pointer)
         ↓ Model Artifact / Observation contract
@@ -57,14 +58,14 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
 ### 저장소별 Source of Truth
 
 - **`gen_data` = Source Data Producer**
-  - 센서 프로토콜 레코드 생성 및 Layer 2 append-only 로그 파일(`_log.jsonl`) 생성
+  - 센서 프로토콜 레코드 생성 및 protocol provenance 로그 파일 생성
   - Canonical V3.1 물리·생성 기준
   - source/reference/test fixture와 seed 기반 재현성 및 source lineage 보존
   - Closed-loop Target에서 정비 대상 설비의 Runtime Overlay Snapshot과 branch-local
     Simulation Clock을 이용한 source Observation 생성
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
-  - **`systems/generator`**: 프로토콜 로그 검증과 파일 가공, Observation/Failure Dataset 분리, Preprocessing Plan/Mapping 수립, Feature/Label/Series 빌드 및 versioned Model Artifact 발행
+  - **`systems/generator`**: 프로토콜 provenance에서 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Observation을 기반으로 Preprocessing Plan/Mapping을 수립하고, Feature 단계에서 Observation, Failure, Plan, Mapping을 결합하여 Feature Dataset Bundle 및 versioned Model Artifact를 발행한다.
   - **`systems/backend/app/diagnosis`**: Runtime feature 재현, runtime inference 및 제품 Result Artifact/Evidence/Prediction History 최종 생성
   - **`systems/frontend` / Report**: 공식 read port를 통한 ViewModel composition (gen_data 원본 파일 직접 파싱 금지)
 
@@ -113,10 +114,13 @@ project-root/
 
 ### 상위 아키텍처 및 책임 원칙
 
-1. **로그 생산과 파일 가공 경계**: `gen_data`는 Layer 2 프로토콜 로그 파일 생산자이며, `systems/generator`는 프로토콜 로그를 파싱·검증하여 Observation/Failure Dataset 및 Feature/Label을 생성하고 Model Artifact를 발행합니다.
-2. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Observation/Feature와 Model Artifact를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
-3. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
-4. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
+1. **`gen_data` protocol provenance는 Observation Dataset 생성에만 사용한다.**
+2. **Failure Dataset은 별도의 Authorized Training Truth Source에서 생성한다.**
+3. **Preprocessing은 Observation Dataset만 분석하여 Plan과 Mapping을 발행한다.**
+4. **Feature 단계가 Observation, Failure, Plan 및 Mapping을 결합한다.**
+5. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Observation/Feature와 Model Artifact를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
+6. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
+7. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
 
 ### Generator 구조 현황 (Current vs Target)
 

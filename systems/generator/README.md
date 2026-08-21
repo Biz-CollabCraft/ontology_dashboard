@@ -35,7 +35,7 @@ systems/generator/
 │  ├─ main.py                 # FastAPI Application Factory (create_app)
 │  ├─ dependencies.py         # 공통 의존성 주입
 │  ├─ api/                    # 중앙 Router 조립
-│  ├─ extraction/             # [1단계 Target] gen_data 프로토콜 로그 추출 및 Observation/Failure 분리
+│  ├─ extraction/             # [1단계 Target] protocol provenance 기반 Observation Extraction 및 별도 Authorized Truth Source 기반 Failure Extraction
 │  ├─ preprocessing/          # [2단계 Target] 데이터셋 분석 및 Preprocessing Plan / Ontology Mapping 수립 (기존 extraction 이전)
 │  ├─ feature/                # [3단계 Target] Feature/Label/Series 빌드 및 Feature Dataset Bundle 발행
 │  └─ training/               # [4단계 Target] 모델 학습, 검증, Model Artifact 발행 및 활성화
@@ -71,21 +71,28 @@ systems/generator/
 | Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Target (유지) |
-| POST | `/extraction` | `gen_data` Layer 2 프로토콜 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target — 미병합 |
+| POST | `/extraction` | protocol provenance → Observation Dataset / Authorized Truth Source → Failure Dataset (신규 1단계) | Target — 미병합 |
 | POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target — 미병합 |
-| POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/feature` | Observation + Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
 | GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
 
-### 2.3 Target 4대 파이프라인 전환 요약
+### 2.3 Target 파이프라인 흐름 요약
+
+Generator의 상위 파이프라인은 4단계(`Extraction` → `Preprocessing` → `Feature` → `Training`)로 구성되며, Extraction 도메인 내부에 두 개의 독립 use case를 둡니다.
 
 ```text
-1. Extraction    : gen_data Layer 2 protocol log → Versioned Observation/Failure Dataset
-2. Preprocessing : Observation Dataset → Preprocessing Plan / Ontology Mapping (기존 extraction 이전)
-3. Feature       : Observation/Failure + Plan/Mapping → Feature/Label/Series & Feature Dataset Bundle
-4. Training      : Feature Dataset Bundle → Immutable Model Artifact (latest.json pointer)
+1. Extraction
+   ├─ Observation Extraction : protocol provenance → Versioned Observation Dataset
+   └─ Failure Extraction     : Authorized Training Truth Source → Versioned Failure Dataset
+
+2. Preprocessing             : Observation Dataset → Preprocessing Plan / Ontology Mapping
+
+3. Feature                   : Observation + Failure + Plan/Mapping → Feature/Label/Series & Feature Dataset Bundle
+
+4. Training                  : Feature Dataset Bundle → Immutable Model Artifact (latest.json pointer)
 ```
 
 상세한 Target 아키텍처, 단계별 책임 명세, Migration 매핑 및 단계별 후속 계획은 [`docs/mvp/generator-architecture-and-file-pipeline-target.md`](../../docs/mvp/generator-architecture-and-file-pipeline-target.md)를 단일 기준으로 따릅니다.

@@ -54,9 +54,9 @@
 | Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Target (유지) |
-| POST | `/extraction` | 프로토콜 투영 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target — 미병합 |
+| POST | `/extraction` | protocol provenance → Observation Dataset / Authorized Truth Source → Failure Dataset (신규 1단계) | Target — 미병합 |
 | POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target — 미병합 |
-| POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/feature` | Observation + Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
@@ -64,7 +64,7 @@
 
 ### 3.3 기존 명칭 Migration 매핑표
 
-별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다. Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 `gen_data` 프로토콜 투영 로그 가공에 사용합니다.
+별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다. Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 protocol provenance 기반 Observation Extraction 및 Authorized Truth Source 기반 Failure Extraction에 사용합니다.
 
 | 선행 API화 작업 대상 (Migration source) | Target (후속 목표 대상) | Migration 계획 및 비고 |
 |---|---|---|
@@ -76,8 +76,8 @@
 | `ExtractionRepository` | `PreprocessingRepository` | 저장소 클래스 변경 |
 | `ExtractionPlanner` | `PreprocessingPlanner` | LLM 계획기 클래스 변경 |
 | `ExtractionProfiler` | `PreprocessingProfiler` | 프로파일러 클래스 변경 |
-| (신규 구현) | `POST /extraction` | 신규 프로토콜 투영 로그 추출 엔드포인트 |
-| (신규 구현) | `ExtractionService` | 신규 Observation/Failure Dataset 발행 서비스 |
+| (신규 구현) | `POST /extraction` | 신규 Observation / Failure 추출 엔드포인트 |
+| (신규 구현) | `ExtractionService` | 신규 Observation / Failure 추출 서비스 |
 
 ---
 
