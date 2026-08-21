@@ -324,3 +324,128 @@ def test_legacy_extraction_facade_compatibility(sample_wide_csv):
     df = legacy_extract_with_plan(actual_file, plan)
     assert not df.empty
     assert len(df) == 3
+
+
+def test_preprocessing_full_execution_failure_prevents_plan_publishing(client, tmp_path, monkeypatch):
+    """If full dataset execution fails after preview/validation, canonical plan must NOT be published."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+    monkeypatch.setattr(PATHS, "data_preprocessed", data_dir)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    # 1. Create a dataset where first 5 rows are valid, but row 6 has duplicate (id, time)
+    rows = []
+    for i in range(5):
+        rows.append({"asset_id": "M1", "timestamp": f"2026-01-01 0{i}:00:00", "voltage": 220.0 + i, "rotation": 1500.0})
+    # Row 6 duplicate with row 5
+    rows.append({"asset_id": "M1", "timestamp": "2026-01-01 04:00:00", "voltage": 999.0, "rotation": 9999.0})
+    df_dup = pd.DataFrame(rows)
+
+    dup_file = data_dir / "dup_test.csv"
+    df_dup.to_csv(dup_file, index=False)
+
+    payload = {
+        "dataset_id": "dup_test",
+        "dataset_version": "v1.0",
+        "source_uri": "dup_test.csv",
+        "force_reanalyze": True,
+        "duplicate_policy": "error",
+    }
+
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 422  # full execution fails due to duplicate_policy='error'
+    data = res.json()
+    assert data["error"]["code"] == "PREPROCESSING_PLANNING_ERROR"
+
+    # Verify canonical plan was NOT published
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+    plan_path = repo.get_plan_path("dup_test", "v1.0")
+    assert not plan_path.exists()
+
+    # Verify no temp files exist in repo directory
+    temp_files = list(repo.base_dir.glob(".tmp_*"))
+    assert len(temp_files) == 0
+
+
+def test_preprocessing_overwrite_failure_preserves_existing_plan(client, tmp_path, monkeypatch):
+    """When force_reanalyze=True but full execution of new plan fails, existing canonical plan is untouched."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+    monkeypatch.setattr(PATHS, "data_preprocessed", data_dir)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+
+    # 1. Publish initial valid plan
+    initial_plan = {
+        "structure_type": "tabular_column_as_attribute",
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "selected_columns": ["asset_id", "timestamp", "voltage"],
+    }
+    repo.publish_plan("preserve_test", "v1.0", initial_plan)
+    plan_path = repo.get_plan_path("preserve_test", "v1.0")
+    assert plan_path.exists()
+    with open(plan_path, "r", encoding="utf-8") as f:
+        original_content = f.read()
+
+    # 2. Create dataset with failure on full execution (row 6 duplicate)
+    rows = []
+    for i in range(5):
+        rows.append({"asset_id": "M1", "timestamp": f"2026-01-01 0{i}:00:00", "voltage": 220.0 + i})
+    rows.append({"asset_id": "M1", "timestamp": "2026-01-01 04:00:00", "voltage": 999.0})
+    df_dup = pd.DataFrame(rows)
+    dup_file = data_dir / "preserve_test.csv"
+    df_dup.to_csv(dup_file, index=False)
+
+    # 3. Post with force_reanalyze=True -> fails on full execution
+    payload = {
+        "dataset_id": "preserve_test",
+        "dataset_version": "v1.0",
+        "source_uri": "preserve_test.csv",
+        "force_reanalyze": True,
+        "duplicate_policy": "error",
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 422
+
+    # 4. Verify existing plan file is completely intact and unaltered
+    assert plan_path.exists()
+    with open(plan_path, "r", encoding="utf-8") as f:
+        current_content = f.read()
+    assert current_content == original_content
+
+    # 5. Verify no temp files exist
+    temp_files = list(repo.base_dir.glob(".tmp_*"))
+    assert len(temp_files) == 0
+
+
+def test_preprocessing_success_publishes_plan(client, sample_wide_csv, tmp_path, monkeypatch):
+    """Successful preview and full execution publishes plan and returns valid mapping_uri."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    payload = {
+        "dataset_id": "success_test",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": True,
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "succeeded"
+    assert "mapping_uri" in data["result"]
+
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+    plan_path = repo.get_plan_path("success_test", "v1.0")
+    assert plan_path.is_file()

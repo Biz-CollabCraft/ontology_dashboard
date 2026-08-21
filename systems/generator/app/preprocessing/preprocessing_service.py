@@ -19,6 +19,7 @@ from systems.generator.app.preprocessing.preprocessing_schema import (
     PreprocessingPlanResponse,
 )
 from systems.generator.app.preprocessing.preprocessing_exception import (
+    PreprocessingError,
     DatasetNotFoundError,
     DatasetContractError,
     PreprocessingRoleError,
@@ -377,16 +378,25 @@ class PreprocessingService:
         # 4. Validate plan
         self.validate_plan(df_preview, plan)
 
-        # 5. Atomically persist plan
+        # 5. Execute full dataset preprocessing with plan to verify full transform success
+        try:
+            preprocess_with_plan(str(dataset_path), plan)
+        except PreprocessingError:
+            raise
+        except Exception as exc:
+            logger.warning(f"[PreprocessingService] Preprocessing execution failed with plan: {exc}")
+            raise PreprocessingPlanningError(
+                f"전처리 계획 적용 실행에 실패했습니다: {exc}",
+                details=[{"stage": "execution", "error": str(exc)}],
+            ) from exc
+
+        # 6. Atomically persist plan only after full execution succeeds
         mapping_uri = self.repository.publish_plan(
             request.dataset_id,
             request.dataset_version,
             plan,
             overwrite=request.force_reanalyze,
         )
-
-        # 6. Execute preprocessing test run with plan
-        preprocess_with_plan(str(dataset_path), plan)
 
         plan_version = f"preprocessing-plan-{request.dataset_id}-{request.dataset_version}"
 
