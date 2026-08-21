@@ -130,7 +130,13 @@ class PreprocessingPlanner:
                 f"Long-format preprocessing requires explicit id, attribute, and value columns for '{filepath}'"
             )
 
+        found_id = next((c for c in avail_cols if c in ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]), None)
+        found_time = next((c for c in avail_cols if c in ["observed_at", "datetime", "timestamp", "time", "date"]), None)
+
         return {
+            "structure_type": structure_type,
+            "id_column": found_id,
+            "time_column": found_time,
             "selected_columns": avail_cols,
             "duplicate_policy": duplicate_policy,
             "aggregation": aggregation,
