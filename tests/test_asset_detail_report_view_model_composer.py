@@ -120,3 +120,18 @@ def test_composer_marks_missing_series_as_gaps_without_synthesizing_values() -> 
     assert {"features[].series", "risk_series", "equipment_history"} <= gap_fields
     assert payload["risk_series"] == []
     assert all(feature["series"] == [] for feature in payload["features"])
+
+
+def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:
+    artifact = json.loads(json.dumps(ARTIFACT))
+    artifact["evidence_payload"]["recommended_actions"] = []
+
+    payload = compose_asset_detail_report_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=artifact,
+    )
+
+    gap_fields = {gap["field"] for gap in payload["evidence"]["gaps"]}
+    assert "evidence_payload.recommended_actions" in gap_fields
+    assert "recommended_actions" not in payload
+    assert "available_actions" not in payload

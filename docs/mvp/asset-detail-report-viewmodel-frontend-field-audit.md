@@ -84,6 +84,7 @@ export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "d
 - `risk.status_grade`는 `normal|attention|warning|critical` 4값만 허용(스키마 enum), `data_quality_hold`는 `data_status.is_data_quality_hold`에만 존재.
 - `runtime_inference|compatibility_fallback`은 `evidence.source_kind`와 `risk_series[].source_kind`에만 존재하고 `data_status.source`(`canonical|fallback`)나 `features[].series[].quality_status`(`good|bad|unknown`)에는 섞이지 않는다.
 - `risk_series[].source_ref`가 `prediction-results://prediction_results/...` 계열이며, legacy `precomputed_prediction_timeline`, `/timeline`, `gen_data/canonical/model_outputs`를 직접 가리키지 않는다.
+- PR #97 이후 `evidence_payload.recommended_actions=[]`는 실행성 추천 부재를 뜻한다. Asset Detail Report composer는 이를 `evidence.gaps[]`로 전달하고 `available_actions`나 synthetic recommendation을 만들지 않는다.
 - 스키마 root와 각 하위 객체는 `additionalProperties: false`이므로 `Mvp` 접두어를 포함한 임의 필드를 추가하면 실패한다.
 - gap으로 기록된 필드(`risk_series`, `equipment_history`, `features[].series`)는 항상 빈 배열이며 합성값으로 채워지지 않는다.
 

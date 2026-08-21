@@ -38,6 +38,14 @@ def compose_asset_detail_report_view_model(
     evidence_payload = result_artifact.get("evidence_payload") or {}
     provenance = result_artifact.get("provenance") or {}
     gaps = list(evidence_payload.get("evidence_gaps") or [])
+    if "recommended_actions" in evidence_payload and not evidence_payload.get("recommended_actions"):
+        gaps.append(
+            {
+                "field": "evidence_payload.recommended_actions",
+                "reason": "Diagnosis recommendation policy did not produce a recommendation",
+                "owner_domain": "diagnosis",
+            }
+        )
 
     features = _features_from_artifact(result_artifact, feature_series)
     if not any(feature["series"] for feature in features):
