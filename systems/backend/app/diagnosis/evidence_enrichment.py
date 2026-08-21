@@ -6,6 +6,7 @@ from typing import Any
 from .contracts import DISPLAY_NAMES, UNITS
 from .evidence_baseline import build_history_baseline_window, numeric_observation
 from .predictor import FactorScore, Prediction
+from .recommendation_policy import resolve_status_criticality_action
 
 GENERATED_BY = "systems.backend.app.diagnosis.evidence_enrichment"
 
@@ -32,12 +33,17 @@ _COMPONENT_BY_FEATURE = {
     "pressure_raw": ("air_supply", "압력/공압 계통"),
     "voltage_raw": ("electrical_supply", "전원 계통"),
 }
+# Status-only fallback used when equipment criticality is unavailable. When
+# criticality IS available, _recommended_actions defers to
+# recommendation_policy.resolve_status_criticality_action instead, so this
+# table never becomes a second, diverging copy of the status x criticality
+# rules owned by recommendation-policy-v1 (see recommendation_policy.json).
 _ACTION_BY_STATUS = {
-    "critical": ("inspect_and_stop_review", "긴급 점검 및 정지 검토", "stop_review"),
-    "warning": ("inspect_current_shift", "현재 교대 내 점검", "inspect"),
-    "attention": ("request_inspection", "점검 요청", "inspect"),
-    "normal": ("continue_monitoring", "모니터링 지속", "monitor"),
-    "data_quality_hold": ("hold_for_data_check", "데이터 확인 후 판단", "data_quality"),
+    "critical": ("review_shutdown", "정지 검토", "review_shutdown"),
+    "warning": ("request_inspection", "점검 요청", "request_inspection"),
+    "attention": ("request_inspection", "점검 요청", "request_inspection"),
+    "normal": ("continue_monitoring", "모니터링 지속", "continue_monitoring"),
+    "data_quality_hold": ("hold_for_data_check", "데이터 확인 후 판단", "hold_for_data_check"),
 }
 _UNIT_FALLBACKS = {
     "voltage_raw": "raw",
@@ -69,8 +75,16 @@ def build_product_result_evidence_payload(
     source_fields = _factor_source_fields(artifact)
     source_fields.extend(_sensor_source_fields(sensor_evidence))
     component_hypotheses = _component_hypotheses(artifact, sensor_evidence)
-    recommended_actions = _recommended_actions(artifact, component_hypotheses)
+    criticality = (fixture or {}).get("equipment", {}).get("criticality")
+    recommended_actions, recommendation_gap = _recommended_actions(
+        artifact,
+        component_hypotheses,
+        criticality=criticality,
+        source_fields=source_fields,
+    )
     evidence_gaps = _evidence_gaps(artifact, maintenance_context, prediction)
+    if recommendation_gap is not None:
+        evidence_gaps.append(recommendation_gap)
 
     payload: dict[str, Any] = {
         "sensor_evidence": sensor_evidence,
@@ -221,14 +235,42 @@ def _component_hypotheses(artifact: dict[str, Any], sensor_evidence: dict[str, A
     return list(hypotheses.values())
 
 
-def _recommended_actions(artifact: dict[str, Any], hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _recommended_actions(
+    artifact: dict[str, Any],
+    hypotheses: list[dict[str, Any]],
+    *,
+    source_fields: list[dict[str, str]],
+    criticality: str | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
     status = str(artifact.get("status_grade") or "attention")
-    action_id, label, kind = _ACTION_BY_STATUS.get(status, _ACTION_BY_STATUS["attention"])
+    source_field_ids = {field["field_id"] for field in source_fields}
+    if status == "data_quality_hold":
+        action_id, label, kind = _ACTION_BY_STATUS["data_quality_hold"]
+        return (
+            [
+                {
+                    "action_id": action_id,
+                    "label": label,
+                    "kind": kind,
+                    "requires_human_approval": True,
+                    "basis": [],
+                }
+            ],
+            None,
+        )
+    resolved = resolve_status_criticality_action(status, criticality)
+    if resolved is not None:
+        action_id, label, kind = resolved
+    else:
+        return [], _recommendation_gap("criticality_missing_or_unresolved")
     basis: list[str] = []
     for hypothesis in hypotheses[:2]:
         basis.extend(hypothesis.get("basis", []))
     if not basis:
         basis = [field["evidence_field_id"] for field in artifact.get("top_factors", [])[:1] if field.get("evidence_field_id")]
+    unresolved_basis = sorted(set(basis) - source_field_ids)
+    if not basis or unresolved_basis:
+        return [], _recommendation_gap("basis_missing_or_unresolved")
     return [
         {
             "action_id": action_id,
@@ -237,7 +279,18 @@ def _recommended_actions(artifact: dict[str, Any], hypotheses: list[dict[str, An
             "requires_human_approval": True,
             "basis": list(dict.fromkeys(basis)),
         }
-    ]
+    ], None
+
+
+def _recommendation_gap(reason: str) -> dict[str, str]:
+    return {
+        "gap_id": "gap.recommended_actions.unavailable",
+        "field": "evidence_payload.recommended_actions",
+        "reason": reason,
+        "required_source": "recommendation_policy_input",
+        "owner_domain": "diagnosis",
+        "display_policy": "show_limitation",
+    }
 
 
 def _factor_source_fields(artifact: dict[str, Any]) -> list[dict[str, str]]:

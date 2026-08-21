@@ -65,6 +65,11 @@ class DataQuality(StrictModel):
     issues: list[str] = Field(default_factory=list)
 
 
+class ResultWriterProvenance(StrictModel):
+    dataset_version_id: str = Field(min_length=1, max_length=160)
+    materialization_strategy: Literal["runtime_generated", "imported_precomputed"]
+
+
 class PredictionResult(StrictModel):
     """Diagnosis-owned Product Result boundary consumed by downstream domains."""
 
@@ -111,4 +116,5 @@ __all__ = [
     "PredictionSubject",
     "PredictionValue",
     "RecommendedAction",
+    "ResultWriterProvenance",
 ]

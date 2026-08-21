@@ -4,8 +4,11 @@ import ast
 import inspect
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from app.dataset.dataset_domain import ObservationDatasetQuery
-from app.diagnosis.diagnosis_schema import PredictionResult
+from app.diagnosis.diagnosis_schema import PredictionResult, ResultWriterProvenance
 from app.diagnosis.ports import (
     DiagnosisRuntimeRepositoryPort,
     EquipmentSnapshotQueryPort,
@@ -68,6 +71,26 @@ def test_diagnosis_public_contracts_are_importable() -> None:
     assert DiagnosisRuntimeRepositoryPort
     assert EquipmentSnapshotQueryPort is EquipmentCurrentStateQuery
     assert ObservationDatasetQueryPort is ObservationDatasetQuery
+
+
+def test_result_writer_provenance_declares_exactly_the_two_allowed_materialization_strategies() -> None:
+    """R14: writer strategy is preserved as provenance, one strategy per contract instance.
+
+    ``ResultWriterProvenance`` is the Diagnosis-side declaration of whether a
+    Product Result was produced by the live runtime or replayed from an
+    imported precomputed source; ``app.maintenance.MaterializationStrategy``
+    enforces the same two values on the Maintenance/materialization side
+    (see ``validate_single_dataset_writer``). This test locks the schema
+    contract in place since nothing else in this package exercises it yet.
+    """
+    runtime = ResultWriterProvenance(dataset_version_id="dsv-1", materialization_strategy="runtime_generated")
+    imported = ResultWriterProvenance(dataset_version_id="dsv-1", materialization_strategy="imported_precomputed")
+
+    assert runtime.materialization_strategy == "runtime_generated"
+    assert imported.materialization_strategy == "imported_precomputed"
+
+    with pytest.raises(ValidationError):
+        ResultWriterProvenance(dataset_version_id="dsv-1", materialization_strategy="unknown_strategy")
 
 
 def test_prediction_result_repository_port_matches_migrated_adapter_surface() -> None:
