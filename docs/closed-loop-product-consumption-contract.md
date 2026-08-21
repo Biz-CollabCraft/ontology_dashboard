@@ -326,6 +326,7 @@ mutation authorization/state validation은 replay 여부와 무관하게 Backend
 - `equipment_id`
 - `recommendation_id`
 - `work_order_id`
+- `work_type` (`inspection` 또는 `maintenance`; WorkOrder와 연결되지 않은 activity는 null 가능)
 - `maintenance_action_id`
 - `maintenance_event_id`
 - `actor_user_id`
@@ -337,6 +338,26 @@ mutation authorization/state validation은 replay 여부와 무관하게 Backend
 모든 activity에서 모든 ID를 강제하지 않는다. 예를 들어 Recommendation 판단에는
 `maintenance_event_id`가 없어도 된다. 대신 존재하는 ID는 같은 Event/Equipment lineage를 깨뜨리면 안
 된다.
+
+### 7.1 Maintenance canonical command/read 위치
+
+2단계 점검→정비 판단 경계는 다음 project/workspace-scoped API를 사용한다.
+
+| Method | Path | Actor |
+|---|---|---|
+| `POST` | `/api/projects/{project_id}/workspaces/{workspace_id}/maintenance/inspection-work-orders` | `process_manager` |
+| `POST` | `.../inspection-work-orders/{work_order_id}/approve` | `process_manager` |
+| `POST` | `.../inspection-work-orders/{work_order_id}/start` | `process_engineer` |
+| `POST` | `.../inspection-work-orders/{work_order_id}/complete` | `process_engineer` |
+| `POST` | `.../inspection-results/{inspection_result_id}/recommendations` | `process_manager` |
+| `POST` | `.../recommendations/{recommendation_id}/decisions` | `process_manager` |
+| `GET` | `.../events/{event_id}/lineage` | `events.read` principal |
+
+모든 mutation은 `Idempotency-Key`를 요구한다. canonical lineage read는 producer Product
+Result/Evidence → inspection WorkOrder/Result → Operations manual recommendation → 두 번째
+RecommendationDecision → maintenance WorkOrder와 `activities[].work_type`을 한 응답에서 보존한다.
+Inspection 완료 응답의 `maintenance_event_id`는 null이며 별도 추천 승인 전에는 maintenance
+WorkOrder를 만들지 않는다.
 
 ## 8. Product aggregation / identity 계약
 

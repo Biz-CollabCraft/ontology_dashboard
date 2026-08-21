@@ -4,7 +4,13 @@ from pathlib import Path
 from typing import Any, Protocol, Sequence
 
 from .integration import ToolReplacementStatePatch
-from .maintenance_schema import MaintenanceEvent, WorkOrder
+from .maintenance_schema import (
+    InspectionResult,
+    MaintenanceEvent,
+    OperationalRecommendedAction,
+    RecommendationDecision,
+    WorkOrder,
+)
 
 
 class DiagnosisResultQueryPort(Protocol):
@@ -31,6 +37,29 @@ class MaintenanceReadPort(Protocol):
     def maintenance_events(self, **scope: Any) -> Sequence[MaintenanceEvent]: ...
 
 
+class MaintenanceCommandRepositoryPort(Protocol):
+    """Persistence boundary used by the canonical Maintenance application service."""
+
+    def create_inspection_work_order(self, **values: Any) -> dict[str, Any]: ...
+    def get_work_order(self, **identity: Any) -> WorkOrder | None: ...
+    def transition_inspection_work_order(self, **values: Any) -> dict[str, Any]: ...
+    def complete_inspection(self, **values: Any) -> dict[str, Any]: ...
+    def get_inspection_result(self, **identity: Any) -> InspectionResult | None: ...
+    def create_manual_recommendation(self, **values: Any) -> dict[str, Any]: ...
+    def get_recommendation(
+        self, **identity: Any
+    ) -> OperationalRecommendedAction | None: ...
+    def decide_recommendation(
+        self,
+        *,
+        recommendation: OperationalRecommendedAction,
+        decision: RecommendationDecision,
+        work_order: WorkOrder | None,
+        **values: Any,
+    ) -> dict[str, Any]: ...
+    def event_lineage(self, **identity: Any) -> dict[str, Any]: ...
+
+
 class LiveMaintenanceOverlayPort(Protocol):
     def active_asset_ids(self, *, stream_root: str | Path) -> set[str]: ...
     def process_available(self, batch: dict[str, Any]) -> list[dict[str, Any]]: ...
@@ -40,5 +69,6 @@ __all__ = [
     "DiagnosisResultQueryPort",
     "EquipmentStatePatchPort",
     "MaintenanceReadPort",
+    "MaintenanceCommandRepositoryPort",
     "LiveMaintenanceOverlayPort",
 ]

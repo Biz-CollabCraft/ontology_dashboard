@@ -772,9 +772,13 @@ class PredictiveMaintenanceRuntimeService:
             model_version = str(row["model_version"])
             schema_version = str(row["schema_version"])
             source_checksum = str(row["source_sha256"])
-            recommendation = PolicyRecommendation(
-                action=str(recommendation_raw["action"]),
-                priority=str(recommendation_raw["priority"]),
+            recommendation = (
+                PolicyRecommendation(
+                    action=str(recommendation_raw["action"]),
+                    priority=str(recommendation_raw["priority"]),
+                )
+                if recommendation_raw
+                else None
             )
             canonical_mutated = provenance.get("canonical_source_mutated")
             if canonical_mutated is not False:

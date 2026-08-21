@@ -18,6 +18,7 @@
   "assessment": {
     "status": "critical",
     "recommended_decision": "review_shutdown",
+    "operational_decision_kind": "review_shutdown",
     "confidence": "high",
     "failure_probability": 0.92,
     "threshold": 0.65,

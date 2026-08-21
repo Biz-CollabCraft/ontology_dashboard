@@ -31,7 +31,7 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 
 현재 `contracts/`의 관리 상태는 다음과 같다.
 
-- `contracts/schemas/`: 17개 공유 JSON Schema 물리 이동 및 정본 관리 완료
+- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가 계약을 포함한 19개 공유 JSON Schema 관리
 - `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`, `backend-contract-ci.yml`), `scripts/`, `tests/` 참조 전환 완료
 - Schema 내용 및 `$id` 식별자 무변경 보존
 - `openapi/`, `examples/`, `test-vectors/`: 향후 구체적 요구사항 확정 시 순차적으로 이식 예정

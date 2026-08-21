@@ -47,6 +47,8 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0029_governed_event_automation",
             "0030_closed_loop_operations",
             "0031_recommendation_materialization_strategy",
+            "0032_operations_manual_recommendation",
+            "0033_inspection_results",
         ]
     assert second == []
 
@@ -69,6 +71,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         "closed_loop_equipment_state",
         "closed_loop_activities",
         "closed_loop_idempotency_records",
+        "closed_loop_inspection_results",
     } <= tables
     with sqlite3.connect(database) as connection:
         activity_columns = {
@@ -87,6 +90,20 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         "created_at",
     } <= activity_columns
     with sqlite3.connect(database) as connection:
+        recommendation_columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(closed_loop_recommendations)"
+            )
+        }
+    assert {
+        "source_inspection_work_order_id",
+        "source_inspection_reference",
+        "action_code",
+        "authored_by",
+        "authored_at",
+    } <= recommendation_columns
+    with sqlite3.connect(database) as connection:
         maintenance_action_columns = {
             row[1]
             for row in connection.execute("PRAGMA table_info(closed_loop_maintenance_actions)")
@@ -97,6 +114,117 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         }
     assert "restart_at" in maintenance_action_columns
     assert "restart_at" not in maintenance_event_columns
+
+
+def test_operations_manual_migration_preserves_existing_recommendation_lineage(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "migration-upgrade.db"
+    migration_root = (
+        ROOT / "systems" / "backend" / "migrations" / "sqlite"
+    )
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            (migration_root / "0030_closed_loop_operations.sql").read_text(
+                encoding="utf-8"
+            )
+        )
+        connection.executescript(
+            (
+                migration_root
+                / "0031_recommendation_materialization_strategy.sql"
+            ).read_text(encoding="utf-8")
+        )
+        connection.execute(
+            """
+            INSERT INTO closed_loop_recommendations (
+                recommendation_id,organization_id,project_id,workspace_id,event_id,
+                asset_id,equipment_id,recommendation_origin,status,
+                materialization_strategy,source_action_id,source_product_result_id,
+                source_evidence_id,source_schema_version,source_policy_version,
+                label,kind,requires_human_approval,basis_json,created_at,updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "recommendation-001",
+                "org-1",
+                "project-1",
+                "workspace-1",
+                "event-001",
+                "CNC-001",
+                "CNC-001",
+                "product_result_projection",
+                "accepted",
+                "runtime_generated",
+                "source-action-001",
+                "result-001",
+                "evidence-001",
+                "product-result-v1",
+                "recommendation-policy-v1",
+                "점검 요청",
+                "request_inspection",
+                1,
+                '["evidence-001"]',
+                "2026-08-21T09:00:00+00:00",
+                "2026-08-21T09:00:00+00:00",
+            ),
+        )
+        connection.execute(
+            """
+                INSERT INTO closed_loop_recommendation_decisions (
+                    decision_id,organization_id,project_id,workspace_id,event_id,
+                    recommendation_id,disposition,actor_id,note,decided_at,created_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                "decision-001",
+                "org-1",
+                "project-1",
+                "workspace-1",
+                "event-001",
+                "recommendation-001",
+                "accept",
+                "manager-001",
+                "inspection approved",
+                "2026-08-21T09:05:00+00:00",
+                "2026-08-21T09:05:00+00:00",
+            ),
+        )
+        connection.commit()
+        connection.executescript(
+            (migration_root / "0032_operations_manual_recommendation.sql").read_text(
+                encoding="utf-8"
+            )
+        )
+        connection.execute("PRAGMA foreign_keys=ON")
+
+        recommendation = connection.execute(
+            """
+            SELECT recommendation_origin,materialization_strategy,
+                   source_inspection_work_order_id,action_code
+              FROM closed_loop_recommendations
+             WHERE recommendation_id='recommendation-001'
+            """
+        ).fetchone()
+        decision = connection.execute(
+            """
+            SELECT recommendation_id
+              FROM closed_loop_recommendation_decisions
+             WHERE decision_id='decision-001'
+            """
+        ).fetchone()
+        foreign_key_violations = connection.execute(
+            "PRAGMA foreign_key_check"
+        ).fetchall()
+
+    assert recommendation == (
+        "product_result_projection",
+        "runtime_generated",
+        None,
+        None,
+    )
+    assert decision == ("recommendation-001",)
+    assert foreign_key_violations == []
 
 
 def test_ontology_adapter_materializes_persistent_objects_and_links(tmp_path: Path) -> None:

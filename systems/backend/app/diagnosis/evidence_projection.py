@@ -13,6 +13,12 @@ from typing import Any
 HIDDEN_KEYS = {"evaluation_truth", "hidden_truth"}
 EVENT_EVIDENCE_SCHEMA_VERSION = "event-evidence-projection-v1"
 EVENT_EVIDENCE_CONTRACT_TYPE = "event_evidence_projection"
+OPERATIONAL_DECISION_KINDS = {
+    "continue_monitoring",
+    "request_inspection",
+    "review_shutdown",
+    "hold_for_data_check",
+}
 
 DECISION_BY_ACTION = {
     "continue_monitoring": "continue_monitoring",
@@ -35,6 +41,7 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
     event_id = f"EVT-{clean_artifact['artifact_id']}"
     threshold = clean_artifact.get("threshold")
     recommended_decision = _recommended_decision(clean_artifact)
+    operational_decision_kind = _operational_decision_kind(payload)
     projection = {
         "schema_version": EVENT_EVIDENCE_SCHEMA_VERSION,
         "contract_type": EVENT_EVIDENCE_CONTRACT_TYPE,
@@ -55,6 +62,7 @@ def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any
         "assessment": {
             "status": clean_artifact.get("status_grade"),
             "recommended_decision": recommended_decision,
+            "operational_decision_kind": operational_decision_kind,
             "confidence": _confidence_label(clean_artifact.get("confidence_label") or clean_artifact.get("confidence")),
             "confidence_value": clean_artifact.get("confidence"),
             "failure_probability": clean_artifact.get("failure_probability"),
@@ -222,6 +230,34 @@ def _recommended_decision(artifact: dict[str, Any]) -> str:
     if status == "data_quality_hold":
         return "hold_for_data_check"
     return "continue_monitoring"
+
+
+def _operational_decision_kind(payload: dict[str, Any]) -> str | None:
+    """Return only the Diagnosis-owned machine decision projection.
+
+    The legacy ``recommended_decision`` remains a display compatibility field.
+    Maintenance must never derive authorization from that field, the root
+    ``recommended_action``, status grade, or a producer recommendation kind.
+    """
+
+    actions = payload.get("recommended_actions") or []
+    if not actions:
+        return None
+    if len(actions) != 1:
+        raise ValueError(
+            "Event Evidence Projection requires exactly one operational recommendation"
+        )
+    action = actions[0]
+    if not isinstance(action, dict):
+        raise ValueError("Event Evidence Projection recommendation must be an object")
+    # ``action_id`` is the Diagnosis policy key. ``kind`` remains producer-owned
+    # display/domain metadata and is deliberately not interpreted here.
+    decision = action.get("action_id")
+    if decision not in OPERATIONAL_DECISION_KINDS:
+        raise ValueError(
+            "Diagnosis policy action_id is not an operational decision"
+        )
+    return str(decision)
 
 
 def _confidence_label(value: Any) -> str:

@@ -13,6 +13,8 @@
 - `export.schema.json`: organization/project/workspace 범위의 export request, snapshot과 checkpoint 계약
 - `dataset-manifest.schema.json`: Project별 dataset source, checksum, schema alias와 quality rule 계약
 - `prediction-result.schema.json`: Prediction Module과 Dashboard 사이의 Evidence·Model·Action 포함 결과 계약
+- `product-result-artifact.schema.json`: Diagnosis Product Result와 추천 미생성(null/empty) 정합성 계약
+- `event-evidence-projection.schema.json`: Product Result에서 파생한 Event Evidence와 별도 운영 Decision field 계약
 - `maintenance-replay-event.schema.json`: Closed-loop가 발행하는 정비 시작·완료·Overlay 재개 요청 이벤트 계약
 - `preventive-what-if.schema.json`: 합성 예방조치 Producer의 위험 상승·선행 지표·조치 전후 효과·한계 계약
 

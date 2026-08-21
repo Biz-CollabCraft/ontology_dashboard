@@ -11,14 +11,12 @@ from app.maintenance import (
     EquipmentIdentity,
     IdempotencyConflict,
     InvalidTransition,
-    OperationalRecommendedAction,
-    ProducerRecommendation,
     RecommendationDecision,
     RecommendationDisposition,
     WorkOrderStatus,
     apply_recommendation_decision,
+    create_operations_manual_recommendation,
     create_work_order_for_recommendation,
-    materialize_recommended_action,
     plan_maintenance_action,
     transition_work_order,
 )
@@ -47,22 +45,18 @@ def _recommendation_setup(repository: MaintenanceRepository):
         equipment_id="CNC-S02-L04-03",
         asset_type="cnc_machine",
     )
-    producer = ProducerRecommendation(
-        source_action_id="SOURCE-ACTION-001",
+    recommendation = create_operations_manual_recommendation(
+        identity=identity,
+        event_id="RISK-EVENT-001",
         source_product_result_id="RESULT-001",
         source_evidence_id="EVIDENCE-001",
         source_schema_version="result-artifact-v1.0",
-        source_policy_version="recommendation-policy-v1",
-        label="공구 교체",
-        kind="TOOL_REPLACEMENT",
-        requires_human_approval=True,
+        source_inspection_work_order_id="INSPECTION-WORK-ORDER-001",
+        source_inspection_reference="INSPECTION-RESULT-001",
+        authored_by="engineer-001",
+        authored_at=datetime(2026, 8, 18, 0, 58, tzinfo=timezone.utc),
         basis=("tool_wear_min threshold exceeded",),
-    )
-    recommendation = materialize_recommended_action(
-        producer,
         recommendation_id="RECOMMENDATION-001",
-        identity=identity,
-        event_id="RISK-EVENT-001",
     )
     repository.save_recommendation(
         recommendation,
@@ -88,8 +82,8 @@ def _recommendation_setup(repository: MaintenanceRepository):
         idempotency_key="http-recommendation-accept-001",
     )
     cause = MaintenanceCause(
-        source_product_result_id=producer.source_product_result_id,
-        source_evidence_id=producer.source_evidence_id,
+        source_product_result_id=recommendation.source_product_result_id,
+        source_evidence_id=recommendation.source_evidence_id,
         decision_id=decision.decision_id,
     )
     return recommendation, accepted, decision, requested_work_order, cause

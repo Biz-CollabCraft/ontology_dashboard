@@ -30,6 +30,7 @@ from app.maintenance import (
     authorize_inspection_work_order,
     authorize_maintenance_work_order,
     create_inspection_work_order,
+    create_operations_manual_recommendation,
     create_work_order_for_recommendation,
     materialize_recommended_action,
     plan_maintenance_action,
@@ -76,6 +77,32 @@ def proposed_recommendation():
         identity=equipment_identity(),
         event_id="event-001",
     )
+
+
+def proposed_manual_recommendation():
+    return create_operations_manual_recommendation(
+        identity=equipment_identity(),
+        event_id="event-001",
+        source_product_result_id="result-cnc-001",
+        source_evidence_id="evidence-cnc-001",
+        source_schema_version="product-result-artifact-v1",
+        source_inspection_work_order_id="inspection-work-order-001",
+        source_inspection_reference="inspection-result-001",
+        authored_by="engineer-001",
+        authored_at=datetime.now(timezone.utc),
+        basis=("inspection-result-001:tool-replacement-required",),
+        recommendation_id="recommendation-001",
+    )
+
+
+def inspection_source_lineage() -> dict[str, str]:
+    return {
+        "source_product_result_id": "result-cnc-001",
+        "source_evidence_id": "evidence-cnc-001",
+        "source_action_id": "action-inspect-tool",
+        "source_schema_version": "product-result-artifact-v1",
+        "source_policy_version": "pdm-recommendation-policy-v1",
+    }
 
 
 def recommendation_decision(
@@ -230,7 +257,10 @@ def test_inspection_mapping_preserves_existing_decision_behavior() -> None:
         OperationalDecisionKind.REQUEST_INSPECTION,
         OperationalDecisionKind.REVIEW_SHUTDOWN,
     ):
-        authorization = authorize_inspection_work_order(operational_decision=decision)
+        authorization = authorize_inspection_work_order(
+            operational_decision=decision,
+            **inspection_source_lineage(),
+        )
         assert authorization.work_type is WorkOrderType.INSPECTION
         assert authorization.operational_decision is decision
 
@@ -239,7 +269,10 @@ def test_inspection_mapping_preserves_existing_decision_behavior() -> None:
         OperationalDecisionKind.HOLD_FOR_DATA_CHECK,
     ):
         with pytest.raises(ValueError, match="request_inspection or review_shutdown"):
-            authorize_inspection_work_order(operational_decision=decision)
+            authorize_inspection_work_order(
+                operational_decision=decision,
+                **inspection_source_lineage(),
+            )
 
 
 def test_authorization_model_rejects_mixed_or_incomplete_authority() -> None:
@@ -257,7 +290,18 @@ def test_authorization_model_rejects_mixed_or_incomplete_authority() -> None:
 
 
 def test_maintenance_work_requires_matching_scoped_explicit_acceptance() -> None:
-    proposed = proposed_recommendation()
+    producer_projection = proposed_recommendation()
+    producer_decision = recommendation_decision()
+    accepted_projection = apply_recommendation_decision(
+        producer_projection, producer_decision
+    )
+    with pytest.raises(ValueError, match="operations_manual recommendation"):
+        authorize_maintenance_work_order(
+            recommendation=accepted_projection,
+            decision=producer_decision,
+        )
+
+    proposed = proposed_manual_recommendation()
     decision = recommendation_decision()
     accepted = apply_recommendation_decision(proposed, decision)
 
@@ -286,7 +330,7 @@ def test_maintenance_work_requires_matching_scoped_explicit_acceptance() -> None
 
 def test_action_and_event_require_approved_completed_matching_lineage() -> None:
     identity = equipment_identity()
-    recommendation = proposed_recommendation()
+    recommendation = proposed_manual_recommendation()
     decision = recommendation_decision()
     accepted = apply_recommendation_decision(recommendation, decision)
     recommendation_order = create_work_order_for_recommendation(
@@ -371,6 +415,7 @@ def test_action_and_event_require_approved_completed_matching_lineage() -> None:
         identity=identity,
         event_id="event-001",
         operational_decision=OperationalDecisionKind.REQUEST_INSPECTION,
+        **inspection_source_lineage(),
         idempotency_key="inspection-create-001",
     )
     inspection_approved = WorkOrder.model_validate(

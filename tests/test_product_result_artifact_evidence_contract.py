@@ -75,6 +75,40 @@ def test_product_result_artifact_schema_accepts_optional_evidence_payload_contra
     assert schema_errors(artifact) == []
 
 
+def test_product_result_artifact_schema_allows_explicit_recommendation_absence() -> None:
+    artifact = producer_enriched_artifact()
+    artifact["recommended_action"] = None
+    artifact["evidence_payload"]["recommended_actions"] = []
+    artifact["evidence_payload"]["evidence_gaps"].append(
+        {
+            "gap_id": "gap.recommended_actions.unavailable",
+            "field": "evidence_payload.recommended_actions",
+            "reason": "insufficient_context",
+            "required_source": "recommendation_policy_input",
+            "owner_domain": "diagnosis",
+            "display_policy": "show_limitation",
+        }
+    )
+
+    assert schema_errors(artifact) == []
+
+
+def test_product_result_artifact_schema_rejects_recommendation_presence_mismatch() -> None:
+    missing_root = producer_enriched_artifact()
+    missing_root.pop("recommended_action")
+
+    stale_root = producer_enriched_artifact()
+    stale_root["evidence_payload"]["recommended_actions"] = []
+
+    assert any(
+        "recommended_action" in error.message for error in schema_errors(missing_root)
+    )
+    assert any(
+        "None" in error.message or "null" in error.message
+        for error in schema_errors(stale_root)
+    )
+
+
 def test_product_result_artifact_schema_rejects_payload_without_evidence_reference() -> None:
     artifact = producer_enriched_artifact()
     artifact["provenance"].pop("evidence_payload_reference")
