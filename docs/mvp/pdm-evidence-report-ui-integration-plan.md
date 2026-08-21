@@ -898,7 +898,7 @@ Status 값은 다음만 사용한다.
 | 1 | Done | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` semantic regression reference를 추가한다. | 최소 fixture set | `tests/fixtures/product_result_evidence_projection/`, `data/fixtures/GS-*.json` |
 | 2 | Done | Product Result Artifact `evidence_payload` 후보 shape를 producer-enriched Artifact regression fixture로 고정한다. | expected fixture 또는 schema candidate | `tests/fixtures/product_result_evidence_projection/producer-enriched-critical-artifact.json` |
 | 3 | Done | Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다. | canonical projection expected fixture | `tests/fixtures/product_result_evidence_projection/expected-event-evidence-projection-critical.json` |
-| 4 | Superseded | legacy `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 transition projection mapper로 구현했다. PR #92 이후 canonical 경로는 `systems/backend/app/diagnosis/evidence_projection.py`다. | historical migration-era projection mapper | `pytest -q tests/test_product_result_evidence_projection.py` |
+| 4 | Done | legacy `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 transition projection mapper로 구현했다. PR #92 이후 canonical 경로는 `systems/backend/app/diagnosis/evidence_projection.py`다. | historical migration-era projection mapper; current implementation path superseded by PR #92 | `pytest -q tests/test_product_result_evidence_projection.py` |
 | 5 | Done | Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다. | canonical + legacy regression test | `pytest -q tests/test_product_result_evidence_projection.py tests/test_system_ownership.py` |
 
 1차 PR 완료 조건은 다음과 같다.
@@ -947,7 +947,7 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 13 | Superseded | legacy `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결했다. PR #92 이후 현행 service/adapter target은 canonical `systems/backend/app/...` 경계다. | historical endpoint compatibility evidence | PR #41 `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
+| 13 | Done | legacy `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결했다. PR #92 이후 현행 service/adapter target은 canonical `systems/backend/app/...` 경계다. | historical endpoint compatibility evidence; current implementation path superseded by PR #92 | PR #41 `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
 | 14 | In Progress | runtime 생성 결과와 imported 기존 결과를 하나의 Result read model로 유지하되, 검증된 producer Evidence가 있을 때만 `_dashboard_detail`이 projection layer를 사용하도록 refactor한다. | runtime service refactor + Evidence availability boundary | PR #50 PostgreSQL replay에서 bundle payload와 runtime payload의 writer 차이 확인; 계약 전체 강등 수정 및 재검증 필요 |
 | 15 | In Progress | 저장 전략과 무관하게 동일한 legacy 기본 응답과 selector 기반 canonical 응답 shape를 유지하고, Evidence가 없으면 detail unavailable을 명시한다. | runtime/imported API regression | PostgreSQL 조건에서 PR #50 replay 3 failed, 1 passed, 1 skipped; runtime/imported 회귀 분리 필요 |
 
