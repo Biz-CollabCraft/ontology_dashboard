@@ -16,4 +16,3 @@ def test_gold_evaluation_records_recommendation_policy_and_side_effect_boundary(
     assert "engineering acceptance evidence only" in result["claim_boundary"]
     assert all(row["producer_recommendation"]["source_product_result_id"] for row in result["rows"])
     assert all(row["producer_recommendation"]["source_evidence_id"] for row in result["rows"])
-

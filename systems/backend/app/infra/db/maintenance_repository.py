@@ -200,4 +200,3 @@ class MaintenanceRepository:
             requires_human_approval=bool(row["requires_human_approval"]),
             basis=tuple(json.loads(row["basis_json"])),
         )
-

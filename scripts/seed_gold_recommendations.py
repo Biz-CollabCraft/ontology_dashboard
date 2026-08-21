@@ -16,8 +16,8 @@ from app.diagnosis.recommendation_policy import (
     RecommendationPolicyInput,
     evaluate_recommendation_policy,
 )
+from app.diagnosis.recommendation_schema import ProducerRecommendation
 from app.diagnosis.predictor import HeuristicPredictor
-from app.maintenance import ProducerRecommendation
 
 
 def _checksum(path: Path) -> str:

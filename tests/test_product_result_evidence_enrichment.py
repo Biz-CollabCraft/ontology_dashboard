@@ -175,7 +175,7 @@ def test_evidence_payload_recommended_action_is_criticality_aware_for_critical_s
     assert policy_recommendation.kind == expected_kind == action["kind"]
 
 
-def test_evidence_payload_recommended_action_falls_back_to_status_only_table_without_criticality() -> None:
+def test_evidence_payload_recommended_action_records_gap_without_criticality() -> None:
     from systems.backend.app.diagnosis.evidence_enrichment import build_product_result_evidence_payload
 
     fixture = load_fixture(ROOT / "data" / "fixtures" / "GS-004-power-overstrain-critical.json")
@@ -187,7 +187,27 @@ def test_evidence_payload_recommended_action_falls_back_to_status_only_table_wit
     payload = build_product_result_evidence_payload(artifact, fixture_without_criticality, prediction)
 
     assert artifact["status_grade"] == "critical"
-    assert payload["recommended_actions"][0]["kind"] == "review_shutdown"
+    assert payload["recommended_actions"] == []
+    assert {
+        "gap_id": "gap.recommended_actions.unavailable",
+        "field": "evidence_payload.recommended_actions",
+        "reason": "criticality_missing_or_unresolved",
+        "required_source": "recommendation_policy_input",
+        "owner_domain": "diagnosis",
+        "display_policy": "show_limitation",
+    } in payload["evidence_gaps"]
+    policy_recommendation = evaluate_recommendation_policy(
+        RecommendationPolicyInput(
+            source_product_result_id=artifact["artifact_id"],
+            source_evidence_id=artifact["provenance"]["evidence_payload_reference"]["reference"],
+            source_schema_version=artifact["schema_version"],
+            status=artifact["status_grade"],
+            equipment=fixture_without_criticality["equipment"],
+            basis=(),
+            source_fields=tuple(field["field_id"] for field in payload["source_fields"]),
+        )
+    )
+    assert policy_recommendation is None
 
 
 def test_product_result_artifact_excludes_non_numeric_observation_values_from_sensor_evidence() -> None:
@@ -411,7 +431,7 @@ def test_evidence_payload_records_gap_when_top_factors_are_unavailable() -> None
     payload = build_product_result_evidence_payload(artifact, fixture, prediction)
 
     assert payload["component_hypotheses"] == []
-    assert payload["recommended_actions"][0]["basis"] == []
+    assert payload["recommended_actions"] == []
     assert {
         "gap_id": "gap.top_factors.unavailable",
         "field": "top_factors",
@@ -420,6 +440,7 @@ def test_evidence_payload_records_gap_when_top_factors_are_unavailable() -> None
         "owner_domain": "diagnosis",
         "display_policy": "show_limitation",
     } in payload["evidence_gaps"]
+    assert any(gap["field"] == "evidence_payload.recommended_actions" for gap in payload["evidence_gaps"])
     validate_evidence_payload_invariants(payload)
 
 

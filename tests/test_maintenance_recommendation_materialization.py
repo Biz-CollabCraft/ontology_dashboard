@@ -100,6 +100,10 @@ def test_runtime_generated_recommendation_materializes_without_work_order_side_e
     }
 
 
+def test_producer_recommendation_contract_is_diagnosis_owned() -> None:
+    assert ProducerRecommendation.__module__ == "app.diagnosis.recommendation_schema"
+
+
 def test_materialization_rejects_imported_precomputed_as_operational_source() -> None:
     with pytest.raises(ValueError, match="runtime_generated"):
         materialize_recommended_action(

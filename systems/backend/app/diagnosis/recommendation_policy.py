@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.maintenance import ProducerRecommendation
+from .recommendation_schema import ProducerRecommendation
 
 POLICY_VERSION = "recommendation-policy-v1"
 

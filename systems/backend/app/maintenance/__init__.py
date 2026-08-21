@@ -4,6 +4,7 @@ from .maintenance_domain import (
     materialize_recommended_action,
     validate_single_dataset_writer,
 )
+from app.diagnosis.recommendation_schema import ProducerRecommendation
 from .maintenance_schema import (
     EquipmentIdentity,
     MaintenanceAction,
@@ -11,7 +12,6 @@ from .maintenance_schema import (
     MaterializationStrategy,
     OperationalDecisionKind,
     OperationalRecommendedAction,
-    ProducerRecommendation,
     RecommendationDecision,
     RecommendationDisposition,
     RecommendationStatus,
