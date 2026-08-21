@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlparse
 import numpy as np
 import pandas as pd
 
-from ontology_dashboard.modeling.models import (
+from model.contracts import (
     ArtifactReference,
     FeatureDatasetVersion,
     FeatureRecipe,

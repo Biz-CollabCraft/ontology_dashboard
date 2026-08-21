@@ -13,14 +13,14 @@ from jsonschema import Draft202012Validator
 
 from app.diagnosis.contracts import load_fixture
 from app.diagnosis.evidence import build_product_result_artifact
+from app.diagnosis.predictor import HeuristicPredictor
 from app.diagnosis.recommendation_policy import (
     POLICY_VERSION,
     RecommendationPolicyInput,
     evaluate_recommendation_policy,
 )
-from app.diagnosis.predictor import HeuristicPredictor
-from ontology_dashboard.contracts import LayoutRequest, ReportRequest
-from ontology_dashboard.service import ManufacturingPredictiveMaintenanceService
+from app.dependencies import build_manufacturing_service
+from app.mvp.contracts import LayoutRequest, ReportRequest
 
 FORBIDDEN_PHRASES = [
     "자동 정지 완료",
@@ -43,24 +43,33 @@ def evaluate(root: Path) -> dict[str, Any]:
     layout_validator = Draft202012Validator(load_schema(root, "ui-block.schema.json"))
     result_rows: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="factory-signal-eval-") as temp_dir:
-        service = ManufacturingPredictiveMaintenanceService(root, database_path=Path(temp_dir) / "eval.db")
+        service = build_manufacturing_service(Path(temp_dir) / "eval.db", root=root)
         for scenario in suite["scenarios"]:
             event_id = f"EVT-{scenario['id']}"
             fixture = load_fixture(root / scenario["fixture_path"])
-            artifact = build_product_result_artifact(fixture, predictor=HeuristicPredictor())
+            artifact = build_product_result_artifact(
+                fixture,
+                predictor=HeuristicPredictor(),
+            )
             evidence_payload = artifact["evidence_payload"]
             source_action = evidence_payload["recommended_actions"][0]
             producer_recommendation = evaluate_recommendation_policy(
                 RecommendationPolicyInput(
                     source_product_result_id=str(artifact["artifact_id"]),
-                    source_evidence_id=str(artifact["provenance"]["evidence_payload_reference"]["reference"]),
+                    source_evidence_id=str(
+                        artifact["provenance"]["evidence_payload_reference"]["reference"]
+                    ),
                     source_schema_version=str(artifact["schema_version"]),
                     status=str(artifact["status_grade"]),
                     equipment=dict(fixture["equipment"]),
                     basis=tuple(source_action["basis"]),
-                    source_fields=tuple(field["field_id"] for field in evidence_payload["source_fields"]),
-                    data_quality_hold=str(artifact["status_grade"]) == "data_quality_hold"
-                    or bool(artifact["data_quality_warnings"]),
+                    source_fields=tuple(
+                        field["field_id"] for field in evidence_payload["source_fields"]
+                    ),
+                    data_quality_hold=(
+                        str(artifact["status_grade"]) == "data_quality_hold"
+                        or bool(artifact["data_quality_warnings"])
+                    ),
                 )
             )
             fixture_expected = service.fixtures[event_id]["expected"]
@@ -177,7 +186,10 @@ def evaluate(root: Path) -> dict[str, Any]:
             "maintenance_actions": 0,
             "maintenance_events": 0,
         },
-        "claim_boundary": "Gold 8/8 is engineering acceptance evidence only, not field or business impact validation.",
+        "claim_boundary": (
+            "Gold 8/8 is engineering acceptance evidence only, "
+            "not field or business impact validation."
+        ),
         "evidence_without_traceable_sections": sum(
             1
             for row in result_rows

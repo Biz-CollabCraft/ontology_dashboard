@@ -1,4 +1,4 @@
-"""Canonical Maintenance value objects for recommendation materialization."""
+"""Closed-loop value objects without HTTP or persistence concerns."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class OperationalDecisionKind(StrEnum):
+    """Operational decision values shared by maintenance authorization flows."""
+
     CONTINUE_MONITORING = "continue_monitoring"
     REQUEST_INSPECTION = "request_inspection"
     REVIEW_SHUTDOWN = "review_shutdown"
@@ -24,6 +26,14 @@ class ScopedRecord(FrozenModel):
     organization_id: str = Field(min_length=1, max_length=160)
     project_id: str = Field(min_length=1, max_length=160)
     workspace_id: str = Field(min_length=1, max_length=160)
+
+
+class RiskEventStatus(StrEnum):
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
 
 
 class RecommendationStatus(StrEnum):
@@ -68,6 +78,17 @@ class MaterializationStrategy(StrEnum):
     IMPORTED_PRECOMPUTED = "imported_precomputed"
 
 
+class IdempotencyState(StrEnum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class IdempotencyOutcome(StrEnum):
+    NEW = "new"
+    REPLAY = "replay"
+
+
 class EquipmentIdentity(ScopedRecord):
     asset_id: str = Field(min_length=1, max_length=240)
     equipment_id: str = Field(min_length=1, max_length=240)
@@ -78,6 +99,10 @@ class EquipmentIdentity(ScopedRecord):
         if self.asset_id != self.equipment_id:
             raise ValueError("MVP identity requires equipment_id = asset_id")
         return self
+
+    @property
+    def stable_key(self) -> str:
+        return f"{self.organization_id}:{self.project_id}:{self.asset_id}"
 
 
 class OperationalRecommendedAction(ScopedRecord):
@@ -121,6 +146,38 @@ class RecommendationDecision(ScopedRecord):
     note: str = Field(default="", max_length=4000)
 
 
+class WorkOrderAuthorization(FrozenModel):
+    work_type: WorkOrderType
+    recommendation_id: str | None = None
+    recommendation_decision_id: str | None = None
+    recommendation_status: Literal[RecommendationStatus.ACCEPTED] | None = None
+    recommendation_disposition: Literal[RecommendationDisposition.ACCEPT] | None = None
+    operational_decision: OperationalDecisionKind | None = None
+
+    @model_validator(mode="after")
+    def require_valid_authorization_shape(self) -> WorkOrderAuthorization:
+        recommendation_fields = (
+            self.recommendation_id,
+            self.recommendation_decision_id,
+            self.recommendation_status,
+            self.recommendation_disposition,
+        )
+        if self.work_type is WorkOrderType.INSPECTION:
+            if self.operational_decision not in {
+                OperationalDecisionKind.REQUEST_INSPECTION,
+                OperationalDecisionKind.REVIEW_SHUTDOWN,
+            }:
+                raise ValueError("inspection requires request_inspection or review_shutdown")
+            if any(value is not None for value in recommendation_fields):
+                raise ValueError("inspection authorization cannot contain maintenance approval")
+            return self
+        if self.operational_decision is not None:
+            raise ValueError("maintenance authorization cannot use an operational decision")
+        if any(value is None for value in recommendation_fields):
+            raise ValueError("maintenance authorization requires an accepted recommendation decision")
+        return self
+
+
 class WorkOrder(ScopedRecord):
     work_order_id: str = Field(min_length=1, max_length=240)
     event_id: str = Field(min_length=1, max_length=240)
@@ -128,23 +185,58 @@ class WorkOrder(ScopedRecord):
     equipment_id: str = Field(min_length=1, max_length=240)
     work_type: WorkOrderType
     status: WorkOrderStatus = WorkOrderStatus.REQUESTED
+    idempotency_key: str = Field(min_length=8, max_length=200)
+    authorization: WorkOrderAuthorization
+
+    @model_validator(mode="after")
+    def require_matching_authorization(self) -> WorkOrder:
+        if self.authorization.work_type != self.work_type:
+            raise ValueError("work order type must match its authorization")
+        if self.asset_id != self.equipment_id:
+            raise ValueError("MVP work order requires equipment_id = asset_id")
+        return self
 
 
 class MaintenanceAction(ScopedRecord):
     maintenance_action_id: str = Field(min_length=1, max_length=240)
     work_order_id: str = Field(min_length=1, max_length=240)
     event_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    equipment_id: str = Field(min_length=1, max_length=240)
     recommendation_id: str = Field(min_length=1, max_length=240)
     recommendation_decision_id: str = Field(min_length=1, max_length=240)
     status: MaintenanceActionStatus = MaintenanceActionStatus.PLANNED
+    idempotency_key: str = Field(min_length=8, max_length=200)
+
+    @model_validator(mode="after")
+    def require_mvp_identity(self) -> MaintenanceAction:
+        if self.asset_id != self.equipment_id:
+            raise ValueError("MVP maintenance action requires equipment_id = asset_id")
+        return self
 
 
 class MaintenanceEvent(ScopedRecord):
+    """Immutable fact created only after maintenance work is completed."""
+
     maintenance_event_id: str = Field(min_length=1, max_length=240)
     maintenance_action_id: str = Field(min_length=1, max_length=240)
     work_order_id: str = Field(min_length=1, max_length=240)
     event_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    equipment_id: str = Field(min_length=1, max_length=240)
     recommendation_id: str = Field(min_length=1, max_length=240)
     recommendation_decision_id: str = Field(min_length=1, max_length=240)
     completed_at: datetime
     outcome: str = Field(min_length=1, max_length=4000)
+
+    @model_validator(mode="after")
+    def require_mvp_identity(self) -> MaintenanceEvent:
+        if self.asset_id != self.equipment_id:
+            raise ValueError("MVP maintenance event requires equipment_id = asset_id")
+        return self
+
+
+class IdempotencyRecord(FrozenModel):
+    idempotency_key: str = Field(min_length=8, max_length=200)
+    request_fingerprint: str = Field(min_length=1, max_length=256)
+    state: IdempotencyState

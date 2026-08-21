@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.identity import PrincipalContext, ROLE_DEFINITIONS, WorkspaceScope
+from app.identity.contracts import PrincipalContext, ROLE_DEFINITIONS, WorkspaceScope
 
 from .project_domain import ProjectAuditPort, ProjectId
 from .project_exception import ProjectError

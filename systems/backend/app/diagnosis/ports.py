@@ -38,6 +38,18 @@ class DiagnosisRuntimeRepositoryPort(Protocol):
     def update_session(self, **kwargs: Any) -> dict[str, Any]: ...
 
 
+class ContextProvider(Protocol):
+    """Maintenance-context boundary used while building diagnosis evidence."""
+
+    provider_name: str
+
+    def get_context(
+        self,
+        equipment_id: str,
+        failure_type: str,
+    ) -> dict[str, Any] | None: ...
+
+
 class PredictionResultRepositoryPort(Protocol):
     """Persistence contract matching the migrated prediction repository API.
 
@@ -64,6 +76,10 @@ class PredictionResultRepositoryPort(Protocol):
     ) -> Sequence[dict[str, Any]]: ...
 
 
+class LiveDiagnosisApplicationPort(Protocol):
+    def materialize_live_results(self, batch: dict[str, Any]) -> dict[str, Any]: ...
+
+
 # Compatibility names retained for Diagnosis consumers, but the contracts are
 # owned by the provider domains. Re-exporting the canonical public protocols
 # prevents the same Dataset/Equipment boundary from drifting into two shapes.
@@ -73,7 +89,9 @@ ObservationDatasetQueryPort = ObservationDatasetQuery
 
 __all__ = [
     "ALLOWED_DERIVED_MEASURES",
+    "ContextProvider",
     "DiagnosisRuntimeRepositoryPort",
+    "LiveDiagnosisApplicationPort",
     "EquipmentSnapshotQueryPort",
     "ObservationDatasetQueryPort",
     "PredictionResultRepositoryPort",

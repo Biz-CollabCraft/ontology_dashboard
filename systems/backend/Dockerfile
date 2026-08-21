@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-ARG GEN_DATA_SOURCE_REVISION=172f0dfd7fa5307273dec9e4f281f247d5a1d7cc
+ARG GEN_DATA_SOURCE_REVISION=c3755260ea3b0b023a519f934d259ad9c0e211d8
 
 WORKDIR /build
 
@@ -89,7 +89,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ONTOLOGY_DASHBOARD_PROJECT_ROOT=/app \
     ONTOLOGY_DASHBOARD_MIGRATION_ROOT=/app/systems/backend/migrations
 
-RUN groupadd --gid 10001 ontology \
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 ontology \
     && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin ontology
 
 COPY --from=builder /install /usr/local
@@ -113,4 +116,4 @@ USER 10001
 EXPOSE 8000
 
 STOPSIGNAL SIGTERM
-CMD ["python", "-m", "uvicorn", "ontology_dashboard.app:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]

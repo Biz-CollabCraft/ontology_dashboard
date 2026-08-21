@@ -231,14 +231,12 @@ def project_checks(project_root: Path) -> list[Check]:
         "contracts/schemas/dataset-bundle-manifest.schema.json",
         "contracts/schemas/prediction-result.schema.json",
         "contracts/schemas/project3-graph-projection.schema.json",
-        "systems/backend/ontology_dashboard/predictive_maintenance_runtime/service.py",
-        "systems/backend/app/diagnosis/diagnosis_router.py",
+        "systems/backend/app/diagnosis/runtime_service.py",
+        "systems/backend/app/diagnosis/runtime_router.py",
         "systems/frontend/src/features/predictive-maintenance/PredictiveMaintenanceReplayPanel.tsx",
-        "tests/test_predictive_maintenance_v3_compatibility.py",
         "tests/test_predictive_maintenance_projection.py",
-        "tests/test_predictive_maintenance_graph_projection.py",
         "tests/test_predictive_maintenance_result_replay.py",
-        "tests/test_predictive_maintenance_visualization_planner.py",
+        "tests/test_canonical_runtime_smoke.py",
     ]
     checks.extend(
         required_file_check(f"project.file.{relative}", project_root / relative)

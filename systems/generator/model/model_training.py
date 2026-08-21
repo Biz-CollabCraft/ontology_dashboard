@@ -435,7 +435,7 @@ def train_all(
                     }
                 },
                 compatibility={
-                    "runtime": "ontology_dashboard.systems.backend.diagnosis",
+                    "runtime": "app.diagnosis",
                     "feature_executor_version": "pdm-feature-executor-v1",
                     "prediction_task": "binary_failure_within_horizon",
                     "python": ">=3.11",

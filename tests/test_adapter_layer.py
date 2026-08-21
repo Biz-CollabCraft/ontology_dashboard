@@ -3,47 +3,20 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from openpyxl import Workbook
 from pydantic import ValidationError
 from jsonschema import Draft202012Validator
 
-from app.dataset.ingestion import DatasetManifest, FileAdapter
-from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
+from app.dataset.ingestion.file_adapter import FileAdapter
+from app.dataset.ingestion.ingestion_schema import DatasetManifest
 from app.diagnosis.diagnosis_schema import PredictionResult
+from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.prediction_result_repository import PredictionResultRepository
-from app.identity import IdentityService
+from app.infra.db.project_repository import SQLiteProjectContextResolver
+from app.infra.db.migrations import migrate
 from identity_test_support import build_identity_service
-from ontology_dashboard.migrations import migrate
-
-
-class _StaticProjectContextResolver:
-    def __init__(self, scopes: dict[str, tuple[str, str]]) -> None:
-        self.scopes = scopes
-
-    def resolve(
-        self,
-        workspace_id: str,
-        *,
-        expected_organization_id: str | None = None,
-        expected_project_id: str | None = None,
-        connection=None,
-    ):
-        scope = self.scopes.get(workspace_id)
-        if scope is None:
-            raise ValueError(f"workspace {workspace_id!r} is not assigned to an accessible Project")
-        organization_id, project_id = scope
-        if expected_organization_id and organization_id != expected_organization_id:
-            raise ValueError("workspace organization scope does not match the request context")
-        if expected_project_id and project_id != expected_project_id:
-            raise ValueError("workspace project scope does not match the request context")
-        return SimpleNamespace(
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-        )
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -98,6 +71,12 @@ def adapter_database(tmp_path: Path) -> Path:
     return database
 
 
+def file_adapter(database: Path, *, allowed_roots: list[Path]) -> FileAdapter:
+    repository = DatasetIngestionRepository(database)
+    repository.project_context = SQLiteProjectContextResolver(database)
+    return FileAdapter(allowed_roots=allowed_roots, repository=repository)
+
+
 def test_azure_file_adapter_quarantines_invalid_rows_and_recalculates_metrics(
     adapter_database: Path,
     tmp_path: Path,
@@ -117,10 +96,7 @@ def test_azure_file_adapter_quarantines_invalid_rows_and_recalculates_metrics(
         workspace_id="azure-fleet-maintenance",
         required_fields=["datetime", "machineID"],
     )
-    result = FileAdapter(
-        allowed_roots=[tmp_path],
-        repository=DatasetIngestionRepository(adapter_database),
-    ).ingest(manifest)
+    result = file_adapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
 
     assert result.status == "completed_with_quarantine"
     assert result.source_record_count == 3
@@ -153,10 +129,7 @@ def test_metropt_adapter_validates_second_project_abstraction(
         workspace_id="metropt-compressor-monitoring",
         required_fields=["timestamp", "TP2"],
     )
-    result = FileAdapter(
-        allowed_roots=[tmp_path],
-        repository=DatasetIngestionRepository(adapter_database),
-    ).ingest(manifest)
+    result = file_adapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
 
     assert result.status == "completed"
     assert result.accepted_record_count == 2
@@ -223,9 +196,7 @@ def test_prediction_contract_requires_evidence_and_project_scope(adapter_databas
         workspace_id="azure-fleet-maintenance",
     )
     result = PredictionResult.model_validate(payload)
-    context = _StaticProjectContextResolver(
-        {"azure-fleet-maintenance": ("org-ontology-demo", "azure-fleet-maintenance-project")}
-    )
+    context = SQLiteProjectContextResolver(adapter_database)
     repository = PredictionResultRepository(adapter_database, project_context=context)
     saved = repository.save(result)
     assert saved["project_id"] == "azure-fleet-maintenance-project"
@@ -275,9 +246,9 @@ def test_checked_in_adapter_manifests_are_checksum_reproducible(
     manifest = DatasetManifest.model_validate(
         json.loads(manifest_path.read_text(encoding="utf-8"))
     )
-    result = FileAdapter(
+    result = file_adapter(
+        adapter_database,
         allowed_roots=[ROOT / "data" / "fixtures"],
-        repository=DatasetIngestionRepository(adapter_database),
     ).ingest(manifest)
     assert result.adapter_code == expected_adapter
     assert result.accepted_record_count == expected_count
@@ -301,10 +272,7 @@ def test_file_adapter_rejects_sources_outside_allowlisted_roots(
         required_fields=["datetime", "machineID"],
     )
     with pytest.raises(ValueError, match="outside the configured ingestion roots"):
-        FileAdapter(
-            allowed_roots=[allowed],
-            repository=DatasetIngestionRepository(adapter_database),
-        ).ingest(manifest)
+        file_adapter(adapter_database, allowed_roots=[allowed]).ingest(manifest)
 
 
 def test_governed_tabular_adapter_honors_approved_csv_delimiter(
@@ -354,10 +322,7 @@ def test_governed_tabular_adapter_honors_approved_csv_delimiter(
             ],
         }
     )
-    result = FileAdapter(
-        allowed_roots=[tmp_path],
-        repository=DatasetIngestionRepository(adapter_database),
-    ).ingest(manifest)
+    result = file_adapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
     assert result.status == "completed"
     assert result.accepted_record_count == 2
     assert result.accepted_records[0]["equipment_id"] == "M-1"
@@ -416,10 +381,7 @@ def test_governed_tabular_adapter_ingests_selected_xlsx_sheet(
             ],
         }
     )
-    result = FileAdapter(
-        allowed_roots=[tmp_path],
-        repository=DatasetIngestionRepository(adapter_database),
-    ).ingest(manifest)
+    result = file_adapter(adapter_database, allowed_roots=[tmp_path]).ingest(manifest)
     assert result.status == "completed"
     assert result.accepted_record_count == 2
     assert result.accepted_records[1]["equipment_id"] == "M-2"

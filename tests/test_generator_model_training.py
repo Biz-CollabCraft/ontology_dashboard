@@ -304,7 +304,7 @@ def test_temporal_model_artifact_runs_through_backend_predictor(tmp_path):
         },
         provenance={"test": True},
         compatibility={
-            "runtime": "ontology_dashboard.systems.backend.diagnosis",
+            "runtime": "app.diagnosis",
             "feature_executor_version": "pdm-feature-executor-v1",
             "prediction_task": "binary_failure_within_horizon",
         },
@@ -382,7 +382,7 @@ def test_canonical_model_artifact_publish_and_backend_roundtrip(tmp_path, algo_n
         metrics={"validation_metrics": {"precision": 0.85, "recall": 0.80}},
         provenance={"training": {"run_id": "run-test-01", "publisher": "systems/generator"}},
         compatibility={
-            "runtime": "ontology_dashboard.systems.backend.diagnosis",
+            "runtime": "app.diagnosis",
             "feature_executor_version": "pdm-feature-executor-v1",
             "prediction_task": "binary_failure_within_horizon",
         },

@@ -44,7 +44,7 @@ if [[ "${ONTOLOGY_DASHBOARD_SEED_DEMO_DATASETS:-1}" == "1" \
     --database "${ONTOLOGY_DASHBOARD_DB}" >/tmp/ontology-dashboard-demo-datasets.log
 fi
 
-"${VENV_DIR}/bin/python" -m uvicorn ontology_dashboard.app:app \
+"${VENV_DIR}/bin/python" -m uvicorn app.main:app \
   --host "${API_HOST}" --port "${API_PORT}" > /tmp/ontology-dashboard-api.log 2>&1 &
 API_PID=$!
 

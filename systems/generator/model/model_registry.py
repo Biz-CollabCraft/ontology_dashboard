@@ -258,7 +258,7 @@ def train_and_publish_model(
                 "truth_usage": "training/evaluation label only",
             },
             compatibility={
-                "runtime": "ontology_dashboard.systems.backend.diagnosis",
+                "runtime": "app.diagnosis",
                 "prediction_task": "binary_failure_within_horizon",
                 "python": ">=3.11",
             },

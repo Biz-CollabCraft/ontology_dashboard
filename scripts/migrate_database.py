@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ontology_dashboard.migrations import migrate, migration_status
+from app.infra.db.migrations import migrate, migration_status
 from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]

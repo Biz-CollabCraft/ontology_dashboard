@@ -240,7 +240,7 @@ class MetricsRegistry:
 
 
 METRICS = MetricsRegistry()
-LOGGER = logging.getLogger("ontology_dashboard.runtime")
+LOGGER = logging.getLogger("app.observability")
 OPEN_METRICS_ENVIRONMENTS = {"development", "test"}
 
 

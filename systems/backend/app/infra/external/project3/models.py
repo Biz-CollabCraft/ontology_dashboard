@@ -335,8 +335,8 @@ class Project3GraphProjectionRequest(Project3ProjectionModel):
             ):
                 raise ValueError("v3.1 projection requires replacement/reset parity")
             expected_continuity = {
-                "tool_replacement_event_count": 731,
-                "aligned_reset_transition_count": 731,
+                "tool_replacement_event_count": 1_075,
+                "aligned_reset_transition_count": 1_075,
                 "reset_without_matching_maintenance_count": 0,
                 "replacement_without_reset_count": 0,
             }
