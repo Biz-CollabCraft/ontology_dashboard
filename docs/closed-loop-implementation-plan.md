@@ -226,6 +226,11 @@ MVP에서는 광우가 별도 recommendation 의미를 새로 계산하지 않�
 - Producer `kind`는 opaque string으로 보존하고 Closed-loop enum으로 재해석하지 않는다.
   `request_inspection`과 `review_shutdown`을 운영 Decision으로 연결해야 할 때는
   Event Evidence Projection이 제공하는 별도 `operational_decision_kind`만 소비한다.
+- `operational_decision_kind`는 Event Evidence Projection `assessment`의 nullable field다.
+  허용 값은 `continue_monitoring`, `request_inspection`, `review_shutdown`,
+  `hold_for_data_check`이며, 추천 미생성 또는 policy 입력 부족 상태에서는 null/absent로
+  둔다. Producer `kind` 문자열 비교로 생성하지 않고, 공식 policy/version projection으로만
+  생성한다.
 - `unavailable`은 recommendation `kind`가 아니라 추천 미생성 상태다. 근거 부족이나
   unresolved basis 때문에 정책 추천을 만들 수 없으면 Operational RecommendedAction을
   materialize하지 않고 Evidence gap 또는 limitation으로 남긴다.
@@ -564,7 +569,9 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 1. CNC 위험 Product Result/Evidence를 조회한다.
 2. 동일 Equipment의 RiskEvent에 근거를 연결한다.
 3. Diagnosis producer recommendation이 `request_inspection` 또는 `review_shutdown`으로
-   inspection WorkOrder를 요청하고, Producer `kind`는 opaque로 보존한다.
+   직접 inspection WorkOrder를 만들지 않는다. Event Evidence Projection의
+   `operational_decision_kind`가 있고 권한 있는 운영 주체 또는 확정된 inspection policy가
+   inspection WorkOrder 요청 command를 실행한다. Producer `kind`는 opaque로 보존한다.
 4. `process_engineer`가 Event/Equipment/Evidence를 확인하고 점검·분석 결과와 판단 근거를 기록한다.
 5. 점검 결과 정비가 필요하면 Operations가 `origin=operations_manual` 추천으로
    `TOOL_REPLACEMENT`를 등록한다.
@@ -573,6 +580,13 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 7. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.
 8. `maintenance_technician`이 배정된 WorkOrder/MaintenanceAction을 시작하고 체크리스트·측정값·note와
    함께 완료한다.
+
+`operations_manual` 추천은 Diagnosis ProducerRecommendation과 같은 객체가 아니다. MVP 최소 계약은
+다음 필드를 가진 Operations-owned recommendation이다: `origin=operations_manual`, stable
+`recommendation_id` 또는 `source_action_id`, `source_inspection_work_order_id`, Inspection
+Result/Activity reference, `action_code=TOOL_REPLACEMENT`, 별도 `policy_version` 또는
+`manual_policy_version`, 작성자, 작성 시각, basis, `requires_human_approval=true`, 중복 방지 키.
+`RecommendationDecision(accept)` 전에는 Maintenance WorkOrder를 생성하지 않는다.
 9. MaintenanceEvent, Equipment state와 Activity가 함께 갱신된다.
 10. 동일 mutation을 replay해 idempotency가 보장되는지 확인한다.
 11. 대상 설비만 Runtime Overlay로 분기되고 다른 설비 Replay는 계속 진행한다.
