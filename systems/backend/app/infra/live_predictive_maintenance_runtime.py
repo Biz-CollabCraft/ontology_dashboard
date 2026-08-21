@@ -991,7 +991,7 @@ def _persist_overlay_product_result(
     observed_at = _parse_observed_at(result["observed_at"])
     source_result = connection.execute(
         """
-        SELECT organization_id,project_id,workspace_id,prediction_result_id
+        SELECT organization_id,project_id,workspace_id,artifact_id
         FROM pm_result_artifacts
         WHERE dataset_version_id=%s AND asset_id=%s AND artifact_id<>%s
           AND observed_at<=%s
@@ -1005,7 +1005,7 @@ def _persist_overlay_product_result(
             "maintenance Overlay Result requires a source Product Result: "
             f"dataset_version_id={dataset_version_id} asset_id={asset_id}"
         )
-    provenance["source_product_result_id"] = str(source_result["prediction_result_id"])
+    provenance["source_product_result_id"] = str(source_result["artifact_id"])
     result["provenance"] = provenance
     organization_id = str(source_result["organization_id"])
     project_id = str(source_result["project_id"])

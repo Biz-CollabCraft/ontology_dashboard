@@ -110,11 +110,12 @@ class MaintenanceRepository:
                 """
                 INSERT OR IGNORE INTO closed_loop_recommendations (
                     recommendation_id,organization_id,project_id,workspace_id,event_id,
-                    asset_id,equipment_id,recommendation_origin,status,source_action_id,
+                    asset_id,equipment_id,recommendation_origin,status,materialization_strategy,
+                    source_action_id,
                     source_product_result_id,source_evidence_id,source_schema_version,
                     source_policy_version,label,kind,requires_human_approval,basis_json,
                     created_at,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     recommendation.recommendation_id,
@@ -126,6 +127,7 @@ class MaintenanceRepository:
                     recommendation.equipment_id,
                     recommendation.recommendation_origin,
                     recommendation.status.value,
+                    recommendation.materialization_strategy.value,
                     recommendation.source_action_id,
                     recommendation.source_product_result_id,
                     recommendation.source_evidence_id,
@@ -196,6 +198,36 @@ class MaintenanceRepository:
                 (scope.organization_id, scope.project_id, workspace_id, recommendation_id),
             ).fetchone()
         return None if row is None else self._recommendation_from_row(row)
+
+    def operational_side_effect_counts(self) -> dict[str, int]:
+        with self._connect() as connection:
+            return {
+                "recommendations": int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM closed_loop_recommendations"
+                    ).fetchone()[0]
+                ),
+                "decisions": int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM closed_loop_recommendation_decisions"
+                    ).fetchone()[0]
+                ),
+                "work_orders": int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM closed_loop_work_orders"
+                    ).fetchone()[0]
+                ),
+                "maintenance_actions": int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM closed_loop_maintenance_actions"
+                    ).fetchone()[0]
+                ),
+                "maintenance_events": int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM closed_loop_maintenance_events"
+                    ).fetchone()[0]
+                ),
+            }
 
     def decide_recommendation(
         self,
@@ -1139,6 +1171,7 @@ class MaintenanceRepository:
             recommendation_id=row["recommendation_id"],
             recommendation_origin=row["recommendation_origin"],
             status=row["status"],
+            materialization_strategy=row["materialization_strategy"],
             asset_id=row["asset_id"],
             equipment_id=row["equipment_id"],
             event_id=row["event_id"],

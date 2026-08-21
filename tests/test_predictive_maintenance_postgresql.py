@@ -91,6 +91,7 @@ def postgresql_database():
         assert "0030_closed_loop_operations" in applied
         assert "0031_predictive_maintenance_runtime_overlay" in applied
         assert "0032_predictive_maintenance_append_only_results" in applied
+        assert "0033_recommendation_materialization_strategy" in applied
         assert migrate(dsn) == []
         import psycopg
 
@@ -265,9 +266,7 @@ def test_product_results_remain_append_only_across_maintenance_overlay(
             "product-result-after-maintenance",
         ]
         assert artifacts[1]["provenance"]["maintenance_event_id"] == "maintenance-event-1"
-        assert artifacts[1]["provenance"]["source_product_result_id"] == str(
-            artifacts[0]["prediction_result_id"]
-        )
+        assert artifacts[1]["provenance"]["source_product_result_id"] == source_artifact_id
         for table in ("pm_prediction_snapshots", "pm_prediction_timeline"):
             count = connection.execute(
                 f"SELECT COUNT(*) AS count FROM {table} "

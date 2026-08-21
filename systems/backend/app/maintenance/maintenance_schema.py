@@ -73,6 +73,11 @@ class MaintenanceActionStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class MaterializationStrategy(StrEnum):
+    RUNTIME_GENERATED = "runtime_generated"
+    IMPORTED_PRECOMPUTED = "imported_precomputed"
+
+
 class IdempotencyState(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -100,26 +105,13 @@ class EquipmentIdentity(ScopedRecord):
         return f"{self.organization_id}:{self.project_id}:{self.asset_id}"
 
 
-class ProducerRecommendation(FrozenModel):
-    source_action_id: str = Field(min_length=1, max_length=240)
-    source_product_result_id: str = Field(min_length=1, max_length=240)
-    source_evidence_id: str = Field(min_length=1, max_length=240)
-    source_schema_version: str = Field(min_length=1, max_length=160)
-    source_policy_version: str = Field(min_length=1, max_length=160)
-    label: str = Field(min_length=1, max_length=500)
-    kind: str = Field(min_length=1, max_length=128)
-    requires_human_approval: bool
-    basis: tuple[str, ...] = Field(min_length=1)
-
-    @property
-    def materialization_key(self) -> str:
-        return f"{self.source_product_result_id}:{self.source_action_id}"
-
-
 class OperationalRecommendedAction(ScopedRecord):
     recommendation_id: str = Field(min_length=1, max_length=240)
     recommendation_origin: Literal["product_result_projection"] = "product_result_projection"
     status: RecommendationStatus = RecommendationStatus.PROPOSED
+    materialization_strategy: Literal[MaterializationStrategy.RUNTIME_GENERATED] = (
+        MaterializationStrategy.RUNTIME_GENERATED
+    )
     asset_id: str = Field(min_length=1, max_length=240)
     equipment_id: str = Field(min_length=1, max_length=240)
     event_id: str = Field(min_length=1, max_length=240)

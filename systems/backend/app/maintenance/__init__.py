@@ -1,5 +1,7 @@
 """Pure domain contracts for the predictive-maintenance closed loop."""
 
+from app.diagnosis.recommendation_schema import ProducerRecommendation
+
 from .maintenance_schema import OperationalDecisionKind
 from .maintenance_domain import (
     ActionInProgress,
@@ -11,6 +13,8 @@ from .maintenance_domain import (
     authorize_maintenance_work_order,
     create_inspection_work_order,
     create_work_order_for_recommendation,
+    deterministic_recommendation_id,
+    imported_result_detail_view,
     materialize_recommended_action,
     plan_maintenance_action,
     record_maintenance_event,
@@ -20,6 +24,7 @@ from .maintenance_domain import (
     transition_recommendation,
     transition_risk_event,
     transition_work_order,
+    validate_single_dataset_writer,
 )
 from .maintenance_schema import (
     EquipmentIdentity,
@@ -29,8 +34,8 @@ from .maintenance_schema import (
     MaintenanceAction,
     MaintenanceActionStatus,
     MaintenanceEvent,
+    MaterializationStrategy,
     OperationalRecommendedAction,
-    ProducerRecommendation,
     RecommendationDecision,
     RecommendationDisposition,
     RecommendationStatus,
@@ -52,6 +57,7 @@ __all__ = [
     "MaintenanceAction",
     "MaintenanceActionStatus",
     "MaintenanceEvent",
+    "MaterializationStrategy",
     "OperationalDecisionKind",
     "OperationalRecommendedAction",
     "PriorActionFailed",
@@ -69,6 +75,8 @@ __all__ = [
     "authorize_maintenance_work_order",
     "create_inspection_work_order",
     "create_work_order_for_recommendation",
+    "deterministic_recommendation_id",
+    "imported_result_detail_view",
     "materialize_recommended_action",
     "plan_maintenance_action",
     "record_maintenance_event",
@@ -78,4 +86,5 @@ __all__ = [
     "transition_recommendation",
     "transition_risk_event",
     "transition_work_order",
+    "validate_single_dataset_writer",
 ]

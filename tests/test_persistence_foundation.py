@@ -46,6 +46,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0028_continuous_mlops_runtime",
             "0029_governed_event_automation",
             "0030_closed_loop_operations",
+            "0031_recommendation_materialization_strategy",
         ]
     assert second == []
 
