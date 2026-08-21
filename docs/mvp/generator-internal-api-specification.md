@@ -35,13 +35,14 @@
 
 ## 3. 엔드포인트 목록 및 Migration 매핑
 
-### 3.1 Current API (현재 main 구현 상태)
+### 3.1 Current API (현재 구현 상태)
 
-현재 `main` 브랜치의 Generator 데몬에 실제로 구현되어 동작하는 엔드포인트는 다음 3개입니다.
+현재 Generator 데몬에 실제로 구현되어 동작하는 엔드포인트는 다음과 같습니다.
 
 | Method | Path | 현재 의미 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (운영 중) |
+| POST | `/preprocessing` | Observation Dataset 분석 및 Preprocessing Plan/Mapping 수립·발행 (2단계) | Current (운영 중) |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | Current (운영 중) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | Current (운영 중) |
 
@@ -53,9 +54,9 @@
 
 | Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
 |---|---|---|---|
-| GET | `/health` | Generator 데몬 상태 확인 | Target (유지) |
+| GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
 | POST | `/extraction` | protocol provenance → Observation Dataset / Authorized Truth Source → Failure Dataset (신규 1단계) | Target — 미병합 |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target — 미병합 |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Current (구현 완료) |
 | POST | `/feature` | Observation + Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
@@ -78,6 +79,10 @@
 | `ExtractionProfiler` | `PreprocessingProfiler` | 프로파일러 클래스 변경 |
 | (신규 구현) | `POST /extraction` | 신규 Observation / Failure 추출 엔드포인트 |
 | (신규 구현) | `ExtractionService` | 신규 Observation / Failure 추출 서비스 |
+
+> **캐시 전환 및 필드 참고 사항**:
+> - **캐시 전환 영향**: Extraction Plan에서 Preprocessing Plan으로 계약과 저장 경로(`models_store/cache/preprocessing_plans/`)가 변경되므로 기존 캐시는 호환 대상으로 간주하지 않으며 재생성합니다.
+> - **`idempotency_key` 필드**: `PreprocessingRequest`의 `idempotency_key`는 후속 멱등성 추적 구현을 위한 예약 필드(Reserved field)입니다.
 
 ---
 
