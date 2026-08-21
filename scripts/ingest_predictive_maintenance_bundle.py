@@ -13,7 +13,7 @@ from app.dataset.ingestion import (
     PredictiveMaintenanceCanonicalV2Adapter,
 )
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
-from ontology_dashboard.migrations import migrate
+from app.infra.db.migrations import migrate
 
 
 ROOT = Path(__file__).resolve().parents[1]

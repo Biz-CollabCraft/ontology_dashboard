@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.dataset.ingestion import DatasetManifest, FileAdapter
 from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
-from ontology_dashboard.migrations import migrate
+from app.infra.db.migrations import migrate
 from app.infra.db.settings import database_location
 
 ROOT = Path(__file__).resolve().parents[1]

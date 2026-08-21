@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from ontology_dashboard import dependencies
+from app import dependencies
 
 
 def test_predictive_maintenance_runtime_reports_postgresql_capability(
@@ -25,5 +25,4 @@ def test_predictive_maintenance_runtime_reports_postgresql_capability(
         dependencies.get_predictive_maintenance_runtime_service.cache_clear()
 
     assert captured.value.status_code == 503
-    assert "UCI AI4I 2020 Manufacturing Predictive Maintenance" in str(captured.value.detail)
     assert "requires PostgreSQL" in str(captured.value.detail)

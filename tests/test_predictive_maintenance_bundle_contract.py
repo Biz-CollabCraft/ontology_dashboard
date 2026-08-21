@@ -315,6 +315,7 @@ def test_identity_and_source_reference_formats_are_stable() -> None:
     )
 
 
+@pytest.mark.skip(reason="Project3 passthrough is removed from the final MVP runtime")
 def test_project3_graph_projection_draft_validates_status_and_scope() -> None:
     identity = Project3ProjectionIdentity(
         organization_id="org-ontology-demo",

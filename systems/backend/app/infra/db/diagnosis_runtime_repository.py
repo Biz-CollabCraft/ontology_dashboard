@@ -339,24 +339,32 @@ class PredictiveMaintenanceRuntimeRepository:
                     filters.append("r.status_grade=%s")
                     parameters.append(status_grade)
                 where = " AND ".join(filters)
+                latest_results = """
+                    SELECT DISTINCT ON (asset_id) *
+                    FROM pm_result_artifacts
+                    WHERE dataset_version_id=%s
+                    ORDER BY asset_id,observed_at DESC,created_at DESC,artifact_id DESC
+                """
                 total = int(
                     connection.execute(
                         f"""
+                        WITH latest_results AS ({latest_results})
                         SELECT COUNT(*) AS count
-                        FROM pm_result_artifacts r
+                        FROM latest_results r
                         JOIN pm_assets a
                           ON a.dataset_version_id=r.dataset_version_id
                          AND a.asset_id=r.asset_id
                         WHERE {where}
                         """,
-                        parameters,
+                        (dataset_version_id, *parameters),
                     ).fetchone()["count"]
                 )
                 rows = connection.execute(
                     f"""
+                    WITH latest_results AS ({latest_results})
                     SELECT r.*,a.site_id,a.cell_id,p.payload_json AS prediction_result_payload,
                            p.created_at AS prediction_result_created_at
-                    FROM pm_result_artifacts r
+                    FROM latest_results r
                     JOIN pm_assets a
                       ON a.dataset_version_id=r.dataset_version_id
                      AND a.asset_id=r.asset_id
@@ -365,7 +373,7 @@ class PredictiveMaintenanceRuntimeRepository:
                     ORDER BY r.failure_probability DESC,r.asset_id
                     OFFSET %s LIMIT %s
                     """,
-                    (*parameters, offset, limit),
+                    (dataset_version_id, *parameters, offset, limit),
                 ).fetchall()
                 return "result_artifact", total, [dict(row) for row in rows]
 
@@ -857,12 +865,13 @@ class PredictiveMaintenanceRuntimeRepository:
         with self._connection(organization_id, project_id) as connection:
             rows = connection.execute(
                 """
-                SELECT artifact_id,asset_id,observed_at,prediction_id,prediction_result_id,
+                SELECT DISTINCT ON (asset_id)
+                       artifact_id,asset_id,observed_at,prediction_id,prediction_result_id,
                        status_grade,failure_probability,model_version,schema_version,source_sha256
                 FROM pm_result_artifacts
                 WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
                   AND dataset_version_id=%s
-                ORDER BY asset_id
+                ORDER BY asset_id,observed_at DESC,created_at DESC,artifact_id DESC
                 """,
                 (organization_id, project_id, workspace_id, dataset_version_id),
             ).fetchall()

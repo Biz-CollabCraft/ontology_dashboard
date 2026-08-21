@@ -28,12 +28,21 @@ dependencies = [
 dev = ["pytest>=8.3"]
 postgres = ["psycopg[binary]>=3.2", "psycopg_pool>=3.2"]
 model-runtimes = ["lightgbm>=4.0,<5.0", "xgboost>=2.0,<3.0"]
+macmini = [
+  "psycopg[binary]>=3.2",
+  "psycopg_pool>=3.2",
+  "redis>=5.0",
+  "lightgbm>=4.0,<5.0",
+  "xgboost>=2.0,<3.0"
+]
 polyglot = [
   "psycopg[binary]>=3.2",
   "psycopg_pool>=3.2",
   "neo4j>=5",
   "redis>=5.0",
-  "pyarrow>=17"
+  "pyarrow>=17",
+  "lightgbm>=4.0,<5.0",
+  "xgboost>=2.0,<3.0"
 ]
 production = [
   "psycopg[binary]>=3.2",

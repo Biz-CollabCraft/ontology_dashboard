@@ -90,6 +90,18 @@ class OntologyObjectQueryPort(Protocol):
     def object_type_registry(self) -> dict[str, Any]: ...
 
 
+class OntologyActionHistoryPort(Protocol):
+    """Read-only action history exposed without leaking repository internals."""
+
+    def list_actions_for_object(
+        self, *, workspace_id: str, object_id: str
+    ) -> list[dict[str, Any]]: ...
+
+
+class LiveOntologyProjectionPort(Protocol):
+    def materialize_live_projection(self, batch: dict[str, Any]) -> dict[str, Any]: ...
+
+
 class OntologyAuditPort(Protocol):
     def record_audit(
         self,
@@ -129,9 +141,11 @@ class OntologyFieldActionPort(Protocol):
 
 __all__ = [
     "OntologyActionRepositoryPort",
+    "OntologyActionHistoryPort",
     "OntologyAuditPort",
     "OntologyEventCommandPort",
     "OntologyFieldActionPort",
     "OntologyInstanceRepositoryPort",
+    "LiveOntologyProjectionPort",
     "OntologyObjectQueryPort",
 ]

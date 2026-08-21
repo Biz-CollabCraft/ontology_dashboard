@@ -3,7 +3,7 @@ generator_llm_client.py
 
 담당 기능:
 - Generator 도메인 전역 LLM 호출 서비스(call_llm) 및 Pydantic 스키마 검증/다중 변환기(validate_or_transform_pydantic) 모듈.
-- OpenAI Chat Completions API(gpt-4o-mini) 호출을 통해 RAW 텍스트 응답을 수신하며, Pydantic 검증 ➔ 실패 시 Multi-Format Transformer(JSON/YAML/KV/CSV) ➔ Pydantic 스키마 재검증 ➔ 실패 시 None(Fail-Fast) 4단계 파이프라인으로 동작한다.
+- OpenAI 또는 Google Vertex AI Gemini provider를 통해 RAW 텍스트 응답을 수신하며, Pydantic 검증 ➔ 실패 시 Multi-Format Transformer(JSON/YAML/KV/CSV) ➔ Pydantic 스키마 재검증 ➔ 실패 시 None(Fail-Fast) 4단계 파이프라인으로 동작한다.
 
 입력:
 - prompt(str): LLM에 전달할 사용자 프롬프트
@@ -18,10 +18,11 @@ generator_llm_client.py
 의존 모듈:
 - generator_config.load_config: API 키 로딩 전 환경변수 세팅.
 - openai.OpenAI: OpenAI 공식 API 클라이언트.
+- google.genai: Google Vertex AI Gemini 공식 Gen AI SDK.
 - pydantic.BaseModel, json, re, yaml, logging
 
 예외/경계 상황:
-- OPENAI_API_KEY 미설정 시 ValueError 발생.
+- 선택한 provider의 인증정보가 없으면 ValueError 발생하고 상위 단계의 기존 rule/heuristic fallback이 동작한다.
 - Pydantic 스키마 검증 및 파싱 실패 시 경고 로그 후 None을 안전하게 반환한다(Fail-Fast).
 
 설계 원칙과의 연결:
@@ -117,22 +118,64 @@ class FileProfileResponse(BaseModel):
 def call_llm(prompt: str, system: str = "You are a helpful assistant.") -> str:
     """Generator 전용 LLM 호출 클라이언트 (RAW 텍스트 응답 수신 전용)."""
     load_config()
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        logger.warning("OPENAI_API_KEY environment variable is missing.")
-        raise ValueError("OPENAI_API_KEY가 설정되어 있지 않습니다.")
+    provider = os.getenv("GENERATOR_LLM_PROVIDER", "openai").strip().lower()
+    if provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            logger.warning("OPENAI_API_KEY environment variable is missing.")
+            raise ValueError("OPENAI_API_KEY가 설정되어 있지 않습니다.")
 
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.0
-    )
-    return response.choices[0].message.content.strip()
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model=os.getenv("GENERATOR_LLM_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.0,
+        )
+        return response.choices[0].message.content.strip()
+
+    if provider in {"vertex", "vertex_ai", "google_vertex"}:
+        from google import genai
+        from google.genai import types
+
+        api_key = os.getenv("VERTEX_AI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        project = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
+        location = os.getenv("GOOGLE_CLOUD_LOCATION", "global").strip() or "global"
+        if not api_key and not project:
+            logger.warning(
+                "Vertex AI authentication is missing: configure VERTEX_AI_API_KEY/GOOGLE_API_KEY "
+                "or GOOGLE_CLOUD_PROJECT with Application Default Credentials."
+            )
+            raise ValueError("Vertex AI 인증정보가 설정되어 있지 않습니다.")
+
+        client_kwargs: dict[str, Any] = {
+            "vertexai": True,
+            "http_options": types.HttpOptions(api_version="v1"),
+        }
+        if api_key:
+            client_kwargs["api_key"] = api_key
+        if project:
+            client_kwargs["project"] = project
+            client_kwargs["location"] = location
+        client = genai.Client(**client_kwargs)
+        response = client.models.generate_content(
+            model=os.getenv("GENERATOR_LLM_MODEL", "gemini-3.5-flash"),
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                temperature=0.0,
+            ),
+        )
+        text = response.text or ""
+        if not text.strip():
+            raise ValueError("Vertex AI Gemini returned an empty response")
+        return text.strip()
+
+    raise ValueError(f"unsupported GENERATOR_LLM_PROVIDER: {provider!r}")
 
 
 def transform_to_structured_data(raw_text: str, expected_type: type = dict) -> Any | None:

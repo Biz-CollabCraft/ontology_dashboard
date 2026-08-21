@@ -4,21 +4,21 @@ import shutil
 import os
 import subprocess
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 
-from app.dataset.ingestion import (
-    BundleFileAdapter,
-    DatasetBundleManifestV2,
-    compute_bundle_checksum,
+from app.dataset.bundle_contract import DatasetBundleManifestV2, compute_bundle_checksum
+from app.dataset.ingestion.bundle_file_adapter import BundleFileAdapter
+from app.infra.db.diagnosis_runtime_repository import (
+    PredictiveMaintenanceRuntimeRepository,
 )
+from app.infra.db.migrations import migrate
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
-from ontology_dashboard.migrations import migrate
-from ontology_dashboard.modeling.models import DatasetIntakeProfile, canonical_checksum
-from ontology_dashboard.modeling.repository import ModelingRepository
 from app.infra.db.pool import close_pools
+from app.infra.live_predictive_maintenance_runtime import _persist_overlay_product_result
 from tests.test_predictive_maintenance_bundle_adapter import (
     build_manifest,
     create_small_package,
@@ -89,6 +89,9 @@ def postgresql_database():
         applied = migrate(dsn)
         assert "0029_governed_event_automation" in applied
         assert "0030_closed_loop_operations" in applied
+        assert "0031_predictive_maintenance_runtime_overlay" in applied
+        assert "0032_predictive_maintenance_append_only_results" in applied
+        assert "0033_recommendation_materialization_strategy" in applied
         assert migrate(dsn) == []
         import psycopg
 
@@ -138,6 +141,175 @@ def _changed_schema_manifest(manifest: DatasetBundleManifestV2) -> DatasetBundle
             "bundle_checksum_sha256": checksum,
         }
     )
+
+
+def test_product_results_remain_append_only_across_maintenance_overlay(
+    tmp_path: Path,
+    postgresql_database: str,
+) -> None:
+    import psycopg
+    from psycopg.rows import dict_row
+    from psycopg.types.json import Jsonb
+
+    package_root = create_small_package(tmp_path)
+    manifest = build_manifest(package_root)
+    validation = BundleFileAdapter(allowed_roots=[package_root]).validate(manifest)
+    ingestion = PostgreSQLPredictiveMaintenanceBundleIngestor(
+        postgresql_database
+    ).ingest_validated_bundle(manifest=manifest, validation=validation)
+
+    with psycopg.connect(postgresql_database, row_factory=dict_row) as connection:
+        connection.execute("SELECT set_config('app.organization_id','org-test',true)")
+        connection.execute("SELECT set_config('app.project_id','project-test',true)")
+        source = connection.execute(
+            """
+            SELECT prediction_id,prediction_result_id,asset_id,asset_type,observed_at,
+                   failure_probability,confidence,status,model_version
+            FROM pm_prediction_snapshots
+            WHERE dataset_version_id=%s AND asset_id='CNC-001'
+            """,
+            (ingestion.dataset_version_id,),
+        ).fetchone()
+        source_artifact_id = "source-product-result-before-maintenance"
+        connection.execute(
+            """
+            INSERT INTO pm_result_artifacts(
+                organization_id,project_id,workspace_id,dataset_version_id,
+                artifact_id,prediction_id,prediction_result_id,asset_id,asset_type,
+                observed_at,prediction_horizon_hours,prediction_task,
+                failure_probability,predicted_failure_type,status_grade,confidence,
+                top_factors,recommended_action,provenance,schema_version,
+                model_version,source_sha256
+            ) VALUES (
+                'org-test','project-test','workspace-test',%s,%s,%s,%s,%s,%s,%s,24,
+                'binary_failure_within_horizon',%s,'no_significant_risk',%s,%s,
+                '[]'::jsonb,'{}'::jsonb,%s::jsonb,'result-artifact-v1.0',%s,%s
+            )
+            """,
+            (
+                ingestion.dataset_version_id,
+                source_artifact_id,
+                source["prediction_id"],
+                source["prediction_result_id"],
+                source["asset_id"],
+                source["asset_type"],
+                source["observed_at"],
+                source["failure_probability"],
+                "critical",
+                source["confidence"],
+                Jsonb(
+                    {
+                        "prediction_id": source["prediction_id"],
+                        "model_version": source["model_version"],
+                    }
+                ),
+                source["model_version"],
+                "a" * 64,
+            ),
+        )
+
+        overlay_result = {
+            "artifact_id": "product-result-after-maintenance",
+            "observed_at": (source["observed_at"] + timedelta(hours=2)).isoformat(),
+            "failure_probability": 0.12,
+            "predicted_failure_type": "none",
+            "status_grade": "normal",
+            "confidence": 0.91,
+            "top_factors": [
+                {
+                    "rank": 1,
+                    "feature": "tool_wear_min",
+                    "feature_value": 0.0,
+                    "signed_contribution": -0.2,
+                    "direction": "negative",
+                    "explanation_method": "maintenance_replay",
+                }
+            ],
+            "recommended_action": {"action": "continue_monitoring"},
+            "provenance": {
+                "prediction_id": "prediction-after-maintenance",
+                "model_version": "test-v2",
+                "maintenance_event_id": "maintenance-event-1",
+                "overlay_branch_id": "overlay-branch-1",
+                "history_segment_id": "history-segment-1",
+                "maintenance_action_id": "maintenance-action-1",
+            },
+        }
+        _persist_overlay_product_result(
+            connection,
+            Jsonb,
+            dataset_version_id=ingestion.dataset_version_id,
+            asset_id="CNC-001",
+            asset_type="cnc",
+            result=overlay_result,
+        )
+        _persist_overlay_product_result(
+            connection,
+            Jsonb,
+            dataset_version_id=ingestion.dataset_version_id,
+            asset_id="CNC-001",
+            asset_type="cnc",
+            result=overlay_result,
+        )
+
+        artifacts = connection.execute(
+            """
+            SELECT artifact_id,prediction_result_id,provenance
+            FROM pm_result_artifacts
+            WHERE dataset_version_id=%s AND asset_id='CNC-001'
+            ORDER BY observed_at
+            """,
+            (ingestion.dataset_version_id,),
+        ).fetchall()
+        assert [row["artifact_id"] for row in artifacts] == [
+            source_artifact_id,
+            "product-result-after-maintenance",
+        ]
+        assert artifacts[1]["provenance"]["maintenance_event_id"] == "maintenance-event-1"
+        assert artifacts[1]["provenance"]["source_product_result_id"] == source_artifact_id
+        for table in ("pm_prediction_snapshots", "pm_prediction_timeline"):
+            count = connection.execute(
+                f"SELECT COUNT(*) AS count FROM {table} "
+                "WHERE dataset_version_id=%s AND asset_id='CNC-001'",
+                (ingestion.dataset_version_id,),
+            ).fetchone()["count"]
+            assert int(count) == 2
+
+    repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    source_contract, total, latest_rows = repository.latest_result_rows(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        dataset_version_id=ingestion.dataset_version_id,
+        asset_id="CNC-001",
+        site_id=None,
+        cell_id=None,
+        asset_type=None,
+        status_grade=None,
+        offset=0,
+        limit=100,
+    )
+    assert source_contract == "result_artifact"
+    assert total == 1
+    assert [row["artifact_id"] for row in latest_rows] == [
+        "product-result-after-maintenance"
+    ]
+
+    _, critical_total, critical_rows = repository.latest_result_rows(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        dataset_version_id=ingestion.dataset_version_id,
+        asset_id="CNC-001",
+        site_id=None,
+        cell_id=None,
+        asset_type=None,
+        status_grade="critical",
+        offset=0,
+        limit=100,
+    )
+    assert critical_total == 0
+    assert critical_rows == []
 
 
 def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
@@ -296,6 +468,7 @@ def test_postgresql_copy_idempotency_rls_and_atomic_rollback(
             admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role)))
 
 
+@pytest.mark.skip(reason="Adaptive Modeling Workbench was removed from the MVP runtime")
 def test_postgresql_adaptive_modeling_repository_jsonb_idempotency_and_rls(
     postgresql_database: str,
 ) -> None:

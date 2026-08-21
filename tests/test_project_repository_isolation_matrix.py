@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from ontology_dashboard.dashboard_repository import DashboardRepository
-from ontology_dashboard.export_repository import ExportRepository
+from app.infra.db.dashboard_repository import DashboardRepository
+from app.infra.db.report_repository import ExportRepository
 from app.identity import IdentityService
 from identity_test_support import build_identity_service
-from ontology_dashboard.migrations import migrate
+from app.infra.db.migrations import migrate
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.project_repository import SQLiteProjectContextResolver
-from ontology_dashboard.role_workflow_repository import RoleWorkflowRepository
+from app.infra.db.role_workflow_repository import RoleWorkflowRepository
 
 
 AZURE_PROJECT = "azure-fleet-maintenance-project"

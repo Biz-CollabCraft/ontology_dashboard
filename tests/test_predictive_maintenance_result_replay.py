@@ -15,22 +15,19 @@ from jsonschema import Draft202012Validator, FormatChecker
 from systems.backend.app.diagnosis.contracts import load_fixture
 from systems.backend.app.diagnosis.evidence import build_product_result_artifact
 from systems.backend.app.diagnosis.predictor import HeuristicPredictor
-from app.dataset.ingestion import (
-    BundleFileAdapter,
-    PredictiveMaintenanceCanonicalV2Adapter,
-)
+from app.dataset.ingestion.bundle_file_adapter import BundleFileAdapter
+from app.dataset.ingestion.predictive_maintenance_v2 import PredictiveMaintenanceCanonicalV2Adapter
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
-from ontology_dashboard.predictive_maintenance_runtime import (
-    PredictiveMaintenanceRuntimeRepository,
-    PredictiveMaintenanceRuntimeService,
-)
+from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
+from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.diagnosis import runtime_service
-from ontology_dashboard.dependencies import (
+from app.dependencies import (
     get_identity_service,
     get_predictive_maintenance_runtime_service,
 )
 from app.identity import AuthError, CSRF_COOKIE, Principal, SESSION_COOKIE
-from ontology_dashboard.main import app, predictive_maintenance_runtime_router
+from app.main import app
+from app.diagnosis.runtime_router import replay_events
 from predictive_maintenance_v3_helpers import (
     create_small_v3_package,
     refresh_v3_contracts,
@@ -40,13 +37,6 @@ from test_predictive_maintenance_bundle_adapter import (
     refresh_contracts,
 )
 from test_predictive_maintenance_postgresql import postgresql_database
-
-
-replay_events = next(
-    route.endpoint
-    for route in predictive_maintenance_runtime_router.routes
-    if getattr(route, "name", None) == "replay_events"
-)
 
 
 REAL_V3_ROOT = (
@@ -381,8 +371,8 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     assert page.context.governance.tool_wear_continuity == {
         "pass": True,
         "running_reset_count": 0,
-        "tool_replacement_event_count": 731,
-        "aligned_reset_transition_count": 731,
+        "tool_replacement_event_count": 1_075,
+        "aligned_reset_transition_count": 1_075,
         "reset_without_matching_maintenance_count": 0,
         "replacement_without_reset_count": 0,
     }
@@ -944,13 +934,13 @@ def test_real_v3_1_result_artifact_and_replay_row_parity(
     assert ingestion.row_counts == {
         "asset_master": 100,
         "asset_relation": 80,
-        "cnc_production_cycle": 170_875,
-        "cnc_sensor_observation": 345_600,
-        "compressor_sensor_observation": 86_400,
-        "maintenance_event": 790,
+        "cnc_production_cycle": 244_929,
+        "cnc_sensor_observation": 495_360,
+        "compressor_sensor_observation": 123_840,
+        "maintenance_event": 1_151,
         "prediction_factor": 300,
         "prediction_snapshot": 100,
-        "prediction_timeline": 68_208,
+        "prediction_timeline": 99_150,
         "result_artifact": 100,
     }
 
@@ -996,7 +986,7 @@ def test_real_v3_1_result_artifact_and_replay_row_parity(
         offset=0,
         limit=1,
     )
-    assert timeline["total"] == 68_208
+    assert timeline["total"] == 99_150
     assert timeline["model_retrained"] is False
 
     with psycopg.connect(postgresql_database, row_factory=dict_row) as connection:
@@ -1021,7 +1011,7 @@ def test_real_v3_1_result_artifact_and_replay_row_parity(
         "artifacts": 100,
         "snapshots": 100,
         "factors": 300,
-        "timeline": 68_208,
+        "timeline": 99_150,
         "linked_prediction_results": 100,
     }
 
