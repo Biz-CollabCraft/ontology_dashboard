@@ -65,6 +65,12 @@ class WorkOrderStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class InspectionOutcome(StrEnum):
+    NO_ACTION_REQUIRED = "no_action_required"
+    MAINTENANCE_RECOMMENDED = "maintenance_recommended"
+    DATA_CHECK_REQUIRED = "data_check_required"
+
+
 class MaintenanceActionStatus(StrEnum):
     PLANNED = "planned"
     IN_PROGRESS = "in_progress"
@@ -107,13 +113,16 @@ class EquipmentIdentity(ScopedRecord):
 
 class OperationalRecommendedAction(ScopedRecord):
     recommendation_id: str = Field(min_length=1, max_length=240)
-    recommendation_origin: Literal["product_result_projection"] = "product_result_projection"
+    recommendation_origin: Literal[
+        "product_result_projection", "operations_manual"
+    ] = "product_result_projection"
     status: RecommendationStatus = RecommendationStatus.PROPOSED
     materialization_strategy: Literal[MaterializationStrategy.RUNTIME_GENERATED] = (
         MaterializationStrategy.RUNTIME_GENERATED
     )
     asset_id: str = Field(min_length=1, max_length=240)
     equipment_id: str = Field(min_length=1, max_length=240)
+    asset_type: str = Field(min_length=1, max_length=160)
     event_id: str = Field(min_length=1, max_length=240)
     source_action_id: str = Field(min_length=1, max_length=240)
     source_product_result_id: str = Field(min_length=1, max_length=240)
@@ -124,15 +133,50 @@ class OperationalRecommendedAction(ScopedRecord):
     kind: str = Field(min_length=1, max_length=128)
     requires_human_approval: bool
     basis: tuple[str, ...] = Field(min_length=1)
+    source_inspection_work_order_id: str | None = Field(
+        default=None, min_length=1, max_length=240
+    )
+    source_inspection_reference: str | None = Field(
+        default=None, min_length=1, max_length=240
+    )
+    action_code: Literal["TOOL_REPLACEMENT"] | None = None
+    authored_by: str | None = Field(default=None, min_length=1, max_length=240)
+    authored_at: datetime | None = None
 
     @model_validator(mode="after")
     def require_mvp_identity(self) -> OperationalRecommendedAction:
         if self.asset_id != self.equipment_id:
             raise ValueError("MVP recommendation requires equipment_id = asset_id")
+        manual_fields = (
+            self.source_inspection_work_order_id,
+            self.source_inspection_reference,
+            self.action_code,
+            self.authored_by,
+            self.authored_at,
+        )
+        if self.recommendation_origin == "product_result_projection":
+            if any(value is not None for value in manual_fields):
+                raise ValueError(
+                    "product_result_projection cannot contain operations_manual lineage"
+                )
+            return self
+        if any(value is None for value in manual_fields):
+            raise ValueError(
+                "operations_manual requires inspection, action, and author lineage"
+            )
+        if self.kind != self.action_code:
+            raise ValueError("operations_manual kind must match action_code")
+        if not self.requires_human_approval:
+            raise ValueError("operations_manual requires human approval")
         return self
 
     @property
     def materialization_key(self) -> str:
+        if self.recommendation_origin == "operations_manual":
+            return (
+                f"{self.source_inspection_work_order_id}:"
+                f"{self.source_inspection_reference}:{self.action_code}"
+            )
         return f"{self.source_product_result_id}:{self.source_action_id}"
 
 
@@ -153,6 +197,11 @@ class WorkOrderAuthorization(FrozenModel):
     recommendation_status: Literal[RecommendationStatus.ACCEPTED] | None = None
     recommendation_disposition: Literal[RecommendationDisposition.ACCEPT] | None = None
     operational_decision: OperationalDecisionKind | None = None
+    source_product_result_id: str | None = Field(default=None, min_length=1, max_length=240)
+    source_evidence_id: str | None = Field(default=None, min_length=1, max_length=240)
+    source_action_id: str | None = Field(default=None, min_length=1, max_length=240)
+    source_schema_version: str | None = Field(default=None, min_length=1, max_length=160)
+    source_policy_version: str | None = Field(default=None, min_length=1, max_length=160)
 
     @model_validator(mode="after")
     def require_valid_authorization_shape(self) -> WorkOrderAuthorization:
@@ -162,6 +211,13 @@ class WorkOrderAuthorization(FrozenModel):
             self.recommendation_status,
             self.recommendation_disposition,
         )
+        inspection_source_fields = (
+            self.source_product_result_id,
+            self.source_evidence_id,
+            self.source_action_id,
+            self.source_schema_version,
+            self.source_policy_version,
+        )
         if self.work_type is WorkOrderType.INSPECTION:
             if self.operational_decision not in {
                 OperationalDecisionKind.REQUEST_INSPECTION,
@@ -170,9 +226,15 @@ class WorkOrderAuthorization(FrozenModel):
                 raise ValueError("inspection requires request_inspection or review_shutdown")
             if any(value is not None for value in recommendation_fields):
                 raise ValueError("inspection authorization cannot contain maintenance approval")
+            if any(value is None for value in inspection_source_fields):
+                raise ValueError(
+                    "inspection authorization requires Product Result/Evidence projection lineage"
+                )
             return self
         if self.operational_decision is not None:
             raise ValueError("maintenance authorization cannot use an operational decision")
+        if any(value is not None for value in inspection_source_fields):
+            raise ValueError("maintenance authorization cannot contain inspection source lineage")
         if any(value is None for value in recommendation_fields):
             raise ValueError("maintenance authorization requires an accepted recommendation decision")
         return self
@@ -183,6 +245,7 @@ class WorkOrder(ScopedRecord):
     event_id: str = Field(min_length=1, max_length=240)
     asset_id: str = Field(min_length=1, max_length=240)
     equipment_id: str = Field(min_length=1, max_length=240)
+    asset_type: str = Field(min_length=1, max_length=160)
     work_type: WorkOrderType
     status: WorkOrderStatus = WorkOrderStatus.REQUESTED
     idempotency_key: str = Field(min_length=8, max_length=200)
@@ -194,6 +257,42 @@ class WorkOrder(ScopedRecord):
             raise ValueError("work order type must match its authorization")
         if self.asset_id != self.equipment_id:
             raise ValueError("MVP work order requires equipment_id = asset_id")
+        return self
+
+
+class InspectionChecklistItem(FrozenModel):
+    item_id: str = Field(min_length=1, max_length=160)
+    status: Literal["pass", "fail", "not_checked"]
+    note: str = Field(default="", max_length=2000)
+
+
+class InspectionMeasurement(FrozenModel):
+    name: str = Field(min_length=1, max_length=160)
+    value: float | int | str | bool | None
+    unit: str = Field(default="", max_length=80)
+
+
+class InspectionResult(ScopedRecord):
+    """Immutable field-inspection fact; never a maintenance approval/event."""
+
+    inspection_result_id: str = Field(min_length=1, max_length=240)
+    work_order_id: str = Field(min_length=1, max_length=240)
+    event_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    equipment_id: str = Field(min_length=1, max_length=240)
+    asset_type: str = Field(min_length=1, max_length=160)
+    outcome: InspectionOutcome
+    checklist: tuple[InspectionChecklistItem, ...] = Field(min_length=1)
+    measurements: tuple[InspectionMeasurement, ...] = ()
+    findings: tuple[str, ...] = Field(min_length=1)
+    note: str = Field(default="", max_length=4000)
+    recorded_by: str = Field(min_length=1, max_length=240)
+    recorded_at: datetime
+
+    @model_validator(mode="after")
+    def require_inspection_identity(self) -> InspectionResult:
+        if self.asset_id != self.equipment_id:
+            raise ValueError("MVP inspection result requires equipment_id = asset_id")
         return self
 
 

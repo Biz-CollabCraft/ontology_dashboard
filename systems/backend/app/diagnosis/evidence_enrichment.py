@@ -111,11 +111,16 @@ def evidence_payload_reference(artifact: dict[str, Any]) -> dict[str, str]:
 
 
 def validate_evidence_payload_invariants(payload: dict[str, Any]) -> None:
+    recommended_actions = payload.get("recommended_actions", [])
+    if len(recommended_actions) > 1:
+        raise ValueError(
+            "evidence_payload supports at most one operational recommendation"
+        )
     source_field_ids = {field["field_id"] for field in payload.get("source_fields", [])}
     basis_refs: set[str] = set()
     for hypothesis in payload.get("component_hypotheses", []):
         basis_refs.update(hypothesis.get("basis", []))
-    for action in payload.get("recommended_actions", []):
+    for action in recommended_actions:
         basis_refs.update(action.get("basis", []))
     unresolved = sorted(basis_refs - source_field_ids)
     if unresolved:

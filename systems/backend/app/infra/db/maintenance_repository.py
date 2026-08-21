@@ -22,6 +22,7 @@ from app.maintenance.integration import (
     MaintenanceStartedEvent,
 )
 from app.maintenance.maintenance_schema import (
+    InspectionResult,
     MaintenanceAction,
     MaintenanceActionStatus,
     OperationalRecommendedAction,
@@ -110,12 +111,13 @@ class MaintenanceRepository:
                 """
                 INSERT OR IGNORE INTO closed_loop_recommendations (
                     recommendation_id,organization_id,project_id,workspace_id,event_id,
-                    asset_id,equipment_id,recommendation_origin,status,materialization_strategy,
+                    asset_id,equipment_id,asset_type,recommendation_origin,status,materialization_strategy,
                     source_action_id,
                     source_product_result_id,source_evidence_id,source_schema_version,
                     source_policy_version,label,kind,requires_human_approval,basis_json,
-                    created_at,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    source_inspection_work_order_id,source_inspection_reference,
+                    action_code,authored_by,authored_at,created_at,updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     recommendation.recommendation_id,
@@ -125,6 +127,7 @@ class MaintenanceRepository:
                     recommendation.event_id,
                     recommendation.asset_id,
                     recommendation.equipment_id,
+                    recommendation.asset_type,
                     recommendation.recommendation_origin,
                     recommendation.status.value,
                     recommendation.materialization_strategy.value,
@@ -137,6 +140,15 @@ class MaintenanceRepository:
                     recommendation.kind,
                     recommendation.requires_human_approval,
                     self._json(list(recommendation.basis)),
+                    recommendation.source_inspection_work_order_id,
+                    recommendation.source_inspection_reference,
+                    recommendation.action_code,
+                    recommendation.authored_by,
+                    (
+                        None
+                        if recommendation.authored_at is None
+                        else recommendation.authored_at.isoformat()
+                    ),
                     now,
                     now,
                 ),
@@ -199,6 +211,169 @@ class MaintenanceRepository:
             ).fetchone()
         return None if row is None else self._recommendation_from_row(row)
 
+    def create_manual_recommendation(
+        self,
+        *,
+        recommendation: OperationalRecommendedAction,
+        actor_display_name: str,
+        request_idempotency_key: str,
+        request_fingerprint: str,
+    ) -> dict[str, Any]:
+        """Persist one Operations recommendation with HTTP replay semantics.
+
+        The stable source tuple is also checked independently from the request
+        key so duplicate submissions cannot create a second recommendation.
+        """
+
+        if recommendation.recommendation_origin != "operations_manual":
+            raise ValueError("manual recommendation command requires operations_manual origin")
+        now = self._now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            scope = self._scope(connection, recommendation)
+            replay = self._reserve_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                command_type="operations_manual.created",
+                request_fingerprint=request_fingerprint,
+                now=now,
+            )
+            if replay is not None:
+                return replay
+
+            inserted = connection.execute(
+                """
+                INSERT OR IGNORE INTO closed_loop_recommendations (
+                    recommendation_id,organization_id,project_id,workspace_id,event_id,
+                    asset_id,equipment_id,asset_type,recommendation_origin,status,materialization_strategy,
+                    source_action_id,source_product_result_id,source_evidence_id,
+                    source_schema_version,source_policy_version,label,kind,
+                    requires_human_approval,basis_json,source_inspection_work_order_id,
+                    source_inspection_reference,action_code,authored_by,authored_at,
+                    created_at,updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    recommendation.recommendation_id,
+                    recommendation.organization_id,
+                    recommendation.project_id,
+                    recommendation.workspace_id,
+                    recommendation.event_id,
+                    recommendation.asset_id,
+                    recommendation.equipment_id,
+                    recommendation.asset_type,
+                    recommendation.recommendation_origin,
+                    recommendation.status.value,
+                    recommendation.materialization_strategy.value,
+                    recommendation.source_action_id,
+                    recommendation.source_product_result_id,
+                    recommendation.source_evidence_id,
+                    recommendation.source_schema_version,
+                    recommendation.source_policy_version,
+                    recommendation.label,
+                    recommendation.kind,
+                    recommendation.requires_human_approval,
+                    self._json(list(recommendation.basis)),
+                    recommendation.source_inspection_work_order_id,
+                    recommendation.source_inspection_reference,
+                    recommendation.action_code,
+                    recommendation.authored_by,
+                    recommendation.authored_at.isoformat(),
+                    now,
+                    now,
+                ),
+            )
+            if inserted.rowcount == 1:
+                self._record_activity(
+                    connection,
+                    scope=scope,
+                    event_id=recommendation.event_id,
+                    equipment_id=recommendation.equipment_id,
+                    recommendation_id=recommendation.recommendation_id,
+                    aggregate_type="recommendation",
+                    aggregate_id=recommendation.recommendation_id,
+                    activity_type="recommendation.materialized",
+                    actor_user_id=str(recommendation.authored_by),
+                    actor_display_name=actor_display_name,
+                    before_status=None,
+                    after_status=recommendation.status.value,
+                    payload={
+                        "recommendation_origin": recommendation.recommendation_origin,
+                        "source_inspection_reference": (
+                            recommendation.source_inspection_reference
+                        ),
+                    },
+                    created_at=recommendation.authored_at.isoformat(),
+                )
+            existing_row = connection.execute(
+                """
+                SELECT * FROM closed_loop_recommendations
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND source_inspection_work_order_id=?
+                  AND source_inspection_reference=? AND action_code=?
+                """,
+                (
+                    recommendation.organization_id,
+                    recommendation.project_id,
+                    recommendation.workspace_id,
+                    recommendation.source_inspection_work_order_id,
+                    recommendation.source_inspection_reference,
+                    recommendation.action_code,
+                ),
+            ).fetchone()
+            if existing_row is None:
+                raise RuntimeError("operations manual recommendation was not persisted")
+            stored = self._recommendation_from_row(existing_row)
+            semantic_fields = (
+                "recommendation_id",
+                "organization_id",
+                "project_id",
+                "workspace_id",
+                "recommendation_origin",
+                "asset_id",
+                "equipment_id",
+                "asset_type",
+                "event_id",
+                "source_action_id",
+                "source_product_result_id",
+                "source_evidence_id",
+                "source_schema_version",
+                "source_policy_version",
+                "label",
+                "kind",
+                "requires_human_approval",
+                "basis",
+                "source_inspection_work_order_id",
+                "source_inspection_reference",
+                "action_code",
+                "authored_by",
+            )
+            if any(
+                getattr(stored, field) != getattr(recommendation, field)
+                for field in semantic_fields
+            ):
+                raise IdempotencyConflict(
+                    "operations manual recommendation conflicts with existing source"
+                )
+            deduplicated = inserted.rowcount != 1
+
+            result = {
+                "recommendation_id": stored.recommendation_id,
+                "recommendation_status": stored.status.value,
+                "recommendation": stored.model_dump(mode="json"),
+                "deduplicated": deduplicated,
+                "replayed": False,
+            }
+            self._finish_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                response=result,
+                now=now,
+            )
+            return result
+
     def operational_side_effect_counts(self) -> dict[str, int]:
         with self._connect() as connection:
             return {
@@ -228,6 +403,326 @@ class MaintenanceRepository:
                     ).fetchone()[0]
                 ),
             }
+
+    def create_inspection_work_order(
+        self,
+        *,
+        work_order: WorkOrder,
+        actor_id: str,
+        actor_display_name: str,
+        request_idempotency_key: str,
+        request_fingerprint: str,
+    ) -> dict[str, Any]:
+        if work_order.work_type is not WorkOrderType.INSPECTION:
+            raise ValueError("inspection request requires an inspection work order")
+        if work_order.status is not WorkOrderStatus.REQUESTED:
+            raise InvalidTransition("inspection work order must start as requested")
+        now = self._now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            scope = self._scope(connection, work_order)
+            replay = self._reserve_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                command_type="inspection.requested",
+                request_fingerprint=request_fingerprint,
+                now=now,
+            )
+            if replay is not None:
+                return replay
+            self._insert_work_order(connection, work_order=work_order, now=now)
+            self._record_activity(
+                connection,
+                scope=scope,
+                event_id=work_order.event_id,
+                equipment_id=work_order.equipment_id,
+                work_order_id=work_order.work_order_id,
+                aggregate_type="work_order",
+                aggregate_id=work_order.work_order_id,
+                activity_type="work_order.requested",
+                actor_user_id=actor_id,
+                actor_display_name=actor_display_name,
+                before_status=None,
+                after_status=work_order.status.value,
+                payload={
+                    "work_type": work_order.work_type.value,
+                    "operational_decision_kind": (
+                        work_order.authorization.operational_decision.value
+                    ),
+                },
+                created_at=now,
+            )
+            result = {
+                "work_order_id": work_order.work_order_id,
+                "work_type": work_order.work_type.value,
+                "work_order_status": work_order.status.value,
+                "replayed": False,
+            }
+            self._finish_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                response=result,
+                now=now,
+            )
+            return result
+
+    def transition_inspection_work_order(
+        self,
+        *,
+        work_order: WorkOrder,
+        actor_id: str,
+        actor_display_name: str,
+        transitioned_at: datetime,
+        request_idempotency_key: str,
+        request_fingerprint: str,
+    ) -> dict[str, Any]:
+        if work_order.work_type is not WorkOrderType.INSPECTION:
+            raise ValueError("inspection transition requires an inspection work order")
+        if work_order.status not in {
+            WorkOrderStatus.APPROVED,
+            WorkOrderStatus.IN_PROGRESS,
+        }:
+            raise InvalidTransition("unsupported inspection work order transition")
+        now = self._now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            scope = self._scope(connection, work_order)
+            replay = self._reserve_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                command_type=f"inspection.{work_order.status.value}",
+                request_fingerprint=request_fingerprint,
+                now=now,
+            )
+            if replay is not None:
+                return replay
+            row = self._work_order_row(
+                connection,
+                scope=scope,
+                work_order_id=work_order.work_order_id,
+            )
+            if row is None:
+                raise ValueError("inspection work order not found")
+            current = self._work_order_from_row(row)
+            if current.work_type is not WorkOrderType.INSPECTION:
+                raise ValueError("work order is not an inspection")
+            transition_work_order(current.status, work_order.status)
+            if current.model_copy(update={"status": work_order.status}) != work_order:
+                raise ValueError("persisted work order does not match inspection transition")
+            updated = connection.execute(
+                """
+                UPDATE closed_loop_work_orders SET status=?,updated_at=?
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND work_order_id=? AND status=?
+                """,
+                (
+                    work_order.status.value,
+                    now,
+                    scope.organization_id,
+                    scope.project_id,
+                    scope.workspace_id,
+                    work_order.work_order_id,
+                    current.status.value,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise InvalidTransition("inspection work order was changed concurrently")
+            self._record_activity(
+                connection,
+                scope=scope,
+                event_id=work_order.event_id,
+                equipment_id=work_order.equipment_id,
+                work_order_id=work_order.work_order_id,
+                aggregate_type="work_order",
+                aggregate_id=work_order.work_order_id,
+                activity_type=f"work_order.{work_order.status.value}",
+                actor_user_id=actor_id,
+                actor_display_name=actor_display_name,
+                before_status=current.status.value,
+                after_status=work_order.status.value,
+                payload={"work_type": WorkOrderType.INSPECTION.value},
+                created_at=transitioned_at.isoformat(),
+            )
+            result = {
+                "work_order_id": work_order.work_order_id,
+                "work_type": work_order.work_type.value,
+                "work_order_status": work_order.status.value,
+                "replayed": False,
+            }
+            self._finish_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                response=result,
+                now=now,
+            )
+            return result
+
+    def complete_inspection(
+        self,
+        *,
+        work_order: WorkOrder,
+        inspection_result: InspectionResult,
+        actor_display_name: str,
+        request_idempotency_key: str,
+        request_fingerprint: str,
+    ) -> dict[str, Any]:
+        if work_order.work_type is not WorkOrderType.INSPECTION:
+            raise ValueError("inspection completion requires an inspection work order")
+        if work_order.status is not WorkOrderStatus.COMPLETED:
+            raise InvalidTransition("inspection completion must target completed status")
+        now = self._now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            scope = self._scope(connection, work_order)
+            self._scope(connection, inspection_result)
+            replay = self._reserve_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                command_type="inspection.completed",
+                request_fingerprint=request_fingerprint,
+                now=now,
+            )
+            if replay is not None:
+                return replay
+            row = self._work_order_row(
+                connection,
+                scope=scope,
+                work_order_id=work_order.work_order_id,
+            )
+            if row is None:
+                raise ValueError("inspection work order not found")
+            current = self._work_order_from_row(row)
+            if current.work_type is not WorkOrderType.INSPECTION:
+                raise ValueError("work order is not an inspection")
+            transition_work_order(current.status, WorkOrderStatus.COMPLETED)
+            if current.model_copy(update={"status": work_order.status}) != work_order:
+                raise ValueError("persisted work order does not match inspection completion")
+            for field in (
+                "organization_id",
+                "project_id",
+                "workspace_id",
+                "work_order_id",
+                "event_id",
+                "asset_id",
+                "equipment_id",
+                "asset_type",
+            ):
+                if getattr(inspection_result, field) != getattr(work_order, field):
+                    raise ValueError(
+                        f"inspection result {field} does not match the work order"
+                    )
+            updated = connection.execute(
+                """
+                UPDATE closed_loop_work_orders SET status=?,updated_at=?
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND work_order_id=? AND status=?
+                """,
+                (
+                    WorkOrderStatus.COMPLETED.value,
+                    now,
+                    scope.organization_id,
+                    scope.project_id,
+                    scope.workspace_id,
+                    work_order.work_order_id,
+                    current.status.value,
+                ),
+            )
+            if updated.rowcount != 1:
+                raise InvalidTransition("inspection work order was changed concurrently")
+            connection.execute(
+                """
+                INSERT INTO closed_loop_inspection_results (
+                    inspection_result_id,organization_id,project_id,workspace_id,
+                    work_order_id,event_id,asset_id,equipment_id,asset_type,outcome,
+                    checklist_json,measurements_json,findings_json,note,
+                    recorded_by,recorded_at,created_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    inspection_result.inspection_result_id,
+                    inspection_result.organization_id,
+                    inspection_result.project_id,
+                    inspection_result.workspace_id,
+                    inspection_result.work_order_id,
+                    inspection_result.event_id,
+                    inspection_result.asset_id,
+                    inspection_result.equipment_id,
+                    inspection_result.asset_type,
+                    inspection_result.outcome.value,
+                    self._json(
+                        [item.model_dump(mode="json") for item in inspection_result.checklist]
+                    ),
+                    self._json(
+                        [
+                            item.model_dump(mode="json")
+                            for item in inspection_result.measurements
+                        ]
+                    ),
+                    self._json(list(inspection_result.findings)),
+                    inspection_result.note,
+                    inspection_result.recorded_by,
+                    inspection_result.recorded_at.isoformat(),
+                    now,
+                ),
+            )
+            self._record_activity(
+                connection,
+                scope=scope,
+                event_id=work_order.event_id,
+                equipment_id=work_order.equipment_id,
+                work_order_id=work_order.work_order_id,
+                aggregate_type="inspection_result",
+                aggregate_id=inspection_result.inspection_result_id,
+                activity_type="inspection.result_recorded",
+                actor_user_id=inspection_result.recorded_by,
+                actor_display_name=actor_display_name,
+                before_status=None,
+                after_status=inspection_result.outcome.value,
+                payload={
+                    "inspection_result_id": inspection_result.inspection_result_id,
+                    "work_type": WorkOrderType.INSPECTION.value,
+                    "outcome": inspection_result.outcome.value,
+                },
+                created_at=inspection_result.recorded_at.isoformat(),
+            )
+            self._record_activity(
+                connection,
+                scope=scope,
+                event_id=work_order.event_id,
+                equipment_id=work_order.equipment_id,
+                work_order_id=work_order.work_order_id,
+                aggregate_type="work_order",
+                aggregate_id=work_order.work_order_id,
+                activity_type="work_order.completed",
+                actor_user_id=inspection_result.recorded_by,
+                actor_display_name=actor_display_name,
+                before_status=current.status.value,
+                after_status=work_order.status.value,
+                payload={"work_type": WorkOrderType.INSPECTION.value},
+                created_at=inspection_result.recorded_at.isoformat(),
+            )
+            result = {
+                "work_order_id": work_order.work_order_id,
+                "work_type": work_order.work_type.value,
+                "work_order_status": work_order.status.value,
+                "inspection_result_id": inspection_result.inspection_result_id,
+                "inspection_outcome": inspection_result.outcome.value,
+                "maintenance_event_id": None,
+                "replayed": False,
+            }
+            self._finish_idempotency(
+                connection,
+                scope=scope,
+                idempotency_key=request_idempotency_key,
+                response=result,
+                now=now,
+            )
+            return result
 
     def decide_recommendation(
         self,
@@ -1050,9 +1545,9 @@ class MaintenanceRepository:
             """
             INSERT INTO closed_loop_work_orders (
                 work_order_id,organization_id,project_id,workspace_id,event_id,
-                asset_id,equipment_id,work_type,status,idempotency_key,
+                asset_id,equipment_id,asset_type,work_type,status,idempotency_key,
                 authorization_json,created_at,updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 work_order.work_order_id,
@@ -1062,6 +1557,7 @@ class MaintenanceRepository:
                 work_order.event_id,
                 work_order.asset_id,
                 work_order.equipment_id,
+                work_order.asset_type,
                 work_order.work_type.value,
                 work_order.status.value,
                 work_order.idempotency_key,
@@ -1114,13 +1610,141 @@ class MaintenanceRepository:
             scope = self.project_context.resolve(workspace_id, connection=connection)
             rows = connection.execute(
                 """
-                SELECT * FROM closed_loop_activities
-                WHERE organization_id=? AND project_id=? AND workspace_id=? AND event_id=?
-                ORDER BY created_at,timeline_order,activity_id
+                SELECT a.*,w.work_type
+                FROM closed_loop_activities a
+                LEFT JOIN closed_loop_work_orders w
+                  ON w.organization_id=a.organization_id
+                 AND w.project_id=a.project_id
+                 AND w.workspace_id=a.workspace_id
+                 AND w.work_order_id=a.work_order_id
+                WHERE a.organization_id=? AND a.project_id=?
+                  AND a.workspace_id=? AND a.event_id=?
+                ORDER BY a.created_at,a.timeline_order,a.activity_id
                 """,
                 (scope.organization_id, scope.project_id, workspace_id, event_id),
             ).fetchall()
         return [{**dict(row), "payload": self._decoded(row["payload_json"])} for row in rows]
+
+    def get_work_order(
+        self, *, workspace_id: str, work_order_id: str
+    ) -> WorkOrder | None:
+        with self._connect() as connection:
+            scope = self.project_context.resolve(workspace_id, connection=connection)
+            row = self._work_order_row(
+                connection,
+                scope=scope,
+                work_order_id=work_order_id,
+            )
+        return None if row is None else self._work_order_from_row(row)
+
+    def get_inspection_result(
+        self,
+        *,
+        workspace_id: str,
+        inspection_result_id: str,
+    ) -> InspectionResult | None:
+        with self._connect() as connection:
+            scope = self.project_context.resolve(workspace_id, connection=connection)
+            row = connection.execute(
+                """
+                SELECT * FROM closed_loop_inspection_results
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND inspection_result_id=?
+                """,
+                (
+                    scope.organization_id,
+                    scope.project_id,
+                    workspace_id,
+                    inspection_result_id,
+                ),
+            ).fetchone()
+        return None if row is None else self._inspection_result_from_row(row)
+
+    def event_lineage(self, *, workspace_id: str, event_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            scope = self.project_context.resolve(workspace_id, connection=connection)
+            parameters = (
+                scope.organization_id,
+                scope.project_id,
+                workspace_id,
+                event_id,
+            )
+            recommendations = connection.execute(
+                """
+                SELECT * FROM closed_loop_recommendations
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY created_at,recommendation_id
+                """,
+                parameters,
+            ).fetchall()
+            decisions = connection.execute(
+                """
+                SELECT * FROM closed_loop_recommendation_decisions
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY decided_at,decision_id
+                """,
+                parameters,
+            ).fetchall()
+            work_orders = connection.execute(
+                """
+                SELECT * FROM closed_loop_work_orders
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY created_at,work_order_id
+                """,
+                parameters,
+            ).fetchall()
+            inspection_results = connection.execute(
+                """
+                SELECT * FROM closed_loop_inspection_results
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY recorded_at,inspection_result_id
+                """,
+                parameters,
+            ).fetchall()
+            maintenance_actions = connection.execute(
+                """
+                SELECT * FROM closed_loop_maintenance_actions
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY created_at,maintenance_action_id
+                """,
+                parameters,
+            ).fetchall()
+            maintenance_events = connection.execute(
+                """
+                SELECT * FROM closed_loop_maintenance_events
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY completed_at,maintenance_event_id
+                """,
+                parameters,
+            ).fetchall()
+        return {
+            "event_id": event_id,
+            "recommendations": [
+                self._recommendation_from_row(row).model_dump(mode="json")
+                for row in recommendations
+            ],
+            "decisions": [dict(row) for row in decisions],
+            "work_orders": [
+                self._work_order_from_row(row).model_dump(mode="json")
+                for row in work_orders
+            ],
+            "inspection_results": [
+                self._inspection_result_from_row(row).model_dump(mode="json")
+                for row in inspection_results
+            ],
+            "maintenance_actions": [dict(row) for row in maintenance_actions],
+            "maintenance_events": [
+                {
+                    **dict(row),
+                    "state_patch": self._decoded(row["state_patch_json"]),
+                }
+                for row in maintenance_events
+            ],
+            "activities": self.list_event_activity(
+                workspace_id=workspace_id,
+                event_id=event_id,
+            ),
+        }
 
     def equipment_state(self, *, workspace_id: str, equipment_id: str) -> dict[str, Any] | None:
         with self._connect() as connection:
@@ -1156,6 +1780,7 @@ class MaintenanceRepository:
             event_id=row["event_id"],
             asset_id=row["asset_id"],
             equipment_id=row["equipment_id"],
+            asset_type=row["asset_type"],
             work_type=row["work_type"],
             status=row["status"],
             idempotency_key=row["idempotency_key"],
@@ -1174,6 +1799,7 @@ class MaintenanceRepository:
             materialization_strategy=row["materialization_strategy"],
             asset_id=row["asset_id"],
             equipment_id=row["equipment_id"],
+            asset_type=row["asset_type"],
             event_id=row["event_id"],
             source_action_id=row["source_action_id"],
             source_product_result_id=row["source_product_result_id"],
@@ -1184,6 +1810,32 @@ class MaintenanceRepository:
             kind=row["kind"],
             requires_human_approval=bool(row["requires_human_approval"]),
             basis=tuple(cls._decoded(row["basis_json"])),
+            source_inspection_work_order_id=row["source_inspection_work_order_id"],
+            source_inspection_reference=row["source_inspection_reference"],
+            action_code=row["action_code"],
+            authored_by=row["authored_by"],
+            authored_at=row["authored_at"],
+        )
+
+    @classmethod
+    def _inspection_result_from_row(cls, row: Mapping[str, Any]) -> InspectionResult:
+        return InspectionResult(
+            organization_id=row["organization_id"],
+            project_id=row["project_id"],
+            workspace_id=row["workspace_id"],
+            inspection_result_id=row["inspection_result_id"],
+            work_order_id=row["work_order_id"],
+            event_id=row["event_id"],
+            asset_id=row["asset_id"],
+            equipment_id=row["equipment_id"],
+            asset_type=row["asset_type"],
+            outcome=row["outcome"],
+            checklist=tuple(cls._decoded(row["checklist_json"])),
+            measurements=tuple(cls._decoded(row["measurements_json"])),
+            findings=tuple(cls._decoded(row["findings_json"])),
+            note=row["note"],
+            recorded_by=row["recorded_by"],
+            recorded_at=row["recorded_at"],
         )
 
     @staticmethod
@@ -1343,6 +1995,7 @@ class MaintenanceRepository:
             "work_order.approved": 40,
             "maintenance_action.planned": 50,
             "work_order.in_progress": 60,
+            "inspection.result_recorded": 75,
             "maintenance.started": 70,
             "work_order.completed": 80,
             "maintenance_action.completed": 90,

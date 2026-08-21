@@ -17,6 +17,7 @@ from app.dependencies import (
     get_export_service,
     get_governance_service,
     get_identity_service,
+    get_maintenance_loop_service,
     get_ontology_planner_service,
     get_ontology_service,
     get_predictive_maintenance_runtime_service,
@@ -33,6 +34,7 @@ from app.governance import GovernanceAccessError, build_governance_router
 from app.health import router as health_router
 from app.identity import AuthError
 from app.identity.identity_router import build_identity_router, identity_http_status
+from app.maintenance.maintenance_router import create_maintenance_router
 from app.ontology.ontology_router import create_ontology_router
 from app.ontology.ontology_service import OntologyAccessError, OntologyNotFound
 from app.planner import build_planner_router
@@ -177,6 +179,12 @@ governance_router = build_governance_router(
     require_permission=require_permission,
     require_csrf=require_csrf,
 )
+maintenance_router = create_maintenance_router(
+    require_permission=require_permission,
+    get_identity_service=get_identity_service,
+    get_maintenance_service=get_maintenance_loop_service,
+    require_csrf=require_csrf,
+)
 
 for router in (
     health_router,
@@ -191,6 +199,7 @@ for router in (
     report_router,
     governance_router,
     planner_router,
+    maintenance_router,
 ):
     app.include_router(router)
 

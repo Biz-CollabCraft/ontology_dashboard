@@ -326,6 +326,7 @@ mutation authorization/state validation은 replay 여부와 무관하게 Backend
 - `equipment_id`
 - `recommendation_id`
 - `work_order_id`
+- `work_type` (`inspection` 또는 `maintenance`; WorkOrder와 연결되지 않은 activity는 null 가능)
 - `maintenance_action_id`
 - `maintenance_event_id`
 - `actor_user_id`
@@ -337,6 +338,42 @@ mutation authorization/state validation은 replay 여부와 무관하게 Backend
 모든 activity에서 모든 ID를 강제하지 않는다. 예를 들어 Recommendation 판단에는
 `maintenance_event_id`가 없어도 된다. 대신 존재하는 ID는 같은 Event/Equipment lineage를 깨뜨리면 안
 된다.
+
+### 7.1 Maintenance canonical command/read 위치
+
+2단계 점검→정비 판단 경계는 다음 project/workspace-scoped API를 사용한다.
+
+| Method | Path | Actor |
+|---|---|---|
+| `POST` | `/api/projects/{project_id}/workspaces/{workspace_id}/maintenance/inspection-work-orders` | `process_manager` |
+| `POST` | `.../inspection-work-orders/{work_order_id}/approve` | `process_manager` |
+| `POST` | `.../inspection-work-orders/{work_order_id}/start` | `process_engineer` |
+| `POST` | `.../inspection-work-orders/{work_order_id}/complete` | `process_engineer` |
+| `POST` | `.../inspection-results/{inspection_result_id}/recommendations` | `process_manager` |
+| `POST` | `.../recommendations/{recommendation_id}/decisions` | `process_manager` |
+| `GET` | `.../events/{event_id}/lineage` | `events.read` principal |
+
+모든 mutation은 `Idempotency-Key`를 요구한다. canonical lineage read는 producer Product
+Result/Evidence → inspection WorkOrder/Result → Operations manual recommendation → 두 번째
+RecommendationDecision → maintenance WorkOrder와 `activities[].work_type`을 한 응답에서 보존한다.
+Inspection 완료 응답의 `maintenance_event_id`는 null이며 별도 추천 승인 전에는 maintenance
+WorkOrder를 만들지 않는다.
+
+Inspection WorkOrder 요청 본문은 `event_id`만 받는다. `asset_id`, `equipment_id`, `asset_type`,
+`operational_decision_kind`, Product Result/Evidence/Action ID와 schema/policy version은
+클라이언트 입력을 신뢰하지 않는다. Backend가 동일 organization/project/workspace scope의
+Diagnosis public query로 canonical Event Evidence Projection을 조회하고, 다음 조건을 모두
+검증한 뒤 WorkOrder authorization과 lineage를 서버에서 구성한다.
+
+- Event와 scope가 실제 canonical Product Result에 존재한다.
+- Projection의 `asset_id = equipment_id`이고 subject/artifact의 `asset_type`이 일치한다.
+- `assessment.operational_decision_kind`가 `request_inspection` 또는 `review_shutdown`이다.
+- 단일 `recommended_actions[0].action_id`가 operational decision과 일치한다.
+- Product Result/Evidence/Action ID와 schema/policy version이 Projection에 존재한다.
+
+존재하지 않거나 scope가 다른 Event는 not found로, 누락·불일치·비허용 결정은 fail-fast
+계약 오류로 처리한다. WorkOrder와 Inspection Result에는 Projection에서 얻은 `asset_type`을
+보존하며, Operations manual recommendation이 이를 이어받는다.
 
 ## 8. Product aggregation / identity 계약
 

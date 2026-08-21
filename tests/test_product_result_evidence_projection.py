@@ -12,6 +12,7 @@ from app.diagnosis.evidence_projection import (
     event_evidence_projection_to_legacy_evidence,
     product_result_artifact_to_event_evidence_projection,
 )
+from app.diagnosis.evidence_enrichment import validate_evidence_payload_invariants
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "product_result_evidence_projection"
@@ -43,12 +44,16 @@ def test_product_result_artifact_to_event_evidence_projection_matches_expected_r
     assert projection["schema_version"] == expected["schema_version"] == EVENT_EVIDENCE_SCHEMA_VERSION
     assert projection["contract_type"] == expected["contract_type"] == EVENT_EVIDENCE_CONTRACT_TYPE
     assert projection["event_id"] == expected["event_id"]
+    assert projection["evidence_id"] == f"EVD-{projection['event_id']}"
     assert projection["subject"] == expected["subject"]
     assert projection["artifact_reference"]["evidence_payload_reference"] == expected["artifact_reference"][
         "evidence_payload_reference"
     ]
     assert projection["assessment"]["status"] == expected["assessment"]["status"]
     assert projection["assessment"]["recommended_decision"] == expected["assessment"]["recommended_decision"]
+    assert projection["assessment"]["operational_decision_kind"] == expected["assessment"][
+        "operational_decision_kind"
+    ]
     assert projection["assessment"]["threshold"] == expected["assessment"]["threshold"]
     assert projection["assessment"]["top_factors"] == expected["assessment"]["top_factors"]
     assert projection["report_projection"]["display_labels"]["confidence_label"] == "high"
@@ -56,6 +61,12 @@ def test_product_result_artifact_to_event_evidence_projection_matches_expected_r
     assert projection["report_projection"]["sensor_cards"][0]["basis"]["baseline_n"] == 240
     assert projection["report_projection"]["inspection_targets"][0]["component_id"] == "rotating_assembly"
     assert_absent_hidden_truth(projection)
+    schema = json.loads(
+        (ROOT / "contracts" / "schemas" / "event-evidence-projection.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert list(Draft202012Validator(schema).iter_errors(projection)) == []
 
 
 def test_enriched_artifact_fixture_keeps_evidence_payload_to_producer_candidate_fields() -> None:
@@ -143,6 +154,7 @@ def test_legacy_projection_uses_ranked_factor_evidence_for_current_schema() -> N
     schema = json.loads((ROOT / "contracts" / "schemas" / "evidence-package.schema.json").read_text(encoding="utf-8"))
     assert list(Draft202012Validator(schema).iter_errors(legacy)) == []
     assert legacy["schema_version"] == "1.0"
+    assert legacy["evidence_id"] == projection["evidence_id"]
     assert legacy["event_id"] == projection["event_id"]
     assert legacy["status"] == projection["assessment"]["status"]
     assert legacy["recommended_decision"] == projection["assessment"]["recommended_decision"]
@@ -162,3 +174,47 @@ def test_projection_display_confidence_prefers_canonical_label_over_numeric_valu
 
     assert projection["assessment"]["confidence"] == "medium"
     assert projection["report_projection"]["display_labels"]["confidence_label"] == "medium"
+
+
+def test_operational_decision_is_null_without_producer_recommendation() -> None:
+    artifact = enriched_critical_artifact()
+    artifact["evidence_payload"]["recommended_actions"] = []
+    artifact["recommended_action"] = {
+        "action": "immediate_inspection_and_stop_review",
+        "priority": "urgent",
+    }
+    artifact["status_grade"] = "critical"
+
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
+
+    assert projection["assessment"]["operational_decision_kind"] is None
+
+
+def test_operational_decision_does_not_reinterpret_producer_kind() -> None:
+    artifact = enriched_critical_artifact()
+    artifact["evidence_payload"]["recommended_actions"][0]["kind"] = "opaque_producer_kind"
+
+    projection = product_result_artifact_to_event_evidence_projection(artifact)
+
+    assert projection["report_projection"]["recommended_actions"][0]["kind"] == (
+        "opaque_producer_kind"
+    )
+    assert projection["assessment"]["operational_decision_kind"] == "review_shutdown"
+
+
+def test_product_result_contract_rejects_multiple_operational_recommendations() -> None:
+    artifact = enriched_critical_artifact()
+    artifact["evidence_payload"]["recommended_actions"].append(
+        dict(artifact["evidence_payload"]["recommended_actions"][0])
+    )
+
+    schema = json.loads(
+        (ROOT / "contracts" / "schemas" / "product-result-artifact.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    errors = list(Draft202012Validator(schema).iter_errors(artifact))
+
+    assert any(error.validator == "maxItems" for error in errors)
+    with pytest.raises(ValueError, match="at most one operational recommendation"):
+        validate_evidence_payload_invariants(artifact["evidence_payload"])

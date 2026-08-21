@@ -51,10 +51,18 @@ from app.infra.db.dataset_ingestion_repository import DatasetIngestionRepository
 from app.infra.db.dataset_repository import DatasetRepository
 from app.infra.db.diagnosis_runtime_repository import PredictiveMaintenanceRuntimeRepository
 from app.infra.db.identity_repository import IdentityRepository as SQLiteIdentityRepository
+from app.infra.db.maintenance_repository import (
+    MaintenanceRepository,
+    PostgreSQLMaintenanceRepository,
+)
 from app.infra.db.migrations import migrate
 from app.infra.db.ontology_action_repository import OntologyActionRepository
 from app.infra.db.ontology_instance_repository import OntologyInstanceRepository
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
+from app.infra.db.postgresql_compat import (
+    PostgreSQLProjectContextResolver,
+    postgres_repository_connection,
+)
 from app.infra.db.prediction_result_repository import PredictionResultRepository
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
@@ -66,6 +74,7 @@ from app.infra.context import Project3HttpContextProvider, ResilientContextProvi
 from app.infra.llm import configured_provider
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
+from app.maintenance.service import MaintenanceLoopService
 from app.ontology import OntologyService
 from app.planner import LayoutPlanner, OntologyDashboardPlannerService
 from app.project import ProjectService
@@ -399,6 +408,30 @@ def get_predictive_maintenance_runtime_service() -> PredictiveMaintenanceRuntime
             detail="Predictive-maintenance live runtime requires PostgreSQL",
         )
     return PredictiveMaintenanceRuntimeService(PredictiveMaintenanceRuntimeRepository(target))
+
+
+@lru_cache(maxsize=1)
+def get_maintenance_loop_service() -> MaintenanceLoopService:
+    """Compose the canonical Maintenance command/read boundary."""
+
+    ensure_database_migrations()
+    target = database_target()
+    if is_postgresql(target):
+        context = PostgreSQLProjectContextResolver(target)
+        repository = PostgreSQLMaintenanceRepository(
+            target,
+            project_context=context,
+            connection_factory=postgres_repository_connection,
+        )
+    else:
+        repository = MaintenanceRepository(
+            target,
+            project_context=RuntimeProjectContextResolver(target),
+        )
+    return MaintenanceLoopService(
+        repository,
+        event_evidence_query=get_predictive_maintenance_runtime_service(),
+    )
 
 
 class DashboardPlannerAdapter:

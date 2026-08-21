@@ -44,7 +44,12 @@ def create_app() -> FastAPI:
         ),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-CSRF-Token",
+            "Idempotency-Key",
+        ],
         expose_headers=[
             "Content-Disposition",
             "X-Export-Checkpoint-ID",
