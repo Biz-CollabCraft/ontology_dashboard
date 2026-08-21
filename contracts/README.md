@@ -38,7 +38,7 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 
 ## Generator 파이프라인 후속 Target 계약 후보 및 계획
 
-Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Series 생산자 확립 및 Layer 2 프로토콜 정규화 작업)을 위한 후속 Target Schema 목록과 상태는 다음과 같습니다.
+Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Series 생산자 확립 및 SensorRecord v2 프로토콜 정규화 작업)을 위한 후속 Target Schema 목록과 상태는 다음과 같습니다.
 
 ```text
 contracts/schemas/ (후속 Target 계약 후보 목록)
@@ -53,11 +53,11 @@ contracts/schemas/ (후속 Target 계약 후보 목록)
 
 | 계약 | 현재 상태 | 설명 |
 |---|---|---|
-| Observation Reference Fixture | 참고 fixture 존재 | `tests/fixtures/gen_data_layer2_observation/` (참고용) |
+| Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
-| Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
-| Extraction Result Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
-| Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
+| Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| Generator Extraction Result Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| Generator Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
 | Generator Feature Series Schema | **Target — 미작성** | Feature 구현 단계에서 작성 예정 |
 | Feature Dataset Bundle | **Target — 기존 Schema 재사용·확장 여부 검토 필요** | 기존 `dataset-bundle-manifest.schema.json`의 재사용 가능성을 우선 검토 |
 

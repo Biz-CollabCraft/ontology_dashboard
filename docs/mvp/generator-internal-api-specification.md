@@ -54,7 +54,7 @@
 | Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Target (유지) |
-| POST | `/extraction` | `gen_data` Layer 2 프로토콜 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target — 미병합 |
+| POST | `/extraction` | 프로토콜 투영 로그를 정제된 Observation/Failure Dataset으로 추출 (신규 1단계) | Target — 미병합 |
 | POST | `/preprocessing` | Observation Dataset을 분석하여 Preprocessing Plan 및 Ontology Mapping 발행 (신규 2단계) | Target — 미병합 |
 | POST | `/feature` | Observation/Failure + Plan/Mapping을 소비하여 Feature/Label/Series 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
@@ -64,7 +64,7 @@
 
 ### 3.3 기존 명칭 Migration 매핑표
 
-별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다. Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 `gen_data` Layer 2 프로토콜 로그 가공에 사용합니다.
+별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다. Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 `gen_data` 프로토콜 투영 로그 가공에 사용합니다.
 
 | 선행 API화 작업 대상 (Migration source) | Target (후속 목표 대상) | Migration 계획 및 비고 |
 |---|---|---|
@@ -76,12 +76,12 @@
 | `ExtractionRepository` | `PreprocessingRepository` | 저장소 클래스 변경 |
 | `ExtractionPlanner` | `PreprocessingPlanner` | LLM 계획기 클래스 변경 |
 | `ExtractionProfiler` | `PreprocessingProfiler` | 프로파일러 클래스 변경 |
-| (신규 구현) | `POST /extraction` | 신규 Layer 2 프로토콜 로그 추출 엔드포인트 |
+| (신규 구현) | `POST /extraction` | 신규 프로토콜 투영 로그 추출 엔드포인트 |
 | (신규 구현) | `ExtractionService` | 신규 Observation/Failure Dataset 발행 서비스 |
 
 ---
 
-## 4. Current 요청/응답 계약
+## 4. Current 요청/응답 및 런타임 동작 계약
 
 ### 4.1 `GET /health`
 
@@ -160,6 +160,35 @@
   }
 }
 ```
+
+### 4.3 Current 오류 응답 규격
+
+Current API는 FastAPI 기본 `{"detail": "..."}` 형식의 에러 응답을 반환합니다 (Target `ErrorEnvelope`와 혼합하지 않음).
+
+| HTTP 상태 | Current 의미 및 발생 조건 |
+|---:|---|
+| 400 | `data_dir`가 없거나, 디렉터리가 아니거나, 비어 있는 경우 |
+| 409 | startup 자동 학습 또는 다른 학습 요청이 이미 실행 중인 경우 |
+| 422 | 요청 JSON 본문 검증 실패 시 |
+| 500 | 학습 파이프라인 내부 처리 실패 또는 전체 모델 학습 실패 시 |
+
+### 4.4 Current Model Artifact 발행 계약
+
+- 학습에 성공한 모델은 immutable한 Model Artifact 패키지(`model-artifact-v1.0`)로 발행됩니다.
+- 동일한 `model_id`와 `model_version` 조합의 기존 아티팩트는 덮어쓰지 않습니다.
+- 발행 위치는 `MODEL_ARTIFACT_URI` 환경변수 또는 주입된 artifact 경로를 사용합니다.
+- `registry.json`은 모델 레지스트리의 보조 실행 인덱스 역할을 수행합니다.
+- Backend 진단 런타임이 소비하는 정본은 Manifest와 Role 파일을 온전히 포함한 Model Artifact입니다.
+- 일부 모델만 학습에 실패한 경우 성공한 모델 Artifact는 보존 및 유지되며, 실패한 모델은 `failed_models`에 별도로 기록됩니다.
+
+### 4.5 Current Startup · Shutdown · 동시성 계약
+
+- **Startup 아티팩트 검사**: Generator startup은 `has_any_published_model_artifact()`를 사용하여 대상 디렉터리에 유효하게 발행된 Model Artifact가 존재하는지 확인합니다.
+- **Initial Training 백그라운드 예약**: 유효한 Model Artifact가 존재하지 않을 경우 initial training을 백그라운드 태스크로 예약하며, ASGI startup 프로세스를 차단(block)하지 않습니다.
+- **Startup 자동 학습 생략**: 유효한 Model Artifact가 이미 존재하면 startup 시 자동 학습을 안전하게 생략합니다.
+- **Shutdown 대기**: 프로세스 shutdown 시 현재 실행 중인 initial training worker가 정상 완료될 때까지 대기합니다.
+- **프로세스 전역 Training Lock**: startup 학습과 `POST /internal/train` 및 `POST /internal/retrain`은 동일한 process-wide training lock(`_training_lock`)을 공유합니다.
+- **동시성 충돌 방지**: 이미 학습이 진행 중일 때 수신된 동시 학습 요청은 HTTP 409 (`Conflict`)로 거부됩니다.
 
 ---
 
