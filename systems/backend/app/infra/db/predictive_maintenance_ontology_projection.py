@@ -936,11 +936,13 @@ class PredictiveMaintenanceOntologyMaterializer:
     def _latest_result_rows(connection: Any, dataset_version_id: str) -> list[dict[str, Any]]:
         rows = connection.execute(
             """
-            SELECT r.*,p.feature_scope,'result_artifact'::text AS artifact_source_role
+            SELECT DISTINCT ON (r.asset_id)
+                   r.*,p.feature_scope,'result_artifact'::text AS artifact_source_role
             FROM pm_result_artifacts r
             JOIN pm_prediction_snapshots p
               ON p.dataset_version_id=r.dataset_version_id AND p.prediction_id=r.prediction_id
-            WHERE r.dataset_version_id=%s ORDER BY r.asset_id
+            WHERE r.dataset_version_id=%s
+            ORDER BY r.asset_id,r.observed_at DESC,r.created_at DESC,r.artifact_id DESC
             """,
             (dataset_version_id,),
         ).fetchall()

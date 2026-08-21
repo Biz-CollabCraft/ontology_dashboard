@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from app.infra.live_predictive_maintenance_runtime import (
     LIVE_SOURCE_VERSION,
+    _materialize_runtime_results,
     active_overlay_asset_ids,
     read_complete_ticks,
     read_overlay_available_events,
@@ -22,6 +24,18 @@ def test_macmini_compose_runs_canonical_live_worker() -> None:
     assert not (
         root / "systems" / "backend" / "ontology_dashboard" / "live_predictive_maintenance.py"
     ).exists()
+
+
+def test_runtime_product_result_materialization_never_deletes_history() -> None:
+    implementation = inspect.getsource(_materialize_runtime_results)
+    for table in (
+        "pm_result_artifacts",
+        "pm_prediction_factors",
+        "pm_prediction_timeline",
+        "pm_prediction_snapshots",
+        "prediction_results",
+    ):
+        assert f"DELETE FROM {table}" not in implementation
 
 
 def _write(path, rows):

@@ -403,41 +403,7 @@ def _materialize_runtime_results(
                     continue
                 prepared.append((row, artifact))
 
-            ready_asset_ids = sorted({str(row["asset_id"]) for row, _artifact in prepared})
-            if ready_asset_ids:
-                previous = connection.execute(
-                    """
-                    SELECT prediction_id,prediction_result_id
-                    FROM pm_prediction_snapshots
-                    WHERE dataset_version_id=%s AND asset_id = ANY(%s)
-                    """,
-                    (dataset_version_id, ready_asset_ids),
-                ).fetchall()
-                previous_prediction_ids = [str(item["prediction_id"]) for item in previous]
-                previous_result_ids = [str(item["prediction_result_id"]) for item in previous]
-                connection.execute(
-                    "DELETE FROM pm_result_artifacts WHERE dataset_version_id=%s AND asset_id = ANY(%s)",
-                    (dataset_version_id, ready_asset_ids),
-                )
-                if previous_prediction_ids:
-                    connection.execute(
-                        "DELETE FROM pm_prediction_factors WHERE dataset_version_id=%s AND prediction_id = ANY(%s)",
-                        (dataset_version_id, previous_prediction_ids),
-                    )
-                    connection.execute(
-                        "DELETE FROM pm_prediction_timeline WHERE dataset_version_id=%s AND prediction_id = ANY(%s)",
-                        (dataset_version_id, previous_prediction_ids),
-                    )
-                connection.execute(
-                    "DELETE FROM pm_prediction_snapshots WHERE dataset_version_id=%s AND asset_id = ANY(%s)",
-                    (dataset_version_id, ready_asset_ids),
-                )
-                if previous_result_ids:
-                    connection.execute(
-                        "DELETE FROM prediction_results WHERE prediction_id = ANY(%s)",
-                        (previous_result_ids,),
-                    )
-
+            inserted_count = 0
             for row, artifact in prepared:
                 asset_type = str(row["asset_type"])
                 probability = float(artifact["failure_probability"])
@@ -472,6 +438,29 @@ def _materialize_runtime_results(
                     "dataset_version_id": dataset_version_id,
                     "source_type": "product_runtime_inference",
                 }
+
+                existing_artifact = connection.execute(
+                    """
+                    SELECT prediction_id,prediction_result_id,source_sha256
+                    FROM pm_result_artifacts
+                    WHERE dataset_version_id=%s AND artifact_id=%s
+                    """,
+                    (dataset_version_id, str(artifact["artifact_id"])),
+                ).fetchone()
+                if existing_artifact is not None:
+                    identity = (
+                        str(existing_artifact["prediction_id"]),
+                        str(existing_artifact["prediction_result_id"]),
+                        str(existing_artifact["source_sha256"]),
+                    )
+                    expected_identity = (prediction_id, prediction_result_id, artifact_checksum)
+                    if identity != expected_identity:
+                        raise RuntimeError(
+                            "immutable Product Result identity collision: "
+                            f"dataset_version_id={dataset_version_id} "
+                            f"artifact_id={artifact['artifact_id']}"
+                        )
+                    continue
 
                 connection.execute(
                     """
@@ -611,12 +600,18 @@ def _materialize_runtime_results(
                         artifact_checksum,
                     ),
                 )
+                inserted_count += 1
 
             final_rows = connection.execute(
                 """
+                WITH latest AS (
+                    SELECT DISTINCT ON (asset_id) status_grade,asset_type
+                    FROM pm_result_artifacts
+                    WHERE dataset_version_id=%s
+                    ORDER BY asset_id,observed_at DESC,created_at DESC,artifact_id DESC
+                )
                 SELECT status_grade,asset_type,COUNT(*) AS count
-                FROM pm_result_artifacts
-                WHERE dataset_version_id=%s
+                FROM latest
                 GROUP BY status_grade,asset_type
                 """,
                 (dataset_version_id,),
@@ -641,7 +636,7 @@ def _materialize_runtime_results(
                 "materialization_profile": materialization_profile,
                 "held_asset_count": len(held_assets),
                 "held_assets": held_assets,
-                "reused": False,
+                "reused": inserted_count == 0,
             }
 
 
@@ -986,35 +981,7 @@ def _persist_overlay_product_result(
     asset_type: str,
     result: dict[str, Any],
 ) -> None:
-    """Project the latest post-maintenance branch result into the product read model."""
-
-    existing = connection.execute(
-        """
-        SELECT prediction_id,prediction_result_id
-        FROM pm_prediction_snapshots
-        WHERE dataset_version_id=%s AND asset_id=%s
-        """,
-        (dataset_version_id, asset_id),
-    ).fetchall()
-    prediction_ids = [str(row["prediction_id"]) for row in existing]
-    prediction_result_ids = [str(row["prediction_result_id"]) for row in existing]
-    connection.execute(
-        "DELETE FROM pm_result_artifacts WHERE dataset_version_id=%s AND asset_id=%s",
-        (dataset_version_id, asset_id),
-    )
-    connection.execute(
-        "DELETE FROM pm_prediction_timeline WHERE dataset_version_id=%s AND asset_id=%s",
-        (dataset_version_id, asset_id),
-    )
-    connection.execute(
-        "DELETE FROM pm_prediction_snapshots WHERE dataset_version_id=%s AND asset_id=%s",
-        (dataset_version_id, asset_id),
-    )
-    if prediction_result_ids:
-        connection.execute(
-            "DELETE FROM prediction_results WHERE prediction_id = ANY(%s)",
-            (prediction_result_ids,),
-        )
+    """Append a post-maintenance Product Result and retain its source lineage."""
 
     provenance = dict(result["provenance"])
     prediction_id = str(provenance["prediction_id"])
@@ -1022,6 +989,27 @@ def _persist_overlay_product_result(
         f"pmoverlay-{uuid.uuid5(uuid.NAMESPACE_URL, f'{dataset_version_id}:{prediction_id}:overlay')}"
     )
     observed_at = _parse_observed_at(result["observed_at"])
+    source_result = connection.execute(
+        """
+        SELECT organization_id,project_id,workspace_id,prediction_result_id
+        FROM pm_result_artifacts
+        WHERE dataset_version_id=%s AND asset_id=%s AND artifact_id<>%s
+          AND observed_at<=%s
+        ORDER BY observed_at DESC,created_at DESC,artifact_id DESC
+        LIMIT 1
+        """,
+        (dataset_version_id, asset_id, str(result["artifact_id"]), observed_at),
+    ).fetchone()
+    if source_result is None:
+        raise RuntimeError(
+            "maintenance Overlay Result requires a source Product Result: "
+            f"dataset_version_id={dataset_version_id} asset_id={asset_id}"
+        )
+    provenance["source_product_result_id"] = str(source_result["prediction_result_id"])
+    result["provenance"] = provenance
+    organization_id = str(source_result["organization_id"])
+    project_id = str(source_result["project_id"])
+    workspace_id = str(source_result["workspace_id"])
     probability = float(result["failure_probability"])
     status = str(result["status_grade"])
     confidence = float(result["confidence"])
@@ -1040,6 +1028,28 @@ def _persist_overlay_product_result(
         "source_type": "product_runtime_inference",
     }
 
+    existing_artifact = connection.execute(
+        """
+        SELECT prediction_id,prediction_result_id,source_sha256
+        FROM pm_result_artifacts
+        WHERE dataset_version_id=%s AND artifact_id=%s
+        """,
+        (dataset_version_id, str(result["artifact_id"])),
+    ).fetchone()
+    if existing_artifact is not None:
+        identity = (
+            str(existing_artifact["prediction_id"]),
+            str(existing_artifact["prediction_result_id"]),
+            str(existing_artifact["source_sha256"]),
+        )
+        expected_identity = (prediction_id, prediction_result_id, artifact_checksum)
+        if identity != expected_identity:
+            raise RuntimeError(
+                "immutable Overlay Product Result identity collision: "
+                f"dataset_version_id={dataset_version_id} artifact_id={result['artifact_id']}"
+            )
+        return
+
     connection.execute(
         """
         INSERT INTO prediction_results(
@@ -1050,9 +1060,9 @@ def _persist_overlay_product_result(
         """,
         (
             prediction_result_id,
-            ORGANIZATION_ID,
-            PROJECT_ID,
-            WORKSPACE_ID,
+            organization_id,
+            project_id,
+            workspace_id,
             asset_id,
             status,
             str(provenance["model_version"]),
@@ -1071,9 +1081,9 @@ def _persist_overlay_product_result(
         ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,24,%s,%s,%s,%s,%s,%s,%s)
         """,
         (
-            ORGANIZATION_ID,
-            PROJECT_ID,
-            WORKSPACE_ID,
+            organization_id,
+            project_id,
+            workspace_id,
             dataset_version_id,
             prediction_id,
             prediction_result_id,
@@ -1101,9 +1111,9 @@ def _persist_overlay_product_result(
                       'maintenance_replay_overlay',%s)
             """,
             (
-                ORGANIZATION_ID,
-                PROJECT_ID,
-                WORKSPACE_ID,
+                organization_id,
+                project_id,
+                workspace_id,
                 dataset_version_id,
                 prediction_id,
                 int(factor["rank"]),
@@ -1127,9 +1137,9 @@ def _persist_overlay_product_result(
                   'maintenance_replay_overlay',%s)
         """,
         (
-            ORGANIZATION_ID,
-            PROJECT_ID,
-            WORKSPACE_ID,
+            organization_id,
+            project_id,
+            workspace_id,
             dataset_version_id,
             prediction_id,
             asset_id,
@@ -1157,9 +1167,9 @@ def _persist_overlay_product_result(
                   'result-artifact-v1.0',%s,%s)
         """,
         (
-            ORGANIZATION_ID,
-            PROJECT_ID,
-            WORKSPACE_ID,
+            organization_id,
+            project_id,
+            workspace_id,
             dataset_version_id,
             str(result["artifact_id"]),
             prediction_id,
