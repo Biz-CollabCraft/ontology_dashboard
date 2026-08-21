@@ -6,10 +6,30 @@
 
 여기서 "대체"는 `pdm-mvp` 원본 payload를 dashboard evidence 루트에 그대로 덮어쓴다는 뜻이 아니다. `pdm-mvp`의 sensor evidence, baseline, component hypothesis, source field 산출 규칙을 운영 producer 경계로 옮겨 Product Result Artifact의 `evidence_payload`를 생성하고, 화면/리포트용 Evidence는 그 enriched Artifact에서 파생한다.
 
-## 1. 확인된 현재 기준선
+## 1. 확인된 현재 기준선 및 데이터 흐름
+
+### 1.1 시스템 간 데이터 흐름 (Target)
+
+```text
+gen_data Layer 2 log (file handoff)
+  ↓
+Generator Target Observation/Feature Series
+  ↓
+Backend Diagnosis Runtime Result (Runtime inference + Evidence)
+  ↓
+Backend Report ViewModel (Composition via read port)
+  ↓
+Dashboard UI
+```
+
+### 1.2 책임 경계 및 상태 구분
 
 - `ontology-dashboard`는 제품 API, 프론트엔드, 역할별 리포트 스키마, MVP 화면을 담당한다.
-- Product Result Artifact/Evidence의 운영 producer는 `systems/backend/app/diagnosis`다.
+- `systems/generator`는 센서/프로토콜 로그로부터 정제된 Observation/Feature Series를 생성하고 Model Artifact를 발행하는 목표 생산자(Target Producer)다.
+- Generator의 Observation/Feature Series는 후속 구현 목표인 **Target 산출물**이며, 현재 `main`에서는 Model Artifact 발행 위주로 운영 중이다.
+- Product Result Artifact/Evidence의 운영 producer는 `systems/backend/app/diagnosis`이며, Generator가 발행한 Observation/Feature와 Model Artifact를 기반으로 runtime feature 재현 및 inference를 수행한다.
+- `risk_series`는 Generator의 Feature Series가 아니라, **Backend Diagnosis Prediction History**에서 생성되는 런타임 진단 시계열이다.
+- Backend Report 및 프론트엔드는 raw `gen_data` 로그를 직접 읽지 않으며, 공식 read boundary를 통해 ViewModel을 구성한다.
 - `pdm-mvp`는 운영 producer가 아니라 Evidence Package 필드 의미, source field, deterministic 역할별 리포트 블록의 reference implementation이다.
 - `pdm-mvp/report_generator.py`는 판단 억제 로직 없이 사실을 제시하며, optional context가 없으면 값을 임의 생성하지 않고 `근거 부족` 블록으로 남긴다.
 - `pdm-mvp/scripts/load_v3_result_artifacts.py`는 자산 유형별 센서 스키마, 동종 집단 비교, 정비 문맥, top factor 기반 `component_hypotheses`, 규칙 기반 `failure_type_candidates`, lineage를 생성한다.

@@ -1,0 +1,367 @@
+# Generator 목표 아키텍처 및 파일 가공 파이프라인 명세서
+
+> **문서 상태**: `Proposed Target` (제안된 목표 설계)
+> **주의**: 본 문서는 현재 `main`에 구현된 코드를 설명하는 문서가 아닙니다. 본 문서는 향후 진행될 Generator 구조 개편, 단계별 책임 분리, API 명칭 전환 및 파일 가공 파이프라인 Migration 작업의 단일 기준이 되는 **목표 설계(Target Specification) 문서**입니다.
+
+---
+
+## 1. 배경 및 목적
+
+1. **Observation/Feature Series 책임 정립 (생산자 경계 확립 작업)**:
+   - Generator 시스템을 센서/프로토콜 로그로부터 정제된 Observation 및 Feature Series를 생성하는 공식 생산자(Producer)로 정의합니다.
+   - 제품 런타임(Backend Diagnosis)은 `gen_data`의 저수준 프로토콜 로그 파일을 직접 파싱하지 않고, Generator가 가공·발행한 정제된 Observation/Feature 산출물 및 Model Artifact를 소비하도록 단방향 데이터 흐름을 확립합니다.
+
+2. **SensorRecord v2 프로토콜과 Reference Fixture (Target dependency)**:
+   - `gen_data`의 SensorRecord v2 프로토콜 투영(`protocol/provenance.jsonl`) 및 Protocol-to-Observation Golden Vector는 향후 도입될 **Target dependency(미병합)**입니다.
+   - Generator 내부에는 이 파일 가공 흐름을 표준적·안정적으로 수행할 공식 파일 처리 계층이 아직 구현되어 있지 않으므로, 목표 구조와 가공 규칙을 먼저 문서로 확정합니다.
+
+3. **단계 명칭 정립 및 선행 API화 작업 연계**:
+   - 별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다.
+   - Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 프로토콜 투영 로그 가공에 사용하도록 4대 파이프라인 단계(`Extraction` → `Preprocessing` → `Feature` → `Training`)의 역할을 명확히 확정합니다.
+
+---
+
+## 2. 시스템 아키텍처 구조 비교
+
+### 2.1 Current 구조 (현재 main 구현 상태)
+
+현재 `main` 브랜치의 Generator는 다음 단일 수준의 디렉터리 및 모듈 구성을 유지하고 있습니다.
+
+```text
+systems/generator/
+├─ generator_main.py          # 데몬 진입점 및 FastAPI 애플리케이션 (현재 /internal 엔드포인트)
+├─ generator_config.py        # 전역 경로 및 설정 싱글톤
+├─ extraction/                # 데이터셋 프로파일링, 추출 계획 수립 (LLM)
+├─ feature/                   # 피처 계산 모듈 (feature_builder 등)
+├─ model/                     # 모델 알고리즘 학습 및 모델 레지스트리
+├─ ontology_mapping/          # 컬럼-온톨로지 노드 의미 매핑
+├─ topology/                  # 설비 간 위상 관계 추론
+├─ common/                    # 공통 에이전트 및 타임스탬프 정규화 유틸리티
+├─ entrypoint.py
+├─ Dockerfile
+└─ requirements.txt
+```
+
+### 2.2 Target 구조 (후속 목표 설계)
+
+후속 구조 개편 작업에서는 프레임워크 비의존 공통 모듈을 `systems/generator/` 최상위에 배치하고, use case와 API 계층을 `app/` 하위 도메인으로 분리합니다 (`core/` 디렉터리는 사용하지 않음).
+
+```text
+systems/generator/
+├─ app/                       # [Target] FastAPI 애플리케이션 및 유스케이스 계층
+│  ├─ main.py                 # FastAPI Application Factory (create_app)
+│  ├─ dependencies.py         # 공통 의존성 주입 (Repository/Service/Settings)
+│  ├─ api/                    # 중앙 Router 조립
+│  ├─ extraction/             # [1단계 Target] Observation / Failure Extraction 도메인
+│  │  ├─ extraction_router.py
+│  │  ├─ extraction_service.py
+│  │  ├─ extraction_repository.py
+│  │  └─ extraction_schema.py
+│  ├─ preprocessing/          # [2단계 Target] 데이터셋 분석, Plan/Mapping 수립 도메인 (기존 extraction 이전)
+│  │  ├─ preprocessing_router.py
+│  │  ├─ preprocessing_service.py
+│  │  ├─ preprocessing_planner.py
+│  │  ├─ preprocessing_profiler.py
+│  │  ├─ preprocessing_repository.py
+│  │  └─ preprocessing_schema.py
+│  ├─ feature/                # [3단계 Target] Feature/Label/Series 빌드 및 번들 발행 도메인
+│  │  ├─ feature_router.py
+│  │  ├─ feature_service.py
+│  │  ├─ feature_repository.py
+│  │  ├─ feature_schema_provider.py
+│  │  ├─ label_schema_provider.py
+│  │  └─ feature_schema.py
+│  └─ training/               # [4단계 Target] 모델 학습, 검증, Artifact 발행 및 활성화 도메인
+│     ├─ training_router.py
+│     ├─ training_service.py
+│     ├─ training_repository.py
+│     └─ training_schema.py
+│
+├─ settings.py                # [Target] 환경설정 싱글톤 (Pydantic Settings)
+├─ paths.py                   # [Target] 시스템 전역 파일/디렉터리 경로 레지스트리
+├─ logging.py                 # [Target] 구조화 로깅 유틸리티
+├─ errors.py                  # [Target] 시스템 전역 표준 ErrorEnvelope 및 공통 예외
+├─ file_integrity.py          # [Target] SHA-256 해시 계산 및 파일 안전성 검사기
+└─ atomic_publish.py          # [Target] 원자적 임시 디렉터리/파일 Staging 및 교체 유틸리티
+```
+
+> **계층 의존성 원칙**: 최상위 공통 기반 모듈(`settings.py`, `paths.py`, `errors.py` 등)은 `app/` 하위 모듈을 절대 import하지 않으며, `FastAPI`에 의존하지 않는 순수 Python 모듈로 작성됩니다.
+
+---
+
+## 3. 4대 파이프라인 단계 및 정본 데이터 흐름 (Target)
+
+시스템 간 통신은 API 호출 및 **파일 기반 Handoff**로 진행되며, `/ingestion`, `/observations` 같은 파일 수신 엔드포인트는 도입하지 않습니다.
+
+```text
+gen_data SensorRecord v2 protocol provenance
+  ↓ (상태: Target dependency — 미병합)
+Generator Observation Extraction
+  ↓
+Versioned Observation Dataset
+  ↓
+Generator Preprocessing
+  ↓
+Preprocessing Plan / Ontology Mapping
+  │
+  └──────────────────────────────┐
+                                 ↓
+Authorized Training Truth Source │ (상태: Authorized Training Truth Source — Target 계약 필요)
+  ↓                              │
+Generator Failure Extraction     │
+  ↓                              │
+Versioned Failure Dataset ───────┤
+                                 ↓
+Generator Feature
+  ↓
+Feature / Label / Series / Feature Dataset Bundle
+  ↓
+Generator Training
+  ↓
+Immutable Model Artifact (latest.json pointer)
+  ↓
+Backend Diagnosis (Runtime inference / Result Artifact / Evidence / Prediction History)
+  ↓
+Backend Report (AssetDetailReportViewModel composition via read port)
+```
+
+---
+
+## 4. 단계별 상세 책임 명세 (Target)
+
+### 4.1 1단계: Extraction (신규 파일 가공 — Target)
+
+Extraction 도메인은 프로토콜 투영 로그와 별도의 공인된 Training Truth Source라는 두 개의 독립 입력 경로를 소유하며, 하위 use case를 엄격히 분리하여 정제된 시계열 Observation 및 Failure 데이터셋을 발행합니다.
+
+```text
+Extraction
+├─ Observation Extraction
+│  └─ protocol provenance → Observation Dataset
+└─ Failure Extraction
+   └─ Authorized Training Truth Source → Failure Dataset
+```
+
+두 입력 소스는 독립적으로 schema, version, checksum 및 lineage를 검증합니다.
+
+#### A. Observation Extraction (입력: 프로토콜 투영 로그)
+- **입력**: `output/runs/{run_id}/protocol/provenance.jsonl` (`상태: Target dependency — 미병합`)
+- **Protocol Provenance 공통 필드 (19개)**:
+  - `direction`, `schema_version`, `observation_id`, `source_kind`, `record_kind`, `quality`, `run_id`, `sequence`, `asset_id`, `measurement_key`, `node_id`, `data_type`, `unit`, `value`, `status_code`, `observed_at_source`, `branch_kind`, `overlay`, `mapping_version`
+- **Direction별 추가 필드 규격**:
+  - `direction=published`: `source_timestamp`, `published_at` 추가 검증
+  - `direction=received`: `source_timestamp`, `server_timestamp`, `received_at`, `status_code_value` 추가 검증
+- **오류·격리 필드 분리 원칙**:
+  - `reason`은 정상 provenance 공통 필드가 아니며, 오류 레코드(`errors.jsonl`) 또는 격리 레코드(`quarantine.jsonl`)의 오류/격리 사유로만 분리하여 기록합니다.
+  - 정상 provenance, error record, quarantine record는 서로 다른 계약으로 관리하며 단일 스키마로 혼합하지 않습니다.
+  - 확정 JSON Schema는 후속 계약 작업에서 direction별 `oneOf` 또는 discriminator 구조로 정의합니다.
+- **Observation Pivot 정책 및 Direction 처리**:
+  - **입력 Direction 결정 정책 (`상태: Accepted Input Direction — Target 계약 확정 필요`)**:
+    - `direction=received`를 기본 입력으로 사용할지, `direction=published`도 허용할지는 입력 계약 확정 시 결정합니다.
+    - 동일 run에서 published와 received를 동시에 입력하면 같은 측정값이 중복될 수 있으므로 자동 혼합하지 않습니다.
+    - 한 Extraction 실행은 허용된 단일 `direction` 또는 명시적인 source projection 하나만 소비합니다.
+  - **식별 기준**: `node_id` 문자열을 자산 및 measurement 식별의 정본으로 분해하지 않고, `asset_id`, `measurement_key`, `mapping_version`, `node_id`를 기본 필드로 우선 사용합니다 (`node_id`는 versioned mapping과의 일치 여부 검증용).
+  - **Pivot 그룹 키**: `run_id`, `branch_kind`, `asset_id`, `normalized_observed_at` 기준으로 Observation 행을 묶어 피벗합니다 (Canonical과 Overlay, 서로 다른 run의 데이터 혼합 방지).
+  - **중복 및 충돌 정책**:
+    - 완전히 동일한 레코드 재수신 시: idempotent dedupe
+    - 동일 measurement에 동일 값·상태: 단일 측정값으로 축약하고 lineage 보존
+    - 동일 measurement에 서로 다른 값 또는 StatusCode 충돌: 임의 집계(aggregate)를 금지하고 명시적 quarantine 또는 conflict 처리
+    - `Bad`, `Uncertain`, `null` 상태값: `0`이나 `Good`으로 변환하지 않고 원본 품질 상태를 보존
+    - 원본 메타데이터 보존: `source_observation_ids[]`와 함께 입력 `direction` 및 `mapping_version`을 provenance에 보존
+  - **완료 기준 (파일 기반 Handoff)**:
+    - `run_manifest`가 완료 상태이고, 입력 파일이 finalize되었으며, checksum 검증이 완료된 run만 처리합니다. 미완료 또는 쓰기 중인 파일은 처리하지 않습니다.
+- **출력 경로 (Target 예시)**:
+  - `data_preprocessed/observations/{dataset_id}/{dataset_version}/observations.jsonl`
+  - `data_preprocessed/observations/{dataset_id}/{dataset_version}/observation_metadata.json`
+
+```json
+// Observation JSONL 레코드 규격 (Target 예시)
+{
+  "asset_id": "CNC-S01-L01-01",
+  "observed_at": "2026-08-20T01:00:00Z",
+  "measurements": {
+    "voltage": 220.5,
+    "rotation": 1502.1
+  },
+  "quality": {
+    "voltage": {"status_code": "Good", "quality": "Good"},
+    "rotation": {"status_code": "Good", "quality": "Good"}
+  },
+  "provenance": {
+    "run_id": "run-20260820-001",
+    "branch_kind": "canonical",
+    "direction": "received",
+    "source_observation_ids": ["obs-001", "obs-002"],
+    "mapping_version": "v1.0"
+  }
+}
+```
+
+#### B. Failure Extraction (입력: 공인된 Training Truth Source)
+- **입력**: `Authorized Training Truth Source` (`상태: Authorized Training Truth Source — Target 계약 필요`)
+- **Failure Truth 계약 요구사항**:
+  - `truth_source_id`, `truth_schema_version`, `truth_dataset_version`, `truth_checksum`, `asset_id`, `event_id`, `anchor_timestamp`, `failure_type`, `failure interval 또는 exclusion interval`, `Observation 연결 키`
+- **Truth 분리 원칙**:
+  - 정상 프로토콜 provenance에는 hidden truth나 failure truth를 절대 포함하지 않습니다.
+  - Failure truth를 Observation이나 일반 Feature 입력에 임의로 병합하지 않습니다.
+  - Failure Dataset은 Preprocessing의 입력이 아니며, 오직 Feature 단계에서만 결합됩니다.
+  - Failure Dataset은 별도의 승인된 Training Truth Source에서만 생성합니다.
+  - 확정되지 않은 truth 파일 경로는 임의로 추측하지 않습니다.
+- **출력 경로 (Target 예시)**:
+  - `data_preprocessed/failures/{failure_dataset_id}/{failure_dataset_version}/failure_events.jsonl`
+  - `data_preprocessed/failures/{failure_dataset_id}/{failure_dataset_version}/failure_metadata.json`
+
+---
+
+### 4.2 2단계: Preprocessing (기존 Extraction 기능 이전 — Target)
+- **입력**: `Versioned Observation Dataset` (`observations.jsonl`, `observation_metadata.json` — Failure Dataset은 Preprocessing의 입력이 아님)
+- **처리**:
+  - Observation Dataset 파일 프로파일링 및 데이터 구조 타입 판별 (`tabular_column_as_attribute`, `tabular_row_as_attribute`)
+  - 역할 컬럼 확정 (`id_column`, `time_column`, `duplicate_policy` 등)
+  - 컬럼별 표준 온톨로지 매핑 (MappingStore, 전역 캐시 오염 방지)
+  - 내용 기반 해시(SHA-256) 버전 산출 (`preprocessing-plan-<hash>`, `ontology-mapping-<hash>`)
+- **출력**: `PreprocessingPlan`, `OntologyMapping`
+
+---
+
+### 4.3 3단계: Feature (Target)
+- **입력**: `Versioned Observation Dataset` + `Versioned Failure Dataset` + `Preprocessing Plan` + `Ontology Mapping` + `Feature/Label Schema` (모든 데이터 및 계약이 합류하는 지점)
+- **처리**:
+  - 번들 재사용 전 Sensor 및 Failure 원본 파일 무결성 및 해시 전수 검증
+  - 설비별 시계열 피처 추출 (`build_features`), 고장 이력 기반 라벨링 (`build_labels`)
+  - 시간순 분할 메타데이터 생성 (`compute_asset_time_split_indices`, `validate_split_indices`)
+  - Feature Schema 선언 순서 유지 및 누수 컬럼 배제
+  - NPY 및 메타데이터 원자적 발행
+- **출력**: `Feature Dataset Bundle` (`features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`), `Observation/Feature series`
+
+---
+
+### 4.4 4단계: Training (Target)
+- **입력**: Feature Dataset Bundle
+- **처리**:
+  - Feature Bundle 파일/체크섬/차원/타입 전수 검증
+  - `asset_time_split` 기반 train/val/test 시간순 분할
+  - 등록 모델(`lightgbm`, `xgboost`, `random_forest`) 학습 및 지표 산출 (모델별 실패 격리)
+  - 불변 Model Artifact 패키지 발행 및 Validator 검증
+  - `activation_policy`(`latest`/`manual`)에 따른 `latest.json` 포인터 갱신 및 실패 복구 지원
+- **출력**: 불변 Model Artifact 패키지 (`model-artifact-v1.0`), 활성 모델 포인터 (`latest.json`)
+
+---
+
+## 5. API 명칭 및 Migration 계획
+
+### 5.1 Current API (현재 main 구현 상태) vs Target API (후속 목표 설계)
+
+| Method | Path | Current 상태 (현재 main) | Target 의미 (후속 목표) |
+|---|---|---|---|
+| GET | `/health` | Generator 데몬 상태 확인 | Generator 데몬 상태 확인 |
+| POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
+| POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
+| POST | `/extraction` | Target — 미병합 | **protocol provenance → Observation Dataset / Authorized Truth Source → Failure Dataset (신규 1단계)** |
+| POST | `/preprocessing` | Target — 미병합 | **Observation Dataset 분석 및 Preprocessing Plan/Mapping 발행 (신규 2단계)** |
+| POST | `/feature` | Target — 미병합 | **Observation + Failure + Plan/Mapping 소비, Feature/Label/Series 및 Feature Dataset Bundle 발행 (신규 3단계)** |
+| POST | `/train` | Target — 미병합 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/train/{base_model}` | Target — 미병합 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
+| GET | `/models/{base_model}/active` | Target — 미병합 | **현재 활성화된 Model Artifact 정보 조회** |
+
+### 5.2 타입 및 클래스 Migration Mapping 계획
+
+| 선행 API화 작업 대상 (Migration source) | Target (후속 목표 대상) | Migration 계획 및 비고 |
+|---|---|---|
+| 선행 API 설계 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (데이터셋 분석 및 Plan/Mapping 기능을 /preprocessing으로 이전) |
+| `ExtractionPlan` | `PreprocessingPlan` | Pydantic 스키마 변경 |
+| `ExtractionPlanResponse` | `PreprocessingPlanResponse` | 응답 스키마 변경 |
+| `extraction_plan_version` | `preprocessing_plan_version` | 식별자 및 메타데이터 키 변경 |
+| `ExtractionService` | `PreprocessingService` | 서비스 클래스 변경 |
+| `ExtractionRepository` | `PreprocessingRepository` | 저장소 클래스 변경 |
+| `ExtractionPlanner` | `PreprocessingPlanner` | LLM 계획기 클래스 변경 |
+| `ExtractionProfiler` | `PreprocessingProfiler` | 프로파일러 클래스 변경 |
+| (신규 구현) | `POST /extraction` | 신규 Observation/Failure 추출 엔드포인트 구현 |
+| (신규 구현) | `ExtractionService` | 신규 Observation/Failure Dataset 발행 서비스 구현 |
+
+---
+
+## 6. 기존 Generator 코드 이식 계획
+
+현재까지 개발된 무결성 검증 및 비즈니스 로직은 누락 없이 새 구조로 이동할 계획입니다:
+
+1. **현재 Extraction 기능 → `app/preprocessing/`으로 이전**:
+   - Dataset profiling, LLM 2단계 구조 판별 및 규칙 수립 로직
+   - long-format (`tabular_row_as_attribute`) 역할 컬럼 검증
+   - Ontology Mapping 수립 및 MappingStore 캐시 격리
+   - Plan/Mapping 내용 기반 해시 버전 발행 및 원본 source SHA-256 검증
+2. **현재 Feature 기능 → `app/feature/`에 유지·정리**:
+   - Feature Bundle 재사용 전 원본 Sensor/Failure 파일 및 provenance 전수 재검증
+   - Failure Dataset 버전 경로 고정 및 설비 ID 호환성 검증
+   - 시계열 Feature 추출, horizon 라벨링, allowlist 및 선언 순서 유지
+   - `split_indices` 및 `row_metadata.json` 무결성 검증
+3. **현재 Training 기능 → `app/training/`에 유지·정리**:
+   - 전체 및 개별 모델 학습 오케스트레이션
+   - Feature Dataset Bundle 전수 체크섬 검증
+   - `asset_time_split` 시간순 분할 인덱스 검증
+   - 모델별 학습 실패 격리 및 불변 Model Artifact 패키지 발행
+   - `activation_policy`(`latest`/`manual`), `latest.json` 원자적 갱신 및 수동 활성화 복구
+4. **실행 진입점 및 설정 모듈 이전**:
+   - `generator_main.py` → `app/main.py`의 `create_app()` 팩토리 기반으로 migration
+   - `generator_config.py` → `settings.py` 및 `paths.py` 정본 모듈로 migration
+   - 기존 파일은 migration 기간 동안 compatibility shim으로 유지하되 신규 로직 추가는 금지
+
+---
+
+## 7. 계약 스키마 관리 상태 및 후속 정합성 검증 계획
+
+### 7.1 계약 스키마 상태 표
+
+| 계약 대상 | 상태 | 설명 |
+|---|---|---|
+| Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
+| `generator-observation.schema.json` | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| `generator-failure-event.schema.json` | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| `generator-extraction-result.schema.json` | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| `generator-preprocessing-plan.schema.json` | **Target — 이전 예정** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
+| `generator-feature-series.schema.json` | **Target — 미작성** | Feature 구현 단계에서 작성 예정 |
+| Feature Dataset Bundle | **Target — 검토 필요** | 기존 `dataset-bundle-manifest.schema.json` 재사용·확장 여부 검토 |
+
+> **주의**: 본 문서 변경 범위에서는 빈 스키마 파일이나 placeholder JSON을 일체 생성하지 않습니다.
+
+### 7.2 스키마 물리 이관 완료 후 수행할 정합성 검증 항목
+
+별도 스키마 물리 이관 작업이 완료된 후에는 다음 검증을 순차적으로 수행합니다:
+1. 실제 `contracts/schemas/` 파일 목록과 문서 내 참조 목록의 1:1 일치 여부 비교
+2. 문서 내 `미작성`, `이전 예정` 상태 태그 현행화
+3. 스키마 `$id` 식별자 및 내부 `$ref` 경로 유효성 검증
+4. 문서 내 예시 JSON payload와 JSON Schema 간의 유효성 검증 (Draft 2020-12)
+5. Pydantic API 모델과 JSON Schema 필드 간의 100% 정합성 검증
+6. 기존 스키마와 신규 스키마 간의 역할 중복 여부 전수 검사
+
+---
+
+## 8. 후속 구현 로드맵 (단계별 계획)
+
+```text
+[구조 migration 단계]
+  ├─ 공통 기반 모듈(settings.py, paths.py, errors.py, file_integrity.py, atomic_publish.py) 구성
+  ├─ FastAPI Application Factory (app/main.py create_app) 및 Router Composition
+  ├─ 기존 Extraction 도메인 → Preprocessing 도메인 rename 및 이전
+  ├─ Feature / Training 도메인 파일 이식 및 정리
+  ├─ Compatibility Shim 구성 (기존 import 경로 임시 지원)
+  └─ API 테스트 회귀 검증
+
+        ↓
+
+[프로토콜 로그 Extraction 구현 단계]
+  ├─ SensorRecord v2 protocol provenance 파서 구현 (Direction별 추가 필드 처리)
+  ├─ measurement_key 기반 식별 및 Pivot
+  ├─ quality/lineage 보존 및 Failure truth 소스 분리
+  ├─ Versioned Observation / Failure Dataset 원자적 발행 및 SHA-256 체크섬
+  └─ Protocol-to-Observation Golden Vector 계약 테스트 작성
+
+        ↓
+
+[파이프라인 통합·검증 단계]
+  ├─ Observation Dataset → Preprocessing 파이프라인 연결
+  ├─ Observation + Failure + Preprocessing Plan/Mapping → Feature 파이프라인 연결
+  ├─ Feature Dataset Bundle → Training 파이프라인 연결
+  ├─ Observation/Feature Series 공식 계약 스키마 확정
+  └─ Architecture CI 규칙 추가 (공통 모듈 app 역참조 금지, FastAPI 비의존 등)
+```

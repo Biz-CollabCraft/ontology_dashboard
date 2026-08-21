@@ -29,6 +29,8 @@
 - 원천 CSV 필드명과 Result Artifact JSON key는 변경하지 않는다.
 - 한국어 이름과 설명은 별도 표시 계층에서 관리한다.
 - API 결합·계산 필드를 Canonical 또는 Result Artifact 원문으로 표현하지 않는다.
+- Observation 및 Feature Series의 목표 생산자는 `systems/generator`이며, Backend Diagnosis는 이를 소비하여 runtime inference 및 Result Artifact/Evidence를 생성한다. Backend Report와 프론트엔드는 공식 read boundary를 통해서만 ViewModel을 구성하며 `gen_data` 원본 로그를 직접 파싱하지 않는다.
+- 고장 진실(failure truth)은 Observation 및 일반 Feature 입력에서 엄격히 분리하여 별도 Failure 데이터셋으로 관리한다.
 - null을 정상값, 0 또는 고장 확정으로 변환하지 않는다.
 - evaluation truth는 제품 스키마와 일반 조회 API에서 제외한다.
 

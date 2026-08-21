@@ -36,6 +36,48 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 - Schema 내용 및 `$id` 식별자 무변경 보존
 - `openapi/`, `examples/`, `test-vectors/`: 향후 구체적 요구사항 확정 시 순차적으로 이식 예정
 
+## Generator 파이프라인 후속 Target 계약 후보 및 계획
+
+Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Series 생산자 확립 및 SensorRecord v2 프로토콜 정규화 작업)을 위한 후속 Target Schema 목록과 상태는 다음과 같습니다.
+
+```text
+contracts/schemas/ (후속 Target 계약 후보 목록)
+├─ generator-observation.schema.json
+├─ generator-failure-event.schema.json
+├─ generator-extraction-result.schema.json
+├─ generator-preprocessing-plan.schema.json
+└─ generator-feature-series.schema.json
+```
+
+### Target 계약 상태 표
+
+| 계약 | 현재 상태 | 설명 |
+|---|---|---|
+| Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
+| Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| Generator Extraction Result Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+| Generator Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
+| Generator Feature Series Schema | **Target — 미작성** | Feature 구현 단계에서 작성 예정 |
+| Feature Dataset Bundle | **Target — 기존 Schema 재사용·확장 여부 검토 필요** | 기존 `dataset-bundle-manifest.schema.json`의 재사용 가능성을 우선 검토 |
+
+### Target 계약 관리 원칙
+
+- **본 문서 변경 범위**: 빈 파일이나 placeholder Schema를 일체 생성하지 않으며, 실제 스키마 생성은 별도 계약·구현 작업에서 수행합니다.
+- **기존 계약 재사용 우선**: 기존 계약으로 표현 가능한 경우 새 스키마를 중복 생성하지 않습니다.
+- **Feature Dataset Bundle 재사용 검토**: Feature Dataset Bundle의 경우 신규 스키마를 추가하기 전에 기존 `dataset-bundle-manifest.schema.json`의 재사용 및 확장 가능성을 먼저 검토합니다.
+
+### 스키마 물리 이관 완료 후 수행할 정합성 검증 항목
+
+별도 스키마 물리 이관 작업이 완료된 후에는 다음 검증을 순차적으로 수행합니다:
+1. 실제 `contracts/schemas/` 목록과 문서 목록 1:1 비교
+2. 문서 내 `미작성`, `이전 예정` 상태 태그 갱신
+3. `$id`와 `$ref` 검증
+4. 스키마 경로 참조 검증
+5. 예시 JSON과 JSON Schema 정합성 검증 (Draft 2020-12)
+6. API 모델과 Schema 필드 정합성 검증
+7. 기존 스키마와 신규 스키마의 역할 중복 검사
+
 ## Migration principle
 
 향후 추가 Migration에서는 실제로 존재하고 시스템이 사용하는 계약만 이전한다.

@@ -12,25 +12,25 @@
 Biz-CollabCraft/gen_data
 Source Data Producer
 raw / simulation / synthetic sensor data
-Canonical V3.1 physical-generation baseline
+SensorRecord v2 protocol provenance files
 source/reference/test fixtures
-seed reproducibility + source validation
-        ↓ source/reference contract
+seed reproducibility + source lineage
+        ↓ protocol provenance contract (file handoff)
 ontology_dashboard/systems/generator
-extraction
-→ ontology mapping
-→ topology
-→ feature
-→ model training
-→ versioned Model Artifact
-        ↓ Model Artifact contract
+Observation Extraction (protocol provenance → Observation Dataset)
+Failure Extraction (Authorized Training Truth Source → Failure Dataset)
+→ Preprocessing (Observation → Plan/Ontology Mapping)
+→ Feature (Observation + Failure + Plan/Mapping → Feature/Label/Series)
+→ Training (Feature Dataset → Model Artifact)
+→ versioned Model Artifact (latest.json pointer)
+        ↓ Model Artifact / Observation contract
 ontology_dashboard/systems/backend/app/diagnosis
-current observation + Model Artifact
+Runtime feature replay + Model Artifact
 → runtime inference
-→ Result Artifact / Evidence
-        ↓ API contract
+→ Result Artifact / Evidence / Prediction History
+        ↓ Canonical Read Port
 ontology_dashboard/systems/frontend / Report
-Result Artifact / Evidence consumer
+AssetDetailReportViewModel (composition via read port)
 ```
 
 정비 후 Closed-loop feedback은 위 단방향 학습/추론 소유권을 뒤집지 않고 별도 Runtime
@@ -58,17 +58,16 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
 ### 저장소별 Source of Truth
 
 - **`gen_data` = Source Data Producer**
-  - raw / simulation / synthetic sensor data 생성·갱신
+  - 센서 프로토콜 레코드 생성 및 protocol provenance 로그 파일 생성
   - Canonical V3.1 물리·생성 기준
-  - source/reference/test fixture와 seed 기반 재현성
-  - source package validation
+  - source/reference/test fixture와 seed 기반 재현성 및 source lineage 보존
   - Closed-loop Target에서 정비 대상 설비의 Runtime Overlay Snapshot과 branch-local
     Simulation Clock을 이용한 source Observation 생성
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
-  - `systems/generator`: Semantic/ML pipeline 및 versioned Model Artifact producer
-  - `systems/backend/app/diagnosis`: runtime inference 및 제품 Result Artifact/Evidence 최종 producer
-  - API / frontend / report: 제품 결과 소비자
+  - **`systems/generator`**: 프로토콜 provenance에서 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Observation을 기반으로 Preprocessing Plan/Mapping을 수립하고, Feature 단계에서 Observation, Failure, Plan, Mapping을 결합하여 Feature Dataset Bundle 및 versioned Model Artifact를 발행한다.
+  - **`systems/backend/app/diagnosis`**: Runtime feature 재현, runtime inference 및 제품 Result Artifact/Evidence/Prediction History 최종 생성
+  - **`systems/frontend` / Report**: 공식 read port를 통한 ViewModel composition (gen_data 원본 파일 직접 파싱 금지)
 
 `gen_data`를 제품 prediction 또는 Result Artifact의 운영 producer로 해석하지 않는다.
 
@@ -111,49 +110,29 @@ project-root/
 
 ## 3. systems/generator — Semantic/ML Pipeline
 
-**책임 끝점은 versioned Model Artifact publish까지다.** 사용자 요청 기반 runtime inference, 제품 Result Artifact 생성, 최종 Evidence 생성은 이 시스템의 책임이 아니다.
+**책임 끝점은 versioned Model Artifact publish 및 활성 버전 포인터(`latest.json`) 관리까지다.** 사용자 요청 기반 runtime inference, 제품 Result Artifact 생성, 최종 Evidence 생성은 이 시스템의 책임이 아니다.
 
-```text
-systems/generator/
-├── extraction/               # 1. 원본 구조 판별 → 추출 계획 (LLM) 및 추출 실행
-│   ├── extraction_agent.py
-│   ├── extraction_service.py
-│   └── extraction_cache.py
-├── ontology_mapping/         # 2. 컬럼 → 온톨로지 노드 의미 매핑
-│   ├── mapping_agent.py
-│   ├── mapping_service.py
-│   └── mapping_cache.py
-├── topology/                 # 3. 설비 간 관계(위상) 추론
-│   ├── topology_agent.py
-│   ├── topology_service.py
-│   └── topology_cache.py
-├── feature/                  # 4. Feature 생성 및 카탈로그 관리
-│   ├── feature_builder.py
-│   └── feature_catalog.py
-├── model/                    # 5. 모델 학습 및 Registry/Store 보관
-│   ├── model_training.py
-│   ├── model_registry.py
-│   └── model_store/          # local publish 구현 예시 (계약 상위 개념은 MODEL_ARTIFACT_URI)
-├── common/                   # 도메인 중립적 공통 베이스 (agent_base, cache_base)
-├── .env.example
-└── requirements.txt
-```
+### 상위 아키텍처 및 책임 원칙
 
-### generator 내부 파이프라인 순서
+1. **`gen_data` protocol provenance는 Observation Dataset 생성에만 사용한다.**
+2. **Failure Dataset은 별도의 Authorized Training Truth Source에서 생성한다.**
+3. **Preprocessing은 Observation Dataset만 분석하여 Plan과 Mapping을 발행한다.**
+4. **Feature 단계가 Observation, Failure, Plan 및 Mapping을 결합한다.**
+5. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Observation/Feature와 Model Artifact를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
+6. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
+7. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
 
-```text
-Raw / Canonical Observation
-  → extraction
-  → ontology_mapping
-  → topology
-  → feature
-  → model training
-  → versioned Model Artifact publish
-```
+### Generator 구조 현황 (Current vs Target)
 
-각 파이프라인 단계는 "판단 단위 분리" 원칙을 따른다 — 하나의 LLM 호출은 하나의 판단만 담당하며, 여러 판단을 한 프롬프트에 섞지 않는다.
+- **Current (현재 main 구현 상태)**:
+  - 단일 레벨 모듈 구조 (`generator_main.py`, `generator_config.py`, `extraction/`, `feature/`, `model/`, `ontology_mapping/`, `topology/`, `common/`)
+  - 제어 엔드포인트: `GET /health`, `POST /internal/train`, `POST /internal/retrain`
+- **Target (후속 개편 목표 설계)**:
+  - 프레임워크 비의존 공통 모듈 최상위 배치 (`settings.py`, `paths.py`, `errors.py`, `file_integrity.py`, `atomic_publish.py`)
+  - 도메인별 FastAPI 계층 분리 (`app/extraction/`, `app/preprocessing/`, `app/feature/`, `app/training/`)
+  - 4대 파이프라인 데이터 흐름: `Extraction` → `Preprocessing` → `Feature` → `Training`
 
-`model_store/`는 local filesystem publish 구현 예시일 뿐이다. 운영 환경에서는 mounted volume, externally provisioned path, object storage, artifact registry 등으로 교체될 수 있다.
+> **상세 명세 위임**: Generator의 상세 Target 디렉터리, 파일명, API 요청/응답 필드 및 단계별 migration 계획은 목표 정본 문서인 [`docs/mvp/generator-architecture-and-file-pipeline-target.md`](./mvp/generator-architecture-and-file-pipeline-target.md)에 위임합니다.
 
 ### Generator Feature 책임
 
