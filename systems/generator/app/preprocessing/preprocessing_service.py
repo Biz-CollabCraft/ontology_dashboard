@@ -34,6 +34,18 @@ SUPPORTED_EXTENSIONS = (".csv", ".xlsx", ".xls")
 _last_plans: dict[str, Any] = {}
 
 
+def _is_within_allowed_root(path: Path, allowed_roots: list[Path]) -> bool:
+    """Check if the resolved path is strictly within any of the allowed root directories."""
+    resolved_path = path.resolve()
+    for root in allowed_roots:
+        try:
+            resolved_path.relative_to(root.resolve())
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 def preprocess_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
     """Execute dataframe loading and transformation based on the validated preprocessing plan."""
     ext = os.path.splitext(filepath)[1].lower()
@@ -225,25 +237,15 @@ class PreprocessingService:
             found_path: Optional[Path] = None
             for base in allowed_roots:
                 candidate = (base / raw_uri).resolve()
-                try:
-                    candidate.relative_to(base)
-                    if candidate.is_file():
-                        found_path = candidate
-                        break
-                except ValueError:
-                    pass
+                if _is_within_allowed_root(candidate, allowed_roots) and candidate.is_file():
+                    found_path = candidate
+                    break
 
             if not found_path:
                 repo_root = PATHS.models_store.parent.resolve()
                 repo_candidate = (repo_root / raw_uri).resolve()
-                for base in allowed_roots:
-                    try:
-                        repo_candidate.relative_to(base)
-                        if repo_candidate.is_file():
-                            found_path = repo_candidate
-                            break
-                    except ValueError:
-                        pass
+                if _is_within_allowed_root(repo_candidate, allowed_roots) and repo_candidate.is_file():
+                    found_path = repo_candidate
 
             if found_path:
                 return found_path
@@ -261,6 +263,13 @@ class PreprocessingService:
             )
 
         # 2. Lookup by dataset_id and dataset_version
+        id_path = Path(str(request.dataset_id).strip())
+        ver_path = Path(str(request.dataset_version).strip())
+        if id_path.is_absolute() or ".." in id_path.parts or ver_path.is_absolute() or ".." in ver_path.parts:
+            raise DatasetContractError(
+                "dataset_id 및 dataset_version에 절대경로나 상위경로(..)는 허용되지 않습니다."
+            )
+
         candidates = [
             PATHS.data_dir / request.dataset_id / f"{request.dataset_version}.csv",
             PATHS.data_dir / f"{request.dataset_id}.csv",
@@ -274,20 +283,17 @@ class PreprocessingService:
 
         for cand in candidates:
             resolved_cand = cand.resolve()
-            is_allowed = any(
-                str(resolved_cand).startswith(str(root))
-                for root in allowed_roots
-            )
-            if not is_allowed:
+            if not _is_within_allowed_root(resolved_cand, allowed_roots):
                 continue
 
             if resolved_cand.is_file():
                 return resolved_cand
             if resolved_cand.is_dir():
                 for child in sorted(resolved_cand.iterdir()):
-                    child_resolved = child.resolve()
-                    if child_resolved.is_file() and child_resolved.suffix.lower() in SUPPORTED_EXTENSIONS:
-                        return child_resolved
+                    resolved_child = child.resolve()
+                    if _is_within_allowed_root(resolved_child, allowed_roots):
+                        if resolved_child.is_file() and resolved_child.suffix.lower() in SUPPORTED_EXTENSIONS:
+                            return resolved_child
 
         raise DatasetNotFoundError(
             f"데이터셋을 찾을 수 없습니다: dataset_id='{request.dataset_id}', "
