@@ -143,7 +143,7 @@ flowchart LR
 - `failure_type_candidates`는 측정값에 대한 규칙 기반 조건 판정이며 모델 출력이 아니다. `predicted_failure_type` 또는 root cause처럼 취급하지 않는다.
 - `map-report-ui-prototype`의 그래프 생성 로직, fixture series, prototype adapter를 제품 runtime source로 승격하지 않는다. UI는 공식 ViewModel에 있는 series만 그리며, 없는 그래프는 `evidence_gap` 또는 `data_status.warnings`로 표시한다.
 - `gen_data`의 raw/simulation/synthetic Observation은 센서 시계열의 source fact로 사용할 수 있지만, `gen_data/canonical/model_outputs/*`의 `prediction_timeline`, `prediction_snapshot`, `result_artifact`는 운영 최신 결과가 아니라 compatibility/regression/migration fixture다. 제품 화면에서 위험도 시계열로 직접 소비하지 않는다.
-- `gen_data`의 최종 저장 형식은 곧바로 Product API ViewModel이 아니다. `.raw`는 프로토콜 원본, Layer 1 `output/sensor/.../{센서명}`은 최신값 overwrite, Layer 2 `output/sensor/.../_log.jsonl`은 append-only 센서 시계열이다. 이 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target으로 보고, Asset Detail Report의 실제 의존성은 내부 파일명이 아니라 versioned Observation/Feature series contract에 둔다. 피쳐 그래프는 Backend가 raw JSONL이나 canonical CSV를 직접 파싱해 만들지 않고, `gen_data`의 source/protocol record를 `systems/generator`가 검증·조립·feature화한 Observation/Feature series에서 파생한다.
+- `gen_data`의 최종 저장 형식은 곧바로 Product API ViewModel이 아니다. `.raw`는 프로토콜 원본, Layer 1 `output/sensor/.../{센서명}`은 최신값 overwrite, Layer 2 `output/sensor/.../_log.jsonl`은 append-only 센서 시계열이다. 이 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target으로 보고, Asset Detail Report의 실제 의존성은 내부 파일명이 아니라 Backend canonical/overlay Observation read contract와 Backend Feature Executor result에 둔다. `systems/generator`는 Feature/Label 의미, History Requirement, transform contract, Model Artifact publish를 소유하지만 제품 runtime series를 Product API source로 publish하지 않는다.
 
 ### 3.1 Asset Detail Report ViewModel 계약 후보
 
@@ -293,19 +293,24 @@ type AssetDetailReportViewModel = {
 | 필드 묶음 | 공식 원천 | 책임 | 없는 경우 |
 |---|---|---|---|
 | `asset`, 표시명, line/cell | Asset/Object read model | Dataset/Equipment API | 필드 생략 또는 `data_status.warnings` |
-| `features[].series` | `gen_data` source/protocol record를 `systems/generator`가 검증·조립·feature화한 versioned Observation/Feature series | `systems/generator` | 빈 배열과 `evidence.gaps[]` |
+| `features[].series` | Backend canonical/overlay Observation read contract + Backend Feature Executor result | `systems/backend` | 빈 배열과 `evidence.gaps[]` |
 | `risk.current`, `top_factor`, `baseline` | Product Result Artifact와 `evidence_payload.sensor_evidence` | `systems/backend/app/diagnosis` | null과 `evidence.gaps[]` |
-| `risk_series` | (미구현) Backend Diagnosis가 Generator 결과로 Product Result/Prediction을 생성해 `prediction_results`에 materialize할 runtime result/prediction history | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; `pm_prediction_timeline`, `precomputed_prediction_timeline`, gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
+| `risk_series` | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. canonical source는 `pm_result_artifacts` append-only Product Result history이며, detail payload가 필요할 때만 `prediction_result_id`로 `prediction_results`를 join | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; `pm_prediction_timeline`, `precomputed_prediction_timeline`, gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
 | `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
 
 `features[].series`는 센서/피처 시계열이고, `risk_series`는 runtime inference 결과의
-누적이다. 따라서 `features[].series`는 `gen_data`의 source/protocol record를
-`systems/generator`가 운영 입력으로 검증·조립·feature화한 계약에서 파생하고,
-`risk_series`는 Backend Diagnosis가 그 결과로 Product Result Artifact/Evidence를 생성한
-뒤 `prediction_results`에 저장한 result/prediction history에서 파생한다. 기존 legacy
-`/timeline`의 `precomputed_prediction_timeline`, PostgreSQL `pm_prediction_timeline`,
-`gen_data/canonical/model_outputs/*`는 compatibility/regression/migration fixture이며 제품
-runtime risk source로 승격하지 않는다.
+누적이다. 따라서 센서 Observation series는 Backend canonical/overlay Observation read contract에서
+읽고, 파생 Feature series는 versioned Feature Schema/transform contract를 적용한 Backend Feature
+Executor result에서 제공한다. `systems/generator`는 Feature/Label 의미, History Requirement,
+transform contract, Model Artifact publish를 소유하지만 제품 runtime series를 Product API source로
+publish하지 않는다. `risk_series`는 Backend Diagnosis가 Model Artifact와 Observation/Feature
+입력으로 runtime inference를 수행해 생성한 Product Result history에서 파생한다. 현재 canonical
+source는 `pm_result_artifacts`의 asset별 append-only Product Result history이며, 상세 payload가
+실제로 필요할 때만 `prediction_result_id`로 `prediction_results`를 조회한다. Product API는 내부
+테이블 shape를 직접 노출하지 않는다.
+기존 legacy `/timeline`의 `precomputed_prediction_timeline`, PostgreSQL `pm_prediction_timeline`,
+`gen_data/canonical/model_outputs/*`는 compatibility/regression/migration fixture이며 제품 runtime
+risk source로 승격하지 않는다.
 
 현재 Evidence만으로 채울 수 있는 범위와 추가로 필요한 source는 다음과 같다.
 
@@ -316,29 +321,27 @@ runtime risk source로 승격하지 않는다.
 | 현재 센서 카드 | 가능 | 없음 | `observation` 또는 `sensor_evidence` 사용 |
 | top factor와 report 근거 | 가능 | 없음 | `evidence_field_id` 유지 |
 | feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
-| 피쳐별 그래프 | 불가 | Backend Observation read contract / Feature Executor result | `features[].series=[]`와 gap 표시 |
-| 위험도 그래프 | 불가 | Backend Diagnosis Runtime Prediction History Query result | `risk_series=[]`와 gap 표시 |
+| 피쳐별 그래프 | 불가 | Backend Observation read contract + Feature Executor result | `features[].series=[]`와 gap 표시 |
+| 위험도 그래프 | 불가 | Backend Diagnosis Runtime Prediction History Query Contract (`pm_result_artifacts` append-only history + optional `prediction_results` detail join) | `risk_series=[]`와 gap 표시 |
 | 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
 | 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
 
-Backend Observation/Feature series 계약의 최소 규칙은 다음과 같다. Generator는 Feature Schema,
-History Requirement, transform, Model Artifact를 소유하고 Product API는 Backend read/query
-contract를 소비한다.
+Backend Observation read contract와 Feature Executor result의 최소 규칙은 다음과 같다.
 
 - `node_id`는 `{asset_id}.{sensor_key}`로 해석한다. 예: `CNC-S01-L01-01.torque_nm`.
 - `source_timestamp`는 canonical `observed_at` 후보이며, `server_timestamp`가 있으면 ingestion/provenance 필드로 보존한다.
 - 같은 `asset_id`와 `source_timestamp`에 속한 센서 row는 하나의 Observation으로 pivot해 `measurements` map을 만든다.
 - `status_code=Bad`, `value=null`, `reason`은 0 또는 정상값으로 보정하지 않고 null value와 data-quality warning/gap으로 전달한다.
-- gen_data의 센서 key와 Product feature key가 다를 수 있으므로 `rpm` -> `rotational_speed_rpm` 같은 feature catalog 또는 ingestion mapping을 별도 계약으로 둔다.
+- gen_data의 센서 key와 Product feature key가 다를 수 있으므로 `rpm` -> `rotational_speed_rpm` 같은 Feature Schema 또는 ingestion mapping을 별도 계약으로 둔다.
 - Layer 1 최신값은 `latest_observation` 또는 현재값 보조 확인에는 사용할 수 있지만, `features[].series`의 history source로 사용하지 않는다.
 - `.raw`는 protocol audit/debug provenance로 보존할 수 있으나 report graph source가 아니다.
 
 ### 3.2 구현 순서
 
 1. `AssetDetailReportViewModel` 문서 계약과 테스트 fixture를 먼저 추가한다.
-2. `gen_data` source/protocol record 샘플을 Backend Observation/Feature series read shape로 정규화하는 fixture를 추가한다.
-3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 fixture-only contract test로 고정한다.
-4. Backend adapter가 Result Artifact/Evidence, Backend Observation/Feature Executor series, Diagnosis Runtime Prediction History Query result를 병합한다.
+2. `gen_data` source/protocol record 샘플을 Backend Observation ingestion fixture로 정규화하고, Feature Schema/transform contract fixture를 추가한다.
+3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 Backend Observation ingestion/Feature Executor contract test로 고정한다.
+4. Backend adapter가 Result Artifact/Evidence, Backend Observation read contract와 Feature Executor result, Backend Diagnosis Runtime Prediction History Query Contract(`pm_result_artifacts` append-only history + optional `prediction_results` detail join)를 병합한다.
 5. Product API endpoint는 현행 compatibility path에 바로 고정하지 않고 `/objects/{asset_id}/report-detail` 후보로 둔다.
 6. 프론트 report UI는 단일 ViewModel을 소비하도록 전환한다.
 7. `map-report-ui-prototype`에서 임시로 가져온 synthetic graph fallback은 제거한다.
@@ -350,7 +353,7 @@ contract를 소비한다.
 
 `contracts/schemas/product-result-artifact.schema.json`은 Canonical V3.1 runtime output과 맞춘다. step 7 결정은 기존 required 필드를 깨지 않고 producer가 optional `evidence_payload`를 추가 산출하는 v1.0-compatible enrichment다. `result-artifact-v1.1` schema version bump는 이번 2주차 producer contract 범위에 넣지 않는다.
 
-여기서 `evidence_payload`는 dashboard projection layer가 reference package를 읽어 운영 근거를 채워 넣는 뜻이 아니다. Product Result Artifact의 공식 생성 책임은 `systems/backend/app/diagnosis`에 유지하고, 같은 producer 경계에서 `sensor_evidence`, `component_hypotheses`, `maintenance_context`, `recommended_actions.basis`, `source_fields`를 산출한다. `systems/backend/ontology_dashboard/...`는 이미 enriched된 Artifact를 Event Evidence projection과 legacy compatibility output으로 변환한다.
+여기서 `evidence_payload`는 dashboard projection layer가 reference package를 읽어 운영 근거를 채워 넣는 뜻이 아니다. Product Result Artifact의 공식 생성 책임은 `systems/backend/app/diagnosis`에 유지하고, 같은 producer 경계에서 `sensor_evidence`, `component_hypotheses`, `maintenance_context`, `recommended_actions.basis`, `source_fields`를 산출한다. PR #92 이후 현행 canonical 구현 경로는 `systems/backend/app/diagnosis`와 Product API adapter이며, 제거된 `systems/backend/ontology_dashboard/...` 경로는 historical evidence로만 기록한다.
 
 필수 확인 필드는 다음과 같다.
 
@@ -544,11 +547,11 @@ canonical Event Evidence의 `assessment.top_factors`는 Product Result Artifact�
 
 Runtime 저장 경계는 결과 계약과 Evidence detail 가용성을 분리한다. `pm_result_artifacts`로 검증된 Result Artifact의 `source_contract`, `artifact_id`, `schema_version`, `recommended_action`은 연결된 `prediction_results.payload_json`에 `evidence_payload`가 없다는 이유로 prediction snapshot compatibility로 강등하지 않는다. 저장된 producer Artifact와 `evidence_payload`가 있으면 dashboard detail을 만들고, 없으면 같은 Result API/화면 shape에서 detail을 unavailable로 표시한다. dashboard는 누락된 Evidence를 재생성하지 않는다.
 
-신규 runtime 생성과 기존 precomputed bundle import는 내부 쓰기 전략으로 분리하되 public API나 frontend 화면 모드로 분기하지 않는다. 신규 데이터의 canonical 경로는 source ingestion 후 `systems/backend/app/diagnosis` runtime producer가 full Product Result Artifact를 저장하는 경로다. 기존 prediction/result 파일은 migration·회귀·과거 데이터 조회를 위한 imported compatibility 경로로 보존한다. 한 Dataset Version에서 두 writer를 동시에 사용하거나 runtime 실패를 imported 결과로 자동 fallback하지 않는다. 명시적인 `materialization_strategy`와 writer 분리는 후속 persistence PR에서 구현하며, 구현 전에는 payload shape나 dataset 전체 row count로 전략을 추측하지 않는다.
+신규 runtime 생성과 기존 precomputed bundle import는 내부 쓰기 전략으로 분리하되 public API나 frontend 화면 모드로 분기하지 않는다. 신규 데이터의 canonical 경로는 source ingestion 후 `systems/backend/app/diagnosis` runtime producer가 full Product Result Artifact를 저장하는 경로다. 기존 prediction/result 파일은 migration·회귀·과거 데이터 조회를 위한 imported compatibility 경로로 보존한다. 한 Dataset Version에서 두 writer를 동시에 사용하거나 runtime 실패를 imported 결과로 자동 fallback하지 않는다. PR #92/#97 이후 `materialization_strategy` persistence와 runtime-generated-only operationalization guard는 현행 기준에 포함된다. Product API와 frontend는 이 내부 전략으로 별도 화면을 만들지 않고 공통 Result/Evidence/ViewModel availability와 limitations만 소비한다.
 
 #### 4.3.1 이전 구현 계획 대비 변경
 
-PR #25 기반 원안의 producer/projection/UI 경계는 유지한다. 변경되는 부분은 PR #50에서 처음 구체화된 persistence writer와 runtime read path다.
+PR #25 기반 원안의 producer/projection/UI 경계는 유지한다. 변경되는 부분은 PR #50에서 처음 구체화된 persistence writer와 runtime read path, 그리고 gen_data PR #7 이후 세분화된 source/protocol/Generator 입력 경계다. 이 세분화는 Product Result Artifact/Evidence의 최종 producer를 Generator로 옮기는 뜻이 아니다.
 
 | 비교 항목 | PR #25 원안 | PR #50 초기 구현 | `59651ca` 대응 | 현재 결정 |
 |---|---|---|---|---|
@@ -559,7 +562,13 @@ PR #25 기반 원안의 producer/projection/UI 경계는 유지한다. 변경되
 | API/UI | legacy 기본 응답과 selector 기반 canonical projection, typed ViewModel 하나 | runtime detail을 같은 API에 연결 | runtime/imported 결과가 서로 다른 계약처럼 보일 위험 발생 | 저장 전략은 frontend에 노출하지 않고 동일 API/ViewModel에서 availability와 limitations만 표시 |
 | 검증 | fixture/contract 중심, PostgreSQL runtime replay 미완료 | full producer payload happy path 중심 | PostgreSQL service 추가 후 replay 3 failed, 1 passed, 1 skipped | runtime full-Evidence와 imported Evidence-unavailable 경로를 별도 PostgreSQL 회귀로 검증 |
 
-Evidence-state 기준으로 PR #25 Step 1~13은 기존 `Done` 판정을 유지한다. “모든 Result Artifact index가 full producer payload를 가리킨다”는 전제는 `Superseded`, `59651ca`의 dataset 전체 계약 강등은 `Rejected`다. 현재 writer 분리와 공통 read/API 경계는 결정만 완료됐고 구현·PostgreSQL 회귀가 남아 있으므로 Step 14~15는 `In Progress` / `Partially Verified`다.
+Evidence-state 기준으로 PR #25 Step 1~13의 historical evidence는 보존하되, PR #92 이후 제거된 legacy 경로의 구현 위치는 `Superseded`로 본다. “모든 Result Artifact index가 full producer payload를 가리킨다”는 전제는 `Superseded`, `59651ca`의 dataset 전체 계약 강등은 `Rejected`다. PR #92/#97로 writer strategy persistence와 recommendation materialization guard는 현행 기준에 포함됐지만, 공통 read/API consumer 전환과 PostgreSQL runtime/imported availability 회귀는 아직 `In Progress` / `Partially Verified`다.
+
+운영 시계열 입력 경계는 다음처럼 세분화한다.
+
+- `gen_data`: SensorRecord / protocol record 생성과 source lineage 보존
+- `systems/generator`: protocol/source record 검증, measurement 조립, quality policy, history window, Feature/Label 생성, Model Artifact publish
+- `systems/backend/app/diagnosis`: Model Artifact와 Observation/Feature 입력을 소비해 runtime inference를 수행하고, Product Result Artifact/Evidence 생성, Runtime Prediction History 저장/조회, Result/Evidence read model 제공
 
 ```text
 유지: Diagnosis Producer -> Product Result Artifact -> Event Evidence Projection -> Report/ViewModel
@@ -634,9 +643,12 @@ Producer target은 다음 경계다.
 - lineage, prediction ID, artifact ID, model version, dataset version, source reference를 보존한다.
 - `error_context`, `peer_comparison`, `maintenance_context`, `failure_type_candidates`가 없거나 unavailable인 경우 이를 `근거 부족` 또는 data-quality/evidence-gap 상태로 전달한다.
 
-Dashboard projection target은 다음 경계다.
+Dashboard projection의 historical evidence는 PR #18/#41 당시 다음 legacy 경로였다. PR #92 이후
+이 패키지는 제거됐고, 현행 canonical Event Evidence Projection 경로는
+`systems/backend/app/diagnosis/evidence_projection.py`다. 신규 Target 경로는 canonical
+`systems/backend/app/diagnosis`와 Product API adapter로만 둔다.
 
-`systems/backend/ontology_dashboard/product_result_evidence_projection.py`
+`systems/backend/ontology_dashboard/product_result_evidence_projection.py` (removed legacy migration source)
 
 책임은 다음과 같다.
 
@@ -712,11 +724,11 @@ PR #18의 이전 transition helper는 producer 구현 API가 아니었다. 새 �
 
 ### 5.3 Runtime Service 재사용
 
-`systems/backend/ontology_dashboard/predictive_maintenance_runtime/service.py`에는 PostgreSQL Result Artifact row를 dashboard evidence/report payload로 변환하는 `_dashboard_detail` 경로가 이미 있다.
+Historical PR #50 근거로는 legacy `systems/backend/ontology_dashboard/predictive_maintenance_runtime/service.py`에 PostgreSQL Result Artifact row를 dashboard evidence/report payload로 변환하는 `_dashboard_detail` 경로가 있었다. PR #92 이후 신규 구현 위치로 재사용하지 않는다.
 
 이 매핑을 service 내부에 계속 두지 말고 producer enrichment 결과를 읽는 projection layer를 호출하도록 분리한다.
 
-현행 `/api/events/{event_id}/evidence`와 `/api/events/{event_id}/report`는 `systems/backend/ontology_dashboard/service.py`의 fixture service 경로도 사용한다. PR #18은 `systems/backend/ontology_dashboard/product_result_evidence_projection.py`의 projection 계약을 우선 고정했다. 다음 구현은 runtime inference와 Product Result Artifact/Evidence 최종 생성 책임을 가진 `systems/backend/app/diagnosis`가 `evidence_payload`를 산출하도록 옮긴 뒤, dashboard API host와 projection layer를 `systems/backend/ontology_dashboard/...` 아래에 유지한다.
+PR #18/#41 당시 `/api/events/{event_id}/evidence`와 `/api/events/{event_id}/report`는 legacy `systems/backend/ontology_dashboard/service.py`의 fixture service 경로도 사용했고, legacy `systems/backend/ontology_dashboard/product_result_evidence_projection.py`의 projection 계약을 우선 고정했다. PR #92 이후 현행 구현은 canonical `systems/backend/app/diagnosis/evidence_projection.py` 및 `systems/backend/app/...` service/adapter 경계로 수렴한다. 다음 구현은 runtime inference와 Product Result Artifact/Evidence 최종 생성 책임을 가진 `systems/backend/app/diagnosis`가 `evidence_payload`를 산출하도록 유지하고, Product API adapter도 canonical `systems/backend/app/...` 경계만 사용한다.
 
 ### 5.4 Report Generator 의미 병합
 
@@ -887,7 +899,7 @@ Status 값은 다음만 사용한다.
 | 1 | Done | Product Result Artifact sample, 현행 dashboard fixture, `pdm-mvp` semantic regression reference를 추가한다. | 최소 fixture set | `tests/fixtures/product_result_evidence_projection/`, `data/fixtures/GS-*.json` |
 | 2 | Done | Product Result Artifact `evidence_payload` 후보 shape를 producer-enriched Artifact regression fixture로 고정한다. | expected fixture 또는 schema candidate | `tests/fixtures/product_result_evidence_projection/producer-enriched-critical-artifact.json` |
 | 3 | Done | Artifact-derived Event Evidence projection shape를 `artifact_reference`, `assessment`, `report_projection`, `provenance`, `limitations`로 고정한다. | canonical projection expected fixture | `tests/fixtures/product_result_evidence_projection/expected-event-evidence-projection-critical.json` |
-| 4 | Done | `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 구현한다. | transition projection mapper | `pytest -q tests/test_product_result_evidence_projection.py` |
+| 4 | Done | legacy `systems/backend/ontology_dashboard/product_result_evidence_projection.py`를 transition projection mapper로 구현했다. PR #92 이후 canonical 경로는 `systems/backend/app/diagnosis/evidence_projection.py`다. | historical migration-era projection mapper; current implementation path superseded by PR #92 | `pytest -q tests/test_product_result_evidence_projection.py` |
 | 5 | Done | Event Evidence projection과 legacy evidence compatibility projection을 동시에 생성하는 dual projection test를 추가한다. | canonical + legacy regression test | `pytest -q tests/test_product_result_evidence_projection.py tests/test_system_ownership.py` |
 
 1차 PR 완료 조건은 다음과 같다.
@@ -925,7 +937,7 @@ Status 값은 다음만 사용한다.
 
 - `systems/backend/app/diagnosis`가 Product Result Artifact와 `evidence_payload`의 최종 producer다.
 - `pdm-mvp`는 runtime dependency가 아니라 산출 규칙과 fixture 비교 기준으로만 남는다.
-- `systems/backend/ontology_dashboard/...`는 운영 근거를 새로 합성하지 않고 projection만 수행한다.
+- PR #92 이후 제거된 legacy `systems/backend/ontology_dashboard/...`는 historical evidence로만 남기고, 운영 근거 생성과 projection target은 canonical `systems/backend/app/diagnosis` 경계로 둔다.
 - 기존 dashboard artifact/evidence의 화면 맞춤 필드는 producer contract로 승격되지 않는다.
 - 산출 불가능한 값은 `evidence_gap`, `limitations`, 또는 후속 도메인/API 계약으로 분리된다.
 - `evaluation_truth`와 `hidden_truth`는 producer output과 projection output에 없다.
@@ -936,7 +948,7 @@ Status 값은 다음만 사용한다.
 
 | Order | Status | Step | Deliverable | Evidence |
 |---:|---|---|---|---|
-| 13 | Done | `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결한다. | 기본 endpoint legacy 유지, selector 기반 canonical 응답 | PR #41 `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
+| 13 | Done | legacy `systems/backend/ontology_dashboard/service.py`의 fixture evidence/report 경로가 projection layer를 사용하도록 연결했다. PR #92 이후 현행 service/adapter target은 canonical `systems/backend/app/...` 경계다. | historical endpoint compatibility evidence; current implementation path superseded by PR #92 | PR #41 `tests/test_mvp.py`, `tests/test_product_result_evidence_projection.py` |
 | 14 | In Progress | runtime 생성 결과와 imported 기존 결과를 하나의 Result read model로 유지하되, 검증된 producer Evidence가 있을 때만 `_dashboard_detail`이 projection layer를 사용하도록 refactor한다. | runtime service refactor + Evidence availability boundary | PR #50 PostgreSQL replay에서 bundle payload와 runtime payload의 writer 차이 확인; 계약 전체 강등 수정 및 재검증 필요 |
 | 15 | In Progress | 저장 전략과 무관하게 동일한 legacy 기본 응답과 selector 기반 canonical 응답 shape를 유지하고, Evidence가 없으면 detail unavailable을 명시한다. | runtime/imported API regression | PostgreSQL 조건에서 PR #50 replay 3 failed, 1 passed, 1 skipped; runtime/imported 회귀 분리 필요 |
 
@@ -949,7 +961,7 @@ Status 값은 다음만 사용한다.
 - producer `evidence_payload`가 없는 imported Result Artifact도 `source_contract=result_artifact`와 공식 결과 필드를 유지한다. synthetic Artifact나 Evidence를 만들지 않고 `selected_event_detail`만 생략하며, 실제 `pm_result_artifacts`가 없는 prediction snapshot만 `prediction_snapshot_compatibility`로 취급한다.
 - runtime detail의 observation window는 dashboard live query가 아니라 저장된 producer Artifact의 `history`와 `detected_interval`을 기준으로 한다. 따라서 별도의 6시간/10분 observation query를 Evidence source로 중복 사용하지 않는다.
 - runtime review에서는 producer 생성, 각 persistence writer, `prediction_results.payload_json`, `pm_result_artifacts` index, repository, projection consumer를 모두 추적한다. demo runtime writer의 full payload 보존을 bundle ingestion writer까지 일반화하지 않는다. full payload가 실제로 있으면 read path를 고치고, imported 결과에 Evidence가 실제로 없으면 같은 Result API에서 unavailable로 남긴다.
-- `materialization_strategy=runtime_generated|imported_precomputed`는 writer 선택과 provenance를 위한 내부 persistence 후속 계약이다. frontend는 이 값으로 별도 화면을 만들지 않고 공통 Event Evidence/ViewModel의 availability와 limitations만 소비한다.
+- `materialization_strategy=runtime_generated|imported_precomputed`는 PR #92/#97 이후 writer 선택과 provenance를 위한 내부 persistence 기준이다. frontend는 이 값으로 별도 화면을 만들지 않고 공통 Event Evidence/ViewModel의 availability와 limitations만 소비한다.
 - `list_events`, `layout`, `follow_up`, frontend ViewModel/UI는 아직 `build_evidence_package()` 또는 별도 경로를 사용하므로 전체 consumer 전환 완료로 주장하지 않는다.
 - `ranked_factor_evidence`는 legacy/detail용 top 5 evidence row 입력이며, canonical Event Evidence의 공식 판단 요약인 `assessment.top_factors` top 3을 대체하지 않는다.
 
