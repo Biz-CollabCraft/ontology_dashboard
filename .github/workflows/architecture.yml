@@ -189,10 +189,16 @@ jobs:
             tests/test_planner_domain_migration.py \
             tests/test_live_predictive_maintenance.py
 
-      - name: Generator import smoke
+      - name: Generator legacy import smoke
         if: needs.changes.outputs.generator == 'true'
         working-directory: systems/generator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: python -c "import extraction; import ontology_mapping; import topology; import feature; import model; import common"
+
+      - name: Generator canonical import smoke
+        if: needs.changes.outputs.generator == 'true'
+        run: python -c "import systems.generator.app.preprocessing"
 
       - name: Generator daemon tests
         if: needs.changes.outputs.generator == 'true'

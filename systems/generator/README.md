@@ -53,6 +53,11 @@ systems/generator/
 ```
 
 > **단방향 의존성 원칙**: 공통 기반 모듈(`systems/generator/*.py`)은 `app` 하위 모듈을 절대 import하지 않으며, `FastAPI`에 의존하지 않습니다.
+>
+> **Python 실행 환경 계약 (Execution Environment Contract)**:
+> - Generator 시스템은 저장소 루트(Repository Root)를 표준 `PYTHONPATH`로 사용하는 패키지 구조를 가집니다.
+> - 저장소 루트 실행: `python -c "import systems.generator.app.preprocessing"`
+> - `systems/generator` 작업 디렉터리 실행: `PYTHONPATH=<repository-root>` 환경변수를 제공하여 legacy facade 및 모듈을 실행합니다.
 
 ---
 
