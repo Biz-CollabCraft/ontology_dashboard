@@ -19,7 +19,7 @@
       }
     },
     "source": {
-      "source_kind": "gen_data_layer2_log",
+      "source_kind": "fixture_only_gen_data_layer2_log",
       "node_ids": [
         "CNC-S01-L01-01.torque_nm",
         "CNC-S01-L01-01.rpm"
@@ -45,7 +45,7 @@
       }
     },
     "source": {
-      "source_kind": "gen_data_layer2_log",
+      "source_kind": "fixture_only_gen_data_layer2_log",
       "node_ids": ["CNC-S01-L01-01.torque_nm"],
       "source_row_numbers": [3],
       "server_timestamps": ["2026-08-20T01:01:02Z"]
@@ -65,7 +65,7 @@
       }
     },
     "source": {
-      "source_kind": "gen_data_layer2_log",
+      "source_kind": "fixture_only_gen_data_layer2_log",
       "node_ids": ["CNC-S01-L01-02.torque_nm"],
       "source_row_numbers": [4],
       "server_timestamps": ["2026-08-20T01:00:04Z"]

@@ -20,7 +20,7 @@
       "status_grade": "warning",
       "prediction_id": "CMP-S03-L03-01#2026-07-31T18:00:00+09:00",
       "source_kind": "runtime_inference",
-      "source_ref": "result-artifact://RESULT#CMP-S03-L03-01#2026-07-31T18:00:00+09:00"
+      "source_ref": "prediction-results://prediction_results/CMP-S03-L03-01/2026-07-31T18:00:00+09:00"
     },
     {
       "observed_at": "2026-07-31T21:00:00+09:00",
@@ -28,7 +28,7 @@
       "status_grade": "warning",
       "prediction_id": "CMP-S03-L03-01#2026-07-31T21:00:00+09:00",
       "source_kind": "runtime_inference",
-      "source_ref": "result-artifact://RESULT#CMP-S03-L03-01#2026-07-31T21:00:00+09:00"
+      "source_ref": "prediction-results://prediction_results/CMP-S03-L03-01/2026-07-31T21:00:00+09:00"
     },
     {
       "observed_at": "2026-08-01T00:00:00+09:00",
@@ -36,7 +36,7 @@
       "status_grade": "critical",
       "prediction_id": "CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
       "source_kind": "runtime_inference",
-      "source_ref": "result-artifact://RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00"
+      "source_ref": "prediction-results://prediction_results/CMP-S03-L03-01/2026-08-01T00:00:00+09:00"
     }
   ],
   "features": [

@@ -293,14 +293,14 @@ type AssetDetailReportViewModel = {
 | 필드 묶음 | 공식 원천 | 책임 | 없는 경우 |
 |---|---|---|---|
 | `asset`, 표시명, line/cell | Asset/Object read model | Dataset/Equipment API | 필드 생략 또는 `data_status.warnings` |
-| `features[].series` | gen_data Layer 2 `_log.jsonl`을 정규화한 canonical Observation 또는 Runtime Overlay Observation | Dataset/Observation API | 빈 배열과 `evidence.gaps[]` |
+| `features[].series` | Generator가 산출한 canonical/overlay Observation 또는 Feature series contract | Dataset/Observation API | 빈 배열과 `evidence.gaps[]` |
 | `risk.current`, `top_factor`, `baseline` | Product Result Artifact와 `evidence_payload.sensor_evidence` | `systems/backend/app/diagnosis` | null과 `evidence.gaps[]` |
-| `risk_series` | Backend Diagnosis가 생성할 runtime prediction/result timeline | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
+| `risk_series` | Backend Diagnosis가 `prediction_results`에서 생성할 runtime result/prediction history | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
 | `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
 
-`risk_series`의 runtime prediction/result timeline은 기존 legacy `/timeline`의
+`risk_series`의 `prediction_results` 기반 runtime result/prediction history는 기존 legacy `/timeline`의
 `precomputed_prediction_timeline`을 제품 runtime source로 승격하는 뜻이 아니다. 이는
-Backend Diagnosis가 runtime inference 결과를 versioned result/prediction history로
+Backend Diagnosis가 runtime inference 결과를 `prediction_results`에 연결된 versioned result/prediction history로
 materialize하는 후속 target이다.
 
 현재 Evidence만으로 채울 수 있는 범위와 추가로 필요한 source는 다음과 같다.
@@ -312,8 +312,8 @@ materialize하는 후속 target이다.
 | 현재 센서 카드 | 가능 | 없음 | `observation` 또는 `sensor_evidence` 사용 |
 | top factor와 report 근거 | 가능 | 없음 | `evidence_field_id` 유지 |
 | feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
-| 피쳐별 그래프 | 불가 | Observation series | `features[].series=[]`와 gap 표시 |
-| 위험도 그래프 | 불가 | runtime prediction/result timeline | `risk_series=[]`와 gap 표시 |
+| 피쳐별 그래프 | 불가 | Generator Observation/Feature series | `features[].series=[]`와 gap 표시 |
+| 위험도 그래프 | 불가 | Backend Diagnosis `prediction_results` history | `risk_series=[]`와 gap 표시 |
 | 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
 | 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
 

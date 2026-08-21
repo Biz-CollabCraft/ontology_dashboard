@@ -36,7 +36,7 @@
     },
     "risk_series": {
       "type": "array",
-      "description": "Backend Diagnosis runtime prediction/result timeline target. Must not be populated by promoting legacy /timeline or precomputed_prediction_timeline.",
+      "description": "Backend Diagnosis prediction_results-backed runtime result/prediction history target. Must not be populated by promoting legacy /timeline, precomputed_prediction_timeline, or gen_data model_outputs fixtures.",
       "items": {
         "type": "object",
         "required": ["observed_at", "failure_probability", "status_grade", "prediction_id", "source_kind"],

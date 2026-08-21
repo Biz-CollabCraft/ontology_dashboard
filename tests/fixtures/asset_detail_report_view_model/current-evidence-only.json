@@ -61,7 +61,7 @@
       },
       {
         "field": "risk_series",
-        "reason": "Backend Diagnosis runtime prediction/result timeline is not materialized yet",
+        "reason": "Backend Diagnosis prediction_results runtime history is not materialized yet",
         "owner_domain": "diagnosis"
       },
       {

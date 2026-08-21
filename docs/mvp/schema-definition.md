@@ -367,21 +367,21 @@ Overview와 Objects 목록의 공통 행이다.
 | `risk.threshold` | number 또는 null | Y | Artifact root `threshold` 또는 policy | 제안 |
 | `risk.status_grade` | string | Y | Product Result Artifact `status_grade` | 제안 |
 | `risk.prediction_horizon_hours` | integer 또는 null | Y | Product Result Artifact | 제안 |
-| `risk_series` | PredictionSeriesPoint[] | Y | Backend Diagnosis runtime prediction/result timeline target | 제안 |
+| `risk_series` | PredictionSeriesPoint[] | Y | Backend Diagnosis `prediction_results` 기반 runtime result/prediction history target | 제안 |
 | `features` | AssetReportFeature[] | Y | Feature catalog + Observation + Evidence | 제안 |
 | `features[].key` | string | Y | Feature catalog | 제안 |
 | `features[].label` | string | Y | Feature catalog 또는 display projection | 제안 |
 | `features[].unit` | string | Y | Feature catalog 또는 Evidence sensor unit | 제안 |
 | `features[].current` | number 또는 null | Y | Product Result Artifact observation 또는 sensor evidence | 제안 |
 | `features[].baseline` | Baseline 또는 null | N | `evidence_payload.sensor_evidence.sensors[*].basis` | 제안 |
-| `features[].series` | ObservationSeriesPoint[] | Y | canonical/overlay Observation API | 제안 |
+| `features[].series` | ObservationSeriesPoint[] | Y | Generator canonical/overlay Observation 또는 Feature series contract | 제안 |
 | `features[].top_factor` | Factor summary 또는 null | N | Product Result Artifact `top_factors` | 제안 |
 | `equipment_history` | EquipmentHistoryRow[] | Y | Activity/Decision/Maintenance source | 제안 |
 | `evidence` | ReportEvidenceStatus | Y | Artifact/Evidence provenance | 제안 |
 | `evidence.gaps` | EvidenceGap[] | Y | Backend adapter | 제안 |
 | `data_status` | DataStatus | Y | API | 제안 |
 
-`features[].series`는 센서 관측 시계열이므로 versioned Observation contract에서 파생한다. gen_data Layer 1/Layer 2/_log.jsonl 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target이며, Product API 계약의 직접 의존성은 내부 파일명이 아니라 canonical/overlay Observation API shape다. 반면 `risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend Diagnosis가 runtime result/prediction history로 materialize하는 후속 target이다. `gen_data/canonical/model_outputs/prediction_timeline.jsonl`이나 legacy `precomputed_prediction_timeline`을 최신 운영 결과처럼 직접 소비하지 않는다.
+`features[].series`는 센서 관측 시계열이므로 Generator가 산출한 versioned Observation/Feature series contract에서 파생한다. gen_data Layer 1/Layer 2/_log.jsonl 세부 저장 형태는 Issue #6의 Source Data Producer 수렴 target이며, Product API 계약의 직접 의존성은 내부 파일명이 아니라 canonical/overlay Observation API shape다. 반면 `risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend Diagnosis가 `prediction_results`에서 runtime result/prediction history로 materialize하는 후속 target이다. `gen_data/canonical/model_outputs/prediction_timeline.jsonl`이나 legacy `precomputed_prediction_timeline`을 최신 운영 결과처럼 직접 소비하지 않는다.
 
 기존 MVP 상세 화면이 사용하던 Event detail 필드(asset, 현재 센서값, top factors,
 threshold, data quality warning, activity, report, provenance)는 이 계약의 기준선이다.
@@ -394,8 +394,8 @@ threshold, data quality warning, activity, report, provenance)는 이 계약의 
 | 현재 센서값 | 가능 | 없음 | `observation` 또는 `sensor_evidence.sensors` |
 | top factors/report citations | 가능 | 없음 | `top_factors`, `report.sections[].evidenceFieldIds` |
 | feature baseline | 부분 가능 | Evidence Payload 노출 필요 | `sensor_evidence.sensors[*].basis`가 있는 feature만 가능 |
-| feature 시계열 | 불가 | Observation API 또는 gen_data Layer 2 정규화 결과 | 단일 Event Evidence는 현재값 중심 |
-| risk 시계열 | 불가 | Backend Diagnosis runtime prediction/result timeline | gen_data model output fixture 대체 금지 |
+| feature 시계열 | 불가 | Generator Observation/Feature series | 단일 Event Evidence는 현재값 중심 |
+| risk 시계열 | 불가 | Backend Diagnosis `prediction_results` history | gen_data model output fixture 대체 금지 |
 | crossing marker/history row | 불가 또는 부분 가능 | Observation series, baseline, Activity/Maintenance source | 합성 금지 |
 
 시계열과 baseline의 최소 추적 필드는 다음과 같다.

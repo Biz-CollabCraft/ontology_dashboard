@@ -149,6 +149,14 @@ def test_risk_series_source_ref_does_not_point_at_legacy_precomputed_timeline() 
             source_ref = point.get("source_ref", "")
             assert "precomputed_prediction_timeline" not in source_ref
             assert "/timeline" not in source_ref
+            assert "gen_data/canonical/model_outputs" not in source_ref
+
+
+def test_risk_series_source_ref_is_prediction_results_backed() -> None:
+    for scenario in SCENARIO_FILES:
+        payload = fixture(scenario)
+        for point in payload["risk_series"]:
+            assert point["source_ref"].startswith("prediction-results://prediction_results/")
 
 
 def test_baseline_partially_missing_keeps_current_value_and_series_but_gaps_baseline() -> None:
