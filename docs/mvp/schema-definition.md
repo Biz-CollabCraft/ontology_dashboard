@@ -374,20 +374,23 @@ Overview와 Objects 목록의 공통 행이다.
 | `features[].unit` | string | Y | Feature catalog 또는 Evidence sensor unit | 제안 |
 | `features[].current` | number 또는 null | Y | Product Result Artifact observation 또는 sensor evidence | 제안 |
 | `features[].baseline` | Baseline 또는 null | N | `evidence_payload.sensor_evidence.sensors[*].basis` | 제안 |
-| `features[].series` | ObservationSeriesPoint[] | Y | Generator Observation/Feature series target contract | 제안 |
+| `features[].series` | ObservationSeriesPoint[] | Y | Backend Observation read contract + Backend Feature Executor result | 제안 |
 | `features[].top_factor` | Factor summary 또는 null | N | Product Result Artifact `top_factors` | 제안 |
 | `equipment_history` | EquipmentHistoryRow[] | Y | Activity/Decision/Maintenance source | 제안 |
 | `evidence` | ReportEvidenceStatus | Y | Artifact/Evidence provenance | 제안 |
 | `evidence.gaps` | EvidenceGap[] | Y | Backend adapter | 제안 |
 | `data_status` | DataStatus | Y | API | 제안 |
 
-`features[].series`는 센서/피처 시계열이므로 Backend가 `gen_data` raw JSONL이나
-canonical CSV를 직접 파싱해 만들지 않는다. `gen_data`의 source/protocol record를
-`systems/generator`가 검증·조립·feature화할 versioned Observation/Feature series target contract에서
-파생한다. 반면 `risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend
-Diagnosis Runtime Prediction History Query Contract에서 파생하는 후속 target이다. 현재 구현
-anchor는 Backend Diagnosis가 Product Result/Prediction을 저장하는 `prediction_results`이지만,
-Product API는 내부 테이블 shape를 직접 노출하지 않는다. `pm_prediction_timeline`,
+`features[].series`는 센서 Observation과 파생 Feature 시계열이므로 Product API가 `gen_data`
+raw JSONL이나 canonical CSV를 직접 파싱해 만들지 않는다. 센서 Observation series는 Backend의
+canonical/overlay branch-aware Observation read contract에서 읽고, 파생 Feature series는
+versioned Feature Schema/transform contract를 적용한 Backend Feature Executor 결과로 제공한다.
+`systems/generator`는 Feature/Label 의미, History Requirement, transform contract, Model Artifact
+publish를 소유하지만 제품 runtime series를 Product API source로 publish하지 않는다. 반면
+`risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend Diagnosis Runtime
+Prediction History Query Contract에서 파생하는 후속 target이다. 현재 구현 anchor는 Backend
+Diagnosis가 Product Result/Prediction을 저장하는 `prediction_results`이지만, Product API는
+내부 테이블 shape를 직접 노출하지 않는다. `pm_prediction_timeline`,
 `gen_data/canonical/model_outputs/prediction_timeline.jsonl`, legacy `precomputed_prediction_timeline`을
 최신 운영 결과처럼 직접 소비하지 않는다.
 
