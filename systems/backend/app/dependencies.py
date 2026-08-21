@@ -35,7 +35,8 @@ from app.dashboard.visualizations import (
     validate_override_channel_mapping,
 )
 from app.dataset import DatasetCatalogService
-from app.diagnosis.evidence import FixtureContextProvider
+from app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from app.diagnosis.predictor import configured_predictor
 from app.diagnosis.runtime_service import (
     PredictiveMaintenanceRuntimeService,
     V3_1_MODEL_VERSION,
@@ -232,11 +233,22 @@ def build_live_predictive_maintenance_service(
     """Compose the live worker application service with its infrastructure adapter."""
 
     from app.infra.live_predictive_maintenance_runtime import (
-        LivePredictiveMaintenanceRuntime,
+        LiveDatasetIngestionAdapter,
+        LiveDiagnosisApplicationAdapter,
+        LiveMaintenanceOverlayAdapter,
+        LiveOntologyProjectionAdapter,
     )
 
+    target = database_url or database_target()
+    shared = {
+        "predictor_factory": configured_predictor,
+        "artifact_builder": build_product_result_artifact,
+    }
     return LivePredictiveMaintenanceService(
-        LivePredictiveMaintenanceRuntime(database_url or database_target())
+        dataset=LiveDatasetIngestionAdapter(target, **shared),
+        diagnosis=LiveDiagnosisApplicationAdapter(**shared),
+        maintenance=LiveMaintenanceOverlayAdapter(**shared),
+        ontology=LiveOntologyProjectionAdapter(),
     )
 
 

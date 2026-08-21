@@ -13,7 +13,7 @@ from app.dataset import (
 )
 from app.diagnosis.ports import PredictionResultRepositoryPort
 from app.diagnosis.schemas import PredictionResult
-from app.identity import AuthError, IdentityService, Principal
+from app.identity.contracts import AuthError, Principal
 
 from app.dataset.ingestion.file_adapter import FileAdapter
 from app.dataset.ingestion.bundle_file_adapter import BundleFileAdapter

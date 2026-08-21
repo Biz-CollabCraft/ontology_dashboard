@@ -76,6 +76,11 @@ def strict_tree(tmp_path: Path) -> Path:
             "ARC008",
         ),
         (
+            "systems/backend/app/infra/bad.py",
+            "from app.diagnosis.predictor import configured_predictor\n",
+            "ARC008",
+        ),
+        (
             "systems/backend/app/runtime_bad.py",
             "from systems.generator.model import model_training\n",
             "ARC009",
@@ -164,9 +169,30 @@ def test_strict_verifier_allows_public_cross_context_boundaries(strict_tree: Pat
                 "from app.diagnosis.ports import PredictionResultRepositoryPort",
                 "from app.diagnosis.schemas import PredictionResult",
                 "from app.ontology.ontology_domain import ObjectRecord",
-                "from app.report import ReportService",
+                "from app.report.ports import ReportRepositoryPort",
                 "",
             ]
         ),
     )
     assert verify(strict_tree) == []
+
+
+@pytest.mark.parametrize(
+    ("module", "symbol"),
+    [
+        ("app.equipment", "EquipmentService"),
+        ("app.dashboard", "DashboardService"),
+        ("app.ontology", "OntologyService"),
+    ],
+)
+def test_strict_verifier_rejects_cross_context_package_root_concrete_services(
+    strict_tree: Path,
+    module: str,
+    symbol: str,
+) -> None:
+    _write(
+        strict_tree / "systems/backend/app/mvp/bad.py",
+        f"from {module} import {symbol}\n",
+    )
+    violations = verify(strict_tree)
+    assert any(item.rule == "ARC005" for item in violations), [str(item) for item in violations]

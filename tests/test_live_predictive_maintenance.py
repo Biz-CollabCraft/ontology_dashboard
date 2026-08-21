@@ -10,6 +10,7 @@ from app.infra.live_predictive_maintenance_runtime import (
     read_complete_ticks,
     read_overlay_available_events,
 )
+from app.maintenance.live_service import LivePredictiveMaintenanceService
 
 
 def test_macmini_compose_runs_canonical_live_worker() -> None:
@@ -141,3 +142,60 @@ def test_overlay_available_outbox_is_deduplicated_by_event_id(tmp_path):
     )
 
     assert read_overlay_available_events(tmp_path) == [event]
+
+
+def test_live_worker_orchestrates_owner_domain_ports_in_order(tmp_path):
+    calls: list[str] = []
+    ticks = [(datetime(2026, 8, 18, 5, 30, tzinfo=timezone.utc), [{"asset_id": "CNC-1"}])]
+    batch = {
+        "ticks": ticks,
+        "summary": {"dataset_id": "dataset-1", "dataset_version_id": "version-1"},
+    }
+
+    class Dataset:
+        def prepare_batch(self, **_kwargs):
+            calls.append("dataset.prepare")
+            return batch
+
+        def persist_batch(self, _batch):
+            calls.append("dataset.persist")
+            return 1
+
+    class Diagnosis:
+        def materialize_live_results(self, _batch):
+            calls.append("diagnosis.materialize")
+            return {"result_artifact_count": 1}
+
+    class Maintenance:
+        def active_asset_ids(self, **_kwargs):
+            calls.append("maintenance.active")
+            return set()
+
+        def process_available(self, _batch):
+            calls.append("maintenance.overlay")
+            return []
+
+    class Ontology:
+        def materialize_live_projection(self, _batch):
+            calls.append("ontology.materialize")
+            return {"object_count": 1}
+
+    service = LivePredictiveMaintenanceService(
+        dataset=Dataset(),
+        diagnosis=Diagnosis(),
+        maintenance=Maintenance(),
+        ontology=Ontology(),
+    )
+
+    result = service.ingest_once(stream_root=tmp_path)
+
+    assert calls == [
+        "maintenance.active",
+        "dataset.prepare",
+        "dataset.persist",
+        "diagnosis.materialize",
+        "maintenance.overlay",
+        "ontology.materialize",
+    ]
+    assert result["inserted_rows"] == 1
+    assert result["runtime"]["result_artifact_count"] == 1

@@ -44,8 +44,17 @@ class MaintenanceQueryPort(Protocol):
     def work_orders(self, **query: Any) -> Sequence[dict[str, Any]]: ...
 
 
+class DashboardApplicationPort(Protocol):
+    """Template use cases exposed to cross-context application orchestrators."""
+
+    def current_template(self, **query: Any) -> Any: ...
+    def validate_template_draft(self, **command: Any) -> Any: ...
+    def publish_template(self, **command: Any) -> Any: ...
+
+
 __all__ = [
     "DashboardPrincipal",
+    "DashboardApplicationPort",
     "DashboardRepositoryPort",
     "DiagnosisReadModelQueryPort",
     "EquipmentStatusQueryPort",

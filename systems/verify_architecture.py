@@ -179,9 +179,9 @@ def _rel(root: Path, path: Path) -> str:
 def _is_public_context_import(module: str, *, source_context: str) -> bool:
     """Return whether a cross-context app import uses an explicit public seam.
 
-    Package roots are public facades.  Deeper cross-context imports must target
-    a domain/port/contract/schema module rather than implementation naming
-    conventions such as repositories, adapters, providers, or services.
+    Cross-context imports must name a domain/port/contract/schema module.
+    Package-root facades are intentionally rejected because they can re-export
+    concrete services and silently bypass dependency inversion.
     """
 
     parts = module.split(".")
@@ -193,7 +193,7 @@ def _is_public_context_import(module: str, *, source_context: str) -> bool:
     if target not in BOUNDARY_CONTEXTS:
         return True
     if len(parts) == 2:
-        return True
+        return False
     public_module = parts[2]
     return (
         public_module in PUBLIC_BOUNDARY_MODULES
@@ -263,8 +263,16 @@ def verify(root: Path = ROOT) -> list[Violation]:
             if domain_core and any(module == prefix or module.startswith(prefix + ".") for prefix in TECHNICAL_IMPORT_PREFIXES):
                 errors.append(Violation("ARC006", location))
 
-            # ARC008 infra may depend on domain contracts/schema, never domain services.
-            if top == "infra" and module.startswith("app.") and module.split(".")[-1].endswith("_service"):
+            # ARC008 infra may implement domain ports, never import domain use-case
+            # services or rule helpers (including Diagnosis inference/evidence).
+            if (
+                top == "infra"
+                and module.startswith("app.")
+                and (
+                    module.split(".")[-1].endswith("_service")
+                    or module in {"app.diagnosis.evidence", "app.diagnosis.predictor"}
+                )
+            ):
                 errors.append(Violation("ARC008", location))
 
             # ARC010 no executable code may resurrect the deleted package.

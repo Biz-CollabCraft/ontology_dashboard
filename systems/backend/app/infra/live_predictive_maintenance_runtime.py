@@ -15,11 +15,9 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from app.common.runtime_settings import project_root
-from app.diagnosis.evidence import build_product_result_artifact
-from app.diagnosis.predictor import configured_predictor
 from app.infra.db.predictive_maintenance_ontology_projection import (
     PredictiveMaintenanceOntologyMaterializer,
 )
@@ -297,10 +295,12 @@ def _materialize_runtime_results(
     source_version: str = SOURCE_VERSION,
     materialization_profile: str = RUNTIME_MATERIALIZATION_PROFILE,
     excluded_asset_ids: set[str] | None = None,
+    predictor_factory: Callable[[str], Any],
+    artifact_builder: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
-    cnc_predictor = configured_predictor("cnc")
-    compressor_predictor = configured_predictor("compressor")
+    cnc_predictor = predictor_factory("cnc")
+    compressor_predictor = predictor_factory("compressor")
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         with connection.transaction():
             _set_scope(connection)
@@ -387,7 +387,7 @@ def _materialize_runtime_results(
                         row["observed_at"],
                     )
                 )
-                artifact = build_product_result_artifact(
+                artifact = artifact_builder(
                     _runtime_fixture(row, history=history, source_version=source_version),
                     predictor=predictor,
                 )
@@ -834,6 +834,9 @@ def _evaluate_overlay_branch(
     database_url: str,
     dataset_version_id: str,
     event: dict[str, Any],
+    *,
+    predictor_factory: Callable[[str], Any],
+    artifact_builder: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
     asset_id = str(event["equipment_id"])
@@ -848,7 +851,7 @@ def _evaluate_overlay_branch(
             if asset is None:
                 raise ValueError(f"Runtime Overlay references unknown live asset: {asset_id}")
             asset_type = str(asset["asset_type"])
-            predictor = configured_predictor(asset_type)
+            predictor = predictor_factory(asset_type)
             required_prior_rows = _required_prior_rows(predictor)
             rows = connection.execute(
                 """
@@ -886,7 +889,7 @@ def _evaluate_overlay_branch(
                 )
                 fixture["event_id"] = f"runtime-overlay:{branch_id}:{current['observed_at'].isoformat()}"
                 fixture["scenario_id"] = f"runtime-overlay:{branch_id}"
-                artifact = build_product_result_artifact(fixture, predictor=predictor)
+                artifact = artifact_builder(fixture, predictor=predictor)
                 provenance = dict(artifact["provenance"])
                 provenance.update(
                     {
@@ -1182,6 +1185,9 @@ def _consume_overlay_event(
     dataset_version_id: str,
     stream_root: str | Path,
     event: dict[str, Any],
+    *,
+    predictor_factory: Callable[[str], Any],
+    artifact_builder: Callable[..., dict[str, Any]],
 ) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
     event_id = str(event["event_id"])
@@ -1274,7 +1280,13 @@ def _consume_overlay_event(
                         event_checksum,
                     ),
                 )
-    state = _evaluate_overlay_branch(database_url, dataset_version_id, event)
+    state = _evaluate_overlay_branch(
+        database_url,
+        dataset_version_id,
+        event,
+        predictor_factory=predictor_factory,
+        artifact_builder=artifact_builder,
+    )
     return {"event_id": event_id, "reused": existing is not None, **state}
 
 
@@ -1283,6 +1295,8 @@ def process_overlay_available_events(
     stream_root: str | Path,
     database_url: str,
     dataset_version_id: str,
+    predictor_factory: Callable[[str], Any],
+    artifact_builder: Callable[..., dict[str, Any]],
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for event in read_overlay_available_events(stream_root):
@@ -1292,6 +1306,8 @@ def process_overlay_available_events(
                 dataset_version_id,
                 stream_root,
                 event,
+                predictor_factory=predictor_factory,
+                artifact_builder=artifact_builder,
             )
         )
     return results
@@ -1453,6 +1469,8 @@ def _seed_live_product_results_for_cutover(
     live_version_id: str,
     cutoff_at: datetime,
     Jsonb: Any,
+    predictor_factory: Callable[[str], Any],
+    artifact_builder: Callable[..., dict[str, Any]],
 ) -> int:
     """Build a non-future Product Result seed while wall-clock history warms up.
 
@@ -1487,7 +1505,7 @@ def _seed_live_product_results_for_cutover(
     for row in candidates:
         asset_id = str(row["asset_id"])
         asset_type = str(row["asset_type"])
-        predictor = configured_predictor(asset_type)
+        predictor = predictor_factory(asset_type)
         history = (
             _compressor_runtime_history(
                 connection,
@@ -1503,7 +1521,7 @@ def _seed_live_product_results_for_cutover(
                 row["observed_at"],
             )
         )
-        artifact = build_product_result_artifact(
+        artifact = artifact_builder(
             _runtime_fixture(
                 row,
                 history=history,
@@ -1705,7 +1723,12 @@ def _seed_live_product_results_for_cutover(
     return seeded
 
 
-def _ensure_live_version(database_url: str) -> tuple[str, str]:
+def _ensure_live_version(
+    database_url: str,
+    *,
+    predictor_factory: Callable[[str], Any],
+    artifact_builder: Callable[..., dict[str, Any]],
+) -> tuple[str, str]:
     psycopg, dict_row, Jsonb = _postgres_modules()
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         with connection.transaction():
@@ -1774,6 +1797,8 @@ def _ensure_live_version(database_url: str) -> tuple[str, str]:
                     live_version_id=version_id,
                     cutoff_at=cutover_at,
                     Jsonb=Jsonb,
+                    predictor_factory=predictor_factory,
+                    artifact_builder=artifact_builder,
                 )
                 if carried:
                     profile_row = connection.execute(
@@ -1881,6 +1906,8 @@ def _ensure_live_version(database_url: str) -> tuple[str, str]:
                 live_version_id=version_id,
                 cutoff_at=cutover_at,
                 Jsonb=Jsonb,
+                predictor_factory=predictor_factory,
+                artifact_builder=artifact_builder,
             )
             if carried:
                 profile["row_counts"]["result_artifact"] = carried
@@ -2063,92 +2090,126 @@ def _insert_ticks(
     return inserted
 
 
-def ingest_once(
-    *,
-    stream_root: str | Path = DEFAULT_STREAM_ROOT,
-    database_url: str | None = None,
-) -> dict[str, Any]:
-    target = _normalize_database_url(database_url or database_target())
-    dataset_id, dataset_version_id = _ensure_live_version(target)
-    active_overlay_assets = active_overlay_asset_ids(stream_root)
-    latest = _latest_ingested_at(target, dataset_version_id)
-    expected_live_assets = max(1, EXPECTED_ASSET_COUNT - len(active_overlay_assets))
-    live_now = datetime.now(tz=timezone.utc)
-    ticks = read_complete_ticks(
-        stream_root,
-        after=latest,
-        not_after=live_now + MAX_LIVE_CLOCK_SKEW,
-        expected_asset_count=expected_live_assets,
-    )
-    if not ticks:
-        overlay = process_overlay_available_events(
-            stream_root=stream_root,
-            database_url=target,
-            dataset_version_id=dataset_version_id,
+class LiveDatasetIngestionAdapter:
+    """PostgreSQL/file adapter for the Dataset-owned live ingestion port."""
+
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        predictor_factory: Callable[[str], Any],
+        artifact_builder: Callable[..., dict[str, Any]],
+    ) -> None:
+        self.database_url = _normalize_database_url(database_url)
+        self.predictor_factory = predictor_factory
+        self.artifact_builder = artifact_builder
+
+    def prepare_batch(
+        self, *, stream_root: str | Path, active_overlay_assets: set[str]
+    ) -> dict[str, Any]:
+        dataset_id, dataset_version_id = _ensure_live_version(
+            self.database_url,
+            predictor_factory=self.predictor_factory,
+            artifact_builder=self.artifact_builder,
+        )
+        latest = _latest_ingested_at(self.database_url, dataset_version_id)
+        ticks = read_complete_ticks(
+            stream_root,
+            after=latest,
+            not_after=datetime.now(tz=timezone.utc) + MAX_LIVE_CLOCK_SKEW,
+            expected_asset_count=max(
+                1, EXPECTED_ASSET_COUNT - len(active_overlay_assets)
+            ),
         )
         return {
+            "database_url": self.database_url,
             "dataset_id": dataset_id,
             "dataset_version_id": dataset_version_id,
-            "source_version": LIVE_SOURCE_VERSION,
-            "new_ticks": 0,
-            "inserted_rows": 0,
-            "latest_observed_at": latest.isoformat() if latest else None,
-            "active_overlay_assets": sorted(active_overlay_assets),
-            "runtime_overlay": overlay,
+            "stream_root": stream_root,
+            "active_overlay_assets": active_overlay_assets,
+            "ticks": ticks,
+            "summary": {
+                "dataset_id": dataset_id,
+                "dataset_version_id": dataset_version_id,
+                "source_version": LIVE_SOURCE_VERSION,
+                "latest_observed_at": latest.isoformat() if latest else None,
+            },
         }
-    inserted = _insert_ticks(target, dataset_version_id, ticks)
-    runtime = _materialize_runtime_results(
-        target,
-        dataset_version_id,
-        source_version=LIVE_SOURCE_VERSION,
-        materialization_profile=LIVE_MATERIALIZATION_PROFILE,
-        excluded_asset_ids=active_overlay_assets,
-    )
-    # Normal live materialization atomically refreshes its current-state output
-    # rows. Project the active post-maintenance branch only after that refresh so
-    # the target equipment rejoins the standard Product Result read model without
-    # mixing its pre-maintenance source history back into temporal inference.
-    overlay = process_overlay_available_events(
-        stream_root=stream_root,
-        database_url=target,
-        dataset_version_id=dataset_version_id,
-    )
-    materializer = PredictiveMaintenanceOntologyMaterializer(target)
-    materializer.ensure_default_mapping(
-        organization_id=ORGANIZATION_ID,
-        project_id=PROJECT_ID,
-        workspace_id=WORKSPACE_ID,
-        dataset_id=dataset_id,
-        dataset_version_id=dataset_version_id,
-        approve=True,
-        approved_by="macmini-live-ingestor",
-    )
-    ontology = materializer.materialize(
-        organization_id=ORGANIZATION_ID,
-        project_id=PROJECT_ID,
-        workspace_id=WORKSPACE_ID,
-        dataset_id=dataset_id,
-        dataset_version_id=dataset_version_id,
-    )
-    return {
-        "dataset_id": dataset_id,
-        "dataset_version_id": dataset_version_id,
-        "source_version": LIVE_SOURCE_VERSION,
-        "new_ticks": len(ticks),
-        "inserted_rows": inserted,
-        "latest_observed_at": ticks[-1][0].isoformat(),
-        "active_overlay_assets": sorted(active_overlay_assets),
-        "runtime_overlay": overlay,
-        "runtime": runtime,
-        "ontology": ontology.model_dump(mode="json"),
-    }
+
+    def persist_batch(self, batch: dict[str, Any]) -> int:
+        return _insert_ticks(
+            str(batch["database_url"]),
+            str(batch["dataset_version_id"]),
+            batch["ticks"],
+        )
 
 
-class LivePredictiveMaintenanceRuntime:
-    """Infrastructure adapter exposing one idempotent live-ingestion cycle."""
+class LiveDiagnosisApplicationAdapter:
+    """Adapter that executes Diagnosis rules supplied by the composition root."""
 
-    def __init__(self, database_url: str | None = None) -> None:
-        self.database_url = database_url
+    def __init__(
+        self,
+        *,
+        predictor_factory: Callable[[str], Any],
+        artifact_builder: Callable[..., dict[str, Any]],
+    ) -> None:
+        self.predictor_factory = predictor_factory
+        self.artifact_builder = artifact_builder
 
-    def ingest_once(self, *, stream_root: str | Path) -> dict[str, Any]:
-        return ingest_once(stream_root=stream_root, database_url=self.database_url)
+    def materialize_live_results(self, batch: dict[str, Any]) -> dict[str, Any]:
+        return _materialize_runtime_results(
+            str(batch["database_url"]),
+            str(batch["dataset_version_id"]),
+            source_version=LIVE_SOURCE_VERSION,
+            materialization_profile=LIVE_MATERIALIZATION_PROFILE,
+            excluded_asset_ids=batch["active_overlay_assets"],
+            predictor_factory=self.predictor_factory,
+            artifact_builder=self.artifact_builder,
+        )
+
+
+class LiveMaintenanceOverlayAdapter:
+    def __init__(
+        self,
+        *,
+        predictor_factory: Callable[[str], Any],
+        artifact_builder: Callable[..., dict[str, Any]],
+    ) -> None:
+        self.predictor_factory = predictor_factory
+        self.artifact_builder = artifact_builder
+
+    def active_asset_ids(self, *, stream_root: str | Path) -> set[str]:
+        return active_overlay_asset_ids(stream_root)
+
+    def process_available(self, batch: dict[str, Any]) -> list[dict[str, Any]]:
+        return process_overlay_available_events(
+            stream_root=batch["stream_root"],
+            database_url=str(batch["database_url"]),
+            dataset_version_id=str(batch["dataset_version_id"]),
+            predictor_factory=self.predictor_factory,
+            artifact_builder=self.artifact_builder,
+        )
+
+
+class LiveOntologyProjectionAdapter:
+    def materialize_live_projection(self, batch: dict[str, Any]) -> dict[str, Any]:
+        materializer = PredictiveMaintenanceOntologyMaterializer(
+            str(batch["database_url"])
+        )
+        materializer.ensure_default_mapping(
+            organization_id=ORGANIZATION_ID,
+            project_id=PROJECT_ID,
+            workspace_id=WORKSPACE_ID,
+            dataset_id=str(batch["dataset_id"]),
+            dataset_version_id=str(batch["dataset_version_id"]),
+            approve=True,
+            approved_by="macmini-live-ingestor",
+        )
+        result = materializer.materialize(
+            organization_id=ORGANIZATION_ID,
+            project_id=PROJECT_ID,
+            workspace_id=WORKSPACE_ID,
+            dataset_id=str(batch["dataset_id"]),
+            dataset_version_id=str(batch["dataset_version_id"]),
+        )
+        return result.model_dump(mode="json")

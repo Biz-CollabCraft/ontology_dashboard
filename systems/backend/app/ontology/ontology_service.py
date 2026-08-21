@@ -702,3 +702,12 @@ class OntologyService:
             }
             for item in records
         ]
+    def list_actions_for_object(
+        self, *, workspace_id: str, object_id: str
+    ) -> list[dict[str, Any]]:
+        """Expose action history through the Ontology application boundary."""
+
+        return self.action_repository.list_for_object(
+            workspace_id=workspace_id,
+            object_id=object_id,
+        )

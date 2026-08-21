@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Protocol, Sequence
 
 from .integration import ToolReplacementStatePatch
@@ -30,8 +31,14 @@ class MaintenanceReadPort(Protocol):
     def maintenance_events(self, **scope: Any) -> Sequence[MaintenanceEvent]: ...
 
 
+class LiveMaintenanceOverlayPort(Protocol):
+    def active_asset_ids(self, *, stream_root: str | Path) -> set[str]: ...
+    def process_available(self, batch: dict[str, Any]) -> list[dict[str, Any]]: ...
+
+
 __all__ = [
     "DiagnosisResultQueryPort",
     "EquipmentStatePatchPort",
     "MaintenanceReadPort",
+    "LiveMaintenanceOverlayPort",
 ]

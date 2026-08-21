@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.identity import AuthError, Principal
+from app.identity.contracts import AuthError, Principal
 from app.ontology.ports import OntologyObjectQueryPort
 
 from .planner_schema import (

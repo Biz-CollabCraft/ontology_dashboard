@@ -14,7 +14,7 @@ from app.diagnosis.domain import (
     event_evidence_projection_to_legacy_evidence,
     product_result_artifact_to_event_evidence_projection,
 )
-from app.equipment import EquipmentService
+from app.equipment.ports import EquipmentApplicationPort
 
 from .context import ContextProviderFactory
 from .contracts import (
@@ -28,7 +28,7 @@ from .contracts import (
     ReportRequest,
     UILayout,
 )
-from app.planner import IntentRouter, deterministic_answer
+from app.planner.contracts import IntentRouter, deterministic_answer
 from .ports import AuditRepositoryPort, LayoutPlannerPort, ReportAgentPort
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
@@ -44,7 +44,7 @@ class ManufacturingPredictiveMaintenanceService:
         root: str | Path,
         *,
         repository: AuditRepositoryPort,
-        equipment_service: EquipmentService,
+        equipment_service: EquipmentApplicationPort,
         report_agent: ReportAgentPort,
         layout_planner: LayoutPlannerPort,
         context_provider_factory: ContextProviderFactory,
@@ -90,6 +90,23 @@ class ManufacturingPredictiveMaintenanceService:
 
     def project_id_for_event(self, event_id: str) -> str:
         return self._fixture_project_id(self._fixture(event_id))
+
+    def fixture_snapshot(self, event_id: str) -> dict[str, Any]:
+        """Return the source snapshot through the MVP application boundary."""
+
+        return self._fixture(event_id)
+
+    def fixture_items(self) -> list[tuple[str, dict[str, Any]]]:
+        return sorted(self.fixtures.items())
+
+    def fixture_count(self) -> int:
+        return len(self.fixtures)
+
+    def event_activity(self, event_id: str) -> dict[str, Any]:
+        return self.repository.event_activity(event_id)
+
+    def record_audit(self, **command: Any) -> dict[str, Any]:
+        return self.repository.record_audit(**command)
 
     def evidence_snapshot(self, event_id: str) -> dict[str, Any]:
         fixture = self._fixture(event_id)

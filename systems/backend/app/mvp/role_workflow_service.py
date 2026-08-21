@@ -7,9 +7,10 @@ from typing import Any
 
 from .contracts import ReportRequest
 from app.dashboard.dashboard_schema import DashboardTemplatePublishRequest
-from app.dashboard import DashboardService
-from app.identity import AuthError, Principal
-from app.ontology import OntologyService, registry_payload
+from app.dashboard.ports import DashboardApplicationPort
+from app.identity.contracts import AuthError, Principal
+from app.ontology.ontology_domain import registry_payload
+from app.ontology.ports import OntologyActionHistoryPort
 from .role_workflow_models import (
     ApprovalDecisionRequest,
     AuditExportCheckpointRequest,
@@ -22,18 +23,18 @@ from .role_workflow_models import (
     ModelReleaseRequestCreate,
     TemplatePublishRequestCreate,
 )
-from .ports import RoleWorkflowRepositoryPort
-from .service import EventNotFound, FactorySignalService, RISK_PRIORITY
+from .ports import FactorySignalApplicationPort, RoleWorkflowRepositoryPort
+from .service import EventNotFound, RISK_PRIORITY
 
 
 class RoleWorkflowService:
     def __init__(
         self,
-        legacy_service: FactorySignalService,
+        legacy_service: FactorySignalApplicationPort,
         *,
         repository: RoleWorkflowRepositoryPort,
-        ontology: OntologyService,
-        dashboards: DashboardService,
+        ontology: OntologyActionHistoryPort,
+        dashboards: DashboardApplicationPort,
     ) -> None:
         self.legacy_service = legacy_service
         self.repository = repository
@@ -53,7 +54,7 @@ class RoleWorkflowService:
         self._require_role(principal, "executive_viewer", "tenant_admin", "fde")
         events = self.legacy_service.list_events()
         activities = {
-            event["event_id"]: self.legacy_service.repository.event_activity(event["event_id"])
+            event["event_id"]: self.legacy_service.event_activity(event["event_id"])
             for event in events
         }
         status_counts = Counter(event["status"] for event in events)
@@ -81,8 +82,13 @@ class RoleWorkflowService:
         )
         risk_values = [event["failure_probability"] for event in events if event["failure_probability"] is not None]
         risk_trend = []
-        for event in sorted(events, key=lambda item: self.legacy_service.fixtures[item["event_id"]]["observation"]["timestamp"]):
-            fixture = self.legacy_service.fixtures[event["event_id"]]
+        for event in sorted(
+            events,
+            key=lambda item: self.legacy_service.fixture_snapshot(item["event_id"])[
+                "observation"
+            ]["timestamp"],
+        ):
+            fixture = self.legacy_service.fixture_snapshot(event["event_id"])
             risk_trend.append(
                 {
                     "observed_at": fixture["observation"]["timestamp"],
@@ -140,23 +146,23 @@ class RoleWorkflowService:
         event_id: str,
     ) -> AuditReconstruction:
         self._require_role(principal, "quality_auditor", "tenant_admin", "fde")
-        fixture = self.legacy_service._fixture(event_id)
+        fixture = self.legacy_service.fixture_snapshot(event_id)
         evidence = self.legacy_service.evidence_snapshot(event_id)
         report, report_trace = self.legacy_service.report(
             event_id,
             ReportRequest(role="manager", use_llm=False),
         )
-        activity = self.legacy_service.repository.event_activity(event_id)
+        activity = self.legacy_service.event_activity(event_id)
         ontology_actions = (
-            self.ontology.action_repository.list_for_object(
+            self.ontology.list_actions_for_object(
                 workspace_id=workspace_id,
                 object_id=f"risk_event:{event_id}",
             )
-            + self.ontology.action_repository.list_for_object(
+            + self.ontology.list_actions_for_object(
                 workspace_id=workspace_id,
                 object_id=f"work_order:{event_id}",
             )
-            + self.ontology.action_repository.list_for_object(
+            + self.ontology.list_actions_for_object(
                 workspace_id=workspace_id,
                 object_id=f"inspection:{event_id}",
             )
@@ -259,7 +265,7 @@ class RoleWorkflowService:
             requested_by_name=principal.display_name,
             snapshot=snapshot,
         )
-        audit = self.legacy_service.repository.record_audit(
+        audit = self.legacy_service.record_audit(
             event_id=request.event_id,
             run_id=checkpoint["id"],
             action="audit.export.checkpoint",
@@ -327,7 +333,7 @@ class RoleWorkflowService:
         invocation_id: str | None = None,
     ) -> dict[str, Any]:
         self._require_role(principal, "maintenance_technician", "process_engineer", "tenant_admin", "fde")
-        self.legacy_service._fixture(request.event_id)
+        self.legacy_service.fixture_snapshot(request.event_id)
         if request.action == "complete" and not request.checklist:
             raise ValueError("complete Action에는 완료한 checklist가 필요합니다.")
         if request.action == "blocked" and not request.note:
@@ -341,7 +347,7 @@ class RoleWorkflowService:
             actor_display_name=principal.display_name,
             payload=payload,
         )
-        audit = self.legacy_service.repository.record_audit(
+        audit = self.legacy_service.record_audit(
             event_id=request.event_id,
             run_id=invocation_id or record["id"],
             action=f"field.task.{request.action}",
@@ -355,7 +361,7 @@ class RoleWorkflowService:
         registry = registry_payload()
         diagnostics: list[dict[str, Any]] = []
         integration_health: list[dict[str, Any]] = []
-        for event_id, fixture in sorted(self.legacy_service.fixtures.items()):
+        for event_id, fixture in self.legacy_service.fixture_items():
             evidence = self.legacy_service.evidence_snapshot(event_id)
             runtime = fixture["runtime"]
             status = "healthy"
@@ -397,7 +403,7 @@ class RoleWorkflowService:
             customer_workspace={
                 "workspace_id": workspace_id,
                 "domain_pack": "manufacturing-predictive-maintenance",
-                "event_count": len(self.legacy_service.fixtures),
+                "event_count": self.legacy_service.fixture_count(),
                 "equipment_count": len(self.legacy_service.list_equipment()),
                 "template_roles": 8,
             },
@@ -462,7 +468,7 @@ class RoleWorkflowService:
                 "base_template_version": current.version,
             },
         )
-        audit = self.legacy_service.repository.record_audit(
+        audit = self.legacy_service.record_audit(
             event_id=None,
             run_id=record["id"],
             action="dashboard.template.publish_requested",
@@ -479,13 +485,17 @@ class RoleWorkflowService:
 
     def model_console(self, *, principal: Principal, workspace_id: str) -> ModelConsole:
         self._require_role(principal, "ml_validator", "tenant_admin", "fde")
-        evidence_items = [self.legacy_service.evidence_snapshot(event_id) for event_id in sorted(self.legacy_service.fixtures)]
+        fixture_items = self.legacy_service.fixture_items()
+        evidence_items = [
+            self.legacy_service.evidence_snapshot(event_id)
+            for event_id, _ in fixture_items
+        ]
         model_counter = Counter(item["model"]["model_version"] for item in evidence_items)
         policy_counter = Counter(item["model"]["policy_version"] for item in evidence_items)
         schema_counter = Counter(item["lineage"].get("fixture_schema_version", "unknown") for item in evidence_items)
         actual_rows: list[dict[str, Any]] = []
         passed = 0
-        for event_id, fixture in sorted(self.legacy_service.fixtures.items()):
+        for event_id, fixture in fixture_items:
             evidence = self.legacy_service.evidence_snapshot(event_id)
             expected = fixture["expected"]
             row_pass = (
@@ -515,7 +525,7 @@ class RoleWorkflowService:
             )
             missed_expected_risk = sum(
                 1
-                for evidence, fixture in zip(evidence_items, [self.legacy_service.fixtures[key] for key in sorted(self.legacy_service.fixtures)])
+                for evidence, (_, fixture) in zip(evidence_items, fixture_items)
                 if fixture["expected"]["risk_band"] in {"warning", "critical"}
                 and (evidence["failure_probability"] is None or evidence["failure_probability"] < threshold)
             )
@@ -603,7 +613,7 @@ class RoleWorkflowService:
             requested_by_name=principal.display_name,
             payload=request.model_dump(mode="json"),
         )
-        audit = self.legacy_service.repository.record_audit(
+        audit = self.legacy_service.record_audit(
             event_id=None,
             run_id=record["id"],
             action="model.release.requested",
@@ -672,7 +682,7 @@ class RoleWorkflowService:
             note=decision.note,
             project_id=existing["project_id"],
         )
-        audit = self.legacy_service.repository.record_audit(
+        audit = self.legacy_service.record_audit(
             event_id=None,
             run_id=request_id,
             action=f"dashboard.template.publish_{decision.decision}d",
@@ -713,7 +723,7 @@ class RoleWorkflowService:
             note=decision.note,
             project_id=existing["project_id"],
         )
-        audit = self.legacy_service.repository.record_audit(
+        audit = self.legacy_service.record_audit(
             event_id=None,
             run_id=request_id,
             action=f"model.release.{decision.decision}d",

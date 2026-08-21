@@ -76,6 +76,10 @@ class PredictionResultRepositoryPort(Protocol):
     ) -> Sequence[dict[str, Any]]: ...
 
 
+class LiveDiagnosisApplicationPort(Protocol):
+    def materialize_live_results(self, batch: dict[str, Any]) -> dict[str, Any]: ...
+
+
 # Compatibility names retained for Diagnosis consumers, but the contracts are
 # owned by the provider domains. Re-exporting the canonical public protocols
 # prevents the same Dataset/Equipment boundary from drifting into two shapes.
@@ -87,6 +91,7 @@ __all__ = [
     "ALLOWED_DERIVED_MEASURES",
     "ContextProvider",
     "DiagnosisRuntimeRepositoryPort",
+    "LiveDiagnosisApplicationPort",
     "EquipmentSnapshotQueryPort",
     "ObservationDatasetQueryPort",
     "PredictionResultRepositoryPort",
