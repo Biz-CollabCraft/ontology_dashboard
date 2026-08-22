@@ -1,17 +1,18 @@
-"""Repository for immutable Feature Dataset Bundle storage, validation, and atomic publishing."""
+"""Repository for immutable Feature Dataset Bundle storage and atomic publishing."""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import shutil
 import uuid
 from pathlib import Path
 from typing import Any, Optional
+
 import numpy as np
 
 from systems.generator.generator_config import PATHS
+from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.app.feature.feature_exception import (
     FeatureContractError,
     FeatureDatasetIntegrityError,
@@ -22,24 +23,15 @@ from systems.generator.app.feature.feature_exception import (
 logger = logging.getLogger(__name__)
 
 
-def compute_file_sha256(file_path: Path) -> str:
-    """Compute standard SHA-256 hex digest for a file on disk."""
-    hasher = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        while chunk := f.read(65536):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-
 class FeatureRepository:
-    """Manages immutable versioned Feature Dataset Bundles (5 essential files) with atomic publishing."""
+    """Manages versioned immutable Feature Dataset Bundles (5 essential files) with atomic publishing."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
         self.base_dir = base_dir or (PATHS.models_store / "cache" / "features")
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def _safe_segment(self, val: str) -> str:
-        return val.replace("/", "_").replace("\\", "_").replace("..", "_").replace(":", "_")
+    def _safe_segment(self, segment: str) -> str:
+        return segment.replace("/", "_").replace("\\", "_").replace("..", "_").replace(":", "_")
 
     def get_feature_dir(self, dataset_id: str, dataset_version: str, feature_dataset_version: str) -> Path:
         return (
@@ -57,12 +49,12 @@ class FeatureRepository:
         expected_inputs: Optional[dict[str, Any]] = None,
         expected_horizon: Optional[int] = None,
     ) -> dict[str, Any]:
-        """Validate integrity and contract match of an existing Feature Dataset Bundle."""
+        """Validate integrity and immutability of an existing Feature Dataset Bundle."""
         target_dir = self.get_feature_dir(dataset_id, dataset_version, feature_dataset_version)
         if not target_dir.exists() or not target_dir.is_dir():
             raise FeatureDatasetIntegrityError(
-                f"Feature Bundle 디렉터리가 존재하지 않습니다: {target_dir}",
-                code="FEATURE_BUNDLE_NOT_FOUND",
+                f"Feature Dataset 디렉터리가 존재하지 않습니다: {target_dir}",
+                code="FEATURE_DATASET_NOT_FOUND",
             )
 
         features_file = target_dir / "features.npy"
@@ -71,21 +63,18 @@ class FeatureRepository:
         row_meta_file = target_dir / "row_metadata.json"
         meta_file = target_dir / "feature_metadata.json"
 
-        # 1. Check all 5 files exist
-        for required_file, role in [
-            (features_file, "features.npy"),
-            (labels_file, "labels.npy"),
-            (cols_file, "feature_columns.json"),
-            (row_meta_file, "row_metadata.json"),
-            (meta_file, "feature_metadata.json"),
-        ]:
-            if not required_file.is_file():
-                raise FeatureDatasetIntegrityError(
-                    f"Feature Bundle 필수 파일({role})이 누락되었습니다: {required_file}",
-                    code="FEATURE_DATASET_INTEGRITY_ERROR",
-                )
+        # 1. Check all 5 essential files exist
+        missing_files = []
+        for file_path in [features_file, labels_file, cols_file, row_meta_file, meta_file]:
+            if not file_path.is_file():
+                missing_files.append(file_path.name)
+        if missing_files:
+            raise FeatureDatasetIntegrityError(
+                f"Feature Dataset Bundle 필수 파일이 누락되었습니다: {missing_files}",
+                code="FEATURE_DATASET_INTEGRITY_ERROR",
+            )
 
-        # 2. Read metadata
+        # 2. Parse feature_metadata.json
         try:
             with open(meta_file, "r", encoding="utf-8") as f:
                 metadata = json.load(f)
@@ -179,16 +168,20 @@ class FeatureRepository:
         dataset_id: str,
         dataset_version: str,
         feature_dataset_version: str,
+        expected_inputs: Optional[dict[str, Any]] = None,
+        expected_horizon: Optional[int] = None,
     ) -> Optional[dict[str, Any]]:
-        """Find and return existing Feature Dataset metadata if valid, or None."""
+        """Find and return existing Feature Dataset metadata if valid. Raises FeatureDatasetIntegrityError if corrupted."""
         target_dir = self.get_feature_dir(dataset_id, dataset_version, feature_dataset_version)
         if not target_dir.exists() or not target_dir.is_dir():
             return None
-        try:
-            return self.validate_feature_bundle(dataset_id, dataset_version, feature_dataset_version)
-        except Exception as exc:
-            logger.warning(f"[FeatureRepository] Existing bundle at {target_dir} failed validation: {exc}")
-            return None
+        return self.validate_feature_bundle(
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            feature_dataset_version=feature_dataset_version,
+            expected_inputs=expected_inputs,
+            expected_horizon=expected_horizon,
+        )
 
     def publish_feature_bundle(
         self,
@@ -321,10 +314,23 @@ class FeatureRepository:
             if y_read.shape != (y.shape[0],):
                 raise FeatureDatasetIntegrityError(f"Written y shape {y_read.shape} != original {y.shape}")
 
-            # 8. Atomic publish
-            temp_dir.replace(target_dir)
-            logger.info(f"[FeatureRepository] Atomically published Feature Dataset Bundle to {target_dir}")
-            return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
+            # 8. Atomic publish with race-condition collision protection
+            try:
+                temp_dir.replace(target_dir)
+                logger.info(f"[FeatureRepository] Atomically published Feature Dataset Bundle to {target_dir}")
+                return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
+            except Exception as replace_exc:
+                if target_dir.exists():
+                    self.validate_feature_bundle(
+                        dataset_id=dataset_id,
+                        dataset_version=dataset_version,
+                        feature_dataset_version=feature_dataset_version,
+                        expected_inputs=inputs_metadata,
+                        expected_horizon=prediction_contract.get("prediction_horizon_hours"),
+                    )
+                    logger.info(f"[FeatureRepository] Concurrent publish detected: validated and reused existing bundle at {target_dir}")
+                    return self._build_logical_uris(dataset_id, dataset_version, feature_dataset_version)
+                raise replace_exc
 
         except Exception as exc:
             if temp_dir.exists():

@@ -1,26 +1,33 @@
-"""Feature domain service orchestrating input resolution, feature/label construction, allowlisting, and bundle publishing."""
+"""Feature and Label generation service orchestrating the 15-step pipeline."""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
 import numpy as np
 import pandas as pd
 
 from systems.generator.generator_config import PATHS
+from systems.generator.file_integrity import compute_file_sha256
+from systems.generator.ontology_mapping.mapping_cache import MappingStore, MappingRecord
 from systems.generator.feature.feature_builder import build_features
-from systems.generator.feature.feature_label_service import build_labels
 from systems.generator.feature.feature_catalog import load_catalog
-from systems.generator.ontology_mapping.mapping_cache import MappingStore
-from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
+from systems.generator.feature.feature_label_service import build_labels
 from systems.generator.app.preprocessing.preprocessing_profiler import load_family_registry
+from systems.generator.app.preprocessing.preprocessing_service import _is_within_allowed_root
+from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
+from systems.generator.app.preprocessing.preprocessing_exception import (
+    DatasetNotFoundError,
+    DatasetContractError,
+    PreprocessingError,
+)
+
 from systems.generator.app.feature.feature_exception import (
-    FeatureError,
     FeatureInputNotFoundError,
     FeatureContractError,
     FeatureSchemaMismatchError,
@@ -34,27 +41,18 @@ from systems.generator.app.feature.feature_schema import (
     FeatureResponse,
     FeatureOutputsPayload,
 )
-from systems.generator.app.feature.feature_repository import FeatureRepository, compute_file_sha256
 from systems.generator.app.feature.feature_schema_provider import FeatureSchemaProvider
 from systems.generator.app.feature.label_schema_provider import LabelSchemaProvider
+from systems.generator.app.feature.feature_repository import FeatureRepository
 
 logger = logging.getLogger(__name__)
 
-
-def _is_within_allowed_root(path: Path, allowed_roots: list[Path]) -> bool:
-    """Check if the resolved path is strictly within any of the allowed root directories."""
-    resolved_path = path.resolve()
-    for root in allowed_roots:
-        try:
-            resolved_path.relative_to(root.resolve())
-            return True
-        except ValueError:
-            continue
-    return False
+CATALOG_VERSION = "2026.08-feature-catalog-v1"
+CODE_REVISION = "2026.08-fastapi-feature-v1"
 
 
 class FeatureService:
-    """Orchestrates Feature generation, validation, and immutable bundle publishing."""
+    """Orchestrates end-to-end Feature and Label engineering and publishes immutable Feature Dataset Bundles."""
 
     def __init__(
         self,
@@ -73,7 +71,7 @@ class FeatureService:
         dataset_id: str,
         dataset_version: str,
     ) -> tuple[pd.DataFrame, Path, str]:
-        """Resolve and load telemetry observation dataset, returning (df, path, sha256)."""
+        """Resolve, validate, and load observation dataset, returning (df, path, sha256)."""
         allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]
 
         candidates: list[Path] = [
@@ -89,27 +87,14 @@ class FeatureService:
             PATHS.data_preprocessed / f"{dataset_id}.csv",
             PATHS.data_dir / dataset_id / "input.csv",
             PATHS.data_preprocessed / dataset_id / "input.csv",
-            PATHS.data_dir / dataset_id,
-            PATHS.data_preprocessed / dataset_id,
         ]
 
         found_path: Optional[Path] = None
         for cand in candidates:
             resolved = cand.resolve()
-            if not _is_within_allowed_root(resolved, allowed_roots):
-                continue
-            if resolved.is_file():
+            if _is_within_allowed_root(resolved, allowed_roots) and resolved.is_file():
                 found_path = resolved
                 break
-            if resolved.is_dir():
-                for child in sorted(resolved.iterdir()):
-                    resolved_child = child.resolve()
-                    if _is_within_allowed_root(resolved_child, allowed_roots) and resolved_child.is_file():
-                        if resolved_child.suffix.lower() in (".csv", ".xlsx", ".xls"):
-                            found_path = resolved_child
-                            break
-                if found_path:
-                    break
 
         if not found_path or not found_path.is_file():
             raise FeatureInputNotFoundError(
@@ -245,24 +230,20 @@ class FeatureService:
         dataset_version: str,
         plan_version: str,
     ) -> tuple[dict[str, Any], str, str]:
-        """Resolve and load Preprocessing Plan, returning (plan_dict, uri, sha256)."""
-        plan = self.preprocessing_repo.find_plan(dataset_id, dataset_version)
+        """Resolve and strictly validate Preprocessing Plan, returning (plan_dict, uri, sha256)."""
+        try:
+            plan = self.preprocessing_repo.load_plan(dataset_id, dataset_version, plan_version)
+        except DatasetNotFoundError as exc:
+            raise FeatureInputNotFoundError(str(exc)) from exc
+        except (DatasetContractError, PreprocessingError, Exception) as exc:
+            raise FeatureContractError(f"Preprocessing Plan 계약 검증 실패: {exc}") from exc
+
+        # Resolve exact path and checksum
         plan_path = self.preprocessing_repo.get_plan_path(dataset_id, dataset_version)
-
-        if not plan or not plan_path.is_file():
-            # Fallback check by raw version string if cached differently
-            plan_path = self.preprocessing_repo.base_dir / f"{plan_version}.json"
-            if plan_path.is_file():
-                try:
-                    with open(plan_path, "r", encoding="utf-8") as f:
-                        plan = json.load(f)
-                except Exception:
-                    plan = None
-
-        if not plan or not plan_path.is_file():
-            raise FeatureInputNotFoundError(
-                f"요청한 Preprocessing Plan을 찾을 수 없습니다: version='{plan_version}' (dataset='{dataset_id}:{dataset_version}')"
-            )
+        if not plan_path.is_file():
+            alt_path = self.preprocessing_repo.base_dir / f"{plan_version}.json"
+            if alt_path.is_file():
+                plan_path = alt_path
 
         sha256 = compute_file_sha256(plan_path)
         try:
@@ -276,46 +257,91 @@ class FeatureService:
     def _resolve_ontology_mapping(
         self,
         mapping_version: str,
+        dataset_id: Optional[str] = None,
+        dataset_version: Optional[str] = None,
     ) -> tuple[MappingStore, str, str]:
-        """Resolve and load Ontology Mapping, returning (mapping_store, uri, sha256)."""
-        from systems.generator.ontology_mapping.mapping_cache import MappingRecord
+        """Resolve and strictly validate Ontology Mapping without silent dummy fallbacks."""
+        candidates: list[Path] = [
+            PATHS.models_store / "cache" / "mappings" / f"{mapping_version}.json",
+        ]
+        if dataset_id and dataset_version:
+            candidates.append(PATHS.models_store / "cache" / "mappings" / dataset_id / dataset_version / f"{mapping_version}.json")
+
+        mapping_file: Optional[Path] = None
+        for cand in candidates:
+            if cand.is_file():
+                mapping_file = cand
+                break
+
+        if not mapping_file:
+            # Check legacy cache file
+            legacy_file = PATHS.models_store / "cache" / "ontology_mappings.json"
+            if legacy_file.is_file():
+                try:
+                    with open(legacy_file, "r", encoding="utf-8") as f:
+                        legacy_data = json.load(f)
+                    file_ver = legacy_data.get("mapping_version")
+                    if file_ver and file_ver == mapping_version:
+                        mapping_file = legacy_file
+                    else:
+                        raise FeatureContractError(
+                            f"Legacy mapping 파일의 version('{file_ver}')이 요청된 mapping_version('{mapping_version}')과 일치하지 않습니다."
+                        )
+                except FeatureContractError:
+                    raise
+                except Exception as exc:
+                    raise FeatureContractError(f"Legacy mapping 파일 파싱 실패: {exc}") from exc
+
+        if not mapping_file or not mapping_file.is_file():
+            raise FeatureInputNotFoundError(
+                f"요청한 Ontology Mapping 파일을 찾을 수 없습니다: mapping_version='{mapping_version}'"
+            )
+
+        try:
+            with open(mapping_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as exc:
+            raise FeatureContractError(f"Ontology Mapping 파일 파싱 실패 ({mapping_file.name}): {exc}") from exc
+
+        if not isinstance(data, dict):
+            raise FeatureContractError(f"Ontology Mapping 형식이 올바르지 않습니다 (dict 기대, {type(data).__name__} 수신)")
+
+        # Verify version if specified inside JSON
+        file_ver = data.get("mapping_version")
+        if file_ver and file_ver != mapping_version:
+            raise FeatureContractError(
+                f"Mapping 파일 내부 version ('{file_ver}')이 요청된 mapping_version ('{mapping_version}')과 일치하지 않습니다."
+            )
 
         mapping_store = MappingStore()
-        mapping_file = PATHS.models_store / "cache" / "mappings" / f"{mapping_version}.json"
+        items_to_parse = data.get("mappings", data) if isinstance(data.get("mappings"), dict) else data
+        item_count = 0
+        for k, v in items_to_parse.items():
+            if k in ("mapping_version", "dataset_id", "dataset_version", "created_at", "fingerprint"):
+                continue
+            if isinstance(v, str):
+                mapping_store.add_mapping(MappingRecord(
+                    source_field=k,
+                    target_ontology=v,
+                    source="inferred",
+                    confidence=1.0,
+                    status="confirmed",
+                ))
+                item_count += 1
+            elif isinstance(v, dict):
+                mapping_store.add_mapping(MappingRecord(source_field=k, **v))
+                item_count += 1
 
-        if mapping_file.is_file():
-            try:
-                with open(mapping_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for k, v in data.items():
-                    if isinstance(v, str):
-                        mapping_store.add_mapping(MappingRecord(
-                            source_field=k,
-                            target_ontology=v,
-                            source="inferred",
-                            confidence=1.0,
-                            status="confirmed",
-                        ))
-                    elif isinstance(v, dict):
-                        mapping_store.add_mapping(MappingRecord(source_field=k, **v))
-                sha256 = compute_file_sha256(mapping_file)
-                repo_root = PATHS.models_store.parent
-                uri = str(mapping_file.relative_to(repo_root).as_posix())
-                return mapping_store, uri, sha256
-            except Exception as exc:
-                logger.warning(f"[FeatureService] Failed to load mapping from {mapping_file}: {exc}")
+        if item_count == 0:
+            raise FeatureContractError(f"Ontology Mapping 항목이 0개입니다: '{mapping_version}'")
 
-        # Fallback to in-memory / legacy mapping cache file
-        legacy_file = PATHS.models_store / "cache" / "ontology_mappings.json"
-        if legacy_file.is_file():
-            sha256 = compute_file_sha256(legacy_file)
-            uri = "models_store/cache/ontology_mappings.json"
-            return mapping_store, uri, sha256
+        sha256 = compute_file_sha256(mapping_file)
+        try:
+            repo_root = PATHS.models_store.parent
+            uri = str(mapping_file.relative_to(repo_root).as_posix())
+        except Exception:
+            uri = f"models_store/cache/mappings/{mapping_file.name}"
 
-        # Deterministic dummy hash if no disk file exists
-        dummy_content = f"ontology-mapping-{mapping_version}".encode("utf-8")
-        sha256 = hashlib.sha256(dummy_content).hexdigest()
-        uri = f"models_store/cache/mappings/{mapping_version}.json"
         return mapping_store, uri, sha256
 
     def run_feature_pipeline(
@@ -333,7 +359,7 @@ class FeatureService:
             f"failure={request.failure_dataset_id}:{request.failure_dataset_version}, run_id={run_id}"
         )
 
-        # 1. Resolve Preprocessing Plan
+        # 1. Resolve Preprocessing Plan (fail-fast on version or contract mismatch)
         plan, plan_uri, plan_sha256 = self._resolve_preprocessing_plan(
             request.dataset_id,
             request.dataset_version,
@@ -346,7 +372,38 @@ class FeatureService:
             request.dataset_version,
         )
 
-        # 3. Resolve Failure Dataset
+        # Early check for valid ID and timestamp columns in Observation dataset
+        id_candidate = plan.get("id_column") if plan and isinstance(plan, dict) else None
+        if not id_candidate or id_candidate not in telemetry_df.columns:
+            for cand in ("asset_id", "machineID", "equipment_id", "machine_id", "device_id", "UDI", "Product ID", "id"):
+                if cand in telemetry_df.columns:
+                    id_candidate = cand
+                    break
+
+        time_candidate = plan.get("time_column") if plan and isinstance(plan, dict) else None
+        if not time_candidate or time_candidate not in telemetry_df.columns:
+            for cand in ("observed_at", "datetime", "timestamp", "time", "ts", "date"):
+                if cand in telemetry_df.columns:
+                    time_candidate = cand
+                    break
+
+        if not id_candidate or id_candidate not in telemetry_df.columns:
+            raise FeatureLabelAlignmentError(
+                f"설비 ID 컬럼을 확정할 수 없습니다. (사용 가능한 컬럼: {list(telemetry_df.columns)})"
+            )
+        if not time_candidate or time_candidate not in telemetry_df.columns:
+            raise FeatureLabelAlignmentError(
+                f"타임스탬프 컬럼을 확정할 수 없습니다. (사용 가능한 컬럼: {list(telemetry_df.columns)})"
+            )
+
+        id_series_str = telemetry_df[id_candidate].astype(str).str.strip()
+        time_series_str = telemetry_df[time_candidate].astype(str).str.strip()
+        if (id_series_str == "").all() or id_series_str.isna().all():
+            raise FeatureLabelAlignmentError(f"Observation 데이터셋의 설비 ID({id_candidate}) 값이 전부 비어 있습니다.")
+        if (time_series_str == "").all() or time_series_str.isna().all():
+            raise FeatureLabelAlignmentError(f"Observation 데이터셋의 타임스탬프({time_candidate}) 값이 전부 비어 있습니다.")
+
+        # 3. Resolve Failure Dataset & validate alignment
         failures_df, fail_path, fail_sha256, failure_meta = self._resolve_failure_dataset(
             request.failure_dataset_id,
             request.failure_dataset_version,
@@ -354,89 +411,103 @@ class FeatureService:
             plan=plan,
         )
 
-        # 4. Resolve Ontology Mapping
-        mapping_store, map_uri, map_sha256 = self._resolve_ontology_mapping(
+        # 4. Resolve Ontology Mapping (fail-fast on missing/corrupted/mismatched version)
+        mapping_store, mapping_uri, mapping_sha256 = self._resolve_ontology_mapping(
             request.mapping_version,
+            dataset_id=request.dataset_id,
+            dataset_version=request.dataset_version,
         )
 
-        # 5. Resolve and validate Feature Schema & Label Schema definitions
-        feat_schema_def = self.feature_schema_provider.get_schema(request.feature_schema_version)
-        feat_schema_sha256 = feat_schema_def.compute_checksum()
-
+        # 5. Resolve and validate Feature & Label Schemas
+        feature_schema_def = self.feature_schema_provider.get_schema(request.feature_schema_version)
         label_schema_def = self.label_schema_provider.validate_label_schema(
             request.label_schema_version,
-            requested_horizon_hours=request.prediction_horizon_hours,
+            request.prediction_horizon_hours,
         )
-        label_schema_sha256 = label_schema_def.compute_checksum()
 
-        # 6. Build canonical inputs metadata and deterministic version
+        # 6. Compute deterministic Feature Dataset Version
+        repo_root = PATHS.models_store.parent
+        try:
+            obs_logical_uri = str(obs_path.relative_to(repo_root).as_posix())
+        except Exception:
+            obs_logical_uri = f"data/{obs_path.name}"
+
+        try:
+            fail_logical_uri = str(fail_path.relative_to(repo_root).as_posix())
+        except Exception:
+            fail_logical_uri = f"data/{fail_path.name}"
+
         inputs_metadata = {
             "dataset_id": request.dataset_id,
             "dataset_version": request.dataset_version,
+            "dataset_uri": obs_logical_uri,
             "dataset_checksum": obs_sha256,
+            "dataset_provider": "local_file_adapter",
+            "dataset_version_verified": False,
             "failure_dataset_id": request.failure_dataset_id,
             "failure_dataset_version": request.failure_dataset_version,
+            "failure_dataset_uri": fail_logical_uri,
             "failure_dataset_checksum": fail_sha256,
+            "failure_dataset_provider": "local_file_adapter",
+            "failure_dataset_version_verified": False,
             "preprocessing_plan_version": request.preprocessing_plan_version,
+            "preprocessing_plan_uri": plan_uri,
             "preprocessing_plan_checksum": plan_sha256,
             "mapping_version": request.mapping_version,
-            "mapping_checksum": map_sha256,
+            "mapping_uri": mapping_uri,
+            "mapping_checksum": mapping_sha256,
             "feature_schema_version": request.feature_schema_version,
-            "feature_schema_checksum": feat_schema_sha256,
+            "feature_schema_checksum": feature_schema_def.compute_checksum(),
             "label_schema_version": request.label_schema_version,
-            "label_schema_checksum": label_schema_sha256,
+            "label_schema_checksum": label_schema_def.compute_checksum(),
         }
 
         prediction_contract = {
             "prediction_horizon_hours": request.prediction_horizon_hours,
+            "feature_catalog_version": CATALOG_VERSION,
+            "code_revision": CODE_REVISION,
         }
 
-        canonical_manifest = {
-            **inputs_metadata,
-            **prediction_contract,
-            "feature_catalog_version": "v1.0",
-            "code_revision": "generator-feature-pipeline-v1",
-        }
-        canonical_json = json.dumps(canonical_manifest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        feature_dataset_version = f"feature-dataset-{hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()[:16]}"
+        feature_dataset_version = self.compute_feature_dataset_version(inputs_metadata, prediction_contract)
+        logger.info(f"[FeatureService] Computed deterministic feature_dataset_version: {feature_dataset_version}")
 
-        # 7. Check if existing bundle can be reused (when rebuild_npy=False)
+        # 7. Check if immutable bundle already exists (rebuild_npy=False reuse optimization)
         if not request.rebuild_npy:
             existing_meta = self.feature_repo.find_feature_bundle(
-                request.dataset_id,
-                request.dataset_version,
-                feature_dataset_version,
+                dataset_id=request.dataset_id,
+                dataset_version=request.dataset_version,
+                feature_dataset_version=feature_dataset_version,
+                expected_inputs=inputs_metadata,
+                expected_horizon=request.prediction_horizon_hours,
             )
             if existing_meta:
-                # Verify exact input and contract match
-                if existing_meta.get("inputs") == inputs_metadata and existing_meta.get("prediction_contract") == prediction_contract:
-                    logger.info(f"[FeatureService] Reusing existing Feature Dataset Bundle: {feature_dataset_version}")
-                    uris = self.feature_repo._build_logical_uris(
-                        request.dataset_id,
-                        request.dataset_version,
-                        feature_dataset_version,
-                    )
-                    return FeatureResponse(
-                        request_id=req_id,
-                        run_id=run_id,
-                        status="succeeded",
-                        dataset_id=request.dataset_id,
-                        dataset_version=request.dataset_version,
-                        failure_dataset_id=request.failure_dataset_id,
-                        failure_dataset_version=request.failure_dataset_version,
-                        preprocessing_plan_version=request.preprocessing_plan_version,
-                        mapping_version=request.mapping_version,
-                        feature_schema_version=request.feature_schema_version,
-                        label_schema_version=request.label_schema_version,
-                        outputs=FeatureOutputsPayload(
-                            feature_dataset_version=feature_dataset_version,
-                            row_count=existing_meta["shape"]["row_count"],
-                            feature_count=existing_meta["shape"]["feature_count"],
-                            features_uri=uris["features_uri"],
-                            labels_uri=uris["labels_uri"],
-                            metadata_uri=uris["metadata_uri"],
-                        ),
-                    )
+                logger.info(f"[FeatureService] Deterministic bundle '{feature_dataset_version}' exists and verified. Reusing.")
+                uris = self.feature_repo._build_logical_uris(
+                    request.dataset_id,
+                    request.dataset_version,
+                    feature_dataset_version,
+                )
+                return FeatureResponse(
+                    request_id=req_id,
+                    run_id=run_id,
+                    status="succeeded",
+                    dataset_id=request.dataset_id,
+                    dataset_version=request.dataset_version,
+                    failure_dataset_id=request.failure_dataset_id,
+                    failure_dataset_version=request.failure_dataset_version,
+                    preprocessing_plan_version=request.preprocessing_plan_version,
+                    mapping_version=request.mapping_version,
+                    feature_schema_version=request.feature_schema_version,
+                    label_schema_version=request.label_schema_version,
+                    outputs=FeatureOutputsPayload(
+                        feature_dataset_version=feature_dataset_version,
+                        row_count=existing_meta["shape"]["row_count"],
+                        feature_count=existing_meta["shape"]["feature_count"],
+                        features_uri=uris["features_uri"],
+                        labels_uri=uris["labels_uri"],
+                        metadata_uri=uris["metadata_uri"],
+                    ),
+                )
 
         # 8. Execute Feature Construction
         catalog = load_catalog()
@@ -476,28 +547,56 @@ class FeatureService:
         if X.shape[0] == 0:
             raise InsufficientTrainingDataError("학습에 유효한 데이터 행이 0건입니다.")
 
-        # 11. Extract row_metadata (asset_id, timestamp) for tracking
-        id_col = plan.get("id_column") or "machineID"
-        if id_col not in labeled_df.columns:
+        if not np.isfinite(X).all():
+            raise FeatureContractError("Feature 행렬에 NaN 또는 Inf 값이 포함되어 있습니다.")
+        if not np.isfinite(y).all():
+            raise FeatureContractError("Label 배열에 NaN 또는 Inf 값이 포함되어 있습니다.")
+        if not set(np.unique(y)).issubset({0, 1}):
+            raise FeatureLabelAlignmentError(f"Label 값이 {{0, 1}} 범위를 벗어납니다: {set(np.unique(y))}")
+
+        # 11. Extract row_metadata (asset_id, timestamp) for tracking with fail-fast
+        id_col = plan.get("id_column") if plan and isinstance(plan, dict) else None
+        if not id_col or id_col not in labeled_df.columns:
             for cand in ("asset_id", "machineID", "equipment_id", "machine_id", "device_id", "UDI", "Product ID", "id"):
                 if cand in labeled_df.columns:
                     id_col = cand
                     break
 
-        time_col = plan.get("time_column") or "observed_at"
-        if time_col not in labeled_df.columns:
+        time_col = plan.get("time_column") if plan and isinstance(plan, dict) else None
+        if not time_col or time_col not in labeled_df.columns:
             for cand in ("observed_at", "datetime", "timestamp", "time", "ts", "date"):
                 if cand in labeled_df.columns:
                     time_col = cand
                     break
 
+        if not id_col or id_col not in labeled_df.columns:
+            raise FeatureLabelAlignmentError(
+                f"Row metadata 작성을 위한 설비 ID 컬럼을 확정할 수 없습니다. (사용 가능한 컬럼: {list(labeled_df.columns)})"
+            )
+        if not time_col or time_col not in labeled_df.columns:
+            raise FeatureLabelAlignmentError(
+                f"Row metadata 작성을 위한 타임스탬프 컬럼을 확정할 수 없습니다. (사용 가능한 컬럼: {list(labeled_df.columns)})"
+            )
+
         row_metadata: list[dict[str, Any]] = []
         for idx, (_, row) in enumerate(labeled_df.iterrows()):
+            asset_val = str(row[id_col]).strip() if pd.notna(row[id_col]) else ""
+            time_val = str(row[time_col]).strip() if pd.notna(row[time_col]) else ""
+            if not asset_val:
+                raise FeatureLabelAlignmentError(f"Row {idx}: 설비 ID(asset_id) 값이 비어 있습니다.")
+            if not time_val:
+                raise FeatureLabelAlignmentError(f"Row {idx}: 타임스탬프(timestamp) 값이 비어 있습니다.")
+
             row_metadata.append({
                 "row_index": idx,
-                "asset_id": str(row.get(id_col, "")),
-                "timestamp": str(row.get(time_col, "")),
+                "asset_id": asset_val,
+                "timestamp": time_val,
             })
+
+        if not (X.shape[0] == y.shape[0] == len(row_metadata)):
+            raise FeatureLabelAlignmentError(
+                f"데이터 행 수 불일치: X={X.shape[0]}, y={y.shape[0]}, row_metadata={len(row_metadata)}"
+            )
 
         # 12. Publish Feature Dataset Bundle atomically
         uris = self.feature_repo.publish_feature_bundle(
@@ -535,3 +634,34 @@ class FeatureService:
                 metadata_uri=uris["metadata_uri"],
             ),
         )
+
+    def compute_feature_dataset_version(
+        self,
+        inputs: dict[str, Any],
+        prediction_contract: dict[str, Any],
+    ) -> str:
+        """Compute 16-character deterministic sha256 hash representing unique immutable Feature Dataset."""
+        import hashlib
+
+        canonical_dict = {
+            "dataset_id": inputs["dataset_id"],
+            "dataset_version": inputs["dataset_version"],
+            "dataset_checksum": inputs["dataset_checksum"],
+            "failure_dataset_id": inputs["failure_dataset_id"],
+            "failure_dataset_version": inputs["failure_dataset_version"],
+            "failure_dataset_checksum": inputs["failure_dataset_checksum"],
+            "preprocessing_plan_version": inputs["preprocessing_plan_version"],
+            "preprocessing_plan_checksum": inputs["preprocessing_plan_checksum"],
+            "mapping_version": inputs["mapping_version"],
+            "mapping_checksum": inputs["mapping_checksum"],
+            "feature_schema_version": inputs["feature_schema_version"],
+            "feature_schema_checksum": inputs["feature_schema_checksum"],
+            "label_schema_version": inputs["label_schema_version"],
+            "label_schema_checksum": inputs["label_schema_checksum"],
+            "prediction_horizon_hours": prediction_contract["prediction_horizon_hours"],
+            "feature_catalog_version": prediction_contract["feature_catalog_version"],
+            "code_revision": prediction_contract["code_revision"],
+        }
+        canonical_json = json.dumps(canonical_dict, sort_keys=True, ensure_ascii=False)
+        full_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+        return f"feature-dataset-{full_hash[:16]}"
