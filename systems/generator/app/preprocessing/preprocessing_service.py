@@ -391,14 +391,20 @@ class PreprocessingService:
             ) from exc
 
         # 6. Atomically persist plan only after full execution succeeds
+        plan_to_publish = dict(plan)
+        plan_to_publish["dataset_id"] = request.dataset_id
+        plan_to_publish["dataset_version"] = request.dataset_version
+        if "preprocessing_plan_version" not in plan_to_publish or not plan_to_publish["preprocessing_plan_version"]:
+            plan_to_publish["preprocessing_plan_version"] = f"preprocessing-plan-{request.dataset_id}-{request.dataset_version}"
+
         mapping_uri = self.repository.publish_plan(
             request.dataset_id,
             request.dataset_version,
-            plan,
+            plan_to_publish,
             overwrite=request.force_reanalyze,
         )
 
-        plan_version = f"preprocessing-plan-{request.dataset_id}-{request.dataset_version}"
+        plan_version = plan_to_publish["preprocessing_plan_version"]
 
         return PreprocessingResponse(
             request_id=req_id,

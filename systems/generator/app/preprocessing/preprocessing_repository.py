@@ -18,6 +18,30 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
 logger = logging.getLogger(__name__)
 
 
+def compute_preprocessing_plan_version(
+    dataset_id: str,
+    dataset_version: str,
+    plan_data: dict[str, Any],
+) -> str:
+    """Compute deterministic 16-character SHA-256 version for preprocessing plan."""
+    import hashlib
+    canonical = {
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "structure_type": plan_data.get("structure_type"),
+        "selected_columns": plan_data.get("selected_columns"),
+        "id_column": plan_data.get("id_column"),
+        "time_column": plan_data.get("time_column"),
+        "attribute_column": plan_data.get("attribute_column"),
+        "value_column": plan_data.get("value_column"),
+        "duplicate_policy": plan_data.get("duplicate_policy"),
+        "aggregation": plan_data.get("aggregation"),
+    }
+    canonical_json = json.dumps(canonical, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    h = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
+    return f"preprocessing-plan-{h}"
+
+
 class PreprocessingRepository:
     """Manages versioned storage of Preprocessing Plans and mappings with atomic publishing."""
 
@@ -81,29 +105,43 @@ class PreprocessingRepository:
                 f"Preprocessing Plan 형식이 올바르지 않습니다 (dict 기대, {type(plan_data).__name__} 수신)"
             )
 
-        # Validate internal fields if present
+        # Mandatory identification and structure fields
+        required_fields = [
+            "dataset_id",
+            "dataset_version",
+            "preprocessing_plan_version",
+            "structure_type",
+        ]
+        for rf in required_fields:
+            if rf not in plan_data or not plan_data[rf]:
+                raise DatasetContractError(f"Preprocessing Plan에 필수 필드 '{rf}'가 누락되었거나 비어 있습니다.")
+
         plan_ds_id = plan_data.get("dataset_id")
         plan_ds_ver = plan_data.get("dataset_version")
         plan_ver = plan_data.get("preprocessing_plan_version")
 
-        if plan_ds_id and plan_ds_id != dataset_id:
+        if plan_ds_id != dataset_id:
             raise DatasetContractError(
                 f"Plan 내부 dataset_id ('{plan_ds_id}')가 요청된 dataset_id ('{dataset_id}')와 일치하지 않습니다."
             )
-        if plan_ds_ver and plan_ds_ver != dataset_version:
+        if plan_ds_ver != dataset_version:
             raise DatasetContractError(
                 f"Plan 내부 dataset_version ('{plan_ds_ver}')가 요청된 dataset_version ('{dataset_version}')와 일치하지 않습니다."
             )
-        if plan_ver and plan_ver != preprocessing_plan_version:
+        if plan_ver != preprocessing_plan_version:
             raise DatasetContractError(
                 f"Plan 내부 preprocessing_plan_version ('{plan_ver}')가 요청된 version ('{preprocessing_plan_version}')과 일치하지 않습니다."
             )
 
-        # Required fields check
-        if "structure_type" not in plan_data:
-            raise DatasetContractError("Preprocessing Plan에 필수 필드 'structure_type'이 누락되었습니다.")
-        if "selected_columns" not in plan_data and plan_data.get("structure_type") == "tabular_column_as_attribute":
-            raise DatasetContractError("Preprocessing Plan에 필수 필드 'selected_columns'가 누락되었습니다.")
+        # Structural contract checks
+        st = plan_data.get("structure_type")
+        if st == "tabular_column_as_attribute":
+            if "selected_columns" not in plan_data or not isinstance(plan_data["selected_columns"], list) or not plan_data["selected_columns"]:
+                raise DatasetContractError("Wide 구조 Preprocessing Plan에 'selected_columns' 목록이 누락되었거나 비어 있습니다.")
+        elif st == "tabular_row_as_attribute":
+            for role_col in ("id_column", "attribute_column", "value_column"):
+                if role_col not in plan_data or not plan_data[role_col]:
+                    raise DatasetContractError(f"Long 구조 Preprocessing Plan에 '{role_col}' 역할 컬럼이 누락되었습니다.")
 
         return plan_data
 
@@ -126,8 +164,8 @@ class PreprocessingRepository:
             data_to_write["dataset_id"] = dataset_id
         if "dataset_version" not in data_to_write:
             data_to_write["dataset_version"] = dataset_version
-        if "preprocessing_plan_version" not in data_to_write:
-            data_to_write["preprocessing_plan_version"] = f"preprocessing-plan-{dataset_id}-{dataset_version}"
+        if "preprocessing_plan_version" not in data_to_write or not data_to_write["preprocessing_plan_version"]:
+            data_to_write["preprocessing_plan_version"] = compute_preprocessing_plan_version(dataset_id, dataset_version, data_to_write)
 
         temp_path = self.base_dir / f".tmp_{uuid.uuid4().hex}_{self._plan_filename(dataset_id, dataset_version)}"
         try:

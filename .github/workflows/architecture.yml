@@ -198,11 +198,18 @@ jobs:
 
       - name: Generator canonical import smoke
         if: needs.changes.outputs.generator == 'true'
-        run: python -c "import systems.generator.app.preprocessing"
+        run: |
+          python -c "import systems.generator.app.preprocessing"
+          python -c "import systems.generator.app.feature"
 
-      - name: Generator daemon tests
+      - name: Generator preprocessing and feature tests
         if: needs.changes.outputs.generator == 'true'
-        run: python -m pytest -q tests/test_generator_daemon.py
+        run: |
+          python -m pytest -q \
+            tests/test_generator_preprocessing_api.py \
+            tests/test_generator_feature_api.py \
+            tests/test_generator_feature_isolation.py \
+            tests/test_generator_daemon.py
 
       - name: Backend import and health
         if: needs.changes.outputs.backend == 'true'
