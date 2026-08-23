@@ -4,6 +4,7 @@ import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpRiskStatus } from "../ap
 import { formatTimestamp } from "../components/MvpUi";
 
 const observedAt = "2026-08-29 23:00";
+const alarmThresholdBasis = "점검/고장 비용비 기준: 긴급 정비 5.42h, 계획 점검 0.5h로 손익분기 약 10.8회. 0.8 완화 비용이 손익분기 5.2배라 알람 경계 0.9 유지.";
 
 const detailRangeOptions = [
   { id: "1h", label: "1시간", minutes: 60, pointCount: 7, displayGrain: "10분 원본", ticks: ["22:00", "22:20", "22:40", "23:00"] },
@@ -77,7 +78,7 @@ interface AssetDetailViewModel {
 }
 
 const equipmentHistory: AssetHistoryRow[] = [
-  { id: "event-current-risk", occurredAt: "2026-08-29 23:00", kind: "예측 알람", tone: "critical", description: "24시간 내 위험 예측이 경고 기준을 넘어 점검 요청 후보가 생성되었습니다.", source: "시스템 기록" },
+  { id: "event-current-risk", occurredAt: "2026-08-29 23:00", kind: "예측 알람", tone: "critical", description: "24시간 내 위험 예측이 알람 경계를 넘어 점검 요청 후보가 생성되었습니다.", source: "시스템 기록" },
   { id: "event-sensor-anomaly", occurredAt: "2026-08-29 20:20", kind: "센서 이상", tone: "warning", description: "주요 피처가 평상시 평균 범위를 벗어난 상태로 관측되었습니다.", source: "시스템 기록" },
   { id: "maintenance-20260812", occurredAt: "2026-08-12 10:30", kind: "정기 점검", tone: "normal", description: "벨트 장력 조정과 구동부 윤활을 완료했습니다.", source: "김도윤", memo: "벨트 장력이 기준 하한에 가까워 재조정했습니다. 2주 뒤 회전 편차를 다시 확인하세요." },
   { id: "maintenance-20260728", occurredAt: "2026-07-28 18:10", kind: "복구 점검", tone: "normal", description: "전원과 축 정렬을 확인한 뒤 설비를 재가동했습니다.", source: "박지훈", memo: "축 정렬 보정 후 공회전 테스트에서 진동이 정상 범위로 복귀했습니다." },
@@ -266,7 +267,7 @@ function buildAssetDetailViewModel(asset: MvpAsset): AssetDetailViewModel {
     ranges: detailRangeOptions,
     risk: {
       current: asset.failureProbability === null ? null : Number((asset.failureProbability * 100).toFixed(1)),
-      threshold: 70,
+      threshold: 90,
       domain: { minimum: 0, maximum: 100 },
     },
     features: featureTemplate.map((feature) => adjustedFeature(feature, asset)),
@@ -407,7 +408,11 @@ function SeriesChart({
       <header className="asset-series-heading">
         <div><Icon size={17} /><strong>{title}</strong></div>
         {baseline ? <span className="asset-baseline-key"><i style={{ background: color }} />평상시 평균 {formatValue(baseline.lower, unit)}-{formatValue(baseline.upper, unit)}</span> : null}
-        {threshold !== undefined ? <span>경고 기준 {threshold}%</span> : null}
+        {threshold !== undefined ? (
+          <span className="asset-threshold-key" tabIndex={0} data-tooltip={alarmThresholdBasis} title={alarmThresholdBasis}>
+            알람 경계 {threshold}% <small>근거</small>
+          </span>
+        ) : null}
       </header>
       {values.length === 0 ? (
         <div className="asset-chart-empty"><Database size={20} /><strong>{emptyLabel}</strong><span>값을 0으로 대체하지 않습니다.</span></div>
@@ -426,7 +431,7 @@ function SeriesChart({
               <line className="asset-crossing-line" x1={crossingX} x2={crossingX} y1={crossingY} y2={frame.bottom} style={{ stroke: color }} />
               <circle className="asset-crossing-marker" cx={crossingX} cy={crossingY} r="5" style={{ fill: color }} />
               <text className="asset-crossing-label" x={clamp(crossingX + 8, 76, 548)} y={clamp(crossingY + 17, 30, 268)} style={{ fill: color }}>
-                {threshold !== undefined ? "경고 초과" : "범위 이탈"} {formatCrossingTime(range, crossingIndex, values.length)}
+                {threshold !== undefined ? "알람 경계 초과" : "범위 이탈"} {formatCrossingTime(range, crossingIndex, values.length)}
               </text>
             </g>
           ) : null}
