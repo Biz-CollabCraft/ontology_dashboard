@@ -746,6 +746,35 @@
 .map-report-prototype .summary-event-list small { color: #64748b; font-size: 12px; }
 .map-report-prototype .summary-event-list b { font-size: 20px; }
 .map-report-prototype .summary-selected-note { margin-top: 10px; }
+.map-report-prototype .summary-graph-board { display: grid; gap: 0; margin-bottom: 14px; border: 1px solid #cbd5e1; background: #eef2f6; }
+.map-report-prototype .summary-graph-grid { display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,.95fr) minmax(300px,.8fr); gap: 14px; padding: 16px; }
+.map-report-prototype .summary-status-chart,
+.map-report-prototype .summary-line-chart,
+.map-report-prototype .summary-selected-graph { min-width: 0; border: 1px solid #d8e0ea; background: #fff; padding: 13px; }
+.map-report-prototype .summary-stack-bar { display: flex; width: 100%; height: 16px; overflow: hidden; border: 1px solid #d8e0ea; background: #f1f5f9; }
+.map-report-prototype .summary-stack-bar i { min-width: 3px; height: 100%; }
+.map-report-prototype .summary-status-legend { display: grid; gap: 8px; margin-top: 12px; }
+.map-report-prototype .summary-status-legend div,
+.map-report-prototype .summary-line-bars div,
+.map-report-prototype .summary-selected-facts div { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 8px; }
+.map-report-prototype .summary-status-legend .dot { width: 9px; height: 9px; border-radius: 999px; }
+.map-report-prototype .summary-status-legend span,
+.map-report-prototype .summary-line-bars span,
+.map-report-prototype .summary-selected-facts dt { overflow: hidden; color: #64748b; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.map-report-prototype .summary-status-legend strong,
+.map-report-prototype .summary-line-bars strong,
+.map-report-prototype .summary-selected-facts dd { margin: 0; color: #172033; font-size: 12px; font-weight: 900; text-align: right; }
+.map-report-prototype .summary-line-bars { display: grid; gap: 10px; }
+.map-report-prototype .summary-line-bars i,
+.map-report-prototype .summary-risk-meter i { display: block; height: 9px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.map-report-prototype .summary-line-bars i b,
+.map-report-prototype .summary-risk-meter i b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4c90f0, #f0a23a, #ec5b62); }
+.map-report-prototype .summary-risk-meter { display: grid; gap: 9px; }
+.map-report-prototype .summary-risk-meter > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.map-report-prototype .summary-risk-meter span { color: #64748b; font-size: 12px; font-weight: 900; }
+.map-report-prototype .summary-risk-meter strong { color: #172033; font-size: 28px; letter-spacing: 0; }
+.map-report-prototype .summary-risk-meter small { color: #64748b; font-size: 12px; line-height: 1.5; }
+.map-report-prototype .summary-selected-facts { display: grid; gap: 8px; margin: 12px 0 0; }
 .map-report-prototype .asset-detail-view { display: grid; gap: 14px; animation: asset-detail-enter 180ms ease-out; }
 @keyframes asset-detail-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 .map-report-prototype .asset-detail-header { display: grid; grid-template-columns: minmax(0,1fr) minmax(240px,340px) auto; gap: 12px; align-items: start; padding: 18px; color: #fff; background: #172033; border: 1px solid #172033; }
@@ -973,6 +1002,9 @@
 .mvp-reports-page .summary-decision-list article,
 .mvp-reports-page .summary-line-list article,
 .mvp-reports-page .summary-selected-note,
+.mvp-reports-page .summary-status-chart,
+.mvp-reports-page .summary-line-chart,
+.mvp-reports-page .summary-selected-graph,
 .mvp-reports-page .formula-disclosure dl div,
 .mvp-reports-page .target-list article,
 .mvp-reports-page .sensor-window,
@@ -987,6 +1019,7 @@
 .mvp-reports-page .limitations p,
 .mvp-reports-page .summary-decision-list p,
 .mvp-reports-page .summary-selected-note p,
+.mvp-reports-page .summary-risk-meter small,
 .mvp-reports-page .target-list p,
 .mvp-reports-page .sensor-window p,
 .mvp-reports-page .sensor-table small,
@@ -1072,6 +1105,28 @@
 .mvp-reports-page .asset-history-source,
 .mvp-reports-page .asset-history-row time { color: var(--mvp-dim); }
 .mvp-reports-page .asset-series-chart { background: #121922; }
+.mvp-reports-page .summary-graph-board { border-color: var(--mvp-border); border-radius: 9px; background: linear-gradient(180deg, rgba(29,38,49,.98), rgba(23,30,39,.98)); box-shadow: 0 9px 24px rgba(0,0,0,.14); }
+.mvp-reports-page .summary-stack-bar { border-color: rgba(181,196,214,.14); background: rgba(255,255,255,.045); }
+.mvp-reports-page .summary-stack-bar .critical,
+.mvp-reports-page .summary-status-legend .critical { background: #ec5b62; }
+.mvp-reports-page .summary-stack-bar .warning,
+.mvp-reports-page .summary-status-legend .warning { background: #f0a23a; }
+.mvp-reports-page .summary-stack-bar .attention,
+.mvp-reports-page .summary-status-legend .attention { background: #4c90f0; }
+.mvp-reports-page .summary-stack-bar .normal,
+.mvp-reports-page .summary-status-legend .normal { background: #45b880; }
+.mvp-reports-page .summary-stack-bar .hold,
+.mvp-reports-page .summary-status-legend .hold { background: #9a77e8; }
+.mvp-reports-page .summary-status-legend span,
+.mvp-reports-page .summary-line-bars span,
+.mvp-reports-page .summary-selected-facts dt,
+.mvp-reports-page .summary-risk-meter span { color: var(--mvp-dim); }
+.mvp-reports-page .summary-status-legend strong,
+.mvp-reports-page .summary-line-bars strong,
+.mvp-reports-page .summary-selected-facts dd,
+.mvp-reports-page .summary-risk-meter strong { color: var(--mvp-text); }
+.mvp-reports-page .summary-line-bars i,
+.mvp-reports-page .summary-risk-meter i { background: rgba(181,196,214,.11); }
 .mvp-reports-page .asset-chart-frame { fill: rgba(255,255,255,.018); stroke: rgba(181,196,214,.14); }
 .mvp-reports-page .asset-chart-grid { stroke: rgba(181,196,214,.1); }
 .mvp-reports-page .asset-chart-axis { fill: var(--mvp-dim); }
@@ -1153,6 +1208,7 @@
   .map-report-prototype .main-grid,
   .map-report-prototype .line-row,
   .map-report-prototype .summary-hero,
+  .map-report-prototype .summary-graph-grid,
   .map-report-prototype .summary-grid { grid-template-columns: 1fr; }
   .map-report-prototype .summary-event-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .map-report-prototype .asset-detail-header,

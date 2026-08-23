@@ -128,6 +128,11 @@ test("covers Reports side-tab flow with summary graphs and report types", async 
   await expect(page.locator(".map-report-prototype .report-panel").getByText("선택 설비 상세")).toBeVisible();
   await page.getByRole("tab", { name: /요약 보고서/ }).click();
   await expect(page.getByTestId("mvp-summary-report")).toBeVisible();
+  await expect(page.getByTestId("mvp-summary-map-report-graphs")).toBeVisible();
+  await expect(page.getByText("상태 맵 · 라인 위험 · 선택 설비를 한 장으로 압축")).toBeVisible();
+  await expect(page.getByText("상태 분포")).toBeVisible();
+  await expect(page.getByText("라인별 평균 위험")).toBeVisible();
+  await expect(page.getByText("위험 예측 확률")).toBeVisible();
   await expect(page.getByTestId("mvp-summary-graphs")).toBeVisible();
   await expect(page.locator(".asset-series-chart")).toHaveCount(5);
   await expect(page.getByRole("img", { name: /회전 상태 그래프/ })).toBeVisible();

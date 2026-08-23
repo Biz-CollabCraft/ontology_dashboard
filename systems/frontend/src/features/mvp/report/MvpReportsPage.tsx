@@ -34,6 +34,8 @@ const MAP_STATUS_META: Record<MvpRiskStatus, { label: string; tone: string; sent
   data_quality_hold: { label: "데이터 확인", tone: "hold", sentence: "데이터 확인 후 판단" },
 };
 
+const SUMMARY_STATUS_ORDER: MvpRiskStatus[] = ["critical", "warning", "attention", "normal", "data_quality_hold"];
+
 function MapStatusBadge({ status }: { status: MvpRiskStatus }) {
   const meta = MAP_STATUS_META[status];
   return <span className={`status-badge ${meta.tone}`}>{meta.label}</span>;
@@ -59,6 +61,103 @@ function ReportKpi({
       <strong>{value}</strong>
       <small>{detail}</small>
     </article>
+  );
+}
+
+function statusCount(model: MvpBootstrapModel, status: MvpRiskStatus) {
+  if (status === "critical") return model.metrics.critical;
+  if (status === "warning") return model.metrics.warning;
+  if (status === "attention") return model.metrics.attention;
+  if (status === "normal") return model.metrics.normal;
+  return model.metrics.dataQualityHold;
+}
+
+function MvpSummaryGraphBoard({
+  model,
+  selected,
+}: {
+  model: MvpBootstrapModel;
+  selected: MvpEvent | null;
+}) {
+  const selectedAsset = model.assets.find((asset) => asset.eventId === selected?.eventId)
+    ?? model.assets.find((asset) => asset.assetId === selected?.assetId)
+    ?? null;
+  const maxLineRisk = Math.max(...model.lineRisk.map((line) => line.averageRisk ?? 0), 0.01);
+  const riskPercent = selected?.failureProbability === null || selected?.failureProbability === undefined
+    ? null
+    : Math.round(selected.failureProbability * 100);
+
+  return (
+    <section className="summary-graph-board" data-testid="mvp-summary-map-report-graphs">
+      <header className="asset-graph-toolbar">
+        <div>
+          <span>MAP-REPORT GRAPH SNAPSHOT</span>
+          <h2>상태 맵 · 라인 위험 · 선택 설비를 한 장으로 압축</h2>
+        </div>
+        <div className="asset-range-meta"><CalendarRange size={15} />동일 snapshot · {formatTimestamp(model.context.observedAt ?? model.context.refreshedAt)}</div>
+      </header>
+
+      <div className="summary-graph-grid">
+        <article className="summary-status-chart" aria-label="상태 분포 그래프">
+          <div className="panel-heading compact"><div><span>STATUS DISTRIBUTION</span><h2>상태 분포</h2></div></div>
+          <div className="summary-stack-bar" aria-hidden="true">
+            {SUMMARY_STATUS_ORDER.map((status) => {
+              const count = statusCount(model, status);
+              const basis = Math.max(1, model.metrics.totalAssets);
+              return <i key={status} className={MAP_STATUS_META[status].tone} style={{ width: `${Math.max(3, (count / basis) * 100)}%` }} />;
+            })}
+          </div>
+          <div className="summary-status-legend">
+            {SUMMARY_STATUS_ORDER.map((status) => (
+              <div key={status}>
+                <i className={`dot ${MAP_STATUS_META[status].tone}`} />
+                <span>{MAP_STATUS_META[status].label}</span>
+                <strong>{statusCount(model, status)}대</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="summary-line-chart" aria-label="라인별 위험 막대 그래프">
+          <div className="panel-heading compact"><div><span>LINE RISK BARS</span><h2>라인별 평균 위험</h2></div></div>
+          <div className="summary-line-bars">
+            {[...model.lineRisk]
+              .sort((a, b) => (b.averageRisk ?? -1) - (a.averageRisk ?? -1))
+              .slice(0, 5)
+              .map((line) => (
+                <div key={line.line}>
+                  <span>{line.line}</span>
+                  <i><b style={{ width: `${Math.max(4, ((line.averageRisk ?? 0) / maxLineRisk) * 100)}%` }} /></i>
+                  <strong>{formatProbability(line.averageRisk)}</strong>
+                </div>
+              ))}
+          </div>
+        </article>
+
+        <article className="summary-selected-graph" aria-label="선택 설비 위험 그래프">
+          <div className="panel-heading compact">
+            <div>
+              <span>SELECTED ASSET</span>
+              <h2>{selected?.assetName ?? selectedAsset?.displayName ?? "선택 설비 없음"}</h2>
+            </div>
+            {selected ? <MapStatusBadge status={selected.status} /> : selectedAsset ? <MapStatusBadge status={selectedAsset.status} /> : null}
+          </div>
+          <div className="summary-risk-meter">
+            <div>
+              <span>위험 예측 확률</span>
+              <strong>{riskPercent === null ? "-" : `${riskPercent}%`}</strong>
+            </div>
+            <i aria-hidden="true"><b style={{ width: `${riskPercent ?? 0}%` }} /></i>
+            <small>map-report 원본처럼 고장 확정이 아니라 점검 우선순위 판단 근거로 표시합니다.</small>
+          </div>
+          <dl className="summary-selected-facts">
+            <div><dt>권장 조치</dt><dd>{selected ? DECISION_LABEL[selected.recommendedDecision] : "선택 필요"}</dd></div>
+            <div><dt>예상 영향</dt><dd>{formatMinutes(selected?.estimatedDowntimeMinutes ?? selectedAsset?.estimatedDowntimeMinutes ?? 0)}</dd></div>
+            <div><dt>근거</dt><dd>{selectedAsset?.topFactors[0]?.label ?? selected?.predictedFailureType ?? "unavailable"}</dd></div>
+          </dl>
+        </article>
+      </div>
+    </section>
   );
 }
 
@@ -531,6 +630,8 @@ function MvpSummaryReport({
           <div><dt>품질 보류</dt><dd>{qualityEvents.length}건</dd></div>
         </dl>
       </section>
+
+      <MvpSummaryGraphBoard model={model} selected={selected} />
 
       <MvpAssetGraphsSection model={model} selectedEvent={selectedEvent} onSelectEvent={onSelectEvent} />
 
