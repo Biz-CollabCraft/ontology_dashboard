@@ -10,6 +10,7 @@ from typing import Any, Optional
 import pandas as pd
 
 from systems.generator.generator_config import PATHS
+from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
 from systems.generator.app.preprocessing.preprocessing_profiler import build_family_registry, load_family_registry
 from systems.generator.app.preprocessing.preprocessing_schema import (
@@ -361,11 +362,16 @@ class PreprocessingService:
         if df_preview.empty or len(df_preview.columns) == 0:
             raise DatasetContractError("데이터셋이 비어 있거나 컬럼이 존재하지 않습니다.")
 
-        # 3. Check existing plan or generate new plan
-        existing_plan = None if request.force_reanalyze else self.repository.find_plan(request.dataset_id, request.dataset_version)
+        # 3. Check existing plan (if force_reanalyze=False)
+        existing_plan = None if request.force_reanalyze else self.repository.find_latest_plan(request.dataset_id, request.dataset_version)
         if existing_plan:
             logger.info(f"[PreprocessingService] Reusing existing plan for {request.dataset_id}:{request.dataset_version}")
             plan = existing_plan
+            plan_id = plan["preprocessing_plan_id"]
+            plan_version = plan["preprocessing_plan_version"]
+            plan_path = self.repository.get_dataset_plan_dir(request.dataset_id, request.dataset_version) / f"{plan_id}.json"
+            plan_uri = self.repository.get_logical_uri(plan_path)
+            plan_sha256 = compute_file_sha256(plan_path)
         else:
             logger.info(f"[PreprocessingService] Generating new preprocessing plan for {request.dataset_id}:{request.dataset_version}")
             plan = self.planner.build_plan(
@@ -375,30 +381,31 @@ class PreprocessingService:
                 aggregation=request.aggregation,
             )
 
-        # 4. Validate plan
-        self.validate_plan(df_preview, plan)
+            # 4. Validate plan
+            self.validate_plan(df_preview, plan)
 
-        # 5. Execute full dataset preprocessing with plan to verify full transform success
-        try:
-            preprocess_with_plan(str(dataset_path), plan)
-        except PreprocessingError:
-            raise
-        except Exception as exc:
-            logger.warning(f"[PreprocessingService] Preprocessing execution failed with plan: {exc}")
-            raise PreprocessingPlanningError(
-                f"전처리 계획 적용 실행에 실패했습니다: {exc}",
-                details=[{"stage": "execution", "error": str(exc)}],
-            ) from exc
+            # 5. Execute full dataset preprocessing with plan to verify full transform success
+            try:
+                preprocess_with_plan(str(dataset_path), plan)
+            except PreprocessingError:
+                raise
+            except Exception as exc:
+                logger.warning(f"[PreprocessingService] Preprocessing execution failed with plan: {exc}")
+                raise PreprocessingPlanningError(
+                    f"전처리 계획 적용 실행에 실패했습니다: {exc}",
+                    details=[{"stage": "execution", "error": str(exc)}],
+                ) from exc
 
-        # 6. Atomically persist plan only after full execution succeeds
-        mapping_uri = self.repository.publish_plan(
-            request.dataset_id,
-            request.dataset_version,
-            plan,
-            overwrite=request.force_reanalyze,
-        )
-
-        plan_version = f"preprocessing-plan-{request.dataset_id}-{request.dataset_version}"
+            # 6. Atomically persist immutable plan and update latest pointer
+            published = self.repository.publish_plan(
+                request.dataset_id,
+                request.dataset_version,
+                plan,
+            )
+            plan_id = published.preprocessing_plan_id
+            plan_version = published.preprocessing_plan_version
+            plan_uri = published.preprocessing_plan_uri
+            plan_sha256 = published.sha256
 
         return PreprocessingResponse(
             request_id=req_id,
@@ -406,9 +413,9 @@ class PreprocessingService:
             status="succeeded",
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
+            preprocessing_plan_id=plan_id,
             preprocessing_plan_version=plan_version,
             result=PreprocessingResultPayload(
-                extraction_type=plan.get("structure_type", "tabular_column_as_attribute"),
                 structure_type=plan.get("structure_type", "tabular_column_as_attribute"),
                 id_column=plan.get("id_column"),
                 time_column=plan.get("time_column"),
@@ -416,7 +423,8 @@ class PreprocessingService:
                 value_column=plan.get("value_column"),
                 duplicate_policy=plan.get("duplicate_policy", request.duplicate_policy),
                 aggregation=plan.get("aggregation", request.aggregation),
-                mapping_uri=mapping_uri,
+                preprocessing_plan_uri=plan_uri,
+                preprocessing_plan_sha256=plan_sha256,
             ),
         )
 

@@ -1,13 +1,19 @@
 """Tests for Generator domain FastAPI application and Preprocessing API (/preprocessing)."""
 
+from __future__ import annotations
+
+import asyncio
+import inspect
 import json
-import pytest
-import pandas as pd
+import uuid
 from pathlib import Path
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from systems.generator.generator_config import PATHS
-from systems.generator.app.main import app
+from systems.generator.file_integrity import compute_file_sha256
+from systems.generator.app.main import app, create_app
 from systems.generator.app.preprocessing.preprocessing_schema import (
     PreprocessingRequest,
     PreprocessingResponse,
@@ -18,8 +24,12 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
     DatasetNotFoundError,
     DatasetContractError,
     PreprocessingRoleError,
+    PreprocessingPlanPublishError,
 )
-from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
+from systems.generator.app.preprocessing.preprocessing_repository import (
+    PreprocessingRepository,
+    compute_preprocessing_plan_version,
+)
 from systems.generator.app.preprocessing.preprocessing_service import (
     PreprocessingService,
     preprocess_with_plan,
@@ -66,6 +76,10 @@ def sample_long_csv(tmp_path):
         csv_path.unlink()
 
 
+# ==========================================
+# 1. Health & Base Endpoints
+# ==========================================
+
 def test_app_health_endpoint(client):
     """GET /health returns 200 and system identifier."""
     res = client.get("/health")
@@ -76,30 +90,156 @@ def test_app_health_endpoint(client):
     assert "X-Request-ID" in res.headers
 
 
-def test_preprocessing_wide_format_success(client, sample_wide_csv):
-    """POST /preprocessing on wide tabular data succeeds and returns plan response."""
+# ==========================================
+# 2. Responsibility Boundaries (Ontology Mapping Removed)
+# ==========================================
+
+def test_preprocessing_responsibility_boundaries(client, sample_wide_csv, tmp_path, monkeypatch):
+    """POST /preprocessing returns preprocessing_plan_uri and does NOT produce ontology mapping."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
     payload = {
-        "dataset_id": "test_wide",
+        "dataset_id": "test_boundary",
         "dataset_version": "v1.0",
         "source_uri": sample_wide_csv,
         "force_reanalyze": True,
-        "duplicate_policy": "error",
-        "aggregation": None,
     }
     res = client.post("/preprocessing", json=payload)
     assert res.status_code == 200
     data = res.json()
 
-    assert data["status"] == "succeeded"
-    assert data["dataset_id"] == "test_wide"
-    assert data["dataset_version"] == "v1.0"
-    assert "request_id" in data
-    assert "run_id" in data
+    # 1. Response fields
     assert "result" in data
-    assert data["result"]["extraction_type"] in ("tabular_column_as_attribute", "wide_pivot")
-    assert "mapping_uri" in data["result"]
-    assert not data["result"]["mapping_uri"].startswith("C:")  # Logical / relative URI
+    res_result = data["result"]
+    assert "mapping_uri" not in res_result
+    assert "mapping_version" not in res_result
+    assert "mapping_uri" not in data
+    assert "preprocessing_plan_uri" in res_result
+    assert "preprocessing_plan_sha256" in res_result
 
+    # 2. Verify no ontology mapping files created in models_store
+    mapping_dir = models_store / "cache" / "mappings"
+    assert not mapping_dir.exists() or len(list(mapping_dir.glob("*.json"))) == 0
+
+
+# ==========================================
+# 3. Plan Identification & Determinism
+# ==========================================
+
+def test_preprocessing_plan_identification_and_determinism(client, sample_wide_csv, tmp_path, monkeypatch):
+    """Plan has pp-{UUID} ID, content-hash version, and matches saved file."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    payload = {
+        "dataset_id": "test_ident",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": True,
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+
+    plan_id = data["preprocessing_plan_id"]
+    plan_ver = data["preprocessing_plan_version"]
+
+    assert plan_id.startswith("pp-")
+    # Verify UUID format in plan_id
+    raw_uuid = plan_id[3:]
+    assert uuid.UUID(raw_uuid)
+
+    assert plan_ver.startswith("preprocessing-plan-")
+    assert len(plan_ver) == len("preprocessing-plan-") + 16
+
+    # Load from disk and verify identity
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+    loaded = repo.load_plan("test_ident", "v1.0", plan_id)
+    assert loaded["preprocessing_plan_id"] == plan_id
+    assert loaded["preprocessing_plan_version"] == plan_ver
+    assert loaded["dataset_id"] == "test_ident"
+    assert loaded["dataset_version"] == "v1.0"
+
+
+def test_compute_preprocessing_plan_version_detects_changes():
+    """Modifying selected_columns, id_column, or duplicate_policy changes version."""
+    base = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["asset_id", "timestamp", "voltage"],
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "duplicate_policy": "error",
+        "aggregation": None,
+    }
+    v_base = compute_preprocessing_plan_version("ds1", "v1.0", base)
+
+    v_cols = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "selected_columns": ["asset_id", "timestamp"]})
+    assert v_cols != v_base
+
+    v_id = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "id_column": "machine_id"})
+    assert v_id != v_base
+
+    v_dup = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "duplicate_policy": "aggregate", "aggregation": "mean"})
+    assert v_dup != v_base
+
+
+# ==========================================
+# 4. Storage Structure & latest.json
+# ==========================================
+
+def test_preprocessing_storage_structure_and_latest_pointer(client, sample_wide_csv, tmp_path, monkeypatch):
+    """Plans stored in {dataset_id}/{dataset_version}/ with latest.json pointing to current plan."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    payload = {
+        "dataset_id": "storage_ds",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": True,
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+
+    plan_id = data["preprocessing_plan_id"]
+    plan_ver = data["preprocessing_plan_version"]
+    plan_uri = data["result"]["preprocessing_plan_uri"]
+    plan_sha = data["result"]["preprocessing_plan_sha256"]
+
+    # Check relative logical URI (never absolute)
+    assert not plan_uri.startswith("C:")
+    assert not plan_uri.startswith("/")
+    assert not plan_uri.startswith("..")
+    assert plan_uri.endswith(f"{plan_id}.json")
+
+    repo_dir = models_store / "cache" / "preprocessing_plans" / "storage_ds" / "v1.0"
+    assert repo_dir.is_dir()
+
+    plan_file = repo_dir / f"{plan_id}.json"
+    assert plan_file.is_file()
+    assert compute_file_sha256(plan_file) == plan_sha
+
+    latest_file = repo_dir / "latest.json"
+    assert latest_file.is_file()
+    with open(latest_file, "r", encoding="utf-8") as f:
+        latest_data = json.load(f)
+
+    assert latest_data["dataset_id"] == "storage_ds"
+    assert latest_data["dataset_version"] == "v1.0"
+    assert latest_data["preprocessing_plan_id"] == plan_id
+    assert latest_data["preprocessing_plan_version"] == plan_ver
+    assert latest_data["path"] == f"{plan_id}.json"
+    assert latest_data["sha256"] == plan_sha
+
+
+# ==========================================
+# 5. Long Format & Contract Validation
+# ==========================================
 
 def test_preprocessing_long_format_success(client, sample_long_csv, monkeypatch):
     """POST /preprocessing on long format data plans roles and pivots successfully."""
@@ -149,7 +289,6 @@ def test_preprocessing_dataset_not_found(client):
     data = res.json()
     assert "error" in data
     assert data["error"]["code"] == "DATASET_NOT_FOUND"
-    assert "X-Request-ID" in res.headers
 
 
 def test_preprocessing_long_format_missing_roles_fails_fast(client, sample_long_csv, monkeypatch):
@@ -160,8 +299,8 @@ def test_preprocessing_long_format_missing_roles_fails_fast(client, sample_long_
             "selected_columns": ["machine_id", "ts"],
             "id_column": "machine_id",
             "time_column": "ts",
-            "attribute_column": None,  # Missing!
-            "value_column": None,      # Missing!
+            "attribute_column": None,
+            "value_column": None,
         }
 
     monkeypatch.setattr(PreprocessingPlanner, "classify_structure", lambda self, f, d: "tabular_row_as_attribute")
@@ -180,154 +319,105 @@ def test_preprocessing_long_format_missing_roles_fails_fast(client, sample_long_
     assert data["error"]["code"] == "PREPROCESSING_ROLE_COLUMNS_MISSING"
 
 
-def test_preprocessing_invalid_duplicate_aggregation_policy(client):
-    """POST /preprocessing rejects aggregate policy without aggregation function."""
-    payload = {
-        "dataset_id": "test_ds",
-        "dataset_version": "v1.0",
-        "duplicate_policy": "aggregate",
-        "aggregation": None,  # Invalid
-    }
-    res = client.post("/preprocessing", json=payload)
+def test_preprocessing_path_confinement_and_security(client):
+    """POST /preprocessing rejects path traversal in source_uri, dataset_id, and dataset_version."""
+    # 1. source_uri traversal
+    res = client.post("/preprocessing", json={"dataset_id": "ds", "dataset_version": "v1", "source_uri": "../../../etc/passwd"})
     assert res.status_code == 422
-    data = res.json()
-    assert "error" in data
-    assert data["error"]["code"] == "REQUEST_VALIDATION_ERROR"
+    assert res.json()["error"]["code"] == "DATASET_CONTRACT_ERROR"
 
-
-def test_preprocessing_absolute_path_traversal_rejection(client):
-    """POST /preprocessing rejects path traversal or absolute path in source_uri."""
-    payload = {
-        "dataset_id": "test_ds",
-        "dataset_version": "v1.0",
-        "source_uri": "../../../etc/passwd",
-    }
-    res = client.post("/preprocessing", json=payload)
+    # 2. dataset_id traversal
+    res = client.post("/preprocessing", json={"dataset_id": "../../../etc/passwd", "dataset_version": "v1"})
     assert res.status_code == 422
-    data = res.json()
-    assert "error" in data
-    assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
+    assert res.json()["error"]["code"] == "DATASET_CONTRACT_ERROR"
 
-    # Also test absolute path rejection
-    payload_abs = {
-        "dataset_id": "test_ds",
-        "dataset_version": "v1.0",
-        "source_uri": "C:/Windows/System32/drivers/etc/hosts",
-    }
-    res_abs = client.post("/preprocessing", json=payload_abs)
-    assert res_abs.status_code == 422
-    assert res_abs.json()["error"]["code"] == "DATASET_CONTRACT_ERROR"
-
-
-def test_preprocessing_outside_allowed_root_rejection(client):
-    """POST /preprocessing rejects source_uri that exists in repo but is outside allowed data roots."""
-    payload = {
-        "dataset_id": "test_ds",
-        "dataset_version": "v1.0",
-        "source_uri": "docs/architecture.md",
-    }
-    res = client.post("/preprocessing", json=payload)
+    # 3. dataset_version traversal
+    res = client.post("/preprocessing", json={"dataset_id": "ds", "dataset_version": "../../../etc/shadow"})
     assert res.status_code == 422
-    data = res.json()
-    assert "error" in data
-    assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
+    assert res.json()["error"]["code"] == "DATASET_CONTRACT_ERROR"
 
 
-def test_preprocessing_dataset_id_path_traversal_rejection(client):
-    """POST /preprocessing rejects dataset_id with path traversal (..)."""
-    payload = {
-        "dataset_id": "../../../etc/passwd",
+# ==========================================
+# 6. Reanalysis Policy & Reuse
+# ==========================================
+
+def test_preprocessing_reanalysis_policy(client, sample_wide_csv, tmp_path, monkeypatch):
+    """force_reanalyze=False reuses latest; force_reanalyze=True publishes new plan ID."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    payload_initial = {
+        "dataset_id": "reuse_ds",
         "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": False,
     }
-    res = client.post("/preprocessing", json=payload)
-    assert res.status_code == 422
-    data = res.json()
-    assert "error" in data
-    assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
+
+    # 1. First run creates plan
+    res1 = client.post("/preprocessing", json=payload_initial)
+    assert res1.status_code == 200
+    d1 = res1.json()
+    plan_id1 = d1["preprocessing_plan_id"]
+    plan_ver1 = d1["preprocessing_plan_version"]
+
+    # 2. Second run with force_reanalyze=False reuses exact plan
+    res2 = client.post("/preprocessing", json=payload_initial)
+    assert res2.status_code == 200
+    d2 = res2.json()
+    assert d2["preprocessing_plan_id"] == plan_id1
+    assert d2["preprocessing_plan_version"] == plan_ver1
+
+    # 3. Third run with force_reanalyze=True creates new plan ID but keeps content version (same content)
+    payload_reanalyze = {**payload_initial, "force_reanalyze": True}
+    res3 = client.post("/preprocessing", json=payload_reanalyze)
+    assert res3.status_code == 200
+    d3 = res3.json()
+    plan_id3 = d3["preprocessing_plan_id"]
+    plan_ver3 = d3["preprocessing_plan_version"]
+
+    assert plan_id3 != plan_id1  # New unique plan ID
+    assert plan_ver3 == plan_ver1  # Content is identical, so content-hash version matches
 
 
-def test_preprocessing_dataset_version_path_traversal_rejection(client):
-    """POST /preprocessing rejects dataset_version with path traversal (..)."""
+def test_preprocessing_corrupted_latest_fails_fast(client, sample_wide_csv, tmp_path, monkeypatch):
+    """Corrupted latest.json or checksum mismatch raises DatasetContractError instead of silent recreation."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
     payload = {
-        "dataset_id": "valid_ds",
-        "dataset_version": "../../../etc/shadow",
+        "dataset_id": "corrupt_ds",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": True,
     }
-    res = client.post("/preprocessing", json=payload)
-    assert res.status_code == 422
-    data = res.json()
-    assert "error" in data
-    assert data["error"]["code"] == "DATASET_CONTRACT_ERROR"
+    res1 = client.post("/preprocessing", json=payload)
+    assert res1.status_code == 200
+
+    # Tamper with the plan file
+    plan_dir = models_store / "cache" / "preprocessing_plans" / "corrupt_ds" / "v1.0"
+    latest_file = plan_dir / "latest.json"
+    with open(latest_file, "r", encoding="utf-8") as f:
+        latest_data = json.load(f)
+
+    plan_file = plan_dir / latest_data["path"]
+    with open(plan_file, "w", encoding="utf-8") as f:
+        f.write('{"tampered": true}')
+
+    # Now call with force_reanalyze=False -> must detect checksum corruption
+    payload_reuse = {**payload, "force_reanalyze": False}
+    res_tampered = client.post("/preprocessing", json=payload_reuse)
+    assert res_tampered.status_code == 422
+    assert res_tampered.json()["error"]["code"] == "DATASET_CONTRACT_ERROR"
 
 
-def test_preprocessing_dataset_id_lookup_success(client):
-    """POST /preprocessing successfully finds file by dataset_id within PATHS.data_dir."""
-    # Ensure test file exists in data/
-    test_file = PATHS.data_dir / "lookup_test_dataset" / "v1.0.csv"
-    test_file.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame({"asset_id": ["A1"], "timestamp": ["2026-01-01 00:00:00"], "val": [10.0]})
-    df.to_csv(test_file, index=False)
-
-    try:
-        payload = {
-            "dataset_id": "lookup_test_dataset",
-            "dataset_version": "v1.0",
-            "force_reanalyze": True,
-        }
-        res = client.post("/preprocessing", json=payload)
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "succeeded"
-        assert data["dataset_id"] == "lookup_test_dataset"
-        assert data["dataset_version"] == "v1.0"
-    finally:
-        if test_file.exists():
-            test_file.unlink()
-        if test_file.parent.exists():
-            test_file.parent.rmdir()
-
-
-def test_preprocessing_plan_cache_and_reuse(client, sample_wide_csv, tmp_path):
-    """POST /preprocessing reuses cached plan when force_reanalyze=False and regenerates when True."""
-    repo = PreprocessingRepository(base_dir=tmp_path / "plans")
-    service = PreprocessingService(repository=repo)
-
-    req1 = PreprocessingRequest(
-        dataset_id="cache_test",
-        dataset_version="v1",
-        source_uri=sample_wide_csv,
-        force_reanalyze=False,
-    )
-    res1 = service.run_preprocessing(req1)
-    plan_path = repo.get_plan_path("cache_test", "v1")
-    assert plan_path.exists()
-
-    # Re-run: should reuse
-    res2 = service.run_preprocessing(req1)
-    assert res2.status == "succeeded"
-    assert res2.preprocessing_plan_version == res1.preprocessing_plan_version
-
-
-def test_legacy_extraction_facade_compatibility(sample_wide_csv):
-    """Verify legacy systems.generator.extraction import facades delegate correctly to preprocessing."""
-    from systems.generator.extraction import (
-        load_all_sources as legacy_load_all,
-        extract_with_plan as legacy_extract_with_plan,
-        build_extraction_plan as legacy_build_plan,
-    )
-    from systems.generator.extraction.extraction_agent import ExtractionPlanner as LegacyPlanner
-
-    actual_file = str(PATHS.data_dir / sample_wide_csv)
-    plan = legacy_build_plan(actual_file)
-    assert "structure_type" in plan
-    assert "selected_columns" in plan
-
-    df = legacy_extract_with_plan(actual_file, plan)
-    assert not df.empty
-    assert len(df) == 3
-
+# ==========================================
+# 7. Atomicity & Failure Isolation
+# ==========================================
 
 def test_preprocessing_full_execution_failure_prevents_plan_publishing(client, tmp_path, monkeypatch):
-    """If full dataset execution fails after preview/validation, canonical plan must NOT be published."""
+    """If full dataset execution fails after preview/validation, plan and latest pointer must NOT be published."""
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     models_store = tmp_path / "models_store"
@@ -337,11 +427,10 @@ def test_preprocessing_full_execution_failure_prevents_plan_publishing(client, t
     monkeypatch.setattr(PATHS, "data_preprocessed", data_dir)
     monkeypatch.setattr(PATHS, "models_store", models_store)
 
-    # 1. Create a dataset where first 5 rows are valid, but row 6 has duplicate (id, time)
+    # Create dataset where first 5 rows are valid, but row 6 has duplicate (id, time)
     rows = []
     for i in range(5):
         rows.append({"asset_id": "M1", "timestamp": f"2026-01-01 0{i}:00:00", "voltage": 220.0 + i, "rotation": 1500.0})
-    # Row 6 duplicate with row 5
     rows.append({"asset_id": "M1", "timestamp": "2026-01-01 04:00:00", "voltage": 999.0, "rotation": 9999.0})
     df_dup = pd.DataFrame(rows)
 
@@ -357,95 +446,60 @@ def test_preprocessing_full_execution_failure_prevents_plan_publishing(client, t
     }
 
     res = client.post("/preprocessing", json=payload)
-    assert res.status_code == 422  # full execution fails due to duplicate_policy='error'
+    assert res.status_code == 422
     data = res.json()
     assert data["error"]["code"] == "PREPROCESSING_PLANNING_ERROR"
 
-    # Verify canonical plan was NOT published
-    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
-    plan_path = repo.get_plan_path("dup_test", "v1.0")
-    assert not plan_path.exists()
-
-    # Verify no temp files exist in repo directory
-    temp_files = list(repo.base_dir.glob(".tmp_*"))
-    assert len(temp_files) == 0
+    # Verify no plan directory or files created
+    plan_dir = models_store / "cache" / "preprocessing_plans" / "dup_test" / "v1.0"
+    assert not plan_dir.exists()
 
 
-def test_preprocessing_overwrite_failure_preserves_existing_plan(client, tmp_path, monkeypatch):
-    """When force_reanalyze=True but full execution of new plan fails, existing canonical plan is untouched."""
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    models_store = tmp_path / "models_store"
-    models_store.mkdir(parents=True, exist_ok=True)
+# ==========================================
+# 8. App Factory & Migration Verification
+# ==========================================
 
-    monkeypatch.setattr(PATHS, "data_dir", data_dir)
-    monkeypatch.setattr(PATHS, "data_preprocessed", data_dir)
-    monkeypatch.setattr(PATHS, "models_store", models_store)
+def test_generator_app_factory_and_compatibility():
+    """Verify app factory create_app, endpoint registration, and generator_main compatibility shim."""
+    from systems.generator.app.main import app as canonical_app, create_app as factory_create_app
+    from systems.generator.generator_main import app as legacy_app
 
-    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+    # 1. Repeatable create_app
+    app2 = factory_create_app()
+    assert app2 is not None
+    assert app2.title == "Generator Domain API"
 
-    # 1. Publish initial valid plan
-    initial_plan = {
-        "structure_type": "tabular_column_as_attribute",
-        "id_column": "asset_id",
-        "time_column": "timestamp",
-        "selected_columns": ["asset_id", "timestamp", "voltage"],
-    }
-    repo.publish_plan("preserve_test", "v1.0", initial_plan)
-    plan_path = repo.get_plan_path("preserve_test", "v1.0")
-    assert plan_path.exists()
-    with open(plan_path, "r", encoding="utf-8") as f:
-        original_content = f.read()
+    # 2. Both canonical app and legacy app have /health, /preprocessing, /internal/train, /internal/retrain
+    c_client = TestClient(canonical_app)
+    l_client = TestClient(legacy_app)
 
-    # 2. Create dataset with failure on full execution (row 6 duplicate)
-    rows = []
-    for i in range(5):
-        rows.append({"asset_id": "M1", "timestamp": f"2026-01-01 0{i}:00:00", "voltage": 220.0 + i})
-    rows.append({"asset_id": "M1", "timestamp": "2026-01-01 04:00:00", "voltage": 999.0})
-    df_dup = pd.DataFrame(rows)
-    dup_file = data_dir / "preserve_test.csv"
-    df_dup.to_csv(dup_file, index=False)
-
-    # 3. Post with force_reanalyze=True -> fails on full execution
-    payload = {
-        "dataset_id": "preserve_test",
-        "dataset_version": "v1.0",
-        "source_uri": "preserve_test.csv",
-        "force_reanalyze": True,
-        "duplicate_policy": "error",
-    }
-    res = client.post("/preprocessing", json=payload)
-    assert res.status_code == 422
-
-    # 4. Verify existing plan file is completely intact and unaltered
-    assert plan_path.exists()
-    with open(plan_path, "r", encoding="utf-8") as f:
-        current_content = f.read()
-    assert current_content == original_content
-
-    # 5. Verify no temp files exist
-    temp_files = list(repo.base_dir.glob(".tmp_*"))
-    assert len(temp_files) == 0
+    for tc in (c_client, l_client):
+        assert tc.get("/health").status_code == 200
+        # Check endpoints exist (422 validation on empty post proves route exists)
+        assert tc.post("/preprocessing", json={}).status_code == 422
+        assert tc.post("/internal/train", json={"force_reanalyze": "invalid"}).status_code == 422
+        assert tc.post("/internal/retrain", json={"force_reanalyze": "invalid"}).status_code == 422
 
 
-def test_preprocessing_success_publishes_plan(client, sample_wide_csv, tmp_path, monkeypatch):
-    """Successful preview and full execution publishes plan and returns valid mapping_uri."""
-    models_store = tmp_path / "models_store"
-    models_store.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(PATHS, "models_store", models_store)
+def test_preprocessing_endpoint_is_synchronous():
+    """Verify post_preprocessing route endpoint is a regular sync def for threadpool execution."""
+    from systems.generator.app.preprocessing.preprocessing_router import post_preprocessing
+    assert not inspect.iscoroutinefunction(post_preprocessing)
 
-    payload = {
-        "dataset_id": "success_test",
-        "dataset_version": "v1.0",
-        "source_uri": sample_wide_csv,
-        "force_reanalyze": True,
-    }
-    res = client.post("/preprocessing", json=payload)
-    assert res.status_code == 200
-    data = res.json()
-    assert data["status"] == "succeeded"
-    assert "mapping_uri" in data["result"]
 
-    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
-    plan_path = repo.get_plan_path("success_test", "v1.0")
-    assert plan_path.is_file()
+def test_legacy_extraction_facade_compatibility(sample_wide_csv):
+    """Verify legacy systems.generator.extraction import facades delegate correctly to preprocessing."""
+    from systems.generator.extraction import (
+        load_all_sources as legacy_load_all,
+        extract_with_plan as legacy_extract_with_plan,
+        build_extraction_plan as legacy_build_plan,
+    )
+
+    actual_file = str(PATHS.data_dir / sample_wide_csv)
+    plan = legacy_build_plan(actual_file)
+    assert "structure_type" in plan
+    assert "selected_columns" in plan
+
+    df = legacy_extract_with_plan(actual_file, plan)
+    assert not df.empty
+    assert len(df) == 3

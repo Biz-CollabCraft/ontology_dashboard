@@ -79,23 +79,24 @@ class PreprocessingRequest(BaseModel):
 
 
 class PreprocessingResultPayload(BaseModel):
-    extraction_type: str = "tabular_column_as_attribute"
-    structure_type: Optional[str] = None
+    structure_type: str
     id_column: Optional[str] = None
     time_column: Optional[str] = None
     attribute_column: Optional[str] = None
     value_column: Optional[str] = None
-    duplicate_policy: str = "error"
-    aggregation: Optional[str] = None
-    mapping_uri: str
+    duplicate_policy: Literal["error", "aggregate"] = "error"
+    aggregation: Optional[Literal["mean", "first", "sum"]] = None
+    preprocessing_plan_uri: str
+    preprocessing_plan_sha256: str
 
 
 class PreprocessingResponse(BaseModel):
     request_id: str
     run_id: str
-    status: Literal["succeeded", "failed"] = "succeeded"
+    status: Literal["succeeded"] = "succeeded"
     dataset_id: str
     dataset_version: str
+    preprocessing_plan_id: str
     preprocessing_plan_version: str
     result: PreprocessingResultPayload
 

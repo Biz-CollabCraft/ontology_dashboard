@@ -20,7 +20,7 @@ def get_preprocessing_service() -> PreprocessingService:
 
 
 @router.post("/preprocessing", response_model=PreprocessingResponse)
-async def post_preprocessing(
+def post_preprocessing(
     req: PreprocessingRequest,
     request: Request,
     service: PreprocessingService = Depends(get_preprocessing_service),
