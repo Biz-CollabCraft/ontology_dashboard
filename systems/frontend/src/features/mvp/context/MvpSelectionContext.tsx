@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { mvpProjectPath, navigate } from "../../../routing";
-import type { MvpRoleLens, MvpSelection, MvpView } from "../api/mvpContracts";
+import type { MvpReportTab, MvpRoleLens, MvpSelection, MvpView } from "../api/mvpContracts";
 
 const SESSION_PREFIX = "ontology-dashboard:mvp-selection:";
 
@@ -20,8 +20,16 @@ interface MvpSelectionContextValue {
 const MvpSelectionContext = createContext<MvpSelectionContextValue | null>(null);
 
 function validView(value: string | null): MvpView {
-  if (value === "objects" || value === "operations" || value === "executive-report") return value;
+  if (value === "objects" || value === "operations" || value === "reports") return value;
+  if (value === "executive-report" || value === "inspection-report") return "reports";
   return "overview";
+}
+
+function validReportTab(value: string | null, legacyView?: string | null): MvpReportTab {
+  if (value === "inspection-request" || value === "status-map" || value === "summary-report" || value === "executive-brief") return value;
+  if (legacyView === "inspection-report") return "inspection-request";
+  if (legacyView === "executive-report") return "executive-brief";
+  return "status-map";
 }
 
 function validRole(value: string | null, fallback: MvpRoleLens): MvpRoleLens {
@@ -49,13 +57,18 @@ export function parseMvpSelection(input: {
   }
   const params = new URLSearchParams(input.search);
   const queryHasView = params.has("view");
+  const queryView = params.get("view");
+  const queryHasReportTab = params.has("report");
   const queryHasRole = params.has("role");
   const queryHasWorkspace = params.has("workspace_id");
   const queryHasAsset = params.has("asset_id");
   const queryHasEvent = params.has("event_id");
   return {
     projectId: input.projectId,
-    view: queryHasView ? validView(params.get("view")) : validView(typeof session.view === "string" ? session.view : null),
+    view: queryHasView ? validView(queryView) : validView(typeof session.view === "string" ? session.view : null),
+    reportTab: queryHasReportTab
+      ? validReportTab(params.get("report"), queryView)
+      : validReportTab(typeof session.reportTab === "string" ? session.reportTab : null, queryView ?? (typeof session.view === "string" ? session.view : null)),
     role: queryHasRole
       ? validRole(params.get("role"), input.defaultRole)
       : validRole(typeof session.role === "string" ? session.role : null, input.defaultRole),
@@ -68,6 +81,7 @@ export function parseMvpSelection(input: {
 export function selectionSearch(selection: MvpSelection): string {
   const params = new URLSearchParams();
   params.set("view", selection.view);
+  if (selection.view === "reports") params.set("report", selection.reportTab);
   params.set("role", selection.role);
   if (selection.workspaceId) params.set("workspace_id", selection.workspaceId);
   if (selection.assetId) params.set("asset_id", selection.assetId);
