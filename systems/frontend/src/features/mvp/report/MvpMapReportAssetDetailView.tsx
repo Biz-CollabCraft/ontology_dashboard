@@ -4,7 +4,7 @@ import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpRiskStatus } from "../ap
 import { formatTimestamp } from "../components/MvpUi";
 
 const observedAt = "2026-08-29 23:00";
-const alarmThresholdBasis = "0.85로 낮추면 고장 5건은 더 빨리 잡지만, 점검은 126회 늘어납니다. 점검에 63h를 더 쓰고 줄이는 고장 손실은 24.6h라 순손해가 약 38.4h입니다. 그래서 0.90을 알람 경계로 둡니다.";
+const alarmThresholdBasis = "0.85로 낮추면 고장 5건은 더 빨리 잡지만, 점검은 126회 늘어납니다. 점검에 63시간을 더 쓰고 줄이는 고장 손실은 24시간이라 순손해가 약 38시간입니다. 그래서 0.90을 알람 경계로 둡니다.";
 
 const detailRangeOptions = [
   { id: "1h", label: "1시간", minutes: 60, pointCount: 7, displayGrain: "10분 원본", ticks: ["22:00", "22:20", "22:40", "23:00"] },
