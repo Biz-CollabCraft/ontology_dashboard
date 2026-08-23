@@ -4,7 +4,7 @@ import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpRiskStatus } from "../ap
 import { formatTimestamp } from "../components/MvpUi";
 
 const observedAt = "2026-08-29 23:00";
-const alarmThresholdBasis = "점검/고장 비용비 기준: 긴급 정비 5.42h, 계획 점검 0.5h로 손익분기 약 10.8회. 0.8 완화 비용이 손익분기 5.2배라 알람 경계 0.9 유지.";
+const alarmThresholdBasis = "0.85로 낮추면 고장 5건을 더 잡지만 점검 126회가 늘어납니다. 계획 점검 0.5h 기준 추가 점검 63h, 조기 포착 절감 24.6h라 순손해 약 38.4h입니다. 그래서 알람 경계는 0.90으로 둡니다.";
 
 const detailRangeOptions = [
   { id: "1h", label: "1시간", minutes: 60, pointCount: 7, displayGrain: "10분 원본", ticks: ["22:00", "22:20", "22:40", "23:00"] },
@@ -409,7 +409,7 @@ function SeriesChart({
         <div><Icon size={17} /><strong>{title}</strong></div>
         {baseline ? <span className="asset-baseline-key"><i style={{ background: color }} />평상시 평균 {formatValue(baseline.lower, unit)}-{formatValue(baseline.upper, unit)}</span> : null}
         {threshold !== undefined ? (
-          <span className="asset-threshold-key" tabIndex={0} data-tooltip={alarmThresholdBasis} title={alarmThresholdBasis}>
+          <span className="asset-threshold-key" tabIndex={0} data-tooltip={alarmThresholdBasis} aria-label={alarmThresholdBasis}>
             알람 경계 {threshold}% <small>근거</small>
           </span>
         ) : null}
