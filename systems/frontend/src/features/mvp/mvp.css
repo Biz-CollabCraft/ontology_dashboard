@@ -1124,7 +1124,7 @@
 .mvp-reports-page .asset-series-chart { background: #121922; }
 .mvp-reports-page .asset-baseline-key { display: inline-flex; align-items: center; gap: 6px; }
 .mvp-reports-page .asset-baseline-key i { width: 18px; height: 8px; border: 1px solid currentColor; opacity: .18; }
-.mvp-reports-page .asset-baseline-band { fill: rgba(69,184,128,.11); stroke: rgba(69,184,128,.34); }
+.mvp-reports-page .asset-baseline-band { fill: rgba(69,184,128,.11); fill-opacity: .14; stroke: rgba(69,184,128,.34); stroke-opacity: .42; }
 .mvp-reports-page .asset-baseline-mean { stroke: #76d6a7; }
 .mvp-reports-page .asset-crossing-line { stroke-width: 1.4; stroke-dasharray: 3 4; opacity: .78; }
 .mvp-reports-page .asset-crossing-marker { stroke: #121922; stroke-width: 2; }
