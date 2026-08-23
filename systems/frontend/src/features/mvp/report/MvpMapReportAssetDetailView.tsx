@@ -358,7 +358,7 @@ function SeriesChart({
   color: string;
   emptyLabel: string;
 }) {
-  const frame = { left: 68, right: 684, top: 16, bottom: 102 };
+  const frame = { left: 68, right: 684, top: 16, bottom: 188 };
   const width = frame.right - frame.left;
   const height = frame.bottom - frame.top;
   const xAt = (index: number) => frame.left + (index / Math.max(1, values.length - 1)) * width;
@@ -381,7 +381,7 @@ function SeriesChart({
       {values.length === 0 ? (
         <div className="asset-chart-empty"><Database size={20} /><strong>{emptyLabel}</strong><span>값을 0으로 대체하지 않습니다.</span></div>
       ) : (
-        <svg className="asset-series-chart" viewBox="0 0 720 144" role="img" aria-label={`${title} ${range.label} 시계열`}>
+        <svg className="asset-series-chart" viewBox="0 0 720 230" role="img" aria-label={`${title} ${range.label} 시계열`}>
           <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
           {yTicks.map((tick) => {
             const y = yAt(tick);
@@ -394,15 +394,15 @@ function SeriesChart({
             <g>
               <line className="asset-crossing-line" x1={crossingX} x2={crossingX} y1={crossingY} y2={frame.bottom} style={{ stroke: color }} />
               <circle className="asset-crossing-marker" cx={crossingX} cy={crossingY} r="5" style={{ fill: color }} />
-              <text className="asset-crossing-label" x={clamp(crossingX + 8, 76, 548)} y={clamp(crossingY + 17, 30, 96)} style={{ fill: color }}>
+              <text className="asset-crossing-label" x={clamp(crossingX + 8, 76, 548)} y={clamp(crossingY + 17, 30, 182)} style={{ fill: color }}>
                 {threshold !== undefined ? "경고 초과" : "범위 이탈"} {formatCrossingTime(range, crossingIndex, values.length)}
               </text>
             </g>
           ) : null}
           {currentY !== null ? <circle className="asset-current-marker" cx={frame.right} cy={currentY} r="5" style={{ fill: color }} /> : null}
-          {currentY !== null ? <text className="asset-current-label" x="674" y={clamp(currentY - 8, 25, 98)} textAnchor="end" style={{ fill: color }}>{formatValue(current, unit)}</text> : null}
-          {range.ticks.map((tick, index) => <text key={tick} className="asset-chart-axis" x={frame.left + (index / 3) * width} y="124" textAnchor={index === 0 ? "start" : index === 3 ? "end" : "middle"}>{tick}</text>)}
-          <text className="asset-chart-axis-title" x="376" y="140" textAnchor="middle">시간</text>
+          {currentY !== null ? <text className="asset-current-label" x="674" y={clamp(currentY - 8, 25, 184)} textAnchor="end" style={{ fill: color }}>{formatValue(current, unit)}</text> : null}
+          {range.ticks.map((tick, index) => <text key={tick} className="asset-chart-axis" x={frame.left + (index / 3) * width} y="210" textAnchor={index === 0 ? "start" : index === 3 ? "end" : "middle"}>{tick}</text>)}
+          <text className="asset-chart-axis-title" x="376" y="226" textAnchor="middle">시간</text>
         </svg>
       )}
     </section>
