@@ -335,6 +335,36 @@ function formatCrossingTime(range: DetailRange, index: number, count: number) {
   }).format(date);
 }
 
+function buildVisibleDomain({
+  values,
+  domain,
+  baseline,
+  threshold,
+}: {
+  values: number[];
+  domain: Domain;
+  baseline?: Baseline;
+  threshold?: number;
+}) {
+  const anchors = [
+    ...values,
+    ...(baseline ? [baseline.lower, baseline.upper] : []),
+    ...(threshold !== undefined ? [threshold] : []),
+  ].filter(Number.isFinite);
+
+  if (anchors.length === 0) return domain;
+
+  const rawMinimum = Math.min(...anchors);
+  const rawMaximum = Math.max(...anchors);
+  const rawSpan = Math.max(rawMaximum - rawMinimum, (domain.maximum - domain.minimum) * 0.08, 1);
+  const padding = rawSpan * 0.18;
+  const minimum = Math.max(domain.minimum, rawMinimum - padding);
+  const maximum = Math.min(domain.maximum, rawMaximum + padding);
+
+  if (maximum - minimum < rawSpan * 0.4) return domain;
+  return { minimum, maximum };
+}
+
 function SeriesChart({
   title,
   icon: Icon,
@@ -361,15 +391,16 @@ function SeriesChart({
   const frame = { left: 68, right: 684, top: 16, bottom: 274 };
   const width = frame.right - frame.left;
   const height = frame.bottom - frame.top;
+  const visibleDomain = buildVisibleDomain({ values, domain, baseline, threshold });
   const xAt = (index: number) => frame.left + (index / Math.max(1, values.length - 1)) * width;
-  const yAt = (value: number) => frame.bottom - ((value - domain.minimum) / (domain.maximum - domain.minimum)) * height;
+  const yAt = (value: number) => frame.bottom - ((value - visibleDomain.minimum) / (visibleDomain.maximum - visibleDomain.minimum)) * height;
   const points = values.map((value, index) => `${xAt(index).toFixed(1)},${yAt(value).toFixed(1)}`).join(" ");
   const crossingIndex = values.findIndex((value) => threshold !== undefined ? value >= threshold : baseline ? value < baseline.lower || value > baseline.upper : false);
   const crossingX = crossingIndex >= 0 ? xAt(crossingIndex) : null;
   const crossingY = crossingIndex >= 0 ? yAt(values[crossingIndex]) : null;
   const current = values.at(-1);
   const currentY = current === undefined ? null : yAt(current);
-  const yTicks = [domain.maximum, (domain.minimum + domain.maximum) / 2, domain.minimum];
+  const yTicks = [visibleDomain.maximum, (visibleDomain.minimum + visibleDomain.maximum) / 2, visibleDomain.minimum];
 
   return (
     <section className="asset-series-block">
