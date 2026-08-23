@@ -1,9 +1,10 @@
-import { AlertTriangle, CalendarRange, ClipboardCheck, Clock3, DatabaseZap, FileText, Filter, Gauge, Map as MapIcon, Printer, RotateCcw, ShieldCheck, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarRange, ClipboardCheck, Clock3, DatabaseZap, FileText, Filter, Gauge, Map as MapIcon, Printer, ShieldCheck, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpEventDetailModel, MvpLineRisk, MvpReportTab, MvpRiskStatus } from "../api/mvpContracts";
 import { DECISION_LABEL, formatMinutes, formatProbability, formatTimestamp } from "../components/MvpUi";
 import { MvpExecutiveReportPage } from "./MvpExecutiveReportPage";
 import { MvpInspectionReportPage } from "./MvpInspectionReportPage";
+import { MvpMapReportAssetDetailView } from "./MvpMapReportAssetDetailView";
 
 const REPORT_TABS: Array<{ id: MvpReportTab; label: string; description: string; icon: typeof MapIcon }> = [
   { id: "status-map", label: "상태 요약", description: "설비 상태 맵과 우선순위", icon: MapIcon },
@@ -11,32 +12,6 @@ const REPORT_TABS: Array<{ id: MvpReportTab; label: string; description: string;
   { id: "summary-report", label: "요약 보고서", description: "관리자 공유본", icon: FileText },
   { id: "executive-brief", label: "Executive Brief", description: "선택 Event 보고서", icon: FileText },
 ];
-
-const GRAPH_RANGES = [
-  { id: "1h", label: "1시간", pointCount: 12, grain: "5분 단위" },
-  { id: "6h", label: "6시간", pointCount: 36, grain: "10분 단위" },
-  { id: "24h", label: "24시간", pointCount: 48, grain: "30분 단위" },
-  { id: "7d", label: "7일", pointCount: 56, grain: "3시간 단위" },
-] as const;
-
-const DEFAULT_FEATURE_SERIES = [
-  { id: "rotation_raw", label: "회전 상태", unit: "rpm", color: "#4c90f0", base: 455, spread: 42 },
-  { id: "pressure_raw", label: "압력", unit: "kPa", color: "#45b880", base: 100, spread: 8 },
-  { id: "vibration_raw", label: "진동", unit: "mm/s", color: "#f0a23a", base: 37, spread: 7 },
-  { id: "voltage_raw", label: "전압", unit: "V", color: "#9a77e8", base: 176, spread: 5 },
-] as const;
-
-interface ReportSeriesLog {
-  timeLabel: string;
-  value: number;
-  status: "평균 구간" | "상한 이탈" | "하한 이탈";
-}
-
-interface ReportSeriesBaseline {
-  mean: number;
-  lower: number;
-  upper: number;
-}
 
 const MAP_STATUS_META: Record<MvpRiskStatus, { label: string; tone: string; sentence: string }> = {
   critical: { label: "위험", tone: "critical", sentence: "즉시 점검이 필요한 위험 신호" },
@@ -251,251 +226,6 @@ function buildLineMapNodes(line: string, assets: MvpAsset[], summary: MvpLineRis
   return nodes.sort((a, b) => a.label.localeCompare(b.label, "ko", { numeric: true }));
 }
 
-function seededWave(seed: string, count: number, end: number, spread: number, floor = 0, ceiling = 100) {
-  const phase = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 23;
-  return Array.from({ length: count }, (_, index) => {
-    const progress = index / Math.max(1, count - 1);
-    const trend = end - spread + spread * progress;
-    const wave = Math.sin((progress * 3.4 + phase) * Math.PI) * spread * 0.22;
-    return Math.min(ceiling, Math.max(floor, trend + wave));
-  });
-}
-
-function buildFeatureSeries(asset: MvpAsset, range: (typeof GRAPH_RANGES)[number]) {
-  const factorByFeature = new Map(asset.topFactors.map((factor) => [factor.feature, factor]));
-  const riskLevel = asset.failureProbability ?? 0.18;
-
-  return DEFAULT_FEATURE_SERIES.map((feature, index) => {
-    const matchedFactor = [...factorByFeature.entries()].find(([featureId]) => featureId.includes(feature.id) || feature.id.includes(featureId));
-    const factor = matchedFactor?.[1];
-    const factorValue = typeof factor?.value === "number" ? factor.value : null;
-    const riskDirection = feature.id === "rotation_raw" || feature.id === "voltage_raw" ? -1 : 1;
-    const featureEnd = factorValue ?? feature.base + riskDirection * riskLevel * feature.spread + (index - 1.5) * feature.spread * 0.12;
-    const values = seededWave(
-      `${asset.assetId}-${range.id}-${feature.id}`,
-      range.pointCount,
-      featureEnd,
-      Math.max(feature.spread * 0.55, Math.abs(featureEnd) * 0.035),
-      Math.max(0, feature.base - feature.spread * 2.1),
-      feature.base + feature.spread * 2.1,
-    );
-
-    return {
-      id: feature.id,
-      title: factor?.label ?? feature.label,
-      values,
-      color: feature.color,
-      unit: ` ${factor?.unit ?? feature.unit}`,
-      baseline: {
-        mean: feature.base,
-        lower: feature.base - feature.spread * 0.42,
-        upper: feature.base + feature.spread * 0.42,
-      },
-    };
-  });
-}
-
-function sampleLogRows(values: number[], baseline: ReportSeriesBaseline | undefined): ReportSeriesLog[] {
-  const labels = ["-50분", "-40분", "-30분", "-20분", "-10분", "현재"];
-  return values.slice(-6).map((value, index) => ({
-    timeLabel: labels[index] ?? `${index}`,
-    value,
-    status: baseline && value > baseline.upper ? "상한 이탈" : baseline && value < baseline.lower ? "하한 이탈" : "평균 구간",
-  }));
-}
-
-function MiniSeriesChart({
-  title,
-  values,
-  color,
-  unit,
-  threshold,
-  baseline,
-}: {
-  title: string;
-  values: number[];
-  color: string;
-  unit: string;
-  threshold?: number;
-  baseline?: ReportSeriesBaseline;
-}) {
-  const width = 640;
-  const height = 150;
-  const frame = { left: 46, right: 618, top: 18, bottom: 112 };
-  const min = Math.min(...values, threshold ?? values[0] ?? 0, baseline?.lower ?? values[0] ?? 0);
-  const max = Math.max(...values, threshold ?? values[0] ?? 1, baseline?.upper ?? values[0] ?? 1);
-  const padding = Math.max(1, (max - min) * 0.18);
-  const domainMin = Math.max(0, min - padding);
-  const domainMax = Math.max(domainMin + 1, max + padding);
-  const xAt = (index: number) => frame.left + (index / Math.max(1, values.length - 1)) * (frame.right - frame.left);
-  const yAt = (value: number) => frame.bottom - ((value - domainMin) / (domainMax - domainMin)) * (frame.bottom - frame.top);
-  const points = values.map((value, index) => `${xAt(index).toFixed(1)},${yAt(value).toFixed(1)}`).join(" ");
-  const latest = values.at(-1) ?? 0;
-  const outOfBandPoints = baseline
-    ? values.map((value, index) => ({ value, index })).filter(({ value }) => value < baseline.lower || value > baseline.upper)
-    : [];
-  const logs = sampleLogRows(values, baseline);
-
-  return (
-    <section className="asset-series-block">
-      <header className="asset-series-heading">
-        <div><Gauge size={17} /><strong>{title}</strong></div>
-        <span>현재 {latest.toFixed(1)}{unit}</span>
-      </header>
-      <svg className="asset-series-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} 그래프`}>
-        <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={frame.right - frame.left} height={frame.bottom - frame.top} />
-        {baseline ? (
-          <>
-            <rect className="asset-baseline-band" x={frame.left} y={yAt(baseline.upper)} width={frame.right - frame.left} height={Math.max(2, yAt(baseline.lower) - yAt(baseline.upper))} />
-            <line className="asset-baseline-mean" x1={frame.left} x2={frame.right} y1={yAt(baseline.mean)} y2={yAt(baseline.mean)} />
-          </>
-        ) : null}
-        {[domainMax, (domainMax + domainMin) / 2, domainMin].map((tick) => {
-          const y = yAt(tick);
-          return (
-            <g key={tick}>
-              <line className="asset-chart-grid" x1={frame.left} x2={frame.right} y1={y} y2={y} />
-              <text className="asset-chart-axis" x="38" y={y + 4} textAnchor="end">{tick.toFixed(0)}</text>
-            </g>
-          );
-        })}
-        {threshold !== undefined ? <line className="asset-threshold-line" x1={frame.left} x2={frame.right} y1={yAt(threshold)} y2={yAt(threshold)} /> : null}
-        <polyline className="asset-series-line" points={points} style={{ stroke: color }} />
-        {outOfBandPoints.map(({ value, index }) => (
-          <circle key={`${index}-${value}`} className="asset-outlier-marker" cx={xAt(index)} cy={yAt(value)} r="4.5" />
-        ))}
-        <circle className="asset-current-marker" cx={frame.right} cy={yAt(latest)} r="5" style={{ fill: color }} />
-        <text className="asset-current-label" x={frame.right - 8} y={Math.max(28, yAt(latest) - 8)} textAnchor="end" style={{ fill: color }}>{latest.toFixed(1)}{unit}</text>
-        {baseline ? (
-          <>
-            <text className="asset-chart-axis" x={frame.right - 2} y={Math.max(frame.top + 12, yAt(baseline.upper) - 4)} textAnchor="end">평균 상한</text>
-            <text className="asset-chart-axis" x={frame.right - 2} y={Math.min(frame.bottom - 4, yAt(baseline.lower) + 12)} textAnchor="end">평균 하한</text>
-          </>
-        ) : null}
-        <text className="asset-chart-axis" x={frame.left} y="136">시작</text>
-        <text className="asset-chart-axis" x={frame.right} y="136" textAnchor="end">현재</text>
-      </svg>
-      <div className="asset-series-meta">
-        {baseline ? (
-          <div className="asset-baseline-summary">
-            <span>평균 구간</span>
-            <strong>{baseline.lower.toFixed(1)}-{baseline.upper.toFixed(1)}{unit}</strong>
-            <small>평균 {baseline.mean.toFixed(1)}{unit} · 이탈 {outOfBandPoints.length}회</small>
-          </div>
-        ) : (
-          <div className="asset-baseline-summary sample">
-            <span>표시 기준</span>
-            <strong>{threshold !== undefined ? `임계값 ${threshold}${unit}` : "샘플 기준 없음"}</strong>
-            <small>실제 baseline API 연결 전 샘플 표시</small>
-          </div>
-        )}
-        <div className="asset-log-table" aria-label={`${title} 최근 로그 표`}>
-          <div className="asset-log-head"><span>시점</span><span>값</span><span>판정</span></div>
-          {logs.map((row) => (
-            <div key={`${title}-${row.timeLabel}`} className={row.status === "평균 구간" ? "" : "outlier"}>
-              <span>{row.timeLabel}</span>
-              <strong>{row.value.toFixed(1)}{unit}</strong>
-              <em>{row.status}</em>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MvpAssetGraphsSection({
-  model,
-  selectedEvent,
-  onSelectEvent,
-}: {
-  model: MvpBootstrapModel;
-  selectedEvent: MvpEvent | null;
-  onSelectEvent: (event: MvpEvent) => void;
-}) {
-  const [rangeId, setRangeId] = useState<(typeof GRAPH_RANGES)[number]["id"]>("6h");
-  const range = GRAPH_RANGES.find((item) => item.id === rangeId) ?? GRAPH_RANGES[1];
-  const eventById = useMemo(() => new Map(model.events.map((event) => [event.eventId, event])), [model.events]);
-  const selectedAsset = model.assets.find((asset) => asset.eventId === selectedEvent?.eventId)
-    ?? model.assets.find((asset) => asset.assetId === selectedEvent?.assetId)
-    ?? model.assets.find((asset) => asset.eventId)
-    ?? model.assets[0]
-    ?? null;
-  const riskEnd = selectedAsset?.failureProbability === null || selectedAsset?.failureProbability === undefined
-    ? 0
-    : selectedAsset.failureProbability * 100;
-  const riskValues = selectedAsset
-    ? seededWave(`${selectedAsset.assetId}-${range.id}-risk`, range.pointCount, riskEnd, Math.max(10, riskEnd * 0.42), 0, 100)
-    : [];
-  const featureSeries = selectedAsset ? buildFeatureSeries(selectedAsset, range) : [];
-
-  return (
-    <div className="asset-detail-view mvp-asset-graphs" data-testid="mvp-summary-graphs">
-      <section className="asset-detail-header">
-        <div className="asset-detail-header-main">
-          <span>선택 설비 상세</span>
-          <h1>{selectedAsset?.displayName ?? "선택 설비 없음"}</h1>
-          <p>{selectedAsset ? `${selectedAsset.assetType} · ${selectedAsset.line} · ${selectedAsset.assetId}` : "상태 맵에서 설비를 선택하세요."}</p>
-        </div>
-        <label className="asset-detail-picker">
-          <span>다른 설비 보기</span>
-          <select value={selectedAsset?.eventId ?? ""} onChange={(event) => {
-            const next = eventById.get(event.target.value);
-            if (next) onSelectEvent(next);
-          }}>
-            {model.assets.filter((asset) => asset.eventId).map((asset) => (
-              <option value={asset.eventId ?? ""} key={asset.assetId}>{asset.displayName} · {MAP_STATUS_META[asset.status].label}</option>
-            ))}
-          </select>
-        </label>
-        {selectedAsset ? <MapStatusBadge status={selectedAsset.status} /> : null}
-        <dl className="asset-detail-facts">
-          <div><dt>24시간 위험 예측</dt><dd>{formatProbability(selectedAsset?.failureProbability ?? null)}</dd></div>
-          <div><dt>예측 신뢰도</dt><dd>{selectedAsset?.confidence ?? "unavailable"}</dd></div>
-          <div><dt>기준 시각</dt><dd>{formatTimestamp(selectedAsset?.observedAt ?? model.context.observedAt)}</dd></div>
-          <div><dt>표시 모드</dt><dd>{model.context.sourceMode === "canonical-runtime" ? "Runtime Result" : "Fallback Replay"}</dd></div>
-        </dl>
-      </section>
-
-      <section className="asset-graph-workspace">
-        <header className="asset-graph-toolbar">
-          <div>
-            <span>피처 그래프와 전체 이력</span>
-            <h2>범위별 설비 상태 변화</h2>
-          </div>
-          <div className="asset-range-group" role="group" aria-label="그래프 시간 범위">
-            {GRAPH_RANGES.map((item) => (
-              <button type="button" key={item.id} aria-pressed={item.id === range.id} onClick={() => setRangeId(item.id)}>{item.label}</button>
-            ))}
-          </div>
-          <div className="asset-range-meta"><CalendarRange size={15} />원본 10분 · {range.grain}</div>
-        </header>
-
-        {selectedAsset ? (
-          <>
-            <MiniSeriesChart title="24시간 내 고장 위험도" values={riskValues} color="#b42318" unit="%" threshold={70} />
-            {featureSeries.map((series) => <MiniSeriesChart key={series.id} title={series.title} values={series.values} color={series.color} unit={series.unit} baseline={series.baseline} />)}
-            <section className="asset-history-section">
-              <header><div><RotateCcw size={16} /><strong>설비 전체 이력 · {selectedAsset.assetId}</strong></div><span>현재 MVP Event 스냅샷</span></header>
-              <div className="asset-history-columns" aria-hidden="true"><span>일시</span><span>유형</span><span>이력 내용</span><span>담당·메모</span></div>
-              <div className="asset-history-rows">
-                {(selectedAsset.eventId ? [eventById.get(selectedAsset.eventId)].filter((event): event is MvpEvent => Boolean(event)) : []).map((event) => (
-                  <article className="asset-history-row" key={event.eventId}>
-                    <time>{formatTimestamp(event.observedAt)}</time>
-                    <span className={`asset-history-kind ${MAP_STATUS_META[event.status].tone}`}>{MAP_STATUS_META[event.status].label}</span>
-                    <p>{DECISION_LABEL[event.recommendedDecision]} · {event.predictedFailureType}</p>
-                    <div className="asset-history-source">{event.assignedEngineer ?? "담당 미배정"}</div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </>
-        ) : <p>선택 가능한 설비가 없습니다.</p>}
-      </section>
-    </div>
-  );
-}
-
 function MvpStatusMapReport({
   model,
   selectedEvent,
@@ -705,7 +435,7 @@ function MvpSummaryReport({
 
       <MvpSummaryGraphBoard model={model} selected={selected} />
 
-      <MvpAssetGraphsSection model={model} selectedEvent={selectedEvent} onSelectEvent={onSelectEvent} />
+      <MvpMapReportAssetDetailView model={model} selectedEvent={selectedEvent} onSelectEvent={onSelectEvent} statusMeta={MAP_STATUS_META} />
 
       <div className="summary-grid">
         <section className="report-panel">
