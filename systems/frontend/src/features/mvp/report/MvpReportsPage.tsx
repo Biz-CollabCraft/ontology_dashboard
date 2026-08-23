@@ -26,6 +26,18 @@ const DEFAULT_FEATURE_SERIES = [
   { id: "voltage_raw", label: "전압", unit: "V", color: "#9a77e8", base: 176, spread: 5 },
 ] as const;
 
+interface ReportSeriesLog {
+  timeLabel: string;
+  value: number;
+  status: "평균 구간" | "상한 이탈" | "하한 이탈";
+}
+
+interface ReportSeriesBaseline {
+  mean: number;
+  lower: number;
+  upper: number;
+}
+
 const MAP_STATUS_META: Record<MvpRiskStatus, { label: string; tone: string; sentence: string }> = {
   critical: { label: "위험", tone: "critical", sentence: "즉시 점검이 필요한 위험 신호" },
   warning: { label: "경고", tone: "warning", sentence: "우선순위 점검 후보" },
@@ -274,8 +286,22 @@ function buildFeatureSeries(asset: MvpAsset, range: (typeof GRAPH_RANGES)[number
       values,
       color: feature.color,
       unit: ` ${factor?.unit ?? feature.unit}`,
+      baseline: {
+        mean: feature.base,
+        lower: feature.base - feature.spread * 0.42,
+        upper: feature.base + feature.spread * 0.42,
+      },
     };
   });
+}
+
+function sampleLogRows(values: number[], baseline: ReportSeriesBaseline | undefined): ReportSeriesLog[] {
+  const labels = ["-50분", "-40분", "-30분", "-20분", "-10분", "현재"];
+  return values.slice(-6).map((value, index) => ({
+    timeLabel: labels[index] ?? `${index}`,
+    value,
+    status: baseline && value > baseline.upper ? "상한 이탈" : baseline && value < baseline.lower ? "하한 이탈" : "평균 구간",
+  }));
 }
 
 function MiniSeriesChart({
@@ -284,18 +310,20 @@ function MiniSeriesChart({
   color,
   unit,
   threshold,
+  baseline,
 }: {
   title: string;
   values: number[];
   color: string;
   unit: string;
   threshold?: number;
+  baseline?: ReportSeriesBaseline;
 }) {
   const width = 640;
   const height = 150;
   const frame = { left: 46, right: 618, top: 18, bottom: 112 };
-  const min = Math.min(...values, threshold ?? values[0] ?? 0);
-  const max = Math.max(...values, threshold ?? values[0] ?? 1);
+  const min = Math.min(...values, threshold ?? values[0] ?? 0, baseline?.lower ?? values[0] ?? 0);
+  const max = Math.max(...values, threshold ?? values[0] ?? 1, baseline?.upper ?? values[0] ?? 1);
   const padding = Math.max(1, (max - min) * 0.18);
   const domainMin = Math.max(0, min - padding);
   const domainMax = Math.max(domainMin + 1, max + padding);
@@ -303,6 +331,10 @@ function MiniSeriesChart({
   const yAt = (value: number) => frame.bottom - ((value - domainMin) / (domainMax - domainMin)) * (frame.bottom - frame.top);
   const points = values.map((value, index) => `${xAt(index).toFixed(1)},${yAt(value).toFixed(1)}`).join(" ");
   const latest = values.at(-1) ?? 0;
+  const outOfBandPoints = baseline
+    ? values.map((value, index) => ({ value, index })).filter(({ value }) => value < baseline.lower || value > baseline.upper)
+    : [];
+  const logs = sampleLogRows(values, baseline);
 
   return (
     <section className="asset-series-block">
@@ -312,6 +344,12 @@ function MiniSeriesChart({
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} 그래프`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={frame.right - frame.left} height={frame.bottom - frame.top} />
+        {baseline ? (
+          <>
+            <rect className="asset-baseline-band" x={frame.left} y={yAt(baseline.upper)} width={frame.right - frame.left} height={Math.max(2, yAt(baseline.lower) - yAt(baseline.upper))} />
+            <line className="asset-baseline-mean" x1={frame.left} x2={frame.right} y1={yAt(baseline.mean)} y2={yAt(baseline.mean)} />
+          </>
+        ) : null}
         {[domainMax, (domainMax + domainMin) / 2, domainMin].map((tick) => {
           const y = yAt(tick);
           return (
@@ -323,11 +361,45 @@ function MiniSeriesChart({
         })}
         {threshold !== undefined ? <line className="asset-threshold-line" x1={frame.left} x2={frame.right} y1={yAt(threshold)} y2={yAt(threshold)} /> : null}
         <polyline className="asset-series-line" points={points} style={{ stroke: color }} />
+        {outOfBandPoints.map(({ value, index }) => (
+          <circle key={`${index}-${value}`} className="asset-outlier-marker" cx={xAt(index)} cy={yAt(value)} r="4.5" />
+        ))}
         <circle className="asset-current-marker" cx={frame.right} cy={yAt(latest)} r="5" style={{ fill: color }} />
         <text className="asset-current-label" x={frame.right - 8} y={Math.max(28, yAt(latest) - 8)} textAnchor="end" style={{ fill: color }}>{latest.toFixed(1)}{unit}</text>
+        {baseline ? (
+          <>
+            <text className="asset-chart-axis" x={frame.right - 2} y={Math.max(frame.top + 12, yAt(baseline.upper) - 4)} textAnchor="end">평균 상한</text>
+            <text className="asset-chart-axis" x={frame.right - 2} y={Math.min(frame.bottom - 4, yAt(baseline.lower) + 12)} textAnchor="end">평균 하한</text>
+          </>
+        ) : null}
         <text className="asset-chart-axis" x={frame.left} y="136">시작</text>
         <text className="asset-chart-axis" x={frame.right} y="136" textAnchor="end">현재</text>
       </svg>
+      <div className="asset-series-meta">
+        {baseline ? (
+          <div className="asset-baseline-summary">
+            <span>평균 구간</span>
+            <strong>{baseline.lower.toFixed(1)}-{baseline.upper.toFixed(1)}{unit}</strong>
+            <small>평균 {baseline.mean.toFixed(1)}{unit} · 이탈 {outOfBandPoints.length}회</small>
+          </div>
+        ) : (
+          <div className="asset-baseline-summary sample">
+            <span>표시 기준</span>
+            <strong>{threshold !== undefined ? `임계값 ${threshold}${unit}` : "샘플 기준 없음"}</strong>
+            <small>실제 baseline API 연결 전 샘플 표시</small>
+          </div>
+        )}
+        <div className="asset-log-table" aria-label={`${title} 최근 로그 표`}>
+          <div className="asset-log-head"><span>시점</span><span>값</span><span>판정</span></div>
+          {logs.map((row) => (
+            <div key={`${title}-${row.timeLabel}`} className={row.status === "평균 구간" ? "" : "outlier"}>
+              <span>{row.timeLabel}</span>
+              <strong>{row.value.toFixed(1)}{unit}</strong>
+              <em>{row.status}</em>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -402,7 +474,7 @@ function MvpAssetGraphsSection({
         {selectedAsset ? (
           <>
             <MiniSeriesChart title="24시간 내 고장 위험도" values={riskValues} color="#b42318" unit="%" threshold={70} />
-            {featureSeries.map((series) => <MiniSeriesChart key={series.id} title={series.title} values={series.values} color={series.color} unit={series.unit} />)}
+            {featureSeries.map((series) => <MiniSeriesChart key={series.id} title={series.title} values={series.values} color={series.color} unit={series.unit} baseline={series.baseline} />)}
             <section className="asset-history-section">
               <header><div><RotateCcw size={16} /><strong>설비 전체 이력 · {selectedAsset.assetId}</strong></div><span>현재 MVP Event 스냅샷</span></header>
               <div className="asset-history-columns" aria-hidden="true"><span>일시</span><span>유형</span><span>이력 내용</span><span>담당·메모</span></div>

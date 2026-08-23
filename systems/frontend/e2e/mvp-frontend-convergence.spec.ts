@@ -139,6 +139,11 @@ test("covers Reports side-tab flow with summary graphs and report types", async 
   await expect(page.getByRole("img", { name: /압력 그래프/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /진동 그래프/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /전압 그래프/ })).toBeVisible();
+  await expect(page.getByText("평균 구간").first()).toBeVisible();
+  await expect(page.locator(".asset-baseline-band").first()).toBeVisible();
+  await expect(page.locator(".asset-outlier-marker").first()).toBeVisible();
+  await expect(page.locator(".asset-log-table").first()).toBeVisible();
+  await expect(page.getByText(/상한 이탈|하한 이탈/).first()).toBeVisible();
   await page.getByRole("tab", { name: /점검 요청/ }).click();
   await expect(page.getByTestId("mvp-static-report")).toBeVisible();
 });
