@@ -84,6 +84,22 @@ test("completes Overview to Objects to Operations to Event Executive Brief witho
   expect(query.get("event_id")).toBeTruthy();
 });
 
+test("loads the Objects inspector through the AssetDetailViewModel API", async ({ page }) => {
+  const detailViewResponses: string[] = [];
+  page.on("response", (response) => {
+    if (response.url().includes("/api/objects/M-014/detail-view") && response.ok()) {
+      detailViewResponses.push(response.url());
+    }
+  });
+
+  await login(page, `${MVP_PATH}?view=objects&asset_id=M-014&event_id=EVT-GS-002`);
+  await expect(page.getByTestId("mvp-objects")).toBeVisible();
+  await expect.poll(() => detailViewResponses.length).toBeGreaterThan(0);
+  await expect(page.locator(".mvp-object-inspector")).toContainText("절삭 설비 14");
+  await expect(page.locator(".mvp-sensor-grid")).toContainText("공구 마모");
+  expect(detailViewResponses[0]).toContain("dataset_version_id=");
+});
+
 test("separates manager decisions from field-operator notes using real permissions", async ({ page }) => {
   await login(page, `${MVP_PATH}?view=operations`, "engineer");
   await expect(page.getByTestId("mvp-operations")).toBeVisible();

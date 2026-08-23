@@ -2,6 +2,7 @@ import type { Evidence, EventSummary, Report } from "../../../types";
 import type { GovernedProductResultSummary } from "../../predictive-maintenance/types";
 import type {
   MvpActivityItem,
+  AssetDetailViewModel,
   MvpAsset,
   MvpConfidence,
   MvpDecision,
@@ -305,6 +306,48 @@ function provenanceFromEvidence(event: MvpEvent, evidence: Evidence | null): Mvp
   };
 }
 
+function provenanceFromAssetDetailViewModel(event: MvpEvent, viewModel: AssetDetailViewModel): MvpProvenance {
+  return {
+    datasetId: null,
+    datasetVersionId: viewModel.evidence.dataset_version ?? event.datasetVersionId,
+    datasetLabel: "Canonical V3.1",
+    sourceVersion: viewModel.evidence.source_kind,
+    modelVersion: viewModel.evidence.model_version,
+    policyVersion: null,
+    schemaVersion: null,
+    promptVersion: null,
+    sourceRefs: [
+      ...(viewModel.evidence.artifact_id ? [`result-artifact://${viewModel.evidence.artifact_id}`] : []),
+      ...viewModel.risk_series.map((point) => point.source_ref).filter((value): value is string => Boolean(value)),
+    ],
+  };
+}
+
+function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSensorValue[] {
+  return viewModel.features.map((feature) => ({
+    id: feature.key,
+    label: feature.label,
+    value: feature.current,
+    unit: feature.unit || null,
+  }));
+}
+
+function factorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpFactor[] {
+  return viewModel.features
+    .filter((feature) => feature.top_factor !== null)
+    .sort((left, right) => (left.top_factor?.rank ?? 999) - (right.top_factor?.rank ?? 999))
+    .map((feature) => ({
+      id: feature.top_factor?.evidence_field_id ?? `${feature.key}:${feature.top_factor?.rank ?? "factor"}`,
+      feature: feature.key,
+      label: feature.label,
+      value: feature.current,
+      unit: feature.unit || null,
+      contribution: Math.abs(feature.top_factor?.contribution ?? 0),
+      direction: feature.top_factor?.direction ?? "risk_up",
+      explanationMethod: feature.top_factor?.explanation_method ?? null,
+    }));
+}
+
 export function normalizeActivity(payload: unknown): MvpActivityItem[] {
   const source = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   const direct = Array.isArray(source.items) ? source.items as Array<Record<string, unknown>> : [];
@@ -459,5 +502,31 @@ export function composeEventDetail(input: {
       activity: Boolean(input.activity),
     },
     warnings: input.warnings ?? [],
+  };
+}
+
+export function applyAssetDetailViewModel(
+  detail: MvpEventDetailModel,
+  viewModel: AssetDetailViewModel,
+): MvpEventDetailModel {
+  const warnings = [
+    ...detail.warnings,
+    ...viewModel.data_status.warnings,
+    ...viewModel.evidence.gaps.map((gap) => `${gap.owner_domain}: ${gap.field} - ${gap.reason}`),
+  ];
+  return {
+    ...detail,
+    sensors: sensorsFromAssetDetailViewModel(viewModel),
+    topFactors: factorsFromAssetDetailViewModel(viewModel),
+    threshold: viewModel.risk.threshold,
+    provenance: {
+      ...provenanceFromAssetDetailViewModel(detail.event, viewModel),
+      promptVersion: detail.provenance.promptVersion,
+    },
+    loadedSources: {
+      ...detail.loadedSources,
+      evidence: true,
+    },
+    warnings: [...new Set(warnings)],
   };
 }
