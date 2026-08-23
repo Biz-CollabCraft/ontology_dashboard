@@ -1133,7 +1133,12 @@
 .mvp-reports-page .asset-baseline-mean { stroke: #76d6a7; }
 .mvp-reports-page .asset-crossing-line { stroke-width: 1.4; stroke-dasharray: 3 4; opacity: .78; }
 .mvp-reports-page .asset-crossing-marker { stroke: #121922; stroke-width: 2; }
-.mvp-reports-page .asset-crossing-label { font-size: 11px; font-weight: 900; }
+.mvp-reports-page .asset-chart-label-bg { fill: rgba(12,18,26,.92); stroke: rgba(181,196,214,.28); stroke-width: 1; }
+.mvp-reports-page .asset-chart-label-bg.current { fill: rgba(18,25,34,.94); stroke: rgba(156,197,250,.38); }
+.mvp-reports-page .asset-crossing-label,
+.mvp-reports-page .asset-current-label { fill: #dce8f7; font-size: 11px; font-weight: 900; letter-spacing: 0; paint-order: stroke; stroke: rgba(12,18,26,.84); stroke-width: 2px; stroke-linejoin: round; }
+.mvp-reports-page .asset-crossing-label { fill: #f7c57d; }
+.mvp-reports-page .asset-current-label { fill: #cfe4ff; }
 .mvp-reports-page .asset-outlier-marker { fill: #121922; stroke: #ff9ca1; }
 .mvp-reports-page .asset-baseline-summary,
 .mvp-reports-page .asset-log-table,

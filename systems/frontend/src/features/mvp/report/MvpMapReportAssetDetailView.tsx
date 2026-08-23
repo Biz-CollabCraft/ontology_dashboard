@@ -4,7 +4,7 @@ import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpRiskStatus } from "../ap
 import { formatTimestamp } from "../components/MvpUi";
 
 const observedAt = "2026-08-29 23:00";
-const alarmThresholdBasis = "0.85로 낮추면 고장 5건을 더 잡지만 점검 126회가 늘어납니다. 계획 점검 0.5h 기준 추가 점검 63h, 조기 포착 절감 24.6h라 순손해 약 38.4h입니다. 그래서 알람 경계는 0.90으로 둡니다.";
+const alarmThresholdBasis = "0.85로 낮추면 고장 5건은 더 빨리 잡지만, 점검은 126회 늘어납니다. 점검에 63h를 더 쓰고 줄이는 고장 손실은 24.6h라 순손해가 약 38.4h입니다. 그래서 0.90을 알람 경계로 둡니다.";
 
 const detailRangeOptions = [
   { id: "1h", label: "1시간", minutes: 60, pointCount: 7, displayGrain: "10분 원본", ticks: ["22:00", "22:20", "22:40", "23:00"] },
@@ -401,6 +401,14 @@ function SeriesChart({
   const crossingY = crossingIndex >= 0 ? yAt(values[crossingIndex]) : null;
   const current = values.at(-1);
   const currentY = current === undefined ? null : yAt(current);
+  const crossingText = crossingIndex >= 0 ? `${threshold !== undefined ? "알람 경계 초과" : "범위 이탈"} ${formatCrossingTime(range, crossingIndex, values.length)}` : "";
+  const crossingLabelWidth = Math.min(176, Math.max(88, crossingText.length * 7.4 + 18));
+  const crossingLabelX = crossingX !== null ? clamp(crossingX + 10, frame.left + 6, frame.right - crossingLabelWidth - 6) : null;
+  const crossingLabelY = crossingY !== null ? clamp(crossingY < frame.top + 52 ? crossingY + 30 : crossingY - 16, frame.top + 22, frame.bottom - 18) : null;
+  const currentText = formatValue(current, unit);
+  const currentLabelWidth = Math.min(120, Math.max(70, currentText.length * 7.1 + 18));
+  const currentLabelX = frame.right - currentLabelWidth - 10;
+  const currentLabelY = currentY !== null ? clamp(currentY > frame.top + height * 0.58 ? currentY - 20 : currentY + 28, frame.top + 22, frame.bottom - 18) : null;
   const yTicks = [visibleDomain.maximum, (visibleDomain.minimum + visibleDomain.maximum) / 2, visibleDomain.minimum];
 
   return (
@@ -426,17 +434,21 @@ function SeriesChart({
           {baseline ? <rect className="asset-baseline-band" x={frame.left} y={yAt(baseline.upper)} width={width} height={yAt(baseline.lower) - yAt(baseline.upper)} style={{ fill: color }} /> : null}
           {threshold !== undefined ? <line className="asset-threshold-line" x1={frame.left} x2={frame.right} y1={yAt(threshold)} y2={yAt(threshold)} /> : null}
           <polyline className="asset-series-line" points={points} style={{ stroke: color }} />
-          {crossingIndex >= 0 && crossingX !== null && crossingY !== null ? (
+          {crossingIndex >= 0 && crossingX !== null && crossingY !== null && crossingLabelX !== null && crossingLabelY !== null ? (
             <g>
               <line className="asset-crossing-line" x1={crossingX} x2={crossingX} y1={crossingY} y2={frame.bottom} style={{ stroke: color }} />
               <circle className="asset-crossing-marker" cx={crossingX} cy={crossingY} r="5" style={{ fill: color }} />
-              <text className="asset-crossing-label" x={clamp(crossingX + 8, 76, 548)} y={clamp(crossingY + 17, 30, 268)} style={{ fill: color }}>
-                {threshold !== undefined ? "알람 경계 초과" : "범위 이탈"} {formatCrossingTime(range, crossingIndex, values.length)}
-              </text>
+              <rect className="asset-chart-label-bg" x={crossingLabelX} y={crossingLabelY - 16} width={crossingLabelWidth} height="23" rx="5" />
+              <text className="asset-crossing-label" x={crossingLabelX + 9} y={crossingLabelY}>{crossingText}</text>
             </g>
           ) : null}
           {currentY !== null ? <circle className="asset-current-marker" cx={frame.right} cy={currentY} r="5" style={{ fill: color }} /> : null}
-          {currentY !== null ? <text className="asset-current-label" x="674" y={clamp(currentY - 8, 25, 270)} textAnchor="end" style={{ fill: color }}>{formatValue(current, unit)}</text> : null}
+          {currentY !== null && currentLabelY !== null ? (
+            <g>
+              <rect className="asset-chart-label-bg current" x={currentLabelX} y={currentLabelY - 16} width={currentLabelWidth} height="23" rx="5" />
+              <text className="asset-current-label" x={currentLabelX + currentLabelWidth - 9} y={currentLabelY} textAnchor="end">{currentText}</text>
+            </g>
+          ) : null}
           {range.ticks.map((tick, index) => <text key={tick} className="asset-chart-axis" x={frame.left + (index / 3) * width} y="296" textAnchor={index === 0 ? "start" : index === 3 ? "end" : "middle"}>{tick}</text>)}
           <text className="asset-chart-axis-title" x="376" y="312" textAnchor="middle">시간</text>
         </svg>
