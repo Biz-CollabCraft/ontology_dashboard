@@ -29,7 +29,7 @@ Expected before implementation: fail if schema or fixture is missing. Expected a
 ### Task 2: Backend Composer
 
 **Files:**
-- Create: `systems/backend/app/report/asset_detail_view_model.py`
+- Create: `systems/backend/app/mvp/asset_detail_view_model.py`
 - Modify: `systems/backend/app/report/__init__.py`
 - Test: `tests/test_asset_detail_view_model_composer.py`
 
@@ -51,9 +51,9 @@ Expected: all tests pass.
 **Files:**
 - Modify: `tests/test_report_domain_migration.py`
 
-- [ ] **Step 1: Add the new report file to canonical report-domain checks**
+- [ ] **Step 1: Keep ViewModel ownership outside the report domain**
 
-Ensure `asset_detail_view_model.py` is recognized as canonical report-domain source and still has no `app.infra` or legacy `ontology_dashboard` imports.
+Ensure `asset_detail_view_model.py` is owned by the MVP application boundary and still has no `app.infra` or legacy `ontology_dashboard` imports.
 
 - [ ] **Step 2: Verify**
 

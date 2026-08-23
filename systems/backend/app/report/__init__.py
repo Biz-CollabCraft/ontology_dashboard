@@ -1,10 +1,5 @@
 """Canonical Report generation, draft, and export package."""
 
-from .asset_detail_view_model import (
-    AssetDetailRequest,
-    AssetDetailViewModelService,
-    compose_asset_detail_view_model,
-)
 from .generation import render_report
 from .generation_provider import ReportAgent
 from .report_exception import ReportConflictError
@@ -21,8 +16,6 @@ from .report_schema import (
 from .report_service import ExportService, ReportService
 
 __all__ = [
-    "AssetDetailRequest",
-    "AssetDetailViewModelService",
     "ExportArtifact",
     "ExportCheckpoint",
     "ExportRequest",
@@ -35,6 +28,5 @@ __all__ = [
     "ReportRequest",
     "ReportService",
     "build_report_router",
-    "compose_asset_detail_view_model",
     "render_report",
 ]

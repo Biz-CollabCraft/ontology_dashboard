@@ -15,7 +15,7 @@ from app.diagnosis.domain import (
     product_result_artifact_to_event_evidence_projection,
 )
 from app.equipment.ports import EquipmentApplicationPort
-from app.report.asset_detail_view_model import compose_asset_detail_view_model
+from app.mvp.asset_detail_view_model import compose_asset_detail_view_model
 
 from .context import ContextProviderFactory
 from .contracts import (

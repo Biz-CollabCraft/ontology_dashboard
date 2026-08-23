@@ -245,7 +245,7 @@ Test scenarios:
 ### Task 3: Update Composer Mapping
 
 **Files:**
-- Modify: `systems/backend/app/report/asset_detail_view_model.py`
+- Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
 - Test: `tests/test_asset_detail_view_model_composer.py`
 
 - [ ] **Step 1: Read criticality from contracted asset/equipment input**
@@ -277,7 +277,7 @@ Test scenarios:
 ### Task 4: Align Existing PR100 Review Fixes
 
 **Files:**
-- Modify: `systems/backend/app/report/asset_detail_view_model.py`
+- Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
 - Modify: `contracts/schemas/asset-detail-view-model.schema.json`
 - Test: `tests/test_asset_detail_view_model_composer.py`
 - Test: `tests/test_asset_detail_view_model_contract.py`
