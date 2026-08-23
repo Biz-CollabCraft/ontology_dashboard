@@ -4,11 +4,11 @@ import ast
 from pathlib import Path
 
 from app.report import (
-    AssetDetailReportViewModelService,
+    AssetDetailViewModelService,
     ReportAgent,
     ReportService,
     build_report_router,
-    compose_asset_detail_report_view_model,
+    compose_asset_detail_view_model,
     render_report,
 )
 from app.report.ports import (
@@ -42,7 +42,7 @@ def test_report_sources_are_physically_canonical() -> None:
         "generation.py",
         "generation_provider.py",
         "ports.py",
-        "asset_detail_report_view_model.py",
+        "asset_detail_view_model.py",
     ):
         assert (REPORT / relative).is_file(), relative
     assert (ROOT / "systems/backend/app/infra/db/report_repository.py").is_file()
@@ -72,8 +72,8 @@ def test_report_public_generation_and_consumer_ports_are_explicit() -> None:
     assert ReportAgent
     assert render_report
     assert build_report_router
-    assert AssetDetailReportViewModelService
-    assert compose_asset_detail_report_view_model
+    assert AssetDetailViewModelService
+    assert compose_asset_detail_view_model
     assert ReportGenerationProviderPort
     assert DiagnosisEvidencePort
     assert MaintenanceHistoryPort

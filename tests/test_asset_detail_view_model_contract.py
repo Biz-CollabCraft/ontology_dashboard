@@ -1,8 +1,8 @@
-"""Contract regression tests for the AssetDetailReportViewModel candidate contract.
+"""Contract regression tests for the AssetDetailViewModel candidate contract.
 
 Context: docs/mvp/pdm-evidence-report-ui-integration-plan.md §3.1/§3.2 and
-docs/mvp/schema-definition.md §5.3 define AssetDetailReportViewModel as a V2
-change proposal for `GET /objects/{asset_id}/report-detail`. It does not
+docs/mvp/schema-definition.md §5.3 define AssetDetailViewModel as a V2
+change proposal for `GET /objects/{asset_id}/detail-view`. It does not
 replace the current Event Report API. Per §3.2 step 1, the documented
 contract and test fixtures are added before any implementation. These tests
 only fix the candidate shape and its scenario fixtures; they do not assert
@@ -21,8 +21,8 @@ import pytest
 from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "contracts" / "schemas" / "asset-detail-report-view-model.schema.json"
-FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "asset_detail_report_view_model"
+SCHEMA_PATH = ROOT / "contracts" / "schemas" / "asset-detail-view-model.schema.json"
+FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "asset_detail_view_model"
 
 SCENARIO_FILES = {
     "current_evidence_only": "current-evidence-only.json",
@@ -61,7 +61,7 @@ def schema_errors(payload: dict) -> list:
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))
-def test_fixture_matches_asset_detail_report_view_model_schema(scenario: str) -> None:
+def test_fixture_matches_asset_detail_view_model_schema(scenario: str) -> None:
     assert schema_errors(fixture(scenario)) == []
 
 
@@ -91,6 +91,12 @@ def test_schema_separates_data_quality_hold_into_data_status() -> None:
 
     assert "is_data_quality_hold" in properties["data_status"]["required"]
     assert properties["data_status"]["properties"]["is_data_quality_hold"]["type"] == "boolean"
+
+
+def test_schema_allows_unknown_freshness_without_synthesizing_false() -> None:
+    properties = schema()["properties"]
+
+    assert properties["data_status"]["properties"]["is_stale"]["type"] == ["boolean", "null"]
 
 
 def test_schema_restricts_source_kind_enum_to_evidence_and_risk_series_only() -> None:

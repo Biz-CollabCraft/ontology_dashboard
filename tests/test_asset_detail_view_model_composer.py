@@ -8,16 +8,16 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
-from systems.backend.app.report.asset_detail_report_view_model import (
-    AssetDetailReportRequest,
-    AssetDetailReportViewModelService,
-    compose_asset_detail_report_view_model,
+from systems.backend.app.report.asset_detail_view_model import (
+    AssetDetailRequest,
+    AssetDetailViewModelService,
+    compose_asset_detail_view_model,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = json.loads(
-    (ROOT / "contracts" / "schemas" / "asset-detail-report-view-model.schema.json").read_text()
+    (ROOT / "contracts" / "schemas" / "asset-detail-view-model.schema.json").read_text()
 )
 ARTIFACT = json.loads(
     (
@@ -30,7 +30,7 @@ ARTIFACT = json.loads(
 )
 
 
-class FakeAssetDetailReportReadPort:
+class FakeAssetDetailReadPort:
     def __init__(
         self,
         *,
@@ -69,8 +69,8 @@ class FakeAssetDetailReportReadPort:
             ]
         }
 
-    def risk_prediction_results(self, **kwargs: Any) -> list[dict[str, Any]]:
-        self.calls.append(("risk_prediction_results", kwargs))
+    def runtime_prediction_history(self, **kwargs: Any) -> list[dict[str, Any]]:
+        self.calls.append(("runtime_prediction_history", kwargs))
         return [
             {
                 "observed_at": "2026-08-01T00:00:00+09:00",
@@ -96,8 +96,8 @@ class FakeAssetDetailReportReadPort:
         }
 
 
-def _request() -> AssetDetailReportRequest:
-    return AssetDetailReportRequest(
+def _request() -> AssetDetailRequest:
+    return AssetDetailRequest(
         organization_id="org-1",
         project_id="project-1",
         workspace_id="workspace-1",
@@ -110,22 +110,22 @@ def _request() -> AssetDetailReportRequest:
 
 
 def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_model() -> None:
-    port = FakeAssetDetailReportReadPort()
-    service = AssetDetailReportViewModelService(port)
+    port = FakeAssetDetailReadPort()
+    service = AssetDetailViewModelService(port)
 
-    payload = service.report_detail(_request())
+    payload = service.detail_view(_request())
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
     assert [name for name, _ in port.calls] == [
         "asset_summary",
         "latest_result_artifact",
         "feature_series",
-        "risk_prediction_results",
+        "runtime_prediction_history",
         "equipment_history",
         "data_status",
     ]
     feature_call = dict(port.calls)["feature_series"]
-    risk_call = dict(port.calls)["risk_prediction_results"]
+    risk_call = dict(port.calls)["runtime_prediction_history"]
     assert feature_call["dataset_version_id"] == "canonical-ai4i-physics-v3.1"
     assert feature_call["grain"] == "1h"
     assert risk_call["start"] == _request().start
@@ -135,34 +135,34 @@ def test_service_reads_only_contracted_sources_and_returns_schema_valid_view_mod
 def test_service_rejects_mismatched_result_artifact_asset() -> None:
     artifact = json.loads(json.dumps(ARTIFACT))
     artifact["asset_id"] = "CMP-OTHER"
-    service = AssetDetailReportViewModelService(
-        FakeAssetDetailReportReadPort(artifact=artifact)
+    service = AssetDetailViewModelService(
+        FakeAssetDetailReadPort(artifact=artifact)
     )
 
     with pytest.raises(ValueError, match="asset_id"):
-        service.report_detail(_request())
+        service.detail_view(_request())
 
 
 def test_service_does_not_accept_legacy_risk_history_sources_from_port() -> None:
-    service = AssetDetailReportViewModelService(
-        FakeAssetDetailReportReadPort(risk_source_ref="pm_prediction_timeline://CMP-S03-L03-01")
+    service = AssetDetailViewModelService(
+        FakeAssetDetailReadPort(risk_source_ref="pm_prediction_timeline://CMP-S03-L03-01")
     )
 
     with pytest.raises(ValueError, match="prediction_results|unsupported"):
-        service.report_detail(_request())
+        service.detail_view(_request())
 
 
 def test_service_requires_product_result_artifact() -> None:
-    service = AssetDetailReportViewModelService(
-        FakeAssetDetailReportReadPort(artifact=None)
+    service = AssetDetailViewModelService(
+        FakeAssetDetailReadPort(artifact=None)
     )
 
     with pytest.raises(KeyError, match="result artifact"):
-        service.report_detail(_request())
+        service.detail_view(_request())
 
 
 def test_composer_builds_view_model_without_generator_raw_file_dependency() -> None:
-    payload = compose_asset_detail_report_view_model(
+    payload = compose_asset_detail_view_model(
         asset={
             "asset_id": "CMP-S03-L03-01",
             "asset_type": "compressor",
@@ -182,7 +182,7 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
                 }
             ]
         },
-        risk_prediction_results=[
+        runtime_prediction_history=[
             {
                 "observed_at": "2026-08-01T00:00:00+09:00",
                 "failure_probability": 0.92,
@@ -217,10 +217,10 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
 )
 def test_composer_rejects_non_prediction_results_risk_series_sources(source_ref: str) -> None:
     with pytest.raises(ValueError, match="unsupported"):
-        compose_asset_detail_report_view_model(
+        compose_asset_detail_view_model(
             asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
             result_artifact=ARTIFACT,
-            risk_prediction_results=[
+            runtime_prediction_history=[
                 {
                     "observed_at": "2026-08-01T00:00:00+09:00",
                     "failure_probability": 0.92,
@@ -237,10 +237,10 @@ def test_composer_keeps_data_quality_hold_out_of_risk_status_grade() -> None:
     artifact["status_grade"] = "data_quality_hold"
     artifact["data_quality_warnings"] = ["sensor packet failed identity validation"]
 
-    payload = compose_asset_detail_report_view_model(
+    payload = compose_asset_detail_view_model(
         asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
         result_artifact=artifact,
-        risk_prediction_results=[
+        runtime_prediction_history=[
             {
                 "observed_at": "2026-08-01T00:00:00+09:00",
                 "failure_probability": 0.92,
@@ -257,6 +257,49 @@ def test_composer_keeps_data_quality_hold_out_of_risk_status_grade() -> None:
     assert payload["risk"]["status_grade"] is None
     assert payload["risk_series"][0]["status_grade"] is None
     assert payload["data_status"]["is_data_quality_hold"] is True
+
+
+def test_composer_uses_legacy_status_fallback_for_data_quality_hold() -> None:
+    artifact = json.loads(json.dumps(ARTIFACT))
+    artifact.pop("status_grade", None)
+    artifact["status"] = "data_quality_hold"
+
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=artifact,
+    )
+
+    assert payload["risk"]["status_grade"] is None
+    assert payload["data_status"]["is_data_quality_hold"] is True
+
+
+def test_composer_omits_missing_top_factor_evidence_field_id() -> None:
+    artifact = json.loads(json.dumps(ARTIFACT))
+    artifact["ranked_factor_evidence"] = []
+
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=artifact,
+    )
+
+    top_factor = next(feature["top_factor"] for feature in payload["features"] if feature["top_factor"])
+    assert "evidence_field_id" not in top_factor
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+
+
+def test_composer_preserves_unknown_freshness_as_null_with_warning() -> None:
+    artifact = json.loads(json.dumps(ARTIFACT))
+    artifact.pop("is_stale", None)
+
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=artifact,
+        data_status={"source": "canonical", "warnings": []},
+    )
+
+    assert payload["data_status"]["is_stale"] is None
+    assert "data_status freshness fact unavailable" in payload["data_status"]["warnings"]
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
 
 
 def test_composer_projects_canonical_evidence_gaps_to_view_model_schema() -> None:
@@ -280,7 +323,7 @@ def test_composer_projects_canonical_evidence_gaps_to_view_model_schema() -> Non
         },
     ]
 
-    payload = compose_asset_detail_report_view_model(
+    payload = compose_asset_detail_view_model(
         asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
         result_artifact=artifact,
         data_status={"source": "canonical", "is_stale": False, "warnings": []},
@@ -306,7 +349,7 @@ def test_composer_preserves_nullable_baseline_as_gap_without_type_error() -> Non
     sensor["basis"]["baseline_mean"] = None
     sensor["basis"]["baseline_std"] = None
 
-    payload = compose_asset_detail_report_view_model(
+    payload = compose_asset_detail_view_model(
         asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
         result_artifact=artifact,
         feature_series={
@@ -330,7 +373,7 @@ def test_composer_preserves_nullable_baseline_as_gap_without_type_error() -> Non
 
 def test_composer_rejects_raw_generator_feature_series_sources() -> None:
     with pytest.raises(ValueError, match="unsupported"):
-        compose_asset_detail_report_view_model(
+        compose_asset_detail_view_model(
             asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
             result_artifact=ARTIFACT,
             feature_series={
@@ -346,7 +389,7 @@ def test_composer_rejects_raw_generator_feature_series_sources() -> None:
 
 
 def test_composer_marks_missing_series_as_gaps_without_synthesizing_values() -> None:
-    payload = compose_asset_detail_report_view_model(
+    payload = compose_asset_detail_view_model(
         asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
         result_artifact=ARTIFACT,
     )
@@ -361,7 +404,7 @@ def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_act
     artifact = json.loads(json.dumps(ARTIFACT))
     artifact["evidence_payload"]["recommended_actions"] = []
 
-    payload = compose_asset_detail_report_view_model(
+    payload = compose_asset_detail_view_model(
         asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
         result_artifact=artifact,
     )

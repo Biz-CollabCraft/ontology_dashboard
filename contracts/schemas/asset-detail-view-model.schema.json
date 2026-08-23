@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ontology-dashboard.local/schemas/asset-detail-report-view-model.schema.json",
-  "title": "Asset Detail Report ViewModel (candidate contract)",
-  "description": "Candidate contract for GET /objects/{asset_id}/report-detail, as documented in docs/mvp/pdm-evidence-report-ui-integration-plan.md §3.1 and docs/mvp/schema-definition.md §5.3. Status: V2 change proposal. Does not replace the current Event Report API. This object name is deliberately not prefixed with `Mvp` — see docs/mvp/asset-detail-report-viewmodel-frontend-field-audit.md.",
+  "$id": "https://ontology-dashboard.local/schemas/asset-detail-view-model.schema.json",
+  "title": "Asset Detail ViewModel (candidate contract)",
+  "description": "Candidate contract for GET /objects/{asset_id}/detail-view, as documented in docs/mvp/pdm-evidence-report-ui-integration-plan.md §3.1 and docs/mvp/schema-definition.md §5.3. Status: V2 change proposal. Does not replace the current Event Report API. This object name is deliberately not prefixed with `Mvp`.",
   "type": "object",
   "required": ["asset", "risk", "risk_series", "features", "equipment_history", "evidence", "data_status"],
   "additionalProperties": false,
@@ -156,7 +156,10 @@
       "additionalProperties": false,
       "properties": {
         "source": {"enum": ["canonical", "fallback"]},
-        "is_stale": {"type": "boolean"},
+        "is_stale": {
+          "type": ["boolean", "null"],
+          "description": "Null means no authoritative freshness fact is available. The ViewModel must not synthesize false for an unknown freshness state."
+        },
         "is_data_quality_hold": {"type": "boolean"},
         "last_updated_at": {"type": "string"},
         "warnings": {"type": "array", "items": {"type": "string"}}

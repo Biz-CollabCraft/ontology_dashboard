@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `AssetDetailReportViewModel`에서 설비 중요도를 예측 위험도와 분리된 제조 운영 맥락으로 모델링하고, 결측/출처/우선순위 의미를 schema와 composer 테스트로 고정한다.
+**Goal:** `AssetDetailViewModel`에서 설비 중요도를 예측 위험도와 분리된 제조 운영 맥락으로 모델링하고, 결측/출처/우선순위 의미를 schema와 composer 테스트로 고정한다.
 
 **Architecture:** 현재 규모에서는 별도 graph DB나 full digital twin을 만들지 않는다. `asset.criticality`를 설비 마스터/프로젝션에서 온 운영 영향도 필드로 두고, `risk.status_grade`는 모델 위험도, `priority`는 risk와 criticality를 조합한 표시/정렬 파생값으로 분리한다. 온톨로지 관계는 문서와 typed reference 수준으로 고정하고, 생산 API endpoint와 frontend 전면 연결은 후속 slice로 둔다.
 
@@ -19,7 +19,7 @@ risk, criticality, evidence, history가 같은 판단 시점과 같은 source bo
 
 ### Problem Baseline
 
-현재 `AssetDetailReportViewModel`은 Product Result Artifact, Evidence Payload,
+현재 `AssetDetailViewModel`은 Product Result Artifact, Evidence Payload,
 Observation series, runtime prediction history, Activity/Maintenance source를 한 화면에
 병합해야 한다. 이 데이터들은 owner와 freshness가 서로 다르다. 따라서 프론트엔드가 여러
 API를 호출해 직접 조립하면 다음 판단이 화면별로 갈라질 수 있다.
@@ -59,13 +59,13 @@ ai-dev 관점에서 원인을 여러 기준으로 다시 본 결과, 핵심 원�
 | Expand generic `/objects`, `/observations`, `/maintenance` APIs first | 재사용 가능한 product API가 됨 | 리포트 전용 판단 시점과 evidence boundary를 보장하기 어려움 | Lower for this slice |
 | Extend Event Evidence only | 변경량이 작음 | 시계열, runtime history, maintenance history를 단일 Evidence로 설명할 수 없음 | Lower |
 | Build ontology/graph layer first | 장기적으로 관계 질의가 유리함 | 현재 규모 대비 과하고 PR95/100의 즉시 문제를 해결하지 못함 | Defer |
-| Single `AssetDetailReportViewModel` API | snapshot, source, gap, quality state를 한 계약에서 통제 가능 | backend adapter 책임 증가 | Preferred |
+| Single `AssetDetailViewModel` API | snapshot, source, gap, quality state를 한 계약에서 통제 가능 | backend adapter 책임 증가 | Preferred |
 
 ### Proposed Framing
 
 따라서 제안은 "단일 ViewModel API로 화면을 편하게 만든다"가 아니다. 제안은
 "예지보전 리포트의 snapshot 정합성과 evidence boundary를 보장하기 위해 backend-owned
-`AssetDetailReportViewModel` projection을 먼저 고정한다"다.
+`AssetDetailViewModel` projection을 먼저 고정한다"다.
 
 이 프레이밍에서 `criticality`는 다음처럼 들어간다.
 
@@ -97,7 +97,7 @@ Draft to resolve:
 ## Scope
 
 In scope:
-- `AssetDetailReportViewModel` schema에 `asset.criticality` 의미와 출처를 명시한다.
+- `AssetDetailViewModel` schema에 `asset.criticality` 의미와 출처를 명시한다.
 - 중요도 결측을 임의 기본값으로 채우지 않고 `evidence.gaps[]` 또는 `data_status.warnings[]`로 표현한다.
 - `risk`, `criticality`, `priority`의 의미를 문서에서 분리한다.
 - PR100 코멘트에서 확인된 naming/null/freshness 문제와 충돌하지 않도록 계획에 반영한다.
@@ -188,7 +188,7 @@ No new graph storage is required for this slice.
 - Modify: `docs/mvp/api-specification.md`
 - Modify: `docs/closed-loop-domain-contract.md`
 
-- [ ] **Step 1: Update `AssetDetailReportViewModel` field table**
+- [ ] **Step 1: Update `AssetDetailViewModel` field table**
 
 Add `asset.criticality`, `asset.criticality_basis`, and `asset.criticality_source` to the Asset summary section. State that `criticality` is operational impact, not model risk.
 
@@ -211,12 +211,12 @@ Verify docs consistently distinguish:
 ### Task 2: Extend ViewModel Schema
 
 **Files:**
-- Modify: `contracts/schemas/asset-detail-report-view-model.schema.json`
-- Modify: `tests/fixtures/asset_detail_report_view_model/current-evidence-only.json`
-- Modify: `tests/fixtures/asset_detail_report_view_model/observation-series-present.json`
-- Modify: `tests/fixtures/asset_detail_report_view_model/risk-timeline-present.json`
-- Modify: `tests/fixtures/asset_detail_report_view_model/baseline-partially-missing.json`
-- Test: `tests/test_asset_detail_report_view_model_contract.py`
+- Modify: `contracts/schemas/asset-detail-view-model.schema.json`
+- Modify: `tests/fixtures/asset_detail_view_model/current-evidence-only.json`
+- Modify: `tests/fixtures/asset_detail_view_model/observation-series-present.json`
+- Modify: `tests/fixtures/asset_detail_view_model/risk-timeline-present.json`
+- Modify: `tests/fixtures/asset_detail_view_model/baseline-partially-missing.json`
+- Test: `tests/test_asset_detail_view_model_contract.py`
 
 - [ ] **Step 1: Add schema fields**
 
@@ -245,8 +245,8 @@ Test scenarios:
 ### Task 3: Update Composer Mapping
 
 **Files:**
-- Modify: `systems/backend/app/report/asset_detail_report_view_model.py`
-- Test: `tests/test_asset_detail_report_view_model_composer.py`
+- Modify: `systems/backend/app/report/asset_detail_view_model.py`
+- Test: `tests/test_asset_detail_view_model_composer.py`
 
 - [ ] **Step 1: Read criticality from contracted asset/equipment input**
 
@@ -277,14 +277,14 @@ Test scenarios:
 ### Task 4: Align Existing PR100 Review Fixes
 
 **Files:**
-- Modify: `systems/backend/app/report/asset_detail_report_view_model.py`
-- Modify: `contracts/schemas/asset-detail-report-view-model.schema.json`
-- Test: `tests/test_asset_detail_report_view_model_composer.py`
-- Test: `tests/test_asset_detail_report_view_model_contract.py`
+- Modify: `systems/backend/app/report/asset_detail_view_model.py`
+- Modify: `contracts/schemas/asset-detail-view-model.schema.json`
+- Test: `tests/test_asset_detail_view_model_composer.py`
+- Test: `tests/test_asset_detail_view_model_contract.py`
 
 - [ ] **Step 1: Rename internal read-port method**
 
-Replace the public contract name `risk_prediction_results` with a semantic name such as `runtime_prediction_history`.
+Replace the public contract name `risk_prediction_results` with the semantic name `runtime_prediction_history`.
 
 - [ ] **Step 2: Fix nullable top-factor field handling**
 

@@ -21,7 +21,7 @@ def normalize_gen_data_layer2_rows(
     """Fixture-only normalizer for documenting Generator Observation handoff.
 
     This test helper intentionally lives outside systems/backend production code.
-    AssetDetailReportViewModel consumers must read Generator-produced
+    AssetDetailViewModel consumers must read Generator-produced
     Observation/Feature series contracts, not raw gen_data Layer files.
     """
 

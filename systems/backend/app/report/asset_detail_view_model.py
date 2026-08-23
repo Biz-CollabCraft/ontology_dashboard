@@ -20,8 +20,8 @@ FORBIDDEN_RISK_SOURCE_MARKERS = (
 )
 
 
-class AssetDetailReportReadPort(Protocol):
-    """Read boundary for the candidate AssetDetailReportViewModel.
+class AssetDetailReadPort(Protocol):
+    """Read boundary for the candidate AssetDetailViewModel.
 
     Implementations may use repositories or external services, but they must
     provide already-contracted data. They must not expose raw gen_data paths,
@@ -60,7 +60,7 @@ class AssetDetailReportReadPort(Protocol):
         grain: str,
     ) -> dict[str, list[dict[str, Any]]]: ...
 
-    def risk_prediction_results(
+    def runtime_prediction_history(
         self,
         *,
         organization_id: str,
@@ -95,7 +95,7 @@ class AssetDetailReportReadPort(Protocol):
 
 
 @dataclass(frozen=True)
-class AssetDetailReportRequest:
+class AssetDetailRequest:
     organization_id: str
     project_id: str
     workspace_id: str
@@ -106,11 +106,11 @@ class AssetDetailReportRequest:
     grain: str = "raw"
 
 
-class AssetDetailReportViewModelService:
-    def __init__(self, read_port: AssetDetailReportReadPort) -> None:
+class AssetDetailViewModelService:
+    def __init__(self, read_port: AssetDetailReadPort) -> None:
         self.read_port = read_port
 
-    def report_detail(self, request: AssetDetailReportRequest) -> dict[str, Any]:
+    def detail_view(self, request: AssetDetailRequest) -> dict[str, Any]:
         asset = self.read_port.asset_summary(
             organization_id=request.organization_id,
             project_id=request.project_id,
@@ -138,7 +138,7 @@ class AssetDetailReportViewModelService:
             dataset_version_id=request.dataset_version_id,
             grain=request.grain,
         )
-        risk_history = self.read_port.risk_prediction_results(
+        risk_history = self.read_port.runtime_prediction_history(
             organization_id=request.organization_id,
             project_id=request.project_id,
             workspace_id=request.workspace_id,
@@ -162,7 +162,7 @@ class AssetDetailReportViewModelService:
             asset_id=request.asset_id,
             dataset_version_id=request.dataset_version_id,
         )
-        return compose_asset_detail_report_view_model(
+        return compose_asset_detail_view_model(
             asset=asset or {
                 "asset_id": request.asset_id,
                 "asset_type": artifact["asset_type"],
@@ -170,22 +170,22 @@ class AssetDetailReportViewModelService:
             },
             result_artifact=artifact,
             feature_series=feature_series,
-            risk_prediction_results=risk_history,
+            runtime_prediction_history=risk_history,
             equipment_history=history,
             data_status=data_status,
         )
 
 
-def compose_asset_detail_report_view_model(
+def compose_asset_detail_view_model(
     *,
     asset: dict[str, Any],
     result_artifact: dict[str, Any],
     feature_series: dict[str, list[dict[str, Any]]] | None = None,
-    risk_prediction_results: list[dict[str, Any]] | None = None,
+    runtime_prediction_history: list[dict[str, Any]] | None = None,
     equipment_history: list[dict[str, Any]] | None = None,
     data_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Compose the candidate AssetDetailReportViewModel from canonical contracts.
+    """Compose the candidate AssetDetailViewModel from canonical contracts.
 
     The composer accepts Backend Observation/Feature Executor series and
     Diagnosis Runtime Prediction History Query results. It intentionally never
@@ -193,7 +193,7 @@ def compose_asset_detail_report_view_model(
     """
 
     feature_series = feature_series or {}
-    risk_prediction_results = risk_prediction_results or []
+    runtime_prediction_history = runtime_prediction_history or []
     equipment_history = equipment_history or []
     evidence_payload = result_artifact.get("evidence_payload") or {}
     provenance = result_artifact.get("provenance") or {}
@@ -217,7 +217,7 @@ def compose_asset_detail_report_view_model(
                 "owner_domain": "dataset",
             }
         )
-    risk_series = [_risk_point(point) for point in risk_prediction_results]
+    risk_series = [_risk_point(point) for point in runtime_prediction_history]
     if not risk_series:
         gaps.append(
             {
@@ -328,6 +328,15 @@ def _feature(
                 ),
                 "owner_domain": "diagnosis",
             }
+    top_factor_summary = None
+    if top_factor is not None:
+        top_factor_summary = {
+            "rank": top_factor["rank"],
+            "contribution": top_factor.get("signed_contribution", top_factor.get("contribution")),
+            "direction": top_factor["direction"],
+            "explanation_method": top_factor["explanation_method"],
+            **_optional(factor_evidence or {}, "evidence_field_id"),
+        }
     return (
         {
             "key": key,
@@ -336,15 +345,7 @@ def _feature(
             "current": sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value"),
             "baseline": baseline,
             "series": checked_series,
-            "top_factor": None
-            if top_factor is None
-            else {
-                "rank": top_factor["rank"],
-                "contribution": top_factor.get("signed_contribution", top_factor.get("contribution")),
-                "direction": top_factor["direction"],
-                "explanation_method": top_factor["explanation_method"],
-                "evidence_field_id": (factor_evidence or {}).get("evidence_field_id"),
-            },
+            "top_factor": top_factor_summary,
         },
         gap,
     )
@@ -378,6 +379,10 @@ def _status_grade(source: dict[str, Any]) -> str | None:
     if status == "data_quality_hold":
         return None
     return status
+
+
+def _is_data_quality_hold(source: dict[str, Any]) -> bool:
+    return str(source.get("status_grade") or source.get("status") or "") == "data_quality_hold"
 
 
 def _view_model_gap(gap: dict[str, Any]) -> dict[str, str]:
@@ -430,12 +435,12 @@ def _data_status(
     elif "is_stale" in result_artifact:
         is_stale = bool(result_artifact["is_stale"])
     else:
-        is_stale = False
-        warnings.append("data_status freshness fact unavailable; is_stale uses candidate default")
+        is_stale = None
+        warnings.append("data_status freshness fact unavailable")
     return {
         "source": source,
         "is_stale": is_stale,
-        "is_data_quality_hold": result_artifact.get("status_grade") == "data_quality_hold"
+        "is_data_quality_hold": _is_data_quality_hold(result_artifact)
         or bool(result_artifact.get("data_quality_warnings"))
         or bool(explicit.get("is_data_quality_hold")),
         "last_updated_at": explicit.get("last_updated_at") or result_artifact.get("observed_at"),
@@ -449,7 +454,7 @@ def _is_number(value: Any) -> bool:
 
 def _reject_source_ref(source_ref: str, *, forbidden: tuple[str, ...]) -> None:
     if any(marker in source_ref for marker in forbidden):
-        raise ValueError(f"unsupported AssetDetailReportViewModel source_ref: {source_ref}")
+        raise ValueError(f"unsupported AssetDetailViewModel source_ref: {source_ref}")
 
 
 def _evidence_payload_reference(provenance: dict[str, Any]) -> str:

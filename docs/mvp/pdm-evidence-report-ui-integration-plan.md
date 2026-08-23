@@ -167,14 +167,14 @@ flowchart LR
 
 ### 3.1 Asset Detail Report ViewModel 계약 후보
 
-`map-report-ui-prototype`을 MVP 리포트 화면에 이식할 때 필요한 공식 경계는 프론트 컴포넌트 계약이 아니라 Backend composition 계약이다. 프론트엔드는 Product Result Artifact, Observation API, runtime prediction series, maintenance/activity source를 직접 조합하지 않고, `AssetDetailReportViewModel`을 소비한다.
+`map-report-ui-prototype`을 MVP 리포트 화면에 이식할 때 필요한 공식 경계는 프론트 컴포넌트 계약이 아니라 Backend composition 계약이다. 프론트엔드는 Product Result Artifact, Observation API, runtime prediction series, maintenance/activity source를 직접 조합하지 않고, `AssetDetailViewModel`을 소비한다.
 
 계약 객체명에는 `Mvp` 접두어를 붙이지 않는다. 기존 MVP 프론트엔드의 `Mvp*`
 타입은 현재 화면이 소비 중인 필드 기준선을 조사하기 위한 구현명으로만 사용하고,
-신규 Product API/View 계약은 `AssetDetailReportViewModel`처럼 접두어 없는
+신규 Product API/View 계약은 `AssetDetailViewModel`처럼 접두어 없는
 도메인 객체명으로 정의한다.
 
-상태: V2 변경 제안. 현행 Event Report API를 대체하지 않으며, 설비 상세 리포트와 요약 리포트의 피쳐 그래프 연결을 위한 후보 계약이다.
+상태: V2 변경 제안. 현행 Event Report API를 대체하지 않으며, 설비 상세 화면과 요약 리포트의 피쳐 그래프 연결을 위한 후보 계약이다.
 
 최종 흐름은 다음과 같다. 센서 그래프는 Observation 계열에서 오고, 위험도 그래프와 현재 판단은 Backend Diagnosis가 만든 runtime Result/Evidence 계열에서 온다. 두 계열은 Product API/Report adapter에서만 합쳐진다.
 
@@ -195,7 +195,7 @@ flowchart TD
   DIA --> EV["Evidence Payload\nsensor evidence / baseline / gaps / provenance"]
   DIA --> RTS["Runtime Prediction/Result Timeline\nrisk_series source"]
 
-  OBS --> API["Product API / Report Adapter\nAssetDetailReportViewModel composition"]
+  OBS --> API["Product API / Detail Adapter\nAssetDetailViewModel composition"]
   RA --> API
   EV --> API
   RTS --> API
@@ -214,7 +214,7 @@ sequenceDiagram
   participant GD as gen_data
   participant GEN as systems/generator
   participant DIA as Backend Diagnosis
-  participant API as Product API / Report Adapter
+  participant API as Product API / Detail Adapter
   participant UI as MVP Report UI
 
   GD->>API: Layer 2 _log.jsonl available through ingestion adapter
@@ -224,13 +224,13 @@ sequenceDiagram
   DIA->>DIA: validate Model Artifact and run runtime inference
   DIA->>API: Product Result Artifact + Evidence Payload
   DIA->>API: runtime prediction/result timeline
-  UI->>API: request AssetDetailReportViewModel(asset_id, from, to)
+  UI->>API: request AssetDetailViewModel(asset_id, from, to)
   API->>API: merge asset, risk, risk_series, features, baseline, gaps
   API->>UI: return official ViewModel
 ```
 
 ```ts
-type AssetDetailReportViewModel = {
+type AssetDetailViewModel = {
   asset: {
     asset_id: string
     asset_type: "compressor" | "cnc"
@@ -358,11 +358,11 @@ Backend Observation read contract와 Feature Executor result의 최소 규칙은
 
 ### 3.2 구현 순서
 
-1. `AssetDetailReportViewModel` 문서 계약과 테스트 fixture를 먼저 추가한다.
+1. `AssetDetailViewModel` 문서 계약과 테스트 fixture를 먼저 추가한다.
 2. `gen_data` source/protocol record 샘플을 Backend Observation ingestion fixture로 정규화하고, Feature Schema/transform contract fixture를 추가한다.
 3. `node_id` 파싱, `source_timestamp` 정규화, 센서 row pivot, `status_code`/`reason` data-quality mapping을 Backend Observation ingestion/Feature Executor contract test로 고정한다.
 4. Backend adapter가 Result Artifact/Evidence, Backend Observation read contract와 Feature Executor result, Backend Diagnosis Runtime Prediction History Query Contract(`pm_result_artifacts` append-only history + optional `prediction_results` detail join)를 병합한다.
-5. Product API endpoint는 현행 compatibility path에 바로 고정하지 않고 `/objects/{asset_id}/report-detail` 후보로 둔다.
+5. Product API endpoint는 현행 compatibility path에 바로 고정하지 않고 `/objects/{asset_id}/detail-view` 후보로 둔다.
 6. 프론트 report UI는 단일 ViewModel을 소비하도록 전환한다.
 7. `map-report-ui-prototype`에서 임시로 가져온 synthetic graph fallback은 제거한다.
 8. E2E는 그래프가 존재하는지만 보지 않고 `source_kind`, `evidence.gaps`, series source를 함께 검증한다.
