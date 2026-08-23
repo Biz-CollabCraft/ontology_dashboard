@@ -401,21 +401,21 @@ function SeriesChart({
   const crossingY = crossingIndex >= 0 ? yAt(values[crossingIndex]) : null;
   const current = values.at(-1);
   const currentY = current === undefined ? null : yAt(current);
-  const crossingText = crossingIndex >= 0 ? `${threshold !== undefined ? "알람 경계 초과" : "범위 이탈"} ${formatCrossingTime(range, crossingIndex, values.length)}` : "";
-  const crossingLabelWidth = Math.min(176, Math.max(88, crossingText.length * 7.4 + 18));
-  const crossingLabelX = crossingX !== null ? clamp(crossingX + 10, frame.left + 6, frame.right - crossingLabelWidth - 6) : null;
-  const crossingLabelY = crossingY !== null ? clamp(crossingY < frame.top + 52 ? crossingY + 30 : crossingY - 16, frame.top + 22, frame.bottom - 18) : null;
   const currentText = formatValue(current, unit);
   const currentLabelWidth = Math.min(120, Math.max(70, currentText.length * 7.1 + 18));
   const currentLabelX = frame.right - currentLabelWidth - 10;
-  let currentLabelY = currentY !== null ? clamp(currentY > frame.top + height * 0.58 ? currentY - 20 : currentY + 28, frame.top + 22, frame.bottom - 18) : null;
+  const currentLabelY = currentY !== null ? clamp(currentY > frame.top + height * 0.58 ? currentY - 20 : currentY + 28, frame.top + 22, frame.bottom - 18) : null;
+  const crossingValue = crossingIndex >= 0 ? values[crossingIndex] : null;
+  const crossingText = crossingIndex >= 0 ? `${threshold !== undefined ? "경계 초과" : "범위 이탈"} ${formatCrossingTime(range, crossingIndex, values.length)} · ${formatValue(crossingValue, unit)}` : "";
+  const crossingLabelWidth = Math.min(220, Math.max(120, crossingText.length * 7.2 + 18));
+  const crossingLabelX = crossingX !== null ? clamp(crossingX - crossingLabelWidth / 2, frame.left + 6, frame.right - crossingLabelWidth - 6) : null;
+  let crossingLabelY = crossingX !== null ? frame.bottom - 10 : null;
   const labelsOverlap = crossingLabelX !== null && crossingLabelY !== null && currentLabelY !== null
     && currentLabelX < crossingLabelX + crossingLabelWidth + 8
     && currentLabelX + currentLabelWidth + 8 > crossingLabelX
     && Math.abs(currentLabelY - crossingLabelY) < 28;
   if (labelsOverlap) {
-    const preferredY = crossingLabelY < frame.top + height * 0.55 ? crossingLabelY + 34 : crossingLabelY - 34;
-    currentLabelY = clamp(preferredY, frame.top + 22, frame.bottom - 18);
+    crossingLabelY = frame.top + 28;
   }
   const yTicks = [visibleDomain.maximum, (visibleDomain.minimum + visibleDomain.maximum) / 2, visibleDomain.minimum];
 
