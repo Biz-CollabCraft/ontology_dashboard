@@ -408,7 +408,15 @@ function SeriesChart({
   const currentText = formatValue(current, unit);
   const currentLabelWidth = Math.min(120, Math.max(70, currentText.length * 7.1 + 18));
   const currentLabelX = frame.right - currentLabelWidth - 10;
-  const currentLabelY = currentY !== null ? clamp(currentY > frame.top + height * 0.58 ? currentY - 20 : currentY + 28, frame.top + 22, frame.bottom - 18) : null;
+  let currentLabelY = currentY !== null ? clamp(currentY > frame.top + height * 0.58 ? currentY - 20 : currentY + 28, frame.top + 22, frame.bottom - 18) : null;
+  const labelsOverlap = crossingLabelX !== null && crossingLabelY !== null && currentLabelY !== null
+    && currentLabelX < crossingLabelX + crossingLabelWidth + 8
+    && currentLabelX + currentLabelWidth + 8 > crossingLabelX
+    && Math.abs(currentLabelY - crossingLabelY) < 28;
+  if (labelsOverlap) {
+    const preferredY = crossingLabelY < frame.top + height * 0.55 ? crossingLabelY + 34 : crossingLabelY - 34;
+    currentLabelY = clamp(preferredY, frame.top + 22, frame.bottom - 18);
+  }
   const yTicks = [visibleDomain.maximum, (visibleDomain.minimum + visibleDomain.maximum) / 2, visibleDomain.minimum];
 
   return (
