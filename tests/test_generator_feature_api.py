@@ -1266,3 +1266,89 @@ def test_feature_bundle_never_contains_pseudo_ids(test_client):
     for r in rows:
         assert r["asset_id"] not in forbidden_patterns
         assert not r["asset_id"].startswith("row_")
+
+
+def test_feature_asset_id_validation_happens_before_bundle_reuse_check(test_client, monkeypatch):
+    """Verify that Asset ID validation is strictly executed before checking or returning cached bundles."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    # 1. First publish a valid bundle
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_source_mode": "embedded_observation",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+    })
+    assert resp.status_code == 200
+
+    # 2. Track calls to find_feature_bundle
+    reuse_checked = []
+    original_find = FeatureRepository.find_feature_bundle
+
+    def tracked_find_feature_bundle(self, *args, **kwargs):
+        reuse_checked.append(True)
+        return original_find(self, *args, **kwargs)
+
+    monkeypatch.setattr(FeatureRepository, "find_feature_bundle", tracked_find_feature_bundle)
+
+    # 3. Create an invalid plan missing id_column
+    from systems.generator.app.preprocessing.preprocessing_repository import (
+        PreprocessingRepository,
+        compute_preprocessing_plan_version,
+        compute_source_schema_fingerprint,
+    )
+    obs_csv = test_client["obs_csv"]
+    prep_repo = PreprocessingRepository()
+    obs_df = pd.read_csv(obs_csv)
+    schema_fp = compute_source_schema_fingerprint(obs_df)
+    obs_sha = compute_file_sha256(obs_csv)
+
+    plan_dict = {
+        "preprocessing_plan_id": "pp-reuse-no-id",
+        "preprocessing_plan_version": "temp",
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "source_dataset_uri": f"data/observations/{dataset_id}/v1.0/observations.csv",
+        "source_dataset_sha256": obs_sha,
+        "source_schema_fingerprint": schema_fp,
+        "decision_source": "rule_fallback",
+        "fallback_reason": "test plan without id_column for reuse test",
+        "planner_version": "1.0",
+        "structure_type": "tabular_column_as_attribute",
+        "id_column": None,
+        "time_column": "observed_at",
+        "attribute_column": None,
+        "value_column": None,
+        "selected_columns": list(obs_df.columns),
+        "duplicate_policy": "error",
+        "aggregation": None,
+        "created_at": "2026-08-24T00:00:00Z",
+    }
+    invalid_plan_ver = compute_preprocessing_plan_version(dataset_id, "v1.0", plan_dict)
+    plan_dict["preprocessing_plan_version"] = invalid_plan_ver
+
+    plan_dir = prep_repo.get_dataset_plan_dir(dataset_id, "v1.0")
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    (plan_dir / "pp-reuse-no-id.json").write_text(json.dumps(plan_dict, indent=2), encoding="utf-8")
+
+    # 4. Calling /feature with invalid plan must fail fast (501) BEFORE find_feature_bundle
+    resp_invalid = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_source_mode": "embedded_observation",
+        "preprocessing_plan_id": "pp-reuse-no-id",
+        "preprocessing_plan_version": invalid_plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+    })
+    assert resp_invalid.status_code == 501
+    assert resp_invalid.json()["error"]["code"] == "FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED"
+    assert len(reuse_checked) == 0, "find_feature_bundle must NOT be called when Asset ID validation fails"

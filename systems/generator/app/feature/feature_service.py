@@ -604,7 +604,24 @@ class FeatureService:
         label_schema_sha256 = label_schema.compute_checksum()
         label_schema_uri = self.feature_repo.get_logical_uri(label_schema.schema_file_path) if label_schema.schema_file_path else f"schemas/labels/{request.label_schema_version}.json"
 
-        # 5. Build Canonical Deterministic Fingerprint
+        # 5. Prepare Canonical Working DataFrame & Validate Asset Identity / Timestamps
+        plan_id_col = plan.get("id_column")
+        plan_time_col = plan.get("time_column")
+        context = {
+            "dataset_id": request.dataset_id,
+            "dataset_version": request.dataset_version,
+            "preprocessing_plan_id": request.preprocessing_plan_id,
+            "preprocessing_plan_version": request.preprocessing_plan_version,
+            "request_id": active_req_id,
+        }
+        working_df, id_col, time_col = self._prepare_canonical_working_df(
+            obs_df=obs_df,
+            id_col=plan_id_col,
+            time_col=plan_time_col,
+            context=context,
+        )
+
+        # 6. Build Canonical Deterministic Fingerprint
         fingerprint = {
             "observation_dataset_id": resolved_obs.dataset_id,
             "observation_dataset_version": resolved_obs.dataset_version,
@@ -627,7 +644,7 @@ class FeatureService:
         }
         feature_dataset_version = compute_feature_dataset_version(fingerprint)
 
-        # 6. Check existing bundle reuse (Immutable Bundle Policy)
+        # 7. Check existing bundle reuse (Immutable Bundle Policy)
         existing_bundle = self.feature_repo.find_feature_bundle(
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
@@ -658,23 +675,6 @@ class FeatureService:
                     metadata_uri=existing_bundle.metadata_uri,
                 ),
             )
-
-        # 7. Prepare Canonical Working DataFrame
-        plan_id_col = plan.get("id_column")
-        plan_time_col = plan.get("time_column")
-        context = {
-            "dataset_id": request.dataset_id,
-            "dataset_version": request.dataset_version,
-            "preprocessing_plan_id": request.preprocessing_plan_id,
-            "preprocessing_plan_version": request.preprocessing_plan_version,
-            "request_id": active_req_id,
-        }
-        working_df, id_col, time_col = self._prepare_canonical_working_df(
-            obs_df=obs_df,
-            id_col=plan_id_col,
-            time_col=plan_time_col,
-            context=context,
-        )
 
         # 8. Compute Features & Missing Masks
         computed_features_df, missing_drop_mask = self._compute_features_and_missing_masks(
