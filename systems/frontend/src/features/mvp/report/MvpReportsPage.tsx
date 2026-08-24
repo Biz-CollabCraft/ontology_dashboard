@@ -139,7 +139,7 @@ function MvpSummaryGraphBoard({
           </div>
           <dl className="summary-selected-facts">
             <div><dt>권장 조치</dt><dd>{selected ? DECISION_LABEL[selected.recommendedDecision] : "선택 필요"}</dd></div>
-            <div><dt>예상 영향</dt><dd>{formatMinutes(selected?.estimatedDowntimeMinutes ?? selectedAsset?.estimatedDowntimeMinutes ?? 0)}</dd></div>
+            <div><dt>예상 영향</dt><dd>{formatMinutes(selected?.estimatedDowntimeMinutes ?? selectedAsset?.estimatedDowntimeMinutes ?? null)}</dd></div>
             <div><dt>근거</dt><dd>{selectedAsset?.topFactors[0]?.label ?? selected?.predictedFailureType ?? "unavailable"}</dd></div>
           </dl>
         </article>
@@ -152,8 +152,6 @@ function lineKey(asset: MvpAsset) {
   return asset.line || asset.cell || asset.site || "미분류 라인";
 }
 
-const MIN_LINE_MAP_NODES = 20;
-
 interface StatusMapNode {
   id: string;
   label: string;
@@ -163,67 +161,15 @@ interface StatusMapNode {
   event: MvpEvent | null;
 }
 
-function lineMapStatus(index: number, averageRisk: number | null, anchorStatus: MvpRiskStatus): MvpRiskStatus {
-  if (averageRisk === null) {
-    return index % 7 === 0 ? "data_quality_hold" : index % 5 === 0 ? "attention" : "normal";
-  }
-  if (anchorStatus === "data_quality_hold" && index % 6 === 0) return "data_quality_hold";
-  if (averageRisk >= 0.75) return index % 5 === 0 ? "critical" : index % 3 === 0 ? "warning" : "attention";
-  if (averageRisk >= 0.55) return index % 6 === 0 ? "critical" : index % 2 === 0 ? "warning" : "attention";
-  if (averageRisk >= 0.25) return index % 5 === 0 ? "warning" : index % 2 === 0 ? "attention" : "normal";
-  return index % 6 === 0 ? "attention" : "normal";
-}
-
-function lineMapProbability(status: MvpRiskStatus, averageRisk: number | null, index: number) {
-  if (status === "data_quality_hold") return null;
-  const baseline = averageRisk ?? (status === "critical" ? 0.82 : status === "warning" ? 0.62 : status === "attention" ? 0.36 : 0.14);
-  const offset = ((index % 5) - 2) * 0.025;
-  return Math.max(0.03, Math.min(0.97, baseline + offset));
-}
-
-function representativeEventForStatus(line: string, status: MvpRiskStatus, assets: MvpAsset[], events: MvpEvent[], eventById: Map<string, MvpEvent>) {
-  const sameStatusAsset = assets.find((asset) => asset.status === status && asset.eventId && eventById.has(asset.eventId));
-  if (sameStatusAsset?.eventId) return eventById.get(sameStatusAsset.eventId) ?? null;
-
-  const sameLineAsset = assets.find((asset) => asset.eventId && eventById.has(asset.eventId));
-  if (sameLineAsset?.eventId) return eventById.get(sameLineAsset.eventId) ?? null;
-
-  return events.find((event) => event.line === line && event.status === status)
-    ?? events.find((event) => event.line === line)
-    ?? events[0]
-    ?? null;
-}
-
-function buildLineMapNodes(line: string, assets: MvpAsset[], summary: MvpLineRisk | undefined, events: MvpEvent[], eventById: Map<string, MvpEvent>) {
-  const actualNodes: StatusMapNode[] = assets.map((asset) => ({
+function buildLineMapNodes(assets: MvpAsset[], eventById: Map<string, MvpEvent>) {
+  return assets.map((asset): StatusMapNode => ({
     id: asset.assetId,
     label: asset.assetId.split("-").at(-1) ?? asset.assetId,
     status: asset.status,
     probability: asset.failureProbability,
     asset,
     event: asset.eventId ? eventById.get(asset.eventId) ?? null : null,
-  }));
-  const targetCount = Math.max(summary?.total ?? 0, actualNodes.length, actualNodes.length < 6 ? MIN_LINE_MAP_NODES : actualNodes.length);
-  const usedLabels = new Set(actualNodes.map((node) => node.label));
-  const nodes = [...actualNodes];
-  const anchorStatus = actualNodes[0]?.status ?? "normal";
-
-  for (let unit = 1; nodes.length < targetCount; unit += 1) {
-    const label = String(unit).padStart(3, "0");
-    if (usedLabels.has(label) || usedLabels.has(String(unit).padStart(2, "0"))) continue;
-    const status = lineMapStatus(unit, summary?.averageRisk ?? null, anchorStatus);
-    nodes.push({
-      id: `${line}-map-${label}`,
-      label,
-      status,
-      probability: lineMapProbability(status, summary?.averageRisk ?? null, unit),
-      asset: null,
-      event: representativeEventForStatus(line, status, assets, events, eventById),
-    });
-    usedLabels.add(label);
-  }
-
-  return nodes.sort((a, b) => a.label.localeCompare(b.label, "ko", { numeric: true }));
+  })).sort((a, b) => a.label.localeCompare(b.label, "ko", { numeric: true }));
 }
 
 function MvpStatusMapReport({
@@ -251,7 +197,7 @@ function MvpStatusMapReport({
       line,
       assets,
       summary: model.lineRisk.find((item) => item.line === line),
-      nodes: buildLineMapNodes(line, assets, model.lineRisk.find((item) => item.line === line), model.events, eventById),
+      nodes: buildLineMapNodes(assets, eventById),
     }));
   }, [eventById, model.assets, model.events, model.lineRisk]);
   const priorityAssets = model.assets
@@ -264,12 +210,12 @@ function MvpStatusMapReport({
         <div>
           <span>상태 요약 보고서</span>
           <h1>예지보전 상태 요약 보고서</h1>
-          <p>현재 MVP의 Result Artifact와 Event 목록을 기준으로 위험 상태, 판단 대기, 데이터 품질 보류를 라인별 맵으로 요약합니다.</p>
+          <p>현재 관측된 설비 판단과 운영 Event를 기준으로 위험 상태, 판단 대기, 데이터 품질 보류를 라인별로 요약합니다.</p>
         </div>
         <div className="report-meta">
           <small>생성 시각</small>
           <strong>{formatTimestamp(model.context.refreshedAt)}</strong>
-          <span>{model.context.sourceMode === "canonical-runtime" ? "Runtime 기반" : "Fallback 기반"}</span>
+          <span>{model.context.sourceMode === "canonical-runtime" ? "운영 데이터" : "보조 데이터"}</span>
         </div>
       </header>
 
@@ -410,11 +356,11 @@ function MvpSummaryReport({
         <div>
           <span>요약 보고서</span>
           <h1>예지보전 운영 요약 보고서</h1>
-          <p>map-report prototype의 요약 보고서 슬롯을 현재 MVP 데이터로 채운 공유용 보고서입니다. 상태 맵의 전체 흐름과 점검 요청의 현장 항목을 한 장으로 압축합니다.</p>
+          <p>상태 맵의 전체 흐름과 점검 요청의 현장 항목을 공유하기 쉬운 한 장 요약으로 정리합니다.</p>
         </div>
         <div className="report-meta">
           <small>작성 상태</small>
-          <strong>{model.context.sourceMode === "canonical-runtime" ? "Runtime 요약" : "Fallback 요약"}</strong>
+          <strong>{model.context.sourceMode === "canonical-runtime" ? "운영 데이터 요약" : "보조 데이터 요약"}</strong>
           <span>{formatTimestamp(model.context.refreshedAt)}</span>
         </div>
       </header>
@@ -517,7 +463,7 @@ export function MvpReportsPage({
   onRetryDetail: () => void;
 }) {
   return (
-    <div className="mvp-page map-report-prototype mvp-reports-page" data-testid="mvp-reports">
+    <div className="mvp-page mvp-reports-page" data-testid="mvp-reports">
       <div className="mvp-report-tabs" role="tablist" aria-label="보고서 종류">
         {REPORT_TABS.map((tab) => {
           const Icon = tab.icon;

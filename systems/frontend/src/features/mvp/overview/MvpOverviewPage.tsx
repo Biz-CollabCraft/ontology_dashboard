@@ -43,7 +43,7 @@ export function MvpOverviewPage({
       <section className="mvp-overview-actions" aria-label="주요 이동">
         <button type="button" className="mvp-button primary" onClick={() => topAssets[0] && onOpenAsset(topAssets[0].assetId, topAssets[0].eventId)} disabled={!topAssets.length}><Boxes size={15} />우선 설비 열기</button>
         <button type="button" className="mvp-button secondary" onClick={() => pendingEvents[0] && onOpenEvent(pendingEvents[0].eventId, pendingEvents[0].assetId)} disabled={!pendingEvents.length}><ClipboardCheck size={15} />판단 업무 열기</button>
-        <button type="button" className="mvp-button secondary" onClick={() => onOpenReport(pendingEvents[0]?.eventId ?? null, pendingEvents[0]?.assetId ?? null)}><FileText size={15} />Event Executive Brief</button>
+        <button type="button" className="mvp-button secondary" onClick={() => onOpenReport(pendingEvents[0]?.eventId ?? null, pendingEvents[0]?.assetId ?? null)}><FileText size={15} />상황 브리핑</button>
         <button type="button" className="mvp-button ghost" onClick={onRefresh}><RefreshCw size={15} />새로고침</button>
       </section>
 
@@ -59,7 +59,7 @@ export function MvpOverviewPage({
                 </article>
               ))}
             </div>
-          ) : <MvpState kind="empty" title="라인 데이터가 없습니다" detail="연결된 Result Artifact에 라인 또는 위치 정보가 없습니다." />}
+          ) : <MvpState kind="empty" title="라인 데이터가 없습니다" detail="연결된 설비 판단에 라인 또는 위치 정보가 없습니다." />}
         </MvpPanel>
 
         <MvpPanel title="고위험 설비 Top N" eyebrow="ASSET PRIORITY">

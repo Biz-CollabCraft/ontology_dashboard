@@ -94,7 +94,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
-        setError(reason instanceof Error ? reason.message : "MVP 데이터를 불러오지 못했습니다.");
+        setError(reason instanceof Error ? reason.message : "운영 데이터를 불러오지 못했습니다.");
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
@@ -202,9 +202,9 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     retryDetail();
   }, [retryDetail, selectedEvent, user]);
 
-  if (loading && !model) return <div className="mvp-route-state"><MvpState kind="loading" title="멘토링 기준 MVP 구성 중" detail="Project, Canonical V3.1 Result Artifact와 네 화면 문맥을 연결하고 있습니다." /></div>;
-  if (error && !model) return <div className="mvp-route-state"><MvpState kind="error" title="MVP를 열지 못했습니다" detail={error} onRetry={refresh} /></div>;
-  if (!model) return <div className="mvp-route-state"><MvpState kind="empty" title="MVP 데이터가 없습니다" detail="Project와 Workspace 연결 상태를 확인하세요." /></div>;
+  if (loading && !model) return <div className="mvp-route-state"><MvpState kind="loading" title="예지보전 화면 구성 중" detail="Project, Workspace, 설비 판단 데이터를 연결하고 있습니다." /></div>;
+  if (error && !model) return <div className="mvp-route-state"><MvpState kind="error" title="예지보전 화면을 열지 못했습니다" detail={error} onRetry={refresh} /></div>;
+  if (!model) return <div className="mvp-route-state"><MvpState kind="empty" title="표시할 운영 데이터가 없습니다" detail="Project와 Workspace 연결 상태를 확인하세요." /></div>;
 
   const canDecide = Boolean(user?.permissions.includes("events.decision"));
   const canNote = Boolean(user?.permissions.includes("events.note"));

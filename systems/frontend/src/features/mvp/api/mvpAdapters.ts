@@ -7,8 +7,10 @@ import type {
   MvpConfidence,
   MvpCriticality,
   MvpDecision,
+  MvpEquipmentHistoryItem,
   MvpEvent,
   MvpEventDetailModel,
+  MvpEvidenceGap,
   MvpFactor,
   MvpLineRisk,
   MvpMetrics,
@@ -26,18 +28,14 @@ const STATUS_PRIORITY: Record<MvpRiskStatus, number> = {
   normal: 1,
 };
 
-export function normalizeRiskStatus(value: unknown, probability?: number | null): MvpRiskStatus {
+export function normalizeRiskStatus(value: unknown): MvpRiskStatus {
   const status = String(value ?? "").toLowerCase();
   if (status === "critical" || status === "danger") return "critical";
   if (status === "warning" || status === "warn") return "warning";
   if (status === "attention" || status === "caution") return "attention";
   if (status === "data_quality_hold" || status === "quality_hold" || status === "blocked") return "data_quality_hold";
   if (status === "normal" || status === "healthy" || status === "ok") return "normal";
-  if (probability === null || probability === undefined) return "data_quality_hold";
-  if (probability >= 0.85) return "critical";
-  if (probability >= 0.6) return "warning";
-  if (probability >= 0.35) return "attention";
-  return "normal";
+  return "data_quality_hold";
 }
 
 export function normalizeConfidence(value: unknown): { level: MvpConfidence; score: number | null } {
@@ -65,15 +63,10 @@ export function normalizeDecision(value: unknown): MvpDecision {
   return "continue_monitoring";
 }
 
-function criticalityRank(value: MvpCriticality): number {
-  return value === "high" ? 3 : value === "medium" ? 2 : value === "low" ? 1 : 0;
-}
-
-export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; criticality: MvpCriticality; observedAt?: string | null }>(items: T[]): T[] {
+export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; observedAt?: string | null }>(items: T[]): T[] {
   return [...items].sort((left, right) => (
     STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status]
     || (right.failureProbability ?? -1) - (left.failureProbability ?? -1)
-    || criticalityRank(right.criticality) - criticalityRank(left.criticality)
     || String(right.observedAt ?? "").localeCompare(String(left.observedAt ?? ""))
   ));
 }
@@ -92,7 +85,7 @@ function fallbackProvenance(datasetVersionId: string): MvpProvenance {
   };
 }
 export function adaptEvent(event: EventSummary): MvpEvent {
-  const status = normalizeRiskStatus(event.status, event.failure_probability);
+  const status = normalizeRiskStatus(event.status);
   return {
     eventId: event.event_id,
     scenarioId: event.scenario_id,
@@ -108,7 +101,7 @@ export function adaptEvent(event: EventSummary): MvpEvent {
       : normalizeDecision(event.recommended_decision),
     criticality: event.equipment.criticality ?? null,
     assignedEngineer: event.equipment.assigned_engineer || null,
-    estimatedDowntimeMinutes: event.equipment.estimated_downtime_minutes ?? 0,
+    estimatedDowntimeMinutes: event.equipment.estimated_downtime_minutes ?? null,
     sparePartAvailable: event.equipment.spare_part_available ?? null,
     observedAt: event.observed_at ?? null,
     datasetVersionId: event.dataset_version_id ?? "dsv-canonical-v3-1",
@@ -170,7 +163,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
   const assets = [...latestResultByAsset.values()].map((result): MvpAsset => {
     const related = byAsset.get(result.asset_id);
     const confidence = normalizeConfidence(result.confidence);
-    const status = normalizeRiskStatus(result.status_grade, result.failure_probability);
+    const status = normalizeRiskStatus(result.status_grade);
     return {
       assetId: result.asset_id,
       displayName: related?.assetName ?? result.asset_id,
@@ -184,7 +177,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
       confidenceScore: confidence.score,
       criticality: related?.criticality ?? null,
       assignedEngineer: related?.assignedEngineer ?? null,
-      estimatedDowntimeMinutes: related?.estimatedDowntimeMinutes ?? 0,
+      estimatedDowntimeMinutes: related?.estimatedDowntimeMinutes ?? null,
       sparePartAvailable: related?.sparePartAvailable ?? null,
       predictedFailureType: result.predicted_failure_type,
       recommendedDecision: related?.recommendedDecision ?? normalizeDecision(result.recommended_action?.action),
@@ -229,7 +222,9 @@ export function computeMetrics(assets: MvpAsset[], events: MvpEvent[]): MvpMetri
     totalAssets: assets.length,
     ...counts,
     averageRisk: probabilities.length ? probabilities.reduce((sum, value) => sum + value, 0) / probabilities.length : null,
-    estimatedDowntimeMinutes: events.reduce((sum, event) => sum + event.estimatedDowntimeMinutes, 0),
+    estimatedDowntimeMinutes: events.length > 0 && events.every((event) => event.estimatedDowntimeMinutes !== null)
+      ? events.reduce((sum, event) => sum + event.estimatedDowntimeMinutes!, 0)
+      : null,
     pendingDecisions: events.filter((event) => event.recommendedDecision !== "continue_monitoring").length,
   };
 }
@@ -333,6 +328,29 @@ function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSe
     label: feature.label,
     value: feature.current.value,
     unit: feature.unit || null,
+    observedAt: feature.current.observed_at,
+    qualityStatus: feature.current.quality_status,
+    historySourceRef: feature.history.source_ref ?? null,
+    historyPointCount: feature.history.points.length,
+  }));
+}
+
+function equipmentHistoryFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpEquipmentHistoryItem[] {
+  return viewModel.equipment_history.map((item) => ({
+    occurredAt: item.occurred_at,
+    kind: item.kind,
+    tone: item.tone,
+    description: item.description,
+    source: item.source,
+    memo: item.memo ?? null,
+  }));
+}
+
+function evidenceGapsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpEvidenceGap[] {
+  return viewModel.evidence.gaps.map((gap) => ({
+    field: gap.field,
+    reason: gap.reason,
+    ownerDomain: gap.owner_domain,
   }));
 }
 
@@ -435,6 +453,7 @@ export function adaptReport(report: Report, revision = 0): MvpReportModel {
 
 export function buildTemplateReport(event: MvpEvent, metrics?: MvpMetrics): MvpReportModel {
   const probability = event.failureProbability === null ? "예측 사용 불가" : `${Math.round(event.failureProbability * 100)}%`;
+  const impact = event.estimatedDowntimeMinutes === null ? "영향 근거 부족" : `${event.estimatedDowntimeMinutes}분`;
   const qualityText = event.status === "data_quality_hold"
     ? "데이터 품질 문제로 판단을 보류하고 원천 데이터 확인이 필요합니다."
     : `현재 실패 위험은 ${probability}이며, 이는 고장 확정이 아닌 운영 우선순위 판단을 위한 모델 결과입니다.`;
@@ -443,7 +462,7 @@ export function buildTemplateReport(event: MvpEvent, metrics?: MvpMetrics): MvpR
     revision: 0,
     mode: "template-fallback",
     headline: `${event.assetName} 설비 위험 대응 보고`,
-    summary: `${event.line}의 ${event.assetName}을 우선 검토 중입니다. 권장 판단은 ${event.recommendedDecision}이며 예상 생산 영향은 ${event.estimatedDowntimeMinutes}분입니다.`,
+    summary: `${event.line}의 ${event.assetName}을 우선 검토 중입니다. 권장 판단은 ${event.recommendedDecision}이며 예상 생산 영향은 ${impact}입니다.`,
     sections: [
       {
         id: "executive-summary",
@@ -497,6 +516,9 @@ export function composeEventDetail(input: {
     topFactors: evidenceFactors(input.evidence),
     threshold: input.evidence?.threshold ?? null,
     dataQualityWarnings: input.evidence?.data_quality_warnings ?? [],
+    equipmentHistory: [],
+    evidenceGaps: [],
+    assetDetailStatus: null,
     activity: normalizeActivity(input.activity),
     report,
     provenance,
@@ -523,6 +545,14 @@ export function applyAssetDetailViewModel(
     sensors: sensorsFromAssetDetailViewModel(viewModel),
     topFactors: factorsFromAssetDetailViewModel(viewModel),
     threshold: viewModel.risk.threshold,
+    equipmentHistory: equipmentHistoryFromAssetDetailViewModel(viewModel),
+    evidenceGaps: evidenceGapsFromAssetDetailViewModel(viewModel),
+    assetDetailStatus: {
+      isStale: viewModel.data_status.is_stale,
+      isDataQualityHold: viewModel.data_status.is_data_quality_hold,
+      lastUpdatedAt: viewModel.data_status.last_updated_at ?? null,
+      source: viewModel.data_status.source,
+    },
     provenance: {
       ...provenanceFromAssetDetailViewModel(detail.event, viewModel),
       promptVersion: detail.provenance.promptVersion,

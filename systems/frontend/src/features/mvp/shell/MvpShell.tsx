@@ -43,7 +43,7 @@ export function MvpShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const active = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
   const headingDetail = activeView === "reports"
-    ? "map-report UI prototype의 보고서 화면과 선택 Event 브리핑을 하나의 사이드탭에서 전환합니다."
+    ? "상태 요약, 점검 요청, 선택 설비 브리핑을 같은 관측 시점으로 확인합니다."
     : role === "process_manager"
       ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
       : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
@@ -52,9 +52,9 @@ export function MvpShell({
       <header className="mvp-global-header">
         <div className="mvp-brand">
           <span className="mvp-brand-mark"><LayoutDashboard size={19} /></span>
-          <div><span>Ontology Dashboard</span><strong>Predictive Maintenance MVP</strong></div>
+          <div><span>Ontology Dashboard</span><strong>Predictive Maintenance</strong></div>
         </div>
-        <div className="mvp-header-context" aria-label="현재 MVP 문맥">
+        <div className="mvp-header-context" aria-label="현재 운영 문맥">
           <div><span>Project</span><strong>{context.projectName}</strong></div>
           <div><span>Workspace</span><strong>{context.workspaceName}</strong></div>
           <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>Canonical V3.1 · {context.datasetVersionId}</strong></div>
@@ -68,7 +68,7 @@ export function MvpShell({
       </header>
 
       <div className="mvp-context-line">
-        <div><span className={`mvp-source-mode source-${context.sourceMode}`}>{context.sourceMode === "canonical-runtime" ? "실제 Result Artifact" : "계약형 Fallback"}</span><strong>{context.sourceStatus}</strong></div>
+        <div><span className={`mvp-source-mode source-${context.sourceMode}`}>{context.sourceMode === "canonical-runtime" ? "운영 데이터 연결" : "보조 데이터 표시"}</span><strong>{context.sourceStatus}</strong></div>
         <MvpFreshness observedAt={context.observedAt} stale={context.stale} />
       </div>
 
@@ -80,15 +80,15 @@ export function MvpShell({
       ) : null}
 
       <div className="mvp-workspace">
-        <aside className={`mvp-navigation ${mobileOpen ? "is-open" : ""}`} aria-label="MVP 화면">
-          <div className="mvp-nav-intro"><span>MENTORING SCOPE</span><strong>Dashboard side tabs</strong><p>Analysis 없이 운영 판단부터 점검 보고까지 연결합니다.</p></div>
+        <aside className={`mvp-navigation ${mobileOpen ? "is-open" : ""}`} aria-label="예지보전 화면">
+          <div className="mvp-nav-intro"><span>WORKFLOW</span><strong>설비 확인에서 보고까지</strong><p>위험 확인, 사람 판단, 공유용 보고를 같은 흐름으로 연결합니다.</p></div>
           <nav>
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               return <button type="button" key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onNavigate(item.id); setMobileOpen(false); }}><Icon size={17} /><div><strong>{item.label}</strong><span>{item.description}</span></div></button>;
             })}
           </nav>
-          <div className="mvp-nav-footnote"><strong>Analysis 제외</strong><span>모델 탐색·Canvas·관리자 Surface는 이번 MVP 범위가 아닙니다.</span></div>
+          <div className="mvp-nav-footnote"><strong>보조 탐색</strong><span>모델 탐색 화면보다 현재 설비 판단과 현장 조치를 우선합니다.</span></div>
         </aside>
         <section className="mvp-main">
           <header className="mvp-page-heading"><span>{active.label}</span><h1>{active.description}</h1><p>{headingDetail}</p></header>

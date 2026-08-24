@@ -48,7 +48,7 @@ export interface MvpAsset {
   confidenceScore: number | null;
   criticality: MvpCriticality;
   assignedEngineer: string | null;
-  estimatedDowntimeMinutes: number;
+  estimatedDowntimeMinutes: number | null;
   sparePartAvailable: boolean | null;
   predictedFailureType: string;
   recommendedDecision: MvpDecision;
@@ -71,7 +71,7 @@ export interface MvpEvent {
   recommendedDecision: MvpDecision;
   criticality: MvpCriticality;
   assignedEngineer: string | null;
-  estimatedDowntimeMinutes: number;
+  estimatedDowntimeMinutes: number | null;
   sparePartAvailable: boolean | null;
   observedAt: string | null;
   datasetVersionId: string;
@@ -86,7 +86,7 @@ export interface MvpMetrics {
   critical: number;
   dataQualityHold: number;
   averageRisk: number | null;
-  estimatedDowntimeMinutes: number;
+  estimatedDowntimeMinutes: number | null;
   pendingDecisions: number;
 }
 
@@ -132,6 +132,10 @@ export interface MvpSensorValue {
   label: string;
   value: number | string | boolean | null;
   unit: string | null;
+  observedAt?: string | null;
+  qualityStatus?: "good" | "bad" | "unknown";
+  historySourceRef?: string | null;
+  historyPointCount?: number;
 }
 
 export interface MvpActivityItem {
@@ -164,12 +168,37 @@ export interface MvpReportModel {
   promptVersion: string | null;
 }
 
+export interface MvpEquipmentHistoryItem {
+  occurredAt: string;
+  kind: string;
+  tone: "critical" | "warning" | "attention" | "normal" | "hold";
+  description: string;
+  source: string;
+  memo: string | null;
+}
+
+export interface MvpEvidenceGap {
+  field: string;
+  reason: string;
+  ownerDomain: string;
+}
+
+export interface MvpAssetDetailStatus {
+  isStale: boolean | null;
+  isDataQualityHold: boolean;
+  lastUpdatedAt: string | null;
+  source: "canonical" | "fallback";
+}
+
 export interface MvpEventDetailModel {
   event: MvpEvent;
   sensors: MvpSensorValue[];
   topFactors: MvpFactor[];
   threshold: number | null;
   dataQualityWarnings: Array<{ code: string; field: string; message: string; severity: string }>;
+  equipmentHistory: MvpEquipmentHistoryItem[];
+  evidenceGaps: MvpEvidenceGap[];
+  assetDetailStatus: MvpAssetDetailStatus | null;
   activity: MvpActivityItem[];
   report: MvpReportModel;
   provenance: MvpProvenance;
@@ -189,6 +218,9 @@ export interface AssetDetailViewModel {
     site_id?: string;
     cell_id?: string;
     observed_at: string;
+    criticality?: MvpCriticality;
+    criticality_basis?: string[];
+    criticality_source?: string;
   };
   risk: {
     current: number | null;
@@ -228,6 +260,14 @@ export interface AssetDetailViewModel {
       explanation_method: string;
       evidence_field_id?: string;
     } | null;
+  }>;
+  equipment_history: Array<{
+    occurred_at: string;
+    kind: string;
+    tone: "critical" | "warning" | "attention" | "normal" | "hold";
+    description: string;
+    source: string;
+    memo?: string;
   }>;
   evidence: {
     artifact_id: string | null;

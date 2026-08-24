@@ -537,7 +537,7 @@ export function MvpMapReportAssetDetailView({
           <div><dt>24시간 위험 예측</dt><dd>{viewModel.risk.current === null ? "데이터 없음" : `${viewModel.risk.current.toFixed(1)}%`}</dd></div>
           <div><dt>원본 관측 간격</dt><dd>{viewModel.observationIntervalMinutes}분</dd></div>
           <div><dt>기준 시각</dt><dd>{formatTimestamp(selectedAsset.observedAt ?? model.context.observedAt) || viewModel.asset.observedAt}</dd></div>
-          <div><dt>표시 모드</dt><dd>{viewModel.provenance.displayMode === "fixture-view-model" ? "Fixture Replay" : "Runtime 저장 데이터"}</dd></div>
+          <div><dt>표시 모드</dt><dd>{viewModel.provenance.displayMode === "fixture-view-model" ? "보조 데이터" : "운영 저장 데이터"}</dd></div>
         </dl>
       </section>
 

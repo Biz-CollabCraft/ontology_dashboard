@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EventSummary } from "../../../types";
 import {
   adaptEvent,
+  applyAssetDetailViewModel,
   buildTemplateReport,
   composeEventDetail,
   computeLineRisk,
@@ -36,8 +37,9 @@ const event: EventSummary = {
 
 describe("MVP adapter contract", () => {
   it("normalizes statuses and only uses the approved decision enum", () => {
-    expect(normalizeRiskStatus("danger", 0.2)).toBe("critical");
-    expect(normalizeRiskStatus("unknown", null)).toBe("data_quality_hold");
+    expect(normalizeRiskStatus("danger")).toBe("critical");
+    expect(normalizeRiskStatus("unknown")).toBe("data_quality_hold");
+    expect(normalizeRiskStatus(undefined)).toBe("data_quality_hold");
     expect(normalizeDecision("automatic shutdown")).toBe("review_shutdown");
     expect(normalizeDecision("inspect bearings")).toBe("request_inspection");
   });
@@ -99,6 +101,18 @@ describe("MVP adapter contract", () => {
 
     expect(assets[0].status).toBe("critical");
     expect(assets[0].criticality).toBeNull();
+  });
+
+  it("does not synthesize downtime impact when operational context is missing", () => {
+    const adapted = adaptEvent({
+      ...event,
+      equipment: {
+        ...event.equipment,
+        estimated_downtime_minutes: undefined,
+      },
+    } as unknown as EventSummary);
+
+    expect(adapted.estimatedDowntimeMinutes).toBeNull();
   });
 
   it("derives the same metrics and line summary used by all four screens", () => {
@@ -174,5 +188,82 @@ describe("MVP adapter contract", () => {
       "relative_vibration_z",
       "relative_vibration_zone",
     ]);
+  });
+
+  it("preserves AssetDetailViewModel current/history, gaps, and nullable freshness", () => {
+    const adapted = adaptEvent(event);
+    const detail = composeEventDetail({ event: adapted, evidence: null, report: null, activity: null });
+    const enriched = applyAssetDetailViewModel(detail, {
+      asset: {
+        asset_id: "CNC-001",
+        asset_type: "cnc",
+        observed_at: "2026-08-06T03:00:00Z",
+      },
+      risk: {
+        current: 0.92,
+        threshold: 0.7,
+        status_grade: "critical",
+        prediction_horizon_hours: 24,
+      },
+      risk_series: [],
+      features: [{
+        key: "tool_wear_min",
+        label: "공구 마모",
+        unit: "분",
+        current: {
+          observed_at: "2026-08-06T03:00:00Z",
+          value: 210,
+          quality_status: "good",
+        },
+        history: {
+          source_ref: "observation-series://CNC-001/tool_wear_min",
+          points: [{
+            observed_at: "2026-08-06T02:00:00Z",
+            value: 200,
+            quality_status: "good",
+          }],
+        },
+        top_factor: {
+          rank: 1,
+          contribution: 0.42,
+          direction: "risk_up",
+          explanation_method: "shap",
+          evidence_field_id: "features.tool_wear_min",
+        },
+      }],
+      equipment_history: [{
+        occurred_at: "2026-08-05T00:00:00Z",
+        kind: "inspection",
+        tone: "attention",
+        description: "이전 점검 기록",
+        source: "maintenance-read-model",
+      }],
+      evidence: {
+        artifact_id: "RESULT#CNC-001",
+        model_version: "model-1",
+        dataset_version: "dsv-canonical-v3-1",
+        source_kind: "runtime_inference",
+        gaps: [{
+          field: "asset.criticality",
+          reason: "equipment master unavailable",
+          owner_domain: "maintenance",
+        }],
+      },
+      data_status: {
+        source: "canonical",
+        is_stale: null,
+        is_data_quality_hold: false,
+        warnings: [],
+      },
+    });
+
+    expect(enriched.sensors[0]).toEqual(expect.objectContaining({
+      observedAt: "2026-08-06T03:00:00Z",
+      historySourceRef: "observation-series://CNC-001/tool_wear_min",
+      historyPointCount: 1,
+    }));
+    expect(enriched.evidenceGaps[0]).toEqual(expect.objectContaining({ field: "asset.criticality" }));
+    expect(enriched.assetDetailStatus?.isStale).toBeNull();
+    expect(enriched.equipmentHistory[0].source).toBe("maintenance-read-model");
   });
 });

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0", "scenario_id": "GS-004", "event_id": "EVT-GS-004",
-  "equipment": {"equipment_id": "M-033", "display_name": "프레스 설비 33", "line": "프레스 1라인", "criticality": "high", "assigned_engineer": "최민호", "last_maintenance_date": "2026-06-15", "estimated_downtime_minutes": 240, "spare_part_available": false},
+  "equipment": {"equipment_id": "M-033", "display_name": "프레스 설비 33", "line": "프레스 1라인", "criticality": "high", "assigned_engineer": "최민호", "last_maintenance_date": "2026-06-15", "estimated_downtime_minutes": 240, "spare_part_available": true},
   "observation": {"timestamp": "2026-08-01T00:00:00+09:00", "product_type": "L", "air_temperature_k": 300.0, "process_temperature_k": 310.0, "rotational_speed_rpm": 1700, "torque_nm": 75.0, "tool_wear_min": 210},
   "history": [
     {"timestamp": "2026-07-31T23:45:00+09:00", "product_type": "L", "air_temperature_k": 299.8, "process_temperature_k": 309.8, "rotational_speed_rpm": 1550, "torque_nm": 58.0, "tool_wear_min": 198},
