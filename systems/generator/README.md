@@ -126,8 +126,16 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 
 ## 4. Feature Dataset Bundle 불변 저장 구조
 
-- **Bundle 식별**: `feature_dataset_version` (`feature-dataset-{hash16}`)은 Observation/Failure Dataset, Preprocessing Plan(ID/ver/sha), Feature Schema, Label Schema, prediction horizon의 canonical fingerprint로 결정론적 산출.
+- **Bundle 식별**: `feature_dataset_version` (`feature-dataset-{hash16}`)은 Observation/Failure Dataset, `failure_source_mode`, Preprocessing Plan(ID/ver/sha), Feature Schema, Label Schema, prediction horizon의 canonical fingerprint로 결정론적 산출.
 - **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
+- **Failure Source 모드 계약**:
+  - `external_dataset` (기본값): Failure 데이터셋이 필수이며 파일 미발견 시 404 Fail-Fast (Observation 대체 fallback 없음).
+  - `embedded_observation`: Observation 내부 indicator 컬럼(`Machine failure` 등)을 직접 소비.
+- **Feature `ffill` 의미 보존**:
+  - `missing_value_policy="ffill"` 적용 시 원본 source 컬럼으로 되돌아가지 않고, 이미 계산된 lag/diff/rolling/ewm series 자체를 설비 단위(`asset_id`)로 forward-fill.
+- **Fail-Closed 검증 강화**:
+  - 다중 설비에서 failure asset 컬럼 누락 또는 Observation 미소속 asset 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`.
+  - `anchor` 및 `exclusion_end` 컬럼 누락, NaT, 또는 `exclusion_end < anchor` 위반 시 `422` 반환 및 `[anchor, exclusion_end]` 전체 구간 학습 데이터 제외.
 - **5개 필수 파일 구성**:
   1. `features.npy`: 2D float64 배열, `allow_pickle=False`, NaN/Inf 불가
   2. `labels.npy`: 1D int64 배열 `{0, 1}`, `allow_pickle=False`

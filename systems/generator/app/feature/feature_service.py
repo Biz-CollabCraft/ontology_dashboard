@@ -60,11 +60,17 @@ class FeatureService:
         self.label_schema_provider = label_schema_provider or LabelSchemaProvider()
 
     def _is_within_allowed_root(self, path: Path) -> bool:
-        """Check whether path is confined within project root."""
+        """Check whether path is confined within project root or data directory."""
         try:
             resolved = path.resolve()
             root = Path.cwd().resolve()
-            return resolved == root or root in resolved.parents
+            data_dir = getattr(PATHS, "data_dir", root / "data").resolve()
+            return (
+                resolved == root
+                or root in resolved.parents
+                or resolved == data_dir
+                or data_dir in resolved.parents
+            )
         except Exception:
             return False
 
@@ -93,11 +99,19 @@ class FeatureService:
 
         # Check in root data directory
         data_dir = getattr(PATHS, "data_dir", Path("data"))
-        direct = Path(data_dir) / f"{clean_id}.csv"
-        if direct.exists() and direct.is_file():
-            if not self._is_within_allowed_root(direct):
-                raise FeatureContractError(f"안전하지 않은 데이터셋 경로 접근이 감지되었습니다: {direct}")
-            return direct.resolve()
+        direct_candidates = [
+            Path(data_dir) / f"{clean_id}.csv",
+            Path(data_dir) / f"{clean_id}_{clean_ver}.csv",
+            Path(data_dir) / clean_id / f"{clean_ver}.csv",
+            Path(data_dir) / clean_id / f"canonical-{clean_ver}.csv",
+            Path(data_dir) / kind / clean_id / clean_ver / f"{kind}.csv",
+            Path(data_dir) / kind / clean_id / clean_ver / "data.csv",
+        ]
+        for direct in direct_candidates:
+            if direct.exists() and direct.is_file():
+                if not self._is_within_allowed_root(direct):
+                    raise FeatureContractError(f"안전하지 않은 데이터셋 경로 접근이 감지되었습니다: {direct}")
+                return direct.resolve()
 
         raise FeatureInputNotFoundError(
             f"{kind.capitalize()} 데이터셋 파일을 찾을 수 없습니다: dataset_id='{clean_id}', dataset_version='{clean_ver}'"
@@ -177,7 +191,7 @@ class FeatureService:
             params = item.parameters or {}
             mv_policy = item.missing_value_policy or "drop"
 
-            # Execute operation without arbitrary premature fillna
+            # Execute operation without premature fillna
             if op == "raw":
                 try:
                     series = working_df[src].astype(float)
@@ -227,17 +241,19 @@ class FeatureService:
             else:
                 raise FeatureSchemaMismatchError(f"지원하지 않는 Feature 연산(operation)입니다: '{op}'")
 
-            # Enforce missing value policy
+            # Enforce missing value policy directly on computed series
             if mv_policy == "drop":
                 nan_mask = series.isna()
                 missing_drop_mask |= nan_mask
             elif mv_policy == "fill_zero":
                 series = series.fillna(0.0)
             elif mv_policy == "ffill":
+                # Forward-fill computed series within asset boundaries without reverting to raw source
                 if id_col and id_col in working_df.columns:
-                    series = working_df.groupby(id_col)[src].ffill().fillna(0.0)
+                    series = series.groupby(working_df[id_col], sort=False).ffill()
                 else:
-                    series = series.ffill().fillna(0.0)
+                    series = series.ffill()
+                series = series.fillna(0.0)
             elif mv_policy == "error":
                 if series.isna().any():
                     raise FeatureDatasetIntegrityError(
@@ -259,6 +275,7 @@ class FeatureService:
         label_schema: LabelSchemaSpec,
         id_col: str | None,
         time_col: str | None,
+        failure_source_mode: str = "external_dataset",
     ) -> tuple[pd.Series, pd.Series]:
         """Generate binary labels using [anchor - horizon, anchor) and mark [anchor, exclusion_end] active failures."""
         labels_series = pd.Series(0, index=working_df.index, dtype=np.int64)
@@ -266,87 +283,130 @@ class FeatureService:
 
         horizon_delta = pd.Timedelta(hours=label_schema.prediction_horizon_hours)
 
-        # 1. External Failure Dataset provided
-        if not fail_df.empty:
+        # 1. External Failure Dataset mode
+        if failure_source_mode == "external_dataset":
+            if fail_df.empty:
+                return labels_series, active_failure_drop_mask
+
             f_df = fail_df.copy()
 
-            # Filter only active failure event rows if a failure indicator column exists in fail_df
+            # Filter only active failure event rows if an indicator column exists
             for cand in ["Machine failure", "failure", "is_failure", "is_failed", "target"]:
                 if cand in f_df.columns:
                     f_df = f_df[f_df[cand] > 0]
                     break
 
-            # Remove degradation_start leakage columns from failure DataFrame if present
+            # Remove degradation_start leakage columns
             for deg_col in ["degradation_start", "degradation_started_at", "period_start"]:
                 if deg_col in f_df.columns:
                     f_df = f_df.drop(columns=[deg_col])
 
-            # Resolve anchor and exclusion_end columns
+            # Strict anchor column check
             anchor_col = label_schema.anchor
             if anchor_col not in f_df.columns:
-                for cand in ["observed_at", "timestamp", "failure_point", "datetime", "date", "time", "failure_occurred_at"]:
-                    if cand in f_df.columns:
-                        anchor_col = cand
-                        break
-
-            if anchor_col not in f_df.columns:
-                raise FeatureContractError(
-                    f"Failure 데이터셋에 anchor 컬럼 ('{label_schema.anchor}')을 찾을 수 없습니다."
+                raise FeatureSchemaMismatchError(
+                    f"Label Schema가 선언한 anchor 컬럼 '{label_schema.anchor}'이 Failure 데이터셋에 없습니다."
                 )
 
             f_df[anchor_col] = canonicalize_timestamp_series(f_df[anchor_col], col_name=anchor_col)
+            if f_df[anchor_col].isna().any():
+                raise FeatureContractError("Failure 데이터셋의 anchor 타임스탬프에 유효하지 않은 값(NaT)이 포함되어 있습니다.")
 
+            # Strict exclusion_end column check
             ex_end_col = label_schema.exclusion_end
-            if ex_end_col and ex_end_col in f_df.columns:
+            if ex_end_col:
+                if ex_end_col not in f_df.columns:
+                    raise FeatureSchemaMismatchError(
+                        f"Label Schema가 선언한 exclusion_end 컬럼 '{label_schema.exclusion_end}'이 Failure 데이터셋에 없습니다."
+                    )
                 f_df[ex_end_col] = canonicalize_timestamp_series(f_df[ex_end_col], col_name=ex_end_col)
-            else:
-                ex_end_col = None
+                if f_df[ex_end_col].isna().any():
+                    raise FeatureContractError("Failure 데이터셋의 exclusion_end 타임스탬프에 유효하지 않은 값(NaT)이 포함되어 있습니다.")
 
-            # Resolve failure asset ID column
-            fail_id_col = id_col
-            if not fail_id_col or fail_id_col not in f_df.columns:
-                for cand in ["asset_id", "machineID", "Product ID", "product_id", "UDI", "udi"]:
+                # Validate exclusion_end >= anchor
+                invalid_intervals = f_df[f_df[ex_end_col] < f_df[anchor_col]]
+                if not invalid_intervals.empty:
+                    first_bad = invalid_intervals.iloc[0]
+                    raise FeatureContractError(
+                        f"Failure 이벤트의 exclusion_end('{first_bad[ex_end_col]}')가 anchor('{first_bad[anchor_col]}')보다 앞섭니다."
+                    )
+
+            # Strict Asset ID check
+            if id_col and id_col in working_df.columns:
+                fail_id_col = None
+                for cand in [id_col, "asset_id", "machineID", "Product ID", "product_id", "UDI", "udi"]:
                     if cand in f_df.columns:
                         fail_id_col = cand
                         break
 
-            # Apply horizon and exclusion logic per failure event
-            for _, row in f_df.iterrows():
-                f_time = row[anchor_col]
-                if pd.isna(f_time):
-                    continue
+                if fail_id_col is None:
+                    raise FeatureLabelAlignmentError(
+                        "다중 설비 Observation에 대응할 Failure asset ID 컬럼이 Failure 데이터셋에 없습니다."
+                    )
 
-                h_start = f_time - horizon_delta
+                observation_assets = set(working_df[id_col].dropna().astype(str))
 
-                if id_col and fail_id_col and id_col in working_df.columns and fail_id_col in row:
-                    asset_mask = (working_df[id_col] == row[fail_id_col])
-                else:
+                for _, row in f_df.iterrows():
+                    raw_fail_asset = row.get(fail_id_col)
+                    if pd.isna(raw_fail_asset) or str(raw_fail_asset).strip() == "":
+                        raise FeatureLabelAlignmentError("Failure 데이터셋의 이벤트 행에 asset ID 값이 누락되었습니다.")
+
+                    fail_asset_str = str(raw_fail_asset)
+                    if fail_asset_str not in observation_assets:
+                        raise FeatureLabelAlignmentError(
+                            f"Failure event의 asset '{fail_asset_str}'이 Observation Dataset에 존재하지 않습니다."
+                        )
+
+                    f_time = row[anchor_col]
+                    h_start = f_time - horizon_delta
+                    asset_mask = (working_df[id_col].astype(str) == fail_asset_str)
+
+                    if time_col and time_col in working_df.columns:
+                        pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
+                        labels_series.loc[pos_mask] = 1
+
+                        if ex_end_col:
+                            ex_end = row[ex_end_col]
+                            ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
+                        else:
+                            ex_mask = asset_mask & (working_df[time_col] == f_time)
+                        active_failure_drop_mask |= ex_mask
+            else:
+                # Single asset dataset
+                for _, row in f_df.iterrows():
+                    f_time = row[anchor_col]
+                    h_start = f_time - horizon_delta
                     asset_mask = pd.Series(True, index=working_df.index)
 
-                if time_col and time_col in working_df.columns:
-                    # 1. Positive window: [f_time - horizon, f_time)
-                    pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
-                    labels_series.loc[pos_mask] = 1
+                    if time_col and time_col in working_df.columns:
+                        pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
+                        labels_series.loc[pos_mask] = 1
 
-                    # 2. Active failure exclusion: [f_time, ex_end]
-                    if ex_end_col and pd.notna(row.get(ex_end_col)):
-                        ex_end = row[ex_end_col]
-                        ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
-                    else:
-                        ex_mask = asset_mask & (working_df[time_col] == f_time)
-                    active_failure_drop_mask |= ex_mask
+                        if ex_end_col:
+                            ex_end = row[ex_end_col]
+                            ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
+                        else:
+                            ex_mask = asset_mask & (working_df[time_col] == f_time)
+                        active_failure_drop_mask |= ex_mask
 
             return labels_series, active_failure_drop_mask
 
-        # 2. Tabular failure indicators inside Observation dataset (e.g. AI4I machine failure)
-        # Convert failure indicator rows into failure events and apply official horizon formula
-        failure_indicator_col = None
-        for cand in ["Machine failure", "failure", "is_failure", "target"]:
-            if cand in working_df.columns:
-                failure_indicator_col = cand
-                break
+        # 2. Embedded Observation mode
+        elif failure_source_mode == "embedded_observation":
+            failure_indicator_col = None
+            for cand in ["Machine failure", "failure", "is_failure", "target"]:
+                if cand in working_df.columns:
+                    failure_indicator_col = cand
+                    break
 
-        if failure_indicator_col is not None and time_col and time_col in working_df.columns:
+            if failure_indicator_col is None:
+                raise FeatureContractError(
+                    "embedded_observation 모드이지만 Observation 데이터셋에 유효한 failure indicator 컬럼이 없습니다."
+                )
+
+            if not time_col or time_col not in working_df.columns:
+                raise FeatureContractError("Observation 데이터셋에 타임스탬프 컬럼이 없습니다.")
+
             fail_indices = working_df.index[working_df[failure_indicator_col] > 0].tolist()
             for f_idx in fail_indices:
                 f_time = working_df[time_col].iloc[f_idx]
@@ -356,20 +416,21 @@ class FeatureService:
                 h_start = f_time - horizon_delta
 
                 if id_col and id_col in working_df.columns:
-                    target_asset = working_df[id_col].iloc[f_idx]
-                    asset_mask = (working_df[id_col] == target_asset)
+                    target_asset = str(working_df[id_col].iloc[f_idx])
+                    asset_mask = (working_df[id_col].astype(str) == target_asset)
                 else:
                     asset_mask = pd.Series(True, index=working_df.index)
 
-                # Positive window: [f_time - horizon, f_time)
                 pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
                 labels_series.loc[pos_mask] = 1
 
-                # Active failure exclusion: [f_time, f_time]
                 ex_mask = asset_mask & (working_df[time_col] == f_time)
                 active_failure_drop_mask |= ex_mask
 
-        return labels_series, active_failure_drop_mask
+            return labels_series, active_failure_drop_mask
+
+        else:
+            raise FeatureContractError(f"지원하지 않는 failure_source_mode입니다: '{failure_source_mode}'")
 
     def execute_feature(self, request: FeatureRequest, request_id: str | None = None) -> FeatureResponse:
         """Execute Feature Dataset generation pipeline and publish immutable bundle."""
@@ -378,7 +439,8 @@ class FeatureService:
 
         logger.info(
             f"[FeatureService] Starting Feature run {run_id} for dataset={request.dataset_id}:{request.dataset_version}, "
-            f"plan={request.preprocessing_plan_id}:{request.preprocessing_plan_version}"
+            f"plan={request.preprocessing_plan_id}:{request.preprocessing_plan_version}, "
+            f"mode={request.failure_source_mode}"
         )
 
         # 1. Load Preprocessing Plan via Repository
@@ -421,18 +483,21 @@ class FeatureService:
         if obs_df.empty:
             raise InsufficientTrainingDataError("Observation 데이터셋이 비어 있습니다 (0행).")
 
-        # 3. Find and validate Failure Dataset file
-        try:
+        # 3. Handle Failure Dataset according to failure_source_mode
+        if request.failure_source_mode == "external_dataset":
+            if not request.failure_dataset_id or not request.failure_dataset_version:
+                raise FeatureContractError("external_dataset 모드에서는 failure_dataset_id 및 failure_dataset_version이 필수입니다.")
             fail_file = self._find_dataset_file(request.failure_dataset_id, request.failure_dataset_version, kind="failures")
             fail_sha256 = compute_file_sha256(fail_file)
             fail_uri = self.feature_repo.get_logical_uri(fail_file)
             fail_df = self._load_dataframe(fail_file)
-        except FeatureInputNotFoundError:
-            # Fallback when failure events are embedded in observation dataset
-            fail_file = obs_file
-            fail_sha256 = obs_sha256
-            fail_uri = obs_uri
+        elif request.failure_source_mode == "embedded_observation":
+            fail_file = None
+            fail_sha256 = None
+            fail_uri = None
             fail_df = pd.DataFrame()
+        else:
+            raise FeatureContractError(f"지원하지 않는 failure_source_mode입니다: '{request.failure_source_mode}'")
 
         # 4. Resolve Feature Schema & Label Schema from files
         feature_schema = self.feature_schema_provider.get_feature_schema(
@@ -453,8 +518,9 @@ class FeatureService:
             "observation_dataset_id": request.dataset_id,
             "observation_dataset_version": request.dataset_version,
             "observation_dataset_sha256": obs_sha256,
-            "failure_dataset_id": request.failure_dataset_id,
-            "failure_dataset_version": request.failure_dataset_version,
+            "failure_source_mode": request.failure_source_mode,
+            "failure_dataset_id": request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
+            "failure_dataset_version": request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
             "failure_dataset_sha256": fail_sha256,
             "preprocessing_plan_id": request.preprocessing_plan_id,
             "preprocessing_plan_version": request.preprocessing_plan_version,
@@ -484,8 +550,9 @@ class FeatureService:
                     status="succeeded",
                     dataset_id=request.dataset_id,
                     dataset_version=request.dataset_version,
-                    failure_dataset_id=request.failure_dataset_id,
-                    failure_dataset_version=request.failure_dataset_version,
+                    failure_source_mode=request.failure_source_mode,
+                    failure_dataset_id=request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
+                    failure_dataset_version=request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
                     preprocessing_plan_id=request.preprocessing_plan_id,
                     preprocessing_plan_version=request.preprocessing_plan_version,
                     feature_schema_version=request.feature_schema_version,
@@ -523,6 +590,7 @@ class FeatureService:
             label_schema=label_schema,
             id_col=id_col,
             time_col=time_col,
+            failure_source_mode=request.failure_source_mode,
         )
 
         # 10. Align Surviving Rows across Features, Labels, and Row Metadata
@@ -557,8 +625,9 @@ class FeatureService:
             "observation_dataset_version": request.dataset_version,
             "observation_dataset_sha256": obs_sha256,
             "observation_dataset_uri": obs_uri,
-            "failure_dataset_id": request.failure_dataset_id,
-            "failure_dataset_version": request.failure_dataset_version,
+            "failure_source_mode": request.failure_source_mode,
+            "failure_dataset_id": request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
+            "failure_dataset_version": request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
             "failure_dataset_sha256": fail_sha256,
             "failure_dataset_uri": fail_uri,
             "preprocessing_plan_id": request.preprocessing_plan_id,
@@ -595,8 +664,9 @@ class FeatureService:
             status="succeeded",
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
-            failure_dataset_id=request.failure_dataset_id,
-            failure_dataset_version=request.failure_dataset_version,
+            failure_source_mode=request.failure_source_mode,
+            failure_dataset_id=request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
+            failure_dataset_version=request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
             preprocessing_plan_id=request.preprocessing_plan_id,
             preprocessing_plan_version=request.preprocessing_plan_version,
             feature_schema_version=request.feature_schema_version,

@@ -88,19 +88,44 @@ class FeatureRepository:
         return self.base_dir / clean_id / clean_ver / clean_feat_ver
 
     def get_logical_uri(self, path: Path | None) -> str:
-        """Convert local filesystem path to relative URI with forward slashes.
-
-        Raises FeatureContractError if path is outside project repository root.
-        """
+        """Convert local filesystem path to relative URI with forward slashes (Fail-Closed)."""
         if path is None:
             return ""
-        resolved_path = path.resolve()
-        cwd = Path.cwd().resolve()
+        resolved = path.resolve()
+
+        # 1. PATHS.data_dir
         try:
-            rel = resolved_path.relative_to(cwd)
-            return str(rel).replace("\\", "/")
-        except ValueError:
-            raise FeatureContractError(f"허용된 저장소 밖의 경로입니다: {path}")
+            data_dir = getattr(PATHS, "data_dir", Path("data")).resolve()
+            if resolved == data_dir:
+                return "data"
+            if data_dir in resolved.parents:
+                return f"data/{resolved.relative_to(data_dir).as_posix()}"
+        except Exception:
+            pass
+
+        # 2. PATHS.models_store
+        try:
+            models_store = getattr(PATHS, "models_store", Path("models_store")).resolve()
+            if resolved == models_store:
+                return "models_store"
+            if models_store in resolved.parents:
+                return f"models_store/{resolved.relative_to(models_store).as_posix()}"
+        except Exception:
+            pass
+
+        # 3. Project workspace
+        try:
+            cwd = Path.cwd().resolve()
+            if resolved == cwd:
+                return "."
+            if cwd in resolved.parents:
+                rel = resolved.relative_to(cwd).as_posix()
+                if not rel.startswith(".."):
+                    return rel
+        except Exception:
+            pass
+
+        raise FeatureContractError(f"논리 URI로 변환할 수 없는 허용 범위 밖의 경로입니다: '{path.name}'")
 
     def find_feature_bundle(
         self,

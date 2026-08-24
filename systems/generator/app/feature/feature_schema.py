@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import re
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+import sys
+from typing import Literal, Optional
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-def _validate_identifier(value: str, field_name: str) -> str:
+def _validate_identifier(value: Optional[str], field_name: str) -> Optional[str]:
     """Validate identifier contains no path traversal or dangerous characters."""
+    if value is None:
+        return None
     if not isinstance(value, str):
         raise ValueError(f"{field_name}은(는) 문자열이어야 합니다.")
     trimmed = value.strip()
@@ -28,8 +38,19 @@ class FeatureRequest(BaseModel):
     dataset_id: str = Field(..., description="Observation dataset identifier")
     dataset_version: str = Field(..., description="Observation dataset version")
 
-    failure_dataset_id: str = Field(..., description="Failure dataset identifier")
-    failure_dataset_version: str = Field(..., description="Failure dataset version")
+    failure_source_mode: Literal["external_dataset", "embedded_observation"] = Field(
+        default="external_dataset",
+        description="Failure source mode: 'external_dataset' (default) or 'embedded_observation'",
+    )
+
+    failure_dataset_id: Optional[str] = Field(
+        default=None,
+        description="Failure dataset identifier (required when failure_source_mode='external_dataset')",
+    )
+    failure_dataset_version: Optional[str] = Field(
+        default=None,
+        description="Failure dataset version (required when failure_source_mode='external_dataset')",
+    )
 
     preprocessing_plan_id: str = Field(..., description="Immutable Preprocessing Plan unique ID (pp-{UUID})")
     preprocessing_plan_version: str = Field(..., description="Preprocessing Plan content hash version")
@@ -49,10 +70,18 @@ class FeatureRequest(BaseModel):
         "preprocessing_plan_version",
         "feature_schema_version",
         "label_schema_version",
+        mode="after",
     )
     @classmethod
-    def validate_id_fields(cls, v: str, info) -> str:
+    def validate_id_fields(cls, v: Optional[str], info) -> Optional[str]:
         return _validate_identifier(v, info.field_name)
+
+    @model_validator(mode="after")
+    def validate_failure_source(self) -> Self:
+        if self.failure_source_mode == "external_dataset":
+            if not self.failure_dataset_id or not self.failure_dataset_version:
+                raise ValueError("external_dataset 모드에서는 failure_dataset_id 및 failure_dataset_version이 필수입니다.")
+        return self
 
 
 class FeatureOutputsPayload(BaseModel):
@@ -75,8 +104,13 @@ class FeatureResponse(BaseModel):
 
     dataset_id: str = Field(..., description="Observation dataset identifier")
     dataset_version: str = Field(..., description="Observation dataset version")
-    failure_dataset_id: str = Field(..., description="Failure dataset identifier")
-    failure_dataset_version: str = Field(..., description="Failure dataset version")
+
+    failure_source_mode: Literal["external_dataset", "embedded_observation"] = Field(
+        default="external_dataset",
+        description="Failure source mode applied",
+    )
+    failure_dataset_id: Optional[str] = Field(default=None, description="Failure dataset identifier")
+    failure_dataset_version: Optional[str] = Field(default=None, description="Failure dataset version")
 
     preprocessing_plan_id: str = Field(..., description="Consumed Preprocessing Plan ID")
     preprocessing_plan_version: str = Field(..., description="Consumed Preprocessing Plan version")

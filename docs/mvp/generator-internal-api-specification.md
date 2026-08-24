@@ -240,13 +240,14 @@ models_store/cache/preprocessing_plans/
 
 ### 5.6 Feature Dataset Bundle 계약 (`POST /feature` — Current)
 
-Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature 및 Label을 계산하고 불변 Feature Dataset Bundle(5개 필수 파일)을 원자적으로 발행합니다.
+Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature 및 Horizon Label을 계산하고 불변 Feature Dataset Bundle(5개 필수 파일)을 원자적으로 발행합니다.
 
 ```json
-// 요청 예시
+// 요청 예시 (external_dataset 모드)
 {
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
+  "failure_source_mode": "external_dataset",
   "failure_dataset_id": "ai4i_failures",
   "failure_dataset_version": "canonical-ai4i-failures-v1",
   "preprocessing_plan_id": "pp-7c106819-cc59-46da-90dd-22c37c441ac9",
@@ -258,9 +259,17 @@ Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Lab
 }
 ```
 
+- **Failure Source 계약 (`failure_source_mode`)**:
+  - `external_dataset`: `failure_dataset_id` 및 `failure_dataset_version`이 필수이며, 파일 부재 시 Observation 데이터셋으로 대체하지 않고 즉시 `404 FEATURE_INPUT_NOT_FOUND`로 실패합니다.
+  - `embedded_observation`: Observation 내부 failure indicator 컬럼(`Machine failure` 등)을 사용하며, indicator 컬럼 부재 시 `422`로 실패합니다.
+- **계산된 Feature 의미 보존**:
+  - `lag`, `diff`, `rolling`, `ewm` 등 변환 연산 결과(`series`)에 대해 `missing_value_policy == "ffill"` 적용 시 원본 source 컬럼으로 되돌아가지 않고 계산된 series 자체를 설비 단위(`asset_id`)로 forward-fill합니다.
+- **Failure 설비 Identity 및 제외 구간 Fail-Closed**:
+  - 다중 설비 데이터셋에서 Failure 데이터셋의 asset ID 컬럼 누락, 결측치 또는 Observation에 존재하지 않는 asset ID 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`를 반환합니다.
+  - Label Schema가 선언한 `anchor` 및 `exclusion_end` 컬럼 누락, NaT 또는 `exclusion_end < anchor` 위반 시 `422`로 처리하며, `[anchor, exclusion_end]` 전체 구간을 학습 데이터에서 엄격히 제거합니다.
 - **5개 필수 파일 구성**: `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`
 - **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
-- **식별자 결정론**: `feature_dataset_version`은 입력 Dataset, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
+- **식별자 결정론**: `feature_dataset_version`은 입력 Dataset, `failure_source_mode`, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
 - **Ontology Mapping 배제**: Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema allowlist/recipe만 실행합니다.
 
 ---
