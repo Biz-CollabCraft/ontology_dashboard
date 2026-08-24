@@ -69,7 +69,7 @@ def profile_source_file_with_llm(filepath: str, filename: str, df_preview: pd.Da
         '    {"name": "column_name", "semantic": "period_start" | "period_end" | "failure_point" | "maintenance_start" | "timestamp"}\n'
         '  ],\n'
         '  "column_notes": {\n'
-        '    "column_name": "note explaining role, unit, or ontology candidate status"\n'
+        '    "column_name": "note explaining structural role, source dtype, unit, timestamp format, or parsing requirement"\n'
         '  },\n'
         '  "confidence": 0.0 ~ 1.0\n'
         "}"

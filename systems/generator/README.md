@@ -31,7 +31,7 @@ systems/generator/
 ├─ file_integrity.py          # SHA-256 무결성 검증 유틸리티
 ├─ feature/                   # Feature 계산 모듈
 ├─ model/                     # 모델 알고리즘 구현 (LightGBM, XGBoost, RandomForest) 및 Registry
-├─ ontology_mapping/          # 컬럼-온톨로지 노드 의미 매핑
+├─ ontology_mapping/          # legacy/보조 semantic mapping 모듈; 신규 Feature API 실행 계약이 아님
 ├─ topology/                  # 설비 간 위상 관계 추론
 ├─ common/                    # 공통 에이전트 및 타임스탬프 정규화 유틸리티
 ├─ entrypoint.py
@@ -48,7 +48,7 @@ systems/generator/
 
 ---
 
-## 2. 도메인 API 현황 및 로드맵
+## 2. 도메인 API 현황 및 파이프라인
 
 ### 2.1 Current API (현재 구현 상태)
 
@@ -57,7 +57,7 @@ systems/generator/
 | Method | Path | 현재 의미 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 및 시스템 식별자 확인 | Current (구현 완료) |
-| POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current (구현 및 정본 Generator App 이관 완료) |
+| POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
 
@@ -68,13 +68,37 @@ systems/generator/
 | Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
-| POST | `/extraction` | protocol provenance → Observation Dataset / Authorized Truth Source → Failure Dataset (신규 1단계) | Target — 미병합 |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current (구현 및 정본 Generator App 이관 완료) |
-| POST | `/feature` | Observation + Failure + Plan + Mapping을 소비하여 Feature/Label 및 Feature Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/extraction` | gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108) | Target — 미병합 |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Target — 미병합 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
 | GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
+
+### 2.3 파이프라인 흐름
+
+Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
+
+```text
+1. Extraction
+   ├─ 지정 Mapping 기반 Protocol Parsing
+   ├─ Canonical Observation Dataset 발행
+   └─ Authorized Truth Source 기반 Failure Dataset 발행
+
+2. Preprocessing
+   ├─ Observation Dataset 구조 분석
+   ├─ ID/time/attribute/value 역할 판정
+   └─ Immutable Preprocessing Plan 발행
+
+3. Feature
+   ├─ Feature Schema allowlist/recipe 적용
+   ├─ Label Schema 적용
+   └─ Feature Dataset Bundle 발행
+
+4. Training
+   └─ Feature Dataset Bundle → Immutable Model Artifact
+```
 
 ---
 
@@ -82,5 +106,5 @@ systems/generator/
 
 - **Plan 식별**: `preprocessing_plan_id` (`pp-{UUID4}`)와 `preprocessing_plan_version` (`preprocessing-plan-{hash}`) 분리.
 - **저장 디렉터리**: `models_store/cache/preprocessing_plans/{dataset_id}/{dataset_version}/`
-- **불변 파일 및 포인터**: `pp-{uuid}.json` (불변 파일) 및 `latest.json` (원자적 교체 포인터).
+- **불변 파일 및 포인터**: `pp-{uuid}.json` (고유 불변 파일 atomic rename 발행) 및 `latest.json` (별도 atomic replace 갱신).
 - **동기 실행**: `/preprocessing` 라우터는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.

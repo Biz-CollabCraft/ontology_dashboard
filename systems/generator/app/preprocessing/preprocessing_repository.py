@@ -238,7 +238,7 @@ class PreprocessingRepository:
         dataset_version: str,
         plan_data: dict[str, Any],
     ) -> PublishedPreprocessingPlan:
-        """Atomically stage and publish an immutable preprocessing plan JSON file and update latest.json pointer."""
+        """Publish an immutable Plan file, then atomically advance latest.json."""
         plan_dir = self.get_dataset_plan_dir(dataset_id, dataset_version)
         plan_dir.mkdir(parents=True, exist_ok=True)
 

@@ -123,6 +123,16 @@ def test_preprocessing_responsibility_boundaries(client, sample_wide_csv, tmp_pa
     mapping_dir = models_store / "cache" / "mappings"
     assert not mapping_dir.exists() or len(list(mapping_dir.glob("*.json"))) == 0
 
+    # 3. Verify published plan JSON contains no ontology or feature fields
+    plan_id = data["preprocessing_plan_id"]
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+    plan_json = repo.load_plan("test_boundary", "v1.0", plan_id)
+    assert "mapping_uri" not in plan_json
+    assert "mapping_version" not in plan_json
+    assert "ontology_node" not in plan_json
+    assert "feature_recipe" not in plan_json
+    assert "feature_names" not in plan_json
+
 
 # ==========================================
 # 3. Plan Identification & Determinism
