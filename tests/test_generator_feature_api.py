@@ -19,6 +19,7 @@ from systems.generator.app.feature.feature_exception import (
     FeatureContractError,
     FeatureLabelAlignmentError,
     FeatureSchemaMismatchError,
+    InsufficientTrainingDataError,
 )
 from systems.generator.app.feature.feature_repository import (
     FeatureRepository,
@@ -291,7 +292,74 @@ def test_external_failure_dataset_missing_returns_404(test_client):
     assert resp.json()["error"]["code"] == "FEATURE_INPUT_NOT_FOUND"
 
 
-def test_external_failure_provenance_uses_actual_failure_file(test_client, tmp_path):
+def test_external_failure_dataset_empty_returns_422(test_client):
+    """Test 422 when external failure dataset is empty (0 rows)."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    empty_fail_ds = "test_empty_failures"
+    fail_file = PATHS.data_dir / f"{empty_fail_ds}.csv"
+    pd.DataFrame(columns=["Product ID", "failure_point", "period_end"]).to_csv(fail_file, index=False)
+
+    try:
+        resp = client.post("/feature", json={
+            "dataset_id": dataset_id,
+            "dataset_version": "v1.0",
+            "failure_source_mode": "external_dataset",
+            "failure_dataset_id": empty_fail_ds,
+            "failure_dataset_version": "v1.0",
+            "preprocessing_plan_id": plan_id,
+            "preprocessing_plan_version": plan_ver,
+            "feature_schema_version": "ai4i-feature-v1",
+            "label_schema_version": "ai4i-label-24h-v1",
+        })
+        assert resp.status_code == 422
+        assert "유효한 failure event가 없습니다" in resp.json()["error"]["message"]
+    finally:
+        if fail_file.exists():
+            fail_file.unlink()
+
+
+def test_external_failure_indicator_has_no_active_event_returns_422(test_client):
+    """Test 422 when external failure dataset has 0 active failure events after indicator filtering."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    no_act_fail_ds = "test_no_active_failures"
+    fail_file = PATHS.data_dir / f"{no_act_fail_ds}.csv"
+    # All failure indicators are 0
+    df_fail = pd.DataFrame({
+        "Product ID": ["L0001", "L0002"],
+        "failure_point": ["2026-01-01 10:00:00", "2026-01-02 11:00:00"],
+        "period_end": ["2026-01-01 11:00:00", "2026-01-02 12:00:00"],
+        "Machine failure": [0, 0],
+    })
+    df_fail.to_csv(fail_file, index=False)
+
+    try:
+        resp = client.post("/feature", json={
+            "dataset_id": dataset_id,
+            "dataset_version": "v1.0",
+            "failure_source_mode": "external_dataset",
+            "failure_dataset_id": no_act_fail_ds,
+            "failure_dataset_version": "v1.0",
+            "preprocessing_plan_id": plan_id,
+            "preprocessing_plan_version": plan_ver,
+            "feature_schema_version": "ai4i-feature-v1",
+            "label_schema_version": "ai4i-label-24h-v1",
+        })
+        assert resp.status_code == 422
+        assert "활성 failure event가 없습니다" in resp.json()["error"]["message"]
+    finally:
+        if fail_file.exists():
+            fail_file.unlink()
+
+
+def test_external_failure_provenance_uses_actual_failure_file(test_client):
     """Test that external_dataset mode records actual failure dataset SHA-256 and URI in provenance."""
     client = test_client["client"]
     dataset_id = test_client["dataset_id"]
@@ -365,8 +433,6 @@ def test_embedded_failure_requires_explicit_mode(test_client):
 def test_embedded_failure_without_indicator_returns_422(test_client):
     """Test 422 when embedded_observation mode is requested on a dataset without failure indicator."""
     client = test_client["client"]
-    plan_id = test_client["plan_id"]
-    plan_ver = test_client["plan_version"]
 
     # Create dataset without Machine failure column
     no_fail_id = "ai4i_no_fail_col"
@@ -384,7 +450,6 @@ def test_embedded_failure_without_indicator_returns_422(test_client):
     df.to_csv(csv_file, index=False)
 
     try:
-        # Preprocess
         prep_res = client.post("/preprocessing", json={"dataset_id": no_fail_id, "dataset_version": "v1.0", "force_reanalyze": True})
         p_id = prep_res.json()["preprocessing_plan_id"]
         p_ver = prep_res.json()["preprocessing_plan_version"]
@@ -444,7 +509,247 @@ def test_failure_source_mode_changes_feature_dataset_version():
 
 
 # ==========================================
-# 3. Failure Asset Identity & Exclusion Tests
+# 3. Observation Timestamp & Embedded NaT Fail-Closed
+# ==========================================
+
+def test_observation_timestamp_column_missing_returns_422(test_client):
+    """Test 422 when observation dataset lacks any recognizable timestamp column."""
+    client = test_client["client"]
+
+    ds_name = "ai4i_no_timestamp"
+    csv_file = PATHS.data_dir / f"{ds_name}.csv"
+    df = pd.DataFrame({
+        "UDI": [1, 2, 3],
+        "Product ID": ["L0001", "L0001", "L0001"],
+        "Air temperature [K]": [298.1, 298.2, 298.3],
+        "Process temperature [K]": [308.1, 308.2, 308.3],
+        "Rotational speed [rpm]": [1500, 1500, 1500],
+        "Torque [Nm]": [40.0, 40.0, 40.0],
+        "Tool wear [min]": [0, 5, 10],
+        "Machine failure": [0, 1, 0],
+    })
+    df.to_csv(csv_file, index=False)
+
+    try:
+        prep_res = client.post("/preprocessing", json={"dataset_id": ds_name, "dataset_version": "v1.0", "force_reanalyze": True})
+        p_id = prep_res.json()["preprocessing_plan_id"]
+        p_ver = prep_res.json()["preprocessing_plan_version"]
+
+        resp = client.post("/feature", json={
+            "dataset_id": ds_name,
+            "dataset_version": "v1.0",
+            "failure_source_mode": "embedded_observation",
+            "preprocessing_plan_id": p_id,
+            "preprocessing_plan_version": p_ver,
+            "feature_schema_version": "ai4i-feature-v1",
+            "label_schema_version": "ai4i-label-24h-v1",
+        })
+        assert resp.status_code == 422
+        assert "Observation timestamp" in resp.json()["error"]["message"]
+    finally:
+        if csv_file.exists():
+            csv_file.unlink()
+
+
+def test_observation_timestamp_contains_invalid_value_returns_422(test_client):
+    """Test 422 when observation dataset contains unparseable timestamp string (NaT)."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    # 1. Direct service verification
+    service = FeatureService()
+    df_invalid = pd.DataFrame({
+        "UDI": [1, 2],
+        "Product ID": ["L0001", "L0001"],
+        "observed_at": ["2026-01-01 01:00", "INVALID_TIMESTAMP"],
+    })
+    with pytest.raises(FeatureLabelAlignmentError) as exc_info:
+        service._prepare_canonical_working_df(df_invalid, id_col="Product ID", time_col="observed_at")
+    assert "정규화할 수 없는 값" in str(exc_info.value)
+
+    # 2. API integration verification by mutating existing valid dataset
+    csv_file = PATHS.data_dir / f"{dataset_id}.csv"
+    orig_df = pd.read_csv(csv_file)
+    corrupted_df = orig_df.copy()
+    corrupted_df.loc[0, "observed_at"] = "NOT_A_TIMESTAMP_FORMAT"
+    corrupted_df.to_csv(csv_file, index=False)
+
+    try:
+        resp = client.post("/feature", json={
+            "dataset_id": dataset_id,
+            "dataset_version": "v1.0",
+            "failure_source_mode": "embedded_observation",
+            "preprocessing_plan_id": plan_id,
+            "preprocessing_plan_version": plan_ver,
+            "feature_schema_version": "ai4i-feature-v1",
+            "label_schema_version": "ai4i-label-24h-v1",
+            "rebuild_npy": True,
+        })
+        assert resp.status_code == 422
+        assert "정규화할 수 없는 값" in resp.json()["error"]["message"]
+    finally:
+        orig_df.to_csv(csv_file, index=False)
+
+
+def test_embedded_failure_event_invalid_timestamp_returns_422():
+    """Test 422 when an embedded failure indicator row has invalid/NaT timestamp."""
+    df_obs = pd.DataFrame({
+        "asset_id": ["A", "A", "A"],
+        "observed_at": [pd.NaT, "2026-01-01 02:00", "2026-01-01 03:00"],
+        "Machine failure": [1, 0, 0],
+    })
+    label_spec = LabelSchemaSpec(schema_version="v1", prediction_task="t", prediction_horizon_hours=24)
+
+    service = FeatureService()
+    with pytest.raises(FeatureLabelAlignmentError) as exc_info:
+        service._generate_labels_and_exclusion_mask(
+            working_df=df_obs,
+            fail_df=pd.DataFrame(),
+            label_schema=label_spec,
+            id_col="asset_id",
+            time_col="observed_at",
+            failure_source_mode="embedded_observation",
+        )
+    assert "timestamp가 유효하지 않습니다" in str(exc_info.value)
+
+
+# ==========================================
+# 4. Label Class Validity Tests
+# ==========================================
+
+def test_binary_label_only_zero_returns_422(test_client):
+    """Test 422 when prediction horizon yields ONLY label 0 (no positive labels generated)."""
+    client = test_client["client"]
+
+    ds_name = "ai4i_no_horizon_match"
+    csv_file = PATHS.data_dir / f"{ds_name}.csv"
+    # Observations are in 2026-01-01, but external failure event is in 2026-06-01 (outside 24h lookahead)
+    df = pd.DataFrame({
+        "UDI": [1, 2, 3],
+        "Product ID": ["L0001", "L0001", "L0001"],
+        "Air temperature [K]": [298.1, 298.2, 298.3],
+        "Process temperature [K]": [308.1, 308.2, 308.3],
+        "Rotational speed [rpm]": [1500, 1500, 1500],
+        "Torque [Nm]": [40.0, 40.0, 40.0],
+        "Tool wear [min]": [0, 5, 10],
+        "observed_at": ["2026-01-01 01:00:00", "2026-01-01 02:00:00", "2026-01-01 03:00:00"],
+    })
+    df.to_csv(csv_file, index=False)
+
+    fail_name = "ai4i_far_failures"
+    fail_file = PATHS.data_dir / f"{fail_name}.csv"
+    pd.DataFrame({
+        "Product ID": ["L0001"],
+        "failure_point": ["2026-06-01 10:00:00"],
+        "period_end": ["2026-06-01 12:00:00"],
+    }).to_csv(fail_file, index=False)
+
+    try:
+        prep_res = client.post("/preprocessing", json={"dataset_id": ds_name, "dataset_version": "v1.0", "force_reanalyze": True})
+        p_id = prep_res.json()["preprocessing_plan_id"]
+        p_ver = prep_res.json()["preprocessing_plan_version"]
+
+        resp = client.post("/feature", json={
+            "dataset_id": ds_name,
+            "dataset_version": "v1.0",
+            "failure_source_mode": "external_dataset",
+            "failure_dataset_id": fail_name,
+            "failure_dataset_version": "v1.0",
+            "preprocessing_plan_id": p_id,
+            "preprocessing_plan_version": p_ver,
+            "feature_schema_version": "ai4i-feature-v1",
+            "label_schema_version": "ai4i-label-24h-v1",
+        })
+        assert resp.status_code == 422
+        assert "label 0과 1이 모두 필요합니다" in resp.json()["error"]["message"]
+    finally:
+        if csv_file.exists():
+            csv_file.unlink()
+        if fail_file.exists():
+            fail_file.unlink()
+
+
+def test_binary_label_only_one_returns_422(test_client):
+    """Test 422 when all surviving rows have label 1 (no negative label 0)."""
+    client = test_client["client"]
+
+    ds_name = "ai4i_only_ones"
+    csv_file = PATHS.data_dir / f"{ds_name}.csv"
+    # Only 2 rows, both fall inside [10:00 - 24h, 10:00) positive lookahead window
+    df = pd.DataFrame({
+        "UDI": [1, 2],
+        "Product ID": ["L0001", "L0001"],
+        "Air temperature [K]": [298.1, 298.2],
+        "Process temperature [K]": [308.1, 308.2],
+        "Rotational speed [rpm]": [1500, 1500],
+        "Torque [Nm]": [40.0, 40.0],
+        "Tool wear [min]": [0, 5],
+        "observed_at": ["2026-01-01 08:00:00", "2026-01-01 09:00:00"],
+    })
+    df.to_csv(csv_file, index=False)
+
+    fail_name = "ai4i_single_failure"
+    fail_file = PATHS.data_dir / f"{fail_name}.csv"
+    pd.DataFrame({
+        "Product ID": ["L0001"],
+        "failure_point": ["2026-01-01 10:00:00"],
+        "period_end": ["2026-01-01 12:00:00"],
+    }).to_csv(fail_file, index=False)
+
+    try:
+        prep_res = client.post("/preprocessing", json={"dataset_id": ds_name, "dataset_version": "v1.0", "force_reanalyze": True})
+        p_id = prep_res.json()["preprocessing_plan_id"]
+        p_ver = prep_res.json()["preprocessing_plan_version"]
+
+        resp = client.post("/feature", json={
+            "dataset_id": ds_name,
+            "dataset_version": "v1.0",
+            "failure_source_mode": "external_dataset",
+            "failure_dataset_id": fail_name,
+            "failure_dataset_version": "v1.0",
+            "preprocessing_plan_id": p_id,
+            "preprocessing_plan_version": p_ver,
+            "feature_schema_version": "ai4i-feature-v1",
+            "label_schema_version": "ai4i-label-24h-v1",
+        })
+        assert resp.status_code == 422
+        assert "label 0과 1이 모두 필요합니다" in resp.json()["error"]["message"]
+    finally:
+        if csv_file.exists():
+            csv_file.unlink()
+        if fail_file.exists():
+            fail_file.unlink()
+
+
+def test_binary_label_contains_both_classes_succeeds(test_client):
+    """Test successful bundle generation when final label array has both 0 and 1 classes."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_source_mode": "embedded_observation",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert resp.status_code == 200
+    feat_ver = resp.json()["outputs"]["feature_dataset_version"]
+    bundle_dir = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver
+    labels = np.load(bundle_dir / "labels.npy", allow_pickle=False)
+    assert set(np.unique(labels).tolist()) == {0, 1}
+
+
+# ==========================================
+# 5. Failure Asset Identity & Exclusion Tests
 # ==========================================
 
 def test_failure_event_affects_only_matching_asset():

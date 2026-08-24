@@ -133,9 +133,19 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
   - `embedded_observation`: Observation 내부 indicator 컬럼(`Machine failure` 등)을 직접 소비.
 - **Feature `ffill` 의미 보존**:
   - `missing_value_policy="ffill"` 적용 시 원본 source 컬럼으로 되돌아가지 않고, 이미 계산된 lag/diff/rolling/ewm series 자체를 설비 단위(`asset_id`)로 forward-fill.
-- **Fail-Closed 검증 강화**:
-  - 다중 설비에서 failure asset 컬럼 누락 또는 Observation 미소속 asset 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`.
-  - `anchor` 및 `exclusion_end` 컬럼 누락, NaT, 또는 `exclusion_end < anchor` 위반 시 `422` 반환 및 `[anchor, exclusion_end]` 전체 구간 학습 데이터 제외.
+- **`binary_failure_within_horizon` Feature Dataset 발행 조건 (Fail-Closed)**:
+  1. **Canonical Observation timestamp 필수**: 누락 또는 NaT 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
+  2. **유효한 failure event 최소 1건 필수**: 외부 Failure Dataset 0행 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  3. **Active failure filtering 후 event 최소 1건 필수**: indicator 필터링 후 0건 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  4. **내장 failure event timestamp 오류 거부**: embedded indicator 행의 timestamp NaT 시 건너뛰지 않고 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
+  5. **최종 Label 클래스 `{0, 1}` 양자 공존 필수**: 최종 생존 라벨에 0과 1이 모두 존재해야 하며, 단일 클래스 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  6. **설비 Identity & 제외 구간 엄격성**: 다중 설비에서 failure asset 누락/미소속 시 `422`, `anchor`/`exclusion_end` 누락, NaT, 또는 `exclusion_end < anchor` 위반 시 `422` 반환 및 `[anchor, exclusion_end]` 전체 구간 학습 데이터 제외.
+- **허용되지 않는 Fallback (Prohibited Fallbacks)**:
+  - timestamp 위치 기반 추측 금지
+  - invalid timestamp 행 조용한 건너뛰기(silent skip) 금지
+  - 빈 Failure Dataset을 정상 Dataset으로 처리 금지
+  - all-zero Label Bundle 발행 금지
+  - 단일 클래스 Label을 Training 단계로 전달 금지
 - **5개 필수 파일 구성**:
   1. `features.npy`: 2D float64 배열, `allow_pickle=False`, NaN/Inf 불가
   2. `labels.npy`: 1D int64 배열 `{0, 1}`, `allow_pickle=False`

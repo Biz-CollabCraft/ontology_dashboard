@@ -267,6 +267,19 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 - **Failure 설비 Identity 및 제외 구간 Fail-Closed**:
   - 다중 설비 데이터셋에서 Failure 데이터셋의 asset ID 컬럼 누락, 결측치 또는 Observation에 존재하지 않는 asset ID 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`를 반환합니다.
   - Label Schema가 선언한 `anchor` 및 `exclusion_end` 컬럼 누락, NaT 또는 `exclusion_end < anchor` 위반 시 `422`로 처리하며, `[anchor, exclusion_end]` 전체 구간을 학습 데이터에서 엄격히 제거합니다.
+- **`binary_failure_within_horizon` Feature Dataset 발행 조건 (Fail-Closed)**:
+  1. **Canonical Observation timestamp 필수**: 누락 또는 NaT 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
+  2. **유효한 failure event 최소 1건 필수**: 외부 Failure Dataset 0행 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  3. **Active failure filtering 후 event 최소 1건 필수**: indicator 필터링 후 0건 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  4. **내장 failure event timestamp 오류 거부**: embedded indicator 행의 timestamp NaT 시 건너뛰지 않고 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
+  5. **최종 Label 클래스 `{0, 1}` 양자 공존 필수**: 최종 생존 라벨에 0과 1이 모두 존재해야 하며, 단일 클래스 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  6. **설비 Identity & 제외 구간 엄격성**: 다중 설비에서 failure asset 누락/미소속 시 `422`, `anchor`/`exclusion_end` 누락, NaT, 또는 `exclusion_end < anchor` 위반 시 `422` 반환 및 `[anchor, exclusion_end]` 전체 구간 학습 데이터 제외.
+- **허용되지 않는 Fallback (Prohibited Fallbacks)**:
+  - timestamp 위치 기반 추측 금지
+  - invalid timestamp 행 조용한 건너뛰기(silent skip) 금지
+  - 빈 Failure Dataset을 정상 Dataset으로 처리 금지
+  - all-zero Label Bundle 발행 금지
+  - 단일 클래스 Label을 Training 단계로 전달 금지
 - **5개 필수 파일 구성**: `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`
 - **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
 - **식별자 결정론**: `feature_dataset_version`은 입력 Dataset, `failure_source_mode`, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.

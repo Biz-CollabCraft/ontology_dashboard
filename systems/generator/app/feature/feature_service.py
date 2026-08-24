@@ -143,9 +143,17 @@ class FeatureService:
                     resolved_time_col = candidate
                     break
 
-        if resolved_time_col and resolved_time_col in working_df.columns:
-            working_df[resolved_time_col] = canonicalize_timestamp_series(
-                working_df[resolved_time_col], col_name=resolved_time_col
+        if not resolved_time_col or resolved_time_col not in working_df.columns:
+            raise FeatureLabelAlignmentError(
+                "호라이즌 라벨링에 필요한 Observation timestamp 컬럼이 없습니다."
+            )
+
+        working_df[resolved_time_col] = canonicalize_timestamp_series(
+            working_df[resolved_time_col], col_name=resolved_time_col
+        )
+        if working_df[resolved_time_col].isna().any():
+            raise FeatureLabelAlignmentError(
+                "Observation timestamp에 정규화할 수 없는 값이 포함되어 있습니다."
             )
 
         # Determine asset ID column
@@ -278,6 +286,11 @@ class FeatureService:
         failure_source_mode: str = "external_dataset",
     ) -> tuple[pd.Series, pd.Series]:
         """Generate binary labels using [anchor - horizon, anchor) and mark [anchor, exclusion_end] active failures."""
+        if not time_col or time_col not in working_df.columns:
+            raise FeatureLabelAlignmentError(
+                "호라이즌 라벨링에 필요한 Observation timestamp 컬럼이 없습니다."
+            )
+
         labels_series = pd.Series(0, index=working_df.index, dtype=np.int64)
         active_failure_drop_mask = pd.Series(False, index=working_df.index)
 
@@ -286,15 +299,26 @@ class FeatureService:
         # 1. External Failure Dataset mode
         if failure_source_mode == "external_dataset":
             if fail_df.empty:
-                return labels_series, active_failure_drop_mask
+                raise InsufficientTrainingDataError(
+                    "외부 Failure Dataset에 유효한 failure event가 없습니다."
+                )
 
             f_df = fail_df.copy()
 
             # Filter only active failure event rows if an indicator column exists
+            failure_indicator_col = None
             for cand in ["Machine failure", "failure", "is_failure", "is_failed", "target"]:
                 if cand in f_df.columns:
-                    f_df = f_df[f_df[cand] > 0]
+                    failure_indicator_col = cand
                     break
+
+            if failure_indicator_col:
+                f_df = f_df[f_df[failure_indicator_col] > 0]
+
+            if f_df.empty:
+                raise InsufficientTrainingDataError(
+                    "외부 Failure Dataset에 활성 failure event가 없습니다."
+                )
 
             # Remove degradation_start leakage columns
             for deg_col in ["degradation_start", "degradation_started_at", "period_start"]:
@@ -361,16 +385,15 @@ class FeatureService:
                     h_start = f_time - horizon_delta
                     asset_mask = (working_df[id_col].astype(str) == fail_asset_str)
 
-                    if time_col and time_col in working_df.columns:
-                        pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
-                        labels_series.loc[pos_mask] = 1
+                    pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
+                    labels_series.loc[pos_mask] = 1
 
-                        if ex_end_col:
-                            ex_end = row[ex_end_col]
-                            ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
-                        else:
-                            ex_mask = asset_mask & (working_df[time_col] == f_time)
-                        active_failure_drop_mask |= ex_mask
+                    if ex_end_col:
+                        ex_end = row[ex_end_col]
+                        ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
+                    else:
+                        ex_mask = asset_mask & (working_df[time_col] == f_time)
+                    active_failure_drop_mask |= ex_mask
             else:
                 # Single asset dataset
                 for _, row in f_df.iterrows():
@@ -378,16 +401,15 @@ class FeatureService:
                     h_start = f_time - horizon_delta
                     asset_mask = pd.Series(True, index=working_df.index)
 
-                    if time_col and time_col in working_df.columns:
-                        pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
-                        labels_series.loc[pos_mask] = 1
+                    pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
+                    labels_series.loc[pos_mask] = 1
 
-                        if ex_end_col:
-                            ex_end = row[ex_end_col]
-                            ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
-                        else:
-                            ex_mask = asset_mask & (working_df[time_col] == f_time)
-                        active_failure_drop_mask |= ex_mask
+                    if ex_end_col:
+                        ex_end = row[ex_end_col]
+                        ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
+                    else:
+                        ex_mask = asset_mask & (working_df[time_col] == f_time)
+                    active_failure_drop_mask |= ex_mask
 
             return labels_series, active_failure_drop_mask
 
@@ -404,14 +426,18 @@ class FeatureService:
                     "embedded_observation 모드이지만 Observation 데이터셋에 유효한 failure indicator 컬럼이 없습니다."
                 )
 
-            if not time_col or time_col not in working_df.columns:
-                raise FeatureContractError("Observation 데이터셋에 타임스탬프 컬럼이 없습니다.")
-
             fail_indices = working_df.index[working_df[failure_indicator_col] > 0].tolist()
+            if not fail_indices:
+                raise InsufficientTrainingDataError(
+                    "내장 failure indicator에 활성 failure event가 0건입니다."
+                )
+
             for f_idx in fail_indices:
                 f_time = working_df[time_col].iloc[f_idx]
                 if pd.isna(f_time):
-                    continue
+                    raise FeatureLabelAlignmentError(
+                        "내장 failure event의 timestamp가 유효하지 않습니다."
+                    )
 
                 h_start = f_time - horizon_delta
 
@@ -611,6 +637,14 @@ class FeatureService:
 
         if surviving_count == 0:
             raise InsufficientTrainingDataError("모든 행이 제외 또는 결측치 처리되어 유효한 학습 데이터가 0행입니다.")
+
+        # Validate label classes for official prediction task
+        if label_schema.prediction_task == "binary_failure_within_horizon":
+            unique_labels = set(np.unique(labels_array).tolist())
+            if unique_labels != {0, 1}:
+                raise InsufficientTrainingDataError(
+                    "binary_failure_within_horizon 학습에는 label 0과 1이 모두 필요합니다."
+                )
 
         # Build row metadata
         row_metadata = []
