@@ -14,14 +14,26 @@ from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 from .api_schema import (
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
+    MaintenanceActionCompleteRequest,
+    MaintenanceActionStartRequest,
+    MaintenanceReplayRequest,
+    MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
+)
+from .integration import (
+    MaintenanceCause,
+    MaintenanceCompletedEvent,
+    MaintenanceReplayRequestedEvent,
+    MaintenanceStartedEvent,
+    ToolReplacementStatePatch,
 )
 from .maintenance_domain import (
     apply_recommendation_decision,
     create_inspection_work_order,
     create_operations_manual_recommendation,
     create_work_order_for_recommendation,
+    plan_maintenance_action,
     transition_work_order,
 )
 from .maintenance_schema import (
@@ -83,6 +95,45 @@ class MaintenanceLoopService:
         if not isinstance(value, str) or not value:
             raise ValueError(f"Event Evidence Projection requires {field}")
         return value
+
+    @classmethod
+    def _require_row_scope(
+        cls,
+        record: Mapping[str, Any],
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+    ) -> None:
+        for field, expected in (
+            ("organization_id", organization_id),
+            ("project_id", project_id),
+            ("workspace_id", workspace_id),
+        ):
+            if record.get(field) != expected:
+                raise ValueError(f"{field} scope mismatch")
+
+    @staticmethod
+    def _stored_datetime(record: Mapping[str, Any], field: str) -> datetime:
+        value = record.get(field)
+        if isinstance(value, datetime):
+            return value
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"persisted maintenance record requires {field}")
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError(f"persisted maintenance {field} must include timezone")
+        return parsed
+
+    @classmethod
+    def _maintenance_cause(cls, record: Mapping[str, Any]) -> MaintenanceCause:
+        return MaintenanceCause(
+            source_product_result_id=cls._required_text(
+                record, "source_product_result_id"
+            ),
+            source_evidence_id=cls._required_text(record, "source_evidence_id"),
+            decision_id=cls._required_text(record, "recommendation_decision_id"),
+        )
 
     def _inspection_source(
         self,
@@ -500,6 +551,263 @@ class MaintenanceLoopService:
                 },
             ),
             actor_display_name=actor_display_name,
+        )
+
+    def approve_maintenance_work_order(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        work_order_id: str,
+        payload: MaintenanceWorkOrderApproveRequest,
+        actor_id: str,
+        actor_display_name: str,
+        idempotency_key: str,
+        approved_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        work_order = self.repository.get_work_order(
+            workspace_id=workspace_id,
+            work_order_id=work_order_id,
+        )
+        if work_order is None:
+            raise KeyError(work_order_id)
+        self._require_scope(
+            work_order,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        if work_order.work_type is not WorkOrderType.MAINTENANCE:
+            raise ValueError("work order is not maintenance work")
+
+        # Build the requested target without trusting caller-supplied lineage.
+        # The repository checks the persisted current state before committing
+        # and handles an identical Idempotency-Key replay before transition
+        # validation.
+        approved = work_order.model_copy(update={"status": WorkOrderStatus.APPROVED})
+        action = plan_maintenance_action(
+            work_order=approved,
+            maintenance_action_id=self._stable_id(
+                "MAINTENANCE-ACTION",
+                organization_id,
+                project_id,
+                workspace_id,
+                work_order_id,
+            ),
+            idempotency_key=idempotency_key,
+        )
+        return self.repository.approve_work_order(
+            work_order=approved,
+            action=action,
+            simulation_session_id=payload.simulation_session_id,
+            actor_id=actor_id,
+            actor_display_name=actor_display_name,
+            approved_at=approved_at or datetime.now(timezone.utc),
+            request_idempotency_key=idempotency_key,
+            request_fingerprint=self._fingerprint(
+                "maintenance.work_order.approve",
+                {
+                    "work_order_id": work_order_id,
+                    "payload": payload.model_dump(mode="json"),
+                    "actor_id": actor_id,
+                },
+            ),
+        )
+
+    def start_maintenance(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        maintenance_action_id: str,
+        payload: MaintenanceActionStartRequest,
+        actor_id: str,
+        actor_display_name: str,
+        idempotency_key: str,
+        started_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        action = self.repository.get_maintenance_action(
+            workspace_id=workspace_id,
+            maintenance_action_id=maintenance_action_id,
+        )
+        if action is None:
+            raise KeyError(maintenance_action_id)
+        self._require_row_scope(
+            action,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        event = MaintenanceStartedEvent(
+            event_id=self._stable_id(
+                "MAINTENANCE-INTEGRATION-EVENT", maintenance_action_id, "started"
+            ),
+            idempotency_key=f"{maintenance_action_id}:1",
+            state_version=1,
+            simulation_session_id=self._required_text(
+                action, "simulation_session_id"
+            ),
+            maintenance_action_id=maintenance_action_id,
+            work_order_id=self._required_text(action, "work_order_id"),
+            equipment_id=self._required_text(action, "equipment_id"),
+            maintenance_started_at=started_at or datetime.now(timezone.utc),
+            action_code=self._required_text(action, "action_code"),
+            caused_by=self._maintenance_cause(action),
+        )
+        return self.repository.start_maintenance(
+            event,
+            workspace_id=workspace_id,
+            actor_id=actor_id,
+            actor_display_name=actor_display_name,
+            request_idempotency_key=idempotency_key,
+            request_fingerprint=self._fingerprint(
+                "maintenance.action.start",
+                {
+                    "maintenance_action_id": maintenance_action_id,
+                    "payload": payload.model_dump(mode="json"),
+                    "actor_id": actor_id,
+                },
+            ),
+        )
+
+    def complete_maintenance(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        maintenance_action_id: str,
+        payload: MaintenanceActionCompleteRequest,
+        actor_id: str,
+        actor_display_name: str,
+        idempotency_key: str,
+        completed_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        action = self.repository.get_maintenance_action(
+            workspace_id=workspace_id,
+            maintenance_action_id=maintenance_action_id,
+        )
+        if action is None:
+            raise KeyError(maintenance_action_id)
+        self._require_row_scope(
+            action,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        timestamp = completed_at or datetime.now(timezone.utc)
+        event = MaintenanceCompletedEvent(
+            event_id=self._stable_id(
+                "MAINTENANCE-INTEGRATION-EVENT", maintenance_action_id, "completed"
+            ),
+            idempotency_key=f"{maintenance_action_id}:2",
+            state_version=2,
+            simulation_session_id=self._required_text(
+                action, "simulation_session_id"
+            ),
+            maintenance_event_id=self._stable_id(
+                "MAINTENANCE-EVENT",
+                organization_id,
+                project_id,
+                workspace_id,
+                maintenance_action_id,
+            ),
+            maintenance_action_id=maintenance_action_id,
+            equipment_id=self._required_text(action, "equipment_id"),
+            maintenance_started_at=self._stored_datetime(action, "started_at"),
+            maintenance_completed_at=timestamp,
+            action_code=self._required_text(action, "action_code"),
+            state_patch=ToolReplacementStatePatch(),
+            caused_by=self._maintenance_cause(action),
+        )
+        return self.repository.complete_maintenance(
+            event,
+            workspace_id=workspace_id,
+            actor_id=actor_id,
+            actor_display_name=actor_display_name,
+            outcome=payload.outcome,
+            request_idempotency_key=idempotency_key,
+            request_fingerprint=self._fingerprint(
+                "maintenance.action.complete",
+                {
+                    "maintenance_action_id": maintenance_action_id,
+                    "payload": payload.model_dump(mode="json"),
+                    "actor_id": actor_id,
+                },
+            ),
+        )
+
+    def request_maintenance_replay(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        maintenance_event_id: str,
+        payload: MaintenanceReplayRequest,
+        actor_id: str,
+        actor_display_name: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        maintenance = self.repository.get_maintenance_event(
+            workspace_id=workspace_id,
+            maintenance_event_id=maintenance_event_id,
+        )
+        if maintenance is None:
+            raise KeyError(maintenance_event_id)
+        self._require_row_scope(
+            maintenance,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        event = MaintenanceReplayRequestedEvent(
+            event_id=self._stable_id(
+                "MAINTENANCE-INTEGRATION-EVENT",
+                self._required_text(maintenance, "maintenance_action_id"),
+                "replay-requested",
+            ),
+            idempotency_key=(
+                f"{self._required_text(maintenance, 'maintenance_action_id')}:3"
+            ),
+            state_version=3,
+            simulation_session_id=self._required_text(
+                maintenance, "simulation_session_id"
+            ),
+            maintenance_event_id=maintenance_event_id,
+            maintenance_action_id=self._required_text(
+                maintenance, "maintenance_action_id"
+            ),
+            equipment_id=self._required_text(maintenance, "equipment_id"),
+            maintenance_started_at=self._stored_datetime(
+                maintenance, "maintenance_started_at"
+            ),
+            maintenance_completed_at=self._stored_datetime(
+                maintenance, "completed_at"
+            ),
+            restart_at=payload.restart_at,
+            action_code=self._required_text(maintenance, "action_code"),
+            state_patch=ToolReplacementStatePatch.model_validate(
+                maintenance["state_patch"]
+            ),
+            caused_by=self._maintenance_cause(maintenance),
+        )
+        return self.repository.request_replay(
+            event,
+            workspace_id=workspace_id,
+            actor_id=actor_id,
+            actor_display_name=actor_display_name,
+            request_idempotency_key=idempotency_key,
+            request_fingerprint=self._fingerprint(
+                "maintenance.replay.request",
+                {
+                    "maintenance_event_id": maintenance_event_id,
+                    "payload": payload.model_dump(mode="json"),
+                    "actor_id": actor_id,
+                },
+            ),
         )
 
     def event_lineage(
