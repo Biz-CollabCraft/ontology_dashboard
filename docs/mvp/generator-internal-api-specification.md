@@ -254,11 +254,20 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
   "preprocessing_plan_version": "preprocessing-plan-a1b2c3d4e5f67890",
   "feature_schema_version": "ai4i-feature-v1",
   "label_schema_version": "ai4i-label-24h-v1",
-  "prediction_horizon_hours": 24,
-  "rebuild_npy": false
+  "prediction_horizon_hours": 24
 }
 ```
 
+- **Versioned Dataset 입력 경로 및 Manifest 계약**:
+  - Observation: `data/observations/{dataset_id}/{dataset_version}/` (`dataset_manifest.json`, `observations.csv` 또는 `.jsonl`)
+  - Failure: `data/failures/{dataset_id}/{dataset_version}/` (`dataset_manifest.json`, `failures.csv` 또는 `.jsonl`)
+  - `contracts/schemas/generator-dataset-input-manifest.schema.json` 검증, 단일 role(`observations`, `failures`), payload SHA-256 및 크기 검증.
+  - unversioned 파일(`data/{dataset_id}.csv` 등)의 암묵적 검색 fallback 완전 제거.
+- **Preprocessing Plan과 Observation Manifest 상호 검증**:
+  - `request.dataset_id == Plan.dataset_id == Observation Manifest.dataset_id`
+  - `request.dataset_version == Plan.dataset_version == Observation Manifest.dataset_version`
+  - `Plan.source_dataset_sha256 == Observation payload SHA-256`
+  - 불일치 시 `422 FEATURE_CONTRACT_ERROR`로 fail-closed.
 - **Failure Source 계약 (`failure_source_mode`)**:
   - `external_dataset`: `failure_dataset_id` 및 `failure_dataset_version`이 필수이며, 파일 부재 시 Observation 데이터셋으로 대체하지 않고 즉시 `404 FEATURE_INPUT_NOT_FOUND`로 실패합니다.
   - `embedded_observation`: Observation 내부 failure indicator 컬럼(`Machine failure` 등)을 사용하며, indicator 컬럼 부재 시 `422`로 실패합니다.
@@ -280,9 +289,10 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
   - 빈 Failure Dataset을 정상 Dataset으로 처리 금지
   - all-zero Label Bundle 발행 금지
   - 단일 클래스 Label을 Training 단계로 전달 금지
+  - unversioned 파일 검색 fallback 금지
 - **5개 필수 파일 구성**: `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`
 - **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
-- **식별자 결정론**: `feature_dataset_version`은 입력 Dataset, `failure_source_mode`, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
+- **식별자 결정론**: `feature_dataset_version`은 입력 Dataset Manifest 및 Payload SHA-256, `failure_source_mode`, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
 - **Ontology Mapping 배제**: Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema allowlist/recipe만 실행합니다.
 
 ---

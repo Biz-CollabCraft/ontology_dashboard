@@ -124,9 +124,19 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 
 ---
 
-## 4. Feature Dataset Bundle 불변 저장 구조
+## 4. Feature Dataset Bundle 불변 저장 구조 및 Versioned Dataset 입력 계약
 
-- **Bundle 식별**: `feature_dataset_version` (`feature-dataset-{hash16}`)은 Observation/Failure Dataset, `failure_source_mode`, Preprocessing Plan(ID/ver/sha), Feature Schema, Label Schema, prediction horizon의 canonical fingerprint로 결정론적 산출.
+- **Versioned Dataset 입력 경로 및 Manifest 계약**:
+  - Observation: `data/observations/{dataset_id}/{dataset_version}/` (`dataset_manifest.json`, `observations.csv` 또는 `.jsonl`)
+  - Failure: `data/failures/{dataset_id}/{dataset_version}/` (`dataset_manifest.json`, `failures.csv` 또는 `.jsonl`)
+  - `contracts/schemas/generator-dataset-input-manifest.schema.json`에 정의된 Manifest 필수 필드, 단일 role(`observations`, `failures`), payload 상대경로 안전성, 실제 파일 SHA-256 및 크기(size_bytes) 일치 여부를 `FeatureInputResolver`가 철저히 검증.
+  - unversioned 파일(`data/{dataset_id}.csv` 등)의 암묵적 검색 fallback을 완전히 제거하여 버전 위조를 원천 차단.
+- **Preprocessing Plan과 Observation Manifest 상호 검증**:
+  - `request.dataset_id == Plan.dataset_id == Observation Manifest.dataset_id`
+  - `request.dataset_version == Plan.dataset_version == Observation Manifest.dataset_version`
+  - `Plan.source_dataset_sha256 == Observation payload SHA-256`
+  - 불일치 시 `422 FEATURE_CONTRACT_ERROR`로 fail-closed.
+- **Bundle 식별**: `feature_dataset_version` (`feature-dataset-{hash16}`)은 Observation/Failure Dataset Manifest 및 Payload SHA-256, `failure_source_mode`, Preprocessing Plan(ID/ver/sha), Feature Schema, Label Schema, prediction horizon의 canonical fingerprint로 결정론적 산출.
 - **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
 - **Failure Source 모드 계약**:
   - `external_dataset` (기본값): Failure 데이터셋이 필수이며 파일 미발견 시 404 Fail-Fast (Observation 대체 fallback 없음).
@@ -146,13 +156,14 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
   - 빈 Failure Dataset을 정상 Dataset으로 처리 금지
   - all-zero Label Bundle 발행 금지
   - 단일 클래스 Label을 Training 단계로 전달 금지
+  - unversioned 파일 검색 fallback 금지
 - **5개 필수 파일 구성**:
   1. `features.npy`: 2D float64 배열, `allow_pickle=False`, NaN/Inf 불가
   2. `labels.npy`: 1D int64 배열 `{0, 1}`, `allow_pickle=False`
   3. `feature_columns.json`: Feature Schema 선언 순서의 컬럼 목록 및 수량
   4. `row_metadata.json`: Feature/Label 행과 1:1 대응되는 asset_id 및 timestamp
-  5. `feature_metadata.json`: 데이터셋 및 스키마 provenance, 클래스 분포, 4개 payload 파일의 개별 SHA-256 체크섬 (자기참조 순환 방지)
-- **원자적 발행 및 재사용**:
+  5. `feature_metadata.json`: 데이터셋 Manifest/payload provenance, 스키마 provenance, 클래스 분포, 4개 payload 파일의 개별 SHA-256 체크섬 (자기참조 순환 방지)
+- **원자적 발행 및 불변성 정책**:
   - 임시 디렉터리(`.tmp_{uuid}`)에서 전체 생성 및 검증 완료 후 atomic rename/replace.
-  - `rebuild_npy=False` 시 모든 파일 존재, 체크섬 및 차원 일치 확인 후 재사용. Fingerprint 불일치 시 `409 FeaturePublishConflictError`, 파일 손상 시 `422 FeatureDatasetIntegrityError` 반환.
+  - 동일 fingerprint 시 기존 유효 Bundle 즉시 재사용. Fingerprint 불일치 시 `409 FeaturePublishConflictError`, 파일 손상 시 `422 FeatureDatasetIntegrityError` 반환.
 - **동기 실행**: `/feature` 엔드포인트는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.

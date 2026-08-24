@@ -18,6 +18,10 @@ from systems.generator.app.feature.feature_exception import (
     FeatureSchemaMismatchError,
     InsufficientTrainingDataError,
 )
+from systems.generator.app.feature.feature_input_resolver import (
+    FeatureInputResolver,
+    ResolvedFeatureInput,
+)
 from systems.generator.app.feature.feature_repository import (
     FeatureRepository,
     compute_feature_dataset_version,
@@ -53,69 +57,13 @@ class FeatureService:
         feature_repo: FeatureRepository | None = None,
         feature_schema_provider: FeatureSchemaProvider | None = None,
         label_schema_provider: LabelSchemaProvider | None = None,
+        feature_input_resolver: FeatureInputResolver | None = None,
     ) -> None:
         self.preprocessing_repo = preprocessing_repo or PreprocessingRepository()
         self.feature_repo = feature_repo or FeatureRepository()
         self.feature_schema_provider = feature_schema_provider or FeatureSchemaProvider()
         self.label_schema_provider = label_schema_provider or LabelSchemaProvider()
-
-    def _is_within_allowed_root(self, path: Path) -> bool:
-        """Check whether path is confined within project root or data directory."""
-        try:
-            resolved = path.resolve()
-            root = Path.cwd().resolve()
-            data_dir = getattr(PATHS, "data_dir", root / "data").resolve()
-            return (
-                resolved == root
-                or root in resolved.parents
-                or resolved == data_dir
-                or data_dir in resolved.parents
-            )
-        except Exception:
-            return False
-
-    def _find_dataset_file(self, dataset_id: str, dataset_version: str, kind: str = "observations") -> Path:
-        """Search and locate dataset source file."""
-        clean_id = dataset_id.strip()
-        clean_ver = dataset_version.strip()
-
-        if ".." in clean_id or ".." in clean_ver or "/" in clean_id or "\\" in clean_id:
-            raise FeatureContractError(f"안전하지 않은 데이터셋 식별자입니다: dataset_id='{dataset_id}', version='{dataset_version}'")
-
-        search_candidates = [
-            Path(f"data/{clean_id}.csv"),
-            Path(f"data/{clean_id}_{clean_ver}.csv"),
-            Path(f"data/{clean_id}/{clean_ver}.csv"),
-            Path(f"data/{clean_id}/{clean_ver}/data.csv"),
-            Path(f"data_preprocessed/{kind}/{clean_id}/{clean_ver}/{kind}.jsonl"),
-            Path(f"data_preprocessed/{kind}/{clean_id}/{clean_ver}/data.csv"),
-            Path(f"data/{clean_id}/canonical-{clean_ver}.csv"),
-        ]
-        for cand in search_candidates:
-            if cand.exists() and cand.is_file():
-                if not self._is_within_allowed_root(cand):
-                    raise FeatureContractError(f"안전하지 않은 데이터셋 경로 접근이 감지되었습니다: {cand}")
-                return cand.resolve()
-
-        # Check in root data directory
-        data_dir = getattr(PATHS, "data_dir", Path("data"))
-        direct_candidates = [
-            Path(data_dir) / f"{clean_id}.csv",
-            Path(data_dir) / f"{clean_id}_{clean_ver}.csv",
-            Path(data_dir) / clean_id / f"{clean_ver}.csv",
-            Path(data_dir) / clean_id / f"canonical-{clean_ver}.csv",
-            Path(data_dir) / kind / clean_id / clean_ver / f"{kind}.csv",
-            Path(data_dir) / kind / clean_id / clean_ver / "data.csv",
-        ]
-        for direct in direct_candidates:
-            if direct.exists() and direct.is_file():
-                if not self._is_within_allowed_root(direct):
-                    raise FeatureContractError(f"안전하지 않은 데이터셋 경로 접근이 감지되었습니다: {direct}")
-                return direct.resolve()
-
-        raise FeatureInputNotFoundError(
-            f"{kind.capitalize()} 데이터셋 파일을 찾을 수 없습니다: dataset_id='{clean_id}', dataset_version='{clean_ver}'"
-        )
+        self.feature_input_resolver = feature_input_resolver or FeatureInputResolver(feature_repo=self.feature_repo)
 
     def _load_dataframe(self, path: Path) -> pd.DataFrame:
         """Load tabular data from CSV or JSONL."""
@@ -501,26 +449,51 @@ class FeatureService:
         plan_sha256 = compute_file_sha256(plan_file)
         plan_uri = self.feature_repo.get_logical_uri(plan_file)
 
-        # 2. Find and validate Observation Dataset file
-        obs_file = self._find_dataset_file(request.dataset_id, request.dataset_version, kind="observations")
-        obs_sha256 = compute_file_sha256(obs_file)
-        obs_uri = self.feature_repo.get_logical_uri(obs_file)
-        obs_df = self._load_dataframe(obs_file)
+        # 2. Strictly Resolve and validate Versioned Observation Dataset
+        resolved_obs = self.feature_input_resolver.resolve_dataset(
+            dataset_type="observation",
+            dataset_id=request.dataset_id,
+            dataset_version=request.dataset_version,
+        )
+
+        # Cross-validate Plan provenance against resolved Observation dataset
+        plan_ds_id = plan.get("dataset_id")
+        plan_ds_ver = plan.get("dataset_version")
+        plan_src_sha256 = plan.get("source_dataset_sha256")
+
+        if plan_ds_id != resolved_obs.dataset_id:
+            raise FeatureContractError(
+                f"Preprocessing Plan의 dataset_id('{plan_ds_id}')가 "
+                f"Observation Dataset ID('{resolved_obs.dataset_id}')와 일치하지 않습니다."
+            )
+        if plan_ds_ver != resolved_obs.dataset_version:
+            raise FeatureContractError(
+                f"Preprocessing Plan의 dataset_version('{plan_ds_ver}')이 "
+                f"Observation Dataset 버전('{resolved_obs.dataset_version}')과 일치하지 않습니다."
+            )
+        if plan_src_sha256 and plan_src_sha256.lower() != resolved_obs.payload_sha256.lower():
+            raise FeatureContractError(
+                f"Preprocessing Plan의 source_dataset_sha256('{plan_src_sha256}')과 "
+                f"실제 Observation payload SHA-256('{resolved_obs.payload_sha256}')이 일치하지 않습니다."
+            )
+
+        obs_df = self._load_dataframe(resolved_obs.payload_path)
         if obs_df.empty:
             raise InsufficientTrainingDataError("Observation 데이터셋이 비어 있습니다 (0행).")
 
         # 3. Handle Failure Dataset according to failure_source_mode
+        resolved_fail: ResolvedFeatureInput | None = None
         if request.failure_source_mode == "external_dataset":
             if not request.failure_dataset_id or not request.failure_dataset_version:
                 raise FeatureContractError("external_dataset 모드에서는 failure_dataset_id 및 failure_dataset_version이 필수입니다.")
-            fail_file = self._find_dataset_file(request.failure_dataset_id, request.failure_dataset_version, kind="failures")
-            fail_sha256 = compute_file_sha256(fail_file)
-            fail_uri = self.feature_repo.get_logical_uri(fail_file)
-            fail_df = self._load_dataframe(fail_file)
+            resolved_fail = self.feature_input_resolver.resolve_dataset(
+                dataset_type="failure",
+                dataset_id=request.failure_dataset_id,
+                dataset_version=request.failure_dataset_version,
+            )
+            fail_df = self._load_dataframe(resolved_fail.payload_path)
         elif request.failure_source_mode == "embedded_observation":
-            fail_file = None
-            fail_sha256 = None
-            fail_uri = None
+            resolved_fail = None
             fail_df = pd.DataFrame()
         else:
             raise FeatureContractError(f"지원하지 않는 failure_source_mode입니다: '{request.failure_source_mode}'")
@@ -541,13 +514,15 @@ class FeatureService:
 
         # 5. Build Canonical Deterministic Fingerprint
         fingerprint = {
-            "observation_dataset_id": request.dataset_id,
-            "observation_dataset_version": request.dataset_version,
-            "observation_dataset_sha256": obs_sha256,
+            "observation_dataset_id": resolved_obs.dataset_id,
+            "observation_dataset_version": resolved_obs.dataset_version,
+            "observation_manifest_sha256": resolved_obs.manifest_sha256,
+            "observation_payload_sha256": resolved_obs.payload_sha256,
             "failure_source_mode": request.failure_source_mode,
-            "failure_dataset_id": request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
-            "failure_dataset_version": request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
-            "failure_dataset_sha256": fail_sha256,
+            "failure_dataset_id": resolved_fail.dataset_id if resolved_fail else None,
+            "failure_dataset_version": resolved_fail.dataset_version if resolved_fail else None,
+            "failure_manifest_sha256": resolved_fail.manifest_sha256 if resolved_fail else None,
+            "failure_payload_sha256": resolved_fail.payload_sha256 if resolved_fail else None,
             "preprocessing_plan_id": request.preprocessing_plan_id,
             "preprocessing_plan_version": request.preprocessing_plan_version,
             "preprocessing_plan_sha256": plan_sha256,
@@ -560,38 +535,37 @@ class FeatureService:
         }
         feature_dataset_version = compute_feature_dataset_version(fingerprint)
 
-        # 6. Check existing bundle reuse
-        if not request.rebuild_npy:
-            existing_bundle = self.feature_repo.find_feature_bundle(
+        # 6. Check existing bundle reuse (Immutable Bundle Policy)
+        existing_bundle = self.feature_repo.find_feature_bundle(
+            dataset_id=request.dataset_id,
+            dataset_version=request.dataset_version,
+            feature_dataset_version=feature_dataset_version,
+            expected_fingerprint=fingerprint,
+        )
+        if existing_bundle is not None:
+            logger.info(f"[FeatureService] Reusing existing valid Feature Bundle {feature_dataset_version}")
+            return FeatureResponse(
+                request_id=active_req_id,
+                run_id=run_id,
+                status="succeeded",
                 dataset_id=request.dataset_id,
                 dataset_version=request.dataset_version,
-                feature_dataset_version=feature_dataset_version,
-                expected_fingerprint=fingerprint,
+                failure_source_mode=request.failure_source_mode,
+                failure_dataset_id=request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
+                failure_dataset_version=request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
+                preprocessing_plan_id=request.preprocessing_plan_id,
+                preprocessing_plan_version=request.preprocessing_plan_version,
+                feature_schema_version=request.feature_schema_version,
+                label_schema_version=request.label_schema_version,
+                outputs=FeatureOutputsPayload(
+                    feature_dataset_version=existing_bundle.feature_dataset_version,
+                    row_count=existing_bundle.row_count,
+                    feature_count=existing_bundle.feature_count,
+                    features_uri=existing_bundle.features_uri,
+                    labels_uri=existing_bundle.labels_uri,
+                    metadata_uri=existing_bundle.metadata_uri,
+                ),
             )
-            if existing_bundle is not None:
-                logger.info(f"[FeatureService] Reusing existing valid Feature Bundle {feature_dataset_version}")
-                return FeatureResponse(
-                    request_id=active_req_id,
-                    run_id=run_id,
-                    status="succeeded",
-                    dataset_id=request.dataset_id,
-                    dataset_version=request.dataset_version,
-                    failure_source_mode=request.failure_source_mode,
-                    failure_dataset_id=request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
-                    failure_dataset_version=request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
-                    preprocessing_plan_id=request.preprocessing_plan_id,
-                    preprocessing_plan_version=request.preprocessing_plan_version,
-                    feature_schema_version=request.feature_schema_version,
-                    label_schema_version=request.label_schema_version,
-                    outputs=FeatureOutputsPayload(
-                        feature_dataset_version=existing_bundle.feature_dataset_version,
-                        row_count=existing_bundle.row_count,
-                        feature_count=existing_bundle.feature_count,
-                        features_uri=existing_bundle.features_uri,
-                        labels_uri=existing_bundle.labels_uri,
-                        metadata_uri=existing_bundle.metadata_uri,
-                    ),
-                )
 
         # 7. Prepare Canonical Working DataFrame
         plan_id_col = plan.get("id_column")
@@ -655,15 +629,19 @@ class FeatureService:
 
         # 11. Build Complete Provenance Metadata
         provenance_meta = {
-            "observation_dataset_id": request.dataset_id,
-            "observation_dataset_version": request.dataset_version,
-            "observation_dataset_sha256": obs_sha256,
-            "observation_dataset_uri": obs_uri,
+            "observation_dataset_id": resolved_obs.dataset_id,
+            "observation_dataset_version": resolved_obs.dataset_version,
+            "observation_manifest_sha256": resolved_obs.manifest_sha256,
+            "observation_manifest_uri": resolved_obs.manifest_uri,
+            "observation_payload_sha256": resolved_obs.payload_sha256,
+            "observation_payload_uri": resolved_obs.payload_uri,
             "failure_source_mode": request.failure_source_mode,
-            "failure_dataset_id": request.failure_dataset_id if request.failure_source_mode == "external_dataset" else None,
-            "failure_dataset_version": request.failure_dataset_version if request.failure_source_mode == "external_dataset" else None,
-            "failure_dataset_sha256": fail_sha256,
-            "failure_dataset_uri": fail_uri,
+            "failure_dataset_id": resolved_fail.dataset_id if resolved_fail else None,
+            "failure_dataset_version": resolved_fail.dataset_version if resolved_fail else None,
+            "failure_manifest_sha256": resolved_fail.manifest_sha256 if resolved_fail else None,
+            "failure_manifest_uri": resolved_fail.manifest_uri if resolved_fail else None,
+            "failure_payload_sha256": resolved_fail.payload_sha256 if resolved_fail else None,
+            "failure_payload_uri": resolved_fail.payload_uri if resolved_fail else None,
             "preprocessing_plan_id": request.preprocessing_plan_id,
             "preprocessing_plan_version": request.preprocessing_plan_version,
             "preprocessing_plan_sha256": plan_sha256,

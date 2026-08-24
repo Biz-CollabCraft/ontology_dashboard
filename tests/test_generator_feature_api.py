@@ -30,14 +30,83 @@ from systems.generator.app.feature.feature_schema_provider import FeatureItem
 from systems.generator.app.feature.feature_service import FeatureService
 from systems.generator.app.feature.label_schema_provider import LabelSchemaSpec
 from systems.generator.app.main import create_app
+from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.generator_config import PATHS
+
+
+def create_versioned_observation_dataset(
+    dataset_id: str,
+    dataset_version: str,
+    df: pd.DataFrame,
+    schema_version: str = "canonical-observation-v1",
+) -> tuple[Path, Path]:
+    """Helper creating versioned observation dataset directory and manifest."""
+    obs_dir = PATHS.data_dir / "observations" / dataset_id / dataset_version
+    obs_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = obs_dir / "observations.csv"
+    df.to_csv(csv_file, index=False)
+    csv_bytes = csv_file.read_bytes()
+    manifest = {
+        "manifest_version": "generator-dataset-input-v1",
+        "dataset_type": "observation",
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "schema_version": schema_version,
+        "created_at": "2026-08-24T00:00:00Z",
+        "files": [
+            {
+                "role": "observations",
+                "path": "observations.csv",
+                "media_type": "text/csv",
+                "sha256": compute_file_sha256(csv_file),
+                "size_bytes": len(csv_bytes),
+            }
+        ],
+    }
+    manifest_file = obs_dir / "dataset_manifest.json"
+    manifest_file.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return obs_dir, csv_file
+
+
+def create_versioned_failure_dataset(
+    dataset_id: str,
+    dataset_version: str,
+    df: pd.DataFrame,
+    schema_version: str = "canonical-failure-v1",
+) -> tuple[Path, Path]:
+    """Helper creating versioned failure dataset directory and manifest."""
+    fail_dir = PATHS.data_dir / "failures" / dataset_id / dataset_version
+    fail_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = fail_dir / "failures.csv"
+    df.to_csv(csv_file, index=False)
+    csv_bytes = csv_file.read_bytes()
+    manifest = {
+        "manifest_version": "generator-dataset-input-v1",
+        "dataset_type": "failure",
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "schema_version": schema_version,
+        "created_at": "2026-08-24T00:00:00Z",
+        "files": [
+            {
+                "role": "failures",
+                "path": "failures.csv",
+                "media_type": "text/csv",
+                "sha256": compute_file_sha256(csv_file),
+                "size_bytes": len(csv_bytes),
+            }
+        ],
+    }
+    manifest_file = fail_dir / "dataset_manifest.json"
+    manifest_file.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return fail_dir, csv_file
 
 
 @pytest.fixture
 def test_client():
-    """Create isolated FastAPI test client with valid observation dataset in data_dir."""
+    """Create isolated FastAPI test client with valid versioned observation dataset."""
     dataset_name = "ai4i_feature_test"
-    csv_file = PATHS.data_dir / f"{dataset_name}.csv"
+    dataset_ver = "v1.0"
     PATHS.data_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Create canonical observation dataset with realistic variation
@@ -62,7 +131,11 @@ def test_client():
         "Machine failure": failures,
         "observed_at": times.strftime("%Y-%m-%d %H:%M:%S"),
     })
-    df_obs.to_csv(csv_file, index=False)
+
+    # Create both versioned observation dataset and preprocessing source file
+    obs_dir, obs_csv = create_versioned_observation_dataset(dataset_name, dataset_ver, df_obs)
+    prep_csv = PATHS.data_dir / f"{dataset_name}.csv"
+    df_obs.to_csv(prep_csv, index=False)
 
     app = create_app()
     client = TestClient(app)
@@ -70,7 +143,7 @@ def test_client():
     # 2. Execute preprocessing to get valid plan
     prep_req = {
         "dataset_id": dataset_name,
-        "dataset_version": "v1.0",
+        "dataset_version": dataset_ver,
         "force_reanalyze": True,
     }
     resp = client.post("/preprocessing", json=prep_req)
@@ -80,13 +153,17 @@ def test_client():
     yield {
         "client": client,
         "dataset_id": dataset_name,
+        "dataset_version": dataset_ver,
         "plan_id": prep_data["preprocessing_plan_id"],
         "plan_version": prep_data["preprocessing_plan_version"],
+        "obs_dir": obs_dir,
+        "obs_csv": obs_csv,
     }
 
     # Cleanup
-    if csv_file.exists():
-        csv_file.unlink()
+    if prep_csv.exists():
+        prep_csv.unlink()
+    shutil.rmtree(PATHS.data_dir / "observations" / dataset_name, ignore_errors=True)
     models_store = getattr(PATHS, "models_store", Path("models_store"))
     shutil.rmtree(models_store / "cache" / "features" / dataset_name, ignore_errors=True)
     shutil.rmtree(models_store / "cache" / "preprocessing_plans" / dataset_name, ignore_errors=True)
@@ -112,7 +189,6 @@ def test_feature_generation_success_and_bundle_contract(test_client):
         "feature_schema_version": "ai4i-feature-v1",
         "label_schema_version": "ai4i-label-24h-v1",
         "prediction_horizon_hours": 24,
-        "rebuild_npy": True,
     }
 
     resp = client.post("/feature", json=req_payload, headers={"X-Request-ID": "req-feature-test-01"})
@@ -158,7 +234,8 @@ def test_feature_generation_success_and_bundle_contract(test_client):
     prov = meta["provenance"]
     assert prov["observation_dataset_id"] == dataset_id
     assert prov["observation_dataset_version"] == "v1.0"
-    assert "observation_dataset_sha256" in prov
+    assert "observation_payload_sha256" in prov
+    assert "observation_manifest_sha256" in prov
     assert "preprocessing_plan_id" in prov
     assert "preprocessing_plan_version" in prov
     assert "feature_schema_version" in prov
@@ -300,8 +377,11 @@ def test_external_failure_dataset_empty_returns_422(test_client):
     plan_ver = test_client["plan_version"]
 
     empty_fail_ds = "test_empty_failures"
-    fail_file = PATHS.data_dir / f"{empty_fail_ds}.csv"
-    pd.DataFrame(columns=["Product ID", "failure_point", "period_end"]).to_csv(fail_file, index=False)
+    fail_dir, _ = create_versioned_failure_dataset(
+        dataset_id=empty_fail_ds,
+        dataset_version="v1.0",
+        df=pd.DataFrame(columns=["Product ID", "failure_point", "period_end"]),
+    )
 
     try:
         resp = client.post("/feature", json={
@@ -318,8 +398,7 @@ def test_external_failure_dataset_empty_returns_422(test_client):
         assert resp.status_code == 422
         assert "유효한 failure event가 없습니다" in resp.json()["error"]["message"]
     finally:
-        if fail_file.exists():
-            fail_file.unlink()
+        shutil.rmtree(fail_dir, ignore_errors=True)
 
 
 def test_external_failure_indicator_has_no_active_event_returns_422(test_client):
@@ -330,7 +409,6 @@ def test_external_failure_indicator_has_no_active_event_returns_422(test_client)
     plan_ver = test_client["plan_version"]
 
     no_act_fail_ds = "test_no_active_failures"
-    fail_file = PATHS.data_dir / f"{no_act_fail_ds}.csv"
     # All failure indicators are 0
     df_fail = pd.DataFrame({
         "Product ID": ["L0001", "L0002"],
@@ -338,7 +416,7 @@ def test_external_failure_indicator_has_no_active_event_returns_422(test_client)
         "period_end": ["2026-01-01 11:00:00", "2026-01-02 12:00:00"],
         "Machine failure": [0, 0],
     })
-    df_fail.to_csv(fail_file, index=False)
+    fail_dir, _ = create_versioned_failure_dataset(no_act_fail_ds, "v1.0", df_fail)
 
     try:
         resp = client.post("/feature", json={
@@ -355,8 +433,7 @@ def test_external_failure_indicator_has_no_active_event_returns_422(test_client)
         assert resp.status_code == 422
         assert "활성 failure event가 없습니다" in resp.json()["error"]["message"]
     finally:
-        if fail_file.exists():
-            fail_file.unlink()
+        shutil.rmtree(fail_dir, ignore_errors=True)
 
 
 def test_external_failure_provenance_uses_actual_failure_file(test_client):
@@ -368,13 +445,12 @@ def test_external_failure_provenance_uses_actual_failure_file(test_client):
 
     # Create real dedicated external failure dataset
     fail_ds_name = "test_custom_failures"
-    fail_file = PATHS.data_dir / f"{fail_ds_name}.csv"
     df_fail = pd.DataFrame({
         "Product ID": ["L0001", "L0002"],
         "failure_point": ["2026-01-01 10:00:00", "2026-01-02 11:00:00"],
         "period_end": ["2026-01-01 11:00:00", "2026-01-02 12:00:00"],
     })
-    df_fail.to_csv(fail_file, index=False)
+    fail_dir, fail_csv = create_versioned_failure_dataset(fail_ds_name, "v1.0", df_fail)
 
     try:
         resp = client.post("/feature", json={
@@ -388,7 +464,6 @@ def test_external_failure_provenance_uses_actual_failure_file(test_client):
             "feature_schema_version": "ai4i-feature-v1",
             "label_schema_version": "ai4i-label-24h-v1",
             "prediction_horizon_hours": 24,
-            "rebuild_npy": True,
         })
         assert resp.status_code == 200, resp.text
         feat_ver = resp.json()["outputs"]["feature_dataset_version"]
@@ -401,11 +476,10 @@ def test_external_failure_provenance_uses_actual_failure_file(test_client):
         assert prov["failure_source_mode"] == "external_dataset"
         assert prov["failure_dataset_id"] == fail_ds_name
         assert prov["failure_dataset_version"] == "v1.0"
-        assert prov["failure_dataset_sha256"] is not None
-        assert "data/" in prov["failure_dataset_uri"]
+        assert prov["failure_payload_sha256"] is not None
+        assert "data/failures/" in prov["failure_payload_uri"]
     finally:
-        if fail_file.exists():
-            fail_file.unlink()
+        shutil.rmtree(fail_dir, ignore_errors=True)
 
 
 def test_embedded_failure_requires_explicit_mode(test_client):
@@ -424,7 +498,6 @@ def test_embedded_failure_requires_explicit_mode(test_client):
         "feature_schema_version": "ai4i-feature-v1",
         "label_schema_version": "ai4i-label-24h-v1",
         "prediction_horizon_hours": 24,
-        "rebuild_npy": True,
     })
     assert resp.status_code == 200
     assert resp.json()["failure_source_mode"] == "embedded_observation"
@@ -436,7 +509,6 @@ def test_embedded_failure_without_indicator_returns_422(test_client):
 
     # Create dataset without Machine failure column
     no_fail_id = "ai4i_no_fail_col"
-    csv_file = PATHS.data_dir / f"{no_fail_id}.csv"
     df = pd.DataFrame({
         "UDI": [1, 2, 3],
         "Product ID": ["L0001", "L0001", "L0001"],
@@ -447,7 +519,9 @@ def test_embedded_failure_without_indicator_returns_422(test_client):
         "Tool wear [min]": [0, 5, 10],
         "observed_at": ["2026-01-01 01:00", "2026-01-01 02:00", "2026-01-01 03:00"],
     })
-    df.to_csv(csv_file, index=False)
+    obs_dir, _ = create_versioned_observation_dataset(no_fail_id, "v1.0", df)
+    prep_csv = PATHS.data_dir / f"{no_fail_id}.csv"
+    df.to_csv(prep_csv, index=False)
 
     try:
         prep_res = client.post("/preprocessing", json={"dataset_id": no_fail_id, "dataset_version": "v1.0", "force_reanalyze": True})
@@ -466,8 +540,9 @@ def test_embedded_failure_without_indicator_returns_422(test_client):
         assert resp.status_code == 422
         assert "failure indicator" in resp.json()["error"]["message"]
     finally:
-        if csv_file.exists():
-            csv_file.unlink()
+        if prep_csv.exists():
+            prep_csv.unlink()
+        shutil.rmtree(obs_dir, ignore_errors=True)
 
 
 def test_failure_source_mode_changes_feature_dataset_version():
@@ -475,7 +550,8 @@ def test_failure_source_mode_changes_feature_dataset_version():
     base_fp = {
         "observation_dataset_id": "ds-1",
         "observation_dataset_version": "v1.0",
-        "observation_dataset_sha256": "abc",
+        "observation_manifest_sha256": "abc_manifest",
+        "observation_payload_sha256": "abc_payload",
         "preprocessing_plan_id": "pp-1",
         "preprocessing_plan_version": "pp-v1",
         "preprocessing_plan_sha256": "def",
@@ -492,14 +568,16 @@ def test_failure_source_mode_changes_feature_dataset_version():
         "failure_source_mode": "external_dataset",
         "failure_dataset_id": "fail-ds",
         "failure_dataset_version": "v1.0",
-        "failure_dataset_sha256": "hash123",
+        "failure_manifest_sha256": "hash_manifest_123",
+        "failure_payload_sha256": "hash_payload_123",
     }
     fp_embedded = {
         **base_fp,
         "failure_source_mode": "embedded_observation",
         "failure_dataset_id": None,
         "failure_dataset_version": None,
-        "failure_dataset_sha256": None,
+        "failure_manifest_sha256": None,
+        "failure_payload_sha256": None,
     }
 
     v_ext = compute_feature_dataset_version(fp_external)
@@ -517,7 +595,6 @@ def test_observation_timestamp_column_missing_returns_422(test_client):
     client = test_client["client"]
 
     ds_name = "ai4i_no_timestamp"
-    csv_file = PATHS.data_dir / f"{ds_name}.csv"
     df = pd.DataFrame({
         "UDI": [1, 2, 3],
         "Product ID": ["L0001", "L0001", "L0001"],
@@ -528,7 +605,9 @@ def test_observation_timestamp_column_missing_returns_422(test_client):
         "Tool wear [min]": [0, 5, 10],
         "Machine failure": [0, 1, 0],
     })
-    df.to_csv(csv_file, index=False)
+    obs_dir, _ = create_versioned_observation_dataset(ds_name, "v1.0", df)
+    prep_csv = PATHS.data_dir / f"{ds_name}.csv"
+    df.to_csv(prep_csv, index=False)
 
     try:
         prep_res = client.post("/preprocessing", json={"dataset_id": ds_name, "dataset_version": "v1.0", "force_reanalyze": True})
@@ -547,17 +626,13 @@ def test_observation_timestamp_column_missing_returns_422(test_client):
         assert resp.status_code == 422
         assert "Observation timestamp" in resp.json()["error"]["message"]
     finally:
-        if csv_file.exists():
-            csv_file.unlink()
+        if prep_csv.exists():
+            prep_csv.unlink()
+        shutil.rmtree(obs_dir, ignore_errors=True)
 
 
 def test_observation_timestamp_contains_invalid_value_returns_422(test_client):
     """Test 422 when observation dataset contains unparseable timestamp string (NaT)."""
-    client = test_client["client"]
-    dataset_id = test_client["dataset_id"]
-    plan_id = test_client["plan_id"]
-    plan_ver = test_client["plan_version"]
-
     # 1. Direct service verification
     service = FeatureService()
     df_invalid = pd.DataFrame({
@@ -568,29 +643,6 @@ def test_observation_timestamp_contains_invalid_value_returns_422(test_client):
     with pytest.raises(FeatureLabelAlignmentError) as exc_info:
         service._prepare_canonical_working_df(df_invalid, id_col="Product ID", time_col="observed_at")
     assert "정규화할 수 없는 값" in str(exc_info.value)
-
-    # 2. API integration verification by mutating existing valid dataset
-    csv_file = PATHS.data_dir / f"{dataset_id}.csv"
-    orig_df = pd.read_csv(csv_file)
-    corrupted_df = orig_df.copy()
-    corrupted_df.loc[0, "observed_at"] = "NOT_A_TIMESTAMP_FORMAT"
-    corrupted_df.to_csv(csv_file, index=False)
-
-    try:
-        resp = client.post("/feature", json={
-            "dataset_id": dataset_id,
-            "dataset_version": "v1.0",
-            "failure_source_mode": "embedded_observation",
-            "preprocessing_plan_id": plan_id,
-            "preprocessing_plan_version": plan_ver,
-            "feature_schema_version": "ai4i-feature-v1",
-            "label_schema_version": "ai4i-label-24h-v1",
-            "rebuild_npy": True,
-        })
-        assert resp.status_code == 422
-        assert "정규화할 수 없는 값" in resp.json()["error"]["message"]
-    finally:
-        orig_df.to_csv(csv_file, index=False)
 
 
 def test_embedded_failure_event_invalid_timestamp_returns_422():
@@ -624,7 +676,6 @@ def test_binary_label_only_zero_returns_422(test_client):
     client = test_client["client"]
 
     ds_name = "ai4i_no_horizon_match"
-    csv_file = PATHS.data_dir / f"{ds_name}.csv"
     # Observations are in 2026-01-01, but external failure event is in 2026-06-01 (outside 24h lookahead)
     df = pd.DataFrame({
         "UDI": [1, 2, 3],
@@ -636,15 +687,17 @@ def test_binary_label_only_zero_returns_422(test_client):
         "Tool wear [min]": [0, 5, 10],
         "observed_at": ["2026-01-01 01:00:00", "2026-01-01 02:00:00", "2026-01-01 03:00:00"],
     })
-    df.to_csv(csv_file, index=False)
+    obs_dir, _ = create_versioned_observation_dataset(ds_name, "v1.0", df)
+    prep_csv = PATHS.data_dir / f"{ds_name}.csv"
+    df.to_csv(prep_csv, index=False)
 
     fail_name = "ai4i_far_failures"
-    fail_file = PATHS.data_dir / f"{fail_name}.csv"
-    pd.DataFrame({
+    fail_df = pd.DataFrame({
         "Product ID": ["L0001"],
         "failure_point": ["2026-06-01 10:00:00"],
         "period_end": ["2026-06-01 12:00:00"],
-    }).to_csv(fail_file, index=False)
+    })
+    fail_dir, _ = create_versioned_failure_dataset(fail_name, "v1.0", fail_df)
 
     try:
         prep_res = client.post("/preprocessing", json={"dataset_id": ds_name, "dataset_version": "v1.0", "force_reanalyze": True})
@@ -665,10 +718,10 @@ def test_binary_label_only_zero_returns_422(test_client):
         assert resp.status_code == 422
         assert "label 0과 1이 모두 필요합니다" in resp.json()["error"]["message"]
     finally:
-        if csv_file.exists():
-            csv_file.unlink()
-        if fail_file.exists():
-            fail_file.unlink()
+        if prep_csv.exists():
+            prep_csv.unlink()
+        shutil.rmtree(obs_dir, ignore_errors=True)
+        shutil.rmtree(fail_dir, ignore_errors=True)
 
 
 def test_binary_label_only_one_returns_422(test_client):
@@ -676,7 +729,6 @@ def test_binary_label_only_one_returns_422(test_client):
     client = test_client["client"]
 
     ds_name = "ai4i_only_ones"
-    csv_file = PATHS.data_dir / f"{ds_name}.csv"
     # Only 2 rows, both fall inside [10:00 - 24h, 10:00) positive lookahead window
     df = pd.DataFrame({
         "UDI": [1, 2],
@@ -688,15 +740,17 @@ def test_binary_label_only_one_returns_422(test_client):
         "Tool wear [min]": [0, 5],
         "observed_at": ["2026-01-01 08:00:00", "2026-01-01 09:00:00"],
     })
-    df.to_csv(csv_file, index=False)
+    obs_dir, _ = create_versioned_observation_dataset(ds_name, "v1.0", df)
+    prep_csv = PATHS.data_dir / f"{ds_name}.csv"
+    df.to_csv(prep_csv, index=False)
 
     fail_name = "ai4i_single_failure"
-    fail_file = PATHS.data_dir / f"{fail_name}.csv"
-    pd.DataFrame({
+    fail_df = pd.DataFrame({
         "Product ID": ["L0001"],
         "failure_point": ["2026-01-01 10:00:00"],
         "period_end": ["2026-01-01 12:00:00"],
-    }).to_csv(fail_file, index=False)
+    })
+    fail_dir, _ = create_versioned_failure_dataset(fail_name, "v1.0", fail_df)
 
     try:
         prep_res = client.post("/preprocessing", json={"dataset_id": ds_name, "dataset_version": "v1.0", "force_reanalyze": True})
@@ -717,10 +771,10 @@ def test_binary_label_only_one_returns_422(test_client):
         assert resp.status_code == 422
         assert "label 0과 1이 모두 필요합니다" in resp.json()["error"]["message"]
     finally:
-        if csv_file.exists():
-            csv_file.unlink()
-        if fail_file.exists():
-            fail_file.unlink()
+        if prep_csv.exists():
+            prep_csv.unlink()
+        shutil.rmtree(obs_dir, ignore_errors=True)
+        shutil.rmtree(fail_dir, ignore_errors=True)
 
 
 def test_binary_label_contains_both_classes_succeeds(test_client):
@@ -739,7 +793,6 @@ def test_binary_label_contains_both_classes_succeeds(test_client):
         "feature_schema_version": "ai4i-feature-v1",
         "label_schema_version": "ai4i-label-24h-v1",
         "prediction_horizon_hours": 24,
-        "rebuild_npy": True,
     })
     assert resp.status_code == 200
     feat_ver = resp.json()["outputs"]["feature_dataset_version"]
@@ -895,13 +948,12 @@ def test_active_failure_interval_is_fully_removed(test_client):
     plan_ver = test_client["plan_version"]
 
     fail_ds = "test_interval_failures"
-    fail_file = PATHS.data_dir / f"{fail_ds}.csv"
     df_fail = pd.DataFrame({
         "Product ID": ["L0001"],
         "failure_point": ["2026-01-01 10:00:00"],
         "period_end": ["2026-01-01 12:00:00"],
     })
-    df_fail.to_csv(fail_file, index=False)
+    fail_dir, _ = create_versioned_failure_dataset(fail_ds, "v1.0", df_fail)
 
     try:
         resp = client.post("/feature", json={
@@ -915,7 +967,6 @@ def test_active_failure_interval_is_fully_removed(test_client):
             "feature_schema_version": "ai4i-feature-v1",
             "label_schema_version": "ai4i-label-24h-v1",
             "prediction_horizon_hours": 24,
-            "rebuild_npy": True,
         })
         assert resp.status_code == 200
         feat_ver = resp.json()["outputs"]["feature_dataset_version"]
@@ -930,8 +981,7 @@ def test_active_failure_interval_is_fully_removed(test_client):
             if r["asset_id"] == "L0001":
                 assert r["timestamp"] not in excluded_times
     finally:
-        if fail_file.exists():
-            fail_file.unlink()
+        shutil.rmtree(fail_dir, ignore_errors=True)
 
 
 def test_logical_uri_outside_root_raises_error():

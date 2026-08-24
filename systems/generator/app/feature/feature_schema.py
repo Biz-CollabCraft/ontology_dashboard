@@ -59,7 +59,6 @@ class FeatureRequest(BaseModel):
     label_schema_version: str = Field(..., description="Label schema specification version")
 
     prediction_horizon_hours: int = Field(default=24, gt=0, description="Prediction horizon in hours")
-    rebuild_npy: bool = Field(default=False, description="Whether to force recalculation and overwrite existing bundle")
 
     @field_validator(
         "dataset_id",

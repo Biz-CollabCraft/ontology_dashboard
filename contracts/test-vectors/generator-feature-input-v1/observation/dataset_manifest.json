@@ -1,0 +1,17 @@
+{
+  "manifest_version": "generator-dataset-input-v1",
+  "dataset_type": "observation",
+  "dataset_id": "golden-observation-v1",
+  "dataset_version": "v1.0",
+  "schema_version": "canonical-observation-v1",
+  "created_at": "2026-08-24T00:00:00Z",
+  "files": [
+    {
+      "role": "observations",
+      "path": "observations.csv",
+      "media_type": "text/csv",
+      "sha256": "43d04fcf4458afd7485af93641059dffb6c93af00012bae0ff7907304b2f4032",
+      "size_bytes": 851
+    }
+  ]
+}
