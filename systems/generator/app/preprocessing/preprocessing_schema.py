@@ -52,8 +52,12 @@ class PreprocessingPlanResponse(BaseModel):
 
             if self.selected_columns:
                 missing_in_selected = [r for r in roles if r not in self.selected_columns]
-                if missing_in_selected:
-                    raise ValueError(f"Long-format role columns {missing_in_selected} must be present in selected_columns")
+        if self.structure_type == "tabular_column_as_attribute":
+            if self.selected_columns:
+                if self.id_column and str(self.id_column).strip() and self.id_column not in self.selected_columns:
+                    raise ValueError(f"Wide-format id_column '{self.id_column}' must be present in selected_columns")
+                if self.time_column and str(self.time_column).strip() and self.time_column not in self.selected_columns:
+                    raise ValueError(f"Wide-format time_column '{self.time_column}' must be present in selected_columns")
 
         return self
 
@@ -67,7 +71,10 @@ class PreprocessingRequest(BaseModel):
     force_reanalyze: bool = Field(False, description="Force re-analyzing plan even if cached")
     duplicate_policy: Literal["error", "aggregate"] = Field("error", description="Duplicate handling policy")
     aggregation: Optional[Literal["mean", "first", "sum"]] = Field(None, description="Aggregation function if duplicate_policy='aggregate'")
-    idempotency_key: Optional[str] = Field(None, description="Optional idempotency key")
+
+    model_config = {
+        "extra": "forbid",
+    }
 
     @model_validator(mode="after")
     def _validate_duplicate_aggregation(self) -> "PreprocessingRequest":

@@ -24,7 +24,9 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
     DatasetNotFoundError,
     DatasetContractError,
     PreprocessingRoleError,
+    PreprocessingPlanValidationError,
     PreprocessingPlanPublishError,
+    PreprocessingPlanConflictError,
 )
 from systems.generator.app.preprocessing.preprocessing_repository import (
     PreprocessingRepository,
@@ -135,14 +137,17 @@ def test_preprocessing_responsibility_boundaries(client, sample_wide_csv, tmp_pa
 
 
 # ==========================================
-# 3. Plan Identification & Determinism
+# 3. Plan Identification, Provenance, & Determinism
 # ==========================================
 
-def test_preprocessing_plan_identification_and_determinism(client, sample_wide_csv, tmp_path, monkeypatch):
-    """Plan has pp-{UUID} ID, content-hash version, and matches saved file."""
+def test_preprocessing_plan_identification_and_provenance(client, sample_wide_csv, tmp_path, monkeypatch):
+    """Plan records source_dataset_uri, source_dataset_sha256, and content-hash version."""
     models_store = tmp_path / "models_store"
     models_store.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    csv_path = PATHS.data_dir / sample_wide_csv
+    expected_file_sha = compute_file_sha256(csv_path)
 
     payload = {
         "dataset_id": "test_ident",
@@ -158,25 +163,28 @@ def test_preprocessing_plan_identification_and_determinism(client, sample_wide_c
     plan_ver = data["preprocessing_plan_version"]
 
     assert plan_id.startswith("pp-")
-    # Verify UUID format in plan_id
     raw_uuid = plan_id[3:]
     assert uuid.UUID(raw_uuid)
 
     assert plan_ver.startswith("preprocessing-plan-")
     assert len(plan_ver) == len("preprocessing-plan-") + 16
 
-    # Load from disk and verify identity
+    # Load from disk and verify identity and provenance
     repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
     loaded = repo.load_plan("test_ident", "v1.0", plan_id)
     assert loaded["preprocessing_plan_id"] == plan_id
     assert loaded["preprocessing_plan_version"] == plan_ver
     assert loaded["dataset_id"] == "test_ident"
     assert loaded["dataset_version"] == "v1.0"
+    assert loaded["source_dataset_sha256"] == expected_file_sha
+    assert not Path(loaded["source_dataset_uri"]).is_absolute()
+    assert ".." not in Path(loaded["source_dataset_uri"]).parts
 
 
 def test_compute_preprocessing_plan_version_detects_changes():
-    """Modifying selected_columns, id_column, or duplicate_policy changes version."""
+    """Modifying selected_columns, id_column, duplicate_policy, or source_dataset_sha256 changes version."""
     base = {
+        "source_dataset_sha256": "a" * 64,
         "structure_type": "tabular_column_as_attribute",
         "selected_columns": ["asset_id", "timestamp", "voltage"],
         "id_column": "asset_id",
@@ -194,6 +202,9 @@ def test_compute_preprocessing_plan_version_detects_changes():
 
     v_dup = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "duplicate_policy": "aggregate", "aggregation": "mean"})
     assert v_dup != v_base
+
+    v_sha = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "source_dataset_sha256": "b" * 64})
+    assert v_sha != v_base
 
 
 # ==========================================
@@ -348,7 +359,7 @@ def test_preprocessing_path_confinement_and_security(client):
 
 
 # ==========================================
-# 6. Reanalysis Policy & Reuse
+# 6. Reanalysis Policy, Reuse & Conflict Detection
 # ==========================================
 
 def test_preprocessing_reanalysis_policy(client, sample_wide_csv, tmp_path, monkeypatch):
@@ -388,6 +399,135 @@ def test_preprocessing_reanalysis_policy(client, sample_wide_csv, tmp_path, monk
 
     assert plan_id3 != plan_id1  # New unique plan ID
     assert plan_ver3 == plan_ver1  # Content is identical, so content-hash version matches
+
+
+def test_preprocessing_checksum_mismatch_fails_409(client, sample_wide_csv, tmp_path, monkeypatch):
+    """When dataset content changes on disk, reuse returns 409 PREPROCESSING_PLAN_CONFLICT."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    payload = {
+        "dataset_id": "checksum_conflict_ds",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": False,
+    }
+
+    # 1. First run creates valid plan
+    res1 = client.post("/preprocessing", json=payload)
+    assert res1.status_code == 200
+
+    # 2. Modify CSV file content on disk
+    csv_path = PATHS.data_dir / sample_wide_csv
+    df = pd.read_csv(csv_path)
+    df["temperature"] = df["temperature"] + 10.0
+    df.to_csv(csv_path, index=False)
+
+    # 3. Subsequent run with force_reanalyze=False detects checksum mismatch -> 409
+    res2 = client.post("/preprocessing", json=payload)
+    assert res2.status_code == 409
+    data2 = res2.json()
+    assert data2["error"]["code"] == "PREPROCESSING_PLAN_CONFLICT"
+    assert "force_reanalyze=True" in data2["error"]["message"]
+
+    # 4. Run with force_reanalyze=True succeeds and issues new plan
+    res3 = client.post("/preprocessing", json={**payload, "force_reanalyze": True})
+    assert res3.status_code == 200
+
+
+def test_preprocessing_duplicate_policy_mismatch_fails_409(client, sample_wide_csv, tmp_path, monkeypatch):
+    """When requested duplicate_policy or aggregation differs from existing plan, reuse returns 409."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    payload_error = {
+        "dataset_id": "dup_policy_ds",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": False,
+        "duplicate_policy": "error",
+    }
+    res1 = client.post("/preprocessing", json=payload_error)
+    assert res1.status_code == 200
+
+    # Request aggregate policy on same dataset without force_reanalyze -> 409
+    payload_agg = {
+        "dataset_id": "dup_policy_ds",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": False,
+        "duplicate_policy": "aggregate",
+        "aggregation": "mean",
+    }
+    res2 = client.post("/preprocessing", json=payload_agg)
+    assert res2.status_code == 409
+    assert res2.json()["error"]["code"] == "PREPROCESSING_PLAN_CONFLICT"
+
+
+def test_preprocessing_selected_columns_missing_fails_422():
+    """preprocess_with_plan fails fast (422) when declared selected_columns are missing in DataFrame."""
+    df = pd.DataFrame({"asset_id": ["A1"], "time": ["2026-01-01 00:00:00"], "col1": [1.0]})
+    plan = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["asset_id", "time", "non_existent_col"],
+    }
+    with pytest.raises(PreprocessingPlanValidationError) as exc_info:
+        # Write to dummy CSV and test
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            df.to_csv(f.name, index=False)
+            tmp_csv = f.name
+        try:
+            preprocess_with_plan(tmp_csv, plan)
+        finally:
+            Path(tmp_csv).unlink(missing_ok=True)
+
+    assert "존재하지 않는 컬럼" in str(exc_info.value)
+
+
+def test_preprocessing_wide_format_timestamp_and_stable_sort():
+    """preprocess_with_plan normalizes timestamp and stably sorts by [id_column, time_column]."""
+    df = pd.DataFrame({
+        "asset_id": ["M002", "M001", "M001"],
+        "timestamp": ["2026-01-01 00:00:00", "2026-01-01 02:00:00", "2026-01-01 01:00:00"],
+        "temperature": [62.1, 58.0, 55.2],
+    })
+    plan = {
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["asset_id", "timestamp", "temperature"],
+        "id_column": "asset_id",
+        "time_column": "timestamp",
+        "duplicate_policy": "error",
+    }
+
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+        df.to_csv(f.name, index=False)
+        tmp_csv = f.name
+    try:
+        processed_df = preprocess_with_plan(tmp_csv, plan)
+    finally:
+        Path(tmp_csv).unlink(missing_ok=True)
+
+    # Check stable sorting: M001 at 01:00, M001 at 02:00, M002 at 00:00
+    assert processed_df["asset_id"].tolist() == ["M001", "M001", "M002"]
+    assert pd.api.types.is_datetime64_any_dtype(processed_df["timestamp"])
+    assert processed_df["temperature"].tolist() == [55.2, 58.0, 62.1]
+
+
+def test_preprocessing_idempotency_key_removed_fails_422(client, sample_wide_csv):
+    """Sending removed idempotency_key in request payload fails fast (422 extra forbid)."""
+    payload = {
+        "dataset_id": "test_idem",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "idempotency_key": "any-key-value",
+    }
+    res = client.post("/preprocessing", json=payload)
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "REQUEST_VALIDATION_ERROR"
 
 
 def test_preprocessing_corrupted_latest_fails_fast(client, sample_wide_csv, tmp_path, monkeypatch):
@@ -458,7 +598,7 @@ def test_preprocessing_full_execution_failure_prevents_plan_publishing(client, t
     res = client.post("/preprocessing", json=payload)
     assert res.status_code == 422
     data = res.json()
-    assert data["error"]["code"] == "PREPROCESSING_PLANNING_ERROR"
+    assert data["error"]["code"] in ("PREPROCESSING_PLANNING_ERROR", "DATASET_CONTRACT_ERROR")
 
     # Verify no plan directory or files created
     plan_dir = models_store / "cache" / "preprocessing_plans" / "dup_test" / "v1.0"

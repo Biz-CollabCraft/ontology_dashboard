@@ -102,9 +102,11 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 
 ---
 
-## 3. Preprocessing Plan 불변 저장 구조
+## 3. Preprocessing Plan 불변 저장 구조 및 provenance 계약
 
 - **Plan 식별**: `preprocessing_plan_id` (`pp-{UUID4}`)와 `preprocessing_plan_version` (`preprocessing-plan-{hash}`) 분리.
+- **Dataset 결합 및 Provenance**: Plan은 `source_dataset_uri` 및 `source_dataset_sha256`과 결합되며, `preprocessing_plan_version`은 `source_dataset_sha256`을 포함한 canonical 해시로 산출.
 - **저장 디렉터리**: `models_store/cache/preprocessing_plans/{dataset_id}/{dataset_version}/`
 - **불변 파일 및 포인터**: `pp-{uuid}.json` (고유 불변 파일 atomic rename 발행) 및 `latest.json` (별도 atomic replace 갱신).
+- **재사용 및 Fail-Fast 검증**: `force_reanalyze=False` 시 dataset sha256 및 중복 정책 불일치 시 `409 PREPROCESSING_PLAN_CONFLICT` 반환. `selected_columns` 또는 역할 컬럼 누락 시 422 fail-fast.
 - **동기 실행**: `/preprocessing` 라우터는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.

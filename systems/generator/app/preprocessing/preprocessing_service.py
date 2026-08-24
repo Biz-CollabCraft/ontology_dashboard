@@ -26,6 +26,7 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
     PreprocessingRoleError,
     PreprocessingPlanValidationError,
     PreprocessingPlanningError,
+    PreprocessingPlanConflictError,
 )
 from systems.generator.app.preprocessing.preprocessing_planner import PreprocessingPlanner
 from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
@@ -58,53 +59,93 @@ def preprocess_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
     elif ext in (".xlsx", ".xls"):
         df = pd.read_excel(filepath)
     else:
-        raise ValueError(f"Unsupported file extension: {ext}")
+        raise DatasetContractError(f"지원하지 않는 파일 형식입니다: {ext}")
+
+    if df.empty or len(df.columns) == 0:
+        raise DatasetContractError("데이터셋이 비어 있거나 유효한 컬럼이 없습니다.")
 
     structure_type = plan.get("structure_type", "tabular_column_as_attribute")
-    selected_cols = plan.get("selected_columns", list(df.columns))
 
     if structure_type == "tabular_column_as_attribute":
-        valid_cols = [c for c in selected_cols if c in df.columns]
-        if not valid_cols:
-            logger.warning(f"[Preprocessor] None of selected columns {selected_cols} exist in '{filepath}'. Keeping all.")
-            valid_cols = list(df.columns)
+        selected_cols = plan.get("selected_columns")
+        if selected_cols is None:
+            selected_cols = list(df.columns)
+        elif not isinstance(selected_cols, list) or len(selected_cols) == 0:
+            raise PreprocessingPlanValidationError("Wide 구조 Plan에 selected_columns 목록이 누락되었거나 비어 있습니다.")
 
-        extracted_df = df[valid_cols].copy()
+        # Fail-fast on any missing selected column (no arbitrary fallback!)
+        missing_cols = [c for c in selected_cols if c not in df.columns]
+        if missing_cols:
+            raise PreprocessingPlanValidationError(
+                f"선택된 컬럼 중 데이터셋에 존재하지 않는 컬럼이 있습니다: {missing_cols}",
+                details=[{
+                    "missing_columns": missing_cols,
+                    "declared_columns": selected_cols,
+                    "available_columns": list(df.columns),
+                }],
+            )
 
+        # Validate declared role columns
         id_col = plan.get("id_column")
         time_col = plan.get("time_column")
-        if id_col and time_col and id_col in extracted_df.columns and time_col in extracted_df.columns:
-            dup_key = [id_col, time_col]
-            has_duplicates = extracted_df.duplicated(subset=dup_key).any()
+        if id_col and id_col not in df.columns:
+            raise PreprocessingPlanValidationError(
+                f"선언된 id_column '{id_col}'가 데이터셋에 존재하지 않습니다: {list(df.columns)}"
+            )
+        if time_col and time_col not in df.columns:
+            raise PreprocessingPlanValidationError(
+                f"선언된 time_column '{time_col}'가 데이터셋에 존재하지 않습니다: {list(df.columns)}"
+            )
+
+        # Timestamp canonicalization for Wide-format
+        if time_col and time_col in df.columns:
+            df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
+            if df[time_col].isna().any():
+                raise DatasetContractError(f"컬럼 '{time_col}'의 타임스탬프 정규화 실패 또는 NaT 값이 감지되었습니다.")
+
+        # Stable sort by [id_column, time_column] or [time_column]
+        sort_cols = []
+        if id_col and id_col in df.columns:
+            sort_cols.append(id_col)
+        if time_col and time_col in df.columns:
+            sort_cols.append(time_col)
+
+        if sort_cols:
+            df = df.sort_values(by=sort_cols, kind="mergesort").reset_index(drop=True)
+
+        extracted_df = df[selected_cols].copy()
+
+        # Duplicate checking and policy enforcement
+        if sort_cols:
+            has_duplicates = extracted_df.duplicated(subset=sort_cols).any()
             if has_duplicates:
                 dup_policy = plan.get("duplicate_policy", "error")
                 aggfunc = plan.get("aggregation")
                 if dup_policy == "aggregate" and aggfunc:
                     numeric_cols = [
                         c for c in extracted_df.columns
-                        if c not in dup_key and pd.api.types.is_numeric_dtype(extracted_df[c])
+                        if c not in sort_cols and pd.api.types.is_numeric_dtype(extracted_df[c])
                     ]
-                    non_numeric_cols = [c for c in extracted_df.columns if c not in dup_key and c not in numeric_cols]
+                    non_numeric_cols = [c for c in extracted_df.columns if c not in sort_cols and c not in numeric_cols]
                     for c in non_numeric_cols:
-                        per_group_nunique = extracted_df.groupby(dup_key)[c].nunique()
+                        per_group_nunique = extracted_df.groupby(sort_cols)[c].nunique()
                         if (per_group_nunique > 1).any():
-                            raise ValueError(
+                            raise DatasetContractError(
                                 f"Cannot deduplicate non-numeric column '{c}' with conflicting "
-                                f"values within the same {dup_key} group; no aggregation policy "
+                                f"values within the same {sort_cols} group; no aggregation policy "
                                 f"is defined for non-numeric conflicts"
                             )
                     agg_map = {c: aggfunc for c in numeric_cols}
                     agg_map.update({c: "first" for c in non_numeric_cols})
-                    extracted_df = extracted_df.groupby(dup_key, as_index=False).agg(agg_map)
-                    extracted_df = extracted_df.sort_values(by=dup_key).reset_index(drop=True)
+                    extracted_df = extracted_df.groupby(sort_cols, as_index=False).agg(agg_map)
+                    extracted_df = extracted_df.sort_values(by=sort_cols, kind="mergesort").reset_index(drop=True)
                 else:
-                    raise ValueError(
-                        f"Duplicate rows found for key {dup_key} and duplicate_policy="
-                        f"{dup_policy!r}; set plan.duplicate_policy='aggregate' with an "
-                        f"aggregation function, or deduplicate the source data"
+                    raise DatasetContractError(
+                        f"Duplicate rows found for key {sort_cols} and duplicate_policy={dup_policy!r}; "
+                        f"set plan.duplicate_policy='aggregate' with an aggregation function, or deduplicate the source data"
                     )
 
-        logger.info(f"[Preprocessor] Successfully processed {len(valid_cols)} columns from '{filepath}'. Output shape: {extracted_df.shape}")
+        logger.info(f"[Preprocessor] Successfully processed {len(selected_cols)} columns from '{filepath}'. Output shape: {extracted_df.shape}")
         return extracted_df
 
     elif structure_type == "tabular_row_as_attribute":
@@ -147,6 +188,8 @@ def preprocess_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
 
         if time_col and time_col in df.columns:
             df[time_col] = canonicalize_timestamp_series(df[time_col], col_name=time_col)
+            if df[time_col].isna().any():
+                raise DatasetContractError(f"Long-format time_column '{time_col}' 정규화 실패 또는 NaT 값이 감지되었습니다.")
             index_cols = [id_col, time_col]
         else:
             index_cols = [id_col]
@@ -163,7 +206,7 @@ def preprocess_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
                 pivoted = df.pivot_table(index=index_cols, columns=attr_col, values=val_col, aggfunc=aggfunc).reset_index()
                 return pivoted
             else:
-                raise ValueError(
+                raise DatasetContractError(
                     f"Long-format dataset '{filepath}' contains duplicate observation entries for keys {check_cols} "
                     f"without an explicit aggregation policy (duplicate_policy='{dup_policy}')."
                 )
@@ -274,6 +317,7 @@ class PreprocessingService:
 
         candidates = [
             PATHS.data_dir / request.dataset_id / f"{request.dataset_version}.csv",
+            PATHS.data_dir / f"{request.dataset_id}_{request.dataset_version}.csv",
             PATHS.data_dir / f"{request.dataset_id}.csv",
             PATHS.data_dir / request.dataset_id / "input.csv",
             PATHS.data_preprocessed / request.dataset_id / f"{request.dataset_version}.csv",
@@ -333,12 +377,31 @@ class PreprocessingService:
                     f"Declared role columns {missing} not found in dataset columns: {cols}"
                 )
 
-        selected = plan.get("selected_columns")
-        if selected:
-            valid_selected = [c for c in selected if c in cols]
-            if not valid_selected:
+        elif st_type == "tabular_column_as_attribute":
+            selected = plan.get("selected_columns")
+            if not selected:
+                raise PreprocessingPlanValidationError("Wide 구조 Plan에 selected_columns 목록이 누락되었습니다.")
+
+            missing_cols = [c for c in selected if c not in cols]
+            if missing_cols:
                 raise PreprocessingPlanValidationError(
-                    f"None of the selected columns {selected} exist in dataset: {cols}"
+                    f"선택된 컬럼 중 데이터셋에 존재하지 않는 컬럼이 있습니다: {missing_cols}",
+                    details=[{
+                        "missing_columns": missing_cols,
+                        "declared_columns": selected,
+                        "available_columns": cols,
+                    }],
+                )
+
+            id_col = plan.get("id_column")
+            time_col = plan.get("time_column")
+            if id_col and id_col not in cols:
+                raise PreprocessingPlanValidationError(
+                    f"선언된 id_column '{id_col}'가 데이터셋에 존재하지 않습니다: {cols}"
+                )
+            if time_col and time_col not in cols:
+                raise PreprocessingPlanValidationError(
+                    f"선언된 time_column '{time_col}'가 데이터셋에 존재하지 않습니다: {cols}"
                 )
 
     def run_preprocessing(self, request: PreprocessingRequest, request_id: Optional[str] = None) -> PreprocessingResponse:
@@ -346,9 +409,12 @@ class PreprocessingService:
         req_id = request_id or f"req-{uuid.uuid4().hex[:12]}"
         run_id = f"preprocessing-{uuid.uuid4().hex[:12]}"
 
-        # 1. Resolve dataset
+        # 1. Resolve dataset path and compute provenance
         dataset_path = self._resolve_dataset_path(request)
-        logger.info(f"[PreprocessingService] Resolved dataset path: '{dataset_path.name}' for {request.dataset_id}")
+        dataset_sha256 = compute_file_sha256(dataset_path)
+        dataset_uri = self.repository.get_logical_uri(dataset_path)
+        dataset_size = dataset_path.stat().st_size
+        logger.info(f"[PreprocessingService] Resolved dataset: '{dataset_path.name}' (sha256={dataset_sha256[:8]}...) for {request.dataset_id}")
 
         # 2. Preview dataset
         ext = dataset_path.suffix.lower()
@@ -362,50 +428,124 @@ class PreprocessingService:
         if df_preview.empty or len(df_preview.columns) == 0:
             raise DatasetContractError("데이터셋이 비어 있거나 컬럼이 존재하지 않습니다.")
 
-        # 3. Check existing plan (if force_reanalyze=False)
-        existing_plan = None if request.force_reanalyze else self.repository.find_latest_plan(request.dataset_id, request.dataset_version)
-        if existing_plan:
-            logger.info(f"[PreprocessingService] Reusing existing plan for {request.dataset_id}:{request.dataset_version}")
-            plan = existing_plan
-            plan_id = plan["preprocessing_plan_id"]
-            plan_version = plan["preprocessing_plan_version"]
-            plan_path = self.repository.get_dataset_plan_dir(request.dataset_id, request.dataset_version) / f"{plan_id}.json"
-            plan_uri = self.repository.get_logical_uri(plan_path)
-            plan_sha256 = compute_file_sha256(plan_path)
-        else:
-            logger.info(f"[PreprocessingService] Generating new preprocessing plan for {request.dataset_id}:{request.dataset_version}")
-            plan = self.planner.build_plan(
-                str(dataset_path),
-                force_reanalyze=request.force_reanalyze,
-                duplicate_policy=request.duplicate_policy,
-                aggregation=request.aggregation,
-            )
+        # 3. Check existing plan reuse (if force_reanalyze=False)
+        existing_plan = None
+        if not request.force_reanalyze:
+            existing_plan = self.repository.find_latest_plan(request.dataset_id, request.dataset_version)
+            if existing_plan:
+                # 3.1. Verify Dataset SHA-256 match
+                existing_sha = existing_plan.get("source_dataset_sha256")
+                if existing_sha != dataset_sha256:
+                    logger.warning(
+                        f"[PreprocessingService] Existing plan source_dataset_sha256 mismatch for {request.dataset_id}:{request.dataset_version} "
+                        f"(saved={existing_sha}, current={dataset_sha256})"
+                    )
+                    raise PreprocessingPlanConflictError(
+                        f"데이터셋 내용(SHA-256)이 변경되었습니다. force_reanalyze=True로 새 계획을 발행하십시오.",
+                        details=[{
+                            "existing_sha256": existing_sha,
+                            "current_sha256": dataset_sha256,
+                        }],
+                    )
 
-            # 4. Validate plan
-            self.validate_plan(df_preview, plan)
+                # 3.2. Verify duplicate policy match
+                plan_dup_policy = existing_plan.get("duplicate_policy")
+                plan_agg = existing_plan.get("aggregation")
+                if request.duplicate_policy != plan_dup_policy or request.aggregation != plan_agg:
+                    logger.warning(
+                        f"[PreprocessingService] Requested duplicate policy mismatch for {request.dataset_id}:{request.dataset_version} "
+                        f"(req={request.duplicate_policy}:{request.aggregation}, plan={plan_dup_policy}:{plan_agg})"
+                    )
+                    raise PreprocessingPlanConflictError(
+                        f"요청된 중복 처리 정책이 기존 Plan의 정책과 일치하지 않습니다.",
+                        details=[{
+                            "requested_duplicate_policy": request.duplicate_policy,
+                            "requested_aggregation": request.aggregation,
+                            "plan_duplicate_policy": plan_dup_policy,
+                            "plan_aggregation": plan_agg,
+                        }],
+                    )
 
-            # 5. Execute full dataset preprocessing with plan to verify full transform success
-            try:
-                preprocess_with_plan(str(dataset_path), plan)
-            except PreprocessingError:
-                raise
-            except Exception as exc:
-                logger.warning(f"[PreprocessingService] Preprocessing execution failed with plan: {exc}")
-                raise PreprocessingPlanningError(
-                    f"전처리 계획 적용 실행에 실패했습니다: {exc}",
-                    details=[{"stage": "execution", "error": str(exc)}],
-                ) from exc
+                # 3.3. Verify plan validity against preview and execute full dataset transform
+                self.validate_plan(df_preview, existing_plan)
+                try:
+                    preprocess_with_plan(str(dataset_path), existing_plan)
+                except PreprocessingError:
+                    raise
+                except Exception as exc:
+                    logger.warning(f"[PreprocessingService] Existing plan execution failed on current dataset: {exc}")
+                    raise PreprocessingPlanConflictError(
+                        f"기존 계획을 현재 데이터셋에 적용할 수 없습니다: {exc}",
+                        details=[{"stage": "execution", "error": str(exc)}],
+                    ) from exc
 
-            # 6. Atomically persist immutable plan and update latest pointer
-            published = self.repository.publish_plan(
-                request.dataset_id,
-                request.dataset_version,
-                plan,
-            )
-            plan_id = published.preprocessing_plan_id
-            plan_version = published.preprocessing_plan_version
-            plan_uri = published.preprocessing_plan_uri
-            plan_sha256 = published.sha256
+                logger.info(f"[PreprocessingService] Reusing existing validated plan for {request.dataset_id}:{request.dataset_version}")
+                plan_id = existing_plan["preprocessing_plan_id"]
+                plan_version = existing_plan["preprocessing_plan_version"]
+                plan_path = self.repository.get_dataset_plan_dir(request.dataset_id, request.dataset_version) / f"{plan_id}.json"
+                plan_uri = self.repository.get_logical_uri(plan_path)
+                plan_sha256 = compute_file_sha256(plan_path)
+
+                return PreprocessingResponse(
+                    request_id=req_id,
+                    run_id=run_id,
+                    status="succeeded",
+                    dataset_id=request.dataset_id,
+                    dataset_version=request.dataset_version,
+                    preprocessing_plan_id=plan_id,
+                    preprocessing_plan_version=plan_version,
+                    result=PreprocessingResultPayload(
+                        structure_type=existing_plan.get("structure_type", "tabular_column_as_attribute"),
+                        id_column=existing_plan.get("id_column"),
+                        time_column=existing_plan.get("time_column"),
+                        attribute_column=existing_plan.get("attribute_column"),
+                        value_column=existing_plan.get("value_column"),
+                        duplicate_policy=existing_plan.get("duplicate_policy", request.duplicate_policy),
+                        aggregation=existing_plan.get("aggregation", request.aggregation),
+                        preprocessing_plan_uri=plan_uri,
+                        preprocessing_plan_sha256=plan_sha256,
+                    ),
+                )
+
+        # 4. Generate new Preprocessing Plan
+        logger.info(f"[PreprocessingService] Generating new preprocessing plan for {request.dataset_id}:{request.dataset_version}")
+        plan = self.planner.build_plan(
+            str(dataset_path),
+            force_reanalyze=request.force_reanalyze,
+            duplicate_policy=request.duplicate_policy,
+            aggregation=request.aggregation,
+        )
+
+        # Attach dataset provenance
+        plan["source_dataset_uri"] = dataset_uri
+        plan["source_dataset_sha256"] = dataset_sha256
+        plan["source_dataset_size_bytes"] = dataset_size
+
+        # 5. Validate plan
+        self.validate_plan(df_preview, plan)
+
+        # 6. Execute full dataset preprocessing with plan to verify full transform success BEFORE publishing
+        try:
+            preprocess_with_plan(str(dataset_path), plan)
+        except PreprocessingError:
+            raise
+        except Exception as exc:
+            logger.warning(f"[PreprocessingService] Preprocessing execution failed with plan: {exc}")
+            raise PreprocessingPlanningError(
+                f"전처리 계획 적용 실행에 실패했습니다: {exc}",
+                details=[{"stage": "execution", "error": str(exc)}],
+            ) from exc
+
+        # 7. Atomically persist immutable plan and update latest pointer
+        published = self.repository.publish_plan(
+            request.dataset_id,
+            request.dataset_version,
+            plan,
+        )
+        plan_id = published.preprocessing_plan_id
+        plan_version = published.preprocessing_plan_version
+        plan_uri = published.preprocessing_plan_uri
+        plan_sha256 = published.sha256
 
         return PreprocessingResponse(
             request_id=req_id,

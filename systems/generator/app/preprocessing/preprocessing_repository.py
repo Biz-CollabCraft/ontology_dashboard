@@ -39,6 +39,7 @@ def compute_preprocessing_plan_version(
     canonical = {
         "dataset_id": dataset_id,
         "dataset_version": dataset_version,
+        "source_dataset_sha256": plan_data.get("source_dataset_sha256"),
         "structure_type": plan_data.get("structure_type"),
         "selected_columns": plan_data.get("selected_columns"),
         "id_column": plan_data.get("id_column"),
@@ -79,22 +80,149 @@ class PreprocessingRepository:
 
     def get_logical_uri(self, target_path: Path) -> str:
         try:
-            repo_root = PATHS.models_store.parent.resolve()
-            return str(target_path.resolve().relative_to(repo_root).as_posix())
+            cwd = Path.cwd().resolve()
+            resolved = target_path.resolve()
+            if cwd in resolved.parents or cwd == resolved:
+                return str(resolved.relative_to(cwd).as_posix())
         except Exception:
-            return str(target_path.as_posix())
+            pass
+
+        try:
+            data_dir = getattr(PATHS, "data_dir", Path("data")).resolve()
+            resolved = target_path.resolve()
+            if data_dir in resolved.parents or data_dir == resolved:
+                rel = resolved.relative_to(data_dir).as_posix()
+                return f"data/{rel}" if rel != "." else "data"
+        except Exception:
+            pass
+
+        try:
+            models_store = getattr(PATHS, "models_store", Path("models_store")).resolve()
+            resolved = target_path.resolve()
+            if models_store in resolved.parents or models_store == resolved:
+                rel = resolved.relative_to(models_store).as_posix()
+                return f"models_store/{rel}" if rel != "." else "models_store"
+        except Exception:
+            pass
+
+        clean = str(target_path.as_posix())
+        if ":" in clean:
+            clean = clean.split(":")[-1].lstrip("/")
+        return clean
+
+    def _validate_plan_content(
+        self,
+        plan_data: dict[str, Any],
+        dataset_id: str,
+        dataset_version: str,
+        expected_plan_id: Optional[str] = None,
+    ) -> None:
+        """Strict validation of plan structure, provenance fields, duplicate policies, and content hashes."""
+        if not isinstance(plan_data, dict):
+            raise DatasetContractError(f"Preprocessing Plan 형식이 올바르지 않습니다 (dict 기대, {type(plan_data).__name__} 수신)")
+
+        # 1. Required identity and provenance fields
+        required_fields = [
+            "preprocessing_plan_id",
+            "preprocessing_plan_version",
+            "dataset_id",
+            "dataset_version",
+            "source_dataset_uri",
+            "source_dataset_sha256",
+            "structure_type",
+            "selected_columns",
+            "duplicate_policy",
+        ]
+        for rf in required_fields:
+            if rf not in plan_data or plan_data[rf] is None or (isinstance(plan_data[rf], str) and not plan_data[rf].strip()):
+                raise DatasetContractError(f"Preprocessing Plan에 필수 필드 '{rf}'가 누락되었거나 비어 있습니다.")
+
+        # 2. Validate source_dataset_sha256 format (64-char hex)
+        src_sha = plan_data.get("source_dataset_sha256", "")
+        if not isinstance(src_sha, str) or len(src_sha) != 64 or not all(c in "0123456789abcdefABCDEF" for c in src_sha):
+            raise DatasetContractError(f"Plan 내부 source_dataset_sha256 형식이 올바르지 않습니다 (64자리 hex 기대): '{src_sha}'")
+
+        # 3. Validate source_dataset_uri format (relative logical path only, no absolute or ..)
+        src_uri = plan_data.get("source_dataset_uri", "")
+        uri_path = Path(src_uri)
+        if uri_path.is_absolute() or ".." in uri_path.parts:
+            raise DatasetContractError(f"Plan 내부 source_dataset_uri에 절대경로 또는 상위경로(..)가 포함되어 있습니다: '{src_uri}'")
+
+        # 4. Identity alignment
+        if plan_data.get("dataset_id") != dataset_id:
+            raise DatasetContractError(
+                f"Plan 내부 dataset_id ('{plan_data.get('dataset_id')}')가 요청된 dataset_id ('{dataset_id}')와 일치하지 않습니다."
+            )
+        if plan_data.get("dataset_version") != dataset_version:
+            raise DatasetContractError(
+                f"Plan 내부 dataset_version ('{plan_data.get('dataset_version')}')가 요청된 dataset_version ('{dataset_version}')와 일치하지 않습니다."
+            )
+        if expected_plan_id and plan_data.get("preprocessing_plan_id") != expected_plan_id:
+            raise DatasetContractError(
+                f"Plan 내부 preprocessing_plan_id ('{plan_data.get('preprocessing_plan_id')}')가 "
+                f"요청된 ID ('{expected_plan_id}')와 일치하지 않습니다."
+            )
+
+        # 5. Duplicate policy & aggregation contract
+        dup_policy = plan_data.get("duplicate_policy")
+        agg = plan_data.get("aggregation")
+        if dup_policy == "aggregate":
+            if agg not in ("mean", "first", "sum"):
+                raise DatasetContractError(f"duplicate_policy='aggregate'는 유효한 aggregation ('mean', 'first', 'sum')이 필요합니다: '{agg}'")
+        elif dup_policy == "error":
+            if agg is not None:
+                raise DatasetContractError("duplicate_policy='error'일 때는 aggregation이 None이어야 합니다.")
+        else:
+            raise DatasetContractError(f"지원하지 않는 duplicate_policy입니다: '{dup_policy}'")
+
+        # 6. Structure-specific role & selected columns validation
+        st = plan_data.get("structure_type")
+        selected_cols = plan_data.get("selected_columns")
+        if not isinstance(selected_cols, list) or not selected_cols:
+            raise DatasetContractError("Preprocessing Plan에 'selected_columns' 목록이 누락되었거나 비어 있습니다.")
+
+        if st == "tabular_column_as_attribute":
+            id_col = plan_data.get("id_column")
+            time_col = plan_data.get("time_column")
+            if id_col and id_col not in selected_cols:
+                raise DatasetContractError(f"Wide 구조 Plan의 선언된 id_column '{id_col}'이 selected_columns에 포함되지 않았습니다.")
+            if time_col and time_col not in selected_cols:
+                raise DatasetContractError(f"Wide 구조 Plan의 선언된 time_column '{time_col}'이 selected_columns에 포함되지 않았습니다.")
+        elif st == "tabular_row_as_attribute":
+            id_col = plan_data.get("id_column")
+            attr_col = plan_data.get("attribute_column")
+            val_col = plan_data.get("value_column")
+            time_col = plan_data.get("time_column")
+
+            for role_name, role_val in (("id_column", id_col), ("attribute_column", attr_col), ("value_column", val_col)):
+                if not role_val or not str(role_val).strip():
+                    raise DatasetContractError(f"Long 구조 Preprocessing Plan에 필수 역할 '{role_name}'이 누락되었습니다.")
+
+            roles = [id_col, attr_col, val_col]
+            if time_col and str(time_col).strip():
+                roles.append(time_col)
+
+            if len(roles) != len(set(roles)):
+                raise DatasetContractError(f"Long 구조 역할 컬럼은 고유해야 합니다: {roles}")
+
+            missing_in_selected = [r for r in roles if r not in selected_cols]
+            if missing_in_selected:
+                raise DatasetContractError(f"Long 구조 역할 컬럼 {missing_in_selected}이 selected_columns에 포함되지 않았습니다.")
+        else:
+            raise DatasetContractError(f"지원하지 않는 structure_type입니다: '{st}'")
+
+        # 7. Content-derived version check
+        computed_ver = compute_preprocessing_plan_version(dataset_id, dataset_version, plan_data)
+        if plan_data.get("preprocessing_plan_version") != computed_ver:
+            raise DatasetContractError(
+                f"Plan 내부 preprocessing_plan_version ('{plan_data.get('preprocessing_plan_version')}')가 "
+                f"내용 기반 계산 버전 ('{computed_ver}')과 일치하지 않습니다."
+            )
 
     def find_latest_plan(self, dataset_id: str, dataset_version: str) -> Optional[dict[str, Any]]:
         """Find and validate latest published plan for a dataset/version, or return None."""
         pointer_path = self.get_latest_pointer_path(dataset_id, dataset_version)
         if not pointer_path.is_file():
-            # Check legacy cache for logging
-            legacy_file = self.base_dir / f"{dataset_id}-{dataset_version}.json"
-            if legacy_file.is_file():
-                logger.info(
-                    f"[PreprocessingRepository] Legacy flat plan cache detected for {dataset_id}:{dataset_version} at {legacy_file.name}, "
-                    f"not promoting to canonical."
-                )
             return None
 
         try:
@@ -139,20 +267,17 @@ class PreprocessingRepository:
         except Exception as exc:
             raise DatasetContractError(f"Plan JSON 파일 파싱 실패 ({target_file.name}): {exc}") from exc
 
-        # Strict internal validation
-        if plan_data.get("preprocessing_plan_id") != plan_id:
-            raise DatasetContractError(
-                f"Plan 파일 내부 plan_id ('{plan_data.get('preprocessing_plan_id')}')가 latest 포인터 ID ('{plan_id}')와 일치하지 않습니다."
-            )
-        if plan_data.get("dataset_id") != dataset_id or plan_data.get("dataset_version") != dataset_version:
-            raise DatasetContractError(
-                f"Plan 파일 내부 dataset 식별자가 요청('{dataset_id}:{dataset_version}')과 일치하지 않습니다."
-            )
+        # Strict validation of plan content
+        self._validate_plan_content(
+            plan_data=plan_data,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            expected_plan_id=plan_id,
+        )
 
-        computed_ver = compute_preprocessing_plan_version(dataset_id, dataset_version, plan_data)
-        if plan_data.get("preprocessing_plan_version") != computed_ver or plan_ver != computed_ver:
+        if plan_ver != plan_data.get("preprocessing_plan_version"):
             raise DatasetContractError(
-                f"Plan 파일 내부 version ('{plan_data.get('preprocessing_plan_version')}')이 내용 기반 계산 버전 ('{computed_ver}')과 일치하지 않습니다."
+                f"latest.json의 plan_version ('{plan_ver}')과 Plan 내부 version ('{plan_data.get('preprocessing_plan_version')}')이 일치하지 않습니다."
             )
 
         return plan_data
@@ -184,51 +309,13 @@ class PreprocessingRepository:
         except Exception as exc:
             raise DatasetContractError(f"Preprocessing Plan JSON 파싱 실패 ({target_path.name}): {exc}") from exc
 
-        if not isinstance(plan_data, dict):
-            raise DatasetContractError(f"Preprocessing Plan 형식이 올바르지 않습니다 (dict 기대, {type(plan_data).__name__} 수신)")
-
-        # Validate mandatory identification and structural fields
-        required_fields = [
-            "preprocessing_plan_id",
-            "preprocessing_plan_version",
-            "dataset_id",
-            "dataset_version",
-            "structure_type",
-        ]
-        for rf in required_fields:
-            if rf not in plan_data or not plan_data[rf]:
-                raise DatasetContractError(f"Preprocessing Plan에 필수 필드 '{rf}'가 누락되었거나 비어 있습니다.")
-
         expected_plan_id = safe_plan_id[:-5] if safe_plan_id.endswith(".json") else safe_plan_id
-        if plan_data.get("preprocessing_plan_id") != expected_plan_id:
-            raise DatasetContractError(
-                f"Plan 내부 preprocessing_plan_id ('{plan_data.get('preprocessing_plan_id')}')가 "
-                f"요청된 ID ('{expected_plan_id}')와 일치하지 않습니다."
-            )
-        if plan_data.get("dataset_id") != dataset_id:
-            raise DatasetContractError(
-                f"Plan 내부 dataset_id ('{plan_data.get('dataset_id')}')가 요청된 dataset_id ('{dataset_id}')와 일치하지 않습니다."
-            )
-        if plan_data.get("dataset_version") != dataset_version:
-            raise DatasetContractError(
-                f"Plan 내부 dataset_version ('{plan_data.get('dataset_version')}')가 요청된 dataset_version ('{dataset_version}')와 일치하지 않습니다."
-            )
-
-        computed_ver = compute_preprocessing_plan_version(dataset_id, dataset_version, plan_data)
-        if plan_data.get("preprocessing_plan_version") != computed_ver:
-            raise DatasetContractError(
-                f"Plan 내부 preprocessing_plan_version ('{plan_data.get('preprocessing_plan_version')}')가 "
-                f"내용 기반 계산 버전 ('{computed_ver}')과 일치하지 않습니다."
-            )
-
-        st = plan_data.get("structure_type")
-        if st == "tabular_column_as_attribute":
-            if "selected_columns" not in plan_data or not isinstance(plan_data["selected_columns"], list) or not plan_data["selected_columns"]:
-                raise DatasetContractError("Wide 구조 Preprocessing Plan에 'selected_columns' 목록이 누락되었거나 비어 있습니다.")
-        elif st == "tabular_row_as_attribute":
-            for role_col in ("id_column", "attribute_column", "value_column"):
-                if role_col not in plan_data or not plan_data[role_col]:
-                    raise DatasetContractError(f"Long 구조 Preprocessing Plan에 '{role_col}' 역할 컬럼이 누락되었습니다.")
+        self._validate_plan_content(
+            plan_data=plan_data,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            expected_plan_id=expected_plan_id,
+        )
 
         return plan_data
 
@@ -238,11 +325,18 @@ class PreprocessingRepository:
         dataset_version: str,
         plan_data: dict[str, Any],
     ) -> PublishedPreprocessingPlan:
-        """Publish an immutable Plan file, then atomically advance latest.json."""
+        """Publish an immutable Plan file with dataset provenance, then atomically advance latest.json."""
         plan_dir = self.get_dataset_plan_dir(dataset_id, dataset_version)
         plan_dir.mkdir(parents=True, exist_ok=True)
 
         plan_id = f"pp-{uuid.uuid4()}"
+
+        # Require provenance fields in plan_data before publishing
+        src_uri = plan_data.get("source_dataset_uri")
+        src_sha = plan_data.get("source_dataset_sha256")
+        if not src_uri or not src_sha:
+            raise PreprocessingPlanPublishError("Plan 발행 시 source_dataset_uri 및 source_dataset_sha256 provenance가 필수입니다.")
+
         canonical_version = compute_preprocessing_plan_version(dataset_id, dataset_version, plan_data)
 
         full_plan_data = {
@@ -250,6 +344,9 @@ class PreprocessingRepository:
             "preprocessing_plan_version": canonical_version,
             "dataset_id": dataset_id,
             "dataset_version": dataset_version,
+            "source_dataset_uri": src_uri,
+            "source_dataset_sha256": src_sha,
+            "source_dataset_size_bytes": plan_data.get("source_dataset_size_bytes"),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "structure_type": plan_data.get("structure_type", "tabular_column_as_attribute"),
             "selected_columns": plan_data.get("selected_columns", []),

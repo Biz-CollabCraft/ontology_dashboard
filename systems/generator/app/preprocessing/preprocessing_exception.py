@@ -121,3 +121,19 @@ class PreprocessingConflictError(PreprocessingError):
             status_code=409,
             details=details,
         )
+
+
+class PreprocessingPlanConflictError(PreprocessingError):
+    """Raised when existing plan conflicts with dataset checksum or requested policies (409)."""
+
+    def __init__(
+        self,
+        message: str = "기존 전처리 계획과 현재 데이터셋 또는 요청 정책 간의 충돌이 발생했습니다.",
+        details: list[Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="PREPROCESSING_PLAN_CONFLICT",
+            status_code=409,
+            details=details,
+        )

@@ -85,9 +85,21 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 ### 4.1 Plan ID와 Plan Version 분리
 
 - **`preprocessing_plan_id`**: 발행 단위 고유 식별자 (`pp-{UUID4}`, 예: `pp-7c106819-cc59-46da-90dd-22c37c441ac9`).
-- **`preprocessing_plan_version`**: Plan 내용 지문 기반 16자리 SHA-256 해시 버전 (`preprocessing-plan-{hash}`, 예: `preprocessing-plan-38f74cc175d5ad12`).
+- **`preprocessing_plan_version`**: Dataset 식별자, `source_dataset_sha256`, 구조 유형, 선택 컬럼 및 중복 정책을 포함하는 canonical 지문 기반 16자리 SHA-256 해시 버전 (`preprocessing-plan-{hash}`, 예: `preprocessing-plan-38f74cc175d5ad12`).
 
-### 4.2 저장 디렉터리 및 원자적 발행 순서
+### 4.2 Dataset Provenance 및 입력 결합
+
+Preprocessing Plan은 Dataset ID/version뿐 아니라 실제 입력 Dataset의 SHA-256 체크섬(`source_dataset_sha256`) 및 논리 상대경로(`source_dataset_uri`)와 결합되어 발행됩니다. 동일한 Dataset ID/version이라도 파일 내용이 변경되면 다른 `preprocessing_plan_version`이 생성됩니다.
+
+### 4.3 Plan 검증 및 재사용 규칙
+
+- **입력 무결성 검증**: `force_reanalyze=False` 시 현재 Dataset의 SHA-256과 Plan의 `source_dataset_sha256`을 비교하여 불일치 시 `409 PREPROCESSING_PLAN_CONFLICT`를 반환합니다.
+- **중복 정책 검증**: 요청된 `duplicate_policy` 및 `aggregation`이 기존 Plan과 다르면 `409 PREPROCESSING_PLAN_CONFLICT`를 반환합니다.
+- **Fail-Fast 컬럼 검증**: Plan에 선언된 `selected_columns` 또는 역할 컬럼(`id_column`, `time_column` 등) 중 하나라도 Dataset에 없으면 임의 fallback 없이 즉시 `422 PREPROCESSING_PLAN_VALIDATION_ERROR`를 발생시킵니다.
+- **Wide-format Timestamp 정규화**: Wide-format에서도 `time_column`이 선언된 경우 `datetime64[ns]` 정규화 및 `[id_column, time_column]` 안정 정렬(stable sort)을 수행합니다.
+- **발행 안정성**: 전체 Dataset 변환이 성공적으로 검증된 경우에만 Plan 파일과 `latest.json` 포인터가 발행됩니다.
+
+### 4.4 저장 디렉터리 및 원자적 발행 순서
 
 ```text
 models_store/cache/preprocessing_plans/
@@ -126,8 +138,7 @@ models_store/cache/preprocessing_plans/
   "source_uri": "ai4i/canonical-v3.1.csv",
   "force_reanalyze": false,
   "duplicate_policy": "error",
-  "aggregation": null,
-  "idempotency_key": null
+  "aggregation": null
 }
 ```
 
