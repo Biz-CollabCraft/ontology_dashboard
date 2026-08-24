@@ -31,34 +31,28 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 
 현재 `contracts/`의 관리 상태는 다음과 같다.
 
-- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가 계약을 포함한 19개 공유 JSON Schema 관리
+- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가 계약을 포함한 20개 공유 JSON Schema 관리
+- `contracts/examples/`: `generator-feature-input/`에 실제 검증 가능한 `FeatureRequest` 및 Versioned Dataset Manifest 예제 관리
+- `contracts/test-vectors/`: `generator-feature-input-v1/`에 Multi-asset Lookahead Horizon 라벨링 및 활성 고장 제외를 검증하는 Golden Vector 관리
 - `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`, `backend-contract-ci.yml`), `scripts/`, `tests/` 참조 전환 완료
 - Schema 내용 및 `$id` 식별자 무변경 보존
-- `openapi/`, `examples/`, `test-vectors/`: 향후 구체적 요구사항 확정 시 순차적으로 이식 예정
 
-## Generator 파이프라인 후속 Target 계약 후보 및 계획
+## Generator 파이프라인 계약 현황 및 후속 Target 계약 후보
 
-Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Series 생산자 확립 및 SensorRecord v2 프로토콜 정규화 작업)을 위한 후속 Target Schema 목록과 상태는 다음과 같습니다.
+Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Series 생산자 확립 및 SensorRecord v2 프로토콜 정규화 작업)을 위한 계약 목록과 상태는 다음과 같습니다.
 
-```text
-contracts/schemas/ (후속 Target 계약 후보 목록)
-├─ generator-observation.schema.json
-├─ generator-failure-event.schema.json
-├─ generator-extraction-result.schema.json
-├─ generator-preprocessing-plan.schema.json
-└─ generator-feature-series.schema.json
-```
-
-### Target 계약 상태 표
+### 계약 상태 표
 
 | 계약 | 현재 상태 | 설명 |
 |---|---|---|
+| Generator Dataset Input Manifest | **Current** | `contracts/schemas/generator-dataset-input-manifest.schema.json` (자동 검증 및 예제/테스트 벡터 존재) |
+| Generator Feature Input Golden Vector | **Current** | `contracts/test-vectors/generator-feature-input-v1/` (Multi-asset 라벨링 및 활성 고장 제외 자동 검증) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Extraction Result Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
-| Generator Feature Series Schema | **Target — 미작성** | Feature 구현 단계에서 작성 예정 |
+| Generator Feature Series Schema | **Target — 미작성** | Feature 후속 확장 단계에서 작성 예정 |
 | Feature Dataset Bundle | **Target — 기존 Schema 재사용·확장 여부 검토 필요** | 기존 `dataset-bundle-manifest.schema.json`의 재사용 가능성을 우선 검토 |
 
 ### Target 계약 관리 원칙
