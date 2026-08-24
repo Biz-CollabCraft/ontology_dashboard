@@ -108,8 +108,31 @@ export function matchMvpProjectPath(pathname: string): { projectId: string } | n
   return match ? { projectId: decodeURIComponent(match[1]) } : null;
 }
 
-export function week2MvpRedirectPath(pathname: string, fallbackProjectId?: string | null): string | null {
+function isBlueprintComparisonEmbedPath(pathname: string, search: string): boolean {
+  if (new URLSearchParams(search).get("comparison_embed") !== "1") return false;
+  return Boolean(
+    matchProjectDashboardPath(pathname)
+    || matchBlueprintProjectPath(pathname)
+    || matchBlueprintV2ProjectPath(pathname)
+    || matchOntologyPath(pathname),
+  );
+}
+
+export function week2MvpRedirectPath(
+  pathname: string,
+  fallbackProjectId?: string | null,
+  search = "",
+): string | null {
   if (matchMvpProjectPath(pathname) || !pathname.startsWith("/app")) return null;
+  // Keep the production product focused on the Week 2 MVP while preserving
+  // the explicitly published design-review surfaces. The comparison page
+  // renders legacy workbenches in same-origin iframes with comparison_embed=1,
+  // so those exact preview routes must bypass the MVP redirect as well.
+  if (
+    matchBlueprintComparisonPath(pathname)
+    || matchBlueprintV4ProjectPath(pathname)
+    || isBlueprintComparisonEmbedPath(pathname, search)
+  ) return null;
   const projectMatch = pathname.match(/^\/app\/projects\/([^/]+)/);
   const projectId = projectMatch ? decodeURIComponent(projectMatch[1]) : fallbackProjectId;
   return projectId ? mvpProjectPath(projectId) : null;

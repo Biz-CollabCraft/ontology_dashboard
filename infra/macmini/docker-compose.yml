@@ -57,6 +57,11 @@ services:
       # Restored production data is authoritative on the Mac mini.  Seed/demo
       # bootstrap must be an explicit opt-in rather than silently mutating it.
       SEED_DEMO_ACCOUNTS: ${SEED_DEMO_ACCOUNTS:-0}
+      # The public Mac mini demo intentionally exposes only the scoped,
+      # read-only comparison viewer session used by the published Blueprint
+      # showcase routes. General production deployments remain opt-in in the
+      # application service itself.
+      ENABLE_PUBLIC_BLUEPRINT_COMPARISON: ${ENABLE_PUBLIC_BLUEPRINT_COMPARISON:-1}
       ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA: ${ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA:-false}
       ONTOLOGY_DASHBOARD_DATABASE_URL: ${ONTOLOGY_DASHBOARD_DATABASE_URL}
       ONTOLOGY_DASHBOARD_REDIS_URL: redis://redis:6379/0

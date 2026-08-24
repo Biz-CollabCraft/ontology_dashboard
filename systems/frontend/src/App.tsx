@@ -254,7 +254,7 @@ function AppRouter() {
     ? mvpProjectPath(defaultProjectId)
     : user.default_path;
   if (featureFlags.week2MvpOnly) {
-    const mvpRedirect = week2MvpRedirectPath(pathname, defaultProjectId);
+    const mvpRedirect = week2MvpRedirectPath(pathname, defaultProjectId, window.location.search);
     if (mvpRedirect) return <Redirect to={mvpRedirect} />;
   }
 

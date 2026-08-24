@@ -244,7 +244,7 @@ test("keeps all MVP views inside a 390px mobile viewport and exposes compact nav
 
 test("redirects a legacy project surface to the official Week 2 MVP", async ({ page }) => {
   await login(page);
-  await page.goto(`/app/projects/${PROJECT}/blueprint-v4`);
+  await page.goto(`/app/projects/${PROJECT}/blueprint-v2`);
   await expect(page).toHaveURL(new RegExp(`${MVP_PATH}$`));
   await expect(page.getByTestId("mvp-overview")).toBeVisible({ timeout: 15_000 });
 });
