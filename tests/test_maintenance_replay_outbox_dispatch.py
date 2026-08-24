@@ -334,6 +334,60 @@ def test_expired_lease_is_recovered_without_duplicate_delivery(tmp_path: Path) -
     assert state == ("processed", 2)
 
 
+def test_append_before_delivery_commit_is_redelivered_without_duplicate(
+    tmp_path: Path,
+) -> None:
+    database = setup_database(tmp_path)
+    payload = replay_events()[0]
+    insert_outbox(database, payload)
+    repository = ProjectOutboxRepository(database)
+    claimed = repository.claim_one(
+        organization_id=ORGANIZATION_ID,
+        project_id=PROJECT_ID,
+        event_types=MAINTENANCE_REPLAY_EVENT_TYPES,
+        max_attempts=3,
+        worker_id="crashed-after-append",
+        lease_seconds=5,
+    )
+    assert claimed is not None
+
+    event_file = tmp_path / "maintenance-events.jsonl"
+    MaintenanceReplayJsonlHandler(event_file)(claimed)
+    assert len(read_jsonl(event_file)) == 1
+
+    with sqlite3.connect(database) as connection:
+        before_recovery = connection.execute(
+            "SELECT status,attempt_count FROM transactional_outbox"
+        ).fetchone()
+        delivery_count = connection.execute(
+            "SELECT COUNT(*) FROM outbox_delivery_log"
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE transactional_outbox SET lease_expires_at=? WHERE id=?",
+            (
+                (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),
+                payload["event_id"],
+            ),
+        )
+    assert before_recovery == ("processing", 1)
+    assert delivery_count == 0
+
+    assert worker(database, event_file).process_once() is True
+
+    assert len(read_jsonl(event_file)) == 1
+    with sqlite3.connect(database) as connection:
+        recovered = connection.execute(
+            "SELECT status,attempt_count FROM transactional_outbox"
+        ).fetchone()
+        deliveries = connection.execute(
+            "SELECT outbox_id,handler_code FROM outbox_delivery_log"
+        ).fetchall()
+    assert recovered == ("processed", 2)
+    assert deliveries == [
+        (str(payload["event_id"]), "maintenance-replay-jsonl-v1")
+    ]
+
+
 def test_worker_leaves_unregistered_outbox_events_untouched(tmp_path: Path) -> None:
     database = setup_database(tmp_path)
     now = datetime.now(timezone.utc).isoformat()
