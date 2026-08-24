@@ -33,6 +33,11 @@ jobs:
         run: >-
           docker run --rm
           --entrypoint python
+          --env DATA_DIR=/data/source
+          --env DATA_PREPROCESSED_DIR=/data/preprocessed
+          --env ONTOLOGY_DIR=/data/ontology
+          --env MODELS_STORE_DIR=/data/models
+          --env MODEL_ARTIFACT_URI=/artifacts
           ontology-generator:feature-check
           -c "from pathlib import Path; from systems.generator.app.feature.feature_input_resolver import FeatureInputResolver; path = Path('/app/contracts/schemas/generator-dataset-input-manifest.schema.json'); assert path.is_file(), path; schema = FeatureInputResolver()._get_manifest_schema(); assert schema['title'] == 'Generator Dataset Input Manifest v1'"
 
@@ -41,6 +46,11 @@ jobs:
           docker run --rm
           --user 0:0
           --entrypoint sh
+          --env DATA_DIR=/data/source
+          --env DATA_PREPROCESSED_DIR=/data/preprocessed
+          --env ONTOLOGY_DIR=/data/ontology
+          --env MODELS_STORE_DIR=/data/models
+          --env MODEL_ARTIFACT_URI=/artifacts
           --volume "${{ github.workspace }}/tests:/app/tests:ro"
           --volume "${{ github.workspace }}/contracts/examples/generator-feature-input:/app/contracts/examples/generator-feature-input:ro"
           --volume "${{ github.workspace }}/contracts/test-vectors/generator-feature-input-v1:/app/contracts/test-vectors/generator-feature-input-v1:ro"
