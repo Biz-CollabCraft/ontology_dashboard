@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
@@ -109,19 +110,33 @@ class TrainingService:
         if not feat_schema_ver or not str(feat_schema_ver).strip():
             raise TrainingContractError("Feature Bundle provenance에 feature_schema_version이 누락되었습니다.")
 
+        expected_feat_sha = prov.get("feature_schema_sha256")
+        if not expected_feat_sha or not str(expected_feat_sha).strip():
+            raise FeatureDatasetIntegrityError("Feature Bundle provenance에 feature_schema_sha256이 누락되었습니다.")
+
         label_schema_ver = prov.get("label_schema_version")
         if not label_schema_ver or not str(label_schema_ver).strip():
             raise TrainingContractError("Feature Bundle provenance에 label_schema_version이 누락되었습니다.")
+
+        expected_label_sha = prov.get("label_schema_sha256")
+        if not expected_label_sha or not str(expected_label_sha).strip():
+            raise FeatureDatasetIntegrityError("Feature Bundle provenance에 label_schema_sha256이 누락되었습니다.")
 
         horizon_hours = prov.get("prediction_horizon_hours")
         if horizon_hours is None:
             raise TrainingContractError("Feature Bundle provenance에 prediction_horizon_hours가 누락되었습니다.")
 
-        # Load official feature schema snapshot
+        # Load official feature schema snapshot and verify checksum against bundle provenance
         try:
             feature_schema_spec = getattr(self.feature_schema_provider, "load_feature_schema", getattr(self.feature_schema_provider, "get_feature_schema"))(feat_schema_ver)
         except Exception as exc:
             raise TrainingContractError(f"Feature Schema 로드 실패: {exc}") from exc
+
+        actual_feat_sha = feature_schema_spec.compute_checksum()
+        if actual_feat_sha != expected_feat_sha:
+            raise FeatureDatasetIntegrityError(
+                f"Feature Schema SHA-256 불일치: Feature Bundle 기록={expected_feat_sha}, 실제 로드={actual_feat_sha}"
+            )
 
         feature_schema_snapshot = (
             json.loads(feature_schema_spec.schema_file_path.read_text(encoding="utf-8"))
@@ -142,11 +157,17 @@ class TrainingService:
             }
         )
 
-        # Load official label schema snapshot
+        # Load official label schema snapshot and verify checksum against bundle provenance
         try:
             label_schema_spec = getattr(self.label_schema_provider, "load_label_schema", getattr(self.label_schema_provider, "get_label_schema"))(label_schema_ver)
         except Exception as exc:
             raise TrainingContractError(f"Label Schema 로드 실패: {exc}") from exc
+
+        actual_label_sha = label_schema_spec.compute_checksum()
+        if actual_label_sha != expected_label_sha:
+            raise FeatureDatasetIntegrityError(
+                f"Label Schema SHA-256 불일치: Label Schema 기록={expected_label_sha}, 실제 로드={actual_label_sha}"
+            )
 
         label_schema_snapshot = (
             json.loads(label_schema_spec.schema_file_path.read_text(encoding="utf-8"))
@@ -198,7 +219,12 @@ class TrainingService:
             trainer = trainer_cls()
 
             model_id = f"pdm-{base_model}"
-            model_ver = req.model_version or f"{base_model}-v1.0"
+            if req.model_version and req.model_version.strip():
+                model_ver = req.model_version.strip()
+            else:
+                fp_content = f"{req.feature_dataset_version}:{config_spec.training_config_version}:{config_spec.sha256}:{bundle_data.feature_metadata_sha256}:{base_model}"
+                fp_hash = hashlib.sha256(fp_content.encode("utf-8")).hexdigest()[:8]
+                model_ver = f"{base_model}-fp{fp_hash}"
 
             stage_logger = {
                 "request_id": req_id,

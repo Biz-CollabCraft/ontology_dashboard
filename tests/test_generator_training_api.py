@@ -536,3 +536,112 @@ def test_generator_training_contract_vectors(test_setup):
     tv_cfg = Path("contracts/test-vectors/generator-training-v1/training-config.json")
     assert tv_cfg.exists()
     jsonschema.validate(instance=json.loads(tv_cfg.read_text(encoding="utf-8")), schema=schema)
+
+
+def test_train_schema_sha256_mismatch_fails_422(test_setup):
+    """Test 422 when feature_schema_sha256 in bundle provenance does not match actual schema on disk."""
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    bundle_dir = models_store / "cache" / "features" / dataset_id / dataset_ver / feat_ver
+
+    # Tamper with feature_schema_sha256 in feature_metadata.json
+    with open(bundle_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    meta["provenance"]["feature_schema_sha256"] = "0" * 64
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "model_version": "tampered-feat-sha-v1",
+    })
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+    assert "Feature Schema SHA-256 불일치" in resp.json()["error"]["message"]
+
+
+def test_train_label_schema_sha256_mismatch_fails_422(test_setup):
+    """Test 422 when label_schema_sha256 in bundle provenance does not match actual label schema."""
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    bundle_dir = models_store / "cache" / "features" / dataset_id / dataset_ver / feat_ver
+
+    # Tamper with label_schema_sha256 in feature_metadata.json
+    with open(bundle_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    meta["provenance"]["label_schema_sha256"] = "f" * 64
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "model_version": "tampered-label-sha-v1",
+    })
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+    assert "Label Schema SHA-256 불일치" in resp.json()["error"]["message"]
+
+
+def test_train_missing_schema_sha256_in_provenance_fails_422(test_setup):
+    """Test 422 when schema sha256 fields are missing from bundle provenance."""
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    bundle_dir = models_store / "cache" / "features" / dataset_id / dataset_ver / feat_ver
+
+    with open(bundle_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
+        meta = json.load(f)
+    del meta["provenance"]["feature_schema_sha256"]
+    with open(bundle_dir / "feature_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "model_version": "missing-sha-v1",
+    })
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+
+
+def test_train_omitted_model_version_deterministic_generation_and_conflict(test_setup):
+    """Test omitted model_version generates deterministic unique version and returns 409 on duplicate train."""
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    req_payload = {
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "training_config_version": "training-config-v1",
+    }
+    # 1. First training with omitted model_version -> succeeds
+    resp1 = client.post("/train/lightgbm", json=req_payload)
+    assert resp1.status_code == 200
+    res1 = resp1.json()["results"][0]
+    gen_ver1 = res1["model_version"]
+    assert gen_ver1.startswith("lightgbm-fp")
+
+    # 2. Second training on EXACT same inputs with omitted model_version -> 409 Conflict because same version is generated!
+    resp2 = client.post("/train/lightgbm", json=req_payload)
+    assert resp2.status_code == 409
+    assert resp2.json()["error"]["code"] == "MODEL_ARTIFACT_CONFLICT"
+
