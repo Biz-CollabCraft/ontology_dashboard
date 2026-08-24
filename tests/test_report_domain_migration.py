@@ -3,7 +3,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.report import ReportAgent, ReportService, build_report_router, render_report
+from app.report import (
+    ReportAgent,
+    ReportService,
+    build_report_router,
+    render_report,
+)
 from app.report.ports import (
     DiagnosisEvidencePort,
     MaintenanceHistoryPort,

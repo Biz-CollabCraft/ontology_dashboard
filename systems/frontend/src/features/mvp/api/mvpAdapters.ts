@@ -2,8 +2,10 @@ import type { Evidence, EventSummary, Report } from "../../../types";
 import type { GovernedProductResultSummary } from "../../predictive-maintenance/types";
 import type {
   MvpActivityItem,
+  AssetDetailViewModel,
   MvpAsset,
   MvpConfidence,
+  MvpCriticality,
   MvpDecision,
   MvpEvent,
   MvpEventDetailModel,
@@ -63,12 +65,15 @@ export function normalizeDecision(value: unknown): MvpDecision {
   return "continue_monitoring";
 }
 
-export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; criticality: "low" | "medium" | "high"; observedAt?: string | null }>(items: T[]): T[] {
-  const criticality = { high: 3, medium: 2, low: 1 } as const;
+function criticalityRank(value: MvpCriticality): number {
+  return value === "high" ? 3 : value === "medium" ? 2 : value === "low" ? 1 : 0;
+}
+
+export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; criticality: MvpCriticality; observedAt?: string | null }>(items: T[]): T[] {
   return [...items].sort((left, right) => (
     STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status]
     || (right.failureProbability ?? -1) - (left.failureProbability ?? -1)
-    || criticality[right.criticality] - criticality[left.criticality]
+    || criticalityRank(right.criticality) - criticalityRank(left.criticality)
     || String(right.observedAt ?? "").localeCompare(String(left.observedAt ?? ""))
   ));
 }
@@ -101,7 +106,7 @@ export function adaptEvent(event: EventSummary): MvpEvent {
     recommendedDecision: status === "data_quality_hold"
       ? "hold_for_data_check"
       : normalizeDecision(event.recommended_decision),
-    criticality: event.equipment.criticality,
+    criticality: event.equipment.criticality ?? null,
     assignedEngineer: event.equipment.assigned_engineer || null,
     estimatedDowntimeMinutes: event.equipment.estimated_downtime_minutes ?? 0,
     sparePartAvailable: event.equipment.spare_part_available ?? null,
@@ -177,7 +182,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
       failureProbability: result.failure_probability,
       confidence: confidence.level,
       confidenceScore: confidence.score,
-      criticality: related?.criticality ?? (status === "critical" ? "high" : "medium"),
+      criticality: related?.criticality ?? null,
       assignedEngineer: related?.assignedEngineer ?? null,
       estimatedDowntimeMinutes: related?.estimatedDowntimeMinutes ?? 0,
       sparePartAvailable: related?.sparePartAvailable ?? null,
@@ -303,6 +308,48 @@ function provenanceFromEvidence(event: MvpEvent, evidence: Evidence | null): Mvp
     promptVersion: null,
     sourceRefs: evidence?.maintenance_context.source_refs ?? [],
   };
+}
+
+function provenanceFromAssetDetailViewModel(event: MvpEvent, viewModel: AssetDetailViewModel): MvpProvenance {
+  return {
+    datasetId: null,
+    datasetVersionId: viewModel.evidence.dataset_version ?? event.datasetVersionId,
+    datasetLabel: "Canonical V3.1",
+    sourceVersion: viewModel.evidence.source_kind,
+    modelVersion: viewModel.evidence.model_version,
+    policyVersion: null,
+    schemaVersion: null,
+    promptVersion: null,
+    sourceRefs: [
+      ...(viewModel.evidence.artifact_id ? [`result-artifact://${viewModel.evidence.artifact_id}`] : []),
+      ...viewModel.risk_series.map((point) => point.source_ref).filter((value): value is string => Boolean(value)),
+    ],
+  };
+}
+
+function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSensorValue[] {
+  return viewModel.features.map((feature) => ({
+    id: feature.key,
+    label: feature.label,
+    value: feature.current,
+    unit: feature.unit || null,
+  }));
+}
+
+function factorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpFactor[] {
+  return viewModel.features
+    .filter((feature) => feature.top_factor !== null)
+    .sort((left, right) => (left.top_factor?.rank ?? 999) - (right.top_factor?.rank ?? 999))
+    .map((feature) => ({
+      id: feature.top_factor?.evidence_field_id ?? `${feature.key}:${feature.top_factor?.rank ?? "factor"}`,
+      feature: feature.key,
+      label: feature.label,
+      value: feature.current,
+      unit: feature.unit || null,
+      contribution: Math.abs(feature.top_factor?.contribution ?? 0),
+      direction: feature.top_factor?.direction ?? "risk_up",
+      explanationMethod: feature.top_factor?.explanation_method ?? null,
+    }));
 }
 
 export function normalizeActivity(payload: unknown): MvpActivityItem[] {
@@ -459,5 +506,31 @@ export function composeEventDetail(input: {
       activity: Boolean(input.activity),
     },
     warnings: input.warnings ?? [],
+  };
+}
+
+export function applyAssetDetailViewModel(
+  detail: MvpEventDetailModel,
+  viewModel: AssetDetailViewModel,
+): MvpEventDetailModel {
+  const warnings = [
+    ...detail.warnings,
+    ...viewModel.data_status.warnings,
+    ...viewModel.evidence.gaps.map((gap) => `${gap.owner_domain}: ${gap.field} - ${gap.reason}`),
+  ];
+  return {
+    ...detail,
+    sensors: sensorsFromAssetDetailViewModel(viewModel),
+    topFactors: factorsFromAssetDetailViewModel(viewModel),
+    threshold: viewModel.risk.threshold,
+    provenance: {
+      ...provenanceFromAssetDetailViewModel(detail.event, viewModel),
+      promptVersion: detail.provenance.promptVersion,
+    },
+    loadedSources: {
+      ...detail.loadedSources,
+      evidence: true,
+    },
+    warnings: [...new Set(warnings)],
   };
 }

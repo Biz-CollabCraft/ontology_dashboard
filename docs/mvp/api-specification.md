@@ -150,17 +150,17 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 설비 유형에 존재하지 않는 센서 key는 400으로 처리한다.
 
-### 4.6 `GET /objects/{asset_id}/report-detail`
+### 4.6 `GET /objects/{asset_id}/detail-view`
 
 상태: V2 변경 제안. 현행 Event Report API나 `/objects/{asset_id}`를 대체하지 않는다.
 
-응답: `AssetDetailReportViewModel`.
+응답: `AssetDetailViewModel`.
 
 계약 객체명에는 구현 네임스페이스 접두어를 붙이지 않는다. 현행 프론트엔드의
 `Mvp*` 타입명은 기존 MVP 화면 구현명으로만 참고하고, Product API 계약명은
-`AssetDetail`, `AssetDetailReportViewModel`처럼 도메인 객체명으로 표기한다.
+`AssetDetail`, `AssetDetailViewModel`처럼 도메인 객체명으로 표기한다.
 
-설비 상세 리포트, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint 후보이다. Backend adapter가 Product Result Artifact/Evidence, Backend Observation read contract와 Feature Executor result, Backend Diagnosis Runtime Prediction History Query Contract, Activity/Maintenance source를 병합한다.
+설비 상세 화면, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint 후보이다. Backend adapter가 Product Result Artifact/Evidence, Backend Observation read contract와 Feature Executor result, Backend Diagnosis Runtime Prediction History Query Contract, Activity/Maintenance source를 병합한다.
 
 필수 Query: `from`, `to`. 선택 Query: `dataset_version_id`, `grain=raw|10m|1h`.
 

@@ -349,17 +349,17 @@ Overview와 Objects 목록의 공통 행이다.
 예측 또는 관측이 없으면 객체를 임의 값으로 채우지 않고 null과 `data_status`로
 이유를 전달한다.
 
-### 5.3 AssetDetailReportViewModel
+### 5.3 AssetDetailViewModel
 
-객체명: `AssetDetailReportViewModel` · 상태: V2 변경 제안.
+객체명: `AssetDetailViewModel` · 상태: V2 변경 제안.
 
 계약 객체명에는 `Mvp` 같은 구현 네임스페이스 접두어를 붙이지 않는다. 현행
 프론트엔드의 `MvpEventDetailModel`, `MvpAsset`, `MvpReportModel`은 기존
 구현의 기준 필드 확인용이며, API/schema 계약명은 `AssetDetail`,
-`AssetDetailReportViewModel`, `AssetReportFeature`처럼 접두어 없는 도메인
+`AssetDetailViewModel`, `AssetDetailFeature`처럼 접두어 없는 도메인
 객체명으로 유지한다.
 
-설비 상세 리포트와 `map-report` 계열 그래프 UI를 위한 composition ViewModel이다. Product Result Artifact, Evidence Payload, Observation series, runtime prediction series, Activity/Maintenance source를 Backend adapter에서 병합해 제공한다. 프론트엔드는 raw JSONL, `gen_data` model output fixture, prototype adapter를 직접 파싱하지 않는다.
+설비 상세 화면과 `map-report` 계열 그래프 UI를 위한 composition ViewModel이다. Product Result Artifact, Evidence Payload, Observation series, runtime prediction series, Activity/Maintenance source를 Backend adapter에서 병합해 제공한다. 프론트엔드는 raw JSONL, `gen_data` model output fixture, prototype adapter를 직접 파싱하지 않는다.
 
 | 필드 | 타입 | 필수 | 출처 | 상태 |
 |---|---|:---:|---|---|
@@ -370,7 +370,7 @@ Overview와 Objects 목록의 공통 행이다.
 | `risk.status_grade` | string | Y | Product Result Artifact `status_grade` | 제안 |
 | `risk.prediction_horizon_hours` | integer 또는 null | Y | Product Result Artifact | 제안 |
 | `risk_series` | PredictionSeriesPoint[] | Y | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. canonical source는 `pm_result_artifacts` append-only Product Result history이며, detail payload가 필요할 때만 `prediction_result_id`로 `prediction_results`를 join | 제안 |
-| `features` | AssetReportFeature[] | Y | Feature catalog + Observation + Evidence | 제안 |
+| `features` | AssetDetailFeature[] | Y | Feature catalog + Observation + Evidence | 제안 |
 | `features[].key` | string | Y | Feature catalog | 제안 |
 | `features[].label` | string | Y | Feature catalog 또는 display projection | 제안 |
 | `features[].unit` | string | Y | Feature catalog 또는 Evidence sensor unit | 제안 |

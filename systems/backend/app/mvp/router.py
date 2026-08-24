@@ -74,6 +74,21 @@ def get_event(
     return service.event(event_id)
 
 
+@router.get("/objects/{asset_id}/detail-view")
+def get_asset_detail_view(
+    asset_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    dataset_version_id: str | None = Query(default=None, max_length=160),
+    principal: Principal = Depends(require_permission("events.read")),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+):
+    if not principal.is_admin and project_id not in principal.project_scopes:
+        raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 Object입니다.")
+    if principal.active_project_id != project_id:
+        raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    return service.asset_detail_view_model(asset_id, project_id, dataset_version_id=dataset_version_id)
+
+
 @router.get("/events/{event_id}/evidence")
 def get_evidence(
     event_id: str,

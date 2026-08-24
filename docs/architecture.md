@@ -30,7 +30,7 @@ Runtime feature replay + Model Artifact
 → Result Artifact / Evidence / Prediction History
         ↓ Canonical Read Port
 ontology_dashboard/systems/frontend / Report
-AssetDetailReportViewModel (composition via read port)
+AssetDetailViewModel (composition via read port)
 ```
 
 정비 후 Closed-loop feedback은 위 단방향 학습/추론 소유권을 뒤집지 않고 별도 Runtime

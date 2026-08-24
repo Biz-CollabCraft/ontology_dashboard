@@ -103,7 +103,7 @@ export function MvpObjectsPage({
                         <span><MvpStatusBadge status={asset.status} /></span>
                         <span><b>{formatProbability(asset.failureProbability)}</b></span>
                         <span><MvpConfidenceBadge confidence={asset.confidence} /></span>
-                        <span><strong>{asset.criticality}</strong></span>
+                        <span><strong>{asset.criticality ?? "확인 필요"}</strong></span>
                         <span><strong>{asset.assignedEngineer ?? "미배정"}</strong></span>
                       </button>
                     );

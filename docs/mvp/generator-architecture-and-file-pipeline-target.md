@@ -122,7 +122,7 @@ Immutable Model Artifact (latest.json pointer)
   ↓
 Backend Diagnosis (Runtime inference / Result Artifact / Evidence / Prediction History)
   ↓
-Backend Report (AssetDetailReportViewModel composition via read port)
+Backend Detail ViewModel (AssetDetailViewModel composition via read port)
 ```
 
 ---

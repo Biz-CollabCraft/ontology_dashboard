@@ -12,8 +12,17 @@ import {
   recordDecision,
 } from "../../../api";
 import type { Evidence, Report } from "../../../types";
-import { adaptEvent, composeEventDetail, computeLineRisk, computeMetrics, mergeAssets, sortRisk } from "./mvpAdapters";
+import {
+  adaptEvent,
+  applyAssetDetailViewModel,
+  composeEventDetail,
+  computeLineRisk,
+  computeMetrics,
+  mergeAssets,
+  sortRisk,
+} from "./mvpAdapters";
 import type {
+  AssetDetailViewModel,
   MvpBootstrapModel,
   MvpDecision,
   MvpEvent,
@@ -36,6 +45,33 @@ async function getEventActivity(eventId: string): Promise<unknown> {
     );
   }
   return payload;
+}
+
+async function getAssetDetailViewModel(
+  projectId: string,
+  assetId: string,
+  datasetVersionId: string,
+): Promise<AssetDetailViewModel> {
+  const params = new URLSearchParams({
+    project_id: projectId,
+    dataset_version_id: datasetVersionId,
+  });
+  const response = await fetch(
+    `${API_BASE}/api/objects/${encodeURIComponent(assetId)}/detail-view?${params.toString()}`,
+    {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload?.error?.code ?? "asset_detail_view_model_failed",
+      payload?.error?.message ?? `Asset detail ViewModel request failed: ${response.status}`,
+    );
+  }
+  return payload as AssetDetailViewModel;
 }
 
 function staleFrom(observedAt: string | null): boolean {
@@ -181,11 +217,13 @@ export async function loadMvpEventDetail(input: {
   const evidencePromise = getEvidence(input.event.eventId);
   const reportPromise = loadLegacyReport(input.event.eventId);
   const activityPromise = getEventActivity(input.event.eventId);
-  const [predictiveState, evidenceState, reportState, activityState] = await Promise.allSettled([
+  const assetDetailPromise = getAssetDetailViewModel(input.projectId, input.event.assetId, input.datasetVersionId);
+  const [predictiveState, evidenceState, reportState, activityState, assetDetailState] = await Promise.allSettled([
     predictivePromise,
     evidencePromise,
     reportPromise,
     activityPromise,
+    assetDetailPromise,
   ]);
   const predictiveDetail = predictiveState.status === "fulfilled"
     ? predictiveState.value.selected_event_detail
@@ -204,8 +242,11 @@ export async function loadMvpEventDetail(input: {
     activityState.status === "rejected"
       ? `Activity API: ${warningMessage(activityState.reason, "사용 불가")}`
       : null,
+    assetDetailState.status === "rejected"
+      ? `AssetDetailViewModel API: ${warningMessage(assetDetailState.reason, "사용 불가")}`
+      : null,
   ].filter((value): value is string => Boolean(value));
-  return composeEventDetail({
+  const detail = composeEventDetail({
     event: input.event,
     evidence,
     report,
@@ -213,6 +254,9 @@ export async function loadMvpEventDetail(input: {
     metrics: input.metrics,
     warnings,
   });
+  return assetDetailState.status === "fulfilled"
+    ? applyAssetDetailViewModel(detail, assetDetailState.value)
+    : detail;
 }
 
 export async function submitMvpDecision(input: {
