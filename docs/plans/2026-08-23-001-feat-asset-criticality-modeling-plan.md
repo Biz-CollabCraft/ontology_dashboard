@@ -284,7 +284,7 @@ Initial context fields should be intentionally small:
 - `operation_context.runtime_hours_7d`
 - `operation_context.production_impact`
 
-Missing operational context must not be converted to `normal`, `low`, or `false`.
+Missing operational context must not be converted to `normal`, `low`, `false`, or `0`.
 Use `null`, an empty collection, `data_status.warnings[]`, or an `evidence.gaps[]`
 entry with the owning domain.
 
@@ -378,9 +378,19 @@ Design decision:
 - Maintenance may store `simulation_session_id` as an opaque correlation
   reference after scope validation, but must not create, parse, or infer it.
 
-If Maintenance needs the value from a diagnosis result/event selection, add a
-separate Diagnosis Runtime query port instead of extending Event Evidence
-Projection:
+Current MVP boundary:
+- The caller passes a replay session selector.
+- Diagnosis Runtime validates organization/project/workspace scope, session
+  state, Dataset binding, and target equipment inclusion through a public query.
+- Diagnosis Runtime returns a validated canonical `simulation_session_id` as an
+  opaque reference.
+- Maintenance stores that reference only; it does not interpret session state,
+  Dataset IDs, replay timing, or target eligibility.
+
+Future event-resolution boundary:
+- Product Result/Event to Replay Session canonical mapping must exist before an
+  event-based resolver can be authoritative.
+- Only after that mapping exists should Diagnosis Runtime expose a query like:
 
 ```text
 resolve_replay_session_for_event(
@@ -555,13 +565,20 @@ Start with minimal operational context:
 - `operation_context.production_impact`
 
 Missing values stay `null`, empty, warning, or gap. Do not convert missing
-context to `normal`, `low`, or `false`.
+context to `normal`, `low`, `false`, or `0`.
 
 - [ ] **Step 3: Add review_priority as a derived review/display value**
 
 Add a bounded `review_priority` block that explains why the asset should be reviewed
 first. It may use risk, criticality, context, and existing action state, but it
 must not rewrite `risk.status_grade` or create authorization/action state.
+
+Fail-closed rule:
+- `review_priority` may be `null`.
+- Do not create a default review-priority level when required risk,
+  criticality, or context inputs are unavailable.
+- Frontend adapters must not calculate fallback review priority.
+- Detailed rule/version calculation may be separated into a later policy PR.
 
 - [ ] **Step 4: Keep policy ownership intact**
 
@@ -663,7 +680,7 @@ These are explicitly not part of the criticality/context/review-priority UI impl
 
 ## Suggested Delivery Order
 
-1. Merge or branch from PR #107 so the implementation starts from the current `AssetDetailViewModel` API/composer/frontend path.
+1. Start from the latest main containing merged PR #107 and its current `AssetDetailViewModel` API/composer/frontend path.
 2. Recheck PR #100 review remnants and keep only unresolved items.
 3. Fix `features[].current` and `features[].series` semantics.
 4. Add criticality source/owner/gap contract.
