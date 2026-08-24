@@ -72,6 +72,28 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 6. API 모델과 Schema 필드 정합성 검증
 7. 기존 스키마와 신규 스키마의 역할 중복 검사
 
+## Verification & CI
+
+계약 자산의 무결성을 검증하기 위해 두 단계의 검증 체계를 운영합니다.
+
+### 1. 경량 정적 계약 검증 (`systems/verify_contract_vectors.py`)
+- **실행 명령**: `python systems/verify_contract_vectors.py`
+- **실행 시간**: 로컬 기준 약 1~3초 (초경량 정적 검증)
+- **검증 범위**:
+  - `contracts/schemas/**/*.schema.json` 문법, Draft 메타 스키마 유효성 및 `$id` 중복 검사
+  - `contracts/examples/`의 예제 JSON 및 Dataset Manifest 유효성
+  - `contracts/test-vectors/` 디렉터리 구조, 필수 파일 존재 여부 및 Dataset Manifest 무결성 (role, SHA-256, `size_bytes`, 경로 안전성)
+  - `expected/` 산출물 간 정적 정합성 (`feature_columns.count`, `labels` 행 수, `row_metadata` 행 수, `summary.json` 라벨/행 분포)
+  - Schema 또는 Test Vector 부재 시 성공하는 false-green 차단
+- **CI 워크플로우**: `.github/workflows/contract-vectors.yml` (Docker·DB·브라우저·LLM 없이 순수 파일/스키마 검증)
+
+### 2. Generator 런타임 및 Golden Parity 검증 (`generator-feature-runtime.yml`)
+- **검증 범위**:
+  - Generator Docker 이미지 빌드 및 컨테이너 내부 환경 구동
+  - `POST /feature` 실제 실행 및 Feature Dataset Bundle 생성
+  - 계산된 Feature, Label, Row Metadata, Summary 및 Provenance와 Golden Vector Expected 간 100% 런타임 Parity 검증
+- **역할 분담**: 정적 Schema 및 테스트 벡터 파일 무결성은 경량 CI(`contract-vectors.yml`)가 담당하고, 실제 비즈니스 로직 계산 및 Docker 런타임 검증은 런타임 CI(`generator-feature-runtime.yml`)가 담당합니다.
+
 ## Migration principle
 
 향후 추가 Migration에서는 실제로 존재하고 시스템이 사용하는 계약만 이전한다.
