@@ -237,57 +237,134 @@ class ContractVectorVerifier:
             vname = vdir.name
             result.vector_count += 1
 
-            # 3.1 Check required files
-            req_files = [
-                vdir / "request.json",
-                vdir / "observation" / "dataset_manifest.json",
-                vdir / "failure" / "dataset_manifest.json",
-                vdir / "expected" / "feature_columns.json",
-                vdir / "expected" / "labels.json",
-                vdir / "expected" / "row_metadata.json",
-                vdir / "expected" / "summary.json",
-            ]
-            missing = [f.relative_to(vdir) for f in req_files if not f.is_file()]
-            if missing:
+            if vname.startswith("generator-training") or (vdir / "training-config.json").is_file():
+                self._verify_training_vector(vname, vdir, result)
+            else:
+                self._verify_feature_input_vector(vname, vdir, manifest_validator, result)
+
+    def _verify_feature_input_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        manifest_validator: Optional[jsonschema.Draft202012Validator],
+        result: VerificationResult,
+    ) -> None:
+        # 3.1 Check required files
+        req_files = [
+            vector_dir / "request.json",
+            vector_dir / "observation" / "dataset_manifest.json",
+            vector_dir / "failure" / "dataset_manifest.json",
+            vector_dir / "expected" / "feature_columns.json",
+            vector_dir / "expected" / "labels.json",
+            vector_dir / "expected" / "row_metadata.json",
+            vector_dir / "expected" / "summary.json",
+        ]
+        missing = [f.relative_to(vector_dir) for f in req_files if not f.is_file()]
+        if missing:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}",
+                    message=f"Missing required test vector file(s): {', '.join(str(m) for m in missing)}",
+                    expected="All required test vector files present",
+                    actual=f"Missing {missing}",
+                )
+            )
+            return
+
+        # 3.2 Verify Manifest & Payload Integrity (Observation & Failure)
+        self._verify_vector_manifest(
+            vector_name=vector_name,
+            vector_dir=vector_dir,
+            manifest_path=vector_dir / "observation" / "dataset_manifest.json",
+            expected_dataset_type="observation",
+            expected_role="observations",
+            manifest_validator=manifest_validator,
+            result=result,
+        )
+
+        self._verify_vector_manifest(
+            vector_name=vector_name,
+            vector_dir=vector_dir,
+            manifest_path=vector_dir / "failure" / "dataset_manifest.json",
+            expected_dataset_type="failure",
+            expected_role="failures",
+            manifest_validator=manifest_validator,
+            result=result,
+        )
+
+        # 3.3 Verify Golden Expected Static Consistency
+        self._verify_vector_expected(
+            vector_name=vector_name,
+            vector_dir=vector_dir,
+            result=result,
+        )
+
+        result.verified_vectors.append(vector_name)
+
+    def _verify_training_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        req_files = [
+            vector_dir / "request.json",
+            vector_dir / "training-config.json",
+            vector_dir / "expected" / "artifact-manifest-required.json",
+            vector_dir / "expected" / "split-summary.json",
+        ]
+        missing = [f.relative_to(vector_dir) for f in req_files if not f.is_file()]
+        if missing:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}",
+                    message=f"Missing required training test vector file(s): {', '.join(str(m) for m in missing)}",
+                    expected="All required training test vector files present",
+                    actual=f"Missing {missing}",
+                )
+            )
+            return
+
+        # 1. Validate request.json
+        try:
+            json.loads((vector_dir / "request.json").read_text(encoding="utf-8"))
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/request.json",
+                    message=f"Invalid JSON in request.json: {e}",
+                )
+            )
+
+        # 2. Validate training-config.json against generator-training-config.schema.json
+        cfg_schema_path = self.schemas_dir / "generator-training-config.schema.json"
+        if cfg_schema_path.is_file():
+            try:
+                cfg_schema = json.loads(cfg_schema_path.read_text(encoding="utf-8"))
+                cfg_data = json.loads((vector_dir / "training-config.json").read_text(encoding="utf-8"))
+                jsonschema.validate(instance=cfg_data, schema=cfg_schema)
+            except Exception as e:
                 result.errors.append(
                     VerificationError(
-                        context=f"{vname}",
-                        message=f"Missing required test vector file(s): {', '.join(str(m) for m in missing)}",
-                        expected="All required test vector files present",
-                        actual=f"Missing {missing}",
+                        context=f"{vector_name}/training-config.json",
+                        message=f"Training config schema validation failed: {e}",
                     )
                 )
-                continue
 
-            # 3.2 Verify Manifest & Payload Integrity (Observation & Failure)
-            self._verify_vector_manifest(
-                vector_name=vname,
-                vector_dir=vdir,
-                manifest_path=vdir / "observation" / "dataset_manifest.json",
-                expected_dataset_type="observation",
-                expected_role="observations",
-                manifest_validator=manifest_validator,
-                result=result,
+        # 3. Validate expected JSON files
+        try:
+            json.loads((vector_dir / "expected" / "artifact-manifest-required.json").read_text(encoding="utf-8"))
+            json.loads((vector_dir / "expected" / "split-summary.json").read_text(encoding="utf-8"))
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected",
+                    message=f"Invalid JSON in expected training files: {e}",
+                )
             )
+            return
 
-            self._verify_vector_manifest(
-                vector_name=vname,
-                vector_dir=vdir,
-                manifest_path=vdir / "failure" / "dataset_manifest.json",
-                expected_dataset_type="failure",
-                expected_role="failures",
-                manifest_validator=manifest_validator,
-                result=result,
-            )
-
-            # 3.3 Verify Golden Expected Static Consistency
-            self._verify_vector_expected(
-                vector_name=vname,
-                vector_dir=vdir,
-                result=result,
-            )
-
-            result.verified_vectors.append(vname)
+        result.verified_vectors.append(vector_name)
 
     def _verify_vector_manifest(
         self,
