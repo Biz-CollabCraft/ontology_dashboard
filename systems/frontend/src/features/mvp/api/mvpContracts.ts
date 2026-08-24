@@ -1,7 +1,9 @@
-export type MvpView = "overview" | "objects" | "operations" | "executive-report";
+export type MvpView = "overview" | "objects" | "operations" | "reports";
+export type MvpReportTab = "status-map" | "inspection-request" | "summary-report" | "executive-brief";
 export type MvpRoleLens = "process_manager" | "field_operator";
 export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "data_quality_hold";
 export type MvpConfidence = "high" | "medium" | "low" | "unavailable";
+export type MvpCriticality = "low" | "medium" | "high" | null;
 export type MvpDecision =
   | "continue_monitoring"
   | "request_inspection"
@@ -44,7 +46,7 @@ export interface MvpAsset {
   failureProbability: number | null;
   confidence: MvpConfidence;
   confidenceScore: number | null;
-  criticality: "low" | "medium" | "high";
+  criticality: MvpCriticality;
   assignedEngineer: string | null;
   estimatedDowntimeMinutes: number;
   sparePartAvailable: boolean | null;
@@ -67,7 +69,7 @@ export interface MvpEvent {
   confidence: MvpConfidence;
   predictedFailureType: string;
   recommendedDecision: MvpDecision;
-  criticality: "low" | "medium" | "high";
+  criticality: MvpCriticality;
   assignedEngineer: string | null;
   estimatedDowntimeMinutes: number;
   sparePartAvailable: boolean | null;
@@ -179,8 +181,62 @@ export interface MvpEventDetailModel {
   warnings: string[];
 }
 
+export interface AssetDetailViewModel {
+  asset: {
+    asset_id: string;
+    asset_type: "compressor" | "cnc";
+    display_name?: string;
+    site_id?: string;
+    cell_id?: string;
+    observed_at: string;
+  };
+  risk: {
+    current: number | null;
+    threshold: number | null;
+    status_grade: "normal" | "attention" | "warning" | "critical" | null;
+    prediction_horizon_hours: number | null;
+  };
+  risk_series: Array<{
+    observed_at: string;
+    failure_probability: number;
+    status_grade: "normal" | "attention" | "warning" | "critical" | null;
+    prediction_id: string;
+    source_kind: "runtime_inference" | "compatibility_fallback";
+    source_ref?: string;
+  }>;
+  features: Array<{
+    key: string;
+    label: string;
+    unit: string;
+    current: number | null;
+    series: Array<{ observed_at: string; value: number | null; quality_status?: "good" | "bad" | "unknown"; source_ref?: string }>;
+    top_factor: {
+      rank: number;
+      contribution: number;
+      direction: "risk_up" | "risk_down";
+      explanation_method: string;
+      evidence_field_id?: string;
+    } | null;
+  }>;
+  evidence: {
+    artifact_id: string | null;
+    model_version: string | null;
+    dataset_version: string | null;
+    source_kind: "runtime_inference" | "compatibility_fallback";
+    gaps: Array<{ field: string; reason: string; owner_domain: string }>;
+  };
+  data_status: {
+    source: "canonical" | "fallback";
+    is_stale: boolean | null;
+    is_data_quality_hold: boolean;
+    last_updated_at?: string;
+    warnings: string[];
+  };
+}
+
 export interface MvpSelection {
   view: MvpView;
+  reportTab: MvpReportTab;
   projectId: string;
   workspaceId: string | null;
   assetId: string | null;

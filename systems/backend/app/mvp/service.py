@@ -15,6 +15,7 @@ from app.diagnosis.domain import (
     product_result_artifact_to_event_evidence_projection,
 )
 from app.equipment.ports import EquipmentApplicationPort
+from app.mvp.asset_detail_view_model import compose_asset_detail_view_model
 
 from .context import ContextProviderFactory
 from .contracts import (
@@ -174,6 +175,29 @@ class ManufacturingPredictiveMaintenanceService:
     ) -> dict[str, Any] | None:
         return self.equipment_service.equipment_current_state(equipment_id, project_id)
 
+    def asset_detail_view_model(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        dataset_version_id: str | None = None,
+    ) -> dict[str, Any]:
+        fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
+        artifact = self._product_result_artifact(fixture)
+        asset = self._asset_summary_for_fixture(fixture, artifact)
+        return compose_asset_detail_view_model(
+            asset=asset,
+            result_artifact=artifact,
+            feature_series=self._feature_series_for_fixture(fixture, artifact),
+            runtime_prediction_history=self._runtime_history_for_fixture(fixture, artifact),
+            equipment_history=self._equipment_history_for_fixture(fixture),
+            data_status={
+                "source": "canonical",
+                "last_updated_at": artifact["observed_at"],
+                "warnings": [],
+            },
+        )
+
     def patch_equipment_state(
         self,
         equipment_id: str,
@@ -201,6 +225,112 @@ class ManufacturingPredictiveMaintenanceService:
             "runtime": fixture["runtime"],
             "activity": self.repository.event_activity(event_id),
         }
+
+    def _fixture_for_asset(
+        self,
+        asset_id: str,
+        project_id: str,
+        *,
+        dataset_version_id: str | None = None,
+    ) -> dict[str, Any]:
+        for fixture in self.project_fixtures.values():
+            if self._fixture_project_id(fixture) != project_id:
+                continue
+            if dataset_version_id and fixture.get("dataset_version") and fixture.get("dataset_version") != dataset_version_id:
+                continue
+            equipment = fixture.get("equipment") or {}
+            if str(equipment.get("equipment_id")) == asset_id:
+                return fixture
+        raise EventNotFound(asset_id)
+
+    @staticmethod
+    def _asset_summary_for_fixture(fixture: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
+        equipment = fixture.get("equipment") or {}
+        return {
+            "asset_id": artifact["asset_id"],
+            "asset_type": artifact["asset_type"],
+            "display_name": equipment.get("display_name") or artifact["asset_id"],
+            "site_id": "Manufacturing Demo",
+            "cell_id": equipment.get("line") or artifact.get("cell_id") or "unknown",
+            "observed_at": artifact["observed_at"],
+        }
+
+    @staticmethod
+    def _feature_series_for_fixture(
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, list[dict[str, Any]]]:
+        feature_keys = list(
+            dict.fromkeys(
+                [
+                    *(factor.get("feature") for factor in artifact.get("top_factors") or []),
+                    *(
+                        ((artifact.get("evidence_payload") or {}).get("sensor_evidence") or {})
+                        .get("sensors", {})
+                        .keys()
+                    ),
+                ]
+            )
+        )
+        rows = fixture.get("history") or [fixture.get("observation") or {}]
+        series: dict[str, list[dict[str, Any]]] = {}
+        for key in feature_keys:
+            points = []
+            for row in rows:
+                if key not in row:
+                    continue
+                points.append(
+                    {
+                        "observed_at": str(row.get("timestamp") or artifact["observed_at"]),
+                        "value": row.get(key),
+                        "quality_status": "unknown"
+                        if artifact.get("status_grade") == "data_quality_hold"
+                        else "good",
+                        "source_ref": f"observation-contract://{artifact['asset_id']}/{key}",
+                    }
+                )
+            if points:
+                series[str(key)] = points
+        return series
+
+    @staticmethod
+    def _runtime_history_for_fixture(
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        points = []
+        history = fixture.get("runtime_prediction_history") or fixture.get("prediction_history") or []
+        for index, row in enumerate(history):
+            if "failure_probability" not in row:
+                continue
+            observed_at = str(row.get("timestamp") or artifact["observed_at"])
+            points.append(
+                {
+                    "observed_at": observed_at,
+                    "failure_probability": row["failure_probability"],
+                    "status_grade": row.get("status_grade") or row.get("status"),
+                    "prediction_id": str(row.get("prediction_id") or f"{artifact['asset_id']}#{observed_at}#{index}"),
+                    "source_kind": str(row.get("source_kind") or "runtime_inference"),
+                    "source_ref": str(row.get("source_ref") or f"diagnosis-runtime-history://{artifact['asset_id']}/{observed_at}"),
+                }
+            )
+        return points
+
+    @staticmethod
+    def _equipment_history_for_fixture(fixture: dict[str, Any]) -> list[dict[str, Any]]:
+        equipment = fixture.get("equipment") or {}
+        last_maintenance = equipment.get("last_maintenance_date")
+        if not last_maintenance:
+            return []
+        return [
+            {
+                "occurred_at": f"{last_maintenance}T00:00:00+09:00",
+                "kind": "maintenance",
+                "tone": "normal",
+                "description": "최근 정비 이력",
+                "source": "equipment-maintenance-context",
+            }
+        ]
 
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)

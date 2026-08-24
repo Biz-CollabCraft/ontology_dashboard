@@ -7,6 +7,7 @@ import type {
   MvpDecision,
   MvpEvent,
   MvpEventDetailModel,
+  MvpReportTab,
   MvpRoleLens,
   MvpView,
 } from "./api/mvpContracts";
@@ -21,7 +22,7 @@ import { MvpSelectionProvider, useMvpSelection } from "./context/MvpSelectionCon
 import { MvpObjectsPage } from "./objects/MvpObjectsPage";
 import { MvpOperationsPage } from "./operations/MvpOperationsPage";
 import { MvpOverviewPage } from "./overview/MvpOverviewPage";
-import { MvpExecutiveReportPage } from "./report/MvpExecutiveReportPage";
+import { MvpReportsPage } from "./report/MvpReportsPage";
 import { MvpShell } from "./shell/MvpShell";
 import "./mvp.css";
 
@@ -134,7 +135,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   const openView = useCallback((view: MvpView) => {
     const patch: Parameters<typeof updateSelection>[0] = { view };
-    if ((view === "operations" || view === "executive-report") && !selection.eventId && model?.events[0]) {
+    if ((view === "operations" || view === "reports") && !selection.eventId && model?.events[0]) {
       patch.eventId = model.events[0].eventId;
       patch.assetId = model.events[0].assetId;
     }
@@ -152,7 +153,8 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   const openReport = useCallback((eventId: string | null, assetId: string | null) => {
     const fallback = model?.events[0] ?? null;
     updateSelection({
-      view: "executive-report",
+      view: "reports",
+      reportTab: "executive-brief",
       eventId: eventId ?? fallback?.eventId ?? null,
       assetId: assetId ?? fallback?.assetId ?? null,
     });
@@ -176,8 +178,17 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   }, [updateSelection]);
 
   const openEventReport = useCallback((event: MvpEvent) => {
-    updateSelection({ view: "executive-report", eventId: event.eventId, assetId: event.assetId });
+    updateSelection({ view: "reports", reportTab: "executive-brief", eventId: event.eventId, assetId: event.assetId });
   }, [updateSelection]);
+
+  const selectReportTab = useCallback((reportTab: MvpReportTab) => {
+    const patch: Parameters<typeof updateSelection>[0] = { view: "reports", reportTab };
+    if (!selection.eventId && model?.events[0]) {
+      patch.eventId = model.events[0].eventId;
+      patch.assetId = model.events[0].assetId;
+    }
+    updateSelection(patch);
+  }, [model?.events, selection.eventId, updateSelection]);
 
   const submitDecision = useCallback(async (decision: MvpDecision, note: string) => {
     if (!selectedEvent || !user) throw new Error("저장할 Event 또는 사용자 문맥이 없습니다.");
@@ -204,8 +215,8 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     content = <MvpObjectsPage model={model} selectedAssetId={selectedAssetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectAsset={selectAsset} onOpenOperations={openAssetOperations} onRetryDetail={retryDetail} />;
   } else if (selection.view === "operations") {
     content = <MvpOperationsPage model={model} selectedEventId={selection.eventId} detail={detail} detailLoading={detailLoading} detailError={detailError} canDecide={canDecide} canNote={canNote} onSelectEvent={selectEvent} onOpenAsset={openEventAsset} onOpenReport={openEventReport} onDecision={submitDecision} onNote={submitNote} onRetryDetail={retryDetail} />;
-  } else if (selection.view === "executive-report") {
-    content = <MvpExecutiveReportPage model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
+  } else if (selection.view === "reports") {
+    content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else {
     content = <MvpOverviewPage model={model} onOpenAsset={openAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
