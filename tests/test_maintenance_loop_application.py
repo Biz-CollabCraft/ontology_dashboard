@@ -72,10 +72,7 @@ class ProjectionQuery:
             "organization_id": values["organization_id"],
             "project_id": values["project_id"],
             "workspace_id": values["workspace_id"],
-            "dataset_id": "DATASET-001",
-            "dataset_version_id": "DATASET-VERSION-001",
             "equipment_id": values["equipment_id"],
-            "state": "running",
         }
 
 
@@ -433,6 +430,32 @@ def test_maintenance_approval_fails_closed_when_diagnosis_rejects_replay(tmp_pat
     assert lineage["maintenance_actions"] == []
 
 
+def test_maintenance_approval_fails_closed_until_diagnosis_provider_is_wired(
+    tmp_path,
+) -> None:
+    loop = MaintenanceLoopService(
+        MaintenanceRepository(tmp_path / "maintenance.db", project_context=Resolver()),
+        event_evidence_query=ProjectionQuery(),
+    )
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="validation is unavailable"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="SIMULATION-SESSION-001"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-approve-provider-missing-001",
+        )
+
+    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
+
+
 @pytest.mark.parametrize(
     ("field", "invalid_value", "message"),
     (
@@ -442,12 +465,6 @@ def test_maintenance_approval_fails_closed_when_diagnosis_rejects_replay(tmp_pat
             "simulation_session_id",
             "ANOTHER-SESSION",
             "canonical identity mismatch",
-        ),
-        ("state", "completed", "not eligible for maintenance"),
-        (
-            "dataset_version_id",
-            "",
-            "requires dataset_version_id",
         ),
     ),
 )
@@ -459,10 +476,7 @@ def test_maintenance_approval_rejects_noncanonical_replay_binding(
         "organization_id": "org-1",
         "project_id": "project-1",
         "workspace_id": "workspace-1",
-        "dataset_id": "DATASET-001",
-        "dataset_version_id": "DATASET-VERSION-001",
         "equipment_id": "CNC-001",
-        "state": "running",
     }
     binding[field] = invalid_value
     loop = service(tmp_path, query=ProjectionQuery(replay_binding=binding))

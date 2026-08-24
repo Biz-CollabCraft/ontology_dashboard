@@ -431,7 +431,6 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
     return MaintenanceLoopService(
         repository,
         event_evidence_query=get_predictive_maintenance_runtime_service(),
-        replay_session_query=get_predictive_maintenance_runtime_service(),
     )
 
 

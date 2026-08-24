@@ -9,10 +9,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from app.diagnosis.ports import (
-    EventEvidenceProjectionQueryPort,
-    MaintenanceReplaySessionQueryPort,
-)
+from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 
 from .api_schema import (
     InspectionResultCreateRequest,
@@ -49,7 +46,10 @@ from .maintenance_schema import (
     WorkOrderStatus,
     WorkOrderType,
 )
-from .ports import MaintenanceCommandRepositoryPort
+from .ports import (
+    MaintenanceCommandRepositoryPort,
+    MaintenanceReplaySessionValidationPort,
+)
 
 
 class MaintenanceLoopService:
@@ -58,7 +58,7 @@ class MaintenanceLoopService:
         repository: MaintenanceCommandRepositoryPort,
         *,
         event_evidence_query: EventEvidenceProjectionQueryPort,
-        replay_session_query: MaintenanceReplaySessionQueryPort,
+        replay_session_query: MaintenanceReplaySessionValidationPort | None = None,
     ) -> None:
         self.repository = repository
         self.event_evidence_query = event_evidence_query
@@ -585,6 +585,8 @@ class MaintenanceLoopService:
         )
         if work_order.work_type is not WorkOrderType.MAINTENANCE:
             raise ValueError("work order is not maintenance work")
+        if self.replay_session_query is None:
+            raise ValueError("Diagnosis replay session validation is unavailable")
 
         replay_binding = self.replay_session_query.resolve_maintenance_replay_session(
             organization_id=organization_id,
@@ -603,12 +605,6 @@ class MaintenanceLoopService:
         )
         if self._required_text(replay_binding, "equipment_id") != work_order.equipment_id:
             raise ValueError("replay session equipment identity mismatch")
-        for field in ("dataset_id", "dataset_version_id"):
-            value = replay_binding.get(field)
-            if not isinstance(value, str) or not value:
-                raise ValueError(f"replay session binding requires {field}")
-        if replay_binding.get("state") not in {"running", "paused"}:
-            raise ValueError("replay session is not eligible for maintenance")
         simulation_session_id = self._required_text(
             replay_binding, "simulation_session_id"
         )
