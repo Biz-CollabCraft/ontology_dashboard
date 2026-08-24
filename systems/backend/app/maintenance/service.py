@@ -70,6 +70,12 @@ class MaintenanceLoopService:
         return f"{prefix}-{uuid.uuid5(uuid.NAMESPACE_URL, source)}"
 
     @staticmethod
+    def _stable_event_id(*parts: str) -> str:
+        """Return the deterministic UUID required by transactional_outbox.id."""
+
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, ":".join(parts)))
+
+    @staticmethod
     def _fingerprint(command: str, payload: Any) -> str:
         body = (
             payload.model_dump(mode="json")
@@ -671,7 +677,7 @@ class MaintenanceLoopService:
             workspace_id=workspace_id,
         )
         event = MaintenanceStartedEvent(
-            event_id=self._stable_id(
+            event_id=self._stable_event_id(
                 "MAINTENANCE-INTEGRATION-EVENT", maintenance_action_id, "started"
             ),
             idempotency_key=f"{maintenance_action_id}:1",
@@ -729,7 +735,7 @@ class MaintenanceLoopService:
         )
         timestamp = completed_at or datetime.now(timezone.utc)
         event = MaintenanceCompletedEvent(
-            event_id=self._stable_id(
+            event_id=self._stable_event_id(
                 "MAINTENANCE-INTEGRATION-EVENT", maintenance_action_id, "completed"
             ),
             idempotency_key=f"{maintenance_action_id}:2",
@@ -794,7 +800,7 @@ class MaintenanceLoopService:
             workspace_id=workspace_id,
         )
         event = MaintenanceReplayRequestedEvent(
-            event_id=self._stable_id(
+            event_id=self._stable_event_id(
                 "MAINTENANCE-INTEGRATION-EVENT",
                 self._required_text(maintenance, "maintenance_action_id"),
                 "replay-requested",

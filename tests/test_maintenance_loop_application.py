@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -386,9 +387,10 @@ def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tm
 
     with loop.repository._connect() as connection:
         outbox = connection.execute(
-            "SELECT event_type,payload_json FROM transactional_outbox "
+            "SELECT id,event_type,payload_json FROM transactional_outbox "
             "WHERE event_type LIKE 'maintenance.%' ORDER BY id"
         ).fetchall()
+    assert all(str(uuid.UUID(row["id"])) == row["id"] for row in outbox)
     assert {
         row["event_type"]: json.loads(row["payload_json"])["state_version"]
         for row in outbox

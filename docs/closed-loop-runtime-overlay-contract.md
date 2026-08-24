@@ -163,6 +163,18 @@ Outbox에 적재한다.
 | `maintenance.replay_requested` | Closed-loop | `gen_data` Runtime Overlay adapter | restart/branch 생성 요청 |
 | `runtime_overlay.observations.available` | `gen_data` Runtime Overlay | Backend ingestion/diagnosis adapter | 생성 완료된 batch와 Observation 범위 인계. readiness 의미 없음 |
 
+로컬 및 Mac mini 시연의 Closed-loop outbound transport는
+`app.maintenance_replay_dispatcher`가 담당한다. 이 worker는 현재 Organization/Project
+scope의 transactional outbox에서 위 `maintenance.*` 세 종류만 claim하고,
+`maintenance-replay-v1` Schema를 다시 검증한 뒤 `gen_data`가 소비하는 JSONL inbox에
+durable append한다. 다른 Domain의 Outbox 이벤트는 claim하지 않는다.
+
+파일 append 이후 DB delivery 완료 기록 전에 process가 중단되면 같은 이벤트가 다시
+전달될 수 있다. JSONL adapter와 `gen_data` consumer는 동일 `event_id`와 payload의 재수신을
+멱등 처리하고, 같은 ID의 다른 payload는 conflict로 거부한다. retry/dead-letter와 lease
+만료 복구는 Backend Outbox worker가 담당한다. 이 JSONL transport는 adapter이므로 향후
+broker로 교체해도 Maintenance Domain event와 Schema는 변경하지 않는다.
+
 Backend Diagnosis는 `maintenance.*` 이벤트만 보고 Prediction하지 않는다.
 `runtime_overlay.observations.available`의 branch가 append-only Overlay 저장소에 반영된
 뒤 해당 Observation과 현재 Model Artifact를 읽어 history requirement를 평가한다.
