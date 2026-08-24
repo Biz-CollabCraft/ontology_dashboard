@@ -5,7 +5,10 @@
     "display_name": "CNC S01-L01-01",
     "site_id": "S01",
     "cell_id": "L01",
-    "observed_at": "2026-08-01T00:00:00+09:00"
+    "observed_at": "2026-08-01T00:00:00+09:00",
+    "criticality": null,
+    "criticality_basis": [],
+    "criticality_source": "unknown"
   },
   "risk": {
     "current": 0.41,
@@ -98,6 +101,17 @@
       "source": "activity"
     }
   ],
+  "maintenance_context": {
+    "last_maintenance_days_ago": 12,
+    "similar_events_30d": null,
+    "open_work_order_exists": null
+  },
+  "operation_context": {
+    "load_level": null,
+    "runtime_hours_7d": null,
+    "production_impact": "low"
+  },
+  "review_priority": null,
   "evidence": {
     "artifact_id": "RESULT#CNC-S01-L01-01#2026-08-01T00:00:00+09:00",
     "evidence_payload_reference": "producer-enriched-attention",
@@ -109,6 +123,16 @@
         "field": "features[1].baseline",
         "reason": "evidence_payload.sensor_evidence.sensors.tool_wear_min has no basis (baseline window rows unavailable for this feature); current value and series are still shown",
         "owner_domain": "diagnosis"
+      },
+      {
+        "field": "asset.criticality",
+        "reason": "criticality_missing_or_unresolved",
+        "owner_domain": "equipment"
+      },
+      {
+        "field": "review_priority",
+        "reason": "review_priority_inputs_missing_or_unresolved",
+        "owner_domain": "report"
       }
     ]
   },

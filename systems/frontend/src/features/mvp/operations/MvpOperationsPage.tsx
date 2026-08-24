@@ -227,6 +227,13 @@ export function MvpOperationsPage({
                   <div className="mvp-operation-evidence-grid">
                     <MvpPanel title="Allowed Action" eyebrow="사람 기록">
                       <div className="mvp-recommendation"><span>추천</span><strong>{DECISION_LABEL[selectedEvent.recommendedDecision]}</strong><p>버튼 하나를 고르면 아래 기록 액션에 바로 반영됩니다.</p></div>
+                      <dl className="mvp-inspector-summary">
+                        <div><dt>검토 우선순위</dt><dd>{detail.reviewPriority?.level ?? "확인 필요"}</dd></div>
+                        <div><dt>중요도</dt><dd>{detail.assetCriticality ?? "확인 필요"}</dd></div>
+                        <div><dt>생산 영향</dt><dd>{detail.operationContext?.productionImpact ?? "확인 필요"}</dd></div>
+                        <div><dt>열린 작업</dt><dd>{detail.maintenanceContext?.openWorkOrderExists === null || detail.maintenanceContext?.openWorkOrderExists === undefined ? "확인 필요" : detail.maintenanceContext.openWorkOrderExists ? "있음" : "없음"}</dd></div>
+                      </dl>
+                      {detail.reviewPriority?.reasons.length ? <p className="mvp-threshold-note">{detail.reviewPriority.reasons.join(" · ")}</p> : <p className="mvp-threshold-note">필수 맥락이 없으면 Operations가 우선순위를 임의 계산하지 않습니다.</p>}
                       <div className="mvp-decision-option-grid" role="radiogroup" aria-label="판단 종류">
                         {DECISION_OPTIONS.map((option) => {
                           const Icon = option.Icon;

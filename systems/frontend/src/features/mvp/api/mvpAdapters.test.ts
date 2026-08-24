@@ -191,13 +191,19 @@ describe("MVP adapter contract", () => {
   });
 
   it("preserves AssetDetailViewModel current/history, gaps, and nullable freshness", () => {
-    const adapted = adaptEvent(event);
+    const adapted = adaptEvent({
+      ...event,
+      equipment: { ...event.equipment, criticality: undefined },
+    } as never);
     const detail = composeEventDetail({ event: adapted, evidence: null, report: null, activity: null });
     const enriched = applyAssetDetailViewModel(detail, {
       asset: {
         asset_id: "CNC-001",
         asset_type: "cnc",
         observed_at: "2026-08-06T03:00:00Z",
+        criticality: null,
+        criticality_basis: [],
+        criticality_source: "unknown",
       },
       risk: {
         current: 0.92,
@@ -245,16 +251,34 @@ describe("MVP adapter contract", () => {
         description: "이전 점검 기록",
         source: "maintenance-read-model",
       }],
+      maintenance_context: {
+        last_maintenance_days_ago: null,
+        similar_events_30d: null,
+        open_work_order_exists: null,
+      },
+      operation_context: {
+        load_level: null,
+        runtime_hours_7d: null,
+        production_impact: null,
+      },
+      review_priority: null,
       evidence: {
         artifact_id: "RESULT#CNC-001",
         model_version: "model-1",
         dataset_version: "dsv-canonical-v3-1",
         source_kind: "runtime_inference",
-        gaps: [{
-          field: "asset.criticality",
-          reason: "equipment master unavailable",
-          owner_domain: "maintenance",
-        }],
+        gaps: [
+          {
+            field: "asset.criticality",
+            reason: "criticality_missing_or_unresolved",
+            owner_domain: "equipment",
+          },
+          {
+            field: "review_priority",
+            reason: "review_priority_inputs_missing_or_unresolved",
+            owner_domain: "report",
+          },
+        ],
       },
       data_status: {
         source: "canonical",
@@ -329,5 +353,9 @@ describe("MVP adapter contract", () => {
       afterStatus: "requested",
       workOrderId: "WO-INS-001",
     }));
+    expect(enriched.event.criticality).toBeNull();
+    expect(enriched.assetCriticality).toBeNull();
+    expect(enriched.reviewPriority).toBeNull();
+    expect(enriched.warnings.join(" ")).toContain("asset.criticality");
   });
 });

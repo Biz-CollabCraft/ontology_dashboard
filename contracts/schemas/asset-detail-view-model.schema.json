@@ -4,12 +4,12 @@
   "title": "Asset Detail ViewModel (candidate contract)",
   "description": "Candidate contract for GET /objects/{asset_id}/detail-view, as documented in docs/mvp/pdm-evidence-report-ui-integration-plan.md §3.1 and docs/mvp/schema-definition.md §5.3. Status: V2 change proposal. Does not replace the current Event Report API. This object name is deliberately not prefixed with `Mvp`.",
   "type": "object",
-  "required": ["asset", "risk", "risk_series", "features", "equipment_history", "evidence", "data_status"],
+  "required": ["asset", "risk", "risk_series", "features", "equipment_history", "maintenance_context", "operation_context", "review_priority", "evidence", "data_status"],
   "additionalProperties": false,
   "properties": {
     "asset": {
       "type": "object",
-      "required": ["asset_id", "asset_type", "observed_at"],
+      "required": ["asset_id", "asset_type", "observed_at", "criticality", "criticality_basis", "criticality_source"],
       "additionalProperties": false,
       "properties": {
         "asset_id": {"type": "string"},
@@ -17,7 +17,12 @@
         "display_name": {"type": "string"},
         "site_id": {"type": "string"},
         "cell_id": {"type": "string"},
-        "observed_at": {"type": "string"}
+        "observed_at": {"type": "string"},
+        "criticality": {"type": ["string", "null"], "enum": ["low", "medium", "high", null]},
+        "criticality_basis": {"type": "array", "items": {"type": "string"}},
+        "criticality_source": {
+          "enum": ["manual_initial_assessment", "equipment_master", "project_context", "unknown"]
+        }
       }
     },
     "risk": {
@@ -141,8 +146,28 @@
         }
       }
     },
+    "maintenance_context": {
+      "type": "object",
+      "required": ["last_maintenance_days_ago", "similar_events_30d", "open_work_order_exists"],
+      "additionalProperties": false,
+      "properties": {
+        "last_maintenance_days_ago": {"type": ["integer", "null"], "minimum": 0},
+        "similar_events_30d": {"type": ["integer", "null"], "minimum": 0},
+        "open_work_order_exists": {"type": ["boolean", "null"]}
+      }
+    },
     "operation_context": {"$ref": "#/$defs/operationContext"},
     "closed_loop": {"$ref": "#/$defs/closedLoopSummary"},
+    "review_priority": {
+      "type": ["object", "null"],
+      "required": ["level", "reasons", "source_fields"],
+      "additionalProperties": false,
+      "properties": {
+        "level": {"enum": ["immediate", "high", "medium", "low"]},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "source_fields": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "evidence": {
       "type": "object",
       "required": ["artifact_id", "model_version", "dataset_version", "source_kind", "gaps"],
@@ -162,7 +187,7 @@
             "properties": {
               "field": {"type": "string"},
               "reason": {"type": "string"},
-              "owner_domain": {"enum": ["diagnosis", "dataset", "maintenance", "report", "frontend"]}
+              "owner_domain": {"enum": ["diagnosis", "dataset", "equipment", "project", "operations", "maintenance", "report", "frontend", "unresolved"]}
             }
           }
         }

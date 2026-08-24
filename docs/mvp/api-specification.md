@@ -166,7 +166,11 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 ```json
 {
-  "asset": {},
+  "asset": {
+    "criticality": "high",
+    "criticality_basis": ["equipment master"],
+    "criticality_source": "equipment_master"
+  },
   "risk": {},
   "risk_series": [],
   "features": [
@@ -177,6 +181,11 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
     }
   ],
   "equipment_history": [],
+  "maintenance_context": {
+    "last_maintenance_days_ago": null,
+    "similar_events_30d": null,
+    "open_work_order_exists": null
+  },
   "operation_context": {
     "load_level": null,
     "runtime_hours_7d": null,
@@ -221,6 +230,7 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
     },
     "limitations": ["Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."]
   },
+  "review_priority": null,
   "closed_loop": {
     "work_orders": [],
     "maintenance_actions": [],
@@ -255,6 +265,13 @@ Product Result history다. 상세 payload가 실제로 필요한 경우에만 `p
 top factors, report section, provenance)는 기준선으로 유지한다. `map-report`
 이식에 필요한 그래프·피쳐 이력 필드는 이 기준선에 추가되는 필드이며, 단일 Event
 Evidence만으로 채울 수 있다고 가정하지 않는다.
+
+`asset.criticality`는 설비/프로젝트 운영 영향도이며 `risk.status_grade`나
+WorkOrder priority가 아니다. 누락 시 `null`로 두고 `evidence.gaps[]`에
+`asset.criticality` gap을 남긴다. `maintenance_context`, `operation_context`,
+`review_priority`도 같은 규칙을 따른다. `review_priority`는 검토 표시 순서용 설명값이며
+필수 입력이 없으면 `null`이다. Product API 또는 Backend composer가 계산하지 않은 값을
+Frontend가 `normal`, `low`, `false`, `0` 또는 fallback priority로 합성하지 않는다.
 
 근거 추적을 위해 시계열 history envelope에는 source reference를, point에는 `observed_at`과
 quality/status 정보를 보존한다. 화면 표시용 `number[]`만 반환하지 않는다.

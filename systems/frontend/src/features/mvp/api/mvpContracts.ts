@@ -330,6 +330,14 @@ export interface MvpEventDetailModel {
   riskSeries: MvpRiskSeriesPoint[];
   predictionHorizonHours: number | null;
   threshold: number | null;
+  assetCriticality: MvpCriticality;
+  criticalityBasis: string[];
+  criticalitySource: "manual_initial_assessment" | "equipment_master" | "project_context" | "unknown";
+  maintenanceContext: {
+    lastMaintenanceDaysAgo: number | null;
+    similarEvents30d: number | null;
+    openWorkOrderExists: boolean | null;
+  } | null;
   dataQualityWarnings: Array<{ code: string; field: string; message: string; severity: string }>;
   equipmentHistory: MvpEquipmentHistoryItem[];
   evidenceGaps: MvpEvidenceGap[];
@@ -360,9 +368,9 @@ export interface AssetDetailViewModel {
     site_id?: string;
     cell_id?: string;
     observed_at: string;
-    criticality?: MvpCriticality;
-    criticality_basis?: string[];
-    criticality_source?: string;
+    criticality: MvpCriticality;
+    criticality_basis: string[];
+    criticality_source: "manual_initial_assessment" | "equipment_master" | "project_context" | "unknown";
   };
   risk: {
     current: number | null;
@@ -411,7 +419,12 @@ export interface AssetDetailViewModel {
     source: string;
     memo?: string;
   }>;
-  operation_context?: {
+  maintenance_context: {
+    last_maintenance_days_ago: number | null;
+    similar_events_30d: number | null;
+    open_work_order_exists: boolean | null;
+  };
+  operation_context: {
     load_level: "low" | "normal" | "high" | null;
     runtime_hours_7d: number | null;
     production_impact: MvpProductionImpact;
@@ -501,7 +514,7 @@ export interface AssetDetailViewModel {
     }>;
     runtime_status?: MvpClosedLoopRuntimeStatus;
   } | null;
-  review_priority?: {
+  review_priority: {
     level: "immediate" | "high" | "medium" | "low";
     reasons: string[];
     source_fields: string[];
