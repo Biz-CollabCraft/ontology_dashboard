@@ -160,6 +160,10 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     });
   }, [model?.events, updateSelection]);
 
+  const previewAsset = useCallback((assetId: string, eventId: string | null) => {
+    updateSelection({ assetId, eventId });
+  }, [updateSelection]);
+
   const selectAsset = useCallback((asset: MvpAsset) => {
     updateSelection({ assetId: asset.assetId, eventId: asset.eventId });
   }, [updateSelection]);
@@ -218,7 +222,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else {
-    content = <MvpOverviewPage model={model} onOpenAsset={openAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <MvpOverviewPage model={model} role={selection.role} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onPreviewAsset={previewAsset} onOpenAsset={openAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   return (
