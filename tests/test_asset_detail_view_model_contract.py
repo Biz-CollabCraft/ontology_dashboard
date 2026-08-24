@@ -42,6 +42,12 @@ ALLOWED_STATUS_GRADES = {"normal", "attention", "warning", "critical"}
 # data_status.source (canonical/fallback) or feature series quality_status
 # (good/bad/unknown).
 SOURCE_KIND_VALUES = {"runtime_inference", "compatibility_fallback"}
+FEATURE_SERIES_SOURCE_KIND_VALUES = {
+    "observed_history",
+    "current_observation",
+    "measured_backfill",
+    "simulated_backfill",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -101,11 +107,14 @@ def test_schema_allows_unknown_freshness_without_synthesizing_false() -> None:
 
 def test_schema_restricts_source_kind_enum_to_evidence_and_risk_series_only() -> None:
     """runtime_inference/compatibility_fallback must not leak into data_status.source
-    or feature series quality_status."""
+    or feature series quality_status/source_kind."""
     properties = schema()["properties"]
 
     assert set(properties["evidence"]["properties"]["source_kind"]["enum"]) == SOURCE_KIND_VALUES
     assert set(properties["risk_series"]["items"]["properties"]["source_kind"]["enum"]) == SOURCE_KIND_VALUES
+    feature_series_source_kind = properties["features"]["items"]["properties"]["series"]["items"]["properties"]["source_kind"]["enum"]
+    assert set(feature_series_source_kind) == FEATURE_SERIES_SOURCE_KIND_VALUES
+    assert SOURCE_KIND_VALUES.isdisjoint(feature_series_source_kind)
     assert set(properties["data_status"]["properties"]["source"]["enum"]) == {"canonical", "fallback"}
     quality_status_enum = properties["features"]["items"]["properties"]["series"]["items"]["properties"]["quality_status"]["enum"]
     assert set(quality_status_enum) == {"good", "bad", "unknown"}
@@ -139,6 +148,18 @@ def test_observation_series_present_fills_feature_series_but_not_risk_series() -
     assert payload["risk_series"] == []
     assert "risk_series" in gap_fields
     assert "features[].series" not in gap_fields
+
+
+@pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))
+def test_feature_series_is_observed_history_before_current_observation(scenario: str) -> None:
+    payload = fixture(scenario)
+    current_observed_at = payload["asset"]["observed_at"]
+
+    for feature in payload["features"]:
+        observed_times = [point["observed_at"] for point in feature["series"]]
+        assert observed_times == sorted(observed_times)
+        assert current_observed_at not in observed_times
+        assert all(point["source_kind"] == "observed_history" for point in feature["series"])
 
 
 def test_risk_timeline_present_fills_risk_series_and_feature_series() -> None:

@@ -272,23 +272,30 @@ class ManufacturingPredictiveMaintenanceService:
                 ]
             )
         )
-        rows = fixture.get("history") or [fixture.get("observation") or {}]
+        rows = fixture.get("history") or []
+        current_observed_at = str(artifact["observed_at"])
         series: dict[str, list[dict[str, Any]]] = {}
         for key in feature_keys:
-            points = []
+            points_by_observed_at: dict[str, dict[str, Any]] = {}
             for row in rows:
                 if key not in row:
                     continue
-                points.append(
-                    {
-                        "observed_at": str(row.get("timestamp") or artifact["observed_at"]),
-                        "value": row.get(key),
-                        "quality_status": "unknown"
-                        if artifact.get("status_grade") == "data_quality_hold"
-                        else "good",
-                        "source_ref": f"observation-contract://{artifact['asset_id']}/{key}",
-                    }
-                )
+                observed_at = str(row.get("timestamp") or current_observed_at)
+                if observed_at >= current_observed_at:
+                    continue
+                points_by_observed_at[observed_at] = {
+                    "observed_at": observed_at,
+                    "value": row.get(key),
+                    "source_kind": "observed_history",
+                    "quality_status": "unknown"
+                    if artifact.get("status_grade") == "data_quality_hold"
+                    else "good",
+                    "source_ref": f"observation-contract://{artifact['asset_id']}/{key}",
+                }
+            points = [
+                points_by_observed_at[observed_at]
+                for observed_at in sorted(points_by_observed_at)
+            ]
             if points:
                 series[str(key)] = points
         return series

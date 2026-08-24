@@ -31,20 +31,16 @@
         {
           "observed_at": "2026-07-31T18:00:00+09:00",
           "value": 1602.1,
+          "source_kind": "observed_history",
           "quality_status": "good",
           "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-07-31T18:00:00+09:00"
         },
         {
           "observed_at": "2026-07-31T21:00:00+09:00",
           "value": 1688.4,
+          "source_kind": "observed_history",
           "quality_status": "good",
           "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-07-31T21:00:00+09:00"
-        },
-        {
-          "observed_at": "2026-08-01T00:00:00+09:00",
-          "value": 1820.0,
-          "quality_status": "good",
-          "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00"
         }
       ],
       "top_factor": {
@@ -65,6 +61,7 @@
         {
           "observed_at": "2026-07-31T18:00:00+09:00",
           "value": null,
+          "source_kind": "observed_history",
           "quality_status": "bad",
           "source_ref": "observation://CMP-S03-L03-01.vibration_raw/2026-07-31T18:00:00+09:00"
         }

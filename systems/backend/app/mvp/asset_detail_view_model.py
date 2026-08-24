@@ -357,6 +357,7 @@ def _feature_series_point(point: dict[str, Any]) -> dict[str, Any]:
     return {
         "observed_at": str(point["observed_at"]),
         "value": point.get("value"),
+        "source_kind": str(point.get("source_kind") or "observed_history"),
         **_optional(point, "quality_status", "source_ref"),
     }
 

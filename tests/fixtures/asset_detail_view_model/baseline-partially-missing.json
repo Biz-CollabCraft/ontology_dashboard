@@ -48,14 +48,9 @@
         {
           "observed_at": "2026-07-31T21:00:00+09:00",
           "value": 43.5,
+          "source_kind": "observed_history",
           "quality_status": "good",
           "source_ref": "observation://CNC-S01-L01-01.torque_nm/2026-07-31T21:00:00+09:00"
-        },
-        {
-          "observed_at": "2026-08-01T00:00:00+09:00",
-          "value": 46.8,
-          "quality_status": "good",
-          "source_ref": "observation://CNC-S01-L01-01.torque_nm/2026-08-01T00:00:00+09:00"
         }
       ],
       "top_factor": {
@@ -76,14 +71,9 @@
         {
           "observed_at": "2026-07-31T21:00:00+09:00",
           "value": 121.0,
+          "source_kind": "observed_history",
           "quality_status": "good",
           "source_ref": "observation://CNC-S01-L01-01.tool_wear_min/2026-07-31T21:00:00+09:00"
-        },
-        {
-          "observed_at": "2026-08-01T00:00:00+09:00",
-          "value": 128.0,
-          "quality_status": "good",
-          "source_ref": "observation://CNC-S01-L01-01.tool_wear_min/2026-08-01T00:00:00+09:00"
         }
       ],
       "top_factor": null

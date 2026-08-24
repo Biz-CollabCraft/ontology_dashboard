@@ -209,7 +209,13 @@ export interface AssetDetailViewModel {
     label: string;
     unit: string;
     current: number | null;
-    series: Array<{ observed_at: string; value: number | null; quality_status?: "good" | "bad" | "unknown"; source_ref?: string }>;
+    series: Array<{
+      observed_at: string;
+      value: number | null;
+      source_kind: "observed_history" | "current_observation" | "measured_backfill" | "simulated_backfill";
+      quality_status?: "good" | "bad" | "unknown";
+      source_ref?: string;
+    }>;
     top_factor: {
       rank: number;
       contribution: number;
