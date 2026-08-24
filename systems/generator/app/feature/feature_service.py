@@ -1,46 +1,51 @@
-"""Feature Service coordinating dataset loading, feature calculations, and bundle publishing."""
+"""Feature Service coordinating dataset loading, feature calculations, horizon labeling, and bundle publishing."""
 
 from __future__ import annotations
 
-import os
-import uuid
 import logging
+import uuid
 from pathlib import Path
 from typing import Any
-import pandas as pd
-import numpy as np
 
-from systems.generator.generator_config import PATHS
-from systems.generator.file_integrity import compute_file_sha256
-from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
-from systems.generator.app.preprocessing.preprocessing_exception import DatasetNotFoundError
-from systems.generator.app.feature.feature_schema import (
-    FeatureRequest,
-    FeatureResponse,
-    FeatureOutputsPayload,
-)
+import numpy as np
+import pandas as pd
+
 from systems.generator.app.feature.feature_exception import (
-    FeatureInputNotFoundError,
     FeatureContractError,
-    FeatureSchemaMismatchError,
+    FeatureDatasetIntegrityError,
+    FeatureInputNotFoundError,
     FeatureLabelAlignmentError,
+    FeatureSchemaMismatchError,
     InsufficientTrainingDataError,
 )
-from systems.generator.app.feature.feature_schema_provider import (
-    FeatureSchemaProvider,
-    FeatureItem,
-)
-from systems.generator.app.feature.label_schema_provider import LabelSchemaProvider
 from systems.generator.app.feature.feature_repository import (
     FeatureRepository,
     compute_feature_dataset_version,
 )
+from systems.generator.app.feature.feature_schema import (
+    FeatureOutputsPayload,
+    FeatureRequest,
+    FeatureResponse,
+)
+from systems.generator.app.feature.feature_schema_provider import (
+    FeatureItem,
+    FeatureSchemaProvider,
+)
+from systems.generator.app.feature.label_schema_provider import (
+    LabelSchemaProvider,
+    LabelSchemaSpec,
+)
+from systems.generator.app.preprocessing.preprocessing_exception import DatasetNotFoundError
+from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
+from systems.generator.common.timestamp_canonicalizer import canonicalize_timestamp_series
+from systems.generator.file_integrity import compute_file_sha256
+from systems.generator.generator_config import PATHS
 
 logger = logging.getLogger(__name__)
 
 
 class FeatureService:
-    """Service handling Feature Dataset Bundle generation and execution."""
+    """Service handling Feature Dataset Bundle generation, deterministic alignment, and execution."""
 
     def __init__(
         self,
@@ -65,14 +70,20 @@ class FeatureService:
 
     def _find_dataset_file(self, dataset_id: str, dataset_version: str, kind: str = "observations") -> Path:
         """Search and locate dataset source file."""
+        clean_id = dataset_id.strip()
+        clean_ver = dataset_version.strip()
+
+        if ".." in clean_id or ".." in clean_ver or "/" in clean_id or "\\" in clean_id:
+            raise FeatureContractError(f"안전하지 않은 데이터셋 식별자입니다: dataset_id='{dataset_id}', version='{dataset_version}'")
+
         search_candidates = [
-            Path(f"data/{dataset_id}.csv"),
-            Path(f"data/{dataset_id}_{dataset_version}.csv"),
-            Path(f"data/{dataset_id}/{dataset_version}.csv"),
-            Path(f"data/{dataset_id}/{dataset_version}/data.csv"),
-            Path(f"data_preprocessed/{kind}/{dataset_id}/{dataset_version}/{kind}.jsonl"),
-            Path(f"data_preprocessed/{kind}/{dataset_id}/{dataset_version}/data.csv"),
-            Path(f"data/{dataset_id}/canonical-{dataset_version}.csv"),
+            Path(f"data/{clean_id}.csv"),
+            Path(f"data/{clean_id}_{clean_ver}.csv"),
+            Path(f"data/{clean_id}/{clean_ver}.csv"),
+            Path(f"data/{clean_id}/{clean_ver}/data.csv"),
+            Path(f"data_preprocessed/{kind}/{clean_id}/{clean_ver}/{kind}.jsonl"),
+            Path(f"data_preprocessed/{kind}/{clean_id}/{clean_ver}/data.csv"),
+            Path(f"data/{clean_id}/canonical-{clean_ver}.csv"),
         ]
         for cand in search_candidates:
             if cand.exists() and cand.is_file():
@@ -82,12 +93,14 @@ class FeatureService:
 
         # Check in root data directory
         data_dir = getattr(PATHS, "data_dir", Path("data"))
-        direct = Path(data_dir) / f"{dataset_id}.csv"
+        direct = Path(data_dir) / f"{clean_id}.csv"
         if direct.exists() and direct.is_file():
+            if not self._is_within_allowed_root(direct):
+                raise FeatureContractError(f"안전하지 않은 데이터셋 경로 접근이 감지되었습니다: {direct}")
             return direct.resolve()
 
         raise FeatureInputNotFoundError(
-            f"{kind.capitalize()} 데이터셋 파일을 찾을 수 없습니다: dataset_id='{dataset_id}', dataset_version='{dataset_version}'"
+            f"{kind.capitalize()} 데이터셋 파일을 찾을 수 없습니다: dataset_id='{clean_id}', dataset_version='{clean_ver}'"
         )
 
     def _load_dataframe(self, path: Path) -> pd.DataFrame:
@@ -99,21 +112,59 @@ class FeatureService:
         except Exception as exc:
             raise FeatureContractError(f"데이터셋 파일 파싱 실패 ({path.name}): {exc}") from exc
 
-    def _apply_feature_recipes(
+    def _prepare_canonical_working_df(
         self,
-        df: pd.DataFrame,
-        feature_items: list[FeatureItem],
+        obs_df: pd.DataFrame,
         id_col: str | None,
         time_col: str | None,
-    ) -> pd.DataFrame:
-        """Calculate features per recipe and asset isolation."""
-        result_df = pd.DataFrame(index=df.index)
+    ) -> tuple[pd.DataFrame, str | None, str | None]:
+        """Normalize timestamps and perform stable sorting by asset ID and time."""
+        working_df = obs_df.copy()
 
-        # Sort if time_col is available
-        working_df = df.copy()
-        if id_col and id_col in working_df.columns and time_col and time_col in working_df.columns:
-            working_df = working_df.sort_values(by=[id_col, time_col]).reset_index(drop=True)
-            result_df = pd.DataFrame(index=working_df.index)
+        # Determine and normalize time column
+        resolved_time_col = time_col
+        if not resolved_time_col or resolved_time_col not in working_df.columns:
+            for candidate in ["observed_at", "timestamp", "datetime", "date", "time"]:
+                if candidate in working_df.columns:
+                    resolved_time_col = candidate
+                    break
+
+        if resolved_time_col and resolved_time_col in working_df.columns:
+            working_df[resolved_time_col] = canonicalize_timestamp_series(
+                working_df[resolved_time_col], col_name=resolved_time_col
+            )
+
+        # Determine asset ID column
+        resolved_id_col = id_col
+        if not resolved_id_col or resolved_id_col not in working_df.columns:
+            for candidate in ["asset_id", "machineID", "Product ID", "product_id", "UDI", "udi"]:
+                if candidate in working_df.columns:
+                    resolved_id_col = candidate
+                    break
+
+        # Stable sort
+        sort_cols = []
+        if resolved_id_col and resolved_id_col in working_df.columns:
+            sort_cols.append(resolved_id_col)
+        if resolved_time_col and resolved_time_col in working_df.columns:
+            sort_cols.append(resolved_time_col)
+
+        if sort_cols:
+            working_df = working_df.sort_values(by=sort_cols, kind="mergesort").reset_index(drop=True)
+        else:
+            working_df = working_df.reset_index(drop=True)
+
+        return working_df, resolved_id_col, resolved_time_col
+
+    def _compute_features_and_missing_masks(
+        self,
+        working_df: pd.DataFrame,
+        feature_items: list[FeatureItem],
+        id_col: str | None,
+    ) -> tuple[pd.DataFrame, pd.Series]:
+        """Compute feature transformations according to schema and track missing value masks."""
+        computed_df = pd.DataFrame(index=working_df.index)
+        missing_drop_mask = pd.Series(False, index=working_df.index)
 
         for item in feature_items:
             src = item.source_field
@@ -124,9 +175,14 @@ class FeatureService:
 
             op = item.operation
             params = item.parameters or {}
+            mv_policy = item.missing_value_policy or "drop"
 
+            # Execute operation without arbitrary premature fillna
             if op == "raw":
-                series = working_df[src].astype(float)
+                try:
+                    series = working_df[src].astype(float)
+                except (ValueError, TypeError) as exc:
+                    raise FeatureContractError(f"Feature '{item.feature_name}'의 수치형 변환 실패: {exc}") from exc
             elif op in ("rolling_mean", "rolling_std", "rolling_max", "rolling_min"):
                 window = params.get("window", 5)
                 min_periods = params.get("min_periods", 1)
@@ -135,7 +191,7 @@ class FeatureService:
                     if op == "rolling_mean":
                         series = grouped.transform(lambda s: s.rolling(window, min_periods=min_periods).mean())
                     elif op == "rolling_std":
-                        series = grouped.transform(lambda s: s.rolling(window, min_periods=min_periods).std().fillna(0.0))
+                        series = grouped.transform(lambda s: s.rolling(window, min_periods=min_periods).std())
                     elif op == "rolling_max":
                         series = grouped.transform(lambda s: s.rolling(window, min_periods=min_periods).max())
                     elif op == "rolling_min":
@@ -145,7 +201,7 @@ class FeatureService:
                     if op == "rolling_mean":
                         series = rolling_obj.mean()
                     elif op == "rolling_std":
-                        series = rolling_obj.std().fillna(0.0)
+                        series = rolling_obj.std()
                     elif op == "rolling_max":
                         series = rolling_obj.max()
                     elif op == "rolling_min":
@@ -171,46 +227,149 @@ class FeatureService:
             else:
                 raise FeatureSchemaMismatchError(f"지원하지 않는 Feature 연산(operation)입니다: '{op}'")
 
-            # Missing value handling
-            if item.missing_value_policy == "fill_zero":
+            # Enforce missing value policy
+            if mv_policy == "drop":
+                nan_mask = series.isna()
+                missing_drop_mask |= nan_mask
+            elif mv_policy == "fill_zero":
                 series = series.fillna(0.0)
-            elif item.missing_value_policy == "ffill":
-                series = series.ffill().fillna(0.0)
+            elif mv_policy == "ffill":
+                if id_col and id_col in working_df.columns:
+                    series = working_df.groupby(id_col)[src].ffill().fillna(0.0)
+                else:
+                    series = series.ffill().fillna(0.0)
+            elif mv_policy == "error":
+                if series.isna().any():
+                    raise FeatureDatasetIntegrityError(
+                        f"Feature '{item.feature_name}'에 결측값(NaN)이 존재합니다 (missing_value_policy='error')."
+                    )
             else:
-                # Default fillna for numeric safety
-                series = series.fillna(0.0)
+                raise FeatureSchemaMismatchError(
+                    f"지원하지 않는 missing_value_policy입니다: '{mv_policy}'. (허용: drop, fill_zero, ffill, error)"
+                )
 
-            result_df[item.feature_name] = series.astype(float)
+            computed_df[item.feature_name] = series.astype(float)
 
-        return result_df
+        return computed_df, missing_drop_mask
 
-    def _generate_labels(
+    def _generate_labels_and_exclusion_mask(
         self,
-        obs_df: pd.DataFrame,
+        working_df: pd.DataFrame,
         fail_df: pd.DataFrame,
-        horizon_hours: int,
+        label_schema: LabelSchemaSpec,
         id_col: str | None,
         time_col: str | None,
-    ) -> np.ndarray:
-        """Generate binary labels based on positive horizon window and exclusion intervals."""
-        n_rows = len(obs_df)
-        labels = np.zeros(n_rows, dtype=np.int64)
+    ) -> tuple[pd.Series, pd.Series]:
+        """Generate binary labels using [anchor - horizon, anchor) and mark [anchor, exclusion_end] active failures."""
+        labels_series = pd.Series(0, index=working_df.index, dtype=np.int64)
+        active_failure_drop_mask = pd.Series(False, index=working_df.index)
 
-        # Check if dataset has explicit failure / machine failure column
-        for col in ["Machine failure", "failure", "is_failure", "target"]:
-            if col in obs_df.columns:
-                raw_fail = obs_df[col].fillna(0).astype(int).to_numpy()
-                labels = np.where(raw_fail > 0, 1, 0)
-                return labels
+        horizon_delta = pd.Timedelta(hours=label_schema.prediction_horizon_hours)
 
-        # If external failure dataset is provided with events
+        # 1. External Failure Dataset provided
         if not fail_df.empty:
-            # Simple timestamp / asset matching if available
-            if id_col and time_col and id_col in obs_df.columns and time_col in obs_df.columns:
-                # Mock / interval labeling
-                pass
+            f_df = fail_df.copy()
 
-        return labels
+            # Filter only active failure event rows if a failure indicator column exists in fail_df
+            for cand in ["Machine failure", "failure", "is_failure", "is_failed", "target"]:
+                if cand in f_df.columns:
+                    f_df = f_df[f_df[cand] > 0]
+                    break
+
+            # Remove degradation_start leakage columns from failure DataFrame if present
+            for deg_col in ["degradation_start", "degradation_started_at", "period_start"]:
+                if deg_col in f_df.columns:
+                    f_df = f_df.drop(columns=[deg_col])
+
+            # Resolve anchor and exclusion_end columns
+            anchor_col = label_schema.anchor
+            if anchor_col not in f_df.columns:
+                for cand in ["observed_at", "timestamp", "failure_point", "datetime", "date", "time", "failure_occurred_at"]:
+                    if cand in f_df.columns:
+                        anchor_col = cand
+                        break
+
+            if anchor_col not in f_df.columns:
+                raise FeatureContractError(
+                    f"Failure 데이터셋에 anchor 컬럼 ('{label_schema.anchor}')을 찾을 수 없습니다."
+                )
+
+            f_df[anchor_col] = canonicalize_timestamp_series(f_df[anchor_col], col_name=anchor_col)
+
+            ex_end_col = label_schema.exclusion_end
+            if ex_end_col and ex_end_col in f_df.columns:
+                f_df[ex_end_col] = canonicalize_timestamp_series(f_df[ex_end_col], col_name=ex_end_col)
+            else:
+                ex_end_col = None
+
+            # Resolve failure asset ID column
+            fail_id_col = id_col
+            if not fail_id_col or fail_id_col not in f_df.columns:
+                for cand in ["asset_id", "machineID", "Product ID", "product_id", "UDI", "udi"]:
+                    if cand in f_df.columns:
+                        fail_id_col = cand
+                        break
+
+            # Apply horizon and exclusion logic per failure event
+            for _, row in f_df.iterrows():
+                f_time = row[anchor_col]
+                if pd.isna(f_time):
+                    continue
+
+                h_start = f_time - horizon_delta
+
+                if id_col and fail_id_col and id_col in working_df.columns and fail_id_col in row:
+                    asset_mask = (working_df[id_col] == row[fail_id_col])
+                else:
+                    asset_mask = pd.Series(True, index=working_df.index)
+
+                if time_col and time_col in working_df.columns:
+                    # 1. Positive window: [f_time - horizon, f_time)
+                    pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
+                    labels_series.loc[pos_mask] = 1
+
+                    # 2. Active failure exclusion: [f_time, ex_end]
+                    if ex_end_col and pd.notna(row.get(ex_end_col)):
+                        ex_end = row[ex_end_col]
+                        ex_mask = asset_mask & (working_df[time_col] >= f_time) & (working_df[time_col] <= ex_end)
+                    else:
+                        ex_mask = asset_mask & (working_df[time_col] == f_time)
+                    active_failure_drop_mask |= ex_mask
+
+            return labels_series, active_failure_drop_mask
+
+        # 2. Tabular failure indicators inside Observation dataset (e.g. AI4I machine failure)
+        # Convert failure indicator rows into failure events and apply official horizon formula
+        failure_indicator_col = None
+        for cand in ["Machine failure", "failure", "is_failure", "target"]:
+            if cand in working_df.columns:
+                failure_indicator_col = cand
+                break
+
+        if failure_indicator_col is not None and time_col and time_col in working_df.columns:
+            fail_indices = working_df.index[working_df[failure_indicator_col] > 0].tolist()
+            for f_idx in fail_indices:
+                f_time = working_df[time_col].iloc[f_idx]
+                if pd.isna(f_time):
+                    continue
+
+                h_start = f_time - horizon_delta
+
+                if id_col and id_col in working_df.columns:
+                    target_asset = working_df[id_col].iloc[f_idx]
+                    asset_mask = (working_df[id_col] == target_asset)
+                else:
+                    asset_mask = pd.Series(True, index=working_df.index)
+
+                # Positive window: [f_time - horizon, f_time)
+                pos_mask = asset_mask & (working_df[time_col] >= h_start) & (working_df[time_col] < f_time)
+                labels_series.loc[pos_mask] = 1
+
+                # Active failure exclusion: [f_time, f_time]
+                ex_mask = asset_mask & (working_df[time_col] == f_time)
+                active_failure_drop_mask |= ex_mask
+
+        return labels_series, active_failure_drop_mask
 
     def execute_feature(self, request: FeatureRequest, request_id: str | None = None) -> FeatureResponse:
         """Execute Feature Dataset generation pipeline and publish immutable bundle."""
@@ -252,10 +411,12 @@ class FeatureService:
         plan_filename = f"{request.preprocessing_plan_id}.json" if not request.preprocessing_plan_id.endswith(".json") else request.preprocessing_plan_id
         plan_file = plan_dir / plan_filename
         plan_sha256 = compute_file_sha256(plan_file)
+        plan_uri = self.feature_repo.get_logical_uri(plan_file)
 
         # 2. Find and validate Observation Dataset file
         obs_file = self._find_dataset_file(request.dataset_id, request.dataset_version, kind="observations")
         obs_sha256 = compute_file_sha256(obs_file)
+        obs_uri = self.feature_repo.get_logical_uri(obs_file)
         obs_df = self._load_dataframe(obs_file)
         if obs_df.empty:
             raise InsufficientTrainingDataError("Observation 데이터셋이 비어 있습니다 (0행).")
@@ -264,26 +425,28 @@ class FeatureService:
         try:
             fail_file = self._find_dataset_file(request.failure_dataset_id, request.failure_dataset_version, kind="failures")
             fail_sha256 = compute_file_sha256(fail_file)
+            fail_uri = self.feature_repo.get_logical_uri(fail_file)
             fail_df = self._load_dataframe(fail_file)
         except FeatureInputNotFoundError:
-            # Allow fallback if failure events are integrated in observation dataset (e.g. ai4i tabular)
+            # Fallback when failure events are embedded in observation dataset
             fail_file = obs_file
             fail_sha256 = obs_sha256
+            fail_uri = obs_uri
             fail_df = pd.DataFrame()
 
-        # 4. Resolve Feature Schema & Label Schema
-        selected_cols = plan.get("selected_columns") or [c for c in obs_df.columns]
+        # 4. Resolve Feature Schema & Label Schema from files
         feature_schema = self.feature_schema_provider.get_feature_schema(
             schema_version=request.feature_schema_version,
-            available_columns=selected_cols,
         )
         feature_schema_sha256 = feature_schema.compute_checksum()
+        feature_schema_uri = self.feature_repo.get_logical_uri(feature_schema.schema_file_path) if feature_schema.schema_file_path else f"schemas/features/{request.feature_schema_version}.json"
 
         label_schema = self.label_schema_provider.get_label_schema(
             schema_version=request.label_schema_version,
             requested_horizon_hours=request.prediction_horizon_hours,
         )
         label_schema_sha256 = label_schema.compute_checksum()
+        label_schema_uri = self.feature_repo.get_logical_uri(label_schema.schema_file_path) if label_schema.schema_file_path else f"schemas/labels/{request.label_schema_version}.json"
 
         # 5. Build Canonical Deterministic Fingerprint
         fingerprint = {
@@ -337,60 +500,88 @@ class FeatureService:
                     ),
                 )
 
-        # 7. Execute Feature & Label calculation
-        id_col = plan.get("id_column")
-        time_col = plan.get("time_column")
+        # 7. Prepare Canonical Working DataFrame
+        plan_id_col = plan.get("id_column")
+        plan_time_col = plan.get("time_column")
+        working_df, id_col, time_col = self._prepare_canonical_working_df(
+            obs_df=obs_df,
+            id_col=plan_id_col,
+            time_col=plan_time_col,
+        )
 
-        features_df = self._apply_feature_recipes(
-            df=obs_df,
+        # 8. Compute Features & Missing Masks
+        computed_features_df, missing_drop_mask = self._compute_features_and_missing_masks(
+            working_df=working_df,
             feature_items=feature_schema.features,
             id_col=id_col,
-            time_col=time_col,
         )
 
-        labels = self._generate_labels(
-            obs_df=obs_df,
+        # 9. Compute Labels & Active Failure Drop Mask
+        labels_series, active_failure_drop_mask = self._generate_labels_and_exclusion_mask(
+            working_df=working_df,
             fail_df=fail_df,
-            horizon_hours=request.prediction_horizon_hours,
+            label_schema=label_schema,
             id_col=id_col,
             time_col=time_col,
         )
+
+        # 10. Align Surviving Rows across Features, Labels, and Row Metadata
+        combined_drop_mask = missing_drop_mask | active_failure_drop_mask
+        keep_mask = ~combined_drop_mask
+
+        surviving_features_df = computed_features_df[keep_mask].copy()
+        surviving_labels_series = labels_series[keep_mask].copy()
+        surviving_working_df = working_df[keep_mask].copy()
+
+        ordered_feature_names = feature_schema.feature_names
+        features_matrix = surviving_features_df[ordered_feature_names].to_numpy(dtype=np.float64)
+        labels_array = surviving_labels_series.to_numpy(dtype=np.int64)
+
+        surviving_count = len(surviving_working_df)
+        if features_matrix.shape[0] != surviving_count or labels_array.shape[0] != surviving_count:
+            raise FeatureLabelAlignmentError("Feature matrix, Labels, row_metadata 행 정렬에 실패했습니다.")
+
+        if surviving_count == 0:
+            raise InsufficientTrainingDataError("모든 행이 제외 또는 결측치 처리되어 유효한 학습 데이터가 0행입니다.")
 
         # Build row metadata
         row_metadata = []
-        for idx in range(len(obs_df)):
-            asset_val = str(obs_df[id_col].iloc[idx]) if (id_col and id_col in obs_df.columns) else f"row_{idx}"
-            time_val = str(obs_df[time_col].iloc[idx]) if (time_col and time_col in obs_df.columns) else f"t_{idx}"
+        for idx in range(surviving_count):
+            asset_val = str(surviving_working_df[id_col].iloc[idx]) if (id_col and id_col in surviving_working_df.columns) else f"row_{idx}"
+            time_val = str(surviving_working_df[time_col].iloc[idx]) if (time_col and time_col in surviving_working_df.columns) else f"t_{idx}"
             row_metadata.append({"asset_id": asset_val, "timestamp": time_val})
 
-        # Strict allowlist selection and ordering
-        ordered_feature_names = feature_schema.feature_names
-        features_matrix = features_df[ordered_feature_names].to_numpy(dtype=np.float64)
-
-        if features_matrix.shape[0] != len(labels) or len(row_metadata) != len(labels):
-            raise FeatureLabelAlignmentError("Feature matrix, Labels, row_metadata 행 정렬에 실패했습니다.")
-
-        if features_matrix.shape[0] == 0:
-            raise InsufficientTrainingDataError("계산된 Feature 데이터셋이 0행입니다.")
-
-        # 8. Publish Bundle Atomically
+        # 11. Build Complete Provenance Metadata
         provenance_meta = {
-            "observation_dataset_uri": self.feature_repo.get_logical_uri(obs_file),
-            "failure_dataset_uri": self.feature_repo.get_logical_uri(fail_file),
+            "observation_dataset_id": request.dataset_id,
+            "observation_dataset_version": request.dataset_version,
+            "observation_dataset_sha256": obs_sha256,
+            "observation_dataset_uri": obs_uri,
+            "failure_dataset_id": request.failure_dataset_id,
+            "failure_dataset_version": request.failure_dataset_version,
+            "failure_dataset_sha256": fail_sha256,
+            "failure_dataset_uri": fail_uri,
             "preprocessing_plan_id": request.preprocessing_plan_id,
             "preprocessing_plan_version": request.preprocessing_plan_version,
             "preprocessing_plan_sha256": plan_sha256,
+            "preprocessing_plan_uri": plan_uri,
             "feature_schema_version": request.feature_schema_version,
+            "feature_schema_sha256": feature_schema_sha256,
+            "feature_schema_uri": feature_schema_uri,
             "label_schema_version": request.label_schema_version,
-            "dataset_provider": "local_file_adapter",
+            "label_schema_sha256": label_schema_sha256,
+            "label_schema_uri": label_schema_uri,
+            "prediction_horizon_hours": request.prediction_horizon_hours,
+            "feature_engine_version": "1.0",
         }
 
+        # 12. Publish Bundle Atomically
         published = self.feature_repo.publish_bundle(
             dataset_id=request.dataset_id,
             dataset_version=request.dataset_version,
             feature_dataset_version=feature_dataset_version,
             features=features_matrix,
-            labels=labels,
+            labels=labels_array,
             feature_columns=ordered_feature_names,
             row_metadata=row_metadata,
             fingerprint=fingerprint,

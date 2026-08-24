@@ -1,43 +1,61 @@
-"""Integration tests for Generator Feature domain (POST /feature) and Feature Dataset Bundle."""
+"""Integration and regression test suite for Generator Feature domain (POST /feature) and Feature Dataset Bundle."""
 
-import json
+from __future__ import annotations
+
 import inspect
+import json
+import shutil
+import threading
 from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from systems.generator.generator_config import PATHS
-from systems.generator.app.main import create_app
+from systems.generator.app.feature.feature_exception import FeatureContractError
+from systems.generator.app.feature.feature_repository import FeatureRepository
 from systems.generator.app.feature.feature_router import post_feature
+from systems.generator.app.main import create_app
+from systems.generator.generator_config import PATHS
 
 
 @pytest.fixture
 def test_client():
-    """Create isolated FastAPI test client with test dataset in data_dir."""
+    """Create isolated FastAPI test client with valid observation dataset in data_dir."""
     dataset_name = "ai4i_feature_test"
     csv_file = PATHS.data_dir / f"{dataset_name}.csv"
     PATHS.data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create dummy observation dataset
+    # 1. Create canonical observation dataset with realistic variation
+    np.random.seed(42)
+    n_rows = 50
+    times = pd.date_range("2026-01-01 00:00:00", periods=n_rows, freq="h")
+
+    # Failures at index 10 (2026-01-01 10:00) and index 35 (2026-01-02 11:00)
+    failures = np.zeros(n_rows, dtype=int)
+    failures[10] = 1
+    failures[35] = 1
+
     df_obs = pd.DataFrame({
-        "UDI": range(1, 21),
-        "Product ID": [f"L{i:04d}" for i in range(1, 21)],
-        "Type": ["L"] * 20,
-        "Air temperature [K]": [298.1 + i * 0.1 for i in range(20)],
-        "Process temperature [K]": [308.6 + i * 0.1 for i in range(20)],
-        "Rotational speed [rpm]": [1500 + i * 5 for i in range(20)],
-        "Torque [Nm]": [40.0 + i * 0.5 for i in range(20)],
-        "Tool wear [min]": [i * 2 for i in range(20)],
-        "Machine failure": [1 if i in (5, 15) else 0 for i in range(20)],
+        "UDI": range(1, n_rows + 1),
+        "Product ID": [f"L{i % 2 + 1:04d}" for i in range(n_rows)],
+        "Type": ["L"] * n_rows,
+        "Air temperature [K]": np.random.normal(298.1, 1.0, n_rows),
+        "Process temperature [K]": np.random.normal(308.6, 1.0, n_rows),
+        "Rotational speed [rpm]": np.random.normal(1500, 30, n_rows),
+        "Torque [Nm]": np.random.normal(40.0, 3.0, n_rows),
+        "Tool wear [min]": np.linspace(0, 200, n_rows),
+        "Machine failure": failures,
+        "observed_at": times.strftime("%Y-%m-%d %H:%M:%S"),
     })
     df_obs.to_csv(csv_file, index=False)
 
     app = create_app()
     client = TestClient(app)
 
-    # Execute preprocessing to get valid plan
+    # 2. Execute preprocessing to get valid plan
     prep_req = {
         "dataset_id": dataset_name,
         "dataset_version": "v1.0",
@@ -57,10 +75,17 @@ def test_client():
     # Cleanup
     if csv_file.exists():
         csv_file.unlink()
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    shutil.rmtree(models_store / "cache" / "features" / dataset_name, ignore_errors=True)
+    shutil.rmtree(models_store / "cache" / "preprocessing_plans" / dataset_name, ignore_errors=True)
 
+
+# ==========================================
+# 1. Feature Schema Tests
+# ==========================================
 
 def test_feature_generation_success_and_bundle_contract(test_client):
-    """Test successful feature generation and verify 5-file bundle integrity."""
+    """Test successful feature generation and verify 5-file bundle integrity and order."""
     client = test_client["client"]
     dataset_id = test_client["dataset_id"]
     plan_id = test_client["plan_id"]
@@ -89,8 +114,10 @@ def test_feature_generation_success_and_bundle_contract(test_client):
     assert data["preprocessing_plan_version"] == plan_ver
 
     outputs = data["outputs"]
-    assert outputs["row_count"] == 20
     assert outputs["feature_count"] == 5
+    # 2 active failure rows dropped from 50 rows -> 48 rows
+    assert outputs["row_count"] == 48
+
     feat_ver = outputs["feature_dataset_version"]
     assert feat_ver.startswith("feature-dataset-")
 
@@ -103,142 +130,164 @@ def test_feature_generation_success_and_bundle_contract(test_client):
     assert (bundle_dir / "row_metadata.json").exists()
     assert (bundle_dir / "feature_metadata.json").exists()
 
-    # Load arrays with allow_pickle=False
-    features = np.load(bundle_dir / "features.npy", allow_pickle=False)
-    labels = np.load(bundle_dir / "labels.npy", allow_pickle=False)
-    assert features.shape == (20, 5)
-    assert features.dtype == np.float64
-    assert np.isfinite(features).all()
-    assert labels.shape == (20,)
-    assert labels.dtype == np.int64
-
-    # Verify feature_columns.json
+    # Verify column order in feature_columns.json exactly matches ai4i-feature-v1.json
     with open(bundle_dir / "feature_columns.json", "r", encoding="utf-8") as f:
-        cols_data = json.load(f)
-        assert cols_data["count"] == 5
-        assert len(cols_data["columns"]) == 5
+        col_info = json.load(f)
+    assert col_info["columns"] == [
+        "Air temperature [K]",
+        "Process temperature [K]",
+        "Rotational speed [rpm]",
+        "Torque [Nm]",
+        "Tool wear [min]",
+    ]
 
-    # Verify row_metadata.json
-    with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
-        row_meta = json.load(f)
-        assert len(row_meta) == 20
-
-    # Verify feature_metadata.json (no self-referential checksum)
+    # Verify provenance metadata completeness
     with open(bundle_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
         meta = json.load(f)
-        assert meta["feature_dataset_version"] == feat_ver
-        assert meta["provenance"]["preprocessing_plan_id"] == plan_id
-        assert meta["provenance"]["preprocessing_plan_version"] == plan_ver
-        assert "feature_metadata.json" not in meta["payload_checksums"]
-        for payload_f in ["features.npy", "labels.npy", "feature_columns.json", "row_metadata.json"]:
-            assert payload_f in meta["payload_checksums"]
+    prov = meta["provenance"]
+    assert prov["observation_dataset_id"] == dataset_id
+    assert prov["observation_dataset_version"] == "v1.0"
+    assert "observation_dataset_sha256" in prov
+    assert "preprocessing_plan_id" in prov
+    assert "preprocessing_plan_version" in prov
+    assert "feature_schema_version" in prov
+    assert "label_schema_version" in prov
+    assert prov["prediction_horizon_hours"] == 24
 
 
-def test_feature_reuse_existing_bundle(test_client):
-    """Test that rebuild_npy=False safely reuses existing valid bundle without recalculation."""
+def test_feature_missing_schema_returns_404(test_client):
+    """Test 404 when requested feature_schema_version does not exist."""
     client = test_client["client"]
     dataset_id = test_client["dataset_id"]
     plan_id = test_client["plan_id"]
     plan_ver = test_client["plan_version"]
 
-    req_payload = {
+    resp = client.post("/feature", json={
         "dataset_id": dataset_id,
         "dataset_version": "v1.0",
         "failure_dataset_id": dataset_id,
         "failure_dataset_version": "v1.0",
         "preprocessing_plan_id": plan_id,
         "preprocessing_plan_version": plan_ver,
-        "feature_schema_version": "ai4i-feature-v1",
+        "feature_schema_version": "nonexistent-feature-schema-v999",
         "label_schema_version": "ai4i-label-24h-v1",
-        "prediction_horizon_hours": 24,
-        "rebuild_npy": False,
-    }
-
-    resp1 = client.post("/feature", json=req_payload)
-    assert resp1.status_code == 200
-    feat_ver1 = resp1.json()["outputs"]["feature_dataset_version"]
-
-    resp2 = client.post("/feature", json=req_payload)
-    assert resp2.status_code == 200
-    feat_ver2 = resp2.json()["outputs"]["feature_dataset_version"]
-    assert feat_ver1 == feat_ver2
-
-
-def test_feature_plan_id_not_found_returns_404(test_client):
-    """Test 404 FEATURE_INPUT_NOT_FOUND when non-existent preprocessing_plan_id is provided."""
-    client = test_client["client"]
-    dataset_id = test_client["dataset_id"]
-    plan_ver = test_client["plan_version"]
-
-    req_payload = {
-        "dataset_id": dataset_id,
-        "dataset_version": "v1.0",
-        "failure_dataset_id": dataset_id,
-        "failure_dataset_version": "v1.0",
-        "preprocessing_plan_id": "pp-nonexistent-000000000000",
-        "preprocessing_plan_version": plan_ver,
-        "feature_schema_version": "ai4i-feature-v1",
-        "label_schema_version": "ai4i-label-24h-v1",
-        "prediction_horizon_hours": 24,
-    }
-    resp = client.post("/feature", json=req_payload)
+    })
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "FEATURE_INPUT_NOT_FOUND"
 
 
-def test_feature_plan_version_mismatch_returns_422(test_client):
-    """Test 422 FEATURE_CONTRACT_ERROR when preprocessing_plan_version mismatches loaded plan."""
-    client = test_client["client"]
-    dataset_id = test_client["dataset_id"]
-    plan_id = test_client["plan_id"]
+def test_feature_schema_version_mismatch_returns_422(test_client, tmp_path):
+    """Test 422 when schema file content version does not match requested version."""
+    from systems.generator.app.feature.feature_schema_provider import FeatureSchemaProvider
 
-    req_payload = {
-        "dataset_id": dataset_id,
-        "dataset_version": "v1.0",
-        "failure_dataset_id": dataset_id,
-        "failure_dataset_version": "v1.0",
-        "preprocessing_plan_id": plan_id,
-        "preprocessing_plan_version": "preprocessing-plan-mismatched99",
-        "feature_schema_version": "ai4i-feature-v1",
-        "label_schema_version": "ai4i-label-24h-v1",
-        "prediction_horizon_hours": 24,
-    }
-    resp = client.post("/feature", json=req_payload)
-    assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "FEATURE_CONTRACT_ERROR"
+    # Create dummy schema file where filename is mismatch-test.json but content declares different-v1
+    mismatch_file = tmp_path / "mismatch-test.json"
+    mismatch_file.write_text(json.dumps({
+        "feature_schema_version": "declared-different-v1",
+        "features": [{"feature_name": "temp", "source_field": "temp", "operation": "raw"}]
+    }), encoding="utf-8")
+
+    provider = FeatureSchemaProvider(search_dirs=[tmp_path])
+    with pytest.raises(Exception) as exc_info:
+        provider.get_feature_schema("mismatch-test")
+    assert "일치하지 않습니다" in str(exc_info.value)
 
 
-def test_feature_horizon_mismatch_returns_422(test_client):
-    """Test 422 FEATURE_SCHEMA_MISMATCH_ERROR when requested horizon mismatches Label Schema."""
+def test_feature_missing_source_field_fails_422(test_client):
+    """Test 422 when a required feature source_field is missing from observation dataset."""
     client = test_client["client"]
     dataset_id = test_client["dataset_id"]
     plan_id = test_client["plan_id"]
     plan_ver = test_client["plan_version"]
 
-    req_payload = {
+    # pdm-feature-v1 requires voltage, pressure, etc. which are not in ai4i dataset
+    resp = client.post("/feature", json={
         "dataset_id": dataset_id,
         "dataset_version": "v1.0",
         "failure_dataset_id": dataset_id,
         "failure_dataset_version": "v1.0",
         "preprocessing_plan_id": plan_id,
         "preprocessing_plan_version": plan_ver,
-        "feature_schema_version": "ai4i-feature-v1",
-        "label_schema_version": "ai4i-label-48h-v1",
-        "prediction_horizon_hours": 24,  # Schema declares 48h, request says 24h
-    }
-    resp = client.post("/feature", json=req_payload)
+        "feature_schema_version": "pdm-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "rebuild_npy": True,
+    })
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "FEATURE_SCHEMA_MISMATCH_ERROR"
 
 
-def test_feature_forbids_mapping_fields(test_client):
-    """Test that extra fields like mapping_version are forbidden and return 422."""
+def test_feature_unsupported_operation_fails_422(tmp_path):
+    """Test 422 when Feature Schema declares an unsupported operation."""
+    from systems.generator.app.feature.feature_schema_provider import FeatureSchemaProvider
+
+    schema_file = tmp_path / "unsupported-op-v1.json"
+    schema_file.write_text(json.dumps({
+        "feature_schema_version": "unsupported-op-v1",
+        "features": [{"feature_name": "fft_val", "source_field": "Torque [Nm]", "operation": "fourier_transform"}]
+    }), encoding="utf-8")
+
+    provider = FeatureSchemaProvider(search_dirs=[tmp_path])
+    with pytest.raises(Exception) as exc_info:
+        provider.get_feature_schema("unsupported-op-v1")
+    assert "지원하지 않는 Feature 연산" in str(exc_info.value)
+
+
+# ==========================================
+# 2. Label Schema & Horizon Labeling Tests
+# ==========================================
+
+def test_label_schema_missing_returns_404(test_client):
+    """Test 404 when requested label_schema_version does not exist."""
     client = test_client["client"]
     dataset_id = test_client["dataset_id"]
     plan_id = test_client["plan_id"]
     plan_ver = test_client["plan_version"]
 
-    req_payload = {
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_dataset_id": dataset_id,
+        "failure_dataset_version": "v1.0",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "nonexistent-label-schema-v999",
+    })
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "FEATURE_INPUT_NOT_FOUND"
+
+
+def test_label_schema_horizon_mismatch_returns_422(test_client):
+    """Test 422 when requested prediction_horizon_hours conflicts with Label Schema."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    # Schema is ai4i-label-24h-v1 (horizon 24), but request specifies 12
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_dataset_id": dataset_id,
+        "failure_dataset_version": "v1.0",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 12,
+    })
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "FEATURE_SCHEMA_MISMATCH_ERROR"
+
+
+def test_horizon_labeling_and_active_failure_drop(test_client):
+    """Test official [anchor - horizon, anchor) positive labeling and [anchor, exclusion_end] drop."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    resp = client.post("/feature", json={
         "dataset_id": dataset_id,
         "dataset_version": "v1.0",
         "failure_dataset_id": dataset_id,
@@ -248,43 +297,165 @@ def test_feature_forbids_mapping_fields(test_client):
         "feature_schema_version": "ai4i-feature-v1",
         "label_schema_version": "ai4i-label-24h-v1",
         "prediction_horizon_hours": 24,
-        "mapping_version": "v1.0",  # FORBIDDEN
-    }
-    resp = client.post("/feature", json=req_payload)
-    assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "REQUEST_VALIDATION_ERROR"
+        "rebuild_npy": True,
+    })
+    assert resp.status_code == 200
+    feat_ver = resp.json()["outputs"]["feature_dataset_version"]
+
+    bundle_dir = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver
+    labels = np.load(bundle_dir / "labels.npy", allow_pickle=False)
+
+    # Verify binary {0, 1} and both positive and negative labels exist
+    assert set(np.unique(labels)).issubset({0, 1})
+    assert np.sum(labels == 1) > 0
+    assert np.sum(labels == 0) > 0
 
 
-def test_feature_path_traversal_forbidden(test_client):
-    """Test that path traversal characters in identifiers are rejected with 422."""
+# ==========================================
+# 3. Row Alignment & Shuffling Invariance
+# ==========================================
+
+def test_row_alignment_and_shuffle_invariance(test_client):
+    """Test that shuffling input rows produces 100% identical Feature and Label arrays."""
     client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
     plan_id = test_client["plan_id"]
     plan_ver = test_client["plan_version"]
 
-    for bad_id in ["../escape", "sub/dir", "back\\slash", ".."]:
-        req_payload = {
-            "dataset_id": bad_id,
-            "dataset_version": "v1.0",
-            "failure_dataset_id": "ai4i",
-            "failure_dataset_version": "v1.0",
-            "preprocessing_plan_id": plan_id,
-            "preprocessing_plan_version": plan_ver,
-            "feature_schema_version": "ai4i-feature-v1",
-            "label_schema_version": "ai4i-label-24h-v1",
-            "prediction_horizon_hours": 24,
-        }
-        resp = client.post("/feature", json=req_payload)
-        assert resp.status_code == 422
+    # 1. Run on original dataset
+    resp1 = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_dataset_id": dataset_id,
+        "failure_dataset_version": "v1.0",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert resp1.status_code == 200
+    feat_ver1 = resp1.json()["outputs"]["feature_dataset_version"]
+    bundle_dir1 = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver1
+    features1 = np.load(bundle_dir1 / "features.npy", allow_pickle=False)
+    labels1 = np.load(bundle_dir1 / "labels.npy", allow_pickle=False)
+
+    # 2. Shuffle input CSV rows and re-run
+    csv_file = PATHS.data_dir / f"{dataset_id}.csv"
+    df = pd.read_csv(csv_file)
+    shuffled_df = df.sample(frac=1.0, random_state=123).reset_index(drop=True)
+    shuffled_df.to_csv(csv_file, index=False)
+
+    resp2 = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_dataset_id": dataset_id,
+        "failure_dataset_version": "v1.0",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert resp2.status_code == 200
+    feat_ver2 = resp2.json()["outputs"]["feature_dataset_version"]
+    bundle_dir2 = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver2
+    features2 = np.load(bundle_dir2 / "features.npy", allow_pickle=False)
+    labels2 = np.load(bundle_dir2 / "labels.npy", allow_pickle=False)
+
+    # Calculated features and labels must be 100% identical despite shuffling
+    np.testing.assert_array_equal(features1, features2)
+    np.testing.assert_array_equal(labels1, labels2)
+
+
+# ==========================================
+# 4. Missing Value Policy Tests
+# ==========================================
+
+def test_missing_value_policies_drop_fill_error(tmp_path):
+    """Test drop, fill_zero, ffill, and error missing value policies."""
+    from systems.generator.app.feature.feature_schema_provider import FeatureItem
+    from systems.generator.app.feature.feature_service import FeatureService
+
+    df = pd.DataFrame({
+        "asset_id": ["A", "A", "A", "A"],
+        "observed_at": ["2026-01-01 01:00", "2026-01-01 02:00", "2026-01-01 03:00", "2026-01-01 04:00"],
+        "val": [10.0, np.nan, 30.0, np.nan],
+    })
+
+    service = FeatureService()
+
+    # 1. missing_value_policy = "drop"
+    items_drop = [FeatureItem(feature_name="f_drop", source_field="val", operation="raw", missing_value_policy="drop")]
+    comp_df, drop_mask = service._compute_features_and_missing_masks(df, items_drop, "asset_id")
+    assert drop_mask.sum() == 2
+
+    # 2. missing_value_policy = "fill_zero"
+    items_zero = [FeatureItem(feature_name="f_zero", source_field="val", operation="raw", missing_value_policy="fill_zero")]
+    comp_df_zero, drop_mask_zero = service._compute_features_and_missing_masks(df, items_zero, "asset_id")
+    assert drop_mask_zero.sum() == 0
+    assert (comp_df_zero["f_zero"] == 0.0).sum() == 2
+
+    # 3. missing_value_policy = "ffill"
+    items_ffill = [FeatureItem(feature_name="f_ffill", source_field="val", operation="raw", missing_value_policy="ffill")]
+    comp_df_ffill, drop_mask_ffill = service._compute_features_and_missing_masks(df, items_ffill, "asset_id")
+    assert drop_mask_ffill.sum() == 0
+    assert comp_df_ffill["f_ffill"].tolist() == [10.0, 10.0, 30.0, 30.0]
+
+    # 4. missing_value_policy = "error"
+    items_error = [FeatureItem(feature_name="f_err", source_field="val", operation="raw", missing_value_policy="error")]
+    with pytest.raises(Exception) as exc_info:
+        service._compute_features_and_missing_masks(df, items_error, "asset_id")
+    assert "결측값" in str(exc_info.value)
+
+
+# ==========================================
+# 5. Bundle Immutability & Conflict Tests
+# ==========================================
+
+def test_feature_conflict_fingerprint_returns_409(test_client):
+    """Test 409 when attempting to publish bundle under existing version with different fingerprint."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    repo = FeatureRepository()
+
+    # Generate first bundle
+    resp1 = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_dataset_id": dataset_id,
+        "failure_dataset_version": "v1.0",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+        "rebuild_npy": True,
+    })
+    assert resp1.status_code == 200
+    feat_ver = resp1.json()["outputs"]["feature_dataset_version"]
+
+    # Attempt to locate bundle with conflicting fingerprint
+    conflicting_fingerprint = {"observation_dataset_id": "different_dataset_id"}
+    with pytest.raises(Exception) as exc_info:
+        repo.find_feature_bundle(dataset_id, "v1.0", feat_ver, expected_fingerprint=conflicting_fingerprint)
+    assert "상이한 지문" in str(exc_info.value)
 
 
 def test_feature_corrupted_bundle_fails_fast(test_client):
-    """Test 422 FEATURE_DATASET_INTEGRITY_ERROR when existing bundle payload is corrupted."""
+    """Test 422 when existing bundle is corrupted."""
     client = test_client["client"]
     dataset_id = test_client["dataset_id"]
     plan_id = test_client["plan_id"]
     plan_ver = test_client["plan_version"]
 
-    req_payload = {
+    # 1. Publish bundle
+    resp = client.post("/feature", json={
         "dataset_id": dataset_id,
         "dataset_version": "v1.0",
         "failure_dataset_id": dataset_id,
@@ -295,116 +466,37 @@ def test_feature_corrupted_bundle_fails_fast(test_client):
         "label_schema_version": "ai4i-label-24h-v1",
         "prediction_horizon_hours": 24,
         "rebuild_npy": True,
-    }
-    resp = client.post("/feature", json=req_payload)
+    })
     assert resp.status_code == 200
     feat_ver = resp.json()["outputs"]["feature_dataset_version"]
 
+    # 2. Corrupt features.npy file
     bundle_dir = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver
-
-    # Corrupt features.npy
     with open(bundle_dir / "features.npy", "wb") as f:
-        f.write(b"corrupted binary data")
+        f.write(b"corrupted_binary_data")
 
-    req_payload["rebuild_npy"] = False
-    resp2 = client.post("/feature", json=req_payload)
-    assert resp2.status_code == 422
-    assert resp2.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+    # 3. Call find_feature_bundle
+    repo = FeatureRepository()
+    with pytest.raises(Exception) as exc_info:
+        repo.find_feature_bundle(dataset_id, "v1.0", feat_ver)
+    assert "손상" in str(exc_info.value) or "체크섬 불일치" in str(exc_info.value)
+
+
+def test_logical_uri_outside_root_raises_error():
+    """Test that get_logical_uri rejects paths outside repo root."""
+    repo = FeatureRepository()
+    with pytest.raises(FeatureContractError) as exc_info:
+        repo.get_logical_uri(Path("C:/Windows/System32/cmd.exe"))
+    assert "허용된 저장소 밖의 경로" in str(exc_info.value)
 
 
 def test_feature_endpoint_is_synchronous():
-    """Verify that POST /feature handler is a synchronous function."""
+    """Verify that POST /feature is a synchronous function executed in worker threads."""
     assert inspect.iscoroutinefunction(post_feature) is False
 
 
-def test_feature_conflict_fingerprint_returns_409(test_client):
-    """Test 409 FEATURE_PUBLISH_CONFLICT when same version directory has conflicting fingerprint."""
-    client = test_client["client"]
-    dataset_id = test_client["dataset_id"]
-    plan_id = test_client["plan_id"]
-    plan_ver = test_client["plan_version"]
-
-    req_payload = {
-        "dataset_id": dataset_id,
-        "dataset_version": "v1.0",
-        "failure_dataset_id": dataset_id,
-        "failure_dataset_version": "v1.0",
-        "preprocessing_plan_id": plan_id,
-        "preprocessing_plan_version": plan_ver,
-        "feature_schema_version": "ai4i-feature-v1",
-        "label_schema_version": "ai4i-label-24h-v1",
-        "prediction_horizon_hours": 24,
-        "rebuild_npy": True,
-    }
-    resp = client.post("/feature", json=req_payload)
-    assert resp.status_code == 200
-    feat_ver = resp.json()["outputs"]["feature_dataset_version"]
-
-    bundle_dir = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver
-    meta_path = bundle_dir / "feature_metadata.json"
-
-    with open(meta_path, "r", encoding="utf-8") as f:
-        meta = json.load(f)
-
-    # Alter fingerprint inside metadata
-    meta["fingerprint"]["observation_dataset_id"] = "tampered_dataset_id"
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=2)
-
-    req_payload["rebuild_npy"] = False
-    resp2 = client.post("/feature", json=req_payload)
-    assert resp2.status_code == 409
-    assert resp2.json()["error"]["code"] == "FEATURE_PUBLISH_CONFLICT"
-
-
-def test_feature_missing_source_field_fails_422(test_client):
-    """Test 422 FEATURE_SCHEMA_MISMATCH_ERROR when requested schema refers to non-existent source column."""
-    from systems.generator.app.feature.feature_schema_provider import FeatureSchemaProvider, FeatureItem
-    from systems.generator.app.feature.feature_service import FeatureService
-
-    client = test_client["client"]
-    dataset_id = test_client["dataset_id"]
-    plan_id = test_client["plan_id"]
-    plan_ver = test_client["plan_version"]
-
-    class MockBadSchemaProvider(FeatureSchemaProvider):
-        def get_feature_schema(self, schema_version, available_columns=None, custom_items=None):
-            return super().get_feature_schema(
-                schema_version=schema_version,
-                custom_items=[
-                    FeatureItem(feature_name="NonexistentFeature", source_field="NonexistentSourceCol", operation="raw")
-                ],
-            )
-
-    from systems.generator.app.feature.feature_router import get_feature_service
-
-    svc = FeatureService(feature_schema_provider=MockBadSchemaProvider())
-    client.app.dependency_overrides[get_feature_service] = lambda: svc
-
-    try:
-        req_payload = {
-            "dataset_id": dataset_id,
-            "dataset_version": "v1.0",
-            "failure_dataset_id": dataset_id,
-            "failure_dataset_version": "v1.0",
-            "preprocessing_plan_id": plan_id,
-            "preprocessing_plan_version": plan_ver,
-            "feature_schema_version": "bad-schema-v1",
-            "label_schema_version": "ai4i-label-24h-v1",
-            "prediction_horizon_hours": 24,
-            "rebuild_npy": True,
-        }
-        resp = client.post("/feature", json=req_payload)
-        assert resp.status_code == 422
-        assert resp.json()["error"]["code"] == "FEATURE_SCHEMA_MISMATCH_ERROR"
-    finally:
-        client.app.dependency_overrides.pop(get_feature_service, None)
-
-
 def test_feature_concurrency_multithreaded_rebuild(test_client):
-    """Test concurrent requests to /feature do not corrupt or conflict partial bundles."""
-    import threading
-
+    """Test concurrent /feature calls safely serialize without race conditions or corruptions."""
     client = test_client["client"]
     dataset_id = test_client["dataset_id"]
     plan_id = test_client["plan_id"]

@@ -3,24 +3,25 @@
 from __future__ import annotations
 
 import json
-import uuid
-import shutil
 import logging
+import shutil
 import threading
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 
-from systems.generator.generator_config import PATHS
-from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.app.feature.feature_exception import (
+    FeatureContractError,
     FeatureDatasetIntegrityError,
     FeaturePublishConflictError,
     FeaturePublishError,
-    FeatureContractError,
 )
+from systems.generator.file_integrity import compute_file_sha256
+from systems.generator.generator_config import PATHS
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,18 @@ class PublishedFeatureBundle:
     features_uri: str
     labels_uri: str
     metadata_uri: str
+    bundle_dir: Path
+
+
+@dataclass(frozen=True)
+class LoadedFeatureBundle:
+    """Loaded data container for model training consumption."""
+    feature_dataset_version: str
+    features: np.ndarray
+    labels: np.ndarray
+    feature_columns: list[str]
+    row_metadata: list[dict[str, Any]]
+    feature_metadata: dict[str, Any]
     bundle_dir: Path
 
 
@@ -70,17 +83,24 @@ class FeatureRepository:
         clean_id = dataset_id.strip()
         clean_ver = dataset_version.strip()
         clean_feat_ver = feature_dataset_version.strip()
-        if ".." in clean_id or ".." in clean_ver or ".." in clean_feat_ver:
-            raise FeatureContractError("Path traversal 문자가 감지되었습니다.")
+        if ".." in clean_id or ".." in clean_ver or ".." in clean_feat_ver or "/" in clean_id or "\\" in clean_id:
+            raise FeatureContractError("Path traversal 또는 안전하지 않은 경로 문자가 감지되었습니다.")
         return self.base_dir / clean_id / clean_ver / clean_feat_ver
 
-    def get_logical_uri(self, path: Path) -> str:
-        """Convert local filesystem path to relative URI with forward slashes."""
+    def get_logical_uri(self, path: Path | None) -> str:
+        """Convert local filesystem path to relative URI with forward slashes.
+
+        Raises FeatureContractError if path is outside project repository root.
+        """
+        if path is None:
+            return ""
+        resolved_path = path.resolve()
+        cwd = Path.cwd().resolve()
         try:
-            rel = path.relative_to(Path.cwd())
+            rel = resolved_path.relative_to(cwd)
             return str(rel).replace("\\", "/")
         except ValueError:
-            return str(path).replace("\\", "/")
+            raise FeatureContractError(f"허용된 저장소 밖의 경로입니다: {path}")
 
     def find_feature_bundle(
         self,
@@ -99,7 +119,7 @@ class FeatureRepository:
             fpath = bundle_dir / fname
             if not fpath.exists() or fpath.stat().st_size == 0:
                 raise FeatureDatasetIntegrityError(
-                    f"Feature Dataset Bundle이 손상되었습니다. 필수 파일 누락: {fname}"
+                    f"Feature Dataset Bundle이 손상되었습니다. 필수 파일 누락 또는 0바이트: {fname}"
                 )
 
         # 2. Read feature_metadata.json
@@ -110,7 +130,14 @@ class FeatureRepository:
         except Exception as exc:
             raise FeatureDatasetIntegrityError(f"feature_metadata.json 파싱 실패: {exc}") from exc
 
-        # 3. Verify fingerprint match (if expected_fingerprint is provided)
+        # 3. Verify metadata declared version
+        declared_ver = meta.get("feature_dataset_version")
+        if declared_ver != feature_dataset_version:
+            raise FeatureDatasetIntegrityError(
+                f"feature_metadata.json의 버전('{declared_ver}')과 디렉터리 버전('{feature_dataset_version}')이 일치하지 않습니다."
+            )
+
+        # 4. Verify fingerprint match (if expected_fingerprint is provided)
         if expected_fingerprint is not None:
             saved_fingerprint = meta.get("fingerprint", {})
             if saved_fingerprint != expected_fingerprint:
@@ -122,7 +149,7 @@ class FeatureRepository:
                     f"Feature Dataset Version '{feature_dataset_version}'에 상이한 지문(fingerprint)이 이미 존재합니다."
                 )
 
-        # 4. Verify payload checksums against declared metadata
+        # 5. Verify payload checksums against declared metadata
         payload_checksums = meta.get("payload_checksums", {})
         for fname in ["features.npy", "labels.npy", "feature_columns.json", "row_metadata.json"]:
             expected_sha = payload_checksums.get(fname)
@@ -136,7 +163,7 @@ class FeatureRepository:
                     f"Feature Dataset Bundle 파일 체크섬 불일치 ({fname}): 기대값={expected_sha}, 실제={actual_sha}"
                 )
 
-        # 5. Verify numpy array integrity (finite, dimensions, row count alignment)
+        # 6. Verify numpy array integrity (finite, dimensions, row count alignment, label values)
         try:
             features = np.load(bundle_dir / "features.npy", allow_pickle=False)
             labels = np.load(bundle_dir / "labels.npy", allow_pickle=False)
@@ -151,6 +178,9 @@ class FeatureRepository:
 
         if labels.ndim != 1:
             raise FeatureDatasetIntegrityError(f"labels.npy는 1차원 배열이어야 합니다 (실제 차원: {labels.ndim})")
+
+        if not np.isin(labels, [0, 1]).all():
+            raise FeatureDatasetIntegrityError("labels.npy의 값은 {0, 1} 이진 레이블이어야 합니다.")
 
         row_count = int(features.shape[0])
         feature_count = int(features.shape[1])
@@ -167,6 +197,16 @@ class FeatureRepository:
                     f"row_metadata.json 항목 수({len(row_meta)})와 Feature 행 수({row_count})가 일치하지 않습니다."
                 )
 
+        with open(bundle_dir / "feature_columns.json", "r", encoding="utf-8") as f:
+            col_data = json.load(f)
+            cols = col_data.get("columns", [])
+            if len(cols) != feature_count:
+                raise FeatureDatasetIntegrityError(
+                    f"feature_columns.json 열 수({len(cols)})와 Feature 열 수({feature_count})가 일치하지 않습니다."
+                )
+            if len(set(cols)) != len(cols):
+                raise FeatureDatasetIntegrityError("feature_columns.json에 중복된 컬럼명이 존재합니다.")
+
         return PublishedFeatureBundle(
             feature_dataset_version=feature_dataset_version,
             row_count=row_count,
@@ -174,6 +214,41 @@ class FeatureRepository:
             features_uri=self.get_logical_uri(bundle_dir / "features.npy"),
             labels_uri=self.get_logical_uri(bundle_dir / "labels.npy"),
             metadata_uri=self.get_logical_uri(bundle_dir / "feature_metadata.json"),
+            bundle_dir=bundle_dir,
+        )
+
+    def load_bundle_data(
+        self,
+        dataset_id: str,
+        dataset_version: str,
+        feature_dataset_version: str,
+    ) -> LoadedFeatureBundle | None:
+        """Load and return all bundle files into memory for downstream training consumption."""
+        bundle = self.find_feature_bundle(dataset_id, dataset_version, feature_dataset_version)
+        if bundle is None:
+            return None
+
+        bundle_dir = bundle.bundle_dir
+        features = np.load(bundle_dir / "features.npy", allow_pickle=False)
+        labels = np.load(bundle_dir / "labels.npy", allow_pickle=False)
+
+        with open(bundle_dir / "feature_columns.json", "r", encoding="utf-8") as f:
+            col_data = json.load(f)
+            feature_columns = col_data.get("columns", [])
+
+        with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
+            row_metadata = json.load(f)
+
+        with open(bundle_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
+            feature_metadata = json.load(f)
+
+        return LoadedFeatureBundle(
+            feature_dataset_version=feature_dataset_version,
+            features=features,
+            labels=labels,
+            feature_columns=feature_columns,
+            row_metadata=row_metadata,
+            feature_metadata=feature_metadata,
             bundle_dir=bundle_dir,
         )
 
@@ -195,12 +270,33 @@ class FeatureRepository:
             bundle_dir = self.get_bundle_dir(dataset_id, dataset_version, feature_dataset_version)
             bundle_dir.parent.mkdir(parents=True, exist_ok=True)
 
+            # Check if bundle already exists — NEVER overwrite or delete existing bundles!
+            if bundle_dir.exists():
+                existing = self.find_feature_bundle(
+                    dataset_id=dataset_id,
+                    dataset_version=dataset_version,
+                    feature_dataset_version=feature_dataset_version,
+                    expected_fingerprint=fingerprint,
+                )
+                if existing is not None:
+                    logger.info(f"[FeatureRepository] Existing valid immutable bundle found at {bundle_dir}, reusing.")
+                    return existing
+
             # Pre-validation of arrays
             if not isinstance(features, np.ndarray) or not isinstance(labels, np.ndarray):
                 raise FeaturePublishError("Features 및 Labels는 numpy ndarray여야 합니다.")
 
+            if features.ndim != 2:
+                raise FeatureDatasetIntegrityError(f"features는 2차원이어야 합니다: ndim={features.ndim}")
+
+            if labels.ndim != 1:
+                raise FeatureDatasetIntegrityError(f"labels는 1차원이어야 합니다: ndim={labels.ndim}")
+
             if not np.isfinite(features).all():
                 raise FeatureDatasetIntegrityError("생성된 features.npy에 NaN 또는 Inf가 포함되어 발행이 중단되었습니다.")
+
+            if not np.isin(labels, [0, 1]).all():
+                raise FeatureDatasetIntegrityError("생성된 labels.npy의 값은 {0, 1} 이진 레이블이어야 합니다.")
 
             row_count = int(features.shape[0])
             feature_count = int(features.shape[1])
@@ -210,6 +306,9 @@ class FeatureRepository:
 
             if len(feature_columns) != feature_count:
                 raise FeatureDatasetIntegrityError("feature_columns 수와 Feature 열 수 불일치")
+
+            if len(set(feature_columns)) != len(feature_columns):
+                raise FeatureDatasetIntegrityError("feature_columns에 중복된 컬럼명이 존재합니다.")
 
             # Create temporary staging directory
             temp_dir = bundle_dir.parent / f".tmp_{uuid.uuid4().hex}_{feature_dataset_version}"
@@ -274,9 +373,14 @@ class FeatureRepository:
                 with open(meta_path, "w", encoding="utf-8") as f:
                     json.dump(full_metadata, f, ensure_ascii=False, indent=2)
 
-                # Atomic replace / rename
+                # Atomic rename staging directory to final target bundle_dir
                 if bundle_dir.exists():
-                    shutil.rmtree(bundle_dir)
+                    # Double-check: if already created concurrently, reuse and discard staging
+                    existing = self.find_feature_bundle(dataset_id, dataset_version, feature_dataset_version, fingerprint)
+                    if existing is not None:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        return existing
+
                 temp_dir.replace(bundle_dir)
                 logger.info(f"[FeatureRepository] Atomically published Feature Bundle to {bundle_dir}")
 
