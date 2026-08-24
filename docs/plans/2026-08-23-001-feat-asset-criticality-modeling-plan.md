@@ -1,8 +1,15 @@
+---
+title: "Asset Criticality Modeling Implementation Plan"
+type: feat
+status: draft
+date: 2026-08-23
+---
+
 # Asset Criticality Modeling Implementation Plan
 
-**Goal:** `AssetDetailViewModel`에서 설비 중요도를 예측 위험도와 분리된 제조 운영 맥락으로 모델링하고, 결측/출처/우선순위 의미를 schema와 composer 테스트로 고정한다.
+**Goal:** `AssetDetailViewModel`에서 설비 중요도를 예측 위험도와 분리된 제조 운영 맥락으로 모델링하고, 결측/출처/검토 우선순위 의미를 schema와 composer 테스트로 고정한다.
 
-**Architecture:** 현재 규모에서는 별도 graph DB나 full digital twin을 만들지 않는다. `asset.criticality`를 설비 마스터/프로젝트 운영 맥락에서 온 영향도 필드로 두고, `risk.status_grade`는 모델 위험도, `priority`는 risk, criticality, history/context를 조합한 표시/업무 우선순위 파생값으로 분리한다. 온톨로지 관계는 문서와 typed reference 수준으로 고정하고, 운영/정비 맥락은 SQL/RDB 기반 source와 `AssetDetailViewModel` composition boundary에서 우선 결합한다. PR #107의 MVP `AssetDetailViewModel` API/E2E 연결을 기준 구현으로 삼되, 운영 read-port/PostgreSQL 연결은 후속으로 둔다. 이번 후속 구현 범위에는 schema/composer/API 호환성뿐 아니라 Objects/Operations/Report의 신규 context/priority 소비와 중복 UI 정리까지 포함한다. Microsoft Fabric/Eventhouse/KQL 패턴, TimescaleDB/ClickHouse/DuckDB류 시계열 분석 비교는 후순위 검증 항목으로만 남긴다.
+**Architecture:** 현재 규모에서는 별도 graph DB나 full digital twin을 만들지 않는다. `asset.criticality`를 설비 마스터/프로젝트 운영 맥락에서 온 영향도 필드로 두고, `risk.status_grade`는 모델 위험도, `review_priority`는 risk, criticality, history/context를 조합한 표시/검토 우선순위 파생값으로 분리한다. `review_priority`는 WorkOrder priority, 권한, action state가 아니다. 온톨로지 관계는 문서와 typed reference 수준으로 고정하고, 운영/정비 맥락은 SQL/RDB 기반 source와 `AssetDetailViewModel` composition boundary에서 우선 결합한다. PR #107의 MVP `AssetDetailViewModel` API/E2E 연결을 기준 구현으로 삼되, 운영 read-port/PostgreSQL 연결은 후속으로 둔다. 이번 후속 구현 범위에는 schema/composer/API 호환성뿐 아니라 Objects/Operations/Report의 신규 context/review-priority 소비와 중복 UI 정리까지 포함한다. Microsoft Fabric/Eventhouse/KQL 패턴, TimescaleDB/ClickHouse/DuckDB류 시계열 분석 비교는 후순위 검증 항목으로만 남긴다.
 
 **Tech Stack:** Python 3, pytest, jsonschema, existing `systems/backend/app/mvp/asset_detail_view_model.py` composer, existing `systems/backend/app/diagnosis/recommendation_policy.py` policy contract, React/TypeScript MVP frontend, Vitest/Playwright.
 
@@ -12,13 +19,13 @@
 
 예지보전 리포트에서는 같은 시점의 같은 설비 판단을 설명하는 snapshot 정합성이 중요하다.
 이번 모델링 판단의 기준점은 "데이터를 많이 보여주는가"가 아니라 "리포트가 보여주는
-risk, criticality, evidence, history가 같은 판단 시점과 같은 source boundary에서 온
+risk, criticality, evidence, context가 같은 판단 시점과 같은 source boundary에서 온
 것이라고 말할 수 있는가"다.
 
 ### Problem Baseline
 
 현재 `AssetDetailViewModel`은 Product Result Artifact, Evidence Payload,
-Observation series, runtime prediction history, Activity/Maintenance source를 한 화면에
+Observation series, runtime prediction history, Activity/Maintenance context source를 한 화면에
 병합해야 한다. 이 데이터들은 owner와 freshness가 서로 다르다. 따라서 프론트엔드가 여러
 API를 호출해 직접 조립하면 다음 판단이 화면별로 갈라질 수 있다.
 
@@ -44,7 +51,7 @@ PR100 검토에서 드러난 실제 현상은 단순 schema typo가 아니라 pr
 아키텍처 리뷰 관점에서 원인을 여러 기준으로 다시 본 결과, 핵심 원인은 ViewModel을 단순 편의
 응답 DTO로 본 데 있다. 이 객체는 화면 payload 이전에 projection contract다.
 
-- Data modeling 기준: producer fact, asset context, derived priority, data quality state가 분리되지 않으면 위험도와 운영 영향도가 섞인다.
+- Data modeling 기준: producer fact, asset context, derived review priority, data quality state가 분리되지 않으면 위험도와 운영 영향도가 섞인다.
 - Manufacturing 기준: 중요도는 설비 고장 확률이 아니라 라인 중단, 품질 손실, 안전/환경, 복구 난이도 같은 운영 영향이다.
 - Ontology 기준: `Asset`, `Observation`, `ProductResultArtifact`, `EvidencePackage`, `MaintenanceRecord`의 관계는 보존되어야 하며, relation을 잃은 화면 조립값은 provenance가 약하다.
 - API contract 기준: consumer가 raw source를 직접 읽거나 fallback을 합성하면 source truth가 화면 레이어로 이동한다.
@@ -56,7 +63,7 @@ PR100 검토에서 드러난 실제 현상은 단순 schema typo가 아니라 pr
 |---|---|---|---|
 | Frontend composes multiple APIs | UI에서 빠르게 조립 가능 | snapshot 정합성, gap, freshness, criticality 해석이 화면별로 분산됨 | Lower |
 | Expand generic `/objects`, `/observations`, `/maintenance` APIs first | 재사용 가능한 product API가 됨 | 리포트 전용 판단 시점과 evidence boundary를 보장하기 어려움 | Lower for this implementation scope |
-| Extend Event Evidence only | 변경량이 작음 | 시계열, runtime history, maintenance history를 단일 Evidence로 설명할 수 없음 | Lower |
+| Extend Event Evidence only | 변경량이 작음 | 시계열, runtime history, maintenance context를 단일 Evidence로 설명할 수 없음 | Lower |
 | Build ontology/graph layer first | 장기적으로 관계 질의가 유리함 | 현재 규모 대비 과하고 PR95/100의 즉시 문제를 해결하지 못함 | Defer |
 | Add Microsoft Fabric/Eventhouse/KQL-style time-series platform | 예지보전 reference architecture와 시계열 분석 패턴이 명확함 | 현재 stack 밖의 vendor/runtime 의존성이 생기고, 이번 구현 범위의 contract 문제보다 인프라 검증이 커짐 | Defer as future validation |
 | Benchmark TimescaleDB/ClickHouse/DuckDB now | 시계열 저장소 선택 근거를 만들 수 있음 | 데이터 생성/적재/쿼리/운영 비교가 별도 프로젝트가 되며 MVP report contract 완성에 직접 필요하지 않음 | Backlog |
@@ -74,7 +81,7 @@ PR100 검토에서 드러난 실제 현상은 단순 schema typo가 아니라 pr
 risk = 모델이 판단한 고장 가능성/등급
 criticality = 제조 운영에서의 설비 영향도
 history/context = 정비 이력, 운영 조건, 반복 이벤트, 기존 작업 상태
-priority = risk, criticality, history/context를 조합한 workflow/display 파생값
+review_priority = risk, criticality, history/context를 조합한 review/display 파생값
 ```
 
 ### Product Direction Note
@@ -85,7 +92,7 @@ priority = risk, criticality, history/context를 조합한 workflow/display 파�
 점이다.
 
 따라서 이번 계획은 UI 기능을 늘리는 방향이 아니라, backend-composed ViewModel이
-risk, evidence, operational context, available actions를 정합성 있게 조립하고, 화면은
+risk, evidence, operational context, review priority, available actions를 정합성 있게 조립하고, 화면은
 이를 검토, 승인, 기록하는 흐름으로 단순화하는 방향을 따른다. 이 인사이트는 표준이나
 외부 레퍼런스를 대체하는 근거가 아니라, 표준 기반 evidence/action contract를 사용자가
 소화할 수 있는 제품 형태로 바꾸기 위한 디자인 판단의 배경이다.
@@ -98,7 +105,7 @@ Product Result Artifact, Evidence Payload, Recommendation Policy, Closed-loop �
 `AssetDetailViewModel` contract test를 재사용할 수 있다.
 
 Design judgment:
-- Use now: `AssetDetailViewModel`에 `asset.criticality`, `maintenance_history`/`equipment_history`, `operation_context`, `priority`의 의미를 명시하고 unavailable source는 gap/warning으로 표현한다.
+- Use now: `AssetDetailViewModel`에 `asset.criticality`, `maintenance_context`/`equipment_history`, `operation_context`, `review_priority`의 의미를 명시하고 unavailable source는 gap/warning으로 표현한다.
 - Use now: ontology는 graph database가 아니라 `source_ref`, `evidence_field_id`, `owner_domain`, relation name 같은 typed reference로 보존한다. 이 값들은 각각 원천 데이터 참조, 근거 필드 식별자, 데이터 책임 도메인, 관계 이름을 뜻한다.
 - Defer: Microsoft Fabric/Eventhouse/KQL은 vendor-neutral requirement source로만 사용한다. 즉 "최근 30일 반복 이상", "정비 후 위험 재상승", "고부하 구간 warning/critical" 같은 분석 패턴을 도출하되, KQL runtime을 이번 구현 범위의 구현 대상이나 성능 비교군으로 삼지 않는다.
 - Backlog: TimescaleDB, ClickHouse, DuckDB/Parquet, PostgreSQL partition 비교는 실제 시계열 병목이나 대규모 분석 요구가 확인된 뒤 별도 performance spike로 수행한다.
@@ -111,15 +118,21 @@ Reference grounding:
 - Current repository MVP and architecture-review contracts already define the official surface as Overview / Objects / Operations / Event Executive Brief, with Product Result Artifact/Evidence provenance, role-specific workflow, and Backend-computed `available_actions`. This supports improving the existing Object/Action workflow instead of replacing it with a generic graph-first surface.
 
 Current implementation state to verify before execution:
-- PR #107 introduces the MVP `AssetDetailViewModel` API, backend composer, and frontend consumption path. If PR #107 is not merged when implementation starts, branch from PR #107 or wait for merge before changing the same contract files.
+- PR #107 has merged and introduced the MVP `AssetDetailViewModel` API, backend composer, and frontend consumption path. Start implementation from updated `main`, not from the superseded PR #100 direction.
 - PR #100 is superseded by the PR #107 `AssetDetailViewModel` direction. Items from PR #100 review must be rechecked against the latest PR #107/main code before remaining work is kept.
 - Already-addressed items such as `runtime_prediction_history` naming, nullable `evidence_field_id`, data-quality-hold mapping, and freshness unknown handling should be recorded as prerequisites or verification checks, not blindly reimplemented.
 
 Automation framing:
-- The service can automate detection, runtime inference, Evidence generation, report drafting, Recommendation creation, and CBM request candidate creation without an agent workflow.
+- The service can automate detection, replay/runtime inference, Evidence generation, report drafting, Recommendation creation, and CBM request candidate creation without an agent workflow.
 - Human approval remains required for recommendation disposition, WorkOrder approval, MaintenanceAction execution, and shutdown review.
-- Agent workflow is a later coordination layer, not the automation engine. It may summarize review packets, draft checklists, and prepare handoff notes, but it must not own risk grading, priority calculation, authorization, or state transitions.
+- Agent workflow is a later coordination layer, not the automation engine. It may summarize review packets, draft checklists, and prepare handoff notes, but it must not own risk grading, review-priority calculation, authorization, or state transitions.
 - This separation should simplify UI information architecture: automated outputs belong in inspection/summary surfaces, while human decisions belong in governed action surfaces.
+
+Simulation/replay ownership:
+- `simulation_session_id` is owned by the Diagnosis Runtime/replay runtime implemented in the predictive-maintenance runtime path, not by Closed-loop Maintenance.
+- Closed-loop Maintenance may preserve `simulation_session_id` as an opaque correlation reference in `MaintenanceAction` and `maintenance-replay-v1` events after organization/project/workspace scope validation.
+- Event Evidence Projection should not become the source of replay session state. If Maintenance needs `simulation_session_id` from a diagnosis `event_id`, add a separate Diagnosis Runtime query port such as `resolve_replay_session_for_event(source_event_id)`.
+- Use `source_event_id` or `diagnosis_event_id` in the query contract to avoid confusion with closed-loop integration event IDs.
 
 ### Action Path
 
@@ -127,8 +140,8 @@ Automation framing:
 2. `features[].current`와 `features[].series`의 표시/병합/정렬/중복 제거 규칙을 계약과 테스트로 고정한다.
 3. `asset.criticality`, `criticality_basis`, `criticality_source`, source/owner/gap 규칙을 schema/docs에 추가한다.
 4. composer가 criticality와 context를 보존하되, 결측 시 default를 만들지 않도록 한다.
-5. `operation_context`, `maintenance_history`, `priority`를 최소 필드로 추가하고, risk 값을 변경하지 않는 파생값임을 테스트한다.
-6. frontend Objects/Operations/Report가 신규 context/priority를 소비하고, UI-side synthesis와 중복 설명을 제거한다.
+5. `operation_context`, `maintenance_context`, `review_priority`를 최소 필드로 추가하고, risk 값을 변경하지 않는 파생값임을 테스트한다.
+6. frontend Objects/Operations/Report가 신규 context/review-priority를 소비하고, UI-side synthesis와 중복 설명을 제거한다.
 
 ### Result, Lesson, Prevention Notes
 
@@ -162,10 +175,10 @@ architecture evidence.
 In scope:
 - `AssetDetailViewModel` schema에 `asset.criticality` 의미와 출처를 명시한다.
 - 중요도 결측을 임의 기본값으로 채우지 않고 `evidence.gaps[]` 또는 `data_status.warnings[]`로 표현한다.
-- `risk`, `criticality`, `priority`의 의미를 문서에서 분리한다.
+- `risk`, `criticality`, `review_priority`의 의미를 문서에서 분리한다.
 - `features[].current`와 `features[].series`의 관계, trend 표시 병합, 정렬, 중복 제거, baseline 산정 범위를 명시한다.
 - 운영/정비 맥락은 현재 source가 제공하는 범위에서 별도 context로 노출하고, 없으면 unavailable/gap으로 표시한다.
-- Objects/Operations/Report UI가 신규 context/priority를 소비하도록 수정하고, 같은 위험/근거/추천 설명의 중복을 줄인다.
+- Objects/Operations/Report UI가 신규 context/review-priority를 소비하도록 수정하고, 같은 위험/근거/추천 설명의 중복을 줄인다.
 - PR100 코멘트에서 확인된 naming/null/freshness 문제는 최신 PR #107/main 기준 잔존 여부를 재검증한 뒤 필요한 항목만 유지한다.
 
 Out of scope:
@@ -175,6 +188,7 @@ Out of scope:
 - TimescaleDB, ClickHouse, DuckDB/Parquet, PostgreSQL partition 성능 벤치마크.
 - RUL/time-to-failure 예측.
 - 운영 read-port/PostgreSQL 기반 데이터 연결.
+- `event_id` 기준 `simulation_session_id` 역조회 public query 구현.
 - LLM enhancement and agent workflow implementation.
 
 ---
@@ -198,29 +212,29 @@ Default contract:
 `criticality`는 고장 가능성이 아니라 고장 발생 시 운영 영향도다.
 
 - Allowed values: `low`, `medium`, `high`
-- Source: asset/equipment master, project operational context, fixture projection, or explicit read-port field
+- Source: asset/equipment master, project operational context, or explicit read-port field
 - Owner domain: use `equipment` for equipment-master owned values, `project` for project-scoped operational importance, and `unresolved` when ownership is not yet decided
 - Missing behavior: do not default to `medium`
-- Consumer use: recommendation/priority context, not model status replacement
+- Consumer use: recommendation/review-priority context, not model status replacement
 
 Directional contract:
 
 ```text
 risk.status_grade = model/evidence-derived failure risk
 asset.criticality = business/operations impact if the asset fails
-priority = display or workflow ordering derived from risk + criticality
+review_priority = display/review ordering derived from risk + criticality
 ```
 
 ### D2. Start with manual/rule-based criticality
 
-Current scale does not justify an automated importance model. Treat criticality as a manually curated or fixture-projected enum with reason codes.
+Current scale does not justify an automated importance model. Treat criticality as a manually curated or source-projected enum with reason codes.
 
 Minimal fields:
 
 ```text
 criticality: low | medium | high | null
 criticality_basis: string[]
-criticality_source: manual_initial_assessment | equipment_master | project_context | fixture_projection | unknown
+criticality_source: manual_initial_assessment | equipment_master | project_context | unknown
 ```
 
 `criticality_basis` examples:
@@ -238,7 +252,7 @@ Represent the ontology in documentation and stable references first:
 Asset HAS_OBSERVATION Observation
 Observation INPUT_TO ProductResultArtifact
 ProductResultArtifact HAS_EVIDENCE EvidencePackage
-ProductResultArtifact HAS_PRIORITY_CONTEXT AssetCriticality
+ProductResultArtifact HAS_REVIEW_CONTEXT AssetCriticality
 EvidencePackage SUPPORTS Recommendation
 Recommendation MAY_CREATE Decision
 Decision MAY_CREATE FieldTask
@@ -256,16 +270,16 @@ Directional contract:
 
 ```text
 risk.status_grade = model/evidence-derived failure risk
-maintenance_history = maintenance-owned event/work history
+maintenance_context = maintenance-owned event/work summary and open-work context
 operation_context = operations-owned load/runtime/production context
 asset.criticality = business/operations impact if the asset fails
-priority = derived report/workflow ordering from the above contexts
+review_priority = derived review/display ordering from the above contexts
 ```
 
 Initial context fields should be intentionally small:
-- `maintenance_history.last_maintenance_days_ago`
-- `maintenance_history.similar_events_30d`
-- `maintenance_history.open_work_order_exists`
+- `maintenance_context.last_maintenance_days_ago`
+- `maintenance_context.similar_events_30d`
+- `maintenance_context.open_work_order_exists`
 - `operation_context.load_level`
 - `operation_context.runtime_hours_7d`
 - `operation_context.production_impact`
@@ -310,24 +324,24 @@ Keep:
 Break or defer:
 - Graph/traversal-first screen as the core PdM decision surface.
 - Generic ObjectSet exploration when it hides the evidence/action sequence a user needs.
-- UI-side synthesis of `priority`, WorkOrder IDs, recommendation states, or missing context defaults.
+- UI-side synthesis of `review_priority`, WorkOrder IDs, recommendation states, or missing context defaults.
 - Duplicate risk/evidence/recommendation explanations across Objects, Operations, and Report.
 
 Product surface decision:
 
 ```text
-Objects = canonical Asset inspection surface for risk, evidence, context, gaps
+Objects = canonical Asset inspection surface for risk, evidence, context, review priority, gaps
 Operations = governed action surface for Recommendation, available_actions, WorkOrder/CBM request state
 Report = grounded narrative surface using the same Artifact/Evidence/action state
 Ontology Workbench = auxiliary exploration/debugging surface, not the official PdM decision flow
 ```
 
 UI implementation boundary:
-- Objects should show the asset-level risk/evidence/context/priority packet once, with clear gaps.
+- Objects should show the asset-level risk/evidence/context/review-priority packet once, with clear gaps.
 - Operations should show action state and human decision controls, not duplicate full factor explanations.
 - Report should summarize the same ViewModel/action state as narrative and link back to the canonical evidence owner.
-- Frontend must not synthesize `criticality`, `priority`, WorkOrder IDs, Recommendation state, or role/state permissions.
-- Browser/E2E coverage is required for the new context/priority rendering path and for absence of duplicate or contradictory recommendation language.
+- Frontend must not synthesize `criticality`, `review_priority`, WorkOrder IDs, Recommendation state, or role/state permissions.
+- Browser/E2E coverage is required for the new context/review-priority rendering path and for absence of duplicate or contradictory recommendation language.
 
 Simplified user flow:
 
@@ -342,6 +356,43 @@ Screen grouping:
 - Automated outputs: risk detection, top factors, Evidence, gaps, report draft, policy recommendation, CBM request candidate.
 - Human decisions: recommendation disposition, WorkOrder approval, MaintenanceAction start/complete, shutdown review, field notes.
 - Optional agent assistance: role-specific briefing, duplicate WorkOrder summary, checklist draft, handoff summary.
+
+### D7. Replay session correlation stays outside Event Evidence Projection
+
+The maintenance-replay contract requires `simulation_session_id`, but this is
+a runtime correlation reference, not a diagnostic evidence fact.
+
+Current repository history shows the responsibilities are split:
+- PR #48 defined the Runtime Overlay contract.
+- PR #49 added the `maintenance-replay-v1` event schema where
+  `simulation_session_id` is required.
+- PR #9 introduced the replay session runtime path, later migrated through
+  PR #86 and PR #92 into the current Diagnosis Runtime modules.
+
+Design decision:
+- Closed-loop Maintenance owns `MaintenanceAction`, `WorkOrder`,
+  `MaintenanceEvent`, and `maintenance.*` event publication.
+- Diagnosis Runtime owns replay session creation, session lookup, and the
+  meaning of `simulation_session_id`.
+- Runtime Overlay/gen_data owns overlay branch observation generation.
+- Maintenance may store `simulation_session_id` as an opaque correlation
+  reference after scope validation, but must not create, parse, or infer it.
+
+If Maintenance needs the value from a diagnosis result/event selection, add a
+separate Diagnosis Runtime query port instead of extending Event Evidence
+Projection:
+
+```text
+resolve_replay_session_for_event(
+  organization_id,
+  project_id,
+  workspace_id,
+  source_event_id
+) -> simulation_session_id | unavailable
+```
+
+The query must use `source_event_id` or `diagnosis_event_id` naming to avoid
+confusing it with closed-loop integration event IDs.
 
 ---
 
@@ -361,8 +412,10 @@ Screen grouping:
 | Generic graph-first UX | Shows relationships visually | Does not directly solve evidence sufficiency, operational context, or action governance | Defer/avoid as core flow |
 | Agent workflow as automation engine | Could appear advanced | Blurs source-of-truth, authorization, and state-transition ownership | Avoid |
 | Agent workflow as coordination assistant | Improves review packets and handoff quality | Requires stable Evidence/ViewModel/action contracts first | Backlog |
-| Backend-composed priority | Consistent report semantics | Backend owns more projection logic | Use for report ViewModel later |
-| Frontend-derived priority | Quick display change | Duplicates policy and hides missing evidence | Avoid for contract logic |
+| Event Evidence carries `simulation_session_id` | Convenient for Maintenance lookup | Couples evidence projection to mutable replay/session state | Avoid as default |
+| Diagnosis Runtime query resolves replay session by event | Keeps replay state in runtime owner | Requires explicit event-to-session mapping | Use when Maintenance integration needs it |
+| Backend-composed review_priority | Consistent report semantics | Backend owns more projection logic | Use for report ViewModel later |
+| Frontend-derived review_priority | Quick display change | Duplicates policy and hides missing evidence | Avoid for contract logic |
 
 ---
 
@@ -381,8 +434,8 @@ Screen grouping:
 
 - [ ] **Step 1: Start from PR #107 or post-merge main**
 
-If PR #107 is still open, create the implementation branch from `feat/asset-detail-report-viewmodel-api`.
-If PR #107 is merged, create it from updated `main`.
+Create the implementation branch from updated `main` because PR #107 has merged.
+Do not branch from PR #100 or reintroduce PR #100 naming/shape assumptions.
 
 - [ ] **Step 2: Recheck PR #100 review remnants**
 
@@ -440,7 +493,7 @@ GS-007-style case if that scenario remains available in the active fixture set.
 Extend `asset` with:
 - `criticality`: `low | medium | high | null`
 - `criticality_basis`: string array
-- `criticality_source`: `manual_initial_assessment | equipment_master | project_context | fixture_projection | unknown`
+- `criticality_source`: `manual_initial_assessment | equipment_master | project_context | unknown`
 
 - [ ] **Step 2: Add owner/gap rule**
 
@@ -453,11 +506,19 @@ criticality_basis = []
 criticality_source = unknown
 field = asset.criticality
 reason = criticality_missing_or_unresolved
-owner_domain = equipment | project | unresolved
+owner_domain = diagnosis | dataset | equipment | project | operations | maintenance | report | frontend | unresolved
 ```
 
 Do not default this gap to `maintenance` unless the missing source is actually
 maintenance-owned.
+
+`owner_domain` classifies which source/owner must resolve the missing field,
+not where the gap is displayed. Use `equipment` for equipment-master values,
+`project` for project-scoped operational importance, `operations` for runtime
+operating context, `maintenance` for maintenance-owned facts, `dataset` for
+missing observation/history data, `diagnosis` for model/evidence producer gaps,
+`report` for projection/report composition gaps, `frontend` for rendering or
+adapter defects, and `unresolved` only when ownership is deliberately undecided.
 
 - [ ] **Step 3: Add contract assertions**
 
@@ -468,7 +529,7 @@ Test scenarios:
 - missing criticality fixture validates only when the gap/warning is explicit
 - `risk.status_grade` still does not include `data_quality_hold`
 
-### Task 3: Add Context And Priority Composition
+### Task 3: Add Context And Review Priority Composition
 
 **Files:**
 - Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
@@ -486,9 +547,9 @@ Composer should copy explicit `criticality`, `criticality_basis`, and
 - [ ] **Step 2: Add intentionally small context fields**
 
 Start with minimal operational context:
-- `maintenance_history.last_maintenance_days_ago`
-- `maintenance_history.similar_events_30d`
-- `maintenance_history.open_work_order_exists`
+- `maintenance_context.last_maintenance_days_ago`
+- `maintenance_context.similar_events_30d`
+- `maintenance_context.open_work_order_exists`
 - `operation_context.load_level`
 - `operation_context.runtime_hours_7d`
 - `operation_context.production_impact`
@@ -496,16 +557,16 @@ Start with minimal operational context:
 Missing values stay `null`, empty, warning, or gap. Do not convert missing
 context to `normal`, `low`, or `false`.
 
-- [ ] **Step 3: Add priority as a derived workflow/display value**
+- [ ] **Step 3: Add review_priority as a derived review/display value**
 
-Add a bounded `priority` block that explains why the asset should be reviewed
+Add a bounded `review_priority` block that explains why the asset should be reviewed
 first. It may use risk, criticality, context, and existing action state, but it
 must not rewrite `risk.status_grade` or create authorization/action state.
 
 - [ ] **Step 4: Keep policy ownership intact**
 
 Composer must not reimplement `status x criticality` recommendation policy.
-It exposes context and priority explanation for downstream report/UI consumers.
+It exposes context and review-priority explanation for downstream report/UI consumers.
 
 ### Task 4: Update Frontend UI Consumption And Remove Duplication
 
@@ -522,14 +583,14 @@ It exposes context and priority explanation for downstream report/UI consumers.
 
 - [ ] **Step 1: Update frontend contracts/adapters**
 
-Type the new criticality/context/priority fields and preserve nulls.
-Frontend adapters must not synthesize `criticality`, `priority`, WorkOrder IDs,
+Type the new criticality/context/review-priority fields and preserve nulls.
+Frontend adapters must not synthesize `criticality`, `review_priority`, WorkOrder IDs,
 Recommendation state, or role/state permissions.
 
 - [ ] **Step 2: Assign screen ownership**
 
 Implement the screen split:
-- Objects: asset risk, evidence, context, priority, and gaps
+- Objects: asset risk, evidence, context, review priority, and gaps
 - Operations: Recommendation, `available_actions`, approval/defer/reject/note state
 - Report: grounded summary from the same ViewModel/action state
 
@@ -542,7 +603,7 @@ owner per detail level. Other screens may show compact summaries and cross-links
 
 Add or update frontend unit/E2E coverage for:
 - missing criticality displays as unavailable/확인 필요
-- priority reasons render from backend/ViewModel data
+- review_priority reasons render from backend/ViewModel data
 - Objects and Operations do not show contradictory recommendation language
 - action controls still depend on backend-provided action state
 
@@ -573,23 +634,23 @@ Expected verification:
 - composer tests pass
 - MVP API compatibility tests pass
 - frontend adapter tests pass
-- MVP E2E for context/priority path passes
+- MVP E2E for context/review-priority path passes
 - whitespace check passes
 
 - [ ] **Step 4: Report evidence boundary**
 
 Final report must state:
-- implemented: current/series contract, criticality, context, priority, UI consumption, docs/tests
+- implemented: current/series contract, criticality, context, review priority, UI consumption, docs/tests
 - not implemented: operating read-port/PostgreSQL source wiring, TSDB/KQL platform, RUL, LLM/agent implementation
 - criticality is operational context, not failure probability or model risk
 
 ### Backlog: LLM, Agent Workflow, And Platform Spikes
 
-These are explicitly not part of the criticality/context/priority UI implementation PR.
+These are explicitly not part of the criticality/context/review-priority UI implementation PR.
 
 - LLM may later produce role-specific summaries, evidence-linked report language,
   limitation wording, and deterministic fallback improvements.
-- LLM must not create risk grades, priority, recommendations, authorization, or
+- LLM must not create risk grades, review_priority, recommendations, authorization, or
   WorkOrder state.
 - Agent workflow may later prepare review packets, duplicate WorkOrder summaries,
   checklist drafts, handoff notes, and approval-request drafts.
@@ -606,7 +667,7 @@ These are explicitly not part of the criticality/context/priority UI implementat
 2. Recheck PR #100 review remnants and keep only unresolved items.
 3. Fix `features[].current` and `features[].series` semantics.
 4. Add criticality source/owner/gap contract.
-5. Add context and priority composition.
+5. Add context and review-priority composition.
 6. Update frontend contracts and UI consumption, removing duplicated explanations.
 7. Run backend contract/composer/API tests, frontend adapter/type/E2E checks, and produce a boundary report.
 
