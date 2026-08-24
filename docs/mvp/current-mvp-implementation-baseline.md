@@ -23,7 +23,7 @@ gen_data
 Source Data / Canonical V3.1 source-reference baseline
       ↓
 systems/generator
-Ontology Mapping → Feature → Training/Evaluation → Model Artifact
+Protocol Mapping 적용 → Canonical Observation Dataset → Preprocessing Plan → Feature Schema 기반 Feature Dataset Bundle → Training/Evaluation → Model Artifact
       ↓
 systems/backend/app/diagnosis
 Model Artifact 검증 → Runtime Inference → Result Artifact / Evidence

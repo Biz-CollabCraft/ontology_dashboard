@@ -97,8 +97,8 @@
     },
     "recommended_actions": [
       {
-        "action_id": "inspect_rotating_assembly",
-        "label": "회전/진동 계통 점검",
+        "action_id": "review_shutdown",
+        "label": "정지 검토",
         "kind": "inspect",
         "requires_human_approval": true,
         "basis": [

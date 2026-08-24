@@ -20,10 +20,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 6_000;
-const PUBLIC_COMPARISON_PATH = "/app/projects/manufacturing-demo-project/blueprint-compare";
+const PUBLIC_SHOWCASE_PATHS = new Set([
+  "/app/projects/manufacturing-demo-project/blueprint-compare",
+  "/app/projects/manufacturing-demo-project/blueprint-v4",
+]);
 
-function isPublicComparisonPath() {
-  return window.location.pathname.replace(/\/$/, "") === PUBLIC_COMPARISON_PATH;
+function isPublicShowcasePath() {
+  return PUBLIC_SHOWCASE_PATHS.has(window.location.pathname.replace(/\/$/, ""));
 }
 
 type ComparisonHostWindow = Window & {
@@ -72,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         return await getCurrentUser(controller.signal);
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401 && isPublicComparisonPath()) {
+        if (error instanceof ApiError && error.status === 401 && isPublicShowcasePath()) {
           return openPublicBlueprintComparison(controller.signal);
         }
         throw error;

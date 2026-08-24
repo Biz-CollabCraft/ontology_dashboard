@@ -265,6 +265,13 @@ deterministic 출력 계약부터 검증한다.
 - Closed-loop 확장은 기존 Event API key를 삭제·rename하지 않는 additive extension으로 유지하며,
   역할별 Action과 mutation 응답은
   [`../closed-loop-product-consumption-contract.md`](../closed-loop-product-consumption-contract.md)를 따른다.
+- 점검→정비 판단의 canonical command/read API는
+  `/api/projects/{project_id}/workspaces/{workspace_id}/maintenance` 아래에 둔다. 점검 요청·승인과
+  Operations manual 추천·판단은 `process_manager`, 점검 시작·결과 기록은 `process_engineer`가
+  수행한다. 모든 mutation은 `Idempotency-Key`를 요구한다.
+- `GET .../maintenance/events/{event_id}/lineage`는 Product Result/Evidence source ID,
+  inspection WorkOrder/Result, Operations manual recommendation, 두 번째 RecommendationDecision,
+  maintenance WorkOrder와 `activities[].work_type`을 반환하는 canonical 운영 lineage 위치다.
 - 정비 후 Runtime Overlay의 Target 상태는 `equipment_under_maintenance`, `warming_up`,
   `history_insufficient`, `ready`, `predicted`를 사용한다. 기존 Result의 `status_grade`를
   이 준비 상태로 덮어쓰지 않는다.

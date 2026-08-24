@@ -61,18 +61,22 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
   그대로 보존한다. 운영 Decision은 Event Evidence Projection의 별도
   `operational_decision_kind` 계약을 사용한다. Producer `kind` 문자열이 기존
   OperationalDecisionKind와 같아도 Maintenance는 이를 직접 변환하지 않는다.
-- `operational_decision_kind`는 Event Evidence Projection `assessment`에 추가할 Target/Open
-  Gate field다. 현행 projection/schema/fixture/test의 `assessment.recommended_decision`은 이
-  계약을 충족한 필드가 아니며, Maintenance가 운영 Decision으로 소비하면 안 된다. Target 허용
+- `operational_decision_kind`는 Event Evidence Projection `assessment`의 공식 machine field다.
+  기존 `assessment.recommended_decision`은 display compatibility field이며 Maintenance가 운영
+  Decision으로 소비하면 안 된다. 허용
   값은 `continue_monitoring`, `request_inspection`, `review_shutdown`, `hold_for_data_check`이고,
   추천이 없거나 policy/basis/criticality가 충족되지 않으면 null 또는 absent로 둔다. 이 값은
-  공식 policy/version projection으로만 생성하며, Producer `kind` 문자열 비교나 기존
-  `recommended_decision` mapping으로 추정하지 않는다. 필드가 없으면 inspection WorkOrder를
-  추정 생성하지 않는다.
+  Diagnosis policy의 `action_id`에서 별도 projection하며, Producer `kind` 문자열 비교나 기존
+  `recommended_decision` mapping으로 추정하지 않는다. 계약 파일은
+  `contracts/schemas/event-evidence-projection.schema.json`이다. 필드가 없거나 null이면 inspection
+  WorkOrder를 생성하지 않는다.
 - `unavailable`은 recommendation `kind`가 아니라 추천 미생성 상태다. Producer가
   근거 부족, unresolved basis, criticality 누락 등으로 추천을 만들 수 없으면 빈
   Operational RecommendedAction을 materialize하지 않고 `evidence_gap` 또는 limitation으로
   표현한다. `hold_for_data_check`는 데이터 확인 전 보류 recommendation으로 유지한다.
+- Product Result Artifact v1.0은 root `recommended_action` key를 유지하되 추천 미생성 시
+  `null`을 사용하고 `evidence_payload.recommended_actions=[]`와 일치시킨다. 기존 key를 제거하지
+  않는 정합성 수정이므로 이 작업에서는 schema version을 올리지 않는다.
 - 동일 idempotency key와 동일 요청이 성공한 경우 기존 결과를 replay한다.
 - 동일 key에 다른 요청을 사용하면 conflict, 기존 요청이 실행 중이거나 실패했다면 각각
   명시적인 `action_in_progress`, `prior_action_failed` 상태로 처리한다.
@@ -86,6 +90,32 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 - MaintenanceAction: `planned → in_progress → completed | failed | cancelled`
 
 완료·거절·차단 등 terminal 상태를 과거 상태로 되돌리지 않는다.
+
+## Operations manual Recommendation 계약
+
+점검 후 실제 정비가 필요하다는 사람의 판단은 Diagnosis ProducerRecommendation을
+변경하거나 재해석하지 않고 별도 `recommendation_origin=operations_manual` 객체로
+생성한다.
+
+- MVP action은 `TOOL_REPLACEMENT`만 허용한다.
+- `source_product_result_id`, `source_evidence_id`, `event_id`, Equipment scope를 유지해
+  최초 위험 판단까지 역추적할 수 있어야 한다.
+- `source_inspection_work_order_id`와 opaque `source_inspection_reference`를 함께 보존한다.
+  Maintenance는 이 reference의 내부 형식을 해석하지 않으며 Inspection owner가 제공한
+  stable reference만 소비한다.
+- `source_policy_version=operations-manual-recommendation-v1`, 작성자와 작성 시각, basis를
+  필수로 보존한다.
+- 동일 `source_inspection_work_order_id + source_inspection_reference + action_code`는 한
+  번만 추천으로 생성한다. 표시 label이나 재전송 시각은 중복 방지 키에 포함하지 않는다.
+- 수동 추천 자체는 정비 승인이 아니다. 별도
+  `RecommendationDecision(disposition=accept)` 이후에만 maintenance Work Order를 만든다.
+- `product_result_projection` 추천은 점검 판단의 근거이며 직접 maintenance Work Order를
+  만들 수 없다. 정비 Work Order 생성 경로는 승인된 `operations_manual`의
+  `TOOL_REPLACEMENT`로 제한한다.
+- Inspection Result는 Maintenance가 소유하는 불변 운영 사실이며 checklist, measurements,
+  findings, outcome, note, 작성자/시각과 원본 inspection WorkOrder lineage를 보존한다. Diagnosis는
+  Maintenance DB를 직접 조회하지 않으며, MVP의 Operations manual recommendation은 공식
+  Maintenance command/read 경계 안에서만 이 결과를 소비한다.
 
 ## 기존 compatibility projection 교정 범위
 

@@ -429,6 +429,41 @@ class PredictiveMaintenanceRuntimeRepository:
             ).fetchall()
         return "prediction_snapshot_compatibility", total, [dict(row) for row in rows]
 
+    def result_artifact_row(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        artifact_id: str,
+    ) -> dict[str, Any] | None:
+        """Return one canonical Product Result row inside the requested scope."""
+
+        with self._connection(organization_id, project_id) as connection:
+            rows = connection.execute(
+                """
+                SELECT r.*,a.site_id,a.cell_id,
+                       p.payload_json AS prediction_result_payload,
+                       p.created_at AS prediction_result_created_at
+                FROM pm_result_artifacts r
+                JOIN pm_assets a
+                  ON a.dataset_version_id=r.dataset_version_id
+                 AND a.asset_id=r.asset_id
+                JOIN prediction_results p
+                  ON p.prediction_id=r.prediction_result_id
+                WHERE r.organization_id=%s AND r.project_id=%s
+                  AND r.workspace_id=%s AND r.artifact_id=%s
+                ORDER BY r.created_at DESC,r.dataset_version_id DESC
+                LIMIT 2
+                """,
+                (organization_id, project_id, workspace_id, artifact_id),
+            ).fetchall()
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise ValueError("Product Result artifact_id is ambiguous inside workspace scope")
+        return dict(rows[0])
+
     def snapshot_drilldown(
         self,
         *,

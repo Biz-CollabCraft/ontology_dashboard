@@ -12,6 +12,7 @@ from .maintenance_domain import (
     authorize_inspection_work_order,
     authorize_maintenance_work_order,
     create_inspection_work_order,
+    create_operations_manual_recommendation,
     create_work_order_for_recommendation,
     deterministic_recommendation_id,
     imported_result_detail_view,
@@ -28,6 +29,10 @@ from .maintenance_domain import (
 )
 from .maintenance_schema import (
     EquipmentIdentity,
+    InspectionChecklistItem,
+    InspectionMeasurement,
+    InspectionOutcome,
+    InspectionResult,
     IdempotencyOutcome,
     IdempotencyRecord,
     IdempotencyState,
@@ -49,6 +54,10 @@ from .maintenance_schema import (
 __all__ = [
     "ActionInProgress",
     "EquipmentIdentity",
+    "InspectionChecklistItem",
+    "InspectionMeasurement",
+    "InspectionOutcome",
+    "InspectionResult",
     "IdempotencyConflict",
     "IdempotencyOutcome",
     "IdempotencyRecord",
@@ -74,6 +83,7 @@ __all__ = [
     "authorize_inspection_work_order",
     "authorize_maintenance_work_order",
     "create_inspection_work_order",
+    "create_operations_manual_recommendation",
     "create_work_order_for_recommendation",
     "deterministic_recommendation_id",
     "imported_result_detail_view",

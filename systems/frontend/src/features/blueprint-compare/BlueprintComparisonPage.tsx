@@ -102,8 +102,8 @@ type ComparisonHostWindow = Window & {
 };
 
 const READY_SELECTORS: Record<VersionId, string> = {
-  original: ".ontology-dashboard-shell, .fd-route-shell",
-  v1: ".blueprint-preview:not(.blueprint-loading) .bp-workbench-shell",
+  original: ".od-workbench-main, .ontology-dashboard-shell, .fd-route-shell",
+  v1: ".blueprint-preview:not(.blueprint-loading)",
   v2: ".blueprint-v2:not(.blueprint-v2-loading) .bpv2-shell",
 };
 
