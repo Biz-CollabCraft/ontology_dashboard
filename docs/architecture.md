@@ -17,11 +17,11 @@ source/reference/test fixtures
 seed reproducibility + source lineage
         ↓ protocol provenance contract (file handoff)
 ontology_dashboard/systems/generator
-Observation Extraction (protocol provenance → Observation Dataset)
-Failure Extraction (Authorized Training Truth Source → Failure Dataset)
-→ Preprocessing (Observation → Plan/Ontology Mapping)
-→ Feature (Observation + Failure + Plan/Mapping → Feature/Label/Series)
-→ Training (Feature Dataset → Model Artifact)
+Observation Extraction (protocol parsing + approved Mapping application → Observation Dataset)
+Failure Extraction (Authorized Truth Source → Failure Dataset)
+→ Preprocessing (Observation 구조 분석 및 역할 판정 → Immutable Preprocessing Plan)
+→ Feature (Observation + Failure + Preprocessing Plan + Feature Schema + Label Schema → Feature/Label Dataset Bundle)
+→ Training (Feature Dataset Bundle → Model Artifact)
 → versioned Model Artifact (latest.json pointer)
         ↓ Model Artifact / Observation contract
 ontology_dashboard/systems/backend/app/diagnosis
@@ -65,7 +65,7 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
     Simulation Clock을 이용한 source Observation 생성
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
-  - **`systems/generator`**: 프로토콜 provenance에서 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Observation을 기반으로 Preprocessing Plan/Mapping을 수립하고, Feature 단계에서 Observation, Failure, Plan, Mapping을 결합하여 Feature Dataset Bundle 및 versioned Model Artifact를 발행한다.
+  - **`systems/generator`**: 프로토콜 provenance에서 지정·승인된 Mapping을 적용하여 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Observation을 기반으로 Preprocessing Plan을 수립하고, Feature 단계에서 Observation, Failure, Preprocessing Plan, Feature Schema, Label Schema를 실행하여 Feature Dataset Bundle 및 versioned Model Artifact를 발행한다.
   - **`systems/backend/app/diagnosis`**: Runtime feature 재현, runtime inference 및 제품 Result Artifact/Evidence/Prediction History 최종 생성
   - **`systems/frontend` / Report**: 공식 read port를 통한 ViewModel composition (gen_data 원본 파일 직접 파싱 금지)
 
@@ -114,13 +114,14 @@ project-root/
 
 ### 상위 아키텍처 및 책임 원칙
 
-1. **`gen_data` protocol provenance는 Observation Dataset 생성에만 사용한다.**
+1. **`gen_data` protocol provenance는 Extraction 단계에서 지정·승인된 Mapping을 적용하여 Canonical Observation Dataset 생성에 사용한다.**
 2. **Failure Dataset은 별도의 Authorized Training Truth Source에서 생성한다.**
-3. **Preprocessing은 Observation Dataset만 분석하여 Plan과 Mapping을 발행한다.**
-4. **Feature 단계가 Observation, Failure, Plan 및 Mapping을 결합한다.**
-5. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Observation/Feature와 Model Artifact를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
-6. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
-7. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
+3. **Preprocessing은 Observation Dataset의 구조와 역할을 분석하여 불변 Preprocessing Plan을 발행한다. Ontology Mapping을 생성하거나 소비하지 않는다.**
+4. **Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema/Recipe와 Label Schema에 명시된 source field, operation 및 parameters를 실행하여 Feature Dataset Bundle을 발행한다.**
+5. **Training 단계는 Feature Dataset Bundle을 소비하여 Model Artifact를 발행한다.**
+6. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Model Artifact와 Observation history를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
+7. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
+8. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
 
 ### Generator 구조 현황 (Current vs Target)
 

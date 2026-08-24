@@ -7,7 +7,7 @@
 - 정본 앱 진입점: `systems.generator.app.main:app` (Application Factory `create_app()` 제공)
 - 호환성 진입점: `systems.generator.generator_main:app` (Compatibility Shim)
 - Base path: (별도 접두사 없음, `generator` 프로세스가 단독으로 사용)
-- 책임: Generator는 Extraction, Preprocessing, Feature 및 Training 파이프라인을 통해 Versioned Observation/Failure Dataset, Preprocessing Plan, Feature Dataset Bundle 및 Model Artifact를 생성·발행한다.
+- 책임: Generator는 단계별 Versioned Observation/Failure Dataset, Preprocessing Plan, Feature Dataset Bundle 및 Model Artifact를 발행한다. Generator의 최종 책임 끝점은 Model Artifact와 활성 버전 포인터(`latest.json`) 발행이다.
 
 Backend Diagnosis는 발행된 Model Artifact와 Observation history를 소비하여 runtime inference, Product Result Artifact 및 Evidence를 생성한다.
 
@@ -232,6 +232,7 @@ Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Lab
   "dataset_version": "canonical-ai4i-physics-v3.1",
   "failure_dataset_id": "ai4i_failures",
   "failure_dataset_version": "canonical-ai4i-failures-v1",
+  "preprocessing_plan_id": "pp-7c106819-cc59-46da-90dd-22c37c441ac9",
   "preprocessing_plan_version": "preprocessing-plan-a1b2c3d4e5f67890",
   "feature_schema_version": "ai4i-feature-v1",
   "label_schema_version": "ai4i-label-v1",

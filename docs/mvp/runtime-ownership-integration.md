@@ -11,7 +11,12 @@ Biz-CollabCraft/gen_data
 Source Data Producer / Canonical V3.1 source-reference baseline
         ↓
 systems/generator
-extraction → ontology mapping → topology → feature → training/evaluation
+Extraction (protocol parsing + approved Mapping application)
+→ Versioned Observation/Failure Dataset
+→ Preprocessing Plan
+→ Feature Schema/Label Schema execution
+→ Feature Dataset Bundle
+→ Training/Evaluation
 → versioned Model Artifact publish
         ↓ MODEL_ARTIFACT_URI
 systems/backend/app/diagnosis
@@ -54,12 +59,17 @@ Canonical 이전 구간과 Overlay 이후 구간을 선택하며 둘의 미래 �
 
 ### `systems/generator`
 
-- source observation extraction/normalization
-- ontology semantic mapping
-- topology preparation
-- feature engineering
-- model training/evaluation
-- immutable versioned Model Artifact publish
+- protocol parsing 및 지정 Mapping 적용 기반 Observation Dataset 발행
+- Authorized Truth Source 기반 Failure Dataset 발행
+- Observation Dataset 구조 분석 및 불변 Preprocessing Plan 발행 (Ontology Mapping 미생성/미소비)
+- Feature Schema allowlist/recipe 및 Label Schema 실행 기반 Feature Dataset Bundle 발행
+- model training/evaluation 및 immutable versioned Model Artifact publish (latest.json pointer 관리)
+- **책임 경계**:
+  - protocol Mapping은 Extraction이 Canonical Observation을 생성할 때 적용한다.
+  - Preprocessing은 Mapping을 생성하거나 소비하지 않는다.
+  - Feature는 Mapping을 조회하지 않고 Feature Schema/Recipe를 실행한다.
+  - Backend Diagnosis는 Feature 생성이나 모델 학습을 수행하지 않는다.
+  - Generator는 runtime inference, Product Result Artifact 및 Evidence를 생성하지 않는다.
 
 기존 확장 ML Validator/workbench가 `systems/backend/ontology_dashboard/modeling` 아래에서 직접 수행하던 semantic mapping, feature materialization, sklearn experiment/training 구현도 각각 `systems/generator/ontology_mapping`, `systems/generator/feature`, `systems/generator/model`로 이동했다. API에는 기존 화면·계약을 깨지 않기 위한 lazy compatibility port만 남겼다.
 

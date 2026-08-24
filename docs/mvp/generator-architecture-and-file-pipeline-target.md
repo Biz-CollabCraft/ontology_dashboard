@@ -15,9 +15,9 @@
    - `gen_data`의 SensorRecord v2 프로토콜 투영(`protocol/provenance.jsonl`) 및 Protocol-to-Observation Golden Vector는 향후 도입될 **Target dependency(미병합)**입니다.
    - Generator 내부에는 이 파일 가공 흐름을 표준적·안정적으로 수행할 공식 파일 처리 계층이 아직 구현되어 있지 않으므로, 목표 구조와 가공 규칙을 먼저 문서로 확정합니다.
 
-3. **단계 명칭 정립 및 선행 API화 작업 연계**:
-   - 별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 분석, Extraction Plan 수립 및 Ontology Mapping을 담당합니다.
-   - Target 구조에서는 이 기능을 `/preprocessing`으로 이전하고, `/extraction`은 프로토콜 투영 로그 가공에 사용하도록 4대 파이프라인 단계(`Extraction` → `Preprocessing` → `Feature` → `Training`)의 역할을 명확히 확정합니다.
+3. **단계 명칭 정립 및 책임 단일화**:
+   - 별도 Generator API화 작업에서 설계된 `/extraction`은 데이터셋 구조 분석 및 Plan 수립을 담당했습니다.
+   - Target 구조에서는 데이터셋 구조 분석 및 불변 Plan 발행을 `/preprocessing`으로 이전하고, `/extraction`은 protocol data에 지정·승인된 Mapping을 적용하여 Versioned Observation 및 Failure Dataset을 발행하도록 4대 파이프라인 단계(`Extraction` → `Preprocessing` → `Feature` → `Training`)의 역할을 명확히 확정합니다.
 
 ---
 
@@ -34,7 +34,7 @@ systems/generator/
 ├─ extraction/                # 데이터셋 프로파일링, 추출 계획 수립 (LLM)
 ├─ feature/                   # 피처 계산 모듈 (feature_builder 등)
 ├─ model/                     # 모델 알고리즘 학습 및 모델 레지스트리
-├─ ontology_mapping/          # 컬럼-온톨로지 노드 의미 매핑
+├─ ontology_mapping/          # legacy/보조 semantic mapping 모듈; 신규 Feature API 실행 계약이 아님
 ├─ topology/                  # 설비 간 위상 관계 추론
 ├─ common/                    # 공통 에이전트 및 타임스탬프 정규화 유틸리티
 ├─ entrypoint.py
@@ -57,7 +57,7 @@ systems/generator/
 │  │  ├─ extraction_service.py
 │  │  ├─ extraction_repository.py
 │  │  └─ extraction_schema.py
-│  ├─ preprocessing/          # [2단계 Target] 데이터셋 분석, Plan/Mapping 수립 도메인 (기존 extraction 이전)
+│  ├─ preprocessing/          # [2단계 Target] 데이터셋 분석, 불변 Plan 수립 도메인 (기존 extraction 이전)
 │  │  ├─ preprocessing_router.py
 │  │  ├─ preprocessing_service.py
 │  │  ├─ preprocessing_planner.py
@@ -96,13 +96,13 @@ systems/generator/
 ```text
 gen_data SensorRecord v2 protocol provenance
   ↓ (상태: Target dependency — 미병합)
-Generator Observation Extraction
+Generator Observation Extraction (지정·승인된 Mapping 적용)
   ↓
 Versioned Observation Dataset
   ↓
-Generator Preprocessing
+Generator Preprocessing (구조 및 역할 분석)
   ↓
-Preprocessing Plan / Ontology Mapping
+Immutable Preprocessing Plan
   │
   └──────────────────────────────┐
                                  ↓
@@ -112,7 +112,7 @@ Generator Failure Extraction     │
   ↓                              │
 Versioned Failure Dataset ───────┤
                                  ↓
-Generator Feature
+Generator Feature (Feature Schema allowlist/recipe + Label Schema 적용)
   ↓
 Feature / Label / Series / Feature Dataset Bundle
   ↓
@@ -136,7 +136,7 @@ Extraction 도메인은 프로토콜 투영 로그와 별도의 공인된 Traini
 ```text
 Extraction
 ├─ Observation Extraction
-│  └─ protocol provenance → Observation Dataset
+│  └─ protocol provenance + approved Mapping → Observation Dataset
 └─ Failure Extraction
    └─ Authorized Training Truth Source → Failure Dataset
 ```
@@ -217,16 +217,17 @@ Extraction
 - **처리**:
   - Observation Dataset 파일 프로파일링 및 데이터 구조 타입 판별 (`tabular_column_as_attribute`, `tabular_row_as_attribute`)
   - 역할 컬럼 확정 (`id_column`, `time_column`, `duplicate_policy` 등)
-  - 컬럼별 표준 온톨로지 매핑 (MappingStore, 전역 캐시 오염 방지)
-  - 내용 기반 해시(SHA-256) 버전 산출 (`preprocessing-plan-<hash>`, `ontology-mapping-<hash>`)
-- **출력**: `PreprocessingPlan`, `OntologyMapping`
+  - 전체 데이터 변환 가능성 검증
+  - 내용 기반 해시(SHA-256) 버전 산출 (`preprocessing-plan-<hash>`)
+- **출력**: `Immutable Preprocessing Plan` (`pp-{uuid}.json`, `latest.json` 포인터)
 
 ---
 
 ### 4.3 3단계: Feature (Target)
-- **입력**: `Versioned Observation Dataset` + `Versioned Failure Dataset` + `Preprocessing Plan` + `Ontology Mapping` + `Feature/Label Schema` (모든 데이터 및 계약이 합류하는 지점)
+- **입력**: `Versioned Observation Dataset` + `Versioned Failure Dataset` + `Preprocessing Plan` + `Feature Schema` + `Label Schema`
 - **처리**:
   - 번들 재사용 전 Sensor 및 Failure 원본 파일 무결성 및 해시 전수 검증
+  - Feature Schema allowlist 및 Feature Recipe에 명시된 source field, operation, parameters 실행
   - 설비별 시계열 피처 추출 (`build_features`), 고장 이력 기반 라벨링 (`build_labels`)
   - 시간순 분할 메타데이터 생성 (`compute_asset_time_split_indices`, `validate_split_indices`)
   - Feature Schema 선언 순서 유지 및 누수 컬럼 배제
@@ -256,9 +257,9 @@ Extraction
 | GET | `/health` | Generator 데몬 상태 확인 | Generator 데몬 상태 확인 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
-| POST | `/extraction` | Target — 미병합 | **protocol provenance → Observation Dataset / Authorized Truth Source → Failure Dataset (신규 1단계)** |
-| POST | `/preprocessing` | Target — 미병합 | **Observation Dataset 분석 및 Preprocessing Plan/Mapping 발행 (신규 2단계)** |
-| POST | `/feature` | Target — 미병합 | **Observation + Failure + Plan/Mapping 소비, Feature/Label/Series 및 Feature Dataset Bundle 발행 (신규 3단계)** |
+| POST | `/extraction` | Target — 미병합 | **gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108)** |
+| POST | `/preprocessing` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (신규 2단계)** |
+| POST | `/feature` | Target — 미병합 | **Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계)** |
 | POST | `/train` | Target — 미병합 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
 | POST | `/train/{base_model}` | Target — 미병합 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
 | POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
@@ -268,7 +269,7 @@ Extraction
 
 | 선행 API화 작업 대상 (Migration source) | Target (후속 목표 대상) | Migration 계획 및 비고 |
 |---|---|---|
-| 선행 API 설계 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (데이터셋 분석 및 Plan/Mapping 기능을 /preprocessing으로 이전) |
+| 선행 API 설계 `POST /extraction` | `POST /preprocessing` | 엔드포인트 URL 변경 (데이터셋 분석 및 Plan 기능을 /preprocessing으로 이전) |
 | `ExtractionPlan` | `PreprocessingPlan` | Pydantic 스키마 변경 |
 | `ExtractionPlanResponse` | `PreprocessingPlanResponse` | 응답 스키마 변경 |
 | `extraction_plan_version` | `preprocessing_plan_version` | 식별자 및 메타데이터 키 변경 |
@@ -288,8 +289,7 @@ Extraction
 1. **현재 Extraction 기능 → `app/preprocessing/`으로 이전**:
    - Dataset profiling, LLM 2단계 구조 판별 및 규칙 수립 로직
    - long-format (`tabular_row_as_attribute`) 역할 컬럼 검증
-   - Ontology Mapping 수립 및 MappingStore 캐시 격리
-   - Plan/Mapping 내용 기반 해시 버전 발행 및 원본 source SHA-256 검증
+   - Plan 내용 기반 해시 버전 발행 및 원본 source SHA-256 검증
 2. **현재 Feature 기능 → `app/feature/`에 유지·정리**:
    - Feature Bundle 재사용 전 원본 Sensor/Failure 파일 및 provenance 전수 재검증
    - Failure Dataset 버전 경로 고정 및 설비 ID 호환성 검증
@@ -360,7 +360,7 @@ Extraction
 
 [파이프라인 통합·검증 단계]
   ├─ Observation Dataset → Preprocessing 파이프라인 연결
-  ├─ Observation + Failure + Preprocessing Plan/Mapping → Feature 파이프라인 연결
+  ├─ Observation + Failure + Preprocessing Plan + Feature Schema + Label Schema → Feature 파이프라인 연결
   ├─ Feature Dataset Bundle → Training 파이프라인 연결
   ├─ Observation/Feature Series 공식 계약 스키마 확정
   └─ Architecture CI 규칙 추가 (공통 모듈 app 역참조 금지, FastAPI 비의존 등)
