@@ -12,6 +12,10 @@ from app.identity import AuthError
 from .api_schema import (
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
+    MaintenanceActionCompleteRequest,
+    MaintenanceActionStartRequest,
+    MaintenanceReplayRequest,
+    MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
 )
@@ -75,6 +79,7 @@ def create_maintenance_router(
     )
     manager_command = require_permission("events.decision")
     engineer_command = require_permission("field.tasks.update")
+    technician_command = require_permission("field.tasks.update")
     events_read = require_permission("events.read")
 
     @router.post("/inspection-work-orders")
@@ -270,6 +275,142 @@ def create_maintenance_router(
                 project_id=project_id,
                 workspace_id=workspace_id,
                 recommendation_id=recommendation_id,
+                payload=payload,
+                actor_id=principal.user_id,
+                actor_display_name=principal.display_name,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    @router.post("/maintenance-work-orders/{work_order_id}/approve")
+    def approve_maintenance_work_order(
+        project_id: str,
+        workspace_id: str,
+        work_order_id: str,
+        payload: MaintenanceWorkOrderApproveRequest,
+        idempotency_key: str = Header(
+            alias="Idempotency-Key", min_length=8, max_length=200
+        ),
+        principal: Any = Depends(manager_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        _require_product_role(principal, project_id, "process_manager")
+        return _execute(
+            lambda: service.approve_maintenance_work_order(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                work_order_id=work_order_id,
+                payload=payload,
+                actor_id=principal.user_id,
+                actor_display_name=principal.display_name,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    @router.post("/maintenance-actions/{maintenance_action_id}/start")
+    def start_maintenance_action(
+        project_id: str,
+        workspace_id: str,
+        maintenance_action_id: str,
+        payload: MaintenanceActionStartRequest,
+        idempotency_key: str = Header(
+            alias="Idempotency-Key", min_length=8, max_length=200
+        ),
+        principal: Any = Depends(technician_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        _require_product_role(principal, project_id, "maintenance_technician")
+        return _execute(
+            lambda: service.start_maintenance(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                maintenance_action_id=maintenance_action_id,
+                payload=payload,
+                actor_id=principal.user_id,
+                actor_display_name=principal.display_name,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    @router.post("/maintenance-actions/{maintenance_action_id}/complete")
+    def complete_maintenance_action(
+        project_id: str,
+        workspace_id: str,
+        maintenance_action_id: str,
+        payload: MaintenanceActionCompleteRequest,
+        idempotency_key: str = Header(
+            alias="Idempotency-Key", min_length=8, max_length=200
+        ),
+        principal: Any = Depends(technician_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        _require_product_role(principal, project_id, "maintenance_technician")
+        return _execute(
+            lambda: service.complete_maintenance(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                maintenance_action_id=maintenance_action_id,
+                payload=payload,
+                actor_id=principal.user_id,
+                actor_display_name=principal.display_name,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    @router.post("/maintenance-events/{maintenance_event_id}/replay")
+    def request_maintenance_replay(
+        project_id: str,
+        workspace_id: str,
+        maintenance_event_id: str,
+        payload: MaintenanceReplayRequest,
+        idempotency_key: str = Header(
+            alias="Idempotency-Key", min_length=8, max_length=200
+        ),
+        principal: Any = Depends(technician_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        _require_product_role(principal, project_id, "maintenance_technician")
+        return _execute(
+            lambda: service.request_maintenance_replay(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                maintenance_event_id=maintenance_event_id,
                 payload=payload,
                 actor_id=principal.user_id,
                 actor_display_name=principal.display_name,

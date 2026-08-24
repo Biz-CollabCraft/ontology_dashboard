@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.infra.db.maintenance_repository import MaintenanceRepository
 from app.maintenance.api_schema import (
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
+    MaintenanceActionCompleteRequest,
+    MaintenanceActionStartRequest,
+    MaintenanceReplayRequest,
+    MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
 )
@@ -37,13 +44,36 @@ class Resolver:
 
 
 class ProjectionQuery:
-    def __init__(self, projection: dict | None = None) -> None:
+    def __init__(
+        self,
+        projection: dict | None = None,
+        *,
+        replay_binding: dict | None = None,
+        replay_error: ValueError | None = None,
+    ) -> None:
         self.projection = projection if projection is not None else canonical_projection()
         self.calls: list[dict] = []
+        self.replay_binding = replay_binding
+        self.replay_error = replay_error
+        self.replay_calls: list[dict] = []
 
     def event_evidence_projection(self, **scope):
         self.calls.append(scope)
         return self.projection
+
+    def resolve_maintenance_replay_session(self, **values):
+        self.replay_calls.append(values)
+        if self.replay_error is not None:
+            raise self.replay_error
+        if self.replay_binding is not None:
+            return self.replay_binding
+        return {
+            "simulation_session_id": values["session_id"],
+            "organization_id": values["organization_id"],
+            "project_id": values["project_id"],
+            "workspace_id": values["workspace_id"],
+            "equipment_id": values["equipment_id"],
+        }
 
 
 def canonical_projection(
@@ -77,9 +107,11 @@ def canonical_projection(
 
 
 def service(tmp_path, *, query: ProjectionQuery | None = None) -> MaintenanceLoopService:
+    provider = query or ProjectionQuery()
     return MaintenanceLoopService(
         MaintenanceRepository(tmp_path / "maintenance.db", project_context=Resolver()),
-        event_evidence_query=query or ProjectionQuery(),
+        event_evidence_query=provider,
+        replay_session_query=provider,
     )
 
 
@@ -146,6 +178,37 @@ def run_completed_inspection(loop: MaintenanceLoopService) -> tuple[str, str]:
     )
     assert completed["maintenance_event_id"] is None
     return work_order_id, completed["inspection_result_id"]
+
+
+def run_requested_maintenance(loop: MaintenanceLoopService) -> str:
+    _inspection_work_order_id, inspection_result_id = run_completed_inspection(loop)
+    created = loop.create_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            basis=("field engineer confirmed tool wear",)
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="manual-recommendation-001",
+    )
+    decided = loop.decide_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        recommendation_id=created["recommendation_id"],
+        payload=RecommendationDecisionCreateRequest(
+            disposition=RecommendationDisposition.ACCEPT,
+            note="approve tool replacement",
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="manual-decision-accept-001",
+    )
+    assert decided["work_order_id"] is not None
+    return decided["work_order_id"]
 
 
 def test_two_stage_inspection_to_maintenance_work_order_lineage(tmp_path) -> None:
@@ -225,6 +288,247 @@ def test_two_stage_inspection_to_maintenance_work_order_lineage(tmp_path) -> Non
     }
     assert lineage["maintenance_actions"] == []
     assert lineage["maintenance_events"] == []
+
+
+def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tmp_path) -> None:
+    diagnosis = ProjectionQuery()
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+    started_at = datetime(2026, 8, 24, 9, 0, tzinfo=timezone.utc)
+    completed_at = started_at + timedelta(minutes=30)
+    restart_at = completed_at + timedelta(minutes=5)
+
+    approved = loop.approve_maintenance_work_order(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        payload=MaintenanceWorkOrderApproveRequest(
+            simulation_session_id="SIMULATION-SESSION-001"
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="maintenance-approve-001",
+        approved_at=started_at - timedelta(minutes=5),
+    )
+    action_id = approved["maintenance_action_id"]
+    assert approved["maintenance_action_status"] == "planned"
+    assert diagnosis.replay_calls == [
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "session_id": "SIMULATION-SESSION-001",
+            "equipment_id": "CNC-001",
+        }
+    ]
+
+    started = loop.start_maintenance(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        maintenance_action_id=action_id,
+        payload=MaintenanceActionStartRequest(),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="maintenance-start-001",
+        started_at=started_at,
+    )
+    completed = loop.complete_maintenance(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        maintenance_action_id=action_id,
+        payload=MaintenanceActionCompleteRequest(outcome="tool replaced"),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="maintenance-complete-001",
+        completed_at=completed_at,
+    )
+    replay = loop.request_maintenance_replay(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        maintenance_event_id=completed["maintenance_event_id"],
+        payload=MaintenanceReplayRequest(restart_at=restart_at),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="maintenance-replay-001",
+    )
+
+    assert started["status"] == "in_progress"
+    assert completed["status"] == "completed"
+    assert replay["status"] == "replay_requested"
+
+    lineage = loop.event_lineage(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+    assert len(lineage["maintenance_actions"]) == 1
+    assert lineage["maintenance_actions"][0]["simulation_session_id"] == (
+        "SIMULATION-SESSION-001"
+    )
+    assert lineage["maintenance_actions"][0]["lifecycle_state_version"] == 3
+    assert len(lineage["maintenance_events"]) == 1
+    assert lineage["maintenance_events"][0]["state_patch"] == {
+        "tool_wear_min": {"operation": "reset", "unit": "min", "value": 0}
+    }
+    equipment_state = loop.repository.equipment_state(
+        workspace_id="workspace-1",
+        equipment_id="CNC-001",
+    )
+    assert equipment_state is not None
+    assert equipment_state["state"] == {
+        "tool_wear_min": {"unit": "min", "value": 0}
+    }
+
+    with loop.repository._connect() as connection:
+        outbox = connection.execute(
+            "SELECT event_type,payload_json FROM transactional_outbox "
+            "WHERE event_type LIKE 'maintenance.%' ORDER BY id"
+        ).fetchall()
+    assert {
+        row["event_type"]: json.loads(row["payload_json"])["state_version"]
+        for row in outbox
+    } == {
+        "maintenance.started": 1,
+        "maintenance.completed": 2,
+        "maintenance.replay_requested": 3,
+    }
+    assert all("SIMULATION-SESSION-001" in row["payload_json"] for row in outbox)
+
+
+def test_maintenance_approval_fails_closed_when_diagnosis_rejects_replay(tmp_path) -> None:
+    diagnosis = ProjectionQuery(
+        replay_error=ValueError("replay session is not available in the requested scope")
+    )
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="not available in the requested scope"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="FORGED-SESSION"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-approve-rejected-001",
+        )
+
+    lineage = loop.event_lineage(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+    assert lineage["maintenance_actions"] == []
+
+
+def test_maintenance_approval_fails_closed_until_diagnosis_provider_is_wired(
+    tmp_path,
+) -> None:
+    loop = MaintenanceLoopService(
+        MaintenanceRepository(tmp_path / "maintenance.db", project_context=Resolver()),
+        event_evidence_query=ProjectionQuery(),
+    )
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="validation is unavailable"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="SIMULATION-SESSION-001"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-approve-provider-missing-001",
+        )
+
+    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value", "message"),
+    (
+        ("project_id", "another-project", "project_id scope mismatch"),
+        ("equipment_id", "CNC-999", "equipment identity mismatch"),
+        (
+            "simulation_session_id",
+            "ANOTHER-SESSION",
+            "canonical identity mismatch",
+        ),
+    ),
+)
+def test_maintenance_approval_rejects_noncanonical_replay_binding(
+    tmp_path, field: str, invalid_value: str, message: str
+) -> None:
+    binding = {
+        "simulation_session_id": "SIMULATION-SESSION-001",
+        "organization_id": "org-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "equipment_id": "CNC-001",
+    }
+    binding[field] = invalid_value
+    loop = service(tmp_path, query=ProjectionQuery(replay_binding=binding))
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match=message):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="SIMULATION-SESSION-001"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key=f"maintenance-approve-{field}-001",
+        )
+
+
+def test_maintenance_execution_commands_are_idempotent(tmp_path) -> None:
+    loop = service(tmp_path)
+    work_order_id = run_requested_maintenance(loop)
+    approve_payload = MaintenanceWorkOrderApproveRequest(
+        simulation_session_id="SIMULATION-SESSION-001"
+    )
+    command = {
+        "organization_id": "org-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "work_order_id": work_order_id,
+        "payload": approve_payload,
+        "actor_id": "manager-1",
+        "actor_display_name": "Manager One",
+        "idempotency_key": "maintenance-approve-001",
+    }
+    first = loop.approve_maintenance_work_order(**command)
+    second = loop.approve_maintenance_work_order(**command)
+
+    assert second["maintenance_action_id"] == first["maintenance_action_id"]
+    assert second["replayed"] is True
+    assert loop.repository.operational_side_effect_counts()["maintenance_actions"] == 1
+
+    with pytest.raises(IdempotencyConflict):
+        loop.approve_maintenance_work_order(
+            **{
+                **command,
+                "payload": MaintenanceWorkOrderApproveRequest(
+                    simulation_session_id="ANOTHER-SIMULATION-SESSION"
+                ),
+            }
+        )
 
 
 def test_manual_recommendation_replay_dedupe_and_conflict(tmp_path) -> None:

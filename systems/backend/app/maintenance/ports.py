@@ -57,7 +57,27 @@ class MaintenanceCommandRepositoryPort(Protocol):
         work_order: WorkOrder | None,
         **values: Any,
     ) -> dict[str, Any]: ...
+    def approve_work_order(self, **values: Any) -> dict[str, Any]: ...
+    def get_maintenance_action(self, **identity: Any) -> dict[str, Any] | None: ...
+    def start_maintenance(self, *args: Any, **values: Any) -> dict[str, Any]: ...
+    def complete_maintenance(self, *args: Any, **values: Any) -> dict[str, Any]: ...
+    def get_maintenance_event(self, **identity: Any) -> dict[str, Any] | None: ...
+    def request_replay(self, *args: Any, **values: Any) -> dict[str, Any]: ...
     def event_lineage(self, **identity: Any) -> dict[str, Any]: ...
+
+
+class MaintenanceReplaySessionValidationPort(Protocol):
+    """Consumer-owned boundary for a Diagnosis-validated replay reference."""
+
+    def resolve_maintenance_replay_session(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        session_id: str,
+        equipment_id: str,
+    ) -> dict[str, Any]: ...
 
 
 class LiveMaintenanceOverlayPort(Protocol):
@@ -70,5 +90,6 @@ __all__ = [
     "EquipmentStatePatchPort",
     "MaintenanceReadPort",
     "MaintenanceCommandRepositoryPort",
+    "MaintenanceReplaySessionValidationPort",
     "LiveMaintenanceOverlayPort",
 ]
