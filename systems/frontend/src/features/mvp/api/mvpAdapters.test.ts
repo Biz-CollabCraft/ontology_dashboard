@@ -79,6 +79,28 @@ describe("MVP adapter contract", () => {
     expect(assets[0].provenance.modelVersion).toBe("model-1");
   });
 
+  it("does not synthesize criticality from risk when operational context is missing", () => {
+    const assets = mergeAssets([{
+      artifact_id: "RESULT#CNC-009",
+      asset_id: "CNC-009",
+      asset_type: "cnc",
+      site_id: "SITE-1",
+      cell_id: "CELL-1",
+      observed_at: "2026-08-06T03:00:00Z",
+      prediction_task: "binary_failure_within_horizon",
+      failure_probability: 0.94,
+      predicted_failure_type: "failure_risk",
+      status_grade: "critical",
+      confidence: 0.88,
+      top_factors: [],
+      recommended_action: { action: "review_shutdown", priority: "critical", semantic_type: "policy_recommendation", approval_state: "not_requested", execution_state: "not_executed", creates_work_order_automatically: false },
+      provenance: { dataset_id: "dataset-1", dataset_version_id: "dsv-canonical-v3-1", source_version: "Canonical V3.1", bundle_checksum_sha256: "a".repeat(64), model_version: "model-1", schema_version: "result-artifact-v1.0", prediction_task: "binary_failure_within_horizon" },
+    }], []);
+
+    expect(assets[0].status).toBe("critical");
+    expect(assets[0].criticality).toBeNull();
+  });
+
   it("derives the same metrics and line summary used by all four screens", () => {
     const events = [adaptEvent(event), adaptEvent({ ...event, event_id: "EVENT-002", equipment: { ...event.equipment, equipment_id: "CNC-002" }, status: "warning", failure_probability: 0.65 })];
     const assets = mergeAssets([], events);

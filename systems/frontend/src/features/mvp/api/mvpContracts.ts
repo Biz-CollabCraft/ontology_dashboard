@@ -3,6 +3,7 @@ export type MvpReportTab = "status-map" | "inspection-request" | "summary-report
 export type MvpRoleLens = "process_manager" | "field_operator";
 export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "data_quality_hold";
 export type MvpConfidence = "high" | "medium" | "low" | "unavailable";
+export type MvpCriticality = "low" | "medium" | "high" | null;
 export type MvpDecision =
   | "continue_monitoring"
   | "request_inspection"
@@ -45,7 +46,7 @@ export interface MvpAsset {
   failureProbability: number | null;
   confidence: MvpConfidence;
   confidenceScore: number | null;
-  criticality: "low" | "medium" | "high";
+  criticality: MvpCriticality;
   assignedEngineer: string | null;
   estimatedDowntimeMinutes: number;
   sparePartAvailable: boolean | null;
@@ -68,7 +69,7 @@ export interface MvpEvent {
   confidence: MvpConfidence;
   predictedFailureType: string;
   recommendedDecision: MvpDecision;
-  criticality: "low" | "medium" | "high";
+  criticality: MvpCriticality;
   assignedEngineer: string | null;
   estimatedDowntimeMinutes: number;
   sparePartAvailable: boolean | null;

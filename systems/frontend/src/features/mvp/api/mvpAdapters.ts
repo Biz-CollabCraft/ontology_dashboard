@@ -5,6 +5,7 @@ import type {
   AssetDetailViewModel,
   MvpAsset,
   MvpConfidence,
+  MvpCriticality,
   MvpDecision,
   MvpEvent,
   MvpEventDetailModel,
@@ -64,12 +65,15 @@ export function normalizeDecision(value: unknown): MvpDecision {
   return "continue_monitoring";
 }
 
-export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; criticality: "low" | "medium" | "high"; observedAt?: string | null }>(items: T[]): T[] {
-  const criticality = { high: 3, medium: 2, low: 1 } as const;
+function criticalityRank(value: MvpCriticality): number {
+  return value === "high" ? 3 : value === "medium" ? 2 : value === "low" ? 1 : 0;
+}
+
+export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; criticality: MvpCriticality; observedAt?: string | null }>(items: T[]): T[] {
   return [...items].sort((left, right) => (
     STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status]
     || (right.failureProbability ?? -1) - (left.failureProbability ?? -1)
-    || criticality[right.criticality] - criticality[left.criticality]
+    || criticalityRank(right.criticality) - criticalityRank(left.criticality)
     || String(right.observedAt ?? "").localeCompare(String(left.observedAt ?? ""))
   ));
 }
@@ -102,7 +106,7 @@ export function adaptEvent(event: EventSummary): MvpEvent {
     recommendedDecision: status === "data_quality_hold"
       ? "hold_for_data_check"
       : normalizeDecision(event.recommended_decision),
-    criticality: event.equipment.criticality,
+    criticality: event.equipment.criticality ?? null,
     assignedEngineer: event.equipment.assigned_engineer || null,
     estimatedDowntimeMinutes: event.equipment.estimated_downtime_minutes ?? 0,
     sparePartAvailable: event.equipment.spare_part_available ?? null,
@@ -178,7 +182,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
       failureProbability: result.failure_probability,
       confidence: confidence.level,
       confidenceScore: confidence.score,
-      criticality: related?.criticality ?? (status === "critical" ? "high" : "medium"),
+      criticality: related?.criticality ?? null,
       assignedEngineer: related?.assignedEngineer ?? null,
       estimatedDowntimeMinutes: related?.estimatedDowntimeMinutes ?? 0,
       sparePartAvailable: related?.sparePartAvailable ?? null,

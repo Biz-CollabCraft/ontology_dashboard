@@ -239,8 +239,11 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert detail_payload["risk"]["status_grade"] == "warning"
     assert detail_payload["features"]
     assert detail_payload["features"][0]["series"]
-    assert detail_payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
+    assert detail_payload["risk_series"] == []
+    assert any(gap["field"] == "risk_series" for gap in detail_payload["evidence"]["gaps"])
     assert detail_payload["evidence"]["source_kind"] == "runtime_inference"
+    assert detail_payload["data_status"]["is_stale"] is None
+    assert "data_status freshness fact unavailable" in detail_payload["data_status"]["warnings"]
 
     evidence = client.get("/api/events/EVT-GS-002/evidence")
     assert evidence.status_code == 200
