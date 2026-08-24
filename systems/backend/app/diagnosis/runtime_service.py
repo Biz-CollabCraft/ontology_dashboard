@@ -1691,6 +1691,60 @@ class PredictiveMaintenanceRuntimeService:
             graph=context.graph,
         )
 
+    def resolve_maintenance_replay_session(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        session_id: str,
+        equipment_id: str,
+    ) -> dict[str, str]:
+        """Validate a replay selector for a downstream Maintenance workflow.
+
+        Diagnosis owns Replay Session eligibility and Dataset membership.  The
+        consumer receives only the verified opaque reference and target scope;
+        mutable Session or Dataset internals are not exposed for reinterpretation.
+        """
+
+        row = self.repository.session(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            session_id=session_id,
+            advance=False,
+        )
+        record = ReplaySessionRecord.model_validate(row)
+        expected_scope = (organization_id, project_id, workspace_id)
+        actual_scope = (
+            record.organization_id,
+            record.project_id,
+            record.workspace_id,
+        )
+        if actual_scope != expected_scope:
+            raise ValueError("Replay Session scope does not match the request")
+        if record.id != session_id:
+            raise ValueError("Replay Session canonical identity does not match the selector")
+        if record.state not in {"running", "paused"}:
+            raise ValueError("Replay Session is not eligible for Maintenance")
+        if not record.dataset_version_id:
+            raise ValueError("Replay Session Dataset Version is missing")
+        if not self.repository.asset_exists_in_version(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            dataset_version_id=record.dataset_version_id,
+            asset_id=equipment_id,
+        ):
+            raise ValueError("equipment is not present in the Replay Session Dataset Version")
+        return {
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "equipment_id": equipment_id,
+            "simulation_session_id": record.id,
+        }
+
     def control_replay(
         self,
         *,

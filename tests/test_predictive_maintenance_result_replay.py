@@ -502,6 +502,28 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     assert replay.nearest_prediction_time == at
 
     clock.advance(seconds=30)
+    binding = service.resolve_maintenance_replay_session(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        session_id=replay.cursor.session_id,
+        equipment_id=cnc.asset_id,
+    )
+    assert binding == {
+        "organization_id": "org-test",
+        "project_id": "project-test",
+        "workspace_id": "workspace-test",
+        "equipment_id": cnc.asset_id,
+        "simulation_session_id": replay.cursor.session_id,
+    }
+    with pytest.raises(ValueError, match="not present"):
+        service.resolve_maintenance_replay_session(
+            organization_id="org-test",
+            project_id="project-test",
+            workspace_id="workspace-test",
+            session_id=replay.cursor.session_id,
+            equipment_id="CNC-UNKNOWN",
+        )
     advanced = service.replay_snapshot(
         organization_id="org-test",
         project_id="project-test",
@@ -528,6 +550,14 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     )
     assert still_paused.cursor.state == "paused"
     assert still_paused.cursor.simulation_time == paused_time
+    paused_binding = service.resolve_maintenance_replay_session(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        session_id=replay.cursor.session_id,
+        equipment_id=cnc.asset_id,
+    )
+    assert paused_binding["simulation_session_id"] == replay.cursor.session_id
 
     speed_changed = service.control_replay(
         organization_id="org-test",
@@ -558,6 +588,14 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     assert completed.cursor.state == "completed"
     assert completed.canonical_sensor_time == completed.cursor.dataset_end
     assert completed.nearest_prediction_time == completed.cursor.dataset_end
+    with pytest.raises(ValueError, match="not eligible"):
+        service.resolve_maintenance_replay_session(
+            organization_id="org-test",
+            project_id="project-test",
+            workspace_id="workspace-test",
+            session_id=replay.cursor.session_id,
+            equipment_id=cnc.asset_id,
+        )
 
     seeked = service.control_replay(
         organization_id="org-test",
