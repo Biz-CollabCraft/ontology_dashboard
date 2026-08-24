@@ -105,6 +105,50 @@ class ConnectedRequest:
         return False
 
 
+class ReplayBindingRepository:
+    def __init__(
+        self,
+        *,
+        state: str = "running",
+        asset_exists: bool = True,
+        missing_session: bool = False,
+    ) -> None:
+        self.state = state
+        self.has_asset = asset_exists
+        self.missing_session = missing_session
+        self.session_calls: list[dict[str, object]] = []
+        self.asset_calls: list[dict[str, object]] = []
+
+    def session(self, **values):
+        self.session_calls.append(values)
+        if self.missing_session:
+            raise KeyError(values["session_id"])
+        now = datetime(2026, 8, 24, 9, 0, tzinfo=timezone.utc)
+        return {
+            "id": values["session_id"],
+            "organization_id": values["organization_id"],
+            "project_id": values["project_id"],
+            "workspace_id": values["workspace_id"],
+            "dataset_id": "DATASET-001",
+            "dataset_version_id": "DATASET-VERSION-001",
+            "created_by": "runtime-user",
+            "state": self.state,
+            "simulation_time": now,
+            "dataset_start": now - timedelta(hours=1),
+            "dataset_end": now + timedelta(hours=1),
+            "source_freshness_at": now,
+            "speed_minutes_per_second": 60.0,
+            "sequence": 1,
+            "last_advanced_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def asset_exists(self, **values):
+        self.asset_calls.append(values)
+        return self.has_asset
+
+
 def test_runtime_uses_the_stored_producer_artifact_payload() -> None:
     fixture = load_fixture(
         Path(__file__).resolve().parents[1] / "data" / "fixtures" / "GS-002-tool-wear-warning.json"
@@ -124,6 +168,69 @@ def test_runtime_uses_the_stored_producer_artifact_payload() -> None:
     assert stored is artifact
     assert stored["evidence_payload"] == artifact["evidence_payload"]
     assert stored["ranked_factor_evidence"] == artifact["ranked_factor_evidence"]
+
+
+def test_maintenance_replay_binding_is_scope_checked_without_advancing_clock() -> None:
+    repository = ReplayBindingRepository()
+    service = PredictiveMaintenanceRuntimeService(repository)
+
+    binding = service.resolve_maintenance_replay_session(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        session_id="REPLAY-001",
+        equipment_id="CNC-001",
+    )
+
+    assert binding == {
+        "simulation_session_id": "REPLAY-001",
+        "organization_id": "org-test",
+        "project_id": "project-test",
+        "workspace_id": "workspace-test",
+        "dataset_id": "DATASET-001",
+        "dataset_version_id": "DATASET-VERSION-001",
+        "equipment_id": "CNC-001",
+        "state": "running",
+    }
+    assert repository.session_calls[0]["advance"] is False
+    assert repository.asset_calls[0]["dataset_version_id"] == "DATASET-VERSION-001"
+    assert repository.asset_calls[0]["asset_id"] == "CNC-001"
+
+
+@pytest.mark.parametrize(
+    ("repository", "message"),
+    (
+        (
+            ReplayBindingRepository(missing_session=True),
+            "not available in the requested scope",
+        ),
+        (
+            ReplayBindingRepository(asset_exists=False),
+            "not present in the replay Dataset Version",
+        ),
+        (
+            ReplayBindingRepository(state="completed"),
+            "not eligible for maintenance",
+        ),
+        (
+            ReplayBindingRepository(state="stopped"),
+            "not eligible for maintenance",
+        ),
+    ),
+)
+def test_maintenance_replay_binding_rejects_invalid_selector(
+    repository: ReplayBindingRepository, message: str
+) -> None:
+    service = PredictiveMaintenanceRuntimeService(repository)
+
+    with pytest.raises(ValueError, match=message):
+        service.resolve_maintenance_replay_session(
+            organization_id="org-test",
+            project_id="project-test",
+            workspace_id="workspace-test",
+            session_id="REPLAY-INVALID",
+            equipment_id="CNC-001",
+        )
 
 
 def test_snapshot_compatibility_does_not_require_dashboard_evidence_detail() -> None:

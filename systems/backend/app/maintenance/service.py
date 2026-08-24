@@ -9,7 +9,10 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from app.diagnosis.ports import EventEvidenceProjectionQueryPort
+from app.diagnosis.ports import (
+    EventEvidenceProjectionQueryPort,
+    MaintenanceReplaySessionQueryPort,
+)
 
 from .api_schema import (
     InspectionResultCreateRequest,
@@ -55,9 +58,11 @@ class MaintenanceLoopService:
         repository: MaintenanceCommandRepositoryPort,
         *,
         event_evidence_query: EventEvidenceProjectionQueryPort,
+        replay_session_query: MaintenanceReplaySessionQueryPort,
     ) -> None:
         self.repository = repository
         self.event_evidence_query = event_evidence_query
+        self.replay_session_query = replay_session_query
 
     @staticmethod
     def _stable_id(prefix: str, *parts: str) -> str:
@@ -581,6 +586,35 @@ class MaintenanceLoopService:
         if work_order.work_type is not WorkOrderType.MAINTENANCE:
             raise ValueError("work order is not maintenance work")
 
+        replay_binding = self.replay_session_query.resolve_maintenance_replay_session(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            session_id=payload.simulation_session_id,
+            equipment_id=work_order.equipment_id,
+        )
+        if not isinstance(replay_binding, Mapping):
+            raise ValueError("Diagnosis returned an invalid replay session binding")
+        self._require_row_scope(
+            replay_binding,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        if self._required_text(replay_binding, "equipment_id") != work_order.equipment_id:
+            raise ValueError("replay session equipment identity mismatch")
+        for field in ("dataset_id", "dataset_version_id"):
+            value = replay_binding.get(field)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"replay session binding requires {field}")
+        if replay_binding.get("state") not in {"running", "paused"}:
+            raise ValueError("replay session is not eligible for maintenance")
+        simulation_session_id = self._required_text(
+            replay_binding, "simulation_session_id"
+        )
+        if simulation_session_id != payload.simulation_session_id:
+            raise ValueError("replay session canonical identity mismatch")
+
         # Build the requested target without trusting caller-supplied lineage.
         # The repository checks the persisted current state before committing
         # and handles an identical Idempotency-Key replay before transition
@@ -600,7 +634,7 @@ class MaintenanceLoopService:
         return self.repository.approve_work_order(
             work_order=approved,
             action=action,
-            simulation_session_id=payload.simulation_session_id,
+            simulation_session_id=simulation_session_id,
             actor_id=actor_id,
             actor_display_name=actor_display_name,
             approved_at=approved_at or datetime.now(timezone.utc),

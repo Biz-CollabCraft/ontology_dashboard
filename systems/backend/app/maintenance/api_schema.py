@@ -49,7 +49,7 @@ class RecommendationDecisionCreateRequest(StrictCommand):
 
 
 class MaintenanceWorkOrderApproveRequest(StrictCommand):
-    """Bind an approved maintenance action to the active simulation context."""
+    """Select the replay context that Diagnosis must validate server-side."""
 
     simulation_session_id: str = Field(min_length=1, max_length=240)
 

@@ -44,13 +44,39 @@ class Resolver:
 
 
 class ProjectionQuery:
-    def __init__(self, projection: dict | None = None) -> None:
+    def __init__(
+        self,
+        projection: dict | None = None,
+        *,
+        replay_binding: dict | None = None,
+        replay_error: ValueError | None = None,
+    ) -> None:
         self.projection = projection if projection is not None else canonical_projection()
         self.calls: list[dict] = []
+        self.replay_binding = replay_binding
+        self.replay_error = replay_error
+        self.replay_calls: list[dict] = []
 
     def event_evidence_projection(self, **scope):
         self.calls.append(scope)
         return self.projection
+
+    def resolve_maintenance_replay_session(self, **values):
+        self.replay_calls.append(values)
+        if self.replay_error is not None:
+            raise self.replay_error
+        if self.replay_binding is not None:
+            return self.replay_binding
+        return {
+            "simulation_session_id": values["session_id"],
+            "organization_id": values["organization_id"],
+            "project_id": values["project_id"],
+            "workspace_id": values["workspace_id"],
+            "dataset_id": "DATASET-001",
+            "dataset_version_id": "DATASET-VERSION-001",
+            "equipment_id": values["equipment_id"],
+            "state": "running",
+        }
 
 
 def canonical_projection(
@@ -84,9 +110,11 @@ def canonical_projection(
 
 
 def service(tmp_path, *, query: ProjectionQuery | None = None) -> MaintenanceLoopService:
+    provider = query or ProjectionQuery()
     return MaintenanceLoopService(
         MaintenanceRepository(tmp_path / "maintenance.db", project_context=Resolver()),
-        event_evidence_query=query or ProjectionQuery(),
+        event_evidence_query=provider,
+        replay_session_query=provider,
     )
 
 
@@ -266,7 +294,8 @@ def test_two_stage_inspection_to_maintenance_work_order_lineage(tmp_path) -> Non
 
 
 def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tmp_path) -> None:
-    loop = service(tmp_path)
+    diagnosis = ProjectionQuery()
+    loop = service(tmp_path, query=diagnosis)
     work_order_id = run_requested_maintenance(loop)
     started_at = datetime(2026, 8, 24, 9, 0, tzinfo=timezone.utc)
     completed_at = started_at + timedelta(minutes=30)
@@ -287,6 +316,15 @@ def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tm
     )
     action_id = approved["maintenance_action_id"]
     assert approved["maintenance_action_status"] == "planned"
+    assert diagnosis.replay_calls == [
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "session_id": "SIMULATION-SESSION-001",
+            "equipment_id": "CNC-001",
+        }
+    ]
 
     started = loop.start_maintenance(
         organization_id="org-1",
@@ -363,6 +401,86 @@ def test_maintenance_execution_uses_persisted_lineage_and_emits_replay_events(tm
         "maintenance.replay_requested": 3,
     }
     assert all("SIMULATION-SESSION-001" in row["payload_json"] for row in outbox)
+
+
+def test_maintenance_approval_fails_closed_when_diagnosis_rejects_replay(tmp_path) -> None:
+    diagnosis = ProjectionQuery(
+        replay_error=ValueError("replay session is not available in the requested scope")
+    )
+    loop = service(tmp_path, query=diagnosis)
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match="not available in the requested scope"):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="FORGED-SESSION"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="maintenance-approve-rejected-001",
+        )
+
+    lineage = loop.event_lineage(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+    assert lineage["maintenance_actions"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value", "message"),
+    (
+        ("project_id", "another-project", "project_id scope mismatch"),
+        ("equipment_id", "CNC-999", "equipment identity mismatch"),
+        (
+            "simulation_session_id",
+            "ANOTHER-SESSION",
+            "canonical identity mismatch",
+        ),
+        ("state", "completed", "not eligible for maintenance"),
+        (
+            "dataset_version_id",
+            "",
+            "requires dataset_version_id",
+        ),
+    ),
+)
+def test_maintenance_approval_rejects_noncanonical_replay_binding(
+    tmp_path, field: str, invalid_value: str, message: str
+) -> None:
+    binding = {
+        "simulation_session_id": "SIMULATION-SESSION-001",
+        "organization_id": "org-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "dataset_id": "DATASET-001",
+        "dataset_version_id": "DATASET-VERSION-001",
+        "equipment_id": "CNC-001",
+        "state": "running",
+    }
+    binding[field] = invalid_value
+    loop = service(tmp_path, query=ProjectionQuery(replay_binding=binding))
+    work_order_id = run_requested_maintenance(loop)
+
+    with pytest.raises(ValueError, match=message):
+        loop.approve_maintenance_work_order(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            work_order_id=work_order_id,
+            payload=MaintenanceWorkOrderApproveRequest(
+                simulation_session_id="SIMULATION-SESSION-001"
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key=f"maintenance-approve-{field}-001",
+        )
 
 
 def test_maintenance_execution_commands_are_idempotent(tmp_path) -> None:
