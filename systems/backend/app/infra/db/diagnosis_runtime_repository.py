@@ -1005,7 +1005,7 @@ class PredictiveMaintenanceRuntimeRepository:
                         (advanced, state, now, now, session_id),
                     ).fetchone()
                     return dict(row)
-            if data["state"] == "running":
+            if advance and data["state"] == "running":
                 row = connection.execute(
                     """
                     UPDATE pm_replay_sessions SET last_advanced_at=%s,updated_at=%s
@@ -1015,6 +1015,41 @@ class PredictiveMaintenanceRuntimeRepository:
                 ).fetchone()
                 return dict(row)
         return data
+
+    def asset_exists_in_version(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        dataset_version_id: str,
+        asset_id: str,
+    ) -> bool:
+        """Return whether an asset belongs to the scoped Dataset Version."""
+
+        with self._connection(organization_id, project_id) as connection:
+            row = connection.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM dataset_versions v
+                    JOIN pm_assets a ON a.dataset_version_id=v.id
+                    WHERE v.id=%s
+                      AND v.organization_id=%s
+                      AND v.project_id=%s
+                      AND v.workspace_id=%s
+                      AND a.asset_id=%s
+                ) AS asset_exists
+                """,
+                (
+                    dataset_version_id,
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    asset_id,
+                ),
+            ).fetchone()
+        return bool(row and row["asset_exists"])
 
     def update_session(
         self,
