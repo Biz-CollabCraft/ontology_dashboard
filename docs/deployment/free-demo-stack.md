@@ -5,10 +5,10 @@
 
 ```text
 pull_request
-  └─ GitHub-hosted Actions: unit / build / Playwright / architecture
+  └─ 자동 CI 테스트 없음
 
 main push
-  └─ architecture workflow green
+  └─ lightweight architecture release marker green
        └─ Mac mini outbound release watcher
             └─ verified main SHA pull
                  └─ Frontend container :8120
@@ -17,8 +17,9 @@ main push
 
 ## CI and CD ownership
 
-- PR은 GitHub-hosted runner에서 검증하고 외부 Preview deployment를 만들지 않는다.
-- `architecture` workflow가 `main` push에 대해 성공한 SHA만 Mac mini CD가 소비한다.
+- PR에서는 자동 unit/build/Playwright/Docker/contract CI를 실행하지 않는다.
+- `architecture` workflow는 테스트를 수행하지 않고 `main` push SHA에 대한 최소 release marker만
+  남긴다. Mac mini CD는 이 성공 marker가 있는 SHA만 소비한다.
 - 저장소가 public이므로 Mac mini를 repository self-hosted runner로 노출하지 않는다.
 - Mac mini의 launchd watcher가 outbound로 `main` 및 GitHub Actions 상태를 확인하고 검증된 SHA만 pull한다.
 - Frontend 입력(`systems/frontend`, `docs`)이 마지막 평가 SHA 이후 바뀌지 않았다면 배포를 건너뛴다.
@@ -57,7 +58,7 @@ Release watcher의 기본 `launchd` 간격은 `StartInterval=60`이다. 같은 `
 평가한 정상 상태에서는 `git ls-remote` 뒤 즉시 종료하고 GitHub Actions REST API를 호출하지
 않으므로 이 간격을 유지한다.
 
-새 `main` SHA의 Architecture CI가 장시간 pending/failure 상태이면 같은 SHA의 Actions 상태를
+새 `main` SHA의 Architecture release marker가 장시간 pending/failure 상태이면 같은 SHA의 Actions 상태를
 60초마다 다시 확인할 수 있다. 이때 GitHub가 `403` 또는 `429`를 반환하면 수동으로 즉시 반복
 호출하지 않는다.
 
@@ -65,7 +66,7 @@ Release watcher의 기본 `launchd` 간격은 `StartInterval=60`이다. 같은 `
 - `X-RateLimit-Reset`이 있으면 reset 시각 이후 다시 확인한다.
 - 반복적인 rate limit이 발생하거나 Mac mini에 다른 GitHub polling 자동화를 추가한다면 전체
   unauthenticated API 호출량을 다시 검토하고 watcher 간격을 임시로 300초로 늘린다.
-- Architecture CI 실패가 장시간 유지될 때는
+- Architecture release marker 실패가 장시간 유지될 때는
   `$HOME/Library/Logs/dev.oosu.ontology-dashboard-release-watcher/` 로그를 먼저 확인하고,
   원인 해소 전에는 polling 간격 확대를 우선한다.
 
