@@ -38,7 +38,7 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 > - Generator는 단계별 Versioned Observation/Failure Dataset, Preprocessing Plan, Feature Dataset Bundle 및 Model Artifact를 발행한다.
 > - Generator의 최종 실행 책임 끝점은 versioned Model Artifact 발행과 Model Artifact의 canonical active-version pointer 관리까지다.
 > - Preprocessing Plan의 `latest.json`은 해당 Dataset version에서 현재 선택된 Preprocessing Plan을 가리키는 포인터이며, Model Artifact 활성 버전 포인터와 동일한 파일 또는 저장 경계를 의미하지 않는다.
-> - Backend 런타임에서 `latest.json`을 읽어 진단 모델을 리로드(reload)하고 소비하는 연계 작업은 Generator 구현 완료 조건에 포함하지 않으며, 별도의 Backend 연계 작업으로 진행된다.
+> - Backend 런타임에서 Model Artifact store의 canonical active-version pointer를 읽어 진단 모델을 reload하고 소비하는 연계 작업은 Generator 구현 완료 조건에 포함하지 않으며, 별도의 Backend 연계 작업으로 진행한다.
 
 ### 금지 범위
 - `POST /internal/predict`, `POST /internal/predict/file`

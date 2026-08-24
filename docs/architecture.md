@@ -153,7 +153,9 @@ project-root/
 
 ### Generator Feature 책임
 
-Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, ontology node, dtype, unit, transform, parameter, partition key, ordering key를 포함한다. 상세 필드와 naming 규칙은 `docs/mvp/generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
+Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, output feature name, dtype, unit, operation 또는 transform, parameters, partition key 및 ordering key를 포함한다.
+
+Feature 실행은 ontology node 또는 Ontology Mapping을 조회하지 않는다. Ontology metadata가 존재하더라도 설명·추적용 선택 metadata로만 사용한다. 상세 필드와 naming 규칙은 `docs/mvp/generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
 ### Label 책임
 
