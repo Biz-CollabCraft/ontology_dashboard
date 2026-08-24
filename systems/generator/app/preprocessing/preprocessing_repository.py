@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+import pandas as pd
 
 from systems.generator.generator_config import PATHS
 from systems.generator.file_integrity import compute_file_sha256
@@ -29,6 +30,46 @@ class PublishedPreprocessingPlan:
     sha256: str
 
 
+def canonicalize_dtype(dtype: Any) -> str:
+    """Map pandas/numpy dtype to stable canonical dtype family string."""
+    if pd.api.types.is_bool_dtype(dtype):
+        return "boolean"
+    elif pd.api.types.is_integer_dtype(dtype):
+        return "integer"
+    elif pd.api.types.is_float_dtype(dtype):
+        return "float"
+    elif pd.api.types.is_datetime64_any_dtype(dtype):
+        return "datetime"
+    elif pd.api.types.is_timedelta64_dtype(dtype):
+        return "timedelta"
+    elif isinstance(dtype, pd.CategoricalDtype) or (hasattr(dtype, "name") and dtype.name == "category"):
+        return "category"
+    elif pd.api.types.is_string_dtype(dtype):
+        return "string"
+    else:
+        return "object"
+
+
+def compute_source_schema_fingerprint(df: pd.DataFrame) -> str:
+    """Compute deterministic 64-character SHA-256 fingerprint for dataframe column names, order, and canonical dtypes."""
+    import hashlib
+    canonical_schema = [
+        {
+            "index": index,
+            "name": str(column),
+            "dtype": canonicalize_dtype(df[column].dtype),
+        }
+        for index, column in enumerate(df.columns)
+    ]
+    canonical_json = json.dumps(
+        canonical_schema,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
 def compute_preprocessing_plan_version(
     dataset_id: str,
     dataset_version: str,
@@ -40,6 +81,10 @@ def compute_preprocessing_plan_version(
         "dataset_id": dataset_id,
         "dataset_version": dataset_version,
         "source_dataset_sha256": plan_data.get("source_dataset_sha256"),
+        "source_schema_fingerprint": plan_data.get("source_schema_fingerprint"),
+        "decision_source": plan_data.get("decision_source"),
+        "fallback_reason": plan_data.get("fallback_reason"),
+        "planner_version": plan_data.get("planner_version"),
         "structure_type": plan_data.get("structure_type"),
         "selected_columns": plan_data.get("selected_columns"),
         "id_column": plan_data.get("id_column"),
@@ -129,6 +174,9 @@ class PreprocessingRepository:
             "dataset_version",
             "source_dataset_uri",
             "source_dataset_sha256",
+            "source_schema_fingerprint",
+            "decision_source",
+            "planner_version",
             "structure_type",
             "selected_columns",
             "duplicate_policy",
@@ -137,18 +185,35 @@ class PreprocessingRepository:
             if rf not in plan_data or plan_data[rf] is None or (isinstance(plan_data[rf], str) and not plan_data[rf].strip()):
                 raise DatasetContractError(f"Preprocessing Plan에 필수 필드 '{rf}'가 누락되었거나 비어 있습니다.")
 
-        # 2. Validate source_dataset_sha256 format (64-char hex)
+        # 2. Validate source_dataset_sha256 and source_schema_fingerprint format (64-char hex)
         src_sha = plan_data.get("source_dataset_sha256", "")
         if not isinstance(src_sha, str) or len(src_sha) != 64 or not all(c in "0123456789abcdefABCDEF" for c in src_sha):
             raise DatasetContractError(f"Plan 내부 source_dataset_sha256 형식이 올바르지 않습니다 (64자리 hex 기대): '{src_sha}'")
 
-        # 3. Validate source_dataset_uri format (relative logical path only, no absolute or ..)
+        schema_fp = plan_data.get("source_schema_fingerprint", "")
+        if not isinstance(schema_fp, str) or len(schema_fp) != 64 or not all(c in "0123456789abcdefABCDEF" for c in schema_fp):
+            raise DatasetContractError(f"Plan 내부 source_schema_fingerprint 형식이 올바르지 않습니다 (64자리 hex 기대): '{schema_fp}'")
+
+        # 3. Validate Planner decision provenance
+        decision_src = plan_data.get("decision_source")
+        if decision_src not in ("llm", "rule_fallback"):
+            raise DatasetContractError(f"Plan 내부 decision_source는 'llm' 또는 'rule_fallback'이어야 합니다: '{decision_src}'")
+
+        fallback_reason = plan_data.get("fallback_reason")
+        if decision_src == "llm":
+            if fallback_reason is not None:
+                raise DatasetContractError(f"decision_source='llm'일 때는 fallback_reason이 null이어야 합니다: '{fallback_reason}'")
+        elif decision_src == "rule_fallback":
+            if not fallback_reason or not str(fallback_reason).strip():
+                raise DatasetContractError("decision_source='rule_fallback'일 때는 유효한 fallback_reason이 필수입니다.")
+
+        # 4. Validate source_dataset_uri format (relative logical path only, no absolute or ..)
         src_uri = plan_data.get("source_dataset_uri", "")
         uri_path = Path(src_uri)
         if uri_path.is_absolute() or ".." in uri_path.parts:
             raise DatasetContractError(f"Plan 내부 source_dataset_uri에 절대경로 또는 상위경로(..)가 포함되어 있습니다: '{src_uri}'")
 
-        # 4. Identity alignment
+        # 5. Identity alignment
         if plan_data.get("dataset_id") != dataset_id:
             raise DatasetContractError(
                 f"Plan 내부 dataset_id ('{plan_data.get('dataset_id')}')가 요청된 dataset_id ('{dataset_id}')와 일치하지 않습니다."
@@ -163,7 +228,7 @@ class PreprocessingRepository:
                 f"요청된 ID ('{expected_plan_id}')와 일치하지 않습니다."
             )
 
-        # 5. Duplicate policy & aggregation contract
+        # 6. Duplicate policy & aggregation contract
         dup_policy = plan_data.get("duplicate_policy")
         agg = plan_data.get("aggregation")
         if dup_policy == "aggregate":
@@ -175,7 +240,7 @@ class PreprocessingRepository:
         else:
             raise DatasetContractError(f"지원하지 않는 duplicate_policy입니다: '{dup_policy}'")
 
-        # 6. Structure-specific role & selected columns validation
+        # 7. Structure-specific role & selected columns validation
         st = plan_data.get("structure_type")
         selected_cols = plan_data.get("selected_columns")
         if not isinstance(selected_cols, list) or not selected_cols:
@@ -211,7 +276,7 @@ class PreprocessingRepository:
         else:
             raise DatasetContractError(f"지원하지 않는 structure_type입니다: '{st}'")
 
-        # 7. Content-derived version check
+        # 8. Content-derived version check
         computed_ver = compute_preprocessing_plan_version(dataset_id, dataset_version, plan_data)
         if plan_data.get("preprocessing_plan_version") != computed_ver:
             raise DatasetContractError(
@@ -325,7 +390,7 @@ class PreprocessingRepository:
         dataset_version: str,
         plan_data: dict[str, Any],
     ) -> PublishedPreprocessingPlan:
-        """Publish an immutable Plan file with dataset provenance, then atomically advance latest.json."""
+        """Publish an immutable Plan file with dataset provenance and schema fingerprint, then atomically advance latest.json."""
         plan_dir = self.get_dataset_plan_dir(dataset_id, dataset_version)
         plan_dir.mkdir(parents=True, exist_ok=True)
 
@@ -334,8 +399,15 @@ class PreprocessingRepository:
         # Require provenance fields in plan_data before publishing
         src_uri = plan_data.get("source_dataset_uri")
         src_sha = plan_data.get("source_dataset_sha256")
+        src_schema_fp = plan_data.get("source_schema_fingerprint")
+        decision_src = plan_data.get("decision_source", "rule_fallback")
+        fallback_reason = plan_data.get("fallback_reason")
+        planner_ver = plan_data.get("planner_version", "preprocessing-planner-v1")
+
         if not src_uri or not src_sha:
             raise PreprocessingPlanPublishError("Plan 발행 시 source_dataset_uri 및 source_dataset_sha256 provenance가 필수입니다.")
+        if not src_schema_fp:
+            raise PreprocessingPlanPublishError("Plan 발행 시 source_schema_fingerprint가 필수입니다.")
 
         canonical_version = compute_preprocessing_plan_version(dataset_id, dataset_version, plan_data)
 
@@ -346,7 +418,11 @@ class PreprocessingRepository:
             "dataset_version": dataset_version,
             "source_dataset_uri": src_uri,
             "source_dataset_sha256": src_sha,
+            "source_schema_fingerprint": src_schema_fp,
             "source_dataset_size_bytes": plan_data.get("source_dataset_size_bytes"),
+            "decision_source": decision_src,
+            "fallback_reason": fallback_reason,
+            "planner_version": planner_ver,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "structure_type": plan_data.get("structure_type", "tabular_column_as_attribute"),
             "selected_columns": plan_data.get("selected_columns", []),

@@ -31,6 +31,12 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
 from systems.generator.app.preprocessing.preprocessing_repository import (
     PreprocessingRepository,
     compute_preprocessing_plan_version,
+    compute_source_schema_fingerprint,
+    canonicalize_dtype,
+)
+from systems.generator.app.preprocessing.preprocessing_planner import (
+    PreprocessingPlanner,
+    PLANNER_VERSION,
 )
 from systems.generator.app.preprocessing.preprocessing_service import (
     PreprocessingService,
@@ -141,13 +147,15 @@ def test_preprocessing_responsibility_boundaries(client, sample_wide_csv, tmp_pa
 # ==========================================
 
 def test_preprocessing_plan_identification_and_provenance(client, sample_wide_csv, tmp_path, monkeypatch):
-    """Plan records source_dataset_uri, source_dataset_sha256, and content-hash version."""
+    """Plan records source_dataset_uri, source_dataset_sha256, source_schema_fingerprint, decision_source, and planner_version."""
     models_store = tmp_path / "models_store"
     models_store.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(PATHS, "models_store", models_store)
 
     csv_path = PATHS.data_dir / sample_wide_csv
     expected_file_sha = compute_file_sha256(csv_path)
+    df_raw = pd.read_csv(csv_path)
+    expected_schema_fp = compute_source_schema_fingerprint(df_raw)
 
     payload = {
         "dataset_id": "test_ident",
@@ -177,14 +185,21 @@ def test_preprocessing_plan_identification_and_provenance(client, sample_wide_cs
     assert loaded["dataset_id"] == "test_ident"
     assert loaded["dataset_version"] == "v1.0"
     assert loaded["source_dataset_sha256"] == expected_file_sha
+    assert loaded["source_schema_fingerprint"] == expected_schema_fp
+    assert loaded["decision_source"] in ("llm", "rule_fallback")
+    assert loaded["planner_version"] == PLANNER_VERSION
     assert not Path(loaded["source_dataset_uri"]).is_absolute()
     assert ".." not in Path(loaded["source_dataset_uri"]).parts
 
 
 def test_compute_preprocessing_plan_version_detects_changes():
-    """Modifying selected_columns, id_column, duplicate_policy, or source_dataset_sha256 changes version."""
+    """Modifying selected_columns, id_column, duplicate_policy, source_dataset_sha256, source_schema_fingerprint, or planner provenance changes version."""
     base = {
         "source_dataset_sha256": "a" * 64,
+        "source_schema_fingerprint": "1" * 64,
+        "decision_source": "rule_fallback",
+        "fallback_reason": "stage1: llm_call_failed; stage2: llm_call_failed",
+        "planner_version": "preprocessing-planner-v1",
         "structure_type": "tabular_column_as_attribute",
         "selected_columns": ["asset_id", "timestamp", "voltage"],
         "id_column": "asset_id",
@@ -205,6 +220,15 @@ def test_compute_preprocessing_plan_version_detects_changes():
 
     v_sha = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "source_dataset_sha256": "b" * 64})
     assert v_sha != v_base
+
+    v_schema_fp = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "source_schema_fingerprint": "2" * 64})
+    assert v_schema_fp != v_base
+
+    v_decision = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "decision_source": "llm", "fallback_reason": None})
+    assert v_decision != v_base
+
+    v_planner_ver = compute_preprocessing_plan_version("ds1", "v1.0", {**base, "planner_version": "preprocessing-planner-v2"})
+    assert v_planner_ver != v_base
 
 
 # ==========================================
@@ -402,7 +426,7 @@ def test_preprocessing_reanalysis_policy(client, sample_wide_csv, tmp_path, monk
 
 
 def test_preprocessing_checksum_mismatch_fails_409(client, sample_wide_csv, tmp_path, monkeypatch):
-    """When dataset content changes on disk, reuse returns 409 PREPROCESSING_PLAN_CONFLICT."""
+    """When dataset content changes on disk (values only), reuse returns 409 with content_changed=True, schema_changed=False."""
     models_store = tmp_path / "models_store"
     models_store.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(PATHS, "models_store", models_store)
@@ -418,7 +442,7 @@ def test_preprocessing_checksum_mismatch_fails_409(client, sample_wide_csv, tmp_
     res1 = client.post("/preprocessing", json=payload)
     assert res1.status_code == 200
 
-    # 2. Modify CSV file content on disk
+    # 2. Modify CSV file content on disk (values only, same columns & dtypes)
     csv_path = PATHS.data_dir / sample_wide_csv
     df = pd.read_csv(csv_path)
     df["temperature"] = df["temperature"] + 10.0
@@ -431,9 +455,49 @@ def test_preprocessing_checksum_mismatch_fails_409(client, sample_wide_csv, tmp_
     assert data2["error"]["code"] == "PREPROCESSING_PLAN_CONFLICT"
     assert "force_reanalyze=True" in data2["error"]["message"]
 
+    details = data2["error"]["details"][0]
+    assert details["content_changed"] is True
+    assert details["schema_changed"] is False
+    assert details["existing_schema_fingerprint"] == details["current_schema_fingerprint"]
+
     # 4. Run with force_reanalyze=True succeeds and issues new plan
     res3 = client.post("/preprocessing", json={**payload, "force_reanalyze": True})
     assert res3.status_code == 200
+
+
+def test_preprocessing_schema_fingerprint_change_fails_409(client, sample_wide_csv, tmp_path, monkeypatch):
+    """When columns/structure change on disk, reuse returns 409 with schema_changed=True."""
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    payload = {
+        "dataset_id": "schema_conflict_ds",
+        "dataset_version": "v1.0",
+        "source_uri": sample_wide_csv,
+        "force_reanalyze": False,
+    }
+
+    # 1. First run
+    res1 = client.post("/preprocessing", json=payload)
+    assert res1.status_code == 200
+
+    # 2. Modify schema on disk (add column)
+    csv_path = PATHS.data_dir / sample_wide_csv
+    df = pd.read_csv(csv_path)
+    df["pressure"] = [101.3, 101.5, 101.2]
+    df.to_csv(csv_path, index=False)
+
+    # 3. Subsequent run -> 409 with schema_changed=True
+    res2 = client.post("/preprocessing", json=payload)
+    assert res2.status_code == 409
+    data2 = res2.json()
+    assert data2["error"]["code"] == "PREPROCESSING_PLAN_CONFLICT"
+
+    details = data2["error"]["details"][0]
+    assert details["content_changed"] is True
+    assert details["schema_changed"] is True
+    assert details["existing_schema_fingerprint"] != details["current_schema_fingerprint"]
 
 
 def test_preprocessing_duplicate_policy_mismatch_fails_409(client, sample_wide_csv, tmp_path, monkeypatch):
@@ -474,7 +538,6 @@ def test_preprocessing_selected_columns_missing_fails_422():
         "selected_columns": ["asset_id", "time", "non_existent_col"],
     }
     with pytest.raises(PreprocessingPlanValidationError) as exc_info:
-        # Write to dummy CSV and test
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
             df.to_csv(f.name, index=False)
@@ -563,7 +626,100 @@ def test_preprocessing_corrupted_latest_fails_fast(client, sample_wide_csv, tmp_
 
 
 # ==========================================
-# 7. Atomicity & Failure Isolation
+# 7. Planner Provenance & Schema Fingerprint Unit Tests
+# ==========================================
+
+def test_source_schema_fingerprint_computation_and_invariance():
+    """Schema fingerprint remains unchanged when sensor values change, but changes on column alterations."""
+    df1 = pd.DataFrame({
+        "id": ["A1", "A2"],
+        "ts": ["2026-01-01", "2026-01-02"],
+        "val": [10.5, 20.5],
+    })
+    fp1 = compute_source_schema_fingerprint(df1)
+    assert len(fp1) == 64
+
+    # 1. Values change -> same fingerprint
+    df2 = pd.DataFrame({
+        "id": ["B99", "B100"],
+        "ts": ["2026-05-01", "2026-05-02"],
+        "val": [999.9, -12.3],
+    })
+    assert compute_source_schema_fingerprint(df2) == fp1
+
+    # 2. Add column -> different
+    df_add = df1.copy()
+    df_add["extra"] = [1, 2]
+    assert compute_source_schema_fingerprint(df_add) != fp1
+
+    # 3. Drop column -> different
+    assert compute_source_schema_fingerprint(df1[["id", "val"]]) != fp1
+
+    # 4. Reorder columns -> different
+    assert compute_source_schema_fingerprint(df1[["val", "ts", "id"]]) != fp1
+
+    # 5. Rename column -> different
+    df_rename = df1.rename(columns={"val": "value"})
+    assert compute_source_schema_fingerprint(df_rename) != fp1
+
+
+def test_planner_provenance_llm_success_and_fallback_tracking(monkeypatch, sample_wide_csv):
+    """Planner records decision_source='llm' when LLM succeeds, and 'rule_fallback' with sanitized reason on failure."""
+    from systems.generator.app.preprocessing.preprocessing_planner import PreprocessingPlanner
+    import systems.generator.generator_llm_client as generator_llm_client
+
+    planner = PreprocessingPlanner()
+    filepath = str(PATHS.data_dir / sample_wide_csv)
+
+    # 1. Normal fallback when no API key (rule_fallback)
+    plan_fallback = planner.build_plan(filepath)
+    assert plan_fallback["decision_source"] == "rule_fallback"
+    assert "stage1:" in plan_fallback["fallback_reason"]
+    assert "stage2:" in plan_fallback["fallback_reason"]
+    assert plan_fallback["planner_version"] == PLANNER_VERSION
+
+    # 2. Mock LLM success
+    def mock_call_llm(prompt, system=None):
+        if "classifier" in (system or ""):
+            return '{"structure_type": "tabular_column_as_attribute", "reason": "ok"}'
+        return '{"structure_type": "tabular_column_as_attribute", "selected_columns": ["asset_id", "timestamp", "temperature", "vibration"], "id_column": "asset_id", "time_column": "timestamp"}'
+
+    monkeypatch.setattr(generator_llm_client, "call_llm", mock_call_llm)
+    plan_llm = planner.build_plan(filepath)
+    assert plan_llm["decision_source"] == "llm"
+    assert plan_llm["fallback_reason"] is None
+    assert plan_llm["planner_version"] == PLANNER_VERSION
+
+
+def test_repository_validation_enforces_schema_fingerprint_and_provenance(tmp_path):
+    """Repository strictly validates presence and format of source_schema_fingerprint and planner provenance."""
+    models_store = tmp_path / "models_store"
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+
+    plan_data = {
+        "source_dataset_uri": "data/test.csv",
+        "source_dataset_sha256": "a" * 64,
+        "source_schema_fingerprint": "b" * 64,
+        "decision_source": "llm",
+        "fallback_reason": None,
+        "planner_version": PLANNER_VERSION,
+        "structure_type": "tabular_column_as_attribute",
+        "selected_columns": ["id", "val"],
+        "duplicate_policy": "error",
+    }
+
+    # 1. Valid publish
+    published = repo.publish_plan("ds_test", "v1.0", plan_data)
+    assert published.preprocessing_plan_id.startswith("pp-")
+
+    # 2. Missing source_schema_fingerprint raises PreprocessingPlanPublishError
+    bad_plan = {**plan_data, "source_schema_fingerprint": None}
+    with pytest.raises(PreprocessingPlanPublishError):
+        repo.publish_plan("ds_test", "v1.0", bad_plan)
+
+
+# ==========================================
+# 8. Atomicity & Failure Isolation
 # ==========================================
 
 def test_preprocessing_full_execution_failure_prevents_plan_publishing(client, tmp_path, monkeypatch):
@@ -606,7 +762,7 @@ def test_preprocessing_full_execution_failure_prevents_plan_publishing(client, t
 
 
 # ==========================================
-# 8. App Factory & Migration Verification
+# 9. App Factory & Migration Verification
 # ==========================================
 
 def test_generator_app_factory_and_compatibility():

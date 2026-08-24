@@ -85,15 +85,18 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 ### 4.1 Plan ID와 Plan Version 분리
 
 - **`preprocessing_plan_id`**: 발행 단위 고유 식별자 (`pp-{UUID4}`, 예: `pp-7c106819-cc59-46da-90dd-22c37c441ac9`).
-- **`preprocessing_plan_version`**: Dataset 식별자, `source_dataset_sha256`, 구조 유형, 선택 컬럼 및 중복 정책을 포함하는 canonical 지문 기반 16자리 SHA-256 해시 버전 (`preprocessing-plan-{hash}`, 예: `preprocessing-plan-38f74cc175d5ad12`).
+- **`preprocessing_plan_version`**: Dataset 식별자, `source_dataset_sha256`, `source_schema_fingerprint`, `decision_source`, `fallback_reason`, `planner_version`, 구조 유형, 선택 컬럼 및 중복 정책을 포함하는 canonical 지문 기반 16자리 SHA-256 해시 버전 (`preprocessing-plan-{hash}`, 예: `preprocessing-plan-38f74cc175d5ad12`).
 
-### 4.2 Dataset Provenance 및 입력 결합
+### 4.2 Dataset Provenance, Schema Fingerprint 및 Planner 판단 이력
 
-Preprocessing Plan은 Dataset ID/version뿐 아니라 실제 입력 Dataset의 SHA-256 체크섬(`source_dataset_sha256`) 및 논리 상대경로(`source_dataset_uri`)와 결합되어 발행됩니다. 동일한 Dataset ID/version이라도 파일 내용이 변경되면 다른 `preprocessing_plan_version`이 생성됩니다.
+- **입력 결합**: Preprocessing Plan은 Dataset ID/version뿐 아니라 실제 입력 Dataset의 SHA-256 체크섬(`source_dataset_sha256`) 및 논리 상대경로(`source_dataset_uri`)와 결합되어 발행됩니다.
+- **Source Schema Fingerprint**: 원본 Dataset의 컬럼 index, 컬럼명, canonical dtype을 기반으로 한 64자리 SHA-256 지문(`source_schema_fingerprint`)을 기록하여 값 변경과 구조 변경을 명확히 구분합니다.
+- **Planner 판단 이력**: Plan 생성 방식(`decision_source`: `llm` 또는 `rule_fallback`), fallback 발생 시 정제된 사유(`fallback_reason`), Planner 계약 버전(`planner_version`: `preprocessing-planner-v1`)을 기록합니다.
+- **버전 결정성**: 같은 Dataset과 역할 설정이라도 파일 내용(sha256), 컬럼 구조(schema fingerprint), Planner 생성 경로(`decision_source`) 또는 Planner 버전이 다르면 다른 `preprocessing_plan_version`이 생성됩니다.
 
 ### 4.3 Plan 검증 및 재사용 규칙
 
-- **입력 무결성 검증**: `force_reanalyze=False` 시 현재 Dataset의 SHA-256과 Plan의 `source_dataset_sha256`을 비교하여 불일치 시 `409 PREPROCESSING_PLAN_CONFLICT`를 반환합니다.
+- **입력 및 구조 무결성 검증**: `force_reanalyze=False` 시 현재 Dataset의 SHA-256 및 Schema Fingerprint와 Plan의 메타데이터를 비교하여 불일치 시 `409 PREPROCESSING_PLAN_CONFLICT`를 반환합니다 (detail에 `content_changed`, `schema_changed`, 이전/현재 해시 상세 제공).
 - **중복 정책 검증**: 요청된 `duplicate_policy` 및 `aggregation`이 기존 Plan과 다르면 `409 PREPROCESSING_PLAN_CONFLICT`를 반환합니다.
 - **Fail-Fast 컬럼 검증**: Plan에 선언된 `selected_columns` 또는 역할 컬럼(`id_column`, `time_column` 등) 중 하나라도 Dataset에 없으면 임의 fallback 없이 즉시 `422 PREPROCESSING_PLAN_VALIDATION_ERROR`를 발생시킵니다.
 - **Wide-format Timestamp 정규화**: Wide-format에서도 `time_column`이 선언된 경우 `datetime64[ns]` 정규화 및 `[id_column, time_column]` 안정 정렬(stable sort)을 수행합니다.

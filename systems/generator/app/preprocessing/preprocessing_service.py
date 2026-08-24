@@ -29,7 +29,10 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
     PreprocessingPlanConflictError,
 )
 from systems.generator.app.preprocessing.preprocessing_planner import PreprocessingPlanner
-from systems.generator.app.preprocessing.preprocessing_repository import PreprocessingRepository
+from systems.generator.app.preprocessing.preprocessing_repository import (
+    PreprocessingRepository,
+    compute_source_schema_fingerprint,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -416,35 +419,47 @@ class PreprocessingService:
         dataset_size = dataset_path.stat().st_size
         logger.info(f"[PreprocessingService] Resolved dataset: '{dataset_path.name}' (sha256={dataset_sha256[:8]}...) for {request.dataset_id}")
 
-        # 2. Preview dataset
+        # 2. Read full dataset for source schema fingerprint and preview
         ext = dataset_path.suffix.lower()
         if ext == ".csv":
-            df_preview = pd.read_csv(dataset_path, nrows=5)
+            df_full = pd.read_csv(dataset_path)
         elif ext in (".xlsx", ".xls"):
-            df_preview = pd.read_excel(dataset_path, nrows=5)
+            df_full = pd.read_excel(dataset_path)
         else:
             raise DatasetContractError(f"지원하지 않는 파일 형식입니다: {ext}")
 
-        if df_preview.empty or len(df_preview.columns) == 0:
+        if df_full.empty or len(df_full.columns) == 0:
             raise DatasetContractError("데이터셋이 비어 있거나 컬럼이 존재하지 않습니다.")
+
+        source_schema_fp = compute_source_schema_fingerprint(df_full)
+        df_preview = df_full.head(5)
 
         # 3. Check existing plan reuse (if force_reanalyze=False)
         existing_plan = None
         if not request.force_reanalyze:
             existing_plan = self.repository.find_latest_plan(request.dataset_id, request.dataset_version)
             if existing_plan:
-                # 3.1. Verify Dataset SHA-256 match
+                # 3.1. Verify Dataset SHA-256 and Source Schema Fingerprint match
                 existing_sha = existing_plan.get("source_dataset_sha256")
-                if existing_sha != dataset_sha256:
+                existing_schema_fp = existing_plan.get("source_schema_fingerprint")
+
+                content_changed = existing_sha != dataset_sha256
+                schema_changed = existing_schema_fp != source_schema_fp
+
+                if content_changed or schema_changed:
                     logger.warning(
-                        f"[PreprocessingService] Existing plan source_dataset_sha256 mismatch for {request.dataset_id}:{request.dataset_version} "
-                        f"(saved={existing_sha}, current={dataset_sha256})"
+                        f"[PreprocessingService] Existing plan conflict for {request.dataset_id}:{request.dataset_version} "
+                        f"(content_changed={content_changed}, schema_changed={schema_changed})"
                     )
                     raise PreprocessingPlanConflictError(
-                        f"데이터셋 내용(SHA-256)이 변경되었습니다. force_reanalyze=True로 새 계획을 발행하십시오.",
+                        f"데이터셋 내용 또는 구조(Schema Fingerprint)가 변경되었습니다. force_reanalyze=True로 새 계획을 발행하십시오.",
                         details=[{
+                            "content_changed": content_changed,
+                            "schema_changed": schema_changed,
                             "existing_sha256": existing_sha,
                             "current_sha256": dataset_sha256,
+                            "existing_schema_fingerprint": existing_schema_fp,
+                            "current_schema_fingerprint": source_schema_fp,
                         }],
                     )
 
@@ -516,9 +531,10 @@ class PreprocessingService:
             aggregation=request.aggregation,
         )
 
-        # Attach dataset provenance
+        # Attach dataset provenance and schema fingerprint
         plan["source_dataset_uri"] = dataset_uri
         plan["source_dataset_sha256"] = dataset_sha256
+        plan["source_schema_fingerprint"] = source_schema_fp
         plan["source_dataset_size_bytes"] = dataset_size
 
         # 5. Validate plan

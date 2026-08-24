@@ -20,9 +20,15 @@ from systems.generator.app.preprocessing.preprocessing_exception import (
 
 logger = logging.getLogger(__name__)
 
+PLANNER_VERSION = "preprocessing-planner-v1"
+
 
 class PreprocessingPlanner:
-    """Handles 2-stage analysis (structure classification & column planning) with strict validation."""
+    """Handles 2-stage analysis (structure classification & column planning) with strict validation and provenance tracking."""
+
+    def __init__(self) -> None:
+        self._last_s1_provenance: tuple[bool, Optional[str]] = (False, None)
+        self._last_s2_provenance: tuple[bool, Optional[str]] = (False, None)
 
     def compute_fingerprint(self, df_preview: pd.DataFrame) -> str:
         raw_str = f"cols:{list(df_preview.columns)}|head:{df_preview.head(3).to_json()}"
@@ -44,11 +50,18 @@ class PreprocessingPlanner:
         try:
             raw_res = generator_llm_client.call_llm(prompt, system=system_prompt)
             res = generator_llm_client.validate_or_transform_pydantic(raw_res, PreprocessingStructureResponse)
-            st_type = res.structure_type if res else "tabular_column_as_attribute"
-            logger.info(f"[PreprocessingPlanner] Stage 1 structure classification for '{filepath}': {st_type}")
-            return st_type
+            if res and res.structure_type:
+                st_type = res.structure_type
+                logger.info(f"[PreprocessingPlanner] Stage 1 structure classification for '{filepath}': {st_type}")
+                self._last_s1_provenance = (False, None)
+                return st_type
+            else:
+                logger.warning(f"[PreprocessingPlanner] Stage 1 classification returned empty or invalid response")
+                self._last_s1_provenance = (True, "response_validation_failed")
+                return "tabular_column_as_attribute"
         except Exception as e:
             logger.warning(f"[PreprocessingPlanner] Stage 1 classification fallback: {e}")
+            self._last_s1_provenance = (True, "llm_call_failed")
             return "tabular_column_as_attribute"
 
     def plan_columns(
@@ -94,6 +107,7 @@ class PreprocessingPlanner:
             f"Sample:\n{df_preview.head(3).to_string()}"
         )
 
+        stage2_fallback_reason: Optional[str] = None
         try:
             raw_res = generator_llm_client.call_llm(prompt, system=system_prompt)
             res = generator_llm_client.validate_or_transform_pydantic(raw_res, PreprocessingPlanResponse)
@@ -106,7 +120,9 @@ class PreprocessingPlanner:
                             f"roles {roles} not fully found in columns {avail_cols}"
                         )
                 cols = res.selected_columns if res.selected_columns else avail_cols
+                self._last_s2_provenance = (False, None)
                 return {
+                    "structure_type": structure_type,
                     "selected_columns": cols,
                     "id_column": res.id_column,
                     "time_column": res.time_column,
@@ -114,7 +130,11 @@ class PreprocessingPlanner:
                     "value_column": res.value_column,
                     "duplicate_policy": duplicate_policy or res.duplicate_policy or "error",
                     "aggregation": aggregation or res.aggregation,
+                    "decision_source": "llm",
+                    "fallback_reason": None,
                 }
+            else:
+                stage2_fallback_reason = "response_validation_failed"
         except PreprocessingRoleError:
             raise
         except Exception as e:
@@ -124,6 +144,7 @@ class PreprocessingPlanner:
                     f"Long-format preprocessing requires explicit role columns (id, attribute, value). "
                     f"Planning failed: {e}"
                 ) from e
+            stage2_fallback_reason = "llm_call_failed"
 
         if structure_type == "tabular_row_as_attribute":
             raise PreprocessingRoleError(
@@ -133,6 +154,7 @@ class PreprocessingPlanner:
         found_id = next((c for c in avail_cols if c in ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]), None)
         found_time = next((c for c in avail_cols if c in ["observed_at", "datetime", "timestamp", "time", "date"]), None)
 
+        self._last_s2_provenance = (True, stage2_fallback_reason or "column_planning_fallback")
         return {
             "structure_type": structure_type,
             "id_column": found_id,
@@ -140,6 +162,8 @@ class PreprocessingPlanner:
             "selected_columns": avail_cols,
             "duplicate_policy": duplicate_policy,
             "aggregation": aggregation,
+            "decision_source": "rule_fallback",
+            "fallback_reason": stage2_fallback_reason or "column_planning_fallback",
         }
 
     def enforce_key_columns(self, selected_columns: list[str], available_columns: list[str]) -> list[str]:
@@ -169,7 +193,7 @@ class PreprocessingPlanner:
         duplicate_policy: str = "error",
         aggregation: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Build preprocessing plan from preview data and LLM analysis."""
+        """Build preprocessing plan from preview data and LLM analysis with full provenance tracking."""
         ext = os.path.splitext(filepath)[1].lower()
         if ext == ".csv":
             df_preview = pd.read_csv(filepath, nrows=5)
@@ -181,10 +205,15 @@ class PreprocessingPlanner:
         fingerprint = self.compute_fingerprint(df_preview)
         file_key = os.path.basename(filepath)
 
+        self._last_s1_provenance = (False, None)
+        self._last_s2_provenance = (False, None)
+
+        # Stage 1: Structure classification
         structure_type = self.classify_structure(filepath, df_preview)
         if structure_type == "unsupported":
             raise PreprocessingPlanningError(f"File '{filepath}' classified as unsupported format.")
 
+        # Stage 2: Column planning
         stage2_plan = self.plan_columns(
             filepath,
             structure_type,
@@ -192,8 +221,28 @@ class PreprocessingPlanner:
             duplicate_policy=duplicate_policy,
             aggregation=aggregation,
         )
+
         raw_selected = stage2_plan.get("selected_columns", list(df_preview.columns))
         final_selected = self.enforce_key_columns(raw_selected, list(df_preview.columns))
+
+        # Check provenance from Stage 1 & Stage 2
+        fallback_reasons = []
+        s1_fallback, s1_reason = getattr(self, "_last_s1_provenance", (False, None))
+        if s1_fallback:
+            fallback_reasons.append(f"stage1: {s1_reason or 'structure_classification_fallback'}")
+
+        s2_fallback, s2_reason = getattr(self, "_last_s2_provenance", (False, None))
+        if stage2_plan.get("decision_source") == "rule_fallback" or s2_fallback:
+            reason = stage2_plan.get("fallback_reason") or s2_reason or "column_planning_fallback"
+            if not any(r.startswith("stage2:") for r in fallback_reasons):
+                fallback_reasons.append(f"stage2: {reason}")
+
+        if fallback_reasons:
+            decision_source = "rule_fallback"
+            fallback_reason = "; ".join(fallback_reasons)
+        else:
+            decision_source = "llm"
+            fallback_reason = None
 
         plan = {
             "filepath": filepath,
@@ -207,5 +256,8 @@ class PreprocessingPlanner:
             "value_column": stage2_plan.get("value_column"),
             "duplicate_policy": stage2_plan.get("duplicate_policy", duplicate_policy),
             "aggregation": stage2_plan.get("aggregation", aggregation),
+            "decision_source": decision_source,
+            "fallback_reason": fallback_reason,
+            "planner_version": PLANNER_VERSION,
         }
         return plan
