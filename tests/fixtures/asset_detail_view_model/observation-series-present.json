@@ -19,7 +19,11 @@
       "key": "rotation_raw",
       "label": "회전 상태",
       "unit": "rpm",
-      "current": 1820.0,
+      "current": {
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "value": 1820.0,
+        "quality_status": "good"
+      },
       "baseline": {
         "mean": 1600.0,
         "std": 67.327,
@@ -27,22 +31,21 @@
         "upper": 1734.654,
         "reference": "all_valid_rows canonical-ai4i-physics-v3.1 compressor_sensor_observation.csv"
       },
-      "series": [
-        {
-          "observed_at": "2026-07-31T18:00:00+09:00",
-          "value": 1602.1,
-          "source_kind": "observed_history",
-          "quality_status": "good",
-          "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-07-31T18:00:00+09:00"
-        },
-        {
-          "observed_at": "2026-07-31T21:00:00+09:00",
-          "value": 1688.4,
-          "source_kind": "observed_history",
-          "quality_status": "good",
-          "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-07-31T21:00:00+09:00"
-        }
-      ],
+      "history": {
+        "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+        "points": [
+          {
+            "observed_at": "2026-07-31T18:00:00+09:00",
+            "value": 1602.1,
+            "quality_status": "good"
+          },
+          {
+            "observed_at": "2026-07-31T21:00:00+09:00",
+            "value": 1688.4,
+            "quality_status": "good"
+          }
+        ]
+      },
       "top_factor": {
         "rank": 1,
         "contribution": 0.42,
@@ -55,17 +58,22 @@
       "key": "vibration_raw",
       "label": "진동 신호",
       "unit": "raw",
-      "current": null,
+      "current": {
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "value": null,
+        "quality_status": "unknown"
+      },
       "baseline": null,
-      "series": [
-        {
-          "observed_at": "2026-07-31T18:00:00+09:00",
-          "value": null,
-          "source_kind": "observed_history",
-          "quality_status": "bad",
-          "source_ref": "observation://CMP-S03-L03-01.vibration_raw/2026-07-31T18:00:00+09:00"
-        }
-      ],
+      "history": {
+        "source_ref": "observation://CMP-S03-L03-01.vibration_raw",
+        "points": [
+          {
+            "observed_at": "2026-07-31T18:00:00+09:00",
+            "value": null,
+            "quality_status": "bad"
+          }
+        ]
+      },
       "top_factor": null
     }
   ],
@@ -95,7 +103,7 @@
     "is_data_quality_hold": false,
     "last_updated_at": "2026-08-01T00:00:00+09:00",
     "warnings": [
-      "features[1].series has a bad-quality reading at 2026-07-31T18:00:00+09:00; value withheld as null instead of estimated"
+      "features[1].history.points has a bad-quality reading at 2026-07-31T18:00:00+09:00; value withheld as null instead of estimated"
     ]
   }
 }

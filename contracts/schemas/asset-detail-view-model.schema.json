@@ -59,13 +59,22 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["key", "label", "unit", "current", "series"],
+        "required": ["key", "label", "unit", "current", "history"],
         "additionalProperties": false,
         "properties": {
           "key": {"type": "string"},
           "label": {"type": "string"},
           "unit": {"type": "string"},
-          "current": {"type": ["number", "null"]},
+          "current": {
+            "type": "object",
+            "required": ["observed_at", "value", "quality_status"],
+            "additionalProperties": false,
+            "properties": {
+              "observed_at": {"type": "string", "format": "date-time"},
+              "value": {"type": ["number", "null"]},
+              "quality_status": {"enum": ["good", "bad", "unknown"]}
+            }
+          },
           "baseline": {
             "type": ["object", "null"],
             "required": ["mean", "std", "lower", "upper", "reference"],
@@ -78,22 +87,25 @@
               "reference": {"type": "string"}
             }
           },
-          "series": {
-            "type": "array",
-            "description": "Observed history before the current judgment point. UI consumers may merge this with features[].current for trend display, but the contract keeps current observation and historical baseline separate. Derived from the versioned Observation contract (canonical/overlay Observation API), not from gen_data internal file layout (Layer 0/1/2, _log.jsonl) directly.",
-            "items": {
-              "type": "object",
-              "required": ["observed_at", "value", "source_kind"],
-              "additionalProperties": false,
-              "properties": {
-                "observed_at": {"type": "string"},
-                "value": {"type": ["number", "null"]},
-                "source_kind": {
-                  "enum": ["observed_history", "current_observation", "measured_backfill", "simulated_backfill"],
-                  "description": "Current implementation emits observed_history for features[].series. current_observation is reserved for display-series extensions; measured_backfill and simulated_backfill are explicit future extensions."
-                },
-                "quality_status": {"enum": ["good", "bad", "unknown"]},
-                "source_ref": {"type": "string"}
+          "history": {
+            "type": "object",
+            "description": "Canonical Observation history strictly before features[].current. Provenance shared by the series is carried once at the history envelope, while points retain only time, value, and quality.",
+            "required": ["points"],
+            "additionalProperties": false,
+            "properties": {
+              "source_ref": {"type": "string"},
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["observed_at", "value", "quality_status"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "observed_at": {"type": "string", "format": "date-time"},
+                    "value": {"type": ["number", "null"]},
+                    "quality_status": {"enum": ["good", "bad", "unknown"]}
+                  }
+                }
               }
             }
           },

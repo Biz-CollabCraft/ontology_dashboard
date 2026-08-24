@@ -42,14 +42,6 @@ ALLOWED_STATUS_GRADES = {"normal", "attention", "warning", "critical"}
 # data_status.source (canonical/fallback) or feature series quality_status
 # (good/bad/unknown).
 SOURCE_KIND_VALUES = {"runtime_inference", "compatibility_fallback"}
-FEATURE_SERIES_SOURCE_KIND_VALUES = {
-    "observed_history",
-    "current_observation",
-    "measured_backfill",
-    "simulated_backfill",
-}
-
-
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -105,20 +97,26 @@ def test_schema_allows_unknown_freshness_without_synthesizing_false() -> None:
     assert properties["data_status"]["properties"]["is_stale"]["type"] == ["boolean", "null"]
 
 
-def test_schema_restricts_source_kind_enum_to_evidence_and_risk_series_only() -> None:
-    """runtime_inference/compatibility_fallback must not leak into data_status.source
-    or feature series quality_status/source_kind."""
+def test_schema_keeps_feature_history_provenance_at_envelope_only() -> None:
+    """Feature points carry time/value/quality only; shared provenance is not repeated."""
     properties = schema()["properties"]
 
     assert set(properties["evidence"]["properties"]["source_kind"]["enum"]) == SOURCE_KIND_VALUES
     assert set(properties["risk_series"]["items"]["properties"]["source_kind"]["enum"]) == SOURCE_KIND_VALUES
-    feature_series_source_kind = properties["features"]["items"]["properties"]["series"]["items"]["properties"]["source_kind"]["enum"]
-    assert set(feature_series_source_kind) == FEATURE_SERIES_SOURCE_KIND_VALUES
-    assert SOURCE_KIND_VALUES.isdisjoint(feature_series_source_kind)
     assert set(properties["data_status"]["properties"]["source"]["enum"]) == {"canonical", "fallback"}
-    quality_status_enum = properties["features"]["items"]["properties"]["series"]["items"]["properties"]["quality_status"]["enum"]
-    assert set(quality_status_enum) == {"good", "bad", "unknown"}
-    assert SOURCE_KIND_VALUES.isdisjoint(quality_status_enum)
+
+    feature_properties = properties["features"]["items"]["properties"]
+    history_properties = feature_properties["history"]["properties"]
+    point_properties = history_properties["points"]["items"]["properties"]
+    assert "source_ref" in history_properties
+    assert "source_ref" not in point_properties
+    assert "source_kind" not in point_properties
+    assert set(point_properties["quality_status"]["enum"]) == {"good", "bad", "unknown"}
+    assert set(feature_properties["current"]["properties"]["quality_status"]["enum"]) == {
+        "good",
+        "bad",
+        "unknown",
+    }
 
 
 def test_schema_rejects_mvp_prefixed_additional_property() -> None:
@@ -130,47 +128,51 @@ def test_schema_rejects_mvp_prefixed_additional_property() -> None:
     assert any("Additional properties are not allowed" in error.message for error in errors)
 
 
-def test_current_evidence_only_records_gaps_for_series_timeline_and_history() -> None:
+def test_current_evidence_only_records_gaps_for_history_timeline_and_equipment() -> None:
     payload = fixture("current_evidence_only")
     gap_fields = {gap["field"] for gap in payload["evidence"]["gaps"]}
 
     assert payload["risk_series"] == []
     assert payload["equipment_history"] == []
-    assert all(feature["series"] == [] for feature in payload["features"])
-    assert {"features[].series", "risk_series", "equipment_history"} <= gap_fields
+    assert all(feature["history"]["points"] == [] for feature in payload["features"])
+    assert {"features[].history.points", "risk_series", "equipment_history"} <= gap_fields
 
 
-def test_observation_series_present_fills_feature_series_but_not_risk_series() -> None:
+def test_observation_history_present_fills_feature_history_but_not_risk_series() -> None:
     payload = fixture("observation_series_present")
     gap_fields = {gap["field"] for gap in payload["evidence"]["gaps"]}
 
-    assert any(feature["series"] for feature in payload["features"])
+    assert any(feature["history"]["points"] for feature in payload["features"])
     assert payload["risk_series"] == []
     assert "risk_series" in gap_fields
-    assert "features[].series" not in gap_fields
+    assert "features[].history.points" not in gap_fields
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))
-def test_feature_series_is_observed_history_before_current_observation(scenario: str) -> None:
+def test_feature_history_is_pre_current_and_keeps_provenance_at_envelope(scenario: str) -> None:
     payload = fixture(scenario)
     current_observed_at = payload["asset"]["observed_at"]
 
     for feature in payload["features"]:
-        observed_times = [point["observed_at"] for point in feature["series"]]
+        assert feature["current"]["observed_at"] == current_observed_at
+        points = feature["history"]["points"]
+        observed_times = [point["observed_at"] for point in points]
         assert observed_times == sorted(observed_times)
         assert current_observed_at not in observed_times
-        assert all(point["source_kind"] == "observed_history" for point in feature["series"])
+        assert all(set(point) == {"observed_at", "value", "quality_status"} for point in points)
+        if points:
+            assert feature["history"]["source_ref"].startswith("observation://")
 
 
-def test_risk_timeline_present_fills_risk_series_and_feature_series() -> None:
+def test_risk_timeline_present_fills_risk_series_and_feature_history() -> None:
     payload = fixture("risk_timeline_present")
     gap_fields = {gap["field"] for gap in payload["evidence"]["gaps"]}
 
     assert payload["risk_series"]
     assert all(point["source_kind"] in SOURCE_KIND_VALUES for point in payload["risk_series"])
-    assert any(feature["series"] for feature in payload["features"])
+    assert any(feature["history"]["points"] for feature in payload["features"])
     assert "risk_series" not in gap_fields
-    assert "features[].series" not in gap_fields
+    assert "features[].history.points" not in gap_fields
     # equipment_history still requires a dedicated Activity/Maintenance source.
     assert "equipment_history" in gap_fields
 
@@ -192,14 +194,14 @@ def test_risk_series_source_ref_uses_runtime_history_contract() -> None:
             assert point["source_ref"].startswith("diagnosis-runtime-history://")
 
 
-def test_baseline_partially_missing_keeps_current_value_and_series_but_gaps_baseline() -> None:
+def test_baseline_partially_missing_keeps_current_value_and_history_but_gaps_baseline() -> None:
     payload = fixture("baseline_partially_missing")
     missing_baseline_features = [feature for feature in payload["features"] if feature["baseline"] is None]
 
     assert missing_baseline_features
     for feature in missing_baseline_features:
-        assert feature["current"] is not None
-        assert feature["series"], "current value/series must not be withheld just because baseline is missing"
+        assert feature["current"]["value"] is not None
+        assert feature["history"]["points"], "current value/history must not be withheld just because baseline is missing"
 
     gap_fields = {gap["field"] for gap in payload["evidence"]["gaps"]}
     assert any(field.startswith("features[") and field.endswith("].baseline") for field in gap_fields)
@@ -216,5 +218,5 @@ def test_fixture_never_synthesizes_values_for_gapped_fields(scenario: str) -> No
         assert payload["risk_series"] == []
     if "equipment_history" in gap_fields:
         assert payload["equipment_history"] == []
-    if "features[].series" in gap_fields:
-        assert all(feature["series"] == [] for feature in payload["features"])
+    if "features[].history.points" in gap_fields:
+        assert all(feature["history"]["points"] == [] for feature in payload["features"])

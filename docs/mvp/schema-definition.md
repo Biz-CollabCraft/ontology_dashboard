@@ -374,17 +374,24 @@ Overview와 Objects 목록의 공통 행이다.
 | `features[].key` | string | Y | Feature catalog | 제안 |
 | `features[].label` | string | Y | Feature catalog 또는 display projection | 제안 |
 | `features[].unit` | string | Y | Feature catalog 또는 Evidence sensor unit | 제안 |
-| `features[].current` | number 또는 null | Y | Product Result Artifact observation 또는 sensor evidence | 제안 |
+| `features[].current` | CurrentObservation | Y | Product Result Artifact observation 또는 sensor evidence | 제안 |
+| `features[].current.observed_at` | datetime | Y | Product Result Artifact observation time | 제안 |
+| `features[].current.value` | number 또는 null | Y | Product Result Artifact observation 또는 sensor evidence | 제안 |
+| `features[].current.quality_status` | enum | Y | Observation/Evidence quality | 제안 |
 | `features[].baseline` | Baseline 또는 null | N | `evidence_payload.sensor_evidence.sensors[*].basis` | 제안 |
-| `features[].series` | ObservationSeriesPoint[] | Y | Backend Observation read contract + Backend Feature Executor result | 제안 |
+| `features[].history` | ObservationHistory | Y | Backend Observation read contract + Backend Feature Executor result | 제안 |
+| `features[].history.source_ref` | string | N | history 전체가 공유하는 Observation/Feature source reference | 제안 |
+| `features[].history.points` | ObservationSeriesPoint[] | Y | actual pre-current observations | 제안 |
 | `features[].top_factor` | Factor summary 또는 null | N | Product Result Artifact `top_factors` | 제안 |
 | `equipment_history` | EquipmentHistoryRow[] | Y | Activity/Decision/Maintenance source | 제안 |
 | `evidence` | ReportEvidenceStatus | Y | Artifact/Evidence provenance | 제안 |
 | `evidence.gaps` | EvidenceGap[] | Y | Backend adapter | 제안 |
 | `data_status` | DataStatus | Y | API | 제안 |
 
-`features[].series`는 센서 Observation과 파생 Feature 시계열이므로 Product API가 `gen_data`
-raw JSONL이나 canonical CSV를 직접 파싱해 만들지 않는다. 센서 Observation series는 Backend의
+`features[].history.points`는 센서 Observation과 파생 Feature 시계열이므로 Product API가
+`gen_data` raw JSONL이나 canonical CSV를 직접 파싱해 만들지 않는다. 같은 history가 공유하는
+provenance는 point마다 반복하지 않고 `features[].history.source_ref` envelope에 한 번만 둔다.
+point에는 `observed_at`, `value`, `quality_status`만 유지한다. 센서 Observation series는 Backend의
 canonical/overlay branch-aware Observation read contract에서 읽고, 파생 Feature series는
 versioned Feature Schema/transform contract를 적용한 Backend Feature Executor 결과로 제공한다.
 `systems/generator`는 Feature/Label 의미, History Requirement, transform contract, Model Artifact
@@ -424,7 +431,8 @@ threshold, data quality warning, activity, report, provenance)는 이 계약의 
 | 객체 | 필수 추적 필드 |
 |---|---|
 | PredictionSeriesPoint | `observed_at`, `failure_probability`, `status_grade`, `prediction_id` 또는 result/artifact reference, `source_kind` |
-| ObservationSeriesPoint | `observed_at`, `value`, `quality_status`, observation row/source reference |
+| ObservationHistory | envelope의 `source_ref`와 `points[]` |
+| ObservationSeriesPoint | `observed_at`, `value`, `quality_status`; source reference는 history envelope가 소유 |
 | Baseline | `mean`, `std`, `lower`, `upper`, `reference`, evidence field/source reference |
 | EquipmentHistoryRow | `occurred_at`, `kind`, `source`, activity/maintenance reference |
 

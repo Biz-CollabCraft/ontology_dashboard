@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from typing import Protocol
 
@@ -58,7 +58,7 @@ class AssetDetailReadPort(Protocol):
         end: datetime,
         dataset_version_id: str | None,
         grain: str,
-    ) -> dict[str, list[dict[str, Any]]]: ...
+    ) -> dict[str, dict[str, Any]]: ...
 
     def runtime_prediction_history(
         self,
@@ -180,7 +180,7 @@ def compose_asset_detail_view_model(
     *,
     asset: dict[str, Any],
     result_artifact: dict[str, Any],
-    feature_series: dict[str, list[dict[str, Any]]] | None = None,
+    feature_series: dict[str, dict[str, Any]] | None = None,
     runtime_prediction_history: list[dict[str, Any]] | None = None,
     equipment_history: list[dict[str, Any]] | None = None,
     data_status: dict[str, Any] | None = None,
@@ -209,10 +209,10 @@ def compose_asset_detail_view_model(
 
     features, feature_gaps = _features_from_artifact(result_artifact, feature_series)
     gaps.extend(feature_gaps)
-    if not any(feature["series"] for feature in features):
+    if not any(feature["history"]["points"] for feature in features):
         gaps.append(
             {
-                "field": "features[].series",
+                "field": "features[].history.points",
                 "reason": "Backend Observation/Feature Executor series is not connected yet",
                 "owner_domain": "dataset",
             }
@@ -267,7 +267,7 @@ def compose_asset_detail_view_model(
 
 def _features_from_artifact(
     result_artifact: dict[str, Any],
-    feature_series: dict[str, list[dict[str, Any]]],
+    feature_series: dict[str, dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     evidence_payload = result_artifact.get("evidence_payload") or {}
     sensors = (evidence_payload.get("sensor_evidence") or {}).get("sensors") or {}
@@ -280,14 +280,17 @@ def _features_from_artifact(
     feature_keys = list(dict.fromkeys([*sensors.keys(), *top_factors.keys(), *feature_series.keys()]))
     features = []
     gaps = []
+    current_observed_at = str(result_artifact["observed_at"])
     for index, key in enumerate(feature_keys):
         feature, gap = _feature(
             key,
             index=index,
+            current_observed_at=current_observed_at,
+            is_data_quality_hold=_is_data_quality_hold(result_artifact),
             sensor=sensors.get(key) or {},
             top_factor=top_factors.get(key),
             factor_evidence=factor_evidence.get(key),
-            series=feature_series.get(key) or [],
+            history=feature_series.get(key) or {},
         )
         features.append(feature)
         if gap is not None:
@@ -299,12 +302,14 @@ def _feature(
     key: str,
     *,
     index: int,
+    current_observed_at: str,
+    is_data_quality_hold: bool,
     sensor: dict[str, Any],
     top_factor: dict[str, Any] | None,
     factor_evidence: dict[str, Any] | None,
-    series: list[dict[str, Any]],
+    history: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, str] | None]:
-    checked_series = [_feature_series_point(point) for point in series]
+    checked_history = _feature_history(history, current_observed_at=current_observed_at)
     basis = sensor.get("basis") or {}
     baseline = None
     gap = None
@@ -337,29 +342,61 @@ def _feature(
             "explanation_method": top_factor["explanation_method"],
             **_optional(factor_evidence or {}, "evidence_field_id"),
         }
+    current_value = sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value")
+    current_quality = (
+        "unknown" if is_data_quality_hold or current_value is None else "good"
+    )
     return (
         {
             "key": key,
             "label": str(sensor.get("display_name") or (factor_evidence or {}).get("display_name") or key),
             "unit": str(sensor.get("unit") or (factor_evidence or {}).get("unit") or ""),
-            "current": sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value"),
+            "current": {
+                "observed_at": current_observed_at,
+                "value": current_value,
+                "quality_status": current_quality,
+            },
             "baseline": baseline,
-            "series": checked_series,
+            "history": checked_history,
             "top_factor": top_factor_summary,
         },
         gap,
     )
 
 
-def _feature_series_point(point: dict[str, Any]) -> dict[str, Any]:
-    source_ref = str(point.get("source_ref") or "")
+def _feature_history(
+    history: dict[str, Any],
+    *,
+    current_observed_at: str,
+) -> dict[str, Any]:
+    source_ref = str(history.get("source_ref") or "")
     _reject_source_ref(source_ref, forbidden=FORBIDDEN_FEATURE_SOURCE_MARKERS)
+    current_instant = _timestamp_instant(current_observed_at)
+    by_instant: dict[datetime, dict[str, Any]] = {}
+    for point in history.get("points") or []:
+        observed_at = str(point["observed_at"])
+        instant = _timestamp_instant(observed_at)
+        if instant >= current_instant:
+            continue
+        checked = {
+            "observed_at": observed_at,
+            "value": point.get("value"),
+            "quality_status": str(point.get("quality_status") or "unknown"),
+        }
+        if instant in by_instant and by_instant[instant] != checked:
+            raise ValueError(f"conflicting feature history points at instant={instant.isoformat()}")
+        by_instant[instant] = checked
     return {
-        "observed_at": str(point["observed_at"]),
-        "value": point.get("value"),
-        "source_kind": str(point.get("source_kind") or "observed_history"),
-        **_optional(point, "quality_status", "source_ref"),
+        **({"source_ref": source_ref} if source_ref else {}),
+        "points": [by_instant[instant] for instant in sorted(by_instant)],
     }
+
+
+def _timestamp_instant(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("AssetDetailViewModel timestamps must include a timezone offset")
+    return parsed.astimezone(timezone.utc)
 
 
 def _risk_point(point: dict[str, Any]) -> dict[str, Any]:

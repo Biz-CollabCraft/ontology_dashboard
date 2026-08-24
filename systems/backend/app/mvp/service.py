@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -259,7 +260,7 @@ class ManufacturingPredictiveMaintenanceService:
     def _feature_series_for_fixture(
         fixture: dict[str, Any],
         artifact: dict[str, Any],
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> dict[str, dict[str, Any]]:
         feature_keys = list(
             dict.fromkeys(
                 [
@@ -274,30 +275,35 @@ class ManufacturingPredictiveMaintenanceService:
         )
         rows = fixture.get("history") or []
         current_observed_at = str(artifact["observed_at"])
-        series: dict[str, list[dict[str, Any]]] = {}
+        current_instant = _timestamp_instant(current_observed_at)
+        series: dict[str, dict[str, Any]] = {}
         for key in feature_keys:
-            points_by_observed_at: dict[str, dict[str, Any]] = {}
+            points_by_instant: dict[datetime, dict[str, Any]] = {}
             for row in rows:
                 if key not in row:
                     continue
                 observed_at = str(row.get("timestamp") or current_observed_at)
-                if observed_at >= current_observed_at:
+                instant = _timestamp_instant(observed_at)
+                if instant >= current_instant:
                     continue
-                points_by_observed_at[observed_at] = {
+                point = {
                     "observed_at": observed_at,
                     "value": row.get(key),
-                    "source_kind": "observed_history",
                     "quality_status": "unknown"
                     if artifact.get("status_grade") == "data_quality_hold"
                     else "good",
-                    "source_ref": f"observation-contract://{artifact['asset_id']}/{key}",
                 }
-            points = [
-                points_by_observed_at[observed_at]
-                for observed_at in sorted(points_by_observed_at)
-            ]
+                if instant in points_by_instant and points_by_instant[instant] != point:
+                    raise ValueError(
+                        f"conflicting fixture history points at instant={instant.isoformat()}"
+                    )
+                points_by_instant[instant] = point
+            points = [points_by_instant[instant] for instant in sorted(points_by_instant)]
             if points:
-                series[str(key)] = points
+                series[str(key)] = {
+                    "source_ref": f"observation-contract://{artifact['asset_id']}/{key}",
+                    "points": points,
+                }
         return series
 
     @staticmethod
@@ -475,6 +481,13 @@ class ManufacturingPredictiveMaintenanceService:
             model_version=model_version,
             payload=payload,
         )
+
+
+def _timestamp_instant(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("fixture observation timestamps must include a timezone offset")
+    return parsed.astimezone(timezone.utc)
 
 
 # Temporary compatibility alias for integrations that still import the historical

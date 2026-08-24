@@ -238,7 +238,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert detail_payload["asset"]["asset_id"] == "M-014"
     assert detail_payload["risk"]["status_grade"] == "warning"
     assert detail_payload["features"]
-    assert detail_payload["features"][0]["series"]
+    assert detail_payload["features"][0]["history"]["points"]
     assert detail_payload["risk_series"] == []
     assert any(gap["field"] == "risk_series" for gap in detail_payload["evidence"]["gaps"])
     assert detail_payload["evidence"]["source_kind"] == "runtime_inference"
@@ -297,7 +297,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert cleared == {"decisions": [], "notes": [], "conversations": []}
 
 
-def test_asset_detail_view_model_keeps_current_observation_out_of_history_series(
+def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(
     client: TestClient,
 ) -> None:
     detail_view = client.get("/api/objects/M-063/detail-view")
@@ -310,10 +310,14 @@ def test_asset_detail_view_model_keeps_current_observation_out_of_history_series
 
     current_observed_at = detail_payload["asset"]["observed_at"]
     for feature in detail_payload["features"]:
-        observed_times = [point["observed_at"] for point in feature["series"]]
+        assert feature["current"]["quality_status"] == "unknown"
+        points = feature["history"]["points"]
+        observed_times = [point["observed_at"] for point in points]
         assert observed_times == sorted(observed_times)
         assert current_observed_at not in observed_times
-        assert all(point["source_kind"] == "observed_history" for point in feature["series"])
+        assert all(set(point) == {"observed_at", "value", "quality_status"} for point in points)
+        if points:
+            assert feature["history"]["source_ref"].startswith("observation-contract://")
 
 
 def test_follow_up_reconfigures_layout_and_rejects_injection(client: TestClient) -> None:

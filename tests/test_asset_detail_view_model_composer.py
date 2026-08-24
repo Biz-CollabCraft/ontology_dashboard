@@ -56,17 +56,19 @@ class FakeAssetDetailReadPort:
         self.calls.append(("latest_result_artifact", kwargs))
         return self.artifact
 
-    def feature_series(self, **kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+    def feature_series(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
         self.calls.append(("feature_series", kwargs))
         return {
-            "rotation_raw": [
-                {
-                    "observed_at": "2026-08-01T00:00:00+09:00",
-                    "value": 1820.0,
-                    "quality_status": "good",
-                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00",
-                }
-            ]
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T21:00:00+09:00",
+                        "value": 1810.0,
+                        "quality_status": "good",
+                    }
+                ],
+            }
         }
 
     def runtime_prediction_history(self, **kwargs: Any) -> list[dict[str, Any]]:
@@ -173,14 +175,16 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
         },
         result_artifact=ARTIFACT,
         feature_series={
-            "rotation_raw": [
-                {
-                    "observed_at": "2026-08-01T00:00:00+09:00",
-                    "value": 1820.0,
-                    "quality_status": "good",
-                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00",
-                }
-            ]
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T21:00:00+09:00",
+                        "value": 1810.0,
+                        "quality_status": "good",
+                    }
+                ],
+            }
         },
         runtime_prediction_history=[
             {
@@ -202,8 +206,62 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
     assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
-    assert "features[].series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
+    assert "features[].history.points" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
     assert "risk_series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
+
+
+def test_composer_excludes_current_instant_across_timezone_offsets() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        feature_series={
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T15:00:00Z",
+                        "value": 1820.0,
+                        "quality_status": "good",
+                    },
+                    {
+                        "observed_at": "2026-07-31T14:00:00Z",
+                        "value": 1800.0,
+                        "quality_status": "good",
+                    },
+                ],
+            }
+        },
+    )
+
+    history = next(
+        feature["history"] for feature in payload["features"] if feature["key"] == "rotation_raw"
+    )
+    assert [point["observed_at"] for point in history["points"]] == ["2026-07-31T14:00:00Z"]
+
+
+def test_composer_rejects_conflicting_points_for_same_instant() -> None:
+    with pytest.raises(ValueError, match="conflicting feature history"):
+        compose_asset_detail_view_model(
+            asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+            result_artifact=ARTIFACT,
+            feature_series={
+                "rotation_raw": {
+                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                    "points": [
+                        {
+                            "observed_at": "2026-07-31T14:00:00Z",
+                            "value": 1800.0,
+                            "quality_status": "good",
+                        },
+                        {
+                            "observed_at": "2026-07-31T23:00:00+09:00",
+                            "value": 1810.0,
+                            "quality_status": "good",
+                        },
+                    ],
+                }
+            },
+        )
 
 
 @pytest.mark.parametrize(
@@ -353,14 +411,16 @@ def test_composer_preserves_nullable_baseline_as_gap_without_type_error() -> Non
         asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
         result_artifact=artifact,
         feature_series={
-            "rotation_raw": [
-                {
-                    "observed_at": "2026-08-01T00:00:00+09:00",
-                    "value": 1820.0,
-                    "quality_status": "good",
-                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00",
-                }
-            ]
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T21:00:00+09:00",
+                        "value": 1810.0,
+                        "quality_status": "good",
+                    }
+                ],
+            }
         },
         data_status={"source": "canonical", "is_stale": False, "warnings": []},
     )
@@ -377,13 +437,16 @@ def test_composer_rejects_raw_generator_feature_series_sources() -> None:
             asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
             result_artifact=ARTIFACT,
             feature_series={
-                "rotation_raw": [
-                    {
-                        "observed_at": "2026-08-01T00:00:00+09:00",
-                        "value": 1820.0,
-                        "source_ref": "gen_data/output/sensor/CMP-S03-L03-01/_log.jsonl",
-                    }
-                ]
+                "rotation_raw": {
+                    "source_ref": "gen_data/output/sensor/CMP-S03-L03-01/_log.jsonl",
+                    "points": [
+                        {
+                            "observed_at": "2026-07-31T21:00:00+09:00",
+                            "value": 1810.0,
+                            "quality_status": "good",
+                        }
+                    ],
+                }
             },
         )
 
@@ -395,9 +458,9 @@ def test_composer_marks_missing_series_as_gaps_without_synthesizing_values() -> 
     )
 
     gap_fields = {gap["field"] for gap in payload["evidence"]["gaps"]}
-    assert {"features[].series", "risk_series", "equipment_history"} <= gap_fields
+    assert {"features[].history.points", "risk_series", "equipment_history"} <= gap_fields
     assert payload["risk_series"] == []
-    assert all(feature["series"] == [] for feature in payload["features"])
+    assert all(feature["history"]["points"] == [] for feature in payload["features"])
 
 
 def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:

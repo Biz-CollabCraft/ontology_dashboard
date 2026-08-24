@@ -331,7 +331,7 @@ function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSe
   return viewModel.features.map((feature) => ({
     id: feature.key,
     label: feature.label,
-    value: feature.current,
+    value: feature.current.value,
     unit: feature.unit || null,
   }));
 }
@@ -344,7 +344,7 @@ function factorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpFa
       id: feature.top_factor?.evidence_field_id ?? `${feature.key}:${feature.top_factor?.rank ?? "factor"}`,
       feature: feature.key,
       label: feature.label,
-      value: feature.current,
+      value: feature.current.value,
       unit: feature.unit || null,
       contribution: Math.abs(feature.top_factor?.contribution ?? 0),
       direction: feature.top_factor?.direction ?? "risk_up",
