@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
 import uuid
 from pathlib import Path
 import pandas as pd
@@ -809,3 +810,136 @@ def test_legacy_extraction_facade_compatibility(sample_wide_csv):
     df = legacy_extract_with_plan(actual_file, plan)
     assert not df.empty
     assert len(df) == 3
+
+
+# ==========================================
+# 10. Structure Type Allowlist & Rejection Tests
+# ==========================================
+
+def test_structure_type_allowlist_and_pydantic_validation():
+    """Pydantic schemas and models strictly reject unsupported structure_type values."""
+    from pydantic import ValidationError
+    from systems.generator.app.preprocessing.preprocessing_schema import (
+        PreprocessingStructureResponse,
+        PreprocessingPlanResponse,
+        PreprocessingResultPayload,
+    )
+
+    # 1. Valid structure types pass
+    s1 = PreprocessingStructureResponse(structure_type="tabular_column_as_attribute")
+    assert s1.structure_type == "tabular_column_as_attribute"
+
+    s2 = PreprocessingStructureResponse(structure_type="tabular_row_as_attribute")
+    assert s2.structure_type == "tabular_row_as_attribute"
+
+    # 2. Unsupported structure types fail validation
+    for bad_st in ("wide_pivot", "unsupported", "matrix_format", ""):
+        with pytest.raises(ValidationError):
+            PreprocessingStructureResponse(structure_type=bad_st)
+
+        with pytest.raises(ValidationError):
+            PreprocessingPlanResponse(structure_type=bad_st)
+
+        with pytest.raises(ValidationError):
+            PreprocessingResultPayload(
+                structure_type=bad_st,
+                preprocessing_plan_uri="models_store/plan.json",
+                preprocessing_plan_sha256="a" * 64,
+            )
+
+
+def test_structure_type_unsupported_fails_422_in_service(sample_wide_csv):
+    """preprocess_with_plan raises PreprocessingPlanValidationError (422) on unsupported structure_type."""
+    actual_file = str(PATHS.data_dir / sample_wide_csv)
+
+    for bad_st in ("wide_pivot", "unsupported", "custom_format"):
+        plan = {
+            "structure_type": bad_st,
+            "selected_columns": ["asset_id"],
+        }
+        with pytest.raises(PreprocessingPlanValidationError) as exc_info:
+            preprocess_with_plan(actual_file, plan)
+        assert "지원하지 않는 structure_type" in str(exc_info.value)
+
+
+def test_repository_rejects_unsupported_structure_type(tmp_path):
+    """Repository._validate_plan_content rejects unsupported structure_type with DatasetContractError."""
+    models_store = tmp_path / "models_store"
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+
+    for bad_st in ("wide_pivot", "unsupported", "invalid_type"):
+        bad_plan = {
+            "preprocessing_plan_id": "pp-00000000-0000-0000-0000-000000000001",
+            "preprocessing_plan_version": "preprocessing-plan-0123456789abcdef",
+            "dataset_id": "ds_test",
+            "dataset_version": "v1.0",
+            "source_dataset_uri": "data/test.csv",
+            "source_dataset_sha256": "a" * 64,
+            "source_schema_fingerprint": "b" * 64,
+            "decision_source": "llm",
+            "fallback_reason": None,
+            "planner_version": PLANNER_VERSION,
+            "structure_type": bad_st,
+            "selected_columns": ["col1"],
+            "duplicate_policy": "error",
+        }
+        with pytest.raises((DatasetContractError, PreprocessingPlanPublishError)) as exc_info:
+            repo._validate_plan_content(bad_plan, "ds_test", "v1.0")
+        assert "지원하지 않는 structure_type" in str(exc_info.value)
+
+        with pytest.raises((DatasetContractError, PreprocessingPlanPublishError)):
+            repo.publish_plan("ds_test", "v1.0", bad_plan)
+
+
+# ==========================================
+# 11. Logical URI Fail-Closed & Security Tests
+# ==========================================
+
+def test_logical_uri_fail_closed_and_sanitization(tmp_path, monkeypatch):
+    """get_logical_uri converts paths within allowed roots and fails closed on outside paths."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    models_store = tmp_path / "models_store"
+    models_store.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(PATHS, "data_dir", data_dir)
+    monkeypatch.setattr(PATHS, "models_store", models_store)
+
+    repo = PreprocessingRepository(base_dir=models_store / "cache" / "preprocessing_plans")
+
+    # 1. Inside data_dir -> data/...
+    sample_data = data_dir / "cnc" / "sample.csv"
+    sample_data.parent.mkdir(parents=True, exist_ok=True)
+    sample_data.touch()
+    uri_data = repo.get_logical_uri(sample_data)
+    assert uri_data.startswith("data/") or uri_data.endswith("sample.csv")
+    assert not uri_data.startswith("C:")
+    assert not uri_data.startswith("/")
+    assert ".." not in uri_data
+
+    # 2. Inside models_store -> models_store/...
+    sample_plan = models_store / "cache" / "plan.json"
+    sample_plan.parent.mkdir(parents=True, exist_ok=True)
+    sample_plan.touch()
+    uri_plan = repo.get_logical_uri(sample_plan)
+    assert uri_plan.startswith("models_store/") or uri_plan.endswith("plan.json")
+    assert not uri_plan.startswith("C:")
+    assert not uri_plan.startswith("/")
+    assert ".." not in uri_plan
+
+    # 3. Path outside all allowed roots -> DatasetContractError (Fail-Closed)
+    outside_dir = tmp_path / "completely_outside_dir"
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    outside_file = outside_dir / "secret_data.csv"
+    outside_file.touch()
+
+    # Clear CWD containment by creating a separate unrelated path
+    with pytest.raises(DatasetContractError) as exc_info:
+        # Pass path that cannot resolve into cwd, data_dir, or models_store
+        repo.get_logical_uri(Path("Z:/outside_drive/forbidden_data.csv") if os.name == "nt" else Path("/opt/forbidden/data.csv"))
+
+    err_msg = str(exc_info.value)
+    assert "논리 URI로 변환할 수 없는 허용 범위 밖의 경로" in err_msg
+    # Ensure full absolute path is not leaked (only filename)
+    assert "Z:\\" not in err_msg
+    assert "/opt/forbidden" not in err_msg

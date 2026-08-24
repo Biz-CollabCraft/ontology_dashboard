@@ -94,7 +94,12 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 - **Planner 판단 이력**: Plan 생성 방식(`decision_source`: `llm` 또는 `rule_fallback`), fallback 발생 시 정제된 사유(`fallback_reason`), Planner 계약 버전(`planner_version`: `preprocessing-planner-v1`)을 기록합니다.
 - **버전 결정성**: 같은 Dataset과 역할 설정이라도 파일 내용(sha256), 컬럼 구조(schema fingerprint), Planner 생성 경로(`decision_source`) 또는 Planner 버전이 다르면 다른 `preprocessing_plan_version`이 생성됩니다.
 
-### 4.3 Plan 검증 및 재사용 규칙
+### 4.3 Structure Type 허용 목록 및 Logical URI Fail-Closed 계약
+
+- **공식 지원 `structure_type`**: `tabular_column_as_attribute`, `tabular_row_as_attribute` 2종류만 공식 지원합니다. `wide_pivot` 및 미지원 형식은 임의 fallback 없이 `422 PREPROCESSING_PLAN_VALIDATION_ERROR`로 거부됩니다.
+- **Logical URI Fail-Closed**: `source_dataset_uri`, `preprocessing_plan_uri`는 허용된 저장소 루트(`PATHS.data_dir`, `PATHS.models_store`, workspace) 기반의 논리 상대경로만 저장됩니다. 허용 루트 밖의 경로는 Fail-Closed로 거부(`422 DATASET_CONTRACT_ERROR`)되며 오류 응답에 전체 절대경로가 노출되지 않습니다.
+
+### 4.4 Plan 검증 및 재사용 규칙
 
 - **입력 및 구조 무결성 검증**: `force_reanalyze=False` 시 현재 Dataset의 SHA-256 및 Schema Fingerprint와 Plan의 메타데이터를 비교하여 불일치 시 `409 PREPROCESSING_PLAN_CONFLICT`를 반환합니다 (detail에 `content_changed`, `schema_changed`, 이전/현재 해시 상세 제공).
 - **중복 정책 검증**: 요청된 `duplicate_policy` 및 `aggregation`이 기존 Plan과 다르면 `409 PREPROCESSING_PLAN_CONFLICT`를 반환합니다.
@@ -102,7 +107,7 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 - **Wide-format Timestamp 정규화**: Wide-format에서도 `time_column`이 선언된 경우 `datetime64[ns]` 정규화 및 `[id_column, time_column]` 안정 정렬(stable sort)을 수행합니다.
 - **발행 안정성**: 전체 Dataset 변환이 성공적으로 검증된 경우에만 Plan 파일과 `latest.json` 포인터가 발행됩니다.
 
-### 4.4 저장 디렉터리 및 원자적 발행 순서
+### 4.5 저장 디렉터리 및 원자적 발행 순서
 
 ```text
 models_store/cache/preprocessing_plans/

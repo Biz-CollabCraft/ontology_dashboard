@@ -219,11 +219,8 @@ def preprocess_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
         logger.info(f"[Preprocessor] Successfully pivoted long-format dataset '{filepath}'. Output shape: {pivoted.shape}")
         return pivoted
 
-    elif structure_type == "wide_pivot":
-        return df
-
     else:
-        raise NotImplementedError(f"Preprocessing for structure type '{structure_type}' is not implemented.")
+        raise PreprocessingPlanValidationError(f"지원하지 않는 structure_type입니다: '{structure_type}'")
 
 
 extract_with_plan = preprocess_with_plan
@@ -406,6 +403,8 @@ class PreprocessingService:
                 raise PreprocessingPlanValidationError(
                     f"선언된 time_column '{time_col}'가 데이터셋에 존재하지 않습니다: {cols}"
                 )
+        else:
+            raise PreprocessingPlanValidationError(f"지원하지 않는 structure_type입니다: '{st_type}'")
 
     def run_preprocessing(self, request: PreprocessingRequest, request_id: Optional[str] = None) -> PreprocessingResponse:
         """Execute full preprocessing workflow and return structured PreprocessingResponse."""

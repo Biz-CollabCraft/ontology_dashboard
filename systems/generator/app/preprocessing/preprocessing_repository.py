@@ -123,37 +123,62 @@ class PreprocessingRepository:
     def get_latest_pointer_path(self, dataset_id: str, dataset_version: str) -> Path:
         return self.get_dataset_plan_dir(dataset_id, dataset_version) / "latest.json"
 
-    def get_logical_uri(self, target_path: Path) -> str:
-        try:
-            cwd = Path.cwd().resolve()
-            resolved = target_path.resolve()
-            if cwd in resolved.parents or cwd == resolved:
-                return str(resolved.relative_to(cwd).as_posix())
-        except Exception:
-            pass
+    def get_logical_uri(self, target_path: Path | str) -> str:
+        """Convert a path inside allowed roots to a canonical logical relative URI.
 
+        Raises DatasetContractError (Fail-Closed) if target_path is outside all allowed roots.
+        """
+        p = Path(target_path) if isinstance(target_path, str) else target_path
+        resolved = p.resolve()
+
+        # 1. PATHS.data_dir (most specific for raw and preprocessed datasets)
         try:
             data_dir = getattr(PATHS, "data_dir", Path("data")).resolve()
-            resolved = target_path.resolve()
-            if data_dir in resolved.parents or data_dir == resolved:
-                rel = resolved.relative_to(data_dir).as_posix()
-                return f"data/{rel}" if rel != "." else "data"
+            if resolved == data_dir:
+                return "data"
+            if data_dir in resolved.parents:
+                return f"data/{resolved.relative_to(data_dir).as_posix()}"
         except Exception:
             pass
 
+        # 2. PATHS.models_store (for plans and model artifacts)
         try:
             models_store = getattr(PATHS, "models_store", Path("models_store")).resolve()
-            resolved = target_path.resolve()
-            if models_store in resolved.parents or models_store == resolved:
-                rel = resolved.relative_to(models_store).as_posix()
-                return f"models_store/{rel}" if rel != "." else "models_store"
+            if resolved == models_store:
+                return "models_store"
+            if models_store in resolved.parents:
+                return f"models_store/{resolved.relative_to(models_store).as_posix()}"
         except Exception:
             pass
 
-        clean = str(target_path.as_posix())
-        if ":" in clean:
-            clean = clean.split(":")[-1].lstrip("/")
-        return clean
+        # 3. self.base_dir (if repository was initialized with custom base_dir)
+        try:
+            if hasattr(self, "base_dir") and self.base_dir:
+                base_dir = self.base_dir.resolve()
+                if resolved == base_dir:
+                    return "models_store/cache/preprocessing_plans"
+                if base_dir in resolved.parents:
+                    rel = resolved.relative_to(base_dir).as_posix()
+                    return f"models_store/cache/preprocessing_plans/{rel}"
+        except Exception:
+            pass
+
+        # 4. Project workspace / repo root
+        try:
+            cwd = Path.cwd().resolve()
+            if resolved == cwd:
+                return "."
+            if cwd in resolved.parents:
+                rel = resolved.relative_to(cwd).as_posix()
+                if not rel.startswith(".."):
+                    return rel
+        except Exception:
+            pass
+
+        # 5. Fail-closed: outside all allowed roots
+        raise DatasetContractError(
+            f"논리 URI로 변환할 수 없는 허용 범위 밖의 경로입니다: '{p.name}'"
+        )
 
     def _validate_plan_content(
         self,
@@ -433,6 +458,9 @@ class PreprocessingRepository:
             "duplicate_policy": plan_data.get("duplicate_policy", "error"),
             "aggregation": plan_data.get("aggregation"),
         }
+
+        # Validate complete plan structure and contracts before persisting
+        self._validate_plan_content(full_plan_data, dataset_id, dataset_version, plan_id)
 
         target_plan_path = plan_dir / f"{plan_id}.json"
         if target_plan_path.exists():

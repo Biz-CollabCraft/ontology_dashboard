@@ -104,8 +104,10 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 
 ## 3. Preprocessing Plan 불변 저장 구조 및 provenance 계약
 
+- **지원 구조 유형 (Structure Types)**: 공식 지원 범위는 `tabular_column_as_attribute`, `tabular_row_as_attribute` 2종류로 한정되며, `wide_pivot` 및 미지원 형식은 임의 fallback 없이 422 오류로 처리됩니다.
 - **Plan 식별**: `preprocessing_plan_id` (`pp-{UUID4}`)와 `preprocessing_plan_version` (`preprocessing-plan-{hash}`) 분리.
 - **Dataset 결합 및 Provenance**: Plan은 `source_dataset_uri`, `source_dataset_sha256`, `source_schema_fingerprint`, `decision_source`, `fallback_reason`, `planner_version`과 결합되며, `preprocessing_plan_version`은 이를 포함한 canonical 해시로 산출.
+- **논리 URI Fail-Closed**: `source_dataset_uri`, `preprocessing_plan_uri`는 허용된 저장소 루트(`data_dir`, `models_store`, workspace) 기반의 논리 상대경로만 저장되며, 허용 루트 밖 경로는 Fail-Closed로 거부되고 API 응답에 전체 절대경로가 노출되지 않습니다.
 - **저장 디렉터리**: `models_store/cache/preprocessing_plans/{dataset_id}/{dataset_version}/`
 - **불변 파일 및 포인터**: `pp-{uuid}.json` (고유 불변 파일 atomic rename 발행) 및 `latest.json` (별도 atomic replace 갱신).
 - **재사용 및 Fail-Fast 검증**: `force_reanalyze=False` 시 dataset sha256, schema fingerprint 및 중복 정책 불일치 시 `409 PREPROCESSING_PLAN_CONFLICT` 반환. `selected_columns` 또는 역할 컬럼 누락 시 422 fail-fast.

@@ -6,10 +6,18 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
+# --- Supported Structure Types ---
+
+SupportedStructureType = Literal[
+    "tabular_column_as_attribute",
+    "tabular_row_as_attribute",
+]
+
+
 # --- Preprocessing Plan LLM Schemas ---
 
 class PreprocessingStructureResponse(BaseModel):
-    structure_type: str = "tabular_column_as_attribute"
+    structure_type: SupportedStructureType = "tabular_column_as_attribute"
     reason: Optional[str] = None
 
 
@@ -18,7 +26,7 @@ class PreprocessingColumnsResponse(BaseModel):
 
 
 class PreprocessingPlanResponse(BaseModel):
-    structure_type: str = "tabular_column_as_attribute"
+    structure_type: SupportedStructureType = "tabular_column_as_attribute"
     selected_columns: list[str] = Field(default_factory=list)
     id_column: Optional[str] = None
     time_column: Optional[str] = None
@@ -52,6 +60,9 @@ class PreprocessingPlanResponse(BaseModel):
 
             if self.selected_columns:
                 missing_in_selected = [r for r in roles if r not in self.selected_columns]
+                if missing_in_selected:
+                    raise ValueError(f"Long-format role columns {missing_in_selected} must be present in selected_columns")
+
         if self.structure_type == "tabular_column_as_attribute":
             if self.selected_columns:
                 if self.id_column and str(self.id_column).strip() and self.id_column not in self.selected_columns:
@@ -86,7 +97,7 @@ class PreprocessingRequest(BaseModel):
 
 
 class PreprocessingResultPayload(BaseModel):
-    structure_type: str
+    structure_type: SupportedStructureType = "tabular_column_as_attribute"
     id_column: Optional[str] = None
     time_column: Optional[str] = None
     attribute_column: Optional[str] = None

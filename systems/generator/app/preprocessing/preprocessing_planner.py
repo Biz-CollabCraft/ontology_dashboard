@@ -40,9 +40,7 @@ class PreprocessingPlanner:
             "You are a manufacturing data structure classifier.\n"
             "Classify the input table format into EXACTLY ONE of the following structure types:\n"
             "- tabular_column_as_attribute: Standard table where each column is an attribute/sensor feature.\n"
-            "- tabular_row_as_attribute: Long format table where rows contain sensor attribute names and values.\n"
-            "- wide_pivot: Wide format matrix requiring reshaping.\n"
-            "- unsupported: Unparseable unstructured text or binary.\n\n"
+            "- tabular_row_as_attribute: Long format table where rows contain sensor attribute names and values.\n\n"
             "Respond ONLY with a JSON object: {\"structure_type\": \"...\", \"reason\": \"...\"}"
         )
         prompt = f"File: {os.path.basename(filepath)}\nColumns: {list(df_preview.columns)}\nSample:\n{df_preview.head(3).to_string()}"
@@ -73,6 +71,9 @@ class PreprocessingPlanner:
         aggregation: Optional[str] = None,
     ) -> dict[str, Any]:
         """Stage 2: Determine column roles and preprocessing mapping."""
+        if structure_type not in ("tabular_column_as_attribute", "tabular_row_as_attribute"):
+            raise PreprocessingPlanValidationError(f"지원하지 않는 structure_type입니다: '{structure_type}'")
+
         avail_cols = list(df_preview.columns)
         if structure_type == "tabular_row_as_attribute":
             system_prompt = (
