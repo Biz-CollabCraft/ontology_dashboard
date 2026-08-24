@@ -159,22 +159,55 @@ class ContractVectorVerifier:
                 else:
                     seen_ids[schema_id] = rel_path
 
+    def _get_manifest_validator(
+        self, result: VerificationResult, context: str
+    ) -> Optional[jsonschema.Draft202012Validator]:
+        """Load and compile the canonical Dataset Input Manifest schema in a fail-closed manner."""
+        manifest_schema_path = self.schemas_dir / "generator-dataset-input-manifest.schema.json"
+        if not manifest_schema_path.is_file():
+            result.errors.append(
+                VerificationError(
+                    context=context,
+                    message=f"Required manifest schema not found: {manifest_schema_path}",
+                    expected="contracts/schemas/generator-dataset-input-manifest.schema.json exists",
+                    actual="File missing",
+                )
+            )
+            return None
+
+        try:
+            m_schema = json.loads(manifest_schema_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{manifest_schema_path.name}",
+                    message=f"Failed to parse manifest schema JSON: {e}",
+                )
+            )
+            return None
+
+        try:
+            jsonschema.Draft202012Validator.check_schema(m_schema)
+            return jsonschema.Draft202012Validator(m_schema)
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{manifest_schema_path.name}",
+                    message=f"Manifest schema definition is invalid: {e}",
+                )
+            )
+            return None
+
     def _verify_examples(self, result: VerificationResult) -> None:
         if not self.examples_dir.is_dir():
-            # If examples dir does not exist, not an error if not required, but here examples exist
             return
 
-        manifest_schema_path = self.schemas_dir / "generator-dataset-input-manifest.schema.json"
-        manifest_validator = None
-        if manifest_schema_path.is_file():
-            try:
-                m_schema = json.loads(manifest_schema_path.read_text(encoding="utf-8"))
-                manifest_validator = jsonschema.Draft202012Validator(m_schema)
-            except Exception:
-                pass
-
-        # Scan example directories
         example_files = sorted(self.examples_dir.glob("**/*.json"))
+        manifest_examples = [ef for ef in example_files if "manifest" in ef.name.lower()]
+        manifest_validator = None
+        if manifest_examples:
+            manifest_validator = self._get_manifest_validator(result, context="examples")
+
         for efile in example_files:
             rel_path = efile.relative_to(self.repo_root)
             try:
@@ -224,23 +257,26 @@ class ContractVectorVerifier:
             )
             return
 
-        manifest_schema_path = self.schemas_dir / "generator-dataset-input-manifest.schema.json"
-        manifest_validator = None
-        if manifest_schema_path.is_file():
-            try:
-                m_schema = json.loads(manifest_schema_path.read_text(encoding="utf-8"))
-                manifest_validator = jsonschema.Draft202012Validator(m_schema)
-            except Exception:
-                pass
-
         for vdir in vector_dirs:
             vname = vdir.name
             result.vector_count += 1
+            error_count_before = len(result.errors)
 
             if vname.startswith("generator-training") or (vdir / "training-config.json").is_file():
                 self._verify_training_vector(vname, vdir, result)
-            else:
+            elif vname.startswith("generator-feature-input") or (vdir / "observation").is_dir():
+                manifest_validator = self._get_manifest_validator(result, context=vname)
                 self._verify_feature_input_vector(vname, vdir, manifest_validator, result)
+            else:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vname}",
+                        message=f"Unknown test vector structure for '{vname}'",
+                    )
+                )
+
+            if len(result.errors) == error_count_before:
+                result.verified_vectors.append(vname)
 
     def _verify_feature_input_vector(
         self,
@@ -271,7 +307,39 @@ class ContractVectorVerifier:
             )
             return
 
-        # 3.2 Verify Manifest & Payload Integrity (Observation & Failure)
+        # 3.2 Validate request.json as valid non-empty JSON object
+        req_path = vector_dir / "request.json"
+        try:
+            req_content = req_path.read_text(encoding="utf-8").strip()
+            if not req_content:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/request.json",
+                        message="request.json is empty",
+                        expected="Non-empty JSON object",
+                        actual="Empty file",
+                    )
+                )
+            else:
+                req_data = json.loads(req_content)
+                if not isinstance(req_data, dict):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/request.json",
+                            message=f"request.json top-level must be a JSON object, got {type(req_data).__name__}",
+                            expected="JSON object ({...})",
+                            actual=f"{type(req_data).__name__}",
+                        )
+                    )
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/request.json",
+                    message=f"Invalid JSON in request.json: {e}",
+                )
+            )
+
+        # 3.3 Verify Manifest & Payload Integrity (Observation & Failure)
         self._verify_vector_manifest(
             vector_name=vector_name,
             vector_dir=vector_dir,
@@ -292,14 +360,12 @@ class ContractVectorVerifier:
             result=result,
         )
 
-        # 3.3 Verify Golden Expected Static Consistency
+        # 3.4 Verify Golden Expected Static Consistency
         self._verify_vector_expected(
             vector_name=vector_name,
             vector_dir=vector_dir,
             result=result,
         )
-
-        result.verified_vectors.append(vector_name)
 
     def _verify_training_vector(
         self,
@@ -325,9 +391,30 @@ class ContractVectorVerifier:
             )
             return
 
-        # 1. Validate request.json
+        # 1. Validate request.json as valid non-empty JSON object
+        req_path = vector_dir / "request.json"
         try:
-            json.loads((vector_dir / "request.json").read_text(encoding="utf-8"))
+            req_content = req_path.read_text(encoding="utf-8").strip()
+            if not req_content:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/request.json",
+                        message="request.json is empty",
+                        expected="Non-empty JSON object",
+                        actual="Empty file",
+                    )
+                )
+            else:
+                req_data = json.loads(req_content)
+                if not isinstance(req_data, dict):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/request.json",
+                            message=f"request.json top-level must be a JSON object, got {type(req_data).__name__}",
+                            expected="JSON object ({...})",
+                            actual=f"{type(req_data).__name__}",
+                        )
+                    )
         except Exception as e:
             result.errors.append(
                 VerificationError(
@@ -336,13 +423,24 @@ class ContractVectorVerifier:
                 )
             )
 
-        # 2. Validate training-config.json against generator-training-config.schema.json
+        # 2. Validate training-config.json against generator-training-config.schema.json (Fail-closed)
         cfg_schema_path = self.schemas_dir / "generator-training-config.schema.json"
-        if cfg_schema_path.is_file():
+        if not cfg_schema_path.is_file():
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}",
+                    message=f"Required training config schema not found: {cfg_schema_path}",
+                    expected="contracts/schemas/generator-training-config.schema.json exists",
+                    actual="File missing",
+                )
+            )
+        else:
             try:
                 cfg_schema = json.loads(cfg_schema_path.read_text(encoding="utf-8"))
+                jsonschema.Draft202012Validator.check_schema(cfg_schema)
+                cfg_validator = jsonschema.Draft202012Validator(cfg_schema)
                 cfg_data = json.loads((vector_dir / "training-config.json").read_text(encoding="utf-8"))
-                jsonschema.validate(instance=cfg_data, schema=cfg_schema)
+                cfg_validator.validate(cfg_data)
             except Exception as e:
                 result.errors.append(
                     VerificationError(
@@ -353,8 +451,22 @@ class ContractVectorVerifier:
 
         # 3. Validate expected JSON files
         try:
-            json.loads((vector_dir / "expected" / "artifact-manifest-required.json").read_text(encoding="utf-8"))
-            json.loads((vector_dir / "expected" / "split-summary.json").read_text(encoding="utf-8"))
+            exp_manifest = json.loads((vector_dir / "expected" / "artifact-manifest-required.json").read_text(encoding="utf-8"))
+            if not isinstance(exp_manifest, dict):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/artifact-manifest-required.json",
+                        message="artifact-manifest-required.json top-level must be a JSON object",
+                    )
+                )
+            exp_split = json.loads((vector_dir / "expected" / "split-summary.json").read_text(encoding="utf-8"))
+            if not isinstance(exp_split, dict):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/split-summary.json",
+                        message="split-summary.json top-level must be a JSON object",
+                    )
+                )
         except Exception as e:
             result.errors.append(
                 VerificationError(
@@ -362,9 +474,6 @@ class ContractVectorVerifier:
                     message=f"Invalid JSON in expected training files: {e}",
                 )
             )
-            return
-
-        result.verified_vectors.append(vector_name)
 
     def _verify_vector_manifest(
         self,
