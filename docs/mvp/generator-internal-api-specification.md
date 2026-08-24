@@ -61,6 +61,8 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 | GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (구현 완료) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 지정된 머신러닝 모델(`lightgbm`, `xgboost`, `random_forest`) 개별 학습 및 Model Artifact 발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 
@@ -74,8 +76,8 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 | POST | `/extraction` | gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108) | Target — 미병합 |
 | POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 완료 |
 | POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Current — 구현 완료 |
-| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
-| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
+| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
+| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
 | GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
 
@@ -323,11 +325,73 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 - **식별자 결정론**: `feature_dataset_version`은 입력 Dataset Manifest 및 Payload SHA-256, `failure_source_mode`, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
 - **Ontology Mapping 배제**: Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema allowlist/recipe만 실행합니다.
 
+### 5.7 Training 및 Model Artifact 발행 계약 (`POST /train`, `POST /train/{base_model}` — Current)
+
+검증된 Feature Dataset Bundle을 소비하여 설비·시간 기준 분할(`asset_time_split`), 모델별 학습 및 평가를 수행하고 불변 Model Artifact 패키지(6개 파일)를 원자적으로 발행합니다.
+
+```json
+// 요청 예시
+{
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "feature_dataset_version": "feature-dataset-a1b2c3d4e5f67890",
+  "training_config_version": "training-config-v1",
+  "model_version": "lightgbm-v1.0",
+  "activation_policy": "activate_on_success"
+}
+```
+
+```json
+// 응답 예시
+{
+  "request_id": "req-17091db43b53",
+  "run_id": "run-a8b9c0d1e2f3",
+  "status": "succeeded",
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "feature_dataset_version": "feature-dataset-a1b2c3d4e5f67890",
+  "training_config_version": "training-config-v1",
+  "results": [
+    {
+      "base_model": "lightgbm",
+      "model_id": "pdm-lightgbm",
+      "model_version": "lightgbm-v1.0",
+      "status": "succeeded",
+      "model_artifact_uri": "models_store/artifacts/pdm-lightgbm/lightgbm-v1.0",
+      "metrics_summary": {
+        "f1": 0.8571,
+        "precision": 0.8823,
+        "recall": 0.8333,
+        "accuracy": 0.9850,
+        "roc_auc": 0.9654,
+        "pr_auc": 0.8920
+      },
+      "activated": true,
+      "error_code": null
+    }
+  ]
+}
+```
+
+- **Training Config 계약**:
+  - `training_config_version`은 `contracts/schemas/generator-training-config.schema.json` 검증을 통과한 설정 파일과 1:1 바인딩됩니다.
+  - 설정 파일 부재 시 `404`, 스키마/버전 불일치 시 `422`로 실패하며, 설정 파일 SHA-256 및 논리 URI가 manifest provenance에 기록됩니다.
+- **Feature/Label Schema 스냅샷 및 History Requirement**:
+  - 축약 없는 온전한 Feature Schema 및 Label Schema 스냅샷을 검증하여 아티팩트에 포함합니다.
+  - `history_requirement.json`은 원본 센서 필드 목록(`required_columns`)과 연산 파라미터(lag/rolling/ewm)를 반영하여 `minimum_history_rows`를 결정론적으로 산출합니다.
+- **Fail-Closed 데이터 분할 (`asset_time_split`)**:
+  - `row_metadata.json`의 모든 행에 `asset_id`와 `timestamp`가 필수이며, 결측 또는 NaT 발생 시 `422`로 처리합니다.
+- **6개 필수 파일 구성**: `manifest.json`, `model.joblib`, `feature_schema.json`, `label_schema.json`, `history_requirement.json`, `metrics.json`
+- **저장 디렉터리**: `models_store/artifacts/{model_id}/{model_version}/`
+- **불변성 보장**: 동일한 `model_id/model_version` 재발행은 `409 MODEL_ARTIFACT_CONFLICT`로 항상 차단됩니다.
+- **부분 성공 격리**: 전체 모델 학습(`POST /train`) 시 특정 모델의 실패는 `partially_succeeded`로 격리되어 정상 모델의 성공 아티팩트 발행을 취소하지 않습니다.
+- **활성화 포인터**: `activation_policy == "activate_on_success"` 시 새 아티팩트 검증 및 발행 완료 후에만 `models_store/artifacts/{model_id}/latest.json` 활성 포인터가 atomic replace로 갱신됩니다.
+
 ---
 
 ## 6. Target Contract 예시 (후속 목표 설계)
 
 > **주의**: 본 절의 계약 내용은 후속 구현 시 적용될 **목표 계약 예시(Target Contract)**입니다.
 
-### 6.1 `POST /train` 및 `POST /train/{base_model}` (Target Contract 예시)
-Feature Dataset Bundle을 소비하여 Model Artifact를 발행하고 활성화 포인터를 관리합니다.
+### 6.1 `POST /models/{base_model}/activate/{model_version}` (Target Contract 예시)
+기존 발행된 불변 Model Artifact 패키지의 활성화 상태를 수동으로 변경하고 `latest.json` 포인터를 원자적으로 갱신합니다.
