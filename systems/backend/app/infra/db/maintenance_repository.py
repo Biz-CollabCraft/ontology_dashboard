@@ -1637,6 +1637,61 @@ class MaintenanceRepository:
             )
         return None if row is None else self._work_order_from_row(row)
 
+    def get_maintenance_action(
+        self,
+        *,
+        workspace_id: str,
+        maintenance_action_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the persisted execution context used to derive lifecycle events.
+
+        The application layer accepts only the action identifier from callers.
+        Work-order, recommendation, session, and source lineage are read from the
+        canonical aggregate instead of being repeated in command payloads.
+        """
+
+        with self._connect() as connection:
+            scope = self.project_context.resolve(workspace_id, connection=connection)
+            row = self._maintenance_action_row(
+                connection,
+                scope=scope,
+                maintenance_action_id=maintenance_action_id,
+            )
+        return None if row is None else dict(row)
+
+    def get_maintenance_event(
+        self,
+        *,
+        workspace_id: str,
+        maintenance_event_id: str,
+    ) -> dict[str, Any] | None:
+        """Return an immutable completed event for a later replay request."""
+
+        with self._connect() as connection:
+            scope = self.project_context.resolve(workspace_id, connection=connection)
+            row = connection.execute(
+                """
+                SELECT e.*,r.source_product_result_id,r.source_evidence_id
+                FROM closed_loop_maintenance_events e
+                JOIN closed_loop_recommendations r
+                  ON r.organization_id=e.organization_id
+                 AND r.project_id=e.project_id
+                 AND r.workspace_id=e.workspace_id
+                 AND r.recommendation_id=e.recommendation_id
+                WHERE e.organization_id=? AND e.project_id=? AND e.workspace_id=?
+                  AND e.maintenance_event_id=?
+                """,
+                (
+                    scope.organization_id,
+                    scope.project_id,
+                    scope.workspace_id,
+                    maintenance_event_id,
+                ),
+            ).fetchone()
+        if row is None:
+            return None
+        return {**dict(row), "state_patch": self._decoded(row["state_patch_json"])}
+
     def get_inspection_result(
         self,
         *,
