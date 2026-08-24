@@ -17,11 +17,11 @@ source/reference/test fixtures
 seed reproducibility + source lineage
         ↓ protocol provenance contract (file handoff)
 ontology_dashboard/systems/generator
-Observation Extraction (protocol provenance → Observation Dataset)
-Failure Extraction (Authorized Training Truth Source → Failure Dataset)
-→ Preprocessing (Observation → Plan/Ontology Mapping)
-→ Feature (Observation + Failure + Plan/Mapping → Feature/Label/Series)
-→ Training (Feature Dataset → Model Artifact)
+Observation Extraction (protocol parsing + approved Mapping application → Observation Dataset)
+Failure Extraction (Authorized Truth Source → Failure Dataset)
+→ Preprocessing (Observation 구조 분석 및 역할 판정 → Immutable Preprocessing Plan)
+→ Feature (Observation + Failure + Preprocessing Plan + Feature Schema + Label Schema → Feature/Label Dataset Bundle)
+→ Training (Feature Dataset Bundle → Model Artifact)
 → versioned Model Artifact (latest.json pointer)
         ↓ Model Artifact / Observation contract
 ontology_dashboard/systems/backend/app/diagnosis
@@ -65,7 +65,7 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
     Simulation Clock을 이용한 source Observation 생성
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
-  - **`systems/generator`**: 프로토콜 provenance에서 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Observation을 기반으로 Preprocessing Plan/Mapping을 수립하고, Feature 단계에서 Observation, Failure, Plan, Mapping을 결합하여 Feature Dataset Bundle 및 versioned Model Artifact를 발행한다.
+  - **`systems/generator`**: 프로토콜 provenance에서 지정·승인된 Mapping을 적용하여 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Observation을 기반으로 Preprocessing Plan을 수립하고, Feature 단계에서 Observation, Failure, Preprocessing Plan, Feature Schema, Label Schema를 실행하여 Feature Dataset Bundle 및 versioned Model Artifact를 발행한다.
   - **`systems/backend/app/diagnosis`**: Runtime feature 재현, runtime inference 및 제품 Result Artifact/Evidence/Prediction History 최종 생성
   - **`systems/frontend` / Report**: 공식 read port를 통한 ViewModel composition (gen_data 원본 파일 직접 파싱 금지)
 
@@ -114,29 +114,48 @@ project-root/
 
 ### 상위 아키텍처 및 책임 원칙
 
-1. **`gen_data` protocol provenance는 Observation Dataset 생성에만 사용한다.**
+1. **`gen_data` protocol provenance는 Extraction 단계에서 지정·승인된 Mapping을 적용하여 Canonical Observation Dataset 생성에 사용한다.**
 2. **Failure Dataset은 별도의 Authorized Training Truth Source에서 생성한다.**
-3. **Preprocessing은 Observation Dataset만 분석하여 Plan과 Mapping을 발행한다.**
-4. **Feature 단계가 Observation, Failure, Plan 및 Mapping을 결합한다.**
-5. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Observation/Feature와 Model Artifact를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
-6. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
-7. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
+3. **Preprocessing은 Observation Dataset의 구조와 역할을 분석하여 불변 Preprocessing Plan을 발행한다. Ontology Mapping을 생성하거나 소비하지 않는다.**
+4. **Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema/Recipe와 Label Schema에 명시된 source field, operation 및 parameters를 실행하여 Feature Dataset Bundle을 발행한다.**
+5. **Training 단계는 Feature Dataset Bundle을 소비하여 Model Artifact를 발행한다.**
+6. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Model Artifact와 Observation history를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
+7. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
+8. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
 
 ### Generator 구조 현황 (Current vs Target)
 
-- **Current (현재 main 구현 상태)**:
-  - 단일 레벨 모듈 구조 (`generator_main.py`, `generator_config.py`, `extraction/`, `feature/`, `model/`, `ontology_mapping/`, `topology/`, `common/`)
-  - 제어 엔드포인트: `GET /health`, `POST /internal/train`, `POST /internal/retrain`
-- **Target (후속 개편 목표 설계)**:
-  - 프레임워크 비의존 공통 모듈 최상위 배치 (`settings.py`, `paths.py`, `errors.py`, `file_integrity.py`, `atomic_publish.py`)
-  - 도메인별 FastAPI 계층 분리 (`app/extraction/`, `app/preprocessing/`, `app/feature/`, `app/training/`)
-  - 4대 파이프라인 데이터 흐름: `Extraction` → `Preprocessing` → `Feature` → `Training`
+- **Current (PR #104 반영 기준)**:
+  - 정본 FastAPI 애플리케이션: `systems/generator/app/main.py`
+  - Application Factory: `create_app()`
+  - 현재 구현 도메인: `systems/generator/app/preprocessing/`
+  - legacy 학습 호환 도메인: `systems/generator/app/training_compat/`
+  - compatibility 진입점: `systems/generator/generator_main.py`
+  - 현재 등록 엔드포인트:
+    - `GET /health`
+    - `POST /preprocessing`
+    - `POST /internal/train` (compatibility)
+    - `POST /internal/retrain` (compatibility)
+  - 기존 최상위 `extraction/`, `feature/`, `model/`, `ontology_mapping/`, `topology/`, `common/`은 migration 기간 동안 legacy 또는 공통 계산 모듈로 존재할 수 있다.
+- **Target — 남은 migration**:
+  - `app/extraction/`
+    - protocol parsing 및 승인 Mapping 적용
+    - Versioned Observation/Failure Dataset 발행
+  - `app/feature/`
+    - Feature Schema/Recipe 및 Label Schema 실행
+    - Feature Dataset Bundle 발행
+  - `app/training/`
+    - Feature Dataset Bundle 소비
+    - versioned Model Artifact 발행
+  - 기존 최상위 legacy 모듈을 정본 도메인 패키지 또는 명시적 compatibility shim으로 단계적으로 정리
 
 > **상세 명세 위임**: Generator의 상세 Target 디렉터리, 파일명, API 요청/응답 필드 및 단계별 migration 계획은 목표 정본 문서인 [`docs/mvp/generator-architecture-and-file-pipeline-target.md`](./mvp/generator-architecture-and-file-pipeline-target.md)에 위임합니다.
 
 ### Generator Feature 책임
 
-Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, ontology node, dtype, unit, transform, parameter, partition key, ordering key를 포함한다. 상세 필드와 naming 규칙은 `docs/mvp/generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
+Feature engineering은 versioned Feature Contract를 생산한다. Feature Contract는 source field, output feature name, dtype, unit, operation 또는 transform, parameters, partition key 및 ordering key를 포함한다.
+
+Feature 실행은 ontology node 또는 Ontology Mapping을 조회하지 않는다. Ontology metadata가 존재하더라도 설명·추적용 선택 metadata로만 사용한다. 상세 필드와 naming 규칙은 `docs/mvp/generator-feature-label-contract.md`와 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
 
 ### Label 책임
 
