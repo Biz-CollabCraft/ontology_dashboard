@@ -311,3 +311,18 @@ def test_golden_test_vector_execution_and_parity():
         shutil.rmtree(PATHS.data_dir / "failures" / "golden-failure-v1", ignore_errors=True)
         shutil.rmtree(PATHS.models_store / "cache" / "features" / "golden-observation-v1", ignore_errors=True)
         shutil.rmtree(PATHS.models_store / "cache" / "preprocessing_plans" / "golden-observation-v1", ignore_errors=True)
+
+
+def test_manifest_schema_is_available_from_generator_runtime_root():
+    """Verify that generator-dataset-input-manifest.schema.json is resolvable and valid."""
+    schema_path = (
+        Path("contracts")
+        / "schemas"
+        / "generator-dataset-input-manifest.schema.json"
+    )
+    assert schema_path.is_file()
+
+    resolver = FeatureInputResolver()
+    schema = resolver._get_manifest_schema()
+
+    assert schema["title"] == "Generator Dataset Input Manifest v1"
