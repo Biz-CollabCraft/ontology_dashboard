@@ -5,7 +5,10 @@
     "display_name": "압축기 S03-L03-01",
     "site_id": "S03",
     "cell_id": "L03",
-    "observed_at": "2026-08-01T00:00:00+09:00"
+    "observed_at": "2026-08-01T00:00:00+09:00",
+    "criticality": "high",
+    "criticality_basis": ["fixture equipment.criticality"],
+    "criticality_source": "equipment_master"
   },
   "risk": {
     "current": 0.92,
@@ -78,6 +81,29 @@
     }
   ],
   "equipment_history": [],
+  "maintenance_context": {
+    "last_maintenance_days_ago": 20,
+    "similar_events_30d": null,
+    "open_work_order_exists": null
+  },
+  "operation_context": {
+    "load_level": null,
+    "runtime_hours_7d": null,
+    "production_impact": "high"
+  },
+  "review_priority": {
+    "level": "immediate",
+    "reasons": [
+      "risk.status_grade=critical",
+      "asset.criticality=high",
+      "operation_context.production_impact=high"
+    ],
+    "source_fields": [
+      "risk.status_grade",
+      "asset.criticality",
+      "operation_context.production_impact"
+    ]
+  },
   "evidence": {
     "artifact_id": "RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
     "evidence_payload_reference": "producer-enriched-critical",

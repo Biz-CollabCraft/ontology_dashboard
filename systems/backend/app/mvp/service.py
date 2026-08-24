@@ -247,6 +247,11 @@ class ManufacturingPredictiveMaintenanceService:
     @staticmethod
     def _asset_summary_for_fixture(fixture: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
         equipment = fixture.get("equipment") or {}
+        last_maintenance_days_ago = _days_between(
+            equipment.get("last_maintenance_date"),
+            artifact["observed_at"],
+        )
+        estimated_downtime = equipment.get("estimated_downtime_minutes")
         return {
             "asset_id": artifact["asset_id"],
             "asset_type": artifact["asset_type"],
@@ -254,6 +259,23 @@ class ManufacturingPredictiveMaintenanceService:
             "site_id": "Manufacturing Demo",
             "cell_id": equipment.get("line") or artifact.get("cell_id") or "unknown",
             "observed_at": artifact["observed_at"],
+            "criticality": equipment.get("criticality"),
+            "criticality_basis": ["fixture equipment.criticality"]
+            if equipment.get("criticality") in {"low", "medium", "high"}
+            else [],
+            "criticality_source": "equipment_master"
+            if equipment.get("criticality") in {"low", "medium", "high"}
+            else "unknown",
+            "maintenance_context": {
+                "last_maintenance_days_ago": last_maintenance_days_ago,
+                "similar_events_30d": None,
+                "open_work_order_exists": None,
+            },
+            "operation_context": {
+                "load_level": None,
+                "runtime_hours_7d": None,
+                "production_impact": _production_impact(estimated_downtime),
+            },
         }
 
     @staticmethod
@@ -488,6 +510,29 @@ def _timestamp_instant(value: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError("fixture observation timestamps must include a timezone offset")
     return parsed.astimezone(timezone.utc)
+
+
+def _days_between(start_date: Any, end_timestamp: str) -> int | None:
+    if not start_date:
+        return None
+    try:
+        start = datetime.fromisoformat(f"{start_date}T00:00:00+09:00")
+        end = datetime.fromisoformat(end_timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, (end.date() - start.date()).days)
+
+
+def _production_impact(estimated_downtime_minutes: Any) -> str | None:
+    if not isinstance(estimated_downtime_minutes, int) or isinstance(estimated_downtime_minutes, bool):
+        return None
+    if estimated_downtime_minutes >= 180:
+        return "high"
+    if estimated_downtime_minutes >= 90:
+        return "medium"
+    if estimated_downtime_minutes > 0:
+        return "low"
+    return "none"
 
 
 # Temporary compatibility alias for integrations that still import the historical

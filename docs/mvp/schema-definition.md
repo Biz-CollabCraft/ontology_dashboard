@@ -384,9 +384,31 @@ Overview와 Objects 목록의 공통 행이다.
 | `features[].history.points` | ObservationSeriesPoint[] | Y | actual pre-current observations | 제안 |
 | `features[].top_factor` | Factor summary 또는 null | N | Product Result Artifact `top_factors` | 제안 |
 | `equipment_history` | EquipmentHistoryRow[] | Y | Activity/Decision/Maintenance source | 제안 |
+| `maintenance_context` | object | Y | Maintenance/Activity read model | 제안 |
+| `maintenance_context.last_maintenance_days_ago` | integer 또는 null | Y | 정비 이력 | 제안 |
+| `maintenance_context.similar_events_30d` | integer 또는 null | Y | Event/Activity 집계 | 제안 |
+| `maintenance_context.open_work_order_exists` | boolean 또는 null | Y | Closed-loop read model | 제안 |
+| `operation_context` | object | Y | 운영 read model | 제안 |
+| `operation_context.load_level` | `low`/`normal`/`high` 또는 null | Y | 운영 상태 | 제안 |
+| `operation_context.runtime_hours_7d` | number 또는 null | Y | 운영 집계 | 제안 |
+| `operation_context.production_impact` | `none`/`low`/`medium`/`high` 또는 null | Y | 운영 영향 추정 | 제안 |
+| `review_priority` | object 또는 null | Y | risk + criticality + context 조합 | 제안 |
 | `evidence` | ReportEvidenceStatus | Y | Artifact/Evidence provenance | 제안 |
 | `evidence.gaps` | EvidenceGap[] | Y | Backend adapter | 제안 |
 | `data_status` | DataStatus | Y | API | 제안 |
+
+`asset.criticality`는 모델 위험도나 WorkOrder priority가 아니라 설비/프로젝트 맥락의
+운영 영향도다. 허용값은 `low`, `medium`, `high`, `null`이며, 누락 시 `medium`으로
+기본값을 만들지 않는다. 이 경우 `asset.criticality=null`,
+`asset.criticality_basis=[]`, `asset.criticality_source=unknown`과 함께
+`evidence.gaps[]`에 `field=asset.criticality`,
+`reason=criticality_missing_or_unresolved`를 기록한다. `owner_domain`은 표시 위치가 아니라
+해결 책임 source를 뜻하며 `equipment`, `project`, `operations`, `maintenance`,
+`diagnosis`, `dataset`, `report`, `frontend`, `unresolved` 중 하나를 사용한다.
+
+`review_priority`는 화면 검토 순서를 설명하는 파생값이며 권한, WorkOrder priority,
+Recommendation state가 아니다. 필요한 risk, criticality, context 입력이 없으면
+`review_priority=null`과 gap으로 표현하고, 프론트엔드는 fallback 우선순위를 계산하지 않는다.
 
 `features[].history.points`는 센서 Observation과 파생 Feature 시계열이므로 Product API가
 `gen_data` raw JSONL이나 canonical CSV를 직접 파싱해 만들지 않는다. 같은 history가 공유하는

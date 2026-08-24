@@ -234,23 +234,36 @@ def compose_asset_detail_view_model(
                 "owner_domain": "maintenance",
             }
         )
+    asset_summary, asset_gaps = _asset_summary(asset, result_artifact)
+    gaps.extend(asset_gaps)
+    maintenance_context, maintenance_gaps = _maintenance_context(asset)
+    operation_context, operation_gaps = _operation_context(asset)
+    gaps.extend(maintenance_gaps)
+    gaps.extend(operation_gaps)
+    risk = {
+        "current": result_artifact.get("failure_probability"),
+        "threshold": result_artifact.get("threshold"),
+        "status_grade": _status_grade(result_artifact),
+        "prediction_horizon_hours": result_artifact.get("prediction_horizon_hours"),
+    }
+    review_priority, priority_gap = _review_priority(
+        risk=risk,
+        asset=asset_summary,
+        maintenance_context=maintenance_context,
+        operation_context=operation_context,
+    )
+    if priority_gap is not None:
+        gaps.append(priority_gap)
 
     return {
-        "asset": {
-            "asset_id": str(asset.get("asset_id") or result_artifact["asset_id"]),
-            "asset_type": str(asset.get("asset_type") or result_artifact["asset_type"]),
-            **_optional(asset, "display_name", "site_id", "cell_id"),
-            "observed_at": str(asset.get("observed_at") or result_artifact["observed_at"]),
-        },
-        "risk": {
-            "current": result_artifact.get("failure_probability"),
-            "threshold": result_artifact.get("threshold"),
-            "status_grade": _status_grade(result_artifact),
-            "prediction_horizon_hours": result_artifact.get("prediction_horizon_hours"),
-        },
+        "asset": asset_summary,
+        "risk": risk,
         "risk_series": risk_series,
         "features": features,
         "equipment_history": equipment_history,
+        "maintenance_context": maintenance_context,
+        "operation_context": operation_context,
+        "review_priority": review_priority,
         "evidence": {
             "artifact_id": result_artifact.get("artifact_id"),
             "evidence_payload_reference": _evidence_payload_reference(provenance),
@@ -296,6 +309,53 @@ def _features_from_artifact(
         if gap is not None:
             gaps.append(gap)
     return features, gaps
+
+
+def _asset_summary(
+    asset: dict[str, Any],
+    result_artifact: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    criticality = _criticality(asset.get("criticality"))
+    basis = [str(item) for item in asset.get("criticality_basis") or []]
+    source = str(asset.get("criticality_source") or "")
+    if source not in {
+        "manual_initial_assessment",
+        "equipment_master",
+        "project_context",
+        "unknown",
+    }:
+        source = "equipment_master" if criticality is not None else "unknown"
+    gaps = []
+    if criticality is None:
+        source = "unknown"
+        basis = []
+        gaps.append(
+            {
+                "field": "asset.criticality",
+                "reason": "criticality_missing_or_unresolved",
+                "owner_domain": _owner_domain(asset.get("criticality_owner_domain"), default="equipment"),
+            }
+        )
+    elif not basis:
+        gaps.append(
+            {
+                "field": "asset.criticality_basis",
+                "reason": "criticality_basis_missing_or_unresolved",
+                "owner_domain": _owner_domain(asset.get("criticality_owner_domain"), default="equipment"),
+            }
+        )
+    return (
+        {
+            "asset_id": str(asset.get("asset_id") or result_artifact["asset_id"]),
+            "asset_type": str(asset.get("asset_type") or result_artifact["asset_type"]),
+            **_optional(asset, "display_name", "site_id", "cell_id"),
+            "observed_at": str(asset.get("observed_at") or result_artifact["observed_at"]),
+            "criticality": criticality,
+            "criticality_basis": basis,
+            "criticality_source": source,
+        },
+        gaps,
+    )
 
 
 def _feature(
@@ -425,12 +485,12 @@ def _is_data_quality_hold(source: dict[str, Any]) -> bool:
 
 def _view_model_gap(gap: dict[str, Any]) -> dict[str, str]:
     owner_domain = str(gap.get("owner_domain") or "report")
-    if owner_domain in {"dashboard", "operations", "aggregate", "unknown"}:
+    if owner_domain in {"dashboard", "aggregate", "unknown"}:
         owner_domain = "report"
     return {
         "field": str(gap.get("field") or "unknown"),
         "reason": _gap_reason(gap),
-        "owner_domain": owner_domain,
+        "owner_domain": _owner_domain(owner_domain),
     }
 
 
@@ -488,6 +548,125 @@ def _data_status(
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _criticality(value: Any) -> str | None:
+    normalized = str(value or "").lower()
+    if normalized in {"low", "medium", "high"}:
+        return normalized
+    return None
+
+
+def _maintenance_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    context = asset.get("maintenance_context") or {}
+    last_maintenance_days_ago = context.get("last_maintenance_days_ago")
+    similar_events_30d = context.get("similar_events_30d")
+    open_work_order_exists = context.get("open_work_order_exists")
+    result = {
+        "last_maintenance_days_ago": int(last_maintenance_days_ago)
+        if isinstance(last_maintenance_days_ago, int) and not isinstance(last_maintenance_days_ago, bool)
+        else None,
+        "similar_events_30d": int(similar_events_30d)
+        if isinstance(similar_events_30d, int) and not isinstance(similar_events_30d, bool)
+        else None,
+        "open_work_order_exists": open_work_order_exists
+        if isinstance(open_work_order_exists, bool)
+        else None,
+    }
+    gaps = []
+    for key, value in result.items():
+        if value is None:
+            gaps.append(
+                {
+                    "field": f"maintenance_context.{key}",
+                    "reason": "maintenance_context_missing_or_unresolved",
+                    "owner_domain": "maintenance",
+                }
+            )
+    return result, gaps
+
+
+def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    context = asset.get("operation_context") or {}
+    load_level = str(context.get("load_level") or "")
+    if load_level not in {"low", "normal", "high"}:
+        load_level = None
+    runtime_hours_7d = context.get("runtime_hours_7d")
+    production_impact = str(context.get("production_impact") or "")
+    if production_impact not in {"none", "low", "medium", "high"}:
+        production_impact = None
+    result = {
+        "load_level": load_level,
+        "runtime_hours_7d": runtime_hours_7d if _is_number(runtime_hours_7d) else None,
+        "production_impact": production_impact,
+    }
+    gaps = []
+    for key, value in result.items():
+        if value is None:
+            gaps.append(
+                {
+                    "field": f"operation_context.{key}",
+                    "reason": "operation_context_missing_or_unresolved",
+                    "owner_domain": "operations",
+                }
+            )
+    return result, gaps
+
+
+def _review_priority(
+    *,
+    risk: dict[str, Any],
+    asset: dict[str, Any],
+    maintenance_context: dict[str, Any],
+    operation_context: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    status = risk.get("status_grade")
+    criticality = asset.get("criticality")
+    production_impact = operation_context.get("production_impact")
+    if status is None or criticality is None or production_impact is None:
+        return None, {
+            "field": "review_priority",
+            "reason": "review_priority_inputs_missing_or_unresolved",
+            "owner_domain": "report",
+        }
+    reasons = [
+        f"risk.status_grade={status}",
+        f"asset.criticality={criticality}",
+    ]
+    source_fields = ["risk.status_grade", "asset.criticality"]
+    open_work_order_exists = maintenance_context.get("open_work_order_exists")
+    if open_work_order_exists is not None:
+        reasons.append(f"maintenance_context.open_work_order_exists={open_work_order_exists}")
+        source_fields.append("maintenance_context.open_work_order_exists")
+    reasons.append(f"operation_context.production_impact={production_impact}")
+    source_fields.append("operation_context.production_impact")
+
+    if status == "critical" and criticality == "high":
+        level = "immediate"
+    elif status in {"critical", "warning"}:
+        level = "high"
+    elif status == "attention" or criticality == "high":
+        level = "medium"
+    else:
+        level = "low"
+    return {"level": level, "reasons": reasons, "source_fields": source_fields}, None
+
+
+def _owner_domain(value: Any, *, default: str = "report") -> str:
+    normalized = str(value or default)
+    if normalized in {
+        "diagnosis",
+        "dataset",
+        "equipment",
+        "project",
+        "operations",
+        "maintenance",
+        "report",
+        "frontend",
+        "unresolved",
+    }:
+        return normalized
+    return default
 
 
 def _reject_source_ref(source_ref: str, *, forbidden: tuple[str, ...]) -> None:

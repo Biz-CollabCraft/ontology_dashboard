@@ -398,7 +398,119 @@ def test_composer_projects_canonical_evidence_gaps_to_view_model_schema() -> Non
     operations_gap = next(
         gap for gap in payload["evidence"]["gaps"] if gap["field"] == "equipment_history"
     )
-    assert operations_gap["owner_domain"] == "report"
+    assert operations_gap["owner_domain"] == "operations"
+
+
+def test_composer_preserves_asset_criticality_context_and_review_priority() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "criticality": "high",
+            "criticality_basis": ["equipment master tier"],
+            "criticality_source": "equipment_master",
+            "maintenance_context": {
+                "last_maintenance_days_ago": 12,
+                "similar_events_30d": None,
+                "open_work_order_exists": False,
+            },
+            "operation_context": {
+                "load_level": None,
+                "runtime_hours_7d": None,
+                "production_impact": "high",
+            },
+        },
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["asset"]["criticality"] == "high"
+    assert payload["asset"]["criticality_basis"] == ["equipment master tier"]
+    assert payload["maintenance_context"]["open_work_order_exists"] is False
+    assert payload["operation_context"]["production_impact"] == "high"
+    assert payload["review_priority"] == {
+        "level": "immediate",
+        "reasons": [
+            "risk.status_grade=critical",
+            "asset.criticality=high",
+            "maintenance_context.open_work_order_exists=False",
+            "operation_context.production_impact=high",
+        ],
+        "source_fields": [
+            "risk.status_grade",
+            "asset.criticality",
+            "maintenance_context.open_work_order_exists",
+            "operation_context.production_impact",
+        ],
+    }
+
+
+def test_composer_does_not_default_missing_criticality_or_context() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["asset"]["criticality"] is None
+    assert payload["asset"]["criticality_basis"] == []
+    assert payload["asset"]["criticality_source"] == "unknown"
+    assert payload["maintenance_context"] == {
+        "last_maintenance_days_ago": None,
+        "similar_events_30d": None,
+        "open_work_order_exists": None,
+    }
+    assert payload["operation_context"] == {
+        "load_level": None,
+        "runtime_hours_7d": None,
+        "production_impact": None,
+    }
+    assert payload["review_priority"] is None
+    gaps = {(gap["field"], gap["reason"], gap["owner_domain"]) for gap in payload["evidence"]["gaps"]}
+    assert ("asset.criticality", "criticality_missing_or_unresolved", "equipment") in gaps
+    assert ("review_priority", "review_priority_inputs_missing_or_unresolved", "report") in gaps
+
+
+def test_composer_does_not_synthesize_missing_criticality_basis() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "criticality": "medium",
+            "criticality_source": "equipment_master",
+            "operation_context": {"production_impact": "medium"},
+        },
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["asset"]["criticality"] == "medium"
+    assert payload["asset"]["criticality_basis"] == []
+    gaps = {(gap["field"], gap["reason"], gap["owner_domain"]) for gap in payload["evidence"]["gaps"]}
+    assert ("asset.criticality_basis", "criticality_basis_missing_or_unresolved", "equipment") in gaps
+
+
+def test_composer_requires_production_impact_for_review_priority() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "criticality": "high",
+            "criticality_basis": ["equipment master tier"],
+            "criticality_source": "equipment_master",
+            "maintenance_context": {"last_maintenance_days_ago": 12},
+        },
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["review_priority"] is None
+    gaps = {(gap["field"], gap["reason"], gap["owner_domain"]) for gap in payload["evidence"]["gaps"]}
+    assert ("review_priority", "review_priority_inputs_missing_or_unresolved", "report") in gaps
 
 
 def test_composer_preserves_nullable_baseline_as_gap_without_type_error() -> None:

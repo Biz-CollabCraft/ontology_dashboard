@@ -119,6 +119,63 @@ def test_schema_keeps_feature_history_provenance_at_envelope_only() -> None:
     }
 
 
+def test_schema_accepts_nullable_criticality_and_extended_owner_domains() -> None:
+    properties = schema()["properties"]
+
+    assert properties["asset"]["properties"]["criticality"]["enum"] == ["low", "medium", "high", None]
+    assert properties["asset"]["properties"]["criticality_source"]["enum"] == [
+        "manual_initial_assessment",
+        "equipment_master",
+        "project_context",
+        "unknown",
+    ]
+    gap_owner_domain = (
+        properties["evidence"]["properties"]["gaps"]["items"]["properties"]["owner_domain"]["enum"]
+    )
+    assert set(gap_owner_domain) == {
+        "diagnosis",
+        "dataset",
+        "equipment",
+        "project",
+        "operations",
+        "maintenance",
+        "report",
+        "frontend",
+        "unresolved",
+    }
+
+
+def test_missing_criticality_fixture_records_explicit_equipment_gap() -> None:
+    payload = fixture("baseline_partially_missing")
+
+    assert payload["asset"]["criticality"] is None
+    assert payload["asset"]["criticality_basis"] == []
+    assert {
+        "field": "asset.criticality",
+        "reason": "criticality_missing_or_unresolved",
+        "owner_domain": "equipment",
+    } in payload["evidence"]["gaps"]
+    assert payload["review_priority"] is None
+
+
+def test_review_priority_is_backend_view_model_data_not_frontend_fallback() -> None:
+    payload = fixture("observation_series_present")
+
+    assert payload["review_priority"] == {
+        "level": "immediate",
+        "reasons": [
+            "risk.status_grade=critical",
+            "asset.criticality=high",
+            "operation_context.production_impact=high",
+        ],
+        "source_fields": [
+            "risk.status_grade",
+            "asset.criticality",
+            "operation_context.production_impact",
+        ],
+    }
+
+
 def test_schema_rejects_mvp_prefixed_additional_property() -> None:
     payload = fixture("current_evidence_only")
     payload["mvpLegacyField"] = True
