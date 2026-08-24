@@ -2,9 +2,9 @@
 
 **Goal:** `AssetDetailViewModel`에서 설비 중요도를 예측 위험도와 분리된 제조 운영 맥락으로 모델링하고, 결측/출처/우선순위 의미를 schema와 composer 테스트로 고정한다.
 
-**Architecture:** 현재 규모에서는 별도 graph DB나 full digital twin을 만들지 않는다. `asset.criticality`를 설비 마스터/프로젝션에서 온 운영 영향도 필드로 두고, `risk.status_grade`는 모델 위험도, `priority`는 risk, criticality, history/context를 조합한 표시/정렬 파생값으로 분리한다. 온톨로지 관계는 문서와 typed reference 수준으로 고정하고, 운영/정비 맥락은 SQL/RDB 기반 source와 `AssetDetailViewModel` composition boundary에서 우선 결합한다. Microsoft Fabric/Eventhouse/KQL 패턴, TimescaleDB/ClickHouse/DuckDB류 시계열 분석 비교는 후순위 검증 항목으로만 남기며, 생산 API endpoint와 frontend 전면 연결은 후속 구현 범위로 둔다.
+**Architecture:** 현재 규모에서는 별도 graph DB나 full digital twin을 만들지 않는다. `asset.criticality`를 설비 마스터/프로젝트 운영 맥락에서 온 영향도 필드로 두고, `risk.status_grade`는 모델 위험도, `priority`는 risk, criticality, history/context를 조합한 표시/업무 우선순위 파생값으로 분리한다. 온톨로지 관계는 문서와 typed reference 수준으로 고정하고, 운영/정비 맥락은 SQL/RDB 기반 source와 `AssetDetailViewModel` composition boundary에서 우선 결합한다. PR #107의 MVP `AssetDetailViewModel` API/E2E 연결을 기준 구현으로 삼되, 운영 read-port/PostgreSQL 연결은 후속으로 둔다. 이번 후속 구현 범위에는 schema/composer/API 호환성뿐 아니라 Objects/Operations/Report의 신규 context/priority 소비와 중복 UI 정리까지 포함한다. Microsoft Fabric/Eventhouse/KQL 패턴, TimescaleDB/ClickHouse/DuckDB류 시계열 분석 비교는 후순위 검증 항목으로만 남긴다.
 
-**Tech Stack:** Python 3, pytest, jsonschema, existing `systems/backend/app/report` composer, existing `systems/backend/app/diagnosis/recommendation_policy.py` policy contract.
+**Tech Stack:** Python 3, pytest, jsonschema, existing `systems/backend/app/mvp/asset_detail_view_model.py` composer, existing `systems/backend/app/diagnosis/recommendation_policy.py` policy contract, React/TypeScript MVP frontend, Vitest/Playwright.
 
 ---
 
@@ -25,6 +25,7 @@ API를 호출해 직접 조립하면 다음 판단이 화면별로 갈라질 수
 - `risk.status_grade`는 모델/근거 기반 고장 위험도다.
 - `asset.criticality`는 고장 발생 시 제조 운영 영향도다.
 - `data_status.is_data_quality_hold`는 위험도가 아니라 데이터 품질 때문에 판단을 보류한 상태다.
+- `features[].current`는 현재 관측/판단 시점의 값이고, `features[].series`는 trend 표시용 이력이다. 두 값을 병합할 경우 중복 제거, 시간순 정렬, baseline 산정 범위를 계약으로 고정해야 한다.
 - `risk_series`, `features[].series`, `equipment_history`는 단일 Event Evidence만으로 항상 채워지지 않는다.
 
 ### Observed Symptoms
@@ -109,6 +110,11 @@ Reference grounding:
 - OPC UA for Asset Administration Shell describes AAS/Submodel-style digital asset representation. This supports keeping Asset-centered typed contexts, but not implementing a full AAS runtime or graph database for this implementation scope. Reference: https://reference.opcfoundation.org/specs/OPC-30270/full
 - Current repository MVP and architecture-review contracts already define the official surface as Overview / Objects / Operations / Event Executive Brief, with Product Result Artifact/Evidence provenance, role-specific workflow, and Backend-computed `available_actions`. This supports improving the existing Object/Action workflow instead of replacing it with a generic graph-first surface.
 
+Current implementation state to verify before execution:
+- PR #107 introduces the MVP `AssetDetailViewModel` API, backend composer, and frontend consumption path. If PR #107 is not merged when implementation starts, branch from PR #107 or wait for merge before changing the same contract files.
+- PR #100 is superseded by the PR #107 `AssetDetailViewModel` direction. Items from PR #100 review must be rechecked against the latest PR #107/main code before remaining work is kept.
+- Already-addressed items such as `runtime_prediction_history` naming, nullable `evidence_field_id`, data-quality-hold mapping, and freshness unknown handling should be recorded as prerequisites or verification checks, not blindly reimplemented.
+
 Automation framing:
 - The service can automate detection, runtime inference, Evidence generation, report drafting, Recommendation creation, and CBM request candidate creation without an agent workflow.
 - Human approval remains required for recommendation disposition, WorkOrder approval, MaintenanceAction execution, and shutdown review.
@@ -117,11 +123,12 @@ Automation framing:
 
 ### Action Path
 
-1. PR100 코멘트에서 확인된 contract correctness 문제를 먼저 수정한다.
-2. `asset.criticality`, `criticality_basis`, `criticality_source`를 schema/docs에 추가한다.
-3. composer가 criticality를 보존하되, 결측 시 default를 만들지 않도록 한다.
-4. missing criticality, freshness unknown, data-quality hold, nullable optional field를 contract test로 고정한다.
-5. production endpoint와 frontend 전환은 다음 구현 범위에서 진행한다.
+1. PR #107 기준 코드에서 current/series, freshness, nullable field, data-quality hold의 잔존 이슈를 먼저 확인한다.
+2. `features[].current`와 `features[].series`의 표시/병합/정렬/중복 제거 규칙을 계약과 테스트로 고정한다.
+3. `asset.criticality`, `criticality_basis`, `criticality_source`, source/owner/gap 규칙을 schema/docs에 추가한다.
+4. composer가 criticality와 context를 보존하되, 결측 시 default를 만들지 않도록 한다.
+5. `operation_context`, `maintenance_history`, `priority`를 최소 필드로 추가하고, risk 값을 변경하지 않는 파생값임을 테스트한다.
+6. frontend Objects/Operations/Report가 신규 context/priority를 소비하고, UI-side synthesis와 중복 설명을 제거한다.
 
 ### Result, Lesson, Prevention Notes
 
@@ -156,9 +163,10 @@ In scope:
 - `AssetDetailViewModel` schema에 `asset.criticality` 의미와 출처를 명시한다.
 - 중요도 결측을 임의 기본값으로 채우지 않고 `evidence.gaps[]` 또는 `data_status.warnings[]`로 표현한다.
 - `risk`, `criticality`, `priority`의 의미를 문서에서 분리한다.
+- `features[].current`와 `features[].series`의 관계, trend 표시 병합, 정렬, 중복 제거, baseline 산정 범위를 명시한다.
 - 운영/정비 맥락은 현재 source가 제공하는 범위에서 별도 context로 노출하고, 없으면 unavailable/gap으로 표시한다.
-- 기존 Object 중심 탐색과 governed Action UI 철학을 검토해 유지할 원칙과 깨야 할 generic workbench assumptions를 문서화한다.
-- PR100 코멘트에서 확인된 naming/null/freshness 문제와 충돌하지 않도록 계획에 반영한다.
+- Objects/Operations/Report UI가 신규 context/priority를 소비하도록 수정하고, 같은 위험/근거/추천 설명의 중복을 줄인다.
+- PR100 코멘트에서 확인된 naming/null/freshness 문제는 최신 PR #107/main 기준 잔존 여부를 재검증한 뒤 필요한 항목만 유지한다.
 
 Out of scope:
 - 설비 중요도 자동 산정 모델, RPN, 비용 최적화 모델.
@@ -166,19 +174,32 @@ Out of scope:
 - Microsoft Fabric/Eventhouse/KQL runtime 도입.
 - TimescaleDB, ClickHouse, DuckDB/Parquet, PostgreSQL partition 성능 벤치마크.
 - RUL/time-to-failure 예측.
-- 실제 production endpoint, frontend ViewModel 소비, PostgreSQL E2E.
-- UI implementation, visual redesign, and browser E2E for the new context/action flow.
+- 운영 read-port/PostgreSQL 기반 데이터 연결.
+- LLM enhancement and agent workflow implementation.
 
 ---
 
 ## Data Modeling Decisions
+
+### D0. `features[].current` and `features[].series` must not be ambiguous
+
+`features[].current` is the current value at the ViewModel snapshot time.
+`features[].series` is the historical/trend series used by the UI.
+
+Default contract:
+- Preserve `series` as history/trend input, not as an implicit replacement for `current`.
+- UI may render a trend that includes the current point, but the merge must be deterministic.
+- If history and current are merged for display, dedupe by `observed_at`, sort by `observed_at` ascending, and prefer the authoritative current value on timestamp collision.
+- Baseline calculation must use the contracted baseline/history input only. Do not silently add current into baseline computation unless the schema explicitly says so.
+- Add a regression case where history and current timestamps differ, including a GS-007-style scenario if it remains in the active fixture set.
 
 ### D1. Criticality is asset context, not risk
 
 `criticality`는 고장 가능성이 아니라 고장 발생 시 운영 영향도다.
 
 - Allowed values: `low`, `medium`, `high`
-- Source: asset/equipment master, fixture projection, or explicit read-port field
+- Source: asset/equipment master, project operational context, fixture projection, or explicit read-port field
+- Owner domain: use `equipment` for equipment-master owned values, `project` for project-scoped operational importance, and `unresolved` when ownership is not yet decided
 - Missing behavior: do not default to `medium`
 - Consumer use: recommendation/priority context, not model status replacement
 
@@ -199,7 +220,7 @@ Minimal fields:
 ```text
 criticality: low | medium | high | null
 criticality_basis: string[]
-criticality_source: manual_initial_assessment | equipment_master | fixture_projection | unknown
+criticality_source: manual_initial_assessment | equipment_master | project_context | fixture_projection | unknown
 ```
 
 `criticality_basis` examples:
@@ -272,7 +293,7 @@ If these queries become slow or product-critical, run a separate spike comparing
 - DuckDB/Parquet or ClickHouse-style analytical path
 - Microsoft Fabric/Eventhouse/KQL as external reference only if deployment context requires it
 
-### D6. Preserve Object/Action philosophy, not generic graph-first UX
+### D6. Implement Object/Action UI cleanup, not generic graph-first UX
 
 The existing UI direction is useful when it behaves like an Object-centered
 operations workbench: choose an Asset/Object, inspect evidence and provenance,
@@ -300,6 +321,13 @@ Operations = governed action surface for Recommendation, available_actions, Work
 Report = grounded narrative surface using the same Artifact/Evidence/action state
 Ontology Workbench = auxiliary exploration/debugging surface, not the official PdM decision flow
 ```
+
+UI implementation boundary:
+- Objects should show the asset-level risk/evidence/context/priority packet once, with clear gaps.
+- Operations should show action state and human decision controls, not duplicate full factor explanations.
+- Report should summarize the same ViewModel/action state as narrative and link back to the canonical evidence owner.
+- Frontend must not synthesize `criticality`, `priority`, WorkOrder IDs, Recommendation state, or role/state permissions.
+- Browser/E2E coverage is required for the new context/priority rendering path and for absence of duplicate or contradictory recommendation language.
 
 Simplified user flow:
 
@@ -340,239 +368,246 @@ Screen grouping:
 
 ## Tasks
 
-### Task 1: Document Criticality Semantics
+### Task 0: Rebase Point And Residual-Issue Audit
 
 **Files:**
-- Modify: `docs/mvp/schema-definition.md`
-- Modify: `docs/mvp/api-specification.md`
-- Modify: `docs/closed-loop-domain-contract.md`
+- Inspect: `contracts/schemas/asset-detail-view-model.schema.json`
+- Inspect: `systems/backend/app/mvp/asset_detail_view_model.py`
+- Inspect: `systems/backend/app/mvp/service.py`
+- Inspect: `systems/frontend/src/features/mvp/api/mvpAdapters.ts`
+- Inspect: `tests/test_asset_detail_view_model_contract.py`
+- Inspect: `tests/test_asset_detail_view_model_composer.py`
+- Inspect: `tests/test_mvp.py`
 
-- [ ] **Step 1: Update `AssetDetailViewModel` field table**
+- [ ] **Step 1: Start from PR #107 or post-merge main**
 
-Add `asset.criticality`, `asset.criticality_basis`, and `asset.criticality_source` to the Asset summary section. State that `criticality` is operational impact, not model risk.
+If PR #107 is still open, create the implementation branch from `feat/asset-detail-report-viewmodel-api`.
+If PR #107 is merged, create it from updated `main`.
 
-- [ ] **Step 2: Add missing-value rule**
+- [ ] **Step 2: Recheck PR #100 review remnants**
 
-Document that missing criticality must not be defaulted to `medium`. Use `null`, `evidence.gaps[]`, and/or `data_status.warnings[]`.
+Verify whether these are already fixed in the base branch:
+- `runtime_prediction_history` naming
+- nullable or omitted `evidence_field_id`
+- `data_quality_hold` consistency
+- freshness unknown as `is_stale: null` plus warning
 
-- [ ] **Step 3: Update closed-loop wording**
+Keep only unresolved items in the implementation PR.
 
-Clarify that recommendation can use criticality as context, but missing criticality blocks executable recommendation or downgrades to review/hold depending on the existing policy.
-
-- [ ] **Step 4: Review**
-
-Verify docs consistently distinguish:
-- model risk: `risk.status_grade`
-- data quality: `data_status.is_data_quality_hold`
-- asset impact: `asset.criticality`
-- derived workflow/display ordering: `priority`
-
-### Task 2: Extend ViewModel Schema
+### Task 1: Fix Current/Series Contract
 
 **Files:**
 - Modify: `contracts/schemas/asset-detail-view-model.schema.json`
-- Modify: `tests/fixtures/asset_detail_view_model/current-evidence-only.json`
-- Modify: `tests/fixtures/asset_detail_view_model/observation-series-present.json`
-- Modify: `tests/fixtures/asset_detail_view_model/risk-timeline-present.json`
-- Modify: `tests/fixtures/asset_detail_view_model/baseline-partially-missing.json`
+- Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
+- Modify: `tests/fixtures/asset_detail_view_model/*.json`
+- Test: `tests/test_asset_detail_view_model_contract.py`
+- Test: `tests/test_asset_detail_view_model_composer.py`
+
+- [ ] **Step 1: Define current and series semantics**
+
+Document and test that `features[].current` is the current snapshot value and
+`features[].series` is trend/history data.
+
+- [ ] **Step 2: Add display-merge rules when needed**
+
+If the UI needs a trend including the current point, the ViewModel or adapter
+must dedupe by `observed_at`, sort ascending, and prefer current on timestamp
+collision.
+
+- [ ] **Step 3: Keep baseline separate**
+
+Do not include current in baseline calculation unless a future schema revision
+explicitly defines that behavior.
+
+- [ ] **Step 4: Add timestamp regression coverage**
+
+Add a fixture/test where history and current timestamps differ, including a
+GS-007-style case if that scenario remains available in the active fixture set.
+
+### Task 2: Extend Criticality Contract
+
+**Files:**
+- Modify: `contracts/schemas/asset-detail-view-model.schema.json`
+- Modify: `contracts/schemas/README.md`
+- Modify: `docs/mvp/schema-definition.md`
+- Modify: `docs/mvp/api-specification.md`
+- Modify: `docs/closed-loop-product-consumption-contract.md`
+- Modify: `tests/fixtures/asset_detail_view_model/*.json`
 - Test: `tests/test_asset_detail_view_model_contract.py`
 
-- [ ] **Step 1: Add schema fields**
+- [ ] **Step 1: Add asset-impact fields**
 
 Extend `asset` with:
 - `criticality`: `low | medium | high | null`
 - `criticality_basis`: string array
-- `criticality_source`: enum allowing `manual_initial_assessment`, `equipment_master`, `fixture_projection`, `unknown`
+- `criticality_source`: `manual_initial_assessment | equipment_master | project_context | fixture_projection | unknown`
 
-- [ ] **Step 2: Keep schema closed**
+- [ ] **Step 2: Add owner/gap rule**
 
-Maintain `additionalProperties: false`. New fields must be explicit and fixture-backed.
+Missing criticality must not default to `medium`.
+Use:
 
-- [ ] **Step 3: Add missing criticality fixture coverage**
+```text
+criticality = null
+criticality_basis = []
+criticality_source = unknown
+field = asset.criticality
+reason = criticality_missing_or_unresolved
+owner_domain = equipment | project | unresolved
+```
 
-Add or update one fixture where `criticality` is `null`, `criticality_source` is `unknown`, and an evidence gap explains the unavailable asset-impact context.
+Do not default this gap to `maintenance` unless the missing source is actually
+maintenance-owned.
 
-- [ ] **Step 4: Add contract assertions**
+- [ ] **Step 3: Add contract assertions**
 
 Test scenarios:
 - schema accepts `high`, `medium`, `low`
 - schema accepts `criticality: null`
 - schema rejects unknown criticality values such as `standard`
-- missing criticality fixture still validates when the gap is present
+- missing criticality fixture validates only when the gap/warning is explicit
 - `risk.status_grade` still does not include `data_quality_hold`
 
-### Task 3: Update Composer Mapping
+### Task 3: Add Context And Priority Composition
 
 **Files:**
 - Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
-- Test: `tests/test_asset_detail_view_model_composer.py`
-
-- [ ] **Step 1: Read criticality from contracted asset/equipment input**
-
-Composer should copy explicit `criticality`, `criticality_basis`, and `criticality_source` from the read-port data when available.
-
-- [ ] **Step 2: Do not synthesize default criticality**
-
-If no criticality exists, output `criticality: null`, `criticality_basis: []`, `criticality_source: "unknown"`, and append a gap such as:
-
-```text
-field = asset.criticality
-reason = criticality_missing_or_unresolved
-owner_domain = maintenance
-```
-
-- [ ] **Step 3: Keep recommendation policy ownership intact**
-
-Composer must not reimplement `status x criticality` recommendation rules. It only exposes the asset context needed by downstream policy/report consumers.
-
-- [ ] **Step 4: Add composer tests**
-
-Test scenarios:
-- explicit high criticality is preserved with basis/source
-- missing criticality is not defaulted
-- missing criticality adds a gap and warning
-- `data_quality_hold` still maps to `risk.status_grade: null` and `data_status.is_data_quality_hold: true`
-
-### Task 4: Align Existing PR100 Review Fixes
-
-**Files:**
-- Modify: `systems/backend/app/mvp/asset_detail_view_model.py`
+- Modify: `systems/backend/app/mvp/service.py`
 - Modify: `contracts/schemas/asset-detail-view-model.schema.json`
+- Modify: `tests/fixtures/asset_detail_view_model/*.json`
 - Test: `tests/test_asset_detail_view_model_composer.py`
-- Test: `tests/test_asset_detail_view_model_contract.py`
+- Test: `tests/test_mvp.py`
 
-- [ ] **Step 1: Rename internal read-port method**
+- [ ] **Step 1: Preserve criticality from contracted inputs**
 
-Replace the public contract name `risk_prediction_results` with the semantic name `runtime_prediction_history`.
+Composer should copy explicit `criticality`, `criticality_basis`, and
+`criticality_source` from asset/equipment/read-port data when available.
 
-- [ ] **Step 2: Fix nullable top-factor field handling**
+- [ ] **Step 2: Add intentionally small context fields**
 
-When `evidence_field_id` is unavailable, omit the field or allow nullable schema explicitly. Prefer omission if the field is optional.
+Start with minimal operational context:
+- `maintenance_history.last_maintenance_days_ago`
+- `maintenance_history.similar_events_30d`
+- `maintenance_history.open_work_order_exists`
+- `operation_context.load_level`
+- `operation_context.runtime_hours_7d`
+- `operation_context.production_impact`
 
-- [ ] **Step 3: Fix data-quality hold consistency**
+Missing values stay `null`, empty, warning, or gap. Do not convert missing
+context to `normal`, `low`, or `false`.
 
-Use one helper/policy path for `status_grade == "data_quality_hold"` and legacy status fallback so `risk` and `data_status` cannot diverge.
+- [ ] **Step 3: Add priority as a derived workflow/display value**
 
-- [ ] **Step 4: Fix freshness unknown handling**
+Add a bounded `priority` block that explains why the asset should be reviewed
+first. It may use risk, criticality, context, and existing action state, but it
+must not rewrite `risk.status_grade` or create authorization/action state.
 
-Do not emit `is_stale: false` when freshness is unknown. Either allow `null` in schema or require an authoritative source. For this implementation scope, prefer `boolean | null` plus a warning/gap.
+- [ ] **Step 4: Keep policy ownership intact**
+
+Composer must not reimplement `status x criticality` recommendation policy.
+It exposes context and priority explanation for downstream report/UI consumers.
+
+### Task 4: Update Frontend UI Consumption And Remove Duplication
+
+**Files:**
+- Modify: `systems/frontend/src/features/mvp/api/mvpContracts.ts`
+- Modify: `systems/frontend/src/features/mvp/api/mvpAdapters.ts`
+- Modify: `systems/frontend/src/features/mvp/objects/MvpObjectsPage.tsx`
+- Modify: `systems/frontend/src/features/mvp/operations/MvpOperationsPage.tsx`
+- Modify: `systems/frontend/src/features/mvp/report/MvpReportsPage.tsx`
+- Modify: `systems/frontend/src/features/mvp/report/MvpExecutiveReportPage.tsx`
+- Modify as needed: `systems/frontend/src/features/mvp/report/MvpMapReportAssetDetailView.tsx`
+- Test: `systems/frontend/src/features/mvp/api/mvpAdapters.test.ts`
+- Test: `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
+
+- [ ] **Step 1: Update frontend contracts/adapters**
+
+Type the new criticality/context/priority fields and preserve nulls.
+Frontend adapters must not synthesize `criticality`, `priority`, WorkOrder IDs,
+Recommendation state, or role/state permissions.
+
+- [ ] **Step 2: Assign screen ownership**
+
+Implement the screen split:
+- Objects: asset risk, evidence, context, priority, and gaps
+- Operations: Recommendation, `available_actions`, approval/defer/reject/note state
+- Report: grounded summary from the same ViewModel/action state
+
+- [ ] **Step 3: Remove duplicated explanations**
+
+Move repeated risk/evidence/recommendation explanations into one canonical
+owner per detail level. Other screens may show compact summaries and cross-links.
+
+- [ ] **Step 4: Add UI verification**
+
+Add or update frontend unit/E2E coverage for:
+- missing criticality displays as unavailable/확인 필요
+- priority reasons render from backend/ViewModel data
+- Objects and Operations do not show contradictory recommendation language
+- action controls still depend on backend-provided action state
 
 ### Task 5: Validation And Boundary Report
 
 **Files:**
 - Modify: `tests/test_report_domain_migration.py`
-- Modify: `contracts/schemas/README.md`
+- Modify: `docs/mvp/functional-specification.md`
+- Modify: `docs/mvp/mvp-design-specification.md`
+- Modify: `docs/mvp/report-specification.md`
 
-- [ ] **Step 1: Keep report-domain import guard current**
+- [ ] **Step 1: Keep canonical module guard current**
 
-Ensure the report composer remains in the canonical `systems/backend/app/report` package and does not import generator/prototype/infra modules directly.
+Ensure the ViewModel composer remains in `systems/backend/app/mvp/asset_detail_view_model.py`
+and does not import generator/prototype/infra modules directly. Report may
+consume the ViewModel/result state but does not own a duplicate composer.
 
-- [ ] **Step 2: Update schema index**
+- [ ] **Step 2: Document UI responsibility**
 
-Document that the ViewModel schema includes asset-impact context and missing-value semantics.
+Document that Overview, Objects, Operations, and Event Executive Brief remain
+the official PdM surfaces, with Ontology Workbench as auxiliary exploration or
+debugging.
 
 - [ ] **Step 3: Run focused verification**
 
 Expected verification:
 - contract fixture tests pass
 - composer tests pass
-- report-domain migration/import guard passes
+- MVP API compatibility tests pass
+- frontend adapter tests pass
+- MVP E2E for context/priority path passes
 - whitespace check passes
 
 - [ ] **Step 4: Report evidence boundary**
 
 Final report must state:
-- implemented: schema/composer/docs/tests
-- not implemented: production endpoint, production read-port, frontend consumption, PostgreSQL E2E
+- implemented: current/series contract, criticality, context, priority, UI consumption, docs/tests
+- not implemented: operating read-port/PostgreSQL source wiring, TSDB/KQL platform, RUL, LLM/agent implementation
 - criticality is operational context, not failure probability or model risk
 
-### Task 6: Document UI Information Architecture Boundary
+### Backlog: LLM, Agent Workflow, And Platform Spikes
 
-**Files:**
-- Modify: `docs/mvp/functional-specification.md`
-- Modify: `docs/mvp/mvp-design-specification.md`
-- Modify: `docs/closed-loop-product-consumption-contract.md`
+These are explicitly not part of the criticality/context/priority UI implementation PR.
 
-- [ ] **Step 1: Preserve official MVP surfaces**
-
-Document that Overview, Objects, Operations, and Event Executive Brief remain
-the official PdM surfaces. Dataset/Governance/Analysis/Ontology Workbench may
-exist, but they must not replace the official evidence-to-action workflow.
-
-- [ ] **Step 2: Assign canonical screen responsibility**
-
-Document the canonical responsibility split:
-- Objects owns Asset risk/evidence/context/gap inspection.
-- Operations owns Recommendation, `available_actions`, CBM request candidate,
-  WorkOrder, Decision, Note, and Activity state.
-- Report owns grounded summary generated from the same Artifact/Evidence/action
-  state, not a separate interpretation.
-
-- [ ] **Step 3: Separate automated outputs from human decisions**
-
-Document the simplified product flow:
-
-```text
-System detected
-→ Review evidence
-→ Review recommended action candidate
-→ Approve, reject, defer, or record field note
-```
-
-Automated outputs should be displayed as system-generated diagnosis/report
-results. Human decision controls should appear only in governed action surfaces.
-
-- [ ] **Step 4: Add duplication cleanup rules**
-
-Document that risk/evidence/recommendation summaries may appear in multiple
-screens only as cross-links or compact summaries. Detailed explanation should
-have one canonical owner so screens do not produce contradictory language.
-
-- [ ] **Step 5: Keep frontend action boundary**
-
-Document that the frontend must not synthesize priority, WorkOrder IDs,
-Recommendation state, or role/state permissions. It consumes backend ViewModel,
-backend policy results, and Backend-computed `available_actions`.
-
-### Task 7: Record LLM And Agent Workflow Backlog
-
-**Files:**
-- Modify: `docs/mvp/functional-specification.md`
-- Modify: `docs/mvp/report-specification.md`
-- Modify: `docs/closed-loop-product-consumption-contract.md`
-
-- [ ] **Step 1: Defer LLM enhancement until contracts stabilize**
-
-Document that LLM enhancement follows Product Result Artifact, Evidence,
-operation context, priority, and `available_actions` stabilization.
-
-- [ ] **Step 2: Limit LLM to explanation**
-
-Document that LLM may produce role-specific summaries, evidence-linked report
-language, limitation wording, and deterministic fallback improvements. It must
-not create risk grades, priority, recommendations, authorization, or WorkOrder
-state.
-
-- [ ] **Step 3: Limit agent workflow to coordination**
-
-Document that agent workflow may prepare review packets, duplicate WorkOrder
-summaries, checklist drafts, handoff notes, and approval-request drafts. It must
-not execute mutations without user approval or own domain state transitions.
-
-- [ ] **Step 4: Keep current implementation scope unchanged**
-
-This roadmap does not add LLM/agent implementation work to the current
-criticality/context contract implementation scope.
+- LLM may later produce role-specific summaries, evidence-linked report language,
+  limitation wording, and deterministic fallback improvements.
+- LLM must not create risk grades, priority, recommendations, authorization, or
+  WorkOrder state.
+- Agent workflow may later prepare review packets, duplicate WorkOrder summaries,
+  checklist drafts, handoff notes, and approval-request drafts.
+- Agent workflow must not execute mutations without user approval or own domain
+  state transitions.
+- Microsoft Fabric/Eventhouse/KQL, TimescaleDB, ClickHouse, DuckDB/Parquet, and
+  PostgreSQL partition comparisons remain later performance/platform spikes.
 
 ---
 
 ## Suggested Delivery Order
 
-1. Fix PR100 contract correctness issues first: naming, nullable top factor, hold consistency, freshness unknown.
-2. Add criticality schema/docs after the contract is stable.
-3. Update composer mapping and missing-criticality tests.
-4. Document UI information architecture boundaries before frontend implementation.
-5. Record LLM/agent workflow as a backlog after contract stabilization.
-6. Run focused tests and produce a narrow PR summary.
+1. Merge or branch from PR #107 so the implementation starts from the current `AssetDetailViewModel` API/composer/frontend path.
+2. Recheck PR #100 review remnants and keep only unresolved items.
+3. Fix `features[].current` and `features[].series` semantics.
+4. Add criticality source/owner/gap contract.
+5. Add context and priority composition.
+6. Update frontend contracts and UI consumption, removing duplicated explanations.
+7. Run backend contract/composer/API tests, frontend adapter/type/E2E checks, and produce a boundary report.
 
-This keeps the modeling improvement small enough to land in the current branch while avoiding a premature ontology platform.
+This keeps one larger implementation PR focused on the ViewModel-to-UI decision flow while avoiding a premature ontology platform, time-series warehouse, or LLM/agent ownership change.
