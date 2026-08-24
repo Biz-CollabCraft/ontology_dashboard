@@ -281,8 +281,6 @@ class GovernedProductResult(StrictModel):
         if self.source_contract == "result_artifact":
             if not self.artifact_id or len(self.top_factors) != 3:
                 raise ValueError("Result Artifact product results require artifact_id and Top-3 factors")
-            if self.recommended_action is None:
-                raise ValueError("Result Artifact product results require a policy recommendation")
         if self.predicted_failure_type not in {
             "failure_risk",
             "no_significant_risk",

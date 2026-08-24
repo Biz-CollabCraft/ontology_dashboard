@@ -233,6 +233,8 @@ def build_product_result_artifact(
         prediction,
         maintenance_context=maintenance_context,
     )
+    if not artifact["evidence_payload"]["recommended_actions"]:
+        artifact["recommended_action"] = None
     artifact["provenance"]["evidence_payload_reference"] = evidence_payload_reference(artifact)
     validate_evidence_payload_invariants(artifact["evidence_payload"])
     validate_product_result_artifact(artifact)

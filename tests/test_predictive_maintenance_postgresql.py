@@ -92,6 +92,8 @@ def postgresql_database():
         assert "0031_predictive_maintenance_runtime_overlay" in applied
         assert "0032_predictive_maintenance_append_only_results" in applied
         assert "0033_recommendation_materialization_strategy" in applied
+        assert "0034_operations_manual_recommendation" in applied
+        assert "0035_inspection_results" in applied
         assert migrate(dsn) == []
         import psycopg
 

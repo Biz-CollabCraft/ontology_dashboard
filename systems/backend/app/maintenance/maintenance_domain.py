@@ -98,6 +98,8 @@ MAINTENANCE_ACTION_TRANSITIONS = {
     MaintenanceActionStatus.CANCELLED: set(),
 }
 
+OPERATIONS_MANUAL_POLICY_VERSION = "operations-manual-recommendation-v1"
+
 StatusT = TypeVar("StatusT")
 
 
@@ -194,6 +196,7 @@ def materialize_recommended_action(
         materialization_strategy=MaterializationStrategy.RUNTIME_GENERATED,
         asset_id=identity.asset_id,
         equipment_id=identity.equipment_id,
+        asset_type=identity.asset_type,
         event_id=event_id,
         source_action_id=producer.source_action_id,
         source_product_result_id=producer.source_product_result_id,
@@ -209,6 +212,82 @@ def materialize_recommended_action(
 
 def deterministic_recommendation_id(producer: ProducerRecommendation) -> str:
     return f"REC-{uuid.uuid5(uuid.NAMESPACE_URL, producer.materialization_key)}"
+
+
+def create_operations_manual_recommendation(
+    *,
+    identity: EquipmentIdentity,
+    event_id: str,
+    source_product_result_id: str,
+    source_evidence_id: str,
+    source_schema_version: str,
+    source_inspection_work_order_id: str,
+    source_inspection_reference: str,
+    authored_by: str,
+    authored_at: datetime,
+    basis: tuple[str, ...],
+    recommendation_id: str | None = None,
+    existing_materialization_keys: Collection[str] = (),
+) -> OperationalRecommendedAction:
+    """Create the separate Operations-owned recommendation after inspection.
+
+    ``source_inspection_reference`` is an opaque stable reference supplied by
+    the Inspection owner. The recommendation preserves the completed inspection
+    result as its source and remains distinct from a Diagnosis-produced
+    recommendation.
+    """
+
+    materialization_key = (
+        f"{source_inspection_work_order_id}:"
+        f"{source_inspection_reference}:TOOL_REPLACEMENT"
+    )
+    if materialization_key in existing_materialization_keys:
+        raise ValueError(
+            f"operations manual recommendation already exists: {materialization_key}"
+        )
+    scoped_key = ":".join(
+        (
+            identity.organization_id,
+            identity.project_id,
+            identity.workspace_id,
+            event_id,
+            identity.equipment_id,
+            materialization_key,
+        )
+    )
+    source_action_id = (
+        "OPERATIONS-MANUAL-ACTION-"
+        f"{uuid.uuid5(uuid.NAMESPACE_URL, scoped_key)}"
+    )
+    return OperationalRecommendedAction(
+        organization_id=identity.organization_id,
+        project_id=identity.project_id,
+        workspace_id=identity.workspace_id,
+        recommendation_id=(
+            recommendation_id
+            or f"REC-{uuid.uuid5(uuid.NAMESPACE_URL, scoped_key)}"
+        ),
+        recommendation_origin="operations_manual",
+        materialization_strategy=MaterializationStrategy.RUNTIME_GENERATED,
+        asset_id=identity.asset_id,
+        equipment_id=identity.equipment_id,
+        asset_type=identity.asset_type,
+        event_id=event_id,
+        source_action_id=source_action_id,
+        source_product_result_id=source_product_result_id,
+        source_evidence_id=source_evidence_id,
+        source_schema_version=source_schema_version,
+        source_policy_version=OPERATIONS_MANUAL_POLICY_VERSION,
+        label="공구 교체",
+        kind="TOOL_REPLACEMENT",
+        action_code="TOOL_REPLACEMENT",
+        requires_human_approval=True,
+        basis=basis,
+        source_inspection_work_order_id=source_inspection_work_order_id,
+        source_inspection_reference=source_inspection_reference,
+        authored_by=authored_by,
+        authored_at=authored_at,
+    )
 
 
 def validate_single_dataset_writer(
@@ -293,7 +372,13 @@ def apply_recommendation_decision(
 
 
 def authorize_inspection_work_order(
-    *, operational_decision: OperationalDecisionKind
+    *,
+    operational_decision: OperationalDecisionKind,
+    source_product_result_id: str,
+    source_evidence_id: str,
+    source_action_id: str,
+    source_schema_version: str,
+    source_policy_version: str,
 ) -> WorkOrderAuthorization:
     if operational_decision not in {
         OperationalDecisionKind.REQUEST_INSPECTION,
@@ -303,6 +388,11 @@ def authorize_inspection_work_order(
     return WorkOrderAuthorization(
         work_type=WorkOrderType.INSPECTION,
         operational_decision=operational_decision,
+        source_product_result_id=source_product_result_id,
+        source_evidence_id=source_evidence_id,
+        source_action_id=source_action_id,
+        source_schema_version=source_schema_version,
+        source_policy_version=source_policy_version,
     )
 
 
@@ -311,6 +401,14 @@ def authorize_maintenance_work_order(
     recommendation: OperationalRecommendedAction,
     decision: RecommendationDecision,
 ) -> WorkOrderAuthorization:
+    if recommendation.recommendation_origin != "operations_manual":
+        raise ValueError(
+            "maintenance work order requires an operations_manual recommendation"
+        )
+    if recommendation.action_code != "TOOL_REPLACEMENT":
+        raise ValueError(
+            "maintenance work order requires an approved TOOL_REPLACEMENT action"
+        )
     if decision.recommendation_id != recommendation.recommendation_id:
         raise ValueError("decision does not belong to the recommendation")
     _require_same_scope(recommendation, decision)
@@ -335,12 +433,22 @@ def create_inspection_work_order(
     identity: EquipmentIdentity,
     event_id: str,
     operational_decision: OperationalDecisionKind,
+    source_product_result_id: str,
+    source_evidence_id: str,
+    source_action_id: str,
+    source_schema_version: str,
+    source_policy_version: str,
     idempotency_key: str,
 ) -> WorkOrder:
-    """Create inspection work without accepting a self-asserted authorization."""
+    """Create inspection work with explicit canonical projection lineage."""
 
     authorization = authorize_inspection_work_order(
         operational_decision=operational_decision,
+        source_product_result_id=source_product_result_id,
+        source_evidence_id=source_evidence_id,
+        source_action_id=source_action_id,
+        source_schema_version=source_schema_version,
+        source_policy_version=source_policy_version,
     )
     return WorkOrder(
         organization_id=identity.organization_id,
@@ -350,6 +458,7 @@ def create_inspection_work_order(
         event_id=event_id,
         asset_id=identity.asset_id,
         equipment_id=identity.equipment_id,
+        asset_type=identity.asset_type,
         work_type=WorkOrderType.INSPECTION,
         idempotency_key=idempotency_key,
         authorization=authorization,
@@ -377,6 +486,7 @@ def create_work_order_for_recommendation(
         event_id=recommendation.event_id,
         asset_id=recommendation.asset_id,
         equipment_id=recommendation.equipment_id,
+        asset_type=recommendation.asset_type,
         work_type=WorkOrderType.MAINTENANCE,
         idempotency_key=idempotency_key,
         authorization=authorization,
