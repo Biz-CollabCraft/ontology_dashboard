@@ -116,3 +116,30 @@ class InsufficientTrainingDataError(FeatureError):
             status_code=422,
             details=details,
         )
+
+
+class FeatureAssetIdentityNotSupportedError(FeatureError):
+    """Asset ID가 없는 Feature 입력은 현재 지원하지 않음을 나타낸다 (501)."""
+
+    def __init__(
+        self,
+        message: str = (
+            "Observation Dataset에서 설비 ID를 식별할 수 없습니다. "
+            "현재 Feature 파이프라인은 Preprocessing Plan에 의해 명시된 asset ID가 필요하며, "
+            "ID가 없는 단일 설비 데이터의 자동 ID 생성 기능은 아직 지원하지 않습니다."
+        ),
+        details: list[Any] | None = None,
+    ) -> None:
+        default_details = [
+            {
+                "required_contract": "preprocessing_plan.id_column",
+                "unsupported_case": "observation_without_asset_id",
+                "required_follow_up": "single-asset identity resolution 기능 구현",
+            }
+        ]
+        super().__init__(
+            message=message,
+            code="FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED",
+            status_code=501,
+            details=details if details is not None else default_details,
+        )

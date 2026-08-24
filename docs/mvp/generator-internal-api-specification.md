@@ -283,14 +283,42 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
   4. **내장 failure event timestamp 오류 거부**: embedded indicator 행의 timestamp NaT 시 건너뛰지 않고 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
   5. **최종 Label 클래스 `{0, 1}` 양자 공존 필수**: 최종 생존 라벨에 0과 1이 모두 존재해야 하며, 단일 클래스 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
   6. **설비 Identity & 제외 구간 엄격성**: 다중 설비에서 failure asset 누락/미소속 시 `422`, `anchor`/`exclusion_end` 누락, NaT, 또는 `exclusion_end < anchor` 위반 시 `422` 반환 및 `[anchor, exclusion_end]` 전체 구간 학습 데이터 제외.
+- **Asset identity requirement (Fail-Closed 501)**:
+  - `POST /feature`가 소비하는 Observation Dataset에는 Preprocessing Plan의 `id_column`으로 선언된 설비 식별 컬럼이 반드시 존재해야 합니다.
+  - 현재 파이프라인은 ID가 없는 Dataset을 자동으로 단일 설비로 간주하거나 임시 ID(`row_{idx}`, `default_asset`)를 생성하지 않습니다.
+  - Preprocessing Plan에 `id_column` 누락, Dataset 내 선언된 ID 컬럼 부재, 또는 ID 컬럼에 null/빈 문자열이 존재할 경우 `501 Not Implemented` (`code: FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED`)로 실패하며 Feature Dataset Bundle을 발행하지 않습니다.
+  - ID가 없는 단일 설비 Dataset 지원은 후속 기능으로 별도 구현합니다.
+
+```json
+// 501 FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED 응답 예시
+{
+  "error": {
+    "code": "FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED",
+    "message": "Observation Dataset에서 설비 ID를 식별할 수 없습니다. 현재 Feature 파이프라인은 Preprocessing Plan에 의해 명시된 asset ID가 필요하며, ID가 없는 단일 설비 데이터의 자동 ID 생성 기능은 아직 지원하지 않습니다.",
+    "path": "/feature",
+    "request_id": "req-17091db43b52",
+    "error_id": "err-3c819d4a",
+    "details": [
+      {
+        "required_contract": "preprocessing_plan.id_column",
+        "unsupported_case": "observation_without_asset_id",
+        "required_follow_up": "single-asset identity resolution 기능 구현"
+      }
+    ]
+  }
+}
+```
+
 - **허용되지 않는 Fallback (Prohibited Fallbacks)**:
+  - `row_{idx}`, `default_asset` 등 임시 asset ID 생성 금지
+  - Preprocessing Plan의 `id_column` 누락 시 임의 컬럼 휴리스틱 선택 금지
   - timestamp 위치 기반 추측 금지
   - invalid timestamp 행 조용한 건너뛰기(silent skip) 금지
   - 빈 Failure Dataset을 정상 Dataset으로 처리 금지
   - all-zero Label Bundle 발행 금지
   - 단일 클래스 Label을 Training 단계로 전달 금지
   - unversioned 파일 검색 fallback 금지
-- **5개 필수 파일 구성**: `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`
+- **5개 필수 파일 구성**: `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json` (실제 `asset_id` 보존), `feature_metadata.json`
 - **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
 - **식별자 결정론**: `feature_dataset_version`은 입력 Dataset Manifest 및 Payload SHA-256, `failure_source_mode`, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
 - **Ontology Mapping 배제**: Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema allowlist/recipe만 실행합니다.

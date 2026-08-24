@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from systems.generator.app.feature.feature_exception import (
+    FeatureAssetIdentityNotSupportedError,
     FeatureContractError,
     FeatureLabelAlignmentError,
     FeatureSchemaMismatchError,
@@ -597,7 +598,7 @@ def test_observation_timestamp_column_missing_returns_422(test_client):
     ds_name = "ai4i_no_timestamp"
     df = pd.DataFrame({
         "UDI": [1, 2, 3],
-        "Product ID": ["L0001", "L0001", "L0001"],
+        "Product ID": ["L0001", "L0002", "L0003"],
         "Air temperature [K]": [298.1, 298.2, 298.3],
         "Process temperature [K]": [308.1, 308.2, 308.3],
         "Rotational speed [rpm]": [1500, 1500, 1500],
@@ -995,3 +996,273 @@ def test_logical_uri_outside_root_raises_error():
 def test_feature_endpoint_is_synchronous():
     """Verify that POST /feature is a synchronous function executed in worker threads."""
     assert inspect.iscoroutinefunction(post_feature) is False
+
+
+# ==========================================
+# 8. Asset Identity Contract & 501 Fail-Closed Tests
+# ==========================================
+
+def test_feature_asset_id_normal_passing_preserved_in_row_metadata(test_client):
+    """Test that canonical asset_id from Preprocessing Plan is strictly preserved in row_metadata."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_source_mode": "embedded_observation",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+    })
+    assert resp.status_code == 200
+    feat_ver = resp.json()["outputs"]["feature_dataset_version"]
+
+    bundle_dir = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver
+    with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
+        rows = json.load(f)
+
+    # In fixture, Product ID was set to L0001 and L0002
+    assert len(rows) > 0
+    asset_ids = {r["asset_id"] for r in rows}
+    assert asset_ids.issubset({"L0001", "L0002"})
+    assert "row_0" not in asset_ids
+    assert "default_asset" not in asset_ids
+
+
+def test_feature_asset_id_missing_in_plan_returns_501(test_client):
+    """Test HTTP 501 FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED when Preprocessing Plan lacks id_column."""
+    from systems.generator.app.preprocessing.preprocessing_repository import (
+        PreprocessingRepository,
+        compute_preprocessing_plan_version,
+        compute_source_schema_fingerprint,
+    )
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    obs_csv = test_client["obs_csv"]
+
+    prep_repo = PreprocessingRepository()
+    obs_df = pd.read_csv(obs_csv)
+    schema_fp = compute_source_schema_fingerprint(obs_df)
+    obs_sha = compute_file_sha256(obs_csv)
+
+    plan_dict = {
+        "preprocessing_plan_id": "pp-no-id-col",
+        "preprocessing_plan_version": "temp",
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "source_dataset_uri": f"data/observations/{dataset_id}/v1.0/observations.csv",
+        "source_dataset_sha256": obs_sha,
+        "source_schema_fingerprint": schema_fp,
+        "decision_source": "rule_fallback",
+        "fallback_reason": "test plan without id_column",
+        "planner_version": "1.0",
+        "structure_type": "tabular_column_as_attribute",
+        "id_column": None,  # No ID column declared
+        "time_column": "observed_at",
+        "attribute_column": None,
+        "value_column": None,
+        "selected_columns": list(obs_df.columns),
+        "duplicate_policy": "error",
+        "aggregation": None,
+        "created_at": "2026-08-24T00:00:00Z",
+    }
+    plan_ver = compute_preprocessing_plan_version(dataset_id, "v1.0", plan_dict)
+    plan_dict["preprocessing_plan_version"] = plan_ver
+
+    plan_dir = prep_repo.get_dataset_plan_dir(dataset_id, "v1.0")
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    (plan_dir / "pp-no-id-col.json").write_text(json.dumps(plan_dict, indent=2), encoding="utf-8")
+
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_source_mode": "embedded_observation",
+        "preprocessing_plan_id": "pp-no-id-col",
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+    })
+    assert resp.status_code == 501
+    err = resp.json()["error"]
+    assert err["code"] == "FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED"
+    assert "설비 ID를 식별할 수 없습니다" in err["message"]
+
+
+def test_feature_asset_id_declared_column_not_in_dataset_returns_501(test_client):
+    """Test HTTP 501 when plan declares id_column not present in observation dataset (no heuristic fallback)."""
+    from systems.generator.app.preprocessing.preprocessing_repository import (
+        PreprocessingRepository,
+        compute_preprocessing_plan_version,
+        compute_source_schema_fingerprint,
+    )
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    obs_csv = test_client["obs_csv"]
+
+    prep_repo = PreprocessingRepository()
+    obs_df = pd.read_csv(obs_csv)
+    schema_fp = compute_source_schema_fingerprint(obs_df)
+    obs_sha = compute_file_sha256(obs_csv)
+
+    plan_dict = {
+        "preprocessing_plan_id": "pp-wrong-id-col",
+        "preprocessing_plan_version": "temp",
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "source_dataset_uri": f"data/observations/{dataset_id}/v1.0/observations.csv",
+        "source_dataset_sha256": obs_sha,
+        "source_schema_fingerprint": schema_fp,
+        "decision_source": "rule_fallback",
+        "fallback_reason": "test plan with nonexistent id_column",
+        "planner_version": "1.0",
+        "structure_type": "tabular_column_as_attribute",
+        "id_column": "nonexistent_machine_id",  # Not in dataset
+        "time_column": "observed_at",
+        "attribute_column": None,
+        "value_column": None,
+        "selected_columns": list(obs_df.columns) + ["nonexistent_machine_id"],
+        "duplicate_policy": "error",
+        "aggregation": None,
+        "created_at": "2026-08-24T00:00:00Z",
+    }
+    plan_ver = compute_preprocessing_plan_version(dataset_id, "v1.0", plan_dict)
+    plan_dict["preprocessing_plan_version"] = plan_ver
+
+    plan_dir = prep_repo.get_dataset_plan_dir(dataset_id, "v1.0")
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    (plan_dir / "pp-wrong-id-col.json").write_text(json.dumps(plan_dict, indent=2), encoding="utf-8")
+
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_source_mode": "embedded_observation",
+        "preprocessing_plan_id": "pp-wrong-id-col",
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+    })
+    assert resp.status_code == 501
+    err = resp.json()["error"]
+    assert err["code"] == "FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED"
+
+
+def test_feature_asset_id_with_null_or_empty_values_returns_501():
+    """Test HTTP 501 when dataset id_column contains null/empty strings."""
+    from systems.generator.app.preprocessing.preprocessing_repository import (
+        PreprocessingRepository,
+        compute_preprocessing_plan_version,
+        compute_source_schema_fingerprint,
+    )
+    dataset_name = "ai4i_null_id_test"
+    dataset_ver = "v1.0"
+
+    n_rows = 20
+    times = pd.date_range("2026-01-01 00:00:00", periods=n_rows, freq="h")
+    product_ids = [f"L{i:04d}" for i in range(n_rows)]
+    product_ids[5] = ""  # Empty string ID
+    product_ids[10] = None  # Null ID
+
+    failures = np.zeros(n_rows, dtype=int)
+    failures[8] = 1
+
+    df_obs = pd.DataFrame({
+        "Product ID": product_ids,
+        "Air temperature [K]": np.random.normal(298.1, 1.0, n_rows),
+        "Process temperature [K]": np.random.normal(308.6, 1.0, n_rows),
+        "Rotational speed [rpm]": np.random.normal(1500, 30, n_rows),
+        "Torque [Nm]": np.random.normal(40.0, 3.0, n_rows),
+        "Tool wear [min]": np.linspace(0, 200, n_rows),
+        "Machine failure": failures,
+        "observed_at": times.strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+    obs_dir, obs_csv = create_versioned_observation_dataset(dataset_name, dataset_ver, df_obs)
+    prep_repo = PreprocessingRepository()
+    schema_fp = compute_source_schema_fingerprint(df_obs)
+    obs_sha = compute_file_sha256(obs_csv)
+
+    plan_dict = {
+        "preprocessing_plan_id": "pp-null-id-val",
+        "preprocessing_plan_version": "temp",
+        "dataset_id": dataset_name,
+        "dataset_version": dataset_ver,
+        "source_dataset_uri": f"data/observations/{dataset_name}/{dataset_ver}/observations.csv",
+        "source_dataset_sha256": obs_sha,
+        "source_schema_fingerprint": schema_fp,
+        "decision_source": "rule_fallback",
+        "fallback_reason": "test plan for null id check",
+        "planner_version": "1.0",
+        "structure_type": "tabular_column_as_attribute",
+        "id_column": "Product ID",
+        "time_column": "observed_at",
+        "attribute_column": None,
+        "value_column": None,
+        "selected_columns": list(df_obs.columns),
+        "duplicate_policy": "error",
+        "aggregation": None,
+        "created_at": "2026-08-24T00:00:00Z",
+    }
+    plan_ver = compute_preprocessing_plan_version(dataset_name, dataset_ver, plan_dict)
+    plan_dict["preprocessing_plan_version"] = plan_ver
+
+    plan_dir = prep_repo.get_dataset_plan_dir(dataset_name, dataset_ver)
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    (plan_dir / "pp-null-id-val.json").write_text(json.dumps(plan_dict, indent=2), encoding="utf-8")
+
+    app = create_app()
+    client = TestClient(app)
+
+    try:
+        resp = client.post("/feature", json={
+            "dataset_id": dataset_name,
+            "dataset_version": dataset_ver,
+            "failure_source_mode": "embedded_observation",
+            "preprocessing_plan_id": "pp-null-id-val",
+            "preprocessing_plan_version": plan_ver,
+            "feature_schema_version": "ai4i-feature-v1",
+            "label_schema_version": "ai4i-label-24h-v1",
+            "prediction_horizon_hours": 24,
+        })
+        assert resp.status_code == 501
+        err = resp.json()["error"]
+        assert err["code"] == "FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED"
+    finally:
+        shutil.rmtree(obs_dir.parent, ignore_errors=True)
+        shutil.rmtree(plan_dir, ignore_errors=True)
+
+
+def test_feature_bundle_never_contains_pseudo_ids(test_client):
+    """Verify that published feature bundles never generate pseudo IDs like row_0 or default_asset."""
+    client = test_client["client"]
+    dataset_id = test_client["dataset_id"]
+    plan_id = test_client["plan_id"]
+    plan_ver = test_client["plan_version"]
+
+    resp = client.post("/feature", json={
+        "dataset_id": dataset_id,
+        "dataset_version": "v1.0",
+        "failure_source_mode": "embedded_observation",
+        "preprocessing_plan_id": plan_id,
+        "preprocessing_plan_version": plan_ver,
+        "feature_schema_version": "ai4i-feature-v1",
+        "label_schema_version": "ai4i-label-24h-v1",
+        "prediction_horizon_hours": 24,
+    })
+    assert resp.status_code == 200
+    feat_ver = resp.json()["outputs"]["feature_dataset_version"]
+
+    bundle_dir = PATHS.models_store / "cache" / "features" / dataset_id / "v1.0" / feat_ver
+    with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
+        rows = json.load(f)
+
+    forbidden_patterns = {"row_0", "row_1", "default_asset", "unknown_asset"}
+    for r in rows:
+        assert r["asset_id"] not in forbidden_patterns
+        assert not r["asset_id"].startswith("row_")

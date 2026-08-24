@@ -150,7 +150,14 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
   4. **내장 failure event timestamp 오류 거부**: embedded indicator 행의 timestamp NaT 시 건너뛰지 않고 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
   5. **최종 Label 클래스 `{0, 1}` 양자 공존 필수**: 최종 생존 라벨에 0과 1이 모두 존재해야 하며, 단일 클래스 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
   6. **설비 Identity & 제외 구간 엄격성**: 다중 설비에서 failure asset 누락/미소속 시 `422`, `anchor`/`exclusion_end` 누락, NaT, 또는 `exclusion_end < anchor` 위반 시 `422` 반환 및 `[anchor, exclusion_end]` 전체 구간 학습 데이터 제외.
+- **Asset identity requirement (Fail-Closed 501)**:
+  - `POST /feature`가 소비하는 Observation Dataset에는 Preprocessing Plan의 `id_column`으로 선언된 설비 식별 컬럼이 반드시 존재해야 한다.
+  - 현재 파이프라인은 ID가 없는 Dataset을 자동으로 단일 설비로 간주하거나 임시 ID(`row_{idx}`, `default_asset`)를 생성하지 않는다.
+  - Plan에 `id_column` 누락, Dataset 내 컬럼 미존재, 또는 null/empty ID 값 포함 시 `501 FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED`로 실패하며 Feature Dataset Bundle을 발행하지 않는다.
+  - ID가 없는 단일 설비 Dataset 지원은 후속 기능으로 별도 구현한다.
 - **허용되지 않는 Fallback (Prohibited Fallbacks)**:
+  - `row_{idx}`, `default_asset` 등 임시 asset ID 생성 금지
+  - Preprocessing Plan의 `id_column` 누락 시 임의 컬럼 휴리스틱 선택 금지
   - timestamp 위치 기반 추측 금지
   - invalid timestamp 행 조용한 건너뛰기(silent skip) 금지
   - 빈 Failure Dataset을 정상 Dataset으로 처리 금지
@@ -161,7 +168,7 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
   1. `features.npy`: 2D float64 배열, `allow_pickle=False`, NaN/Inf 불가
   2. `labels.npy`: 1D int64 배열 `{0, 1}`, `allow_pickle=False`
   3. `feature_columns.json`: Feature Schema 선언 순서의 컬럼 목록 및 수량
-  4. `row_metadata.json`: Feature/Label 행과 1:1 대응되는 asset_id 및 timestamp
+  4. `row_metadata.json`: Feature/Label 행과 1:1 대응되는 실제 설비 식별자(`asset_id`) 및 timestamp
   5. `feature_metadata.json`: 데이터셋 Manifest/payload provenance, 스키마 provenance, 클래스 분포, 4개 payload 파일의 개별 SHA-256 체크섬 (자기참조 순환 방지)
 - **원자적 발행 및 불변성 정책**:
   - 임시 디렉터리(`.tmp_{uuid}`)에서 전체 생성 및 검증 완료 후 atomic rename/replace.

@@ -10,8 +10,8 @@
       "role": "failures",
       "path": "failures.csv",
       "media_type": "text/csv",
-      "sha256": "5b15007f9808fa848f16160dc62868d2d8c1d28de3a88cfac50cf7d09a41d568",
-      "size_bytes": 86
+      "sha256": "9d2c25a640d9563e72a7492981a7301589d318da8f06f66581464778c4c3ddf1",
+      "size_bytes": 84
     }
   ]
 }

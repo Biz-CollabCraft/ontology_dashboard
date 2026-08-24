@@ -10,8 +10,8 @@
       "role": "observations",
       "path": "observations.csv",
       "media_type": "text/csv",
-      "sha256": "43d04fcf4458afd7485af93641059dffb6c93af00012bae0ff7907304b2f4032",
-      "size_bytes": 851
+      "sha256": "2f67bdb37017e0661d08a306c9686bfb231ee68c7e5277a3ffc2c2a5952c4462",
+      "size_bytes": 838
     }
   ]
 }

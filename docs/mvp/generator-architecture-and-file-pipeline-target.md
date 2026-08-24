@@ -223,16 +223,17 @@ Extraction
 
 ---
 
-### 4.3 3단계: Feature (Target)
+### 4.3 3단계: Feature (Current)
 - **입력**: `Versioned Observation Dataset` (Manifest 포함) + `Versioned Failure Dataset` (Manifest 포함) + `Preprocessing Plan` + `Feature Schema` + `Label Schema`
 - **처리**:
   - `FeatureInputResolver`를 통한 Versioned Dataset Manifest, payload SHA-256 및 크기 검증, unversioned 파일 검색 배제
   - Preprocessing Plan과 Observation Manifest identity 및 payload SHA-256 상호 검증
+  - Preprocessing Plan의 `id_column` 필수 검증 및 Dataset 내 존재/결측치 부재 검증 (미충족 시 `501 FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED` Fail-Closed)
   - Feature Schema allowlist 및 Feature Recipe에 명시된 source field, operation, parameters 실행
   - 설비별 시계열 피처 추출 (`missing_value_policy == "ffill"` 의미 보존), 고장 이력 기반 라벨링 (`[anchor-horizon, anchor)` 양성, `[anchor, exclusion_end]` 활성 고장 제외)
   - `binary_failure_within_horizon`의 경우 최종 Label `{0, 1}` 양자 존재 검증
   - Feature Schema 선언 순서 유지 및 누수 컬럼 배제
-  - NPY 및 메타데이터 원자적 발행
+  - NPY 및 메타데이터 원자적 발행 (실제 `asset_id` 보존)
 - **출력**: `Feature Dataset Bundle` (`features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`)
 
 ---

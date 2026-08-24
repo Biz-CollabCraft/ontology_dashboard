@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from systems.generator.app.feature.feature_exception import (
+    FeatureAssetIdentityNotSupportedError,
     FeatureContractError,
     FeatureDatasetIntegrityError,
     FeatureInputNotFoundError,
@@ -79,11 +80,17 @@ class FeatureService:
         obs_df: pd.DataFrame,
         id_col: str | None,
         time_col: str | None,
-    ) -> tuple[pd.DataFrame, str | None, str | None]:
-        """Normalize timestamps and perform stable sorting by asset ID and time."""
+        context: dict[str, Any] | None = None,
+    ) -> tuple[pd.DataFrame, str, str]:
+        """Normalize timestamps and perform stable sorting by asset ID and time.
+
+        Strictly validates that Preprocessing Plan declares an id_column present in Observation Dataset
+        without missing values. Fails closed with FeatureAssetIdentityNotSupportedError (501) otherwise.
+        """
+        ctx = context or {}
         working_df = obs_df.copy()
 
-        # Determine and normalize time column
+        # 1. Determine and normalize time column
         resolved_time_col = time_col
         if not resolved_time_col or resolved_time_col not in working_df.columns:
             for candidate in ["observed_at", "timestamp", "datetime", "date", "time"]:
@@ -104,25 +111,110 @@ class FeatureService:
                 "Observation timestamp에 정규화할 수 없는 값이 포함되어 있습니다."
             )
 
-        # Determine asset ID column
+        # 2. Strict Asset ID Validation (Fail-Closed)
         resolved_id_col = id_col
-        if not resolved_id_col or resolved_id_col not in working_df.columns:
-            for candidate in ["asset_id", "machineID", "Product ID", "product_id", "UDI", "udi"]:
-                if candidate in working_df.columns:
-                    resolved_id_col = candidate
-                    break
+        if not resolved_id_col or not str(resolved_id_col).strip():
+            logger.warning(
+                f"[FeatureService] event=feature_asset_identity_unsupported "
+                f"error_code=FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED "
+                f"request_id={ctx.get('request_id')} "
+                f"dataset_id={ctx.get('dataset_id')} dataset_version={ctx.get('dataset_version')} "
+                f"preprocessing_plan_id={ctx.get('preprocessing_plan_id')} preprocessing_plan_version={ctx.get('preprocessing_plan_version')} "
+                f"declared_id_column={resolved_id_col} "
+                f"failure_reason='Preprocessing Plan에 id_column이 선언되지 않았거나 비어 있습니다.'"
+            )
+            raise FeatureAssetIdentityNotSupportedError(
+                "Observation Dataset에서 설비 ID를 식별할 수 없습니다. "
+                "현재 Feature 파이프라인은 Preprocessing Plan에 의해 명시된 asset ID가 필요하며, "
+                "ID가 없는 단일 설비 데이터의 자동 ID 생성 기능은 아직 지원하지 않습니다.",
+                details=[{
+                    "required_contract": "preprocessing_plan.id_column",
+                    "unsupported_case": "observation_without_asset_id",
+                    "required_follow_up": "single-asset identity resolution 기능 구현",
+                    "declared_id_column": resolved_id_col,
+                    "failure_reason": "Preprocessing Plan에 id_column이 선언되지 않았거나 비어 있습니다.",
+                }],
+            )
 
-        # Stable sort
-        sort_cols = []
-        if resolved_id_col and resolved_id_col in working_df.columns:
-            sort_cols.append(resolved_id_col)
-        if resolved_time_col and resolved_time_col in working_df.columns:
-            sort_cols.append(resolved_time_col)
+        if resolved_id_col not in working_df.columns:
+            logger.warning(
+                f"[FeatureService] event=feature_asset_identity_unsupported "
+                f"error_code=FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED "
+                f"request_id={ctx.get('request_id')} "
+                f"dataset_id={ctx.get('dataset_id')} dataset_version={ctx.get('dataset_version')} "
+                f"preprocessing_plan_id={ctx.get('preprocessing_plan_id')} preprocessing_plan_version={ctx.get('preprocessing_plan_version')} "
+                f"declared_id_column={resolved_id_col} "
+                f"failure_reason='선언된 id_column이 Observation Dataset에 존재하지 않습니다.'"
+            )
+            raise FeatureAssetIdentityNotSupportedError(
+                "Observation Dataset에서 설비 ID를 식별할 수 없습니다. "
+                "현재 Feature 파이프라인은 Preprocessing Plan에 의해 명시된 asset ID가 필요하며, "
+                "ID가 없는 단일 설비 데이터의 자동 ID 생성 기능은 아직 지원하지 않습니다.",
+                details=[{
+                    "required_contract": "preprocessing_plan.id_column",
+                    "unsupported_case": "observation_without_asset_id",
+                    "required_follow_up": "single-asset identity resolution 기능 구현",
+                    "declared_id_column": resolved_id_col,
+                    "available_columns": list(working_df.columns),
+                    "failure_reason": f"선언된 id_column '{resolved_id_col}'이 Observation Dataset에 존재하지 않습니다.",
+                }],
+            )
 
-        if sort_cols:
-            working_df = working_df.sort_values(by=sort_cols, kind="mergesort").reset_index(drop=True)
-        else:
-            working_df = working_df.reset_index(drop=True)
+        # 3. Validate ID values
+        id_series = working_df[resolved_id_col]
+        if id_series.isna().any():
+            logger.warning(
+                f"[FeatureService] event=feature_asset_identity_unsupported "
+                f"error_code=FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED "
+                f"request_id={ctx.get('request_id')} "
+                f"dataset_id={ctx.get('dataset_id')} dataset_version={ctx.get('dataset_version')} "
+                f"preprocessing_plan_id={ctx.get('preprocessing_plan_id')} preprocessing_plan_version={ctx.get('preprocessing_plan_version')} "
+                f"declared_id_column={resolved_id_col} "
+                f"failure_reason='id_column에 결측치(null/NaN)가 포함되어 있습니다.'"
+            )
+            raise FeatureAssetIdentityNotSupportedError(
+                "Observation Dataset에서 설비 ID를 식별할 수 없습니다. "
+                "현재 Feature 파이프라인은 Preprocessing Plan에 의해 명시된 asset ID가 필요하며, "
+                "ID가 없는 단일 설비 데이터의 자동 ID 생성 기능은 아직 지원하지 않습니다.",
+                details=[{
+                    "required_contract": "preprocessing_plan.id_column",
+                    "unsupported_case": "observation_without_asset_id",
+                    "required_follow_up": "single-asset identity resolution 기능 구현",
+                    "declared_id_column": resolved_id_col,
+                    "failure_reason": f"id_column '{resolved_id_col}'에 결측치(null/NaN)가 포함되어 있습니다.",
+                }],
+            )
+
+        normalized_ids = id_series.astype(str).str.strip()
+        if normalized_ids.eq("").any():
+            logger.warning(
+                f"[FeatureService] event=feature_asset_identity_unsupported "
+                f"error_code=FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED "
+                f"request_id={ctx.get('request_id')} "
+                f"dataset_id={ctx.get('dataset_id')} dataset_version={ctx.get('dataset_version')} "
+                f"preprocessing_plan_id={ctx.get('preprocessing_plan_id')} preprocessing_plan_version={ctx.get('preprocessing_plan_version')} "
+                f"declared_id_column={resolved_id_col} "
+                f"failure_reason='id_column에 빈 문자열이 포함되어 있습니다.'"
+            )
+            raise FeatureAssetIdentityNotSupportedError(
+                "Observation Dataset에서 설비 ID를 식별할 수 없습니다. "
+                "현재 Feature 파이프라인은 Preprocessing Plan에 의해 명시된 asset ID가 필요하며, "
+                "ID가 없는 단일 설비 데이터의 자동 ID 생성 기능은 아직 지원하지 않습니다.",
+                details=[{
+                    "required_contract": "preprocessing_plan.id_column",
+                    "unsupported_case": "observation_without_asset_id",
+                    "required_follow_up": "single-asset identity resolution 기능 구현",
+                    "declared_id_column": resolved_id_col,
+                    "failure_reason": f"id_column '{resolved_id_col}'에 빈 문자열이 포함되어 있습니다.",
+                }],
+            )
+
+        working_df[resolved_id_col] = normalized_ids
+
+        # 4. Stable sort by (asset_id, timestamp)
+        working_df = working_df.sort_values(
+            by=[resolved_id_col, resolved_time_col], kind="mergesort"
+        ).reset_index(drop=True)
 
         return working_df, resolved_id_col, resolved_time_col
 
@@ -570,10 +662,18 @@ class FeatureService:
         # 7. Prepare Canonical Working DataFrame
         plan_id_col = plan.get("id_column")
         plan_time_col = plan.get("time_column")
+        context = {
+            "dataset_id": request.dataset_id,
+            "dataset_version": request.dataset_version,
+            "preprocessing_plan_id": request.preprocessing_plan_id,
+            "preprocessing_plan_version": request.preprocessing_plan_version,
+            "request_id": active_req_id,
+        }
         working_df, id_col, time_col = self._prepare_canonical_working_df(
             obs_df=obs_df,
             id_col=plan_id_col,
             time_col=plan_time_col,
+            context=context,
         )
 
         # 8. Compute Features & Missing Masks
@@ -620,11 +720,11 @@ class FeatureService:
                     "binary_failure_within_horizon 학습에는 label 0과 1이 모두 필요합니다."
                 )
 
-        # Build row metadata
+        # Build row metadata (strictly preserving validated canonical asset_id)
         row_metadata = []
         for idx in range(surviving_count):
-            asset_val = str(surviving_working_df[id_col].iloc[idx]) if (id_col and id_col in surviving_working_df.columns) else f"row_{idx}"
-            time_val = str(surviving_working_df[time_col].iloc[idx]) if (time_col and time_col in surviving_working_df.columns) else f"t_{idx}"
+            asset_val = str(surviving_working_df[id_col].iloc[idx])
+            time_val = str(surviving_working_df[time_col].iloc[idx])
             row_metadata.append({"asset_id": asset_val, "timestamp": time_val})
 
         # 11. Build Complete Provenance Metadata
