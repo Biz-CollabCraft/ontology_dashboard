@@ -60,6 +60,7 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (구현 완료) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 
@@ -71,8 +72,8 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
 | POST | `/extraction` | gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108) | Target — 미병합 |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 및 정본 Generator App 등록 완료 |
-| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 완료 |
+| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Current — 구현 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
@@ -237,18 +238,12 @@ models_store/cache/preprocessing_plans/
 - **Shutdown 대기**: 프로세스 shutdown 시 현재 실행 중인 initial training worker가 정상 완료될 때까지 대기합니다.
 - **프로세스 전역 Training Lock**: startup 학습과 `POST /internal/train` 및 `POST /internal/retrain`은 동일한 process-wide training lock(`_training_lock`)을 공유합니다.
 
----
+### 5.6 Feature Dataset Bundle 계약 (`POST /feature` — Current)
 
-## 6. Target Contract 예시 (후속 목표 설계)
-
-> **주의**: 본 절의 계약 내용은 후속 구현 시 적용될 **목표 계약 예시(Target Contract)**입니다.
-
-### 6.1 `POST /feature` (Target Contract 예시)
-
-Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature 및 Label을 계산하고 불변 Feature Dataset Bundle(5개 필수 파일)을 발행합니다.
+Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature 및 Label을 계산하고 불변 Feature Dataset Bundle(5개 필수 파일)을 원자적으로 발행합니다.
 
 ```json
-// 요청 예시 (Target)
+// 요청 예시
 {
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
@@ -257,11 +252,22 @@ Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Lab
   "preprocessing_plan_id": "pp-7c106819-cc59-46da-90dd-22c37c441ac9",
   "preprocessing_plan_version": "preprocessing-plan-a1b2c3d4e5f67890",
   "feature_schema_version": "ai4i-feature-v1",
-  "label_schema_version": "ai4i-label-v1",
+  "label_schema_version": "ai4i-label-24h-v1",
   "prediction_horizon_hours": 24,
-  "rebuild_npy": true
+  "rebuild_npy": false
 }
 ```
 
-### 6.2 `POST /train` 및 `POST /train/{base_model}` (Target Contract 예시)
+- **5개 필수 파일 구성**: `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`
+- **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
+- **식별자 결정론**: `feature_dataset_version`은 입력 Dataset, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
+- **Ontology Mapping 배제**: Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema allowlist/recipe만 실행합니다.
+
+---
+
+## 6. Target Contract 예시 (후속 목표 설계)
+
+> **주의**: 본 절의 계약 내용은 후속 구현 시 적용될 **목표 계약 예시(Target Contract)**입니다.
+
+### 6.1 `POST /train` 및 `POST /train/{base_model}` (Target Contract 예시)
 Feature Dataset Bundle을 소비하여 Model Artifact를 발행하고 활성화 포인터를 관리합니다.

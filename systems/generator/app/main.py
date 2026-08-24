@@ -13,6 +13,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from systems.generator.app.preprocessing.preprocessing_router import router as preprocessing_router
 from systems.generator.app.preprocessing.preprocessing_exception import PreprocessingError
 from systems.generator.app.preprocessing.preprocessing_schema import ErrorEnvelope, ErrorEnvelopeBody
+from systems.generator.app.feature.feature_router import router as feature_router
+from systems.generator.app.feature.feature_exception import FeatureError
 from systems.generator.app.training_compat.training_compat_router import router as training_compat_router
 from systems.generator.app.training_compat.training_lifecycle import lifespan
 
@@ -67,6 +69,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             details=exc.details,
         )
 
+    @app.exception_handler(FeatureError)
+    async def feature_error_handler(request: Request, exc: FeatureError) -> JSONResponse:
+        req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
+        logger.warning(f"[FeatureAPI] FeatureError: {exc.code} - {exc.message}")
+        return _build_error_response(
+            status_code=exc.status_code,
+            code=exc.code,
+            message=exc.message,
+            path=request.url.path,
+            request_id=req_id,
+            details=exc.details,
+        )
+
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
@@ -78,8 +93,8 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "type": err.get("type", ""),
             })
         logger.warning(f"[GeneratorAPI] Request validation error: {details}")
-        # Return ErrorEnvelope for preprocessing, standard detail for training compat if needed
-        if request.url.path.startswith("/preprocessing"):
+        # Return ErrorEnvelope for preprocessing and feature, standard detail for training compat if needed
+        if request.url.path.startswith(("/preprocessing", "/feature")):
             return _build_error_response(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 code="REQUEST_VALIDATION_ERROR",
@@ -97,6 +112,14 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.info(f"[GeneratorAPI] HTTP Exception {exc.status_code} on {request.url.path}: {exc.detail}")
+        if request.url.path.startswith(("/preprocessing", "/feature")):
+            return _build_error_response(
+                status_code=exc.status_code,
+                code=f"HTTP_{exc.status_code}",
+                message=str(exc.detail) if exc.detail else "HTTP 요청 처리 중 오류가 발생했습니다.",
+                path=request.url.path,
+                request_id=req_id,
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
@@ -106,7 +129,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.exception(f"[GeneratorAPI] Unhandled error on {request.url.path}: {exc}")
-        if request.url.path.startswith("/preprocessing"):
+        if request.url.path.startswith(("/preprocessing", "/feature")):
             return _build_error_response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 code="INTERNAL_SERVER_ERROR",
@@ -127,6 +150,7 @@ def register_routers(app: FastAPI) -> None:
         return {"status": "ok", "system": "generator"}
 
     app.include_router(preprocessing_router)
+    app.include_router(feature_router)
     app.include_router(training_compat_router)
 
 

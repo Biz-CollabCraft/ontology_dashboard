@@ -22,6 +22,14 @@ systems/generator/
 │  │  ├─ preprocessing_profiler.py
 │  │  ├─ preprocessing_exception.py
 │  │  └─ preprocessing_router.py
+│  ├─ feature/                # [3단계 Current] Preprocessing Plan 및 Schema 기반 Feature Dataset Bundle 발행
+│  │  ├─ feature_schema.py
+│  │  ├─ feature_service.py
+│  │  ├─ feature_repository.py
+│  │  ├─ feature_schema_provider.py
+│  │  ├─ label_schema_provider.py
+│  │  ├─ feature_exception.py
+│  │  └─ feature_router.py
 │  └─ training_compat/        # [호환성] legacy /internal/train, /internal/retrain 및 lifecycle
 │     ├─ training_compat_router.py
 │     └─ training_lifecycle.py
@@ -29,7 +37,7 @@ systems/generator/
 ├─ generator_main.py          # [호환성 Shim] app.main:app 재노출
 ├─ generator_config.py        # 전역 경로 및 설정 싱글톤
 ├─ file_integrity.py          # SHA-256 무결성 검증 유틸리티
-├─ feature/                   # Feature 계산 모듈
+├─ feature/                   # Feature 계산 모듈 (수학/시계열 변환 기반)
 ├─ model/                     # 모델 알고리즘 구현 (LightGBM, XGBoost, RandomForest) 및 Registry
 ├─ ontology_mapping/          # legacy/보조 semantic mapping 모듈; 신규 Feature API 실행 계약이 아님
 ├─ topology/                  # 설비 간 위상 관계 추론
@@ -43,7 +51,7 @@ systems/generator/
 >
 > **Python 실행 환경 계약 (Execution Environment Contract)**:
 > - Generator 시스템은 저장소 루트(Repository Root)를 표준 `PYTHONPATH`로 사용하는 패키지 구조를 가집니다.
-> - 저장소 루트 실행: `python -c "import systems.generator.app.preprocessing"`
+> - 저장소 루트 실행: `python -c "import systems.generator.app.preprocessing; import systems.generator.app.feature"`
 > - `systems/generator` 작업 디렉터리 실행: `PYTHONPATH=<repository-root>` 환경변수를 제공하여 legacy facade 및 모듈을 실행합니다.
 
 ---
@@ -58,6 +66,7 @@ systems/generator/
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 및 시스템 식별자 확인 | Current (구현 완료) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
 
@@ -69,8 +78,8 @@ systems/generator/
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
 | POST | `/extraction` | gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108) | Target — 미병합 |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 및 정본 Generator App 등록 완료 |
-| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Target — 미병합 |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 완료 |
+| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Current — 구현 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
@@ -92,9 +101,9 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
    └─ Immutable Preprocessing Plan 발행
 
 3. Feature
-   ├─ Feature Schema allowlist/recipe 적용
+   ├─ Feature Schema allowlist/recipe 적용 (Ontology Mapping 미소비)
    ├─ Label Schema 적용
-   └─ Feature Dataset Bundle 발행
+   └─ Immutable Feature Dataset Bundle 발행
 
 4. Training
    └─ Feature Dataset Bundle → Immutable Model Artifact
@@ -112,3 +121,20 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 - **불변 파일 및 포인터**: `pp-{uuid}.json` (고유 불변 파일 atomic rename 발행) 및 `latest.json` (별도 atomic replace 갱신).
 - **재사용 및 Fail-Fast 검증**: `force_reanalyze=False` 시 dataset sha256, schema fingerprint 및 중복 정책 불일치 시 `409 PREPROCESSING_PLAN_CONFLICT` 반환. `selected_columns` 또는 역할 컬럼 누락 시 422 fail-fast.
 - **동기 실행**: `/preprocessing` 라우터는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.
+
+---
+
+## 4. Feature Dataset Bundle 불변 저장 구조
+
+- **Bundle 식별**: `feature_dataset_version` (`feature-dataset-{hash16}`)은 Observation/Failure Dataset, Preprocessing Plan(ID/ver/sha), Feature Schema, Label Schema, prediction horizon의 canonical fingerprint로 결정론적 산출.
+- **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
+- **5개 필수 파일 구성**:
+  1. `features.npy`: 2D float64 배열, `allow_pickle=False`, NaN/Inf 불가
+  2. `labels.npy`: 1D int64 배열 `{0, 1}`, `allow_pickle=False`
+  3. `feature_columns.json`: Feature Schema 선언 순서의 컬럼 목록 및 수량
+  4. `row_metadata.json`: Feature/Label 행과 1:1 대응되는 asset_id 및 timestamp
+  5. `feature_metadata.json`: 데이터셋 및 스키마 provenance, 클래스 분포, 4개 payload 파일의 개별 SHA-256 체크섬 (자기참조 순환 방지)
+- **원자적 발행 및 재사용**:
+  - 임시 디렉터리(`.tmp_{uuid}`)에서 전체 생성 및 검증 완료 후 atomic rename/replace.
+  - `rebuild_npy=False` 시 모든 파일 존재, 체크섬 및 차원 일치 확인 후 재사용. Fingerprint 불일치 시 `409 FeaturePublishConflictError`, 파일 손상 시 `422 FeatureDatasetIntegrityError` 반환.
+- **동기 실행**: `/feature` 엔드포인트는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.

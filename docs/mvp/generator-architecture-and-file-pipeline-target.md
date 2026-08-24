@@ -259,7 +259,7 @@ Extraction
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
 | POST | `/extraction` | Target — 미병합 | **gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108)** |
 | POST | `/preprocessing` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (신규 2단계)** |
-| POST | `/feature` | Target — 미병합 | **Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계)** |
+| POST | `/feature` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계)** |
 | POST | `/train` | Target — 미병합 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
 | POST | `/train/{base_model}` | Target — 미병합 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
 | POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
