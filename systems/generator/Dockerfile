@@ -27,8 +27,8 @@ COPY contracts/schemas/generator-dataset-input-manifest.schema.json \
 
 RUN groupadd --gid 10002 generator \
     && useradd --uid 10002 --gid 10002 --create-home --shell /usr/sbin/nologin generator \
-    && mkdir -p /data/source /data/preprocessed /data/ontology /data/models /artifacts /logs \
-    && chown -R 10002:10002 /data /artifacts /logs
+    && mkdir -p /app/data /app/data_preprocessed /app/ontology /app/models_store /data/source /data/preprocessed /data/ontology /data/models /artifacts /logs \
+    && chown -R 10002:10002 /app /data /artifacts /logs
 
 USER 10002
 
