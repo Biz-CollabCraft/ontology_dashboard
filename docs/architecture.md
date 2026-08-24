@@ -125,13 +125,29 @@ project-root/
 
 ### Generator 구조 현황 (Current vs Target)
 
-- **Current (현재 main 구현 상태)**:
-  - 단일 레벨 모듈 구조 (`generator_main.py`, `generator_config.py`, `extraction/`, `feature/`, `model/`, `ontology_mapping/`, `topology/`, `common/`)
-  - 제어 엔드포인트: `GET /health`, `POST /internal/train`, `POST /internal/retrain`
-- **Target (후속 개편 목표 설계)**:
-  - 프레임워크 비의존 공통 모듈 최상위 배치 (`settings.py`, `paths.py`, `errors.py`, `file_integrity.py`, `atomic_publish.py`)
-  - 도메인별 FastAPI 계층 분리 (`app/extraction/`, `app/preprocessing/`, `app/feature/`, `app/training/`)
-  - 4대 파이프라인 데이터 흐름: `Extraction` → `Preprocessing` → `Feature` → `Training`
+- **Current (PR #104 반영 기준)**:
+  - 정본 FastAPI 애플리케이션: `systems/generator/app/main.py`
+  - Application Factory: `create_app()`
+  - 현재 구현 도메인: `systems/generator/app/preprocessing/`
+  - legacy 학습 호환 도메인: `systems/generator/app/training_compat/`
+  - compatibility 진입점: `systems/generator/generator_main.py`
+  - 현재 등록 엔드포인트:
+    - `GET /health`
+    - `POST /preprocessing`
+    - `POST /internal/train` (compatibility)
+    - `POST /internal/retrain` (compatibility)
+  - 기존 최상위 `extraction/`, `feature/`, `model/`, `ontology_mapping/`, `topology/`, `common/`은 migration 기간 동안 legacy 또는 공통 계산 모듈로 존재할 수 있다.
+- **Target — 남은 migration**:
+  - `app/extraction/`
+    - protocol parsing 및 승인 Mapping 적용
+    - Versioned Observation/Failure Dataset 발행
+  - `app/feature/`
+    - Feature Schema/Recipe 및 Label Schema 실행
+    - Feature Dataset Bundle 발행
+  - `app/training/`
+    - Feature Dataset Bundle 소비
+    - versioned Model Artifact 발행
+  - 기존 최상위 legacy 모듈을 정본 도메인 패키지 또는 명시적 compatibility shim으로 단계적으로 정리
 
 > **상세 명세 위임**: Generator의 상세 Target 디렉터리, 파일명, API 요청/응답 필드 및 단계별 migration 계획은 목표 정본 문서인 [`docs/mvp/generator-architecture-and-file-pipeline-target.md`](./mvp/generator-architecture-and-file-pipeline-target.md)에 위임합니다.
 

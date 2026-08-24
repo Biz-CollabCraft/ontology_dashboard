@@ -62,8 +62,12 @@ UI 표시 문자열은 역할 매핑에서 분리해 후속 사용자 검증 후
 세부 시스템 책임은 다음과 같이 구분한다.
 
 - `gen_data`: raw/simulation/synthetic sensor data와 Canonical V3.1 원천 생성·재현성.
-- `systems/generator`: extraction, ontology mapping, topology, Feature Engineering,
-  모델 학습·평가와 versioned Model Artifact 발행.
+- `systems/generator`:
+  - Extraction 단계에서 protocol data에 지정·승인된 Mapping을 적용하여 Versioned Observation Dataset을 발행한다.
+  - 별도의 Authorized Training Truth Source를 사용하여 Versioned Failure Dataset을 발행한다.
+  - Observation Dataset의 구조와 컬럼 역할을 분석하여 불변 Preprocessing Plan을 발행한다.
+  - Ontology Mapping을 조회하지 않고 Feature Schema/Recipe 및 Label Schema를 실행하여 Feature Dataset Bundle을 발행한다.
+  - Feature Dataset Bundle을 소비하여 모델을 학습·평가하고 versioned Model Artifact를 발행한다.
 - `systems/backend/app/diagnosis`: Model Artifact 검증·로드, runtime inference,
   Product Result Artifact와 Evidence 생성.
 - Frontend: API가 제공한 공통 결과의 사용자 화면 표현.
