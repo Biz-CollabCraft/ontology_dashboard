@@ -1,11 +1,9 @@
 import {
   Activity,
   ArrowRight,
-  Boxes,
   ClipboardCheck,
   ClipboardList,
   FileText,
-  Gauge,
   LineChart,
   RefreshCw,
   RotateCcw,
@@ -57,10 +55,51 @@ interface CellSummary {
 
 type DrawerTab = "status" | "action";
 
+interface PlanningImpactRow {
+  assetId: string;
+  eventId: string;
+  line: string;
+  productLabel: string;
+  estimatedLossUnits: number | null;
+  status: "plan_at_risk" | "shift_inspection" | "inspection_priority" | "data_quality_hold";
+  nextAction: string;
+  sparePartAvailable: boolean | null;
+}
+
+const TODAY_PLAN_UNITS = 16200;
+const PLANNING_MODEL_BASIS = "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준";
+const PLANNING_IMPACT_ROWS: PlanningImpactRow[] = [
+  { assetId: "M-033", eventId: "EVT-GS-004", line: "프레스 1라인", productLabel: "금속 성형 부품 L", estimatedLossUnits: 51, status: "plan_at_risk", nextAction: "부품 재고 확인", sparePartAvailable: false },
+  { assetId: "M-021", eventId: "EVT-GS-003", line: "성형 1라인", productLabel: "성형 공정", estimatedLossUnits: 32, status: "shift_inspection", nextAction: "교대 내 점검 예약", sparePartAvailable: null },
+  { assetId: "M-014", eventId: "EVT-GS-002", line: "가공 2라인", productLabel: "가공 공정", estimatedLossUnits: 25, status: "inspection_priority", nextAction: "점검 우선", sparePartAvailable: null },
+  { assetId: "M-063", eventId: "EVT-GS-007", line: "검사 1라인", productLabel: "검사 공정", estimatedLossUnits: null, status: "data_quality_hold", nextAction: "데이터 품질 확인 필요", sparePartAvailable: true },
+];
+
+const PLANNING_STATUS_LABEL: Record<PlanningImpactRow["status"], string> = {
+  plan_at_risk: "계획 위험",
+  shift_inspection: "교대 내 점검",
+  inspection_priority: "점검 우선",
+  data_quality_hold: "데이터 품질 확인 필요",
+};
+
 function partLabel(value: boolean | null): string {
   if (value === true) return "확보";
   if (value === false) return "미확보";
   return "확인 필요";
+}
+
+function planningImpactForAsset(assetId: string | null | undefined): PlanningImpactRow | null {
+  if (!assetId) return null;
+  return PLANNING_IMPACT_ROWS.find((row) => row.assetId === assetId) ?? null;
+}
+
+function productionLossLabel(value: number | null): string {
+  return value === null ? "생산 영향 미산정" : `${value.toLocaleString()} units 예상`;
+}
+
+function displayPartLabel(assetId: string | null | undefined, value: boolean | null): string {
+  const planning = planningImpactForAsset(assetId);
+  return partLabel(planning?.sparePartAvailable ?? value);
 }
 
 function riskTone(summary: Pick<CellSummary, "critical" | "warning" | "hold"> & { attention?: number }): "critical" | "warning" | "hold" | "attention" | "normal" {
@@ -214,6 +253,8 @@ export function MvpOverviewPage({
   const selectedPredictionWindow = detail?.event.assetId === selectedAsset?.assetId
     ? detail.predictionHorizonHours
     : null;
+  const selectedPlanningImpact = planningImpactForAsset(selectedAsset?.assetId);
+  const maxPlanningImpact = PLANNING_IMPACT_ROWS.find((row) => row.eventId === "EVT-GS-004") ?? PLANNING_IMPACT_ROWS[0];
   const agentSummaryLine = role === "field_operator"
     ? `오더 후보 ${workOrderCandidates.length}건 · 부품 확인 ${needsPartCheck}건 · 실제 WorkOrder ID는 생성하지 않음`
     : `위험 라인 ${riskyLines}개 · 셀 ${cellSummaries.length}개 · 평균 위험도 ${formatProbability(metrics.averageRisk)}`;
@@ -250,38 +291,46 @@ export function MvpOverviewPage({
           <p>
             {role === "field_operator"
               ? "자동 WorkOrder 생성이나 승인 실행은 하지 않고, 현재 snapshot의 점검 근거만 다음 클릭으로 이어줍니다."
-              : `${agentSummaryLine} · 생산 계획과 오늘 생산량 데이터는 연결 예정입니다.`}
+              : `${agentSummaryLine} · 계획 영향은 synthetic_capacity_model 기반 추정이며 생산계획 ViewModel 연결 전 표시입니다.`}
           </p>
         </div>
         {role === "process_manager" ? (
           <div className="mvp-agent-sample-strip" aria-label="생산 관리 관련 데이터">
-            <span>리스크 관리</span>
-            <span>생산 계획 예정</span>
-            <span>오늘 생산량 예정</span>
+            <span>오늘 계획 {TODAY_PLAN_UNITS.toLocaleString()} units/day</span>
+            <span>생산계획 ViewModel 미연결</span>
+            <span>실제 MES 실적 아님</span>
           </div>
         ) : null}
         <button type="button" className="mvp-button ghost" onClick={onRefresh}><RefreshCw size={15} />새로고침</button>
       </section>
 
       <section className="mvp-overview-topline" aria-label="운영 상단 지표">
-        <DonutMetric
-          label="설비 가동률"
-          value={null}
-          detail="가동률 데이터 없음"
-          tone="hold"
-        />
+        <article className="mvp-plan-impact-card">
+          <span>오늘 계획</span>
+          <strong>{TODAY_PLAN_UNITS.toLocaleString()} units/day</strong>
+          <small>계획 기준 · 생산계획 ViewModel 미연결</small>
+        </article>
+        <article className="mvp-plan-impact-card is-critical">
+          <span>최대 생산 영향 이벤트</span>
+          <strong>{productionLossLabel(maxPlanningImpact.estimatedLossUnits)}</strong>
+          <small>{maxPlanningImpact.eventId} / {maxPlanningImpact.assetId} / {maxPlanningImpact.line}</small>
+        </article>
+        <article className="mvp-plan-impact-card">
+          <span>즉시 판단 필요</span>
+          <strong>1건</strong>
+          <small>계획 위험 이벤트 기준</small>
+        </article>
+        <article className="mvp-plan-impact-card is-hold">
+          <span>데이터 품질 확인 필요</span>
+          <strong>1건</strong>
+          <small>생산 영향 미산정 포함</small>
+        </article>
         <DonutMetric
           label={`${selectedPredictionWindow ?? 24}시간 이내 고장 발생률`}
           value={selectedAsset?.failureProbability ?? null}
           detail={selectedPredictionWindow ? "AssetDetail 예측 기간 기준" : "예측 기간 근거 없음"}
           tone="risk"
         />
-        <div className="mvp-overview-status-strip">
-          <article className="is-critical"><span>위험 설비</span><strong>{metrics.critical}</strong></article>
-          <article className="is-warning"><span>경고 설비</span><strong>{metrics.warning}</strong></article>
-          <article><span>판단 대기</span><strong>{metrics.pendingDecisions}</strong></article>
-          <article className="is-hold"><span>데이터 확인</span><strong>{metrics.dataQualityHold}</strong></article>
-        </div>
       </section>
 
       {role === "field_operator" ? (
@@ -309,16 +358,18 @@ export function MvpOverviewPage({
       ) : (
         <div className="mvp-role-overview">
           <MvpPanel title="우선순위" eyebrow="FROM STATUS SUMMARY" className="mvp-process-panel">
-            {cellSummaries.length ? (
-              <div className="mvp-cell-map">
-                {cellSummaries.slice(0, 12).map((cell) => {
-                  const tone = riskTone(cell);
+            <div className="mvp-plan-impact-note">synthetic_capacity_model 기반 계획 영향 추정 · 실제 MES 실적 아님</div>
+            {PLANNING_IMPACT_ROWS.length ? (
+              <div className="mvp-cell-map mvp-plan-impact-list">
+                {PLANNING_IMPACT_ROWS.map((impact) => {
+                  const asset = model.assets.find((item) => item.assetId === impact.assetId) ?? null;
+                  const tone = impact.status === "data_quality_hold" ? "hold" : impact.status === "plan_at_risk" ? "critical" : "warning";
                   return (
-                    <button type="button" key={cell.cell} className={`mvp-cell-block tone-${tone} ${selectedCell?.cell === cell.cell ? "is-selected" : ""}`} onClick={() => previewInDrawer(cell.representative.assetId, cell.representative.eventId)}>
-                      <span>{cell.line}</span>
-                      <strong>{cell.cell}</strong>
-                      <b>{formatProbability(cell.averageRisk)}</b>
-                      <small>{cell.assets.length}대 · 위험 {cell.critical} · 경고 {cell.warning} · 확인 {cell.hold}</small>
+                    <button type="button" key={impact.eventId} className={`mvp-cell-block tone-${tone} ${selectedAsset?.assetId === impact.assetId ? "is-selected" : ""}`} onClick={() => previewInDrawer(impact.assetId, impact.eventId)}>
+                      <span>{impact.line} · {impact.productLabel}</span>
+                      <strong>{impact.assetId}{asset ? ` · ${asset.displayName}` : ""}</strong>
+                      <b>{productionLossLabel(impact.estimatedLossUnits)}</b>
+                      <small>{impact.status} · {PLANNING_STATUS_LABEL[impact.status]} · 부품 {displayPartLabel(impact.assetId, asset?.sparePartAvailable ?? null)}</small>
                     </button>
                   );
                 })}
@@ -353,7 +404,7 @@ export function MvpOverviewPage({
             <button type="button" className="mvp-icon-button mvp-drawer-close" aria-label="상세 닫기" onClick={() => setDetailDrawerOpen(false)}>
               <X size={16} />
             </button>
-            <AssetPreviewPanel asset={selectedAsset} event={selectedEvent} candidate={selectedCandidate} cell={selectedCell} factors={selectedFactors} riskPercent={selectedRiskPercent} detail={detail} detailLoading={detailLoading} detailError={detailError} activeTab={detailDrawerTab} onTabChange={setDetailDrawerTab} onOpenAsset={onOpenAsset} onOpenEvent={onOpenEvent} onOpenReport={onOpenReport} />
+            <AssetPreviewPanel asset={selectedAsset} event={selectedEvent} candidate={selectedCandidate} cell={selectedCell} factors={selectedFactors} riskPercent={selectedRiskPercent} planningImpact={selectedPlanningImpact} detail={detail} detailLoading={detailLoading} detailError={detailError} role={role} activeTab={detailDrawerTab} onTabChange={setDetailDrawerTab} onOpenAsset={onOpenAsset} onOpenEvent={onOpenEvent} onOpenReport={onOpenReport} />
           </aside>
         </div>
       ) : null}
@@ -383,7 +434,7 @@ function DonutMetric({
         <strong>{percent === null ? "-" : `${percent}%`}</strong>
       </div>
       <div>
-        <span>{tone === "risk" ? <Activity size={13} /> : <Gauge size={13} />}{label}</span>
+        <span><Activity size={13} />{label}</span>
         <small>{detail}</small>
       </div>
     </article>
@@ -453,6 +504,19 @@ function MapReportFeatureSeries({
   );
 }
 
+function DerivedMetricSlots() {
+  const slots = ["온도 차이", "기계 출력", "복합 과부하 지표"];
+  return (
+    <section className="mvp-derived-metric-slots" aria-label="파생 지표 시계열 준비">
+      <header><LineChart size={14} /><strong>파생 지표 시계열</strong><span>Backend ViewModel 연결 전</span></header>
+      <div>
+        {slots.map((slot) => <article key={slot}><span>{slot}</span><strong>대기</strong></article>)}
+      </div>
+      <p>파생 지표 시계열은 Backend ViewModel 연결 후 features[].series로 표시됩니다.</p>
+    </section>
+  );
+}
+
 function AssetPreviewPanel({
   asset,
   event,
@@ -460,9 +524,11 @@ function AssetPreviewPanel({
   cell,
   factors,
   riskPercent,
+  planningImpact,
   detail,
   detailLoading,
   detailError,
+  role,
   activeTab,
   onTabChange,
   onOpenAsset,
@@ -475,9 +541,11 @@ function AssetPreviewPanel({
   cell: CellSummary | null;
   factors: MvpAsset["topFactors"];
   riskPercent: number | null;
+  planningImpact: PlanningImpactRow | null;
   detail: MvpEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  role: MvpRoleLens;
   activeTab: DrawerTab;
   onTabChange: (tab: DrawerTab) => void;
   onOpenAsset: (assetId: string, eventId: string | null) => void;
@@ -499,20 +567,20 @@ function AssetPreviewPanel({
     >
       {asset ? (
         <div className="mvp-asset-preview">
-          <div className="mvp-drawer-tabs" role="tablist" aria-label="상세 보기 탭">
-            <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태·근거</button>
+          <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
+            <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
           </div>
           <header>
             <MvpStatusBadge status={asset.status} />
             <div><strong>{statusText(asset)}</strong><small>{asset.assetId} · 관측 {formatTimestamp(asset.observedAt)}</small></div>
           </header>
-          {activeTab === "status" ? (
+          {role === "process_manager" && activeTab === "status" ? (
             <>
               <dl>
                 <div><dt>위험도</dt><dd>{formatProbability(asset.failureProbability)}</dd></div>
                 <div><dt>권고</dt><dd>{DECISION_LABEL[asset.recommendedDecision]}</dd></div>
-                <div><dt>부품</dt><dd>{partLabel(asset.sparePartAvailable)}</dd></div>
+                <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
                 <div><dt>담당</dt><dd>{asset.assignedEngineer ?? "미배정"}</dd></div>
                 <div><dt>영향</dt><dd>{formatMinutes(asset.estimatedDowntimeMinutes)}</dd></div>
                 <div><dt>신뢰도</dt><dd><MvpConfidenceBadge confidence={asset.confidence} /></dd></div>
@@ -520,6 +588,52 @@ function AssetPreviewPanel({
                 {cell ? <div><dt>셀</dt><dd>{cell.cell} · {cell.assets.length}대</dd></div> : null}
               </dl>
 
+              <section className="mvp-production-impact-block" aria-label="생산 영향">
+                <header><Activity size={14} /><strong>생산 영향</strong><span>계획 기준 추정</span></header>
+                <dl>
+                  <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
+                  <div><dt>상태</dt><dd>{planningImpact ? PLANNING_STATUS_LABEL[planningImpact.status] : "생산 영향 미산정"}</dd></div>
+                  <div className="is-wide"><dt>근거</dt><dd>{PLANNING_MODEL_BASIS}</dd></div>
+                  <div className="is-wide"><dt>다음 액션</dt><dd>{planningImpact ? `${planningImpact.nextAction}, 현장 점검 요청` : "데이터 품질 확인 필요"}</dd></div>
+                </dl>
+                <p>synthetic_capacity_model 기반 계획 영향 추정 · 고장확률, 위험도, top factor, 권고 판단을 변경하지 않습니다.</p>
+              </section>
+            </>
+          ) : null}
+
+          {role === "process_manager" && activeTab === "action" ? (
+            <>
+              <section className="mvp-overview-action-panel" aria-label="생산 관리자 처리">
+                <header><ClipboardCheck size={14} /><strong>처리</strong><span>오더 후보</span></header>
+                <div className="mvp-action-summary-card">
+                  <MvpStatusBadge status={asset.status} />
+                  <div>
+                    <strong>{candidate?.suspectedPart ?? factors[0]?.label ?? asset.predictedFailureType}</strong>
+                    <small>WO ID 미생성 · 권고 {DECISION_LABEL[asset.recommendedDecision]}</small>
+                  </div>
+                </div>
+                <dl className="mvp-action-facts">
+                  <div><dt>대상 설비</dt><dd>{asset.displayName}</dd></div>
+                  <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
+                  <div><dt>담당</dt><dd>{asset.assignedEngineer ?? "미배정"}</dd></div>
+                  <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
+                  <div><dt>처리 상태</dt><dd>후보 검토</dd></div>
+                  <div><dt>권한 액션</dt><dd>Work Orders에서 처리</dd></div>
+                </dl>
+                <div className="mvp-side-action-flow">
+                  <button type="button" className="mvp-button secondary" onClick={() => onTabChange("status")}><LineChart size={14} />상태 다시 보기</button>
+                  <button type="button" className="mvp-button primary" onClick={() => event && onOpenEvent(event.eventId, event.assetId)} disabled={!event}><ClipboardCheck size={14} />Work Orders에서 처리</button>
+                  <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(event?.eventId ?? null, asset.assetId)}><FileText size={14} />보고서 보기</button>
+                </div>
+                <p className="mvp-action-note">
+                  승인, 보류, 반려, 메모 저장은 자동 실행하지 않고 Work Orders의 governed action에서 처리합니다.
+                </p>
+              </section>
+            </>
+          ) : null}
+
+          {role === "field_operator" && activeTab === "status" ? (
+            <>
               <section className="mvp-overview-report-graph mvp-side-map-report" aria-label="요약 리포트 피쳐 그래프">
                 <header><LineChart size={14} /><strong>요약 리포트 시계열</strong><span>{detailLoading ? "불러오는 중" : detailError ? "상세 연결 실패" : "동일 snapshot"}</span></header>
                 <div className="mvp-overview-risk-meter">
@@ -534,6 +648,7 @@ function AssetPreviewPanel({
                   emptyTitle="피쳐 이력 없음"
                   emptyDetail="현재 snapshot에는 피쳐 이력이 없어 임의 그래프를 표시하지 않습니다."
                 />
+                <DerivedMetricSlots />
               </section>
 
               <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검할 설비 부품">
@@ -574,34 +689,36 @@ function AssetPreviewPanel({
                 </div>
               </section>
             </>
-          ) : (
-            <section className="mvp-overview-action-panel" aria-label="처리">
-              <header><ClipboardCheck size={14} /><strong>처리</strong><span>오더 후보</span></header>
+          ) : null}
+
+          {role === "field_operator" && activeTab === "action" ? (
+            <section className="mvp-overview-action-panel" aria-label="현장 관리자 처리">
+              <header><Wrench size={14} /><strong>현장 처리</strong><span>점검 후보</span></header>
               <div className="mvp-action-summary-card">
                 <MvpStatusBadge status={asset.status} />
                 <div>
                   <strong>{candidate?.suspectedPart ?? factors[0]?.label ?? asset.predictedFailureType}</strong>
-                  <small>WO ID 미생성 · 권고 {DECISION_LABEL[asset.recommendedDecision]}</small>
+                  <small>WO ID 미생성 · {planningImpact?.nextAction ?? "현장 점검 요청"}</small>
                 </div>
               </div>
               <dl className="mvp-action-facts">
                 <div><dt>대상 설비</dt><dd>{asset.displayName}</dd></div>
-                <div><dt>대상 부품</dt><dd>{candidate?.suspectedPart ?? factors[0]?.label ?? "근거 부족"}</dd></div>
-                <div><dt>담당</dt><dd>{asset.assignedEngineer ?? "미배정"}</dd></div>
-                <div><dt>부품</dt><dd>{partLabel(asset.sparePartAvailable)}</dd></div>
-                <div><dt>처리 상태</dt><dd>후보 검토</dd></div>
-                <div><dt>권한 액션</dt><dd>Work Orders에서 처리</dd></div>
+                <div><dt>의심 부품</dt><dd>{candidate?.suspectedPart ?? factors[0]?.label ?? "근거 부족"}</dd></div>
+                <div><dt>점검 위치</dt><dd>{planningImpact?.line ?? asset.cell ?? asset.line}</dd></div>
+                <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
+                <div><dt>데이터 품질</dt><dd>{asset.status === "data_quality_hold" ? "데이터 품질 확인 필요" : "확인 가능"}</dd></div>
+                <div><dt>다음 액션</dt><dd>{planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>
               </dl>
               <div className="mvp-side-action-flow">
-                <button type="button" className="mvp-button secondary" onClick={() => onTabChange("status")}><Boxes size={14} />근거 다시 보기</button>
+                <button type="button" className="mvp-button secondary" onClick={() => onTabChange("status")}><LineChart size={14} />상태 다시 보기</button>
                 <button type="button" className="mvp-button primary" onClick={() => event && onOpenEvent(event.eventId, event.assetId)} disabled={!event}><ClipboardCheck size={14} />Work Orders에서 처리</button>
                 <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(event?.eventId ?? null, asset.assetId)}><FileText size={14} />보고서 보기</button>
               </div>
               <p className="mvp-action-note">
-                승인, 보류, 반려, 메모 저장은 자동 실행하지 않고 Work Orders의 governed action에서 처리합니다.
+                점검 요청 후보이며 WorkOrder/MaintenanceAction은 실제 생성하지 않습니다.
               </p>
             </section>
-          )}
+          ) : null}
         </div>
       ) : <MvpState kind="empty" title="선택된 설비가 없습니다" detail="왼쪽의 설비 또는 라인을 선택하세요." />}
     </MvpPanel>

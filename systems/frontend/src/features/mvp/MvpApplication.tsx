@@ -234,8 +234,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       context={model.context}
       activeView={selection.view}
       role={selection.role}
-      onNavigate={openView}
-      onRoleChange={(role: MvpRoleLens) => updateSelection({ role })}
+      onRoleChange={(role: MvpRoleLens) => updateSelection({ role, view: "overview" })}
       onRefresh={refresh}
       refreshing={loading}
       onLogout={signOut}
