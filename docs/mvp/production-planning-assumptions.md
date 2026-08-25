@@ -220,12 +220,14 @@ AssetDetailViewModel
 ```text
 fixture.history 원센서 rows
   -> Backend composer가 row별 파생값 계산
-  -> ViewModel features[].series에 포함
+  -> ViewModel features[].history.points에 포함
   -> Frontend는 계산하지 않고 렌더링만 수행
 ```
 
 따라서 문서와 코드에서 `fixture series`라고 부르지 않는다. fixture는 `history`, 화면용
-시계열은 `features[].series`로 구분한다.
+시계열은 `features[].history.points`로 구분한다. Frontend 내부 adapter가 화면 컴포넌트
+편의를 위해 `historyPoints`로 매핑할 수는 있지만, 공식 API 계약 필드명은
+`features[].history.points`다.
 
 ## Production Impact Calculation
 
@@ -290,8 +292,8 @@ estimated_lost_units =
 - `equipment_history[]`는 사람이 읽는 timeline projection으로 유지하고,
   `maintenance_event_id`, `overlay_branch_id`, `history_segment_id`, `runtime_status` 같은
   기계 판독 lineage 필드를 임의로 끼워 넣지 않는다.
-- 아직 Backend API/ViewModel/Frontend consumer에 연결하지 않았으므로 화면 제공은 설계·fixture
-  수준이며 runtime/UI delivery는 `Not Proven`이다.
+- Backend API/ViewModel 연결은 `codex/operation-context-api` 브랜치에서 구현했다.
+  화면 제공은 UI 워크트리 반영 전이므로 Frontend delivery는 별도 검증 대상이다.
 
 ### 데이터 모델링 계약 관점
 
@@ -301,9 +303,9 @@ estimated_lost_units =
 - 설비 수는 `risk-rise-detection-v1`의 `cnc_asset_count = 80`을 참조한다.
 - OEE와 cycle time은 산출 근거와 assumption을 분리했다.
 - data-quality hold event는 생산 영향 수치를 만들지 않고 `withheld_data_quality_hold`로 둔다.
-- 다음 구현 단계에서는 별도 화면용 ViewModel schema를 먼저 만들지 않고, 기존 MVP consumer
-  ViewModel 흐름에 `operationContext` 또는 `productionImpact` section을 additive로 붙인다.
-  현재 프론트 타입에는 이 필드가 없다.
+- 별도 화면용 ViewModel schema를 만들지 않고, 기존 MVP consumer ViewModel 흐름에
+  `operation_context` typed section을 additive로 붙인다. Frontend 타입은
+  `operation_context` summary와 rich production-planning field를 모두 소비하도록 정렬해야 한다.
 - 정비 overlay/readiness가 화면에 필요하면 `equipment_history[]`를 확장하지 않고
   `maintenance_context` 또는 runtime-status typed section을 additive로 붙인다.
   이 section의 공식 공개 위치는 Maintenance/Diagnosis/ViewModel 팀 합의 후 schema에 반영한다.
