@@ -51,6 +51,22 @@ class Service:
         self.calls.append(("decision", values))
         return {"decision_id": "DECISION-1", "work_order_id": "MAINTENANCE-WO-1"}
 
+    def approve_maintenance_work_order(self, **values):
+        self.calls.append(("maintenance_approve", values))
+        return {"maintenance_action_id": "MAINTENANCE-ACTION-1"}
+
+    def start_maintenance(self, **values):
+        self.calls.append(("maintenance_start", values))
+        return {"status": "in_progress"}
+
+    def complete_maintenance(self, **values):
+        self.calls.append(("maintenance_complete", values))
+        return {"maintenance_event_id": "MAINTENANCE-EVENT-1"}
+
+    def request_maintenance_replay(self, **values):
+        self.calls.append(("maintenance_replay", values))
+        return {"status": "replay_requested"}
+
     def event_lineage(self, **values):
         self.calls.append(("lineage", values))
         return {"event_id": values["event_id"], "activities": []}
@@ -196,4 +212,81 @@ def test_maintenance_technician_cannot_take_process_engineer_inspection_action()
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "role_context_denied"
+    assert service.calls == []
+
+
+def test_manager_approves_maintenance_but_cannot_execute_it() -> None:
+    client, service = client_for("process_manager")
+
+    missing_idempotency = client.post(
+        f"{BASE}/maintenance-work-orders/MAINTENANCE-WO-1/approve",
+        json={"simulation_session_id": "SIMULATION-SESSION-001"},
+    )
+    approved = client.post(
+        f"{BASE}/maintenance-work-orders/MAINTENANCE-WO-1/approve",
+        json={"simulation_session_id": "SIMULATION-SESSION-001"},
+        headers={"Idempotency-Key": "maintenance-approve-001"},
+    )
+    denied = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/start",
+        json={},
+        headers={"Idempotency-Key": "maintenance-start-001"},
+    )
+
+    assert missing_idempotency.status_code == 422
+    assert approved.status_code == 200
+    assert denied.status_code == 403
+    assert [name for name, _ in service.calls] == ["maintenance_approve"]
+
+
+def test_technician_executes_and_requests_replay_without_caller_lineage() -> None:
+    client, service = client_for("maintenance_technician")
+
+    denied_approval = client.post(
+        f"{BASE}/maintenance-work-orders/MAINTENANCE-WO-1/approve",
+        json={"simulation_session_id": "SIMULATION-SESSION-001"},
+        headers={"Idempotency-Key": "maintenance-approve-001"},
+    )
+    started = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/start",
+        json={},
+        headers={"Idempotency-Key": "maintenance-start-001"},
+    )
+    completed = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/complete",
+        json={"outcome": "tool replaced"},
+        headers={"Idempotency-Key": "maintenance-complete-001"},
+    )
+    replay = client.post(
+        f"{BASE}/maintenance-events/MAINTENANCE-EVENT-1/replay",
+        json={"restart_at": "2026-08-24T09:35:00Z"},
+        headers={"Idempotency-Key": "maintenance-replay-001"},
+    )
+
+    assert denied_approval.status_code == 403
+    assert started.status_code == 200
+    assert completed.status_code == 200
+    assert replay.status_code == 200
+    assert [name for name, _ in service.calls] == [
+        "maintenance_start",
+        "maintenance_complete",
+        "maintenance_replay",
+    ]
+
+
+def test_maintenance_commands_reject_caller_supplied_canonical_lineage() -> None:
+    client, service = client_for("maintenance_technician")
+
+    forged = client.post(
+        f"{BASE}/maintenance-actions/MAINTENANCE-ACTION-1/complete",
+        json={
+            "outcome": "tool replaced",
+            "source_product_result_id": "FORGED-RESULT",
+            "equipment_id": "FORGED-EQUIPMENT",
+            "state_patch": {"tool_wear_min": 999},
+        },
+        headers={"Idempotency-Key": "maintenance-complete-001"},
+    )
+
+    assert forged.status_code == 422
     assert service.calls == []

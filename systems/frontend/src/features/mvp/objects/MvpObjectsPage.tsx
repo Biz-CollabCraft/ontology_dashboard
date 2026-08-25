@@ -21,6 +21,11 @@ function matches(asset: MvpAsset, search: string) {
     .some((value) => String(value ?? "").toLowerCase().includes(query));
 }
 
+function valueOrGap(value: unknown, suffix = "") {
+  if (value === null || value === undefined || value === "") return "확인 필요";
+  return `${value}${suffix}`;
+}
+
 export function MvpObjectsPage({
   model,
   selectedAssetId,
@@ -62,6 +67,7 @@ export function MvpObjectsPage({
   });
   const factors = detail?.topFactors.length ? detail.topFactors : selectedAsset?.topFactors ?? [];
   const provenance = detail?.provenance ?? selectedAsset?.provenance ?? null;
+  const selectedCriticality = detail?.assetCriticality ?? selectedAsset?.criticality ?? null;
 
   function resetFilters() {
     setSearch("");
@@ -127,6 +133,7 @@ export function MvpObjectsPage({
                 <div><dt>고장 확률</dt><dd>{formatProbability(selectedAsset.failureProbability)}</dd></div>
                 <div><dt>신뢰도</dt><dd>{selectedAsset.confidenceScore === null ? selectedAsset.confidence : formatProbability(selectedAsset.confidenceScore)}</dd></div>
                 <div><dt>예상 영향</dt><dd>{formatMinutes(selectedAsset.estimatedDowntimeMinutes)}</dd></div>
+                <div><dt>설비 중요도</dt><dd>{selectedCriticality ?? "확인 필요"}</dd></div>
                 <div><dt>담당자</dt><dd>{selectedAsset.assignedEngineer ?? "미배정"}</dd></div>
                 <div><dt>위치</dt><dd>{selectedAsset.site} · {selectedAsset.line} · {selectedAsset.cell}</dd></div>
                 <div><dt>관측 시각</dt><dd>{formatTimestamp(selectedAsset.observedAt)}</dd></div>
@@ -136,6 +143,19 @@ export function MvpObjectsPage({
               {selectedAsset.confidence === "low" || selectedAsset.confidence === "unavailable" ? <div className="mvp-confidence-callout"><strong>낮은 신뢰도</strong><p>추가 현장 확인 전에는 원인이나 고장을 확정하지 않습니다.</p></div> : null}
 
               <section className="mvp-inspector-section"><header><span>Prediction</span><strong>{selectedAsset.predictedFailureType}</strong></header><p>권장 조치: <b>{DECISION_LABEL[selectedAsset.recommendedDecision]}</b></p></section>
+
+              <section className="mvp-inspector-section">
+                <header><span>Context · Review</span><strong>{detail?.reviewPriority?.level ?? "gap-aware"}</strong></header>
+                <dl className="mvp-inspector-summary">
+                  <div><dt>검토 우선순위</dt><dd>{detail?.reviewPriority?.level ?? "확인 필요"}</dd></div>
+                  <div><dt>중요도 근거</dt><dd>{detail?.criticalityBasis.length ? detail.criticalityBasis.join(", ") : "확인 필요"}</dd></div>
+                  <div><dt>마지막 정비</dt><dd>{valueOrGap(detail?.maintenanceContext?.lastMaintenanceDaysAgo, "일 전")}</dd></div>
+                  <div><dt>30일 유사 Event</dt><dd>{valueOrGap(detail?.maintenanceContext?.similarEvents30d, "건")}</dd></div>
+                  <div><dt>열린 작업</dt><dd>{detail?.maintenanceContext?.openWorkOrderExists === null || detail?.maintenanceContext?.openWorkOrderExists === undefined ? "확인 필요" : detail.maintenanceContext.openWorkOrderExists ? "있음" : "없음"}</dd></div>
+                  <div><dt>생산 영향</dt><dd>{detail?.operationContext?.productionImpact ?? "확인 필요"}</dd></div>
+                </dl>
+                {detail?.reviewPriority?.reasons.length ? <p className="mvp-muted">{detail.reviewPriority.reasons.join(" · ")}</p> : <p className="mvp-muted">필요한 운영 맥락이 없으면 우선순위를 임의 계산하지 않습니다.</p>}
+              </section>
 
               <section className="mvp-inspector-section">
                 <header><span>핵심 센서</span><strong>{detailLoading ? "불러오는 중" : `${detail?.sensors.length ?? 0} fields`}</strong></header>

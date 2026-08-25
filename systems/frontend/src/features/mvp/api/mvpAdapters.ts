@@ -331,7 +331,7 @@ function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSe
   return viewModel.features.map((feature) => ({
     id: feature.key,
     label: feature.label,
-    value: feature.current,
+    value: feature.current.value,
     unit: feature.unit || null,
   }));
 }
@@ -344,7 +344,7 @@ function factorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpFa
       id: feature.top_factor?.evidence_field_id ?? `${feature.key}:${feature.top_factor?.rank ?? "factor"}`,
       feature: feature.key,
       label: feature.label,
-      value: feature.current,
+      value: feature.current.value,
       unit: feature.unit || null,
       contribution: Math.abs(feature.top_factor?.contribution ?? 0),
       direction: feature.top_factor?.direction ?? "risk_up",
@@ -496,6 +496,12 @@ export function composeEventDetail(input: {
     sensors: evidenceSensors(input.evidence),
     topFactors: evidenceFactors(input.evidence),
     threshold: input.evidence?.threshold ?? null,
+    assetCriticality: input.event.criticality,
+    criticalityBasis: [],
+    criticalitySource: "unknown",
+    maintenanceContext: null,
+    operationContext: null,
+    reviewPriority: null,
     dataQualityWarnings: input.evidence?.data_quality_warnings ?? [],
     activity: normalizeActivity(input.activity),
     report,
@@ -523,6 +529,28 @@ export function applyAssetDetailViewModel(
     sensors: sensorsFromAssetDetailViewModel(viewModel),
     topFactors: factorsFromAssetDetailViewModel(viewModel),
     threshold: viewModel.risk.threshold,
+    event: {
+      ...detail.event,
+      criticality: viewModel.asset.criticality,
+    },
+    assetCriticality: viewModel.asset.criticality,
+    criticalityBasis: viewModel.asset.criticality_basis,
+    criticalitySource: viewModel.asset.criticality_source,
+    maintenanceContext: {
+      lastMaintenanceDaysAgo: viewModel.maintenance_context.last_maintenance_days_ago,
+      similarEvents30d: viewModel.maintenance_context.similar_events_30d,
+      openWorkOrderExists: viewModel.maintenance_context.open_work_order_exists,
+    },
+    operationContext: {
+      loadLevel: viewModel.operation_context.load_level,
+      runtimeHours7d: viewModel.operation_context.runtime_hours_7d,
+      productionImpact: viewModel.operation_context.production_impact,
+    },
+    reviewPriority: viewModel.review_priority ? {
+      level: viewModel.review_priority.level,
+      reasons: viewModel.review_priority.reasons,
+      sourceFields: viewModel.review_priority.source_fields,
+    } : null,
     provenance: {
       ...provenanceFromAssetDetailViewModel(detail.event, viewModel),
       promptVersion: detail.provenance.promptVersion,

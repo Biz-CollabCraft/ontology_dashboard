@@ -166,11 +166,32 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 ```json
 {
-  "asset": {},
+  "asset": {
+    "criticality": "high",
+    "criticality_basis": ["equipment master"],
+    "criticality_source": "equipment_master"
+  },
   "risk": {},
   "risk_series": [],
-  "features": [],
+  "features": [
+    {
+      "key": "rotation_raw",
+      "current": {"observed_at": "2026-08-01T00:00:00+09:00", "value": 1820.0, "quality_status": "good"},
+      "history": {"source_ref": "observation://asset/rotation_raw", "points": []}
+    }
+  ],
   "equipment_history": [],
+  "maintenance_context": {
+    "last_maintenance_days_ago": null,
+    "similar_events_30d": null,
+    "open_work_order_exists": null
+  },
+  "operation_context": {
+    "load_level": null,
+    "runtime_hours_7d": null,
+    "production_impact": null
+  },
+  "review_priority": null,
   "evidence": {
     "artifact_id": null,
     "source_kind": "runtime_inference",
@@ -180,8 +201,9 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 }
 ```
 
-`features[].series`는 Backend canonical/overlay Observation read contract와 Backend Feature
-Executor result에서 파생한다. `systems/generator`는 Feature/Label 의미, History Requirement,
+`features[].history.points`는 Backend canonical/overlay Observation read contract와 Backend
+Feature Executor result에서 파생한다. 같은 history가 공유하는 provenance는
+`features[].history.source_ref` envelope에 한 번만 두며, point에는 시간·값·품질만 둔다. `systems/generator`는 Feature/Label 의미, History Requirement,
 transform contract, Model Artifact publish를 소유하지만, Product API가 소비하는 제품 runtime
 series를 publish하지 않는다. Product API 계약은 `gen_data` 내부 파일명이나 canonical CSV를 직접
 의존하지 않는다.
@@ -197,7 +219,14 @@ top factors, report section, provenance)는 기준선으로 유지한다. `map-r
 이식에 필요한 그래프·피쳐 이력 필드는 이 기준선에 추가되는 필드이며, 단일 Event
 Evidence만으로 채울 수 있다고 가정하지 않는다.
 
-근거 추적을 위해 시계열 point와 baseline에는 최소 `observed_at`, source reference,
+`asset.criticality`는 설비/프로젝트 운영 영향도이며 `risk.status_grade`나
+WorkOrder priority가 아니다. 누락 시 `null`로 두고 `evidence.gaps[]`에
+`asset.criticality` gap을 남긴다. `maintenance_context`, `operation_context`,
+`review_priority`도 같은 규칙을 따른다. `review_priority`는 검토 표시 순서용 설명값이며
+필수 입력이 없으면 `null`이다. Product API 또는 Backend composer가 계산하지 않은 값을
+Frontend가 `normal`, `low`, `false`, `0` 또는 fallback priority로 합성하지 않는다.
+
+근거 추적을 위해 시계열 history envelope에는 source reference를, point에는 `observed_at`과
 quality/status 정보를 보존한다. 화면 표시용 `number[]`만 반환하지 않는다.
 
 없는 값은 합성하지 않고 null, 빈 배열, `evidence.gaps[]`, `data_status.warnings[]`로 표현한다.

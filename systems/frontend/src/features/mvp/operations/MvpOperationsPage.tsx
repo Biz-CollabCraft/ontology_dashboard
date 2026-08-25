@@ -123,10 +123,16 @@ export function MvpOperationsPage({
                 <>
                   {detail.warnings.length ? <div className="mvp-inline-warning" role="status"><strong>부분 API 경고</strong><ul>{detail.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div> : null}
                   <div className="mvp-operation-evidence-grid">
-                    <MvpPanel title="권장 결정과 근거" eyebrow="EVIDENCE">
-                      <div className="mvp-recommendation"><span>Policy recommendation</span><strong>{DECISION_LABEL[selectedEvent.recommendedDecision]}</strong><p>모델 결과와 운영 정책을 결합한 추천이며 실제 사용자 결정과 구분됩니다.</p></div>
-                      {detail.topFactors.length ? <div className="mvp-factor-list">{detail.topFactors.slice(0, 4).map((factor) => <article key={factor.id}><div><strong>{factor.label}</strong><span>{factor.value ?? "—"} {factor.unit}</span></div><div className="mvp-factor-track"><i style={{ width: `${Math.max(4, Math.min(100, factor.contribution * 100))}%` }} /></div><b>{factor.direction === "risk_up" ? "점검 우선 후보" : "완화 요인"}</b></article>)}</div> : <p className="mvp-muted">Top factor가 제공되지 않았습니다. 원인을 임의로 단정하지 않습니다.</p>}
-                      {detail.threshold !== null ? <p className="mvp-threshold-note">현재 운영 임계값 <strong>{formatProbability(detail.threshold)}</strong> · 미탐·오탐 비용 가정에 따라 달라질 수 있습니다.</p> : null}
+                    <MvpPanel title="Decision Packet" eyebrow="GOVERNED REVIEW">
+                      <div className="mvp-recommendation"><span>Policy recommendation</span><strong>{DECISION_LABEL[selectedEvent.recommendedDecision]}</strong><p>상세 센서와 Top factors는 Objects의 동일 snapshot에서 확인합니다. 이 화면은 사람이 남길 판단과 다음 Action에 집중합니다.</p></div>
+                      <dl className="mvp-inspector-summary">
+                        <div><dt>검토 우선순위</dt><dd>{detail.reviewPriority?.level ?? "확인 필요"}</dd></div>
+                        <div><dt>중요도</dt><dd>{detail.assetCriticality ?? "확인 필요"}</dd></div>
+                        <div><dt>생산 영향</dt><dd>{detail.operationContext?.productionImpact ?? "확인 필요"}</dd></div>
+                        <div><dt>열린 작업</dt><dd>{detail.maintenanceContext?.openWorkOrderExists === null || detail.maintenanceContext?.openWorkOrderExists === undefined ? "확인 필요" : detail.maintenanceContext.openWorkOrderExists ? "있음" : "없음"}</dd></div>
+                      </dl>
+                      {detail.reviewPriority?.reasons.length ? <p className="mvp-threshold-note">{detail.reviewPriority.reasons.join(" · ")}</p> : <p className="mvp-threshold-note">필수 맥락이 없으면 Operations가 우선순위를 임의 계산하지 않습니다.</p>}
+                      {detail.threshold !== null ? <p className="mvp-threshold-note">운영 임계값 <strong>{formatProbability(detail.threshold)}</strong>은 참고 기준이며, 실제 결정은 아래 기록으로 남깁니다.</p> : null}
                     </MvpPanel>
 
                     <MvpPanel title="판단 기록" eyebrow="GOVERNED ACTION">

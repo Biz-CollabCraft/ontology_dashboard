@@ -428,9 +428,11 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             target,
             project_context=RuntimeProjectContextResolver(target),
         )
+    diagnosis_runtime = get_predictive_maintenance_runtime_service()
     return MaintenanceLoopService(
         repository,
-        event_evidence_query=get_predictive_maintenance_runtime_service(),
+        event_evidence_query=diagnosis_runtime,
+        replay_session_query=diagnosis_runtime,
     )
 
 
