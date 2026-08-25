@@ -158,13 +158,94 @@
     },
     "operation_context": {
       "type": "object",
+      "description": "Optional production-planning context composed by Backend from operation-context fixtures. It is not an Evidence/Product Result input and must not change risk, status_grade, top_factors, or recommended_action.",
       "required": ["load_level", "runtime_hours_7d", "production_impact"],
       "additionalProperties": false,
       "properties": {
         "load_level": {"type": ["string", "null"], "enum": ["low", "normal", "high", null]},
         "runtime_hours_7d": {"type": ["number", "null"], "minimum": 0},
-        "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]}
-      }
+        "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]},
+        "context_id": {"type": "string"},
+        "source_type": {"const": "synthetic_capacity_model"},
+        "temporal_scope": {
+          "type": "object",
+          "required": ["snapshot_id", "timezone", "valid_from", "valid_to", "generated_at"],
+          "additionalProperties": false,
+          "properties": {
+            "snapshot_id": {"type": "string"},
+            "timezone": {"type": "string"},
+            "valid_from": {"type": "string"},
+            "valid_to": {"type": "string"},
+            "generated_at": {"type": "string"}
+          }
+        },
+        "production_plan": {
+          "type": "object",
+          "required": ["plan_id", "plan_date", "planned_units", "product_mix"],
+          "additionalProperties": false,
+          "properties": {
+            "plan_id": {"type": "string"},
+            "plan_date": {"type": "string"},
+            "planned_units": {"type": "integer", "minimum": 0},
+            "product_mix": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["variant", "share", "planned_units"],
+                "additionalProperties": false,
+                "properties": {
+                  "variant": {"type": "string"},
+                  "share": {"type": "number", "minimum": 0, "maximum": 1},
+                  "planned_units": {"type": "integer", "minimum": 0}
+                }
+              }
+            }
+          }
+        },
+        "capacity_model": {
+          "type": "object",
+          "required": ["active_asset_count", "planned_operating_hours", "oee", "standard_cycle_minutes_per_unit", "asset_units_per_hour", "daily_capacity_units", "basis"],
+          "additionalProperties": false,
+          "properties": {
+            "active_asset_count": {"type": "integer", "minimum": 1},
+            "planned_operating_hours": {"type": "number", "minimum": 0},
+            "oee": {"type": "number", "minimum": 0, "maximum": 1},
+            "standard_cycle_minutes_per_unit": {"type": "number", "exclusiveMinimum": 0},
+            "asset_units_per_hour": {"type": "number", "minimum": 0},
+            "daily_capacity_units": {"type": "integer", "minimum": 0},
+            "basis": {"type": "string"}
+          }
+        },
+        "event_impact": {
+          "type": ["object", "null"],
+          "required": ["event_id", "equipment_id", "line", "product_variant", "screen_priority", "impact_status", "estimated_lost_units", "basis"],
+          "additionalProperties": false,
+          "properties": {
+            "event_id": {"type": "string"},
+            "equipment_id": {"type": "string"},
+            "line": {"type": "string"},
+            "product_variant": {"type": "string"},
+            "screen_priority": {"enum": ["none", "monitor", "shift_inspection", "plan_at_risk", "data_check_required"]},
+            "impact_status": {"enum": ["not_applicable", "estimated", "withheld_data_quality_hold"]},
+            "estimated_lost_units": {"type": ["integer", "null"], "minimum": 0},
+            "basis": {
+              "type": "object",
+              "required": ["estimated_downtime_minutes", "asset_units_per_hour", "formula"],
+              "additionalProperties": false,
+              "properties": {
+                "estimated_downtime_minutes": {"type": "integer", "minimum": 0},
+                "asset_units_per_hour": {"type": "number", "minimum": 0},
+                "formula": {"type": "string"}
+              }
+            }
+          }
+        },
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      },
+      "anyOf": [
+        {"required": ["load_level", "runtime_hours_7d", "production_impact"]},
+        {"required": ["context_id", "source_type", "temporal_scope", "production_plan", "capacity_model", "event_impact", "limitations"]}
+      ]
     },
     "review_priority": {
       "type": ["object", "null"],

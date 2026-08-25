@@ -183,6 +183,7 @@ def compose_asset_detail_view_model(
     feature_series: dict[str, dict[str, Any]] | None = None,
     runtime_prediction_history: list[dict[str, Any]] | None = None,
     equipment_history: list[dict[str, Any]] | None = None,
+    operation_context: dict[str, Any] | None = None,
     data_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compose the candidate AssetDetailViewModel from canonical contracts.
@@ -237,7 +238,9 @@ def compose_asset_detail_view_model(
     asset_summary, asset_gaps = _asset_summary(asset, result_artifact)
     gaps.extend(asset_gaps)
     maintenance_context, maintenance_gaps = _maintenance_context(asset)
-    operation_context, operation_gaps = _operation_context(asset)
+    operation_context, operation_gaps = _operation_context(
+        operation_context if operation_context is not None else asset.get("operation_context")
+    )
     gaps.extend(maintenance_gaps)
     gaps.extend(operation_gaps)
     risk = {
@@ -586,8 +589,8 @@ def _maintenance_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[di
     return result, gaps
 
 
-def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
-    context = asset.get("operation_context") or {}
+def _operation_context(context: dict[str, Any] | None) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    context = context or {}
     load_level = str(context.get("load_level") or "")
     if load_level not in {"low", "normal", "high"}:
         load_level = None
@@ -600,8 +603,21 @@ def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict
         "runtime_hours_7d": runtime_hours_7d if _is_number(runtime_hours_7d) else None,
         "production_impact": production_impact,
     }
+    if context.get("source_type") == "synthetic_capacity_model":
+        result.update(
+            {
+                "context_id": context.get("context_id"),
+                "source_type": context.get("source_type"),
+                "temporal_scope": context.get("temporal_scope"),
+                "production_plan": context.get("production_plan"),
+                "capacity_model": context.get("capacity_model"),
+                "event_impact": context.get("event_impact"),
+                "limitations": context.get("limitations") or [],
+            }
+        )
     gaps = []
-    for key, value in result.items():
+    for key in ("load_level", "runtime_hours_7d", "production_impact"):
+        value = result.get(key)
         if value is None:
             gaps.append(
                 {

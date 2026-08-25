@@ -259,6 +259,45 @@ export interface AssetDetailViewModel {
     load_level: "low" | "normal" | "high" | null;
     runtime_hours_7d: number | null;
     production_impact: "none" | "low" | "medium" | "high" | null;
+    context_id?: string;
+    source_type?: "synthetic_capacity_model";
+    temporal_scope?: {
+      snapshot_id: string;
+      timezone: string;
+      valid_from: string;
+      valid_to: string;
+      generated_at: string;
+    };
+    production_plan?: {
+      plan_id: string;
+      plan_date: string;
+      planned_units: number;
+      product_mix: Array<{ variant: string; share: number; planned_units: number }>;
+    };
+    capacity_model?: {
+      active_asset_count: number;
+      planned_operating_hours: number;
+      oee: number;
+      standard_cycle_minutes_per_unit: number;
+      asset_units_per_hour: number;
+      daily_capacity_units: number;
+      basis: string;
+    };
+    event_impact?: {
+      event_id: string;
+      equipment_id: string;
+      line: string;
+      product_variant: string;
+      screen_priority: "none" | "monitor" | "shift_inspection" | "plan_at_risk" | "data_check_required";
+      impact_status: "not_applicable" | "estimated" | "withheld_data_quality_hold";
+      estimated_lost_units: number | null;
+      basis: {
+        estimated_downtime_minutes: number;
+        asset_units_per_hour: number;
+        formula: string;
+      };
+    } | null;
+    limitations?: string[];
   };
   review_priority: {
     level: "immediate" | "high" | "medium" | "low";
