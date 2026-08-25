@@ -11,17 +11,14 @@
   "hyperparameters": {
     "lightgbm": {
       "n_estimators": 50,
-      "learning_rate": 0.1,
-      "random_state": 42
+      "learning_rate": 0.1
     },
     "xgboost": {
       "n_estimators": 50,
-      "learning_rate": 0.1,
-      "random_state": 42
+      "learning_rate": 0.1
     },
     "random_forest": {
-      "n_estimators": 50,
-      "random_state": 42
+      "n_estimators": 50
     }
   },
   "metrics": [

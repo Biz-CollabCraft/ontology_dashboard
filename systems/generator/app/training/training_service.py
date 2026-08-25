@@ -20,6 +20,10 @@ from systems.generator.app.training.training_config_provider import (
 )
 from systems.generator.app.training.training_exception import (
     FeatureDatasetIntegrityError,
+    ModelActivationCommitError,
+    ModelActivationInProgressError,
+    ModelActivationTargetInvalidError,
+    ModelActivationVerifyError,
     TrainingContractError,
     TrainingDependencyError,
     TrainingExecutionError,
@@ -125,6 +129,10 @@ class TrainingService:
         horizon_hours = prov.get("prediction_horizon_hours")
         if horizon_hours is None:
             raise TrainingContractError("Feature Bundle provenance에 prediction_horizon_hours가 누락되었습니다.")
+        if type(horizon_hours) is not int or horizon_hours <= 0:
+            raise TrainingContractError(
+                f"Feature Bundle provenance 'prediction_horizon_hours' must be a positive integer, got {horizon_hours!r} ({type(horizon_hours).__name__})"
+            )
 
         # Load official feature schema snapshot and verify checksum against bundle provenance
         try:
@@ -183,6 +191,12 @@ class TrainingService:
                 "target_name": label_schema_spec.target_name,
             }
         )
+
+        label_horizon = label_schema_snapshot.get("prediction_horizon_hours")
+        if label_horizon != horizon_hours:
+            raise TrainingContractError(
+                f"Prediction horizon mismatch: Feature Bundle has {horizon_hours}h, but Label Schema has {label_horizon}h"
+            )
 
         # 5. Deterministically derive history requirements from feature schema recipe
         history_requirement_snapshot = build_history_requirement_from_feature_schema(feature_schema_snapshot)
@@ -302,7 +316,7 @@ class TrainingService:
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }
 
-                artifact_dir = self.artifact_publisher.publish_artifact(
+                pub_result = self.artifact_publisher.publish_artifact(
                     model_id=model_id,
                     model_version=model_ver,
                     base_model=base_model,
@@ -319,24 +333,75 @@ class TrainingService:
                     activation_policy=req.activation_policy,
                 )
 
-                logical_uri = self.artifact_publisher.get_logical_uri(artifact_dir)
-                results.append(
-                    ModelTrainingResult(
-                        base_model=base_model,
-                        model_id=model_id,
-                        model_version=model_ver,
-                        status="succeeded",
-                        published=True,
-                        latest_updated=True,
-                        model_artifact_uri=logical_uri,
-                        artifact_uri=logical_uri,
-                        metrics_summary=trained.metrics,
-                        activated=True,
-                        activation_error_code=None,
-                        error_code=None,
+                if pub_result.published and pub_result.latest_updated:
+                    results.append(
+                        ModelTrainingResult(
+                            base_model=base_model,
+                            model_id=model_id,
+                            model_version=model_ver,
+                            status="succeeded",
+                            published=True,
+                            latest_updated=True,
+                            model_artifact_uri=pub_result.artifact_uri,
+                            artifact_uri=pub_result.artifact_uri,
+                            metrics_summary=trained.metrics,
+                            latest_error_code=None,
+                            latest_error_message=None,
+                            activated=True,
+                            activation_error_code=None,
+                            error_code=None,
+                        )
                     )
-                )
-                logger.info(f"[TrainingService] Model {base_model} succeeded: f1={trained.metrics.get('f1', 0.0):.4f}")
+                    logger.info(f"[TrainingService] Model {base_model} succeeded: f1={trained.metrics.get('f1', 0.0):.4f}")
+                elif pub_result.published and not pub_result.latest_updated:
+                    logger.warning(
+                        f"[TrainingService] Model {base_model} artifact published at {pub_result.artifact_uri} but pointer update failed: {pub_result.latest_error_code}"
+                    )
+                    if target_model is not None:
+                        details_payload = [{
+                            "published": True,
+                            "model_artifact_uri": pub_result.artifact_uri,
+                            "latest_updated": False,
+                            "latest_error_code": pub_result.latest_error_code,
+                        }]
+                        if pub_result.latest_error_code == "MODEL_LATEST_UPDATE_IN_PROGRESS":
+                            raise ModelActivationInProgressError(
+                                f"Model Artifact '{model_id}/{model_ver}'가 발행되었으나 최신 포인터 갱신 락 획득에 실패했습니다: {pub_result.latest_error_message}",
+                                details=details_payload,
+                            )
+                        elif pub_result.latest_error_code == "MODEL_LATEST_TARGET_INVALID":
+                            raise ModelActivationTargetInvalidError(
+                                f"Model Artifact '{model_id}/{model_ver}'가 발행되었으나 최신 포인터 대상 검증에 실패했습니다: {pub_result.latest_error_message}",
+                                details=details_payload,
+                            )
+                        elif pub_result.latest_error_code == "MODEL_LATEST_VERIFY_FAILED":
+                            raise ModelActivationVerifyError(
+                                f"Model Artifact '{model_id}/{model_ver}'가 발행되었으나 최신 포인터 재검증에 실패했습니다: {pub_result.latest_error_message}",
+                                details=details_payload,
+                            )
+                        else:
+                            raise ModelActivationCommitError(
+                                f"Model Artifact '{model_id}/{model_ver}'가 발행되었으나 최신 포인터 갱신에 실패했습니다: {pub_result.latest_error_message}",
+                                details=details_payload,
+                            )
+                    results.append(
+                        ModelTrainingResult(
+                            base_model=base_model,
+                            model_id=model_id,
+                            model_version=model_ver,
+                            status="failed",
+                            published=True,
+                            latest_updated=False,
+                            model_artifact_uri=pub_result.artifact_uri,
+                            artifact_uri=pub_result.artifact_uri,
+                            metrics_summary=trained.metrics,
+                            latest_error_code=pub_result.latest_error_code,
+                            latest_error_message=pub_result.latest_error_message,
+                            activated=False,
+                            activation_error_code=pub_result.latest_error_code,
+                            error_code=pub_result.latest_error_code,
+                        )
+                    )
 
             except Exception as exc:
                 logger.exception(f"[TrainingService] Model {base_model} failed: {exc}", extra=stage_logger)
@@ -351,7 +416,7 @@ class TrainingService:
 
                 err_code = getattr(exc, "code", type(exc).__name__)
                 if is_published:
-                    err_code = "LATEST_POINTER_UPDATE_FAILED"
+                    err_code = "MODEL_LATEST_UPDATE_FAILED"
 
                 # For full train, isolate error and mark model as failed
                 results.append(
@@ -365,6 +430,8 @@ class TrainingService:
                         model_artifact_uri=logical_art_uri,
                         artifact_uri=logical_art_uri,
                         metrics_summary=None,
+                        latest_error_code=err_code if is_published else None,
+                        latest_error_message=str(exc) if is_published else None,
                         activated=False,
                         activation_error_code=err_code if is_published else None,
                         error_code=err_code,

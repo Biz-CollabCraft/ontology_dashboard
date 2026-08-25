@@ -513,6 +513,18 @@ class ContractVectorVerifier:
                     )
                 else:
                     for p_name, p_val in model_params.items():
+                        if p_name in {"random_state", "seed", "random_seed"}:
+                            result.errors.append(
+                                VerificationError(
+                                    context=context,
+                                    message=(
+                                        f"hyperparameters.{model_name} contains reserved seed key '{p_name}'. "
+                                        "Use top-level 'random_seed' instead."
+                                    ),
+                                    expected="No reserved seed key in model hyperparameters",
+                                    actual=f"Found '{p_name}' in hyperparameters.{model_name}",
+                                )
+                            )
                         if isinstance(p_val, float) and (math.isnan(p_val) or math.isinf(p_val)):
                             result.errors.append(
                                 VerificationError(

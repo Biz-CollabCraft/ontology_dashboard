@@ -10,6 +10,7 @@ import sys
 import tempfile
 import uuid
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,19 @@ ARTIFACT_TYPE = "predictive_maintenance_model"
 ARTIFACT_SCHEMA_VERSION = "model-artifact-v1.0"
 REQUIRED_ARTIFACT_ROLES = ("model", "feature_schema", "label_schema", "history_requirement", "metrics")
 OFFICIAL_SCHEMA_PATH = Path("contracts/schemas/model-artifact.schema.json")
+
+
+@dataclass(frozen=True)
+class ModelArtifactPublicationResult:
+    """Explicit result of publishing an immutable Model Artifact and updating its latest pointer."""
+
+    model_id: str
+    model_version: str
+    published: bool
+    artifact_uri: str | None
+    latest_updated: bool
+    latest_error_code: str | None = None
+    latest_error_message: str | None = None
 
 
 class ModelActivationLock:
@@ -252,22 +266,94 @@ class ModelArtifactPublisher:
         metrics: dict[str, Any],
         training_config: dict[str, Any],
         provenance: dict[str, Any],
-        activation_policy: str = "activate_on_success",
-    ) -> Path:
-        """Atomically stage, validate, and publish an immutable 6-file Model Artifact package."""
+        activation_policy: str | None = None,
+    ) -> ModelArtifactPublicationResult:
+        """Atomically stage, validate, and publish an immutable Model Artifact package, then update latest pointer."""
         with _artifact_lock:
             dest_dir = self.get_artifact_dir(model_id, model_version)
             model_root = dest_dir.parent
             model_root.mkdir(parents=True, exist_ok=True)
 
-            # IMMUTABILITY RULE: Never allow overwriting or deleting an existing model version!
+            feature_schema_ver = feature_schema.get("feature_schema_version") or feature_schema.get("schema_version", "unknown-feature-schema")
+            label_schema_ver = label_schema.get("label_schema_version") or label_schema.get("schema_version", "unknown-label-schema")
+            training_cfg_ver = training_config.get("training_config_version", "training-config-v1")
+
+            # Check if artifact directory already exists
             if dest_dir.exists():
-                raise ModelArtifactConflictError(
-                    f"Model Artifact '{model_id}/{model_version}'가 이미 존재합니다. "
-                    "불변 아티팩트 정책에 따라 동일 버전 재발행 및 덮어쓰기는 금지됩니다."
+                manifest_file = dest_dir / "manifest.json"
+                if not manifest_file.is_file():
+                    raise ModelArtifactConflictError(
+                        f"Model Artifact '{model_id}/{model_version}' 디렉터리가 불완전한 상태로 이미 존재합니다."
+                    )
+                try:
+                    existing_manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+                    self.validate_manifest(existing_manifest, dest_dir)
+                except Exception as exc:
+                    raise ModelArtifactConflictError(
+                        f"Model Artifact '{model_id}/{model_version}'가 이미 존재하며 유효성 검증에 실패했습니다: {exc}"
+                    ) from exc
+
+                # Check input fingerprint match for idempotent pointer recovery
+                em = existing_manifest
+                em_cfg = em.get("training_config", {})
+                em_prov = em.get("provenance", {})
+
+                inputs_match = (
+                    em.get("dataset_version") == dataset_version
+                    and em.get("feature_schema_version") == feature_schema_ver
+                    and em.get("label_schema_version") == label_schema_ver
+                    and em_cfg.get("training_config_version") == training_cfg_ver
+                    and em_cfg.get("training_config_sha256") == training_config.get("training_config_sha256")
+                    and em_prov.get("feature_dataset_metadata_sha256") == provenance.get("feature_dataset_metadata_sha256")
+                    and em_prov.get("prediction_horizon_hours") == provenance.get("prediction_horizon_hours")
                 )
 
-            # Staging directory on the same filesystem
+                if not inputs_match:
+                    raise ModelArtifactConflictError(
+                        f"Model Artifact '{model_id}/{model_version}'가 이미 다른 입력으로 존재합니다. "
+                        "불변 아티팩트 정책에 따라 동일 버전 재발행 및 덮어쓰기는 금지됩니다."
+                    )
+
+                # Check if already pointing in latest.json
+                final_pointer = model_root / "latest.json"
+                already_latest = False
+                if final_pointer.is_file():
+                    try:
+                        ptr_data = json.loads(final_pointer.read_text(encoding="utf-8"))
+                        if ptr_data.get("model_version") == model_version or ptr_data.get("active_version") == model_version:
+                            already_latest = True
+                    except Exception:
+                        pass
+
+                if already_latest:
+                    raise ModelArtifactConflictError(
+                        f"Model Artifact '{model_id}/{model_version}'가 이미 정상 발행되어 최신 포인터로 활성화되어 있습니다. "
+                        "불변 아티팩트 정책에 따라 동일 버전 재발행 및 덮어쓰기는 금지됩니다."
+                    )
+
+                # Inputs match and not yet in latest.json -> Retry pointer update!
+                try:
+                    self.update_active_pointer(model_id, model_version)
+                    return ModelArtifactPublicationResult(
+                        model_id=model_id,
+                        model_version=model_version,
+                        published=True,
+                        artifact_uri=self.get_logical_uri(dest_dir),
+                        latest_updated=True,
+                    )
+                except Exception as p_exc:
+                    err_code = getattr(p_exc, "code", type(p_exc).__name__)
+                    return ModelArtifactPublicationResult(
+                        model_id=model_id,
+                        model_version=model_version,
+                        published=True,
+                        artifact_uri=self.get_logical_uri(dest_dir),
+                        latest_updated=False,
+                        latest_error_code=err_code,
+                        latest_error_message=str(p_exc),
+                    )
+
+            # Phase A: Staging and immutable Artifact publish
             staging_dir = model_root / f".tmp_{uuid.uuid4().hex}"
             staging_dir.mkdir(parents=True, exist_ok=True)
 
@@ -334,10 +420,7 @@ class ModelArtifactPublisher:
                 ]
 
                 # 7. Construct and write manifest.json conforming to model-artifact.schema.json
-                feature_schema_ver = feature_schema.get("feature_schema_version") or feature_schema.get("schema_version", "unknown-feature-schema")
-                label_schema_ver = label_schema.get("label_schema_version") or label_schema.get("schema_version", "unknown-label-schema")
                 hist_req_ver = history_requirement.get("history_requirement_version", f"hist-req-{feature_schema_ver}")
-                training_cfg_ver = training_config.get("training_config_version", "training-config-v1")
 
                 manifest = {
                     "artifact_type": ARTIFACT_TYPE,
@@ -368,35 +451,42 @@ class ModelArtifactPublisher:
                 # 8. Full validation of staging directory
                 self.validate_manifest(manifest, staging_dir)
 
-                # 9. Atomic rename / move staging -> dest_dir
+                # 9. Atomic rename / move staging -> dest_dir (Phase A completed!)
                 staging_dir.rename(dest_dir)
-
                 logger.info(f"[ModelArtifactPublisher] Published Model Artifact to {dest_dir}")
 
-                # 10. Automatically update latest.json pointer (activation_policy is deprecated/ignored)
-                self.update_active_pointer(model_id, model_version)
-
-                return dest_dir
             except Exception as exc:
-                # Cleanup staging
                 if staging_dir.exists():
                     shutil.rmtree(staging_dir, ignore_errors=True)
-                if isinstance(
-                    exc,
-                    (
-                        ModelArtifactConflictError,
-                        ModelArtifactValidationError,
-                        TrainingContractError,
-                        ModelActivationInProgressError,
-                        ModelActivationTargetNotFoundError,
-                        ModelActivationTargetInvalidError,
-                        ModelActivationCommitError,
-                        ModelActivationVerifyError,
-                    ),
-                ):
+                if isinstance(exc, (ModelArtifactConflictError, ModelArtifactValidationError, TrainingContractError)):
                     raise
                 logger.exception(f"[ModelArtifactPublisher] Failed to publish model artifact: {exc}")
                 raise ModelArtifactPublishError(f"Model Artifact 원자적 발행 실패: {exc}") from exc
+
+            # Phase B: Latest pointer update
+            try:
+                self.update_active_pointer(model_id, model_version)
+                return ModelArtifactPublicationResult(
+                    model_id=model_id,
+                    model_version=model_version,
+                    published=True,
+                    artifact_uri=self.get_logical_uri(dest_dir),
+                    latest_updated=True,
+                )
+            except Exception as p_exc:
+                err_code = getattr(p_exc, "code", type(p_exc).__name__)
+                logger.warning(
+                    f"[ModelArtifactPublisher] Artifact published at {dest_dir} but latest pointer update failed: {p_exc}"
+                )
+                return ModelArtifactPublicationResult(
+                    model_id=model_id,
+                    model_version=model_version,
+                    published=True,
+                    artifact_uri=self.get_logical_uri(dest_dir),
+                    latest_updated=False,
+                    latest_error_code=err_code,
+                    latest_error_message=str(p_exc),
+                )
 
     def update_active_pointer(self, model_id: str, model_version: str) -> None:
         """Atomically update latest.json system-managed pointer for model_id with OS locking and validation."""
@@ -487,3 +577,4 @@ class ModelArtifactPublisher:
                 raise ModelActivationVerifyError(f"latest.json read-back 검증 실패: {exc}") from exc
 
             logger.info(f"[ModelArtifactPublisher] Updated latest pointer for {model_id} -> {model_version}")
+    update_latest_pointer = update_active_pointer

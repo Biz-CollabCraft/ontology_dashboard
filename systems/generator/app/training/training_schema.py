@@ -64,6 +64,8 @@ class ModelTrainingResult(BaseModel):
     model_artifact_uri: str | None = None
     artifact_uri: str | None = None
     metrics_summary: dict[str, float] | None = None
+    latest_error_code: str | None = None
+    latest_error_message: str | None = None
     activated: bool = False
     activation_error_code: str | None = None
     error_code: str | None = None

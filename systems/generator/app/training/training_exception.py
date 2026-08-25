@@ -102,31 +102,40 @@ class ModelActivationInProgressError(TrainingError):
 
 
 class ModelActivationTargetNotFoundError(TrainingError):
-    """Raised when target model version artifact does not exist during activation."""
+    """Raised when target model version artifact does not exist during pointer update."""
 
     status_code = 404
-    code = "MODEL_ACTIVATION_TARGET_NOT_FOUND"
+    code = "MODEL_LATEST_TARGET_NOT_FOUND"
 
 
 class ModelActivationTargetInvalidError(TrainingError):
-    """Raised when target model version artifact fails validation during activation."""
+    """Raised when target model version artifact fails validation during pointer update."""
 
     status_code = 422
-    code = "MODEL_ACTIVATION_TARGET_INVALID"
+    code = "MODEL_LATEST_TARGET_INVALID"
 
 
 class ModelActivationCommitError(TrainingError):
     """Raised when atomic replacement of latest.json fails."""
 
     status_code = 500
-    code = "MODEL_ACTIVATION_COMMIT_FAILED"
+    code = "MODEL_LATEST_UPDATE_FAILED"
 
 
 class ModelActivationVerifyError(TrainingError):
     """Raised when read-back verification of latest.json fails."""
 
     status_code = 500
-    code = "MODEL_ACTIVATION_VERIFY_FAILED"
+    code = "MODEL_LATEST_VERIFY_FAILED"
+
+
+# Aliases for latest pointer naming
+ModelLatestUpdateInProgressError = ModelActivationInProgressError
+ModelLatestTargetNotFoundError = ModelActivationTargetNotFoundError
+ModelLatestTargetInvalidError = ModelActivationTargetInvalidError
+ModelLatestUpdateFailedError = ModelActivationCommitError
+ModelLatestVerifyFailedError = ModelActivationVerifyError
+
 
 
 class TrainingExecutionError(TrainingError):

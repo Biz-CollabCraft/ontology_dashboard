@@ -195,8 +195,11 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 - **Training Config 및 Hyperparameter 해결 계약**:
   - `training_config_version`은 `contracts/schemas/generator-training-config.schema.json`에 정의된 버전 관리 설정 파일과 1:1로 바인딩됩니다.
   - 설정 파일 부재 시 `404`, 스키마 위반 또는 분할 비율 오류 시 `422`로 Fail-Closed 처리되며, 설정 파일의 SHA-256 및 논리 URI가 Model Artifact provenance에 기록됩니다.
-  - 최상위 `random_seed`가 단일 정본으로 사용되며, 모델별 `hyperparameters` 내부의 중복 `random_state`/`seed` 선언은 거부됩니다.
+  - 최상위 `random_seed`가 학습 시드의 유일한 단일 정본으로 사용되며, 모델별 `hyperparameters` 내부의 `random_state`, `seed`, `random_seed` 중복 선언은 정적 검증 및 런타임에서 `422 TRAINING_CONTRACT_ERROR`로 Fail-Closed 차단됩니다.
   - Trainer의 `resolve_parameters(configured, random_seed)`를 통해 기본값보다 설정값을 우선 적용한 `resolved_parameters`가 실제 Estimator `get_params()` 및 Manifest `training_config`에 온전히 기록됩니다.
+- **Prediction Horizon 의미 계약 및 Schema 교차 검증**:
+  - Feature Bundle provenance의 `prediction_horizon_hours`는 양의 정수(`int > 0`, `bool`/`float`/`str` 불가)여야 합니다.
+  - Model Artifact staging 및 발행 전 Label Schema 스냅샷의 `prediction_horizon_hours`와 일치하는지 교차 검증하며, 불일치 시 `422 TRAINING_CONTRACT_ERROR`로 즉시 Fail-Closed 처리되어 불완전한 아티팩트 생성을 방지합니다.
 - **Feature/Label Schema 스냅샷 보존 및 History Requirement 산출**:
   - 축약되거나 임의 기본값으로 대체되지 않은 완전한 Feature Schema 및 Label Schema 스냅샷을 검증하여 아티팩트에 보존합니다.
   - `history_requirement.json`은 Feature Schema 레시피로부터 파생 Feature명이 아닌 **원본 센서 필드 목록(`required_columns`)** 및 연산 파라미터(lag/rolling/ewm)를 반영하여 `minimum_history_rows`를 결정론적으로 산출합니다.
@@ -212,16 +215,15 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
   4. `label_schema.json`: 학습에 실제 사용된 Label Schema 확정본
   5. `history_requirement.json`: Feature Schema 기준 결정론적 산출 (`minimum_history_rows`, `required_columns`, `missing_history_policy`)
   6. `metrics.json`: 계산된 validation 지표, 클래스 분포, primary metric
-- **불변성 및 원자적 발행**:
-  - 동일한 `model_id/model_version` 재발행은 어떠한 경우에도 금지되며, 이미 존재할 경우 `409 ModelArtifactConflictError`를 반환합니다 (기존 아티팩트 덮어쓰기/삭제 불가).
-  - 임시 디렉터리(`.tmp_{uuid}`)에서 6개 파일 생성 및 manifest 전수 검증(role/path 중복 차단 포함) 완료 후 atomic rename.
-- **자동 최신 포인터 (`latest.json`) 관리**:
-  - `latest.json`은 검증된 Model Artifact가 정상 발행될 때마다 Generator가 자동으로 갱신하는 시스템 관리 포인터입니다. 현재 API는 사용자에 의한 버전 선택 또는 포인터 변경을 지원하지 않습니다.
-  - **모델별 상호 배제 및 원자적 갱신**:
-    - `artifacts/{model_id}/.latest.lock`을 통한 모델별 non-blocking OS advisory lock을 획득합니다.
-    - 락 경합 시 즉시 `409 MODEL_LATEST_UPDATE_IN_PROGRESS`를 반환합니다 (배치 `/train`에서는 해당 모델만 실패 격리).
-    - 대상 아티팩트 검증 $\rightarrow$ 기존 포인터 일치 시 멱등 성공 $\rightarrow$ 임시 파일(`.latest.{tx_id}.tmp`) 작성 $\rightarrow$ `flush` + `fsync` $\rightarrow$ `os.replace` $\rightarrow$ 디렉터리 fsync $\rightarrow$ read-back 재검증의 원자적 트랜잭션을 거쳐 최신 포인터를 갱신합니다.
-    - 응답 모델(`ModelTrainingResult`)에서 발행(`published`)과 최신 포인터 갱신(`latest_updated`, `error_code`) 상태를 명확히 구분하여 반환합니다.
-  - **후속 계획**:
-    - 특정 버전 조회·실행·운영 전환·rollback은 Issue #117에서 단계적으로 구현합니다. 해당 기능이 도입되기 전까지 모든 Runtime 소비자는 유효한 `latest.json`을 기본 포인터로 사용합니다.
+- **2단계 발행(Two-Phase Publication) 및 불변성 정책**:
+  - **Phase A (불변 아티팩트 원자적 발행)**: 임시 디렉터리(`.tmp_{uuid}`)에서 6개 파일 생성 및 manifest 전수 검증 완료 후 atomic rename으로 커밋합니다.
+  - **Phase B (최신 포인터 갱신)**: non-blocking OS advisory lock(`artifacts/{model_id}/.latest.lock`) 하에서 `latest.json`을 원자적으로 갱신합니다.
+  - **상태 분리 및 부분 실패 보존**: Phase B 실패 시 이미 커밋된 불변 아티팩트를 삭제하거나 rollback하지 않고 보존하며, API 응답/details에 `published=True`, `model_artifact_uri=...`, `latest_updated=False`, `latest_error_code=...`를 투명하게 기록합니다.
+  - **동일 아티팩트 멱등 복구**: 동일 입력 계약으로 재요청 시 디렉터리와 checksum이 온전히 존재하면 아티팩트 재작성을 건너뛰고 `latest.json` 갱신만 안전하게 재시도합니다. 이미 최신 포인터로 활성화된 상태라면 `409 MODEL_ARTIFACT_CONFLICT`를 반환합니다.
+- **자동 최신 포인터 (`latest.json`) 관리 및 오류 체계**:
+  - `MODEL_LATEST_UPDATE_IN_PROGRESS` (409): 포인터 갱신 락 경합
+  - `MODEL_LATEST_TARGET_NOT_FOUND` (404): 대상 아티팩트 부재
+  - `MODEL_LATEST_TARGET_INVALID` (422): 대상 아티팩트 파일/체크섬 검증 실패
+  - `MODEL_LATEST_UPDATE_FAILED` (500): 임시 파일 작성 또는 원자적 교체 실패
+  - `MODEL_LATEST_VERIFY_FAILED` (500): 교체 후 read-back 검증 실패
 - **동기 실행**: `/train` 및 `/train/{base_model}` 엔드포인트는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.

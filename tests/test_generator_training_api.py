@@ -915,3 +915,177 @@ def test_public_version_selection_api_does_not_exist(test_setup):
     client = test_setup["client"]
     resp = client.post("/models/pdm-lightgbm/select-version", json={"model_version": "v1"})
     assert resp.status_code in (404, 405)
+
+
+def test_partial_failure_preserves_artifact_and_recovers_on_retry(test_setup):
+    """Test that pointer failure preserves published immutable artifact in details and recovers on retry."""
+    from systems.generator.model.publisher import ModelActivationLock
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    model_id = "pdm-lightgbm"
+    lock_file = models_store / "artifacts" / model_id / ".latest.lock"
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+    m_ver = "partial-fail-recovery-v1"
+
+    # 1. Hold the lock manually to simulate pointer lock contention
+    with ModelActivationLock(lock_file, model_id=model_id):
+        resp = client.post("/train/lightgbm", json={
+            "dataset_id": dataset_id,
+            "dataset_version": dataset_ver,
+            "feature_dataset_version": feat_ver,
+            "model_version": m_ver,
+        })
+        assert resp.status_code == 409
+        err = resp.json()["error"]
+        assert err["code"] == "MODEL_LATEST_UPDATE_IN_PROGRESS"
+        assert len(err["details"]) > 0
+        detail = err["details"][0]
+        assert detail["published"] is True
+        assert detail["latest_updated"] is False
+        assert detail["latest_error_code"] == "MODEL_LATEST_UPDATE_IN_PROGRESS"
+        assert "partial-fail-recovery-v1" in detail["model_artifact_uri"]
+
+    # Verify immutable artifact exists on disk
+    art_dir = models_store / "artifacts" / model_id / m_ver
+    assert art_dir.is_dir()
+    assert (art_dir / "manifest.json").is_file()
+    assert (art_dir / "model.joblib").is_file()
+
+    # Verify staging residue does not exist
+    staging_dirs = list((models_store / "artifacts" / model_id).glob(".tmp_*"))
+    assert len(staging_dirs) == 0
+
+    # 2. Lock is now released. Retry identical training request -> should recover pointer and succeed!
+    resp_retry = client.post("/train/lightgbm", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "model_version": m_ver,
+    })
+    assert resp_retry.status_code == 200
+    res = resp_retry.json()["results"][0]
+    assert res["published"] is True
+    assert res["latest_updated"] is True
+
+    latest_file = models_store / "artifacts" / model_id / "latest.json"
+    assert latest_file.is_file()
+    assert json.loads(latest_file.read_text(encoding="utf-8"))["model_version"] == m_ver
+
+    # 3. Retrying same version after it is already active -> should return 409 MODEL_ARTIFACT_CONFLICT
+    resp_conflict = client.post("/train/lightgbm", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "model_version": m_ver,
+    })
+    assert resp_conflict.status_code == 409
+    assert resp_conflict.json()["error"]["code"] == "MODEL_ARTIFACT_CONFLICT"
+
+
+def test_batch_train_isolates_pointer_contention_partial_success(test_setup):
+    """Test batch /train isolates pointer lock failure as failed model while allowing other models to succeed."""
+    from systems.generator.model.publisher import ModelActivationLock
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    xgb_lock_file = models_store / "artifacts" / "pdm-xgboost" / ".latest.lock"
+    xgb_lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    with ModelActivationLock(xgb_lock_file, model_id="pdm-xgboost"):
+        resp = client.post("/train", json={
+            "dataset_id": dataset_id,
+            "dataset_version": dataset_ver,
+            "feature_dataset_version": feat_ver,
+            "model_version": "batch-iso-v1",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "partially_succeeded"
+
+        results_by_model = {r["base_model"]: r for r in data["results"]}
+        # xgboost had lock conflict -> published=True, latest_updated=False, status=failed
+        xgb_res = results_by_model["xgboost"]
+        assert xgb_res["published"] is True
+        assert xgb_res["latest_updated"] is False
+        assert xgb_res["status"] == "failed"
+        assert xgb_res["latest_error_code"] == "MODEL_LATEST_UPDATE_IN_PROGRESS"
+
+        # lightgbm succeeded normally
+        lgb_res = results_by_model["lightgbm"]
+        assert lgb_res["published"] is True
+        assert lgb_res["latest_updated"] is True
+        assert lgb_res["status"] == "succeeded"
+
+
+def test_prediction_horizon_positive_integer_validation(test_setup, tmp_path):
+    """Test strict prediction_horizon_hours validation rejects non-positive-int values with 422."""
+    client = test_setup["client"]
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    cache_dir = models_store / "cache" / "features" / test_setup["dataset_id"] / test_setup["dataset_version"] / test_setup["feature_dataset_version"]
+    meta_path = cache_dir / "feature_metadata.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    invalid_horizons = [0, -24, 24.5, "24", True, None]
+
+    for inv_h in invalid_horizons:
+        meta_corrupt = dict(meta)
+        meta_corrupt["provenance"] = dict(meta["provenance"])
+        if inv_h is None:
+            meta_corrupt["provenance"].pop("prediction_horizon_hours", None)
+        else:
+            meta_corrupt["provenance"]["prediction_horizon_hours"] = inv_h
+
+        meta_path.write_text(json.dumps(meta_corrupt), encoding="utf-8")
+
+        resp = client.post("/train/lightgbm", json={
+            "dataset_id": test_setup["dataset_id"],
+            "dataset_version": test_setup["dataset_version"],
+            "feature_dataset_version": test_setup["feature_dataset_version"],
+            "model_version": f"horizon-inv-{type(inv_h).__name__}",
+        })
+        assert resp.status_code == 422, f"Failed for horizon value {inv_h!r}"
+        assert resp.json()["error"]["code"] == "TRAINING_CONTRACT_ERROR"
+
+    # Restore valid metadata
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+
+def test_prediction_horizon_mismatch_with_label_schema_returns_422(test_setup):
+    """Test mismatch between Feature Bundle horizon and Label Schema horizon returns 422 without creating artifact."""
+    client = test_setup["client"]
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    cache_dir = models_store / "cache" / "features" / test_setup["dataset_id"] / test_setup["dataset_version"] / test_setup["feature_dataset_version"]
+    meta_path = cache_dir / "feature_metadata.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    meta_mismatch = dict(meta)
+    meta_mismatch["provenance"] = dict(meta["provenance"])
+    meta_mismatch["provenance"]["prediction_horizon_hours"] = 999  # Label schema has 24h
+    meta_path.write_text(json.dumps(meta_mismatch), encoding="utf-8")
+
+    m_ver = "mismatch-horizon-v1"
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": m_ver,
+    })
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "TRAINING_CONTRACT_ERROR"
+    assert "Prediction horizon mismatch" in resp.json()["error"]["message"]
+
+    # Verify no artifact destination or latest.json was created for this version
+    art_dir = models_store / "artifacts" / "pdm-lightgbm" / m_ver
+    assert not art_dir.exists()
+
+    # Restore valid metadata
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
