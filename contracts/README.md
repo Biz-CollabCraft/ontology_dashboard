@@ -10,7 +10,7 @@
 
 ### `schemas/`
 여러 시스템이 공유하는 JSON Schema를 보관한다.
-기존 최상위 `schemas/` 위치의 17개 공유 JSON Schema는 `contracts/schemas/`로 물리 이전을 완료하였다.
+기존 최상위 `schemas/` 위치의 공유 JSON Schema는 `contracts/schemas/`로 물리 이전을 완료하였다.
 
 ### `openapi/`
 시스템 경계를 통과하는 공유 API 계약을 보관한다.
@@ -31,10 +31,10 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 
 현재 `contracts/`의 관리 상태는 다음과 같다.
 
-- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가 계약을 포함한 20개 공유 JSON Schema 관리
-- `contracts/examples/`: `generator-feature-input/`에 실제 검증 가능한 `FeatureRequest` 및 Versioned Dataset Manifest 예제 관리
-- `contracts/test-vectors/`: `generator-feature-input-v1/`에 Multi-asset Lookahead Horizon 라벨링 및 활성 고장 제외를 검증하는 Golden Vector 관리
-- `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`, `backend-contract-ci.yml`), `scripts/`, `tests/` 참조 전환 완료
+- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가된 공유 JSON Schema 관리 (Training Config 스키마 포함)
+- `contracts/examples/`: `generator-feature-input/` 및 `generator-training/`에 실제 검증 가능한 요청/설정 예제 관리
+- `contracts/test-vectors/`: `generator-feature-input-v1/` 및 `generator-training-v1/`에 Feature 및 Training Golden Vector 관리
+- `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`), `scripts/`, `tests/` 참조 전환 완료
 - Schema 내용 및 `$id` 식별자 무변경 보존
 
 ## Generator 파이프라인 계약 현황 및 후속 Target 계약 후보
@@ -47,6 +47,9 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 |---|---|---|
 | Generator Dataset Input Manifest | **Current** | `contracts/schemas/generator-dataset-input-manifest.schema.json` (자동 검증 및 예제/테스트 벡터 존재) |
 | Generator Feature Input Golden Vector | **Current** | `contracts/test-vectors/generator-feature-input-v1/` (Multi-asset 라벨링 및 활성 고장 제외 자동 검증) |
+| Generator Training Config Schema | **Current** | `contracts/schemas/generator-training-config.schema.json` (설정 버전, 파라미터, 분할 비율 검증) |
+| Generator Training Golden Vector | **Current** | `contracts/test-vectors/generator-training-v1/` (데이터 분할 결정성 및 불변 Model Artifact 검증) |
+| Model Artifact Schema | **Current** | `contracts/schemas/model-artifact.schema.json` (6개 파일 불변 아티팩트 및 manifest 무결성 정본) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |

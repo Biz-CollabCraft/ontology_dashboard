@@ -26,7 +26,7 @@ ARTIFACT = json.loads(
         / "fixtures"
         / "product_result_evidence_projection"
         / "producer-enriched-critical-artifact.json"
-    ).read_text()
+    ).read_text(encoding="utf-8")
 )
 
 

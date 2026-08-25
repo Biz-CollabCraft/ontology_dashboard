@@ -692,6 +692,7 @@ def _setup_valid_training_examples(contracts_dir: Path) -> Path:
             "validation": 0.15,
             "test": 0.15
         },
+        "random_seed": 42,
         "primary_metric": "f1",
         "metrics": ["f1", "precision", "recall"],
         "hyperparameters": {
@@ -836,3 +837,20 @@ def test_training_examples_optional_model_version_null_or_omitted_passes(tmp_pat
 
     result = verifier.verify_all()
     assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
+
+
+@pytest.mark.parametrize("model_name,reserved_key", [
+    ("lightgbm", "random_state"),
+    ("xgboost", "seed"),
+    ("random_forest", "random_seed"),
+])
+def test_training_examples_config_reserved_seed_keys_fails(tmp_path: Path, model_name: str, reserved_key: str):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    cfg = json.loads((ex_dir / "training-config-v1.json").read_text(encoding="utf-8"))
+    cfg["hyperparameters"][model_name] = {reserved_key: 42, "n_estimators": 50}
+    (ex_dir / "training-config-v1.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any(f"hyperparameters.{model_name} contains reserved seed key '{reserved_key}'" in e.message for e in result.errors)
