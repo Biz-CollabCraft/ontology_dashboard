@@ -1,10 +1,14 @@
 import {
   Activity,
-  ArrowRight,
+  AlertTriangle,
+  Clock3,
   ClipboardCheck,
   ClipboardList,
+  DatabaseZap,
   FileText,
+  Gauge,
   LineChart,
+  Printer,
   RefreshCw,
   RotateCcw,
   Wrench,
@@ -15,6 +19,7 @@ import type {
   MvpBootstrapModel,
   MvpEvent,
   MvpEventDetailModel,
+  MvpReportTab,
   MvpRoleLens,
 } from "../api/mvpContracts";
 import {
@@ -68,31 +73,17 @@ interface LineImpactSummary {
   planningRows: PlanningImpactRow[];
 }
 
-interface FactoryCellSlot {
-  id: string;
-  kind: "cnc" | "compressor";
-  label: string;
-  assetId: string;
-  cell: string;
-  asset: MvpAsset | null;
-}
-
-interface FactoryCellLayout {
-  id: string;
-  site: string;
-  cell: string;
-  label: string;
-  planUnits: number;
-  summary: LineImpactSummary | null;
-  slots: FactoryCellSlot[];
-}
-
-interface FactorySlotPreview {
-  slot: FactoryCellSlot;
-  cell: FactoryCellLayout;
-}
-
 type DrawerTab = "status" | "action";
+type FactorySlotKind = "cnc" | "compressor";
+type WorkActionDialogKind = "request" | "complete";
+type WorkStatus =
+  | "candidate_recommended"
+  | "work_requested"
+  | "assigned"
+  | "inspection_started"
+  | "maintenance_completed"
+  | "observation_pending"
+  | "ready_for_reprediction";
 
 interface PlanningImpactRow {
   assetId: string;
@@ -105,12 +96,34 @@ interface PlanningImpactRow {
   sparePartAvailable: boolean | null;
 }
 
-const TODAY_PLAN_UNITS = 16200;
-const PLANNING_MODEL_BASIS = "전체 설비 100대 계약 기준 · 16,200개/일 계획 영향 추정";
+interface FactoryCellSlot {
+  id: string;
+  assetId: string;
+  label: string;
+  kind: FactorySlotKind;
+  asset: MvpAsset | null;
+}
+
+interface FactoryCellLayout {
+  id: string;
+  site: string;
+  cell: string;
+  label: string;
+  slots: FactoryCellSlot[];
+  summary: LineImpactSummary | null;
+  planUnits: number | null;
+}
+
+interface FactorySlotPreview {
+  slot: FactoryCellSlot;
+  cell: FactoryCellLayout;
+}
+
+const FALLBACK_TODAY_PLAN_UNITS = 16200;
+const FALLBACK_PLANNING_MODEL_BASIS = "생산계획 데이터 연결 전 임시 추정값입니다.";
 const FACTORY_SITE_IDS = ["S01", "S02", "S03", "S04"];
-const FACTORY_CELLS_PER_SITE = 5;
-const FACTORY_CELL_COUNT = FACTORY_SITE_IDS.length * FACTORY_CELLS_PER_SITE;
-const FACTORY_CELL_PLAN_UNITS = Math.round(TODAY_PLAN_UNITS / FACTORY_CELL_COUNT);
+const FACTORY_CELL_IDS = ["L01", "L02", "L03", "L04", "L05"];
+const FACTORY_LAYOUT_NOTICE = "데모 배치 화면 · 상태와 위험도는 연결된 설비 데이터만 표시";
 const FACTORY_SITE_LABELS: Record<string, string> = {
   S01: "1구역",
   S02: "2구역",
@@ -131,6 +144,45 @@ const PLANNING_STATUS_LABEL: Record<PlanningImpactRow["status"], string> = {
   data_quality_hold: "데이터 품질 확인 필요",
 };
 
+const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
+  candidate_recommended: "후보 추천됨",
+  work_requested: "작업 요청됨",
+  assigned: "담당자 배정됨",
+  inspection_started: "점검 중",
+  maintenance_completed: "정비 완료",
+  observation_pending: "정비 후 관측 대기",
+  ready_for_reprediction: "재예측 가능",
+};
+
+const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean }> = {
+  candidate_recommended: { label: "작업 요청", disabled: false },
+  work_requested: { label: "점검 시작", disabled: false },
+  assigned: { label: "점검 시작", disabled: false },
+  inspection_started: { label: "정비 완료", disabled: false },
+  maintenance_completed: { label: "정비 후 관측 대기", disabled: true },
+  observation_pending: { label: "관측 데이터 대기", disabled: true },
+  ready_for_reprediction: { label: "재예측 보기", disabled: false },
+};
+
+const WORK_REQUEST_TYPES = ["현장 점검 요청", "부품 확인 요청", "데이터 품질 확인", "보류 검토"];
+
+const REPORT_OUTPUT_OPTIONS: Array<{ id: MvpReportTab; label: string; detail: string }> = [
+  { id: "status-map", label: "상태 요약", detail: "설비 맵과 위험 상태" },
+  { id: "inspection-request", label: "점검 요청", detail: "현장 확인 항목" },
+  { id: "summary-report", label: "요약 보고서", detail: "관리자 공유본" },
+  { id: "executive-brief", label: "Executive Brief", detail: "선택 이벤트 보고서" },
+];
+
+type WorkQueueColumnId = "candidate" | "requested" | "inspection" | "observe" | "repredict";
+
+const WORK_QUEUE_COLUMNS: Array<{ id: WorkQueueColumnId; label: string; detail: string }> = [
+  { id: "candidate", label: "후보", detail: "추천됨" },
+  { id: "requested", label: "요청", detail: "요청·배정" },
+  { id: "inspection", label: "점검 중", detail: "현장 진행" },
+  { id: "observe", label: "관측 대기", detail: "완료 후 확인" },
+  { id: "repredict", label: "재예측", detail: "다음 판단" },
+];
+
 const DERIVED_FEATURE_KEYS = new Set(["temperature_difference_k", "mechanical_power_w", "overstrain_index"]);
 const PRIMARY_FIELD_SENSOR_KEYS = new Set(["torque_nm", "tool_wear_min", "rotational_speed_rpm"]);
 
@@ -146,7 +198,7 @@ function planningImpactForAsset(assetId: string | null | undefined): PlanningImp
 }
 
 function productionLossLabel(value: number | null): string {
-  return value === null ? "생산 영향 미산정" : `${value.toLocaleString()} units 예상`;
+  return value === null ? "생산 영향 미산정" : `${value.toLocaleString()}개 예상`;
 }
 
 function displayPartLabel(assetId: string | null | undefined, value: boolean | null): string {
@@ -163,18 +215,9 @@ function displayFactoryCell(cell: string): string {
   return suffix ? `${Number(suffix)}셀` : cell;
 }
 
-function canonicalSlotAssetId(cell: string, kind: FactoryCellSlot["kind"], slotIndex: number): string {
-  if (kind === "compressor") return `CMP-${cell}-01`;
-  return `CNC-${cell}-${String(slotIndex).padStart(2, "0")}`;
-}
-
-function factorySlotLabel(kind: FactoryCellSlot["kind"], slotIndex: number): string {
+function factorySlotLabel(kind: FactorySlotKind, slotIndex: number): string {
   if (kind === "compressor") return "공기압축기";
   return `CNC 가공기 ${slotIndex}`;
-}
-
-function displayFactorySlotName(slot: FactoryCellSlot, cell: FactoryCellLayout): string {
-  return `${displayFactorySite(cell.site)} · ${displayFactoryCell(cell.cell)} · ${slot.label}`;
 }
 
 function displayFactoryAssetName(assetId: string): string | null {
@@ -182,8 +225,24 @@ function displayFactoryAssetName(assetId: string): string | null {
   if (!match) return null;
   const [, prefix, site, line, slot] = match;
   const cell = `${site}-L${line}`;
-  const kind: FactoryCellSlot["kind"] = prefix === "CMP" ? "compressor" : "cnc";
+  const kind: "cnc" | "compressor" = prefix === "CMP" ? "compressor" : "cnc";
   return `${displayFactorySite(site)} · ${displayFactoryCell(cell)} · ${factorySlotLabel(kind, Number(slot))}`;
+}
+
+function canonicalSlotAssetId(site: string, cell: string, kind: FactorySlotKind, slotIndex: number): string {
+  const line = cell.match(/^L\d+$/) ? cell : cell.match(/-L(\d+)$/)?.[1] ? `L${cell.match(/-L(\d+)$/)?.[1]}` : cell;
+  const prefix = kind === "compressor" ? "CMP" : "CNC";
+  return `${prefix}-${site}-${line}-${String(slotIndex).padStart(2, "0")}`;
+}
+
+function displayFactorySlotName(slot: FactoryCellSlot, cell: FactoryCellLayout): string {
+  return `${displayFactorySite(cell.site)} · ${displayFactoryCell(cell.cell)} · ${slot.label}`;
+}
+
+function displayLineLabel(line: string): string {
+  const canonical = line.match(/^(S\d+)-L(\d+)$/);
+  if (canonical) return `${displayFactorySite(canonical[1])} · ${Number(canonical[2])}라인`;
+  return line || "미지정 라인";
 }
 
 function canonicalCellKeyFromAsset(asset: Pick<MvpAsset, "assetId" | "site" | "line" | "cell">): string | null {
@@ -218,7 +277,7 @@ function suspectedPartLabel(event: MvpEvent, asset: MvpAsset | null): string {
 function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
   const groups = new Map<string, MvpAsset[]>();
   assets.forEach((asset) => {
-    const key = canonicalCellKeyFromAsset(asset) ?? asset.line ?? asset.cell ?? "라인 근거 없음";
+    const key = asset.line || asset.cell || canonicalCellKeyFromAsset(asset) || "라인 근거 없음";
     groups.set(key, [...(groups.get(key) ?? []), asset]);
   });
   return Array.from(groups.entries()).map(([line, group]) => {
@@ -239,47 +298,6 @@ function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
     const toneWeight = { critical: 4, warning: 3, hold: 2, attention: 1, normal: 0 };
     return toneWeight[riskTone(b)] - toneWeight[riskTone(a)] || (b.averageRisk ?? -1) - (a.averageRisk ?? -1);
   });
-}
-
-function buildFactoryCellLayout(assets: MvpAsset[], summaries: LineImpactSummary[]): FactoryCellLayout[] {
-  const assetsByCell = new Map<string, MvpAsset[]>();
-  assets.forEach((asset) => {
-    const cell = canonicalCellKeyFromAsset(asset);
-    if (!cell) return;
-    assetsByCell.set(cell, [...(assetsByCell.get(cell) ?? []), asset]);
-  });
-  const usedAssets = new Set<string>();
-  return FACTORY_SITE_IDS.flatMap((site) =>
-    Array.from({ length: FACTORY_CELLS_PER_SITE }, (_, cellIndex): FactoryCellLayout => {
-      const cell = `${site}-L${String(cellIndex + 1).padStart(2, "0")}`;
-      const cellAssets = assetsByCell.get(cell) ?? [];
-      const summary = summaries.find((item) => item.assets.some((asset) => cellAssets.some((cellAsset) => cellAsset.assetId === asset.assetId))) ?? null;
-      const slots: FactoryCellSlot[] = [
-        { id: `${cell}-cmp`, kind: "compressor", label: factorySlotLabel("compressor", 1), assetId: canonicalSlotAssetId(cell, "compressor", 1), cell, asset: null },
-        { id: `${cell}-cnc-1`, kind: "cnc", label: factorySlotLabel("cnc", 1), assetId: canonicalSlotAssetId(cell, "cnc", 1), cell, asset: null },
-        { id: `${cell}-cnc-2`, kind: "cnc", label: factorySlotLabel("cnc", 2), assetId: canonicalSlotAssetId(cell, "cnc", 2), cell, asset: null },
-        { id: `${cell}-cnc-3`, kind: "cnc", label: factorySlotLabel("cnc", 3), assetId: canonicalSlotAssetId(cell, "cnc", 3), cell, asset: null },
-        { id: `${cell}-cnc-4`, kind: "cnc", label: factorySlotLabel("cnc", 4), assetId: canonicalSlotAssetId(cell, "cnc", 4), cell, asset: null },
-      ];
-      cellAssets.forEach((asset) => {
-        const slotMatch = asset.assetId.match(/^(CNC|CMP)-S\d+-L\d+-(\d+)$/);
-        const targetIndex = slotMatch?.[1] === "CMP" ? 0 : Number(slotMatch?.[2] ?? 1);
-        if (usedAssets.has(asset.assetId)) return;
-        const slot = slots[targetIndex] ?? slots[1];
-        slot.asset = asset;
-        if (asset) usedAssets.add(asset.assetId);
-      });
-      return {
-        id: cell,
-        site,
-        cell,
-        label: `${displayFactorySite(site)} · ${displayFactoryCell(cell)}`,
-        planUnits: FACTORY_CELL_PLAN_UNITS,
-        summary,
-        slots,
-      };
-    })
-  );
 }
 
 function factorValueLabel(factor: MvpAsset["topFactors"][number]): string {
@@ -357,6 +375,403 @@ function productionImpactLevelLabel(summary: LineImpactSummary, detail: MvpEvent
     : "생산 영향 수준 미연결";
 }
 
+function planningImpactFromOperationContext(detail: MvpEventDetailModel | null, fallback: PlanningImpactRow | null): PlanningImpactRow | null {
+  const impact = detail?.operationContext?.eventImpact;
+  if (!impact) return fallback;
+  const fallbackStatus = fallback?.status ?? "inspection_priority";
+  const status: PlanningImpactRow["status"] =
+    impact.screenPriority === "plan_at_risk"
+      ? "plan_at_risk"
+      : impact.screenPriority === "shift_inspection"
+        ? "shift_inspection"
+        : impact.screenPriority === "data_check_required" || impact.impactStatus === "withheld_data_quality_hold"
+          ? "data_quality_hold"
+          : fallbackStatus;
+  return {
+    assetId: impact.equipmentId,
+    eventId: impact.eventId,
+    line: impact.line,
+    productLabel: impact.productVariant,
+    estimatedLossUnits: impact.estimatedLostUnits,
+    status,
+    nextAction: fallback?.nextAction ?? (status === "data_quality_hold" ? "데이터 품질 확인 필요" : "처리 탭에서 검토"),
+    sparePartAvailable: fallback?.sparePartAvailable ?? null,
+  };
+}
+
+function plannedUnitsFromDetail(detail: MvpEventDetailModel | null): { value: number | null; fallback: boolean } {
+  const plannedUnits = detail?.operationContext?.productionPlan?.plannedUnits;
+  return typeof plannedUnits === "number"
+    ? { value: plannedUnits, fallback: false }
+    : { value: FALLBACK_TODAY_PLAN_UNITS, fallback: true };
+}
+
+function planningBasisFromDetail(detail: MvpEventDetailModel | null): { value: string; fallback: boolean } {
+  const basis = detail?.operationContext?.capacityModel?.basis;
+  return basis
+    ? { value: basis, fallback: false }
+    : { value: FALLBACK_PLANNING_MODEL_BASIS, fallback: true };
+}
+
+function lineAssetLabel(asset: MvpAsset): string {
+  return displayFactoryAssetName(asset.assetId) ?? displayAssetName(asset);
+}
+
+function workStatusForAsset(_asset: MvpAsset | null, _event: MvpEvent | null): WorkStatus {
+  return "candidate_recommended";
+}
+
+function nextWorkStatus(status: WorkStatus): WorkStatus {
+  if (status === "candidate_recommended") return "work_requested";
+  if (status === "work_requested") return "inspection_started";
+  if (status === "assigned") return "inspection_started";
+  if (status === "inspection_started") return "maintenance_completed";
+  if (status === "maintenance_completed") return "observation_pending";
+  if (status === "observation_pending") return "ready_for_reprediction";
+  return status;
+}
+
+function workQueueColumn(status: WorkStatus): WorkQueueColumnId {
+  if (status === "candidate_recommended") return "candidate";
+  if (status === "work_requested" || status === "assigned") return "requested";
+  if (status === "inspection_started") return "inspection";
+  if (status === "maintenance_completed" || status === "observation_pending") return "observe";
+  return "repredict";
+}
+
+function WorkStatusFixedBar({
+  status,
+  disabled = false,
+  loading = false,
+  onAction,
+}: {
+  status: WorkStatus;
+  disabled?: boolean;
+  loading?: boolean;
+  onAction: () => void;
+}) {
+  const action = WORK_STATUS_ACTION[status];
+  const actionDisabled = disabled || action.disabled || loading;
+  return (
+    <section className="mvp-work-status-bar" aria-label="작업 상태">
+      <div><span>현재 상태</span><strong>{WORK_STATUS_LABEL[status]}</strong></div>
+      <div><span>다음 권장 액션</span><strong>{action.label}</strong></div>
+      <button
+        type="button"
+        className="mvp-button primary"
+        disabled={actionDisabled}
+        onClick={onAction}
+      >
+        {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
+        {loading ? "처리 중" : actionDisabled ? "액션 대기" : action.label}
+      </button>
+    </section>
+  );
+}
+
+function WorkStatusPrimaryAction({
+  status,
+  disabled = false,
+  loading = false,
+  onAction,
+}: {
+  status: WorkStatus;
+  disabled?: boolean;
+  loading?: boolean;
+  onAction: () => void;
+}) {
+  const action = WORK_STATUS_ACTION[status];
+  const actionDisabled = disabled || action.disabled || loading;
+  return (
+    <div className="mvp-work-primary-action">
+      <button type="button" className="mvp-button primary" disabled={actionDisabled} onClick={onAction}>
+        {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
+        {loading ? "처리 중" : action.label}
+      </button>
+      <small>현재는 화면 상태만 다음 단계로 표시하며 실제 작업요청 API는 실행하지 않습니다.</small>
+    </div>
+  );
+}
+
+function WorkStatusTimeline({ status }: { status: WorkStatus }) {
+  const order: WorkStatus[] = [
+    "candidate_recommended",
+    "work_requested",
+    "assigned",
+    "inspection_started",
+    "maintenance_completed",
+    "observation_pending",
+    "ready_for_reprediction",
+  ];
+  const activeIndex = order.indexOf(status);
+  return (
+    <ol className="mvp-work-status-timeline" aria-label="작업 상태 타임라인">
+      {order.map((item, index) => (
+        <li key={item} className={index < activeIndex ? "is-done" : index === activeIndex ? "is-active" : ""}>
+          <i aria-hidden="true" />
+          <span>{WORK_STATUS_LABEL[item]}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function WorkStatusQueueBoard({
+  candidates,
+  role,
+  selectedAssetId,
+  statusByAssetId,
+  assigneeByAssetId,
+  onPreview,
+}: {
+  candidates: WorkOrderCandidate[];
+  role: MvpRoleLens;
+  selectedAssetId: string | null;
+  statusByAssetId: Record<string, WorkStatus>;
+  assigneeByAssetId: Record<string, string>;
+  onPreview: (assetId: string, eventId: string | null) => void;
+}) {
+  const items = candidates.map((candidate) => {
+    const status = statusByAssetId[candidate.event.assetId] ?? workStatusForAsset(candidate.asset, candidate.event);
+    return { candidate, status, column: workQueueColumn(status) };
+  });
+  return (
+    <section className="mvp-work-queue-board" aria-label="작업 상태 큐">
+      <header>
+        <div>
+          <span>{role === "field_operator" ? "현장 작업 큐" : "생산 판단 큐"}</span>
+          <strong>작업 상태 큐</strong>
+        </div>
+        <small>사이드뷰 처리 버튼과 같은 상태를 공유합니다</small>
+      </header>
+      <div className="mvp-work-kanban" role="list">
+        {WORK_QUEUE_COLUMNS.map((column) => {
+          const columnItems = items.filter((item) => item.column === column.id);
+          return (
+            <section key={column.id} className="mvp-work-kanban-column" aria-label={column.label}>
+              <header>
+                <div><strong>{column.label}</strong><span>{column.detail}</span></div>
+                <b>{columnItems.length}</b>
+              </header>
+              <div>
+                {columnItems.length ? columnItems.map(({ candidate, status }) => {
+                  const assetName = candidate.asset ? displayAssetName(candidate.asset) : displayEventAssetName(candidate.event);
+                  const lineLabel = candidate.asset?.line || candidate.asset?.cell || candidate.event.line || "라인 미지정";
+                  const assignee = assigneeByAssetId[candidate.event.assetId] ?? candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
+                  const secondary = role === "field_operator"
+                    ? `${candidate.suspectedPart} · ${displayPartLabel(candidate.event.assetId, candidate.event.sparePartAvailable)}`
+                    : `${lineLabel} · ${DECISION_LABEL[candidate.event.recommendedDecision]}`;
+                  return (
+                    <button
+                      type="button"
+                      key={candidate.event.eventId}
+                      className={selectedAssetId === candidate.event.assetId ? "mvp-work-kanban-card is-selected" : "mvp-work-kanban-card"}
+                      onClick={() => onPreview(candidate.event.assetId, candidate.event.eventId)}
+                    >
+                      <MvpStatusBadge status={candidate.event.status} />
+                      <strong>{assetName}</strong>
+                      <small>{secondary}</small>
+                      <span>{WORK_STATUS_LABEL[status]} · 담당 {assignee}</span>
+                    </button>
+                  );
+                }) : <p>대기 없음</p>}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AssignmentDialog({
+  assignees,
+  selectedAssignee,
+  requestType,
+  requestNote,
+  loading,
+  onSelectedAssigneeChange,
+  onConfirm,
+  onClose,
+}: {
+  assignees: string[];
+  selectedAssignee: string;
+  requestType: string;
+  requestNote: string;
+  loading: boolean;
+  onSelectedAssigneeChange: (assignee: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mvp-assignment-popover" role="dialog" aria-modal="true" aria-label="담당자 배정" onClick={onClose}>
+      <div className="mvp-assignment-card" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div><span>담당자 배정</span><strong>점검 시작 전 담당자를 확인합니다</strong></div>
+          <button type="button" className="mvp-icon-button" onClick={onClose} disabled={loading} aria-label="담당자 배정 닫기">×</button>
+        </header>
+        <dl className="mvp-work-dialog-summary">
+          <div><dt>요청 유형</dt><dd>{requestType || "작업 요청"}</dd></div>
+          <div><dt>요청 메모</dt><dd>{requestNote || "메모 없음"}</dd></div>
+        </dl>
+        <div className="mvp-assignee-list" role="listbox" aria-label="담당자 목록">
+          {assignees.length ? assignees.map((assignee) => (
+            <button
+              type="button"
+              key={assignee}
+              className={selectedAssignee === assignee ? "is-selected" : ""}
+              onClick={() => onSelectedAssigneeChange(assignee)}
+              disabled={loading}
+            >
+              <strong>{assignee}</strong>
+              <small>현장 점검 담당 후보</small>
+            </button>
+          )) : <p>배정 가능한 담당자 목록이 없습니다.</p>}
+        </div>
+        <footer>
+          <button type="button" className="mvp-button ghost" onClick={onClose} disabled={loading}>취소</button>
+          <button type="button" className="mvp-button primary" onClick={onConfirm} disabled={loading || !selectedAssignee}>
+            {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
+            {loading ? "배정 중" : "배정 후 점검 시작"}
+          </button>
+        </footer>
+        <small>현재는 화면 상태만 변경하며 실제 작업자 배정 API는 실행하지 않습니다.</small>
+      </div>
+    </div>
+  );
+}
+
+function WorkActionDialog({
+  kind,
+  requestType,
+  note,
+  loading,
+  onRequestTypeChange,
+  onNoteChange,
+  onConfirm,
+  onClose,
+}: {
+  kind: WorkActionDialogKind;
+  requestType: string;
+  note: string;
+  loading: boolean;
+  onRequestTypeChange: (value: string) => void;
+  onNoteChange: (value: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const isRequest = kind === "request";
+  return (
+    <div className="mvp-assignment-popover" role="dialog" aria-modal="true" aria-label={isRequest ? "작업 요청 유형 선택" : "정비 완료 메모"} onClick={onClose}>
+      <div className="mvp-assignment-card" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>{isRequest ? "작업 요청" : "정비 완료"}</span>
+            <strong>{isRequest ? "요청 유형을 선택합니다" : "완료 메모를 남길 수 있습니다"}</strong>
+          </div>
+        </header>
+        {isRequest ? (
+          <div className="mvp-work-dialog-options" role="radiogroup" aria-label="작업 요청 유형">
+            {WORK_REQUEST_TYPES.map((type) => (
+              <button
+                type="button"
+                key={type}
+                className={requestType === type ? "is-selected" : ""}
+                onClick={() => onRequestTypeChange(type)}
+                disabled={loading}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <label className="mvp-work-dialog-note">
+          <span>{isRequest ? "요청 메모" : "완료 메모"} <b>선택</b></span>
+          <textarea
+            value={note}
+            onChange={(event) => onNoteChange(event.target.value)}
+            disabled={loading}
+            placeholder={isRequest ? "현장 전달 메모가 있으면 입력" : "특이사항이 없으면 비워둬도 됩니다"}
+          />
+        </label>
+        <footer>
+          <button type="button" className="mvp-button ghost" onClick={onClose} disabled={loading}>취소</button>
+          <button type="button" className="mvp-button primary" onClick={onConfirm} disabled={loading || (isRequest && !requestType)}>
+            {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
+            {loading ? "처리 중" : isRequest ? "작업 요청" : "정비 완료"}
+          </button>
+        </footer>
+        <small>현재는 화면 상태만 변경하며 실제 작업요청/정비 완료 API는 실행하지 않습니다.</small>
+      </div>
+    </div>
+  );
+}
+
+function ReportOutputDialog({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (reportTab: MvpReportTab) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mvp-assignment-popover" role="dialog" aria-modal="true" aria-label="보고서 출력 유형 선택" onClick={onClose}>
+      <div className="mvp-assignment-card mvp-report-output-card" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div><span>보고서 출력</span><strong>출력할 보고서 유형을 선택합니다</strong></div>
+        </header>
+        <div className="mvp-report-output-options" role="list">
+          {REPORT_OUTPUT_OPTIONS.map((option) => (
+            <button type="button" key={option.id} onClick={() => onSelect(option.id)}>
+              <FileText size={14} />
+              <span>{option.label}</span>
+              <small>{option.detail}</small>
+            </button>
+          ))}
+        </div>
+        <footer>
+          <button type="button" className="mvp-button ghost" onClick={onClose}>취소</button>
+        </footer>
+        <small>선택한 보고서 화면으로 이동한 뒤 브라우저 출력 창을 엽니다.</small>
+      </div>
+    </div>
+  );
+}
+
+function buildFactoryCellLayout(assets: MvpAsset[], summaries: LineImpactSummary[]): FactoryCellLayout[] {
+  const assetsById = new Map(assets.map((asset) => [asset.assetId, asset]));
+  const summaryByLine = new Map(summaries.map((summary) => [summary.line, summary]));
+  return FACTORY_SITE_IDS.flatMap((site) => FACTORY_CELL_IDS.map((cell) => {
+    const line = `${site}-${cell}`;
+    const slotSeeds: Array<{ kind: FactorySlotKind; slotIndex: number }> = [
+      { kind: "compressor", slotIndex: 1 },
+      { kind: "cnc", slotIndex: 1 },
+      { kind: "cnc", slotIndex: 2 },
+      { kind: "cnc", slotIndex: 3 },
+      { kind: "cnc", slotIndex: 4 },
+    ];
+    const slots: FactoryCellSlot[] = slotSeeds.map(({ kind, slotIndex }) => {
+      const assetId = canonicalSlotAssetId(site, cell, kind, slotIndex);
+      return {
+        id: `${line}-${kind}-${slotIndex}`,
+        assetId,
+        label: factorySlotLabel(kind, slotIndex),
+        kind,
+        asset: assetsById.get(assetId) ?? null,
+      };
+    });
+    return {
+      id: line,
+      site,
+      cell: line,
+      label: `${displayFactorySite(site)} · ${displayFactoryCell(line)}`,
+      slots,
+      summary: summaryByLine.get(line) ?? null,
+      planUnits: null,
+    };
+  }));
+}
+
 function reviewPriorityLabel(summary: LineImpactSummary, detail: MvpEventDetailModel | null): string {
   const hasSelectedAsset = detail ? summary.assets.some((asset) => asset.assetId === detail.event.assetId) : false;
   return hasSelectedAsset ? displayReviewPriority(detail?.reviewPriority?.level) : "검토 우선순위 미제공";
@@ -364,11 +779,12 @@ function reviewPriorityLabel(summary: LineImpactSummary, detail: MvpEventDetailM
 
 function inspectionLocationForFeature(feature: string): { range: string; note: string; className: string } {
   const key = feature.toLowerCase();
+  if (key.includes("tool") || key.includes("wear") || key.includes("mold") || key.includes("die")) return { range: "공구대/금형 접촉부", note: "공구 날끝, 금형 접촉부, 마모 흔적 확인", className: "loc-drive-zone" };
   if (key.includes("vibration")) return { range: "모터-축/벨트-압축부", note: "간헐적 떨림과 체결 풀림 확인", className: "loc-drive-zone" };
   if (key.includes("pressure")) return { range: "압축부-배관/밸브", note: "압력 변동과 누설 확인", className: "loc-pump-valve" };
   if (key.includes("voltage") || key.includes("power")) return { range: "모터 전원부", note: "전원 공급과 전압 저하 확인", className: "loc-motor-power" };
-  if (key.includes("torque") || key.includes("rotation")) return { range: "모터-축/벨트", note: "회전 힘 전달과 속도 저하 확인", className: "loc-motor-drive" };
-  if (key.includes("strain") || key.includes("load")) return { range: "축/벨트-압축부", note: "부하 변동과 과부하 흔적 확인", className: "loc-drive-pump" };
+  if (key.includes("torque") || key.includes("rotation") || key.includes("speed")) return { range: "모터-축/벨트", note: "회전 힘 전달과 속도 저하 확인", className: "loc-motor-drive" };
+  if (key.includes("strain") || key.includes("load")) return { range: "프레스 구동부", note: "부하 변동과 과부하 흔적 확인", className: "loc-drive-pump" };
   if (key.includes("temperature")) return { range: "압축부 고정부", note: "열 상승과 베이스 상태 확인", className: "loc-pump-base" };
   return { range: "설비 주요 연결부", note: "현장 점검 위치 확인", className: "loc-pump-base" };
 }
@@ -381,7 +797,6 @@ export function MvpOverviewPage({
   detailLoading,
   detailError,
   onPreviewAsset,
-  onOpenAsset,
   onOpenEvent,
   onOpenReport,
   onRefresh,
@@ -393,9 +808,8 @@ export function MvpOverviewPage({
   detailLoading: boolean;
   detailError: string | null;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
-  onOpenAsset: (assetId: string, eventId: string | null) => void;
   onOpenEvent: (eventId: string, assetId: string) => void;
-  onOpenReport: (eventId: string | null, assetId: string | null) => void;
+  onOpenReport: (eventId: string | null, assetId: string | null, reportTab?: MvpReportTab) => void;
   onRefresh: () => void;
 }) {
   const { metrics } = model;
@@ -422,10 +836,6 @@ export function MvpOverviewPage({
   const dataQualityEvent = model.events.find((event) => event.status === "data_quality_hold") ?? null;
   const dataQualityCount = model.events.filter((event) => event.status === "data_quality_hold").length;
   const spareMissingCount = PLANNING_IMPACT_ROWS.filter((row) => row.sparePartAvailable === false).length;
-  const decisionCounts = DECISION_ORDER.map((decision) => ({
-    decision,
-    count: model.events.filter((event) => event.recommendedDecision === decision).length,
-  }));
   const riskyLines = model.lineRisk.filter((line) => line.critical + line.warning + line.dataQualityHold > 0).length;
   const selectedLineSummary = selectedAsset
     ? lineImpactSummaries.find((summary) => summary.line === (selectedAsset.line || selectedAsset.cell || "라인 근거 없음")) ?? null
@@ -436,14 +846,26 @@ export function MvpOverviewPage({
   const selectedRiskPercent = selectedAsset?.failureProbability === null || selectedAsset?.failureProbability === undefined
     ? null
     : Math.round(selectedAsset.failureProbability * 100);
-  const selectedPlanningImpact = planningImpactForAsset(selectedAsset?.assetId);
-  const maxPlanningImpact = PLANNING_IMPACT_ROWS.find((row) => row.eventId === "EVT-GS-004") ?? PLANNING_IMPACT_ROWS[0];
+  const selectedDetail = detail?.event.assetId === selectedAsset?.assetId ? detail : null;
+  const plannedUnits = plannedUnitsFromDetail(selectedDetail);
+  const planningBasis = planningBasisFromDetail(selectedDetail);
+  const selectedPlanningImpact = planningImpactFromOperationContext(selectedDetail, planningImpactForAsset(selectedAsset?.assetId));
+  const maxPlanningImpact = planningImpactFromOperationContext(selectedDetail, PLANNING_IMPACT_ROWS.find((row) => row.eventId === "EVT-GS-004") ?? PLANNING_IMPACT_ROWS[0]);
   const agentSummaryLine = role === "field_operator"
     ? `점검 후보 ${workOrderCandidates.length}건 · 부품 확인 ${needsPartCheck}건 · 작업요청 ID 미생성`
     : `위험 라인 ${riskyLines}개 · 라인 ${lineImpactSummaries.length}개 · 평균 위험도 ${formatProbability(metrics.averageRisk)}`;
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
+  const [workStatusByAssetId, setWorkStatusByAssetId] = useState<Record<string, WorkStatus>>({});
+  const [loadingWorkActionAssetId, setLoadingWorkActionAssetId] = useState<string | null>(null);
+  const [assigneeByAssetId, setAssigneeByAssetId] = useState<Record<string, string>>({});
+  const [assignmentAssetId, setAssignmentAssetId] = useState<string | null>(null);
+  const [selectedAssignee, setSelectedAssignee] = useState("");
+  const [workActionDialog, setWorkActionDialog] = useState<{ assetId: string; kind: WorkActionDialogKind } | null>(null);
+  const [requestTypeByAssetId, setRequestTypeByAssetId] = useState<Record<string, string>>({});
+  const [workRequestNoteByAssetId, setWorkRequestNoteByAssetId] = useState<Record<string, string>>({});
+  const [completionNoteByAssetId, setCompletionNoteByAssetId] = useState<Record<string, string>>({});
   const drawerAsset = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
   const drawerEvent = drawerAsset?.eventId
     ? model.events.find((event) => event.eventId === drawerAsset.eventId) ?? null
@@ -460,7 +882,31 @@ export function MvpOverviewPage({
   const drawerRiskPercent = drawerAsset?.failureProbability === null || drawerAsset?.failureProbability === undefined
     ? null
     : Math.round(drawerAsset.failureProbability * 100);
-  const drawerPlanningImpact = planningImpactForAsset(drawerAsset?.assetId);
+  const drawerDetail = drawerAsset && detail?.event.assetId === drawerAsset.assetId ? detail : null;
+  const drawerPlanningImpact = planningImpactFromOperationContext(drawerDetail, planningImpactForAsset(drawerAsset?.assetId));
+  const drawerWorkStatus = drawerAsset
+    ? workStatusByAssetId[drawerAsset.assetId] ?? workStatusForAsset(drawerAsset, drawerEvent)
+    : "candidate_recommended";
+  const drawerWorkActionLoading = drawerAsset?.assetId === loadingWorkActionAssetId;
+  const drawerAssignee = drawerAsset
+    ? assigneeByAssetId[drawerAsset.assetId] ?? drawerAsset.assignedEngineer ?? drawerEvent?.assignedEngineer ?? "미배정"
+    : "미배정";
+  const drawerRequestType = drawerAsset ? requestTypeByAssetId[drawerAsset.assetId] ?? WORK_REQUEST_TYPES[0] : WORK_REQUEST_TYPES[0];
+  const drawerRequestNote = drawerAsset ? workRequestNoteByAssetId[drawerAsset.assetId] ?? "" : "";
+  const drawerCompletionNote = drawerAsset ? completionNoteByAssetId[drawerAsset.assetId] ?? "" : "";
+  const drawerWorkActionDialogKind = drawerAsset && workActionDialog?.assetId === drawerAsset.assetId ? workActionDialog.kind : null;
+  const availableAssignees = Array.from(new Set(
+    model.assets
+      .map((asset) => asset.assignedEngineer)
+      .filter((assignee): assignee is string => Boolean(assignee))
+  ));
+  const fieldSummaryPart = selectedCandidate?.suspectedPart
+    ?? (selectedFactors[0] ? fieldFactorItem(selectedFactors[0]) : "의심 부품 확인 필요");
+  const fieldSummaryPartStatus = selectedEvent ? displayPartLabel(selectedEvent.assetId, selectedEvent.sparePartAvailable) : "확인 필요";
+  const fieldSummaryQuality = selectedAsset?.status === "data_quality_hold" ? "데이터 품질 확인이 먼저 필요합니다" : "관측 데이터로 바로 확인할 수 있습니다";
+  const fieldSummary = selectedAsset
+    ? `${fieldSummaryPart}을 먼저 확인하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업요청 ID는 아직 없고, ${fieldSummaryQuality}.`
+    : "선택된 설비가 없어 점검 후보를 만들 수 없습니다.";
 
   useEffect(() => {
     if (!detailDrawerOpen) return;
@@ -484,6 +930,64 @@ export function MvpOverviewPage({
     setDetailDrawerTab("status");
   };
 
+  const advanceDrawerWorkStatus = () => {
+    if (!drawerAsset) return;
+    const assetId = drawerAsset.assetId;
+    const currentStatus = workStatusByAssetId[assetId] ?? workStatusForAsset(drawerAsset, drawerEvent);
+    const action = WORK_STATUS_ACTION[currentStatus];
+    if (action.disabled || loadingWorkActionAssetId) return;
+    if (currentStatus === "candidate_recommended") {
+      setRequestTypeByAssetId((current) => ({ ...current, [assetId]: current[assetId] ?? WORK_REQUEST_TYPES[0] }));
+      setWorkActionDialog({ assetId, kind: "request" });
+      return;
+    }
+    if (currentStatus === "work_requested" || currentStatus === "assigned") {
+      setSelectedAssignee(assigneeByAssetId[assetId] ?? drawerAsset.assignedEngineer ?? drawerEvent?.assignedEngineer ?? availableAssignees[0] ?? "");
+      setAssignmentAssetId(assetId);
+      return;
+    }
+    if (currentStatus === "inspection_started") {
+      setCompletionNoteByAssetId((current) => ({ ...current, [assetId]: current[assetId] ?? "" }));
+      setWorkActionDialog({ assetId, kind: "complete" });
+      return;
+    }
+    setLoadingWorkActionAssetId(assetId);
+    window.setTimeout(() => {
+      setWorkStatusByAssetId((current) => {
+        const latestStatus = current[assetId] ?? currentStatus;
+        return { ...current, [assetId]: nextWorkStatus(latestStatus) };
+      });
+      setLoadingWorkActionAssetId((current) => current === assetId ? null : current);
+    }, 500);
+  };
+
+  const confirmDrawerWorkAction = () => {
+    if (!drawerAsset || workActionDialog?.assetId !== drawerAsset.assetId) return;
+    const assetId = drawerAsset.assetId;
+    const kind = workActionDialog.kind;
+    setLoadingWorkActionAssetId(assetId);
+    window.setTimeout(() => {
+      setWorkStatusByAssetId((current) => ({
+        ...current,
+        [assetId]: kind === "request" ? "work_requested" : "maintenance_completed",
+      }));
+      setWorkActionDialog((current) => current?.assetId === assetId ? null : current);
+      setLoadingWorkActionAssetId((current) => current === assetId ? null : current);
+    }, 500);
+  };
+
+  const confirmDrawerAssignment = () => {
+    if (!drawerAsset || assignmentAssetId !== drawerAsset.assetId || !selectedAssignee) return;
+    const assetId = drawerAsset.assetId;
+    setLoadingWorkActionAssetId(assetId);
+    window.setTimeout(() => {
+      setAssigneeByAssetId((current) => ({ ...current, [assetId]: selectedAssignee }));
+      setWorkStatusByAssetId((current) => ({ ...current, [assetId]: "inspection_started" }));
+      setAssignmentAssetId((current) => current === assetId ? null : current);
+      setLoadingWorkActionAssetId((current) => current === assetId ? null : current);
+    }, 500);
+  };
+
   const previewFactoryAssetSlot = (asset: MvpAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => {
     setFactorySlotPreview({ slot, cell });
     onPreviewAsset(asset.assetId, asset.eventId);
@@ -505,14 +1009,14 @@ export function MvpOverviewPage({
           </strong>
           <p>
             {role === "field_operator"
-              ? "자동 작업요청 생성이나 승인 실행은 하지 않고, 현재 관측 기준의 점검 근거만 다음 클릭으로 이어줍니다."
+              ? fieldSummary
               : `${agentSummaryLine} · 계획 영향은 합성 용량 모델 기반 추정이며 생산계획 화면 데이터 연결 전 표시입니다.`}
           </p>
         </div>
         {role === "process_manager" ? (
           <div className="mvp-agent-sample-strip" aria-label="생산 관리 관련 데이터">
-            <span>오늘 계획 {TODAY_PLAN_UNITS.toLocaleString()}개/일</span>
-            <span>생산계획 화면 데이터 미연결</span>
+            <span>오늘 계획 {plannedUnits.value ? plannedUnits.value.toLocaleString() : "미연결"}개/일</span>
+            <span>{plannedUnits.fallback ? "생산계획 데이터 미연결" : "생산계획 데이터 기준"}</span>
             <span>실제 생산관리 실적 아님</span>
           </div>
         ) : null}
@@ -522,26 +1026,31 @@ export function MvpOverviewPage({
       {role === "process_manager" ? (
         <section className="mvp-overview-topline" aria-label="생산 관리자 상단 지표">
           <article className="mvp-plan-impact-card">
+            <Gauge className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>오늘 계획</span>
-            <strong>{TODAY_PLAN_UNITS.toLocaleString()}개/일</strong>
-            <small>계획 기준 · 생산계획 화면 데이터 미연결</small>
+            <strong>{plannedUnits.value ? plannedUnits.value.toLocaleString() : "-"}개/일</strong>
+            <small>{plannedUnits.fallback ? "생산계획 데이터 연결 전 임시값" : "생산계획 데이터 기준"}</small>
           </article>
           <article className="mvp-plan-impact-card is-critical">
+            <AlertTriangle className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>최대 계획 영향</span>
-            <strong>{productionLossLabel(maxPlanningImpact.estimatedLossUnits)}</strong>
-            <small>{displayEventLabel(maxPlanningImpact.eventId)} / {displayFactoryAssetName(maxPlanningImpact.assetId) ?? displayAssetName({ assetId: maxPlanningImpact.assetId })}</small>
+            <strong>{productionLossLabel(maxPlanningImpact?.estimatedLossUnits ?? null)}</strong>
+            <small>{maxPlanningImpact ? `${displayEventLabel(maxPlanningImpact.eventId)} / ${displayFactoryAssetName(maxPlanningImpact.assetId) ?? displayAssetName({ assetId: maxPlanningImpact.assetId })}` : "계획 영향 미산정"}</small>
           </article>
           <article className="mvp-plan-impact-card">
+            <ClipboardCheck className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>즉시 판단 필요</span>
             <strong>1건</strong>
             <small>계획 위험 이벤트 기준</small>
           </article>
           <article className="mvp-plan-impact-card is-hold">
+            <DatabaseZap className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>데이터 품질 보류</span>
             <strong>{dataQualityCount.toLocaleString()}건</strong>
             <small>생산 영향 미산정 포함</small>
           </article>
           <article className="mvp-plan-impact-card is-hold">
+            <Wrench className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>부품 미확보</span>
             <strong>{spareMissingCount.toLocaleString()}건</strong>
             <small>조치 제약 확인 필요</small>
@@ -550,26 +1059,31 @@ export function MvpOverviewPage({
       ) : (
         <section className="mvp-overview-topline" aria-label="현장 관리자 상단 지표">
           <article className="mvp-plan-impact-card">
+            <ClipboardList className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>점검 후보</span>
             <strong>{workOrderCandidates.length.toLocaleString()}건</strong>
             <small>작업요청 미생성 후보</small>
           </article>
           <article className="mvp-plan-impact-card is-critical">
+            <AlertTriangle className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>최우선 설비</span>
             <strong>{displayAssetName(selectedAsset)}</strong>
             <small>최우선 점검 대상</small>
           </article>
           <article className="mvp-plan-impact-card">
+            <Wrench className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>부품 확인 필요</span>
             <strong>{needsPartCheck.toLocaleString()}건</strong>
             <small>미확보 또는 확인 필요 후보</small>
           </article>
           <article className="mvp-plan-impact-card is-hold">
+            <DatabaseZap className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>데이터 품질 확인</span>
             <strong>{dataQualityCount.toLocaleString()}건</strong>
             <small>{dataQualityEvent ? `${displayEventAssetName(dataQualityEvent)} / ${displayEventLabel(dataQualityEvent)}` : "품질 보류 없음"}</small>
           </article>
           <article className="mvp-plan-impact-card">
+            <Clock3 className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>작업 상태</span>
             <strong>미생성</strong>
             <small>작업요청 ID 미생성 · 점검 후보</small>
@@ -577,11 +1091,19 @@ export function MvpOverviewPage({
         </section>
       )}
 
+      <WorkStatusQueueBoard
+        candidates={workOrderCandidates}
+        role={role}
+        selectedAssetId={selectedAsset?.assetId ?? null}
+        statusByAssetId={workStatusByAssetId}
+        assigneeByAssetId={assigneeByAssetId}
+        onPreview={previewInDrawer}
+      />
+
       {role === "field_operator" ? (
         <div className="mvp-role-overview mvp-role-overview-wide">
           <MvpPanel title="우선순위" eyebrow="점검 요청 기준" className="mvp-today-panel">
             <div className="mvp-order-board">
-              <header><ClipboardList size={15} /><strong>점검 후보 · 의심 부품</strong><span>{workOrderCandidates.length}건</span></header>
               <div className="mvp-work-card-list">
                 {workOrderCandidates.length ? workOrderCandidates.map((candidate, index) => (
                   <button type="button" key={candidate.event.eventId} className={selectedAsset?.assetId === candidate.event.assetId ? "mvp-work-card is-selected" : "mvp-work-card"} onClick={() => previewInDrawer(candidate.event.assetId, candidate.event.eventId)}>
@@ -600,12 +1122,12 @@ export function MvpOverviewPage({
         </div>
       ) : (
         <div className="mvp-role-overview">
-          <MvpPanel title="전체 공장 셀별 설비 지도" eyebrow="공장 셀 기준" className="mvp-process-panel mvp-factory-map-panel">
-            <div className="mvp-plan-impact-note">100대 설비 계약 배치 · 4구역 × 5셀 · 셀당 공기압축기 1대 + CNC 가공기 4대 · 계획 영향 추정</div>
+          <MvpPanel title="라인별 설비 영향 맵" eyebrow="데모 설비 배치" className="mvp-process-panel mvp-factory-map-panel">
+            <div className="mvp-plan-impact-note">{FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산계획 데이터 미연결" : "생산계획 데이터 기준"} · {planningBasis.value}</div>
             {factoryCells.length ? (
               <div className="mvp-factory-map">
                 <div className="mvp-factory-map-legend" aria-label="설비 상태 범례">
-                  <i className="critical">위험</i><i className="warning">경고</i><i className="attention">주의</i><i className="normal">정상</i><i className="hold">데이터 확인</i>
+                  <i className="critical">위험</i><i className="warning">경고</i><i className="attention">주의</i><i className="normal">정상</i><i className="hold">데이터 확인</i><i className="slot">상태 미연결</i>
                 </div>
                 <div className="mvp-factory-line-map">
                   {FACTORY_SITE_IDS.map((site) => {
@@ -621,17 +1143,17 @@ export function MvpOverviewPage({
                             ? "attention"
                             : "normal";
                     return (
-                      <article key={site} className={`mvp-factory-line-row tone-${siteTone} ${siteAssets.some((asset) => asset.assetId === selectedAsset?.assetId) ? "is-selected" : ""}`}>
+                      <article key={site} className={`mvp-factory-line-row tone-${siteTone}`}>
                         <header>
                           <strong>{displayFactorySite(site)}</strong>
-                          <small>{siteCells.length}셀 · 설비 25대 · 셀 계획 {FACTORY_CELL_PLAN_UNITS.toLocaleString()}개/일</small>
+                          <small>{siteCells.length}개 라인 · 데모 배치 슬롯 · 연결 설비 {siteAssets.length}대</small>
                         </header>
                         <div className="mvp-factory-cell-grid" aria-label={`${site} 셀별 설비 상태`}>
                           {siteCells.map((cell) => (
                             <section key={cell.id} className={`mvp-factory-cell-card tone-${cell.summary ? riskTone(cell.summary) : "empty"} ${cell.slots.some((slot) => slot.asset?.assetId === selectedAsset?.assetId) ? "is-selected" : ""}`} aria-label={cell.label}>
                               <header>
                                 <strong>{displayFactoryCell(cell.cell)}</strong>
-                                <small>{cell.summary ? `${cell.summary.assets.length}건 확인` : `${cell.planUnits.toLocaleString()}개/일`}</small>
+                                <small>{cell.summary ? `${cell.summary.assets.length}대 연결` : "상태 미연결"}</small>
                               </header>
                               <div className="mvp-factory-cell-slots">
                                 {cell.slots.map((slot) => {
@@ -642,7 +1164,7 @@ export function MvpOverviewPage({
                                   const tone = asset ? mapTone(asset.status) : "slot";
                                   const title = asset
                                     ? `${displayFactorySlotName(slot, cell)} · ${formatProbability(asset.failureProbability)} · ${displayPartLabel(asset.assetId, asset.sparePartAvailable)}`
-                                    : `${cell.label} · ${slot.label} · 설비 상세`;
+                                    : `${cell.label} · ${slot.label} · 상태 미연결`;
                                   return (
                                     <button
                                       key={slot.id}
@@ -668,18 +1190,6 @@ export function MvpOverviewPage({
             ) : <MvpState kind="empty" title="셀 배치 데이터가 없습니다" detail="연결된 설비 판단에 공장 셀 기준 배치 정보가 없습니다." />}
           </MvpPanel>
 
-          <div className="mvp-manager-column">
-            <MvpPanel title="진행 현황" eyebrow="검토 대기">
-              <div className="mvp-progress-grid">
-                {decisionCounts.map((item) => (
-                  <article key={item.decision}>
-                    <span>{DECISION_LABEL[item.decision]}</span>
-                    <strong>{item.count}</strong>
-                  </article>
-                ))}
-              </div>
-            </MvpPanel>
-          </div>
         </div>
       )}
 
@@ -692,7 +1202,7 @@ export function MvpOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} event={drawerEvent} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={factorySlotPreview && !drawerAsset ? null : detail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} role={role} activeTab={detailDrawerTab} onTabChange={setDetailDrawerTab} onOpenAsset={onOpenAsset} onOpenEvent={onOpenEvent} onOpenReport={onOpenReport} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} event={drawerEvent} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workActionLoading={drawerWorkActionLoading} assignee={drawerAssignee} assignees={availableAssignees} assignmentOpen={assignmentAssetId === drawerAsset?.assetId} workActionDialogKind={drawerWorkActionDialogKind} requestType={drawerRequestType} requestNote={drawerRequestNote} completionNote={drawerCompletionNote} selectedAssignee={selectedAssignee} onSelectedAssigneeChange={setSelectedAssignee} onRequestTypeChange={(value) => drawerAsset ? setRequestTypeByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onRequestNoteChange={(value) => drawerAsset ? setWorkRequestNoteByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onCompletionNoteChange={(value) => drawerAsset ? setCompletionNoteByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onConfirmAssignment={confirmDrawerAssignment} onCloseAssignment={() => setAssignmentAssetId(null)} onConfirmWorkAction={confirmDrawerWorkAction} onCloseWorkAction={() => setWorkActionDialog(null)} onTabChange={setDetailDrawerTab} onAdvanceWorkStatus={advanceDrawerWorkStatus} onPreviewAsset={onPreviewAsset} onOpenEvent={onOpenEvent} onOpenReport={onOpenReport} />
           </aside>
         </div>
       ) : null}
@@ -840,9 +1350,7 @@ function FeatureSeriesCollection({
   emptyTitle: string;
   emptyDetail: string;
 }) {
-  const primarySensors = sensors.filter((sensor) => PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id));
-  const secondarySensors = sensors.filter((sensor) => !PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id));
-  const visibleSensors = primarySensors.length ? primarySensors : sensors;
+  const visibleSensors = sensors;
   return (
     <section className="mvp-feature-series-collection" aria-label={title}>
       <header><LineChart size={14} /><strong>{title}</strong><span>관측 이력 기반</span></header>
@@ -863,27 +1371,6 @@ function FeatureSeriesCollection({
               emptyDetail={`${sensor.label} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
             />
           ))}
-          {primarySensors.length && secondarySensors.length ? (
-            <details className="mvp-derived-metric-dropdown mvp-secondary-sensor-series">
-              <summary><span><LineChart size={14} />보조 센서 관측</span><b>{secondarySensors.length}개</b></summary>
-              <div className="mvp-derived-series-list">
-                {secondarySensors.map((sensor) => (
-                  <MapReportFeatureSeries
-                    key={sensor.id}
-                    title={sensor.label}
-                    unit={sensor.unit}
-                    points={sensor.points}
-                    qualityStatus={sensor.currentQuality}
-                    currentValue={sensor.currentValue}
-                    currentObservedAt={sensor.currentObservedAt}
-                    fieldItemLabel={FIELD_FACTOR_LABELS[sensor.id]?.item}
-                    emptyTitle="관측 이력 없음"
-                    emptyDetail={`${sensor.label} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
-                  />
-                ))}
-              </div>
-            </details>
-          ) : null}
         </>
       ) : <MvpState kind="empty" title={emptyTitle} detail={emptyDetail} />}
     </section>
@@ -932,8 +1419,27 @@ function AssetPreviewPanel({
   detailError,
   role,
   activeTab,
+  workStatus,
+  workActionLoading,
+  assignee,
+  assignees,
+  assignmentOpen,
+  workActionDialogKind,
+  requestType,
+  requestNote,
+  completionNote,
+  selectedAssignee,
+  onSelectedAssigneeChange,
+  onRequestTypeChange,
+  onRequestNoteChange,
+  onCompletionNoteChange,
+  onConfirmAssignment,
+  onCloseAssignment,
+  onConfirmWorkAction,
+  onCloseWorkAction,
   onTabChange,
-  onOpenAsset,
+  onAdvanceWorkStatus,
+  onPreviewAsset,
   onOpenEvent,
   onOpenReport,
 }: {
@@ -950,11 +1456,31 @@ function AssetPreviewPanel({
   detailError: string | null;
   role: MvpRoleLens;
   activeTab: DrawerTab;
+  workStatus: WorkStatus;
+  workActionLoading: boolean;
+  assignee: string;
+  assignees: string[];
+  assignmentOpen: boolean;
+  workActionDialogKind: WorkActionDialogKind | null;
+  requestType: string;
+  requestNote: string;
+  completionNote: string;
+  selectedAssignee: string;
+  onSelectedAssigneeChange: (assignee: string) => void;
+  onRequestTypeChange: (value: string) => void;
+  onRequestNoteChange: (value: string) => void;
+  onCompletionNoteChange: (value: string) => void;
+  onConfirmAssignment: () => void;
+  onCloseAssignment: () => void;
+  onConfirmWorkAction: () => void;
+  onCloseWorkAction: () => void;
   onTabChange: (tab: DrawerTab) => void;
-  onOpenAsset: (assetId: string, eventId: string | null) => void;
+  onAdvanceWorkStatus: () => void;
+  onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onOpenEvent: (eventId: string, assetId: string) => void;
-  onOpenReport: (eventId: string | null, assetId: string | null) => void;
+  onOpenReport: (eventId: string | null, assetId: string | null, reportTab?: MvpReportTab) => void;
 }) {
+  const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets = factors.slice(0, 3).map((factor, index) => ({
@@ -965,19 +1491,27 @@ function AssetPreviewPanel({
   const fallbackInspectionLocation = inspectionLocationForFeature(asset?.predictedFailureType ?? "");
   const factoryAssetName = factorySlotPreview ? displayFactorySlotName(factorySlotPreview.slot, factorySlotPreview.cell) : null;
   const assetDisplayName = asset ? factoryAssetName ?? displayAssetName(asset) : "선택된 설비 없음";
+  const outputReport = (reportTab: MvpReportTab) => {
+    if (!asset) return;
+    setReportOutputOpen(false);
+    onOpenReport(event?.eventId ?? null, asset.assetId, reportTab);
+    window.setTimeout(() => window.print(), 500);
+  };
   if (factorySlotPreview && !asset) {
     const { slot, cell } = factorySlotPreview;
     return (
       <div className="mvp-asset-preview-panel">
         <div className="mvp-asset-preview">
+          <header>
+            <span className="mvp-slot-status">상태 미연결</span>
+            <div><strong>{displayFactorySlotName(slot, cell)}</strong><small>{slot.assetId} · 고장 확정 아님</small></div>
+          </header>
+          <WorkStatusFixedBar status={workStatus} disabled loading={workActionLoading} onAction={onAdvanceWorkStatus} />
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
           </div>
-          <header>
-            <span className="mvp-slot-status">상태 미연결</span>
-            <div><strong>{slot.label}</strong><small>{cell.label} · {slot.assetId}</small></div>
-          </header>
+          <WorkStatusTimeline status={workStatus} />
           {activeTab === "status" ? (
             <>
               <dl>
@@ -986,14 +1520,14 @@ function AssetPreviewPanel({
                 <div><dt>설비 유형</dt><dd>{displayAssetType(slot.kind)}</dd></div>
                 <div><dt>상태</dt><dd>상세 데이터 미연결</dd></div>
                 <div><dt>관측 상세</dt><dd>상세 데이터 미연결</dd></div>
-                <div><dt>계획 기준</dt><dd>{cell.planUnits.toLocaleString()}개/일</dd></div>
+                <div><dt>계획 기준</dt><dd>생산계획 데이터 미연결</dd></div>
               </dl>
               <section className="mvp-production-impact-block" aria-label="정상 설비 상세">
-                <header><Activity size={14} /><strong>설비 상세</strong><span>계약 배치 기준</span></header>
+                <header><Activity size={14} /><strong>설비 상세</strong><span>데모 배치</span></header>
                 <dl>
                   <div><dt>설비 ID</dt><dd>{slot.assetId}</dd></div>
                   <div><dt>설비</dt><dd>{slot.label}</dd></div>
-                  <div className="is-wide"><dt>배치</dt><dd>{displayFactorySite(cell.site)} · {displayFactoryCell(cell.cell)} · 공기압축기 1대와 CNC 가공기 4대 구성</dd></div>
+                  <div className="is-wide"><dt>배치</dt><dd>{displayFactorySite(cell.site)} · {displayFactoryCell(cell.cell)} · 데모 배치 슬롯</dd></div>
                   <div className="is-wide"><dt>상태 해석</dt><dd>현재 화면 데이터에 위험/정상 관측이 연결되지 않은 설비 슬롯입니다. 센서 관측과 생산 영향은 상세 데이터 연결 후 표시됩니다.</dd></div>
                 </dl>
               </section>
@@ -1014,6 +1548,11 @@ function AssetPreviewPanel({
                 <div><dt>셀</dt><dd>{displayFactoryCell(cell.cell)}</dd></div>
                 <div><dt>상태</dt><dd>상세 데이터 미연결</dd></div>
               </dl>
+              <div className="mvp-action-placeholder-grid" aria-label="작업 입력 자리">
+                <label><span>요청 메모</span><textarea disabled placeholder="요청 화면 연결 후 입력" /></label>
+                <label><span>담당자</span><input disabled placeholder="미배정" /></label>
+              </div>
+              <WorkStatusPrimaryAction status={workStatus} disabled loading={workActionLoading} onAction={onAdvanceWorkStatus} />
               <p className="mvp-action-note">
                 위험 이벤트와 작업요청이 연결되지 않은 설비는 자동 조치하지 않습니다.
               </p>
@@ -1027,21 +1566,26 @@ function AssetPreviewPanel({
     <div className="mvp-asset-preview-panel">
       {asset ? (
         <div className="mvp-asset-preview">
+          <header>
+            <MvpStatusBadge status={asset.status} />
+            <div><strong>{assetDisplayName}</strong><small>{asset.line || asset.cell || asset.assetId} · 관측 {formatTimestamp(asset.observedAt)} · 고장 확정 아님</small></div>
+            <button type="button" className="mvp-icon-button" onClick={() => setReportOutputOpen(true)} aria-label="보고서 출력" title="보고서 출력">
+              <Printer size={15} />
+            </button>
+          </header>
+          <WorkStatusFixedBar status={workStatus} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
           </div>
-          <header>
-            <MvpStatusBadge status={asset.status} />
-            <div><strong>{assetDisplayName}</strong><small>{factorySlotPreview ? `관측 ${formatTimestamp(asset.observedAt)}` : `${asset.assetId} · 관측 ${formatTimestamp(asset.observedAt)}`}</small></div>
-          </header>
+          <WorkStatusTimeline status={workStatus} />
           {role === "process_manager" && activeTab === "status" ? (
             <>
               <dl>
                 <div><dt>공장 위치</dt><dd>{assetDisplayName}</dd></div>
                 <div><dt>계획 상태</dt><dd>{planningImpact ? PLANNING_STATUS_LABEL[planningImpact.status] : "생산 영향 미산정"}</dd></div>
                 <div><dt>부품 제약</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
-                <div><dt>담당</dt><dd>{asset.assignedEngineer ?? "미배정"}</dd></div>
+                <div><dt>담당</dt><dd>{assignee}</dd></div>
                 <div><dt>예상 정지 영향</dt><dd>{formatMinutes(asset.estimatedDowntimeMinutes)}</dd></div>
                 <div><dt>신뢰도</dt><dd><MvpConfidenceBadge confidence={asset.confidence} /></dd></div>
                 {lineSummary ? <div><dt>라인 설비</dt><dd>{lineSummary.line} · {lineSummary.assets.length}대</dd></div> : null}
@@ -1055,21 +1599,17 @@ function AssetPreviewPanel({
                   <div><dt>상태</dt><dd>{planningImpact ? PLANNING_STATUS_LABEL[planningImpact.status] : "생산 영향 미산정"}</dd></div>
                   <div><dt>생산 영향 수준</dt><dd>{lineSummary ? productionImpactLevelLabel(lineSummary, detail) : "생산 영향 수준 미연결"}</dd></div>
                   <div><dt>검토 우선순위</dt><dd>{lineSummary ? reviewPriorityLabel(lineSummary, detail) : "검토 우선순위 미제공"}</dd></div>
-                  <div className="is-wide"><dt>근거</dt><dd>{PLANNING_MODEL_BASIS}</dd></div>
+                  <div className="is-wide"><dt>근거</dt><dd>{planningBasisFromDetail(detail).value}</dd></div>
                   <div className="is-wide"><dt>다음 검토</dt><dd>{planningImpact ? `${planningImpact.nextAction} · 현장 점검 요청 필요` : "데이터 품질 확인 필요"}</dd></div>
                 </dl>
                 <p>합성 용량 모델 기반 계획 영향 추정 · 고장확률, 위험도, 점검 근거, 권고 판단을 변경하지 않습니다.</p>
-                <div className="mvp-side-action-flow">
-                  <button type="button" className="mvp-button primary" onClick={() => event && onOpenEvent(event.eventId, event.assetId)} disabled={!event}><ClipboardCheck size={14} />작업요청에서 검토</button>
-                  <button type="button" className="mvp-button ghost" onClick={() => onTabChange("action")}><ArrowRight size={14} />처리 탭</button>
-                </div>
               </section>
               {lineSummary ? (
                 <section className="mvp-line-asset-list" aria-label="라인 위험 설비 목록">
                   <header><ClipboardList size={14} /><strong>{lineSummary.line} 위험 설비</strong><span>{lineSummary.assets.length}대</span></header>
                   <div>
                     {lineSummary.assets.map((lineAsset) => (
-                      <button type="button" key={lineAsset.assetId} className={lineAsset.assetId === asset.assetId ? "is-selected" : ""} onClick={() => onOpenAsset(lineAsset.assetId, lineAsset.eventId)}>
+                      <button type="button" key={lineAsset.assetId} className={lineAsset.assetId === asset.assetId ? "is-selected" : ""} onClick={() => onPreviewAsset(lineAsset.assetId, lineAsset.eventId)}>
                         <MvpStatusBadge status={lineAsset.status} />
                         <strong>{displayFactoryAssetName(lineAsset.assetId) ?? displayAssetName(lineAsset)}</strong>
                         <span>{formatProbability(lineAsset.failureProbability)} · {displayPartLabel(lineAsset.assetId, lineAsset.sparePartAvailable)}</span>
@@ -1095,16 +1635,19 @@ function AssetPreviewPanel({
                 <dl className="mvp-action-facts">
                   <div><dt>대상 설비</dt><dd>{assetDisplayName}</dd></div>
                   <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
-                  <div><dt>담당</dt><dd>{asset.assignedEngineer ?? "미배정"}</dd></div>
+                  <div><dt>담당</dt><dd>{assignee}</dd></div>
                   <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
                   <div><dt>처리 상태</dt><dd>후보 검토</dd></div>
-                  <div><dt>권한 액션</dt><dd>작업요청에서 처리</dd></div>
+                  <div><dt>권한 액션</dt><dd>처리 탭에서 검토</dd></div>
                 </dl>
-                <div className="mvp-side-action-flow">
-                  <button type="button" className="mvp-button secondary" onClick={() => onTabChange("status")}><LineChart size={14} />상태 다시 보기</button>
-                  <button type="button" className="mvp-button primary" onClick={() => event && onOpenEvent(event.eventId, event.assetId)} disabled={!event}><ClipboardCheck size={14} />작업요청에서 처리</button>
-                  <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(event?.eventId ?? null, asset.assetId)}><FileText size={14} />보고서 보기</button>
+                <div className="mvp-action-placeholder-grid" aria-label="작업요청 입력 자리">
+                  <label><span>요청 유형</span><input disabled value={requestType} readOnly /></label>
+                  <label><span>요청 메모</span><textarea disabled value={requestNote || "메모 없음"} readOnly /></label>
+                  <label><span>담당자</span><input disabled placeholder={assignee} /></label>
+                  <label><span>완료 메모</span><textarea disabled value={completionNote || "메모 없음"} readOnly /></label>
+                  <label><span>교체 부품</span><input disabled value="교체부품 기록 필드 없음" readOnly /></label>
                 </div>
+                <WorkStatusPrimaryAction status={workStatus} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
                 <p className="mvp-action-note">
                   승인, 보류, 반려, 메모 저장은 자동 실행하지 않고 작업요청의 승인 절차에서 처리합니다.
                 </p>
@@ -1188,15 +1731,47 @@ function AssetPreviewPanel({
                 <div><dt>데이터 품질</dt><dd>{asset.status === "data_quality_hold" ? "데이터 품질 확인 필요" : "확인 가능"}</dd></div>
                 <div><dt>다음 액션</dt><dd>{planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>
               </dl>
-              <div className="mvp-side-action-flow">
-                <button type="button" className="mvp-button secondary" onClick={() => onTabChange("status")}><LineChart size={14} />상태 다시 보기</button>
-                <button type="button" className="mvp-button primary" onClick={() => event && onOpenEvent(event.eventId, event.assetId)} disabled={!event}><ClipboardCheck size={14} />작업요청에서 처리</button>
-                <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(event?.eventId ?? null, asset.assetId)}><FileText size={14} />보고서 보기</button>
+              <div className="mvp-action-placeholder-grid" aria-label="현장 처리 입력 자리">
+                <label><span>요청 유형</span><input disabled value={requestType} readOnly /></label>
+                <label><span>요청 메모</span><textarea disabled value={requestNote || "메모 없음"} readOnly /></label>
+                <label><span>담당자</span><input disabled placeholder={assignee} /></label>
+                <label><span>완료 메모</span><textarea disabled value={completionNote || "메모 없음"} readOnly /></label>
               </div>
+              <WorkStatusPrimaryAction status={workStatus} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
               <p className="mvp-action-note">
                 점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
               </p>
             </section>
+          ) : null}
+          {assignmentOpen ? (
+            <AssignmentDialog
+              assignees={assignees}
+              selectedAssignee={selectedAssignee}
+              requestType={requestType}
+              requestNote={requestNote}
+              loading={workActionLoading}
+              onSelectedAssigneeChange={onSelectedAssigneeChange}
+              onConfirm={onConfirmAssignment}
+              onClose={onCloseAssignment}
+            />
+          ) : null}
+          {workActionDialogKind ? (
+            <WorkActionDialog
+              kind={workActionDialogKind}
+              requestType={requestType}
+              note={workActionDialogKind === "request" ? requestNote : completionNote}
+              loading={workActionLoading}
+              onRequestTypeChange={onRequestTypeChange}
+              onNoteChange={workActionDialogKind === "request" ? onRequestNoteChange : onCompletionNoteChange}
+              onConfirm={onConfirmWorkAction}
+              onClose={onCloseWorkAction}
+            />
+          ) : null}
+          {reportOutputOpen ? (
+            <ReportOutputDialog
+              onSelect={outputReport}
+              onClose={() => setReportOutputOpen(false)}
+            />
           ) : null}
         </div>
       ) : <MvpState kind="empty" title="선택된 설비가 없습니다" detail="왼쪽의 설비 또는 라인을 선택하세요." />}

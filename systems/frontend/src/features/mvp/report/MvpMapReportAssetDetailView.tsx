@@ -90,9 +90,9 @@ interface AssetDetailViewModel {
 
 const equipmentHistory: AssetHistoryRow[] = [
   { id: "event-current-risk", occurredAt: "2026-08-29 23:00", kind: "예측 알람", tone: "critical", description: "24시간 내 위험 예측이 알람 경계를 넘어 점검 요청 후보가 생성되었습니다.", source: "시스템 기록" },
-  { id: "event-sensor-anomaly", occurredAt: "2026-08-29 20:20", kind: "센서 이상", tone: "warning", description: "주요 관측 항목이 평상시 평균 범위를 벗어난 상태로 관측되었습니다.", source: "시스템 기록" },
+  { id: "event-sensor-anomaly", occurredAt: "2026-08-29 20:20", kind: "센서 이상", tone: "warning", description: "주요 관측 항목이 관측 기준 범위를 벗어난 상태로 기록되었습니다.", source: "시스템 기록" },
   { id: "maintenance-20260812", occurredAt: "2026-08-12 10:30", kind: "정기 점검", tone: "normal", description: "벨트 장력 조정과 구동부 윤활을 완료했습니다.", source: "김도윤", memo: "벨트 장력이 기준 하한에 가까워 재조정했습니다. 2주 뒤 회전 편차를 다시 확인하세요." },
-  { id: "maintenance-20260728", occurredAt: "2026-07-28 18:10", kind: "복구 점검", tone: "normal", description: "전원과 축 정렬을 확인한 뒤 설비를 재가동했습니다.", source: "박지훈", memo: "축 정렬 보정 뒤 공회전 테스트 관측값을 기록했습니다. 이 화면에서 정비 효과를 확정하지 않습니다." },
+  { id: "maintenance-20260728", occurredAt: "2026-07-28 18:10", kind: "복구 점검", tone: "normal", description: "전원과 축 정렬을 확인했고 정비 후 관측 대기 상태로 기록했습니다.", source: "박지훈", memo: "축 정렬 보정 뒤 공회전 테스트 관측값을 기록했습니다. 이 화면에서 정비 효과를 확정하지 않습니다." },
   { id: "failure-20260728", occurredAt: "2026-07-28 17:30", kind: "고장", tone: "critical", description: "설비 정지 이벤트가 기록되었습니다. 원인은 이 화면에서 확정하지 않습니다.", source: "운영 기록" },
   { id: "maintenance-20260603", occurredAt: "2026-06-03 09:15", kind: "정기 점검", tone: "normal", description: "필터·윤활 상태와 센서 부착 상태를 확인했습니다.", source: "이서진", memo: "특이사항이 없었고 센서 체결 상태를 기준 관측 구간으로 기록했습니다." },
   { id: "anomaly-20260511", occurredAt: "2026-05-11 14:40", kind: "이상", tone: "warning", description: "진동 평균이 일시 상승한 뒤 30분 내 기준 관측 구간으로 다시 관측되었습니다.", source: "시스템 기록" },
@@ -109,11 +109,11 @@ const compressorFeatures: FeatureTemplate[] = [
     expectedSide: "low",
     history: [
       ["2026-08-29 23:00", "위험", "420.1 rpm · 평균 대비 -2.9σ · 낮음 지속", "현재값"],
-      ["2026-08-29 21:40", "이상", "회전 평균이 기준선 대비 -2.1σ에 도달", "알람 연결"],
-      ["2026-08-29 19:50", "범위 이탈", "평상시 평균 범위 448-462 rpm 최초 이탈", "자동 기록"],
+      ["2026-08-29 21:40", "이상", "회전 평균이 관측 기준 대비 -2.1σ에 도달", "알람 연결"],
+      ["2026-08-29 19:50", "범위 이탈", "관측 기준 범위 448-462 rpm 최초 이탈", "자동 기록"],
       ["2026-08-12 10:40", "점검 기록", "454.8 rpm · 기준 관측 구간", "김도윤", "벨트 장력 조정 직후 30분 평균입니다. 이 화면에서 정비 효과를 확정하지 않습니다."],
       ["2026-07-28 17:30", "고장 시점", "398.2 rpm · 급격한 회전 저하 기록", "고장 이력"],
-      ["2026-06-03 09:15", "점검 기준", "456.1 rpm · 기준선 갱신에 사용", "이서진", "무부하와 부하 관측 구간을 기준 데이터로 기록했습니다."],
+      ["2026-06-03 09:15", "과거 점검 기록", "456.1 rpm · 관측 기준 참고", "이서진", "무부하와 부하 관측 구간을 기준 데이터로 기록했습니다."],
     ],
   },
   {
@@ -126,11 +126,11 @@ const compressorFeatures: FeatureTemplate[] = [
     expectedSide: "high",
     history: [
       ["2026-08-29 23:00", "위험", "39.8 mm/s · 평균 대비 +1.6σ · 높음 지속", "현재값"],
-      ["2026-08-29 22:10", "이상", "진동 평균이 기준선 대비 +1.3σ에 도달", "알람 연결"],
-      ["2026-08-29 21:00", "범위 이탈", "평상시 평균 범위 35.4-37.8 mm/s 최초 이탈", "자동 기록"],
+      ["2026-08-29 22:10", "이상", "진동 평균이 관측 기준 대비 +1.3σ에 도달", "알람 연결"],
+      ["2026-08-29 21:00", "범위 이탈", "관측 기준 범위 35.4-37.8 mm/s 최초 이탈", "자동 기록"],
       ["2026-08-12 10:40", "점검 기록", "36.1 mm/s · 기준 관측 구간", "김도윤", "윤활 및 벨트 장력 조정 뒤 관측값입니다. 이 화면에서 정비 효과를 확정하지 않습니다."],
       ["2026-07-28 17:30", "고장 시점", "44.2 mm/s · 고진동 구간 기록", "고장 이력"],
-      ["2026-06-03 09:15", "점검 기준", "36.7 mm/s · 기준선 갱신에 사용", "이서진", "센서 체결 상태와 측정 방향을 확인해 기준 관측값으로 기록했습니다."],
+      ["2026-06-03 09:15", "과거 점검 기록", "36.7 mm/s · 관측 기준 참고", "이서진", "센서 체결 상태와 측정 방향을 확인해 기준 관측값으로 기록했습니다."],
     ],
   },
 ];
@@ -145,8 +145,8 @@ const cncFeatures: FeatureTemplate[] = [
     domain: { minimum: 1200, maximum: 1750 },
     expectedSide: "low",
     history: [
-      ["2026-08-29 23:00", "주의", "1,342 rpm · 평상시 범위 아래에서 관측", "현재값"],
-      ["2026-08-29 20:10", "범위 이탈", "평상시 회전 범위 1,450-1,650 rpm 최초 이탈", "자동 기록"],
+      ["2026-08-29 23:00", "주의", "1,342 rpm · 관측 기준 범위 아래에서 기록", "현재값"],
+      ["2026-08-29 20:10", "범위 이탈", "관측 기준 회전 범위 1,450-1,650 rpm 최초 이탈", "자동 기록"],
       ["2026-08-12 11:20", "점검 기록", "1,538 rpm · 기준 관측 구간", "김도윤", "공구와 주축 체결 상태를 확인한 뒤 시험 운전 관측값을 기록했습니다."],
       ["2026-07-19 16:30", "이상", "1,301 rpm · 저회전 구간 기록", "운영 기록"],
     ],
@@ -160,8 +160,8 @@ const cncFeatures: FeatureTemplate[] = [
     domain: { minimum: 25, maximum: 65 },
     expectedSide: "high",
     history: [
-      ["2026-08-29 23:00", "주의", "57.8 N·m · 평상시 범위 위에서 관측", "현재값"],
-      ["2026-08-29 21:00", "범위 이탈", "평상시 토크 범위 34-50 N·m 최초 이탈", "자동 기록"],
+      ["2026-08-29 23:00", "주의", "57.8 N·m · 관측 기준 범위 위에서 기록", "현재값"],
+      ["2026-08-29 21:00", "범위 이탈", "관측 기준 토크 범위 34-50 N·m 최초 이탈", "자동 기록"],
       ["2026-08-12 11:20", "점검 기록", "43.4 N·m · 기준 관측 구간", "김도윤", "시험 운전 중 토크 관측값을 기록했습니다."],
       ["2026-07-19 16:30", "이상", "61.2 N·m · 고토크 구간 기록", "운영 기록"],
     ],
@@ -410,7 +410,7 @@ function SeriesChart({
     <section className="asset-series-block">
       <header className="asset-series-heading">
         <div><Icon size={17} /><strong>{title}</strong></div>
-        {baseline ? <span className="asset-baseline-key"><i style={{ background: color }} />평상시 평균 {formatValue(baseline.lower, unit)}-{formatValue(baseline.upper, unit)}</span> : null}
+        {baseline ? <span className="asset-baseline-key"><i style={{ background: color }} />관측 기준 범위 {formatValue(baseline.lower, unit)}-{formatValue(baseline.upper, unit)}</span> : null}
         {threshold !== undefined ? (
           <span className="asset-threshold-key" tabIndex={0} data-tooltip={alarmThresholdBasis} aria-label={alarmThresholdBasis}>
             알람 경계 {threshold}% <small>근거</small>

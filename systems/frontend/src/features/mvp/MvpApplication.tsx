@@ -150,11 +150,11 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     updateSelection({ view: "operations", eventId, assetId });
   }, [updateSelection]);
 
-  const openReport = useCallback((eventId: string | null, assetId: string | null) => {
+  const openReport = useCallback((eventId: string | null, assetId: string | null, reportTab: MvpReportTab = "executive-brief") => {
     const fallback = model?.events[0] ?? null;
     updateSelection({
       view: "reports",
-      reportTab: "executive-brief",
+      reportTab,
       eventId: eventId ?? fallback?.eventId ?? null,
       assetId: assetId ?? fallback?.assetId ?? null,
     });
@@ -226,7 +226,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else {
-    content = <MvpOverviewPage model={model} role={selection.role} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onPreviewAsset={previewAsset} onOpenAsset={openAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <MvpOverviewPage model={model} role={selection.role} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   return (

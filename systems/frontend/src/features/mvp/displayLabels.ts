@@ -12,13 +12,16 @@ export const ASSET_FIELD_LABELS: Record<string, string> = {
 export const SENSOR_FIELD_LABELS: Record<string, string> = {
   rotation_raw: "회전 평균",
   vibration_raw: "진동 평균",
+  pressure_raw: "압력 평균",
   air_temperature_k: "흡입 공기 온도",
   process_temperature_k: "가공부 온도",
   rotational_speed_rpm: "주축 회전수",
   torque_nm: "구동 토크",
   tool_wear_min: "공구 사용 시간",
   mechanical_power_w: "모터 출력",
+  power_w: "모터 출력",
   overstrain_index: "과부하 누적 지표",
+  overstrain_load: "과부하 누적 지표",
   temperature_difference_k: "공정-공기 온도차",
 };
 
@@ -34,17 +37,23 @@ export const EVENT_FIELD_LABELS: Record<string, string> = {
 };
 
 export const FIELD_FACTOR_LABELS: Record<string, { item: string; symptom: string; locationHint: string }> = {
+  rotation_raw: { item: "회전 평균 확인", symptom: "회전 관측 변동", locationHint: "모터/축/벨트" },
+  vibration_raw: { item: "진동 평균 확인", symptom: "진동 증가", locationHint: "모터/축/벨트/압축부" },
+  pressure_raw: { item: "압력 평균 확인", symptom: "압력 변동", locationHint: "압축부/배관/밸브" },
   air_temperature_k: { item: "흡입 공기 온도 확인", symptom: "주변 온도 조건 변화", locationHint: "흡입부/주변 환경" },
   process_temperature_k: { item: "가공부 열 축적 확인", symptom: "공정 온도 상승", locationHint: "가공부/냉각 흐름" },
   rotational_speed_rpm: { item: "주축 회전수 확인", symptom: "회전수 이상", locationHint: "모터/축 연결부" },
   torque_nm: { item: "구동 토크 확인", symptom: "토크 상승", locationHint: "모터/축/벨트" },
   tool_wear_min: { item: "공구 사용 시간 확인", symptom: "공구 사용 시간 누적", locationHint: "공구대/금형 접촉부" },
   mechanical_power_w: { item: "모터 출력 확인", symptom: "모터 출력 부하 상승", locationHint: "모터/전원부" },
+  power_w: { item: "모터 출력 확인", symptom: "모터 출력 부하 상승", locationHint: "모터/전원부" },
   overstrain_index: { item: "프레스 과부하 확인", symptom: "과부하 누적", locationHint: "프레스 구동부" },
+  overstrain_load: { item: "프레스 과부하 확인", symptom: "과부하 누적", locationHint: "프레스 구동부" },
   temperature_difference_k: { item: "공정-공기 온도차 확인", symptom: "열 해소 불균형", locationHint: "냉각/배기 흐름" },
 };
 
 export const FAILURE_TYPE_LABELS: Record<string, string> = {
+  none: "특이 고장 유형 없음",
   power_or_overstrain_failure: "구동부 과부하 의심",
   tool_wear_failure: "공구/금형 마모 의심",
   heat_dissipation_failure: "냉각/열 해소 이상 의심",
