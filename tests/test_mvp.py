@@ -345,6 +345,14 @@ def test_asset_detail_view_model_exposes_gs004_24h_feature_history(
         for point in points
     }
 
+    operation_context = detail_payload["operation_context"]
+    assert operation_context["production_plan"]["planned_units"] == 16200
+    assert operation_context["capacity_model"]["asset_units_per_hour"] == 12.69
+    assert operation_context["event_impact"]["event_id"] == "EVT-GS-004"
+    assert operation_context["event_impact"]["equipment_id"] == "CNC-S04-L02-03"
+    assert operation_context["event_impact"]["screen_priority"] == "plan_at_risk"
+    assert operation_context["event_impact"]["estimated_lost_units"] == 51
+
     event = client.get("/api/events/EVT-GS-004")
     assert event.status_code == 200
     assert event.json()["equipment"]["spare_part_available"] is False

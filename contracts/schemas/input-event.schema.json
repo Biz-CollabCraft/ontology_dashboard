@@ -46,6 +46,7 @@
         "context_provider": {"enum": ["fixture", "project3_http", "none"]}
       }
     },
+    "operation_context": {"$ref": "#/$defs/operationContext"},
     "expected": {
       "type": "object",
       "additionalProperties": false,
@@ -60,6 +61,92 @@
   },
   "$defs": {
     "nullableNumber": {"type": ["number", "null"]},
+    "operationContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["load_level", "runtime_hours_7d", "production_impact"],
+      "properties": {
+        "load_level": {"type": ["string", "null"], "enum": ["low", "normal", "high", null]},
+        "runtime_hours_7d": {"type": ["number", "null"]},
+        "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]},
+        "context_id": {"type": "string"},
+        "source_type": {"enum": ["synthetic_capacity_model"]},
+        "temporal_scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["snapshot_id", "timezone", "valid_from", "valid_to", "generated_at"],
+          "properties": {
+            "snapshot_id": {"type": "string"},
+            "timezone": {"type": "string"},
+            "valid_from": {"type": "string", "format": "date-time"},
+            "valid_to": {"type": "string", "format": "date-time"},
+            "generated_at": {"type": "string", "format": "date-time"}
+          }
+        },
+        "production_plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["plan_id", "plan_date", "planned_units", "product_mix"],
+          "properties": {
+            "plan_id": {"type": "string"},
+            "plan_date": {"type": "string", "format": "date"},
+            "planned_units": {"type": "number"},
+            "product_mix": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["variant", "share", "planned_units"],
+                "properties": {
+                  "variant": {"type": "string"},
+                  "share": {"type": "number"},
+                  "planned_units": {"type": "number"}
+                }
+              }
+            }
+          }
+        },
+        "capacity_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["active_asset_count", "planned_operating_hours", "oee", "standard_cycle_minutes_per_unit", "asset_units_per_hour", "daily_capacity_units", "basis"],
+          "properties": {
+            "active_asset_count": {"type": "number"},
+            "planned_operating_hours": {"type": "number"},
+            "oee": {"type": "number"},
+            "standard_cycle_minutes_per_unit": {"type": "number"},
+            "asset_units_per_hour": {"type": "number"},
+            "daily_capacity_units": {"type": "number"},
+            "basis": {"type": "string"}
+          }
+        },
+        "event_impact": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["event_id", "equipment_id", "line", "product_variant", "screen_priority", "impact_status", "estimated_lost_units", "basis"],
+          "properties": {
+            "event_id": {"type": "string"},
+            "equipment_id": {"type": "string"},
+            "line": {"type": "string"},
+            "product_variant": {"type": "string"},
+            "screen_priority": {"enum": ["none", "monitor", "shift_inspection", "plan_at_risk", "data_check_required"]},
+            "impact_status": {"enum": ["not_applicable", "estimated", "withheld_data_quality_hold"]},
+            "estimated_lost_units": {"type": ["number", "null"]},
+            "basis": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["estimated_downtime_minutes", "asset_units_per_hour", "formula"],
+              "properties": {
+                "estimated_downtime_minutes": {"type": "number"},
+                "asset_units_per_hour": {"type": "number"},
+                "formula": {"type": "string"}
+              }
+            }
+          }
+        },
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "observation": {
       "type": "object",
       "additionalProperties": false,

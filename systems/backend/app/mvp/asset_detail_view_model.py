@@ -183,6 +183,7 @@ def compose_asset_detail_view_model(
     feature_series: dict[str, dict[str, Any]] | None = None,
     runtime_prediction_history: list[dict[str, Any]] | None = None,
     equipment_history: list[dict[str, Any]] | None = None,
+    operation_context: dict[str, Any] | None = None,
     data_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compose the candidate AssetDetailViewModel from canonical contracts.
@@ -251,6 +252,7 @@ def compose_asset_detail_view_model(
         "risk_series": risk_series,
         "features": features,
         "equipment_history": equipment_history,
+        **({"operation_context": operation_context} if operation_context is not None else {}),
         "evidence": {
             "artifact_id": result_artifact.get("artifact_id"),
             "evidence_payload_reference": _evidence_payload_reference(provenance),

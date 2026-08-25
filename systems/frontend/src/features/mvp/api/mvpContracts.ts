@@ -203,6 +203,64 @@ export interface MvpAssetDetailStatus {
   source: "canonical" | "fallback";
 }
 
+export type MvpProductionImpact = "none" | "low" | "medium" | "high" | null;
+export type MvpOperationSourceType = "synthetic_capacity_model";
+export type MvpScreenPriority = "none" | "monitor" | "shift_inspection" | "plan_at_risk" | "data_check_required";
+export type MvpImpactStatus = "not_applicable" | "estimated" | "withheld_data_quality_hold";
+
+export interface MvpOperationTemporalScope {
+  snapshotId: string;
+  timezone: string;
+  validFrom: string;
+  validTo: string;
+  generatedAt: string;
+}
+
+export interface MvpProductionPlan {
+  planId: string;
+  planDate: string;
+  plannedUnits: number;
+  productMix: Array<{ variant: string; share: number; plannedUnits: number }>;
+}
+
+export interface MvpCapacityModel {
+  activeAssetCount: number;
+  plannedOperatingHours: number;
+  oee: number;
+  standardCycleMinutesPerUnit: number;
+  assetUnitsPerHour: number;
+  dailyCapacityUnits: number;
+  basis: string;
+}
+
+export interface MvpEventImpact {
+  eventId: string;
+  equipmentId: string;
+  line: string;
+  productVariant: string;
+  screenPriority: MvpScreenPriority;
+  impactStatus: MvpImpactStatus;
+  estimatedLostUnits: number | null;
+  basis: {
+    estimatedDowntimeMinutes: number;
+    assetUnitsPerHour: number;
+    formula: string;
+  };
+}
+
+export interface MvpOperationContext {
+  loadLevel: "low" | "normal" | "high" | null;
+  runtimeHours7d: number | null;
+  productionImpact: MvpProductionImpact;
+  contextId?: string;
+  sourceType?: MvpOperationSourceType;
+  temporalScope?: MvpOperationTemporalScope;
+  productionPlan?: MvpProductionPlan;
+  capacityModel?: MvpCapacityModel;
+  eventImpact?: MvpEventImpact | null;
+  limitations?: string[];
+}
+
 export interface MvpEventDetailModel {
   event: MvpEvent;
   sensors: MvpSensorValue[];
@@ -214,11 +272,7 @@ export interface MvpEventDetailModel {
   equipmentHistory: MvpEquipmentHistoryItem[];
   evidenceGaps: MvpEvidenceGap[];
   assetDetailStatus: MvpAssetDetailStatus | null;
-  operationContext: {
-    loadLevel: "low" | "normal" | "high" | null;
-    runtimeHours7d: number | null;
-    productionImpact: "none" | "low" | "medium" | "high" | null;
-  } | null;
+  operationContext: MvpOperationContext | null;
   reviewPriority: {
     level: "immediate" | "high" | "medium" | "low";
     reasons: string[];
@@ -297,7 +351,46 @@ export interface AssetDetailViewModel {
   operation_context?: {
     load_level: "low" | "normal" | "high" | null;
     runtime_hours_7d: number | null;
-    production_impact: "none" | "low" | "medium" | "high" | null;
+    production_impact: MvpProductionImpact;
+    context_id?: string;
+    source_type?: MvpOperationSourceType;
+    temporal_scope?: {
+      snapshot_id: string;
+      timezone: string;
+      valid_from: string;
+      valid_to: string;
+      generated_at: string;
+    };
+    production_plan?: {
+      plan_id: string;
+      plan_date: string;
+      planned_units: number;
+      product_mix: Array<{ variant: string; share: number; planned_units: number }>;
+    };
+    capacity_model?: {
+      active_asset_count: number;
+      planned_operating_hours: number;
+      oee: number;
+      standard_cycle_minutes_per_unit: number;
+      asset_units_per_hour: number;
+      daily_capacity_units: number;
+      basis: string;
+    };
+    event_impact?: {
+      event_id: string;
+      equipment_id: string;
+      line: string;
+      product_variant: string;
+      screen_priority: MvpScreenPriority;
+      impact_status: MvpImpactStatus;
+      estimated_lost_units: number | null;
+      basis: {
+        estimated_downtime_minutes: number;
+        asset_units_per_hour: number;
+        formula: string;
+      };
+    } | null;
+    limitations?: string[];
   };
   review_priority?: {
     level: "immediate" | "high" | "medium" | "low";

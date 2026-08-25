@@ -14,6 +14,7 @@ import type {
   MvpFactor,
   MvpLineRisk,
   MvpMetrics,
+  MvpOperationContext,
   MvpProvenance,
   MvpReportModel,
   MvpRiskStatus,
@@ -86,7 +87,7 @@ function fallbackProvenance(datasetVersionId: string): MvpProvenance {
 }
 export function adaptEvent(event: EventSummary): MvpEvent {
   const status = normalizeRiskStatus(event.status);
-  const line = event.equipment.cell_id ?? event.equipment.line ?? "미지정 셀";
+  const line = event.equipment.line ?? event.equipment.cell_id ?? "미지정 라인";
   return {
     eventId: event.event_id,
     scenarioId: event.scenario_id,
@@ -107,6 +108,59 @@ export function adaptEvent(event: EventSummary): MvpEvent {
     observedAt: event.observed_at ?? null,
     datasetVersionId: event.dataset_version_id ?? "dsv-canonical-v3-1",
     ontologyObjectId: event.ontology_object_id ?? null,
+  };
+}
+
+function operationContextFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpOperationContext | null {
+  const context = viewModel.operation_context;
+  if (!context) return null;
+  return {
+    loadLevel: context.load_level,
+    runtimeHours7d: context.runtime_hours_7d,
+    productionImpact: context.production_impact,
+    contextId: context.context_id,
+    sourceType: context.source_type,
+    temporalScope: context.temporal_scope ? {
+      snapshotId: context.temporal_scope.snapshot_id,
+      timezone: context.temporal_scope.timezone,
+      validFrom: context.temporal_scope.valid_from,
+      validTo: context.temporal_scope.valid_to,
+      generatedAt: context.temporal_scope.generated_at,
+    } : undefined,
+    productionPlan: context.production_plan ? {
+      planId: context.production_plan.plan_id,
+      planDate: context.production_plan.plan_date,
+      plannedUnits: context.production_plan.planned_units,
+      productMix: context.production_plan.product_mix.map((item) => ({
+        variant: item.variant,
+        share: item.share,
+        plannedUnits: item.planned_units,
+      })),
+    } : undefined,
+    capacityModel: context.capacity_model ? {
+      activeAssetCount: context.capacity_model.active_asset_count,
+      plannedOperatingHours: context.capacity_model.planned_operating_hours,
+      oee: context.capacity_model.oee,
+      standardCycleMinutesPerUnit: context.capacity_model.standard_cycle_minutes_per_unit,
+      assetUnitsPerHour: context.capacity_model.asset_units_per_hour,
+      dailyCapacityUnits: context.capacity_model.daily_capacity_units,
+      basis: context.capacity_model.basis,
+    } : undefined,
+    eventImpact: context.event_impact ? {
+      eventId: context.event_impact.event_id,
+      equipmentId: context.event_impact.equipment_id,
+      line: context.event_impact.line,
+      productVariant: context.event_impact.product_variant,
+      screenPriority: context.event_impact.screen_priority,
+      impactStatus: context.event_impact.impact_status,
+      estimatedLostUnits: context.event_impact.estimated_lost_units,
+      basis: {
+        estimatedDowntimeMinutes: context.event_impact.basis.estimated_downtime_minutes,
+        assetUnitsPerHour: context.event_impact.basis.asset_units_per_hour,
+        formula: context.event_impact.basis.formula,
+      },
+    } : context.event_impact === null ? null : undefined,
+    limitations: context.limitations,
   };
 }
 
@@ -573,11 +627,7 @@ export function applyAssetDetailViewModel(
       lastUpdatedAt: viewModel.data_status.last_updated_at ?? null,
       source: viewModel.data_status.source,
     },
-    operationContext: viewModel.operation_context ? {
-      loadLevel: viewModel.operation_context.load_level,
-      runtimeHours7d: viewModel.operation_context.runtime_hours_7d,
-      productionImpact: viewModel.operation_context.production_impact,
-    } : null,
+    operationContext: operationContextFromAssetDetailViewModel(viewModel),
     reviewPriority: viewModel.review_priority ? {
       level: viewModel.review_priority.level,
       reasons: viewModel.review_priority.reasons,

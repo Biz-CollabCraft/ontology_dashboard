@@ -192,6 +192,7 @@ class ManufacturingPredictiveMaintenanceService:
             feature_series=self._feature_series_for_fixture(fixture, artifact),
             runtime_prediction_history=self._runtime_history_for_fixture(fixture, artifact),
             equipment_history=self._equipment_history_for_fixture(fixture),
+            operation_context=fixture.get("operation_context"),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
