@@ -1,8 +1,9 @@
 # ADR-002: Training과 Runtime Prediction 소유권 분리 및 Feature History Execution
 
-- **상태**: Proposed (제안 — 목표 계약)
-- **날짜**: 2026-08-12
-- **결정자**: 팀 공통 (검토 진행 중)
+- **상태**: Superseded (ADR-003에 의해 대체됨)
+- **날짜**: 2026-08-12 (2026-08-25 대체)
+- **결정자**: 팀 공통
+- **대체 문서**: [`ADR-003-generator-runtime-prediction-and-anomaly-signal-ownership.md`](./ADR-003-generator-runtime-prediction-and-anomaly-signal-ownership.md)
 
 ---
 

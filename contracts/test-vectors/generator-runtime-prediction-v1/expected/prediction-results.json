@@ -1,5 +1,6 @@
 [
   {
+    "asset_id": "M14860",
     "model_id": "pdm-lightgbm",
     "model_version": "pdm-lightgbm-v1.0",
     "status": "succeeded",
@@ -22,6 +23,7 @@
     "error_message": null
   },
   {
+    "asset_id": "M14860",
     "model_id": "pdm-xgboost",
     "model_version": "pdm-xgboost-v1.0",
     "status": "succeeded",
@@ -44,6 +46,7 @@
     "error_message": null
   },
   {
+    "asset_id": "M14860",
     "model_id": "pdm-random_forest",
     "model_version": "pdm-random_forest-v1.0",
     "status": "succeeded",
@@ -64,5 +67,143 @@
     },
     "error_code": null,
     "error_message": null
+  },
+  {
+    "asset_id": "L47181",
+    "model_id": "pdm-lightgbm",
+    "model_version": "pdm-lightgbm-v1.0",
+    "status": "succeeded",
+    "prediction": "normal",
+    "probability": 0.05,
+    "threshold": 0.5,
+    "is_anomaly": false,
+    "predicted_at": "2026-08-25T11:55:00Z",
+    "artifact_ref": {
+      "uri": "models_store/artifacts/pdm-lightgbm/pdm-lightgbm-v1.0",
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "role": "model_artifact"
+    },
+    "feature_ref": {
+      "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "role": "runtime_features"
+    },
+    "error_code": null,
+    "error_message": null
+  },
+  {
+    "asset_id": "L47181",
+    "model_id": "pdm-xgboost",
+    "model_version": "pdm-xgboost-v1.0",
+    "status": "succeeded",
+    "prediction": "normal",
+    "probability": 0.12,
+    "threshold": 0.5,
+    "is_anomaly": false,
+    "predicted_at": "2026-08-25T11:55:00Z",
+    "artifact_ref": {
+      "uri": "models_store/artifacts/pdm-xgboost/pdm-xgboost-v1.0",
+      "sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
+      "role": "model_artifact"
+    },
+    "feature_ref": {
+      "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "role": "runtime_features"
+    },
+    "error_code": null,
+    "error_message": null
+  },
+  {
+    "asset_id": "L47181",
+    "model_id": "pdm-random_forest",
+    "model_version": "pdm-random_forest-v1.0",
+    "status": "succeeded",
+    "prediction": "normal",
+    "probability": 0.15,
+    "threshold": 0.5,
+    "is_anomaly": false,
+    "predicted_at": "2026-08-25T11:55:00Z",
+    "artifact_ref": {
+      "uri": "models_store/artifacts/pdm-random_forest/pdm-random_forest-v1.0",
+      "sha256": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+      "role": "model_artifact"
+    },
+    "feature_ref": {
+      "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "role": "runtime_features"
+    },
+    "error_code": null,
+    "error_message": null
+  },
+  {
+    "asset_id": "H29424",
+    "model_id": "pdm-lightgbm",
+    "model_version": "pdm-lightgbm-v1.0",
+    "status": "unknown",
+    "prediction": "unknown",
+    "probability": null,
+    "threshold": 0.5,
+    "is_anomaly": null,
+    "predicted_at": "2026-08-25T11:55:00Z",
+    "artifact_ref": {
+      "uri": "models_store/artifacts/pdm-lightgbm/pdm-lightgbm-v1.0",
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "role": "model_artifact"
+    },
+    "feature_ref": {
+      "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "role": "runtime_features"
+    },
+    "error_code": "PIPELINE_HISTORY_INSUFFICIENT",
+    "error_message": "설비 'H29424'의 관측 이력 부족 (요구치=3, 실제=1)"
+  },
+  {
+    "asset_id": "H29424",
+    "model_id": "pdm-xgboost",
+    "model_version": "pdm-xgboost-v1.0",
+    "status": "unknown",
+    "prediction": "unknown",
+    "probability": null,
+    "threshold": 0.5,
+    "is_anomaly": null,
+    "predicted_at": "2026-08-25T11:55:00Z",
+    "artifact_ref": {
+      "uri": "models_store/artifacts/pdm-xgboost/pdm-xgboost-v1.0",
+      "sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
+      "role": "model_artifact"
+    },
+    "feature_ref": {
+      "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "role": "runtime_features"
+    },
+    "error_code": "PIPELINE_HISTORY_INSUFFICIENT",
+    "error_message": "설비 'H29424'의 관측 이력 부족 (요구치=3, 실제=1)"
+  },
+  {
+    "asset_id": "H29424",
+    "model_id": "pdm-random_forest",
+    "model_version": "pdm-random_forest-v1.0",
+    "status": "unknown",
+    "prediction": "unknown",
+    "probability": null,
+    "threshold": 0.5,
+    "is_anomaly": null,
+    "predicted_at": "2026-08-25T11:55:00Z",
+    "artifact_ref": {
+      "uri": "models_store/artifacts/pdm-random_forest/pdm-random_forest-v1.0",
+      "sha256": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+      "role": "model_artifact"
+    },
+    "feature_ref": {
+      "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "role": "runtime_features"
+    },
+    "error_code": "PIPELINE_HISTORY_INSUFFICIENT",
+    "error_message": "설비 'H29424'의 관측 이력 부족 (요구치=3, 실제=1)"
   }
 ]

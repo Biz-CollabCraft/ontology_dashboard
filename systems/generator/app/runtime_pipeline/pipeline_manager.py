@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from systems.generator.app.runtime_pipeline.notification_service import NotificationService
+from systems.generator.app.runtime_pipeline.notification_worker import NotificationWorker
 from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
 from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
@@ -19,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class PipelineManager:
-    """Application singleton managing queue, worker lifecycle, and status reporting."""
+    """Application singleton managing queue, workers lifecycle, and status reporting."""
 
     _instance: Optional[PipelineManager] = None
 
@@ -28,11 +30,17 @@ class PipelineManager:
         queue: Optional[PipelineQueue] = None,
         repository: Optional[PipelineRepository] = None,
         service: Optional[PipelineService] = None,
+        notification_service: Optional[NotificationService] = None,
     ) -> None:
         self.repository = repository or PipelineRepository()
         self.queue = queue or PipelineQueue()
-        self.service = service or PipelineService(repository=self.repository)
+        self.notification_service = notification_service or NotificationService()
+        self.service = service or PipelineService(
+            repository=self.repository,
+            notification_service=self.notification_service,
+        )
         self.worker = PipelineWorker(queue=self.queue, service=self.service)
+        self.notification_worker = NotificationWorker(service=self.notification_service)
         self._is_running = False
 
     @classmethod
@@ -46,19 +54,21 @@ class PipelineManager:
         cls._instance = instance
 
     def start(self) -> None:
-        """Startup lifecycle hook: recover interrupted jobs and start background worker."""
+        """Startup lifecycle hook: recover interrupted jobs and start background workers."""
         if self._is_running:
             return
         recovered = self.queue.recover_running_on_startup()
         logger.info(f"[PipelineManager] Startup recovery completed: {recovered} running jobs reset")
         self.worker.start()
+        self.notification_worker.start()
         self._is_running = True
 
     def stop(self, timeout: float = 10.0) -> None:
-        """Shutdown lifecycle hook: drain worker and release resources."""
+        """Shutdown lifecycle hook: drain workers and release resources."""
         if not self._is_running:
             return
         self.worker.stop(timeout=timeout)
+        self.notification_worker.stop(timeout=timeout)
         self._is_running = False
         logger.info("[PipelineManager] Shutdown completed")
 

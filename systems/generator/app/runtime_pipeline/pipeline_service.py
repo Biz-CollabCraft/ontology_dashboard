@@ -25,12 +25,16 @@ from systems.generator.app.runtime_pipeline.notification_service import (
     NotificationService,
 )
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
+    PipelineAssetIdMissingError,
     PipelineInputChecksumMismatchError,
     PipelineInputNotFoundError,
+    PipelineMappingNotImplementedError,
     PipelineNoActiveModelError,
     PipelinePreprocessingFailedError,
     PipelineRuntimeFeatureFailedError,
+    PipelineTimestampInvalidError,
 )
+
 from systems.generator.app.runtime_pipeline.pipeline_repository import (
     PipelineRepository,
 )
@@ -52,6 +56,7 @@ from systems.generator.app.runtime_pipeline.prediction_service import (
     REGISTERED_BASE_MODELS,
 )
 from systems.generator.app.runtime_pipeline.runtime_feature_service import (
+    RuntimeFeatureBundle,
     RuntimeFeatureService,
 )
 
@@ -160,14 +165,14 @@ class PipelineService:
                 retryable=False,
             )
 
+        # 2. Initialize State Manager
+        run_id = f"run-{uuid.uuid4().hex[:12]}"
         source_ref = ArtifactReference(
             uri=item.source_uri,
             sha256=item.source_checksum,
-            role="source_observation_file",
-            size_bytes=source_path.stat().st_size,
+            role="source_observation_protocol",
+            size_bytes=source_path.stat().st_size if source_path.exists() else None,
         )
-
-        run_id = f"run-{uuid.uuid4().hex[:12]}"
         manager = PipelineStateManager.create(
             run_id=run_id,
             job_id=item.job_id,
@@ -175,43 +180,102 @@ class PipelineService:
         )
         manager.start_run()
 
-        raw_df = self._load_source_df(source_path)
-
         # -------------------------------------------------------------
-        # Stage 1: Preprocessing (Build Plan & Execute & Publish Dataset)
+        # Stage 1: Preprocessing (Plan building + Dataset publishing)
         # -------------------------------------------------------------
         manager.start_stage("preprocessing", input_refs=[source_ref])
         try:
+            raw_df = self._load_source_df(source_path)
+
+            # 1. Early strict validation of ID and timestamp
+            id_cols = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id") if c in raw_df.columns]
+            if not id_cols:
+                raise PipelineMappingNotImplementedError(
+                    "입력 데이터에 확정된 설비 식별자 컬럼이 없어 LLM 기반 자동 매핑이 필요합니다. 현재 단계에서는 지원되지 않습니다.",
+                    details=[{
+                        "enhancement_issue": 117,
+                        "required_capability": "llm_mapping_generation",
+                        "source_schema_fingerprint": compute_source_schema_fingerprint(raw_df),
+                    }],
+                    retryable=False,
+                )
+
+            target_id = id_cols[0]
+            raw_id_series = raw_df[target_id]
+            invalid_id_mask = (
+                raw_id_series.isna()
+                | raw_id_series.astype(str).str.strip().str.lower().isin(["", "null", "none", "nan"])
+            )
+            if invalid_id_mask.any():
+                invalid_indices = [int(i) for i in raw_df.index[invalid_id_mask]]
+                raise PipelineAssetIdMissingError(
+                    f"설비 식별자 컬럼 '{target_id}'에 누락/무효 값(None, 빈문자열, null, none)이 {len(invalid_indices)}건 존재합니다.",
+                    details=[{
+                        "id_column": target_id,
+                        "invalid_row_count": len(invalid_indices),
+                        "sample_row_indexes": invalid_indices[:10],
+                    }],
+                    retryable=False,
+                )
+
+            time_cols = [c for c in ("timestamp", "observed_at", "time", "date", "datetime") if c in raw_df.columns]
+            if time_cols:
+                target_time = time_cols[0]
+                raw_ts = raw_df[target_time]
+                if raw_ts.isna().any() or raw_ts.astype(str).str.strip().isin(["", "null", "none", "nan"]).any():
+                    raise PipelineTimestampInvalidError(
+                        f"타임스탬프 컬럼 '{target_time}'에 결측치 또는 유효하지 않은 값이 포함되어 있습니다.",
+                        details=[{"time_column": target_time}],
+                        retryable=False,
+                    )
+                try:
+                    converted_ts = pd.to_datetime(raw_ts, utc=True)
+                    if converted_ts.isna().any():
+                        raise ValueError("NaT detected")
+                except Exception as exc:
+                    raise PipelineTimestampInvalidError(
+                        f"타임스탬프 컬럼 '{target_time}' 파싱 실패: {exc}",
+                        details=[{"time_column": target_time, "error": str(exc)}],
+                        retryable=False,
+                    ) from exc
+
+            schema_fp = compute_source_schema_fingerprint(raw_df)
+
+            # Build and validate preprocessing plan
             plan = self.preprocessing_service.planner.build_plan(str(source_path))
             self.preprocessing_service.validate_plan(raw_df, plan)
 
-            clean_source_uri = item.source_uri
-            if Path(clean_source_uri).is_absolute() or ".." in Path(clean_source_uri).parts:
-                clean_source_uri = f"data/incoming/{source_path.name}"
+            # Publish plan to repository
+            try:
+                logical_src_uri = self.preprocessing_service.repository.get_logical_uri(source_path)
+            except Exception:
+                logical_src_uri = f"data/incoming/{source_path.name}"
 
-            plan["dataset_id"] = item.dataset_id
-            plan["dataset_version"] = item.dataset_version
-            plan["source_dataset_uri"] = clean_source_uri
-            plan["source_dataset_sha256"] = item.source_checksum
-            plan["source_schema_fingerprint"] = compute_source_schema_fingerprint(raw_df)
-            plan["source_dataset_size_bytes"] = source_path.stat().st_size
-
+            plan_data_to_publish = dict(plan)
+            plan_data_to_publish.update({
+                "source_dataset_uri": logical_src_uri,
+                "source_dataset_sha256": item.source_checksum,
+                "source_schema_fingerprint": schema_fp,
+                "source_dataset_size_bytes": source_path.stat().st_size if source_path.exists() else None,
+            })
             published_plan = self.preprocessing_service.repository.publish_plan(
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
-                plan_data=plan,
+                plan_data=plan_data_to_publish,
             )
 
             plan_ref = ArtifactReference(
                 uri=published_plan.preprocessing_plan_uri,
                 sha256=published_plan.sha256,
                 role="preprocessing_plan",
+                size_bytes=None,
             )
 
-            # Actual execution of plan on raw dataset
+
+            # Execute actual preprocessing
             preprocessed_df = self.preprocessing_service.preprocess_with_plan(str(source_path), plan)
 
-            # Atomically publish preprocessed dataset file
+            # Atomically publish preprocessed dataset to disk
             dataset_ref = self._publish_preprocessed_dataset(run_id, preprocessed_df)
 
             manager.succeed_stage("preprocessing", output_refs=[plan_ref, dataset_ref])
@@ -224,11 +288,12 @@ class PipelineService:
             raise
 
         # -------------------------------------------------------------
-        # Stage 2: Runtime Feature (Per-Model Extraction & Asset Isolation)
+        # Stage 2: Runtime Feature (Per-Equipment Isolation & float64 npy)
         # -------------------------------------------------------------
         manager.start_stage("runtime_feature", input_refs=[dataset_ref, plan_ref])
         model_artifacts: dict[str, LoadedModelArtifact] = {}
         model_feature_refs: dict[str, ArtifactReference] = {}
+        model_feature_bundles: dict[str, RuntimeFeatureBundle] = {}
         last_feat_error: Optional[Exception] = None
 
         try:
@@ -253,6 +318,7 @@ class PipelineService:
                         dataset_version=item.dataset_version,
                     )
                     model_feature_refs[base_model] = feat_ref
+                    model_feature_bundles[base_model] = bundle
                 except Exception as exc:
                     last_feat_error = exc
                     logger.warning(f"[PipelineService] Feature extraction failed for '{model_id}': {exc}")
@@ -281,7 +347,7 @@ class PipelineService:
             raise
 
         # -------------------------------------------------------------
-        # Stage 3: Prediction (Inference from Feature Refs Only)
+        # Stage 3: Prediction (Inference from Feature Refs per Equipment)
         # -------------------------------------------------------------
         manager.start_stage("prediction", input_refs=list(model_feature_refs.values()))
         try:
@@ -289,6 +355,7 @@ class PipelineService:
                 self.prediction_service.execute_predictions_from_feature_refs(
                     model_artifacts=model_artifacts,
                     model_feature_refs=model_feature_refs,
+                    model_feature_bundles=model_feature_bundles,
                 )
             )
             pred_output_refs = [
@@ -304,7 +371,7 @@ class PipelineService:
             raise
 
         # -------------------------------------------------------------
-        # Stage 4: Aggregation
+        # Stage 4: Aggregation (Per-Equipment Aggregation)
         # -------------------------------------------------------------
         manager.start_stage("aggregation")
         verdict: AggregationVerdict = self.aggregation_service.aggregate(model_results)
@@ -312,56 +379,48 @@ class PipelineService:
         manager.succeed_stage("aggregation", output_refs=[])
 
         # -------------------------------------------------------------
-        # Stage 5: Notification (if anomaly detected, with Outbox pattern)
+        # Stage 5: Notification (Outbox Persistence per Anomalous Equipment)
         # -------------------------------------------------------------
-        if verdict.anomaly_detected is True:
+        if verdict.anomalous_assets:
             manager.start_stage("notification")
             manager.record_notification("pending")
-            event_id = f"evt-{uuid.uuid4().hex[:16]}"
+            event_ids: list[str] = []
 
-            # Determine representative asset ID
-            asset_id = None
-            if "asset_id" in preprocessed_input_df.columns:
-                asset_id = str(preprocessed_input_df["asset_id"].iloc[-1])
-            elif "Product ID" in preprocessed_input_df.columns:
-                asset_id = str(preprocessed_input_df["Product ID"].iloc[-1])
+            for asset_id in verdict.anomalous_assets:
+                eq_verdict = verdict.equipment_verdicts[asset_id]
+                event_id = f"evt-{uuid.uuid4().hex[:16]}"
+                event_ids.append(event_id)
 
-            first_feat_ref = next((r.feature_ref.model_dump() for r in model_results if r.feature_ref), None)
+                first_feat_ref = next(
+                    (r.feature_ref.model_dump() for r in eq_verdict.model_results if r.feature_ref),
+                    None,
+                )
 
-            signal_payload = AnomalySignalPayload(
-                event_id=event_id,
-                run_id=run_id,
-                job_id=item.job_id,
-                asset_id=asset_id,
-                detected_at=now_utc_iso(),
-                dataset_id=item.dataset_id,
-                dataset_version=item.dataset_version,
-                anomaly_detected=True,
-                anomaly_models=verdict.anomaly_models,
-                model_results=model_results,
-                source_lineage=SourceLineage(
-                    source_uri=item.source_uri,
-                    source_checksum=item.source_checksum,
-                ),
-                sensor_data_ref={"uri": item.source_uri, "sha256": item.source_checksum},
-                feature_ref=first_feat_ref,
-            )
+                signal_payload = AnomalySignalPayload(
+                    event_id=event_id,
+                    run_id=run_id,
+                    job_id=item.job_id,
+                    asset_id=asset_id,
+                    detected_at=now_utc_iso(),
+                    dataset_id=item.dataset_id,
+                    dataset_version=item.dataset_version,
+                    anomaly_detected=True,
+                    anomaly_models=eq_verdict.anomaly_models,
+                    model_results=eq_verdict.model_results,
+                    source_lineage=SourceLineage(
+                        source_uri=item.source_uri,
+                        source_checksum=item.source_checksum,
+                    ),
+                    sensor_data_ref={"uri": item.source_uri, "sha256": item.source_checksum},
+                    feature_ref=first_feat_ref,
+                )
 
-            try:
-                self.notification_service.send_notification(signal_payload)
-                manager.record_notification("sent")
-                manager.succeed_stage("notification", output_refs=[])
+                # Persist to Outbox directory atomically for dedicated NotificationWorker delivery
+                self.notification_service.create_outbox_record(signal_payload)
                 self.repository.save_event(signal_payload)
-            except Exception as exc:
-                err_code = getattr(exc, "code", "PIPELINE_NOTIFICATION_FAILED")
-                retryable = getattr(exc, "retryable", True)
-                logger.warning(f"[PipelineService] Notification dispatch failed: {exc}")
-                manager.record_notification("failed")
-                manager.fail_stage("notification", err_code, str(exc), retryable=retryable)
-                manager.finish_run(verdict.overall_status)
-                self.repository.save_run_state(manager.state)
-                # Re-raise so worker can schedule notification retry
-                raise
+
+            manager.state.notification_event_ids = event_ids
+            manager.succeed_stage("notification", output_refs=[])
         else:
             manager.record_notification("not_required")
 

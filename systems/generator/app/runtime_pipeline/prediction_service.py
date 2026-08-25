@@ -1,4 +1,4 @@
-"""Service for executing multi-model predictions against active Model Artifacts."""
+"""Service for executing multi-model predictions against active Model Artifacts across equipment."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ModelPredictionResult,
     now_utc_iso,
 )
+from systems.generator.app.runtime_pipeline.runtime_feature_service import RuntimeFeatureBundle
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class LoadedModelArtifact:
 
 
 class PredictionService:
-    """Loads active Model Artifacts and executes inference from published Runtime Feature references."""
+    """Loads active Model Artifacts and executes inference from published Runtime Feature references per equipment."""
 
     def __init__(
         self,
@@ -149,6 +150,7 @@ class PredictionService:
             uri=str(target_artifact_dir).replace("\\", "/"),
             sha256=manifest_sha,
             role="model_artifact",
+            size_bytes=None,
         )
 
         return LoadedModelArtifact(
@@ -169,40 +171,21 @@ class PredictionService:
         *,
         model_artifacts: dict[str, LoadedModelArtifact],
         model_feature_refs: dict[str, ArtifactReference],
-        target_models: Optional[list[str]] = None,
+        model_feature_bundles: Optional[dict[str, RuntimeFeatureBundle]] = None,
     ) -> list[ModelPredictionResult]:
-        """Execute inference from published feature matrix npy references with model failure isolation."""
-        models_to_run = target_models or REGISTERED_BASE_MODELS
+        """Run pure model inference for each equipment over all active models consuming published features."""
         results: list[ModelPredictionResult] = []
+        now = now_utc_iso()
 
-        for base_model in models_to_run:
-            model_id = self.resolve_model_id(base_model)
-            now = now_utc_iso()
-
-            artifact = model_artifacts.get(base_model) or model_artifacts.get(model_id)
-            if artifact is None:
-                results.append(
-                    ModelPredictionResult(
-                        model_id=model_id,
-                        model_version="unknown",
-                        status="failed",
-                        prediction="failed",
-                        probability=None,
-                        threshold=0.5,
-                        is_anomaly=None,
-                        predicted_at=now,
-                        artifact_ref=None,
-                        feature_ref=None,
-                        error_code="PIPELINE_NO_ACTIVE_MODEL",
-                        error_message=f"활성화된 모델 아티팩트를 찾을 수 없습니다: '{model_id}'",
-                    )
-                )
-                continue
-
+        for base_model, artifact in model_artifacts.items():
+            model_id = artifact.model_id
             feature_ref = model_feature_refs.get(base_model) or model_feature_refs.get(model_id)
+            bundle = (model_feature_bundles or {}).get(base_model)
+
             if feature_ref is None:
                 results.append(
                     ModelPredictionResult(
+                        asset_id="unknown",
                         model_id=model_id,
                         model_version=artifact.model_version,
                         status="failed",
@@ -231,6 +214,7 @@ class PredictionService:
                 logger.warning(f"[PredictionService] Failed to load feature npy for '{model_id}': {exc}")
                 results.append(
                     ModelPredictionResult(
+                        asset_id="unknown",
                         model_id=model_id,
                         model_version=artifact.model_version,
                         status="failed",
@@ -247,68 +231,106 @@ class PredictionService:
                 )
                 continue
 
-            # Perform model inference
-            try:
-                model_obj = artifact.model
-                target_features = features_matrix[-1:] if features_matrix.ndim == 2 else features_matrix.reshape(1, -1)
+            # Map row metadata to equipments
+            # Determine latest row index per equipment
+            asset_latest_row: dict[str, int] = {}
+            if bundle and bundle.row_metadata:
+                for row_meta in bundle.row_metadata:
+                    asset_latest_row[row_meta.asset_id] = row_meta.row_index
+            else:
+                asset_latest_row["default_asset"] = len(features_matrix) - 1
 
-                if hasattr(model_obj, "predict_proba"):
-                    probs = model_obj.predict_proba(target_features)
-                    if probs.ndim == 2 and probs.shape[1] >= 2:
-                        prob_val = float(probs[0, 1])
+            # Iterate over each equipment
+            for asset_id, latest_idx in asset_latest_row.items():
+                # Check history sufficiency for this asset
+                history_status = (bundle.asset_history_status or {}).get(asset_id) if bundle else None
+                if history_status and not history_status.get("ready", True):
+                    actual_count = history_status.get("count", 0)
+                    min_req = history_status.get("minimum_history_rows", 1)
+                    results.append(
+                        ModelPredictionResult(
+                            asset_id=asset_id,
+                            model_id=model_id,
+                            model_version=artifact.model_version,
+                            status="unknown",
+                            prediction="unknown",
+                            probability=None,
+                            threshold=0.5,
+                            is_anomaly=None,
+                            predicted_at=now,
+                            artifact_ref=artifact.artifact_ref,
+                            feature_ref=feature_ref,
+                            error_code="PIPELINE_HISTORY_INSUFFICIENT",
+                            error_message=f"설비 '{asset_id}'의 관측 이력 부족 (요구치={min_req}, 실제={actual_count})",
+                        )
+                    )
+                    continue
+
+                # Extract latest feature vector for this equipment
+                target_features = features_matrix[latest_idx : latest_idx + 1]
+
+                # Perform inference
+                try:
+                    model_obj = artifact.model
+                    if hasattr(model_obj, "predict_proba"):
+                        probs = model_obj.predict_proba(target_features)
+                        if probs.ndim == 2 and probs.shape[1] >= 2:
+                            prob_val = float(probs[0, 1])
+                        else:
+                            prob_val = float(probs[0, 0])
+                    elif hasattr(model_obj, "decision_function"):
+                        df_val = float(model_obj.decision_function(target_features)[0])
+                        prob_val = float(1.0 / (1.0 + np.exp(-df_val)))
+                    elif hasattr(model_obj, "predict"):
+                        preds = model_obj.predict(target_features)
+                        prob_val = float(preds[0])
                     else:
-                        prob_val = float(probs[0, 0])
-                elif hasattr(model_obj, "decision_function"):
-                    df_val = float(model_obj.decision_function(target_features)[0])
-                    prob_val = float(1.0 / (1.0 + np.exp(-df_val)))
-                elif hasattr(model_obj, "predict"):
-                    preds = model_obj.predict(target_features)
-                    prob_val = float(preds[0])
-                else:
-                    raise PipelineModelPredictionFailedError(f"Model object has no predict method: {type(model_obj)}")
+                        raise PipelineModelPredictionFailedError(f"Model object has no predict method: {type(model_obj)}")
 
-                threshold = 0.5
-                is_anomaly = prob_val >= threshold
-                pred_label = "anomaly" if is_anomaly else "normal"
+                    threshold = 0.5
+                    is_anomaly = prob_val >= threshold
+                    pred_label = "anomaly" if is_anomaly else "normal"
 
-                results.append(
-                    ModelPredictionResult(
-                        model_id=model_id,
-                        model_version=artifact.model_version,
-                        status="succeeded",
-                        prediction=pred_label,
-                        probability=prob_val,
-                        threshold=threshold,
-                        is_anomaly=is_anomaly,
-                        predicted_at=now,
-                        artifact_ref=artifact.artifact_ref,
-                        feature_ref=feature_ref,
-                        error_code=None,
-                        error_message=None,
+                    results.append(
+                        ModelPredictionResult(
+                            asset_id=asset_id,
+                            model_id=model_id,
+                            model_version=artifact.model_version,
+                            status="succeeded",
+                            prediction=pred_label,
+                            probability=prob_val,
+                            threshold=threshold,
+                            is_anomaly=is_anomaly,
+                            predicted_at=now,
+                            artifact_ref=artifact.artifact_ref,
+                            feature_ref=feature_ref,
+                            error_code=None,
+                            error_message=None,
+                        )
                     )
-                )
-                logger.info(
-                    f"[PredictionService] Model '{model_id}' ({artifact.model_version}): "
-                    f"prediction={pred_label}, prob={prob_val:.4f}"
-                )
-            except Exception as exc:
-                err_code = getattr(exc, "code", "PIPELINE_MODEL_PREDICTION_FAILED")
-                logger.warning(f"[PredictionService] Model '{model_id}' prediction execution failed: {exc}")
-                results.append(
-                    ModelPredictionResult(
-                        model_id=model_id,
-                        model_version=artifact.model_version,
-                        status="failed",
-                        prediction="failed",
-                        probability=None,
-                        threshold=0.5,
-                        is_anomaly=None,
-                        predicted_at=now,
-                        artifact_ref=artifact.artifact_ref,
-                        feature_ref=feature_ref,
-                        error_code=err_code,
-                        error_message=str(exc),
+                    logger.info(
+                        f"[PredictionService] Equipment '{asset_id}', Model '{model_id}' ({artifact.model_version}): "
+                        f"prediction={pred_label}, prob={prob_val:.4f}"
                     )
-                )
+                except Exception as exc:
+                    err_code = getattr(exc, "code", "PIPELINE_MODEL_PREDICTION_FAILED")
+                    logger.warning(f"[PredictionService] Model '{model_id}' prediction execution failed for asset '{asset_id}': {exc}")
+                    results.append(
+                        ModelPredictionResult(
+                            asset_id=asset_id,
+                            model_id=model_id,
+                            model_version=artifact.model_version,
+                            status="failed",
+                            prediction="failed",
+                            probability=None,
+                            threshold=0.5,
+                            is_anomaly=None,
+                            predicted_at=now,
+                            artifact_ref=artifact.artifact_ref,
+                            feature_ref=feature_ref,
+                            error_code=err_code,
+                            error_message=str(exc),
+                        )
+                    )
 
         return results

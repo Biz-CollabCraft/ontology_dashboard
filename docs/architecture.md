@@ -65,8 +65,8 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
     Simulation Clock을 이용한 source Observation 생성
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
-  - **`systems/generator`**: 프로토콜 provenance에서 지정·승인된 Mapping을 적용하여 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Observation을 기반으로 Preprocessing Plan을 수립하고, Feature 단계에서 Observation, Failure, Preprocessing Plan, Feature Schema, Label Schema를 실행하여 Feature Dataset Bundle 및 versioned Model Artifact를 발행한다.
-  - **`systems/backend/app/diagnosis`**: Runtime feature 재현, runtime inference 및 제품 Result Artifact/Evidence/Prediction History 최종 생성
+  - **`systems/generator`**: 프로토콜 provenance에서 지정·승인된 Mapping을 적용하여 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Preprocessing Plan 수립, Feature Dataset Bundle 발행 및 Model Artifact를 발행하며, **런타임 파이프라인(Runtime Pipeline)을 통해 관측 데이터의 Preprocessing → Runtime Feature 생성 → 등록된 활성 Model Artifact별 Runtime Prediction → 모델 결과 취합 → Anomaly Signal 발행**을 전담한다. (단, Product Result Artifact, Evidence, Report는 생성하지 않음)
+  - **`systems/backend`**: Generator가 발행한 Anomaly Signal을 수신하여 source lineage 검증, 관련 센서값 및 설비 metadata 조회, Product Result Artifact, Evidence 및 Report 최종 생성, Dashboard API 제공을 전담한다.
   - **`systems/frontend` / Report**: 공식 read port를 통한 ViewModel composition (gen_data 원본 파일 직접 파싱 금지)
 
 `gen_data`를 제품 prediction 또는 Result Artifact의 운영 producer로 해석하지 않는다.
@@ -110,18 +110,19 @@ project-root/
 
 ## 3. systems/generator — Semantic/ML Pipeline
 
-**책임 끝점은 versioned Model Artifact publish 및 활성 버전 포인터(`latest.json`) 관리까지다.** 사용자 요청 기반 runtime inference, 제품 Result Artifact 생성, 최종 Evidence 생성은 이 시스템의 책임이 아니다.
+**책임 범위는 versioned Model Artifact 발행 및 활성 포인터(`latest.json`) 관리, 그리고 런타임 관측 데이터를 소비하여 Preprocessing → Runtime Feature 생성 → Model Artifact별 Runtime Prediction → 모델 결과 취합 → Anomaly Signal 발행까지다.** 제품 Result Artifact 생성, Evidence 및 최종 Report 생성은 Backend의 책임이다.
 
 ### 상위 아키텍처 및 책임 원칙
 
 1. **`gen_data` protocol provenance는 Extraction 단계에서 지정·승인된 Mapping을 적용하여 Canonical Observation Dataset 생성에 사용한다.**
 2. **Failure Dataset은 별도의 Authorized Training Truth Source에서 생성한다.**
-3. **Preprocessing은 Observation Dataset의 구조와 역할을 분석하여 불변 Preprocessing Plan을 발행한다. Ontology Mapping을 생성하거나 소비하지 않는다.**
-4. **Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema/Recipe와 Label Schema에 명시된 source field, operation 및 parameters를 실행하여 Feature Dataset Bundle을 발행한다.**
+3. **Preprocessing은 Observation Dataset의 구조와 역할을 분석하여 불변 Preprocessing Plan을 발행하고 전처리 데이터셋을 원자적으로 발행한다.**
+4. **Feature 단계는 Feature Schema/Recipe와 Label Schema에 명시된 source field, operation 및 parameters를 실행하여 Feature Dataset Bundle 및 런타임 Feature 행렬을 발행한다.**
 5. **Training 단계는 Feature Dataset Bundle을 소비하여 Model Artifact를 발행한다.**
-6. **런타임 추론과 근거 생성 경계**: `systems/backend/app/diagnosis`는 Generator가 발행한 Model Artifact와 Observation history를 기반으로 runtime feature 재현, inference, Result Artifact 및 Evidence 생성을 전담합니다.
-7. **소비 경계**: Backend Report와 Frontend는 공식 read boundary를 통해서만 ViewModel을 구성하며, `gen_data` 원본 로그를 직접 파싱하지 않습니다.
-8. **금지 범위**: Generator는 Product Result Artifact나 Evidence를 직접 생성하지 않습니다.
+6. **런타임 추론 및 이상 신호 경계**: `systems/generator`는 런타임 관측 데이터 파일을 소비하여 전처리, 설비별 시계열 Feature 생성, 활성 Model Artifact별 추론 및 설비별 Aggregation을 수행하고 이상 감지 시 Anomaly Signal을 발행합니다.
+7. **소비 경계**: `systems/backend`는 Generator의 Anomaly Signal을 수신하여 관측 센서값과 설비 메타데이터를 조회하고, 최종 Evidence 및 Report 생성을 전담합니다. Frontend는 Backend API만 소비합니다.
+8. **금지 범위**: Generator는 Product Result Artifact, Evidence, Report를 직접 생성하지 않으며, Backend는 Generator의 Python 코드를 직접 import하지 않습니다.
+
 
 ### Generator 구조 현황 (Current vs Target)
 

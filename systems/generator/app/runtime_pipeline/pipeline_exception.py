@@ -102,6 +102,13 @@ class PipelineAssetIdMissingError(PipelineBaseError):
     retryable = False
 
 
+class PipelineTimestampInvalidError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_TIMESTAMP_INVALID"
+    retryable = False
+
+
+
 class PipelinePreprocessingFailedError(PipelineBaseError):
     status_code = 422
     code = "PIPELINE_PREPROCESSING_FAILED"

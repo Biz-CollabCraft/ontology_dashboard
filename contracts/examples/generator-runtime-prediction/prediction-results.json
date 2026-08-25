@@ -1,5 +1,6 @@
 [
   {
+    "asset_id": "M14860",
     "model_id": "pdm-lightgbm",
     "model_version": "pdm-lightgbm-v1.0",
     "status": "succeeded",
@@ -22,6 +23,7 @@
     "error_message": null
   },
   {
+    "asset_id": "M14860",
     "model_id": "pdm-xgboost",
     "model_version": "pdm-xgboost-v1.0",
     "status": "succeeded",
@@ -44,6 +46,7 @@
     "error_message": null
   },
   {
+    "asset_id": "M14860",
     "model_id": "pdm-random_forest",
     "model_version": "pdm-random_forest-v1.0",
     "status": "succeeded",

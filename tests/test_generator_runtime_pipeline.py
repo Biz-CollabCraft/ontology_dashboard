@@ -17,6 +17,7 @@ from systems.generator.model.publisher import ModelArtifactPublisher
 from systems.generator.app.main import app
 from systems.generator.app.runtime_pipeline.aggregation_service import AggregationService
 from systems.generator.app.runtime_pipeline.notification_service import NotificationService
+from systems.generator.app.runtime_pipeline.notification_worker import NotificationWorker
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineAssetIdMissingError,
     PipelineDuplicateInputError,
@@ -24,10 +25,14 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineInputChecksumMismatchError,
     PipelineInputNotFoundError,
     PipelineJobNotFailedError,
+    PipelineMappingNotImplementedError,
     PipelineNoActiveModelError,
-    PipelineNotificationRetryExhaustedError,
+    PipelineNotificationFailedError,
+    PipelineNotificationServerError,
+    PipelineNotificationTimeoutError,
     PipelinePathNotAllowedError,
     PipelineStateTransitionInvalidError,
+    PipelineTimestampInvalidError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_manager import PipelineManager
 from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
@@ -36,6 +41,7 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     AnomalySignalPayload,
     ArtifactReference,
     ModelPredictionResult,
+    NotificationOutboxItem,
     PipelineQueueItem,
     PipelineRunState,
 )
@@ -55,12 +61,19 @@ class MockEstimator:
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         n = len(X)
         probs = np.zeros((n, 2))
-        probs[:, 0] = 1.0 - self.anomaly_prob
-        probs[:, 1] = self.anomaly_prob
+        for i in range(n):
+            # If feature 0 (Air temp) > 298.25, use configured anomaly_prob, otherwise low normal prob
+            if X.shape[1] > 0 and X[i, 0] > 298.25:
+                prob = self.anomaly_prob
+            else:
+                prob = 0.05
+            probs[i, 0] = 1.0 - prob
+            probs[i, 1] = prob
         return probs
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
 
 
 @pytest.fixture
@@ -197,16 +210,9 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         publisher=publisher,
     )
     agg_service = AggregationService()
+    notif_service = NotificationService(outbox_dir=outbox_dir)
+    notif_worker = NotificationWorker(service=notif_service)
 
-    sent_signals = []
-
-    class MockNotificationService(NotificationService):
-        def send_notification(self, payload: AnomalySignalPayload):
-            self.save_to_outbox(payload, status="sent")
-            sent_signals.append(payload)
-            return {"delivered": True, "status_code": 200}
-
-    notif_service = MockNotificationService(outbox_dir=outbox_dir)
     service = PipelineService(
         repository=repository,
         preprocessing_service=None,
@@ -216,7 +222,12 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         notification_service=notif_service,
     )
     worker = PipelineWorker(queue=queue, service=service, max_attempts=5, retry_backoff_seconds=0.01)
-    manager = PipelineManager(queue=queue, repository=repository, service=service)
+    manager = PipelineManager(
+        queue=queue,
+        repository=repository,
+        service=service,
+        notification_service=notif_service,
+    )
 
     return {
         "tmp_path": tmp_path,
@@ -232,7 +243,8 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         "service": service,
         "worker": worker,
         "manager": manager,
-        "sent_signals": sent_signals,
+        "notif_service": notif_service,
+        "notif_worker": notif_worker,
     }
 
 
@@ -259,191 +271,226 @@ def create_sample_observation_jsonl(file_path: Path, num_rows: int = 5, asset_id
 
 
 # =====================================================================
-# 1. Stage Separation & Preprocessing Dataset Publishing Test
+# 1. Multi-Equipment Prediction and Aggregation Test
 # =====================================================================
 
-def test_full_pipeline_5_stages_and_dataset_publishing(isolated_runtime_env):
+def test_multi_equipment_prediction_and_aggregation(isolated_runtime_env):
     env = isolated_runtime_env
     incoming = env["incoming_dir"]
-    src_file, sha256 = create_sample_observation_jsonl(incoming / "obs_01.jsonl", num_rows=5)
+
+    # Create multi-equipment input: Asset A (3 rows), Asset B (3 rows), Asset C (1 row)
+    records = [
+        # Asset A (3 rows -> ready)
+        {"UDI": 1, "Product ID": "M14860_01", "asset_id": "M14860", "Air temperature [K]": 298.1, "Process temperature [K]": 308.6, "Rotational speed [rpm]": 1550, "Torque [Nm]": 42.0, "timestamp": "2026-08-25T10:00:00Z"},
+        {"UDI": 2, "Product ID": "M14860_02", "asset_id": "M14860", "Air temperature [K]": 298.2, "Process temperature [K]": 308.7, "Rotational speed [rpm]": 1540, "Torque [Nm]": 43.0, "timestamp": "2026-08-25T10:01:00Z"},
+        {"UDI": 3, "Product ID": "M14860_03", "asset_id": "M14860", "Air temperature [K]": 298.3, "Process temperature [K]": 308.8, "Rotational speed [rpm]": 1530, "Torque [Nm]": 44.0, "timestamp": "2026-08-25T10:02:00Z"},
+        # Asset B (3 rows -> ready)
+        {"UDI": 4, "Product ID": "L47181_01", "asset_id": "L47181", "Air temperature [K]": 298.0, "Process temperature [K]": 308.5, "Rotational speed [rpm]": 1400, "Torque [Nm]": 45.0, "timestamp": "2026-08-25T10:00:00Z"},
+        {"UDI": 5, "Product ID": "L47181_02", "asset_id": "L47181", "Air temperature [K]": 298.1, "Process temperature [K]": 308.6, "Rotational speed [rpm]": 1405, "Torque [Nm]": 46.0, "timestamp": "2026-08-25T10:01:00Z"},
+        {"UDI": 6, "Product ID": "L47181_03", "asset_id": "L47181", "Air temperature [K]": 298.2, "Process temperature [K]": 308.7, "Rotational speed [rpm]": 1410, "Torque [Nm]": 47.0, "timestamp": "2026-08-25T10:02:00Z"},
+        # Asset C (1 row -> insufficient history when min=2)
+        {"UDI": 7, "Product ID": "H29424_01", "asset_id": "H29424", "Air temperature [K]": 298.0, "Process temperature [K]": 308.4, "Rotational speed [rpm]": 1420, "Torque [Nm]": 40.0, "timestamp": "2026-08-25T10:00:00Z"},
+    ]
+    src_file = incoming / "multi_equipments.jsonl"
+    src_file.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+    sha256 = compute_file_sha256(src_file)
 
     item = env["queue"].enqueue(
-        job_id="job-stage-test-01",
+        job_id="job-multi-eq-01",
         source_uri=str(src_file),
         source_checksum=sha256,
     )
 
     run_state = env["worker"].process_one()
     assert run_state is not None
-    assert run_state.status == "succeeded"
+    assert run_state.status == "partially_succeeded"  # because Asset C is unknown
 
-    # Verify 5 distinct stages exist
-    assert "preprocessing" in run_state.stages
-    assert "runtime_feature" in run_state.stages
-    assert "prediction" in run_state.stages
-    assert "aggregation" in run_state.stages
-    assert "notification" in run_state.stages
+    # 1. Check prediction results per asset
+    results = run_state.prediction_results
+    assert len(results) == 9  # 3 assets * 3 models
 
-    # Preprocessing stage must publish both plan and preprocessed dataset
-    prep_stage = run_state.stages["preprocessing"]
-    assert prep_stage.status == "succeeded"
-    roles = [r.role for r in prep_stage.output_refs]
-    assert "preprocessing_plan" in roles
-    assert "preprocessed_dataset" in roles
+    assets_in_results = {r.asset_id for r in results}
+    assert assets_in_results == {"M14860", "L47181", "H29424"}
 
-    # Verify preprocessed dataset file physically exists
-    dataset_ref = next(r for r in prep_stage.output_refs if r.role == "preprocessed_dataset")
-    assert Path(dataset_ref.uri).is_file()
+    # Asset C must have status="unknown" and PIPELINE_HISTORY_INSUFFICIENT
+    asset_c_results = [r for r in results if r.asset_id == "H29424"]
+    for r in asset_c_results:
+        assert r.status == "unknown"
+        assert r.error_code == "PIPELINE_HISTORY_INSUFFICIENT"
 
-    # Runtime feature stage
-    feat_stage = run_state.stages["runtime_feature"]
-    assert feat_stage.status == "succeeded"
-    assert len(feat_stage.output_refs) == 3
-    for r in feat_stage.output_refs:
-        assert r.role == "runtime_features"
-        assert Path(r.uri).is_file()
-
-    # Notification stage & signal
-    assert run_state.anomaly_detected is True
-    assert run_state.notification_status == "sent"
-    assert len(env["sent_signals"]) == 1
+    # 2. Check outbox records
+    outbox_items = env["notif_service"].list_outbox_items()
+    # Only anomalous assets should have Outbox items generated
+    # (Asset A has xgboost & random_forest anomalies)
+    assert len(outbox_items) == 1
+    assert outbox_items[0].asset_id == "M14860"
+    assert outbox_items[0].status == "pending"
+    assert len(run_state.notification_event_ids) == 1
+    assert run_state.notification_event_ids[0] == outbox_items[0].event_id
 
 
 # =====================================================================
-# 2. Equipment-Isolated Runtime Feature Calculation Test
+# 2. Notification Worker Outbox Retries & Decoupling Test
 # =====================================================================
 
-def test_equipment_isolated_feature_calculation(isolated_runtime_env):
+def test_notification_worker_decoupled_retry_and_backoff(isolated_runtime_env, monkeypatch):
     env = isolated_runtime_env
-    incoming = env["incoming_dir"]
+    notif_service = env["notif_service"]
+    notif_worker = env["notif_worker"]
 
-    # Create mixed observation file with 2 assets: A and B
-    records = [
-        # Asset A rows
-        {"asset_id": "Asset_A", "Air temperature [K]": 300.0, "Process temperature [K]": 310.0, "Rotational speed [rpm]": 1500, "timestamp": "2026-08-25T10:00:00Z"},
-        {"asset_id": "Asset_A", "Air temperature [K]": 305.0, "Process temperature [K]": 315.0, "Rotational speed [rpm]": 1510, "timestamp": "2026-08-25T10:01:00Z"},
-        # Asset B rows
-        {"asset_id": "Asset_B", "Air temperature [K]": 400.0, "Process temperature [K]": 410.0, "Rotational speed [rpm]": 1600, "timestamp": "2026-08-25T10:00:00Z"},
-        {"asset_id": "Asset_B", "Air temperature [K]": 405.0, "Process temperature [K]": 415.0, "Rotational speed [rpm]": 1610, "timestamp": "2026-08-25T10:01:00Z"},
-    ]
-    src_file = incoming / "mixed_assets.jsonl"
-    src_file.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
-    sha256 = compute_file_sha256(src_file)
-
-    item = env["queue"].enqueue(
-        job_id="job-asset-iso-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+    payload = AnomalySignalPayload(
+        event_id="evt-retry-01",
+        run_id="run-01",
+        job_id="job-01",
+        asset_id="M14860",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+        anomaly_detected=True,
+        anomaly_models=["pdm-xgboost"],
+        model_results=[
+            ModelPredictionResult(
+                asset_id="M14860",
+                model_id="pdm-xgboost",
+                model_version="pdm-xgboost-v1.0",
+                status="succeeded",
+                prediction="anomaly",
+                probability=0.88,
+                threshold=0.5,
+                is_anomaly=True,
+            )
+        ],
+        source_lineage={"source_uri": "test.jsonl", "source_checksum": "0" * 64},
     )
 
-    run_state = env["worker"].process_one()
-    assert run_state is not None
-    assert run_state.status == "succeeded"
+    # 1. Create outbox record
+    item = notif_service.create_outbox_record(payload)
+    assert item.status == "pending"
+    assert item.attempt == 0
 
-    # Check that lag1 for first row of Asset_B is fill_zero (0.0), NOT 305.0 from Asset_A!
-    feat_stage = run_state.stages["runtime_feature"]
-    feat_ref = feat_stage.output_refs[0]
-    matrix = np.load(Path(feat_ref.uri))
+    # 2. Simulate 500 Server Error on first attempt
+    def mock_send_500(pl):
+        raise PipelineNotificationServerError("500 Internal Server Error")
 
-    # Column 0 = feat_air_temp, Column 1 = feat_air_temp_lag1
-    # Row 0: Asset_A row 1 -> lag1 is 0.0 (fill_zero)
-    # Row 1: Asset_A row 2 -> lag1 is 300.0
-    # Row 2: Asset_B row 1 -> lag1 MUST BE 0.0, NEVER 305.0 from Asset_A!
-    # Row 3: Asset_B row 2 -> lag1 is 400.0
-    assert matrix[0, 1] == 0.0
-    assert matrix[1, 1] == 300.0
-    assert matrix[2, 1] == 0.0, f"Asset leak detected! Expected 0.0, got {matrix[2, 1]}"
-    assert matrix[3, 1] == 400.0
+    monkeypatch.setattr(notif_service, "send_once", mock_send_500)
+
+    # Process pending items
+    processed = notif_worker.process_pending()
+    assert processed == 1
+
+    updated_item = notif_service.get_outbox_item("evt-retry-01")
+    assert updated_item is not None
+    assert updated_item.status == "retry_wait"
+    assert updated_item.attempt == 1
+    assert updated_item.next_retry_at is not None
+
+    # 3. Simulate 400 Bad Request error (non-retryable)
+    def mock_send_400(pl):
+        raise PipelineNotificationFailedError("400 Bad Request", retryable=False)
+
+    monkeypatch.setattr(notif_service, "send_once", mock_send_400)
+    updated_item.next_retry_at = None  # force due immediately
+    notif_service.save_outbox_item(updated_item)
+
+    processed = notif_worker.process_pending()
+    assert processed == 1
+
+    failed_item = notif_service.get_outbox_item("evt-retry-01")
+    assert failed_item.status == "failed"
+    assert failed_item.attempt == 2
+
+    # 4. Successful delivery for a new item
+    success_payload = payload.model_copy(update={"event_id": "evt-success-01"})
+    notif_service.create_outbox_record(success_payload)
+
+    def mock_send_200(pl):
+        return {"delivered": True, "status_code": 200}
+
+    monkeypatch.setattr(notif_service, "send_once", mock_send_200)
+
+    processed = notif_worker.process_pending()
+    assert processed >= 1
+    sent_item = notif_service.get_outbox_item("evt-success-01")
+    assert sent_item.status == "sent"
+    assert sent_item.attempt == 1
 
 
-def test_missing_asset_id_fails_closed(isolated_runtime_env):
+# =====================================================================
+# 3. Input Validation Fail-Closed Tests (ID & Timestamp & Mapping)
+# =====================================================================
+
+def test_missing_or_blank_asset_id_fails_closed(isolated_runtime_env):
     env = isolated_runtime_env
     incoming = env["incoming_dir"]
 
-    # Observation data with NO asset ID column
+    # Blank / whitespace asset_id
     records = [
-        {"Air temperature [K]": 300.0, "Process temperature [K]": 310.0, "Rotational speed [rpm]": 1500, "timestamp": "2026-08-25T10:00:00Z"},
-        {"Air temperature [K]": 305.0, "Process temperature [K]": 315.0, "Rotational speed [rpm]": 1510, "timestamp": "2026-08-25T10:01:00Z"},
+        {"asset_id": "  ", "Air temperature [K]": 300.0, "Process temperature [K]": 310.0, "Rotational speed [rpm]": 1500, "timestamp": "2026-08-25T10:00:00Z"},
+        {"asset_id": "null", "Air temperature [K]": 305.0, "Process temperature [K]": 315.0, "Rotational speed [rpm]": 1510, "timestamp": "2026-08-25T10:01:00Z"},
     ]
-    src_file = incoming / "no_id.jsonl"
+    src_file = incoming / "blank_id.jsonl"
     src_file.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
     sha256 = compute_file_sha256(src_file)
 
     item = env["queue"].enqueue(
-        job_id="job-no-id-01",
+        job_id="job-blank-id-01",
         source_uri=str(src_file),
         source_checksum=sha256,
     )
 
     run_state = env["worker"].process_one()
     assert run_state is None
-    # Verify queue item marked failed immediately (retryable=False)
     q_items = env["queue"].list_items(status="failed")
-    assert len(q_items) == 1
-    assert q_items[0].error_code == "PIPELINE_ASSET_ID_MISSING"
+    assert any(q.error_code == "PIPELINE_ASSET_ID_MISSING" for q in q_items)
 
 
-# =====================================================================
-# 3. Non-Retryable vs Retryable (Max 5 Attempts) Tests
-# =====================================================================
-
-def test_non_retryable_error_fails_immediately(isolated_runtime_env):
+def test_invalid_timestamp_fails_closed(isolated_runtime_env):
     env = isolated_runtime_env
     incoming = env["incoming_dir"]
-    src_file, sha256 = create_sample_observation_jsonl(incoming / "corrupt.jsonl", num_rows=1)
 
-    # Only 1 row -> PIPELINE_HISTORY_INSUFFICIENT (non-retryable)
+    # Invalid timestamp string
+    records = [
+        {"asset_id": "M14860", "Air temperature [K]": 300.0, "Process temperature [K]": 310.0, "Rotational speed [rpm]": 1500, "timestamp": "not-a-valid-timestamp"},
+        {"asset_id": "M14860", "Air temperature [K]": 305.0, "Process temperature [K]": 315.0, "Rotational speed [rpm]": 1510, "timestamp": "2026-08-25T10:01:00Z"},
+    ]
+    src_file = incoming / "bad_ts.jsonl"
+    src_file.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+    sha256 = compute_file_sha256(src_file)
+
     item = env["queue"].enqueue(
-        job_id="job-non-retry-01",
+        job_id="job-bad-ts-01",
         source_uri=str(src_file),
         source_checksum=sha256,
     )
 
-    # Single process call should mark it directly as failed
     run_state = env["worker"].process_one()
     assert run_state is None
-
-    items = env["queue"].list_items()
-    assert len(items) == 1
-    assert items[0].status == "failed"
-    assert items[0].attempt == 1
+    q_items = env["queue"].list_items(status="failed")
+    assert any(q.error_code == "PIPELINE_TIMESTAMP_INVALID" for q in q_items)
 
 
-def test_retryable_error_retries_up_to_max_attempts(isolated_runtime_env):
+def test_unsupported_mapping_fails_with_501(isolated_runtime_env):
     env = isolated_runtime_env
     incoming = env["incoming_dir"]
-    src_file, sha256 = create_sample_observation_jsonl(incoming / "retry_test.jsonl", num_rows=5)
 
-    # Monkeypatch notification service to always fail with 500 server error (retryable)
-    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineNotificationServerError
-
-    class AlwaysFailingNotif(NotificationService):
-        def send_notification(self, payload):
-            raise PipelineNotificationServerError("Temporary 500 server error")
-
-    env["service"].notification_service = AlwaysFailingNotif(outbox_dir=env["outbox_dir"])
-
+    # Raw sensor data with NO identifiable ID column at all
+    records = [
+        {"Sensor_A": 300.0, "Sensor_B": 310.0, "Sensor_C": 1500, "timestamp": "2026-08-25T10:00:00Z"},
+        {"Sensor_A": 305.0, "Sensor_B": 315.0, "Sensor_C": 1510, "timestamp": "2026-08-25T10:01:00Z"},
+    ]
+    src_file = incoming / "unmapped.jsonl"
+    src_file.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
+    sha256 = compute_file_sha256(src_file)
 
     item = env["queue"].enqueue(
-        job_id="job-retry-loop-01",
+        job_id="job-unmapped-01",
         source_uri=str(src_file),
         source_checksum=sha256,
     )
 
-    # Attempts 1 to 4 should transition to queued/retry_wait
-    for att in range(1, 5):
-        run = env["worker"].process_one()
-        assert run is None
-        items = env["queue"].list_items()
-        assert items[0].status == "queued"
-        assert items[0].attempt == att + 1
-
-    # Attempt 5 should fail definitively
-    run = env["worker"].process_one()
-    assert run is None
-    items = env["queue"].list_items()
-    assert items[0].status == "failed"
-    assert items[0].attempt == 5
+    run_state = env["worker"].process_one()
+    assert run_state is None
+    q_items = env["queue"].list_items(status="failed")
+    assert any(q.error_code == "PIPELINE_MAPPING_NOT_IMPLEMENTED" for q in q_items)
 
 
 # =====================================================================
@@ -455,7 +502,7 @@ def test_retry_failed_job_transaction(isolated_runtime_env):
     incoming = env["incoming_dir"]
     src_file, sha256 = create_sample_observation_jsonl(incoming / "re_enqueue.jsonl", num_rows=1)
 
-    # 1. Enqueue and let it fail
+    # 1. Enqueue and let it fail (1 row -> history insufficient)
     item = env["queue"].enqueue(
         job_id="job-fail-first",
         source_uri=str(src_file),
@@ -492,7 +539,6 @@ def test_retry_failed_job_transaction(isolated_runtime_env):
 
 def test_path_security_and_allowed_roots(isolated_runtime_env):
     env = isolated_runtime_env
-    incoming = env["incoming_dir"]
 
     # 1. Path traversal rejected
     with pytest.raises(PipelinePathNotAllowedError):

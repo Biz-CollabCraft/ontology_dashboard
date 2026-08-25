@@ -7,6 +7,7 @@
     "event_id",
     "run_id",
     "job_id",
+    "asset_id",
     "detected_at",
     "dataset_id",
     "dataset_version",
@@ -29,7 +30,8 @@
       "minLength": 1
     },
     "asset_id": {
-      "type": ["string", "null"]
+      "type": "string",
+      "minLength": 1
     },
     "detected_at": {
       "type": "string",
@@ -55,6 +57,7 @@
       "items": {
         "type": "object",
         "required": [
+          "asset_id",
           "model_id",
           "model_version",
           "status",
@@ -63,6 +66,7 @@
           "predicted_at"
         ],
         "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
           "model_id": { "type": "string" },
           "model_version": { "type": "string" },
           "status": { "type": "string", "enum": ["succeeded", "failed", "unknown"] },
@@ -99,7 +103,8 @@
       "type": ["object", "null"],
       "properties": {
         "uri": { "type": "string" },
-        "sha256": { "type": "string" }
+        "sha256": { "type": "string" },
+        "role": { "type": "string" }
       }
     }
   },

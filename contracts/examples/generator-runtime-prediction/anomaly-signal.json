@@ -10,6 +10,7 @@
   "anomaly_models": ["pdm-xgboost", "pdm-random_forest"],
   "model_results": [
     {
+      "asset_id": "M14860",
       "model_id": "pdm-lightgbm",
       "model_version": "pdm-lightgbm-v1.0",
       "status": "succeeded",
@@ -32,6 +33,7 @@
       "error_message": null
     },
     {
+      "asset_id": "M14860",
       "model_id": "pdm-xgboost",
       "model_version": "pdm-xgboost-v1.0",
       "status": "succeeded",
@@ -54,6 +56,7 @@
       "error_message": null
     },
     {
+      "asset_id": "M14860",
       "model_id": "pdm-random_forest",
       "model_version": "pdm-random_forest-v1.0",
       "status": "succeeded",
@@ -87,6 +90,7 @@
   },
   "feature_ref": {
     "uri": "models_store/cache/runtime_features/runtime-feat-01.npy",
-    "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "role": "runtime_features"
   }
 }

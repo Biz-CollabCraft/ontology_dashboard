@@ -4,6 +4,7 @@
   "title": "GeneratorModelPredictionResult",
   "type": "object",
   "required": [
+    "asset_id",
     "model_id",
     "model_version",
     "status",
@@ -12,6 +13,10 @@
     "predicted_at"
   ],
   "properties": {
+    "asset_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "model_id": {
       "type": "string",
       "minLength": 1

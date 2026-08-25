@@ -57,6 +57,7 @@
       "items": {
         "type": "object",
         "required": [
+          "asset_id",
           "model_id",
           "model_version",
           "status",
@@ -65,6 +66,7 @@
           "predicted_at"
         ],
         "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
           "model_id": { "type": "string" },
           "model_version": { "type": "string" },
           "status": { "type": "string", "enum": ["succeeded", "failed", "unknown"] },
@@ -85,6 +87,10 @@
       "type": ["string", "null"],
       "enum": ["not_required", "pending", "sent", "failed", null]
     },
+    "notification_event_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "started_at": { "type": ["string", "null"], "format": "date-time" },
     "finished_at": { "type": ["string", "null"], "format": "date-time" },
     "errors": {
@@ -99,7 +105,7 @@
           "details": { "type": "array" },
           "retryable": { "type": "boolean" },
           "attempt": { "type": "integer" },
-          "occurred_at": { "type": "string" }
+          "occurred_at": { "type": "string", "format": "date-time" }
         }
       }
     }

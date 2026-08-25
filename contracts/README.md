@@ -51,9 +51,15 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Generator Training Golden Vector | **Current** | `contracts/test-vectors/generator-training-v1/` (데이터 분할 결정성 및 불변 Model Artifact 검증) |
 | Model Artifact Schema | **Current** | `contracts/schemas/model-artifact.schema.json` (6개 파일 불변 아티팩트 및 manifest 무결성 정본) |
 | Runtime Overlay Observation / Available | **Current** | `contracts/schemas/runtime-overlay-observation.schema.json`, `runtime-overlay-observations-available.schema.json`, `contracts/test-vectors/runtime-overlay-output-v1/` (정비 후 CNC Overlay, digest 경로 identity, Unicode canonical checksum) |
+| Generator Runtime Pipeline Run State Schema | **Current** | `contracts/schemas/generator-pipeline-run-state.schema.json` (런타임 5대 Stage 상태 및 설비별 다중 모델 예측 결과) |
+| Generator Runtime Feature Schema | **Current** | `contracts/schemas/generator-runtime-feature.schema.json` (런타임 피처 행렬 및 설비·시간 metadata) |
+| Generator Model Prediction Result Schema | **Current** | `contracts/schemas/generator-model-prediction-result.schema.json` (설비별 모델 추론 확률 및 이상 판정) |
+| Generator Anomaly Signal Schema | **Current** | `contracts/schemas/generator-anomaly-signal.schema.json` (설비 단위 이상 감지 신호 및 Outbox/Backend 전달 계약) |
+| Generator Runtime Prediction Golden Vector | **Current** | `contracts/test-vectors/generator-runtime-prediction-v1/` (다중 설비 런타임 예측 및 이상 신호 검증) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
+
 | Generator Extraction Result Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
 | Generator Feature Series Schema | **Target — 미작성** | Feature 후속 확장 단계에서 작성 예정 |

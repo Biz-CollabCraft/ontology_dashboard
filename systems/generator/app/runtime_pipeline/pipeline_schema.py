@@ -52,10 +52,20 @@ class StageState(BaseModel):
     retryable: Optional[bool] = Field(None, description="Whether failed stage is retryable")
 
 
-class ModelPredictionResult(BaseModel):
-    """Inference result for a single registered model."""
+class RuntimeFeatureRowMetadata(BaseModel):
+    """Row metadata mapping each feature matrix row to equipment and timestamp."""
     model_config = ConfigDict(extra="forbid")
 
+    row_index: int = Field(..., ge=0, description="Row index in feature matrix")
+    asset_id: str = Field(..., description="Target asset/equipment identifier")
+    observed_at: str = Field(..., description="Observation timestamp in UTC ISO format")
+
+
+class ModelPredictionResult(BaseModel):
+    """Inference result for a single registered model for a specific equipment."""
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str = Field(..., description="Target equipment identifier")
     model_id: str = Field(..., description="Unique model identifier, e.g. pdm-lightgbm")
     model_version: str = Field(..., description="Published model artifact version")
     status: Literal["succeeded", "failed", "unknown"] = Field("succeeded", description="Model evaluation status")
@@ -88,11 +98,14 @@ class PipelineRunState(BaseModel):
     source_ref: ArtifactReference = Field(..., description="Source observation protocol file reference")
     stages: dict[str, StageState] = Field(default_factory=dict, description="Stage execution map")
     prediction_results: list[ModelPredictionResult] = Field(
-        default_factory=list, description="Array of predictions for all registered models"
+        default_factory=list, description="Array of predictions for all registered models across equipments"
     )
     anomaly_detected: Optional[bool] = Field(None, description="Whether any model detected an anomaly")
     notification_status: Optional[Literal["not_required", "pending", "sent", "failed"]] = Field(
         None, description="Notification dispatch status"
+    )
+    notification_event_ids: list[str] = Field(
+        default_factory=list, description="List of generated anomaly signal event IDs"
     )
     started_at: Optional[str] = Field(None, description="ISO start timestamp")
     finished_at: Optional[str] = Field(None, description="ISO finish timestamp")
@@ -124,7 +137,6 @@ class PipelineQueueItem(BaseModel):
     error_code: Optional[str] = Field(None, description="Error code if item failed")
 
 
-
 class SourceLineage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -134,21 +146,42 @@ class SourceLineage(BaseModel):
 
 
 class AnomalySignalPayload(BaseModel):
-    """External anomaly signal payload sent to receiving system."""
+    """External anomaly signal payload sent to receiving system per anomalous equipment."""
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(..., description="Unique event identifier (Idempotency Key)")
     run_id: str = Field(..., description="Associated pipeline run ID")
     job_id: str = Field(..., description="Associated queue job ID")
-    asset_id: Optional[str] = Field(None, description="Target asset identifier if available")
+    asset_id: str = Field(..., description="Target equipment identifier")
     detected_at: str = Field(default_factory=now_utc_iso, description="Detection timestamp")
     dataset_id: str = Field(..., description="Dataset identifier")
     dataset_version: str = Field(..., description="Dataset version")
     anomaly_detected: bool = Field(True, description="Always true when signal is dispatched")
     anomaly_models: list[str] = Field(default_factory=list, description="List of model IDs flagging anomaly")
     model_results: list[ModelPredictionResult] = Field(
-        ..., min_length=1, description="Full array of model prediction results"
+        ..., min_length=1, description="Array of model prediction results for this equipment"
     )
     source_lineage: SourceLineage = Field(..., description="Input lineage traceability")
     sensor_data_ref: Optional[dict[str, Any]] = Field(None, description="Sensor data reference")
     feature_ref: Optional[dict[str, Any]] = Field(None, description="Runtime feature reference")
+
+
+class NotificationOutboxItem(BaseModel):
+    """Item managed in notification outbox."""
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(..., description="Unique event identifier")
+    run_id: str = Field(..., description="Associated pipeline run ID")
+    job_id: str = Field(..., description="Associated queue job ID")
+    asset_id: str = Field(..., description="Target equipment identifier")
+    status: Literal["pending", "sending", "sent", "retry_wait", "failed"] = Field(
+        "pending", description="Outbox delivery status"
+    )
+    attempt: int = Field(0, ge=0, description="Attempt count")
+    max_attempts: int = Field(5, ge=1, description="Max delivery attempts")
+    next_retry_at: Optional[str] = Field(None, description="ISO timestamp for next retry")
+    last_error_code: Optional[str] = Field(None, description="Last error code if failed")
+    last_error_message: Optional[str] = Field(None, description="Last error message if failed")
+    created_at: str = Field(default_factory=now_utc_iso, description="Created timestamp")
+    updated_at: str = Field(default_factory=now_utc_iso, description="Updated timestamp")
+    payload: AnomalySignalPayload = Field(..., description="Signal payload to deliver")

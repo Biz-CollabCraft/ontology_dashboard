@@ -6,7 +6,7 @@ import hashlib
 import logging
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
@@ -25,9 +25,11 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineFeatureSchemaMismatchError,
     PipelineHistoryInsufficientError,
     PipelineRuntimeFeatureFailedError,
+    PipelineTimestampInvalidError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
+    RuntimeFeatureRowMetadata,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,11 +40,12 @@ class RuntimeFeatureBundle:
     """In-memory bundle returned from computation before atomic persistence."""
     features: np.ndarray
     feature_columns: list[str]
-    row_metadata: list[dict[str, Any]]
+    row_metadata: list[RuntimeFeatureRowMetadata]
     runtime_feature_version: str
     feature_schema_version: str
     dataset_id: str
     dataset_version: str
+    asset_history_status: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class RuntimeFeatureService:
@@ -81,10 +84,21 @@ class RuntimeFeatureService:
                 retryable=False,
             )
 
-        if df[target_id_col].isna().all():
+        # Strict validation: reject any null, nan, empty string, whitespace, "null", "none"
+        raw_id_series = df[target_id_col]
+        invalid_mask = (
+            raw_id_series.isna()
+            | raw_id_series.astype(str).str.strip().str.lower().isin(["", "null", "none", "nan"])
+        )
+        if invalid_mask.any():
+            invalid_indices = [int(i) for i in df.index[invalid_mask]]
             raise PipelineAssetIdMissingError(
-                f"설비 식별자 컬럼 '{target_id_col}'의 모든 값이 결측치(NaN/None)입니다.",
-                details=[{"id_column": target_id_col}],
+                f"설비 식별자 컬럼 '{target_id_col}'에 누락/무효 값(None, 빈문자열, null, none)이 {len(invalid_indices)}건 존재합니다.",
+                details=[{
+                    "id_column": target_id_col,
+                    "invalid_row_count": len(invalid_indices),
+                    "sample_row_indexes": invalid_indices[:10],
+                }],
                 retryable=False,
             )
 
@@ -168,20 +182,56 @@ class RuntimeFeatureService:
 
         df_sorted = preprocessed_df.copy()
         if time_col and time_col in df_sorted.columns:
+            # Validate timestamp values strictly (no silent except: pass)
+            raw_ts = df_sorted[time_col]
+            if raw_ts.isna().any() or raw_ts.astype(str).str.strip().isin(["", "null", "none", "nan"]).any():
+                raise PipelineTimestampInvalidError(
+                    f"타임스탬프 컬럼 '{time_col}'에 결측치 또는 유효하지 않은 값이 포함되어 있습니다.",
+                    details=[{"time_column": time_col}],
+                    retryable=False,
+                )
             try:
-                df_sorted[time_col] = pd.to_datetime(df_sorted[time_col], utc=True)
-            except Exception:
-                pass
+                converted_ts = pd.to_datetime(raw_ts, utc=True)
+            except Exception as exc:
+                raise PipelineTimestampInvalidError(
+                    f"타임스탬프 컬럼 '{time_col}' 파싱 실패: {exc}",
+                    details=[{"time_column": time_col, "error": str(exc)}],
+                    retryable=False,
+                ) from exc
+
+            if converted_ts.isna().any():
+                raise PipelineTimestampInvalidError(
+                    f"타임스탬프 변환 후 NaT가 발견되었습니다: 컬럼 '{time_col}'",
+                    details=[{"time_column": time_col}],
+                    retryable=False,
+                )
+            df_sorted[time_col] = converted_ts.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             df_sorted = df_sorted.sort_values(by=[id_col, time_col]).reset_index(drop=True)
         else:
             df_sorted = df_sorted.sort_values(by=[id_col]).reset_index(drop=True)
 
-        # 2. Validate against history requirement
+        # 2. Per-equipment History Requirement evaluation
         min_rows = int(history_requirement_dict.get("minimum_history_rows", 1))
-        if len(df_sorted) < min_rows:
+        grouped_counts = df_sorted.groupby(id_col).size().to_dict()
+        asset_history_status: dict[str, dict[str, Any]] = {}
+        ready_count = 0
+
+        for asset_key, count in grouped_counts.items():
+            is_ready = bool(count >= min_rows)
+            if is_ready:
+                ready_count += 1
+            asset_history_status[str(asset_key)] = {
+                "ready": is_ready,
+                "count": int(count),
+                "minimum_history_rows": min_rows,
+            }
+
+        # If ALL equipments have insufficient history -> fail stage
+        if ready_count == 0:
             raise PipelineHistoryInsufficientError(
-                f"관측 이력 행 수가 부족합니다: 요구치={min_rows}, 실제={len(df_sorted)}",
-                details=[{"minimum_history_rows": min_rows, "actual_rows": len(df_sorted)}],
+                f"모든 설비의 관측 이력 행 수가 부족합니다 (요구치={min_rows}): {grouped_counts}",
+                details=[{"minimum_history_rows": min_rows, "history_counts": grouped_counts}],
+                retryable=False,
             )
 
         req_cols = history_requirement_dict.get("required_columns", [])
@@ -190,6 +240,7 @@ class RuntimeFeatureService:
             raise PipelineFeatureSchemaMismatchError(
                 f"Model Artifact가 요구하는 필수 센서 컬럼이 누락되었습니다: {missing_req}",
                 details=[{"missing_columns": missing_req}],
+                retryable=False,
             )
 
         # 3. Parse feature schema
@@ -213,6 +264,7 @@ class RuntimeFeatureService:
                 raise PipelineFeatureSchemaMismatchError(
                     f"Feature '{col_name}'의 원본 필드 '{src_col}'이 데이터셋에 없습니다.",
                     details=[{"feature_name": col_name, "source_field": src_col}],
+                    retryable=False,
                 )
 
             # Isolated per asset calculation
@@ -231,12 +283,18 @@ class RuntimeFeatureService:
             features_matrix = np.nan_to_num(features_matrix, nan=0.0, posinf=1e6, neginf=-1e6)
 
         # 6. Row metadata
-        row_metadata = []
+        row_metadata: list[RuntimeFeatureRowMetadata] = []
         for idx in range(len(df_sorted)):
             row = df_sorted.iloc[idx]
             asset_val = str(row.get(id_col))
             ts_val = str(row.get(time_col)) if time_col else ""
-            row_metadata.append({"row_index": idx, "asset_id": asset_val, "timestamp": ts_val})
+            row_metadata.append(
+                RuntimeFeatureRowMetadata(
+                    row_index=idx,
+                    asset_id=asset_val,
+                    observed_at=ts_val,
+                )
+            )
 
         feat_hash = hashlib.sha256(features_matrix.tobytes()).hexdigest()[:16]
         runtime_feature_version = f"runtime-feat-{feat_hash}"
@@ -249,6 +307,7 @@ class RuntimeFeatureService:
             feature_schema_version=schema_spec.schema_version,
             dataset_id=dataset_id,
             dataset_version=dataset_version,
+            asset_history_status=asset_history_status,
         )
 
         # 7. Atomic file persistence of features.npy
