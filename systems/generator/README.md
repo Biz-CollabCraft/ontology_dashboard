@@ -36,20 +36,6 @@ systems/generator/
 │  │  ├─ data_splitter.py
 │  │  ├─ training_exception.py
 │  │  └─ training_router.py
-│  ├─ runtime_pipeline/       # [5단계 Current] 런타임 자동 예측·이상 신호 파이프라인
-│  │  ├─ pipeline_schema.py
-│  │  ├─ pipeline_exception.py
-│  │  ├─ pipeline_queue.py
-│  │  ├─ pipeline_state.py
-│  │  ├─ pipeline_repository.py
-│  │  ├─ runtime_feature_service.py
-│  │  ├─ prediction_service.py
-│  │  ├─ aggregation_service.py
-│  │  ├─ notification_service.py
-│  │  ├─ pipeline_service.py
-│  │  ├─ pipeline_worker.py
-│  │  ├─ pipeline_manager.py
-│  │  └─ pipeline_router.py
 │  └─ training_compat/        # [호환성] legacy /internal/train, /internal/retrain 및 lifecycle
 │     ├─ training_compat_router.py
 │     └─ training_lifecycle.py
@@ -71,7 +57,7 @@ systems/generator/
 >
 > **Python 실행 환경 계약 (Execution Environment Contract)**:
 > - Generator 시스템은 저장소 루트(Repository Root)를 표준 `PYTHONPATH`로 사용하는 패키지 구조를 가집니다.
-> - 저장소 루트 실행: `python -c "import systems.generator.app.preprocessing; import systems.generator.app.feature; import systems.generator.app.training; import systems.generator.app.runtime_pipeline"`
+> - 저장소 루트 실행: `python -c "import systems.generator.app.preprocessing; import systems.generator.app.feature; import systems.generator.app.training"`
 > - `systems/generator` 작업 디렉터리 실행: `PYTHONPATH=<repository-root>` 환경변수를 제공하여 legacy facade 및 모듈을 실행합니다.
 
 ---
@@ -89,13 +75,8 @@ systems/generator/
 | POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 지정된 머신러닝 모델(`lightgbm`, `xgboost`, `random_forest`) 개별 학습 및 Model Artifact 발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
-| GET | `/runtime-pipeline/status` | 런타임 파이프라인 큐 길이, 워커 상태 및 최근 실행 결과 조회 | Current — 구현 및 정본 Generator App 등록 완료 |
-| GET | `/runtime-pipeline/runs/{run_id}` | 특정 실행 ID의 단계별 상태(StageState) 및 다중 모델 예측 결과 상세 조회 | Current — 구현 및 정본 Generator App 등록 완료 |
-| GET | `/runtime-pipeline/queue` | FIFO 작업 큐 상태 목록 조회 (queued/running/succeeded/failed) | Current — 구현 및 정본 Generator App 등록 완료 |
-| POST | `/internal/runtime-pipeline/enqueue` | 새 관측 소스 파일을 런타임 예측 FIFO 큐에 내부 등록 | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
-
 
 ### 2.2 Target API (후속 목표 설계)
 

@@ -125,32 +125,29 @@ project-root/
 
 ### Generator 구조 현황 (Current vs Target)
 
-- **Current**:
+- **Current (PR #104 반영 기준)**:
   - 정본 FastAPI 애플리케이션: `systems/generator/app/main.py`
   - Application Factory: `create_app()`
-  - 구현 완료 도메인:
-    - `systems/generator/app/preprocessing/`
-    - `systems/generator/app/feature/`
-    - `systems/generator/app/training/`
-    - `systems/generator/app/runtime_pipeline/`
+  - 현재 구현 도메인: `systems/generator/app/preprocessing/`
   - legacy 학습 호환 도메인: `systems/generator/app/training_compat/`
   - compatibility 진입점: `systems/generator/generator_main.py`
-  - 등록 엔드포인트:
+  - 현재 등록 엔드포인트:
     - `GET /health`
     - `POST /preprocessing`
-    - `POST /feature`
-    - `POST /train`
-    - `POST /train/{base_model}`
-    - `GET /runtime-pipeline/status`
-    - `GET /runtime-pipeline/runs/{run_id}`
-    - `GET /runtime-pipeline/queue`
-    - `POST /internal/runtime-pipeline/enqueue`
     - `POST /internal/train` (compatibility)
     - `POST /internal/retrain` (compatibility)
-  - Runtime Pipeline: 영속 FIFO Queue와 단일 Worker 기반으로 Preprocessing → Label-free Runtime Feature → Multi-model Prediction → Aggregation → Anomaly Signal Dispatch를 단계별 불변 파일 참조(ArtifactReference)로 순차 실행.
+  - 기존 최상위 `extraction/`, `feature/`, `model/`, `ontology_mapping/`, `topology/`, `common/`은 migration 기간 동안 legacy 또는 공통 계산 모듈로 존재할 수 있다.
 - **Target — 남은 migration**:
-  - `app/extraction/` (파일 관찰 및 프로토콜 레코드 추출 후 enqueue 경계 연결)
-
+  - `app/extraction/`
+    - protocol parsing 및 승인 Mapping 적용
+    - Versioned Observation/Failure Dataset 발행
+  - `app/feature/`
+    - Feature Schema/Recipe 및 Label Schema 실행
+    - Feature Dataset Bundle 발행
+  - `app/training/`
+    - Feature Dataset Bundle 소비
+    - versioned Model Artifact 발행
+  - 기존 최상위 legacy 모듈을 정본 도메인 패키지 또는 명시적 compatibility shim으로 단계적으로 정리
 
 > **상세 명세 위임**: Generator의 상세 Target 디렉터리, 파일명, API 요청/응답 필드 및 단계별 migration 계획은 목표 정본 문서인 [`docs/mvp/generator-architecture-and-file-pipeline-target.md`](./mvp/generator-architecture-and-file-pipeline-target.md)에 위임합니다.
 
