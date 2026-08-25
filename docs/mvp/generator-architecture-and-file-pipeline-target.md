@@ -71,29 +71,13 @@ systems/generator/
 │  │  ├─ feature_schema_provider.py
 │  │  ├─ label_schema_provider.py
 │  │  └─ feature_schema.py
-│  ├─ training/               # [4단계 Current] 모델 학습, 검증, Artifact 발행 및 활성화 도메인
-│  │  ├─ training_router.py
-│  │  ├─ training_service.py
-│  │  ├─ training_repository.py
-│  │  └─ training_schema.py
-│  │
-│  └─ runtime_pipeline/       # [Current] 런타임 자동 예측·이상 신호 파이프라인
-│     ├─ pipeline_router.py
-│     ├─ pipeline_service.py
-│     ├─ pipeline_queue.py
-│     ├─ pipeline_state.py
-│     ├─ pipeline_worker.py
-│     ├─ pipeline_manager.py
-│     ├─ runtime_feature_service.py
-│     ├─ prediction_service.py
-│     ├─ aggregation_service.py
-│     ├─ notification_service.py
-│     ├─ pipeline_repository.py
-│     ├─ pipeline_schema.py
-│     └─ pipeline_exception.py
+│  └─ training/               # [4단계 Target] 모델 학습, 검증, Artifact 발행 및 활성화 도메인
+│     ├─ training_router.py
+│     ├─ training_service.py
+│     ├─ training_repository.py
+│     └─ training_schema.py
 │
 ├─ settings.py                # [Target] 환경설정 싱글톤 (Pydantic Settings)
-
 ├─ paths.py                   # [Target] 시스템 전역 파일/디렉터리 경로 레지스트리
 ├─ logging.py                 # [Target] 구조화 로깅 유틸리티
 ├─ errors.py                  # [Target] 시스템 전역 표준 ErrorEnvelope 및 공통 예외
@@ -268,19 +252,6 @@ Extraction
 
 ---
 
-### 4.5 5단계: Runtime Prediction Pipeline (Current)
-- **입력**: `Completed Observation Protocol File` (FIFO 큐 작업 수신)
-- **실행 모델**: `PipelineManager` 애플리케이션 싱글톤 + 영속 FIFO `PipelineQueue` + 단일 Worker 비동기 루프
-- **처리**:
-  - `PipelineQueue`에 중복 방지 키(`normalized_source_uri + source_checksum`)로 영속 등록 및 순차 처리
-  - **Stage 1 (Preprocessing)**: `PreprocessingService` 직접 호출로 데이터셋 유효성 검증 및 불변 Plan 발행 참조 기록
-  - **Stage 2 (Runtime Feature & Prediction)**: Failure/Label을 전혀 사용하지 않는 Label-free 수식으로 `feature_schema.json` 및 `history_requirement.json` 검증 후 2D float64 특성 행렬 원자적 발행 → 활성 Model Artifact 로드 및 다중 모델 추론 실행
-  - **Stage 3 (Aggregation)**: 모델별 결과 취합 정책 (하나라도 이상 → `anomaly_detected=True`, 전원 정상 → `anomaly_detected=False`, 이상 없으나 부분 실패/unknown 존재 시 `partially_succeeded`/`failed` 판정)
-  - **Stage 4 (Notification)**: 이상 판정 시 `GENERATOR_ANOMALY_SIGNAL_URL`로 `Idempotency-Key` 포함 HTTP POST 전송 (실패 시 예측 결과 보존 및 전송 재시도 분리)
-- **출력**: 불변 `PipelineRunState` (`data_preprocessed/pipeline_runs/{run_id}.json`), 이상 신호 이벤트 (`data_preprocessed/pipeline_events/{event_id}.json`)
-
----
-
 ## 5. API 명칭 및 Migration 계획
 
 ### 5.1 Current API (현재 main 구현 상태) vs Target API (후속 목표 설계)
@@ -295,13 +266,8 @@ Extraction
 | POST | `/feature` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계)** |
 | POST | `/train` | Current — 구현 및 정본 Generator App 등록 완료 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
 | POST | `/train/{base_model}` | Current — 구현 및 정본 Generator App 등록 완료 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
-| GET | `/runtime-pipeline/status` | Current — 구현 및 정본 Generator App 등록 완료 | **런타임 파이프라인 큐 길이, 워커 상태 및 최근 실행 결과 조회** |
-| GET | `/runtime-pipeline/runs/{run_id}` | Current — 구현 및 정본 Generator App 등록 완료 | **특정 실행 ID의 단계별 상태(StageState) 및 다중 모델 예측 결과 상세 조회** |
-| GET | `/runtime-pipeline/queue` | Current — 구현 및 정본 Generator App 등록 완료 | **FIFO 작업 큐 상태 목록 조회 (queued/running/succeeded/failed)** |
-| POST | `/internal/runtime-pipeline/enqueue` | Current — 구현 및 정본 Generator App 등록 완료 | **새 관측 소스 파일을 런타임 예측 FIFO 큐에 내부 등록** |
 | POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
 | GET | `/models/{base_model}/active` | Target — 미병합 | **현재 활성화된 Model Artifact 정보 조회** |
-
 
 ### 5.2 타입 및 클래스 Migration Mapping 계획
 
