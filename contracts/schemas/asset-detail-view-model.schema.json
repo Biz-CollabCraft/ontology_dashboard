@@ -187,14 +187,15 @@
   "$defs": {
     "operationContext": {
       "type": "object",
+      "description": "Optional production-planning context composed by Backend. It is not an Evidence/Product Result input and must not change risk, status_grade, top_factors, or recommended_action.",
       "additionalProperties": false,
       "required": ["load_level", "runtime_hours_7d", "production_impact"],
       "properties": {
         "load_level": {"type": ["string", "null"], "enum": ["low", "normal", "high", null]},
-        "runtime_hours_7d": {"type": ["number", "null"]},
+        "runtime_hours_7d": {"type": ["number", "null"], "minimum": 0},
         "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]},
         "context_id": {"type": "string"},
-        "source_type": {"enum": ["synthetic_capacity_model"]},
+        "source_type": {"const": "synthetic_capacity_model"},
         "temporal_scope": {
           "type": "object",
           "additionalProperties": false,
@@ -214,7 +215,7 @@
           "properties": {
             "plan_id": {"type": "string"},
             "plan_date": {"type": "string", "format": "date"},
-            "planned_units": {"type": "number"},
+            "planned_units": {"type": "integer", "minimum": 0},
             "product_mix": {
               "type": "array",
               "items": {
@@ -223,8 +224,8 @@
                 "required": ["variant", "share", "planned_units"],
                 "properties": {
                   "variant": {"type": "string"},
-                  "share": {"type": "number"},
-                  "planned_units": {"type": "number"}
+                  "share": {"type": "number", "minimum": 0, "maximum": 1},
+                  "planned_units": {"type": "integer", "minimum": 0}
                 }
               }
             }
@@ -235,12 +236,12 @@
           "additionalProperties": false,
           "required": ["active_asset_count", "planned_operating_hours", "oee", "standard_cycle_minutes_per_unit", "asset_units_per_hour", "daily_capacity_units", "basis"],
           "properties": {
-            "active_asset_count": {"type": "number"},
-            "planned_operating_hours": {"type": "number"},
-            "oee": {"type": "number"},
-            "standard_cycle_minutes_per_unit": {"type": "number"},
-            "asset_units_per_hour": {"type": "number"},
-            "daily_capacity_units": {"type": "number"},
+            "active_asset_count": {"type": "integer", "minimum": 1},
+            "planned_operating_hours": {"type": "number", "minimum": 0},
+            "oee": {"type": "number", "minimum": 0, "maximum": 1},
+            "standard_cycle_minutes_per_unit": {"type": "number", "exclusiveMinimum": 0},
+            "asset_units_per_hour": {"type": "number", "minimum": 0},
+            "daily_capacity_units": {"type": "integer", "minimum": 0},
             "basis": {"type": "string"}
           }
         },
@@ -255,21 +256,27 @@
             "product_variant": {"type": "string"},
             "screen_priority": {"enum": ["none", "monitor", "shift_inspection", "plan_at_risk", "data_check_required"]},
             "impact_status": {"enum": ["not_applicable", "estimated", "withheld_data_quality_hold"]},
-            "estimated_lost_units": {"type": ["number", "null"]},
+            "estimated_lost_units": {"type": ["integer", "null"], "minimum": 0},
             "basis": {
               "type": "object",
               "additionalProperties": false,
               "required": ["estimated_downtime_minutes", "asset_units_per_hour", "formula"],
               "properties": {
-                "estimated_downtime_minutes": {"type": "number"},
-                "asset_units_per_hour": {"type": "number"},
+                "estimated_downtime_minutes": {"type": "integer", "minimum": 0},
+                "asset_units_per_hour": {"type": "number", "minimum": 0},
                 "formula": {"type": "string"}
               }
             }
           }
         },
         "limitations": {"type": "array", "items": {"type": "string"}}
-      }
+      },
+      "allOf": [
+        {
+          "if": {"required": ["source_type"]},
+          "then": {"required": ["context_id", "source_type", "temporal_scope", "production_plan", "capacity_model", "event_impact", "limitations"]}
+        }
+      ]
     },
     "closedLoopSummary": {
       "type": "object",
