@@ -692,6 +692,7 @@ def _setup_valid_training_examples(contracts_dir: Path) -> Path:
             "validation": 0.15,
             "test": 0.15
         },
+        "random_seed": 42,
         "primary_metric": "f1",
         "metrics": ["f1", "precision", "recall"],
         "hyperparameters": {
