@@ -67,6 +67,52 @@ def test_schema_meta_draft_violation_fails(tmp_path: Path):
     assert any("Schema violates its meta-schema" in e.message for e in result.errors)
 
 
+def test_top_level_array_schema_fails(tmp_path: Path):
+    """Verify that a schema with top-level array fails false-green check."""
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    bad_schema = contracts_dir / "schemas" / "array.schema.json"
+    bad_schema.write_text("[]", encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Schema top-level must be a JSON object" in e.message for e in result.errors)
+
+
+def test_schema_without_schema_keyword_but_invalid_type_fails(tmp_path: Path):
+    """Verify that a schema without $schema keyword still undergoes meta-schema validation."""
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    bad_schema = contracts_dir / "schemas" / "no_dollar_schema_bad.schema.json"
+    bad_schema.write_text(
+        json.dumps({
+            "type": "invalid_primitive_type",
+        }),
+        encoding="utf-8",
+    )
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Schema violates its meta-schema" in e.message for e in result.errors)
+
+
+@pytest.mark.parametrize("invalid_top_level", [
+    "[]",
+    '"schema"',
+    "123",
+    "null",
+    "true",
+    "false",
+])
+def test_top_level_non_object_schema_fails(tmp_path: Path, invalid_top_level: str):
+    """Verify that any top-level primitive/array/boolean schema fails by project policy."""
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    bad_schema = contracts_dir / "schemas" / "non_object.schema.json"
+    bad_schema.write_text(invalid_top_level, encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Schema top-level must be a JSON object" in e.message for e in result.errors)
+
+
 def test_duplicate_schema_id_fails(tmp_path: Path):
     contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
     # create duplicate id
@@ -577,3 +623,216 @@ def test_unknown_vector_prefix_fails_fail_closed(tmp_path: Path):
     result = verifier.verify_all()
     assert not result.passed
     assert any("Unknown test vector structure" in e.message for e in result.errors)
+
+
+# ==========================================
+# Training Example Semantic Tests
+# ==========================================
+
+def _setup_valid_training_examples(contracts_dir: Path) -> Path:
+    # Ensure training config schema exists
+    schema_path = contracts_dir / "schemas" / "generator-training-config.schema.json"
+    if not schema_path.exists():
+        schema_data = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://contracts.ontology.local/schemas/generator-training-config.schema.json",
+            "title": "Generator Training Config Schema",
+            "type": "object",
+            "required": ["training_config_version", "split_strategy", "split_ratio", "primary_metric", "metrics"],
+            "properties": {
+                "training_config_version": {"type": "string"},
+                "split_strategy": {"type": "string", "enum": ["asset_time_split"]},
+                "split_ratio": {
+                    "type": "object",
+                    "required": ["train", "validation", "test"],
+                    "properties": {
+                        "train": {"type": "number"},
+                        "validation": {"type": "number"},
+                        "test": {"type": "number"}
+                    }
+                },
+                "primary_metric": {"type": "string"},
+                "metrics": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "hyperparameters": {"type": "object"}
+            }
+        }
+        schema_path.write_text(json.dumps(schema_data), encoding="utf-8")
+
+    ex_dir = contracts_dir / "examples" / "generator-training"
+    ex_dir.mkdir(parents=True, exist_ok=True)
+
+    all_req = {
+        "dataset_id": "ai4i",
+        "dataset_version": "v1.0",
+        "feature_dataset_version": "f-v1.0",
+        "training_config_version": "training-config-v1",
+        "model_version": "lightgbm-v1.0",
+        "activation_policy": "activate_on_success"
+    }
+    (ex_dir / "training-request-all-models.json").write_text(json.dumps(all_req), encoding="utf-8")
+
+    single_req = {
+        "dataset_id": "ai4i",
+        "dataset_version": "v1.0",
+        "feature_dataset_version": "f-v1.0",
+        "training_config_version": "training-config-v1",
+        "model_version": "lightgbm-v1.0",
+        "activation_policy": "publish_only"
+    }
+    (ex_dir / "training-request-single-model.json").write_text(json.dumps(single_req), encoding="utf-8")
+
+    cfg_data = {
+        "training_config_version": "training-config-v1",
+        "split_strategy": "asset_time_split",
+        "split_ratio": {
+            "train": 0.7,
+            "validation": 0.15,
+            "test": 0.15
+        },
+        "primary_metric": "f1",
+        "metrics": ["f1", "precision", "recall"],
+        "hyperparameters": {
+            "lightgbm": {
+                "n_estimators": 50
+            }
+        }
+    }
+    (ex_dir / "training-config-v1.json").write_text(json.dumps(cfg_data), encoding="utf-8")
+    return ex_dir
+
+
+def test_valid_training_examples_pass(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    _setup_valid_training_examples(contracts_dir)
+
+    result = verifier.verify_all()
+    assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
+
+
+def test_training_examples_missing_file_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    (ex_dir / "training-request-single-model.json").unlink()
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("missing required files" in e.message for e in result.errors)
+
+
+def test_training_examples_request_invalid_json_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    (ex_dir / "training-request-all-models.json").write_text("{ invalid json: ", encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Invalid JSON" in e.message for e in result.errors)
+
+
+def test_training_examples_request_array_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    (ex_dir / "training-request-all-models.json").write_text("[]", encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("must be a JSON object" in e.message for e in result.errors)
+
+
+def test_training_examples_request_missing_required_field_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    req = json.loads((ex_dir / "training-request-all-models.json").read_text(encoding="utf-8"))
+    del req["feature_dataset_version"]
+    (ex_dir / "training-request-all-models.json").write_text(json.dumps(req), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Missing required field 'feature_dataset_version'" in e.message for e in result.errors)
+
+
+def test_training_examples_request_path_traversal_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    req = json.loads((ex_dir / "training-request-all-models.json").read_text(encoding="utf-8"))
+    req["dataset_version"] = "../secret"
+    (ex_dir / "training-request-all-models.json").write_text(json.dumps(req), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("invalid path characters" in e.message for e in result.errors)
+
+
+def test_training_examples_request_invalid_activation_policy_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    req = json.loads((ex_dir / "training-request-all-models.json").read_text(encoding="utf-8"))
+    req["activation_policy"] = "invalid_policy"
+    (ex_dir / "training-request-all-models.json").write_text(json.dumps(req), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("activation_policy 'invalid_policy' is invalid" in e.message for e in result.errors)
+
+
+def test_training_examples_request_extra_field_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    req = json.loads((ex_dir / "training-request-all-models.json").read_text(encoding="utf-8"))
+    req["unsupported_field"] = "bad"
+    (ex_dir / "training-request-all-models.json").write_text(json.dumps(req), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("forbidden extra fields" in e.message for e in result.errors)
+
+
+def test_training_examples_config_split_ratio_sum_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    cfg = json.loads((ex_dir / "training-config-v1.json").read_text(encoding="utf-8"))
+    cfg["split_ratio"]["train"] = 0.9  # 0.9 + 0.15 + 0.15 = 1.2
+    (ex_dir / "training-config-v1.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("split_ratio sum must be 1.0" in e.message for e in result.errors)
+
+
+def test_training_examples_config_duplicate_metrics_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    cfg = json.loads((ex_dir / "training-config-v1.json").read_text(encoding="utf-8"))
+    cfg["metrics"] = ["f1", "f1"]
+    (ex_dir / "training-config-v1.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Duplicate metric names found" in e.message for e in result.errors)
+
+
+def test_training_examples_config_missing_primary_metric_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    cfg = json.loads((ex_dir / "training-config-v1.json").read_text(encoding="utf-8"))
+    cfg["primary_metric"] = "roc_auc"
+    (ex_dir / "training-config-v1.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("primary_metric 'roc_auc' must be included in metrics list" in e.message for e in result.errors)
+
+
+def test_training_examples_optional_model_version_null_or_omitted_passes(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    req = json.loads((ex_dir / "training-request-all-models.json").read_text(encoding="utf-8"))
+    req["model_version"] = None
+    del req["activation_policy"]
+    (ex_dir / "training-request-all-models.json").write_text(json.dumps(req), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
