@@ -61,9 +61,3 @@ def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
         dataset_id=req.dataset_id,
         dataset_version=req.dataset_version,
     )
-
-
-@router.post("/internal/runtime-pipeline/retry-failed/{job_id}", response_model=PipelineQueueItem)
-def retry_failed_job_endpoint(job_id: str) -> PipelineQueueItem:
-    """Explicitly re-enqueue a failed or dead_letter job into the FIFO queue."""
-    return get_manager().retry_failed_job(job_id)

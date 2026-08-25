@@ -299,9 +299,7 @@ Extraction
 | GET | `/runtime-pipeline/runs/{run_id}` | Current — 구현 및 정본 Generator App 등록 완료 | **특정 실행 ID의 단계별 상태(StageState) 및 다중 모델 예측 결과 상세 조회** |
 | GET | `/runtime-pipeline/queue` | Current — 구현 및 정본 Generator App 등록 완료 | **FIFO 작업 큐 상태 목록 조회 (queued/running/succeeded/failed)** |
 | POST | `/internal/runtime-pipeline/enqueue` | Current — 구현 및 정본 Generator App 등록 완료 | **새 관측 소스 파일을 런타임 예측 FIFO 큐에 내부 등록** |
-| POST | `/internal/runtime-pipeline/retry-failed/{job_id}` | Current — 구현 및 정본 Generator App 등록 완료 | **실패(failed/dead_letter) 작업 명시적 정리 및 신규 시퀀스 재등록** |
 | POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
-
 | GET | `/models/{base_model}/active` | Target — 미병합 | **현재 활성화된 Model Artifact 정보 조회** |
 
 

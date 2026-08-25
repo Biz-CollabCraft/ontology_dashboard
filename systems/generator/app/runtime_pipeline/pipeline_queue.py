@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Optional
-from uuid import uuid4
+from typing import Any, Optional
 
 from systems.generator.generator_config import PATHS
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineDuplicateInputError,
-    PipelineInputNotFoundError,
-    PipelineJobNotFailedError,
     PipelineQueueItemInvalidError,
     PipelineQueuePersistError,
 )
@@ -26,14 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 class PipelineQueue:
-    """Persistent FIFO queue backed by SQLite with deduplication, crash recovery, and retry re-enqueue."""
+    """Persistent FIFO queue backed by SQLite with deduplication and crash recovery."""
 
     def __init__(self, db_path: Optional[Path] = None) -> None:
         if db_path is None:
-            self.db_path = PATHS.pipeline_queue_db
+            preprocessed_dir = getattr(PATHS, "data_preprocessed_dir", Path("data_preprocessed"))
+            queue_dir = Path(preprocessed_dir) / "pipeline_queue"
+            queue_dir.mkdir(parents=True, exist_ok=True)
+            self.db_path = queue_dir / "queue.db"
         else:
             self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._lock = threading.Lock()
         self._init_db()
@@ -56,19 +57,12 @@ class PipelineQueue:
                     detected_at TEXT NOT NULL,
                     sequence INTEGER NOT NULL,
                     attempt INTEGER NOT NULL DEFAULT 1,
-                    retry_of_job_id TEXT,
                     status TEXT NOT NULL,
                     error_code TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
             """)
-            # Add retry_of_job_id column if table was created previously without it
-            cur = conn.execute("PRAGMA table_info(queue_items)")
-            columns = [row["name"] for row in cur.fetchall()]
-            if "retry_of_job_id" not in columns:
-                conn.execute("ALTER TABLE queue_items ADD COLUMN retry_of_job_id TEXT")
-
             conn.execute("CREATE INDEX IF NOT EXISTS idx_queue_status_seq ON queue_items (status, sequence)")
             conn.commit()
 
@@ -83,7 +77,6 @@ class PipelineQueue:
         source_checksum: str,
         dataset_id: str = "canonical-ai4i-v1",
         dataset_version: str = "canonical-ai4i-physics-v3.1",
-        retry_of_job_id: Optional[str] = None,
     ) -> PipelineQueueItem:
         """Enqueue a new completed observation source file item."""
         clean_job_id = job_id.strip()
@@ -110,7 +103,7 @@ class PipelineQueue:
                     existing = cur.fetchone()
                     if existing is not None:
                         ex_status = existing["status"]
-                        if ex_status in ("queued", "running", "succeeded", "retry_wait"):
+                        if ex_status in ("queued", "running", "succeeded"):
                             raise PipelineDuplicateInputError(
                                 f"동일한 입력 파일(SHA-256: {clean_checksum[:8]}...)이 이미 등록되어 있습니다 ({ex_status}).",
                                 details=[{"job_id": existing["job_id"], "status": ex_status}],
@@ -129,7 +122,6 @@ class PipelineQueue:
                         detected_at=now,
                         sequence=next_seq,
                         attempt=1,
-                        retry_of_job_id=retry_of_job_id,
                         status="queued",
                     )
 
@@ -138,8 +130,8 @@ class PipelineQueue:
                         INSERT INTO queue_items (
                             job_id, source_uri, source_checksum, dedup_key,
                             dataset_id, dataset_version, detected_at, sequence,
-                            attempt, retry_of_job_id, status, error_code, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            attempt, status, error_code, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             item.job_id,
@@ -151,7 +143,6 @@ class PipelineQueue:
                             item.detected_at,
                             item.sequence,
                             item.attempt,
-                            item.retry_of_job_id,
                             item.status,
                             item.error_code,
                             now,
@@ -161,89 +152,11 @@ class PipelineQueue:
                     conn.commit()
                     logger.info(f"[PipelineQueue] Enqueued job '{item.job_id}' (seq={item.sequence}) for {clean_uri}")
                     return item
-            except (PipelineDuplicateInputError, PipelineQueueItemInvalidError):
+            except PipelineDuplicateInputError:
                 raise
             except Exception as exc:
                 logger.exception(f"[PipelineQueue] Failed to persist queue item: {exc}")
                 raise PipelineQueuePersistError(f"작업 큐 저장 실패: {exc}") from exc
-
-    def retry_failed_job(self, job_id: str) -> PipelineQueueItem:
-        """Atomically re-enqueue a failed or dead_letter job as a new queue item."""
-        now = now_utc_iso()
-        with self._lock:
-            with self._get_connection() as conn:
-                cur = conn.execute(
-                    "SELECT * FROM queue_items WHERE job_id = ?",
-                    (job_id,),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    raise PipelineInputNotFoundError(
-                        f"재등록 대상 작업을 찾을 수 없습니다: '{job_id}'",
-                        details=[{"job_id": job_id}],
-                    )
-
-                status = row["status"]
-                if status not in ("failed", "dead_letter"):
-                    raise PipelineJobNotFailedError(
-                        f"실패(failed/dead_letter) 상태의 작업만 재등록할 수 있습니다. 현재 상태: '{status}'",
-                        details=[{"job_id": job_id, "status": status}],
-                    )
-
-                # Release unique dedup_key constraint on old record while preserving the record
-                old_dedup = row["dedup_key"]
-                archived_dedup = f"archived:{job_id}:{old_dedup}"
-                conn.execute(
-                    "UPDATE queue_items SET dedup_key = ?, updated_at = ? WHERE job_id = ?",
-                    (archived_dedup, now, job_id),
-                )
-
-                # Get next sequence
-                cur = conn.execute("SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM queue_items")
-                next_seq = cur.fetchone()["next_seq"]
-
-                new_job_id = f"{job_id}-retry-{uuid4().hex[:6]}"
-                new_item = PipelineQueueItem(
-                    job_id=new_job_id,
-                    source_uri=row["source_uri"],
-                    source_checksum=row["source_checksum"],
-                    dataset_id=row["dataset_id"],
-                    dataset_version=row["dataset_version"],
-                    detected_at=now,
-                    sequence=next_seq,
-                    attempt=1,
-                    retry_of_job_id=job_id,
-                    status="queued",
-                )
-
-                conn.execute(
-                    """
-                    INSERT INTO queue_items (
-                        job_id, source_uri, source_checksum, dedup_key,
-                        dataset_id, dataset_version, detected_at, sequence,
-                        attempt, retry_of_job_id, status, error_code, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        new_item.job_id,
-                        new_item.source_uri,
-                        new_item.source_checksum,
-                        old_dedup,
-                        new_item.dataset_id,
-                        new_item.dataset_version,
-                        new_item.detected_at,
-                        new_item.sequence,
-                        new_item.attempt,
-                        new_item.retry_of_job_id,
-                        new_item.status,
-                        None,
-                        now,
-                        now,
-                    ),
-                )
-                conn.commit()
-                logger.info(f"[PipelineQueue] Re-enqueued failed job '{job_id}' as new job '{new_job_id}' (seq={next_seq})")
-                return new_item
 
     def claim_next(self) -> Optional[PipelineQueueItem]:
         """Claim the next FIFO queued item and transition state to running."""
@@ -282,7 +195,6 @@ class PipelineQueue:
                     detected_at=row["detected_at"],
                     sequence=row["sequence"],
                     attempt=row["attempt"],
-                    retry_of_job_id=row["retry_of_job_id"] if "retry_of_job_id" in row.keys() else None,
                     status="running",
                     error_code=row["error_code"],
                 )
@@ -339,7 +251,6 @@ class PipelineQueue:
                     detected_at=r["detected_at"],
                     sequence=r["sequence"],
                     attempt=r["attempt"],
-                    retry_of_job_id=r["retry_of_job_id"] if "retry_of_job_id" in r.keys() else None,
                     status=r["status"],
                     error_code=r["error_code"],
                 )

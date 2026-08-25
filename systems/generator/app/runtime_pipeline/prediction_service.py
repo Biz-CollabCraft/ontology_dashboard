@@ -10,18 +10,23 @@ from typing import Any, Optional
 
 import joblib
 import numpy as np
+import pandas as pd
 
 from systems.generator.generator_config import PATHS
 from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.model.publisher import ModelArtifactPublisher
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineModelArtifactInvalidError,
-    PipelineModelPredictionFailedError,
+    PipelineNoActiveModelError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
     ModelPredictionResult,
     now_utc_iso,
+)
+from systems.generator.app.runtime_pipeline.runtime_feature_service import (
+    RuntimeFeatureBundle,
+    RuntimeFeatureService,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,12 +49,13 @@ class LoadedModelArtifact:
 
 
 class PredictionService:
-    """Loads active Model Artifacts and executes inference from published Runtime Feature references."""
+    """Loads active Model Artifacts, extracts runtime features per model, and executes inference."""
 
     def __init__(
         self,
         models_store_dir: Optional[Path] = None,
         publisher: Optional[ModelArtifactPublisher] = None,
+        feature_service: Optional[RuntimeFeatureService] = None,
     ) -> None:
         if models_store_dir is None:
             self.models_store = PATHS.models_store
@@ -64,6 +70,7 @@ class PredictionService:
                 self.artifacts_dir = base_p / "artifacts"
 
         self.publisher = publisher or ModelArtifactPublisher(self.artifacts_dir)
+        self.feature_service = feature_service or RuntimeFeatureService()
 
     def resolve_model_id(self, base_or_id: str) -> str:
         clean = base_or_id.strip()
@@ -80,7 +87,6 @@ class PredictionService:
             raise PipelineModelArtifactInvalidError(
                 f"모델 '{model_id}'의 latest.json 포인터가 존재하지 않습니다.",
                 details=[{"model_id": model_id, "pointer_path": str(latest_file)}],
-                retryable=False,
             )
 
         try:
@@ -90,29 +96,23 @@ class PredictionService:
             raise PipelineModelArtifactInvalidError(
                 f"모델 '{model_id}'의 latest.json 파싱 실패: {exc}",
                 details=[{"model_id": model_id, "error": str(exc)}],
-                retryable=False,
             ) from exc
 
         model_version = pointer_data.get("model_version") or pointer_data.get("active_version")
         if not model_version:
             raise PipelineModelArtifactInvalidError(
-                f"latest.json에 유효한 model_version이 없습니다 ({model_id}).",
-                retryable=False,
+                f"latest.json에 유효한 model_version이 없습니다 ({model_id})."
             )
 
         target_artifact_dir = self.artifacts_dir / model_id / model_version
         if not target_artifact_dir.is_dir():
             raise PipelineModelArtifactInvalidError(
-                f"latest.json이 가리키는 아티팩트 디렉터리가 존재하지 않습니다: {target_artifact_dir}",
-                retryable=False,
+                f"latest.json이 가리키는 아티팩트 디렉터리가 존재하지 않습니다: {target_artifact_dir}"
             )
 
         manifest_file = target_artifact_dir / "manifest.json"
         if not manifest_file.exists():
-            raise PipelineModelArtifactInvalidError(
-                f"manifest.json이 누락되었습니다: {manifest_file}",
-                retryable=False,
-            )
+            raise PipelineModelArtifactInvalidError(f"manifest.json이 누락되었습니다: {manifest_file}")
 
         try:
             with open(manifest_file, "r", encoding="utf-8") as f:
@@ -122,7 +122,6 @@ class PredictionService:
             raise PipelineModelArtifactInvalidError(
                 f"아티팩트 manifest 검증 실패 ({model_id}/{model_version}): {exc}",
                 details=[{"model_id": model_id, "model_version": model_version, "error": str(exc)}],
-                retryable=False,
             ) from exc
 
         # Load payload files
@@ -140,8 +139,7 @@ class PredictionService:
             metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
         except Exception as exc:
             raise PipelineModelArtifactInvalidError(
-                f"아티팩트 페이로드 파일 로드 실패 ({model_id}/{model_version}): {exc}",
-                retryable=False,
+                f"아티팩트 페이로드 파일 로드 실패 ({model_id}/{model_version}): {exc}"
             ) from exc
 
         manifest_sha = compute_file_sha256(manifest_file)
@@ -164,14 +162,15 @@ class PredictionService:
             artifact_ref=artifact_ref,
         )
 
-    def execute_predictions_from_feature_refs(
+    def execute_predictions(
         self,
         *,
-        model_artifacts: dict[str, LoadedModelArtifact],
-        model_feature_refs: dict[str, ArtifactReference],
+        preprocessed_df: pd.DataFrame,
+        dataset_id: str = "canonical-ai4i-v1",
+        dataset_version: str = "canonical-ai4i-physics-v3.1",
         target_models: Optional[list[str]] = None,
     ) -> list[ModelPredictionResult]:
-        """Execute inference from published feature matrix npy references with model failure isolation."""
+        """Execute inference for all registered models with failure isolation."""
         models_to_run = target_models or REGISTERED_BASE_MODELS
         results: list[ModelPredictionResult] = []
 
@@ -179,8 +178,12 @@ class PredictionService:
             model_id = self.resolve_model_id(base_model)
             now = now_utc_iso()
 
-            artifact = model_artifacts.get(base_model) or model_artifacts.get(model_id)
-            if artifact is None:
+            # 1. Load active artifact
+            try:
+                artifact = self.load_active_artifact(base_model)
+            except Exception as exc:
+                err_code = getattr(exc, "code", "PIPELINE_MODEL_ARTIFACT_INVALID")
+                logger.warning(f"[PredictionService] Model '{model_id}' failed artifact load: {exc}")
                 results.append(
                     ModelPredictionResult(
                         model_id=model_id,
@@ -193,14 +196,24 @@ class PredictionService:
                         predicted_at=now,
                         artifact_ref=None,
                         feature_ref=None,
-                        error_code="PIPELINE_NO_ACTIVE_MODEL",
-                        error_message=f"활성화된 모델 아티팩트를 찾을 수 없습니다: '{model_id}'",
+                        error_code=err_code,
+                        error_message=str(exc),
                     )
                 )
                 continue
 
-            feature_ref = model_feature_refs.get(base_model) or model_feature_refs.get(model_id)
-            if feature_ref is None:
+            # 2. Extract runtime features matching this model's schema
+            try:
+                bundle, feat_ref = self.feature_service.extract_and_publish(
+                    preprocessed_df=preprocessed_df,
+                    feature_schema_dict=artifact.feature_schema,
+                    history_requirement_dict=artifact.history_requirement,
+                    dataset_id=dataset_id,
+                    dataset_version=dataset_version,
+                )
+            except Exception as exc:
+                err_code = getattr(exc, "code", "PIPELINE_RUNTIME_FEATURE_FAILED")
+                logger.warning(f"[PredictionService] Model '{model_id}' failed feature extraction: {exc}")
                 results.append(
                     ModelPredictionResult(
                         model_id=model_id,
@@ -213,62 +226,29 @@ class PredictionService:
                         predicted_at=now,
                         artifact_ref=artifact.artifact_ref,
                         feature_ref=None,
-                        error_code="PIPELINE_RUNTIME_FEATURE_FAILED",
-                        error_message=f"모델 '{model_id}'에 해당하는 Runtime Feature가 생성되지 않았습니다.",
+                        error_code=err_code,
+                        error_message=str(exc),
                     )
                 )
                 continue
 
-            # Load feature matrix from published npy file
+            # 3. Model Inference
             try:
-                feat_path = Path(feature_ref.uri)
-                if not feat_path.exists():
-                    raise FileNotFoundError(f"Runtime feature file not found: {feat_path}")
-                features_matrix = np.load(feat_path, allow_pickle=False)
-                if features_matrix.size == 0:
-                    raise ValueError("Feature matrix is empty")
-            except Exception as exc:
-                logger.warning(f"[PredictionService] Failed to load feature npy for '{model_id}': {exc}")
-                results.append(
-                    ModelPredictionResult(
-                        model_id=model_id,
-                        model_version=artifact.model_version,
-                        status="failed",
-                        prediction="failed",
-                        probability=None,
-                        threshold=0.5,
-                        is_anomaly=None,
-                        predicted_at=now,
-                        artifact_ref=artifact.artifact_ref,
-                        feature_ref=feature_ref,
-                        error_code="PIPELINE_RUNTIME_FEATURE_FAILED",
-                        error_message=f"Runtime feature npy 로드 실패: {exc}",
-                    )
-                )
-                continue
-
-            # Perform model inference
-            try:
-                model_obj = artifact.model
-                target_features = features_matrix[-1:] if features_matrix.ndim == 2 else features_matrix.reshape(1, -1)
-
-                if hasattr(model_obj, "predict_proba"):
-                    probs = model_obj.predict_proba(target_features)
+                X = bundle.features
+                if hasattr(artifact.model, "predict_proba"):
+                    probs = artifact.model.predict_proba(X)
                     if probs.ndim == 2 and probs.shape[1] >= 2:
-                        prob_val = float(probs[0, 1])
+                        prob = float(probs[-1, 1])
                     else:
-                        prob_val = float(probs[0, 0])
-                elif hasattr(model_obj, "decision_function"):
-                    df_val = float(model_obj.decision_function(target_features)[0])
-                    prob_val = float(1.0 / (1.0 + np.exp(-df_val)))
-                elif hasattr(model_obj, "predict"):
-                    preds = model_obj.predict(target_features)
-                    prob_val = float(preds[0])
+                        prob = float(probs[-1])
+                elif hasattr(artifact.model, "predict"):
+                    preds = artifact.model.predict(X)
+                    prob = float(preds[-1])
                 else:
-                    raise PipelineModelPredictionFailedError(f"Model object has no predict method: {type(model_obj)}")
+                    raise TypeError(f"Loaded model '{model_id}' has no predict or predict_proba method")
 
                 threshold = 0.5
-                is_anomaly = prob_val >= threshold
+                is_anomaly = bool(prob >= threshold)
                 pred_label = "anomaly" if is_anomaly else "normal"
 
                 results.append(
@@ -277,23 +257,18 @@ class PredictionService:
                         model_version=artifact.model_version,
                         status="succeeded",
                         prediction=pred_label,
-                        probability=prob_val,
+                        probability=round(prob, 4),
                         threshold=threshold,
                         is_anomaly=is_anomaly,
                         predicted_at=now,
                         artifact_ref=artifact.artifact_ref,
-                        feature_ref=feature_ref,
+                        feature_ref=feat_ref,
                         error_code=None,
                         error_message=None,
                     )
                 )
-                logger.info(
-                    f"[PredictionService] Model '{model_id}' ({artifact.model_version}): "
-                    f"prediction={pred_label}, prob={prob_val:.4f}"
-                )
             except Exception as exc:
-                err_code = getattr(exc, "code", "PIPELINE_MODEL_PREDICTION_FAILED")
-                logger.warning(f"[PredictionService] Model '{model_id}' prediction execution failed: {exc}")
+                logger.exception(f"[PredictionService] Model '{model_id}' inference failed: {exc}")
                 results.append(
                     ModelPredictionResult(
                         model_id=model_id,
@@ -305,10 +280,18 @@ class PredictionService:
                         is_anomaly=None,
                         predicted_at=now,
                         artifact_ref=artifact.artifact_ref,
-                        feature_ref=feature_ref,
-                        error_code=err_code,
+                        feature_ref=feat_ref,
+                        error_code="PIPELINE_MODEL_PREDICTION_FAILED",
                         error_message=str(exc),
                     )
                 )
+
+        # Check if all models failed
+        succeeded = [r for r in results if r.status == "succeeded"]
+        if not succeeded:
+            raise PipelineNoActiveModelError(
+                "모든 활성 머신러닝 모델의 추론이 실패하였거나 로드할 수 없습니다.",
+                details=[r.model_dump() for r in results],
+            )
 
         return results

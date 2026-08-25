@@ -91,10 +91,9 @@ systems/generator/
 | POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 지정된 머신러닝 모델(`lightgbm`, `xgboost`, `random_forest`) 개별 학습 및 Model Artifact 발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | GET | `/runtime-pipeline/status` | 런타임 파이프라인 큐 길이, 워커 상태 및 최근 실행 결과 조회 | Current — 구현 및 정본 Generator App 등록 완료 |
 | GET | `/runtime-pipeline/runs/{run_id}` | 특정 실행 ID의 단계별 상태(StageState) 및 다중 모델 예측 결과 상세 조회 | Current — 구현 및 정본 Generator App 등록 완료 |
+| GET | `/runtime-pipeline/queue` | FIFO 작업 큐 상태 목록 조회 (queued/running/succeeded/failed) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/runtime-pipeline/enqueue` | 새 관측 소스 파일을 런타임 예측 FIFO 큐에 내부 등록 | Current — 구현 및 정본 Generator App 등록 완료 |
-| POST | `/internal/runtime-pipeline/retry-failed/{job_id}` | 실패(failed/dead_letter) 작업 명시적 정리 및 신규 시퀀스 재등록 | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
-
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
 
 
