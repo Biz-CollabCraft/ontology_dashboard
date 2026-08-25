@@ -1089,3 +1089,67 @@ def test_prediction_horizon_mismatch_with_label_schema_returns_422(test_setup):
 
     # Restore valid metadata
     meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+
+def test_batch_train_duplicate_request_returns_conflict_not_latest_error(test_setup):
+    """Test duplicate batch /train returns MODEL_ARTIFACT_CONFLICT with published=False and latest_error_code=None."""
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+    m_ver = "batch-dup-v1"
+
+    req_payload = {
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "model_version": m_ver,
+    }
+
+    # 1. First batch train -> succeeds
+    resp1 = client.post("/train", json=req_payload)
+    assert resp1.status_code == 200
+    data1 = resp1.json()
+    assert data1["status"] == "succeeded"
+    for r in data1["results"]:
+        assert r["published"] is True
+        assert r["latest_updated"] is True
+        assert r["error_code"] is None
+
+    # 2. Second batch train with same version -> already active, fails with MODEL_ARTIFACT_CONFLICT
+    resp2 = client.post("/train", json=req_payload)
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["status"] == "failed"
+    for r in data2["results"]:
+        assert r["published"] is False
+        assert r["latest_updated"] is False
+        assert r["latest_error_code"] is None
+        assert r["model_artifact_uri"] is None
+        assert r["error_code"] == "MODEL_ARTIFACT_CONFLICT"
+
+
+def test_trainer_failure_with_existing_artifact_preserves_trainer_error(test_setup, monkeypatch):
+    """Test that a trainer execution failure preserves original error and does NOT convert to MODEL_LATEST_UPDATE_FAILED."""
+    from systems.generator.model.registry import LightGBMTrainer
+    from systems.generator.app.training.training_exception import TrainingExecutionError
+
+    def failing_train(*args, **kwargs):
+        raise TrainingExecutionError("Mock trainer numerical instability failure")
+
+    monkeypatch.setattr(LightGBMTrainer, "train", failing_train)
+
+    client = test_setup["client"]
+    resp = client.post("/train", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "trainer-fail-v1",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    lgb_result = next(r for r in data["results"] if r["base_model"] == "lightgbm")
+    assert lgb_result["published"] is False
+    assert lgb_result["latest_updated"] is False
+    assert lgb_result["latest_error_code"] is None
+    assert lgb_result["error_code"] == "TRAINING_EXECUTION_ERROR"

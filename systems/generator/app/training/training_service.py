@@ -409,14 +409,7 @@ class TrainingService:
                 if target_model is not None:
                     raise
 
-                # Check if artifact was published before pointer error
-                target_art_dir = self.artifact_publisher.get_artifact_dir(model_id, model_ver)
-                is_published = target_art_dir.is_dir() and (target_art_dir / "manifest.json").is_file()
-                logical_art_uri = self.artifact_publisher.get_logical_uri(target_art_dir) if is_published else None
-
                 err_code = getattr(exc, "code", type(exc).__name__)
-                if is_published:
-                    err_code = "MODEL_LATEST_UPDATE_FAILED"
 
                 # For full train, isolate error and mark model as failed
                 results.append(
@@ -425,15 +418,15 @@ class TrainingService:
                         model_id=model_id,
                         model_version=model_ver,
                         status="failed",
-                        published=is_published,
+                        published=False,
                         latest_updated=False,
-                        model_artifact_uri=logical_art_uri,
-                        artifact_uri=logical_art_uri,
+                        model_artifact_uri=None,
+                        artifact_uri=None,
                         metrics_summary=None,
-                        latest_error_code=err_code if is_published else None,
-                        latest_error_message=str(exc) if is_published else None,
+                        latest_error_code=None,
+                        latest_error_message=None,
                         activated=False,
-                        activation_error_code=err_code if is_published else None,
+                        activation_error_code=None,
                         error_code=err_code,
                     )
                 )
