@@ -7,10 +7,7 @@
     "asset_id",
     "model_id",
     "model_version",
-    "status",
-    "prediction",
-    "threshold",
-    "predicted_at"
+    "status"
   ],
   "properties": {
     "asset_id": {
@@ -29,26 +26,13 @@
       "type": "string",
       "enum": ["succeeded", "failed", "unknown"]
     },
-    "prediction": {
-      "type": "string",
-      "enum": ["normal", "anomaly", "unknown", "failed"]
+    "score_type": {
+      "type": ["string", "null"]
     },
-    "probability": {
+    "score": {
       "type": ["number", "null"],
       "minimum": 0.0,
       "maximum": 1.0
-    },
-    "threshold": {
-      "type": "number",
-      "minimum": 0.0,
-      "maximum": 1.0
-    },
-    "is_anomaly": {
-      "type": ["boolean", "null"]
-    },
-    "predicted_at": {
-      "type": "string",
-      "format": "date-time"
     },
     "artifact_ref": {
       "type": ["object", "null"],

@@ -43,8 +43,9 @@ class PipelineStateManager:
             source_ref=source_ref,
             stages={},
             prediction_results=[],
-            anomaly_detected=None,
-            notification_status=None,
+            prediction_delivery_status=None,
+            prediction_event_ids=[],
+            prediction_events=[],
             started_at=None,
             finished_at=None,
             errors=[],
@@ -152,13 +153,15 @@ class PipelineStateManager:
     def record_predictions(
         self,
         results: list[ModelPredictionResult],
-        anomaly_detected: Optional[bool],
+        anomaly_detected: Optional[bool] = None,
     ) -> None:
         self.state.prediction_results = results
-        self.state.anomaly_detected = anomaly_detected
+
+    def record_prediction_delivery(self, status: Literal["not_required", "pending", "sent", "failed"]) -> None:
+        self.state.prediction_delivery_status = status
 
     def record_notification(self, status: Literal["not_required", "pending", "sent", "failed"]) -> None:
-        self.state.notification_status = status
+        self.record_prediction_delivery(status)
 
     def finish_run(
         self,

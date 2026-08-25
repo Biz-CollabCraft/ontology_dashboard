@@ -1,4 +1,4 @@
-"""Repository for atomically persisting and retrieving PipelineRunState and AnomalySignalPayload."""
+"""Repository for atomically persisting and retrieving PipelineRunState and PredictionResultBatchPayload."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineRecoveryError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
-    AnomalySignalPayload,
-    NotificationEventState,
+    PredictionDeliveryEventState,
+    PredictionResultBatchPayload,
     PipelineRunState,
     now_utc_iso,
 )
@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 
 class PipelineRepository:
-
     """File-based persistent repository for pipeline run states and event payloads."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
@@ -80,16 +79,16 @@ class PipelineRepository:
             logger.warning(f"[PipelineRepository] Failed to load run state '{run_id}': {exc}")
             return None
 
-    def save_event(self, event: AnomalySignalPayload) -> None:
-        """Atomically persist AnomalySignalPayload to disk."""
+    def save_event(self, event: PredictionResultBatchPayload) -> None:
+        """Atomically persist PredictionResultBatchPayload to disk."""
         target_file = self.events_dir / f"{event.event_id}.json"
         try:
             self._atomic_write_json(target_file, event.model_dump())
         except Exception as exc:
-            logger.warning(f"[PipelineRepository] Failed to save anomaly event '{event.event_id}': {exc}")
+            logger.warning(f"[PipelineRepository] Failed to save prediction event '{event.event_id}': {exc}")
 
-    def get_event(self, event_id: str) -> Optional[AnomalySignalPayload]:
-        """Fetch AnomalySignalPayload by event ID."""
+    def get_event(self, event_id: str) -> Optional[PredictionResultBatchPayload]:
+        """Fetch PredictionResultBatchPayload by event ID."""
         clean_id = Path(event_id).name
         target_file = self.events_dir / f"{clean_id}.json"
         if not target_file.is_file():
@@ -97,9 +96,9 @@ class PipelineRepository:
         try:
             with open(target_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return AnomalySignalPayload.model_validate(data)
+            return PredictionResultBatchPayload.model_validate(data)
         except Exception as exc:
-            logger.warning(f"[PipelineRepository] Failed to load anomaly event '{event_id}': {exc}")
+            logger.warning(f"[PipelineRepository] Failed to load prediction event '{event_id}': {exc}")
             return None
 
     def list_run_states(self, limit: int = 50) -> list[PipelineRunState]:
@@ -115,7 +114,7 @@ class PipelineRepository:
                 continue
         return runs
 
-    def update_notification_event(
+    def update_prediction_event(
         self,
         *,
         run_id: str,
@@ -128,18 +127,18 @@ class PipelineRepository:
         last_error_code: Optional[str] = None,
         last_error_message: Optional[str] = None,
     ) -> Optional[PipelineRunState]:
-        """Atomically update a specific notification event state and aggregate overall notification_status."""
+        """Atomically update a specific prediction delivery event state and aggregate overall status."""
         state = self.get_run_state(run_id)
         if not state:
             return None
 
         found = False
         updated_events = []
-        for ev in state.notification_events:
+        for ev in state.prediction_events:
             if ev.event_id == event_id:
                 found = True
                 updated_events.append(
-                    NotificationEventState(
+                    PredictionDeliveryEventState(
                         event_id=event_id,
                         asset_id=asset_id or ev.asset_id,
                         status=status,
@@ -156,7 +155,7 @@ class PipelineRepository:
 
         if not found:
             updated_events.append(
-                NotificationEventState(
+                PredictionDeliveryEventState(
                     event_id=event_id,
                     asset_id=asset_id,
                     status=status,
@@ -169,21 +168,47 @@ class PipelineRepository:
                 )
             )
 
-        state.notification_events = updated_events
+        state.prediction_events = updated_events
 
-        # Re-aggregate overall notification_status
-        if not state.notification_events:
-            state.notification_status = "not_required"
+        # Re-aggregate overall prediction_delivery_status
+        if not state.prediction_events:
+            state.prediction_delivery_status = "not_required"
         else:
-            statuses = {ev.status for ev in state.notification_events}
-            if len(state.notification_events) < len(state.notification_event_ids):
-                state.notification_status = "pending"
+            statuses = {ev.status for ev in state.prediction_events}
+            if len(state.prediction_events) < len(state.prediction_event_ids):
+                state.prediction_delivery_status = "pending"
             elif any(s == "failed" for s in statuses):
-                state.notification_status = "failed"
+                state.prediction_delivery_status = "failed"
             elif all(s == "sent" for s in statuses):
-                state.notification_status = "sent"
+                state.prediction_delivery_status = "sent"
             else:
-                state.notification_status = "pending"
+                state.prediction_delivery_status = "pending"
 
         self.save_run_state(state)
         return state
+
+    def update_notification_event(
+        self,
+        *,
+        run_id: str,
+        event_id: str,
+        asset_id: str,
+        status: Literal["pending", "sending", "retry_wait", "sent", "failed"],
+        attempt: int,
+        max_attempts: int = 5,
+        next_retry_at: Optional[str] = None,
+        last_error_code: Optional[str] = None,
+        last_error_message: Optional[str] = None,
+    ) -> Optional[PipelineRunState]:
+        """Backward-compatible alias for update_prediction_event."""
+        return self.update_prediction_event(
+            run_id=run_id,
+            event_id=event_id,
+            asset_id=asset_id,
+            status=status,
+            attempt=attempt,
+            max_attempts=max_attempts,
+            next_retry_at=next_retry_at,
+            last_error_code=last_error_code,
+            last_error_message=last_error_message,
+        )

@@ -5,12 +5,18 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from systems.generator.app.runtime_pipeline.notification_service import NotificationService
-from systems.generator.app.runtime_pipeline.notification_worker import NotificationWorker
+from systems.generator.app.runtime_pipeline.notification_service import (
+    PredictionDeliveryService,
+    NotificationService,
+)
+from systems.generator.app.runtime_pipeline.notification_worker import (
+    PredictionDeliveryWorker,
+    NotificationWorker,
+)
 from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
 from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
-    AnomalySignalPayload,
+    PredictionResultBatchPayload,
     PipelineQueueItem,
     PipelineRunState,
 )
@@ -30,22 +36,21 @@ class PipelineManager:
         queue: Optional[PipelineQueue] = None,
         repository: Optional[PipelineRepository] = None,
         service: Optional[PipelineService] = None,
-        notification_service: Optional[NotificationService] = None,
+        notification_service: Optional[PredictionDeliveryService] = None,
     ) -> None:
         self.repository = repository or PipelineRepository()
         self.queue = queue or PipelineQueue()
-        self.notification_service = notification_service or NotificationService()
+        self.notification_service = notification_service or PredictionDeliveryService()
         self.service = service or PipelineService(
             repository=self.repository,
             notification_service=self.notification_service,
         )
         self.worker = PipelineWorker(queue=self.queue, service=self.service)
-        self.notification_worker = NotificationWorker(
+        self.notification_worker = PredictionDeliveryWorker(
             service=self.notification_service,
             repository=self.repository,
         )
         self._is_running = False
-
 
     @classmethod
     def get_instance(cls) -> PipelineManager:
@@ -115,7 +120,7 @@ class PipelineManager:
     def get_run_state(self, run_id: str) -> Optional[PipelineRunState]:
         return self.repository.get_run_state(run_id)
 
-    def get_event(self, event_id: str) -> Optional[AnomalySignalPayload]:
+    def get_event(self, event_id: str) -> Optional[PredictionResultBatchPayload]:
         return self.repository.get_event(event_id)
 
     def list_queue_items(self, status: Optional[str] = None) -> list[PipelineQueueItem]:

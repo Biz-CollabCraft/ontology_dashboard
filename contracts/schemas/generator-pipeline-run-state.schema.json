@@ -60,38 +60,46 @@
           "asset_id",
           "model_id",
           "model_version",
-          "status",
-          "prediction",
-          "threshold",
-          "predicted_at"
+          "status"
         ],
         "properties": {
           "asset_id": { "type": "string", "minLength": 1 },
-          "model_id": { "type": "string" },
-          "model_version": { "type": "string" },
+          "model_id": { "type": "string", "minLength": 1 },
+          "model_version": { "type": "string", "minLength": 1 },
           "status": { "type": "string", "enum": ["succeeded", "failed", "unknown"] },
-          "prediction": { "type": "string", "enum": ["normal", "anomaly", "unknown", "failed"] },
-          "probability": { "type": ["number", "null"] },
-          "threshold": { "type": "number" },
-          "is_anomaly": { "type": ["boolean", "null"] },
-          "predicted_at": { "type": "string", "format": "date-time" },
-          "artifact_ref": { "type": ["object", "null"] },
-          "feature_ref": { "type": ["object", "null"] },
+          "score_type": { "type": ["string", "null"] },
+          "score": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 },
+          "artifact_ref": {
+            "type": ["object", "null"],
+            "properties": {
+              "uri": { "type": "string" },
+              "sha256": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          },
+          "feature_ref": {
+            "type": ["object", "null"],
+            "properties": {
+              "uri": { "type": "string" },
+              "sha256": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          },
           "error_code": { "type": ["string", "null"] },
           "error_message": { "type": ["string", "null"] }
-        }
+        },
+        "additionalProperties": false
       }
     },
-    "anomaly_detected": { "type": ["boolean", "null"] },
-    "notification_status": {
+    "prediction_delivery_status": {
       "type": ["string", "null"],
       "enum": ["not_required", "pending", "sent", "failed", null]
     },
-    "notification_event_ids": {
+    "prediction_event_ids": {
       "type": "array",
       "items": { "type": "string" }
     },
-    "notification_events": {
+    "prediction_events": {
       "type": "array",
       "items": {
         "type": "object",
@@ -114,7 +122,6 @@
       }
     },
     "started_at": { "type": ["string", "null"], "format": "date-time" },
-
     "finished_at": { "type": ["string", "null"], "format": "date-time" },
     "errors": {
       "type": "array",

@@ -1,4 +1,4 @@
-"""Service for managing Anomaly Signal Outbox and single-dispatch HTTP client."""
+"""Service for managing Prediction Result Outbox and single-dispatch HTTP client."""
 
 from __future__ import annotations
 
@@ -12,21 +12,21 @@ from typing import Any, Optional
 
 from systems.generator.generator_config import PATHS
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
-    PipelineNotificationFailedError,
-    PipelineNotificationServerError,
-    PipelineNotificationTimeoutError,
+    PipelineDeliveryFailedError,
+    PipelineDeliveryServerError,
+    PipelineDeliveryTimeoutError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
-    AnomalySignalPayload,
-    NotificationOutboxItem,
+    PredictionOutboxItem,
+    PredictionResultBatchPayload,
     now_utc_iso,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class NotificationService:
-    """HTTP client for dispatching anomaly notifications with Outbox persistence and single-dispatch execution."""
+class PredictionDeliveryService:
+    """HTTP client for dispatching prediction result batches with Outbox persistence and single-dispatch execution."""
 
     def __init__(
         self,
@@ -35,8 +35,11 @@ class NotificationService:
         outbox_dir: Optional[Path] = None,
     ) -> None:
         self.endpoint_url = endpoint_url or os.environ.get(
-            "GENERATOR_ANOMALY_SIGNAL_URL",
-            "http://localhost:8000/api/v1/anomaly-events",
+            "GENERATOR_PREDICTION_RESULT_URL",
+            os.environ.get(
+                "GENERATOR_ANOMALY_SIGNAL_URL",
+                "http://localhost:8000/internal/prediction-results",
+            ),
         )
         self.timeout = timeout_seconds
         if outbox_dir is None:
@@ -45,8 +48,8 @@ class NotificationService:
             self.outbox_dir = Path(outbox_dir)
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_outbox_item(self, item: NotificationOutboxItem) -> Path:
-        """Atomically persist or update NotificationOutboxItem file."""
+    def save_outbox_item(self, item: PredictionOutboxItem) -> Path:
+        """Atomically persist or update PredictionOutboxItem file."""
         dest_path = self.outbox_dir / f"{item.event_id}.json"
         temp_path = self.outbox_dir / f".tmp_{item.event_id}.json"
         item.updated_at = now_utc_iso()
@@ -57,7 +60,7 @@ class NotificationService:
         temp_path.replace(dest_path)
         return dest_path
 
-    def get_outbox_item(self, event_id: str) -> Optional[NotificationOutboxItem]:
+    def get_outbox_item(self, event_id: str) -> Optional[PredictionOutboxItem]:
         """Load single outbox item by event_id."""
         path = self.outbox_dir / f"{event_id}.json"
         if not path.is_file():
@@ -65,21 +68,21 @@ class NotificationService:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return NotificationOutboxItem.model_validate(data)
+            return PredictionOutboxItem.model_validate(data)
         except Exception as exc:
-            logger.error(f"[NotificationService] Failed to load outbox item '{event_id}': {exc}")
+            logger.error(f"[PredictionDeliveryService] Failed to load outbox item '{event_id}': {exc}")
             return None
 
-    def list_outbox_items(self, status: Optional[str] = None) -> list[NotificationOutboxItem]:
+    def list_outbox_items(self, status: Optional[str] = None) -> list[PredictionOutboxItem]:
         """List all outbox items, optionally filtered by status."""
-        items: list[NotificationOutboxItem] = []
+        items: list[PredictionOutboxItem] = []
         for file in sorted(self.outbox_dir.glob("*.json")):
             if file.name.startswith(".tmp_"):
                 continue
             try:
                 with open(file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                item = NotificationOutboxItem.model_validate(data)
+                item = PredictionOutboxItem.model_validate(data)
                 if status is None or item.status == status:
                     items.append(item)
             except Exception as exc:
@@ -89,17 +92,16 @@ class NotificationService:
                 try:
                     file.replace(dest)
                     logger.error(
-                        f"[NotificationService] Corrupt outbox file '{file.name}' quarantined to '{dest}': {exc} "
-                        f"(error_code=PIPELINE_NOTIFICATION_OUTBOX_CORRUPT, retryable=False)"
+                        f"[PredictionDeliveryService] Corrupt outbox file '{file.name}' quarantined to '{dest}': {exc} "
+                        f"(error_code=PIPELINE_DELIVERY_OUTBOX_CORRUPT, retryable=False)"
                     )
                 except Exception:
-                    logger.error(f"[NotificationService] Failed to quarantine corrupt file '{file.name}': {exc}")
+                    logger.error(f"[PredictionDeliveryService] Failed to quarantine corrupt file '{file.name}': {exc}")
         return items
 
-
-    def create_outbox_record(self, payload: AnomalySignalPayload) -> NotificationOutboxItem:
+    def create_outbox_record(self, payload: PredictionResultBatchPayload) -> PredictionOutboxItem:
         """Create new pending outbox record for payload."""
-        item = NotificationOutboxItem(
+        item = PredictionOutboxItem(
             event_id=payload.event_id,
             run_id=payload.run_id,
             job_id=payload.job_id,
@@ -112,8 +114,8 @@ class NotificationService:
         self.save_outbox_item(item)
         return item
 
-    def send_once(self, payload: AnomalySignalPayload) -> dict[str, Any]:
-        """Perform a single HTTP POST dispatch attempt to the receiver."""
+    def send_once(self, payload: PredictionResultBatchPayload) -> dict[str, Any]:
+        """Perform a single HTTP POST dispatch attempt to the backend receiver."""
         body = payload.model_dump_json().encode("utf-8")
         headers = {
             "Content-Type": "application/json",
@@ -131,40 +133,39 @@ class NotificationService:
                 status_code = resp.getcode()
                 resp_body = resp.read().decode("utf-8")
                 logger.info(
-                    f"[NotificationService] Successfully sent signal '{payload.event_id}' "
+                    f"[PredictionDeliveryService] Successfully sent prediction batch '{payload.event_id}' "
                     f"(HTTP {status_code}) to {self.endpoint_url}"
                 )
                 return {"delivered": True, "status_code": status_code, "response": resp_body}
         except urllib.error.HTTPError as h_err:
             if 400 <= h_err.code < 500:
                 logger.error(
-                    f"[NotificationService] Receiver rejected signal '{payload.event_id}' with HTTP {h_err.code}"
+                    f"[PredictionDeliveryService] Receiver rejected prediction batch '{payload.event_id}' with HTTP {h_err.code}"
                 )
-                raise PipelineNotificationFailedError(
-                    f"신호 수신 시스템이 이상 신호를 거부했습니다 (HTTP {h_err.code})",
+                raise PipelineDeliveryFailedError(
+                    f"수신 시스템이 결과 배치를 거부했습니다 (HTTP {h_err.code})",
                     details=[{"status_code": h_err.code, "event_id": payload.event_id}],
                     retryable=False,
                 ) from h_err
             # 5xx server error
             logger.warning(
-                f"[NotificationService] Server error from receiver (HTTP {h_err.code}): {h_err}"
+                f"[PredictionDeliveryService] Server error from receiver (HTTP {h_err.code}): {h_err}"
             )
-            raise PipelineNotificationServerError(
-                f"이상 신호 수신 서버 5xx 오류 (HTTP {h_err.code}): {h_err}",
+            raise PipelineDeliveryServerError(
+                f"수신 시스템 서버 오류 (HTTP {h_err.code}): {h_err}",
                 details=[{"status_code": h_err.code, "event_id": payload.event_id}],
                 retryable=True,
             ) from h_err
-        except TimeoutError as t_err:
-            logger.warning(f"[NotificationService] Timeout sending signal '{payload.event_id}': {t_err}")
-            raise PipelineNotificationTimeoutError(
-                f"이상 신호 전송 타임아웃 ({self.endpoint_url}): {t_err}",
-                details=[{"event_id": payload.event_id, "endpoint": self.endpoint_url}],
+        except (urllib.error.URLError, TimeoutError, OSError) as net_err:
+            logger.warning(
+                f"[PredictionDeliveryService] Network error sending prediction batch '{payload.event_id}': {net_err}"
+            )
+            raise PipelineDeliveryTimeoutError(
+                f"결과 배치 전송 네트워크/타임아웃 오류: {net_err}",
+                details=[{"error": str(net_err), "event_id": payload.event_id}],
                 retryable=True,
-            ) from t_err
-        except Exception as exc:
-            logger.warning(f"[NotificationService] Network error sending signal '{payload.event_id}': {exc}")
-            raise PipelineNotificationFailedError(
-                f"이상 신호 전송 네트워크 오류: {exc}",
-                details=[{"event_id": payload.event_id, "error": str(exc)}],
-                retryable=True,
-            ) from exc
+            ) from net_err
+
+
+# Alias for backward compatibility
+NotificationService = PredictionDeliveryService

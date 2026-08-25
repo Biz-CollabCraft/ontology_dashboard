@@ -69,19 +69,16 @@ class ModelPredictionResult(BaseModel):
     model_id: str = Field(..., description="Unique model identifier, e.g. pdm-lightgbm")
     model_version: str = Field(..., description="Published model artifact version")
     status: Literal["succeeded", "failed", "unknown"] = Field("succeeded", description="Model evaluation status")
-    prediction: Literal["normal", "anomaly", "unknown", "failed"] = Field("normal", description="Prediction class")
-    probability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted anomaly probability score")
-    threshold: float = Field(0.5, ge=0.0, le=1.0, description="Decision threshold")
-    is_anomaly: Optional[bool] = Field(None, description="Whether prediction is classified as anomaly")
-    predicted_at: str = Field(default_factory=now_utc_iso, description="ISO timestamp of prediction")
+    score_type: Optional[str] = Field("positive_class_probability", description="Type of score, e.g. positive_class_probability")
+    score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted numeric score/probability")
     artifact_ref: Optional[ArtifactReference] = Field(None, description="Reference to Model Artifact")
     feature_ref: Optional[ArtifactReference] = Field(None, description="Reference to Runtime Feature bundle")
     error_code: Optional[str] = Field(None, description="Error code if model inference failed")
     error_message: Optional[str] = Field(None, description="Error message if model inference failed")
 
 
-class NotificationEventState(BaseModel):
-    """Delivery state tracking for an individual Anomaly Signal notification event."""
+class PredictionDeliveryEventState(BaseModel):
+    """Delivery state tracking for an individual Prediction Result Batch delivery event."""
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(..., description="Unique event identifier")
@@ -95,6 +92,10 @@ class NotificationEventState(BaseModel):
     last_error_code: Optional[str] = Field(None, description="Last error code")
     last_error_message: Optional[str] = Field(None, description="Last error message")
     updated_at: str = Field(default_factory=now_utc_iso, description="ISO update timestamp")
+
+
+# Alias for backward compatibility
+NotificationEventState = PredictionDeliveryEventState
 
 
 class PipelineRunState(BaseModel):
@@ -115,21 +116,45 @@ class PipelineRunState(BaseModel):
     source_ref: ArtifactReference = Field(..., description="Source observation protocol file reference")
     stages: dict[str, StageState] = Field(default_factory=dict, description="Stage execution map")
     prediction_results: list[ModelPredictionResult] = Field(
-        default_factory=list, description="Array of predictions for all registered models across equipments"
+        default_factory=list, description="Array of prediction results for all registered models across equipments"
     )
-    anomaly_detected: Optional[bool] = Field(None, description="Whether any model detected an anomaly")
-    notification_status: Optional[Literal["not_required", "pending", "sent", "failed"]] = Field(
-        None, description="Notification dispatch status"
+    prediction_delivery_status: Optional[Literal["not_required", "pending", "sent", "failed"]] = Field(
+        None, description="Prediction delivery dispatch status"
     )
-    notification_event_ids: list[str] = Field(
-        default_factory=list, description="List of generated anomaly signal event IDs"
+    prediction_event_ids: list[str] = Field(
+        default_factory=list, description="List of generated prediction batch event IDs"
     )
-    notification_events: list[NotificationEventState] = Field(
-        default_factory=list, description="List of per-event notification delivery states"
+    prediction_events: list[PredictionDeliveryEventState] = Field(
+        default_factory=list, description="List of per-event delivery states"
     )
     started_at: Optional[str] = Field(None, description="ISO start timestamp")
     finished_at: Optional[str] = Field(None, description="ISO finish timestamp")
     errors: list[PipelineError] = Field(default_factory=list, description="List of errors occurred")
+
+    # Compatibility properties
+    @property
+    def notification_status(self) -> Optional[Literal["not_required", "pending", "sent", "failed"]]:
+        return self.prediction_delivery_status
+
+    @notification_status.setter
+    def notification_status(self, val: Optional[Literal["not_required", "pending", "sent", "failed"]]) -> None:
+        self.prediction_delivery_status = val
+
+    @property
+    def notification_event_ids(self) -> list[str]:
+        return self.prediction_event_ids
+
+    @notification_event_ids.setter
+    def notification_event_ids(self, val: list[str]) -> None:
+        self.prediction_event_ids = val
+
+    @property
+    def notification_events(self) -> list[PredictionDeliveryEventState]:
+        return self.prediction_events
+
+    @notification_events.setter
+    def notification_events(self, val: list[PredictionDeliveryEventState]) -> None:
+        self.prediction_events = val
 
 
 class PipelineQueueItem(BaseModel):
@@ -162,22 +187,21 @@ class SourceLineage(BaseModel):
 
     source_uri: str
     source_checksum: str
-    pipeline_contract_version: str = "1.0"
+    pipeline_contract_version: str = "generator-prediction-result-v1"
 
 
-class AnomalySignalPayload(BaseModel):
-    """External anomaly signal payload sent to receiving system per anomalous equipment."""
+class PredictionResultBatchPayload(BaseModel):
+    """Prediction Result Batch payload sent per equipment across models."""
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(..., description="Unique event identifier (Idempotency Key)")
     run_id: str = Field(..., description="Associated pipeline run ID")
     job_id: str = Field(..., description="Associated queue job ID")
     asset_id: str = Field(..., description="Target equipment identifier")
-    detected_at: str = Field(default_factory=now_utc_iso, description="Detection timestamp")
+    observed_at: str = Field(..., description="Observation timestamp")
+    generated_at: str = Field(default_factory=now_utc_iso, description="Generation timestamp")
     dataset_id: str = Field(..., description="Dataset identifier")
     dataset_version: str = Field(..., description="Dataset version")
-    anomaly_detected: bool = Field(True, description="Always true when signal is dispatched")
-    anomaly_models: list[str] = Field(default_factory=list, description="List of model IDs flagging anomaly")
     model_results: list[ModelPredictionResult] = Field(
         ..., min_length=1, description="Array of model prediction results for this equipment"
     )
@@ -186,8 +210,12 @@ class AnomalySignalPayload(BaseModel):
     feature_ref: Optional[dict[str, Any]] = Field(None, description="Runtime feature reference")
 
 
-class NotificationOutboxItem(BaseModel):
-    """Item managed in notification outbox."""
+# Alias for backward compatibility
+AnomalySignalPayload = PredictionResultBatchPayload
+
+
+class PredictionOutboxItem(BaseModel):
+    """Item managed in prediction delivery outbox."""
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(..., description="Unique event identifier")
@@ -204,4 +232,8 @@ class NotificationOutboxItem(BaseModel):
     last_error_message: Optional[str] = Field(None, description="Last error message if failed")
     created_at: str = Field(default_factory=now_utc_iso, description="Created timestamp")
     updated_at: str = Field(default_factory=now_utc_iso, description="Updated timestamp")
-    payload: AnomalySignalPayload = Field(..., description="Signal payload to deliver")
+    payload: PredictionResultBatchPayload = Field(..., description="Batch payload to deliver")
+
+
+# Alias for backward compatibility
+NotificationOutboxItem = PredictionOutboxItem

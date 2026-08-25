@@ -22,12 +22,13 @@ Failure Extraction (Authorized Truth Source → Failure Dataset)
 → Preprocessing (Observation 구조 분석 및 역할 판정 → Immutable Preprocessing Plan)
 → Feature (Feature Schema + Label Schema → Feature/Label Dataset Bundle)
 → Training (Feature Dataset Bundle → Model Artifact)
-→ Runtime Pipeline (Preprocessing → Runtime Feature → active Model Artifact별 Prediction → asset별 Aggregation → Anomaly Signal)
-        ↓ Anomaly Signal Contract
+→ Runtime Pipeline (Preprocessing → Runtime Feature → active Model Artifact별 Prediction(score) → asset별 Batch 구성 → Prediction Result Batch 송신)
+        ↓ Prediction Result Batch Contract
 ontology_dashboard/systems/backend
-Anomaly Signal 소비 및 source lineage 검증
+Prediction Result Batch 수신 및 멱등 저장
+→ Threshold/Decision Policy 적용 및 이상 판정
 → 센서값·설비 metadata 조회
-→ Product Result Artifact / Evidence / Report 생성
+→ Product Result Artifact / Evidence / Report 생성 / 알림
         ↓ Canonical Read Port
 ontology_dashboard/systems/frontend / Report
 AssetDetailViewModel (composition via read port)
@@ -43,12 +44,12 @@ gen_data Runtime Overlay
 target equipment snapshot + branch-local simulation clock
         ↓ maintenance_replay_overlay Observation
 ontology_dashboard/systems/generator Runtime Pipeline
-설비별 History Requirement 검증 및 Runtime Prediction
+설비별 History Requirement 검증 및 Runtime Prediction (score)
         ├─ insufficient: unknown / warming_up 기록
-        └─ ready: Prediction → Aggregation → Anomaly Signal
-        ↓ Anomaly Signal
+        └─ ready: Prediction → Batch Building → Prediction Result Batch 송신
+        ↓ Prediction Result Batch
 ontology_dashboard/systems/backend
-source lineage 및 센서 근거 검증 → Product Result Artifact / Evidence / Report 생성
+Threshold Policy 기반 이상 판정 → 센서 근거 검증 → Product Result Artifact / Evidence / Report 생성
 ```
 
 
@@ -67,8 +68,8 @@ opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 �
     Simulation Clock을 이용한 source Observation 생성
   - 과거 model/prediction/result 파일을 보존할 수 있으나 제품 운영 SoT가 아니라 reference/regression fixture로 취급한다.
 - **`ontology_dashboard` = Semantic/ML + Prediction + Result Artifact/Evidence + Product**
-  - **`systems/generator`**: 프로토콜 provenance에서 지정·승인된 Mapping을 적용하여 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Preprocessing Plan 수립, Feature Dataset Bundle 발행 및 Model Artifact를 발행하며, **런타임 파이프라인(Runtime Pipeline)을 통해 관측 데이터의 Preprocessing → Runtime Feature 생성 → 등록된 활성 Model Artifact별 Runtime Prediction → 모델 결과 취합 → Anomaly Signal 발행**을 전담한다. (단, Product Result Artifact, Evidence, Report는 생성하지 않음)
-  - **`systems/backend`**: Generator가 발행한 Anomaly Signal을 수신하여 source lineage 검증, 관련 센서값 및 설비 metadata 조회, Product Result Artifact, Evidence 및 Report 최종 생성, Dashboard API 제공을 전담한다.
+  - **`systems/generator`**: 프로토콜 provenance에서 지정·승인된 Mapping을 적용하여 Observation Dataset을 생성하고, 별도의 승인된 Training Truth Source에서 Failure Dataset을 생성한다. 이후 Preprocessing Plan 수립, Feature Dataset Bundle 발행 및 Model Artifact를 발행하며, **런타임 파이프라인(Runtime Pipeline)을 통해 관측 데이터의 Preprocessing → Runtime Feature 생성 → 등록된 활성 Model Artifact별 점수 계산(`score`) → 설비별 모델 결과 묶음 구성 → Prediction Result Batch 송신**을 전담한다. (단, threshold 적용, 이상 판정, Product Result Artifact, Evidence, Report는 생성하지 않음)
+  - **`systems/backend`**: Generator가 송신한 Prediction Result Batch를 수신하여 멱등 저장, Threshold Policy 적용을 통한 이상 판정, source lineage 검증, 관련 센서값 및 설비 metadata 조회, Product Result Artifact, Evidence 및 Report 최종 생성, Dashboard API 제공을 전담한다.
   - **`systems/frontend` / Report**: 공식 read port를 통한 ViewModel composition (gen_data 원본 파일 직접 파싱 금지)
 
 `gen_data`를 제품 prediction 또는 Result Artifact의 운영 producer로 해석하지 않는다.
@@ -112,7 +113,7 @@ project-root/
 
 ## 3. systems/generator — Semantic/ML Pipeline
 
-**책임 범위는 versioned Model Artifact 발행 및 활성 포인터(`latest.json`) 관리, 그리고 런타임 관측 데이터를 소비하여 Preprocessing → Runtime Feature 생성 → Model Artifact별 Runtime Prediction → 모델 결과 취합 → Anomaly Signal 발행까지다.** 제품 Result Artifact 생성, Evidence 및 최종 Report 생성은 Backend의 책임이다.
+**책임 범위는 versioned Model Artifact 발행 및 활성 포인터(`latest.json`) 관리, 그리고 런타임 관측 데이터를 소비하여 Preprocessing → Runtime Feature 생성 → Model Artifact별 점수 계산(`score`) → 설비별 모델 결과 묶음 구성 → Prediction Result Batch 송신까지다.** 임계치 적용, 이상 판정, 제품 Result Artifact 생성, Evidence 및 최종 Report 생성은 Backend의 책임이다.
 
 ### 상위 아키텍처 및 책임 원칙
 
@@ -121,9 +122,9 @@ project-root/
 3. **Preprocessing은 Observation Dataset의 구조와 역할을 분석하여 불변 Preprocessing Plan을 발행하고 전처리 데이터셋을 원자적으로 발행한다.**
 4. **Feature 단계는 Feature Schema/Recipe와 Label Schema에 명시된 source field, operation 및 parameters를 실행하여 Feature Dataset Bundle 및 런타임 Feature 행렬을 발행한다.**
 5. **Training 단계는 Feature Dataset Bundle을 소비하여 Model Artifact를 발행한다.**
-6. **런타임 추론 및 이상 신호 경계**: `systems/generator`는 런타임 관측 데이터 파일을 소비하여 전처리, 설비별 시계열 Feature 생성, 활성 Model Artifact별 추론 및 설비별 Aggregation을 수행하고 이상 감지 시 Anomaly Signal을 발행합니다.
-7. **소비 경계**: `systems/backend`는 Generator의 Anomaly Signal을 수신하여 관측 센서값과 설비 메타데이터를 조회하고, 최종 Evidence 및 Report 생성을 전담합니다. Frontend는 Backend API만 소비합니다.
-8. **금지 범위**: Generator는 Product Result Artifact, Evidence, Report를 직접 생성하지 않으며, Backend는 Generator의 Python 코드를 직접 import하지 않습니다.
+6. **런타임 예측 및 결과 배치 송신 경계**: `systems/generator`는 런타임 관측 데이터 파일을 소비하여 전처리, 설비별 시계열 Feature 생성, 활성 Model Artifact별 점수 계산(`score`) 및 설비별 묶음을 구성하여 Prediction Result Batch를 송신합니다 (Threshold 미적용).
+7. **소비 및 판정 경계**: `systems/backend`는 Generator의 Prediction Result Batch를 수신하여 Threshold Policy 기반 이상 판정을 내리고, 관측 센서값과 설비 메타데이터를 조회하여 최종 Evidence 및 Report 생성을 전담합니다. Frontend는 Backend API만 소비합니다.
+8. **금지 범위**: Generator는 Threshold Policy를 로드하거나 이상 판정, Product Result Artifact, Evidence, Report를 직접 생성하지 않으며, Backend는 Generator의 Python 코드를 직접 import하지 않습니다.
 
 
 ### Generator 구조 현황 (Current vs Target)
@@ -373,17 +374,17 @@ legacy Python Source와 non-legacy 영역의 static/dynamic import 및 문자열
 
 ---
 
-## 6. Model Artifact, Anomaly Signal 및 Result Artifact 구분
+## 6. Model Artifact, Prediction Result Batch 및 Result Artifact 구분
 
-| 구분 | Model Artifact | Anomaly Signal | Product Result Artifact |
+| 구분 | Model Artifact | Prediction Result Batch | Product Result Artifact |
 |---|---|---|---|
 | Producer | `systems/generator` (Training) | `systems/generator` (Runtime Pipeline) | `systems/backend/app/diagnosis` |
 | Consumer | `systems/generator` (Runtime Pipeline) | `systems/backend` | Backend API / Dashboard / Report / Frontend |
-| 생성 시점 | Training publish 시점 | Runtime Prediction 시점 | Signal 소비 이후 |
-| 의미 | 학습된 모델, feature contract, metrics, version, provenance | 설비별 이상 감지 신호와 모델 추론 결과 | 제품이 소비하는 최종 판단·근거 |
-| Evidence 관계 | 학습 provenance/평가 정보 포함 가능 | 런타임 feature 및 모델 평가 근거 포함 | 제품 판단에 제시되는 최종 runtime Evidence/provenance 포함 |
+| 생성 시점 | Training publish 시점 | Runtime Prediction 시점 | Batch 소비 및 Threshold 판정 이후 |
+| 의미 | 학습된 모델, feature contract, metrics, version, provenance | 설비별 다중 모델 예측 수치 묶음 (`score`) | 제품이 소비하는 최종 판단(정상/이상)·근거 |
+| Evidence 관계 | 학습 provenance/평가 정보 포함 가능 | 런타임 feature 및 모델 점수 포함 | 제품 판단에 제시되는 최종 runtime Evidence/provenance 포함 |
 
-> **호환성 안내 (Compatibility)**: Backend가 Model Artifact를 로드하는 기존 추론 경로는 Migration/Compatibility 상태로 남을 수 있으나, 제품의 공식 Target 런타임 아키텍처는 Generator가 Anomaly Signal을 발행하고 Backend가 이를 소비하는 구조다.
+> **호환성 안내 (Compatibility)**: Backend가 Model Artifact를 로드하는 기존 추론 경로는 Migration/Compatibility 상태로 남을 수 있으나, 제품의 공식 Target 런타임 아키텍처는 Generator가 Prediction Result Batch를 송신하고 Backend가 Threshold Policy를 적용하여 소비/판정하는 구조다.
 
 ---
 

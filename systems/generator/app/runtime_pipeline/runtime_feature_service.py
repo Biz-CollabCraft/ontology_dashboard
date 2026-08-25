@@ -21,7 +21,11 @@ from systems.generator.app.feature.feature_schema_provider import (
     FeatureSchemaSpec,
 )
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
+    PipelineAssetIdColumnMissingError,
     PipelineAssetIdMissingError,
+    PipelineAssetIdValueMissingError,
+    PipelineFeatureMetadataAlignmentError,
+    PipelineFeatureMissingValueHandlingNotImplementedError,
     PipelineFeatureSchemaMismatchError,
     PipelineHistoryInsufficientError,
     PipelineRuntimeFeatureFailedError,
@@ -72,15 +76,20 @@ class RuntimeFeatureService:
         """Identify asset ID and timestamp columns with fail-closed missing ID check."""
         target_id_col = id_column
         if not target_id_col:
-            for candidate in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id"):
-                if candidate in df.columns:
-                    target_id_col = candidate
-                    break
+            candidates = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id") if c in df.columns]
+            if candidates:
+                target_id_col = candidates[0]
+            else:
+                raise PipelineAssetIdColumnMissingError(
+                    "데이터셋에 설비 식별자(asset_id) 컬럼이 누락되었습니다. 임의의 default_asset 대체는 금지됩니다.",
+                    details=[{"available_columns": list(df.columns)}],
+                    retryable=False,
+                )
 
         if not target_id_col or target_id_col not in df.columns:
-            raise PipelineAssetIdMissingError(
-                "데이터셋에 설비 식별자(asset_id) 컬럼이 누락되었습니다. 임의의 default_asset 대체는 금지됩니다.",
-                details=[{"columns": list(df.columns)}],
+            raise PipelineAssetIdColumnMissingError(
+                f"데이터셋에 설비 식별자 컬럼 '{target_id_col}'이 존재하지 않습니다.",
+                details=[{"id_column": target_id_col, "available_columns": list(df.columns)}],
                 retryable=False,
             )
 
@@ -92,7 +101,7 @@ class RuntimeFeatureService:
         )
         if invalid_mask.any():
             invalid_indices = [int(i) for i in df.index[invalid_mask]]
-            raise PipelineAssetIdMissingError(
+            raise PipelineAssetIdValueMissingError(
                 f"설비 식별자 컬럼 '{target_id_col}'에 누락/무효 값(None, 빈문자열, null, none)이 {len(invalid_indices)}건 존재합니다.",
                 details=[{
                     "id_column": target_id_col,
@@ -111,15 +120,20 @@ class RuntimeFeatureService:
 
         return target_id_col, target_time_col
 
-    def _calculate_feature_series(
+    def _calculate_feature_series_for_asset(
         self,
+        asset_id: str,
         series: pd.Series,
-        op: str,
-        params: dict[str, Any],
-        mv_policy: str,
+        item: FeatureItem,
+        time_series: Optional[pd.Series] = None,
     ) -> pd.Series:
-        """Compute single feature series within an isolated asset group."""
+        """Compute single feature series within an isolated asset group with fail-closed missing value checks."""
         numeric_series = pd.to_numeric(series, errors="coerce")
+        op = item.operation
+        params = item.parameters or {}
+        col_name = item.feature_name
+        src_col = item.source_field
+        mv_policy = item.missing_value_policy
 
         if op == "raw":
             res = numeric_series
@@ -149,16 +163,28 @@ class RuntimeFeatureService:
         else:
             res = numeric_series
 
-        # Apply missing value policy strictly within group
-        if res.isna().any():
-            if mv_policy == "ffill":
-                res = res.ffill().bfill().fillna(0.0)
-            elif mv_policy == "fill_zero":
-                res = res.fillna(0.0)
-            elif mv_policy == "drop":
-                res = res.fillna(0.0)
-            else:
-                res = res.fillna(0.0)
+        # Fail-closed if NaN or Inf occurs
+        nan_or_inf_mask = res.isna() | np.isinf(res)
+        if nan_or_inf_mask.any():
+            missing_indices = [int(i) for i in res.index[nan_or_inf_mask]]
+            missing_timestamps = (
+                list(time_series.loc[missing_indices].astype(str)) if time_series is not None else []
+            )
+            raise PipelineFeatureMissingValueHandlingNotImplementedError(
+                f"Feature '{col_name}' 계산 중 결측값/무한대(NaN/Inf)가 {len(missing_indices)}건 발생했습니다. "
+                f"선언된 결측 처리 정책 '{mv_policy}'은 미구현 상태입니다.",
+                details=[{
+                    "asset_id": str(asset_id),
+                    "feature_name": col_name,
+                    "source_field": src_col,
+                    "operation": op,
+                    "missing_value_policy": mv_policy,
+                    "missing_count": len(missing_indices),
+                    "missing_row_indices": missing_indices[:10],
+                    "missing_timestamps": missing_timestamps[:10],
+                }],
+                retryable=False,
+            )
 
         return res.astype("float64")
 
@@ -182,7 +208,6 @@ class RuntimeFeatureService:
 
         df_sorted = preprocessed_df.copy()
         if time_col and time_col in df_sorted.columns:
-            # Validate timestamp values strictly (no silent except: pass)
             raw_ts = df_sorted[time_col]
             if raw_ts.isna().any() or raw_ts.astype(str).str.strip().isin(["", "null", "none", "nan"]).any():
                 raise PipelineTimestampInvalidError(
@@ -249,16 +274,13 @@ class RuntimeFeatureService:
         except Exception as exc:
             raise PipelineFeatureSchemaMismatchError(f"Feature Schema 유효성 검증 실패: {exc}") from exc
 
-        # 4. Calculate features column by column with strict equipment isolation (groupby id_col)
+        # 4. Calculate features column by column with strict equipment isolation
         feature_cols: list[str] = []
         feature_data_dict: dict[str, np.ndarray] = {}
 
         for item in schema_spec.features:
             col_name = item.feature_name
             src_col = item.source_field
-            op = item.operation
-            params = item.parameters or {}
-            mv_policy = item.missing_value_policy
 
             if src_col not in df_sorted.columns:
                 raise PipelineFeatureSchemaMismatchError(
@@ -268,11 +290,19 @@ class RuntimeFeatureService:
                 )
 
             # Isolated per asset calculation
-            grouped_calc = df_sorted.groupby(id_col, group_keys=False, sort=False)[src_col].apply(
-                lambda s: self._calculate_feature_series(s, op, params, mv_policy)
-            )
+            res_series_list: list[pd.Series] = []
+            for asset_id_val, group in df_sorted.groupby(id_col, sort=False):
+                time_s = group[time_col] if time_col and time_col in group.columns else None
+                computed = self._calculate_feature_series_for_asset(
+                    asset_id=str(asset_id_val),
+                    series=group[src_col],
+                    item=item,
+                    time_series=time_s,
+                )
+                res_series_list.append(computed)
 
-            feature_data_dict[col_name] = grouped_calc.values.astype(np.float64)
+            combined_series = pd.concat(res_series_list).sort_index()
+            feature_data_dict[col_name] = combined_series.values.astype(np.float64)
             feature_cols.append(col_name)
 
         # 5. Assemble 2D float64 matrix
@@ -280,7 +310,11 @@ class RuntimeFeatureService:
         features_matrix = np.column_stack(matrix_list).astype(np.float64)
 
         if np.isnan(features_matrix).any() or np.isinf(features_matrix).any():
-            features_matrix = np.nan_to_num(features_matrix, nan=0.0, posinf=1e6, neginf=-1e6)
+            raise PipelineFeatureMissingValueHandlingNotImplementedError(
+                "Feature 행렬에 결측값 또는 무한대(NaN/Inf)가 존재합니다. 조용한 0 치환은 금지됩니다.",
+                details=[{"matrix_shape": list(features_matrix.shape)}],
+                retryable=False,
+            )
 
         # 6. Row metadata
         row_metadata: list[RuntimeFeatureRowMetadata] = []
@@ -294,6 +328,14 @@ class RuntimeFeatureService:
                     asset_id=asset_val,
                     observed_at=ts_val,
                 )
+            )
+
+        # Metadata alignment verification
+        if features_matrix.shape[0] != len(row_metadata):
+            raise PipelineFeatureMetadataAlignmentError(
+                f"Feature 행렬 행 수({features_matrix.shape[0]})와 메타데이터 행 수({len(row_metadata)})가 불일치합니다.",
+                details=[{"matrix_rows": features_matrix.shape[0], "metadata_rows": len(row_metadata)}],
+                retryable=False,
             )
 
         feat_hash = hashlib.sha256(features_matrix.tobytes()).hexdigest()[:16]
@@ -310,30 +352,30 @@ class RuntimeFeatureService:
             asset_history_status=asset_history_status,
         )
 
-        # 7. Atomic file persistence of features.npy
-        dest_npy = self.cache_dir / f"{runtime_feature_version}.npy"
-        temp_npy = self.cache_dir / f".tmp_{uuid.uuid4().hex}_{runtime_feature_version}.npy"
-        try:
-            with open(temp_npy, "wb") as f:
-                np.save(f, features_matrix, allow_pickle=False)
-                f.flush()
-                os.fsync(f.fileno())
-            temp_npy.replace(dest_npy)
-        except Exception as exc:
-            if temp_npy.exists():
-                try:
-                    temp_npy.unlink()
-                except Exception:
-                    pass
-            raise PipelineRuntimeFeatureFailedError(f"Runtime Feature npy 저장 실패: {exc}") from exc
+        # 7. Atomic persistence
+        artifact_ref = self._persist_feature_artifact(bundle)
+        return bundle, artifact_ref
 
-        sha256 = compute_file_sha256(dest_npy)
-        size_bytes = dest_npy.stat().st_size
-        ref = ArtifactReference(
-            uri=str(dest_npy).replace("\\", "/"),
-            sha256=sha256,
+    def _persist_feature_artifact(self, bundle: RuntimeFeatureBundle) -> ArtifactReference:
+        """Atomically persist features array as .npy file and return ArtifactReference."""
+        target_filename = f"{bundle.runtime_feature_version}.npy"
+        target_path = self.cache_dir / target_filename
+
+        tmp_path = self.cache_dir / f".tmp_{uuid.uuid4().hex}_{target_filename}"
+        with open(tmp_path, "wb") as f:
+            np.save(f, bundle.features)
+
+        sha256_hash = compute_file_sha256(tmp_path)
+        size_bytes = tmp_path.stat().st_size
+
+        if target_path.exists():
+            os.replace(tmp_path, target_path)
+        else:
+            tmp_path.rename(target_path)
+
+        return ArtifactReference(
+            uri=str(target_path).replace("\\", "/"),
+            sha256=sha256_hash,
             role="runtime_features",
             size_bytes=size_bytes,
         )
-
-        return bundle, ref

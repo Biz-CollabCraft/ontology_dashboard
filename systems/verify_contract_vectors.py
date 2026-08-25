@@ -1280,7 +1280,7 @@ class ContractVectorVerifier:
         req_files = [
             vector_dir / "input" / "protocol-sample-01.jsonl",
             vector_dir / "expected" / "prediction-results.json",
-            vector_dir / "expected" / "anomaly-signal.json",
+            vector_dir / "expected" / "prediction-result-batch.json",
         ]
         missing = [f.relative_to(vector_dir) for f in req_files if not f.is_file()]
         if missing:
@@ -1319,29 +1319,33 @@ class ContractVectorVerifier:
                 )
             )
 
-        # 2. Validate anomaly-signal.json
-        signal_path = vector_dir / "expected" / "anomaly-signal.json"
-        signal_schema_path = self.schemas_dir / "generator-anomaly-signal.schema.json"
+        # 2. Validate prediction-result-batch.json
+        batch_path = vector_dir / "expected" / "prediction-result-batch.json"
+        batch_schema_path = self.schemas_dir / "generator-prediction-result-batch.schema.json"
         try:
-            signal_data = json.loads(signal_path.read_text(encoding="utf-8"))
-            if not isinstance(signal_data, dict):
+            batch_data = json.loads(batch_path.read_text(encoding="utf-8"))
+            if not isinstance(batch_data, dict):
                 result.errors.append(
                     VerificationError(
-                        context=f"{vector_name}/expected/anomaly-signal.json",
-                        message="anomaly-signal.json must be a JSON object",
+                        context=f"{vector_name}/expected/prediction-result-batch.json",
+                        message="prediction-result-batch.json must be a JSON object",
                     )
                 )
-            elif signal_schema_path.is_file():
-                sig_schema = json.loads(signal_schema_path.read_text(encoding="utf-8"))
-                validator = jsonschema.Draft202012Validator(sig_schema)
-                validator.validate(signal_data)
+            elif batch_schema_path.is_file():
+                batch_schema = json.loads(batch_schema_path.read_text(encoding="utf-8"))
+                # Build a resolver/registry so that $ref to generator-model-prediction-result.schema.json is resolved
+                registry = jsonschema.validators.validator_for(batch_schema)
+                # Load all schema files for $ref resolution if needed
+                validator = jsonschema.Draft202012Validator(batch_schema)
+                validator.validate(batch_data)
         except Exception as e:
             result.errors.append(
                 VerificationError(
-                    context=f"{vector_name}/expected/anomaly-signal.json",
-                    message=f"Failed validating anomaly-signal.json: {e}",
+                    context=f"{vector_name}/expected/prediction-result-batch.json",
+                    message=f"Failed validating prediction-result-batch.json: {e}",
                 )
             )
+
 
         # 3. Validate input jsonl format
         input_path = vector_dir / "input" / "protocol-sample-01.jsonl"

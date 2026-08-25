@@ -1,4 +1,4 @@
-"""Background worker dedicated solely to delivering Anomaly Signals from Notification Outbox."""
+"""Background worker dedicated solely to delivering Prediction Result Batches from Outbox."""
 
 from __future__ import annotations
 
@@ -8,8 +8,12 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional, TYPE_CHECKING
 
-from systems.generator.app.runtime_pipeline.notification_service import NotificationService
+from systems.generator.app.runtime_pipeline.notification_service import (
+    PredictionDeliveryService,
+    NotificationService,
+)
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
+    PredictionOutboxItem,
     NotificationOutboxItem,
     now_utc_iso,
 )
@@ -20,12 +24,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class NotificationWorker:
+class PredictionDeliveryWorker:
     """Dedicated background worker polling Outbox and executing retries without re-running pipeline."""
 
     def __init__(
         self,
-        service: NotificationService,
+        service: PredictionDeliveryService,
         repository: Optional[PipelineRepository] = None,
         poll_interval: float = 0.5,
         max_attempts: int = 5,
@@ -46,14 +50,14 @@ class NotificationWorker:
 
         for item in items:
             item.status = "retry_wait"
-            item.last_error_code = "PIPELINE_NOTIFICATION_INTERRUPTED"
-            item.last_error_message = "알림 전송 도중 시스템 재시작/종료로 인해 중단되어 자동 복구되었습니다."
+            item.last_error_code = "PIPELINE_DELIVERY_INTERRUPTED"
+            item.last_error_message = "배치 전송 도중 시스템 재시작/종료로 인해 중단되어 자동 복구되었습니다."
             item.next_retry_at = now_str
             self.service.save_outbox_item(item)
 
             if self.repository is not None and item.run_id:
                 try:
-                    self.repository.update_notification_event(
+                    self.repository.update_prediction_event(
                         run_id=item.run_id,
                         event_id=item.event_id,
                         asset_id=item.asset_id,
@@ -65,10 +69,10 @@ class NotificationWorker:
                         last_error_message=item.last_error_message,
                     )
                 except Exception as r_exc:
-                    logger.warning(f"[NotificationWorker] Failed to sync recovered state for '{item.event_id}': {r_exc}")
+                    logger.warning(f"[PredictionDeliveryWorker] Failed to sync recovered state for '{item.event_id}': {r_exc}")
 
             logger.info(
-                f"[NotificationWorker] Recovered interrupted outbox item '{item.event_id}' "
+                f"[PredictionDeliveryWorker] Recovered interrupted outbox item '{item.event_id}' "
                 f"(run_id='{item.run_id}', asset_id='{item.asset_id}') -> retry_wait"
             )
             recovered_count += 1
@@ -76,38 +80,38 @@ class NotificationWorker:
         return recovered_count
 
     def start(self) -> None:
-        """Start the background notification worker thread after running startup recovery."""
+        """Start the background delivery worker thread after running startup recovery."""
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return
             recovered = self.recover_interrupted_items()
             if recovered > 0:
-                logger.info(f"[NotificationWorker] Recovered {recovered} interrupted 'sending' notification(s)")
+                logger.info(f"[PredictionDeliveryWorker] Recovered {recovered} interrupted 'sending' delivery item(s)")
             self._stop_event.clear()
             self._thread = threading.Thread(
                 target=self._run_loop,
-                name="NotificationWorkerThread",
+                name="PredictionDeliveryWorkerThread",
                 daemon=True,
             )
             self._thread.start()
-            logger.info("[NotificationWorker] Background notification worker started")
+            logger.info("[PredictionDeliveryWorker] Background prediction delivery worker started")
 
     def stop(self, timeout: float = 10.0) -> None:
         """Signal stop and wait for thread to terminate."""
         self._stop_event.set()
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=timeout)
-            logger.info("[NotificationWorker] Background notification worker stopped")
+            logger.info("[PredictionDeliveryWorker] Background prediction delivery worker stopped")
 
-    def process_item(self, item: NotificationOutboxItem) -> bool:
+    def process_item(self, item: PredictionOutboxItem) -> bool:
         """Process a single outbox item through send_once and update outbox status & Run State."""
-        logger.info(f"[NotificationWorker] Delivering signal '{item.event_id}' (attempt={item.attempt + 1}/{item.max_attempts})")
+        logger.info(f"[PredictionDeliveryWorker] Delivering batch '{item.event_id}' (attempt={item.attempt + 1}/{item.max_attempts})")
         item.status = "sending"
         self.service.save_outbox_item(item)
 
         if self.repository is not None and item.run_id:
             try:
-                self.repository.update_notification_event(
+                self.repository.update_prediction_event(
                     run_id=item.run_id,
                     event_id=item.event_id,
                     asset_id=item.asset_id,
@@ -119,7 +123,7 @@ class NotificationWorker:
                     last_error_message=None,
                 )
             except Exception as exc:
-                logger.warning(f"[NotificationWorker] Failed to sync 'sending' state to repository: {exc}")
+                logger.warning(f"[PredictionDeliveryWorker] Failed to sync 'sending' state to repository: {exc}")
 
         try:
             self.service.send_once(item.payload)
@@ -131,7 +135,7 @@ class NotificationWorker:
 
             if self.repository is not None and item.run_id:
                 try:
-                    self.repository.update_notification_event(
+                    self.repository.update_prediction_event(
                         run_id=item.run_id,
                         event_id=item.event_id,
                         asset_id=item.asset_id,
@@ -143,12 +147,12 @@ class NotificationWorker:
                         last_error_message=None,
                     )
                 except Exception as exc:
-                    logger.warning(f"[NotificationWorker] Failed to sync 'sent' state to repository: {exc}")
+                    logger.warning(f"[PredictionDeliveryWorker] Failed to sync 'sent' state to repository: {exc}")
 
-            logger.info(f"[NotificationWorker] Successfully delivered signal '{item.event_id}'")
+            logger.info(f"[PredictionDeliveryWorker] Successfully delivered batch '{item.event_id}'")
             return True
         except Exception as exc:
-            err_code = getattr(exc, "code", "PIPELINE_NOTIFICATION_FAILED")
+            err_code = getattr(exc, "code", "PIPELINE_DELIVERY_FAILED")
             retryable = getattr(exc, "retryable", False)
             item.attempt += 1
             item.last_error_code = err_code
@@ -160,20 +164,20 @@ class NotificationWorker:
                 item.status = "retry_wait"
                 item.next_retry_at = next_time.isoformat()
                 logger.warning(
-                    f"[NotificationWorker] Signal '{item.event_id}' delivery failed (retryable): {exc}. "
+                    f"[PredictionDeliveryWorker] Batch '{item.event_id}' delivery failed (retryable): {exc}. "
                     f"Scheduling retry in {backoff_seconds:.1f}s"
                 )
             else:
                 item.status = "failed"
                 logger.error(
-                    f"[NotificationWorker] Signal '{item.event_id}' delivery failed permanently (retryable={retryable}, attempt={item.attempt}): {exc}"
+                    f"[PredictionDeliveryWorker] Batch '{item.event_id}' delivery failed permanently (retryable={retryable}, attempt={item.attempt}): {exc}"
                 )
 
             self.service.save_outbox_item(item)
 
             if self.repository is not None and item.run_id:
                 try:
-                    self.repository.update_notification_event(
+                    self.repository.update_prediction_event(
                         run_id=item.run_id,
                         event_id=item.event_id,
                         asset_id=item.asset_id,
@@ -185,7 +189,7 @@ class NotificationWorker:
                         last_error_message=item.last_error_message,
                     )
                 except Exception as r_exc:
-                    logger.warning(f"[NotificationWorker] Failed to sync failure state to repository: {r_exc}")
+                    logger.warning(f"[PredictionDeliveryWorker] Failed to sync failure state to repository: {r_exc}")
 
             return False
 
@@ -222,5 +226,9 @@ class NotificationWorker:
                 if processed == 0:
                     time.sleep(self.poll_interval)
             except Exception as exc:
-                logger.error(f"[NotificationWorker] Error in worker loop: {exc}")
+                logger.error(f"[PredictionDeliveryWorker] Error in worker loop: {exc}")
                 time.sleep(self.poll_interval)
+
+
+# Backward-compatible alias
+NotificationWorker = PredictionDeliveryWorker

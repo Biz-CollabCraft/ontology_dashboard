@@ -1,31 +1,27 @@
 {
-  "event_id": "evt-7a8b9c0d1e2f3a4b",
-  "run_id": "run-f1e2d3c4b5a6",
-  "job_id": "job-001",
+  "event_id": "evt-0102030405060708",
+  "run_id": "run-test-01",
+  "job_id": "job-test-01",
   "asset_id": "M14860",
-  "detected_at": "2026-08-25T14:30:05Z",
+  "observed_at": "2026-08-25T11:55:00Z",
+  "generated_at": "2026-08-25T11:55:05Z",
   "dataset_id": "canonical-ai4i-v1",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "anomaly_detected": true,
-  "anomaly_models": ["pdm-xgboost", "pdm-random_forest"],
   "model_results": [
     {
       "asset_id": "M14860",
       "model_id": "pdm-lightgbm",
       "model_version": "pdm-lightgbm-v1.0",
       "status": "succeeded",
-      "prediction": "normal",
-      "probability": 0.12,
-      "threshold": 0.5,
-      "is_anomaly": false,
-      "predicted_at": "2026-08-25T14:30:00Z",
+      "score_type": "positive_class_probability",
+      "score": 0.08,
       "artifact_ref": {
         "uri": "models_store/artifacts/pdm-lightgbm/pdm-lightgbm-v1.0",
         "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
         "role": "model_artifact"
       },
       "feature_ref": {
-        "uri": "models_store/cache/runtime_features/runtime-feat-01.npy",
+        "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
         "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         "role": "runtime_features"
       },
@@ -37,18 +33,15 @@
       "model_id": "pdm-xgboost",
       "model_version": "pdm-xgboost-v1.0",
       "status": "succeeded",
-      "prediction": "anomaly",
-      "probability": 0.88,
-      "threshold": 0.5,
-      "is_anomaly": true,
-      "predicted_at": "2026-08-25T14:30:00Z",
+      "score_type": "positive_class_probability",
+      "score": 0.85,
       "artifact_ref": {
         "uri": "models_store/artifacts/pdm-xgboost/pdm-xgboost-v1.0",
         "sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
         "role": "model_artifact"
       },
       "feature_ref": {
-        "uri": "models_store/cache/runtime_features/runtime-feat-01.npy",
+        "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
         "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         "role": "runtime_features"
       },
@@ -60,18 +53,15 @@
       "model_id": "pdm-random_forest",
       "model_version": "pdm-random_forest-v1.0",
       "status": "succeeded",
-      "prediction": "anomaly",
-      "probability": 0.74,
-      "threshold": 0.5,
-      "is_anomaly": true,
-      "predicted_at": "2026-08-25T14:30:00Z",
+      "score_type": "positive_class_probability",
+      "score": 0.79,
       "artifact_ref": {
         "uri": "models_store/artifacts/pdm-random_forest/pdm-random_forest-v1.0",
         "sha256": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
         "role": "model_artifact"
       },
       "feature_ref": {
-        "uri": "models_store/cache/runtime_features/runtime-feat-01.npy",
+        "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
         "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         "role": "runtime_features"
       },
@@ -80,16 +70,16 @@
     }
   ],
   "source_lineage": {
-    "source_uri": "data/incoming/protocol_sample_01.jsonl",
-    "source_checksum": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    "pipeline_contract_version": "1.0"
+    "source_uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
+    "source_checksum": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "pipeline_contract_version": "generator-prediction-result-v1"
   },
   "sensor_data_ref": {
-    "uri": "data/incoming/protocol_sample_01.jsonl",
-    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
+    "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
   },
   "feature_ref": {
-    "uri": "models_store/cache/runtime_features/runtime-feat-01.npy",
+    "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
     "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
     "role": "runtime_features"
   }

@@ -102,11 +102,34 @@ class PipelineAssetIdMissingError(PipelineBaseError):
     retryable = False
 
 
+class PipelineAssetIdResolutionNotImplementedError(PipelineBaseError):
+    status_code = 501
+    code = "PIPELINE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED"
+    retryable = False
+
+
+class PipelineAssetIdColumnMissingError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_ASSET_ID_COLUMN_MISSING"
+    retryable = False
+
+
+class PipelineAssetIdValueMissingError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_ASSET_ID_VALUE_MISSING"
+    retryable = False
+
+
+class PipelineFeatureMetadataAlignmentError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_FEATURE_METADATA_ALIGNMENT_ERROR"
+    retryable = False
+
+
 class PipelineTimestampInvalidError(PipelineBaseError):
     status_code = 422
     code = "PIPELINE_TIMESTAMP_INVALID"
     retryable = False
-
 
 
 class PipelinePreprocessingFailedError(PipelineBaseError):
@@ -118,6 +141,12 @@ class PipelinePreprocessingFailedError(PipelineBaseError):
 class PipelineRuntimeFeatureFailedError(PipelineBaseError):
     status_code = 422
     code = "PIPELINE_RUNTIME_FEATURE_FAILED"
+    retryable = False
+
+
+class PipelineFeatureMissingValueHandlingNotImplementedError(PipelineBaseError):
+    status_code = 501
+    code = "PIPELINE_FEATURE_MISSING_VALUE_HANDLING_NOT_IMPLEMENTED"
     retryable = False
 
 
@@ -203,25 +232,32 @@ class PipelineRecoveryError(PipelineBaseError):
     retryable = True
 
 
-class PipelineNotificationFailedError(PipelineBaseError):
+class PipelineDeliveryFailedError(PipelineBaseError):
     status_code = 502
-    code = "PIPELINE_NOTIFICATION_FAILED"
+    code = "PIPELINE_DELIVERY_FAILED"
     retryable = True
 
 
-class PipelineNotificationTimeoutError(PipelineBaseError):
+class PipelineDeliveryTimeoutError(PipelineBaseError):
     status_code = 504
-    code = "PIPELINE_NOTIFICATION_TIMEOUT"
+    code = "PIPELINE_DELIVERY_TIMEOUT"
     retryable = True
 
 
-class PipelineNotificationServerError(PipelineBaseError):
+class PipelineDeliveryServerError(PipelineBaseError):
     status_code = 502
-    code = "PIPELINE_NOTIFICATION_SERVER_ERROR"
+    code = "PIPELINE_DELIVERY_SERVER_ERROR"
     retryable = True
 
 
-class PipelineNotificationRetryExhaustedError(PipelineBaseError):
+class PipelineDeliveryRetryExhaustedError(PipelineBaseError):
     status_code = 502
-    code = "PIPELINE_NOTIFICATION_RETRY_EXHAUSTED"
+    code = "PIPELINE_DELIVERY_RETRY_EXHAUSTED"
     retryable = False
+
+
+# Aliases for backward compatibility
+PipelineNotificationFailedError = PipelineDeliveryFailedError
+PipelineNotificationTimeoutError = PipelineDeliveryTimeoutError
+PipelineNotificationServerError = PipelineDeliveryServerError
+PipelineNotificationRetryExhaustedError = PipelineDeliveryRetryExhaustedError

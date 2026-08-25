@@ -1,4 +1,4 @@
-"""Pipeline orchestration service executing Preprocessing, Runtime Feature, Prediction, Aggregation, and Notification."""
+"""Pipeline orchestration service executing Preprocessing, Runtime Feature, Prediction, Batch Building, and Delivery."""
 
 from __future__ import annotations
 
@@ -19,30 +19,34 @@ from systems.generator.app.preprocessing.preprocessing_repository import (
 from systems.generator.app.preprocessing.preprocessing_service import PreprocessingService
 from systems.generator.app.runtime_pipeline.aggregation_service import (
     AggregationService,
-    AggregationVerdict,
+    ModelResultCollector,
+    PredictionBatchSummary,
 )
 from systems.generator.app.runtime_pipeline.notification_service import (
+    PredictionDeliveryService,
     NotificationService,
 )
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
+    PipelineAssetIdColumnMissingError,
     PipelineAssetIdMissingError,
+    PipelineAssetIdValueMissingError,
     PipelineInputChecksumMismatchError,
     PipelineInputNotFoundError,
     PipelineMappingNotImplementedError,
+    PipelineModelPredictionFailedError,
     PipelineNoActiveModelError,
     PipelinePreprocessingFailedError,
     PipelineRuntimeFeatureFailedError,
     PipelineTimestampInvalidError,
 )
-
 from systems.generator.app.runtime_pipeline.pipeline_repository import (
     PipelineRepository,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
-    AnomalySignalPayload,
     ArtifactReference,
     ModelPredictionResult,
-    NotificationEventState,
+    PredictionDeliveryEventState,
+    PredictionResultBatchPayload,
     PipelineQueueItem,
     PipelineRunState,
     SourceLineage,
@@ -80,8 +84,8 @@ class PipelineService:
         self.preprocessing_service = preprocessing_service or PreprocessingService()
         self.runtime_feature_service = runtime_feature_service or RuntimeFeatureService()
         self.prediction_service = prediction_service or PredictionService()
-        self.aggregation_service = aggregation_service or AggregationService()
-        self.notification_service = notification_service or NotificationService()
+        self.aggregation_service = aggregation_service or ModelResultCollector()
+        self.notification_service = notification_service or PredictionDeliveryService()
 
     def _load_source_df(self, source_path: Path) -> pd.DataFrame:
         """Parse source observation protocol file (.jsonl or .csv)."""
@@ -188,8 +192,8 @@ class PipelineService:
         try:
             raw_df = self._load_source_df(source_path)
 
-            # 1. Early strict validation of ID and timestamp
-            id_cols = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id") if c in raw_df.columns]
+            # Strict validation of ID and timestamp
+            id_cols = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id") if c in raw_df.columns]
             if not id_cols:
                 raise PipelineMappingNotImplementedError(
                     "입력 데이터에 확정된 설비 식별자 컬럼이 없어 LLM 기반 자동 매핑이 필요합니다. 현재 단계에서는 지원되지 않습니다.",
@@ -209,7 +213,7 @@ class PipelineService:
             )
             if invalid_id_mask.any():
                 invalid_indices = [int(i) for i in raw_df.index[invalid_id_mask]]
-                raise PipelineAssetIdMissingError(
+                raise PipelineAssetIdValueMissingError(
                     f"설비 식별자 컬럼 '{target_id}'에 누락/무효 값(None, 빈문자열, null, none)이 {len(invalid_indices)}건 존재합니다.",
                     details=[{
                         "id_column": target_id,
@@ -272,7 +276,6 @@ class PipelineService:
                 size_bytes=None,
             )
 
-
             # Execute actual preprocessing
             preprocessed_df = self.preprocessing_service.preprocess_with_plan(str(source_path), plan)
 
@@ -298,15 +301,26 @@ class PipelineService:
         last_feat_error: Optional[Exception] = None
 
         try:
-            # Load preprocessed dataframe from published dataset
             prep_file_path = Path(dataset_ref.uri)
             preprocessed_input_df = pd.read_csv(prep_file_path)
 
             id_col = plan.get("id_column") or "asset_id"
-            if id_col in preprocessed_input_df.columns:
-                actual_asset_ids = sorted(preprocessed_input_df[id_col].dropna().astype(str).unique().tolist())
-            else:
-                actual_asset_ids = ["default_asset"]
+            if id_col not in preprocessed_input_df.columns:
+                candidates = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id") if c in preprocessed_input_df.columns]
+                if candidates:
+                    id_col = candidates[0]
+                else:
+                    raise PipelineAssetIdColumnMissingError(
+                        "전처리 데이터셋에 설비 식별자(asset_id) 컬럼이 누락되었습니다.",
+                        retryable=False,
+                    )
+
+            actual_asset_ids = sorted(preprocessed_input_df[id_col].dropna().astype(str).unique().tolist())
+            if not actual_asset_ids:
+                raise PipelineAssetIdValueMissingError(
+                    "전처리 데이터셋에서 유효한 설비 식별자 목록을 추출할 수 없습니다.",
+                    retryable=False,
+                )
 
             model_feature_errors: dict[str, Any] = {}
 
@@ -321,7 +335,7 @@ class PipelineService:
                         preprocessed_df=preprocessed_input_df,
                         feature_schema_dict=artifact.feature_schema,
                         history_requirement_dict=artifact.history_requirement,
-                        id_column=plan.get("id_column"),
+                        id_column=id_col,
                         time_column=plan.get("time_column"),
                         dataset_id=item.dataset_id,
                         dataset_version=item.dataset_version,
@@ -357,7 +371,7 @@ class PipelineService:
             raise
 
         # -------------------------------------------------------------
-        # Stage 3: Prediction (Inference from Feature Refs per Equipment)
+        # Stage 3: Prediction (Score Calculation across Models per Equipment)
         # -------------------------------------------------------------
         manager.start_stage("prediction", input_refs=list(model_feature_refs.values()))
         try:
@@ -370,6 +384,16 @@ class PipelineService:
                     model_feature_errors=model_feature_errors,
                 )
             )
+
+            # Check if 0 models succeeded across all equipments
+            succeeded_count = sum(1 for r in model_results if r.status == "succeeded")
+            if succeeded_count == 0:
+                raise PipelineModelPredictionFailedError(
+                    "모든 모델의 예측 계산이 실패하여 전달 가능한 결과가 없습니다.",
+                    details=[{"total_results": len(model_results)}],
+                    retryable=False,
+                )
+
             pred_output_refs = [
                 r.artifact_ref for r in model_results if r.artifact_ref is not None
             ]
@@ -383,28 +407,27 @@ class PipelineService:
             raise
 
         # -------------------------------------------------------------
-        # Stage 4: Aggregation (Per-Equipment Aggregation)
+        # Stage 4: Batch Building (Collect Model Results per Equipment)
         # -------------------------------------------------------------
         manager.start_stage("aggregation")
-        verdict: AggregationVerdict = self.aggregation_service.aggregate(model_results)
-        manager.record_predictions(model_results, verdict.anomaly_detected)
+        batch_summary: PredictionBatchSummary = self.aggregation_service.collect(model_results)
+        manager.record_predictions(model_results)
         manager.succeed_stage("aggregation", output_refs=[])
 
         # -------------------------------------------------------------
-        # Stage 5: Notification (Outbox Persistence per Anomalous Equipment)
+        # Stage 5: Prediction Result Batch Delivery (Outbox Persistence for ALL equipments)
         # -------------------------------------------------------------
-        if verdict.anomalous_assets:
+        if batch_summary.equipment_batches:
             manager.start_stage("notification")
-            manager.record_notification("pending")
+            manager.record_prediction_delivery("pending")
             event_ids: list[str] = []
-            events_state: list[NotificationEventState] = []
+            events_state: list[PredictionDeliveryEventState] = []
 
-            for asset_id in verdict.anomalous_assets:
-                eq_verdict = verdict.equipment_verdicts[asset_id]
+            for asset_id, eq_batch in batch_summary.equipment_batches.items():
                 event_id = f"evt-{uuid.uuid4().hex[:16]}"
                 event_ids.append(event_id)
                 events_state.append(
-                    NotificationEventState(
+                    PredictionDeliveryEventState(
                         event_id=event_id,
                         asset_id=asset_id,
                         status="pending",
@@ -418,45 +441,56 @@ class PipelineService:
                 )
 
                 first_feat_ref = next(
-                    (r.feature_ref.model_dump() for r in eq_verdict.model_results if r.feature_ref),
+                    (r.feature_ref.model_dump() for r in eq_batch.model_results if r.feature_ref),
                     None,
                 )
 
-                signal_payload = AnomalySignalPayload(
+                # Observed timestamp from metadata if available
+                first_obs_time = next(
+                    (
+                        rm.observed_at
+                        for b in model_feature_bundles.values()
+                        if b and b.row_metadata
+                        for rm in b.row_metadata
+                        if rm.asset_id == asset_id and rm.observed_at
+                    ),
+                    now_utc_iso(),
+                )
+
+                batch_payload = PredictionResultBatchPayload(
                     event_id=event_id,
                     run_id=run_id,
                     job_id=item.job_id,
                     asset_id=asset_id,
-                    detected_at=now_utc_iso(),
+                    observed_at=first_obs_time,
+                    generated_at=now_utc_iso(),
                     dataset_id=item.dataset_id,
                     dataset_version=item.dataset_version,
-                    anomaly_detected=True,
-                    anomaly_models=eq_verdict.anomaly_models,
-                    model_results=eq_verdict.model_results,
+                    model_results=eq_batch.model_results,
                     source_lineage=SourceLineage(
                         source_uri=item.source_uri,
                         source_checksum=item.source_checksum,
+                        pipeline_contract_version="generator-prediction-result-v1",
                     ),
                     sensor_data_ref={"uri": item.source_uri, "sha256": item.source_checksum},
                     feature_ref=first_feat_ref,
                 )
 
-                # Persist to Outbox directory atomically for dedicated NotificationWorker delivery
-                self.notification_service.create_outbox_record(signal_payload)
-                self.repository.save_event(signal_payload)
+                # Atomically persist to Outbox directory for background worker delivery
+                self.notification_service.create_outbox_record(batch_payload)
+                self.repository.save_event(batch_payload)
 
-            manager.state.notification_event_ids = event_ids
-            manager.state.notification_events = events_state
+            manager.state.prediction_event_ids = event_ids
+            manager.state.prediction_events = events_state
             manager.succeed_stage("notification", output_refs=[])
         else:
-            manager.record_notification("not_required")
-            manager.state.notification_events = []
+            manager.record_prediction_delivery("not_required")
+            manager.state.prediction_events = []
 
         # -------------------------------------------------------------
         # Finish Run and Persist
         # -------------------------------------------------------------
-        manager.finish_run(verdict.overall_status)
-
+        manager.finish_run(batch_summary.overall_status)
         self.repository.save_run_state(manager.state)
 
         return manager.state

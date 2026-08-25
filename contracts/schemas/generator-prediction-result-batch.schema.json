@@ -1,18 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ontology-dashboard.local/schemas/generator-anomaly-signal.schema.json",
-  "title": "GeneratorAnomalySignal",
+  "$id": "https://ontology-dashboard.local/schemas/generator-prediction-result-batch.schema.json",
+  "title": "GeneratorPredictionResultBatch",
   "type": "object",
   "required": [
     "event_id",
     "run_id",
     "job_id",
     "asset_id",
-    "detected_at",
+    "observed_at",
+    "generated_at",
     "dataset_id",
     "dataset_version",
-    "anomaly_detected",
-    "anomaly_models",
     "model_results",
     "source_lineage"
   ],
@@ -33,7 +32,11 @@
       "type": "string",
       "minLength": 1
     },
-    "detected_at": {
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_at": {
       "type": "string",
       "format": "date-time"
     },
@@ -45,13 +48,6 @@
       "type": "string",
       "minLength": 1
     },
-    "anomaly_detected": {
-      "type": "boolean"
-    },
-    "anomaly_models": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
     "model_results": {
       "type": "array",
       "items": {
@@ -60,26 +56,35 @@
           "asset_id",
           "model_id",
           "model_version",
-          "status",
-          "prediction",
-          "threshold",
-          "predicted_at"
+          "status"
         ],
         "properties": {
           "asset_id": { "type": "string", "minLength": 1 },
-          "model_id": { "type": "string" },
-          "model_version": { "type": "string" },
+          "model_id": { "type": "string", "minLength": 1 },
+          "model_version": { "type": "string", "minLength": 1 },
           "status": { "type": "string", "enum": ["succeeded", "failed", "unknown"] },
-          "prediction": { "type": "string", "enum": ["normal", "anomaly", "unknown", "failed"] },
-          "probability": { "type": ["number", "null"] },
-          "threshold": { "type": "number" },
-          "is_anomaly": { "type": ["boolean", "null"] },
-          "predicted_at": { "type": "string", "format": "date-time" },
-          "artifact_ref": { "type": ["object", "null"] },
-          "feature_ref": { "type": ["object", "null"] },
+          "score_type": { "type": ["string", "null"] },
+          "score": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 },
+          "artifact_ref": {
+            "type": ["object", "null"],
+            "properties": {
+              "uri": { "type": "string" },
+              "sha256": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          },
+          "feature_ref": {
+            "type": ["object", "null"],
+            "properties": {
+              "uri": { "type": "string" },
+              "sha256": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          },
           "error_code": { "type": ["string", "null"] },
           "error_message": { "type": ["string", "null"] }
-        }
+        },
+        "additionalProperties": false
       },
       "minItems": 1
     },
@@ -90,7 +95,8 @@
         "source_uri": { "type": "string" },
         "source_checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "pipeline_contract_version": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "sensor_data_ref": {
       "type": ["object", "null"],
