@@ -80,10 +80,6 @@ class PipelineManager:
             dataset_version=dataset_version,
         )
 
-    def retry_failed_job(self, job_id: str) -> PipelineQueueItem:
-        """Explicitly re-enqueue a failed or dead_letter job."""
-        return self.queue.retry_failed_job(job_id=job_id)
-
     def get_status(self) -> dict[str, Any]:
         """Inspection summary of queue and worker state."""
         queued_items = self.queue.list_items(status="queued")

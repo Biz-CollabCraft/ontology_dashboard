@@ -7,7 +7,6 @@ import threading
 import time
 from typing import Optional
 
-from systems.generator.generator_config import PATHS
 from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
 from systems.generator.app.runtime_pipeline.pipeline_schema import PipelineQueueItem, PipelineRunState
 from systems.generator.app.runtime_pipeline.pipeline_service import PipelineService
@@ -16,21 +15,17 @@ logger = logging.getLogger(__name__)
 
 
 class PipelineWorker:
-    """Single consumer background worker reading from PipelineQueue with exponential backoff retry."""
+    """Single consumer background worker reading from PipelineQueue."""
 
     def __init__(
         self,
         queue: PipelineQueue,
         service: PipelineService,
         poll_interval: float = 0.5,
-        max_attempts: Optional[int] = None,
-        retry_backoff_seconds: Optional[float] = None,
     ) -> None:
         self.queue = queue
         self.service = service
         self.poll_interval = poll_interval
-        self.max_attempts = max_attempts or PATHS.pipeline_max_attempts
-        self.retry_backoff_seconds = retry_backoff_seconds or PATHS.pipeline_retry_backoff_seconds
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._current_job: Optional[PipelineQueueItem] = None
@@ -61,7 +56,7 @@ class PipelineWorker:
 
         self._current_job = item
         try:
-            logger.info(f"[PipelineWorker] Processing claimed job '{item.job_id}' (seq={item.sequence}, attempt={item.attempt})")
+            logger.info(f"[PipelineWorker] Processing claimed job '{item.job_id}' (seq={item.sequence})")
             run_state = self.service.execute_queue_item(item)
             self.queue.mark_succeeded(item.job_id)
             logger.info(f"[PipelineWorker] Completed job '{item.job_id}' with status '{run_state.status}'")
@@ -69,11 +64,8 @@ class PipelineWorker:
         except Exception as exc:
             err_code = getattr(exc, "code", "PIPELINE_ERROR")
             retryable = getattr(exc, "retryable", False)
-            logger.exception(f"[PipelineWorker] Job '{item.job_id}' failed: {exc} (retryable={retryable}, attempt={item.attempt})")
-            if retryable and item.attempt < self.max_attempts:
-                backoff = self.retry_backoff_seconds * (2 ** (item.attempt - 1))
-                logger.info(f"[PipelineWorker] Retrying job '{item.job_id}' in {backoff:.1f}s (next attempt={item.attempt + 1})")
-                time.sleep(backoff)
+            logger.exception(f"[PipelineWorker] Job '{item.job_id}' failed: {exc}")
+            if retryable and item.attempt < 3:
                 self.queue.mark_retry_wait(item.job_id, error_code=err_code)
             else:
                 self.queue.mark_failed(item.job_id, error_code=err_code, dead_letter=False)

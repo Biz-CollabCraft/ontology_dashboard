@@ -268,10 +268,6 @@ class PreprocessingService:
         self.planner = planner or PreprocessingPlanner()
         self.repository = repository or PreprocessingRepository()
 
-    def preprocess_with_plan(self, filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
-        """Execute dataframe loading and transformation based on the validated preprocessing plan."""
-        return preprocess_with_plan(filepath, plan)
-
     def _resolve_dataset_path(self, request: PreprocessingRequest) -> Path:
         """Resolve dataset_id / dataset_version / source_uri to a concrete readable file path."""
         allowed_roots = [PATHS.data_dir.resolve(), PATHS.data_preprocessed.resolve()]

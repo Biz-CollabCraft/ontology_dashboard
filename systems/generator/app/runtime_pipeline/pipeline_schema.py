@@ -111,7 +111,6 @@ class PipelineQueueItem(BaseModel):
     detected_at: str = Field(default_factory=now_utc_iso, description="ISO detection timestamp")
     sequence: int = Field(1, ge=1, description="FIFO sequence number")
     attempt: int = Field(1, ge=1, description="Execution attempt number")
-    retry_of_job_id: Optional[str] = Field(None, description="Previous failed job ID if re-enqueued")
     status: Literal[
         "detected",
         "queued",
@@ -122,7 +121,6 @@ class PipelineQueueItem(BaseModel):
         "dead_letter",
     ] = Field("queued", description="Queue item state")
     error_code: Optional[str] = Field(None, description="Error code if item failed")
-
 
 
 class SourceLineage(BaseModel):
