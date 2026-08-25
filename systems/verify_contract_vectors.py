@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 from dataclasses import dataclass, field
@@ -262,11 +263,11 @@ class ContractVectorVerifier:
             result.vector_count += 1
             error_count_before = len(result.errors)
 
-            if vname.startswith("generator-training") or (vdir / "training-config.json").is_file():
-                self._verify_training_vector(vname, vdir, result)
-            elif vname.startswith("generator-feature-input") or (vdir / "observation").is_dir():
+            if vname.startswith("generator-feature-input"):
                 manifest_validator = self._get_manifest_validator(result, context=vname)
                 self._verify_feature_input_vector(vname, vdir, manifest_validator, result)
+            elif vname.startswith("generator-training"):
+                self._verify_training_vector(vname, vdir, result)
             else:
                 result.errors.append(
                     VerificationError(
@@ -391,7 +392,24 @@ class ContractVectorVerifier:
             )
             return
 
-        # 1. Validate request.json as valid non-empty JSON object
+        # 1. Validate request.json
+        req_data = self._verify_training_request(vector_name, vector_dir, result)
+
+        # 2. Validate training-config.json
+        cfg_data = self._verify_training_config(vector_name, vector_dir, req_data, result)
+
+        # 3. Validate expected/artifact-manifest-required.json
+        self._verify_training_artifact_expected(vector_name, vector_dir, req_data, result)
+
+        # 4. Validate expected/split-summary.json
+        self._verify_training_split_summary(vector_name, vector_dir, cfg_data, result)
+
+    def _verify_training_request(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> Optional[dict[str, Any]]:
         req_path = vector_dir / "request.json"
         try:
             req_content = req_path.read_text(encoding="utf-8").strip()
@@ -404,17 +422,8 @@ class ContractVectorVerifier:
                         actual="Empty file",
                     )
                 )
-            else:
-                req_data = json.loads(req_content)
-                if not isinstance(req_data, dict):
-                    result.errors.append(
-                        VerificationError(
-                            context=f"{vector_name}/request.json",
-                            message=f"request.json top-level must be a JSON object, got {type(req_data).__name__}",
-                            expected="JSON object ({...})",
-                            actual=f"{type(req_data).__name__}",
-                        )
-                    )
+                return None
+            req_data = json.loads(req_content)
         except Exception as e:
             result.errors.append(
                 VerificationError(
@@ -422,8 +431,122 @@ class ContractVectorVerifier:
                     message=f"Invalid JSON in request.json: {e}",
                 )
             )
+            return None
 
-        # 2. Validate training-config.json against generator-training-config.schema.json (Fail-closed)
+        if not isinstance(req_data, dict):
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/request.json",
+                    message=f"request.json top-level must be a JSON object, got {type(req_data).__name__}",
+                    expected="JSON object ({...})",
+                    actual=f"{type(req_data).__name__}",
+                )
+            )
+            return None
+
+        allowed_fields = {
+            "dataset_id",
+            "dataset_version",
+            "feature_dataset_version",
+            "training_config_version",
+            "activation_policy",
+            "model_version",
+        }
+        extra_fields = set(req_data.keys()) - allowed_fields
+        if extra_fields:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/request.json",
+                    message=f"request.json contains forbidden extra fields: {sorted(extra_fields)}",
+                    expected="Only allowed fields: dataset_id, dataset_version, feature_dataset_version, training_config_version, activation_policy, model_version",
+                    actual=str(list(req_data.keys())),
+                )
+            )
+
+        required_fields = ["dataset_id", "dataset_version", "feature_dataset_version"]
+        for field in required_fields:
+            val = req_data.get(field)
+            if val is None:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/request.json",
+                        message=f"Missing required field '{field}' in request.json",
+                    )
+                )
+            elif not isinstance(val, str):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/request.json",
+                        message=f"Field '{field}' must be a string, got {type(val).__name__}",
+                    )
+                )
+            else:
+                cleaned = val.strip()
+                if not cleaned:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/request.json",
+                            message=f"Field '{field}' cannot be empty after stripping whitespace",
+                        )
+                    )
+                if ".." in cleaned or "/" in cleaned or "\\" in cleaned:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/request.json",
+                            message=f"Field '{field}' contains invalid path characters ('..', '/', '\\'): '{val}'",
+                        )
+                    )
+
+        if "training_config_version" in req_data and req_data["training_config_version"] is not None:
+            tcv = req_data["training_config_version"]
+            if not isinstance(tcv, str) or not tcv.strip() or ".." in tcv or "/" in tcv or "\\" in tcv:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/request.json",
+                        message=f"training_config_version '{tcv}' must be a valid identifier",
+                    )
+                )
+
+        if "activation_policy" in req_data and req_data["activation_policy"] is not None:
+            act_pol = req_data["activation_policy"]
+            if act_pol not in ("activate_on_success", "publish_only"):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/request.json",
+                        message=f"activation_policy '{act_pol}' is invalid. Allowed: 'activate_on_success', 'publish_only'",
+                        expected="activate_on_success or publish_only",
+                        actual=str(act_pol),
+                    )
+                )
+
+        if "model_version" in req_data and req_data["model_version"] is not None:
+            mv = req_data["model_version"]
+            if not isinstance(mv, str):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/request.json",
+                        message=f"model_version must be a string or null, got {type(mv).__name__}",
+                    )
+                )
+            else:
+                cleaned_mv = mv.strip()
+                if not cleaned_mv or ".." in cleaned_mv or "/" in cleaned_mv or "\\" in cleaned_mv:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/request.json",
+                            message=f"model_version contains invalid path characters or is empty: '{mv}'",
+                        )
+                    )
+
+        return req_data
+
+    def _verify_training_config(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        req_data: Optional[dict[str, Any]],
+        result: VerificationResult,
+    ) -> Optional[dict[str, Any]]:
         cfg_schema_path = self.schemas_dir / "generator-training-config.schema.json"
         if not cfg_schema_path.is_file():
             result.errors.append(
@@ -434,44 +557,434 @@ class ContractVectorVerifier:
                     actual="File missing",
                 )
             )
-        else:
-            try:
-                cfg_schema = json.loads(cfg_schema_path.read_text(encoding="utf-8"))
-                jsonschema.Draft202012Validator.check_schema(cfg_schema)
-                cfg_validator = jsonschema.Draft202012Validator(cfg_schema)
-                cfg_data = json.loads((vector_dir / "training-config.json").read_text(encoding="utf-8"))
-                cfg_validator.validate(cfg_data)
-            except Exception as e:
-                result.errors.append(
-                    VerificationError(
-                        context=f"{vector_name}/training-config.json",
-                        message=f"Training config schema validation failed: {e}",
-                    )
-                )
+            return None
 
-        # 3. Validate expected JSON files
         try:
-            exp_manifest = json.loads((vector_dir / "expected" / "artifact-manifest-required.json").read_text(encoding="utf-8"))
-            if not isinstance(exp_manifest, dict):
-                result.errors.append(
-                    VerificationError(
-                        context=f"{vector_name}/expected/artifact-manifest-required.json",
-                        message="artifact-manifest-required.json top-level must be a JSON object",
-                    )
-                )
-            exp_split = json.loads((vector_dir / "expected" / "split-summary.json").read_text(encoding="utf-8"))
-            if not isinstance(exp_split, dict):
-                result.errors.append(
-                    VerificationError(
-                        context=f"{vector_name}/expected/split-summary.json",
-                        message="split-summary.json top-level must be a JSON object",
-                    )
-                )
+            cfg_schema = json.loads(cfg_schema_path.read_text(encoding="utf-8"))
+            jsonschema.Draft202012Validator.check_schema(cfg_schema)
+            cfg_validator = jsonschema.Draft202012Validator(cfg_schema)
         except Exception as e:
             result.errors.append(
                 VerificationError(
-                    context=f"{vector_name}/expected",
-                    message=f"Invalid JSON in expected training files: {e}",
+                    context=f"{vector_name}/generator-training-config.schema.json",
+                    message=f"Failed to compile generator-training-config.schema.json: {e}",
+                )
+            )
+            return None
+
+        cfg_file = vector_dir / "training-config.json"
+        try:
+            cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/training-config.json",
+                    message=f"Invalid JSON in training-config.json: {e}",
+                )
+            )
+            return None
+
+        if not isinstance(cfg_data, dict):
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/training-config.json",
+                    message=f"training-config.json top-level must be a JSON object, got {type(cfg_data).__name__}",
+                )
+            )
+            return None
+
+        # 1. JSON Schema validation
+        try:
+            cfg_validator.validate(cfg_data)
+        except jsonschema.ValidationError as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/training-config.json",
+                    message=f"Training config schema validation failed: {e.message}",
+                )
+            )
+
+        # 2. Request connection validation
+        if req_data and "training_config_version" in req_data and req_data["training_config_version"]:
+            if req_data["training_config_version"] != cfg_data.get("training_config_version"):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/training-config.json",
+                        message="training_config_version mismatch between request and config",
+                        expected=str(req_data["training_config_version"]),
+                        actual=str(cfg_data.get("training_config_version")),
+                    )
+                )
+
+        # 3. Split settings check
+        split_strategy = cfg_data.get("split_strategy")
+        if split_strategy != "asset_time_split":
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/training-config.json",
+                    message=f"split_strategy must be 'asset_time_split', got '{split_strategy}'",
+                    expected="asset_time_split",
+                    actual=str(split_strategy),
+                )
+            )
+
+        split_ratio = cfg_data.get("split_ratio", {})
+        if not isinstance(split_ratio, dict):
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/training-config.json",
+                    message="split_ratio must be an object",
+                )
+            )
+        else:
+            train_r = split_ratio.get("train")
+            val_r = split_ratio.get("validation")
+            test_r = split_ratio.get("test")
+
+            for k, v in [("train", train_r), ("validation", val_r), ("test", test_r)]:
+                if v is None or not isinstance(v, (int, float)) or math.isnan(v) or math.isinf(v) or v < 0.0 or v > 1.0:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/training-config.json",
+                            message=f"split_ratio.{k} must be a finite number between 0.0 and 1.0, got {v}",
+                        )
+                    )
+
+            if isinstance(train_r, (int, float)) and isinstance(val_r, (int, float)) and isinstance(test_r, (int, float)):
+                if not (math.isnan(train_r) or math.isnan(val_r) or math.isnan(test_r) or math.isinf(train_r) or math.isinf(val_r) or math.isinf(test_r)):
+                    ratio_sum = train_r + val_r + test_r
+                    if not math.isclose(ratio_sum, 1.0, rel_tol=0.0, abs_tol=1e-9):
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/training-config.json",
+                                message=f"split_ratio sum must be 1.0, got {ratio_sum}",
+                                expected="1.0",
+                                actual=str(ratio_sum),
+                            )
+                        )
+
+        # 4. Metric verification
+        metrics = cfg_data.get("metrics")
+        primary_metric = cfg_data.get("primary_metric")
+        if not isinstance(metrics, list) or not metrics:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/training-config.json",
+                    message="metrics must be a non-empty list of strings",
+                )
+            )
+        else:
+            for m in metrics:
+                if not isinstance(m, str) or not m.strip():
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/training-config.json",
+                            message=f"Invalid metric name '{m}' in metrics list",
+                        )
+                    )
+            if len(metrics) != len(set(metrics)):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/training-config.json",
+                        message=f"Duplicate metric names found in metrics: {metrics}",
+                    )
+                )
+            if primary_metric not in metrics:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/training-config.json",
+                        message=f"primary_metric '{primary_metric}' must be included in metrics list",
+                        expected=f"One of {metrics}",
+                        actual=str(primary_metric),
+                    )
+                )
+
+        # 5. Hyperparameter static verification
+        hyperparams = cfg_data.get("hyperparameters", {})
+        if not isinstance(hyperparams, dict):
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/training-config.json",
+                    message="hyperparameters must be an object",
+                )
+            )
+        else:
+            for model_k, model_cfg in hyperparams.items():
+                if not isinstance(model_cfg, dict):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/training-config.json",
+                            message=f"hyperparameters['{model_k}'] must be an object",
+                        )
+                    )
+                else:
+                    for param_k, param_v in model_cfg.items():
+                        if isinstance(param_v, float) and (math.isnan(param_v) or math.isinf(param_v)):
+                            result.errors.append(
+                                VerificationError(
+                                    context=f"{vector_name}/training-config.json",
+                                    message=f"hyperparameters['{model_k}']['{param_k}'] must not be NaN or Inf",
+                                )
+                            )
+
+        return cfg_data
+
+    def _verify_training_artifact_expected(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        req_data: Optional[dict[str, Any]],
+        result: VerificationResult,
+    ) -> None:
+        exp_file = vector_dir / "expected" / "artifact-manifest-required.json"
+        try:
+            exp_data = json.loads(exp_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/artifact-manifest-required.json",
+                    message=f"Invalid JSON in artifact-manifest-required.json: {e}",
+                )
+            )
+            return
+
+        if not isinstance(exp_data, dict):
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/artifact-manifest-required.json",
+                    message="artifact-manifest-required.json top-level must be a JSON object",
+                )
+            )
+            return
+
+        if req_data and req_data.get("model_version"):
+            if exp_data.get("model_version") != req_data["model_version"]:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/artifact-manifest-required.json",
+                        message="model_version in expected manifest does not match request.model_version",
+                        expected=str(req_data["model_version"]),
+                        actual=str(exp_data.get("model_version")),
+                    )
+                )
+
+        required_manifest_fields = [
+            "artifact_type",
+            "artifact_schema_version",
+            "model_id",
+            "dataset_version",
+            "feature_schema_version",
+            "label_schema_version",
+            "history_requirement_version",
+            "metrics_schema_version",
+        ]
+        for field in required_manifest_fields:
+            v = exp_data.get(field)
+            if not v or not isinstance(v, str) or not v.strip():
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/artifact-manifest-required.json",
+                        message=f"Required field '{field}' is missing or empty in artifact-manifest-required.json",
+                    )
+                )
+
+        if exp_data.get("artifact_type") != "predictive_maintenance_model":
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/artifact-manifest-required.json",
+                    message="artifact_type must be 'predictive_maintenance_model'",
+                    expected="predictive_maintenance_model",
+                    actual=str(exp_data.get("artifact_type")),
+                )
+            )
+
+        if exp_data.get("artifact_schema_version") != "model-artifact-v1.0":
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/artifact-manifest-required.json",
+                    message="artifact_schema_version must be 'model-artifact-v1.0'",
+                    expected="model-artifact-v1.0",
+                    actual=str(exp_data.get("artifact_schema_version")),
+                )
+            )
+
+        req_roles = exp_data.get("required_roles")
+        if not isinstance(req_roles, list) or not req_roles:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/artifact-manifest-required.json",
+                    message="required_roles must be a non-empty list of strings",
+                )
+            )
+        else:
+            expected_required_roles = {"model", "feature_schema", "label_schema", "history_requirement", "metrics"}
+            for role in req_roles:
+                if not isinstance(role, str) or not role.strip():
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/artifact-manifest-required.json",
+                            message=f"Invalid role entry '{role}' in required_roles",
+                        )
+                    )
+            if len(req_roles) != len(set(req_roles)):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/artifact-manifest-required.json",
+                        message=f"Duplicate roles found in required_roles: {req_roles}",
+                    )
+                )
+            missing_roles = expected_required_roles - set(req_roles)
+            if missing_roles:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/artifact-manifest-required.json",
+                        message=f"Missing essential roles in required_roles: {sorted(missing_roles)}",
+                        expected=str(sorted(expected_required_roles)),
+                        actual=str(req_roles),
+                    )
+                )
+
+    def _verify_training_split_summary(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        cfg_data: Optional[dict[str, Any]],
+        result: VerificationResult,
+    ) -> None:
+        split_file = vector_dir / "expected" / "split-summary.json"
+        try:
+            split_data = json.loads(split_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/split-summary.json",
+                    message=f"Invalid JSON in split-summary.json: {e}",
+                )
+            )
+            return
+
+        if not isinstance(split_data, dict):
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/split-summary.json",
+                    message="split-summary.json top-level must be a JSON object",
+                )
+            )
+            return
+
+        strategy = split_data.get("strategy")
+        if strategy != "asset_time_split":
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/split-summary.json",
+                    message=f"strategy must be 'asset_time_split', got '{strategy}'",
+                    expected="asset_time_split",
+                    actual=str(strategy),
+                )
+            )
+        if cfg_data and "split_strategy" in cfg_data and cfg_data["split_strategy"] != strategy:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/split-summary.json",
+                    message=f"split summary strategy '{strategy}' does not match training config split_strategy '{cfg_data['split_strategy']}'",
+                )
+            )
+
+        asset_count = split_data.get("asset_count")
+        if not isinstance(asset_count, int) or isinstance(asset_count, bool) or asset_count < 0:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/split-summary.json",
+                    message=f"asset_count must be an integer >= 0, got {asset_count}",
+                )
+            )
+
+        total_rows = split_data.get("total_rows")
+        if not isinstance(total_rows, int) or isinstance(total_rows, bool) or total_rows < 0:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/split-summary.json",
+                    message=f"total_rows must be an integer >= 0, got {total_rows}",
+                )
+            )
+            return
+
+        partition_row_sum = 0
+        for part in ["train", "val", "test"]:
+            p_data = split_data.get(part)
+            if not isinstance(p_data, dict):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/split-summary.json",
+                        message=f"Partition '{part}' must be an object",
+                    )
+                )
+                continue
+
+            row_cnt = p_data.get("row_count")
+            pos_cnt = p_data.get("positive_count")
+            neg_cnt = p_data.get("negative_count")
+            pos_ratio = p_data.get("positive_ratio")
+
+            for k, v in [("row_count", row_cnt), ("positive_count", pos_cnt), ("negative_count", neg_cnt)]:
+                if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/split-summary.json",
+                            message=f"Partition '{part}.{k}' must be an integer >= 0, got {v}",
+                        )
+                    )
+
+            if isinstance(row_cnt, int) and isinstance(pos_cnt, int) and isinstance(neg_cnt, int):
+                partition_row_sum += row_cnt
+                if pos_cnt + neg_cnt != row_cnt:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/split-summary.json",
+                            message=f"In partition '{part}': positive_count ({pos_cnt}) + negative_count ({neg_cnt}) != row_count ({row_cnt})",
+                        )
+                    )
+
+                if isinstance(pos_ratio, (int, float)) and not math.isnan(pos_ratio) and not math.isinf(pos_ratio):
+                    if pos_ratio < 0.0 or pos_ratio > 1.0:
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/split-summary.json",
+                                message=f"In partition '{part}': positive_ratio must be between 0.0 and 1.0, got {pos_ratio}",
+                            )
+                        )
+                    elif row_cnt > 0:
+                        expected_ratio = pos_cnt / row_cnt
+                        if not math.isclose(pos_ratio, expected_ratio, rel_tol=1e-4, abs_tol=1e-4):
+                            result.errors.append(
+                                VerificationError(
+                                    context=f"{vector_name}/expected/split-summary.json",
+                                    message=f"In partition '{part}': positive_ratio ({pos_ratio}) does not match positive_count/row_count ({expected_ratio})",
+                                )
+                            )
+                    else:
+                        if pos_ratio != 0.0:
+                            result.errors.append(
+                                VerificationError(
+                                    context=f"{vector_name}/expected/split-summary.json",
+                                    message=f"In partition '{part}': positive_ratio must be 0.0 when row_count == 0, got {pos_ratio}",
+                                )
+                            )
+                else:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/split-summary.json",
+                            message=f"In partition '{part}': positive_ratio must be a finite number",
+                        )
+                    )
+
+        if partition_row_sum != total_rows:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/split-summary.json",
+                    message=f"Sum of partition row_counts ({partition_row_sum}) does not match total_rows ({total_rows})",
+                    expected=str(total_rows),
+                    actual=str(partition_row_sum),
                 )
             )
 

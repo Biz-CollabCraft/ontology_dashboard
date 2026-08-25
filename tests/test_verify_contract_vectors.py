@@ -331,22 +331,126 @@ def test_feature_vector_request_json_empty_fails(tmp_path: Path):
 
 
 # ==========================================
-# Training Vector Fail-Closed Tests
+# Training Vector Fail-Closed & Semantic Tests
 # ==========================================
+
+def _setup_valid_synthetic_training_vector(contracts_dir: Path) -> Path:
+    schema_path = contracts_dir / "schemas" / "generator-training-config.schema.json"
+    schema_data = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://contracts.ontology.local/schemas/generator-training-config.schema.json",
+        "title": "Generator Training Config Schema",
+        "type": "object",
+        "required": ["training_config_version", "split_strategy", "split_ratio", "primary_metric", "metrics"],
+        "properties": {
+            "training_config_version": {"type": "string"},
+            "split_strategy": {"type": "string", "enum": ["asset_time_split"]},
+            "split_ratio": {
+                "type": "object",
+                "required": ["train", "validation", "test"],
+                "properties": {
+                    "train": {"type": "number"},
+                    "validation": {"type": "number"},
+                    "test": {"type": "number"}
+                }
+            },
+            "primary_metric": {"type": "string"},
+            "metrics": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+            "hyperparameters": {"type": "object"}
+        }
+    }
+    schema_path.write_text(json.dumps(schema_data), encoding="utf-8")
+
+    t_vdir = contracts_dir / "test-vectors" / "generator-training-v1"
+    t_vdir.mkdir(parents=True, exist_ok=True)
+    (t_vdir / "expected").mkdir(parents=True, exist_ok=True)
+
+    request_data = {
+        "dataset_id": "ai4i",
+        "dataset_version": "v1.0",
+        "feature_dataset_version": "f-v1.0",
+        "training_config_version": "tc-v1.0",
+        "activation_policy": "activate_on_success",
+        "model_version": "pdm-lgb-v1.0"
+    }
+    (t_vdir / "request.json").write_text(json.dumps(request_data), encoding="utf-8")
+
+    training_config_data = {
+        "training_config_version": "tc-v1.0",
+        "split_strategy": "asset_time_split",
+        "split_ratio": {
+            "train": 0.7,
+            "validation": 0.15,
+            "test": 0.15
+        },
+        "primary_metric": "f1_score",
+        "metrics": ["f1_score", "roc_auc"],
+        "hyperparameters": {
+            "lightgbm": {
+                "n_estimators": 50,
+                "learning_rate": 0.05
+            }
+        }
+    }
+    (t_vdir / "training-config.json").write_text(json.dumps(training_config_data), encoding="utf-8")
+
+    artifact_data = {
+        "artifact_type": "predictive_maintenance_model",
+        "artifact_schema_version": "model-artifact-v1.0",
+        "model_id": "pdm-lgb",
+        "model_version": "pdm-lgb-v1.0",
+        "dataset_version": "v1.0",
+        "feature_schema_version": "fs-v1.0",
+        "label_schema_version": "ls-v1.0",
+        "history_requirement_version": "hr-v1.0",
+        "metrics_schema_version": "ms-v1.0",
+        "required_roles": ["model", "feature_schema", "label_schema", "history_requirement", "metrics"]
+    }
+    (t_vdir / "expected" / "artifact-manifest-required.json").write_text(json.dumps(artifact_data), encoding="utf-8")
+
+    split_summary_data = {
+        "strategy": "asset_time_split",
+        "asset_count": 5,
+        "total_rows": 100,
+        "train": {
+            "row_count": 70,
+            "positive_count": 7,
+            "negative_count": 63,
+            "positive_ratio": 0.1
+        },
+        "val": {
+            "row_count": 15,
+            "positive_count": 3,
+            "negative_count": 12,
+            "positive_ratio": 0.2
+        },
+        "test": {
+            "row_count": 15,
+            "positive_count": 3,
+            "negative_count": 12,
+            "positive_ratio": 0.2
+        }
+    }
+    (t_vdir / "expected" / "split-summary.json").write_text(json.dumps(split_summary_data), encoding="utf-8")
+    return t_vdir
+
+
+def test_valid_synthetic_training_vector_passes(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    _setup_valid_synthetic_training_vector(contracts_dir)
+
+    result = verifier.verify_all()
+    assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
+    assert "generator-training-v1" in result.verified_vectors
+
 
 def test_training_vector_missing_schema_fails(tmp_path: Path):
     """Verify that if a training vector exists without its schema, verification fails fail-closed."""
     contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
-    # create synthetic training vector
-    t_vdir = contracts_dir / "test-vectors" / "generator-training-v1"
-    t_vdir.mkdir(parents=True, exist_ok=True)
-    (t_vdir / "expected").mkdir(parents=True, exist_ok=True)
-    (t_vdir / "request.json").write_text(json.dumps({"dataset_id": "ai4i"}), encoding="utf-8")
-    (t_vdir / "training-config.json").write_text(json.dumps({"training_config_version": "v1"}), encoding="utf-8")
-    (t_vdir / "expected" / "artifact-manifest-required.json").write_text(json.dumps({"model_id": "pdm-lgb"}), encoding="utf-8")
-    (t_vdir / "expected" / "split-summary.json").write_text(json.dumps({"train_rows": 10}), encoding="utf-8")
-
-    # If schema is missing
+    _setup_valid_synthetic_training_vector(contracts_dir)
     schema_path = contracts_dir / "schemas" / "generator-training-config.schema.json"
     if schema_path.exists():
         schema_path.unlink()
@@ -356,32 +460,120 @@ def test_training_vector_missing_schema_fails(tmp_path: Path):
     assert any("Required training config schema not found" in e.message for e in result.errors)
 
 
-def test_training_vector_invalid_config_schema_fails(tmp_path: Path):
-    """Verify that if training-config.json violates generator-training-config.schema.json, verification fails."""
+def test_training_request_forbidden_extra_field_fails(tmp_path: Path):
     contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
-    # create schema
-    schema_path = contracts_dir / "schemas" / "generator-training-config.schema.json"
-    schema_path.write_text(
-        json.dumps({
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["split_ratio"],
-            "properties": {
-                "split_ratio": {"type": "object"}
-            }
-        }),
-        encoding="utf-8",
-    )
-
-    t_vdir = contracts_dir / "test-vectors" / "generator-training-v1"
-    t_vdir.mkdir(parents=True, exist_ok=True)
-    (t_vdir / "expected").mkdir(parents=True, exist_ok=True)
-    (t_vdir / "request.json").write_text(json.dumps({"dataset_id": "ai4i"}), encoding="utf-8")
-    # missing required split_ratio
-    (t_vdir / "training-config.json").write_text(json.dumps({"training_config_version": "v1"}), encoding="utf-8")
-    (t_vdir / "expected" / "artifact-manifest-required.json").write_text(json.dumps({"model_id": "pdm-lgb"}), encoding="utf-8")
-    (t_vdir / "expected" / "split-summary.json").write_text(json.dumps({"train_rows": 10}), encoding="utf-8")
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    req = json.loads((t_vdir / "request.json").read_text(encoding="utf-8"))
+    req["extra_forbidden_field"] = "bad"
+    (t_vdir / "request.json").write_text(json.dumps(req), encoding="utf-8")
 
     result = verifier.verify_all()
     assert not result.passed
-    assert any("Training config schema validation failed" in e.message for e in result.errors)
+    assert any("forbidden extra fields" in e.message for e in result.errors)
+
+
+def test_training_request_path_traversal_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    req = json.loads((t_vdir / "request.json").read_text(encoding="utf-8"))
+    req["dataset_id"] = "../traversal_id"
+    (t_vdir / "request.json").write_text(json.dumps(req), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("invalid path characters" in e.message for e in result.errors)
+
+
+def test_training_request_invalid_activation_policy_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    req = json.loads((t_vdir / "request.json").read_text(encoding="utf-8"))
+    req["activation_policy"] = "auto_merge"
+    (t_vdir / "request.json").write_text(json.dumps(req), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("activation_policy 'auto_merge' is invalid" in e.message for e in result.errors)
+
+
+def test_training_config_split_ratio_sum_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    cfg = json.loads((t_vdir / "training-config.json").read_text(encoding="utf-8"))
+    cfg["split_ratio"]["train"] = 0.8  # sum is 0.8 + 0.15 + 0.15 = 1.1
+    (t_vdir / "training-config.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("split_ratio sum must be 1.0" in e.message for e in result.errors)
+
+
+def test_training_config_primary_metric_not_in_metrics_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    cfg = json.loads((t_vdir / "training-config.json").read_text(encoding="utf-8"))
+    cfg["primary_metric"] = "custom_loss"
+    (t_vdir / "training-config.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("primary_metric 'custom_loss' must be included in metrics list" in e.message for e in result.errors)
+
+
+def test_training_artifact_expected_missing_roles_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    art = json.loads((t_vdir / "expected" / "artifact-manifest-required.json").read_text(encoding="utf-8"))
+    art["required_roles"] = ["model", "metrics"]  # missing feature_schema, label_schema, history_requirement
+    (t_vdir / "expected" / "artifact-manifest-required.json").write_text(json.dumps(art), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Missing essential roles in required_roles" in e.message for e in result.errors)
+
+
+def test_training_split_summary_partition_sum_mismatch_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    split_s = json.loads((t_vdir / "expected" / "split-summary.json").read_text(encoding="utf-8"))
+    split_s["total_rows"] = 150  # partition sum is 70 + 15 + 15 = 100 != 150
+    (t_vdir / "expected" / "split-summary.json").write_text(json.dumps(split_s), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("does not match total_rows" in e.message for e in result.errors)
+
+
+def test_training_split_summary_positive_negative_sum_mismatch_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    split_s = json.loads((t_vdir / "expected" / "split-summary.json").read_text(encoding="utf-8"))
+    split_s["train"]["positive_count"] = 10  # 10 + 63 = 73 != 70
+    (t_vdir / "expected" / "split-summary.json").write_text(json.dumps(split_s), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("positive_count (10) + negative_count (63) != row_count (70)" in e.message for e in result.errors)
+
+
+def test_training_split_summary_invalid_positive_ratio_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    t_vdir = _setup_valid_synthetic_training_vector(contracts_dir)
+    split_s = json.loads((t_vdir / "expected" / "split-summary.json").read_text(encoding="utf-8"))
+    split_s["train"]["positive_ratio"] = 0.99  # actual is 7/70 = 0.1
+    (t_vdir / "expected" / "split-summary.json").write_text(json.dumps(split_s), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("positive_ratio (0.99) does not match positive_count/row_count" in e.message for e in result.errors)
+
+
+def test_unknown_vector_prefix_fails_fail_closed(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    unknown_vdir = contracts_dir / "test-vectors" / "unknown-pipeline-v1"
+    unknown_vdir.mkdir(parents=True, exist_ok=True)
+    (unknown_vdir / "request.json").write_text("{}", encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("Unknown test vector structure" in e.message for e in result.errors)
