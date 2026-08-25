@@ -385,4 +385,3 @@ def test_training_vector_invalid_config_schema_fails(tmp_path: Path):
     result = verifier.verify_all()
     assert not result.passed
     assert any("Training config schema validation failed" in e.message for e in result.errors)
-
