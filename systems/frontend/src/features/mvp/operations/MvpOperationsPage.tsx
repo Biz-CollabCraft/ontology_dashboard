@@ -103,6 +103,8 @@ export function MvpOperationsPage({
   const [savingNote, setSavingNote] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const queue = useMemo(() => model.events.filter((item) => item.recommendedDecision !== "continue_monitoring" || item.status !== "normal"), [model.events]);
+  const selectedAsset = selectedEvent ? model.assets.find((asset) => asset.assetId === selectedEvent.assetId) ?? null : null;
+  const suspectedPart = selectedAsset?.topFactors[0]?.label ?? selectedEvent?.predictedFailureType ?? "부품 근거 없음";
   const latestDecision = detail?.activity.find((activity) => activity.kind === "decision") ?? null;
   const selectedDecisionOption = DECISION_OPTIONS.find((option) => option.decision === decision) ?? DECISION_OPTIONS[0];
   const SelectedDecisionIcon = selectedDecisionOption.Icon;
@@ -164,28 +166,28 @@ export function MvpOperationsPage({
   return (
     <div className="mvp-page mvp-operations-page" data-testid="mvp-operations">
       <div className="mvp-operations-layout">
-        <MvpPanel title={`검토 업무 · ${queue.length}`} eyebrow="업무 목록" className="mvp-operation-queue-panel">
+        <MvpPanel title={`Work Order 후보 · ${queue.length}`} eyebrow="WORK ORDER QUEUE" className="mvp-operation-queue-panel">
           {queue.length ? <div className="mvp-operation-queue">{queue.map((event) => (
             <button type="button" key={event.eventId} className={event.eventId === selectedEventId ? "is-selected" : ""} onClick={() => { setDecision(event.recommendedDecision); onSelectEvent(event); }}>
               <div><MvpStatusBadge status={event.status} /><strong>{event.assetName}</strong><code>{event.eventId}</code></div>
               <dl><div><dt>위험</dt><dd>{formatProbability(event.failureProbability)}</dd></div><div><dt>영향</dt><dd>{formatMinutes(event.estimatedDowntimeMinutes)}</dd></div></dl>
-              <span>{DECISION_LABEL[event.recommendedDecision]}</span>
+              <span>{DECISION_LABEL[event.recommendedDecision]} · WO ID 미생성</span>
               <small>{event.assignedEngineer ?? "미배정"}</small>
             </button>
-          ))}</div> : <MvpState kind="empty" title="검토할 업무가 없습니다" detail="현재 관측 기준으로 즉시 판단할 위험 Event가 없습니다." />}
+          ))}</div> : <MvpState kind="empty" title="처리할 작업 후보가 없습니다" detail="현재 관측 기준으로 Work Order 후보가 필요한 Event가 없습니다." />}
         </MvpPanel>
 
         <section className="mvp-operation-detail">
           {!selectedEvent ? (
-            <MvpState kind="empty" title="검토할 업무를 선택하세요" detail={selectedEventId ? `요청한 Event ${selectedEventId}를 현재 데이터에서 찾지 못했습니다.` : "왼쪽 목록에서 업무를 선택하면 근거 상태와 판단 기록을 확인할 수 있습니다."} />
+            <MvpState kind="empty" title="Work Order 후보를 선택하세요" detail={selectedEventId ? `요청한 Event ${selectedEventId}를 현재 데이터에서 찾지 못했습니다.` : "왼쪽 큐에서 후보를 선택하면 관련 설비, 근거, 허용된 기록 액션을 확인할 수 있습니다."} />
           ) : (
             <>
-              <MvpPanel title={selectedEvent.assetName} eyebrow={`검토 업무 · ${selectedEvent.eventId}`} actions={<><button type="button" className="mvp-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />전체 근거 보기</button><button type="button" className="mvp-button secondary" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />보고서 보기</button></>}>
+              <MvpPanel title={selectedEvent.assetName} eyebrow={`WORK ORDER CANDIDATE · ${selectedEvent.eventId}`} actions={<><button type="button" className="mvp-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />Asset 보기</button><button type="button" className="mvp-button secondary" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />Report 보기</button></>}>
                 <div className="mvp-guided-action">
                   <div>
-                    <span>다음 액션</span>
+                    <span>다음 처리</span>
                     <strong>{recommendedOption.title}</strong>
-                    <p>{gapCount > 0 ? `${gapCount}개 제한을 확인한 뒤 기록하세요.` : "추천 판단을 바로 기록하거나, 근거와 보고서를 먼저 확인할 수 있습니다."}</p>
+                    <p>{gapCount > 0 ? `${gapCount}개 제한을 확인한 뒤 기록하세요.` : "실제 WorkOrder 생성/승인은 아직 연결되지 않았고, 현재는 후보 판단 기록만 남깁니다."}</p>
                   </div>
                   <div>
                     {canDecide ? (
@@ -200,8 +202,16 @@ export function MvpOperationsPage({
                 </div>
                 <div className="mvp-operation-hero">
                   <div><MvpStatusBadge status={selectedEvent.status} /><MvpConfidenceBadge confidence={selectedEvent.confidence} /></div>
-                  <dl><div><dt>고장 확률</dt><dd>{formatProbability(selectedEvent.failureProbability)}</dd></div><div><dt>추천 상태</dt><dd>{DECISION_LABEL[selectedEvent.recommendedDecision]}</dd></div><div><dt>최근 사람 결정</dt><dd>{latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "기록 없음"}</dd></div><div><dt>담당자</dt><dd>{selectedEvent.assignedEngineer ?? "미배정"}</dd></div><div><dt>부품</dt><dd>{selectedEvent.sparePartAvailable === null ? "확인 필요" : selectedEvent.sparePartAvailable ? "확보" : "미확보"}</dd></div></dl>
+                  <dl><div><dt>Target Asset</dt><dd>{selectedEvent.assetId}</dd></div><div><dt>의심 부품</dt><dd>{suspectedPart}</dd></div><div><dt>고장 확률</dt><dd>{formatProbability(selectedEvent.failureProbability)}</dd></div><div><dt>추천 상태</dt><dd>{DECISION_LABEL[selectedEvent.recommendedDecision]}</dd></div><div><dt>최근 사람 결정</dt><dd>{latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "기록 없음"}</dd></div><div><dt>담당자</dt><dd>{selectedEvent.assignedEngineer ?? "미배정"}</dd></div><div><dt>부품</dt><dd>{selectedEvent.sparePartAvailable === null ? "확인 필요" : selectedEvent.sparePartAvailable ? "확보" : "미확보"}</dd></div></dl>
                 </div>
+                <section className="mvp-always-action" aria-label="현재 허용된 작업">
+                  <header><span>Allowed Action</span><strong>{canDecide ? "판단 기록 가능" : "읽기 전용"}</strong></header>
+                  <div className="mvp-action-row">
+                    <button type="button" className="mvp-button primary" onClick={saveDecision} disabled={!canDecide || savingDecision}><Save size={14} />{savingDecision ? "기록 중" : `${DECISION_LABEL[decision]} 기록`}</button>
+                    <button type="button" className="mvp-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />Asset 근거</button>
+                    <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />Report</button>
+                  </div>
+                </section>
                 <ol className="mvp-decision-flow" aria-label="업무 진행 상태">
                   <li className={detailError ? "is-warning" : "is-complete"}><span>1</span><div><strong>{evidenceStatus}</strong><small>근거 확인</small></div></li>
                   <li className={gapCount > 0 ? "is-warning" : "is-complete"}><span>2</span><div><strong>{limitationStatus}</strong><small>제한 확인</small></div></li>
@@ -214,7 +224,7 @@ export function MvpOperationsPage({
                 <>
                   {detail.warnings.length ? <div className="mvp-inline-warning" role="status"><strong>부분 연결 경고</strong><ul>{detail.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div> : null}
                   <div className="mvp-operation-evidence-grid">
-                    <MvpPanel title="판단 선택" eyebrow="액션 선택">
+                    <MvpPanel title="Allowed Action" eyebrow="사람 기록">
                       <div className="mvp-recommendation"><span>추천</span><strong>{DECISION_LABEL[selectedEvent.recommendedDecision]}</strong><p>버튼 하나를 고르면 아래 기록 액션에 바로 반영됩니다.</p></div>
                       <div className="mvp-decision-option-grid" role="radiogroup" aria-label="판단 종류">
                         {DECISION_OPTIONS.map((option) => {
@@ -239,8 +249,10 @@ export function MvpOperationsPage({
                       </div>
                     </MvpPanel>
 
-                    <MvpPanel title="판단 전 요약" eyebrow="확인">
+                    <MvpPanel title="WorkOrder Context" eyebrow="관련 설비와 근거">
                       <dl className="mvp-sensor-grid">
+                        <div><dt>WorkOrder ID</dt><dd>계약 없음 · 미생성</dd></div>
+                        <div><dt>MaintenanceAction</dt><dd>계약 없음</dd></div>
                         <div><dt>위험</dt><dd>{formatProbability(selectedEvent.failureProbability)} · {selectedEvent.predictedFailureType}</dd></div>
                         <div><dt>운영 영향</dt><dd>{selectedEvent.criticality ?? "중요도 근거 부족"} · {formatMinutes(selectedEvent.estimatedDowntimeMinutes)}</dd></div>
                         <div><dt>결정 전 확인</dt><dd>{detail.evidenceGaps.length ? `${detail.evidenceGaps.length}개 항목 확인 필요` : detail.threshold === null ? "임계값 근거 부족" : `임계값 ${formatProbability(detail.threshold)}`}</dd></div>

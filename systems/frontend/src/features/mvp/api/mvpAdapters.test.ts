@@ -205,7 +205,14 @@ describe("MVP adapter contract", () => {
         status_grade: "critical",
         prediction_horizon_hours: 24,
       },
-      risk_series: [],
+      risk_series: [{
+        observed_at: "2026-08-06T02:00:00Z",
+        failure_probability: 0.84,
+        status_grade: "warning",
+        prediction_id: "pred-1",
+        source_kind: "runtime_inference",
+        source_ref: "prediction://pred-1",
+      }],
       features: [{
         key: "tool_wear_min",
         label: "공구 마모",
@@ -261,6 +268,17 @@ describe("MVP adapter contract", () => {
       observedAt: "2026-08-06T03:00:00Z",
       historySourceRef: "observation-series://CNC-001/tool_wear_min",
       historyPointCount: 1,
+      historyPoints: [{
+        observedAt: "2026-08-06T02:00:00Z",
+        value: 200,
+        qualityStatus: "good",
+      }],
+    }));
+    expect(enriched.predictionHorizonHours).toBe(24);
+    expect(enriched.riskSeries[0]).toEqual(expect.objectContaining({
+      observedAt: "2026-08-06T02:00:00Z",
+      failureProbability: 0.84,
+      status: "warning",
     }));
     expect(enriched.evidenceGaps[0]).toEqual(expect.objectContaining({ field: "asset.criticality" }));
     expect(enriched.assetDetailStatus?.isStale).toBeNull();

@@ -173,6 +173,10 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     updateSelection({ view: "operations", assetId: asset.assetId, eventId: asset.eventId });
   }, [updateSelection]);
 
+  const openAssetReport = useCallback((asset: MvpAsset) => {
+    updateSelection({ view: "reports", reportTab: "executive-brief", assetId: asset.assetId, eventId: asset.eventId });
+  }, [updateSelection]);
+
   const selectEvent = useCallback((event: MvpEvent) => {
     updateSelection({ eventId: event.eventId, assetId: event.assetId });
   }, [updateSelection]);
@@ -216,7 +220,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   let content;
   if (selection.view === "objects") {
-    content = <MvpObjectsPage model={model} selectedAssetId={selectedAssetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectAsset={selectAsset} onOpenOperations={openAssetOperations} onRetryDetail={retryDetail} />;
+    content = <MvpObjectsPage model={model} selectedAssetId={selectedAssetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectAsset={selectAsset} onOpenOperations={openAssetOperations} onOpenReport={openAssetReport} onRetryDetail={retryDetail} />;
   } else if (selection.view === "operations") {
     content = <MvpOperationsPage model={model} selectedEventId={selection.eventId} detail={detail} detailLoading={detailLoading} detailError={detailError} canDecide={canDecide} canNote={canNote} onSelectEvent={selectEvent} onOpenAsset={openEventAsset} onOpenReport={openEventReport} onDecision={submitDecision} onNote={submitNote} onRetryDetail={retryDetail} />;
   } else if (selection.view === "reports") {

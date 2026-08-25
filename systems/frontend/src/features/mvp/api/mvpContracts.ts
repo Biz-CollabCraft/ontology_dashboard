@@ -136,6 +136,19 @@ export interface MvpSensorValue {
   qualityStatus?: "good" | "bad" | "unknown";
   historySourceRef?: string | null;
   historyPointCount?: number;
+  historyPoints?: MvpFeatureHistoryPoint[];
+}
+
+export interface MvpFeatureHistoryPoint {
+  observedAt: string;
+  value: number | null;
+  qualityStatus: "good" | "bad" | "unknown";
+}
+
+export interface MvpRiskSeriesPoint {
+  observedAt: string;
+  failureProbability: number;
+  status: "normal" | "attention" | "warning" | "critical" | null;
 }
 
 export interface MvpActivityItem {
@@ -194,6 +207,8 @@ export interface MvpEventDetailModel {
   event: MvpEvent;
   sensors: MvpSensorValue[];
   topFactors: MvpFactor[];
+  riskSeries: MvpRiskSeriesPoint[];
+  predictionHorizonHours: number | null;
   threshold: number | null;
   dataQualityWarnings: Array<{ code: string; field: string; message: string; severity: string }>;
   equipmentHistory: MvpEquipmentHistoryItem[];

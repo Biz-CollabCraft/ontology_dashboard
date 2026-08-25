@@ -332,6 +332,19 @@ function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSe
     qualityStatus: feature.current.quality_status,
     historySourceRef: feature.history.source_ref ?? null,
     historyPointCount: feature.history.points.length,
+    historyPoints: feature.history.points.map((point) => ({
+      observedAt: point.observed_at,
+      value: point.value,
+      qualityStatus: point.quality_status,
+    })),
+  }));
+}
+
+function riskSeriesFromAssetDetailViewModel(viewModel: AssetDetailViewModel) {
+  return viewModel.risk_series.map((point) => ({
+    observedAt: point.observed_at,
+    failureProbability: point.failure_probability,
+    status: point.status_grade,
   }));
 }
 
@@ -514,6 +527,8 @@ export function composeEventDetail(input: {
     event: input.event,
     sensors: evidenceSensors(input.evidence),
     topFactors: evidenceFactors(input.evidence),
+    riskSeries: [],
+    predictionHorizonHours: null,
     threshold: input.evidence?.threshold ?? null,
     dataQualityWarnings: input.evidence?.data_quality_warnings ?? [],
     equipmentHistory: [],
@@ -544,6 +559,8 @@ export function applyAssetDetailViewModel(
     ...detail,
     sensors: sensorsFromAssetDetailViewModel(viewModel),
     topFactors: factorsFromAssetDetailViewModel(viewModel),
+    riskSeries: riskSeriesFromAssetDetailViewModel(viewModel),
+    predictionHorizonHours: viewModel.risk.prediction_horizon_hours,
     threshold: viewModel.risk.threshold,
     equipmentHistory: equipmentHistoryFromAssetDetailViewModel(viewModel),
     evidenceGaps: evidenceGapsFromAssetDetailViewModel(viewModel),

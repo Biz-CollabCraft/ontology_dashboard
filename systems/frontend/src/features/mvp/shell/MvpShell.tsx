@@ -1,7 +1,6 @@
 import {
   Boxes,
   ClipboardCheck,
-  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -13,10 +12,9 @@ import type { MvpContextModel, MvpRoleLens, MvpView } from "../api/mvpContracts"
 import { MvpFreshness } from "../components/MvpUi";
 
 const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: typeof LayoutDashboard }> = [
-  { id: "overview", label: "Overview", description: "위험 현황과 우선순위", icon: LayoutDashboard },
-  { id: "objects", label: "Objects", description: "설비 목록과 근거", icon: Boxes },
-  { id: "operations", label: "Operations", description: "점검·판단 업무", icon: ClipboardCheck },
-  { id: "reports", label: "Reports", description: "상태 요약·점검 요청·브리핑", icon: FileText },
+  { id: "overview", label: "Overview", description: "운영 상황판", icon: LayoutDashboard },
+  { id: "objects", label: "Assets", description: "설비 상태와 근거", icon: Boxes },
+  { id: "operations", label: "Work Orders", description: "처리할 작업", icon: ClipboardCheck },
 ];
 
 export function MvpShell({
@@ -41,12 +39,15 @@ export function MvpShell({
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const active = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
+  const active = NAV_ITEMS.find((item) => item.id === activeView)
+    ?? (activeView === "reports"
+      ? { id: "reports" as MvpView, label: "Report", description: "공유용 근거 문서", icon: ClipboardCheck }
+      : NAV_ITEMS[0]);
   const headingDetail = activeView === "reports"
-    ? "상태 요약, 점검 요청, 선택 설비 브리핑을 같은 관측 시점으로 확인합니다."
+    ? "보고서는 top-level 업무가 아니라 선택 설비와 작업의 근거 문서로 확인합니다."
     : role === "process_manager"
-      ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
-      : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
+      ? "전체 공정, 위험 셀, 처리할 작업을 한 화면에서 판단합니다."
+      : "점검 요청과 설비 근거를 작업 단위로 확인합니다.";
   return (
     <main className="mvp-app">
       <header className="mvp-global-header">
@@ -81,14 +82,14 @@ export function MvpShell({
 
       <div className="mvp-workspace">
         <aside className={`mvp-navigation ${mobileOpen ? "is-open" : ""}`} aria-label="예지보전 화면">
-          <div className="mvp-nav-intro"><span>WORKFLOW</span><strong>설비 확인에서 보고까지</strong><p>위험 확인, 사람 판단, 공유용 보고를 같은 흐름으로 연결합니다.</p></div>
+          <div className="mvp-nav-intro"><span>WORKFLOW</span><strong>상황 → 설비 → 작업</strong><p>Ontology는 뒤에서 관계를 유지하고, 화면은 처리할 업무만 보여줍니다.</p></div>
           <nav>
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               return <button type="button" key={item.id} className={activeView === item.id ? "is-active" : ""} onClick={() => { onNavigate(item.id); setMobileOpen(false); }}><Icon size={17} /><div><strong>{item.label}</strong><span>{item.description}</span></div></button>;
             })}
           </nav>
-          <div className="mvp-nav-footnote"><strong>보조 탐색</strong><span>모델 탐색 화면보다 현재 설비 판단과 현장 조치를 우선합니다.</span></div>
+          <div className="mvp-nav-footnote"><strong>Domain backbone</strong><span>Asset, Evidence, WorkOrder 관계는 각 Inspector 안에서 연결합니다.</span></div>
         </aside>
         <section className="mvp-main">
           <header className="mvp-page-heading"><span>{active.label}</span><h1>{active.description}</h1><p>{headingDetail}</p></header>
