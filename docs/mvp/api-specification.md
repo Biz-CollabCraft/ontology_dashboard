@@ -189,11 +189,46 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
   "operation_context": {
     "load_level": null,
     "runtime_hours_7d": null,
-    "production_impact": null,
+    "production_impact": "medium",
+    "context_id": "production-planning-context-v1",
     "source_type": "synthetic_capacity_model",
-    "production_plan": {},
-    "capacity_model": {},
-    "event_impact": {}
+    "temporal_scope": {
+      "snapshot_id": "OPS-SNAPSHOT-2026-08-01-A-B",
+      "timezone": "Asia/Seoul",
+      "valid_from": "2026-08-01T00:00:00+09:00",
+      "valid_to": "2026-08-02T00:00:00+09:00",
+      "generated_at": "2026-08-01T00:00:00+09:00"
+    },
+    "production_plan": {
+      "plan_id": "PLAN-2026-08-01-GS-DEMO",
+      "plan_date": "2026-08-01",
+      "planned_units": 16200,
+      "product_mix": [{"variant": "M", "share": 0.3, "planned_units": 4860}]
+    },
+    "capacity_model": {
+      "active_asset_count": 80,
+      "planned_operating_hours": 16,
+      "oee": 0.846,
+      "standard_cycle_minutes_per_unit": 4.0,
+      "asset_units_per_hour": 12.69,
+      "daily_capacity_units": 16200,
+      "basis": "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준"
+    },
+    "event_impact": {
+      "event_id": "EVT-GS-002",
+      "equipment_id": "M-014",
+      "line": "가공 2라인",
+      "product_variant": "M",
+      "screen_priority": "shift_inspection",
+      "impact_status": "estimated",
+      "estimated_lost_units": 25,
+      "basis": {
+        "estimated_downtime_minutes": 120,
+        "asset_units_per_hour": 12.69,
+        "formula": "120 / 60 * 12.69"
+      }
+    },
+    "limitations": ["Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."]
   },
   "review_priority": null,
   "evidence": {

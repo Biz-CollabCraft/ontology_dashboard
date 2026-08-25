@@ -242,9 +242,11 @@
         },
         "limitations": {"type": "array", "items": {"type": "string"}}
       },
-      "anyOf": [
-        {"required": ["load_level", "runtime_hours_7d", "production_impact"]},
-        {"required": ["context_id", "source_type", "temporal_scope", "production_plan", "capacity_model", "event_impact", "limitations"]}
+      "allOf": [
+        {
+          "if": {"required": ["source_type"]},
+          "then": {"required": ["context_id", "source_type", "temporal_scope", "production_plan", "capacity_model", "event_impact", "limitations"]}
+        }
       ]
     },
     "review_priority": {
