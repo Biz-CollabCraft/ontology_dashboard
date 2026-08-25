@@ -151,7 +151,7 @@ project-root/
     - `POST /internal/runtime-pipeline/retry-failed/{job_id}`
     - `POST /internal/train` (compatibility)
     - `POST /internal/retrain` (compatibility)
-  - Runtime Pipeline: 영속 FIFO Queue와 단일 Worker 기반으로 Preprocessing → Label-free Runtime Feature → Multi-model Prediction → Aggregation → Anomaly Signal Dispatch를 5대 독립 StageState 및 불변 파일 참조(ArtifactReference)로 순차 실행.
+  - Runtime Pipeline: 영속 FIFO Queue와 단일 Worker 기반으로 Preprocessing → Label-free Runtime Feature → Multi-model Prediction → Batch Building → Prediction Delivery를 5대 독립 StageState 및 불변 파일 참조(ArtifactReference)로 순차 실행.
 
 - **Target — 남은 migration**:
   - `app/extraction/` (파일 관찰 및 프로토콜 레코드 추출 후 enqueue 경계 연결)
@@ -231,11 +231,13 @@ MODEL_ARTIFACT_URI=registry://pdm/production
 
 ## 5. systems/backend — Product Runtime
 
-Backend는 모델을 **학습하거나 운영 Runtime Prediction을 직접 수행하지 않는다**. Backend는 Generator가 발행한 Prediction Result Batch와 source lineage를 소비하여 Threshold Policy를 적용하고, 해당 설비의 센서 근거 및 metadata를 조회하여 제품이 실제 소비하는 **Product Result Artifact, Evidence와 Report를 최종 생성**한다.
+Backend는 모델을 **학습하거나 동일 Model Artifact를 다시 로드하여 중복 추론을 수행하지 않는다**. Generator가 입력 관측 데이터로부터 Runtime Feature를 생성하고 모델별 raw score를 산출하여 `Prediction Result Batch`로 전달하면, Backend는 이를 수신하여 Threshold Policy를 적용하고, 해당 설비의 센서 근거 및 metadata를 조회하여 제품이 실제 소비하는 **Product Result Artifact, Evidence와 Report를 최종 생성**한다.
+
+Generator는 Report나 Evidence를 생성하지 않으며, Backend의 수신 및 판정 파이프라인 연동은 후속 구현으로 진행된다.
 
 > **Current vs Target 책임 구분**:
 > - **Current (현재 PR 구현 범위)**: Generator가 활성 Model Artifact별 점수(`score`)를 계산하여 설비별 K-V Dictionary(`model_results: dict[str, ModelPredictionResult]`) 구조의 `Prediction Result Batch`를 생성하고 Outbox에 저장한 뒤 `GENERATOR_PREDICTION_RESULT_URL`로 멱등 송신한다.
-> - **Target (후속 Backend 구현 범위)**: Backend가 `POST /internal/prediction-results` 엔드포인트를 제공하여 배치를 수신·저장하고, Threshold Policy 적용, 이상 판정, Diagnosis, Product Result Artifact, Evidence, Report 생성 및 사용자 알림을 수행한다.
+> - **Target (후속 Backend 구현 범위)**: Backend가 `POST /internal/prediction-results` 엔드포인트를 제공하여 배치를 수신·저장하고, Threshold Policy 적용, 최종 이상 판정, Diagnosis, Product Result Artifact, Evidence, Report 생성, Dashboard 알림 및 재학습/후속 조치를 수행한다.
 
 ### 5.1 Backend Canonical Root 및 목표 디렉터리 구조
 

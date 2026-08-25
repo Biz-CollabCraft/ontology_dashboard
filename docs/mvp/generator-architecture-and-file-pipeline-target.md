@@ -86,8 +86,9 @@ systems/generator/
 │     ├─ pipeline_manager.py
 │     ├─ runtime_feature_service.py
 │     ├─ prediction_service.py
-│     ├─ aggregation_service.py
-│     ├─ notification_service.py
+│     ├─ prediction_batch_service.py
+│     ├─ prediction_delivery_service.py
+│     ├─ prediction_delivery_worker.py
 │     ├─ pipeline_repository.py
 │     ├─ pipeline_schema.py
 │     └─ pipeline_exception.py
@@ -270,14 +271,15 @@ Extraction
 
 ### 4.5 5단계: Runtime Prediction Pipeline (Current)
 - **입력**: `Completed Observation Protocol File` (FIFO 큐 작업 수신)
-- **실행 모델**: `PipelineManager` 애플리케이션 싱글톤 + 영속 FIFO `PipelineQueue` + 단일 Worker 비동기 루프
+- **실행 모델**: `PipelineManager` 애플리케이션 싱글톤 + 영속 FIFO `PipelineQueue` + 단일 Worker 비동기 루프 + `PredictionDeliveryWorker` 전송 워커
 - **처리**:
   - `PipelineQueue`에 중복 방지 키(`normalized_source_uri + source_checksum`)로 영속 등록 및 순차 처리
   - **Stage 1 (Preprocessing)**: `PreprocessingService` 직접 호출로 데이터셋 유효성 검증 및 불변 Plan 발행 참조 기록
-  - **Stage 2 (Runtime Feature & Prediction)**: Failure/Label을 전혀 사용하지 않는 Label-free 수식으로 `feature_schema.json` 및 `history_requirement.json` 검증 후 2D float64 특성 행렬 원자적 발행 → 활성 Model Artifact 로드 및 다중 모델 추론 실행
-  - **Stage 3 (Aggregation)**: 모델별 결과 취합 정책 (하나라도 이상 → `anomaly_detected=True`, 전원 정상 → `anomaly_detected=False`, 이상 없으나 부분 실패/unknown 존재 시 `partially_succeeded`/`failed` 판정)
-  - **Stage 4 (Notification)**: 이상 판정 시 `GENERATOR_ANOMALY_SIGNAL_URL`로 `Idempotency-Key` 포함 HTTP POST 전송 (실패 시 예측 결과 보존 및 전송 재시도 분리)
-- **출력**: 불변 `PipelineRunState` (`data_preprocessed/pipeline_runs/{run_id}.json`), 이상 신호 이벤트 (`data_preprocessed/pipeline_events/{event_id}.json`)
+  - **Stage 2 (Runtime Feature)**: Failure/Label을 전혀 사용하지 않는 Label-free 수식으로 `feature_schema.json` 및 `history_requirement.json` 검증 후 2D float64 특성 행렬 원자적 발행
+  - **Stage 3 (Runtime Prediction)**: 활성 Model Artifact 로드 및 모델별 raw score (`0.0~1.0` 확률 또는 decision score), `score_source`, 실제 추론 행 메타데이터 기반 `observed_at` 산출 (threshold 미적용, 이상 여부 미판정)
+  - **Stage 4 (Batch Building)**: 설비별 `model_id` 키 기반 K-V 딕셔너리(`model_results: dict[str, ModelPredictionResult]`) 구조로 `PredictionResultBatchPayload` 생성 (시각 불일치/메타데이터 결측 시 `501` fail-closed)
+  - **Stage 5 (Prediction Delivery)**: `GENERATOR_PREDICTION_RESULT_URL`로 `Idempotency-Key` 포함 HTTP POST 멱등 전송 (Outbox 영속화 및 전용 Worker 백오프 재시도, 시스템 재시작 시 `sending` 자동 복구)
+- **출력**: 불변 `PipelineRunState` (`data_preprocessed/pipeline_runs/{run_id}.json`), 결과 배치 Outbox (`data_preprocessed/prediction_outbox/{event_id}.json`)
 
 ---
 
