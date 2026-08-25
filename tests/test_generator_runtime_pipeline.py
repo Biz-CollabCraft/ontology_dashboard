@@ -15,14 +15,14 @@ from systems.generator.generator_config import PATHS, GeneratorPaths
 from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.model.publisher import ModelArtifactPublisher
 from systems.generator.app.main import app
-from systems.generator.app.runtime_pipeline.aggregation_service import AggregationService
-from systems.generator.app.runtime_pipeline.notification_service import (
-    PredictionDeliveryService,
-    NotificationService,
+from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+    PredictionBatchService,
 )
-from systems.generator.app.runtime_pipeline.notification_worker import (
+from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
+    PredictionDeliveryService,
+)
+from systems.generator.app.runtime_pipeline.prediction_delivery_worker import (
     PredictionDeliveryWorker,
-    NotificationWorker,
 )
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineAssetIdMissingError,
@@ -35,9 +35,12 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineInputNotFoundError,
     PipelineJobNotFailedError,
     PipelineMappingNotImplementedError,
+    PipelineModelFeatureMissingValueHandlingNotImplementedError,
     PipelineNoActiveModelError,
     PipelinePathNotAllowedError,
+    PipelinePredictionObservationAlignmentNotImplementedError,
     PipelineRuntimeFeatureFailedError,
+    PipelineSensorValueMissingError,
     PipelineStateTransitionInvalidError,
     PipelineTimestampInvalidError,
 )
@@ -46,6 +49,7 @@ from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
 from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
+    InternalModelPredictionResult,
     ModelPredictionResult,
     PredictionDeliveryEventState,
     PredictionOutboxItem,
@@ -55,11 +59,13 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     SourceLineage,
     now_utc_iso,
 )
-
 from systems.generator.app.runtime_pipeline.pipeline_service import PipelineService
 from systems.generator.app.runtime_pipeline.pipeline_state import PipelineStateManager
 from systems.generator.app.runtime_pipeline.pipeline_worker import PipelineWorker
-from systems.generator.app.runtime_pipeline.prediction_service import PredictionService
+from systems.generator.app.runtime_pipeline.prediction_service import (
+    PredictionService,
+    REGISTERED_BASE_MODELS,
+)
 from systems.generator.app.runtime_pipeline.runtime_feature_service import RuntimeFeatureService
 
 
@@ -73,7 +79,6 @@ class MockEstimator:
         n = len(X)
         probs = np.zeros((n, 2))
         for i in range(n):
-            # If feature 0 (Air temp) > 298.25, use configured anomaly_prob, otherwise low normal prob
             if X.shape[1] > 0 and X[i, 0] > 298.25:
                 prob = self.anomaly_prob
             else:
@@ -84,7 +89,6 @@ class MockEstimator:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
-
 
 
 @pytest.fixture
@@ -163,7 +167,6 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         "primary_metric": "f1",
     }
 
-    # Model default probabilities: lightgbm=normal(0.1), xgboost=anomaly(0.85), random_forest=anomaly(0.75)
     model_probs = {
         "pdm-lightgbm": 0.1,
         "pdm-xgboost": 0.85,
@@ -213,25 +216,24 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         models_store_dir=artifacts_dir,
         publisher=publisher,
     )
-    agg_service = AggregationService()
+    batch_service = PredictionBatchService()
     notif_service = PredictionDeliveryService(outbox_dir=outbox_dir)
     notif_worker = PredictionDeliveryWorker(service=notif_service, repository=repository)
 
     service = PipelineService(
-
         repository=repository,
         preprocessing_service=None,
         runtime_feature_service=feat_service,
         prediction_service=pred_service,
-        aggregation_service=agg_service,
-        notification_service=notif_service,
+        prediction_batch_service=batch_service,
+        prediction_delivery_service=notif_service,
     )
     worker = PipelineWorker(queue=queue, service=service, max_attempts=5, retry_backoff_seconds=0.01)
     manager = PipelineManager(
         queue=queue,
         repository=repository,
         service=service,
-        notification_service=notif_service,
+        prediction_delivery_service=notif_service,
     )
 
     return {
@@ -245,6 +247,7 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         "repository": repository,
         "feat_service": feat_service,
         "pred_service": pred_service,
+        "batch_service": batch_service,
         "service": service,
         "worker": worker,
         "manager": manager,
@@ -279,7 +282,7 @@ def create_sample_observation_jsonl(file_path: Path, num_rows: int = 5, asset_id
 # 1. Multi-Equipment Prediction and Batch Building Test
 # =====================================================================
 
-def test_multi_equipment_prediction_and_aggregation(isolated_runtime_env):
+def test_multi_equipment_prediction_and_batch_building(isolated_runtime_env):
     env = isolated_runtime_env
     incoming = env["incoming_dir"]
 
@@ -321,10 +324,12 @@ def test_multi_equipment_prediction_and_aggregation(isolated_runtime_env):
         assert not hasattr(r, "threshold") or "threshold" not in r.model_fields
         assert not hasattr(r, "is_anomaly") or "is_anomaly" not in r.model_fields
         assert not hasattr(r, "prediction") or "prediction" not in r.model_fields
+        assert r.observed_at != ""
         if r.status == "succeeded":
             assert r.score is not None
             assert 0.0 <= r.score <= 1.0
             assert r.score_type == "positive_class_probability"
+            assert r.score_source == "predict_proba"
 
     # Asset C must have status="unknown" and PIPELINE_HISTORY_INSUFFICIENT
     asset_c_results = [r for r in results if r.asset_id == "H29424"]
@@ -332,15 +337,30 @@ def test_multi_equipment_prediction_and_aggregation(isolated_runtime_env):
         assert r.status == "unknown"
         assert r.error_code == "PIPELINE_HISTORY_INSUFFICIENT"
 
-    # 2. Check outbox records — ALL equipments with predictions get outbox items
+    # 2. Check outbox records — model_results is dictionary keyed by model_id, no top-level feature_ref
     outbox_items = env["notif_service"].list_outbox_items()
     outbox_asset_ids = {item.asset_id for item in outbox_items}
-    # All 3 equipments should have outbox items (including Asset C with unknown results)
-    assert len(outbox_items) >= 2  # At least A and B; C may or may not depending on "all equipments" policy
+    assert len(outbox_items) == 3
     assert "M14860" in outbox_asset_ids
     assert "L47181" in outbox_asset_ids
+    assert "H29424" in outbox_asset_ids
+
     for oi in outbox_items:
         assert oi.status == "pending"
+        payload = oi.payload
+        assert isinstance(payload.model_results, dict)
+        assert "pdm-lightgbm" in payload.model_results
+        assert "pdm-xgboost" in payload.model_results
+        assert "pdm-random_forest" in payload.model_results
+        assert payload.observed_at != ""
+        assert not hasattr(payload, "feature_ref") or "feature_ref" not in payload.model_fields
+
+        for mid, mres in payload.model_results.items():
+            assert not hasattr(mres, "model_id") or "model_id" not in mres.model_fields
+            assert not hasattr(mres, "asset_id") or "asset_id" not in mres.model_fields
+            assert mres.observed_at != ""
+            assert mres.score_source in ("predict_proba", "decision_function_compat", "predict_compat", None)
+
     assert len(run_state.prediction_event_ids) == len(outbox_items)
 
 
@@ -348,7 +368,7 @@ def test_multi_equipment_prediction_and_aggregation(isolated_runtime_env):
 # 2. Prediction Delivery Worker Outbox Retries & Decoupling Test
 # =====================================================================
 
-def test_notification_worker_decoupled_retry_and_backoff(isolated_runtime_env, monkeypatch):
+def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monkeypatch):
     env = isolated_runtime_env
     notif_service = env["notif_service"]
     notif_worker = env["notif_worker"]
@@ -361,16 +381,16 @@ def test_notification_worker_decoupled_retry_and_backoff(isolated_runtime_env, m
         observed_at="2026-08-25T10:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
-        model_results=[
-            ModelPredictionResult(
-                asset_id="M14860",
-                model_id="pdm-xgboost",
+        model_results={
+            "pdm-xgboost": ModelPredictionResult(
                 model_version="pdm-xgboost-v1.0",
                 status="succeeded",
+                observed_at="2026-08-25T10:00:00Z",
                 score_type="positive_class_probability",
+                score_source="predict_proba",
                 score=0.88,
             )
-        ],
+        },
         source_lineage=SourceLineage(
             source_uri="test.jsonl",
             source_checksum="0" * 64,
@@ -618,7 +638,7 @@ def test_runtime_pipeline_router_api_with_retry_failed(isolated_runtime_env):
 # 7. Prediction Delivery Run State Synchronization & Event Aggregation Test
 # =====================================================================
 
-def test_notification_worker_run_state_synchronization_and_aggregation(isolated_runtime_env, monkeypatch):
+def test_delivery_worker_run_state_synchronization_and_aggregation(isolated_runtime_env, monkeypatch):
     env = isolated_runtime_env
     repo: PipelineRepository = env["repository"]
     notif_service: PredictionDeliveryService = env["notif_service"]
@@ -661,7 +681,6 @@ def test_notification_worker_run_state_synchronization_and_aggregation(isolated_
     )
     repo.save_run_state(run_state)
 
-
     # Create 2 outbox items for this run
     p1 = PredictionResultBatchPayload(
         event_id=ev1_id,
@@ -671,16 +690,16 @@ def test_notification_worker_run_state_synchronization_and_aggregation(isolated_
         observed_at="2026-08-25T10:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
-        model_results=[
-            ModelPredictionResult(
-                asset_id="Asset-1",
-                model_id="pdm-xgboost",
+        model_results={
+            "pdm-xgboost": ModelPredictionResult(
                 model_version="pdm-xgboost-v1.0",
                 status="succeeded",
+                observed_at="2026-08-25T10:00:00Z",
                 score_type="positive_class_probability",
+                score_source="predict_proba",
                 score=0.9,
             )
-        ],
+        },
         source_lineage=SourceLineage(
             source_uri="test.jsonl",
             source_checksum="0" * 64,
@@ -717,7 +736,7 @@ def test_notification_worker_run_state_synchronization_and_aggregation(isolated_
 # 8. Delivery Interrupted 'sending' Items Startup Recovery Test
 # =====================================================================
 
-def test_notification_worker_recover_interrupted_sending_items(isolated_runtime_env):
+def test_delivery_worker_recover_interrupted_sending_items(isolated_runtime_env):
     env = isolated_runtime_env
     repo: PipelineRepository = env["repository"]
     notif_service: PredictionDeliveryService = env["notif_service"]
@@ -750,16 +769,16 @@ def test_notification_worker_recover_interrupted_sending_items(isolated_runtime_
         observed_at="2026-08-25T10:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
-        model_results=[
-            ModelPredictionResult(
-                asset_id="Asset-Rec",
-                model_id="pdm-xgboost",
+        model_results={
+            "pdm-xgboost": ModelPredictionResult(
                 model_version="pdm-xgboost-v1.0",
                 status="succeeded",
+                observed_at="2026-08-25T10:00:00Z",
                 score_type="positive_class_probability",
+                score_source="predict_proba",
                 score=0.95,
             )
-        ],
+        },
         source_lineage=SourceLineage(
             source_uri="test.jsonl",
             source_checksum="0" * 64,
@@ -790,45 +809,135 @@ def test_notification_worker_recover_interrupted_sending_items(isolated_runtime_
 
 
 # =====================================================================
-# 9. Model Feature Failure Mapping per Equipment (No fake 'unknown')
+# 9. Observation Alignment Verification Test (501 Fail-Closed)
 # =====================================================================
 
-def test_model_feature_failure_maps_to_actual_equipment_ids_not_unknown(isolated_runtime_env):
+def test_observation_timestamp_misalignment_raises_501(isolated_runtime_env):
+    """If models for the same asset have different observed_at, raise 501 PipelinePredictionObservationAlignmentNotImplementedError."""
     env = isolated_runtime_env
-    pred_service: PredictionService = env["pred_service"]
-    artifacts = {
-        "pdm-lightgbm": pred_service.load_active_artifact("pdm-lightgbm"),
-        "pdm-xgboost": pred_service.load_active_artifact("pdm-xgboost"),
+    batch_service = env["batch_service"]
+
+    # Succeeded model predictions with mismatched observed_at for asset M14860
+    results = [
+        InternalModelPredictionResult(
+            asset_id="M14860",
+            model_id="pdm-lightgbm",
+            model_version="pdm-lightgbm-v1.0",
+            status="succeeded",
+            observed_at="2026-08-25T10:00:00Z",
+            score_type="positive_class_probability",
+            score_source="predict_proba",
+            score=0.10,
+        ),
+        InternalModelPredictionResult(
+            asset_id="M14860",
+            model_id="pdm-xgboost",
+            model_version="pdm-xgboost-v1.0",
+            status="succeeded",
+            observed_at="2026-08-25T10:05:00Z",  # Different timestamp!
+            score_type="positive_class_probability",
+            score_source="predict_proba",
+            score=0.85,
+        ),
+    ]
+
+    with pytest.raises(PipelinePredictionObservationAlignmentNotImplementedError) as exc_info:
+        batch_service.collect(results)
+
+    assert "observed_at" in str(exc_info.value)
+    assert exc_info.value.status_code == 501
+    assert exc_info.value.code == "PIPELINE_PREDICTION_OBSERVATION_ALIGNMENT_NOT_IMPLEMENTED"
+
+
+# =====================================================================
+# 10. Feature Calculation NaN/Inf Missing Value Handling Test (501 Fail-Closed)
+# =====================================================================
+
+def test_feature_calculation_nan_inf_raises_501_with_model_context(isolated_runtime_env):
+    """If lag/rolling feature produces NaN/Inf, raise 501 PipelineModelFeatureMissingValueHandlingNotImplementedError with full context."""
+    env = isolated_runtime_env
+    feat_service: RuntimeFeatureService = env["feat_service"]
+
+    # Data with only 1 row, but lag feature needs prior row
+    df = pd.DataFrame([{
+        "asset_id": "M14860",
+        "Air temperature [K]": 298.1,
+        "timestamp": "2026-08-25T10:00:00Z",
+    }])
+
+    lag_schema = {
+        "$schema": "https://ontology-dashboard.local/schemas/generator-feature-schema.schema.json",
+        "schema_version": "1.0",
+        "features": [
+            {
+                "feature_name": "feat_air_temp_lag1",
+                "source_field": "Air temperature [K]",
+                "operation": "lag",
+                "parameters": {"periods": 1},
+                "missing_value_policy": "drop",
+            }
+        ],
     }
 
-    # Simulate: feature for pdm-lightgbm succeeded, but feature for pdm-xgboost is missing (failed)
-    # Target equipments: ['M14860', 'L47181']
-    dummy_feat_ref = ArtifactReference(
-        uri="dummy.npy",
-        sha256="0" * 64,
-        role="runtime_features",
-    )
-    feature_refs = {"pdm-lightgbm": dummy_feat_ref}  # pdm-xgboost omitted
-    feature_bundles = {}
+    hist_req = {"minimum_history_rows": 1, "required_columns": ["Air temperature [K]"]}
 
-    results = pred_service.execute_predictions_from_feature_refs(
-        model_artifacts=artifacts,
-        model_feature_refs=feature_refs,
-        model_feature_bundles=feature_bundles,
-        asset_ids=["M14860", "L47181"],
-        model_feature_errors={"pdm-xgboost": PipelineRuntimeFeatureFailedError("History insufficient for model")},
-    )
+    with pytest.raises(PipelineModelFeatureMissingValueHandlingNotImplementedError) as exc_info:
+        feat_service.extract_and_publish(
+            preprocessed_df=df,
+            feature_schema_dict=lag_schema,
+            history_requirement_dict=hist_req,
+            model_id="pdm-lag-model",
+            model_version="pdm-lag-model-v1.0",
+            id_column="asset_id",
+            time_column="timestamp",
+        )
 
-    # Must have 4 results (2 models * 2 assets)
-    assert len(results) == 4
-    asset_ids_in_results = {r.asset_id for r in results}
-    assert "unknown" not in asset_ids_in_results
-    assert asset_ids_in_results == {"M14860", "L47181"}
+    assert exc_info.value.status_code == 501
+    assert exc_info.value.code == "PIPELINE_MODEL_FEATURE_MISSING_VALUE_HANDLING_NOT_IMPLEMENTED"
+    assert exc_info.value.details[0]["model_id"] == "pdm-lag-model"
+    assert exc_info.value.details[0]["model_version"] == "pdm-lag-model-v1.0"
+    assert exc_info.value.details[0]["feature_name"] == "feat_air_temp_lag1"
 
-    # Failed model results must be recorded for each actual asset
-    xgboost_results = [r for r in results if r.model_id == "pdm-xgboost"]
-    assert len(xgboost_results) == 2
-    for r in xgboost_results:
-        assert r.asset_id in ["M14860", "L47181"]
-        assert r.status == "failed"
-        assert r.error_code == "PIPELINE_RUNTIME_FEATURE_FAILED"
+
+# =====================================================================
+# 11. Raw Sensor Value Missing Check Test (422 Fail-Closed)
+# =====================================================================
+
+def test_raw_sensor_value_missing_raises_422(isolated_runtime_env):
+    """If raw sensor field contains NaN/null, raise 422 PipelineSensorValueMissingError."""
+    env = isolated_runtime_env
+    feat_service: RuntimeFeatureService = env["feat_service"]
+
+    df = pd.DataFrame([
+        {"asset_id": "M14860", "Air temperature [K]": None, "timestamp": "2026-08-25T10:00:00Z"},
+        {"asset_id": "M14860", "Air temperature [K]": 298.2, "timestamp": "2026-08-25T10:01:00Z"},
+    ])
+
+    raw_schema = {
+        "$schema": "https://ontology-dashboard.local/schemas/generator-feature-schema.schema.json",
+        "schema_version": "1.0",
+        "features": [
+            {
+                "feature_name": "feat_air_temp",
+                "source_field": "Air temperature [K]",
+                "operation": "raw",
+                "parameters": {},
+                "missing_value_policy": "drop",
+            }
+        ],
+    }
+
+    hist_req = {"minimum_history_rows": 2, "required_columns": ["Air temperature [K]"]}
+
+    with pytest.raises(PipelineSensorValueMissingError) as exc_info:
+        feat_service.extract_and_publish(
+            preprocessed_df=df,
+            feature_schema_dict=raw_schema,
+            history_requirement_dict=hist_req,
+            id_column="asset_id",
+            time_column="timestamp",
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "PIPELINE_SENSOR_VALUE_MISSING"
+    assert exc_info.value.details[0]["source_field"] == "Air temperature [K]"

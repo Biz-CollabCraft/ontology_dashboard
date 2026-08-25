@@ -8,13 +8,11 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional, TYPE_CHECKING
 
-from systems.generator.app.runtime_pipeline.notification_service import (
+from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
     PredictionDeliveryService,
-    NotificationService,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PredictionOutboxItem,
-    NotificationOutboxItem,
     now_utc_iso,
 )
 
@@ -228,7 +226,3 @@ class PredictionDeliveryWorker:
             except Exception as exc:
                 logger.error(f"[PredictionDeliveryWorker] Error in worker loop: {exc}")
                 time.sleep(self.poll_interval)
-
-
-# Backward-compatible alias
-NotificationWorker = PredictionDeliveryWorker

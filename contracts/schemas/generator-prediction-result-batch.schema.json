@@ -49,44 +49,16 @@
       "minLength": 1
     },
     "model_results": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "asset_id",
-          "model_id",
-          "model_version",
-          "status"
-        ],
-        "properties": {
-          "asset_id": { "type": "string", "minLength": 1 },
-          "model_id": { "type": "string", "minLength": 1 },
-          "model_version": { "type": "string", "minLength": 1 },
-          "status": { "type": "string", "enum": ["succeeded", "failed", "unknown"] },
-          "score_type": { "type": ["string", "null"] },
-          "score": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 },
-          "artifact_ref": {
-            "type": ["object", "null"],
-            "properties": {
-              "uri": { "type": "string" },
-              "sha256": { "type": "string" },
-              "role": { "type": "string" }
-            }
-          },
-          "feature_ref": {
-            "type": ["object", "null"],
-            "properties": {
-              "uri": { "type": "string" },
-              "sha256": { "type": "string" },
-              "role": { "type": "string" }
-            }
-          },
-          "error_code": { "type": ["string", "null"] },
-          "error_message": { "type": ["string", "null"] }
-        },
-        "additionalProperties": false
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9._-]+$"
       },
-      "minItems": 1
+      "additionalProperties": {
+        "$ref": "generator-model-prediction-result.schema.json"
+      }
     },
     "source_lineage": {
       "type": "object",
@@ -103,15 +75,8 @@
       "properties": {
         "uri": { "type": "string" },
         "sha256": { "type": "string" }
-      }
-    },
-    "feature_ref": {
-      "type": ["object", "null"],
-      "properties": {
-        "uri": { "type": "string" },
-        "sha256": { "type": "string" },
-        "role": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

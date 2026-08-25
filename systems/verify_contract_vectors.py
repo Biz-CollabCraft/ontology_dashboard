@@ -1271,6 +1271,27 @@ class ContractVectorVerifier:
                 )
             )
 
+    def _build_schema_registry(self) -> Any:
+        if not hasattr(self, "_registry") or self._registry is None:
+            if not self.schemas_dir.is_dir():
+                return None
+            try:
+                import referencing
+                reg = referencing.Registry()
+                for sf in self.schemas_dir.glob("**/*.schema.json"):
+                    try:
+                        s_data = json.loads(sf.read_text(encoding="utf-8"))
+                        res = referencing.Resource.from_contents(s_data)
+                        if "$id" in s_data:
+                            reg = reg.with_resource(s_data["$id"], res)
+                        reg = reg.with_resource(sf.name, res)
+                    except Exception:
+                        pass
+                self._registry = reg
+            except Exception:
+                self._registry = None
+        return self._registry
+
     def _verify_runtime_prediction_vector(
         self,
         vector_name: str,
@@ -1331,13 +1352,35 @@ class ContractVectorVerifier:
                         message="prediction-result-batch.json must be a JSON object",
                     )
                 )
-            elif batch_schema_path.is_file():
-                batch_schema = json.loads(batch_schema_path.read_text(encoding="utf-8"))
-                # Build a resolver/registry so that $ref to generator-model-prediction-result.schema.json is resolved
-                registry = jsonschema.validators.validator_for(batch_schema)
-                # Load all schema files for $ref resolution if needed
-                validator = jsonschema.Draft202012Validator(batch_schema)
-                validator.validate(batch_data)
+            else:
+                # Assert top-level feature_ref is removed
+                if "feature_ref" in batch_data:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/prediction-result-batch.json",
+                            message="Top-level 'feature_ref' must be removed from prediction-result-batch",
+                            expected="No top-level feature_ref",
+                            actual="Found top-level feature_ref",
+                        )
+                    )
+                # Assert model_results is a dict
+                if not isinstance(batch_data.get("model_results"), dict):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/prediction-result-batch.json",
+                            message="'model_results' must be a dictionary keyed by model_id",
+                            expected="JSON object",
+                            actual=type(batch_data.get("model_results")).__name__,
+                        )
+                    )
+                if batch_schema_path.is_file():
+                    batch_schema = json.loads(batch_schema_path.read_text(encoding="utf-8"))
+                    reg = self._build_schema_registry()
+                    if reg is not None:
+                        validator = jsonschema.Draft202012Validator(batch_schema, registry=reg)
+                    else:
+                        validator = jsonschema.Draft202012Validator(batch_schema)
+                    validator.validate(batch_data)
         except Exception as e:
             result.errors.append(
                 VerificationError(

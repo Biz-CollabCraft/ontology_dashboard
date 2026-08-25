@@ -10,7 +10,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
-    ModelPredictionResult,
+    InternalModelPredictionResult,
     PipelineError,
     PipelineRunState,
     StageState,
@@ -152,16 +152,12 @@ class PipelineStateManager:
 
     def record_predictions(
         self,
-        results: list[ModelPredictionResult],
-        anomaly_detected: Optional[bool] = None,
+        results: list[InternalModelPredictionResult],
     ) -> None:
         self.state.prediction_results = results
 
     def record_prediction_delivery(self, status: Literal["not_required", "pending", "sent", "failed"]) -> None:
         self.state.prediction_delivery_status = status
-
-    def record_notification(self, status: Literal["not_required", "pending", "sent", "failed"]) -> None:
-        self.record_prediction_delivery(status)
 
     def finish_run(
         self,

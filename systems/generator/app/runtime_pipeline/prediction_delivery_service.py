@@ -36,10 +36,7 @@ class PredictionDeliveryService:
     ) -> None:
         self.endpoint_url = endpoint_url or os.environ.get(
             "GENERATOR_PREDICTION_RESULT_URL",
-            os.environ.get(
-                "GENERATOR_ANOMALY_SIGNAL_URL",
-                "http://localhost:8000/internal/prediction-results",
-            ),
+            "http://localhost:8000/internal/prediction-results",
         )
         self.timeout = timeout_seconds
         if outbox_dir is None:
@@ -165,7 +162,3 @@ class PredictionDeliveryService:
                 details=[{"error": str(net_err), "event_id": payload.event_id}],
                 retryable=True,
             ) from net_err
-
-
-# Alias for backward compatibility
-NotificationService = PredictionDeliveryService

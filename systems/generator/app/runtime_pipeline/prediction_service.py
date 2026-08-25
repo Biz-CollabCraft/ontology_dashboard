@@ -19,10 +19,11 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineAssetIdColumnMissingError,
     PipelineModelArtifactInvalidError,
     PipelineModelPredictionFailedError,
+    PipelinePredictionObservationAlignmentNotImplementedError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
-    ModelPredictionResult,
+    InternalModelPredictionResult,
 )
 from systems.generator.app.runtime_pipeline.runtime_feature_service import RuntimeFeatureBundle
 
@@ -167,36 +168,54 @@ class PredictionService:
             artifact_ref=artifact_ref,
         )
 
-    def execute_predictions_from_feature_refs(
+    def predict_for_models(
         self,
-        *,
-        model_artifacts: dict[str, LoadedModelArtifact],
+        base_models: list[str],
         model_feature_refs: dict[str, ArtifactReference],
         model_feature_bundles: Optional[dict[str, RuntimeFeatureBundle]] = None,
-        asset_ids: Optional[list[str]] = None,
         model_feature_errors: Optional[dict[str, Any]] = None,
-    ) -> list[ModelPredictionResult]:
+        asset_ids: Optional[list[str]] = None,
+    ) -> list[InternalModelPredictionResult]:
         """Run pure model inference for each equipment over all active models without thresholding."""
-        results: list[ModelPredictionResult] = []
+        results: list[InternalModelPredictionResult] = []
 
         # Resolve all known equipment IDs strictly
-        known_assets: list[str] = list(asset_ids or [])
-        if not known_assets and model_feature_bundles:
+        known_assets: set[str] = set(asset_ids or [])
+        if model_feature_bundles:
             for b in model_feature_bundles.values():
                 if b and b.row_metadata:
                     for rm in b.row_metadata:
-                        if rm.asset_id not in known_assets:
-                            known_assets.append(rm.asset_id)
+                        known_assets.add(rm.asset_id)
 
-        if not known_assets:
-            raise PipelineAssetIdColumnMissingError(
-                "예측을 수행할 유효한 설비 식별자(asset_id)가 식별되지 않았습니다.",
-                retryable=False,
-            )
+        for base_model in base_models:
+            model_id = self.resolve_model_id(base_model)
 
-        for base_model, artifact in model_artifacts.items():
-            model_id = artifact.model_id
-            feature_ref = model_feature_refs.get(base_model) or model_feature_refs.get(model_id)
+            # Load active artifact
+            try:
+                artifact = self.load_active_artifact(base_model)
+            except Exception as exc:
+                err_code = getattr(exc, "code", "PIPELINE_MODEL_ARTIFACT_INVALID")
+                logger.warning(f"[PredictionService] Failed to load active artifact for '{model_id}': {exc}")
+                for target_asset in known_assets:
+                    results.append(
+                        InternalModelPredictionResult(
+                            asset_id=target_asset,
+                            model_id=model_id,
+                            model_version="unknown",
+                            status="failed",
+                            observed_at="",
+                            score_type="positive_class_probability",
+                            score_source=None,
+                            score=None,
+                            artifact_ref=None,
+                            feature_ref=None,
+                            error_code=err_code,
+                            error_message=str(exc),
+                        )
+                    )
+                continue
+
+            feature_ref = model_feature_refs.get(base_model)
             bundle = (model_feature_bundles or {}).get(base_model)
 
             if feature_ref is None:
@@ -205,12 +224,14 @@ class PredictionService:
                 err_msg = str(err_info) if err_info else f"모델 '{model_id}'에 해당하는 Runtime Feature가 생성되지 않았습니다."
                 for target_asset in known_assets:
                     results.append(
-                        ModelPredictionResult(
+                        InternalModelPredictionResult(
                             asset_id=target_asset,
                             model_id=model_id,
                             model_version=artifact.model_version,
                             status="failed",
+                            observed_at="",
                             score_type="positive_class_probability",
+                            score_source=None,
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=None,
@@ -232,12 +253,14 @@ class PredictionService:
                 logger.warning(f"[PredictionService] Failed to load feature npy for '{model_id}': {exc}")
                 for target_asset in known_assets:
                     results.append(
-                        ModelPredictionResult(
+                        InternalModelPredictionResult(
                             asset_id=target_asset,
                             model_id=model_id,
                             model_version=artifact.model_version,
                             status="failed",
+                            observed_at="",
                             score_type="positive_class_probability",
+                            score_source=None,
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
@@ -249,20 +272,24 @@ class PredictionService:
 
             # Map row metadata to equipments
             asset_latest_row: dict[str, int] = {}
+            row_meta_by_index: dict[int, Any] = {}
             if bundle and bundle.row_metadata:
                 for row_meta in bundle.row_metadata:
                     asset_latest_row[row_meta.asset_id] = row_meta.row_index
+                    row_meta_by_index[row_meta.row_index] = row_meta
 
             # If bundle metadata is missing, fail-closed
             if not asset_latest_row:
                 for target_asset in known_assets:
                     results.append(
-                        ModelPredictionResult(
+                        InternalModelPredictionResult(
                             asset_id=target_asset,
                             model_id=model_id,
                             model_version=artifact.model_version,
                             status="failed",
+                            observed_at="",
                             score_type="positive_class_probability",
+                            score_source=None,
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
@@ -274,18 +301,29 @@ class PredictionService:
 
             # Iterate over each equipment
             for asset_id, latest_idx in asset_latest_row.items():
+                target_metadata = row_meta_by_index.get(latest_idx)
+                if target_metadata is None or not target_metadata.observed_at:
+                    raise PipelinePredictionObservationAlignmentNotImplementedError(
+                        f"설비 '{asset_id}'의 최신 예측 행(index={latest_idx})에 대응하는 row metadata 또는 observed_at이 없습니다.",
+                        details=[{"model_id": model_id, "asset_id": asset_id, "row_index": latest_idx}],
+                        retryable=False,
+                    )
+                observed_at_val = target_metadata.observed_at
+
                 # Check history sufficiency for this asset
                 history_status = (bundle.asset_history_status or {}).get(asset_id) if bundle else None
                 if history_status and not history_status.get("ready", True):
                     actual_count = history_status.get("count", 0)
                     min_req = history_status.get("minimum_history_rows", 1)
                     results.append(
-                        ModelPredictionResult(
+                        InternalModelPredictionResult(
                             asset_id=asset_id,
                             model_id=model_id,
                             model_version=artifact.model_version,
                             status="unknown",
+                            observed_at=observed_at_val,
                             score_type="positive_class_probability",
+                            score_source=None,
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
@@ -307,12 +345,15 @@ class PredictionService:
                             score_val = float(probs[0, 1])
                         else:
                             score_val = float(probs[0, 0])
+                        score_source_val = "predict_proba"
                     elif hasattr(model_obj, "decision_function"):
                         df_val = float(model_obj.decision_function(target_features)[0])
                         score_val = float(1.0 / (1.0 + np.exp(-df_val)))
+                        score_source_val = "decision_function_compat"
                     elif hasattr(model_obj, "predict"):
                         preds = model_obj.predict(target_features)
                         score_val = float(preds[0])
+                        score_source_val = "predict_compat"
                     else:
                         raise PipelineModelPredictionFailedError(f"Model object has no predict method: {type(model_obj)}")
 
@@ -327,12 +368,14 @@ class PredictionService:
                         )
 
                     results.append(
-                        ModelPredictionResult(
+                        InternalModelPredictionResult(
                             asset_id=asset_id,
                             model_id=model_id,
                             model_version=artifact.model_version,
                             status="succeeded",
+                            observed_at=observed_at_val,
                             score_type="positive_class_probability",
+                            score_source=score_source_val,
                             score=score_val,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
@@ -342,18 +385,20 @@ class PredictionService:
                     )
                     logger.info(
                         f"[PredictionService] Equipment '{asset_id}', Model '{model_id}' ({artifact.model_version}): "
-                        f"score={score_val:.4f}"
+                        f"score={score_val:.4f} (source={score_source_val}, observed_at={observed_at_val})"
                     )
                 except Exception as exc:
                     err_code = getattr(exc, "code", "PIPELINE_MODEL_PREDICTION_FAILED")
                     logger.warning(f"[PredictionService] Model '{model_id}' prediction execution failed for asset '{asset_id}': {exc}")
                     results.append(
-                        ModelPredictionResult(
+                        InternalModelPredictionResult(
                             asset_id=asset_id,
                             model_id=model_id,
                             model_version=artifact.model_version,
                             status="failed",
+                            observed_at=observed_at_val,
                             score_type="positive_class_probability",
+                            score_source=None,
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,

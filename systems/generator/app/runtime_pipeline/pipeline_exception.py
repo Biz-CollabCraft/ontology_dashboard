@@ -138,15 +138,27 @@ class PipelinePreprocessingFailedError(PipelineBaseError):
     retryable = False
 
 
+class PipelineSensorValueMissingError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_SENSOR_VALUE_MISSING"
+    retryable = False
+
+
 class PipelineRuntimeFeatureFailedError(PipelineBaseError):
     status_code = 422
     code = "PIPELINE_RUNTIME_FEATURE_FAILED"
     retryable = False
 
 
-class PipelineFeatureMissingValueHandlingNotImplementedError(PipelineBaseError):
+class PipelineModelFeatureMissingValueHandlingNotImplementedError(PipelineBaseError):
     status_code = 501
-    code = "PIPELINE_FEATURE_MISSING_VALUE_HANDLING_NOT_IMPLEMENTED"
+    code = "PIPELINE_MODEL_FEATURE_MISSING_VALUE_HANDLING_NOT_IMPLEMENTED"
+    retryable = False
+
+
+class PipelinePredictionObservationAlignmentNotImplementedError(PipelineBaseError):
+    status_code = 501
+    code = "PIPELINE_PREDICTION_OBSERVATION_ALIGNMENT_NOT_IMPLEMENTED"
     retryable = False
 
 
@@ -186,9 +198,9 @@ class PipelinePartialPredictionError(PipelineBaseError):
     retryable = False
 
 
-class PipelineAggregationFailedError(PipelineBaseError):
+class PipelineBatchBuildingFailedError(PipelineBaseError):
     status_code = 500
-    code = "PIPELINE_AGGREGATION_FAILED"
+    code = "PIPELINE_BATCH_BUILDING_FAILED"
     retryable = False
 
 
@@ -254,10 +266,3 @@ class PipelineDeliveryRetryExhaustedError(PipelineBaseError):
     status_code = 502
     code = "PIPELINE_DELIVERY_RETRY_EXHAUSTED"
     retryable = False
-
-
-# Aliases for backward compatibility
-PipelineNotificationFailedError = PipelineDeliveryFailedError
-PipelineNotificationTimeoutError = PipelineDeliveryTimeoutError
-PipelineNotificationServerError = PipelineDeliveryServerError
-PipelineNotificationRetryExhaustedError = PipelineDeliveryRetryExhaustedError

@@ -186,29 +186,3 @@ class PipelineRepository:
 
         self.save_run_state(state)
         return state
-
-    def update_notification_event(
-        self,
-        *,
-        run_id: str,
-        event_id: str,
-        asset_id: str,
-        status: Literal["pending", "sending", "retry_wait", "sent", "failed"],
-        attempt: int,
-        max_attempts: int = 5,
-        next_retry_at: Optional[str] = None,
-        last_error_code: Optional[str] = None,
-        last_error_message: Optional[str] = None,
-    ) -> Optional[PipelineRunState]:
-        """Backward-compatible alias for update_prediction_event."""
-        return self.update_prediction_event(
-            run_id=run_id,
-            event_id=event_id,
-            asset_id=asset_id,
-            status=status,
-            attempt=attempt,
-            max_attempts=max_attempts,
-            next_retry_at=next_retry_at,
-            last_error_code=last_error_code,
-            last_error_message=last_error_message,
-        )

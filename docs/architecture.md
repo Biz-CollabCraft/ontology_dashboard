@@ -231,7 +231,11 @@ MODEL_ARTIFACT_URI=registry://pdm/production
 
 ## 5. systems/backend — Product Runtime
 
-Backend는 모델을 **학습하거나 운영 Runtime Prediction을 직접 수행하지 않는다**. Backend는 Generator가 발행한 Anomaly Signal과 source lineage를 소비하여 해당 설비의 센서 근거 및 metadata를 조회하고, 제품이 실제 소비하는 **Product Result Artifact, Evidence와 Report를 최종 생성**한다.
+Backend는 모델을 **학습하거나 운영 Runtime Prediction을 직접 수행하지 않는다**. Backend는 Generator가 발행한 Prediction Result Batch와 source lineage를 소비하여 Threshold Policy를 적용하고, 해당 설비의 센서 근거 및 metadata를 조회하여 제품이 실제 소비하는 **Product Result Artifact, Evidence와 Report를 최종 생성**한다.
+
+> **Current vs Target 책임 구분**:
+> - **Current (현재 PR 구현 범위)**: Generator가 활성 Model Artifact별 점수(`score`)를 계산하여 설비별 K-V Dictionary(`model_results: dict[str, ModelPredictionResult]`) 구조의 `Prediction Result Batch`를 생성하고 Outbox에 저장한 뒤 `GENERATOR_PREDICTION_RESULT_URL`로 멱등 송신한다.
+> - **Target (후속 Backend 구현 범위)**: Backend가 `POST /internal/prediction-results` 엔드포인트를 제공하여 배치를 수신·저장하고, Threshold Policy 적용, 이상 판정, Diagnosis, Product Result Artifact, Evidence, Report 생성 및 사용자 알림을 수행한다.
 
 ### 5.1 Backend Canonical Root 및 목표 디렉터리 구조
 
@@ -257,7 +261,7 @@ systems/backend/
 │   ├── equipment/               # 설비 마스터 및 설비 상태
 │   ├── ontology/                # Object/Link/Action 온톨로지 레지스트리 및 인스턴스
 │   ├── dataset/                 # 데이터셋 소스 및 프로젝션
-│   ├── diagnosis/               # Anomaly Signal 소비 및 Product Result Artifact/Evidence 생성
+│   ├── diagnosis/               # Prediction Result Batch 소비, Threshold 적용 및 Product Result Artifact/Evidence 생성
 │   ├── maintenance/             # Closed-loop 정비 조치/이벤트/결정/작업지시 (구 closed_loop)
 │   ├── dashboard/               # Read-model composition 영역
 │   ├── report/                  # 보고서 생성 및 내보내기
@@ -272,22 +276,23 @@ systems/backend/
 ### 5.2 diagnosis 책임
 
 ```text
-Anomaly Signal
+Prediction Result Batch
 + Source Lineage
 + Sensor/Asset Metadata
         ↓
 systems/backend/app/diagnosis
-signal validation & evidence aggregation
+threshold evaluation & evidence aggregation
         ↓
 Product Result Artifact / Evidence
         ↓
 API / Dashboard / Report / Frontend
 ```
 
-- Anomaly Signal Schema 검증
+- Prediction Result Batch Schema 검증
 - `event_id`, `run_id`, `job_id`, `asset_id` 정합성 검증
 - source URI·checksum 및 pipeline contract version 검증
-- 신호에 사용된 Model ID·Model Version 및 이상 예측 모델 목록 보존
+- 수신된 모델별 점수(`score`)에 Threshold Policy를 적용하여 이상 여부 판정
+- 신호에 사용된 Model ID·Model Version 및 예측 수치 보존
 - 관련 센서값 및 설비 metadata 조회
 - 특정 asset + observation time에 대한 Product Result Artifact 생성
 - 신호 및 센서 관측 근거에 연결되는 Evidence/provenance 생성 또는 조립
@@ -299,8 +304,8 @@ Training metrics, feature importance 등 모델 개발 설명자료는 Model Art
 ### 5.3 Runtime Feature 및 Model 결과 소비 경계
 
 Runtime Feature 계산과 Model Artifact 실행은 Generator가 소유한다.
-Backend는 Runtime Feature 파일을 재계산하지 않으며, Anomaly Signal에 포함된
-Feature Reference, Model ID, Model Version, probability, threshold와 source
+Backend는 Runtime Feature 파일을 재계산하지 않으며, Prediction Result Batch에 포함된
+Feature Reference, Model ID, Model Version, score와 source
 lineage를 Evidence provenance로 소비한다.
 
 Backend는 Generator의 Python 코드를 import하거나 Runtime Feature 구현을 복제하지 않는다.

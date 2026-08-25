@@ -25,10 +25,11 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineAssetIdMissingError,
     PipelineAssetIdValueMissingError,
     PipelineFeatureMetadataAlignmentError,
-    PipelineFeatureMissingValueHandlingNotImplementedError,
     PipelineFeatureSchemaMismatchError,
     PipelineHistoryInsufficientError,
+    PipelineModelFeatureMissingValueHandlingNotImplementedError,
     PipelineRuntimeFeatureFailedError,
+    PipelineSensorValueMissingError,
     PipelineTimestampInvalidError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
@@ -126,9 +127,38 @@ class RuntimeFeatureService:
         series: pd.Series,
         item: FeatureItem,
         time_series: Optional[pd.Series] = None,
+        model_id: Optional[str] = None,
+        model_version: Optional[str] = None,
+        feature_schema_version: Optional[str] = None,
     ) -> pd.Series:
         """Compute single feature series within an isolated asset group with fail-closed missing value checks."""
+        # Raw sensor value missing check
+        if series.isna().any():
+            missing_indices = [int(i) for i in series.index[series.isna()]]
+            missing_timestamps = (
+                list(time_series.loc[missing_indices].astype(str)) if time_series is not None else []
+            )
+            raise PipelineSensorValueMissingError(
+                f"원본 센서 필드 '{item.source_field}'에 결측치(NaN/null)가 {len(missing_indices)}건 발생했습니다.",
+                details=[{
+                    "asset_id": str(asset_id),
+                    "source_field": item.source_field,
+                    "missing_count": len(missing_indices),
+                    "missing_row_indices": missing_indices[:10],
+                    "missing_timestamps": missing_timestamps[:10],
+                }],
+                retryable=False,
+            )
+
         numeric_series = pd.to_numeric(series, errors="coerce")
+        if numeric_series.isna().any():
+            missing_indices = [int(i) for i in numeric_series.index[numeric_series.isna()]]
+            raise PipelineSensorValueMissingError(
+                f"원본 센서 필드 '{item.source_field}'에 숫자로 변환할 수 없는 유효하지 않은 값이 포함되어 있습니다.",
+                details=[{"source_field": item.source_field, "missing_row_indices": missing_indices[:10]}],
+                retryable=False,
+            )
+
         op = item.operation
         params = item.parameters or {}
         col_name = item.feature_name
@@ -170,15 +200,18 @@ class RuntimeFeatureService:
             missing_timestamps = (
                 list(time_series.loc[missing_indices].astype(str)) if time_series is not None else []
             )
-            raise PipelineFeatureMissingValueHandlingNotImplementedError(
+            raise PipelineModelFeatureMissingValueHandlingNotImplementedError(
                 f"Feature '{col_name}' 계산 중 결측값/무한대(NaN/Inf)가 {len(missing_indices)}건 발생했습니다. "
                 f"선언된 결측 처리 정책 '{mv_policy}'은 미구현 상태입니다.",
                 details=[{
-                    "asset_id": str(asset_id),
+                    "model_id": model_id,
+                    "model_version": model_version,
+                    "feature_schema_version": feature_schema_version,
                     "feature_name": col_name,
                     "source_field": src_col,
                     "operation": op,
                     "missing_value_policy": mv_policy,
+                    "asset_id": str(asset_id),
                     "missing_count": len(missing_indices),
                     "missing_row_indices": missing_indices[:10],
                     "missing_timestamps": missing_timestamps[:10],
@@ -194,6 +227,8 @@ class RuntimeFeatureService:
         preprocessed_df: pd.DataFrame,
         feature_schema_dict: dict[str, Any],
         history_requirement_dict: dict[str, Any],
+        model_id: Optional[str] = None,
+        model_version: Optional[str] = None,
         id_column: Optional[str] = None,
         time_column: Optional[str] = None,
         dataset_id: str = "canonical-ai4i-v1",
@@ -298,6 +333,9 @@ class RuntimeFeatureService:
                     series=group[src_col],
                     item=item,
                     time_series=time_s,
+                    model_id=model_id,
+                    model_version=model_version,
+                    feature_schema_version=schema_spec.schema_version,
                 )
                 res_series_list.append(computed)
 
@@ -310,9 +348,14 @@ class RuntimeFeatureService:
         features_matrix = np.column_stack(matrix_list).astype(np.float64)
 
         if np.isnan(features_matrix).any() or np.isinf(features_matrix).any():
-            raise PipelineFeatureMissingValueHandlingNotImplementedError(
+            raise PipelineModelFeatureMissingValueHandlingNotImplementedError(
                 "Feature 행렬에 결측값 또는 무한대(NaN/Inf)가 존재합니다. 조용한 0 치환은 금지됩니다.",
-                details=[{"matrix_shape": list(features_matrix.shape)}],
+                details=[{
+                    "model_id": model_id,
+                    "model_version": model_version,
+                    "feature_schema_version": schema_spec.schema_version,
+                    "matrix_shape": list(features_matrix.shape),
+                }],
                 retryable=False,
             )
 

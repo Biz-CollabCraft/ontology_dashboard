@@ -62,19 +62,56 @@ class RuntimeFeatureRowMetadata(BaseModel):
 
 
 class ModelPredictionResult(BaseModel):
-    """Inference result for a single registered model for a specific equipment."""
+    """Inference result payload for a single model in equipment batch."""
+    model_config = ConfigDict(extra="forbid")
+
+    model_version: str = Field(..., description="Published model artifact version")
+    status: Literal["succeeded", "failed", "unknown"] = Field("succeeded", description="Model evaluation status")
+    observed_at: str = Field(..., description="Observation timestamp in UTC ISO format")
+    score_type: Optional[str] = Field("positive_class_probability", description="Type of score, e.g. positive_class_probability")
+    score_source: Optional[Literal["predict_proba", "decision_function_compat", "predict_compat"]] = Field(
+        "predict_proba", description="Inference method source"
+    )
+    score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted numeric score/probability")
+    artifact_ref: Optional[ArtifactReference] = Field(None, description="Reference to Model Artifact")
+    feature_ref: Optional[ArtifactReference] = Field(None, description="Reference to Runtime Feature bundle")
+    error_code: Optional[str] = Field(None, description="Error code if model inference failed")
+    error_message: Optional[str] = Field(None, description="Error message if model inference failed")
+
+
+class InternalModelPredictionResult(BaseModel):
+    """Internal model inference result containing asset_id and model_id for orchestration."""
     model_config = ConfigDict(extra="forbid")
 
     asset_id: str = Field(..., description="Target equipment identifier")
     model_id: str = Field(..., description="Unique model identifier, e.g. pdm-lightgbm")
     model_version: str = Field(..., description="Published model artifact version")
     status: Literal["succeeded", "failed", "unknown"] = Field("succeeded", description="Model evaluation status")
+    observed_at: str = Field(..., description="Observation timestamp in UTC ISO format")
     score_type: Optional[str] = Field("positive_class_probability", description="Type of score, e.g. positive_class_probability")
+    score_source: Optional[Literal["predict_proba", "decision_function_compat", "predict_compat"]] = Field(
+        "predict_proba", description="Inference method source"
+    )
     score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted numeric score/probability")
     artifact_ref: Optional[ArtifactReference] = Field(None, description="Reference to Model Artifact")
     feature_ref: Optional[ArtifactReference] = Field(None, description="Reference to Runtime Feature bundle")
     error_code: Optional[str] = Field(None, description="Error code if model inference failed")
     error_message: Optional[str] = Field(None, description="Error message if model inference failed")
+
+    def to_payload_result(self) -> ModelPredictionResult:
+        """Convert internal result to contract payload result (without redundant asset_id/model_id)."""
+        return ModelPredictionResult(
+            model_version=self.model_version,
+            status=self.status,
+            observed_at=self.observed_at,
+            score_type=self.score_type,
+            score_source=self.score_source,
+            score=self.score,
+            artifact_ref=self.artifact_ref,
+            feature_ref=self.feature_ref,
+            error_code=self.error_code,
+            error_message=self.error_message,
+        )
 
 
 class PredictionDeliveryEventState(BaseModel):
@@ -94,10 +131,6 @@ class PredictionDeliveryEventState(BaseModel):
     updated_at: str = Field(default_factory=now_utc_iso, description="ISO update timestamp")
 
 
-# Alias for backward compatibility
-NotificationEventState = PredictionDeliveryEventState
-
-
 class PipelineRunState(BaseModel):
     """Complete execution record for a single pipeline run."""
     model_config = ConfigDict(extra="forbid")
@@ -115,7 +148,7 @@ class PipelineRunState(BaseModel):
     current_stage: Optional[str] = Field(None, description="Currently active stage")
     source_ref: ArtifactReference = Field(..., description="Source observation protocol file reference")
     stages: dict[str, StageState] = Field(default_factory=dict, description="Stage execution map")
-    prediction_results: list[ModelPredictionResult] = Field(
+    prediction_results: list[InternalModelPredictionResult] = Field(
         default_factory=list, description="Array of prediction results for all registered models across equipments"
     )
     prediction_delivery_status: Optional[Literal["not_required", "pending", "sent", "failed"]] = Field(
@@ -130,31 +163,6 @@ class PipelineRunState(BaseModel):
     started_at: Optional[str] = Field(None, description="ISO start timestamp")
     finished_at: Optional[str] = Field(None, description="ISO finish timestamp")
     errors: list[PipelineError] = Field(default_factory=list, description="List of errors occurred")
-
-    # Compatibility properties
-    @property
-    def notification_status(self) -> Optional[Literal["not_required", "pending", "sent", "failed"]]:
-        return self.prediction_delivery_status
-
-    @notification_status.setter
-    def notification_status(self, val: Optional[Literal["not_required", "pending", "sent", "failed"]]) -> None:
-        self.prediction_delivery_status = val
-
-    @property
-    def notification_event_ids(self) -> list[str]:
-        return self.prediction_event_ids
-
-    @notification_event_ids.setter
-    def notification_event_ids(self, val: list[str]) -> None:
-        self.prediction_event_ids = val
-
-    @property
-    def notification_events(self) -> list[PredictionDeliveryEventState]:
-        return self.prediction_events
-
-    @notification_events.setter
-    def notification_events(self, val: list[PredictionDeliveryEventState]) -> None:
-        self.prediction_events = val
 
 
 class PipelineQueueItem(BaseModel):
@@ -198,20 +206,15 @@ class PredictionResultBatchPayload(BaseModel):
     run_id: str = Field(..., description="Associated pipeline run ID")
     job_id: str = Field(..., description="Associated queue job ID")
     asset_id: str = Field(..., description="Target equipment identifier")
-    observed_at: str = Field(..., description="Observation timestamp")
+    observed_at: str = Field(..., description="Observation timestamp in UTC ISO format")
     generated_at: str = Field(default_factory=now_utc_iso, description="Generation timestamp")
     dataset_id: str = Field(..., description="Dataset identifier")
     dataset_version: str = Field(..., description="Dataset version")
-    model_results: list[ModelPredictionResult] = Field(
-        ..., min_length=1, description="Array of model prediction results for this equipment"
+    model_results: dict[str, ModelPredictionResult] = Field(
+        ..., description="Map of model_id to model prediction results for this equipment"
     )
     source_lineage: SourceLineage = Field(..., description="Input lineage traceability")
     sensor_data_ref: Optional[dict[str, Any]] = Field(None, description="Sensor data reference")
-    feature_ref: Optional[dict[str, Any]] = Field(None, description="Runtime feature reference")
-
-
-# Alias for backward compatibility
-AnomalySignalPayload = PredictionResultBatchPayload
 
 
 class PredictionOutboxItem(BaseModel):
@@ -233,7 +236,3 @@ class PredictionOutboxItem(BaseModel):
     created_at: str = Field(default_factory=now_utc_iso, description="Created timestamp")
     updated_at: str = Field(default_factory=now_utc_iso, description="Updated timestamp")
     payload: PredictionResultBatchPayload = Field(..., description="Batch payload to deliver")
-
-
-# Alias for backward compatibility
-NotificationOutboxItem = PredictionOutboxItem

@@ -17,14 +17,12 @@ from systems.generator.app.preprocessing.preprocessing_repository import (
     compute_source_schema_fingerprint,
 )
 from systems.generator.app.preprocessing.preprocessing_service import PreprocessingService
-from systems.generator.app.runtime_pipeline.aggregation_service import (
-    AggregationService,
-    ModelResultCollector,
+from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+    PredictionBatchService,
     PredictionBatchSummary,
 )
-from systems.generator.app.runtime_pipeline.notification_service import (
+from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
     PredictionDeliveryService,
-    NotificationService,
 )
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineAssetIdColumnMissingError,
@@ -35,6 +33,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineMappingNotImplementedError,
     PipelineModelPredictionFailedError,
     PipelineNoActiveModelError,
+    PipelinePredictionObservationAlignmentNotImplementedError,
     PipelinePreprocessingFailedError,
     PipelineRuntimeFeatureFailedError,
     PipelineTimestampInvalidError,
@@ -44,7 +43,7 @@ from systems.generator.app.runtime_pipeline.pipeline_repository import (
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
-    ModelPredictionResult,
+    InternalModelPredictionResult,
     PredictionDeliveryEventState,
     PredictionResultBatchPayload,
     PipelineQueueItem,
@@ -77,15 +76,15 @@ class PipelineService:
         preprocessing_service: Optional[PreprocessingService] = None,
         runtime_feature_service: Optional[RuntimeFeatureService] = None,
         prediction_service: Optional[PredictionService] = None,
-        aggregation_service: Optional[AggregationService] = None,
-        notification_service: Optional[NotificationService] = None,
+        prediction_batch_service: Optional[PredictionBatchService] = None,
+        prediction_delivery_service: Optional[PredictionDeliveryService] = None,
     ) -> None:
         self.repository = repository or PipelineRepository()
         self.preprocessing_service = preprocessing_service or PreprocessingService()
         self.runtime_feature_service = runtime_feature_service or RuntimeFeatureService()
         self.prediction_service = prediction_service or PredictionService()
-        self.aggregation_service = aggregation_service or ModelResultCollector()
-        self.notification_service = notification_service or PredictionDeliveryService()
+        self.prediction_batch_service = prediction_batch_service or PredictionBatchService()
+        self.prediction_delivery_service = prediction_delivery_service or PredictionDeliveryService()
 
     def _load_source_df(self, source_path: Path) -> pd.DataFrame:
         """Parse source observation protocol file (.jsonl or .csv)."""
@@ -335,6 +334,8 @@ class PipelineService:
                         preprocessed_df=preprocessed_input_df,
                         feature_schema_dict=artifact.feature_schema,
                         history_requirement_dict=artifact.history_requirement,
+                        model_id=model_id,
+                        model_version=artifact.model_version,
                         id_column=id_col,
                         time_column=plan.get("time_column"),
                         dataset_id=item.dataset_id,
@@ -375,12 +376,11 @@ class PipelineService:
         # -------------------------------------------------------------
         manager.start_stage("prediction", input_refs=list(model_feature_refs.values()))
         try:
-            model_results: list[ModelPredictionResult] = (
-                self.prediction_service.execute_predictions_from_feature_refs(
-                    model_artifacts=model_artifacts,
+            model_results: list[InternalModelPredictionResult] = (
+                self.prediction_service.predict_for_models(
+                    base_models=REGISTERED_BASE_MODELS,
                     model_feature_refs=model_feature_refs,
                     model_feature_bundles=model_feature_bundles,
-                    asset_ids=actual_asset_ids,
                     model_feature_errors=model_feature_errors,
                 )
             )
@@ -409,16 +409,24 @@ class PipelineService:
         # -------------------------------------------------------------
         # Stage 4: Batch Building (Collect Model Results per Equipment)
         # -------------------------------------------------------------
-        manager.start_stage("aggregation")
-        batch_summary: PredictionBatchSummary = self.aggregation_service.collect(model_results)
-        manager.record_predictions(model_results)
-        manager.succeed_stage("aggregation", output_refs=[])
+        manager.start_stage("batch_building")
+        try:
+            batch_summary: PredictionBatchSummary = self.prediction_batch_service.collect(model_results)
+            manager.record_predictions(model_results)
+            manager.succeed_stage("batch_building", output_refs=[])
+        except Exception as exc:
+            err_code = getattr(exc, "code", "PIPELINE_BATCH_BUILDING_FAILED")
+            retryable = getattr(exc, "retryable", False)
+            manager.fail_stage("batch_building", err_code, str(exc), retryable=retryable)
+            manager.finish_run("failed")
+            self.repository.save_run_state(manager.state)
+            raise
 
         # -------------------------------------------------------------
-        # Stage 5: Prediction Result Batch Delivery (Outbox Persistence for ALL equipments)
+        # Stage 5: Prediction Delivery (Outbox Persistence for ALL equipments)
         # -------------------------------------------------------------
         if batch_summary.equipment_batches:
-            manager.start_stage("notification")
+            manager.start_stage("prediction_delivery")
             manager.record_prediction_delivery("pending")
             event_ids: list[str] = []
             events_state: list[PredictionDeliveryEventState] = []
@@ -440,29 +448,20 @@ class PipelineService:
                     )
                 )
 
-                first_feat_ref = next(
-                    (r.feature_ref.model_dump() for r in eq_batch.model_results if r.feature_ref),
-                    None,
-                )
-
-                # Observed timestamp from metadata if available
-                first_obs_time = next(
-                    (
-                        rm.observed_at
-                        for b in model_feature_bundles.values()
-                        if b and b.row_metadata
-                        for rm in b.row_metadata
-                        if rm.asset_id == asset_id and rm.observed_at
-                    ),
-                    now_utc_iso(),
-                )
+                batch_observed_at = eq_batch.observed_at
+                if not batch_observed_at:
+                    raise PipelinePredictionObservationAlignmentNotImplementedError(
+                        f"설비 '{asset_id}'의 결과 배치를 위한 관측 시각(observed_at)이 누락되었습니다.",
+                        details=[{"asset_id": asset_id}],
+                        retryable=False,
+                    )
 
                 batch_payload = PredictionResultBatchPayload(
                     event_id=event_id,
                     run_id=run_id,
                     job_id=item.job_id,
                     asset_id=asset_id,
-                    observed_at=first_obs_time,
+                    observed_at=batch_observed_at,
                     generated_at=now_utc_iso(),
                     dataset_id=item.dataset_id,
                     dataset_version=item.dataset_version,
@@ -473,16 +472,15 @@ class PipelineService:
                         pipeline_contract_version="generator-prediction-result-v1",
                     ),
                     sensor_data_ref={"uri": item.source_uri, "sha256": item.source_checksum},
-                    feature_ref=first_feat_ref,
                 )
 
                 # Atomically persist to Outbox directory for background worker delivery
-                self.notification_service.create_outbox_record(batch_payload)
+                self.prediction_delivery_service.create_outbox_record(batch_payload)
                 self.repository.save_event(batch_payload)
 
             manager.state.prediction_event_ids = event_ids
             manager.state.prediction_events = events_state
-            manager.succeed_stage("notification", output_refs=[])
+            manager.succeed_stage("prediction_delivery", output_refs=[])
         else:
             manager.record_prediction_delivery("not_required")
             manager.state.prediction_events = []

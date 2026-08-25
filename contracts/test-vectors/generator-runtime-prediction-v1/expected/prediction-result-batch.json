@@ -7,13 +7,13 @@
   "generated_at": "2026-08-25T11:55:05Z",
   "dataset_id": "canonical-ai4i-v1",
   "dataset_version": "canonical-ai4i-physics-v3.1",
-  "model_results": [
-    {
-      "asset_id": "M14860",
-      "model_id": "pdm-lightgbm",
+  "model_results": {
+    "pdm-lightgbm": {
       "model_version": "pdm-lightgbm-v1.0",
       "status": "succeeded",
+      "observed_at": "2026-08-25T11:55:00Z",
       "score_type": "positive_class_probability",
+      "score_source": "predict_proba",
       "score": 0.08,
       "artifact_ref": {
         "uri": "models_store/artifacts/pdm-lightgbm/pdm-lightgbm-v1.0",
@@ -28,12 +28,12 @@
       "error_code": null,
       "error_message": null
     },
-    {
-      "asset_id": "M14860",
-      "model_id": "pdm-xgboost",
+    "pdm-xgboost": {
       "model_version": "pdm-xgboost-v1.0",
       "status": "succeeded",
+      "observed_at": "2026-08-25T11:55:00Z",
       "score_type": "positive_class_probability",
+      "score_source": "predict_proba",
       "score": 0.85,
       "artifact_ref": {
         "uri": "models_store/artifacts/pdm-xgboost/pdm-xgboost-v1.0",
@@ -48,12 +48,12 @@
       "error_code": null,
       "error_message": null
     },
-    {
-      "asset_id": "M14860",
-      "model_id": "pdm-random_forest",
+    "pdm-random_forest": {
       "model_version": "pdm-random_forest-v1.0",
       "status": "succeeded",
+      "observed_at": "2026-08-25T11:55:00Z",
       "score_type": "positive_class_probability",
+      "score_source": "predict_proba",
       "score": 0.79,
       "artifact_ref": {
         "uri": "models_store/artifacts/pdm-random_forest/pdm-random_forest-v1.0",
@@ -68,7 +68,7 @@
       "error_code": null,
       "error_message": null
     }
-  ],
+  },
   "source_lineage": {
     "source_uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
     "source_checksum": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
@@ -77,10 +77,5 @@
   "sensor_data_ref": {
     "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
     "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-  },
-  "feature_ref": {
-    "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
-    "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-    "role": "runtime_features"
   }
 }

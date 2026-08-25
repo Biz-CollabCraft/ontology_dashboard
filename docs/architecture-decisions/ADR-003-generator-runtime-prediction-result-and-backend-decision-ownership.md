@@ -22,7 +22,8 @@
 
 1. **Generator의 런타임 예측 및 결과 배치 송신 소유권**:
    - `systems/generator`가 관측 데이터의 전처리(Preprocessing), 설비별 시계열 피처 추출(Runtime Feature), 활성 Model Artifact 로드 및 다중 모델 점수 계산(Runtime Prediction, `score`), 설비별 결과 묶음 구성(Batch Building)을 전담한다.
-   - Generator는 임계치를 적용하거나 `is_anomaly` 등 이상 판정을 내리지 않으며, 모델 결과가 생성된 모든 설비에 대해 `Prediction Result Batch`를 생성하여 Outbox에 등록하고 Backend 수신 엔드포인트로 멱등 송신한다.
+   - Generator는 임계치를 적용하거나 `is_anomaly` 등 이상 판정을 내리지 않으며, 모델 결과가 생성된 모든 설비에 대해 `Prediction Result Batch` (`model_results`는 model_id 키 기반 딕셔너리 구조)를 생성하여 Outbox에 등록하고 Backend 수신 엔드포인트(`GENERATOR_PREDICTION_RESULT_URL`)로 멱등 송신한다.
+   - 모델별 예측 대상 관측 시각(`observed_at`)은 실제 추론에 사용된 피처 행 메타데이터에서 추출하여 정합성을 보장하며, 결측/시각 불일치 시 조용한 fallback 없이 `501 Not Implemented` 오류로 fail-closed 처리한다.
 
 2. **Backend의 예측 결과 수신, 정책 기반 이상 판정 및 근거/리포트 생성 소유권**:
    - `systems/backend`는 Generator가 송신한 `Prediction Result Batch`를 수신(`POST /internal/prediction-results`)하여 멱등 저장한다.
@@ -42,7 +43,7 @@
 
 ## 3. 결과 및 영향 (Consequences)
 
-- Generator는 학습(Training)뿐만 아니라 런타임 파이프라인(Runtime Pipeline) 워커와 Outbox 기반 전송 워커(Delivery Worker)를 소유한다.
+- Generator는 학습(Training)뿐만 아니라 런타임 파이프라인(Runtime Pipeline) 워커와 Outbox 기반 전송 워커(Prediction Delivery Worker)를 소유한다.
 - Backend는 ML 피처 추출 및 추론 엔진 의존성을 제거하고 도메인/온톨로지/판정 정책/리포트 비즈니스 로직에 집중할 수 있다.
 - 예측 결과 배치 전송 실패 시 Outbox 패턴을 통해 동일 `event_id`로 안전하게 재시도되며, 파이프라인 전체를 불필요하게 재실행하지 않는다.
 - 임계치나 판정 정책의 변경이 머신러닝 연산 레이어와 완전히 독립되어 운영 안정성이 향상된다.

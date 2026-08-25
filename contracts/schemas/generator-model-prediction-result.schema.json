@@ -4,20 +4,13 @@
   "title": "GeneratorModelPredictionResult",
   "type": "object",
   "required": [
-    "asset_id",
-    "model_id",
     "model_version",
-    "status"
+    "status",
+    "observed_at",
+    "score_type",
+    "score_source"
   ],
   "properties": {
-    "asset_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "model_id": {
-      "type": "string",
-      "minLength": 1
-    },
     "model_version": {
       "type": "string",
       "minLength": 1
@@ -26,8 +19,16 @@
       "type": "string",
       "enum": ["succeeded", "failed", "unknown"]
     },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "score_type": {
       "type": ["string", "null"]
+    },
+    "score_source": {
+      "type": ["string", "null"],
+      "enum": ["predict_proba", "decision_function_compat", "predict_compat", null]
     },
     "score": {
       "type": ["number", "null"],
@@ -40,7 +41,8 @@
         "uri": { "type": "string" },
         "sha256": { "type": "string" },
         "role": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "feature_ref": {
       "type": ["object", "null"],
@@ -48,7 +50,8 @@
         "uri": { "type": "string" },
         "sha256": { "type": "string" },
         "role": { "type": "string" }
-      }
+      },
+      "additionalProperties": false
     },
     "error_code": {
       "type": ["string", "null"]

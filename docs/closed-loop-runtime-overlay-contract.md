@@ -29,11 +29,11 @@ producer와 Backend consumer가 별도 Schema로 확정한다.
 - 정비 완료 후 Snapshot에 정비 효과를 반영한다.
 - 실제 시간만큼 기다리지 않고 **대상 설비 Overlay branch의 Simulation Clock만**
   Fast-forward하여 정비 후 Observation 생성을 재개하고 지속한다.
-- 필요한 Observation 수와 이력 충족 여부는 Backend Diagnosis가 현재 Model Artifact의
+- 필요한 Observation 수와 이력 충족 여부는 Generator 런타임 파이프라인이 현재 Model Artifact의
   `history_requirement.json`으로 계산한다. `gen_data`는 Model Artifact를 읽거나
   inference readiness를 판정하지 않는다.
-- Backend는 첫 번째 `inference-ready` Observation에서 신규 Runtime Prediction과
-  Product Result/Evidence를 생성한다.
+- Generator는 첫 번째 `inference-ready` Observation에서 신규 Runtime Prediction(`score`)을 산출하여
+  Backend로 송신하고, Backend는 Threshold 적용을 통해 새 Product Result/Evidence를 생성한다.
 - Canonical, 정비 전 Observation, 정비 전 Product Result/Evidence는 immutable하게
   보존한다.
 - 정비 완료 자체를 정상 판정으로 사용하지 않는다.
@@ -45,7 +45,9 @@ Canonical V3.1 Replay
         ↓
 Runtime Observation
         ↓
-Backend Runtime Prediction / Product Result / Evidence
+Generator Runtime Pipeline: Prediction (score) → Batch Building → 송신
+        ↓
+Backend: Threshold 적용 → Product Result / Evidence 생성
         ↓
 Recommendation → Decision → WorkOrder → MaintenanceAction
         ↓
@@ -63,12 +65,14 @@ gen_data: 대상 설비 Overlay branch 생성 + Observation 지속 생성
         ↓ 매 tick 또는 persisted batch
 runtime_overlay.observations.available
         ↓
-Backend: 새 Observation마다 history_requirement 검증
+Generator: 새 Observation마다 history_requirement 검증
         ├─ 부족 + stream 진행 중: warming_up / 다음 Observation 대기
         ├─ 유효 이력 확보 불가 확정: history_insufficient
         └─ 충족: ready
         ↓
-Backend Runtime Prediction / 새 Product Result / Evidence
+Generator: Runtime Prediction (score) → Prediction Result Batch 송신
+        ↓
+Backend: Threshold 적용 → 새 Product Result / Evidence 생성
 ```
 
 ## 4. Canonical과 Runtime Overlay 분리

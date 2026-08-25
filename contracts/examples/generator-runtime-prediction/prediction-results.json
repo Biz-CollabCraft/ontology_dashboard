@@ -1,10 +1,10 @@
 [
   {
-    "asset_id": "M14860",
-    "model_id": "pdm-lightgbm",
     "model_version": "pdm-lightgbm-v1.0",
     "status": "succeeded",
+    "observed_at": "2026-08-25T11:55:00Z",
     "score_type": "positive_class_probability",
+    "score_source": "predict_proba",
     "score": 0.12,
     "artifact_ref": {
       "uri": "models_store/artifacts/pdm-lightgbm/pdm-lightgbm-v1.0",
@@ -20,11 +20,11 @@
     "error_message": null
   },
   {
-    "asset_id": "M14860",
-    "model_id": "pdm-xgboost",
     "model_version": "pdm-xgboost-v1.0",
     "status": "succeeded",
+    "observed_at": "2026-08-25T11:55:00Z",
     "score_type": "positive_class_probability",
+    "score_source": "predict_proba",
     "score": 0.88,
     "artifact_ref": {
       "uri": "models_store/artifacts/pdm-xgboost/pdm-xgboost-v1.0",
@@ -40,11 +40,11 @@
     "error_message": null
   },
   {
-    "asset_id": "M14860",
-    "model_id": "pdm-random_forest",
     "model_version": "pdm-random_forest-v1.0",
     "status": "succeeded",
+    "observed_at": "2026-08-25T11:55:00Z",
     "score_type": "positive_class_probability",
+    "score_source": "predict_proba",
     "score": 0.74,
     "artifact_ref": {
       "uri": "models_store/artifacts/pdm-random_forest/pdm-random_forest-v1.0",

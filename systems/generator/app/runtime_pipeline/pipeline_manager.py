@@ -5,13 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from systems.generator.app.runtime_pipeline.notification_service import (
+from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
     PredictionDeliveryService,
-    NotificationService,
 )
-from systems.generator.app.runtime_pipeline.notification_worker import (
+from systems.generator.app.runtime_pipeline.prediction_delivery_worker import (
     PredictionDeliveryWorker,
-    NotificationWorker,
 )
 from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
 from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
@@ -36,21 +34,25 @@ class PipelineManager:
         queue: Optional[PipelineQueue] = None,
         repository: Optional[PipelineRepository] = None,
         service: Optional[PipelineService] = None,
-        notification_service: Optional[PredictionDeliveryService] = None,
+        prediction_delivery_service: Optional[PredictionDeliveryService] = None,
     ) -> None:
         self.repository = repository or PipelineRepository()
         self.queue = queue or PipelineQueue()
-        self.notification_service = notification_service or PredictionDeliveryService()
+        self.prediction_delivery_service = prediction_delivery_service or PredictionDeliveryService()
         self.service = service or PipelineService(
             repository=self.repository,
-            notification_service=self.notification_service,
+            prediction_delivery_service=self.prediction_delivery_service,
         )
         self.worker = PipelineWorker(queue=self.queue, service=self.service)
-        self.notification_worker = PredictionDeliveryWorker(
-            service=self.notification_service,
+        self.prediction_delivery_worker = PredictionDeliveryWorker(
+            service=self.prediction_delivery_service,
             repository=self.repository,
         )
         self._is_running = False
+
+    @property
+    def notification_worker(self) -> PredictionDeliveryWorker:
+        return self.prediction_delivery_worker
 
     @classmethod
     def get_instance(cls) -> PipelineManager:
@@ -69,7 +71,7 @@ class PipelineManager:
         recovered = self.queue.recover_running_on_startup()
         logger.info(f"[PipelineManager] Startup recovery completed: {recovered} running jobs reset")
         self.worker.start()
-        self.notification_worker.start()
+        self.prediction_delivery_worker.start()
         self._is_running = True
 
     def stop(self, timeout: float = 10.0) -> None:
@@ -77,7 +79,7 @@ class PipelineManager:
         if not self._is_running:
             return
         self.worker.stop(timeout=timeout)
-        self.notification_worker.stop(timeout=timeout)
+        self.prediction_delivery_worker.stop(timeout=timeout)
         self._is_running = False
         logger.info("[PipelineManager] Shutdown completed")
 
