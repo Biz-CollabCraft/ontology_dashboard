@@ -22,8 +22,7 @@ COPY systems/__init__.py /app/systems/__init__.py
 COPY systems/generator /app/systems/generator
 
 # Shared contracts consumed by Generator at runtime
-COPY contracts/schemas/generator-dataset-input-manifest.schema.json \
-     /app/contracts/schemas/generator-dataset-input-manifest.schema.json
+COPY contracts/schemas /app/contracts/schemas
 
 RUN groupadd --gid 10002 generator \
     && useradd --uid 10002 --gid 10002 --create-home --shell /usr/sbin/nologin generator \

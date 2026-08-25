@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
+import sys
 import tempfile
 import uuid
 import threading
@@ -18,6 +20,11 @@ import jsonschema
 from systems.generator.generator_config import PATHS
 from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.app.training.training_exception import (
+    ModelActivationCommitError,
+    ModelActivationInProgressError,
+    ModelActivationTargetInvalidError,
+    ModelActivationTargetNotFoundError,
+    ModelActivationVerifyError,
     ModelArtifactConflictError,
     ModelArtifactPublishError,
     ModelArtifactValidationError,
@@ -32,6 +39,65 @@ ARTIFACT_TYPE = "predictive_maintenance_model"
 ARTIFACT_SCHEMA_VERSION = "model-artifact-v1.0"
 REQUIRED_ARTIFACT_ROLES = ("model", "feature_schema", "label_schema", "history_requirement", "metrics")
 OFFICIAL_SCHEMA_PATH = Path("contracts/schemas/model-artifact.schema.json")
+
+
+class ModelActivationLock:
+    """Non-blocking OS-level advisory file lock for model activation."""
+
+    def __init__(self, lock_file_path: Path, model_id: str, requested_version: str | None = None) -> None:
+        self.lock_file_path = lock_file_path
+        self.model_id = model_id
+        self.requested_version = requested_version
+        self._file_obj = None
+
+    def __enter__(self) -> "ModelActivationLock":
+        self.lock_file_path.parent.mkdir(parents=True, exist_ok=True)
+        self._file_obj = open(self.lock_file_path, "a+", encoding="utf-8")
+
+        locked = False
+        try:
+            if sys.platform != "win32":
+                import fcntl
+                fcntl.flock(self._file_obj.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+            else:
+                import msvcrt
+                self._file_obj.seek(0)
+                msvcrt.locking(self._file_obj.fileno(), msvcrt.LK_NBLCK, 1)
+                locked = True
+        except (IOError, OSError):
+            pass
+
+        if not locked:
+            if self._file_obj:
+                try:
+                    self._file_obj.close()
+                except Exception:
+                    pass
+                self._file_obj = None
+            raise ModelActivationInProgressError(
+                "해당 모델의 활성 버전 갱신 작업이 이미 진행 중입니다.",
+                details=[{"model_id": self.model_id, "requested_version": self.requested_version}],
+            )
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        if self._file_obj:
+            try:
+                if sys.platform != "win32":
+                    import fcntl
+                    fcntl.flock(self._file_obj.fileno(), fcntl.LOCK_UN)
+                else:
+                    import msvcrt
+                    self._file_obj.seek(0)
+                    msvcrt.locking(self._file_obj.fileno(), msvcrt.LK_UNLCK, 1)
+            except Exception:
+                pass
+            try:
+                self._file_obj.close()
+            except Exception:
+                pass
+            self._file_obj = None
 
 
 def build_history_requirement_from_feature_schema(feature_schema: dict[str, Any]) -> dict[str, Any]:
@@ -137,7 +203,8 @@ class ModelArtifactPublisher:
         if not isinstance(artifact_files, list):
             raise ModelArtifactValidationError("artifact_files는 배열 구조여야 합니다.")
 
-        found_roles: set[str] = set()
+        seen_roles: set[str] = set()
+        seen_paths: set[str] = set()
         for item in artifact_files:
             if not isinstance(item, dict):
                 raise ModelArtifactValidationError("artifact_files 항목은 객체여야 합니다.")
@@ -146,6 +213,10 @@ class ModelArtifactPublisher:
             expected_sha = item.get("sha256")
             if not role or not rel_path_str or not expected_sha:
                 raise ModelArtifactValidationError(f"Role 항목에 필수 필드 누락: {item}")
+            if role in seen_roles:
+                raise ModelArtifactValidationError(f"Manifest artifact_files에 role 중복 발견: '{role}'")
+            if rel_path_str in seen_paths:
+                raise ModelArtifactValidationError(f"Manifest artifact_files에 path 중복 발견: '{rel_path_str}'")
             if ".." in rel_path_str or Path(rel_path_str).is_absolute():
                 raise ModelArtifactValidationError(f"Role '{role}'의 path에 비정상 경로 감지: '{rel_path_str}'")
 
@@ -158,10 +229,11 @@ class ModelArtifactPublisher:
                 raise ModelArtifactValidationError(
                     f"Role '{role}' 파일 체크섬 불일치 ({rel_path_str}): 기대값={expected_sha}, 실제={actual_sha}"
                 )
-            found_roles.add(role)
+            seen_roles.add(role)
+            seen_paths.add(rel_path_str)
 
         for role in REQUIRED_ARTIFACT_ROLES:
-            if role not in found_roles:
+            if role not in seen_roles:
                 raise ModelArtifactValidationError(f"Manifest artifact_files에 필수 role 누락: '{role}'")
 
     def publish_artifact(
@@ -316,6 +388,11 @@ class ModelArtifactPublisher:
                         ModelArtifactConflictError,
                         ModelArtifactValidationError,
                         TrainingContractError,
+                        ModelActivationInProgressError,
+                        ModelActivationTargetNotFoundError,
+                        ModelActivationTargetInvalidError,
+                        ModelActivationCommitError,
+                        ModelActivationVerifyError,
                     ),
                 ):
                     raise
@@ -323,25 +400,85 @@ class ModelArtifactPublisher:
                 raise ModelArtifactPublishError(f"Model Artifact 원자적 발행 실패: {exc}") from exc
 
     def update_active_pointer(self, model_id: str, model_version: str) -> None:
-        """Atomically update latest.json active pointer for model_id."""
+        """Atomically update latest.json active pointer for model_id with OS locking and validation."""
         model_root = self.base_dir / model_id
         model_root.mkdir(parents=True, exist_ok=True)
-        pointer_data = {
-            "model_id": model_id,
-            "active_version": model_version,
-            "activated_at": datetime.now(timezone.utc).isoformat(),
-            "manifest_path": f"{model_version}/manifest.json",
-            "model_path": f"{model_version}/model.joblib",
-        }
-        temp_pointer = model_root / f".latest_tmp_{uuid.uuid4().hex}.json"
-        final_pointer = model_root / "latest.json"
-        try:
-            with open(temp_pointer, "w", encoding="utf-8") as f:
-                json.dump(pointer_data, f, indent=2, ensure_ascii=False)
-            temp_pointer.replace(final_pointer)
+        lock_file = model_root / ".activation.lock"
+
+        with ModelActivationLock(lock_file, model_id=model_id, requested_version=model_version):
+            # 2. Check target artifact dir and manifest exist
+            target_dir = self.get_artifact_dir(model_id, model_version)
+            manifest_file = target_dir / "manifest.json"
+            if not target_dir.is_dir() or not manifest_file.is_file():
+                raise ModelActivationTargetNotFoundError(
+                    f"활성화 대상 모델 아티팩트가 존재하지 않습니다: {model_id}/{model_version}"
+                )
+
+            # 3. Checksum verification of target artifact files
+            try:
+                manifest_data = json.loads(manifest_file.read_text(encoding="utf-8"))
+                self.validate_manifest(manifest_data, target_dir)
+            except Exception as exc:
+                if isinstance(exc, ModelArtifactValidationError):
+                    raise ModelActivationTargetInvalidError(
+                        f"활성화 대상 모델 아티팩트 검증 실패: {exc.message}"
+                    ) from exc
+                raise ModelActivationTargetInvalidError(
+                    f"활성화 대상 모델 아티팩트 매니페스트 파싱 실패: {exc}"
+                ) from exc
+
+            # 4. Read existing latest.json for idempotency
+            final_pointer = model_root / "latest.json"
+            if final_pointer.is_file():
+                try:
+                    existing_pointer = json.loads(final_pointer.read_text(encoding="utf-8"))
+                    if existing_pointer.get("active_version") == model_version:
+                        logger.info(f"[ModelArtifactPublisher] latest.json is already pointing to {model_version} (idempotent success)")
+                        return
+                except Exception:
+                    pass
+
+            # 5-8. Atomic write to temp file, flush, fsync, os.replace
+            tx_id = uuid.uuid4().hex
+            temp_pointer = model_root / f".latest.{tx_id}.tmp"
+            pointer_data = {
+                "model_id": model_id,
+                "active_version": model_version,
+                "activated_at": datetime.now(timezone.utc).isoformat(),
+                "manifest_path": f"{model_version}/manifest.json",
+                "model_path": f"{model_version}/model.joblib",
+            }
+
+            try:
+                with open(temp_pointer, "w", encoding="utf-8") as f:
+                    json.dump(pointer_data, f, indent=2, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+
+                os.replace(temp_pointer, final_pointer)
+
+                if sys.platform != "win32":
+                    try:
+                        dir_fd = os.open(str(model_root), os.O_RDONLY)
+                        os.fsync(dir_fd)
+                        os.close(dir_fd)
+                    except Exception:
+                        pass
+            except Exception as exc:
+                if temp_pointer.exists():
+                    temp_pointer.unlink(missing_ok=True)
+                raise ModelActivationCommitError(f"latest.json 원자적 교체 실패: {exc}") from exc
+
+            # 9-10. Read-back verification
+            try:
+                readback_data = json.loads(final_pointer.read_text(encoding="utf-8"))
+                if readback_data.get("active_version") != model_version:
+                    raise ModelActivationVerifyError(
+                        f"latest.json read-back 불일치: 기대값={model_version}, 실제={readback_data.get('active_version')}"
+                    )
+            except Exception as exc:
+                if isinstance(exc, ModelActivationVerifyError):
+                    raise
+                raise ModelActivationVerifyError(f"latest.json read-back 검증 실패: {exc}") from exc
+
             logger.info(f"[ModelArtifactPublisher] Updated active version pointer for {model_id} -> {model_version}")
-        except Exception as exc:
-            if temp_pointer.exists():
-                temp_pointer.unlink(missing_ok=True)
-            logger.exception(f"[ModelArtifactPublisher] Failed to update latest.json: {exc}")
-            raise ModelArtifactPublishError(f"활성 모델 포인터(latest.json) 갱신 실패: {exc}") from exc

@@ -143,6 +143,11 @@ def asset_time_split(
     X_train = features[train_indices]
     y_train = labels[train_indices]
 
+    if len(np.unique(y_train)) < 2:
+        raise TrainingDatasetError(
+            "시간 분할 후 train partition에 두 클래스가 모두 존재하지 않습니다."
+        )
+
     X_val = features[val_indices] if val_indices else X_train[:0]
     y_val = labels[val_indices] if val_indices else y_train[:0]
 

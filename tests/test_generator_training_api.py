@@ -645,3 +645,193 @@ def test_train_omitted_model_version_deterministic_generation_and_conflict(test_
     assert resp2.status_code == 409
     assert resp2.json()["error"]["code"] == "MODEL_ARTIFACT_CONFLICT"
 
+
+def test_train_hyperparameters_and_seed_propagation(test_setup, tmp_path):
+    """Test that training config hyperparameters and random_seed propagate to estimator and manifest."""
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    # Create custom training config with non-default seed and parameters
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    cfg_dir = models_store / "training_configs"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    custom_cfg_file = cfg_dir / "custom-seed-params-v1.json"
+
+    custom_cfg = {
+        "training_config_version": "custom-seed-params-v1",
+        "random_seed": 777,
+        "split_strategy": "asset_time_split",
+        "split_ratio": {"train": 0.70, "validation": 0.15, "test": 0.15},
+        "metrics": ["f1", "precision", "recall", "roc_auc", "pr_auc"],
+        "primary_metric": "f1",
+        "hyperparameters": {
+            "lightgbm": {"n_estimators": 50, "learning_rate": 0.05},
+            "xgboost": {"n_estimators": 50, "learning_rate": 0.05},
+            "random_forest": {"n_estimators": 50, "max_depth": 5},
+        },
+    }
+    with open(custom_cfg_file, "w", encoding="utf-8") as f:
+        json.dump(custom_cfg, f, indent=2)
+
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "training_config_version": "custom-seed-params-v1",
+        "model_version": "custom-params-v1",
+    })
+    assert resp.status_code == 200
+    res = resp.json()["results"][0]
+    assert res["status"] == "succeeded"
+    assert res["published"] is True
+    assert res["activated"] is True
+
+    # Inspect published manifest
+    publisher = ModelArtifactPublisher()
+    art_dir = publisher.get_artifact_dir(res["model_id"], res["model_version"])
+    manifest = json.loads((art_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    tc = manifest["training_config"]
+    assert tc["random_seed"] == 777
+    assert tc["configured_parameters"]["n_estimators"] == 50
+    assert tc["configured_parameters"]["learning_rate"] == 0.05
+    assert tc["resolved_parameters"]["random_state"] == 777
+    assert tc["resolved_parameters"]["n_estimators"] == 50
+    assert tc["resolved_parameters"]["learning_rate"] == 0.05
+
+    # Check joblib model estimator params
+    import joblib
+    model_obj = joblib.load(art_dir / "model.joblib")
+    assert model_obj.n_estimators == 50
+    assert model_obj.random_state == 777
+
+
+def test_train_duplicate_seed_in_hyperparameters_rejected(test_setup):
+    """Test that declaring random_state/seed inside model hyperparameters is rejected."""
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    cfg_dir = models_store / "training_configs"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    bad_cfg_file = cfg_dir / "bad-seed-cfg-v1.json"
+
+    bad_cfg = {
+        "training_config_version": "bad-seed-cfg-v1",
+        "random_seed": 123,
+        "split_strategy": "asset_time_split",
+        "split_ratio": {"train": 0.70, "validation": 0.15, "test": 0.15},
+        "metrics": ["f1"],
+        "primary_metric": "f1",
+        "hyperparameters": {
+            "lightgbm": {"random_state": 999},
+        },
+    }
+    with open(bad_cfg_file, "w", encoding="utf-8") as f:
+        json.dump(bad_cfg, f, indent=2)
+
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_ver,
+        "feature_dataset_version": feat_ver,
+        "training_config_version": "bad-seed-cfg-v1",
+        "model_version": "bad-seed-test-v1",
+    })
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "TRAINING_CONTRACT_ERROR"
+    assert "random_state" in resp.json()["error"]["message"]
+
+
+def test_train_single_class_train_partition_fails_422(test_setup):
+    """Test that when train partition has only a single class after split, 422 is raised."""
+    from systems.generator.app.training.data_splitter import asset_time_split
+    from systems.generator.app.training.training_exception import TrainingDatasetError
+
+    features = np.ones((20, 4))
+    # 18 zeros, 2 ones placed at the end so time split puts all ones in test
+    labels = np.array([0] * 18 + [1, 1])
+    row_metadata = [
+        {"asset_id": "asset-1", "timestamp": f"2026-08-20T{i:02d}:00:00Z"}
+        for i in range(20)
+    ]
+
+    with pytest.raises(TrainingDatasetError) as exc_info:
+        asset_time_split(features, labels, row_metadata)
+    assert "train partition에 두 클래스가 모두 존재하지 않습니다" in str(exc_info.value)
+
+
+def test_manifest_duplicate_roles_and_paths_rejected(tmp_path):
+    """Test that manifest with duplicate roles or duplicate paths is rejected with ModelArtifactValidationError."""
+    from systems.generator.app.training.training_exception import ModelArtifactValidationError
+
+    pub = ModelArtifactPublisher(base_dir=tmp_path)
+    staging_dir = tmp_path / "staging"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create dummy files
+    for f in ["model.joblib", "feature_schema.json", "label_schema.json", "history_requirement.json", "metrics.json"]:
+        (staging_dir / f).write_text("{}", encoding="utf-8")
+
+    checksum_dict = {f: compute_file_sha256(staging_dir / f) for f in ["model.joblib", "feature_schema.json", "label_schema.json", "history_requirement.json", "metrics.json"]}
+
+    manifest_duplicate_role = {
+        "artifact_type": ARTIFACT_TYPE,
+        "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
+        "model_id": "pdm-test",
+        "model_version": "v1.0",
+        "dataset_version": "v1.0",
+        "feature_schema_version": "feat-v1",
+        "label_schema_version": "label-v1",
+        "history_requirement_version": "hist-v1",
+        "metrics_schema_version": "pdm-metrics-v1",
+        "created_at": "2026-08-24T00:00:00Z",
+        "training_config": {"training_config_version": "v1"},
+        "metrics": {"f1": 0.9},
+        "checksum": {"algorithm": "sha256", "files": checksum_dict},
+        "provenance": {},
+        "compatibility": {"runtime": "app.diagnosis"},
+        "artifact_files": [
+            {"role": "model", "path": "model.joblib", "sha256": checksum_dict["model.joblib"]},
+            {"role": "model", "path": "model.joblib", "sha256": checksum_dict["model.joblib"]},
+            {"role": "feature_schema", "path": "feature_schema.json", "sha256": checksum_dict["feature_schema.json"]},
+            {"role": "label_schema", "path": "label_schema.json", "sha256": checksum_dict["label_schema.json"]},
+            {"role": "history_requirement", "path": "history_requirement.json", "sha256": checksum_dict["history_requirement.json"]},
+            {"role": "metrics", "path": "metrics.json", "sha256": checksum_dict["metrics.json"]},
+        ],
+    }
+
+    with pytest.raises(ModelArtifactValidationError) as exc_info:
+        pub.validate_manifest(manifest_duplicate_role, staging_dir)
+    assert "role 중복 발견" in str(exc_info.value)
+
+
+def test_activation_lock_concurrency_returns_409(test_setup, tmp_path):
+    """Test that concurrent activation on the same model_id returns 409 MODEL_ACTIVATION_IN_PROGRESS."""
+    from systems.generator.model.publisher import ModelActivationLock
+    from systems.generator.app.training.training_exception import ModelActivationInProgressError
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    model_id = "pdm-lightgbm"
+    lock_file = models_store / "artifacts" / model_id / ".activation.lock"
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+    client = test_setup["client"]
+    dataset_id = test_setup["dataset_id"]
+    dataset_ver = test_setup["dataset_version"]
+    feat_ver = test_setup["feature_dataset_version"]
+
+    # Hold the lock manually
+    with ModelActivationLock(lock_file, model_id=model_id):
+        # Now attempting to post /train/lightgbm should fail with 409
+        resp = client.post("/train/lightgbm", json={
+            "dataset_id": dataset_id,
+            "dataset_version": dataset_ver,
+            "feature_dataset_version": feat_ver,
+            "model_version": "lock-test-v1",
+        })
+        assert resp.status_code == 409
+        assert resp.json()["error"]["code"] == "MODEL_ACTIVATION_IN_PROGRESS"

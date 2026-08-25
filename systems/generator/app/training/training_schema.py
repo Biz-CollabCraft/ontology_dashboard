@@ -59,9 +59,11 @@ class ModelTrainingResult(BaseModel):
     model_id: str
     model_version: str
     status: Literal["succeeded", "failed", "skipped"]
+    published: bool = False
     model_artifact_uri: str | None = None
     metrics_summary: dict[str, float] | None = None
     activated: bool = False
+    activation_error_code: str | None = None
     error_code: str | None = None
 
 

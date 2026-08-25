@@ -357,6 +357,7 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
       "model_id": "pdm-lightgbm",
       "model_version": "lightgbm-v1.0",
       "status": "succeeded",
+      "published": true,
       "model_artifact_uri": "models_store/artifacts/pdm-lightgbm/lightgbm-v1.0",
       "metrics_summary": {
         "f1": 0.8571,
@@ -367,25 +368,31 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
         "pr_auc": 0.8920
       },
       "activated": true,
+      "activation_error_code": null,
       "error_code": null
     }
   ]
 }
 ```
 
-- **Training Config 계약**:
+- **Training Config 및 Hyperparameter 해결 계약**:
   - `training_config_version`은 `contracts/schemas/generator-training-config.schema.json` 검증을 통과한 설정 파일과 1:1 바인딩됩니다.
   - 설정 파일 부재 시 `404`, 스키마/버전 불일치 시 `422`로 실패하며, 설정 파일 SHA-256 및 논리 URI가 manifest provenance에 기록됩니다.
+  - 최상위 `random_seed`가 단일 정본으로 사용되며, 모델별 `hyperparameters` 내부의 중복 `random_state`/`seed` 선언은 `422 TRAINING_CONTRACT_ERROR`로 거부됩니다.
+  - Trainer의 `resolve_parameters(configured, random_seed)`를 통해 기본값보다 설정값을 우선 적용한 `resolved_parameters`가 실제 Estimator `get_params()` 및 Manifest `training_config`에 온전히 기록됩니다.
 - **Feature/Label Schema 스냅샷 및 History Requirement**:
   - 축약 없는 온전한 Feature Schema 및 Label Schema 스냅샷을 검증하여 아티팩트에 포함합니다.
   - `history_requirement.json`은 원본 센서 필드 목록(`required_columns`)과 연산 파라미터(lag/rolling/ewm)를 반영하여 `minimum_history_rows`를 결정론적으로 산출합니다.
 - **Fail-Closed 데이터 분할 (`asset_time_split`)**:
-  - `row_metadata.json`의 모든 행에 `asset_id`와 `timestamp`가 필수이며, 결측 또는 NaT 발생 시 `422`로 처리합니다.
+  - `row_metadata.json`의 모든 행에 `asset_id`와 `timestamp`가 필수이며, 결측 또는 NaT 발생 시 `422 TrainingDatasetError`로 처리합니다.
+  - 시간 분할 후 train partition에 단일 클래스만 존재할 경우 즉시 `422 TrainingDatasetError`로 Fail-Closed 처리됩니다.
 - **6개 필수 파일 구성**: `manifest.json`, `model.joblib`, `feature_schema.json`, `label_schema.json`, `history_requirement.json`, `metrics.json`
 - **저장 디렉터리**: `models_store/artifacts/{model_id}/{model_version}/`
-- **불변성 보장**: 동일한 `model_id/model_version` 재발행은 `409 MODEL_ARTIFACT_CONFLICT`로 항상 차단됩니다.
+- **불변성 및 Manifest 검증 보장**: 동일한 `model_id/model_version` 재발행은 `409 MODEL_ARTIFACT_CONFLICT`로 항상 차단되며, manifest의 role 및 path 중복은 `422 MODEL_ARTIFACT_VALIDATION_ERROR`로 차단됩니다.
 - **부분 성공 격리**: 전체 모델 학습(`POST /train`) 시 특정 모델의 실패는 `partially_succeeded`로 격리되어 정상 모델의 성공 아티팩트 발행을 취소하지 않습니다.
-- **활성화 포인터**: `activation_policy == "activate_on_success"` 시 새 아티팩트 검증 및 발행 완료 후에만 `models_store/artifacts/{model_id}/latest.json` 활성 포인터가 atomic replace로 갱신됩니다.
+- **Singleton `latest.json` 및 상호 배제 원자적 갱신**:
+  - `artifacts/{model_id}/.activation.lock`을 통한 non-blocking OS advisory lock으로 활성화 작업을 상호 배제합니다 (락 경합 시 `409 MODEL_ACTIVATION_IN_PROGRESS`).
+  - 아티팩트 존재 확인 $\rightarrow$ Checksum 재검증 $\rightarrow$ 동일 버전 멱등 성공 확인 $\rightarrow$ 임시 파일(`.latest.{tx_id}.tmp`) 작성 $\rightarrow$ `flush` + `fsync` $\rightarrow$ `os.replace` $\rightarrow$ 디렉터리 fsync $\rightarrow$ read-back 검증의 트랜잭션을 거쳐 안전하게 포인터를 갱신합니다.
 
 ---
 

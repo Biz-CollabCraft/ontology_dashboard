@@ -192,18 +192,21 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 
 - **엔드포인트**: `POST /train` (전체 등록 모델: `lightgbm`, `xgboost`, `random_forest`) 및 `POST /train/{base_model}` (지정 모델).
 - **입력 소비**: 5개 파일이 완비된 불변 **Feature Dataset Bundle**만 소비하며, 원본 센서 데이터를 직접 파싱하거나 Feature/Label을 재계산하지 않습니다.
-- **Training Config 계약**:
+- **Training Config 및 Hyperparameter 해결 계약**:
   - `training_config_version`은 `contracts/schemas/generator-training-config.schema.json`에 정의된 버전 관리 설정 파일과 1:1로 바인딩됩니다.
   - 설정 파일 부재 시 `404`, 스키마 위반 또는 분할 비율 오류 시 `422`로 Fail-Closed 처리되며, 설정 파일의 SHA-256 및 논리 URI가 Model Artifact provenance에 기록됩니다.
+  - 최상위 `random_seed`가 단일 정본으로 사용되며, 모델별 `hyperparameters` 내부의 중복 `random_state`/`seed` 선언은 거부됩니다.
+  - Trainer의 `resolve_parameters(configured, random_seed)`를 통해 기본값보다 설정값을 우선 적용한 `resolved_parameters`가 실제 Estimator `get_params()` 및 Manifest `training_config`에 온전히 기록됩니다.
 - **Feature/Label Schema 스냅샷 보존 및 History Requirement 산출**:
   - 축약되거나 임의 기본값으로 대체되지 않은 완전한 Feature Schema 및 Label Schema 스냅샷을 검증하여 아티팩트에 보존합니다.
   - `history_requirement.json`은 Feature Schema 레시피로부터 파생 Feature명이 아닌 **원본 센서 필드 목록(`required_columns`)** 및 연산 파라미터(lag/rolling/ewm)를 반영하여 `minimum_history_rows`를 결정론적으로 산출합니다.
 - **Fail-Closed 데이터 분할 (`asset_time_split`)**:
   - `row_metadata.json`의 모든 행에 `asset_id`와 유효한 `timestamp`가 필수이며, 결측 또는 NaT 발생 시 `422 TrainingDatasetError`를 반환합니다 (`default_asset` 또는 행 번호 대체 금지).
+  - 시간 분할 후 train partition에 단일 클래스만 남을 경우 즉시 `422 TrainingDatasetError`로 Fail-Closed 처리됩니다.
   - Training Config에 정의된 분할 비율(예: 70/15/15) 및 `random_seed`를 엄격히 적용합니다.
 - **저장 디렉터리**: `models_store/artifacts/{model_id}/{model_version}/`
 - **6개 필수 파일 구성**:
-  1. `manifest.json`: 5개 payload 파일의 상대 경로 및 SHA-256 체크섬, provenance, compatibility, training_config (자기참조 순환 제외)
+  1. `manifest.json`: 5개 payload 파일의 상대 경로 및 SHA-256 체크섬, provenance, compatibility, training_config (자기참조 순환 제외, role 및 path 중복 검증 필수)
   2. `model.joblib`: 학습된 직렬화 모델 바이너리 (`joblib.dump(compress=3)`)
   3. `feature_schema.json`: 학습에 실제 사용된 Feature Schema 확정본
   4. `label_schema.json`: 학습에 실제 사용된 Label Schema 확정본
@@ -211,6 +214,10 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
   6. `metrics.json`: 계산된 validation 지표, 클래스 분포, primary metric
 - **불변성 및 원자적 발행**:
   - 동일한 `model_id/model_version` 재발행은 어떠한 경우에도 금지되며, 이미 존재할 경우 `409 ModelArtifactConflictError`를 반환합니다 (기존 아티팩트 덮어쓰기/삭제 불가).
-  - 임시 디렉터리(`.tmp_{uuid}`)에서 6개 파일 생성 및 manifest 전수 검증 완료 후 atomic rename.
-  - `activation_policy == "activate_on_success"` 시 새 아티팩트 검증 및 발행 완료 후에만 `models_store/artifacts/{model_id}/latest.json` 활성 포인터를 atomic replace로 갱신합니다.
+  - 임시 디렉터리(`.tmp_{uuid}`)에서 6개 파일 생성 및 manifest 전수 검증(role/path 중복 차단 포함) 완료 후 atomic rename.
+- **Singleton `latest.json` 및 상호 배제 원자적 갱신**:
+  - `artifacts/{model_id}/.activation.lock`을 통한 모델별 non-blocking OS advisory lock을 획득합니다.
+  - 락 경합 시 즉시 `409 MODEL_ACTIVATION_IN_PROGRESS`를 반환합니다 (배치 `/train`에서는 해당 모델만 실패 격리).
+  - 아티팩트 존재 및 체크섬 재검증 $\rightarrow$ 기존 포인터 동일 여부(idempotent success) $\rightarrow$ 임시 파일(`.latest.{tx_id}.tmp`) 작성 $\rightarrow$ `flush` + `fsync` $\rightarrow$ `os.replace` $\rightarrow$ 디렉터리 fsync $\rightarrow$ read-back 검증의 원자적 트랜잭션을 거쳐 활성 버전을 갱신합니다.
+  - 응답 결과(`ModelTrainingResult`)에서 발행(`published`)과 활성화(`activated`, `activation_error_code`)를 명확히 분리합니다.
 - **동기 실행**: `/train` 및 `/train/{base_model}` 엔드포인트는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.

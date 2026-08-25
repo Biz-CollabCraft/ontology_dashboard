@@ -94,6 +94,41 @@ class ModelArtifactPublishError(TrainingError):
     code = "MODEL_ARTIFACT_PUBLISH_ERROR"
 
 
+class ModelActivationInProgressError(TrainingError):
+    """Raised when an activation lock for the model_id cannot be acquired."""
+
+    status_code = 409
+    code = "MODEL_ACTIVATION_IN_PROGRESS"
+
+
+class ModelActivationTargetNotFoundError(TrainingError):
+    """Raised when target model version artifact does not exist during activation."""
+
+    status_code = 404
+    code = "MODEL_ACTIVATION_TARGET_NOT_FOUND"
+
+
+class ModelActivationTargetInvalidError(TrainingError):
+    """Raised when target model version artifact fails validation during activation."""
+
+    status_code = 422
+    code = "MODEL_ACTIVATION_TARGET_INVALID"
+
+
+class ModelActivationCommitError(TrainingError):
+    """Raised when atomic replacement of latest.json fails."""
+
+    status_code = 500
+    code = "MODEL_ACTIVATION_COMMIT_FAILED"
+
+
+class ModelActivationVerifyError(TrainingError):
+    """Raised when read-back verification of latest.json fails."""
+
+    status_code = 500
+    code = "MODEL_ACTIVATION_VERIFY_FAILED"
+
+
 class TrainingExecutionError(TrainingError):
     """Raised when model training algorithm fails during fit or evaluation."""
 

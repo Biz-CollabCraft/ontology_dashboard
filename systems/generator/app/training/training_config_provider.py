@@ -56,6 +56,7 @@ class TrainingConfigProvider:
                 repo_root / "systems" / "generator" / "schemas" / "training",
                 repo_root / "contracts" / "examples" / "generator-training",
                 Path(models_store) / "schemas" / "training",
+                Path(models_store) / "training_configs",
                 Path(data_dir) / "schemas" / "training",
                 Path(data_dir) / "training_configs",
                 repo_root / "schemas" / "training",

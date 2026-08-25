@@ -235,13 +235,20 @@ class TrainingService:
             }
 
             try:
-                logger.info(f"[TrainingService] Training model {base_model}...", extra=stage_logger)
+                configured_params = dict(config_spec.hyperparameters.get(base_model, {}))
+                resolved_params = trainer.resolve_parameters(
+                    configured=configured_params,
+                    random_seed=config_spec.random_seed,
+                )
+
+                logger.info(f"[TrainingService] Training model {base_model} with resolved parameters: {resolved_params}...", extra=stage_logger)
                 trained = trainer.train(
                     X_train=splits.X_train,
                     y_train=splits.y_train,
                     X_val=splits.X_val,
                     y_val=splits.y_val,
                     feature_names=bundle_data.feature_columns,
+                    model_parameters=resolved_params,
                 )
 
                 metrics_payload = {
@@ -270,6 +277,8 @@ class TrainingService:
                     "split_strategy": config_spec.split_strategy,
                     "split_ratio": config_spec.split_ratio,
                     "hyperparameters": config_spec.hyperparameters.get(base_model, {}),
+                    "configured_parameters": configured_params,
+                    "resolved_parameters": resolved_params,
                     "activation_policy": req.activation_policy,
                 }
 
@@ -316,6 +325,7 @@ class TrainingService:
                         model_id=model_id,
                         model_version=model_ver,
                         status="succeeded",
+                        published=True,
                         model_artifact_uri=self.artifact_publisher.get_logical_uri(artifact_dir),
                         metrics_summary=trained.metrics,
                         activated=(req.activation_policy == "activate_on_success"),
@@ -336,6 +346,7 @@ class TrainingService:
                         model_id=model_id,
                         model_version=model_ver,
                         status="failed",
+                        published=False,
                         model_artifact_uri=None,
                         metrics_summary=None,
                         activated=False,

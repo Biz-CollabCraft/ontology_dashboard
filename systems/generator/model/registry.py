@@ -9,6 +9,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from systems.generator.app.training.training_exception import (
+    TrainingContractError,
     TrainingDependencyError,
     TrainingExecutionError,
 )
@@ -68,6 +69,13 @@ class ModelTrainer(Protocol):
 
     base_model: str
 
+    def resolve_parameters(
+        self,
+        configured: dict[str, Any],
+        random_seed: int,
+    ) -> dict[str, Any]:
+        ...
+
     def train(
         self,
         X_train: np.ndarray,
@@ -75,6 +83,7 @@ class ModelTrainer(Protocol):
         X_val: np.ndarray,
         y_val: np.ndarray,
         feature_names: list[str],
+        model_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> TrainedModelResult:
         ...
@@ -85,6 +94,20 @@ class LightGBMTrainer:
 
     base_model: str = "lightgbm"
 
+    def resolve_parameters(self, configured: dict[str, Any], random_seed: int) -> dict[str, Any]:
+        for forbidden in ("random_state", "seed", "random_seed"):
+            if forbidden in configured:
+                raise TrainingContractError(
+                    f"모델별 hyperparameters에 '{forbidden}'을 선언할 수 없습니다. 최상위 random_seed를 사용하세요."
+                )
+        resolved = {
+            "random_state": random_seed,
+            "verbosity": -1,
+            "n_estimators": 100,
+        }
+        resolved.update(configured)
+        return resolved
+
     def train(
         self,
         X_train: np.ndarray,
@@ -92,6 +115,7 @@ class LightGBMTrainer:
         X_val: np.ndarray,
         y_val: np.ndarray,
         feature_names: list[str],
+        model_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> TrainedModelResult:
         start_time = time.perf_counter()
@@ -100,13 +124,11 @@ class LightGBMTrainer:
         except ImportError as exc:
             raise TrainingDependencyError(f"LightGBM 라이브러리를 임포트할 수 없습니다: {exc}") from exc
 
+        params = dict(model_parameters or {"random_state": 42, "verbosity": -1, "n_estimators": 100})
+        params.update(kwargs)
+
         try:
-            clf = lgb.LGBMClassifier(
-                random_state=42,
-                verbosity=-1,
-                n_estimators=100,
-                **kwargs,
-            )
+            clf = lgb.LGBMClassifier(**params)
             clf.fit(X_train, y_train)
 
             # Evaluate on validation set (or train if val empty)
@@ -132,7 +154,7 @@ class LightGBMTrainer:
                 training_duration_seconds=duration,
             )
         except Exception as exc:
-            if isinstance(exc, TrainingDependencyError):
+            if isinstance(exc, (TrainingDependencyError, TrainingContractError)):
                 raise
             raise TrainingExecutionError(f"LightGBM 학습 실행 실패: {exc}") from exc
 
@@ -142,6 +164,20 @@ class XGBoostTrainer:
 
     base_model: str = "xgboost"
 
+    def resolve_parameters(self, configured: dict[str, Any], random_seed: int) -> dict[str, Any]:
+        for forbidden in ("random_state", "seed", "random_seed"):
+            if forbidden in configured:
+                raise TrainingContractError(
+                    f"모델별 hyperparameters에 '{forbidden}'을 선언할 수 없습니다. 최상위 random_seed를 사용하세요."
+                )
+        resolved = {
+            "random_state": random_seed,
+            "eval_metric": "logloss",
+            "n_estimators": 100,
+        }
+        resolved.update(configured)
+        return resolved
+
     def train(
         self,
         X_train: np.ndarray,
@@ -149,6 +185,7 @@ class XGBoostTrainer:
         X_val: np.ndarray,
         y_val: np.ndarray,
         feature_names: list[str],
+        model_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> TrainedModelResult:
         start_time = time.perf_counter()
@@ -157,13 +194,11 @@ class XGBoostTrainer:
         except ImportError as exc:
             raise TrainingDependencyError(f"XGBoost 라이브러리를 임포트할 수 없습니다: {exc}") from exc
 
+        params = dict(model_parameters or {"random_state": 42, "eval_metric": "logloss", "n_estimators": 100})
+        params.update(kwargs)
+
         try:
-            clf = xgb.XGBClassifier(
-                random_state=42,
-                eval_metric="logloss",
-                n_estimators=100,
-                **kwargs,
-            )
+            clf = xgb.XGBClassifier(**params)
             clf.fit(X_train, y_train)
 
             eval_X = X_val if len(X_val) > 0 else X_train
@@ -187,7 +222,7 @@ class XGBoostTrainer:
                 training_duration_seconds=duration,
             )
         except Exception as exc:
-            if isinstance(exc, TrainingDependencyError):
+            if isinstance(exc, (TrainingDependencyError, TrainingContractError)):
                 raise
             raise TrainingExecutionError(f"XGBoost 학습 실행 실패: {exc}") from exc
 
@@ -197,6 +232,20 @@ class RandomForestTrainer:
 
     base_model: str = "random_forest"
 
+    def resolve_parameters(self, configured: dict[str, Any], random_seed: int) -> dict[str, Any]:
+        for forbidden in ("random_state", "seed", "random_seed"):
+            if forbidden in configured:
+                raise TrainingContractError(
+                    f"모델별 hyperparameters에 '{forbidden}'을 선언할 수 없습니다. 최상위 random_seed를 사용하세요."
+                )
+        resolved = {
+            "random_state": random_seed,
+            "n_estimators": 100,
+            "n_jobs": 2,
+        }
+        resolved.update(configured)
+        return resolved
+
     def train(
         self,
         X_train: np.ndarray,
@@ -204,6 +253,7 @@ class RandomForestTrainer:
         X_val: np.ndarray,
         y_val: np.ndarray,
         feature_names: list[str],
+        model_parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> TrainedModelResult:
         start_time = time.perf_counter()
@@ -212,13 +262,11 @@ class RandomForestTrainer:
         except ImportError as exc:
             raise TrainingDependencyError(f"scikit-learn 라이브러리를 임포트할 수 없습니다: {exc}") from exc
 
+        params = dict(model_parameters or {"random_state": 42, "n_estimators": 100, "n_jobs": 2})
+        params.update(kwargs)
+
         try:
-            clf = RandomForestClassifier(
-                random_state=42,
-                n_estimators=100,
-                n_jobs=2,
-                **kwargs,
-            )
+            clf = RandomForestClassifier(**params)
             clf.fit(X_train, y_train)
 
             eval_X = X_val if len(X_val) > 0 else X_train
@@ -242,7 +290,7 @@ class RandomForestTrainer:
                 training_duration_seconds=duration,
             )
         except Exception as exc:
-            if isinstance(exc, TrainingDependencyError):
+            if isinstance(exc, (TrainingDependencyError, TrainingContractError)):
                 raise
             raise TrainingExecutionError(f"RandomForest 학습 실행 실패: {exc}") from exc
 
