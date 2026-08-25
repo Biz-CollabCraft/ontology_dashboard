@@ -17,6 +17,8 @@
 - `event-evidence-projection.schema.json`: Product Result에서 파생한 Event Evidence와 별도 운영 Decision field 계약
 - `asset-detail-view-model.schema.json`: 설비 상세 화면용 Backend composition ViewModel 후보 계약
 - `maintenance-replay-event.schema.json`: Closed-loop가 발행하는 정비 시작·완료·Overlay 재개 요청 이벤트 계약
+- `runtime-overlay-observation.schema.json`: Generator가 발행하는 append-only 정비 후 CNC Overlay Observation 계약
+- `runtime-overlay-observations-available.schema.json`: 새 Overlay Observation delta batch를 Backend에 인계하는 이벤트 계약
 - `preventive-what-if.schema.json`: 합성 예방조치 Producer의 위험 상승·선행 지표·조치 전후 효과·한계 계약
 
 스키마를 변경할 때는 fixture, Pydantic model, backend tests, Gold evaluator와 TypeScript type을 함께 변경해야 한다. LLM 출력은 스키마와 grounding 검사를 모두 통과하지 못하면 폐기하고 deterministic fallback을 사용한다.
