@@ -8,7 +8,7 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from systems.generator.generator_config import PATHS
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
@@ -16,13 +16,16 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     AnomalySignalPayload,
+    NotificationEventState,
     PipelineRunState,
+    now_utc_iso,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class PipelineRepository:
+
     """File-based persistent repository for pipeline run states and event payloads."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
@@ -111,3 +114,76 @@ class PipelineRepository:
             except Exception:
                 continue
         return runs
+
+    def update_notification_event(
+        self,
+        *,
+        run_id: str,
+        event_id: str,
+        asset_id: str,
+        status: Literal["pending", "sending", "retry_wait", "sent", "failed"],
+        attempt: int,
+        max_attempts: int = 5,
+        next_retry_at: Optional[str] = None,
+        last_error_code: Optional[str] = None,
+        last_error_message: Optional[str] = None,
+    ) -> Optional[PipelineRunState]:
+        """Atomically update a specific notification event state and aggregate overall notification_status."""
+        state = self.get_run_state(run_id)
+        if not state:
+            return None
+
+        found = False
+        updated_events = []
+        for ev in state.notification_events:
+            if ev.event_id == event_id:
+                found = True
+                updated_events.append(
+                    NotificationEventState(
+                        event_id=event_id,
+                        asset_id=asset_id or ev.asset_id,
+                        status=status,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        next_retry_at=next_retry_at,
+                        last_error_code=last_error_code,
+                        last_error_message=last_error_message,
+                        updated_at=now_utc_iso(),
+                    )
+                )
+            else:
+                updated_events.append(ev)
+
+        if not found:
+            updated_events.append(
+                NotificationEventState(
+                    event_id=event_id,
+                    asset_id=asset_id,
+                    status=status,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    next_retry_at=next_retry_at,
+                    last_error_code=last_error_code,
+                    last_error_message=last_error_message,
+                    updated_at=now_utc_iso(),
+                )
+            )
+
+        state.notification_events = updated_events
+
+        # Re-aggregate overall notification_status
+        if not state.notification_events:
+            state.notification_status = "not_required"
+        else:
+            statuses = {ev.status for ev in state.notification_events}
+            if len(state.notification_events) < len(state.notification_event_ids):
+                state.notification_status = "pending"
+            elif any(s == "failed" for s in statuses):
+                state.notification_status = "failed"
+            elif all(s == "sent" for s in statuses):
+                state.notification_status = "sent"
+            else:
+                state.notification_status = "pending"
+
+        self.save_run_state(state)
+        return state

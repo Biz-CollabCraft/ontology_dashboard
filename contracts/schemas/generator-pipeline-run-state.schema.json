@@ -91,7 +91,30 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "notification_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "asset_id", "status", "attempt", "max_attempts", "updated_at"],
+        "properties": {
+          "event_id": { "type": "string" },
+          "asset_id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "sending", "retry_wait", "sent", "failed"]
+          },
+          "attempt": { "type": "integer", "minimum": 0 },
+          "max_attempts": { "type": "integer", "minimum": 1 },
+          "next_retry_at": { "type": ["string", "null"] },
+          "last_error_code": { "type": ["string", "null"] },
+          "last_error_message": { "type": ["string", "null"] },
+          "updated_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
     "started_at": { "type": ["string", "null"], "format": "date-time" },
+
     "finished_at": { "type": ["string", "null"], "format": "date-time" },
     "errors": {
       "type": "array",

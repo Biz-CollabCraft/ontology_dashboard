@@ -83,8 +83,19 @@ class NotificationService:
                 if status is None or item.status == status:
                     items.append(item)
             except Exception as exc:
-                logger.warning(f"[NotificationService] Skipping corrupt outbox file '{file.name}': {exc}")
+                quarantine_dir = self.outbox_dir / "quarantine"
+                quarantine_dir.mkdir(parents=True, exist_ok=True)
+                dest = quarantine_dir / file.name
+                try:
+                    file.replace(dest)
+                    logger.error(
+                        f"[NotificationService] Corrupt outbox file '{file.name}' quarantined to '{dest}': {exc} "
+                        f"(error_code=PIPELINE_NOTIFICATION_OUTBOX_CORRUPT, retryable=False)"
+                    )
+                except Exception:
+                    logger.error(f"[NotificationService] Failed to quarantine corrupt file '{file.name}': {exc}")
         return items
+
 
     def create_outbox_record(self, payload: AnomalySignalPayload) -> NotificationOutboxItem:
         """Create new pending outbox record for payload."""

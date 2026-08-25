@@ -40,8 +40,12 @@ class PipelineManager:
             notification_service=self.notification_service,
         )
         self.worker = PipelineWorker(queue=self.queue, service=self.service)
-        self.notification_worker = NotificationWorker(service=self.notification_service)
+        self.notification_worker = NotificationWorker(
+            service=self.notification_service,
+            repository=self.repository,
+        )
         self._is_running = False
+
 
     @classmethod
     def get_instance(cls) -> PipelineManager:

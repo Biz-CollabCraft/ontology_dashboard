@@ -20,14 +20,14 @@ ontology_dashboard/systems/generator
 Observation Extraction (protocol parsing + approved Mapping application → Observation Dataset)
 Failure Extraction (Authorized Truth Source → Failure Dataset)
 → Preprocessing (Observation 구조 분석 및 역할 판정 → Immutable Preprocessing Plan)
-→ Feature (Observation + Failure + Preprocessing Plan + Feature Schema + Label Schema → Feature/Label Dataset Bundle)
+→ Feature (Feature Schema + Label Schema → Feature/Label Dataset Bundle)
 → Training (Feature Dataset Bundle → Model Artifact)
-→ versioned Model Artifact (latest.json pointer)
-        ↓ Model Artifact / Observation contract
-ontology_dashboard/systems/backend/app/diagnosis
-Runtime feature replay + Model Artifact
-→ runtime inference
-→ Result Artifact / Evidence / Prediction History
+→ Runtime Pipeline (Preprocessing → Runtime Feature → active Model Artifact별 Prediction → asset별 Aggregation → Anomaly Signal)
+        ↓ Anomaly Signal Contract
+ontology_dashboard/systems/backend
+Anomaly Signal 소비 및 source lineage 검증
+→ 센서값·설비 metadata 조회
+→ Product Result Artifact / Evidence / Report 생성
         ↓ Canonical Read Port
 ontology_dashboard/systems/frontend / Report
 AssetDetailViewModel (composition via read port)
@@ -41,14 +41,16 @@ Closed-loop MaintenanceEvent
         ↓ versioned Integration event
 gen_data Runtime Overlay
 target equipment snapshot + branch-local simulation clock
-        ↓ continuous maintenance_replay_overlay Observation availability
-ontology_dashboard/systems/backend/app/diagnosis
-history requirement/readiness validation
-        ├─ insufficient: wait for subsequent Observation
-        └─ ready: runtime inference
-        ↓
-new Result Artifact / Evidence
+        ↓ maintenance_replay_overlay Observation
+ontology_dashboard/systems/generator Runtime Pipeline
+설비별 History Requirement 검증 및 Runtime Prediction
+        ├─ insufficient: unknown / warming_up 기록
+        └─ ready: Prediction → Aggregation → Anomaly Signal
+        ↓ Anomaly Signal
+ontology_dashboard/systems/backend
+source lineage 및 센서 근거 검증 → Product Result Artifact / Evidence / Report 생성
 ```
+
 
 Canonical/source Replay는 계속 read-only다. Runtime Overlay는 대상 설비에만 적용하는
 opt-in 경로이며 전체 Replay Clock이나 Canonical 원본을 변경하지 않는다. 상세는
@@ -228,7 +230,7 @@ MODEL_ARTIFACT_URI=registry://pdm/production
 
 ## 5. systems/backend — Product Runtime
 
-Backend는 모델을 **학습하지 않는다**. `app/diagnosis`가 versioned Model Artifact와 현재 observation을 입력으로 runtime inference를 수행하고, 제품이 실제 소비하는 **Result Artifact/Evidence를 최종 생성**한다.
+Backend는 모델을 **학습하거나 운영 Runtime Prediction을 직접 수행하지 않는다**. Backend는 Generator가 발행한 Anomaly Signal과 source lineage를 소비하여 해당 설비의 센서 근거 및 metadata를 조회하고, 제품이 실제 소비하는 **Product Result Artifact, Evidence와 Report를 최종 생성**한다.
 
 ### 5.1 Backend Canonical Root 및 목표 디렉터리 구조
 
@@ -254,7 +256,7 @@ systems/backend/
 │   ├── equipment/               # 설비 마스터 및 설비 상태
 │   ├── ontology/                # Object/Link/Action 온톨로지 레지스트리 및 인스턴스
 │   ├── dataset/                 # 데이터셋 소스 및 프로젝션
-│   ├── diagnosis/               # 런타임 추론 및 Result Artifact/Evidence 생성
+│   ├── diagnosis/               # Anomaly Signal 소비 및 Product Result Artifact/Evidence 생성
 │   ├── maintenance/             # Closed-loop 정비 조치/이벤트/결정/작업지시 (구 closed_loop)
 │   ├── dashboard/               # Read-model composition 영역
 │   ├── report/                  # 보고서 생성 및 내보내기
@@ -269,43 +271,39 @@ systems/backend/
 ### 5.2 diagnosis 책임
 
 ```text
-Model Artifact
-+ Current Observation
+Anomaly Signal
++ Source Lineage
++ Sensor/Asset Metadata
         ↓
 systems/backend/app/diagnosis
-runtime inference
+signal validation & evidence aggregation
         ↓
-Result Artifact / Evidence
+Product Result Artifact / Evidence
         ↓
 API / Dashboard / Report / Frontend
 ```
 
-- `MODEL_ARTIFACT_URI`로 주입된 artifact provider에서 Model Artifact 로드
-- manifest compatibility / integrity 검증
-- current observation에 대한 runtime inference
-- 특정 asset + observation time에 대한 Result Artifact 생성
-- inference 결과에 연결되는 Evidence/provenance 생성 또는 조립
+- Anomaly Signal Schema 검증
+- `event_id`, `run_id`, `job_id`, `asset_id` 정합성 검증
+- source URI·checksum 및 pipeline contract version 검증
+- 신호에 사용된 Model ID·Model Version 및 이상 예측 모델 목록 보존
+- 관련 센서값 및 설비 metadata 조회
+- 특정 asset + observation time에 대한 Product Result Artifact 생성
+- 신호 및 센서 관측 근거에 연결되는 Evidence/provenance 생성 또는 조립
+- Report 도메인으로 결과 전달
 - **제품 Result Artifact의 최종 producer**
 
 Training metrics, feature importance 등 모델 개발 설명자료는 Model Artifact provenance에 포함될 수 있지만, 이를 제품 runtime Evidence와 동일 개념으로 취급하지 않는다.
 
-### 5.3 Backend Feature 소비
+### 5.3 Runtime Feature 및 Model 결과 소비 경계
 
-Backend는 Generator 구현을 import하지 않는다. Backend가 runtime Feature를 생성해야 한다면 Model Artifact에 포함된 검증된 Feature Contract(`feature_schema.json`)와 지원 transform 집합만을 사용한다. 지원하지 않는 transform이나 `feature_schema_version` 불일치는 명시적으로 실패시킨다. 상세는 `docs/architecture-decisions/ADR-001-unified-feature-contract.md`를 따른다.
+Runtime Feature 계산과 Model Artifact 실행은 Generator가 소유한다.
+Backend는 Runtime Feature 파일을 재계산하지 않으며, Anomaly Signal에 포함된
+Feature Reference, Model ID, Model Version, probability, threshold와 source
+lineage를 Evidence provenance로 소비한다.
 
-정비 후 Overlay Observation은 `restart_at`부터 새 history segment를 사용한다. Backend는
-Model Artifact의 `history_requirement.json`을 충족하기 전에는 heuristic이나 silent
-fallback으로 Prediction하지 않으며 `warming_up` 또는 `history_insufficient`를 명시한다.
-Inference readiness는 Backend Diagnosis가 단독 판정한다. `gen_data`는 Model Artifact를
-소비하지 않고 Overlay branch의 Observation을 지속 생성한다. 이력이 부족하면 Backend는
-Prediction을 수행하지 않고 같은 branch의 다음 Observation을 기다린다.
-첫 inference-ready Observation에서 새 Product Result/Evidence를 생성하고 이후 정상
-Runtime Prediction 주기를 유지한다.
+Backend는 Generator의 Python 코드를 import하거나 Runtime Feature 구현을 복제하지 않는다.
 
-Runtime Overlay Observation은 Canonical Observation 테이블을 update하거나 같은
-Canonical identity로 삽입하지 않는다. 별도 append-only Overlay 저장소와 branch-aware
-read model을 사용해 대상 설비의 정비 후 예정 Canonical 행이 Overlay history에 다시
-섞이지 않도록 한다.
 
 ### 5.4 Backend 도메인 및 구조 규칙
 
@@ -375,17 +373,17 @@ legacy Python Source와 non-legacy 영역의 static/dynamic import 및 문자열
 
 ---
 
-## 6. Model Artifact와 Result Artifact 구분
+## 6. Model Artifact, Anomaly Signal 및 Result Artifact 구분
 
-| 구분 | Model Artifact | Result Artifact |
-|---|---|---|
-| Producer | `systems/generator` | `systems/backend/app/diagnosis` |
-| Consumer | `systems/backend/app/diagnosis` | Backend API / Dashboard / Report / Frontend |
-| 생성 시점 | 학습/publish 시점 | runtime inference 시점 |
-| 의미 | 학습된 모델, feature contract, metrics, version, provenance | 특정 asset + observation time에 대한 실제 inference 결과 |
-| Evidence 관계 | 학습 provenance/평가 정보 포함 가능 | 제품 판단에 제시되는 runtime Evidence/provenance 포함 |
+| 구분 | Model Artifact | Anomaly Signal | Product Result Artifact |
+|---|---|---|---|
+| Producer | `systems/generator` (Training) | `systems/generator` (Runtime Pipeline) | `systems/backend/app/diagnosis` |
+| Consumer | `systems/generator` (Runtime Pipeline) | `systems/backend` | Backend API / Dashboard / Report / Frontend |
+| 생성 시점 | Training publish 시점 | Runtime Prediction 시점 | Signal 소비 이후 |
+| 의미 | 학습된 모델, feature contract, metrics, version, provenance | 설비별 이상 감지 신호와 모델 추론 결과 | 제품이 소비하는 최종 판단·근거 |
+| Evidence 관계 | 학습 provenance/평가 정보 포함 가능 | 런타임 feature 및 모델 평가 근거 포함 | 제품 판단에 제시되는 최종 runtime Evidence/provenance 포함 |
 
-두 artifact를 같은 파일 또는 같은 책임으로 취급하지 않는다.
+> **호환성 안내 (Compatibility)**: Backend가 Model Artifact를 로드하는 기존 추론 경로는 Migration/Compatibility 상태로 남을 수 있으나, 제품의 공식 Target 런타임 아키텍처는 Generator가 Anomaly Signal을 발행하고 Backend가 이를 소비하는 구조다.
 
 ---
 
@@ -469,8 +467,8 @@ python systems/verify_architecture.py
 
 PR #9의 대규모 실행 코드는 이 PR에서 이동하지 않는다. 이후 재배치 시 다음 책임으로 귀속한다.
 
-- semantic extraction / mapping / topology / feature / training → `systems/generator`
-- runtime prediction / inference / Result Artifact / Evidence → `systems/backend/app/diagnosis`
+- semantic extraction / mapping / topology / feature / training / runtime prediction / aggregation / anomaly signal → `systems/generator`
+- anomaly signal consumption / Product Result Artifact / Evidence / Report → `systems/backend`
 - 정비 대상 설비 Runtime Overlay Observation → `gen_data`의 opt-in Runtime Overlay
 - 사용자 화면 및 report rendering → Frontend/Report consumer
 

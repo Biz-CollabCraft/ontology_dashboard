@@ -80,6 +80,23 @@ class ModelPredictionResult(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if model inference failed")
 
 
+class NotificationEventState(BaseModel):
+    """Delivery state tracking for an individual Anomaly Signal notification event."""
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(..., description="Unique event identifier")
+    asset_id: str = Field(..., description="Target equipment identifier")
+    status: Literal["pending", "sending", "retry_wait", "sent", "failed"] = Field(
+        "pending", description="Event delivery status"
+    )
+    attempt: int = Field(0, ge=0, description="Attempt count")
+    max_attempts: int = Field(5, ge=1, description="Max delivery attempts")
+    next_retry_at: Optional[str] = Field(None, description="ISO timestamp for next retry")
+    last_error_code: Optional[str] = Field(None, description="Last error code")
+    last_error_message: Optional[str] = Field(None, description="Last error message")
+    updated_at: str = Field(default_factory=now_utc_iso, description="ISO update timestamp")
+
+
 class PipelineRunState(BaseModel):
     """Complete execution record for a single pipeline run."""
     model_config = ConfigDict(extra="forbid")
@@ -106,6 +123,9 @@ class PipelineRunState(BaseModel):
     )
     notification_event_ids: list[str] = Field(
         default_factory=list, description="List of generated anomaly signal event IDs"
+    )
+    notification_events: list[NotificationEventState] = Field(
+        default_factory=list, description="List of per-event notification delivery states"
     )
     started_at: Optional[str] = Field(None, description="ISO start timestamp")
     finished_at: Optional[str] = Field(None, description="ISO finish timestamp")

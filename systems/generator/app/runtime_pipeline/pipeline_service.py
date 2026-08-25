@@ -42,6 +42,7 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     AnomalySignalPayload,
     ArtifactReference,
     ModelPredictionResult,
+    NotificationEventState,
     PipelineQueueItem,
     PipelineRunState,
     SourceLineage,
@@ -301,6 +302,14 @@ class PipelineService:
             prep_file_path = Path(dataset_ref.uri)
             preprocessed_input_df = pd.read_csv(prep_file_path)
 
+            id_col = plan.get("id_column") or "asset_id"
+            if id_col in preprocessed_input_df.columns:
+                actual_asset_ids = sorted(preprocessed_input_df[id_col].dropna().astype(str).unique().tolist())
+            else:
+                actual_asset_ids = ["default_asset"]
+
+            model_feature_errors: dict[str, Any] = {}
+
             for base_model in REGISTERED_BASE_MODELS:
                 model_id = self.prediction_service.resolve_model_id(base_model)
                 try:
@@ -321,6 +330,7 @@ class PipelineService:
                     model_feature_bundles[base_model] = bundle
                 except Exception as exc:
                     last_feat_error = exc
+                    model_feature_errors[base_model] = exc
                     logger.warning(f"[PipelineService] Feature extraction failed for '{model_id}': {exc}")
 
             if not model_artifacts:
@@ -356,6 +366,8 @@ class PipelineService:
                     model_artifacts=model_artifacts,
                     model_feature_refs=model_feature_refs,
                     model_feature_bundles=model_feature_bundles,
+                    asset_ids=actual_asset_ids,
+                    model_feature_errors=model_feature_errors,
                 )
             )
             pred_output_refs = [
@@ -385,11 +397,25 @@ class PipelineService:
             manager.start_stage("notification")
             manager.record_notification("pending")
             event_ids: list[str] = []
+            events_state: list[NotificationEventState] = []
 
             for asset_id in verdict.anomalous_assets:
                 eq_verdict = verdict.equipment_verdicts[asset_id]
                 event_id = f"evt-{uuid.uuid4().hex[:16]}"
                 event_ids.append(event_id)
+                events_state.append(
+                    NotificationEventState(
+                        event_id=event_id,
+                        asset_id=asset_id,
+                        status="pending",
+                        attempt=0,
+                        max_attempts=5,
+                        next_retry_at=None,
+                        last_error_code=None,
+                        last_error_message=None,
+                        updated_at=now_utc_iso(),
+                    )
+                )
 
                 first_feat_ref = next(
                     (r.feature_ref.model_dump() for r in eq_verdict.model_results if r.feature_ref),
@@ -420,14 +446,17 @@ class PipelineService:
                 self.repository.save_event(signal_payload)
 
             manager.state.notification_event_ids = event_ids
+            manager.state.notification_events = events_state
             manager.succeed_stage("notification", output_refs=[])
         else:
             manager.record_notification("not_required")
+            manager.state.notification_events = []
 
         # -------------------------------------------------------------
         # Finish Run and Persist
         # -------------------------------------------------------------
         manager.finish_run(verdict.overall_status)
+
         self.repository.save_run_state(manager.state)
 
         return manager.state

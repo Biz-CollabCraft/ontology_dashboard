@@ -31,6 +31,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineNotificationServerError,
     PipelineNotificationTimeoutError,
     PipelinePathNotAllowedError,
+    PipelineRuntimeFeatureFailedError,
     PipelineStateTransitionInvalidError,
     PipelineTimestampInvalidError,
 )
@@ -41,10 +42,13 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     AnomalySignalPayload,
     ArtifactReference,
     ModelPredictionResult,
+    NotificationEventState,
     NotificationOutboxItem,
     PipelineQueueItem,
     PipelineRunState,
+    now_utc_iso,
 )
+
 from systems.generator.app.runtime_pipeline.pipeline_service import PipelineService
 from systems.generator.app.runtime_pipeline.pipeline_state import PipelineStateManager
 from systems.generator.app.runtime_pipeline.pipeline_worker import PipelineWorker
@@ -211,9 +215,10 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     agg_service = AggregationService()
     notif_service = NotificationService(outbox_dir=outbox_dir)
-    notif_worker = NotificationWorker(service=notif_service)
+    notif_worker = NotificationWorker(service=notif_service, repository=repository)
 
     service = PipelineService(
+
         repository=repository,
         preprocessing_service=None,
         runtime_feature_service=feat_service,
@@ -597,3 +602,225 @@ def test_runtime_pipeline_router_api_with_retry_failed(isolated_runtime_env):
     resp_stat = client.get("/runtime-pipeline/status")
     assert resp_stat.status_code == 200
     assert "queued_count" in resp_stat.json()
+
+
+# =====================================================================
+# 7. Notification Run State Synchronization & Event Aggregation Test
+# =====================================================================
+
+def test_notification_worker_run_state_synchronization_and_aggregation(isolated_runtime_env, monkeypatch):
+    env = isolated_runtime_env
+    repo: PipelineRepository = env["repository"]
+    notif_service: NotificationService = env["notif_service"]
+    notif_worker: NotificationWorker = env["notif_worker"]
+
+    run_id = "run-notif-sync-01"
+    ev1_id = "evt-sync-01"
+    ev2_id = "evt-sync-02"
+
+    # Initial RunState with 2 notification events in pending
+    run_state = PipelineRunState(
+        run_id=run_id,
+        job_id="job-sync-01",
+        status="succeeded",
+        current_stage=None,
+        source_ref=ArtifactReference(uri="data/test.jsonl", sha256="0"*64, role="source_observation_protocol"),
+        stages={},
+        prediction_results=[],
+        anomaly_detected=True,
+        notification_status="pending",
+        notification_event_ids=[ev1_id, ev2_id],
+        notification_events=[
+            NotificationEventState(
+                event_id=ev1_id,
+                asset_id="Asset-1",
+                status="pending",
+                attempt=0,
+                max_attempts=5,
+                updated_at=now_utc_iso(),
+            ),
+            NotificationEventState(
+                event_id=ev2_id,
+                asset_id="Asset-2",
+                status="pending",
+                attempt=0,
+                max_attempts=5,
+                updated_at=now_utc_iso(),
+            ),
+        ],
+        errors=[],
+    )
+    repo.save_run_state(run_state)
+
+
+    # Create 2 outbox items for this run
+    p1 = AnomalySignalPayload(
+        event_id=ev1_id,
+        run_id=run_id,
+        job_id="job-sync-01",
+        asset_id="Asset-1",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+        anomaly_detected=True,
+        anomaly_models=["pdm-xgboost"],
+        model_results=[
+            ModelPredictionResult(
+                asset_id="Asset-1",
+                model_id="pdm-xgboost",
+                model_version="pdm-xgboost-v1.0",
+                status="succeeded",
+                prediction="anomaly",
+                probability=0.9,
+                threshold=0.5,
+                is_anomaly=True,
+            )
+        ],
+        source_lineage={"source_uri": "test.jsonl", "source_checksum": "0" * 64},
+    )
+    p2 = p1.model_copy(update={"event_id": ev2_id, "asset_id": "Asset-2"})
+    notif_service.create_outbox_record(p1)
+    notif_service.create_outbox_record(p2)
+
+    # 1. Process Event 1 successfully (Mock HTTP 200)
+    monkeypatch.setattr(notif_service, "send_once", lambda pl: {"delivered": True, "status_code": 200})
+    item1 = notif_service.get_outbox_item(ev1_id)
+    notif_worker.process_item(item1)
+
+    # Check state after Event 1 sent, Event 2 still pending
+    st1 = repo.get_run_state(run_id)
+    assert st1 is not None
+    assert st1.notification_status == "pending"  # because ev2 is not sent yet
+    ev1_state = next(e for e in st1.notification_events if e.event_id == ev1_id)
+    assert ev1_state.status == "sent"
+
+    # 2. Process Event 2 successfully
+    item2 = notif_service.get_outbox_item(ev2_id)
+    notif_worker.process_item(item2)
+
+    # Check state after both events sent -> notification_status must be 'sent'
+    st2 = repo.get_run_state(run_id)
+    assert st2 is not None
+    assert st2.notification_status == "sent"
+    assert all(e.status == "sent" for e in st2.notification_events)
+
+
+# =====================================================================
+# 8. Notification Interrupted 'sending' Items Startup Recovery Test
+# =====================================================================
+
+def test_notification_worker_recover_interrupted_sending_items(isolated_runtime_env):
+    env = isolated_runtime_env
+    repo: PipelineRepository = env["repository"]
+    notif_service: NotificationService = env["notif_service"]
+    notif_worker: NotificationWorker = env["notif_worker"]
+
+    run_id = "run-recover-01"
+    event_id = "evt-recover-01"
+
+    # Save run state
+    run_state = PipelineRunState(
+        run_id=run_id,
+        job_id="job-rec-01",
+        status="succeeded",
+        current_stage=None,
+        source_ref=ArtifactReference(uri="data/test.jsonl", sha256="0"*64, role="source_observation_protocol"),
+        stages={},
+        prediction_results=[],
+        anomaly_detected=True,
+        notification_status="pending",
+        notification_event_ids=[event_id],
+        notification_events=[],
+        errors=[],
+    )
+    repo.save_run_state(run_state)
+
+    payload = AnomalySignalPayload(
+        event_id=event_id,
+        run_id=run_id,
+        job_id="job-rec-01",
+        asset_id="Asset-Rec",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+        anomaly_detected=True,
+        anomaly_models=["pdm-xgboost"],
+        model_results=[
+            ModelPredictionResult(
+                asset_id="Asset-Rec",
+                model_id="pdm-xgboost",
+                model_version="pdm-xgboost-v1.0",
+                status="succeeded",
+                prediction="anomaly",
+                probability=0.95,
+                threshold=0.5,
+                is_anomaly=True,
+            )
+        ],
+        source_lineage={"source_uri": "test.jsonl", "source_checksum": "0" * 64},
+    )
+    item = notif_service.create_outbox_record(payload)
+    item.status = "sending"
+    notif_service.save_outbox_item(item)
+
+    # Execute recovery hook
+    recovered_count = notif_worker.recover_interrupted_items()
+    assert recovered_count == 1
+
+    # Verify Outbox Item was recovered to retry_wait
+    recovered_item = notif_service.get_outbox_item(event_id)
+    assert recovered_item is not None
+    assert recovered_item.status == "retry_wait"
+    assert recovered_item.last_error_code == "PIPELINE_NOTIFICATION_INTERRUPTED"
+    assert recovered_item.next_retry_at is not None
+
+    # Verify RunState is synced
+    updated_run = repo.get_run_state(run_id)
+    assert updated_run is not None
+    assert updated_run.notification_status == "pending"
+    ev_state = next(e for e in updated_run.notification_events if e.event_id == event_id)
+    assert ev_state.status == "retry_wait"
+    assert ev_state.last_error_code == "PIPELINE_NOTIFICATION_INTERRUPTED"
+
+
+# =====================================================================
+# 9. Model Feature Failure Mapping per Equipment (No fake 'unknown')
+# =====================================================================
+
+def test_model_feature_failure_maps_to_actual_equipment_ids_not_unknown(isolated_runtime_env):
+    env = isolated_runtime_env
+    pred_service: PredictionService = env["pred_service"]
+    artifacts = {
+        "pdm-lightgbm": pred_service.load_active_artifact("pdm-lightgbm"),
+        "pdm-xgboost": pred_service.load_active_artifact("pdm-xgboost"),
+    }
+
+    # Simulate: feature for pdm-lightgbm succeeded, but feature for pdm-xgboost is missing (failed)
+    # Target equipments: ['M14860', 'L47181']
+    dummy_feat_ref = ArtifactReference(
+        uri="dummy.npy",
+        sha256="0" * 64,
+        role="runtime_features",
+    )
+    feature_refs = {"pdm-lightgbm": dummy_feat_ref}  # pdm-xgboost omitted
+    feature_bundles = {}
+
+    results = pred_service.execute_predictions_from_feature_refs(
+        model_artifacts=artifacts,
+        model_feature_refs=feature_refs,
+        model_feature_bundles=feature_bundles,
+        asset_ids=["M14860", "L47181"],
+        model_feature_errors={"pdm-xgboost": PipelineRuntimeFeatureFailedError("History insufficient for model")},
+    )
+
+    # Must have 4 results (2 models * 2 assets)
+    assert len(results) == 4
+    asset_ids_in_results = {r.asset_id for r in results}
+    assert "unknown" not in asset_ids_in_results
+    assert asset_ids_in_results == {"M14860", "L47181"}
+
+    # Failed model results must be recorded for each actual asset
+    xgboost_results = [r for r in results if r.model_id == "pdm-xgboost"]
+    assert len(xgboost_results) == 2
+    for r in xgboost_results:
+        assert r.asset_id in ["M14860", "L47181"]
+        assert r.status == "failed"
+        assert r.error_code == "PIPELINE_RUNTIME_FEATURE_FAILED"

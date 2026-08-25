@@ -172,10 +172,23 @@ class PredictionService:
         model_artifacts: dict[str, LoadedModelArtifact],
         model_feature_refs: dict[str, ArtifactReference],
         model_feature_bundles: Optional[dict[str, RuntimeFeatureBundle]] = None,
+        asset_ids: Optional[list[str]] = None,
+        model_feature_errors: Optional[dict[str, Any]] = None,
     ) -> list[ModelPredictionResult]:
         """Run pure model inference for each equipment over all active models consuming published features."""
         results: list[ModelPredictionResult] = []
         now = now_utc_iso()
+
+        # Resolve all known equipment IDs
+        known_assets: list[str] = list(asset_ids or [])
+        if not known_assets and model_feature_bundles:
+            for b in model_feature_bundles.values():
+                if b and b.row_metadata:
+                    for rm in b.row_metadata:
+                        if rm.asset_id not in known_assets:
+                            known_assets.append(rm.asset_id)
+        if not known_assets:
+            known_assets = ["default_asset"]
 
         for base_model, artifact in model_artifacts.items():
             model_id = artifact.model_id
@@ -183,23 +196,27 @@ class PredictionService:
             bundle = (model_feature_bundles or {}).get(base_model)
 
             if feature_ref is None:
-                results.append(
-                    ModelPredictionResult(
-                        asset_id="unknown",
-                        model_id=model_id,
-                        model_version=artifact.model_version,
-                        status="failed",
-                        prediction="failed",
-                        probability=None,
-                        threshold=0.5,
-                        is_anomaly=None,
-                        predicted_at=now,
-                        artifact_ref=artifact.artifact_ref,
-                        feature_ref=None,
-                        error_code="PIPELINE_RUNTIME_FEATURE_FAILED",
-                        error_message=f"모델 '{model_id}'에 해당하는 Runtime Feature가 생성되지 않았습니다.",
+                err_info = (model_feature_errors or {}).get(base_model)
+                err_code = getattr(err_info, "code", "PIPELINE_RUNTIME_FEATURE_FAILED") if err_info else "PIPELINE_RUNTIME_FEATURE_FAILED"
+                err_msg = str(err_info) if err_info else f"모델 '{model_id}'에 해당하는 Runtime Feature가 생성되지 않았습니다."
+                for target_asset in known_assets:
+                    results.append(
+                        ModelPredictionResult(
+                            asset_id=target_asset,
+                            model_id=model_id,
+                            model_version=artifact.model_version,
+                            status="failed",
+                            prediction="failed",
+                            probability=None,
+                            threshold=0.5,
+                            is_anomaly=None,
+                            predicted_at=now,
+                            artifact_ref=artifact.artifact_ref,
+                            feature_ref=None,
+                            error_code=err_code,
+                            error_message=err_msg,
+                        )
                     )
-                )
                 continue
 
             # Load feature matrix from published npy file
@@ -212,23 +229,24 @@ class PredictionService:
                     raise ValueError("Feature matrix is empty")
             except Exception as exc:
                 logger.warning(f"[PredictionService] Failed to load feature npy for '{model_id}': {exc}")
-                results.append(
-                    ModelPredictionResult(
-                        asset_id="unknown",
-                        model_id=model_id,
-                        model_version=artifact.model_version,
-                        status="failed",
-                        prediction="failed",
-                        probability=None,
-                        threshold=0.5,
-                        is_anomaly=None,
-                        predicted_at=now,
-                        artifact_ref=artifact.artifact_ref,
-                        feature_ref=feature_ref,
-                        error_code="PIPELINE_RUNTIME_FEATURE_FAILED",
-                        error_message=f"Runtime feature npy 로드 실패: {exc}",
+                for target_asset in known_assets:
+                    results.append(
+                        ModelPredictionResult(
+                            asset_id=target_asset,
+                            model_id=model_id,
+                            model_version=artifact.model_version,
+                            status="failed",
+                            prediction="failed",
+                            probability=None,
+                            threshold=0.5,
+                            is_anomaly=None,
+                            predicted_at=now,
+                            artifact_ref=artifact.artifact_ref,
+                            feature_ref=feature_ref,
+                            error_code="PIPELINE_RUNTIME_FEATURE_FAILED",
+                            error_message=f"Runtime feature npy 로드 실패: {exc}",
+                        )
                     )
-                )
                 continue
 
             # Map row metadata to equipments
@@ -242,6 +260,7 @@ class PredictionService:
 
             # Iterate over each equipment
             for asset_id, latest_idx in asset_latest_row.items():
+
                 # Check history sufficiency for this asset
                 history_status = (bundle.asset_history_status or {}).get(asset_id) if bundle else None
                 if history_status and not history_status.get("ready", True):
