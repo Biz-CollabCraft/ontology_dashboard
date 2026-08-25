@@ -16,6 +16,7 @@ import {
   formatProbability,
   formatTimestamp,
 } from "../components/MvpUi";
+import { displayEventAssetName, displayEventLabel, fieldFailureLabel } from "../displayLabels";
 
 const DECISION_OPTIONS: Array<{
   decision: MvpDecision;
@@ -166,28 +167,28 @@ export function MvpOperationsPage({
   return (
     <div className="mvp-page mvp-operations-page" data-testid="mvp-operations">
       <div className="mvp-operations-layout">
-        <MvpPanel title={`Work Order 후보 · ${queue.length}`} eyebrow="WORK ORDER QUEUE" className="mvp-operation-queue-panel">
+        <MvpPanel title={`작업요청 후보 · ${queue.length}`} eyebrow="작업요청 대기열" className="mvp-operation-queue-panel">
           {queue.length ? <div className="mvp-operation-queue">{queue.map((event) => (
             <button type="button" key={event.eventId} className={event.eventId === selectedEventId ? "is-selected" : ""} onClick={() => { setDecision(event.recommendedDecision); onSelectEvent(event); }}>
-              <div><MvpStatusBadge status={event.status} /><strong>{event.assetName}</strong><code>{event.eventId}</code></div>
+              <div><MvpStatusBadge status={event.status} /><strong>{displayEventAssetName(event)}</strong><code>{displayEventLabel(event)}</code></div>
               <dl><div><dt>위험</dt><dd>{formatProbability(event.failureProbability)}</dd></div><div><dt>영향</dt><dd>{formatMinutes(event.estimatedDowntimeMinutes)}</dd></div></dl>
-              <span>{DECISION_LABEL[event.recommendedDecision]} · WO ID 미생성</span>
+              <span>{DECISION_LABEL[event.recommendedDecision]} · 작업요청 ID 미생성</span>
               <small>{event.assignedEngineer ?? "미배정"}</small>
             </button>
-          ))}</div> : <MvpState kind="empty" title="처리할 작업 후보가 없습니다" detail="현재 관측 기준으로 Work Order 후보가 필요한 Event가 없습니다." />}
+          ))}</div> : <MvpState kind="empty" title="처리할 작업 후보가 없습니다" detail="현재 관측 기준으로 작업요청 후보가 필요한 이벤트가 없습니다." />}
         </MvpPanel>
 
         <section className="mvp-operation-detail">
           {!selectedEvent ? (
-            <MvpState kind="empty" title="Work Order 후보를 선택하세요" detail={selectedEventId ? `요청한 Event ${selectedEventId}를 현재 데이터에서 찾지 못했습니다.` : "왼쪽 큐에서 후보를 선택하면 관련 설비, 근거, 허용된 기록 액션을 확인할 수 있습니다."} />
+            <MvpState kind="empty" title="작업요청 후보를 선택하세요" detail={selectedEventId ? `요청한 ${displayEventLabel(selectedEventId)}을 현재 데이터에서 찾지 못했습니다.` : "왼쪽 큐에서 후보를 선택하면 관련 설비, 근거, 허용된 기록 액션을 확인할 수 있습니다."} />
           ) : (
             <>
-              <MvpPanel title={selectedEvent.assetName} eyebrow={`WORK ORDER CANDIDATE · ${selectedEvent.eventId}`} actions={<><button type="button" className="mvp-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />Asset 보기</button><button type="button" className="mvp-button secondary" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />Report 보기</button></>}>
+              <MvpPanel title={displayEventAssetName(selectedEvent)} eyebrow={`작업요청 후보 · ${displayEventLabel(selectedEvent)}`} actions={<><button type="button" className="mvp-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />설비 보기</button><button type="button" className="mvp-button secondary" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />보고서 보기</button></>}>
                 <div className="mvp-guided-action">
                   <div>
                     <span>다음 처리</span>
                     <strong>{recommendedOption.title}</strong>
-                    <p>{gapCount > 0 ? `${gapCount}개 제한을 확인한 뒤 기록하세요.` : "실제 WorkOrder 생성/승인은 아직 연결되지 않았고, 현재는 후보 판단 기록만 남깁니다."}</p>
+                    <p>{gapCount > 0 ? `${gapCount}개 제한을 확인한 뒤 기록하세요.` : "실제 작업요청 생성/승인은 아직 연결되지 않았고, 현재는 후보 판단 기록만 남깁니다."}</p>
                   </div>
                   <div>
                     {canDecide ? (
@@ -202,7 +203,7 @@ export function MvpOperationsPage({
                 </div>
                 <div className="mvp-operation-hero">
                   <div><MvpStatusBadge status={selectedEvent.status} /><MvpConfidenceBadge confidence={selectedEvent.confidence} /></div>
-                  <dl><div><dt>Target Asset</dt><dd>{selectedEvent.assetId}</dd></div><div><dt>의심 부품</dt><dd>{suspectedPart}</dd></div><div><dt>고장 확률</dt><dd>{formatProbability(selectedEvent.failureProbability)}</dd></div><div><dt>추천 상태</dt><dd>{DECISION_LABEL[selectedEvent.recommendedDecision]}</dd></div><div><dt>최근 사람 결정</dt><dd>{latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "기록 없음"}</dd></div><div><dt>담당자</dt><dd>{selectedEvent.assignedEngineer ?? "미배정"}</dd></div><div><dt>부품</dt><dd>{selectedEvent.sparePartAvailable === null ? "확인 필요" : selectedEvent.sparePartAvailable ? "확보" : "미확보"}</dd></div></dl>
+                  <dl><div><dt>대상 설비</dt><dd>{displayEventAssetName(selectedEvent)}</dd></div><div><dt>의심 부품</dt><dd>{suspectedPart}</dd></div><div><dt>고장 확률</dt><dd>{formatProbability(selectedEvent.failureProbability)}</dd></div><div><dt>추천 상태</dt><dd>{DECISION_LABEL[selectedEvent.recommendedDecision]}</dd></div><div><dt>최근 사람 결정</dt><dd>{latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "기록 없음"}</dd></div><div><dt>담당자</dt><dd>{selectedEvent.assignedEngineer ?? "미배정"}</dd></div><div><dt>부품</dt><dd>{selectedEvent.sparePartAvailable === null ? "확인 필요" : selectedEvent.sparePartAvailable ? "확보" : "미확보"}</dd></div></dl>
                 </div>
                 <section className="mvp-always-action" aria-label="현재 허용된 작업">
                   <header><span>Allowed Action</span><strong>{canDecide ? "판단 기록 가능" : "읽기 전용"}</strong></header>
@@ -249,11 +250,11 @@ export function MvpOperationsPage({
                       </div>
                     </MvpPanel>
 
-                    <MvpPanel title="WorkOrder Context" eyebrow="관련 설비와 근거">
+                    <MvpPanel title="작업요청 맥락" eyebrow="관련 설비와 근거">
                       <dl className="mvp-sensor-grid">
-                        <div><dt>WorkOrder ID</dt><dd>계약 없음 · 미생성</dd></div>
-                        <div><dt>MaintenanceAction</dt><dd>계약 없음</dd></div>
-                        <div><dt>위험</dt><dd>{formatProbability(selectedEvent.failureProbability)} · {selectedEvent.predictedFailureType}</dd></div>
+                        <div><dt>작업요청 ID</dt><dd>계약 없음 · 미생성</dd></div>
+                        <div><dt>정비 조치</dt><dd>계약 없음</dd></div>
+                        <div><dt>위험</dt><dd>{formatProbability(selectedEvent.failureProbability)} · {fieldFailureLabel(selectedEvent.predictedFailureType)}</dd></div>
                         <div><dt>운영 영향</dt><dd>{selectedEvent.criticality ?? "중요도 근거 부족"} · {formatMinutes(selectedEvent.estimatedDowntimeMinutes)}</dd></div>
                         <div><dt>결정 전 확인</dt><dd>{detail.evidenceGaps.length ? `${detail.evidenceGaps.length}개 항목 확인 필요` : detail.threshold === null ? "임계값 근거 부족" : `임계값 ${formatProbability(detail.threshold)}`}</dd></div>
                         <div><dt>상세 근거</dt><dd><button type="button" className="mvp-link-button" onClick={() => onOpenAsset(selectedEvent)}>전체 근거 보기</button></dd></div>
@@ -286,7 +287,7 @@ export function MvpOperationsPage({
                     </MvpPanel>
 
                     <MvpPanel title="Activity · Audit" eyebrow="SHARED EVENT HISTORY">
-                      {detail.activity.length ? <div className="mvp-activity-list">{detail.activity.map((activity) => <article key={activity.id}><span className={`activity-${activity.kind}`} /><div><strong>{activity.decision ? DECISION_LABEL[activity.decision] : activity.title}</strong><p>{activity.detail || "상세 기록 없음"}</p><small>{activity.actor} · {formatTimestamp(activity.createdAt)}</small></div></article>)}</div> : <MvpState kind="empty" title="기록된 Activity가 없습니다" detail="판단 또는 현장 메모가 저장되면 이 Event 이력에 표시됩니다." />}
+                      {detail.activity.length ? <div className="mvp-activity-list">{detail.activity.map((activity) => <article key={activity.id}><span className={`activity-${activity.kind}`} /><div><strong>{activity.decision ? DECISION_LABEL[activity.decision] : activity.title}</strong><p>{activity.detail || "상세 기록 없음"}</p><small>{activity.actor} · {formatTimestamp(activity.createdAt)}</small></div></article>)}</div> : <MvpState kind="empty" title="기록된 작업 이력이 없습니다" detail="판단 또는 현장 메모가 저장되면 이 이벤트 이력에 표시됩니다." />}
                     </MvpPanel>
                   </div>
 

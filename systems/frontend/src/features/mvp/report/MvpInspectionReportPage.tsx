@@ -12,6 +12,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import { displayAssetName, displayAssetShortName } from "../displayLabels";
 
 const statusMeta = {
   critical: { label: "위험", tone: "critical", sentence: "즉시 점검이 필요한 위험 신호" },
@@ -296,13 +297,13 @@ export function MvpInspectionReportPage() {
           <label htmlFor="inspection-asset-select">다른 설비 보기</label>
           <select id="inspection-asset-select" value={activeAssetId} onChange={(event) => setActiveAssetId(event.target.value)}>
             {inspectionAssetOptions.map((asset) => (
-              <option key={asset.assetId} value={asset.assetId}>{asset.displayName} · {statusMeta[asset.status].label}</option>
+              <option key={asset.assetId} value={asset.assetId}>{displayAssetName(asset)} · {statusMeta[asset.status].label}</option>
             ))}
           </select>
           <div className="asset-switcher-chips" aria-label="주요 설비 바로 보기">
             {quickSwitchAssets.map((asset) => (
-              <button key={asset.assetId} type="button" className={asset.assetId === activeAssetId ? "active" : ""} onClick={() => setActiveAssetId(asset.assetId)} title={`${asset.displayName} · ${statusMeta[asset.status].label} · 위험 예측 확률 ${percent(asset.probability)}`}>
-                {asset.assetId.split("-").at(-1)}호
+              <button key={asset.assetId} type="button" className={asset.assetId === activeAssetId ? "active" : ""} onClick={() => setActiveAssetId(asset.assetId)} title={`${displayAssetName(asset)} · ${statusMeta[asset.status].label} · 위험 예측 확률 ${percent(asset.probability)}`}>
+                {displayAssetShortName(asset)}
               </button>
             ))}
           </div>

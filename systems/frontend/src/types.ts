@@ -137,6 +137,9 @@ export interface Equipment {
   equipment_id: string;
   display_name: string;
   line: string;
+  asset_type?: string;
+  site_id?: string;
+  cell_id?: string;
   criticality: "low" | "medium" | "high";
   assigned_engineer: string;
   last_maintenance_date: string;

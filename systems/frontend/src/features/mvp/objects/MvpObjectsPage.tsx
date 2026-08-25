@@ -13,6 +13,7 @@ import {
   formatProbability,
   formatTimestamp,
 } from "../components/MvpUi";
+import { displayEventLabel, fieldFailureLabel } from "../displayLabels";
 
 function qualityLabel(value: string | undefined) {
   if (value === "good") return "정상";
@@ -149,34 +150,34 @@ export function MvpObjectsPage({
               </section>
 
               <section className="mvp-inspector-section">
-                <header><span>Evidence / Diagnosis</span><strong>{selectedAsset.predictedFailureType}</strong></header>
+                <header><span>근거 / 진단</span><strong>{fieldFailureLabel(selectedAsset.predictedFailureType)}</strong></header>
                 <dl className="mvp-sensor-grid">
-                  <div><dt>Related Event</dt><dd>{selectedAsset.eventId ?? "Event 연결 없음"}</dd></div>
-                  <div><dt>Diagnosis</dt><dd>{DECISION_LABEL[selectedAsset.recommendedDecision]}</dd></div>
-                  <div><dt>Confidence</dt><dd>{selectedAsset.confidenceScore === null ? selectedAsset.confidence : formatProbability(selectedAsset.confidenceScore)}</dd></div>
+                  <div><dt>관련 이벤트</dt><dd>{selectedAsset.eventId ? displayEventLabel(selectedAsset.eventId) : "이벤트 연결 없음"}</dd></div>
+                  <div><dt>진단</dt><dd>{DECISION_LABEL[selectedAsset.recommendedDecision]}</dd></div>
+                  <div><dt>신뢰도</dt><dd>{selectedAsset.confidenceScore === null ? selectedAsset.confidence : formatProbability(selectedAsset.confidenceScore)}</dd></div>
                 </dl>
-                {detailLoading ? <MvpState kind="loading" title="근거 로딩" detail="선택 Event의 현재 관측과 과거 이력을 확인하고 있습니다." /> : detailError ? <MvpState kind="error" title="센서 근거를 불러오지 못했습니다" detail={detailError} onRetry={onRetryDetail} /> : detail?.sensors.length ? <dl className="mvp-sensor-grid">{detail.sensors.map((sensor) => <div key={sensor.id}><dt>{sensor.label}</dt><dd>{sensor.value === null || sensor.value === "" ? "—" : String(sensor.value)} {sensor.unit}<small>현재 {qualityLabel(sensor.qualityStatus)} · 이력 {sensor.historyPointCount ?? 0}개{sensor.historySourceRef ? ` · ${sensor.historySourceRef}` : ""}</small></dd></div>)}</dl> : <p className="mvp-muted">이 설비와 연결된 Event 근거가 없습니다.</p>}
+                {detailLoading ? <MvpState kind="loading" title="근거 로딩" detail="선택 이벤트의 현재 관측과 과거 이력을 확인하고 있습니다." /> : detailError ? <MvpState kind="error" title="센서 근거를 불러오지 못했습니다" detail={detailError} onRetry={onRetryDetail} /> : detail?.sensors.length ? <dl className="mvp-sensor-grid">{detail.sensors.map((sensor) => <div key={sensor.id}><dt>{sensor.label}</dt><dd>{sensor.value === null || sensor.value === "" ? "—" : String(sensor.value)} {sensor.unit}<small>현재 {qualityLabel(sensor.qualityStatus)} · 이력 {sensor.historyPointCount ?? 0}개{sensor.historySourceRef ? ` · ${sensor.historySourceRef}` : ""}</small></dd></div>)}</dl> : <p className="mvp-muted">이 설비와 연결된 이벤트 근거가 없습니다.</p>}
                 {factors.length ? <div className="mvp-factor-list">{factors.slice(0, 5).map((factor) => <article key={factor.id}><div><strong>{factor.label}</strong><span>{factor.value === null ? "—" : factor.value.toLocaleString()} {factor.unit}</span></div><div className="mvp-factor-track"><i style={{ width: `${Math.max(4, Math.min(100, factor.contribution * 100))}%` }} /></div><b>{factor.direction === "risk_up" ? "위험 증가" : "위험 완화"}</b></article>)}</div> : <p className="mvp-muted">설명 가능한 기여 요인이 제공되지 않았습니다.</p>}
               </section>
 
               <section className="mvp-inspector-section">
-                <header><span>Maintenance</span><strong>작업 연결</strong></header>
+                <header><span>작업 연결</span><strong>작업요청</strong></header>
                 <dl className="mvp-sensor-grid">
-                  <div><dt>WorkOrder</dt><dd>{selectedAsset.eventId ? "후보 있음 · ID 미생성" : "연결 없음"}</dd></div>
-                  <div><dt>MaintenanceAction</dt><dd>계약 없음</dd></div>
-                  <div><dt>Part</dt><dd>{selectedAsset.sparePartAvailable === null ? "확인 필요" : selectedAsset.sparePartAvailable ? "확보" : "미확보"}</dd></div>
+                  <div><dt>작업요청</dt><dd>{selectedAsset.eventId ? "후보 있음 · ID 미생성" : "연결 없음"}</dd></div>
+                  <div><dt>정비 조치</dt><dd>계약 없음</dd></div>
+                  <div><dt>부품</dt><dd>{selectedAsset.sparePartAvailable === null ? "확인 필요" : selectedAsset.sparePartAvailable ? "확보" : "미확보"}</dd></div>
                 </dl>
                 {detail?.equipmentHistory.length ? <div className="mvp-activity-list">{detail.equipmentHistory.slice(0, 4).map((item) => <article key={`${item.occurredAt}-${item.kind}`}><span className={`activity-${item.tone === "hold" ? "system" : "note"}`} /><div><strong>{item.kind}</strong><p>{item.description}</p><small>{item.source} · {formatTimestamp(item.occurredAt)}</small></div></article>)}</div> : <p className="mvp-muted">정비/운영 context 이력이 제공되지 않았습니다.</p>}
               </section>
 
               <section className="mvp-inspector-section">
-                <header><span>Available Actions</span><strong>현재 가능한 이동</strong></header>
+                <header><span>가능한 이동</span><strong>현재 가능한 이동</strong></header>
                 <div className="mvp-action-row">
-                  <button type="button" className="mvp-button primary" onClick={() => onOpenOperations(selectedAsset)} disabled={!selectedAsset.eventId}><ClipboardCheck size={15} />Work Order 후보 열기<ArrowRight size={15} /></button>
+                  <button type="button" className="mvp-button primary" onClick={() => onOpenOperations(selectedAsset)} disabled={!selectedAsset.eventId}><ClipboardCheck size={15} />작업요청 후보 열기<ArrowRight size={15} /></button>
                   <button type="button" className="mvp-button secondary" onClick={() => selectedAsset.eventId && onOpenOperations(selectedAsset)} disabled={!selectedAsset.eventId}><Wrench size={15} />조치 판단</button>
                   {selectedAsset.eventId ? <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(selectedAsset)}><FileText size={15} />관련 보고서</button> : null}
                 </div>
-                {!selectedAsset.eventId ? <small className="mvp-muted">이 설비 판단에는 연결된 운영 Event가 없어 읽기 전용으로 표시됩니다.</small> : null}
+                {!selectedAsset.eventId ? <small className="mvp-muted">이 설비 판단에는 연결된 운영 이벤트가 없어 읽기 전용으로 표시됩니다.</small> : null}
               </section>
 
               {detail?.evidenceGaps.length ? <section className="mvp-inspector-section"><header><span>Gaps</span><strong>{detail.evidenceGaps.length}개</strong></header><ul className="mvp-gap-list">{detail.evidenceGaps.map((gap) => <li key={`${gap.ownerDomain}-${gap.field}`}><strong>{gap.field}</strong><span>{gap.ownerDomain} · {gap.reason}</span></li>)}</ul></section> : null}

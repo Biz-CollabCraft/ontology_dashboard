@@ -214,6 +214,16 @@ export interface MvpEventDetailModel {
   equipmentHistory: MvpEquipmentHistoryItem[];
   evidenceGaps: MvpEvidenceGap[];
   assetDetailStatus: MvpAssetDetailStatus | null;
+  operationContext: {
+    loadLevel: "low" | "normal" | "high" | null;
+    runtimeHours7d: number | null;
+    productionImpact: "none" | "low" | "medium" | "high" | null;
+  } | null;
+  reviewPriority: {
+    level: "immediate" | "high" | "medium" | "low";
+    reasons: string[];
+    sourceFields: string[];
+  } | null;
   activity: MvpActivityItem[];
   report: MvpReportModel;
   provenance: MvpProvenance;
@@ -284,6 +294,16 @@ export interface AssetDetailViewModel {
     source: string;
     memo?: string;
   }>;
+  operation_context?: {
+    load_level: "low" | "normal" | "high" | null;
+    runtime_hours_7d: number | null;
+    production_impact: "none" | "low" | "medium" | "high" | null;
+  };
+  review_priority?: {
+    level: "immediate" | "high" | "medium" | "low";
+    reasons: string[];
+    source_fields: string[];
+  } | null;
   evidence: {
     artifact_id: string | null;
     model_version: string | null;

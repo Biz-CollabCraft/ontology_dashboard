@@ -19,6 +19,9 @@
       "properties": {
         "equipment_id": {"type": "string"},
         "display_name": {"type": "string"},
+        "asset_type": {"enum": ["compressor", "cnc"]},
+        "site_id": {"type": "string", "minLength": 1},
+        "cell_id": {"type": "string", "minLength": 1},
         "line": {"type": "string"},
         "criticality": {"enum": ["low", "medium", "high"]},
         "assigned_engineer": {"type": "string"},

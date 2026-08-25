@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0", "scenario_id": "GS-005", "event_id": "EVT-GS-005",
-  "equipment": {"equipment_id": "M-042", "display_name": "복합 가공 설비 42", "line": "가공 3라인", "criticality": "medium", "assigned_engineer": "박지민", "last_maintenance_date": "2026-07-01", "estimated_downtime_minutes": 100, "spare_part_available": true},
+  "equipment": {"equipment_id": "CNC-S03-L01-03", "display_name": "3구역 · 1셀 · CNC 가공기 3", "asset_type": "cnc", "site_id": "S03", "cell_id": "S03-L01", "line": "S03-L01", "criticality": "medium", "assigned_engineer": "박지민", "last_maintenance_date": "2026-07-01", "estimated_downtime_minutes": 100, "spare_part_available": true},
   "observation": {"timestamp": "2026-08-01T00:00:00+09:00", "product_type": "M", "air_temperature_k": 301.0, "process_temperature_k": 308.8, "rotational_speed_rpm": 1550, "torque_nm": 60.0, "tool_wear_min": 215},
   "history": [
     {"timestamp": "2026-07-31T23:45:00+09:00", "product_type": "M", "air_temperature_k": 299.8, "process_temperature_k": 308.8, "rotational_speed_rpm": 1480, "torque_nm": 52.0, "tool_wear_min": 194},

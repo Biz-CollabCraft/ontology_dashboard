@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.diagnosis.contracts import load_fixture
+from app.diagnosis.contracts import derive_features, load_fixture
 from app.diagnosis.domain import (
     build_evidence_package,
     build_product_result_artifact,
@@ -249,10 +249,10 @@ class ManufacturingPredictiveMaintenanceService:
         equipment = fixture.get("equipment") or {}
         return {
             "asset_id": artifact["asset_id"],
-            "asset_type": artifact["asset_type"],
+            "asset_type": equipment.get("asset_type") or artifact["asset_type"],
             "display_name": equipment.get("display_name") or artifact["asset_id"],
-            "site_id": "Manufacturing Demo",
-            "cell_id": equipment.get("line") or artifact.get("cell_id") or "unknown",
+            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Manufacturing Demo",
+            "cell_id": equipment.get("cell_id") or equipment.get("line") or artifact.get("cell_id") or "unknown",
             "observed_at": artifact["observed_at"],
         }
 
@@ -280,7 +280,13 @@ class ManufacturingPredictiveMaintenanceService:
         for key in feature_keys:
             points_by_instant: dict[datetime, dict[str, Any]] = {}
             for row in rows:
-                if key not in row:
+                derived_row: dict[str, Any] = {}
+                try:
+                    derived_row = derive_features(row)
+                except (TypeError, ValueError):
+                    derived_row = {}
+                source_row = {**derived_row, **row}
+                if key not in source_row:
                     continue
                 observed_at = str(row.get("timestamp") or current_observed_at)
                 instant = _timestamp_instant(observed_at)
@@ -288,7 +294,7 @@ class ManufacturingPredictiveMaintenanceService:
                     continue
                 point = {
                     "observed_at": observed_at,
-                    "value": row.get(key),
+                    "value": source_row.get(key),
                     "quality_status": "unknown"
                     if artifact.get("status_grade") == "data_quality_hold"
                     else "good",

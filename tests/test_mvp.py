@@ -134,8 +134,8 @@ def test_reports_are_generated_as_separate_locale_variants(service: FactorySigna
     assert korean.report_id != english.report_id
     assert "근거 분석" in korean.headline
     assert "evidence analysis" in english.headline
-    assert "절삭 설비" in korean.headline
-    assert "Cutting Machine" in english.headline
+    assert "CNC 가공기" in korean.headline
+    assert "CNC" in english.headline
     assert any(section.title == "점검 체크리스트" for section in korean.sections)
     assert any(section.title == "Inspection checklist" for section in english.sections)
 
@@ -232,10 +232,10 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert len(events) == 8
     assert events[0]["status"] == "critical"
 
-    detail_view = client.get("/api/objects/M-014/detail-view")
+    detail_view = client.get("/api/objects/CNC-S04-L04-01/detail-view")
     assert detail_view.status_code == 200
     detail_payload = detail_view.json()
-    assert detail_payload["asset"]["asset_id"] == "M-014"
+    assert detail_payload["asset"]["asset_id"] == "CNC-S04-L04-01"
     assert detail_payload["risk"]["status_grade"] == "warning"
     assert detail_payload["features"]
     assert detail_payload["features"][0]["history"]["points"]
@@ -300,11 +300,11 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
 def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(
     client: TestClient,
 ) -> None:
-    detail_view = client.get("/api/objects/M-063/detail-view")
+    detail_view = client.get("/api/objects/CNC-S04-L05-01/detail-view")
     assert detail_view.status_code == 200
     detail_payload = detail_view.json()
 
-    assert detail_payload["asset"]["asset_id"] == "M-063"
+    assert detail_payload["asset"]["asset_id"] == "CNC-S04-L05-01"
     assert detail_payload["risk"]["status_grade"] is None
     assert detail_payload["data_status"]["is_data_quality_hold"] is True
 
@@ -318,6 +318,36 @@ def test_asset_detail_view_model_keeps_current_observation_out_of_history_points
         assert all(set(point) == {"observed_at", "value", "quality_status"} for point in points)
         if points:
             assert feature["history"]["source_ref"].startswith("observation-contract://")
+
+
+def test_asset_detail_view_model_exposes_gs004_24h_feature_history(
+    client: TestClient,
+) -> None:
+    detail_view = client.get("/api/objects/CNC-S04-L02-03/detail-view")
+    assert detail_view.status_code == 200
+    detail_payload = detail_view.json()
+
+    assert detail_payload["asset"]["asset_id"] == "CNC-S04-L02-03"
+    current_observed_at = detail_payload["asset"]["observed_at"]
+    feature_points = {
+        feature["key"]: feature["history"]["points"]
+        for feature in detail_payload["features"]
+    }
+
+    assert len(feature_points["torque_nm"]) == 24
+    assert len(feature_points["mechanical_power_w"]) == 24
+    assert len(feature_points["overstrain_index"]) == 24
+    assert feature_points["torque_nm"][0]["observed_at"] == "2026-07-31T00:00:00+09:00"
+    assert feature_points["torque_nm"][-1]["observed_at"] == "2026-07-31T23:00:00+09:00"
+    assert current_observed_at not in {
+        point["observed_at"]
+        for points in feature_points.values()
+        for point in points
+    }
+
+    event = client.get("/api/events/EVT-GS-004")
+    assert event.status_code == 200
+    assert event.json()["equipment"]["spare_part_available"] is False
 
 
 def test_follow_up_reconfigures_layout_and_rejects_injection(client: TestClient) -> None:
@@ -358,7 +388,7 @@ def test_project3_context_failure_falls_back() -> None:
         Project3HttpContextProvider(base_url="http://127.0.0.1:1", timeout_seconds=0.01),
         FixtureContextProvider(),
     )
-    context = provider.get_context("M-014", "tool_wear_failure")
+    context = provider.get_context("CNC-S04-L04-01", "tool_wear_failure")
     assert context["provider"] == "fixture_fallback"
     assert context["source_refs"]
 

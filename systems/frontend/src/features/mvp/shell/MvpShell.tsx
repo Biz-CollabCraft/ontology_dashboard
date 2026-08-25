@@ -14,7 +14,7 @@ import { MvpFreshness } from "../components/MvpUi";
 const VIEW_LABELS: Record<MvpView, { label: string; description: string }> = {
   overview: { label: "Overview", description: "운영 상황판" },
   objects: { label: "Assets", description: "설비 상태와 근거" },
-  operations: { label: "Work Orders", description: "처리할 작업" },
+  operations: { label: "작업요청", description: "처리할 작업" },
   reports: { label: "Report", description: "공유용 근거 문서" },
 };
 
@@ -108,7 +108,7 @@ export function MvpShell({
               );
             })}
           </nav>
-          <div className="mvp-nav-footnote"><strong>Domain backbone</strong><span>Asset, Evidence, WorkOrder 관계는 각 Inspector 안에서 연결합니다.</span></div>
+          <div className="mvp-nav-footnote"><strong>업무 흐름</strong><span>설비, 근거, 작업요청 관계는 각 상세 화면 안에서 연결합니다.</span></div>
         </aside>
         <section className="mvp-main">
           <header className="mvp-page-heading"><span>{active.label}</span><h1>{active.description}</h1><p>{headingDetail}</p></header>

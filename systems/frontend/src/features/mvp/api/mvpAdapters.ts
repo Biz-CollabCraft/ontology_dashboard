@@ -86,12 +86,13 @@ function fallbackProvenance(datasetVersionId: string): MvpProvenance {
 }
 export function adaptEvent(event: EventSummary): MvpEvent {
   const status = normalizeRiskStatus(event.status);
+  const line = event.equipment.cell_id ?? event.equipment.line ?? "미지정 셀";
   return {
     eventId: event.event_id,
     scenarioId: event.scenario_id,
     assetId: event.equipment.equipment_id,
     assetName: event.equipment.display_name,
-    line: event.equipment.line || "미지정 라인",
+    line,
     status,
     failureProbability: status === "data_quality_hold" ? null : event.failure_probability,
     confidence: normalizeConfidence(event.confidence).level,
@@ -113,12 +114,12 @@ function eventAsset(event: MvpEvent): MvpAsset {
   return {
     assetId: event.assetId,
     displayName: event.assetName,
-    assetType: event.assetId.toLowerCase().includes("cnc") || event.assetId.startsWith("M-")
+    assetType: event.assetId.toLowerCase().includes("cnc")
       ? "cnc"
       : event.assetId.toUpperCase().startsWith("CMP-")
         ? "compressor"
         : "equipment",
-    site: "Manufacturing Demo",
+    site: event.assetId.match(/^[A-Z]+-(S\d+)-/)?.[1] ?? "Manufacturing Demo",
     line: event.line,
     cell: event.line,
     status: event.status,
@@ -534,6 +535,8 @@ export function composeEventDetail(input: {
     equipmentHistory: [],
     evidenceGaps: [],
     assetDetailStatus: null,
+    operationContext: null,
+    reviewPriority: null,
     activity: normalizeActivity(input.activity),
     report,
     provenance,
@@ -570,6 +573,16 @@ export function applyAssetDetailViewModel(
       lastUpdatedAt: viewModel.data_status.last_updated_at ?? null,
       source: viewModel.data_status.source,
     },
+    operationContext: viewModel.operation_context ? {
+      loadLevel: viewModel.operation_context.load_level,
+      runtimeHours7d: viewModel.operation_context.runtime_hours_7d,
+      productionImpact: viewModel.operation_context.production_impact,
+    } : null,
+    reviewPriority: viewModel.review_priority ? {
+      level: viewModel.review_priority.level,
+      reasons: viewModel.review_priority.reasons,
+      sourceFields: viewModel.review_priority.source_fields,
+    } : null,
     provenance: {
       ...provenanceFromAssetDetailViewModel(detail.event, viewModel),
       promptVersion: detail.provenance.promptVersion,
