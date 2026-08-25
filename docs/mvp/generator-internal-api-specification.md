@@ -67,8 +67,10 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 | GET | `/runtime-pipeline/runs/{run_id}` | 특정 실행 ID의 단계별 상태(StageState) 및 다중 모델 예측 결과 상세 조회 | Current — 구현 및 정본 Generator App 등록 완료 |
 | GET | `/runtime-pipeline/queue` | FIFO 작업 큐 상태 목록 조회 (queued/running/succeeded/failed) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/runtime-pipeline/enqueue` | 새 관측 소스 파일을 런타임 예측 FIFO 큐에 내부 등록 | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/internal/runtime-pipeline/retry-failed/{job_id}` | 실패(failed/dead_letter) 작업 명시적 정리 및 신규 시퀀스 재등록 | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
+
 
 
 ### 3.2 Target API (후속 목표 설계)

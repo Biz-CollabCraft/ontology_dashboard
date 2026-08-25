@@ -143,11 +143,12 @@ project-root/
     - `POST /train/{base_model}`
     - `GET /runtime-pipeline/status`
     - `GET /runtime-pipeline/runs/{run_id}`
-    - `GET /runtime-pipeline/queue`
     - `POST /internal/runtime-pipeline/enqueue`
+    - `POST /internal/runtime-pipeline/retry-failed/{job_id}`
     - `POST /internal/train` (compatibility)
     - `POST /internal/retrain` (compatibility)
-  - Runtime Pipeline: 영속 FIFO Queue와 단일 Worker 기반으로 Preprocessing → Label-free Runtime Feature → Multi-model Prediction → Aggregation → Anomaly Signal Dispatch를 단계별 불변 파일 참조(ArtifactReference)로 순차 실행.
+  - Runtime Pipeline: 영속 FIFO Queue와 단일 Worker 기반으로 Preprocessing → Label-free Runtime Feature → Multi-model Prediction → Aggregation → Anomaly Signal Dispatch를 5대 독립 StageState 및 불변 파일 참조(ArtifactReference)로 순차 실행.
+
 - **Target — 남은 migration**:
   - `app/extraction/` (파일 관찰 및 프로토콜 레코드 추출 후 enqueue 경계 연결)
 
