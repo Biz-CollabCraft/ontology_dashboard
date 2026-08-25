@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/generator-model-prediction-result.schema.json",
+  "title": "GeneratorModelPredictionResult",
+  "type": "object",
+  "required": [
+    "model_id",
+    "model_version",
+    "status",
+    "prediction",
+    "threshold",
+    "predicted_at"
+  ],
+  "properties": {
+    "model_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "unknown"]
+    },
+    "prediction": {
+      "type": "string",
+      "enum": ["normal", "anomaly", "unknown", "failed"]
+    },
+    "probability": {
+      "type": ["number", "null"],
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "is_anomaly": {
+      "type": ["boolean", "null"]
+    },
+    "predicted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "artifact_ref": {
+      "type": ["object", "null"],
+      "properties": {
+        "uri": { "type": "string" },
+        "sha256": { "type": "string" },
+        "role": { "type": "string" }
+      }
+    },
+    "feature_ref": {
+      "type": ["object", "null"],
+      "properties": {
+        "uri": { "type": "string" },
+        "sha256": { "type": "string" },
+        "role": { "type": "string" }
+      }
+    },
+    "error_code": {
+      "type": ["string", "null"]
+    },
+    "error_message": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": false
+}

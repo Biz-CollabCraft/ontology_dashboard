@@ -1,0 +1,3 @@
+{"UDI": 1, "Product ID": "M14860", "Type": "M", "Air temperature [K]": 298.1, "Process temperature [K]": 308.6, "Rotational speed [rpm]": 1551, "Torque [Nm]": 42.8, "Tool wear [min]": 0, "observed_at": "2026-08-25T11:50:00Z"}
+{"UDI": 2, "Product ID": "M14860", "Type": "M", "Air temperature [K]": 298.2, "Process temperature [K]": 308.7, "Rotational speed [rpm]": 1408, "Torque [Nm]": 46.3, "Tool wear [min]": 3, "observed_at": "2026-08-25T11:51:00Z"}
+{"UDI": 3, "Product ID": "M14860", "Type": "M", "Air temperature [K]": 298.1, "Process temperature [K]": 308.5, "Rotational speed [rpm]": 1498, "Torque [Nm]": 49.4, "Tool wear [min]": 5, "observed_at": "2026-08-25T11:52:00Z"}

@@ -1,0 +1,104 @@
+"""Application-level manager coordinating queue, worker, and pipeline execution."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Optional
+
+from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
+from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
+from systems.generator.app.runtime_pipeline.pipeline_schema import (
+    AnomalySignalPayload,
+    PipelineQueueItem,
+    PipelineRunState,
+)
+from systems.generator.app.runtime_pipeline.pipeline_service import PipelineService
+from systems.generator.app.runtime_pipeline.pipeline_worker import PipelineWorker
+
+logger = logging.getLogger(__name__)
+
+
+class PipelineManager:
+    """Application singleton managing queue, worker lifecycle, and status reporting."""
+
+    _instance: Optional[PipelineManager] = None
+
+    def __init__(
+        self,
+        queue: Optional[PipelineQueue] = None,
+        repository: Optional[PipelineRepository] = None,
+        service: Optional[PipelineService] = None,
+    ) -> None:
+        self.repository = repository or PipelineRepository()
+        self.queue = queue or PipelineQueue()
+        self.service = service or PipelineService(repository=self.repository)
+        self.worker = PipelineWorker(queue=self.queue, service=self.service)
+        self._is_running = False
+
+    @classmethod
+    def get_instance(cls) -> PipelineManager:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def set_instance(cls, instance: Optional[PipelineManager]) -> None:
+        cls._instance = instance
+
+    def start(self) -> None:
+        """Startup lifecycle hook: recover interrupted jobs and start background worker."""
+        if self._is_running:
+            return
+        recovered = self.queue.recover_running_on_startup()
+        logger.info(f"[PipelineManager] Startup recovery completed: {recovered} running jobs reset")
+        self.worker.start()
+        self._is_running = True
+
+    def stop(self, timeout: float = 10.0) -> None:
+        """Shutdown lifecycle hook: drain worker and release resources."""
+        if not self._is_running:
+            return
+        self.worker.stop(timeout=timeout)
+        self._is_running = False
+        logger.info("[PipelineManager] Shutdown completed")
+
+    def enqueue(
+        self,
+        *,
+        job_id: str,
+        source_uri: str,
+        source_checksum: str,
+        dataset_id: str = "canonical-ai4i-v1",
+        dataset_version: str = "canonical-ai4i-physics-v3.1",
+    ) -> PipelineQueueItem:
+        """Enqueue new observation source file for processing."""
+        return self.queue.enqueue(
+            job_id=job_id,
+            source_uri=source_uri,
+            source_checksum=source_checksum,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+        )
+
+    def get_status(self) -> dict[str, Any]:
+        """Inspection summary of queue and worker state."""
+        queued_items = self.queue.list_items(status="queued")
+        running_items = self.queue.list_items(status="running")
+        recent_runs = self.repository.list_run_states(limit=10)
+
+        return {
+            "worker_active": self._is_running,
+            "queued_count": len(queued_items),
+            "running_count": len(running_items),
+            "current_job": self.worker._current_job.model_dump() if self.worker._current_job else None,
+            "recent_runs": [r.model_dump() for r in recent_runs],
+        }
+
+    def get_run_state(self, run_id: str) -> Optional[PipelineRunState]:
+        return self.repository.get_run_state(run_id)
+
+    def get_event(self, event_id: str) -> Optional[AnomalySignalPayload]:
+        return self.repository.get_event(event_id)
+
+    def list_queue_items(self, status: Optional[str] = None) -> list[PipelineQueueItem]:
+        return self.queue.list_items(status=status)

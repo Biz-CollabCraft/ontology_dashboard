@@ -854,3 +854,12 @@ def test_training_examples_config_reserved_seed_keys_fails(tmp_path: Path, model
     result = verifier.verify_all()
     assert not result.passed
     assert any(f"hyperparameters.{model_name} contains reserved seed key '{reserved_key}'" in e.message for e in result.errors)
+
+
+def test_runtime_prediction_vector_verification_passes():
+    """Verify that real repository generator-runtime-prediction-v1 vector verifies cleanly."""
+    from systems.verify_contract_vectors import ContractVectorVerifier
+    verifier = ContractVectorVerifier()
+    result = verifier.verify_all()
+    assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
+    assert "generator-runtime-prediction-v1" in result.verified_vectors
