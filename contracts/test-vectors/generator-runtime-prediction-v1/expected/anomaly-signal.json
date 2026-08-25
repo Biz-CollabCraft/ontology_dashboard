@@ -1,0 +1,92 @@
+{
+  "event_id": "evt-0102030405060708",
+  "run_id": "run-test-01",
+  "job_id": "job-test-01",
+  "asset_id": "M14860",
+  "detected_at": "2026-08-25T11:55:05Z",
+  "dataset_id": "canonical-ai4i-v1",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "anomaly_detected": true,
+  "anomaly_models": ["pdm-xgboost", "pdm-random_forest"],
+  "model_results": [
+    {
+      "model_id": "pdm-lightgbm",
+      "model_version": "pdm-lightgbm-v1.0",
+      "status": "succeeded",
+      "prediction": "normal",
+      "probability": 0.08,
+      "threshold": 0.5,
+      "is_anomaly": false,
+      "predicted_at": "2026-08-25T11:55:00Z",
+      "artifact_ref": {
+        "uri": "models_store/artifacts/pdm-lightgbm/pdm-lightgbm-v1.0",
+        "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "role": "model_artifact"
+      },
+      "feature_ref": {
+        "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+        "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "role": "runtime_features"
+      },
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "model_id": "pdm-xgboost",
+      "model_version": "pdm-xgboost-v1.0",
+      "status": "succeeded",
+      "prediction": "anomaly",
+      "probability": 0.85,
+      "threshold": 0.5,
+      "is_anomaly": true,
+      "predicted_at": "2026-08-25T11:55:00Z",
+      "artifact_ref": {
+        "uri": "models_store/artifacts/pdm-xgboost/pdm-xgboost-v1.0",
+        "sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
+        "role": "model_artifact"
+      },
+      "feature_ref": {
+        "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+        "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "role": "runtime_features"
+      },
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "model_id": "pdm-random_forest",
+      "model_version": "pdm-random_forest-v1.0",
+      "status": "succeeded",
+      "prediction": "anomaly",
+      "probability": 0.79,
+      "threshold": 0.5,
+      "is_anomaly": true,
+      "predicted_at": "2026-08-25T11:55:00Z",
+      "artifact_ref": {
+        "uri": "models_store/artifacts/pdm-random_forest/pdm-random_forest-v1.0",
+        "sha256": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+        "role": "model_artifact"
+      },
+      "feature_ref": {
+        "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+        "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+        "role": "runtime_features"
+      },
+      "error_code": null,
+      "error_message": null
+    }
+  ],
+  "source_lineage": {
+    "source_uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
+    "source_checksum": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "pipeline_contract_version": "1.0"
+  },
+  "sensor_data_ref": {
+    "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
+    "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  },
+  "feature_ref": {
+    "uri": "models_store/cache/runtime_features/runtime-feat-vector-01.npy",
+    "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+  }
+}

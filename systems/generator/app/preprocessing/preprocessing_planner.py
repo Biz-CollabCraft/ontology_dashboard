@@ -198,6 +198,8 @@ class PreprocessingPlanner:
             df_preview = pd.read_csv(filepath, nrows=5)
         elif ext in (".xlsx", ".xls"):
             df_preview = pd.read_excel(filepath, nrows=5)
+        elif ext == ".jsonl":
+            df_preview = pd.read_json(filepath, lines=True, nrows=5)
         else:
             raise ValueError(f"Unsupported file format: {ext}")
 

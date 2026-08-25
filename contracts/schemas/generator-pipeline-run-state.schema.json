@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/generator-pipeline-run-state.schema.json",
+  "title": "GeneratorPipelineRunState",
+  "type": "object",
+  "required": [
+    "run_id",
+    "job_id",
+    "status",
+    "source_ref",
+    "stages",
+    "prediction_results",
+    "errors"
+  ],
+  "properties": {
+    "run_id": { "type": "string", "minLength": 1 },
+    "job_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "queued", "running", "succeeded", "partially_succeeded", "failed"]
+    },
+    "current_stage": { "type": ["string", "null"] },
+    "source_ref": {
+      "type": "object",
+      "required": ["uri", "sha256"],
+      "properties": {
+        "uri": { "type": "string" },
+        "sha256": { "type": "string" },
+        "role": { "type": "string" },
+        "size_bytes": { "type": ["integer", "null"] }
+      }
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "attempt"],
+        "properties": {
+          "stage_name": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "running", "succeeded", "failed", "skipped"]
+          },
+          "attempt": { "type": "integer", "minimum": 1 },
+          "started_at": { "type": ["string", "null"] },
+          "finished_at": { "type": ["string", "null"] },
+          "input_refs": { "type": "array" },
+          "output_refs": { "type": "array" },
+          "error_code": { "type": ["string", "null"] },
+          "error_message": { "type": ["string", "null"] },
+          "retryable": { "type": ["boolean", "null"] }
+        }
+      }
+    },
+    "prediction_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "model_id",
+          "model_version",
+          "status",
+          "prediction",
+          "threshold",
+          "predicted_at"
+        ],
+        "properties": {
+          "model_id": { "type": "string" },
+          "model_version": { "type": "string" },
+          "status": { "type": "string", "enum": ["succeeded", "failed", "unknown"] },
+          "prediction": { "type": "string", "enum": ["normal", "anomaly", "unknown", "failed"] },
+          "probability": { "type": ["number", "null"] },
+          "threshold": { "type": "number" },
+          "is_anomaly": { "type": ["boolean", "null"] },
+          "predicted_at": { "type": "string", "format": "date-time" },
+          "artifact_ref": { "type": ["object", "null"] },
+          "feature_ref": { "type": ["object", "null"] },
+          "error_code": { "type": ["string", "null"] },
+          "error_message": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "anomaly_detected": { "type": ["boolean", "null"] },
+    "notification_status": {
+      "type": ["string", "null"],
+      "enum": ["not_required", "pending", "sent", "failed", null]
+    },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "finished_at": { "type": ["string", "null"], "format": "date-time" },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message", "occurred_at"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "stage": { "type": "string" },
+          "details": { "type": "array" },
+          "retryable": { "type": "boolean" },
+          "attempt": { "type": "integer" },
+          "occurred_at": { "type": "string" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
