@@ -220,10 +220,17 @@ class FeatureRepository:
 
         with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
             row_meta = json.load(f)
+            if not isinstance(row_meta, list):
+                raise FeatureDatasetIntegrityError("row_metadata.json은 JSON 배열이어야 합니다.")
             if len(row_meta) != row_count:
                 raise FeatureDatasetIntegrityError(
                     f"row_metadata.json 항목 수({len(row_meta)})와 Feature 행 수({row_count})가 일치하지 않습니다."
                 )
+            for index, item in enumerate(row_meta):
+                if not isinstance(item, dict):
+                    raise FeatureDatasetIntegrityError(
+                        f"row_metadata.json의 {index}번째 항목은 JSON 객체여야 합니다."
+                    )
 
         with open(bundle_dir / "feature_columns.json", "r", encoding="utf-8") as f:
             col_data = json.load(f)
@@ -287,10 +294,17 @@ class FeatureRepository:
 
         with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
             row_meta = json.load(f)
+            if not isinstance(row_meta, list):
+                raise FeatureDatasetIntegrityError("row_metadata.json은 JSON 배열이어야 합니다.")
             if len(row_meta) != row_count:
                 raise FeatureDatasetIntegrityError(
                     f"row_metadata.json 항목 수({len(row_meta)})와 Feature 행 수({row_count})가 일치하지 않습니다."
                 )
+            for index, item in enumerate(row_meta):
+                if not isinstance(item, dict):
+                    raise FeatureDatasetIntegrityError(
+                        f"row_metadata.json의 {index}번째 항목은 JSON 객체여야 합니다."
+                    )
 
         metadata_sha256 = compute_file_sha256(meta_path)
 

@@ -55,6 +55,8 @@ class ModelArtifactPublicationResult:
     latest_error_message: str | None = None
 
 
+import errno
+
 class ModelActivationLock:
     """Non-blocking OS-level advisory file lock for model latest pointer updates."""
 
@@ -65,8 +67,19 @@ class ModelActivationLock:
         self._file_obj = None
 
     def __enter__(self) -> "ModelActivationLock":
-        self.lock_file_path.parent.mkdir(parents=True, exist_ok=True)
-        self._file_obj = open(self.lock_file_path, "a+", encoding="utf-8")
+        try:
+            self.lock_file_path.parent.mkdir(parents=True, exist_ok=True)
+            self._file_obj = open(self.lock_file_path, "a+", encoding="utf-8")
+        except OSError as exc:
+            logger.warning(f"[ModelActivationLock] Lock file open/prepare failed: {exc}")
+            raise ModelActivationCommitError(
+                f"최신 포인터 잠금 파일 준비 실패: {exc}",
+                details=[{
+                    "stage": "latest_pointer_lock_open",
+                    "model_id": self.model_id,
+                    "requested_version": self.requested_version,
+                }],
+            ) from exc
 
         locked = False
         try:
@@ -79,20 +92,41 @@ class ModelActivationLock:
                 self._file_obj.seek(0)
                 msvcrt.locking(self._file_obj.fileno(), msvcrt.LK_NBLCK, 1)
                 locked = True
-        except (IOError, OSError):
-            pass
-
-        if not locked:
+        except (BlockingIOError, OSError) as exc:
             if self._file_obj:
                 try:
                     self._file_obj.close()
                 except Exception:
                     pass
                 self._file_obj = None
-            raise ModelActivationInProgressError(
-                "해당 모델의 최신 포인터 갱신 작업이 이미 진행 중입니다.",
-                details=[{"model_id": self.model_id, "requested_version": self.requested_version}],
-            )
+
+            # Check if this is a genuine lock contention
+            is_contention = False
+            if sys.platform != "win32":
+                if isinstance(exc, BlockingIOError) or exc.errno in (errno.EACCES, errno.EAGAIN, getattr(errno, "EWOULDBLOCK", errno.EAGAIN)):
+                    is_contention = True
+            else:
+                # On Windows, lock violation raises PermissionError (EACCES) or EDEADLK or winerror 32/33
+                if exc.errno in (errno.EACCES, getattr(errno, "EDEADLK", 36)) or getattr(exc, "winerror", None) in (32, 33):
+                    is_contention = True
+
+            if is_contention:
+                raise ModelActivationInProgressError(
+                    "해당 모델의 최신 포인터 갱신 작업이 이미 진행 중입니다.",
+                    details=[{"model_id": self.model_id, "requested_version": self.requested_version}],
+                ) from exc
+
+            # Otherwise, it's a general I/O or descriptor failure
+            logger.warning(f"[ModelActivationLock] Lock acquisition failed with I/O error: {exc}")
+            raise ModelActivationCommitError(
+                f"최신 포인터 잠금 획득 중 I/O 실패: {exc}",
+                details=[{
+                    "stage": "latest_pointer_lock_acquire",
+                    "model_id": self.model_id,
+                    "requested_version": self.requested_version,
+                }],
+            ) from exc
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -354,15 +388,18 @@ class ModelArtifactPublisher:
                     )
 
             # Phase A: Staging and immutable Artifact publish
+            current_stage = "artifact_staging_create"
             staging_dir = model_root / f".tmp_{uuid.uuid4().hex}"
             staging_dir.mkdir(parents=True, exist_ok=True)
 
             try:
                 # 1. Write model.joblib
+                current_stage = "artifact_model_write"
                 model_file = staging_dir / "model.joblib"
                 joblib.dump(model_obj, model_file, compress=3)
 
                 # 2. Write feature_schema.json (full snapshot)
+                current_stage = "artifact_schema_write"
                 feat_schema_file = staging_dir / "feature_schema.json"
                 with open(feat_schema_file, "w", encoding="utf-8") as f:
                     json.dump(feature_schema, f, indent=2, ensure_ascii=False)
@@ -383,6 +420,7 @@ class ModelArtifactPublisher:
                     json.dump(metrics, f, indent=2, ensure_ascii=False)
 
                 # 6. Calculate checksums for the 5 payload files
+                current_stage = "artifact_checksum_calc"
                 checksum_dict = {
                     "model.joblib": compute_file_sha256(model_file),
                     "feature_schema.json": compute_file_sha256(feat_schema_file),
@@ -449,19 +487,43 @@ class ModelArtifactPublisher:
                     json.dump(manifest, f, indent=2, ensure_ascii=False)
 
                 # 8. Full validation of staging directory
+                current_stage = "artifact_validation"
                 self.validate_manifest(manifest, staging_dir)
 
                 # 9. Atomic rename / move staging -> dest_dir (Phase A completed!)
-                staging_dir.rename(dest_dir)
+                current_stage = "artifact_commit"
+                try:
+                    staging_dir.rename(dest_dir)
+                except FileExistsError as exc:
+                    raise ModelArtifactConflictError(
+                        f"Model Artifact '{model_id}/{model_version}'가 동시에 발행되었거나 이미 존재합니다."
+                    ) from exc
+
                 logger.info(f"[ModelArtifactPublisher] Published Model Artifact to {dest_dir}")
 
             except Exception as exc:
+                cleanup_error = None
                 if staging_dir.exists():
-                    shutil.rmtree(staging_dir, ignore_errors=True)
+                    try:
+                        shutil.rmtree(staging_dir, ignore_errors=False)
+                    except Exception as c_exc:
+                        cleanup_error = c_exc
+                        logger.warning(f"[ModelArtifactPublisher] Failed to cleanup staging directory {staging_dir}: {c_exc}")
+
                 if isinstance(exc, (ModelArtifactConflictError, ModelArtifactValidationError, TrainingContractError)):
                     raise
-                logger.exception(f"[ModelArtifactPublisher] Failed to publish model artifact: {exc}")
-                raise ModelArtifactPublishError(f"Model Artifact 원자적 발행 실패: {exc}") from exc
+
+                logger.exception(f"[ModelArtifactPublisher] Failed to publish model artifact during {current_stage}: {exc}")
+                raise ModelArtifactPublishError(
+                    f"Model Artifact 원자적 발행 실패: {exc}",
+                    details=[{
+                        "stage": current_stage,
+                        "model_id": model_id,
+                        "model_version": model_version,
+                        "published": False,
+                        "cleanup_failed": cleanup_error is not None,
+                    }],
+                ) from exc
 
             # Phase B: Latest pointer update
             try:
@@ -552,16 +614,39 @@ class ModelArtifactPublisher:
                 os.replace(temp_pointer, final_pointer)
 
                 if sys.platform != "win32":
+                    dir_fd = None
                     try:
                         dir_fd = os.open(str(model_root), os.O_RDONLY)
                         os.fsync(dir_fd)
-                        os.close(dir_fd)
                     except Exception:
                         pass
+                    finally:
+                        if dir_fd is not None:
+                            try:
+                                os.close(dir_fd)
+                            except Exception:
+                                pass
             except Exception as exc:
+                cleanup_error = None
                 if temp_pointer.exists():
-                    temp_pointer.unlink(missing_ok=True)
-                raise ModelActivationCommitError(f"latest.json 원자적 교체 실패: {exc}") from exc
+                    try:
+                        temp_pointer.unlink(missing_ok=True)
+                    except Exception as c_exc:
+                        cleanup_error = c_exc
+                        logger.warning(f"[ModelArtifactPublisher] Failed to cleanup temp pointer {temp_pointer}: {c_exc}")
+
+                if isinstance(exc, (ModelActivationCommitError, ModelActivationInProgressError, ModelActivationTargetNotFoundError, ModelActivationTargetInvalidError, ModelActivationVerifyError)):
+                    raise
+
+                raise ModelActivationCommitError(
+                    f"latest.json 원자적 교체 실패: {exc}",
+                    details=[{
+                        "stage": "latest_pointer_commit",
+                        "model_id": model_id,
+                        "model_version": model_version,
+                        "cleanup_failed": cleanup_error is not None,
+                    }],
+                ) from exc
 
             # 9-10. Read-back verification
             try:

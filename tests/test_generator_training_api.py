@@ -1153,3 +1153,235 @@ def test_trainer_failure_with_existing_artifact_preserves_trainer_error(test_set
     assert lgb_result["latest_updated"] is False
     assert lgb_result["latest_error_code"] is None
     assert lgb_result["error_code"] == "TRAINING_EXECUTION_ERROR"
+
+
+def test_row_metadata_structure_integrity_returns_422(test_setup):
+    """Test that non-list row_metadata and non-dict items fail closed with FEATURE_DATASET_INTEGRITY_ERROR (422)."""
+    from systems.generator.file_integrity import compute_file_sha256
+
+    client = test_setup["client"]
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    cache_dir = models_store / "cache" / "features" / test_setup["dataset_id"] / test_setup["dataset_version"] / test_setup["feature_dataset_version"]
+    row_meta_path = cache_dir / "row_metadata.json"
+    feat_meta_path = cache_dir / "feature_metadata.json"
+    original_row_data = row_meta_path.read_text(encoding="utf-8")
+    original_feat_data = feat_meta_path.read_text(encoding="utf-8")
+    feat_meta = json.loads(original_feat_data)
+
+    def write_row_meta(content_str: str):
+        row_meta_path.write_text(content_str, encoding="utf-8")
+        updated_feat = dict(feat_meta)
+        updated_feat["payload_checksums"] = dict(feat_meta.get("payload_checksums", {}))
+        updated_feat["payload_checksums"]["row_metadata.json"] = compute_file_sha256(row_meta_path)
+        feat_meta_path.write_text(json.dumps(updated_feat), encoding="utf-8")
+
+    try:
+        # 1. Non-list row_metadata (dict)
+        write_row_meta(json.dumps({"type": "invalid_structure"}))
+        resp = client.post("/train/lightgbm", json={
+            "dataset_id": test_setup["dataset_id"],
+            "dataset_version": test_setup["dataset_version"],
+            "feature_dataset_version": test_setup["feature_dataset_version"],
+            "model_version": "rowmeta-dict-v1",
+        })
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+
+        # 2. List containing string items instead of dict
+        write_row_meta(json.dumps(["item_str_1", "item_str_2"]))
+        resp = client.post("/train/lightgbm", json={
+            "dataset_id": test_setup["dataset_id"],
+            "dataset_version": test_setup["dataset_version"],
+            "feature_dataset_version": test_setup["feature_dataset_version"],
+            "model_version": "rowmeta-str-v1",
+        })
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+
+        # 3. List containing list items instead of dict
+        write_row_meta(json.dumps([["sub1"], ["sub2"]]))
+        resp = client.post("/train/lightgbm", json={
+            "dataset_id": test_setup["dataset_id"],
+            "dataset_version": test_setup["dataset_version"],
+            "feature_dataset_version": test_setup["feature_dataset_version"],
+            "model_version": "rowmeta-list-v1",
+        })
+        assert resp.status_code == 422
+        assert resp.json()["error"]["code"] == "FEATURE_DATASET_INTEGRITY_ERROR"
+
+    finally:
+        row_meta_path.write_text(original_row_data, encoding="utf-8")
+        feat_meta_path.write_text(original_feat_data, encoding="utf-8")
+
+
+def test_row_metadata_and_timestamp_validation_returns_422(test_setup):
+    """Test that missing asset_id, bool, NaN, and Inf timestamps return 422 TRAINING_DATASET_ERROR."""
+    from systems.generator.file_integrity import compute_file_sha256
+
+    client = test_setup["client"]
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    cache_dir = models_store / "cache" / "features" / test_setup["dataset_id"] / test_setup["dataset_version"] / test_setup["feature_dataset_version"]
+    row_meta_path = cache_dir / "row_metadata.json"
+    feat_meta_path = cache_dir / "feature_metadata.json"
+    original_row_data = row_meta_path.read_text(encoding="utf-8")
+    original_feat_data = feat_meta_path.read_text(encoding="utf-8")
+    original_rows = json.loads(original_row_data)
+    feat_meta = json.loads(original_feat_data)
+
+    invalid_cases = [
+        # (modified_rows, expected_err_code, desc)
+        ([{**r, "asset_id": ""} for r in original_rows], "TRAINING_DATASET_ERROR", "empty asset_id"),
+        ([{**r, "asset_id": None} for r in original_rows], "TRAINING_DATASET_ERROR", "null asset_id"),
+        ([{**r, "asset_id": True} for r in original_rows], "TRAINING_DATASET_ERROR", "bool asset_id"),
+        ([{**r, "timestamp": True} for r in original_rows], "TRAINING_DATASET_ERROR", "bool timestamp"),
+        ([{**r, "timestamp": float("nan")} for r in original_rows], "TRAINING_DATASET_ERROR", "NaN timestamp"),
+        ([{**r, "timestamp": float("inf")} for r in original_rows], "TRAINING_DATASET_ERROR", "Inf timestamp"),
+        ([{**r, "timestamp": float("-inf")} for r in original_rows], "TRAINING_DATASET_ERROR", "-Inf timestamp"),
+        ([{**r, "timestamp": "NaN"} for r in original_rows], "TRAINING_DATASET_ERROR", "string NaN timestamp"),
+        ([{**r, "timestamp": "Infinity"} for r in original_rows], "TRAINING_DATASET_ERROR", "string Infinity timestamp"),
+    ]
+
+    try:
+        for idx, (bad_rows, exp_code, desc) in enumerate(invalid_cases):
+            row_meta_path.write_text(json.dumps(bad_rows), encoding="utf-8")
+            updated_feat = dict(feat_meta)
+            updated_feat["payload_checksums"] = dict(feat_meta.get("payload_checksums", {}))
+            updated_feat["payload_checksums"]["row_metadata.json"] = compute_file_sha256(row_meta_path)
+            feat_meta_path.write_text(json.dumps(updated_feat), encoding="utf-8")
+
+            resp = client.post("/train/lightgbm", json={
+                "dataset_id": test_setup["dataset_id"],
+                "dataset_version": test_setup["dataset_version"],
+                "feature_dataset_version": test_setup["feature_dataset_version"],
+                "model_version": f"invalid-row-{idx}",
+            })
+            assert resp.status_code == 422, f"Failed for {desc}"
+            assert resp.json()["error"]["code"] == exp_code, f"Failed code for {desc}"
+            art_dir = models_store / "artifacts" / "pdm-lightgbm" / f"invalid-row-{idx}"
+            assert not art_dir.exists()
+    finally:
+        row_meta_path.write_text(original_row_data, encoding="utf-8")
+        feat_meta_path.write_text(original_feat_data, encoding="utf-8")
+
+
+def test_artifact_publish_rename_conflict_returns_409(test_setup, monkeypatch):
+    """Test that a FileExistsError during staging rename is translated to 409 MODEL_ARTIFACT_CONFLICT."""
+    from pathlib import Path
+
+    def mock_rename(self, target):
+        raise FileExistsError("Concurrent destination exists")
+
+    monkeypatch.setattr(Path, "rename", mock_rename)
+
+    client = test_setup["client"]
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "conflict-rename-v1",
+    })
+    assert resp.status_code == 409
+    assert resp.json()["error"]["code"] == "MODEL_ARTIFACT_CONFLICT"
+
+
+def test_artifact_publish_io_error_returns_500_with_stage(test_setup, monkeypatch):
+    """Test that an OSError during artifact publication is mapped to 500 MODEL_ARTIFACT_PUBLISH_ERROR with stage info."""
+    import joblib
+
+    def failing_dump(*args, **kwargs):
+        raise OSError("Disk quota exceeded or read-only volume")
+
+    monkeypatch.setattr(joblib, "dump", failing_dump)
+
+    client = test_setup["client"]
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "publish-io-err-v1",
+    })
+    assert resp.status_code == 500
+    err_body = resp.json()["error"]
+    assert err_body["code"] == "MODEL_ARTIFACT_PUBLISH_ERROR"
+    assert len(err_body["details"]) > 0
+    assert err_body["details"][0]["stage"] == "artifact_model_write"
+    assert err_body["details"][0]["published"] is False
+
+
+def test_latest_pointer_lock_open_io_error_returns_500(test_setup, monkeypatch):
+    """Test that an I/O error preparing lock file returns 500 MODEL_LATEST_UPDATE_FAILED rather than 409."""
+    from systems.generator.model.publisher import ModelActivationLock
+
+    original_enter = ModelActivationLock.__enter__
+
+    def failing_enter(self):
+        raise OSError("Read-only filesystem on lock open")
+
+    monkeypatch.setattr(ModelActivationLock, "__enter__", failing_enter)
+
+    client = test_setup["client"]
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "lock-open-io-v1",
+    })
+    # Since Phase A succeeded and Phase B failed with lock open IO error, it returns 500
+    assert resp.status_code == 500
+    assert resp.json()["error"]["code"] == "MODEL_LATEST_UPDATE_FAILED"
+
+
+def test_latest_pointer_readback_mismatch_returns_500(test_setup, monkeypatch):
+    """Test that a read-back mismatch after pointer replacement returns 500 MODEL_LATEST_VERIFY_FAILED."""
+    import os
+    from systems.generator.model import publisher
+
+    # Let os.replace write an invalid pointer content
+    original_replace = os.replace
+
+    def corrupt_replace(src, dst):
+        Path(dst).write_text(json.dumps({"model_version": "corrupted-pointer", "model_id": "pdm-lightgbm"}), encoding="utf-8")
+        if Path(src).exists():
+            Path(src).unlink()
+
+    monkeypatch.setattr(os, "replace", corrupt_replace)
+
+    client = test_setup["client"]
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "readback-mismatch-v1",
+    })
+    assert resp.status_code == 500
+    assert resp.json()["error"]["code"] == "MODEL_LATEST_VERIFY_FAILED"
+
+
+def test_pointer_commit_cleanup_failure_preserves_error(test_setup, monkeypatch):
+    """Test that cleanup failure of temp pointer does not mask original error and sets cleanup_failed."""
+    import os
+    from pathlib import Path
+
+    def failing_replace(src, dst):
+        raise OSError("Disk write I/O error during pointer replacement")
+
+    original_unlink = Path.unlink
+
+    def failing_unlink(self, missing_ok=False):
+        if ".latest." in self.name and ".tmp" in self.name:
+            raise OSError("Permission denied on temp unlink")
+        return original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    monkeypatch.setattr(Path, "unlink", failing_unlink)
+
+    client = test_setup["client"]
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "cleanup-fail-v1",
+    })
+    assert resp.status_code == 500
+    err_body = resp.json()["error"]
+    assert err_body["code"] == "MODEL_LATEST_UPDATE_FAILED"

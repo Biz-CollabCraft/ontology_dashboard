@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -30,30 +31,45 @@ class DatasetSplits:
 
 def _parse_timestamp(val: Any) -> float:
     """Parse various timestamp formats (including ISO datetime, unix epoch, and synthetic step strings)."""
+    if isinstance(val, bool):
+        raise TrainingDatasetError(f"timestamp는 bool 값을 사용할 수 없습니다: {val!r}")
+
+    parsed: float | None = None
     if isinstance(val, (int, float)):
-        return float(val)
-    if isinstance(val, str):
+        parsed = float(val)
+    elif isinstance(val, str):
         # Try ISO format
         try:
-            return datetime.fromisoformat(val.replace("Z", "+00:00")).timestamp()
+            parsed = datetime.fromisoformat(val.replace("Z", "+00:00")).timestamp()
         except ValueError:
-            pass
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d"):
+            parsed = None
+
+        if parsed is None:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d"):
+                try:
+                    parsed = datetime.strptime(val, fmt).timestamp()
+                    break
+                except ValueError:
+                    pass
+
+        if parsed is None and (val.startswith("t_") or val.startswith("step_") or val.startswith("row_")):
             try:
-                return datetime.strptime(val, fmt).timestamp()
+                parsed = float(val.split("_", 1)[1])
             except ValueError:
                 pass
-        # Check if synthetic string like "t_0", "step_0", "row_0"
-        if val.startswith("t_") or val.startswith("step_") or val.startswith("row_"):
+
+        if parsed is None:
             try:
-                return float(val.split("_", 1)[1])
+                parsed = float(val)
             except ValueError:
-                pass
-        try:
-            return float(val)
-        except ValueError:
-            pass
-    raise TrainingDatasetError(f"타임스탬프 '{val}'를 시간 객체로 변환할 수 없습니다.")
+                raise TrainingDatasetError(f"타임스탬프 '{val}'를 시간 객체로 변환할 수 없습니다.")
+    else:
+        raise TrainingDatasetError(f"타임스탬프 '{val}'는 유효한 타입이 아닙니다 ({type(val).__name__}).")
+
+    if not math.isfinite(parsed):
+        raise TrainingDatasetError(f"timestamp는 유한한 값이어야 합니다: {val!r}")
+
+    return parsed
 
 
 def asset_time_split(
@@ -78,6 +94,9 @@ def asset_time_split(
             f"데이터셋에 최소 2개 이상의 클래스가 존재해야 합니다 (현재 클래스: {unique_classes})."
         )
 
+    if not isinstance(row_metadata, list):
+        raise TrainingDatasetError("row_metadata는 리스트 형태여야 합니다.")
+
     if len(row_metadata) != total_rows:
         raise TrainingDatasetError(
             f"row_metadata 항목 수({len(row_metadata)})와 Label 행 수({total_rows})가 일치하지 않습니다."
@@ -86,13 +105,16 @@ def asset_time_split(
     # Group row indices by asset_id
     asset_groups: dict[str, list[tuple[int, float]]] = {}
     for idx, meta in enumerate(row_metadata):
+        if not isinstance(meta, dict):
+            raise TrainingDatasetError(f"row_metadata {idx}번째 항목은 딕셔너리여야 합니다.")
+
         raw_asset = meta.get("asset_id")
-        if raw_asset is None or str(raw_asset).strip() == "":
+        if raw_asset is None or isinstance(raw_asset, bool) or not isinstance(raw_asset, (str, int)) or str(raw_asset).strip() == "":
             raise TrainingDatasetError(f"row_metadata {idx}번째 행에 유효한 asset_id가 누락되었습니다.")
         asset_id = str(raw_asset).strip()
 
         raw_ts = meta.get("timestamp")
-        if raw_ts is None or str(raw_ts).strip() == "":
+        if raw_ts is None or (isinstance(raw_ts, str) and raw_ts.strip() == ""):
             raise TrainingDatasetError(f"row_metadata {idx}번째 행에 유효한 timestamp가 누락되었습니다.")
         ts = _parse_timestamp(raw_ts)
 
