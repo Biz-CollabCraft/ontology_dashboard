@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EventSummary } from "../../../types";
 import {
   adaptEvent,
+  applyAssetDetailViewModel,
   buildTemplateReport,
   composeEventDetail,
   computeLineRisk,
@@ -174,5 +175,71 @@ describe("MVP adapter contract", () => {
       "relative_vibration_z",
       "relative_vibration_zone",
     ]);
+  });
+
+  it("uses AssetDetailViewModel criticality context and review priority without frontend fallback", () => {
+    const baseEvent = adaptEvent({
+      ...event,
+      equipment: { ...event.equipment, criticality: undefined },
+    } as never);
+    const detail = composeEventDetail({ event: baseEvent, evidence: null, report: null, activity: null });
+    const enriched = applyAssetDetailViewModel(detail, {
+      asset: {
+        asset_id: "CNC-001",
+        asset_type: "cnc",
+        observed_at: "2026-08-06T03:00:00Z",
+        criticality: null,
+        criticality_basis: [],
+        criticality_source: "unknown",
+      },
+      risk: {
+        current: 0.92,
+        threshold: 0.65,
+        status_grade: "critical",
+        prediction_horizon_hours: 24,
+      },
+      risk_series: [],
+      features: [],
+      maintenance_context: {
+        last_maintenance_days_ago: null,
+        similar_events_30d: null,
+        open_work_order_exists: null,
+      },
+      operation_context: {
+        load_level: null,
+        runtime_hours_7d: null,
+        production_impact: null,
+      },
+      review_priority: null,
+      evidence: {
+        artifact_id: "RESULT#CNC-001",
+        model_version: "model-1",
+        dataset_version: "dsv-canonical-v3-1",
+        source_kind: "runtime_inference",
+        gaps: [
+          {
+            field: "asset.criticality",
+            reason: "criticality_missing_or_unresolved",
+            owner_domain: "equipment",
+          },
+          {
+            field: "review_priority",
+            reason: "review_priority_inputs_missing_or_unresolved",
+            owner_domain: "report",
+          },
+        ],
+      },
+      data_status: {
+        source: "canonical",
+        is_stale: null,
+        is_data_quality_hold: false,
+        warnings: [],
+      },
+    });
+
+    expect(enriched.event.criticality).toBeNull();
+    expect(enriched.assetCriticality).toBeNull();
+    expect(enriched.reviewPriority).toBeNull();
+    expect(enriched.warnings.join(" ")).toContain("asset.criticality");
   });
 });
