@@ -257,7 +257,11 @@ type AssetDetailViewModel = {
     key: string
     label: string
     unit: string
-    current: number | null
+    current: {
+      observed_at: string
+      value: number | null
+      quality_status: "good" | "bad" | "unknown"
+    }
     baseline?: {
       mean: number
       std: number
@@ -265,12 +269,14 @@ type AssetDetailViewModel = {
       upper: number
       reference: string
     }
-    series: Array<{
-      observed_at: string
-      value: number | null
-      quality_status?: "good" | "bad" | "unknown"
+    history: {
       source_ref?: string
-    }>
+      points: Array<{
+        observed_at: string
+        value: number | null
+        quality_status: "good" | "bad" | "unknown"
+      }>
+    }
     top_factor?: {
       rank: number
       contribution: number
@@ -343,7 +349,7 @@ risk source로 승격하지 않는다.
 | feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
 | 피쳐별 그래프 | 불가 | Backend Observation read contract + Feature Executor result | `features[].history.points=[]`와 gap 표시 |
 | 위험도 그래프 | 불가 | Backend Diagnosis Runtime Prediction History Query Contract (`pm_result_artifacts` append-only history + optional `prediction_results` detail join) | `risk_series=[]`와 gap 표시 |
-| 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
+| 범위 이탈 마커 | 불가 | feature history + baseline | history 없이 계산 금지 |
 | 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
 
 Backend Observation read contract와 Feature Executor result의 최소 규칙은 다음과 같다.
