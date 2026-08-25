@@ -699,6 +699,10 @@ class ContractVectorVerifier:
                 self._verify_training_vector(vname, vdir, result)
             elif vname.startswith("runtime-overlay-output"):
                 self._verify_runtime_overlay_output_vector(vname, vdir, result)
+            elif vname.startswith("generator-runtime-prediction"):
+                self._verify_runtime_prediction_vector(vname, vdir, result)
+
+
             else:
                 result.errors.append(
                     VerificationError(
@@ -1264,6 +1268,107 @@ class ContractVectorVerifier:
                     message=f"Sum of partition row_counts ({partition_row_sum}) does not match total_rows ({total_rows})",
                     expected=str(total_rows),
                     actual=str(partition_row_sum),
+                )
+            )
+
+    def _verify_runtime_prediction_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        req_files = [
+            vector_dir / "input" / "protocol-sample-01.jsonl",
+            vector_dir / "expected" / "prediction-results.json",
+            vector_dir / "expected" / "anomaly-signal.json",
+        ]
+        missing = [f.relative_to(vector_dir) for f in req_files if not f.is_file()]
+        if missing:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}",
+                    message=f"Missing required test vector file(s): {', '.join(str(m) for m in missing)}",
+                    expected="All required test vector files present",
+                    actual=f"Missing {missing}",
+                )
+            )
+            return
+
+        # 1. Validate prediction-results.json
+        pred_res_path = vector_dir / "expected" / "prediction-results.json"
+        pred_schema_path = self.schemas_dir / "generator-model-prediction-result.schema.json"
+        try:
+            pred_data = json.loads(pred_res_path.read_text(encoding="utf-8"))
+            if not isinstance(pred_data, list) or len(pred_data) == 0:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/prediction-results.json",
+                        message="prediction-results.json must be a non-empty list of model prediction results",
+                    )
+                )
+            elif pred_schema_path.is_file():
+                pred_schema = json.loads(pred_schema_path.read_text(encoding="utf-8"))
+                validator = jsonschema.Draft202012Validator(pred_schema)
+                for item in pred_data:
+                    validator.validate(item)
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/prediction-results.json",
+                    message=f"Failed validating prediction-results.json: {e}",
+                )
+            )
+
+        # 2. Validate anomaly-signal.json
+        signal_path = vector_dir / "expected" / "anomaly-signal.json"
+        signal_schema_path = self.schemas_dir / "generator-anomaly-signal.schema.json"
+        try:
+            signal_data = json.loads(signal_path.read_text(encoding="utf-8"))
+            if not isinstance(signal_data, dict):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/anomaly-signal.json",
+                        message="anomaly-signal.json must be a JSON object",
+                    )
+                )
+            elif signal_schema_path.is_file():
+                sig_schema = json.loads(signal_schema_path.read_text(encoding="utf-8"))
+                validator = jsonschema.Draft202012Validator(sig_schema)
+                validator.validate(signal_data)
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/anomaly-signal.json",
+                    message=f"Failed validating anomaly-signal.json: {e}",
+                )
+            )
+
+        # 3. Validate input jsonl format
+        input_path = vector_dir / "input" / "protocol-sample-01.jsonl"
+        try:
+            lines = [l.strip() for l in input_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+            if not lines:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/input/protocol-sample-01.jsonl",
+                        message="Input jsonl file is empty",
+                    )
+                )
+            else:
+                for idx, line in enumerate(lines):
+                    parsed = json.loads(line)
+                    if not isinstance(parsed, dict):
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/input/protocol-sample-01.jsonl:line {idx+1}",
+                                message=f"Line {idx+1} must be a JSON object",
+                            )
+                        )
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/input/protocol-sample-01.jsonl",
+                    message=f"Failed parsing input jsonl: {e}",
                 )
             )
 
