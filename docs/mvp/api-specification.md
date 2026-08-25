@@ -177,6 +177,24 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
     }
   ],
   "equipment_history": [],
+  "operation_context": {
+    "load_level": null,
+    "runtime_hours_7d": null,
+    "production_impact": null,
+    "context_id": "production-planning-context-v1",
+    "source_type": "synthetic_capacity_model",
+    "production_plan": {},
+    "capacity_model": {},
+    "event_impact": {}
+  },
+  "closed_loop": {
+    "work_orders": [],
+    "maintenance_actions": [],
+    "maintenance_events": [],
+    "activities": [],
+    "available_actions": [],
+    "runtime_status": null
+  },
   "evidence": {
     "artifact_id": null,
     "source_kind": "runtime_inference",
@@ -208,6 +226,11 @@ Evidence만으로 채울 수 있다고 가정하지 않는다.
 quality/status 정보를 보존한다. 화면 표시용 `number[]`만 반환하지 않는다.
 
 없는 값은 합성하지 않고 null, 빈 배열, `evidence.gaps[]`, `data_status.warnings[]`로 표현한다.
+
+`operation_context`는 optional typed section이다. Backend composer가 별도
+`operation-context` fixture/API source를 Event 관측 시각과 Project scope로 검증한 뒤
+붙인다. 이 값은 생산계획/생산영향 표시용 문맥이며 Product Result/Evidence의
+`failure_probability`, `status_grade`, `top_factors`, `recommended_action`을 변경하지 않는다.
 
 ### 4.7 Operations
 

@@ -164,6 +164,49 @@ def test_service_requires_product_result_artifact() -> None:
 
 
 def test_composer_builds_view_model_without_generator_raw_file_dependency() -> None:
+    operation_context = {
+        "context_id": "production-planning-context-v1",
+        "source_type": "synthetic_capacity_model",
+        "temporal_scope": {
+            "snapshot_id": "OPS-SNAPSHOT-2026-08-01-A-B",
+            "timezone": "Asia/Seoul",
+            "valid_from": "2026-08-01T00:00:00+09:00",
+            "valid_to": "2026-08-02T00:00:00+09:00",
+            "generated_at": "2026-08-01T00:00:00+09:00",
+        },
+        "production_plan": {
+            "plan_id": "PLAN-2026-08-01-GS-DEMO",
+            "plan_date": "2026-08-01",
+            "planned_units": 16200,
+            "product_mix": [{"variant": "M", "share": 0.3, "planned_units": 4860}],
+        },
+        "capacity_model": {
+            "active_asset_count": 80,
+            "planned_operating_hours": 16,
+            "oee": 0.846,
+            "standard_cycle_minutes_per_unit": 4.0,
+            "asset_units_per_hour": 12.69,
+            "daily_capacity_units": 16200,
+            "basis": "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준",
+        },
+        "event_impact": {
+            "event_id": "EVT-GS-002",
+            "equipment_id": "M-014",
+            "line": "가공 2라인",
+            "product_variant": "M",
+            "screen_priority": "shift_inspection",
+            "impact_status": "estimated",
+            "estimated_lost_units": 25,
+            "basis": {
+                "estimated_downtime_minutes": 120,
+                "asset_units_per_hour": 12.69,
+                "formula": "120 / 60 * 12.69",
+            },
+        },
+        "limitations": [
+            "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action."
+        ],
+    }
     payload = compose_asset_detail_view_model(
         asset={
             "asset_id": "CMP-S03-L03-01",
@@ -196,6 +239,7 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
                 "source_ref": "diagnosis-runtime-history://CMP-S03-L03-01/2026-08-01T00:00:00+09:00",
             }
         ],
+        operation_context=operation_context,
         data_status={
             "source": "canonical",
             "is_stale": False,
@@ -205,6 +249,8 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
     )
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["operation_context"]["source_type"] == "synthetic_capacity_model"
+    assert payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
     assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
     assert "features[].history.points" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
     assert "risk_series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}

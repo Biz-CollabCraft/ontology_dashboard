@@ -18,5 +18,6 @@
 - `asset-detail-view-model.schema.json`: 설비 상세 화면용 Backend composition ViewModel 후보 계약
 - `maintenance-replay-event.schema.json`: Closed-loop가 발행하는 정비 시작·완료·Overlay 재개 요청 이벤트 계약
 - `preventive-what-if.schema.json`: 합성 예방조치 Producer의 위험 상승·선행 지표·조치 전후 효과·한계 계약
+- `operation-context.schema.json`: 생산관리자 화면용 synthetic 생산계획·생산영향 fixture 계약. Product Result/Evidence 산출에는 사용하지 않는다.
 
 스키마를 변경할 때는 fixture, Pydantic model, backend tests, Gold evaluator와 TypeScript type을 함께 변경해야 한다. LLM 출력은 스키마와 grounding 검사를 모두 통과하지 못하면 폐기하고 deterministic fallback을 사용한다.
