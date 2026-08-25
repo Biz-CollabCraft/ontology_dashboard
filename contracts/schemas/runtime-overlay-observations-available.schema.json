@@ -40,7 +40,7 @@
     "observed_to": {"type": "string", "format": "date-time"},
     "storage_reference": {
       "type": "string",
-      "pattern": "^runtime_overlay/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\\.jsonl$"
+      "pattern": "^runtime_overlay/sha256-[a-f0-9]{64}\\.jsonl$"
     }
   }
 }

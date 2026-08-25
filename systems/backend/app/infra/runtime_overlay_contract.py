@@ -29,19 +29,24 @@ _MEASUREMENT_FIELDS = (
 )
 
 
-def _safe_component(value: str) -> str:
-    return "".join(
-        char
-        if (char.isascii() and char.isalnum()) or char in {"-", "_", "."}
-        else "_"
-        for char in str(value)
-    )
+def _storage_component(simulation_session_id: str, overlay_branch_id: str) -> str:
+    """Return a collision-resistant path component for a logical identity pair."""
+    identity = json.dumps(
+        [str(simulation_session_id), str(overlay_branch_id)],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    digest = hashlib.sha256(identity).hexdigest()
+    return f"sha256-{digest}"
 
 
 def expected_storage_reference(event: dict[str, Any]) -> str:
-    session = _safe_component(str(event["simulation_session_id"]))
-    branch = _safe_component(str(event["overlay_branch_id"]))
-    return (PurePosixPath("runtime_overlay") / session / f"{branch}.jsonl").as_posix()
+    component = _storage_component(
+        str(event["simulation_session_id"]),
+        str(event["overlay_branch_id"]),
+    )
+    return (PurePosixPath("runtime_overlay") / f"{component}.jsonl").as_posix()
 
 
 def resolve_storage_reference(stream_root: str | Path, event: dict[str, Any]) -> Path:
@@ -54,7 +59,15 @@ def resolve_storage_reference(stream_root: str | Path, event: dict[str, Any]) ->
             "Runtime Overlay storage_reference does not match its session/branch: "
             f"expected={expected} actual={reference.as_posix()}"
         )
-    return Path(stream_root).expanduser().joinpath(*reference.parts)
+    root = Path(stream_root).expanduser().resolve()
+    candidate = root.joinpath(*reference.parts).resolve(strict=False)
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(
+            "Runtime Overlay storage_reference must resolve inside the stream root"
+        ) from exc
+    return candidate
 
 
 def semantic_observation_sha256(payload: dict[str, Any]) -> str:
@@ -68,6 +81,7 @@ def semantic_observation_sha256(payload: dict[str, Any]) -> str:
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
+        allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 

@@ -12,6 +12,7 @@ from app.infra.live_predictive_maintenance_runtime import (
     read_complete_ticks,
     read_overlay_available_events,
 )
+from app.infra.runtime_overlay_contract import expected_storage_reference
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 
 
@@ -151,8 +152,9 @@ def test_overlay_available_outbox_is_deduplicated_by_event_id(tmp_path):
         "generated_rows": 36,
         "observed_from": "2026-08-18T05:30:00+00:00",
         "observed_to": "2026-08-18T11:20:00+00:00",
-        "storage_reference": "runtime_overlay/SESSION-1/MAINT-1_post.jsonl",
+        "storage_reference": "",
     }
+    event["storage_reference"] = expected_storage_reference(event)
     _write(
         tmp_path / "runtime_overlay/observations_available.jsonl",
         [event, event],

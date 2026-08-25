@@ -12,6 +12,7 @@
 - `ontology-planner.schema.json`: typed Object query, Board recommendation, Dashboard draft와 grounded narrative 응답
 - `export.schema.json`: organization/project/workspace 범위의 export request, snapshot과 checkpoint 계약
 - `dataset-manifest.schema.json`: Project별 dataset source, checksum, schema alias와 quality rule 계약
+- `runtime-overlay-observation.schema.json`, `runtime-overlay-observations-available.schema.json`: 정비 후 Observation과 availability 이벤트 계약. 경로 identity와 Unicode checksum의 canonical 예시는 `contracts/test-vectors/runtime-overlay-output-v1/`을 따른다.
 - `prediction-result.schema.json`: Prediction Module과 Dashboard 사이의 Evidence·Model·Action 포함 결과 계약
 - `product-result-artifact.schema.json`: Diagnosis Product Result와 추천 미생성(null/empty) 정합성 계약
 - `event-evidence-projection.schema.json`: Product Result에서 파생한 Event Evidence와 별도 운영 Decision field 계약

@@ -9,6 +9,8 @@ from jsonschema import Draft202012Validator
 
 from app.infra.live_predictive_maintenance_runtime import _read_overlay_event_rows
 from app.infra.runtime_overlay_contract import (
+    expected_storage_reference,
+    resolve_storage_reference,
     semantic_observation_sha256,
     validate_overlay_available_event,
     validate_overlay_observation,
@@ -73,7 +75,7 @@ def observation() -> dict[str, object]:
 
 
 def available_event(*, batch_rows: int = 1, generated_rows: int = 1) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "contract_version": "runtime-overlay-observations-available-v1",
         "event_type": "runtime_overlay.observations.available",
         "event_id": f"OVERLAY-AVAILABLE:MAINT-001:post:{generated_rows}",
@@ -89,8 +91,10 @@ def available_event(*, batch_rows: int = 1, generated_rows: int = 1) -> dict[str
         "generated_rows": generated_rows,
         "observed_from": "2026-08-18T01:40:00+00:00",
         "observed_to": "2026-08-18T01:40:00+00:00",
-        "storage_reference": "runtime_overlay/DEMO-001/MAINT-001_post.jsonl",
+        "storage_reference": "",
     }
+    payload["storage_reference"] = expected_storage_reference(payload)
+    return payload
 
 
 def test_runtime_overlay_schemas_are_valid_draft_2020_12() -> None:
@@ -105,6 +109,41 @@ def test_runtime_overlay_schemas_are_valid_draft_2020_12() -> None:
 def test_official_runtime_overlay_payloads_pass_shape_and_semantic_validation() -> None:
     validate_overlay_observation(observation())
     validate_overlay_available_event(available_event())
+
+
+def test_unicode_contract_vector_has_the_official_canonical_checksum() -> None:
+    vector_dir = ROOT / "contracts" / "test-vectors" / "runtime-overlay-output-v1"
+    payload = json.loads(
+        (vector_dir / "observation-unicode.json").read_text(encoding="utf-8")
+    )
+    expected = (vector_dir / "expected-observation-sha256.txt").read_text(
+        encoding="utf-8"
+    ).strip()
+
+    assert semantic_observation_sha256(payload) == expected
+    assert payload["observation_sha256"] == expected
+    validate_overlay_observation(payload)
+
+    changed_generated_at = copy.deepcopy(payload)
+    changed_generated_at["generated_at"] = "2026-08-18T03:00:00+00:00"
+    assert semantic_observation_sha256(changed_generated_at) == expected
+
+
+def test_path_identity_contract_vector_matches_consumer_derivation() -> None:
+    vector_path = (
+        ROOT
+        / "contracts"
+        / "test-vectors"
+        / "runtime-overlay-output-v1"
+        / "path-identities.json"
+    )
+    vector = json.loads(vector_path.read_text(encoding="utf-8"))
+    references = []
+    for case in vector["cases"]:
+        actual = expected_storage_reference(case)
+        assert actual == case["expected_storage_reference"]
+        references.append(actual)
+    assert len(references) == len(set(references))
 
 
 def test_observation_rejects_flat_projection_or_checksum_drift() -> None:
@@ -126,9 +165,40 @@ def test_available_event_rejects_absolute_or_mismatched_storage_reference() -> N
         validate_overlay_available_event(payload)
 
     payload = available_event()
-    payload["storage_reference"] = "runtime_overlay/OTHER/MAINT-001_post.jsonl"
+    payload["storage_reference"] = "runtime_overlay/sha256-" + "0" * 64 + ".jsonl"
     with pytest.raises(ValueError, match="does not match"):
         validate_overlay_available_event(payload)
+
+
+def test_storage_reference_uses_distinct_digest_identity_for_unsafe_ids() -> None:
+    dot = available_event()
+    dot["simulation_session_id"] = "."
+    dot["overlay_branch_id"] = ".."
+    dot["storage_reference"] = expected_storage_reference(dot)
+    validate_overlay_available_event(dot)
+
+    colon = available_event()
+    colon["simulation_session_id"] = "A:B"
+    colon["storage_reference"] = expected_storage_reference(colon)
+    question = available_event()
+    question["simulation_session_id"] = "A?B"
+    question["storage_reference"] = expected_storage_reference(question)
+
+    assert colon["storage_reference"] != question["storage_reference"]
+
+
+def test_storage_reference_resolves_inside_stream_root(tmp_path: Path) -> None:
+    event = available_event()
+    resolved = resolve_storage_reference(tmp_path, event)
+    assert resolved.is_relative_to(tmp_path.resolve())
+    assert resolved == tmp_path.resolve().joinpath(
+        *Path(str(event["storage_reference"])).parts
+    )
+
+    forged = available_event()
+    forged["storage_reference"] = "runtime_overlay/../escape.jsonl"
+    with pytest.raises(ValueError, match="safe relative path"):
+        resolve_storage_reference(tmp_path, forged)
 
 
 def test_available_event_batch_is_delta_and_generated_rows_is_cumulative() -> None:
@@ -140,7 +210,7 @@ def test_available_event_batch_is_delta_and_generated_rows_is_cumulative() -> No
 def test_backend_reads_only_rows_matching_the_official_available_event(tmp_path: Path) -> None:
     payload = observation()
     event = available_event()
-    storage = tmp_path / "runtime_overlay" / "DEMO-001" / "MAINT-001_post.jsonl"
+    storage = resolve_storage_reference(tmp_path, event)
     storage.parent.mkdir(parents=True)
     storage.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 

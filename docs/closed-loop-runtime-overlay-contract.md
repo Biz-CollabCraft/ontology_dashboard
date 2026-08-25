@@ -295,7 +295,18 @@ MVP의 `TOOL_REPLACEMENT`는 다음 typed patch를 사용한다.
 `runtime-overlay-observations-available-v1`이다. `batch_rows`와 `observed_from`/`observed_to`는
 이번 이벤트가 새로 알리는 delta batch를 뜻하고, `generated_rows`는 같은 branch에서 지금까지
 생성된 누적 행 수다. `storage_reference`는 producer 로컬 절대경로가 아니라 stream root 기준
-`runtime_overlay/<safe-session>/<safe-branch>.jsonl` 상대경로만 허용한다.
+상대경로만 허용한다. 파일 경로에는 논리 ID를 치환해 직접 넣지 않는다. 대신
+`[simulation_session_id, overlay_branch_id]` 배열을 공백 없는 JSON으로 직렬화하고 Unicode를
+escape하지 않은 UTF-8 byte에 대해 lowercase SHA-256 digest를 사용한다.
+
+```text
+runtime_overlay/
+  sha256-<sha256(canonical UTF-8 identity pair)>.jsonl
+```
+
+따라서 `.`, `..`와 구두점이 포함된 논리 ID도 path segment로 해석되지 않으며 서로 다른
+ID가 replacement sanitizer 때문에 같은 파일로 합쳐지지 않는다. consumer는 이 경로를
+다시 계산하고 최종 resolved path가 stream root 내부인지 확인해야 한다.
 
 ## 10. Overlay branch와 Simulation Clock
 
@@ -376,7 +387,12 @@ Feature history와 Product Observation API는 동일 branch-aware read rule을 �
 `base_source_sha256`은 기반 Canonical Snapshot의 checksum이고,
 `observation_sha256`은 canonicalized Overlay Observation과 lineage의 무결성 값이다.
 정본 직렬화는 `generated_at`과 `observation_sha256`을 제외한 전체 payload를 key 오름차순,
-공백 없는 UTF-8 JSON으로 만든 뒤 SHA-256을 계산한다. `measurements`가 센서값의 정본이며
+공백 없는 JSON으로 직렬화하고 UTF-8 byte로 인코딩한 뒤 SHA-256을 계산한다. 문자열의
+Unicode code point는 ASCII escape로 바꾸지 않고(`ensure_ascii=false`) Unicode normalization도
+적용하지 않는다. 비유한수는 허용하지 않는다. Python 구현 기준 옵션은
+`ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False`다.
+`contracts/test-vectors/runtime-overlay-output-v1/`의 Unicode payload와 기대 SHA가 두 저장소의
+공용 byte-level 기준이다. `measurements`가 센서값의 정본이며
 Backend 호환용 최상위 센서 필드는 같은 값을 복사한 projection이므로 서로 다르면 계약
 위반이다.
 
