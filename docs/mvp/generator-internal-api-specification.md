@@ -327,7 +327,9 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 
 ### 5.7 Training 및 Model Artifact 발행 계약 (`POST /train`, `POST /train/{base_model}` — Current)
 
-검증된 Feature Dataset Bundle을 소비하여 설비·시간 기준 분할(`asset_time_split`), 모델별 학습 및 평가를 수행하고 불변 Model Artifact 패키지(6개 파일)를 원자적으로 발행합니다.
+검증된 Feature Dataset Bundle을 소비하여 설비·시간 기준 분할(`asset_time_split`), 모델별 학습 및 평가를 수행하고 불변 Model Artifact 패키지(6개 파일)를 원자적으로 발행하며 `latest.json` 포인터를 자동 갱신합니다.
+
+> **현재 계약 원칙**: `latest.json`은 검증된 Model Artifact가 정상 발행될 때마다 Generator가 자동으로 갱신하는 시스템 관리 포인터입니다. 현재 API는 사용자에 의한 버전 선택 또는 포인터 변경을 지원하지 않습니다.
 
 ```json
 // 요청 예시
@@ -336,8 +338,7 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
   "dataset_version": "canonical-ai4i-physics-v3.1",
   "feature_dataset_version": "feature-dataset-a1b2c3d4e5f67890",
   "training_config_version": "training-config-v1",
-  "model_version": "lightgbm-v1.0",
-  "activation_policy": "activate_on_success"
+  "model_version": "lightgbm-v1.0"
 }
 ```
 
@@ -358,7 +359,9 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
       "model_version": "lightgbm-v1.0",
       "status": "succeeded",
       "published": true,
+      "latest_updated": true,
       "model_artifact_uri": "models_store/artifacts/pdm-lightgbm/lightgbm-v1.0",
+      "artifact_uri": "models_store/artifacts/pdm-lightgbm/lightgbm-v1.0",
       "metrics_summary": {
         "f1": 0.8571,
         "precision": 0.8823,
@@ -390,15 +393,20 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 - **저장 디렉터리**: `models_store/artifacts/{model_id}/{model_version}/`
 - **불변성 및 Manifest 검증 보장**: 동일한 `model_id/model_version` 재발행은 `409 MODEL_ARTIFACT_CONFLICT`로 항상 차단되며, manifest의 role 및 path 중복은 `422 MODEL_ARTIFACT_VALIDATION_ERROR`로 차단됩니다.
 - **부분 성공 격리**: 전체 모델 학습(`POST /train`) 시 특정 모델의 실패는 `partially_succeeded`로 격리되어 정상 모델의 성공 아티팩트 발행을 취소하지 않습니다.
-- **Singleton `latest.json` 및 상호 배제 원자적 갱신**:
-  - `artifacts/{model_id}/.activation.lock`을 통한 non-blocking OS advisory lock으로 활성화 작업을 상호 배제합니다 (락 경합 시 `409 MODEL_ACTIVATION_IN_PROGRESS`).
-  - 아티팩트 존재 확인 $\rightarrow$ Checksum 재검증 $\rightarrow$ 동일 버전 멱등 성공 확인 $\rightarrow$ 임시 파일(`.latest.{tx_id}.tmp`) 작성 $\rightarrow$ `flush` + `fsync` $\rightarrow$ `os.replace` $\rightarrow$ 디렉터리 fsync $\rightarrow$ read-back 검증의 트랜잭션을 거쳐 안전하게 포인터를 갱신합니다.
+- **자동 최신 포인터 (`latest.json`) 관리 및 원자적 갱신**:
+  - `artifacts/{model_id}/.latest.lock`을 통한 non-blocking OS advisory lock으로 포인터 갱신 작업을 상호 배제합니다 (락 경합 시 `409 MODEL_LATEST_UPDATE_IN_PROGRESS`).
+  - 아티팩트 존재 확인 $\rightarrow$ Checksum 재검증 $\rightarrow$ 동일 버전 멱등 성공 확인 $\rightarrow$ 임시 파일(`.latest.{tx_id}.tmp`) 작성 $\rightarrow$ `flush` + `fsync` $\rightarrow$ `os.replace` $\rightarrow$ 디렉터리 fsync $\rightarrow$ read-back 재검증의 트랜잭션을 거쳐 안전하게 포인터를 갱신합니다.
+  - `activation_policy`는 deprecated 필드이며, 요청에 포함되더라도 자동 최신 포인터 갱신 동작은 건너뛰지 않습니다.
 
 ---
 
-## 6. Target Contract 예시 (후속 목표 설계)
+## 6. Target Contract 예시 (후속 목표 설계 — Issue #117)
 
-> **주의**: 본 절의 계약 내용은 후속 구현 시 적용될 **목표 계약 예시(Target Contract)**입니다.
+> **주의**: 특정 버전 조회·실행·운영 전환·rollback은 Issue #117에서 단계적으로 구현합니다. 해당 기능이 도입되기 전까지 모든 Runtime 소비자는 유효한 `latest.json`을 기본 포인터로 사용합니다.
 
-### 6.1 `POST /models/{base_model}/activate/{model_version}` (Target Contract 예시)
-기존 발행된 불변 Model Artifact 패키지의 활성화 상태를 수동으로 변경하고 `latest.json` 포인터를 원자적으로 갱신합니다.
+### 6.1 Issue #117 단계적 고도화 로드맵
+- **Phase 1 (현재 완료)**: Model Artifact 정상 발행 시 `latest.json` 자동 갱신 및 파일 락, 원자적 교체, 부분 실패 보존.
+- **Phase 2 (후속)**: 모델별 발행 버전 목록 및 최신 포인터 조회 전용 API (`GET /models`, `GET /models/{model_id}/versions`, `GET /models/{model_id}/latest`).
+- **Phase 3 (후속)**: 특정 버전 지정 일회성 실행 (기본 `latest.json` 변경 없음, 감사 로그 기록).
+- **Phase 4 (후속)**: 운영자 전용 수동 버전 전환 및 rollback 내부 API (`POST /internal/models/{model_id}/select-version`, `POST /internal/models/{model_id}/rollback`).
+- **Phase 5 (후속)**: 자동 최신 포인터(`latest.json`)와 운영 선택 포인터(`selected.json`) 역할 분리 검토.

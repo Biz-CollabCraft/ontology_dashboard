@@ -215,9 +215,13 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 - **불변성 및 원자적 발행**:
   - 동일한 `model_id/model_version` 재발행은 어떠한 경우에도 금지되며, 이미 존재할 경우 `409 ModelArtifactConflictError`를 반환합니다 (기존 아티팩트 덮어쓰기/삭제 불가).
   - 임시 디렉터리(`.tmp_{uuid}`)에서 6개 파일 생성 및 manifest 전수 검증(role/path 중복 차단 포함) 완료 후 atomic rename.
-- **Singleton `latest.json` 및 상호 배제 원자적 갱신**:
-  - `artifacts/{model_id}/.activation.lock`을 통한 모델별 non-blocking OS advisory lock을 획득합니다.
-  - 락 경합 시 즉시 `409 MODEL_ACTIVATION_IN_PROGRESS`를 반환합니다 (배치 `/train`에서는 해당 모델만 실패 격리).
-  - 아티팩트 존재 및 체크섬 재검증 $\rightarrow$ 기존 포인터 동일 여부(idempotent success) $\rightarrow$ 임시 파일(`.latest.{tx_id}.tmp`) 작성 $\rightarrow$ `flush` + `fsync` $\rightarrow$ `os.replace` $\rightarrow$ 디렉터리 fsync $\rightarrow$ read-back 검증의 원자적 트랜잭션을 거쳐 활성 버전을 갱신합니다.
-  - 응답 결과(`ModelTrainingResult`)에서 발행(`published`)과 활성화(`activated`, `activation_error_code`)를 명확히 분리합니다.
+- **자동 최신 포인터 (`latest.json`) 관리**:
+  - `latest.json`은 검증된 Model Artifact가 정상 발행될 때마다 Generator가 자동으로 갱신하는 시스템 관리 포인터입니다. 현재 API는 사용자에 의한 버전 선택 또는 포인터 변경을 지원하지 않습니다.
+  - **모델별 상호 배제 및 원자적 갱신**:
+    - `artifacts/{model_id}/.latest.lock`을 통한 모델별 non-blocking OS advisory lock을 획득합니다.
+    - 락 경합 시 즉시 `409 MODEL_LATEST_UPDATE_IN_PROGRESS`를 반환합니다 (배치 `/train`에서는 해당 모델만 실패 격리).
+    - 대상 아티팩트 검증 $\rightarrow$ 기존 포인터 일치 시 멱등 성공 $\rightarrow$ 임시 파일(`.latest.{tx_id}.tmp`) 작성 $\rightarrow$ `flush` + `fsync` $\rightarrow$ `os.replace` $\rightarrow$ 디렉터리 fsync $\rightarrow$ read-back 재검증의 원자적 트랜잭션을 거쳐 최신 포인터를 갱신합니다.
+    - 응답 모델(`ModelTrainingResult`)에서 발행(`published`)과 최신 포인터 갱신(`latest_updated`, `error_code`) 상태를 명확히 구분하여 반환합니다.
+  - **후속 계획**:
+    - 특정 버전 조회·실행·운영 전환·rollback은 Issue #117에서 단계적으로 구현합니다. 해당 기능이 도입되기 전까지 모든 Runtime 소비자는 유효한 `latest.json`을 기본 포인터로 사용합니다.
 - **동기 실행**: `/train` 및 `/train/{base_model}` 엔드포인트는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.

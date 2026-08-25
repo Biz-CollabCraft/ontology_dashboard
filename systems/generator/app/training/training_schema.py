@@ -25,9 +25,9 @@ class TrainingRequest(BaseModel):
         default=None,
         description="Optional explicit model version. Auto-generated if omitted.",
     )
-    activation_policy: Literal["activate_on_success", "publish_only"] = Field(
-        default="activate_on_success",
-        description="Model activation policy upon training success",
+    activation_policy: Literal["activate_on_success", "publish_only"] | None = Field(
+        default=None,
+        description="Deprecated: Model Artifact publication always automatically updates latest.json upon success.",
     )
 
     @field_validator(
@@ -58,9 +58,11 @@ class ModelTrainingResult(BaseModel):
     base_model: str
     model_id: str
     model_version: str
-    status: Literal["succeeded", "failed", "skipped"]
+    status: Literal["succeeded", "failed", "skipped", "partially_succeeded"]
     published: bool = False
+    latest_updated: bool = False
     model_artifact_uri: str | None = None
+    artifact_uri: str | None = None
     metrics_summary: dict[str, float] | None = None
     activated: bool = False
     activation_error_code: str | None = None

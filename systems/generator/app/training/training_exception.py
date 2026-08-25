@@ -95,10 +95,10 @@ class ModelArtifactPublishError(TrainingError):
 
 
 class ModelActivationInProgressError(TrainingError):
-    """Raised when an activation lock for the model_id cannot be acquired."""
+    """Raised when an update lock for the model_id cannot be acquired."""
 
     status_code = 409
-    code = "MODEL_ACTIVATION_IN_PROGRESS"
+    code = "MODEL_LATEST_UPDATE_IN_PROGRESS"
 
 
 class ModelActivationTargetNotFoundError(TrainingError):

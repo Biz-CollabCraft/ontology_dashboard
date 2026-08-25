@@ -319,6 +319,7 @@ class TrainingService:
                     activation_policy=req.activation_policy,
                 )
 
+                logical_uri = self.artifact_publisher.get_logical_uri(artifact_dir)
                 results.append(
                     ModelTrainingResult(
                         base_model=base_model,
@@ -326,9 +327,13 @@ class TrainingService:
                         model_version=model_ver,
                         status="succeeded",
                         published=True,
-                        model_artifact_uri=self.artifact_publisher.get_logical_uri(artifact_dir),
+                        latest_updated=True,
+                        model_artifact_uri=logical_uri,
+                        artifact_uri=logical_uri,
                         metrics_summary=trained.metrics,
-                        activated=(req.activation_policy == "activate_on_success"),
+                        activated=True,
+                        activation_error_code=None,
+                        error_code=None,
                     )
                 )
                 logger.info(f"[TrainingService] Model {base_model} succeeded: f1={trained.metrics.get('f1', 0.0):.4f}")
@@ -339,6 +344,15 @@ class TrainingService:
                 if target_model is not None:
                     raise
 
+                # Check if artifact was published before pointer error
+                target_art_dir = self.artifact_publisher.get_artifact_dir(model_id, model_ver)
+                is_published = target_art_dir.is_dir() and (target_art_dir / "manifest.json").is_file()
+                logical_art_uri = self.artifact_publisher.get_logical_uri(target_art_dir) if is_published else None
+
+                err_code = getattr(exc, "code", type(exc).__name__)
+                if is_published:
+                    err_code = "LATEST_POINTER_UPDATE_FAILED"
+
                 # For full train, isolate error and mark model as failed
                 results.append(
                     ModelTrainingResult(
@@ -346,11 +360,14 @@ class TrainingService:
                         model_id=model_id,
                         model_version=model_ver,
                         status="failed",
-                        published=False,
-                        model_artifact_uri=None,
+                        published=is_published,
+                        latest_updated=False,
+                        model_artifact_uri=logical_art_uri,
+                        artifact_uri=logical_art_uri,
                         metrics_summary=None,
                         activated=False,
-                        error_code=type(exc).__name__,
+                        activation_error_code=err_code if is_published else None,
+                        error_code=err_code,
                     )
                 )
 

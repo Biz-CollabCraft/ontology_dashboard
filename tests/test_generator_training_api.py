@@ -457,7 +457,7 @@ def test_train_conflict_existing_model_version_always_returns_409(test_setup):
 
 
 def test_train_activation_policy_publish_only(test_setup):
-    """Test publish_only creates artifact but does not update latest.json pointer."""
+    """Test that deprecated activation_policy='publish_only' still automatically updates latest.json upon publish."""
     client = test_setup["client"]
     dataset_id = test_setup["dataset_id"]
     dataset_ver = test_setup["dataset_version"]
@@ -477,8 +477,12 @@ def test_train_activation_policy_publish_only(test_setup):
     }
     resp = client.post("/train/random_forest", json=req_payload)
     assert resp.status_code == 200
-    assert resp.json()["results"][0]["activated"] is False
-    assert not pointer_file.exists()
+    res = resp.json()["results"][0]
+    assert res["published"] is True
+    assert res["latest_updated"] is True
+    assert pointer_file.exists()
+    assert json.loads(pointer_file.read_text(encoding="utf-8"))["model_version"] == "publish-only-v1"
+
 
 
 def test_train_endpoint_is_synchronous():
@@ -810,13 +814,13 @@ def test_manifest_duplicate_roles_and_paths_rejected(tmp_path):
 
 
 def test_activation_lock_concurrency_returns_409(test_setup, tmp_path):
-    """Test that concurrent activation on the same model_id returns 409 MODEL_ACTIVATION_IN_PROGRESS."""
+    """Test that concurrent lock on the same model_id returns 409 MODEL_LATEST_UPDATE_IN_PROGRESS."""
     from systems.generator.model.publisher import ModelActivationLock
     from systems.generator.app.training.training_exception import ModelActivationInProgressError
 
     models_store = getattr(PATHS, "models_store", Path("models_store"))
     model_id = "pdm-lightgbm"
-    lock_file = models_store / "artifacts" / model_id / ".activation.lock"
+    lock_file = models_store / "artifacts" / model_id / ".latest.lock"
     lock_file.parent.mkdir(parents=True, exist_ok=True)
 
     client = test_setup["client"]
@@ -834,4 +838,80 @@ def test_activation_lock_concurrency_returns_409(test_setup, tmp_path):
             "model_version": "lock-test-v1",
         })
         assert resp.status_code == 409
-        assert resp.json()["error"]["code"] == "MODEL_ACTIVATION_IN_PROGRESS"
+        assert resp.json()["error"]["code"] == "MODEL_LATEST_UPDATE_IN_PROGRESS"
+
+
+def test_auto_latest_pointer_created_on_publish(test_setup):
+    """Test that latest.json is automatically created and updated upon artifact publish."""
+    client = test_setup["client"]
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "auto-latest-v1",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["results"][0]["published"] is True
+    assert data["results"][0]["latest_updated"] is True
+
+    latest_file = models_store / "artifacts" / "pdm-lightgbm" / "latest.json"
+    assert latest_file.is_file()
+    pointer_data = json.loads(latest_file.read_text(encoding="utf-8"))
+    assert pointer_data["model_version"] == "auto-latest-v1"
+    assert pointer_data["model_id"] == "pdm-lightgbm"
+    assert "artifact_uri" in pointer_data
+
+
+def test_cannot_skip_latest_pointer_update_with_publish_only(test_setup):
+    """Test that passing activation_policy='publish_only' still auto-updates latest.json (user cannot skip)."""
+    client = test_setup["client"]
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+
+    resp = client.post("/train/lightgbm", json={
+        "dataset_id": test_setup["dataset_id"],
+        "dataset_version": test_setup["dataset_version"],
+        "feature_dataset_version": test_setup["feature_dataset_version"],
+        "model_version": "auto-latest-v2",
+        "activation_policy": "publish_only",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["results"][0]["published"] is True
+    assert data["results"][0]["latest_updated"] is True
+
+    latest_file = models_store / "artifacts" / "pdm-lightgbm" / "latest.json"
+    assert latest_file.is_file()
+    pointer_data = json.loads(latest_file.read_text(encoding="utf-8"))
+    assert pointer_data["model_version"] == "auto-latest-v2"
+
+
+def test_parallel_locks_on_different_models_do_not_block_each_other(test_setup):
+    """Test that holding lock on model A (xgboost) does not block training/publishing model B (lightgbm)."""
+    from systems.generator.model.publisher import ModelActivationLock
+
+    models_store = getattr(PATHS, "models_store", Path("models_store"))
+    xgb_lock_file = models_store / "artifacts" / "pdm-xgboost" / ".latest.lock"
+    xgb_lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+    client = test_setup["client"]
+    with ModelActivationLock(xgb_lock_file, model_id="pdm-xgboost"):
+        # Training lightgbm should succeed without blocking
+        resp = client.post("/train/lightgbm", json={
+            "dataset_id": test_setup["dataset_id"],
+            "dataset_version": test_setup["dataset_version"],
+            "feature_dataset_version": test_setup["feature_dataset_version"],
+            "model_version": "lgb-parallel-v1",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["results"][0]["published"] is True
+        assert resp.json()["results"][0]["latest_updated"] is True
+
+
+def test_public_version_selection_api_does_not_exist(test_setup):
+    """Test that manual version selection or rollback public APIs do not exist in current PR."""
+    client = test_setup["client"]
+    resp = client.post("/models/pdm-lightgbm/select-version", json={"model_version": "v1"})
+    assert resp.status_code in (404, 405)
