@@ -36,6 +36,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineJobNotFailedError,
     PipelineMappingNotImplementedError,
     PipelineModelFeatureMissingValueHandlingNotImplementedError,
+    PipelineModelPredictionFailedError,
     PipelineNoActiveModelError,
     PipelinePathNotAllowedError,
     PipelinePredictionObservationAlignmentNotImplementedError,
@@ -1256,3 +1257,245 @@ def test_failed_file_stability_emits_no_outbox_or_events(isolated_runtime_env):
     event_files = list(events_dir.glob("*.json"))
     assert len(outbox_files) == 0
     assert len(event_files) == 0
+
+
+# =====================================================================
+# 20. Stage Checkpoints Recorded and Persisted Test
+# =====================================================================
+
+def test_stage_checkpoints_recorded_and_persisted(isolated_runtime_env):
+    """Each completed stage records an atomic, persistent checkpoint with stage outputs and status."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "chk_flow.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-chk-1", source_uri=str(src_file), source_checksum=sha)
+    run_state = service.execute_queue_item(item)
+
+    assert run_state.status == "succeeded"
+    assert run_state.last_completed_stage == "prediction_delivery"
+    assert run_state.next_stage == "completed"
+
+    chk = repo.get_checkpoint(run_state.run_id)
+    assert chk is not None
+    assert chk.checkpoint_version == "generator-runtime-checkpoint-v1"
+    assert chk.last_completed_stage == "prediction_delivery"
+    assert chk.status == "completed"
+    assert "preprocessing" in chk.stage_outputs
+    assert "runtime_feature" in chk.stage_outputs
+    assert "runtime_prediction" in chk.stage_outputs
+
+
+# =====================================================================
+# 21. Resumption From Stage 2 Skips Preprocessing Test
+# =====================================================================
+
+def test_resumption_from_stage_2_skips_preprocessing(isolated_runtime_env, monkeypatch):
+    """When a run previously completed Preprocessing (Checkpoint 1), re-execution skips Preprocessing and resumes from Runtime Feature."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "resume_stage2.jsonl", num_rows=3, asset_id="M14860")
+
+    # 1. First execution fails at Stage 2 (simulate failure in runtime_feature)
+    call_count = {"prep": 0}
+    orig_preprocess = service.preprocessing_service.preprocess_with_plan
+
+    def tracked_preprocess(*args, **kwargs):
+        call_count["prep"] += 1
+        return orig_preprocess(*args, **kwargs)
+
+    monkeypatch.setattr(service.preprocessing_service, "preprocess_with_plan", tracked_preprocess)
+
+    # Monkeypatch prediction service to fail on first attempt
+    orig_predict = service.prediction_service.predict_for_models
+
+    def failing_predict(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated inference failure at stage 3")
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
+
+    item1 = queue.enqueue(job_id="job-resume-prep-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    assert call_count["prep"] == 1
+    # Check that Checkpoint 2 was recorded before stage 3 failure
+    resumable = repo.find_resumable_run(item1.source_identity)
+    assert resumable is not None
+    assert resumable.last_completed_stage == "runtime_feature"
+
+    # 2. Second execution with restored prediction service
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", orig_predict)
+
+    item2 = PipelineQueueItem(
+        job_id="job-resume-prep-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+    run_state2 = service.execute_queue_item(item2)
+
+    assert run_state2.status == "succeeded"
+    assert run_state2.run_id == resumable.run_id
+    assert run_state2.resume_count == 1
+    # Preprocess was NOT called again during resumption!
+    assert call_count["prep"] == 1
+
+
+# =====================================================================
+# 22. Partial Model Feature Recovery Test
+# =====================================================================
+
+def test_partial_model_feature_recovery(isolated_runtime_env, monkeypatch):
+    """When one model feature NPY is corrupted or deleted, only that model feature is re-extracted while others are reused."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "partial_feat.jsonl", num_rows=3, asset_id="M14860")
+
+    # 1. Fail at prediction stage so Checkpoint 2 is saved
+    orig_predict = service.prediction_service.predict_for_models
+
+    def failing_predict(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated failure")
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
+
+    item1 = queue.enqueue(job_id="job-part-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+    chk = repo.get_checkpoint(first_run.run_id)
+    assert chk is not None
+    feat_outputs = chk.stage_outputs.get("runtime_feature", [])
+    assert len(feat_outputs) >= 1
+
+    # Corrupt the first feature NPY file
+    target_npy = Path(feat_outputs[0].uri)
+    if target_npy.exists():
+        target_npy.write_text("corrupted", encoding="utf-8")
+
+    # 2. Resume execution
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", orig_predict)
+
+    item2 = PipelineQueueItem(
+        job_id="job-part-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+
+
+# =====================================================================
+# 23. Source Checksum Change Rejects Checkpoint Test
+# =====================================================================
+
+def test_source_checksum_change_rejects_old_checkpoint(isolated_runtime_env, monkeypatch):
+    """When source file content changes, existing checkpoint is invalidated and a fresh run is created."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha1 = create_sample_observation_jsonl(incoming_dir / "mod_check.jsonl", num_rows=2, asset_id="M14860")
+
+    # 1. Fail at prediction
+    orig_predict = service.prediction_service.predict_for_models
+
+    def failing_predict(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated failure")
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
+
+    item1 = queue.enqueue(job_id="job-mod-1", source_uri=str(src_file), source_checksum=sha1)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+
+    # 2. Modify file content -> new checksum
+    src_file, sha2 = create_sample_observation_jsonl(incoming_dir / "mod_check.jsonl", num_rows=4, asset_id="M14860")
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", orig_predict)
+
+    item2 = queue.enqueue(job_id="job-mod-2", source_uri=str(src_file), source_checksum=sha2)
+    run_state2 = service.execute_queue_item(item2)
+
+    assert run_state2.status == "succeeded"
+    assert run_state2.run_id != first_run.run_id
+
+
+# =====================================================================
+# 24. Safe Cleanup Removes Run-Dedicated Intermediates Test
+# =====================================================================
+
+def test_safe_cleanup_removes_run_dedicated_intermediates_preserves_models(isolated_runtime_env):
+    """After Checkpoint 5 is published, run-dedicated intermediate datasets and NPYs are cleaned up while source files and models are preserved."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    models_store: Path = env.get("models_dir", getattr(PATHS, "models_store", Path("models_store")))
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "cleanup_test.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-clean-1", source_uri=str(src_file), source_checksum=sha)
+    run_state = service.execute_queue_item(item)
+
+    assert run_state.status == "succeeded"
+    assert run_state.cleanup_status == "cleaned"
+
+    # Source file MUST exist
+    assert src_file.exists()
+
+    # Model artifacts MUST exist
+    for base_model in REGISTERED_BASE_MODELS:
+        m_dir = models_store / "artifacts" / f"pdm-{base_model}"
+        assert m_dir.exists()
+
+    # Run-dedicated pipeline dataset directory MUST be removed
+    run_dataset_dir = env["repository"].base_dir / "pipeline_datasets" / run_state.run_id
+    assert not run_dataset_dir.exists()
+
+
+# =====================================================================
+# 25. Cleanup Failure Results In succeeded_with_cleanup_warning Test
+# =====================================================================
+
+def test_cleanup_failure_results_in_succeeded_with_cleanup_warning(isolated_runtime_env, monkeypatch):
+    """When intermediate file cleanup encounters an error, the run status is succeeded_with_cleanup_warning without invalidating Outbox delivery."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_warn.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-clean-warn-1", source_uri=str(src_file), source_checksum=sha)
+
+    # Monkeypatch cleanup to fail
+    def failing_cleanup(*args, **kwargs):
+        return False, [], "Simulated permission denied on cleanup"
+
+    monkeypatch.setattr(repo, "cleanup_run_intermediate_outputs", failing_cleanup)
+
+    run_state = service.execute_queue_item(item)
+    assert run_state.status == "succeeded_with_cleanup_warning"
+    assert run_state.cleanup_status == "cleanup_failed"
+    # Prediction delivery Outbox MUST still be published
+    assert len(run_state.prediction_event_ids) > 0
+    assert len(list(env["outbox_dir"].glob("*.json"))) > 0

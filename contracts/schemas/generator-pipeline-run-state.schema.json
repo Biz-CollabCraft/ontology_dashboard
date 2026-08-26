@@ -17,7 +17,7 @@
     "job_id": { "type": "string", "minLength": 1 },
     "status": {
       "type": "string",
-      "enum": ["pending", "queued", "running", "succeeded", "partially_succeeded", "failed"]
+      "enum": ["pending", "queued", "running", "succeeded", "succeeded_with_cleanup_warning", "partially_succeeded", "failed"]
     },
     "current_stage": { "type": ["string", "null"] },
     "source_ref": {
@@ -151,7 +151,21 @@
         },
         "additionalProperties": false
       }
-    }
+    },
+    "last_completed_stage": { "type": ["string", "null"] },
+    "next_stage": { "type": ["string", "null"] },
+    "resume_count": { "type": "integer", "minimum": 0 },
+    "resumed_from_stage": { "type": ["string", "null"] },
+    "checkpoint_status": {
+      "type": ["string", "null"],
+      "enum": ["resumable", "debug_only", "cleanup_pending", "completed", "invalidated", null]
+    },
+    "cleanup_status": {
+      "type": ["string", "null"],
+      "enum": ["not_started", "cleanup_pending", "cleaned", "cleanup_failed", "cleanup_skipped", null]
+    },
+    "intermediate_outputs": { "type": "array" },
+    "checkpoint": { "type": ["object", "null"] }
   },
   "additionalProperties": false
 }

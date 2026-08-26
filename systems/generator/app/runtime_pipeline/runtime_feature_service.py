@@ -233,6 +233,7 @@ class RuntimeFeatureService:
         time_column: Optional[str] = None,
         dataset_id: str = "canonical-ai4i-v1",
         dataset_version: str = "canonical-ai4i-physics-v3.1",
+        run_id: Optional[str] = None,
     ) -> tuple[RuntimeFeatureBundle, ArtifactReference]:
         """Compute runtime feature matrix with equipment-isolated timeseries and publish npy artifact."""
         if preprocessed_df.empty:
@@ -409,15 +410,26 @@ class RuntimeFeatureService:
         )
 
         # 7. Atomic persistence
-        artifact_ref = self._persist_feature_artifact(bundle)
+        artifact_ref = self._persist_feature_artifact(bundle, model_id=model_id, run_id=run_id)
         return bundle, artifact_ref
 
-    def _persist_feature_artifact(self, bundle: RuntimeFeatureBundle) -> ArtifactReference:
+    def _persist_feature_artifact(
+        self,
+        bundle: RuntimeFeatureBundle,
+        model_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+    ) -> ArtifactReference:
         """Atomically persist features array as .npy file and return ArtifactReference."""
-        target_filename = f"{bundle.runtime_feature_version}.npy"
-        target_path = self.cache_dir / target_filename
+        target_dir = self.cache_dir
+        if run_id:
+            target_dir = self.cache_dir / run_id
+            target_dir.mkdir(parents=True, exist_ok=True)
 
-        tmp_path = self.cache_dir / f".tmp_{uuid.uuid4().hex}_{target_filename}"
+        prefix = f"{model_id}_" if model_id else ""
+        target_filename = f"{prefix}{bundle.runtime_feature_version}.npy"
+        target_path = target_dir / target_filename
+
+        tmp_path = target_dir / f".tmp_{uuid.uuid4().hex}_{target_filename}"
         with open(tmp_path, "wb") as f:
             np.save(f, bundle.features)
 
@@ -434,4 +446,66 @@ class RuntimeFeatureService:
             sha256=sha256_hash,
             role="runtime_features",
             size_bytes=size_bytes,
+        )
+
+    def load_bundle_from_artifact(
+        self,
+        artifact_ref: ArtifactReference,
+        preprocessed_df: pd.DataFrame,
+        feature_schema_dict: dict[str, Any],
+        id_column: Optional[str] = None,
+        time_column: Optional[str] = None,
+        dataset_id: str = "canonical-ai4i-v1",
+        dataset_version: str = "canonical-ai4i-physics-v3.1",
+    ) -> RuntimeFeatureBundle:
+        """Reconstruct RuntimeFeatureBundle from a validated on-disk NPY file and preprocessed_df."""
+        npy_path = Path(artifact_ref.uri)
+        if not npy_path.exists() or not npy_path.is_file():
+            raise PipelineRuntimeFeatureFailedError(f"Runtime Feature NPY 파일이 존재하지 않습니다: {npy_path}")
+
+        actual_sha = compute_file_sha256(npy_path)
+        if actual_sha != artifact_ref.sha256:
+            raise PipelineRuntimeFeatureFailedError(
+                f"Runtime Feature NPY 파일 체크섬 불일치: 기대={artifact_ref.sha256}, 실제={actual_sha}"
+            )
+
+        features_matrix = np.load(npy_path)
+
+        id_col, time_col = self._resolve_id_and_time_columns(preprocessed_df, id_column, time_column)
+        df_sorted = preprocessed_df.copy()
+        if time_col and time_col in df_sorted.columns:
+            converted_ts = pd.to_datetime(df_sorted[time_col], utc=True)
+            df_sorted[time_col] = converted_ts.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            df_sorted = df_sorted.sort_values(by=[id_col, time_col], kind="stable")
+        else:
+            df_sorted = df_sorted.sort_values(by=[id_col], kind="stable")
+
+        schema_spec = self.schema_provider.parse_schema_dict(feature_schema_dict)
+        feature_cols = [item.feature_name for item in schema_spec.features]
+
+        row_metadata: list[RuntimeFeatureRowMetadata] = []
+        for idx in range(len(df_sorted)):
+            row = df_sorted.iloc[idx]
+            asset_val = str(row.get(id_col))
+            ts_val = str(row.get(time_col)) if time_col else ""
+            row_metadata.append(
+                RuntimeFeatureRowMetadata(
+                    row_index=idx,
+                    asset_id=asset_val,
+                    observed_at=ts_val,
+                )
+            )
+
+        feat_hash = hashlib.sha256(features_matrix.tobytes()).hexdigest()[:16]
+        runtime_feature_version = f"runtime-feat-{feat_hash}"
+
+        return RuntimeFeatureBundle(
+            features=features_matrix,
+            feature_columns=feature_cols,
+            row_metadata=row_metadata,
+            runtime_feature_version=runtime_feature_version,
+            feature_schema_version=schema_spec.schema_version,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            asset_history_status={},
         )

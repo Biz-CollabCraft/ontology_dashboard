@@ -131,6 +131,46 @@ class PredictionDeliveryEventState(BaseModel):
     updated_at: str = Field(default_factory=now_utc_iso, description="ISO update timestamp")
 
 
+class PipelineCheckpoint(BaseModel):
+    """State checkpoint recorded at end of each stage for resumption."""
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_version: str = Field("generator-runtime-checkpoint-v1", description="Checkpoint schema version")
+    run_id: str = Field(..., description="Run identifier")
+    job_id: str = Field(..., description="Job identifier")
+    source_identity: str = Field(..., description="Source identity SHA-256")
+    source_uri: str = Field(..., description="Source file relative or logical URI")
+    source_checksum: str = Field(..., description="Source file SHA-256")
+    source_size_bytes: Optional[int] = Field(None, description="Source file size in bytes")
+    dataset_id: str = Field(..., description="Dataset ID")
+    dataset_version: str = Field(..., description="Dataset version")
+    pipeline_contract_version: str = Field("generator-prediction-result-v1", description="Pipeline contract version")
+    last_completed_stage: Optional[Literal[
+        "source_validated",
+        "preprocessing",
+        "runtime_feature",
+        "runtime_prediction",
+        "batch_building",
+        "prediction_delivery"
+    ]] = Field(None, description="Last completed stage name")
+    next_stage: Optional[Literal[
+        "preprocessing",
+        "runtime_feature",
+        "runtime_prediction",
+        "batch_building",
+        "prediction_delivery",
+        "completed"
+    ]] = Field(None, description="Next stage to execute")
+    status: Literal["resumable", "debug_only", "cleanup_pending", "completed", "invalidated"] = Field(
+        "resumable", description="Checkpoint lifecycle status"
+    )
+    created_at: str = Field(default_factory=now_utc_iso, description="Created timestamp")
+    updated_at: str = Field(default_factory=now_utc_iso, description="Updated timestamp")
+    stage_outputs: dict[str, list[ArtifactReference]] = Field(default_factory=dict, description="Validated output artifact references by stage")
+    model_snapshot: dict[str, dict[str, Any]] = Field(default_factory=dict, description="Active model versions, manifest checksums and schemas")
+    errors: list[PipelineError] = Field(default_factory=list, description="Historical error list")
+
+
 class PipelineRunState(BaseModel):
     """Complete execution record for a single pipeline run."""
     model_config = ConfigDict(extra="forbid")
@@ -142,6 +182,7 @@ class PipelineRunState(BaseModel):
         "queued",
         "running",
         "succeeded",
+        "succeeded_with_cleanup_warning",
         "partially_succeeded",
         "failed",
     ] = Field("pending", description="Overall pipeline run status")
@@ -163,6 +204,22 @@ class PipelineRunState(BaseModel):
     started_at: Optional[str] = Field(None, description="ISO start timestamp")
     finished_at: Optional[str] = Field(None, description="ISO finish timestamp")
     errors: list[PipelineError] = Field(default_factory=list, description="List of errors occurred")
+
+    # Resumption, checkpoint, and intermediate cleanup lifecycle fields
+    last_completed_stage: Optional[str] = Field(None, description="Last completed stage name")
+    next_stage: Optional[str] = Field(None, description="Next stage to execute")
+    resume_count: int = Field(0, ge=0, description="Number of times this run was resumed")
+    resumed_from_stage: Optional[str] = Field(None, description="Stage from which this execution resumed")
+    checkpoint_status: Optional[Literal["resumable", "debug_only", "cleanup_pending", "completed", "invalidated"]] = Field(
+        None, description="Checkpoint lifecycle status"
+    )
+    cleanup_status: Optional[Literal["not_started", "cleanup_pending", "cleaned", "cleanup_failed", "cleanup_skipped"]] = Field(
+        "not_started", description="Intermediate output cleanup status"
+    )
+    intermediate_outputs: list[ArtifactReference] = Field(
+        default_factory=list, description="List of run-dedicated intermediate artifacts subject to cleanup"
+    )
+    checkpoint: Optional[PipelineCheckpoint] = Field(None, description="Current persistent stage checkpoint")
 
 
 def compute_source_identity(

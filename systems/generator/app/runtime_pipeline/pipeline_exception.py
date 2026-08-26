@@ -290,3 +290,79 @@ class PipelineDeliveryRetryExhaustedError(PipelineBaseError):
     status_code = 502
     code = "PIPELINE_DELIVERY_RETRY_EXHAUSTED"
     retryable = False
+
+
+# =====================================================================
+# 3. Checkpoint, Resumption & Intermediate Cleanup Errors
+# =====================================================================
+
+class PipelineCheckpointInvalidError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_CHECKPOINT_INVALID"
+    retryable = False
+
+
+class PipelineCheckpointIncompatibleError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_CHECKPOINT_INCOMPATIBLE"
+    retryable = False
+
+
+class PipelineCheckpointOutputMissingError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_CHECKPOINT_OUTPUT_MISSING"
+    retryable = False
+
+
+class PipelineCheckpointChecksumMismatchError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_CHECKPOINT_CHECKSUM_MISMATCH"
+    retryable = False
+
+
+class PipelineResumeNotAllowedError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_RESUME_NOT_ALLOWED"
+    retryable = False
+
+
+class PipelineResumeFailedError(PipelineBaseError):
+    status_code = 500
+    code = "PIPELINE_RESUME_FAILED"
+    retryable = False
+
+
+class PipelineIntermediateCleanupFailedError(PipelineBaseError):
+    status_code = 500
+    code = "PIPELINE_INTERMEDIATE_CLEANUP_FAILED"
+    retryable = False
+
+
+class PipelineCleanupTargetNotAllowedError(PipelineBaseError):
+    status_code = 403
+    code = "PIPELINE_CLEANUP_TARGET_NOT_ALLOWED"
+    retryable = False
+
+
+class PipelineCleanupChecksumMismatchError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_CLEANUP_CHECKSUM_MISMATCH"
+    retryable = False
+
+
+class PipelineRunAlreadyActiveError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_RUN_ALREADY_ACTIVE"
+    retryable = False
+
+
+class PipelineCheckpointLockConflictError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_CHECKPOINT_LOCK_CONFLICT"
+    retryable = False
+
+
+class PipelineCleanupInProgressError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_CLEANUP_IN_PROGRESS"
+    retryable = False

@@ -12,12 +12,16 @@ from typing import Any, Literal, Optional
 
 from systems.generator.generator_config import PATHS
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
+    PipelineCleanupTargetNotAllowedError,
+    PipelineIntermediateCleanupFailedError,
     PipelineRecoveryError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
+    ArtifactReference,
+    PipelineCheckpoint,
+    PipelineRunState,
     PredictionDeliveryEventState,
     PredictionResultBatchPayload,
-    PipelineRunState,
     now_utc_iso,
 )
 
@@ -25,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class PipelineRepository:
-    """File-based persistent repository for pipeline run states and event payloads."""
+    """File-based persistent repository for pipeline run states, checkpoints, and event payloads."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
         if base_dir is None:
@@ -35,8 +39,10 @@ class PipelineRepository:
             self.base_dir = Path(base_dir)
 
         self.runs_dir = self.base_dir / "pipeline_runs"
+        self.checkpoints_dir = self.base_dir / "pipeline_checkpoints"
         self.events_dir = self.base_dir / "pipeline_events"
         self.runs_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
         self.events_dir.mkdir(parents=True, exist_ok=True)
 
     def _atomic_write_json(self, target_path: Path, data: dict[str, Any]) -> None:
@@ -186,3 +192,135 @@ class PipelineRepository:
 
         self.save_run_state(state)
         return state
+
+    def save_checkpoint(self, checkpoint: PipelineCheckpoint) -> None:
+        """Atomically persist PipelineCheckpoint to disk."""
+        target_file = self.checkpoints_dir / f"{checkpoint.run_id}.json"
+        try:
+            self._atomic_write_json(target_file, checkpoint.model_dump())
+        except Exception as exc:
+            logger.exception(f"[PipelineRepository] Failed to save checkpoint '{checkpoint.run_id}': {exc}")
+            raise PipelineRecoveryError(f"체크포인트 저장 실패: {exc}") from exc
+
+    def get_checkpoint(self, run_id: str) -> Optional[PipelineCheckpoint]:
+        """Fetch PipelineCheckpoint by run ID."""
+        clean_id = Path(run_id).name
+        target_file = self.checkpoints_dir / f"{clean_id}.json"
+        if not target_file.is_file():
+            return None
+        try:
+            with open(target_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return PipelineCheckpoint.model_validate(data)
+        except Exception as exc:
+            logger.warning(f"[PipelineRepository] Failed to load checkpoint '{run_id}': {exc}")
+            return None
+
+    def find_resumable_run(self, source_identity: str) -> Optional[PipelineRunState]:
+        """Find the most recent resumable run state matching source_identity."""
+        runs = self.list_run_states(limit=100)
+        for r in runs:
+            # Must match source_identity (either in checkpoint or source_ref computation)
+            chk = self.get_checkpoint(r.run_id) or r.checkpoint
+            chk_identity = chk.source_identity if chk else None
+            if not chk_identity and r.source_ref:
+                # Compute default identity
+                from systems.generator.app.runtime_pipeline.pipeline_schema import compute_source_identity
+                chk_identity = compute_source_identity(r.source_ref.sha256)
+
+            if chk_identity == source_identity:
+                # Only resumable if status is running/failed/partially_succeeded and checkpoint status is resumable
+                if r.status in ("running", "failed", "partially_succeeded") and (not chk or chk.status == "resumable"):
+                    return r
+        return None
+
+    def cleanup_run_intermediate_outputs(
+        self,
+        run_id: str,
+        intermediate_refs: list[ArtifactReference],
+    ) -> tuple[bool, list[str], Optional[str]]:
+        """Safely cleanup run-dedicated intermediate artifacts.
+
+        Strict safety invariant:
+        - The target path MUST be within allowed staging/cache/preprocessed directories.
+        - The target path MUST contain `run_id` as part of its path components.
+        - Absolute root / shared directories / source files / model artifacts CANNOT be deleted.
+        """
+        clean_run_id = Path(run_id).name
+        if not clean_run_id:
+            return False, [], "Invalid empty run_id for cleanup"
+
+        deleted_paths: list[str] = []
+        errors: list[str] = []
+
+        allowed_parent_dirs = [
+            self.base_dir.resolve(),
+            (self.base_dir / "pipeline_datasets").resolve(),
+            (self.base_dir / "predictions").resolve(),
+            (getattr(PATHS, "models_store", Path("models_store")) / "cache").resolve(),
+        ]
+
+        forbidden_names = {
+            "models_store", "data", "ontology", "contracts", "systems", "tests",
+            "manifest.json", "model.joblib", "feature_schema.json", "label_schema.json",
+            "history_requirement.json", "metrics.json", "registry.json"
+        }
+
+        for ref in intermediate_refs:
+            uri_str = ref.uri
+            p = Path(uri_str)
+            if not p.is_absolute():
+                # Resolve relative to base_dir or project root
+                p = (self.base_dir / p).resolve()
+            else:
+                p = p.resolve()
+
+            # Safety Rule 1: Check forbidden names
+            if p.name in forbidden_names:
+                errors.append(f"Refusing to delete protected artifact '{p.name}' ({ref.uri})")
+                continue
+
+            # Safety Rule 2: Path must contain run_id
+            if clean_run_id not in p.parts:
+                errors.append(f"Target path does not contain run_id '{clean_run_id}': {ref.uri}")
+                continue
+
+            # Safety Rule 3: Must be inside one of allowed parents
+            is_under_allowed = False
+            for parent in allowed_parent_dirs:
+                try:
+                    p.relative_to(parent)
+                    is_under_allowed = True
+                    break
+                except ValueError:
+                    continue
+
+            if not is_under_allowed:
+                errors.append(f"Target path is outside allowed sandbox: {ref.uri}")
+                continue
+
+            # Safe to delete
+            try:
+                if p.is_file() or p.is_symlink():
+                    p.unlink()
+                    deleted_paths.append(str(p))
+                    logger.info(f"[PipelineRepository] Cleaned intermediate file '{p}'")
+                elif p.is_dir():
+                    shutil.rmtree(p)
+                    deleted_paths.append(str(p))
+                    logger.info(f"[PipelineRepository] Cleaned intermediate directory '{p}'")
+            except Exception as e:
+                errors.append(f"Failed to delete '{p}': {e}")
+
+        # Also clean empty run-dedicated directory if exists
+        run_dataset_dir = (self.base_dir / "pipeline_datasets" / clean_run_id).resolve()
+        if run_dataset_dir.is_dir():
+            try:
+                shutil.rmtree(run_dataset_dir)
+                deleted_paths.append(str(run_dataset_dir))
+            except Exception:
+                pass
+
+        if errors:
+            return False, deleted_paths, "; ".join(errors)
+        return True, deleted_paths, None

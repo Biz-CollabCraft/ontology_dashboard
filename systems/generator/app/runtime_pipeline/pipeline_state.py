@@ -11,6 +11,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
     InternalModelPredictionResult,
+    PipelineCheckpoint,
     PipelineError,
     PipelineRunState,
     StageState,
@@ -49,6 +50,14 @@ class PipelineStateManager:
             started_at=None,
             finished_at=None,
             errors=[],
+            last_completed_stage=None,
+            next_stage="preprocessing",
+            resume_count=0,
+            resumed_from_stage=None,
+            checkpoint_status="resumable",
+            cleanup_status="not_started",
+            intermediate_outputs=[],
+            checkpoint=None,
         )
         return cls(state)
 
@@ -150,6 +159,89 @@ class PipelineStateManager:
         self.state.errors.append(err)
         return stage
 
+    def record_checkpoint(
+        self,
+        *,
+        stage_name: str,
+        next_stage: Optional[str] = None,
+        stage_outputs: Optional[list[ArtifactReference]] = None,
+        model_snapshot: Optional[dict[str, Any]] = None,
+        source_identity: str = "",
+        dataset_id: str = "canonical-ai4i-v1",
+        dataset_version: str = "canonical-ai4i-physics-v3.1",
+        pipeline_contract_version: str = "generator-prediction-result-v1",
+        status: Literal["resumable", "debug_only", "cleanup_pending", "completed", "invalidated"] = "resumable",
+    ) -> PipelineCheckpoint:
+        """Atomically construct and bind a verified stage checkpoint."""
+        now = now_utc_iso()
+        existing_outputs = dict(self.state.checkpoint.stage_outputs) if self.state.checkpoint else {}
+        if stage_outputs is not None:
+            existing_outputs[stage_name] = stage_outputs
+
+        existing_snapshot = dict(self.state.checkpoint.model_snapshot) if self.state.checkpoint else {}
+        if model_snapshot is not None:
+            existing_snapshot.update(model_snapshot)
+
+        chk = PipelineCheckpoint(
+            checkpoint_version="generator-runtime-checkpoint-v1",
+            run_id=self.state.run_id,
+            job_id=self.state.job_id,
+            source_identity=source_identity or (self.state.checkpoint.source_identity if self.state.checkpoint else ""),
+            source_uri=self.state.source_ref.uri,
+            source_checksum=self.state.source_ref.sha256,
+            source_size_bytes=self.state.source_ref.size_bytes,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            pipeline_contract_version=pipeline_contract_version,
+            last_completed_stage=stage_name,  # type: ignore
+            next_stage=next_stage,  # type: ignore
+            status=status,
+            created_at=self.state.checkpoint.created_at if self.state.checkpoint else now,
+            updated_at=now,
+            stage_outputs=existing_outputs,
+            model_snapshot=existing_snapshot,
+            errors=list(self.state.errors),
+        )
+        self.state.checkpoint = chk
+        self.state.last_completed_stage = stage_name
+        self.state.next_stage = next_stage
+        self.state.checkpoint_status = status
+        return chk
+
+    def mark_resumed(self, from_stage: str) -> None:
+        """Record resumption state."""
+        self.state.resume_count += 1
+        self.state.resumed_from_stage = from_stage
+        self.state.status = "running"
+        logger.info(f"[PipelineStateManager] Run '{self.state.run_id}' resumed from stage '{from_stage}' (resume_count={self.state.resume_count})")
+
+    def register_intermediate_outputs(self, refs: list[ArtifactReference]) -> None:
+        """Register run-dedicated intermediate artifacts for lifecycle tracking & cleanup."""
+        existing_uris = {r.uri for r in self.state.intermediate_outputs}
+        for ref in refs:
+            if ref.uri not in existing_uris:
+                self.state.intermediate_outputs.append(ref)
+                existing_uris.add(ref.uri)
+
+    def mark_cleanup_pending(self) -> None:
+        self.state.cleanup_status = "cleanup_pending"
+
+    def mark_cleaned(self) -> None:
+        self.state.cleanup_status = "cleaned"
+
+    def mark_cleanup_failed(self, error_code: str, error_message: str) -> None:
+        self.state.cleanup_status = "cleanup_failed"
+        err = PipelineError(
+            code=error_code,
+            message=error_message,
+            stage="intermediate_cleanup",
+            details=[],
+            retryable=False,
+            attempt=1,
+            occurred_at=now_utc_iso(),
+        )
+        self.state.errors.append(err)
+
     def record_predictions(
         self,
         results: list[InternalModelPredictionResult],
@@ -161,7 +253,7 @@ class PipelineStateManager:
 
     def finish_run(
         self,
-        final_status: Literal["succeeded", "partially_succeeded", "failed"],
+        final_status: Literal["succeeded", "succeeded_with_cleanup_warning", "partially_succeeded", "failed"],
     ) -> None:
         self.state.status = final_status
         self.state.current_stage = None
