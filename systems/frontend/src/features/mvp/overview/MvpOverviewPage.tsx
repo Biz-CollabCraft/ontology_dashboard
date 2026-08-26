@@ -4,6 +4,7 @@ import type {
   MvpEventDetailModel,
   MvpReportTab,
   MvpRoleLens,
+  MvpSensorWindowId,
 } from "../api/mvpContracts";
 import { MvpClassicOverviewPage } from "./MvpClassicOverviewPage";
 import { MvpWorkflowOverviewPage } from "./MvpWorkflowOverviewPage";
@@ -16,10 +17,12 @@ export function MvpOverviewPage({
   detail,
   detailLoading,
   detailError,
+  sensorWindow,
   onOpenAsset,
   onPreviewAsset,
   onOpenEvent,
   onOpenReport,
+  onSensorWindowChange,
   onRefresh,
 }: {
   model: MvpBootstrapModel;
@@ -29,10 +32,12 @@ export function MvpOverviewPage({
   detail: MvpEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  sensorWindow: MvpSensorWindowId;
   onOpenAsset: (assetId: string, eventId: string | null) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onOpenEvent: (eventId: string, assetId: string) => void;
   onOpenReport: (eventId: string | null, assetId: string | null, reportTab?: MvpReportTab) => void;
+  onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onRefresh: () => void;
 }) {
   return (
@@ -53,6 +58,8 @@ export function MvpOverviewPage({
           detail={detail}
           detailLoading={detailLoading}
           detailError={detailError}
+          sensorWindow={sensorWindow}
+          onSensorWindowChange={onSensorWindowChange}
           onPreviewAsset={onPreviewAsset}
           onRefresh={onRefresh}
         />

@@ -12,6 +12,8 @@ export type MvpDecision =
   | "hold_for_data_check";
 
 export type MvpSourceMode = "canonical-runtime" | "gold-fixture-fallback";
+export type MvpSensorWindowId = "24h" | "7d" | "30d";
+export type MvpSensorWindowCoverage = "complete" | "partial" | "empty" | "unknown";
 
 export interface MvpProvenance {
   datasetId: string | null;
@@ -137,7 +139,19 @@ export interface MvpSensorValue {
   qualityStatus?: "good" | "bad" | "unknown";
   historySourceRef?: string | null;
   historyPointCount?: number;
+  historyWindow?: MvpFeatureHistoryWindow | null;
   historyPoints?: MvpFeatureHistoryPoint[];
+}
+
+export interface MvpFeatureHistoryWindow {
+  requested: MvpSensorWindowId;
+  anchorObservedAt: string | null;
+  requestedStart: string | null;
+  requestedEnd: string | null;
+  actualStart: string | null;
+  actualEnd: string | null;
+  pointCount: number;
+  coverageStatus: MvpSensorWindowCoverage;
 }
 
 export interface MvpFeatureHistoryPoint {
@@ -398,6 +412,16 @@ export interface AssetDetailViewModel {
     };
     history: {
       source_ref?: string;
+      window?: {
+        requested: MvpSensorWindowId;
+        anchor_observed_at: string | null;
+        requested_start: string | null;
+        requested_end: string | null;
+        actual_start: string | null;
+        actual_end: string | null;
+        point_count: number;
+        coverage_status: MvpSensorWindowCoverage;
+      };
       points: Array<{
         observed_at: string;
         value: number | null;

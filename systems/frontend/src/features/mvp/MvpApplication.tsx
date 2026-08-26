@@ -9,6 +9,7 @@ import type {
   MvpEventDetailModel,
   MvpReportTab,
   MvpRoleLens,
+  MvpSensorWindowId,
   MvpView,
 } from "./api/mvpContracts";
 import {
@@ -54,6 +55,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailVersion, setDetailVersion] = useState(0);
+  const [sensorWindow, setSensorWindow] = useState<MvpSensorWindowId>("24h");
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
@@ -121,6 +123,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       datasetVersionId: model.context.datasetVersionId,
       event: selectedEvent,
       role: selection.role,
+      historyWindow: sensorWindow,
       metrics: model.metrics,
     })
       .then((payload) => !cancelled && setDetail(payload))
@@ -131,7 +134,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       })
       .finally(() => !cancelled && setDetailLoading(false));
     return () => { cancelled = true; };
-  }, [detailVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role]);
+  }, [detailVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role, sensorWindow]);
 
   const openView = useCallback((view: MvpView) => {
     const patch: Parameters<typeof updateSelection>[0] = { view };
@@ -226,7 +229,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else {
-    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   return (

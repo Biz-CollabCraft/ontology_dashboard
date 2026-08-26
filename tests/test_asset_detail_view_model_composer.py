@@ -283,6 +283,50 @@ def test_composer_excludes_current_instant_across_timezone_offsets() -> None:
         feature["history"] for feature in payload["features"] if feature["key"] == "rotation_raw"
     )
     assert [point["observed_at"] for point in history["points"]] == ["2026-07-31T14:00:00Z"]
+    assert history["window"] == {
+        "requested": "24h",
+        "anchor_observed_at": "2026-07-31T15:00:00Z",
+        "requested_start": "2026-07-30T15:00:00Z",
+        "requested_end": "2026-07-31T15:00:00Z",
+        "actual_start": "2026-07-31T14:00:00Z",
+        "actual_end": "2026-07-31T14:00:00Z",
+        "point_count": 1,
+        "coverage_status": "partial",
+    }
+
+
+def test_composer_filters_feature_history_to_requested_window() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        feature_series={
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-30T14:59:59Z",
+                        "value": 1700.0,
+                        "quality_status": "good",
+                    },
+                    {
+                        "observed_at": "2026-07-31T14:00:00Z",
+                        "value": 1800.0,
+                        "quality_status": "good",
+                    },
+                ],
+            }
+        },
+        history_window="24h",
+    )
+
+    history = next(
+        feature["history"] for feature in payload["features"] if feature["key"] == "rotation_raw"
+    )
+    assert [point["observed_at"] for point in history["points"]] == ["2026-07-31T14:00:00Z"]
+    assert history["window"]["requested"] == "24h"
+    assert history["window"]["actual_start"] == "2026-07-31T14:00:00Z"
+    assert history["window"]["point_count"] == 1
+    assert history["window"]["coverage_status"] == "partial"
 
 
 def test_composer_rejects_conflicting_points_for_same_instant() -> None:

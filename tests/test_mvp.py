@@ -320,6 +320,8 @@ def test_asset_detail_view_model_keeps_current_observation_out_of_history_points
         assert observed_times == sorted(observed_times)
         assert current_observed_at not in observed_times
         assert all(set(point) == {"observed_at", "value", "quality_status"} for point in points)
+        assert feature["history"]["window"]["requested"] == "24h"
+        assert feature["history"]["window"]["point_count"] == len(points)
         if points:
             assert feature["history"]["source_ref"].startswith("observation-contract://")
 
@@ -348,6 +350,36 @@ def test_asset_detail_view_model_exposes_gs004_24h_feature_history(
         for points in feature_points.values()
         for point in points
     }
+    torque_window = next(
+        feature["history"]["window"]
+        for feature in detail_payload["features"]
+        if feature["key"] == "torque_nm"
+    )
+    assert torque_window["requested"] == "24h"
+    assert torque_window["requested_start"] == "2026-07-30T15:00:00Z"
+    assert torque_window["requested_end"] == "2026-07-31T15:00:00Z"
+    assert torque_window["actual_start"] == "2026-07-30T15:00:00Z"
+    assert torque_window["actual_end"] == "2026-07-31T14:00:00Z"
+    assert torque_window["point_count"] == 24
+    assert torque_window["coverage_status"] == "partial"
+
+
+def test_asset_detail_view_model_accepts_7d_feature_history_window(
+    client: TestClient,
+) -> None:
+    detail_view = client.get("/api/objects/CNC-S04-L02-03/detail-view?history_window=7d")
+    assert detail_view.status_code == 200
+    detail_payload = detail_view.json()
+    torque_history = next(
+        feature["history"]
+        for feature in detail_payload["features"]
+        if feature["key"] == "torque_nm"
+    )
+
+    assert torque_history["window"]["requested"] == "7d"
+    assert torque_history["window"]["requested_start"] == "2026-07-24T15:00:00Z"
+    assert torque_history["window"]["point_count"] == len(torque_history["points"])
+    assert torque_history["window"]["coverage_status"] == "partial"
 
     operation_context = detail_payload["operation_context"]
     assert operation_context["production_plan"]["planned_units"] == 16200

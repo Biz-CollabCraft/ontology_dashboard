@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
+
+DEFAULT_HISTORY_WINDOW = "24h"
+HISTORY_WINDOW_HOURS = {
+    "24h": 24,
+    "7d": 24 * 7,
+    "30d": 24 * 30,
+}
 
 FORBIDDEN_FEATURE_SOURCE_MARKERS = (
     "gen_data/",
@@ -104,6 +111,7 @@ class AssetDetailRequest:
     end: datetime
     dataset_version_id: str | None = None
     grain: str = "raw"
+    history_window: str = DEFAULT_HISTORY_WINDOW
 
 
 class AssetDetailViewModelService:
@@ -173,6 +181,7 @@ class AssetDetailViewModelService:
             runtime_prediction_history=risk_history,
             equipment_history=history,
             data_status=data_status,
+            history_window=request.history_window,
         )
 
 
@@ -186,6 +195,7 @@ def compose_asset_detail_view_model(
     operation_context: dict[str, Any] | None = None,
     closed_loop: dict[str, Any] | None = None,
     data_status: dict[str, Any] | None = None,
+    history_window: str = DEFAULT_HISTORY_WINDOW,
 ) -> dict[str, Any]:
     """Compose the candidate AssetDetailViewModel from canonical contracts.
 
@@ -195,6 +205,7 @@ def compose_asset_detail_view_model(
     """
 
     feature_series = feature_series or {}
+    normalized_history_window = _normalize_history_window(history_window)
     runtime_prediction_history = runtime_prediction_history or []
     equipment_history = equipment_history or []
     evidence_payload = result_artifact.get("evidence_payload") or {}
@@ -209,7 +220,11 @@ def compose_asset_detail_view_model(
             }
         )
 
-    features, feature_gaps = _features_from_artifact(result_artifact, feature_series)
+    features, feature_gaps = _features_from_artifact(
+        result_artifact,
+        feature_series,
+        history_window=normalized_history_window,
+    )
     gaps.extend(feature_gaps)
     if not any(feature["history"]["points"] for feature in features):
         gaps.append(
@@ -289,6 +304,8 @@ def compose_asset_detail_view_model(
 def _features_from_artifact(
     result_artifact: dict[str, Any],
     feature_series: dict[str, dict[str, Any]],
+    *,
+    history_window: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     evidence_payload = result_artifact.get("evidence_payload") or {}
     sensors = (evidence_payload.get("sensor_evidence") or {}).get("sensors") or {}
@@ -312,6 +329,7 @@ def _features_from_artifact(
             top_factor=top_factors.get(key),
             factor_evidence=factor_evidence.get(key),
             history=feature_series.get(key) or {},
+            history_window=history_window,
         )
         features.append(feature)
         if gap is not None:
@@ -376,8 +394,13 @@ def _feature(
     top_factor: dict[str, Any] | None,
     factor_evidence: dict[str, Any] | None,
     history: dict[str, Any],
+    history_window: str,
 ) -> tuple[dict[str, Any], dict[str, str] | None]:
-    checked_history = _feature_history(history, current_observed_at=current_observed_at)
+    checked_history = _feature_history(
+        history,
+        current_observed_at=current_observed_at,
+        history_window=history_window,
+    )
     basis = sensor.get("basis") or {}
     baseline = None
     gap = None
@@ -436,15 +459,18 @@ def _feature_history(
     history: dict[str, Any],
     *,
     current_observed_at: str,
+    history_window: str,
 ) -> dict[str, Any]:
     source_ref = str(history.get("source_ref") or "")
     _reject_source_ref(source_ref, forbidden=FORBIDDEN_FEATURE_SOURCE_MARKERS)
     current_instant = _timestamp_instant(current_observed_at)
+    requested_window = _normalize_history_window(history_window)
+    requested_start = current_instant - timedelta(hours=HISTORY_WINDOW_HOURS[requested_window])
     by_instant: dict[datetime, dict[str, Any]] = {}
     for point in history.get("points") or []:
         observed_at = str(point["observed_at"])
         instant = _timestamp_instant(observed_at)
-        if instant >= current_instant:
+        if instant < requested_start or instant >= current_instant:
             continue
         checked = {
             "observed_at": observed_at,
@@ -454,10 +480,54 @@ def _feature_history(
         if instant in by_instant and by_instant[instant] != checked:
             raise ValueError(f"conflicting feature history points at instant={instant.isoformat()}")
         by_instant[instant] = checked
+    instants = sorted(by_instant)
     return {
         **({"source_ref": source_ref} if source_ref else {}),
-        "points": [by_instant[instant] for instant in sorted(by_instant)],
+        "window": _feature_history_window(
+            requested_window=requested_window,
+            requested_start=requested_start,
+            requested_end=current_instant,
+            instants=instants,
+        ),
+        "points": [by_instant[instant] for instant in instants],
     }
+
+
+def _normalize_history_window(value: str) -> str:
+    if value not in HISTORY_WINDOW_HOURS:
+        raise ValueError(f"unsupported AssetDetailViewModel history_window: {value}")
+    return value
+
+
+def _feature_history_window(
+    *,
+    requested_window: str,
+    requested_start: datetime,
+    requested_end: datetime,
+    instants: list[datetime],
+) -> dict[str, Any]:
+    actual_start = instants[0] if instants else None
+    actual_end = instants[-1] if instants else None
+    if not instants:
+        coverage_status = "empty"
+    elif actual_start and actual_start <= requested_start and actual_end and actual_end >= requested_end:
+        coverage_status = "complete"
+    else:
+        coverage_status = "partial"
+    return {
+        "requested": requested_window,
+        "anchor_observed_at": _format_utc_instant(requested_end),
+        "requested_start": _format_utc_instant(requested_start),
+        "requested_end": _format_utc_instant(requested_end),
+        "actual_start": _format_utc_instant(actual_start) if actual_start else None,
+        "actual_end": _format_utc_instant(actual_end) if actual_end else None,
+        "point_count": len(instants),
+        "coverage_status": coverage_status,
+    }
+
+
+def _format_utc_instant(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _timestamp_instant(value: str) -> datetime:

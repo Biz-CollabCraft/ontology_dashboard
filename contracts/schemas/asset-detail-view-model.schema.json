@@ -99,6 +99,22 @@
             "additionalProperties": false,
             "properties": {
               "source_ref": {"type": "string"},
+              "window": {
+                "type": "object",
+                "description": "Backend-owned observation history window for the returned history points. requested_* records the selected query window, while actual_* and point_count expose the data actually available without claiming full coverage.",
+                "required": ["requested", "anchor_observed_at", "requested_start", "requested_end", "actual_start", "actual_end", "point_count", "coverage_status"],
+                "additionalProperties": false,
+                "properties": {
+                  "requested": {"enum": ["24h", "7d", "30d"]},
+                  "anchor_observed_at": {"type": ["string", "null"], "format": "date-time"},
+                  "requested_start": {"type": ["string", "null"], "format": "date-time"},
+                  "requested_end": {"type": ["string", "null"], "format": "date-time"},
+                  "actual_start": {"type": ["string", "null"], "format": "date-time"},
+                  "actual_end": {"type": ["string", "null"], "format": "date-time"},
+                  "point_count": {"type": "integer", "minimum": 0},
+                  "coverage_status": {"enum": ["complete", "partial", "empty", "unknown"]}
+                }
+              },
               "points": {
                 "type": "array",
                 "items": {

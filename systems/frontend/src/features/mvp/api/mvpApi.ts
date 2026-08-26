@@ -29,6 +29,7 @@ import type {
   MvpEventDetailModel,
   MvpMetrics,
   MvpRoleLens,
+  MvpSensorWindowId,
 } from "./mvpContracts";
 
 async function getEventActivity(eventId: string): Promise<unknown> {
@@ -51,10 +52,12 @@ async function getAssetDetailViewModel(
   projectId: string,
   assetId: string,
   datasetVersionId: string,
+  historyWindow: MvpSensorWindowId,
 ): Promise<AssetDetailViewModel> {
   const params = new URLSearchParams({
     project_id: projectId,
     dataset_version_id: datasetVersionId,
+    history_window: historyWindow,
   });
   const response = await fetch(
     `${API_BASE}/api/objects/${encodeURIComponent(assetId)}/detail-view?${params.toString()}`,
@@ -213,6 +216,7 @@ export async function loadMvpEventDetail(input: {
   datasetVersionId: string;
   event: MvpEvent;
   role: MvpRoleLens;
+  historyWindow: MvpSensorWindowId;
   metrics?: MvpMetrics;
 }): Promise<MvpEventDetailModel> {
   const predictivePromise = getPredictiveMaintenanceDashboard(input.projectId, input.workspaceId, {
@@ -225,7 +229,12 @@ export async function loadMvpEventDetail(input: {
   const evidencePromise = getEvidence(input.event.eventId);
   const reportPromise = loadLegacyReport(input.event.eventId);
   const activityPromise = getEventActivity(input.event.eventId);
-  const assetDetailPromise = getAssetDetailViewModel(input.projectId, input.event.assetId, input.datasetVersionId);
+  const assetDetailPromise = getAssetDetailViewModel(
+    input.projectId,
+    input.event.assetId,
+    input.datasetVersionId,
+    input.historyWindow,
+  );
   const [predictiveState, evidenceState, reportState, activityState, assetDetailState] = await Promise.allSettled([
     predictivePromise,
     evidencePromise,

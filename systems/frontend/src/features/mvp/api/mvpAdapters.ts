@@ -438,6 +438,16 @@ function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSe
     qualityStatus: feature.current.quality_status,
     historySourceRef: feature.history.source_ref ?? null,
     historyPointCount: feature.history.points.length,
+    historyWindow: feature.history.window ? {
+      requested: feature.history.window.requested,
+      anchorObservedAt: feature.history.window.anchor_observed_at,
+      requestedStart: feature.history.window.requested_start,
+      requestedEnd: feature.history.window.requested_end,
+      actualStart: feature.history.window.actual_start,
+      actualEnd: feature.history.window.actual_end,
+      pointCount: feature.history.window.point_count,
+      coverageStatus: feature.history.window.coverage_status,
+    } : null,
     historyPoints: feature.history.points.map((point) => ({
       observedAt: point.observed_at,
       value: point.value,

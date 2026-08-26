@@ -188,6 +188,7 @@ class ManufacturingPredictiveMaintenanceService:
         project_id: str = "manufacturing-demo-project",
         *,
         dataset_version_id: str | None = None,
+        history_window: str = "24h",
     ) -> dict[str, Any]:
         fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
         artifact = self._product_result_artifact(fixture)
@@ -205,6 +206,7 @@ class ManufacturingPredictiveMaintenanceService:
                 "last_updated_at": artifact["observed_at"],
                 "warnings": [],
             },
+            history_window=history_window,
         )
 
     def patch_equipment_state(

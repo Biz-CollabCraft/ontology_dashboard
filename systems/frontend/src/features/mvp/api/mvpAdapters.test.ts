@@ -230,6 +230,16 @@ describe("MVP adapter contract", () => {
         },
         history: {
           source_ref: "observation-series://CNC-001/tool_wear_min",
+          window: {
+            requested: "24h",
+            anchor_observed_at: "2026-08-06T03:00:00Z",
+            requested_start: "2026-08-05T03:00:00Z",
+            requested_end: "2026-08-06T03:00:00Z",
+            actual_start: "2026-08-06T02:00:00Z",
+            actual_end: "2026-08-06T02:00:00Z",
+            point_count: 1,
+            coverage_status: "partial",
+          },
           points: [{
             observed_at: "2026-08-06T02:00:00Z",
             value: 200,
@@ -323,6 +333,16 @@ describe("MVP adapter contract", () => {
       observedAt: "2026-08-06T03:00:00Z",
       historySourceRef: "observation-series://CNC-001/tool_wear_min",
       historyPointCount: 1,
+      historyWindow: {
+        requested: "24h",
+        anchorObservedAt: "2026-08-06T03:00:00Z",
+        requestedStart: "2026-08-05T03:00:00Z",
+        requestedEnd: "2026-08-06T03:00:00Z",
+        actualStart: "2026-08-06T02:00:00Z",
+        actualEnd: "2026-08-06T02:00:00Z",
+        pointCount: 1,
+        coverageStatus: "partial",
+      },
       historyPoints: [{
         observedAt: "2026-08-06T02:00:00Z",
         value: 200,

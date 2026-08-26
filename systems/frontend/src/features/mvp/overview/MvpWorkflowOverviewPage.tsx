@@ -19,8 +19,10 @@ import type {
   MvpClosedLoopSummary,
   MvpEvent,
   MvpEventDetailModel,
+  MvpFeatureHistoryWindow,
   MvpReportTab,
   MvpRoleLens,
+  MvpSensorWindowId,
 } from "../api/mvpContracts";
 import {
   DECISION_LABEL,
@@ -66,7 +68,6 @@ interface LineImpactSummary {
 
 type DrawerTab = "status" | "action";
 type FactorySlotKind = "cnc" | "compressor";
-type SensorWindowId = "24h" | "7d" | "30d";
 type WorkStatus =
   | "candidate_recommended"
   | "work_requested"
@@ -165,7 +166,7 @@ const WORK_QUEUE_COLUMNS: Array<{ id: WorkQueueColumnId; label: string; detail: 
   { id: "repredict", label: "재예측", detail: "다음 판단" },
 ];
 
-const SENSOR_WINDOW_OPTIONS: Array<{ id: SensorWindowId; label: string; hours: number }> = [
+const SENSOR_WINDOW_OPTIONS: Array<{ id: MvpSensorWindowId; label: string; hours: number }> = [
   { id: "24h", label: "24시간", hours: 24 },
   { id: "7d", label: "7일", hours: 24 * 7 },
   { id: "30d", label: "30일", hours: 24 * 30 },
@@ -302,7 +303,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function filterSeriesPoints(points: SeriesDatum[], currentObservedAt: string | null | undefined, windowId: SensorWindowId): SeriesDatum[] {
+function filterSeriesPoints(points: SeriesDatum[], currentObservedAt: string | null | undefined, windowId: MvpSensorWindowId): SeriesDatum[] {
   const selected = SENSOR_WINDOW_OPTIONS.find((option) => option.id === windowId) ?? SENSOR_WINDOW_OPTIONS[0];
   const anchor = timestampMillis(currentObservedAt)
     ?? points.map((point) => timestampMillis(point.observedAt)).filter((time): time is number => time !== null).sort((left, right) => right - left)[0]
@@ -315,8 +316,14 @@ function filterSeriesPoints(points: SeriesDatum[], currentObservedAt: string | n
   });
 }
 
-function seriesRangeLabel(points: SeriesDatum[], windowId: SensorWindowId): string {
+function seriesRangeLabel(points: SeriesDatum[], windowId: MvpSensorWindowId, window: MvpFeatureHistoryWindow | null | undefined): string {
   const selected = SENSOR_WINDOW_OPTIONS.find((option) => option.id === windowId) ?? SENSOR_WINDOW_OPTIONS[0];
+  if (window?.requested === windowId) {
+    if (window.coverageStatus === "empty" || window.pointCount === 0) return `${selected.label} 선택 · 관측 없음`;
+    if (window.coverageStatus === "partial") return `${selected.label} 선택 · 관측 이력 일부만 제공`;
+    if (window.coverageStatus === "unknown") return `${selected.label} 선택 · 관측 범위 검증 전`;
+    return `${selected.label} 선택 · 관측 이력 제공`;
+  }
   const timestamps = points.map((point) => timestampMillis(point.observedAt)).filter((time): time is number => time !== null).sort((left, right) => left - right);
   if (timestamps.length < 2) return `${selected.label} 선택 · 제공된 관측 이력 분포`;
   const hours = Math.max(1, Math.round((timestamps[timestamps.length - 1] - timestamps[0]) / (60 * 60 * 1000)));
@@ -365,6 +372,7 @@ function sensorSeries(detail: MvpEventDetailModel | null, asset: MvpAsset | null
     currentValue: sensor.value,
     currentObservedAt: sensor.observedAt,
     currentQuality: sensor.qualityStatus ?? "unknown",
+    window: sensor.historyWindow ?? null,
     points: (sensor.historyPoints ?? []).map((point) => ({
       observedAt: point.observedAt,
       value: typeof point.value === "number" && Number.isFinite(point.value) ? point.value : null,
@@ -786,6 +794,8 @@ export function MvpWorkflowOverviewPage({
   detail,
   detailLoading,
   detailError,
+  sensorWindow,
+  onSensorWindowChange,
   onPreviewAsset,
   onRefresh,
 }: {
@@ -795,6 +805,8 @@ export function MvpWorkflowOverviewPage({
   detail: MvpEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  sensorWindow: MvpSensorWindowId;
+  onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onRefresh: () => void;
 }) {
@@ -1120,7 +1132,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} onTabChange={setDetailDrawerTab} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1133,6 +1145,7 @@ function MapReportFeatureSeries({
   unit,
   points,
   windowId,
+  window,
   emptyTitle,
   emptyDetail,
   currentValue,
@@ -1142,7 +1155,8 @@ function MapReportFeatureSeries({
   title: string;
   unit: string | null;
   points: SeriesDatum[];
-  windowId: SensorWindowId;
+  windowId: MvpSensorWindowId;
+  window?: MvpFeatureHistoryWindow | null;
   emptyTitle: string;
   emptyDetail: string;
   currentValue?: number | string | boolean | null;
@@ -1217,7 +1231,7 @@ function MapReportFeatureSeries({
     <section className={primary ? "asset-series-block is-primary" : "asset-series-block"}>
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
-        <span className="asset-baseline-key"><i style={{ background: color }} />{seriesRangeLabel(visiblePoints, windowId)}</span>
+        <span className="asset-baseline-key"><i style={{ background: color }} />{seriesRangeLabel(visiblePoints, windowId, window)}</span>
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
@@ -1265,8 +1279,8 @@ function FeatureSeriesCollection({
 }: {
   title: string;
   sensors: ReturnType<typeof sensorSeries>;
-  windowId: SensorWindowId;
-  onWindowChange: (windowId: SensorWindowId) => void;
+  windowId: MvpSensorWindowId;
+  onWindowChange: (windowId: MvpSensorWindowId) => void;
   emptyTitle: string;
   emptyDetail: string;
 }) {
@@ -1299,6 +1313,7 @@ function FeatureSeriesCollection({
               unit={sensor.unit}
               points={sensor.points}
               windowId={windowId}
+              window={sensor.window}
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
               primary={PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id)}
@@ -1312,7 +1327,7 @@ function FeatureSeriesCollection({
   );
 }
 
-function DerivedMetricSlots({ sensors, windowId }: { sensors: ReturnType<typeof sensorSeries>; windowId: SensorWindowId }) {
+function DerivedMetricSlots({ sensors, windowId }: { sensors: ReturnType<typeof sensorSeries>; windowId: MvpSensorWindowId }) {
   const derivedSensors = sensors.filter((sensor) => DERIVED_FEATURE_KEYS.has(sensor.id));
   return (
     <details className="mvp-derived-metric-dropdown" aria-label="파생 지표 관측 흐름">
@@ -1326,6 +1341,7 @@ function DerivedMetricSlots({ sensors, windowId }: { sensors: ReturnType<typeof 
               unit={sensor.unit}
               points={sensor.points}
               windowId={windowId}
+              window={sensor.window}
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
               emptyTitle="관측 이력 없음"
@@ -1351,6 +1367,7 @@ function AssetPreviewPanel({
   detail,
   detailLoading,
   detailError,
+  sensorWindow,
   role,
   activeTab,
   workStatus,
@@ -1361,6 +1378,7 @@ function AssetPreviewPanel({
   workActionDisabled,
   assignee,
   onTabChange,
+  onSensorWindowChange,
   onPreviewAsset,
 }: {
   asset: MvpAsset | null;
@@ -1373,6 +1391,7 @@ function AssetPreviewPanel({
   detail: MvpEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
+  sensorWindow: MvpSensorWindowId;
   role: MvpRoleLens;
   activeTab: DrawerTab;
   workStatus: WorkStatus;
@@ -1383,11 +1402,11 @@ function AssetPreviewPanel({
   workActionDisabled: boolean;
   assignee: string;
   onTabChange: (tab: DrawerTab) => void;
+  onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
-  const [sensorWindow, setSensorWindow] = useState<SensorWindowId>("24h");
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets = factors.slice(0, 3).map((factor, index) => ({
@@ -1620,7 +1639,7 @@ function AssetPreviewPanel({
                   title="센서 관측 흐름"
                   sensors={directFeatureSnapshots}
                   windowId={sensorWindow}
-                  onWindowChange={setSensorWindow}
+                  onWindowChange={onSensorWindowChange}
                   emptyTitle="센서 이력 없음"
                   emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
                 />
