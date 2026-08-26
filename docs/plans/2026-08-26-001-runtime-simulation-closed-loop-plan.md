@@ -3,6 +3,7 @@
 Status: draft
 Date: 2026-08-26
 Base reference: PR #128 `feat(mvp): 역할별 overview와 asset detail 작업 흐름 정리`
+Evidence state: 문서-only 계획; 구현과 E2E runtime 동작은 이 PR에서 `Not Proven`
 Related:
 
 - PR #127 `Generator Runtime Prediction Result Pipeline 및 Outbox 전달 경계 구현`
@@ -13,6 +14,11 @@ Related:
 - `docs/plans/2026-08-24-001-feat-asset-detail-ui-agent-flow-plan.md`
 
 ## 1. 목적
+
+이 문서는 후속 구현 순서와 acceptance boundary를 고정하기 위한 계획 문서다. 여기의
+`완료 조건`은 앞으로 구현 PR/stack에서 충족해야 할 조건이며, 이 PR이 runtime inbox,
+Product Result append, Product API/UI live update, Closed-loop mutation, maintenance replay를
+이미 구현했다는 근거로 사용하지 않는다.
 
 PR #128은 역할별 Overview, Asset Detail Side Task View, 작업 상태 큐, Report 출력 진입을
 정리해 사용자가 "상황 -> 설비 -> 작업"으로 이동할 수 있는 read surface를 만든다.
@@ -705,7 +711,7 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 
 ## 13. Acceptance Criteria
 
-전체 계획의 완료 기준:
+후속 Integration PR/stack의 완료 기준:
 
 - live와 simulation source가 Generator Prediction Result Batch -> Backend Product Result path로 수렴한다.
 - Product Result/Evidence는 append-only이며 정비 전/후 lineage를 복원할 수 있다.
@@ -720,7 +726,9 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 
 ## 14. 권장 통합 PR 구성과 병렬 순서
 
-권장 PR 범위는 작게 쪼개진 기능 PR 나열이 아니라, 다음 3개 stack이다.
+권장 PR 범위는 작게 쪼개진 기능 PR 나열이 아니라, 다음 3개 stack이다. 단, 각 stack은
+아래 순서로 독립 claim을 닫아야 하며 이전 단계가 `Not Proven`이면 다음 단계는
+`Partially Verified` 이상으로 말하지 않는다.
 
 1. Integration PR 1: Runtime Product Loop
    - Generator Prediction Result Batch/Outbox
@@ -748,8 +756,22 @@ Integration PR 1과 2는 겹치는 계약을 `AssetDetailViewModel`, Product Res
 Maintenance API로 고정하면 병렬 진행 가능하다. Generator PR은 Product Result를 직접 만들지
 않고 Prediction Result Batch contract만 고정한다는 조건에서 병렬 진행 가능하다.
 
-이 순서는 PR #128이 만든 read surface를 깨지 않고, Generator upstream과 Backend Product Result
-gate를 병렬로 안정화한 뒤 Frontend와 Closed-loop mutation을 붙이는 흐름이다.
+실행 순서는 PR #128이 만든 read surface를 깨지 않는 방향으로 둔다.
+
+```text
+0. PR #127/#128/#129의 최신 base/head와 팀 승인 상태 확인
+1. Prediction Result Batch 최소 contract freeze
+2. Backend Prediction Inbox / Product Result 승격 gate 구현
+3. AssetDetailViewModel / Product API runtime status 노출
+4. PR #128 UI refetch/live update 연결
+5. Product Result/Evidence 기반 Closed-loop mutation 연결
+6. Maintenance replay / post-maintenance Product Result E2E
+7. Backend direct inference 제거 여부를 별도 PR에서 결정
+```
+
+Generator upstream과 Backend Product Result gate는 병렬로 안정화할 수 있지만, Frontend와
+Closed-loop는 Backend가 승격한 Product Result/Evidence와 persisted mutation response만
+소비해야 한다.
 
 ## 15. 보류 및 재검토 조건
 

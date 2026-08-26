@@ -3,12 +3,18 @@
 Status: draft
 Date: 2026-08-26
 Base: PR #128 `feat(mvp): 역할별 overview와 asset detail 작업 흐름 정리`
+Evidence state: 문서-only 제안; 구현과 E2E runtime 동작은 이 PR에서 `Not Proven`
 Reference:
 
 - PR #127 `Generator Runtime Prediction Result Pipeline 및 Outbox 전달 경계 구현`
 - Issue #99 `Maintenance Loop Prototype 검증 근거 및 이식 전 계약 Gate`
 
 ## 1. 제안 목적
+
+이 문서는 PR #128 이후의 병렬 개발 순서를 제안한다. 여기의 `완료 기준`과 E2E 문장은
+후속 구현 PR/stack에서 검증해야 할 acceptance criteria이며, 이 문서 PR이 Backend Inbox,
+Product Result append, Product API/UI live update, Closed-loop mutation, maintenance replay를
+이미 구현했다는 뜻이 아니다.
 
 PR #128은 화면을 새로 확장하는 작업이 아니라, 사용자 업무 흐름을 다음처럼 정리한 PR이다.
 
@@ -229,9 +235,10 @@ rollback path로만 기록한다.
 
 담당: Closed-loop owner
 
-Issue #99 기준으로 Inspection, Recommendation, Decision, WorkOrder, MaintenanceEvent의 기본
-상태 전이와 이식 Gate는 상당 부분 마련되어 있다. PR #128 후속에서는 이 상태를 화면이 소비할 수
-있는 read model과 mutation response로 연결하고, Maintenance replay trigger까지 end-to-end로 잇는다.
+Issue #99에는 Inspection, Recommendation, Decision, WorkOrder, MaintenanceEvent의 기본
+상태 전이와 이식 Gate가 완료/미완료로 나뉘어 기록되어 있다. 이 문서는 그 이슈의 완료 항목을
+구현 근거로 재판정하지 않으며, PR #128 후속에서는 남은 Product API/UI lineage, runtime status,
+배포형 E2E gap을 화면이 소비할 수 있는 read model과 mutation response로 연결한다.
 
 책임:
 
@@ -314,11 +321,13 @@ Track E Frontend
 초기 통합 정본은 Generator Prediction Result Batch를 Backend가 승격하는 경로로 둔다.
 
 ```text
-1. Generator Runtime Prediction으로 sensor/overlay observation -> Prediction Result Batch를 먼저 닫는다.
-2. Closed-loop는 Product Result/Evidence 기반으로 작업요청/정비/replay를 병렬 연결한다.
-3. Backend Prediction Inbox가 Batch를 검증하고 Product Result/Evidence로 승격한다.
-4. PR #128 UI는 Backend Product API/ViewModel 변화를 refetch한다.
-5. rollback 가능 상태 확인 후 기존 Backend direct inference 제거를 별도 마지막 PR로 진행한다.
+0. PR #127/#128/#129의 최신 base/head와 팀 승인 상태를 확인한다.
+1. Prediction Result Batch 최소 contract를 freeze한다.
+2. Backend Prediction Inbox가 Batch를 검증하고 Product Result/Evidence로 승격한다.
+3. PR #128 UI는 Backend Product API/ViewModel 변화를 refetch한다.
+4. Closed-loop는 Product Result/Evidence와 persisted mutation response 기반으로 작업요청/정비/replay를 연결한다.
+5. Maintenance replay -> post-maintenance Product Result E2E를 닫는다.
+6. rollback 가능 상태 확인 후 기존 Backend direct inference 제거를 별도 마지막 PR로 진행한다.
 ```
 
 ## 7. 큰 범위 구현 순서
