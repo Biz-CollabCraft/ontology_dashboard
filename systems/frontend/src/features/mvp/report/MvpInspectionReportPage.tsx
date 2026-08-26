@@ -335,14 +335,14 @@ export function MvpInspectionReportPage() {
 
         <section className="report-panel">
           <div className="panel-heading compact"><div><span>ENGINEER BLOCK</span><h2>점검 항목</h2></div></div>
-          <div className="equipment-sketch" aria-label="공기압축기 점검 위치 안내">
+          <div className="equipment-sketch" aria-label="공기압축기 설비 참고도">
             <div className="compressor-visual" aria-hidden="true">
               <span className="vibration-zone" /><span className="pipe pipe-1" /><span className="pipe pipe-2" /><span className="pipe pipe-3" /><span className="pipe pipe-4" />
               <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
               {activeReport.targets.map((target) => <mark key={target.feature} className={`callout ${inspectionLocation(target.feature).className}`}>{target.rank}</mark>)}
             </div>
             <div>
-              <strong>공기압축기 점검 위치</strong>
+              <strong>공기압축기 설비 참고도</strong>
               <ul className="sketch-legend">
                 {activeReport.targets.map((target) => {
                   const location = inspectionLocation(target.feature);

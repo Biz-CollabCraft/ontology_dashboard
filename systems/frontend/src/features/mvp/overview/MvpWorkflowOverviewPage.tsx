@@ -1605,7 +1605,7 @@ function AssetPreviewPanel({
                     <ul className="sketch-legend">
                       {inspectionTargets.length ? inspectionTargets.map((target) => (
                         <li key={target.factor.id}><b>{target.rank}</b>{fieldFactorLocation(target.factor)}: Backend 점검 위치 계약 연결 후 표시</li>
-                      )) : <li><b>!</b>점검 위치: 부품 근거 없음</li>}
+                      )) : <li><b>!</b>위치 근거: 부품 근거 없음</li>}
                     </ul>
                   </div>
                 </div>
@@ -1661,7 +1661,7 @@ function AssetPreviewPanel({
               <dl className="mvp-action-facts">
                 <div><dt>대상 설비</dt><dd>{assetDisplayName}</dd></div>
                 <div><dt>점검 항목</dt><dd>{candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : "근거 부족")}</dd></div>
-                <div><dt>점검 위치</dt><dd>{asset.cell || asset.line}</dd></div>
+                <div><dt>설비 위치</dt><dd>{asset.cell || asset.line}</dd></div>
                 <div><dt>부품</dt><dd>{displayPartLabel(asset.sparePartAvailable)}</dd></div>
                 <div><dt>데이터 품질</dt><dd>{asset.status === "data_quality_hold" ? "데이터 품질 확인 필요" : "확인 가능"}</dd></div>
                 <div><dt>작업 ID</dt><dd>{workId}</dd></div>

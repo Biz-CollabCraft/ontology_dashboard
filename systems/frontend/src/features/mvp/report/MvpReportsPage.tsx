@@ -391,7 +391,7 @@ function MvpSummaryReport({
           <div className="panel-heading compact"><div><span>MANAGER SUMMARY</span><h2>운영 판단 요약</h2></div></div>
           <div className="summary-decision-list">
             <article><strong>1. 우선순위</strong><p>위험/경고 설비를 먼저 확인하고, 생산 영향이 큰 설비는 Operations에서 결정 메모를 남깁니다.</p></article>
-            <article><strong>2. 현장 확인</strong><p>점검 요청 보고서의 설비별 센서 근거와 점검 위치를 현장 담당자에게 전달합니다.</p></article>
+            <article><strong>2. 현장 확인</strong><p>점검 요청 보고서의 설비별 센서 근거와 위치 근거 유무를 현장 담당자에게 전달합니다.</p></article>
             <article><strong>3. 데이터 품질</strong><p>품질 보류 이벤트는 위험 수치로 단정하지 않고 원천 데이터 확인 대상으로 분리합니다.</p></article>
           </div>
         </section>
