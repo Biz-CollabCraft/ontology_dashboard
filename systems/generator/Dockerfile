@@ -15,15 +15,19 @@ COPY systems/generator/requirements.txt /tmp/generator-requirements.txt
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r /tmp/generator-requirements.txt
 
-# Generator is its own deployment unit. Backend source is intentionally not
-# copied into this image; shared contracts are repository-level data only.
+# Generator remains an independent deployment unit.
+# Backend source is not copied. Only shared contract files required by
+# Generator runtime validation are copied explicitly.
 COPY systems/__init__.py /app/systems/__init__.py
 COPY systems/generator /app/systems/generator
 
+# Shared contracts consumed by Generator at runtime
+COPY contracts/schemas /app/contracts/schemas
+
 RUN groupadd --gid 10002 generator \
     && useradd --uid 10002 --gid 10002 --create-home --shell /usr/sbin/nologin generator \
-    && mkdir -p /data/source /data/preprocessed /data/ontology /data/models /artifacts /logs \
-    && chown -R 10002:10002 /data /artifacts /logs
+    && mkdir -p /app/data /app/data_preprocessed /app/ontology /app/models_store /data/source /data/preprocessed /data/ontology /data/models /artifacts /logs \
+    && chown -R 10002:10002 /app /data /artifacts /logs
 
 USER 10002
 

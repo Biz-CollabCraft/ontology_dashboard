@@ -12,6 +12,7 @@ from app.infra.live_predictive_maintenance_runtime import (
     read_complete_ticks,
     read_overlay_available_events,
 )
+from app.infra.runtime_overlay_contract import expected_storage_reference
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 
 
@@ -136,6 +137,7 @@ def test_active_overlay_asset_ids_reads_checkpoint_without_model_semantics(tmp_p
 
 def test_overlay_available_outbox_is_deduplicated_by_event_id(tmp_path):
     event = {
+        "contract_version": "runtime-overlay-observations-available-v1",
         "event_type": "runtime_overlay.observations.available",
         "event_id": "OVERLAY-AVAILABLE:MAINT-1:post:36",
         "simulation_session_id": "SESSION-1",
@@ -144,12 +146,15 @@ def test_overlay_available_outbox_is_deduplicated_by_event_id(tmp_path):
         "maintenance_event_id": "MAINT-1",
         "overlay_branch_id": "MAINT-1:post",
         "history_segment_id": "MAINT-1:post",
+        "source_kind": "maintenance_replay_overlay",
         "state_version": 3,
         "batch_rows": 36,
         "generated_rows": 36,
         "observed_from": "2026-08-18T05:30:00+00:00",
         "observed_to": "2026-08-18T11:20:00+00:00",
+        "storage_reference": "",
     }
+    event["storage_reference"] = expected_storage_reference(event)
     _write(
         tmp_path / "runtime_overlay/observations_available.jsonl",
         [event, event],

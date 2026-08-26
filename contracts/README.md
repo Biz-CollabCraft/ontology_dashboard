@@ -10,7 +10,7 @@
 
 ### `schemas/`
 여러 시스템이 공유하는 JSON Schema를 보관한다.
-기존 최상위 `schemas/` 위치의 17개 공유 JSON Schema는 `contracts/schemas/`로 물리 이전을 완료하였다.
+기존 최상위 `schemas/` 위치의 공유 JSON Schema는 `contracts/schemas/`로 물리 이전을 완료하였다.
 
 ### `openapi/`
 시스템 경계를 통과하는 공유 API 계약을 보관한다.
@@ -31,34 +31,32 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 
 현재 `contracts/`의 관리 상태는 다음과 같다.
 
-- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가 계약을 포함한 19개 공유 JSON Schema 관리
-- `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`, `backend-contract-ci.yml`), `scripts/`, `tests/` 참조 전환 완료
+- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가된 공유 JSON Schema 관리 (Training Config 및 Runtime Overlay 스키마 포함)
+- `contracts/examples/`: `generator-feature-input/` 및 `generator-training/`에 실제 검증 가능한 요청/설정 예제 관리
+- `contracts/test-vectors/`: `generator-feature-input-v1/` 및 `generator-training-v1/`에 Feature 및 Training Golden Vector 관리
+- `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`), `scripts/`, `tests/` 참조 전환 완료
 - Schema 내용 및 `$id` 식별자 무변경 보존
-- `openapi/`, `examples/`, `test-vectors/`: 향후 구체적 요구사항 확정 시 순차적으로 이식 예정
 
-## Generator 파이프라인 후속 Target 계약 후보 및 계획
+## Generator 파이프라인 계약 현황 및 후속 Target 계약 후보
 
-Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Series 생산자 확립 및 SensorRecord v2 프로토콜 정규화 작업)을 위한 후속 Target Schema 목록과 상태는 다음과 같습니다.
+Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Series 생산자 확립 및 SensorRecord v2 프로토콜 정규화 작업)을 위한 계약 목록과 상태는 다음과 같습니다.
 
-```text
-contracts/schemas/ (후속 Target 계약 후보 목록)
-├─ generator-observation.schema.json
-├─ generator-failure-event.schema.json
-├─ generator-extraction-result.schema.json
-├─ generator-preprocessing-plan.schema.json
-└─ generator-feature-series.schema.json
-```
-
-### Target 계약 상태 표
+### 계약 상태 표
 
 | 계약 | 현재 상태 | 설명 |
 |---|---|---|
+| Generator Dataset Input Manifest | **Current** | `contracts/schemas/generator-dataset-input-manifest.schema.json` (자동 검증 및 예제/테스트 벡터 존재) |
+| Generator Feature Input Golden Vector | **Current** | `contracts/test-vectors/generator-feature-input-v1/` (Multi-asset 라벨링 및 활성 고장 제외 자동 검증) |
+| Generator Training Config Schema | **Current** | `contracts/schemas/generator-training-config.schema.json` (설정 버전, 파라미터, 분할 비율 검증) |
+| Generator Training Golden Vector | **Current** | `contracts/test-vectors/generator-training-v1/` (데이터 분할 결정성 및 불변 Model Artifact 검증) |
+| Model Artifact Schema | **Current** | `contracts/schemas/model-artifact.schema.json` (6개 파일 불변 아티팩트 및 manifest 무결성 정본) |
+| Runtime Overlay Observation / Available | **Current** | `contracts/schemas/runtime-overlay-observation.schema.json`, `runtime-overlay-observations-available.schema.json`, `contracts/test-vectors/runtime-overlay-output-v1/` (정비 후 CNC Overlay, digest 경로 identity, Unicode canonical checksum) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Extraction Result Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
-| Generator Feature Series Schema | **Target — 미작성** | Feature 구현 단계에서 작성 예정 |
+| Generator Feature Series Schema | **Target — 미작성** | Feature 후속 확장 단계에서 작성 예정 |
 | Feature Dataset Bundle | **Target — 기존 Schema 재사용·확장 여부 검토 필요** | 기존 `dataset-bundle-manifest.schema.json`의 재사용 가능성을 우선 검토 |
 
 ### Target 계약 관리 원칙
@@ -77,6 +75,28 @@ contracts/schemas/ (후속 Target 계약 후보 목록)
 5. 예시 JSON과 JSON Schema 정합성 검증 (Draft 2020-12)
 6. API 모델과 Schema 필드 정합성 검증
 7. 기존 스키마와 신규 스키마의 역할 중복 검사
+
+## Verification & CI
+
+계약 자산의 무결성을 검증하기 위해 두 단계의 검증 체계를 운영합니다.
+
+### 1. 경량 정적 계약 검증 (`systems/verify_contract_vectors.py`)
+- **실행 명령**: `python systems/verify_contract_vectors.py`
+- **실행 시간**: 로컬 기준 약 1~3초 (초경량 정적 검증)
+- **검증 범위**:
+  - `contracts/schemas/**/*.schema.json` 문법, Draft 메타 스키마 유효성 및 `$id` 중복 검사
+  - `contracts/examples/`의 예제 JSON 및 Dataset Manifest 유효성
+  - `contracts/test-vectors/` 디렉터리 구조, 필수 파일 존재 여부 및 Dataset Manifest 무결성 (role, SHA-256, `size_bytes`, 경로 안전성)
+  - `expected/` 산출물 간 정적 정합성 (`feature_columns.count`, `labels` 행 수, `row_metadata` 행 수, `summary.json` 라벨/행 분포)
+  - Schema 또는 Test Vector 부재 시 성공하는 false-green 차단
+- **CI 워크플로우**: `.github/workflows/contract-vectors.yml` (Docker·DB·브라우저·LLM 없이 순수 파일/스키마 검증)
+
+### 2. Generator 런타임 및 Golden Parity 검증 (`generator-feature-runtime.yml`)
+- **검증 범위**:
+  - Generator Docker 이미지 빌드 및 컨테이너 내부 환경 구동
+  - `POST /feature` 실제 실행 및 Feature Dataset Bundle 생성
+  - 계산된 Feature, Label, Row Metadata, Summary 및 Provenance와 Golden Vector Expected 간 100% 런타임 Parity 검증
+- **역할 분담**: 정적 Schema 및 테스트 벡터 파일 무결성은 경량 CI(`contract-vectors.yml`)가 담당하고, 실제 비즈니스 로직 계산 및 Docker 런타임 검증은 런타임 CI(`generator-feature-runtime.yml`)가 담당합니다.
 
 ## Migration principle
 

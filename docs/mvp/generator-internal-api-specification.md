@@ -60,6 +60,9 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (구현 완료) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |
+| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 지정된 머신러닝 모델(`lightgbm`, `xgboost`, `random_forest`) 개별 학습 및 Model Artifact 발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 
@@ -71,10 +74,10 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
 | POST | `/extraction` | gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108) | Target — 미병합 |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 및 정본 Generator App 등록 완료 |
-| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Target — 미병합 |
-| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
-| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Target — 미병합 |
+| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 완료 |
+| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Current — 구현 완료 |
+| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
+| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
 | POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
 | GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
 
@@ -237,31 +240,191 @@ models_store/cache/preprocessing_plans/
 - **Shutdown 대기**: 프로세스 shutdown 시 현재 실행 중인 initial training worker가 정상 완료될 때까지 대기합니다.
 - **프로세스 전역 Training Lock**: startup 학습과 `POST /internal/train` 및 `POST /internal/retrain`은 동일한 process-wide training lock(`_training_lock`)을 공유합니다.
 
----
+### 5.6 Feature Dataset Bundle 계약 (`POST /feature` — Current)
 
-## 6. Target Contract 예시 (후속 목표 설계)
-
-> **주의**: 본 절의 계약 내용은 후속 구현 시 적용될 **목표 계약 예시(Target Contract)**입니다.
-
-### 6.1 `POST /feature` (Target Contract 예시)
-
-Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature 및 Label을 계산하고 불변 Feature Dataset Bundle(5개 필수 파일)을 발행합니다.
+Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature 및 Horizon Label을 계산하고 불변 Feature Dataset Bundle(5개 필수 파일)을 원자적으로 발행합니다.
 
 ```json
-// 요청 예시 (Target)
+// 요청 예시 (external_dataset 모드)
 {
   "dataset_id": "ai4i",
   "dataset_version": "canonical-ai4i-physics-v3.1",
+  "failure_source_mode": "external_dataset",
   "failure_dataset_id": "ai4i_failures",
   "failure_dataset_version": "canonical-ai4i-failures-v1",
   "preprocessing_plan_id": "pp-7c106819-cc59-46da-90dd-22c37c441ac9",
   "preprocessing_plan_version": "preprocessing-plan-a1b2c3d4e5f67890",
   "feature_schema_version": "ai4i-feature-v1",
-  "label_schema_version": "ai4i-label-v1",
-  "prediction_horizon_hours": 24,
-  "rebuild_npy": true
+  "label_schema_version": "ai4i-label-24h-v1",
+  "prediction_horizon_hours": 24
 }
 ```
 
-### 6.2 `POST /train` 및 `POST /train/{base_model}` (Target Contract 예시)
-Feature Dataset Bundle을 소비하여 Model Artifact를 발행하고 활성화 포인터를 관리합니다.
+- **Versioned Dataset 입력 경로 및 Manifest 계약**:
+  - Observation: `data/observations/{dataset_id}/{dataset_version}/` (`dataset_manifest.json`, `observations.csv` 또는 `.jsonl`)
+  - Failure: `data/failures/{dataset_id}/{dataset_version}/` (`dataset_manifest.json`, `failures.csv` 또는 `.jsonl`)
+  - `contracts/schemas/generator-dataset-input-manifest.schema.json` 검증, 단일 role(`observations`, `failures`), payload SHA-256 및 크기 검증.
+  - unversioned 파일(`data/{dataset_id}.csv` 등)의 암묵적 검색 fallback 완전 제거.
+- **Preprocessing Plan과 Observation Manifest 상호 검증**:
+  - `request.dataset_id == Plan.dataset_id == Observation Manifest.dataset_id`
+  - `request.dataset_version == Plan.dataset_version == Observation Manifest.dataset_version`
+  - `Plan.source_dataset_sha256 == Observation payload SHA-256`
+  - 불일치 시 `422 FEATURE_CONTRACT_ERROR`로 fail-closed.
+- **Failure Source 계약 (`failure_source_mode`)**:
+  - `external_dataset`: `failure_dataset_id` 및 `failure_dataset_version`이 필수이며, 파일 부재 시 Observation 데이터셋으로 대체하지 않고 즉시 `404 FEATURE_INPUT_NOT_FOUND`로 실패합니다.
+  - `embedded_observation`: Observation 내부 failure indicator 컬럼(`Machine failure` 등)을 사용하며, indicator 컬럼 부재 시 `422`로 실패합니다.
+- **계산된 Feature 의미 보존**:
+  - `lag`, `diff`, `rolling`, `ewm` 등 변환 연산 결과(`series`)에 대해 `missing_value_policy == "ffill"` 적용 시 원본 source 컬럼으로 되돌아가지 않고 계산된 series 자체를 설비 단위(`asset_id`)로 forward-fill합니다.
+- **Failure 설비 Identity 및 제외 구간 Fail-Closed**:
+  - 다중 설비 데이터셋에서 Failure 데이터셋의 asset ID 컬럼 누락, 결측치 또는 Observation에 존재하지 않는 asset ID 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`를 반환합니다.
+  - Label Schema가 선언한 `anchor` 및 `exclusion_end` 컬럼 누락, NaT 또는 `exclusion_end < anchor` 위반 시 `422`로 처리하며, `[anchor, exclusion_end]` 전체 구간을 학습 데이터에서 엄격히 제거합니다.
+- **`binary_failure_within_horizon` Feature Dataset 발행 조건 (Fail-Closed)**:
+  1. **Canonical Observation timestamp 필수**: 누락 또는 NaT 포함 시 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
+  2. **유효한 failure event 최소 1건 필수**: 외부 Failure Dataset 0행 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  3. **Active failure filtering 후 event 최소 1건 필수**: indicator 필터링 후 0건 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  4. **내장 failure event timestamp 오류 거부**: embedded indicator 행의 timestamp NaT 시 건너뛰지 않고 `422 FEATURE_LABEL_ALIGNMENT_ERROR`로 거부.
+  5. **최종 Label 클래스 `{0, 1}` 양자 공존 필수**: 최종 생존 라벨에 0과 1이 모두 존재해야 하며, 단일 클래스 시 `422 INSUFFICIENT_TRAINING_DATA`로 거부.
+  6. **설비 Identity & 제외 구간 엄격성**: 다중 설비에서 failure asset 누락/미소속 시 `422`, `anchor`/`exclusion_end` 누락, NaT, 또는 `exclusion_end < anchor` 위반 시 `422` 반환 및 `[anchor, exclusion_end]` 전체 구간 학습 데이터 제외.
+- **Asset identity requirement (Fail-Closed 501)**:
+  - `POST /feature`가 소비하는 Observation Dataset에는 Preprocessing Plan의 `id_column`으로 선언된 설비 식별 컬럼이 반드시 존재해야 합니다.
+  - 현재 파이프라인은 ID가 없는 Dataset을 자동으로 단일 설비로 간주하거나 임시 ID(`row_{idx}`, `default_asset`)를 생성하지 않습니다.
+  - Preprocessing Plan에 `id_column` 누락, Dataset 내 선언된 ID 컬럼 부재, 또는 ID 컬럼에 null/빈 문자열이 존재할 경우 `501 Not Implemented` (`code: FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED`)로 실패하며 Feature Dataset Bundle을 발행하지 않습니다.
+  - ID가 없는 단일 설비 Dataset 지원은 후속 기능으로 별도 구현합니다.
+
+```json
+// 501 FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED 응답 예시
+{
+  "error": {
+    "code": "FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED",
+    "message": "Observation Dataset에서 설비 ID를 식별할 수 없습니다. 현재 Feature 파이프라인은 Preprocessing Plan에 의해 명시된 asset ID가 필요하며, ID가 없는 단일 설비 데이터의 자동 ID 생성 기능은 아직 지원하지 않습니다.",
+    "path": "/feature",
+    "request_id": "req-17091db43b52",
+    "error_id": "err-3c819d4a",
+    "details": [
+      {
+        "required_contract": "preprocessing_plan.id_column",
+        "unsupported_case": "observation_without_asset_id",
+        "required_follow_up": "single-asset identity resolution 기능 구현"
+      }
+    ]
+  }
+}
+```
+
+- **허용되지 않는 Fallback (Prohibited Fallbacks)**:
+  - `row_{idx}`, `default_asset` 등 임시 asset ID 생성 금지
+  - Preprocessing Plan의 `id_column` 누락 시 임의 컬럼 휴리스틱 선택 금지
+  - timestamp 위치 기반 추측 금지
+  - invalid timestamp 행 조용한 건너뛰기(silent skip) 금지
+  - 빈 Failure Dataset을 정상 Dataset으로 처리 금지
+  - all-zero Label Bundle 발행 금지
+  - 단일 클래스 Label을 Training 단계로 전달 금지
+  - unversioned 파일 검색 fallback 금지
+- **5개 필수 파일 구성**: `features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json` (실제 `asset_id` 보존), `feature_metadata.json`
+- **저장 디렉터리**: `models_store/cache/features/{dataset_id}/{dataset_version}/{feature_dataset_version}/`
+- **식별자 결정론**: `feature_dataset_version`은 입력 Dataset Manifest 및 Payload SHA-256, `failure_source_mode`, Plan(ID/ver/sha), Schema(ver/sha)의 canonical fingerprint로 결정론적 산출.
+- **Ontology Mapping 배제**: Feature 단계는 Ontology Mapping을 조회하지 않고 Feature Schema allowlist/recipe만 실행합니다.
+
+### 5.7 Training 및 Model Artifact 발행 계약 (`POST /train`, `POST /train/{base_model}` — Current)
+
+검증된 Feature Dataset Bundle을 소비하여 설비·시간 기준 분할(`asset_time_split`), 모델별 학습 및 평가를 수행하고 불변 Model Artifact 패키지(6개 파일)를 원자적으로 발행하며 `latest.json` 포인터를 자동 갱신합니다.
+
+> **현재 계약 원칙**: `latest.json`은 검증된 Model Artifact가 정상 발행될 때마다 Generator가 자동으로 갱신하는 시스템 관리 포인터입니다. 현재 API는 사용자에 의한 버전 선택 또는 포인터 변경을 지원하지 않습니다.
+
+```json
+// 요청 예시
+{
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "feature_dataset_version": "feature-dataset-a1b2c3d4e5f67890",
+  "training_config_version": "training-config-v1",
+  "model_version": "lightgbm-v1.0"
+}
+```
+
+```json
+// 응답 예시
+{
+  "request_id": "req-17091db43b53",
+  "run_id": "run-a8b9c0d1e2f3",
+  "status": "succeeded",
+  "dataset_id": "ai4i",
+  "dataset_version": "canonical-ai4i-physics-v3.1",
+  "feature_dataset_version": "feature-dataset-a1b2c3d4e5f67890",
+  "training_config_version": "training-config-v1",
+  "results": [
+    {
+      "base_model": "lightgbm",
+      "model_id": "pdm-lightgbm",
+      "model_version": "lightgbm-v1.0",
+      "status": "succeeded",
+      "published": true,
+      "latest_updated": true,
+      "model_artifact_uri": "models_store/artifacts/pdm-lightgbm/lightgbm-v1.0",
+      "artifact_uri": "models_store/artifacts/pdm-lightgbm/lightgbm-v1.0",
+      "metrics_summary": {
+        "f1": 0.8571,
+        "precision": 0.8823,
+        "recall": 0.8333,
+        "accuracy": 0.9850,
+        "roc_auc": 0.9654,
+        "pr_auc": 0.8920
+      },
+      "activated": true,
+      "activation_error_code": null,
+      "error_code": null
+    }
+  ]
+}
+```
+
+- **Training Config 및 Hyperparameter 해결 계약**:
+  - `training_config_version`은 `contracts/schemas/generator-training-config.schema.json` 검증을 통과한 설정 파일과 1:1 바인딩됩니다.
+  - 설정 파일 부재 시 `404`, 스키마/버전 불일치 시 `422`로 실패하며, 설정 파일 SHA-256 및 논리 URI가 manifest provenance에 기록됩니다.
+  - 최상위 `random_seed`가 학습 시드의 유일한 단일 정본으로 사용되며, 모델별 `hyperparameters` 내부의 `random_state`, `seed`, `random_seed` 중복 선언은 정적 검증 및 런타임에서 `422 TRAINING_CONTRACT_ERROR`로 Fail-Closed 차단됩니다.
+  - Trainer의 `resolve_parameters(configured, random_seed)`를 통해 기본값보다 설정값을 우선 적용한 `resolved_parameters`가 실제 Estimator `get_params()` 및 Manifest `training_config`에 온전히 기록됩니다.
+- **Prediction Horizon 의미 계약 및 Schema 교차 검증**:
+  - Feature Bundle provenance의 `prediction_horizon_hours`는 양의 정수(`int > 0`, `bool`/`float`/`str` 불가)여야 합니다.
+  - Model Artifact staging 및 발행 전 Label Schema 스냅샷의 `prediction_horizon_hours`와 일치하는지 교차 검증하며, 불일치 시 `422 TRAINING_CONTRACT_ERROR`로 즉시 Fail-Closed 처리되어 불완전한 아티팩트 생성을 방지합니다.
+- **Feature/Label Schema 스냅샷 및 History Requirement**:
+  - 축약 없는 온전한 Feature Schema 및 Label Schema 스냅샷을 검증하여 아티팩트에 포함합니다.
+  - `history_requirement.json`은 원본 센서 필드 목록(`required_columns`)과 연산 파라미터(lag/rolling/ewm)를 반영하여 `minimum_history_rows`를 결정론적으로 산출합니다.
+- **Fail-Closed 데이터 분할 (`asset_time_split`)**:
+  - `row_metadata.json`의 모든 행에 `asset_id`와 `timestamp`가 필수이며, 결측 또는 NaT 발생 시 `422 TrainingDatasetError`로 처리합니다.
+  - 시간 분할 후 train partition에 단일 클래스만 존재할 경우 즉시 `422 TrainingDatasetError`로 Fail-Closed 처리됩니다.
+- **6개 필수 파일 구성**: `manifest.json`, `model.joblib`, `feature_schema.json`, `label_schema.json`, `history_requirement.json`, `metrics.json`
+- **저장 디렉터리**: `models_store/artifacts/{model_id}/{model_version}/`
+- **2단계 발행(Two-Phase Publication) 및 불변성 정책**:
+  - **Phase A (불변 아티팩트 원자적 발행)**: 임시 디렉터리(`.tmp_{uuid}`)에서 6개 파일 생성 및 manifest 전수 검증 완료 후 atomic rename으로 커밋합니다.
+  - **Phase B (최신 포인터 갱신)**: non-blocking OS advisory lock(`artifacts/{model_id}/.latest.lock`) 하에서 `latest.json`을 원자적으로 갱신합니다.
+  - **상태 분리 및 부분 실패 보존**: Phase B 실패 시 이미 커밋된 불변 아티팩트를 삭제하거나 rollback하지 않고 보존하며, API 응답/details에 `published=True`, `model_artifact_uri=...`, `latest_updated=False`, `latest_error_code=...`를 투명하게 기록합니다.
+  - **동일 아티팩트 멱등 복구**: 동일 입력 계약으로 재요청 시 디렉터리와 checksum이 온전히 존재하면 아티팩트 재작성을 건너뛰고 `latest.json` 갱신만 안전하게 재시도합니다. 이미 최신 포인터로 활성화된 상태라면 `409 MODEL_ARTIFACT_CONFLICT`를 반환합니다.
+- **오류 체계 및 장애 격리 정책**:
+  - 현재 Generator는 단일 인스턴스와 순차 Pipeline 실행을 기본으로 합니다. 비정상 Bundle 입력, 동일 Artifact 발행 경쟁 및 저장소 I/O 장애가 발생하면 자동 복구를 추측하지 않고 fail-closed하며, 실패 단계에 맞는 409·422·500 오류를 반환합니다.
+  - 다중 Worker·Replica의 분산 상호 배제, 저장소 장애 자동 복구, staging 잔재 정리 및 reconciliation은 Issue #117의 운영 고도화 범위로 관리합니다.
+
+| HTTP | 오류 코드 | 적용 상황 |
+|---:|---|---|
+| 422 | `FEATURE_DATASET_INTEGRITY_ERROR` | `row_metadata`가 배열이 아니거나 항목이 객체가 아님, 파일 누락/체크섬 불일치 |
+| 422 | `TRAINING_DATASET_ERROR` | timestamp 누락·파싱 실패·bool·NaN·Inf, 단일 클래스, 행 수 부족 |
+| 409 | `MODEL_ARTIFACT_CONFLICT` | 동일 Artifact 존재 또는 동시 rename 충돌 |
+| 500 | `MODEL_ARTIFACT_PUBLISH_ERROR` | Artifact staging·작성·commit I/O 실패 |
+| 409 | `MODEL_LATEST_UPDATE_IN_PROGRESS` | 실제 latest 포인터 lock 경합 |
+| 500 | `MODEL_LATEST_UPDATE_FAILED` | 포인터 파일 준비·작성·교체 I/O 실패 |
+| 500 | `MODEL_LATEST_VERIFY_FAILED` | 포인터 교체 후 read-back 불일치 |
+
+- **부분 성공 격리**: 전체 모델 학습(`POST /train`) 시 특정 모델의 실패는 `partially_succeeded`로 격리되어 정상 모델의 성공 아티팩트 발행을 취소하지 않습니다.
+
+
+---
+
+## 6. Target Contract 예시 (후속 목표 설계 — Issue #117)
+
+> **주의**: 특정 버전 조회·실행·운영 전환·rollback은 Issue #117에서 단계적으로 구현합니다. 해당 기능이 도입되기 전까지 모든 Runtime 소비자는 유효한 `latest.json`을 기본 포인터로 사용합니다.
+
+### 6.1 Issue #117 단계적 고도화 로드맵
+- **Phase 1 (현재 완료)**: Model Artifact 정상 발행 시 `latest.json` 자동 갱신 및 파일 락, 원자적 교체, 부분 실패 보존.
+- **Phase 2 (후속)**: 모델별 발행 버전 목록 및 최신 포인터 조회 전용 API (`GET /models`, `GET /models/{model_id}/versions`, `GET /models/{model_id}/latest`).
+- **Phase 3 (후속)**: 특정 버전 지정 일회성 실행 (기본 `latest.json` 변경 없음, 감사 로그 기록).
+- **Phase 4 (후속)**: 운영자 전용 수동 버전 전환 및 rollback 내부 API (`POST /internal/models/{model_id}/select-version`, `POST /internal/models/{model_id}/rollback`).
+- **Phase 5 (후속)**: 자동 최신 포인터(`latest.json`)와 운영 선택 포인터(`selected.json`) 역할 분리 검토.

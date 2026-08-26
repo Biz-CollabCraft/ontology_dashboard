@@ -223,27 +223,31 @@ Extraction
 
 ---
 
-### 4.3 3단계: Feature (Target)
-- **입력**: `Versioned Observation Dataset` + `Versioned Failure Dataset` + `Preprocessing Plan` + `Feature Schema` + `Label Schema`
+### 4.3 3단계: Feature (Current)
+- **입력**: `Versioned Observation Dataset` (Manifest 포함) + `Versioned Failure Dataset` (Manifest 포함) + `Preprocessing Plan` + `Feature Schema` + `Label Schema`
 - **처리**:
-  - 번들 재사용 전 Sensor 및 Failure 원본 파일 무결성 및 해시 전수 검증
+  - `FeatureInputResolver`를 통한 Versioned Dataset Manifest, payload SHA-256 및 크기 검증, unversioned 파일 검색 배제
+  - Preprocessing Plan과 Observation Manifest identity 및 payload SHA-256 상호 검증
+  - Preprocessing Plan의 `id_column` 필수 검증 및 Dataset 내 존재/결측치 부재 검증 (미충족 시 `501 FEATURE_ASSET_ID_RESOLUTION_NOT_IMPLEMENTED` Fail-Closed)
   - Feature Schema allowlist 및 Feature Recipe에 명시된 source field, operation, parameters 실행
-  - 설비별 시계열 피처 추출 (`build_features`), 고장 이력 기반 라벨링 (`build_labels`)
-  - 시간순 분할 메타데이터 생성 (`compute_asset_time_split_indices`, `validate_split_indices`)
+  - 설비별 시계열 피처 추출 (`missing_value_policy == "ffill"` 의미 보존), 고장 이력 기반 라벨링 (`[anchor-horizon, anchor)` 양성, `[anchor, exclusion_end]` 활성 고장 제외)
+  - `binary_failure_within_horizon`의 경우 최종 Label `{0, 1}` 양자 존재 검증
   - Feature Schema 선언 순서 유지 및 누수 컬럼 배제
-  - NPY 및 메타데이터 원자적 발행
-- **출력**: `Feature Dataset Bundle` (`features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`), `Observation/Feature series`
+  - NPY 및 메타데이터 원자적 발행 (실제 `asset_id` 보존)
+- **출력**: `Feature Dataset Bundle` (`features.npy`, `labels.npy`, `feature_columns.json`, `row_metadata.json`, `feature_metadata.json`)
 
 ---
 
-### 4.4 4단계: Training (Target)
-- **입력**: Feature Dataset Bundle
+### 4.4 4단계: Training (Current)
+- **입력**: `Feature Dataset Bundle` (5개 필수 파일) + `Training Config` (`generator-training-config.schema.json`)
 - **처리**:
-  - Feature Bundle 파일/체크섬/차원/타입 전수 검증
-  - `asset_time_split` 기반 train/val/test 시간순 분할
+  - `TrainingConfigProvider`를 통한 설정 로드, 스키마 검증, 분할 비율 및 SHA-256 검증
+  - Feature Bundle 파일/체크섬/차원/타입 전수 검증 및 Feature/Label Schema 스냅샷 보존
+  - Feature Schema 레시피로부터 원본 센서 필드 목록(`required_columns`) 및 `minimum_history_rows` 결정론적 산출
+  - `asset_time_split` 기반 설비별 시간순 분할 (설비 ID 또는 타임스탬프 결측/NaT 시 `422` fail-closed)
   - 등록 모델(`lightgbm`, `xgboost`, `random_forest`) 학습 및 지표 산출 (모델별 실패 격리)
-  - 불변 Model Artifact 패키지 발행 및 Validator 검증
-  - `activation_policy`(`latest`/`manual`)에 따른 `latest.json` 포인터 갱신 및 실패 복구 지원
+  - 6개 파일 불변 Model Artifact 패키지 발행 및 Validator 검증 (동일 버전 재발행 시 `409` 차단)
+  - `activation_policy == "activate_on_success"` 시 새 아티팩트 발행 완료 후에만 `latest.json` 포인터 원자적 갱신
 - **출력**: 불변 Model Artifact 패키지 (`model-artifact-v1.0`), 활성 모델 포인터 (`latest.json`)
 
 ---
@@ -259,9 +263,9 @@ Extraction
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어) | 후속 migration 시 호환 shim 유지 또는 정리 검토 |
 | POST | `/extraction` | Target — 미병합 | **gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108)** |
 | POST | `/preprocessing` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (신규 2단계)** |
-| POST | `/feature` | Target — 미병합 | **Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계)** |
-| POST | `/train` | Target — 미병합 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
-| POST | `/train/{base_model}` | Target — 미병합 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/feature` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계)** |
+| POST | `/train` | Current — 구현 및 정본 Generator App 등록 완료 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/train/{base_model}` | Current — 구현 및 정본 Generator App 등록 완료 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
 | POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
 | GET | `/models/{base_model}/active` | Target — 미병합 | **현재 활성화된 Model Artifact 정보 조회** |
 

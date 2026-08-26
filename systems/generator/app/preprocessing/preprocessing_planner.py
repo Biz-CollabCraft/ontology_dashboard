@@ -147,13 +147,11 @@ class PreprocessingPlanner:
                 ) from e
             stage2_fallback_reason = "llm_call_failed"
 
-        if structure_type == "tabular_row_as_attribute":
-            raise PreprocessingRoleError(
-                f"Long-format preprocessing requires explicit id, attribute, and value columns for '{filepath}'"
-            )
+        id_candidates = ["asset_id", "machineID", "Product ID", "product_id", "equipment_id", "device_id", "asset", "machine", "UDI", "udi"]
+        time_candidates = ["observed_at", "datetime", "timestamp", "time", "date"]
 
-        found_id = next((c for c in avail_cols if c in ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]), None)
-        found_time = next((c for c in avail_cols if c in ["observed_at", "datetime", "timestamp", "time", "date"]), None)
+        found_id = next((c for c in id_candidates if c in avail_cols), None)
+        found_time = next((c for c in time_candidates if c in avail_cols), None)
 
         self._last_s2_provenance = (True, stage2_fallback_reason or "column_planning_fallback")
         return {
@@ -170,18 +168,18 @@ class PreprocessingPlanner:
     def enforce_key_columns(self, selected_columns: list[str], available_columns: list[str]) -> list[str]:
         """Preserve key machine and timestamp column identifiers if present in available columns."""
         result = list(selected_columns)
-        id_candidates = ["asset_id", "machineID", "equipment_id", "device_id", "asset", "machine"]
+        id_candidates = ["asset_id", "machineID", "Product ID", "product_id", "equipment_id", "device_id", "asset", "machine", "UDI", "udi"]
         time_candidates = ["observed_at", "datetime", "timestamp", "time", "date"]
 
         has_id = any(c in result for c in id_candidates)
         if not has_id:
-            found_id = next((c for c in available_columns if c in id_candidates), None)
+            found_id = next((c for c in id_candidates if c in available_columns), None)
             if found_id and found_id not in result:
                 result.append(found_id)
 
         has_time = any(c in result for c in time_candidates)
         if not has_time:
-            found_time = next((c for c in available_columns if c in time_candidates), None)
+            found_time = next((c for c in time_candidates if c in available_columns), None)
             if found_time and found_time not in result:
                 result.append(found_time)
 
