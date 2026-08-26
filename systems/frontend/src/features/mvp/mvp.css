@@ -692,18 +692,16 @@
 .mvp-side-map-report .compressor-visual .loc-valve-tank { left: calc(var(--sketch-origin) + 399px); top: 156px; }
 .mvp-side-map-report .compressor-visual .loc-pump-base { left: calc(var(--sketch-origin) + 401px); top: 80px; }
 .mvp-side-map-report .compressor-visual .loc-motor-power { left: calc(var(--sketch-origin) + 222px); top: 122px; }
-.mvp-side-map-report .cnc-visual .cnc-risk-zone { left: calc(var(--sketch-origin) + 146px); top: 26px; width: 426px; height: 146px; border: 1px solid rgba(181,196,214,.16); background: rgba(255,255,255,.018); z-index: 0; }
+.mvp-side-map-report .cnc-visual .cnc-risk-zone { display: none; }
 .mvp-side-map-report .cnc-visual .cnc-base { left: calc(var(--sketch-origin) + 130px); top: 176px; width: 398px; height: 18px; border-radius: 3px; z-index: 2; }
 .mvp-side-map-report .cnc-visual .cnc-column { left: calc(var(--sketch-origin) + 184px); top: 50px; width: 58px; height: 112px; z-index: 2; }
 .mvp-side-map-report .cnc-visual .cnc-head { left: calc(var(--sketch-origin) + 274px); top: 48px; width: 110px; height: 38px; border-color: rgba(76,144,240,.76); z-index: 3; }
 .mvp-side-map-report .cnc-visual .cnc-tool { left: calc(var(--sketch-origin) + 310px); top: 98px; width: 40px; height: 30px; border-color: rgba(246,189,112,.76); z-index: 4; }
 .mvp-side-map-report .cnc-visual .cnc-table { left: calc(var(--sketch-origin) + 270px); top: 150px; width: 206px; height: 20px; border-radius: 4px; z-index: 3; }
 .mvp-side-map-report .cnc-visual .cnc-workpiece { left: calc(var(--sketch-origin) + 378px); top: 120px; width: 58px; height: 24px; border-color: rgba(126,211,134,.72); font-size: 9px; z-index: 4; }
-.mvp-side-map-report .cnc-visual .cnc-axis { border: 0; background: rgba(181,196,214,.62); color: transparent; padding: 0; font-size: 0; z-index: 1; }
-.mvp-side-map-report .cnc-visual .x-axis { left: calc(var(--sketch-origin) + 258px); top: 160px; width: 238px; height: 3px; opacity: .44; }
-.mvp-side-map-report .cnc-visual .z-axis { left: calc(var(--sketch-origin) + 330px); top: 86px; width: 3px; height: 64px; opacity: .44; }
-.mvp-side-map-report .cnc-visual .cnc-servo { left: calc(var(--sketch-origin) + 462px); top: 54px; width: 80px; height: 36px; border-color: rgba(236,91,98,.62); font-size: 9px; z-index: 3; }
-.mvp-side-map-report .cnc-visual .cnc-coolant { left: calc(var(--sketch-origin) + 462px); top: 112px; width: 80px; height: 30px; border-radius: 4px; font-size: 9px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-axis { display: none; }
+.mvp-side-map-report .cnc-visual .cnc-servo { left: calc(var(--sketch-origin) + 446px); top: 56px; width: 78px; height: 34px; border-color: rgba(236,91,98,.62); font-size: 9px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-coolant { left: calc(var(--sketch-origin) + 446px); top: 110px; width: 78px; height: 30px; border-radius: 4px; font-size: 9px; z-index: 3; }
 .mvp-side-map-report .cnc-visual .cnc-control { left: calc(var(--sketch-origin) + 72px); top: 120px; width: 58px; height: 40px; border-color: rgba(181,196,214,.52); font-size: 9px; z-index: 3; }
 .mvp-side-map-report .target-list { display: grid; gap: 8px; }
 .mvp-side-map-report .target-list article { min-width: 0; display: grid; grid-template-columns: 30px 30px minmax(0,1fr) auto; gap: 8px; align-items: center; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; background: rgba(255,255,255,.018); padding: 9px; }
