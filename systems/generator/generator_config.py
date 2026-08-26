@@ -120,6 +120,9 @@ class GeneratorPaths:
         backoff_env = os.getenv("GENERATOR_PIPELINE_RETRY_BACKOFF_SECONDS")
         self.pipeline_retry_backoff_seconds: float = float(backoff_env) if backoff_env else 1.0
 
+        pred_enabled_env = os.getenv("GENERATOR_RUNTIME_PREDICTION_ENABLED", "false").strip().lower()
+        self.runtime_prediction_enabled: bool = pred_enabled_env in ("true", "1", "yes")
+
     def ensure_directories(self) -> None:
         """필요 디렉토리가 존재하는지 검사하고 자동 생성한다."""
         for path in (

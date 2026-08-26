@@ -15,6 +15,9 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineDeliveryFailedError,
     PipelineDeliveryServerError,
     PipelineDeliveryTimeoutError,
+    PipelineDeliveryUnauthorizedError,
+    PipelineDeliveryUnprocessableError,
+    PipelineOutboxEventConflictError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PredictionOutboxItem,
@@ -31,22 +34,19 @@ class PredictionDeliveryService:
     def __init__(
         self,
         endpoint_url: Optional[str] = None,
-        timeout_seconds: float = 5.0,
         outbox_dir: Optional[Path] = None,
+        timeout: float = 10.0,
     ) -> None:
         self.endpoint_url = endpoint_url or os.environ.get(
-            "GENERATOR_PREDICTION_RESULT_URL",
-            "http://localhost:8000/internal/prediction-results",
+            "GENERATOR_PREDICTION_RECEIVER_URL",
+            "http://localhost:8000/api/v1/diagnosis/prediction-batches",
         )
-        self.timeout = timeout_seconds
-        if outbox_dir is None:
-            self.outbox_dir = PATHS.notification_outbox_root
-        else:
-            self.outbox_dir = Path(outbox_dir)
+        self.outbox_dir = Path(outbox_dir) if outbox_dir else PATHS.notification_outbox_root
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
+        self.timeout = timeout
 
     def save_outbox_item(self, item: PredictionOutboxItem) -> Path:
-        """Atomically persist or update PredictionOutboxItem file."""
+        """Atomic save of outbox item to outbox_dir/{event_id}.json."""
         dest_path = self.outbox_dir / f"{item.event_id}.json"
         temp_path = self.outbox_dir / f".tmp_{item.event_id}.json"
         item.updated_at = now_utc_iso()
@@ -108,26 +108,12 @@ class PredictionDeliveryService:
         canonical_json = json.dumps(d, sort_keys=True, separators=(",", ":"))
         payload_sha256 = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
-        contract_ver = (
-            payload.source_lineage.pipeline_contract_version
-            if hasattr(payload, "source_lineage") and payload.source_lineage
-            else "generator-prediction-result-v1"
-        )
-        raw_key = f"{contract_ver}:{payload.run_id}:{payload.asset_id}:{payload_sha256}"
-        event_id = f"evt-{hashlib.sha256(raw_key.encode('utf-8')).hexdigest()[:32]}"
+        key_str = f"{payload.source_lineage.pipeline_contract_version}:{payload.run_id}:{payload.asset_id}:{payload_sha256}"
+        event_id = f"evt-{hashlib.sha256(key_str.encode('utf-8')).hexdigest()[:32]}"
         return event_id, payload_sha256
 
     def register_idempotent_outbox_record(self, payload: PredictionResultBatchPayload) -> tuple[PredictionOutboxItem, str]:
-        """
-        Registers or reuses outbox record with deterministic event ID and payload sha256.
-        If event_id already exists:
-          - If payload sha256 matches: return existing item as idempotent success.
-          - If payload sha256 differs: raise PipelineOutboxEventConflictError.
-        """
-        from systems.generator.app.runtime_pipeline.pipeline_exception import (
-            PipelineOutboxEventConflictError,
-        )
-
+        """Register outbox record with deterministic event_id. Idempotently returns existing record if present."""
         event_id, payload_sha256 = self.compute_canonical_payload_sha256(payload)
         payload.event_id = event_id
 
@@ -135,19 +121,12 @@ class PredictionDeliveryService:
         if existing_item is not None:
             _, existing_sha256 = self.compute_canonical_payload_sha256(existing_item.payload)
             if existing_sha256 == payload_sha256:
-                logger.info(
-                    f"[PredictionDeliveryService] Idempotent reuse of existing outbox record '{event_id}' for equipment '{payload.asset_id}'"
-                )
+                logger.info(f"[PredictionDeliveryService] Idempotent reuse of existing outbox record '{event_id}'")
                 return existing_item, payload_sha256
             else:
                 raise PipelineOutboxEventConflictError(
-                    f"Outbox event ID '{event_id}' already exists with different payload checksum for equipment '{payload.asset_id}'",
-                    details=[{
-                        "event_id": event_id,
-                        "asset_id": payload.asset_id,
-                        "existing_sha256": existing_sha256,
-                        "new_sha256": payload_sha256,
-                    }],
+                    f"동일한 event_id '{event_id}'에 대해 내용이 상이한 payload가 감지되었습니다.",
+                    details=[{"event_id": event_id, "existing_sha256": existing_sha256, "new_sha256": payload_sha256}],
                     retryable=False,
                 )
 
@@ -168,7 +147,6 @@ class PredictionDeliveryService:
         )
         self.save_outbox_item(item)
         return item
-
 
     def send_once(self, payload: PredictionResultBatchPayload) -> dict[str, Any]:
         """Perform a single HTTP POST dispatch attempt to the backend receiver."""
@@ -194,7 +172,30 @@ class PredictionDeliveryService:
                 )
                 return {"delivered": True, "status_code": status_code, "response": resp_body}
         except urllib.error.HTTPError as h_err:
-            if 400 <= h_err.code < 500:
+            if h_err.code in (200, 202):
+                return {"delivered": True, "status_code": h_err.code, "response": ""}
+            elif h_err.code == 409:
+                logger.error(f"[PredictionDeliveryService] Conflict error (HTTP 409) for batch '{payload.event_id}'")
+                raise PipelineOutboxEventConflictError(
+                    f"수신 시스템에서 event ID 충돌이 발생했습니다 (HTTP 409): {payload.event_id}",
+                    details=[{"status_code": 409, "event_id": payload.event_id}],
+                    retryable=False,
+                ) from h_err
+            elif h_err.code == 422:
+                logger.error(f"[PredictionDeliveryService] Contract unprocessable error (HTTP 422) for batch '{payload.event_id}'")
+                raise PipelineDeliveryUnprocessableError(
+                    f"수신 시스템이 계약 위반으로 배치를 거부했습니다 (HTTP 422): {payload.event_id}",
+                    details=[{"status_code": 422, "event_id": payload.event_id}],
+                    retryable=False,
+                ) from h_err
+            elif h_err.code in (401, 403):
+                logger.error(f"[PredictionDeliveryService] Authorization error (HTTP {h_err.code}) for batch '{payload.event_id}'")
+                raise PipelineDeliveryUnauthorizedError(
+                    f"수신 시스템 인증/권한 오류 (HTTP {h_err.code}): {payload.event_id}",
+                    details=[{"status_code": h_err.code, "event_id": payload.event_id}],
+                    retryable=False,
+                ) from h_err
+            elif 400 <= h_err.code < 500:
                 logger.error(
                     f"[PredictionDeliveryService] Receiver rejected prediction batch '{payload.event_id}' with HTTP {h_err.code}"
                 )

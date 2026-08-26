@@ -44,6 +44,7 @@ class LoadedModelArtifact:
     metrics: dict[str, Any]
     artifact_dir: Path
     artifact_ref: ArtifactReference
+    manifest_checksum: str
 
 
 class PredictionService:
@@ -74,39 +75,45 @@ class PredictionService:
             return clean
         return f"pdm-{clean}"
 
-    def load_active_artifact(self, base_or_id: str) -> LoadedModelArtifact:
-        """Resolve latest.json, strictly verify all 6 files and checksums, and load model."""
+    def load_active_artifact(
+        self,
+        base_or_id: str,
+        target_version: Optional[str] = None,
+    ) -> LoadedModelArtifact:
+        """Resolve artifact for explicit version or latest.json, strictly verify all 6 files and checksums, and load model."""
         model_id = self.resolve_model_id(base_or_id)
-        latest_file = self.artifacts_dir / model_id / "latest.json"
+        if target_version:
+            model_version = target_version
+        else:
+            latest_file = self.artifacts_dir / model_id / "latest.json"
+            if not latest_file.exists():
+                raise PipelineModelArtifactInvalidError(
+                    f"모델 '{model_id}'의 latest.json 포인터가 존재하지 않습니다.",
+                    details=[{"model_id": model_id, "pointer_path": str(latest_file)}],
+                    retryable=False,
+                )
 
-        if not latest_file.exists():
-            raise PipelineModelArtifactInvalidError(
-                f"모델 '{model_id}'의 latest.json 포인터가 존재하지 않습니다.",
-                details=[{"model_id": model_id, "pointer_path": str(latest_file)}],
-                retryable=False,
-            )
+            try:
+                with open(latest_file, "r", encoding="utf-8") as f:
+                    pointer_data = json.load(f)
+            except Exception as exc:
+                raise PipelineModelArtifactInvalidError(
+                    f"모델 '{model_id}'의 latest.json 파싱 실패: {exc}",
+                    details=[{"model_id": model_id, "error": str(exc)}],
+                    retryable=False,
+                ) from exc
 
-        try:
-            with open(latest_file, "r", encoding="utf-8") as f:
-                pointer_data = json.load(f)
-        except Exception as exc:
-            raise PipelineModelArtifactInvalidError(
-                f"모델 '{model_id}'의 latest.json 파싱 실패: {exc}",
-                details=[{"model_id": model_id, "error": str(exc)}],
-                retryable=False,
-            ) from exc
-
-        model_version = pointer_data.get("model_version") or pointer_data.get("active_version")
-        if not model_version:
-            raise PipelineModelArtifactInvalidError(
-                f"latest.json에 유효한 model_version이 없습니다 ({model_id}).",
-                retryable=False,
-            )
+            model_version = pointer_data.get("model_version") or pointer_data.get("active_version")
+            if not model_version:
+                raise PipelineModelArtifactInvalidError(
+                    f"latest.json에 유효한 model_version이 없습니다 ({model_id}).",
+                    retryable=False,
+                )
 
         target_artifact_dir = self.artifacts_dir / model_id / model_version
         if not target_artifact_dir.is_dir():
             raise PipelineModelArtifactInvalidError(
-                f"latest.json이 가리키는 아티팩트 디렉터리가 존재하지 않습니다: {target_artifact_dir}",
+                f"아티팩트 디렉터리가 존재하지 않습니다: {target_artifact_dir}",
                 retryable=False,
             )
 
@@ -166,6 +173,7 @@ class PredictionService:
             metrics=metrics,
             artifact_dir=target_artifact_dir,
             artifact_ref=artifact_ref,
+            manifest_checksum=manifest_sha,
         )
 
     def predict_for_models(
@@ -175,8 +183,10 @@ class PredictionService:
         model_feature_bundles: Optional[dict[str, RuntimeFeatureBundle]] = None,
         model_feature_errors: Optional[dict[str, Any]] = None,
         asset_ids: Optional[list[str]] = None,
+        active_model_set: Optional[ActiveModelSet] = None,
     ) -> list[InternalModelPredictionResult]:
         """Run pure model inference for each equipment over all active models without thresholding."""
+        from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelSet
         results: list[InternalModelPredictionResult] = []
 
         # Resolve all known equipment IDs strictly
@@ -187,21 +197,39 @@ class PredictionService:
                     for rm in b.row_metadata:
                         known_assets.add(rm.asset_id)
 
-        for base_model in base_models:
+        model_items: list[tuple[str, Optional[str], bool]] = []
+        if active_model_set:
+            model_set_id = active_model_set.model_set_id
+            model_set_version = active_model_set.model_set_version
+            for bm, cfg in active_model_set.models.items():
+                model_items.append((bm, cfg.model_version, cfg.required))
+        else:
+            model_set_id = "pdm-default"
+            model_set_version = "1.0.0"
+            for bm in base_models:
+                model_items.append((bm, None, True))
+
+        for base_model, target_ver, is_required in model_items:
             model_id = self.resolve_model_id(base_model)
 
             # Load active artifact
             try:
-                artifact = self.load_active_artifact(base_model)
+                artifact = self.load_active_artifact(base_model, target_version=target_ver)
             except Exception as exc:
                 err_code = getattr(exc, "code", "PIPELINE_MODEL_ARTIFACT_INVALID")
                 logger.warning(f"[PredictionService] Failed to load active artifact for '{model_id}': {exc}")
+                if is_required:
+                    raise PipelineModelPredictionFailedError(
+                        f"필수 모델 '{model_id}' ({target_ver or 'latest'}) 로드 실패: {exc}",
+                        details=[{"model_id": model_id, "error": str(exc)}],
+                        retryable=False,
+                    ) from exc
                 for target_asset in known_assets:
                     results.append(
                         InternalModelPredictionResult(
                             asset_id=target_asset,
                             model_id=model_id,
-                            model_version="unknown",
+                            model_version=target_ver or "unknown",
                             status="failed",
                             observed_at="",
                             score_type="positive_class_probability",
@@ -209,6 +237,12 @@ class PredictionService:
                             score=None,
                             artifact_ref=None,
                             feature_ref=None,
+                            manifest_checksum=None,
+                            feature_schema_version=None,
+                            label_schema_version=None,
+                            history_requirement_version=None,
+                            model_set_id=model_set_id,
+                            model_set_version=model_set_version,
                             error_code=err_code,
                             error_message=str(exc),
                         )
@@ -222,6 +256,12 @@ class PredictionService:
                 err_info = (model_feature_errors or {}).get(base_model)
                 err_code = getattr(err_info, "code", "PIPELINE_RUNTIME_FEATURE_FAILED") if err_info else "PIPELINE_RUNTIME_FEATURE_FAILED"
                 err_msg = str(err_info) if err_info else f"모델 '{model_id}'에 해당하는 Runtime Feature가 생성되지 않았습니다."
+                if is_required:
+                    raise PipelineModelPredictionFailedError(
+                        f"필수 모델 '{model_id}'의 Feature 생성 실패: {err_msg}",
+                        details=[{"model_id": model_id, "error": err_msg}],
+                        retryable=False,
+                    )
                 for target_asset in known_assets:
                     results.append(
                         InternalModelPredictionResult(
@@ -235,6 +275,12 @@ class PredictionService:
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=None,
+                            manifest_checksum=artifact.manifest_checksum,
+                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
+                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
+                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            model_set_id=model_set_id,
+                            model_set_version=model_set_version,
                             error_code=err_code,
                             error_message=err_msg,
                         )
@@ -251,6 +297,12 @@ class PredictionService:
                     raise ValueError("Feature matrix is empty")
             except Exception as exc:
                 logger.warning(f"[PredictionService] Failed to load feature npy for '{model_id}': {exc}")
+                if is_required:
+                    raise PipelineModelPredictionFailedError(
+                        f"필수 모델 '{model_id}'의 Feature npy 로드 실패: {exc}",
+                        details=[{"model_id": model_id, "error": str(exc)}],
+                        retryable=False,
+                    ) from exc
                 for target_asset in known_assets:
                     results.append(
                         InternalModelPredictionResult(
@@ -264,6 +316,12 @@ class PredictionService:
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
+                            manifest_checksum=artifact.manifest_checksum,
+                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
+                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
+                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            model_set_id=model_set_id,
+                            model_set_version=model_set_version,
                             error_code="PIPELINE_RUNTIME_FEATURE_FAILED",
                             error_message=f"Runtime feature npy 로드 실패: {exc}",
                         )
@@ -280,6 +338,12 @@ class PredictionService:
 
             # If bundle metadata is missing, fail-closed
             if not asset_latest_row:
+                if is_required:
+                    raise PipelineModelPredictionFailedError(
+                        f"필수 모델 '{model_id}'의 Feature 메타데이터 매핑이 누락되었습니다.",
+                        details=[{"model_id": model_id}],
+                        retryable=False,
+                    )
                 for target_asset in known_assets:
                     results.append(
                         InternalModelPredictionResult(
@@ -293,6 +357,12 @@ class PredictionService:
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
+                            manifest_checksum=artifact.manifest_checksum,
+                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
+                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
+                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            model_set_id=model_set_id,
+                            model_set_version=model_set_version,
                             error_code="PIPELINE_FEATURE_METADATA_ALIGNMENT_ERROR",
                             error_message="Feature 메타데이터 매핑이 누락되었습니다.",
                         )
@@ -327,6 +397,12 @@ class PredictionService:
                             score=None,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
+                            manifest_checksum=artifact.manifest_checksum,
+                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
+                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
+                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            model_set_id=model_set_id,
+                            model_set_version=model_set_version,
                             error_code="PIPELINE_HISTORY_INSUFFICIENT",
                             error_message=f"설비 '{asset_id}'의 관측 이력 부족 (요구치={min_req}, 실제={actual_count})",
                         )
@@ -379,6 +455,12 @@ class PredictionService:
                             score=score_val,
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
+                            manifest_checksum=artifact.manifest_checksum,
+                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
+                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
+                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            model_set_id=model_set_id,
+                            model_set_version=model_set_version,
                             error_code=None,
                             error_message=None,
                         )
@@ -390,21 +472,5 @@ class PredictionService:
                 except Exception as exc:
                     err_code = getattr(exc, "code", "PIPELINE_MODEL_PREDICTION_FAILED")
                     logger.warning(f"[PredictionService] Model '{model_id}' prediction execution failed for asset '{asset_id}': {exc}")
-                    results.append(
-                        InternalModelPredictionResult(
-                            asset_id=asset_id,
-                            model_id=model_id,
-                            model_version=artifact.model_version,
-                            status="failed",
-                            observed_at=observed_at_val,
-                            score_type="positive_class_probability",
-                            score_source=None,
-                            score=None,
-                            artifact_ref=artifact.artifact_ref,
-                            feature_ref=feature_ref,
-                            error_code=err_code,
-                            error_message=str(exc),
-                        )
-                    )
 
         return results

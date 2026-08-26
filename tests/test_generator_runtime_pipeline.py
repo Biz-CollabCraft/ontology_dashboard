@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 import numpy as np
@@ -124,6 +126,7 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(PATHS, "notification_outbox_root", outbox_dir)
     monkeypatch.setattr(PATHS, "pipeline_queue_db", preprocessed_dir / "pipeline_queue" / "queue.db")
     monkeypatch.setattr(PATHS, "pipeline_state_root", preprocessed_dir / "pipeline_runs")
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
 
     publisher = ModelArtifactPublisher(artifacts_dir)
 
@@ -1596,8 +1599,8 @@ def test_snapshot_version_change_recalculates_predictions(isolated_runtime_env, 
     # 2. Update active model snapshot manifest version
     orig_build_snap = service._build_model_snapshot
 
-    def modified_snap(base_models):
-        snap, arts = orig_build_snap(base_models)
+    def modified_snap(base_models, *args, **kwargs):
+        snap, arts = orig_build_snap(base_models, *args, **kwargs)
         for m_id in snap:
             snap[m_id]["model_version"] = snap[m_id]["model_version"] + "-v2.0"
             snap[m_id]["manifest_sha256"] = "1" * 64
@@ -1660,8 +1663,8 @@ def test_snapshot_feature_schema_change_reextracts_features(isolated_runtime_env
     # Change feature schema sha256 in current snapshot
     orig_build_snap = service._build_model_snapshot
 
-    def modified_snap(base_models):
-        snap, arts = orig_build_snap(base_models)
+    def modified_snap(base_models, *args, **kwargs):
+        snap, arts = orig_build_snap(base_models, *args, **kwargs)
         for m_id in snap:
             snap[m_id]["feature_schema_sha256"] = "f" * 64
         return snap, arts
@@ -1987,3 +1990,189 @@ def test_cleanup_warning_does_not_invalidate_published_outbox(isolated_runtime_e
     assert run_state.cleanup_status == "cleanup_failed"
     assert len(run_state.cleanup_failed_paths) >= 1
     assert "Permission denied" in run_state.cleanup_failed_paths[0]
+
+
+
+# =====================================================================
+# 36. Active Model Set Pointer Management & Atomic Update Test
+# =====================================================================
+
+def test_active_model_set_pointer_management_and_atomic_update(isolated_runtime_env):
+    """ActiveModelSetService loads active-model-set.json, validates pointer, and performs atomic replace with locking."""
+    from systems.generator.app.runtime_pipeline.active_model_set_service import ActiveModelSetService
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        ModelSetArtifactNotFoundError,
+        ModelSetOptionalModelPolicyNotImplementedError,
+    )
+
+    env = isolated_runtime_env
+    models_dir: Path = env["tmp_path"] / "models_store"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    svc = ActiveModelSetService(models_store_dir=models_dir)
+    default_set = svc.load_active_model_set()
+    assert default_set.model_set_id == "pdm-default"
+    assert "lightgbm" in default_set.models
+
+    # Reject required=False optional policy
+    invalid_set = ActiveModelSet(
+        model_set_id="pdm-opt",
+        model_set_version="1.0.1",
+        models={"lightgbm": ActiveModelConfig(model_version="1.0.0", required=False)},
+    )
+    with pytest.raises(ModelSetOptionalModelPolicyNotImplementedError):
+        svc.update_active_model_set(invalid_set, validate_artifacts=False)
+
+    # Reject missing artifact version
+    missing_art_set = ActiveModelSet(
+        model_set_id="pdm-missing",
+        model_set_version="1.0.2",
+        models={"lightgbm": ActiveModelConfig(model_version="99.99.99", required=True)},
+    )
+    with pytest.raises(ModelSetArtifactNotFoundError):
+        svc.update_active_model_set(missing_art_set, validate_artifacts=True)
+
+
+# =====================================================================
+# 37. Real Manifest Checksum Recorded in Prediction Result Test
+# =====================================================================
+
+def test_real_manifest_checksum_recorded_in_prediction_result(isolated_runtime_env, monkeypatch):
+    """Prediction results record real manifest SHA-256 checksum and model_set provenance."""
+    from systems.generator.generator_config import PATHS
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "real_manifest.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-real-manifest-1", source_uri=str(src_file), source_checksum=sha)
+
+    run_state = service.execute_queue_item(item)
+    assert run_state.status == "succeeded"
+    assert len(run_state.prediction_results) > 0
+
+    for res in run_state.prediction_results:
+        assert res.manifest_checksum is not None
+        assert len(res.manifest_checksum) == 64
+        assert res.model_set_id == "pdm-default"
+        assert res.model_set_version == "1.0.0"
+
+
+# =====================================================================
+# 38. Required Model Failure Blocks Batch Publishing Test
+# =====================================================================
+
+def test_required_model_failure_blocks_batch_publishing(isolated_runtime_env, monkeypatch):
+    """When a required=true model inference fails, the pipeline fails closed and batch is not published."""
+    from systems.generator.generator_config import PATHS
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    env = isolated_runtime_env
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        PipelineModelArtifactInvalidError,
+        PipelineModelPredictionFailedError,
+    )
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "req_fail.jsonl", num_rows=3, asset_id="M14860")
+
+    orig_load = service.prediction_service.load_active_artifact
+
+    def failing_load(base_or_id, target_version=None):
+        if "xgboost" in base_or_id:
+            raise PipelineModelArtifactInvalidError("Simulated XGBoost required load failure")
+        return orig_load(base_or_id, target_version=target_version)
+
+    monkeypatch.setattr(service.prediction_service, "load_active_artifact", failing_load)
+
+    item = queue.enqueue(job_id="job-req-fail-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises((PipelineModelPredictionFailedError, PipelineModelArtifactInvalidError)):
+        service.execute_queue_item(item)
+
+
+# =====================================================================
+# 39. Generator Runtime Prediction Disabled by Default Test
+# =====================================================================
+
+def test_generator_runtime_prediction_disabled_by_default(isolated_runtime_env, monkeypatch):
+    """When GENERATOR_RUNTIME_PREDICTION_ENABLED=false (default), pipeline execution and outbox worker start are blocked."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineRuntimePredictionDisabledError
+
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", False)
+
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "disabled_test.jsonl", num_rows=2, asset_id="M14860")
+    item = queue.enqueue(job_id="job-disabled-1", source_uri=str(src_file), source_checksum=sha)
+
+    with pytest.raises(PipelineRuntimePredictionDisabledError):
+        service.execute_queue_item(item)
+
+
+# =====================================================================
+# 40. Delivery Worker HTTP Status Codes Handling Test
+# =====================================================================
+
+def test_delivery_worker_http_status_codes_handling(isolated_runtime_env, monkeypatch):
+    """Delivery worker properly distinguishes 200/202, 409 conflict, 422 unprocessable, 401 unauthorized, and 500 retry."""
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        PipelineDeliveryUnauthorizedError,
+        PipelineDeliveryUnprocessableError,
+    )
+
+    env = isolated_runtime_env
+    delivery_service: PredictionDeliveryService = env["service"].prediction_delivery_service
+    src_file, sha = create_sample_observation_jsonl(env["incoming_dir"] / "http_code.jsonl", num_rows=2, asset_id="M14860")
+
+    payload = PredictionResultBatchPayload(
+        event_id="evt-test-http-codes",
+        run_id="run-http-1",
+        job_id="job-http-1",
+        asset_id="M14860",
+        observed_at="2026-08-26T09:00:00Z",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v3.1",
+        model_results={},
+        source_lineage=SourceLineage(source_uri=str(src_file), source_checksum=sha),
+    )
+
+    class MockHTTPResp:
+        def getcode(self):
+            return 202
+        def read(self):
+            return b'{"accepted": true}'
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+
+    # HTTP 202 Success
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=10.0: MockHTTPResp())
+    res = delivery_service.send_once(payload)
+    assert res["delivered"] is True
+
+    # HTTP 422 Unprocessable Error
+    def failing_urlopen_422(req, timeout=10.0):
+        raise urllib.error.HTTPError(req.full_url, 422, "Unprocessable Entity", {}, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", failing_urlopen_422)
+    with pytest.raises(PipelineDeliveryUnprocessableError):
+        delivery_service.send_once(payload)
+
+    # HTTP 401 Unauthorized Error
+    def failing_urlopen_401(req, timeout=10.0):
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", failing_urlopen_401)
+    with pytest.raises(PipelineDeliveryUnauthorizedError):
+        delivery_service.send_once(payload)

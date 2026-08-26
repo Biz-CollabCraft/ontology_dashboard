@@ -408,3 +408,69 @@ class PipelineOutboxPartialPublishError(PipelineBaseError):
     status_code = 500
     code = "PIPELINE_OUTBOX_PARTIAL_PUBLISH"
     retryable = False
+
+
+class ModelSetUpdateLockedError(PipelineBaseError):
+    status_code = 409
+    code = "MODEL_SET_UPDATE_LOCKED"
+    retryable = False
+
+
+class ModelSetUpdateConflictError(PipelineBaseError):
+    status_code = 409
+    code = "MODEL_SET_UPDATE_CONFLICT"
+    retryable = False
+
+
+class ModelSetContractInvalidError(PipelineBaseError):
+    status_code = 422
+    code = "MODEL_SET_CONTRACT_INVALID"
+    retryable = False
+
+
+class ModelSetArtifactNotFoundError(PipelineBaseError):
+    status_code = 404
+    code = "MODEL_SET_ARTIFACT_NOT_FOUND"
+    retryable = False
+
+
+class ModelSetArtifactIntegrityError(PipelineBaseError):
+    status_code = 422
+    code = "MODEL_SET_ARTIFACT_INTEGRITY_ERROR"
+    retryable = False
+
+
+class ModelSetAtomicPublishFailedError(PipelineBaseError):
+    status_code = 500
+    code = "MODEL_SET_ATOMIC_PUBLISH_FAILED"
+    retryable = False
+
+
+class ModelSetOptionalModelPolicyNotImplementedError(PipelineBaseError):
+    status_code = 501
+    code = "MODEL_SET_OPTIONAL_MODEL_POLICY_NOT_IMPLEMENTED"
+    retryable = False
+
+
+class PipelineRuntimePredictionDisabledError(PipelineBaseError):
+    status_code = 503
+    code = "PIPELINE_RUNTIME_PREDICTION_DISABLED"
+    retryable = False
+
+
+class PipelineModelManifestChecksumMissingError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_MODEL_MANIFEST_CHECKSUM_MISSING"
+    retryable = False
+
+
+class PipelineDeliveryUnprocessableError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_DELIVERY_UNPROCESSABLE"
+    retryable = False
+
+
+class PipelineDeliveryUnauthorizedError(PipelineBaseError):
+    status_code = 401
+    code = "PIPELINE_DELIVERY_UNAUTHORIZED"
+    retryable = False

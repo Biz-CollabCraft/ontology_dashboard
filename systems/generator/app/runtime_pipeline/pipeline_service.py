@@ -47,6 +47,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineModelSetChangedError,
     PipelineModelSnapshotArtifactMissingError,
     PipelineModelSnapshotChecksumMismatchError,
+    PipelineModelSnapshotChecksumMismatchError,
     PipelineModelSnapshotIncompatibleError,
     PipelineNoActiveModelError,
     PipelineOutboxEventConflictError,
@@ -56,14 +57,19 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineResumeFailedError,
     PipelineResumeNotAllowedError,
     PipelineRuntimeFeatureFailedError,
+    PipelineRuntimePredictionDisabledError,
     PipelineSourceChecksumChangedError,
     PipelineSourceFileNotStableError,
     PipelineTimestampInvalidError,
+)
+from systems.generator.app.runtime_pipeline.active_model_set_service import (
+    ActiveModelSetService,
 )
 from systems.generator.app.runtime_pipeline.pipeline_repository import (
     PipelineRepository,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
+    ActiveModelSet,
     ArtifactReference,
     InternalModelPredictionResult,
     ModelSnapshotEntry,
@@ -109,6 +115,7 @@ class PipelineService:
         prediction_service: Optional[PredictionService] = None,
         prediction_batch_service: Optional[PredictionBatchService] = None,
         prediction_delivery_service: Optional[PredictionDeliveryService] = None,
+        active_model_set_service: Optional[ActiveModelSetService] = None,
     ) -> None:
         self.repository = repository or PipelineRepository()
         self.preprocessing_service = preprocessing_service or PreprocessingService()
@@ -116,6 +123,7 @@ class PipelineService:
         self.prediction_service = prediction_service or PredictionService()
         self.prediction_batch_service = prediction_batch_service or PredictionBatchService()
         self.prediction_delivery_service = prediction_delivery_service or PredictionDeliveryService()
+        self.active_model_set_service = active_model_set_service or ActiveModelSetService()
 
     def get_logical_source_uri(self, source_path: Path) -> str:
         """Convert filesystem path to logical relative URI without exposing local drives or absolute paths."""
@@ -254,21 +262,31 @@ class PipelineService:
     def _build_model_snapshot(
         self,
         base_models: list[str],
+        active_model_set: Optional[ActiveModelSet] = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, LoadedModelArtifact]]:
         """Construct Model Snapshot dictionary for active models and return loaded artifacts."""
         snapshot: dict[str, dict[str, Any]] = {}
         artifacts: dict[str, LoadedModelArtifact] = {}
-        for bm in base_models:
+
+        model_items: list[tuple[str, Optional[str]]] = []
+        if active_model_set and active_model_set.models:
+            for bm, cfg in active_model_set.models.items():
+                model_items.append((bm, cfg.model_version))
+        else:
+            for bm in base_models:
+                model_items.append((bm, None))
+
+        for bm, target_ver in model_items:
             model_id = self.prediction_service.resolve_model_id(bm)
-            art = self.prediction_service.load_active_artifact(bm)
+            try:
+                art = self.prediction_service.load_active_artifact(bm, target_version=target_ver)
+            except TypeError:
+                art = self.prediction_service.load_active_artifact(bm)
             artifacts[bm] = art
 
-            if hasattr(art, "manifest_path") and art.manifest_path and Path(art.manifest_path).is_file():
-                manifest_sha = compute_file_sha256(Path(art.manifest_path))
-            elif hasattr(art, "publisher") and hasattr(art.publisher, "manifest"):
-                manifest_sha = hashlib.sha256(art.publisher.manifest.model_dump_json(indent=2).encode("utf-8")).hexdigest()
-            else:
-                manifest_sha = hashlib.sha256(f"{model_id}:{art.model_version}".encode("utf-8")).hexdigest()
+            manifest_sha = art.manifest_checksum
 
             f_schema_ver = art.feature_schema.get("feature_schema_version", "v1")
             f_schema_sha = _compute_canonical_dict_sha256(art.feature_schema)
@@ -288,6 +306,17 @@ class PipelineService:
 
     def execute_queue_item(self, item: PipelineQueueItem) -> PipelineRunState:
         """Execute complete 5-stage pipeline lifecycle for a claimed queue item with checkpoint resumption."""
+        # 0. Check Runtime Prediction Enabled Feature Flag
+        if not PATHS.runtime_prediction_enabled:
+            logger.warning(
+                "[PipelineService] Generator Runtime Prediction is disabled (GENERATOR_RUNTIME_PREDICTION_ENABLED=false). "
+                "Rejecting queue item execution."
+            )
+            raise PipelineRuntimePredictionDisabledError(
+                "Runtime Prediction Pipeline이 비활성화되어 있습니다. (GENERATOR_RUNTIME_PREDICTION_ENABLED=false)",
+                retryable=False,
+            )
+
         # 1. Path, File Existence and Stability Validation
         source_path = validate_pipeline_source_uri(item.source_uri)
         if not source_path.exists() or not source_path.is_file():
@@ -319,8 +348,11 @@ class PipelineService:
         )
         logical_source_uri = self.get_logical_source_uri(source_path)
 
+        # Load active model set pointer
+        active_model_set = self.active_model_set_service.load_active_model_set()
+
         # Pin active base models for this run
-        current_snapshot, model_artifacts = self._build_model_snapshot(REGISTERED_BASE_MODELS)
+        current_snapshot, model_artifacts = self._build_model_snapshot(REGISTERED_BASE_MODELS, active_model_set=active_model_set)
         if not model_artifacts:
             raise PipelineNoActiveModelError(
                 "활성화된 머신러닝 모델 아티팩트가 0개입니다.",
@@ -737,6 +769,7 @@ class PipelineService:
                     model_feature_refs=model_feature_refs,
                     model_feature_bundles=model_feature_bundles,
                     model_feature_errors=model_feature_errors,
+                    active_model_set=active_model_set,
                 )
 
                 succeeded_count = sum(1 for r in model_results if r.status == "succeeded")

@@ -61,6 +61,24 @@ class RuntimeFeatureRowMetadata(BaseModel):
     observed_at: str = Field(..., description="Observation timestamp in UTC ISO format")
 
 
+class ActiveModelConfig(BaseModel):
+    """Configuration for a single base model in active-model-set.json."""
+    model_config = ConfigDict(extra="forbid")
+
+    model_version: str = Field(..., description="Target model artifact version string")
+    required: bool = Field(True, description="Whether failure of this model fails the entire batch")
+
+
+class ActiveModelSet(BaseModel):
+    """Active model set configuration pointer used during Generator Runtime Prediction."""
+    model_config = ConfigDict(extra="forbid")
+
+    model_set_id: str = Field("pdm-default", description="Model set identifier")
+    model_set_version: str = Field("1.0.0", description="Model set version string")
+    updated_at: str = Field(default_factory=now_utc_iso, description="ISO timestamp of last update")
+    models: dict[str, ActiveModelConfig] = Field(..., description="Map of base model identifiers to active model config")
+
+
 class ModelPredictionResult(BaseModel):
     """Inference result payload for a single model in equipment batch."""
     model_config = ConfigDict(extra="forbid")
@@ -75,6 +93,12 @@ class ModelPredictionResult(BaseModel):
     score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted numeric score/probability")
     artifact_ref: Optional[ArtifactReference] = Field(None, description="Reference to Model Artifact")
     feature_ref: Optional[ArtifactReference] = Field(None, description="Reference to Runtime Feature bundle")
+    manifest_checksum: Optional[str] = Field(None, description="SHA-256 checksum of Model Artifact manifest")
+    feature_schema_version: Optional[str] = Field(None, description="Feature schema version string")
+    label_schema_version: Optional[str] = Field(None, description="Label schema version string")
+    history_requirement_version: Optional[str] = Field(None, description="History requirement version string")
+    model_set_id: Optional[str] = Field(None, description="Model set ID")
+    model_set_version: Optional[str] = Field(None, description="Model set version")
     error_code: Optional[str] = Field(None, description="Error code if model inference failed")
     error_message: Optional[str] = Field(None, description="Error message if model inference failed")
 
@@ -95,6 +119,12 @@ class InternalModelPredictionResult(BaseModel):
     score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted numeric score/probability")
     artifact_ref: Optional[ArtifactReference] = Field(None, description="Reference to Model Artifact")
     feature_ref: Optional[ArtifactReference] = Field(None, description="Reference to Runtime Feature bundle")
+    manifest_checksum: Optional[str] = Field(None, description="SHA-256 checksum of Model Artifact manifest")
+    feature_schema_version: Optional[str] = Field(None, description="Feature schema version string")
+    label_schema_version: Optional[str] = Field(None, description="Label schema version string")
+    history_requirement_version: Optional[str] = Field(None, description="History requirement version string")
+    model_set_id: Optional[str] = Field(None, description="Model set ID")
+    model_set_version: Optional[str] = Field(None, description="Model set version")
     error_code: Optional[str] = Field(None, description="Error code if model inference failed")
     error_message: Optional[str] = Field(None, description="Error message if model inference failed")
 
@@ -109,6 +139,12 @@ class InternalModelPredictionResult(BaseModel):
             score=self.score,
             artifact_ref=self.artifact_ref,
             feature_ref=self.feature_ref,
+            manifest_checksum=self.manifest_checksum,
+            feature_schema_version=self.feature_schema_version,
+            label_schema_version=self.label_schema_version,
+            history_requirement_version=self.history_requirement_version,
+            model_set_id=self.model_set_id,
+            model_set_version=self.model_set_version,
             error_code=self.error_code,
             error_message=self.error_message,
         )
@@ -331,6 +367,8 @@ class PredictionResultBatchPayload(BaseModel):
     generated_at: str = Field(default_factory=now_utc_iso, description="Generation timestamp")
     dataset_id: str = Field(..., description="Dataset identifier")
     dataset_version: str = Field(..., description="Dataset version")
+    model_set_id: Optional[str] = Field("pdm-default", description="Model set identifier")
+    model_set_version: Optional[str] = Field("1.0.0", description="Model set version")
     model_results: dict[str, ModelPredictionResult] = Field(
         ..., description="Map of model_id to model prediction results for this equipment"
     )

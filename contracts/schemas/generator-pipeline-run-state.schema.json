@@ -170,7 +170,9 @@
     "model_stage_outputs": { "type": "object" },
     "delivery_outputs": { "type": "object" },
     "cleanup_deleted_paths": { "type": "array" },
-    "cleanup_failed_paths": { "type": "array" }
+    "cleanup_failed_paths": { "type": "array" },
+    "model_set_id": { "type": ["string", "null"] },
+    "model_set_version": { "type": ["string", "null"] }
   },
   "additionalProperties": false
 }

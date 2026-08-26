@@ -79,6 +79,11 @@ class PredictionDeliveryWorker:
 
     def start(self) -> None:
         """Start the background delivery worker thread after running startup recovery."""
+        from systems.generator.generator_config import PATHS
+        if not PATHS.runtime_prediction_enabled:
+            logger.info("[PredictionDeliveryWorker] Generator Runtime Prediction is disabled (GENERATOR_RUNTIME_PREDICTION_ENABLED=false). Skipping worker start.")
+            return
+
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return
