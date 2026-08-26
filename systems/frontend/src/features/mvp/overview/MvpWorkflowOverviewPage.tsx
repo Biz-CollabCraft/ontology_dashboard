@@ -94,6 +94,33 @@ interface InspectionTargetView {
   rank: number;
 }
 
+function EquipmentSketchVisual({ assetType }: { assetType: string }) {
+  if (assetType.toLowerCase() === "cnc") {
+    return (
+      <div className="cnc-visual" aria-hidden="true">
+        <span className="cnc-risk-zone" />
+        <span className="cnc-base">베드</span>
+        <span className="cnc-column">컬럼</span>
+        <span className="cnc-head">스핀들</span>
+        <span className="cnc-tool">공구대</span>
+        <span className="cnc-table">테이블</span>
+        <span className="cnc-workpiece">가공물</span>
+        <span className="cnc-axis x-axis">X축</span>
+        <span className="cnc-axis z-axis">Z축</span>
+        <span className="cnc-servo">서보/구동</span>
+        <span className="cnc-coolant">냉각</span>
+        <span className="cnc-control">제어반</span>
+      </div>
+    );
+  }
+  return (
+    <div className="compressor-visual" aria-hidden="true">
+      <span className="vibration-zone" /><span className="pipe pipe-1" /><span className="pipe pipe-2" /><span className="pipe pipe-3" /><span className="pipe pipe-4" />
+      <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
+    </div>
+  );
+}
+
 interface FactoryCellSlot {
   id: string;
   assetId: string;
@@ -1609,10 +1636,7 @@ function AssetPreviewPanel({
               <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검 근거">
                 <header><Wrench size={14} /><strong>점검 근거</strong><span>위치 근거 미제공</span></header>
                 <div className="equipment-sketch" aria-label="설비 참고도">
-                  <div className="compressor-visual" aria-hidden="true">
-                    <span className="vibration-zone" /><span className="pipe pipe-1" /><span className="pipe pipe-2" /><span className="pipe pipe-3" /><span className="pipe pipe-4" />
-                    <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
-                  </div>
+                  <EquipmentSketchVisual assetType={asset.assetType} />
                   <div>
                     <strong>{inspectionTargets[0]?.target?.componentLabel ?? candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
                     <ul className="sketch-legend">
