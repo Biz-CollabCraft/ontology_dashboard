@@ -119,9 +119,6 @@ const FACTORY_SITE_LABELS: Record<string, string> = {
   S03: "3구역",
   S04: "4구역",
 };
-const SPARE_PART_AVAILABILITY_OVERRIDES: Record<string, boolean> = {
-  "CNC-S04-L02-03": false,
-};
 
 const PLANNING_STATUS_LABEL: Record<PlanningImpactRow["status"], string> = {
   plan_at_risk: "계획 위험",
@@ -180,9 +177,8 @@ function productionLossLabel(value: number | null): string {
   return value === null ? "생산 영향 미산정" : `${value.toLocaleString()}개 예상`;
 }
 
-function displayPartLabel(assetId: string | null | undefined, value: boolean | null): string {
-  const override = assetId ? SPARE_PART_AVAILABILITY_OVERRIDES[assetId] : undefined;
-  return partLabel(override ?? value);
+function displayPartLabel(value: boolean | null): string {
+  return partLabel(value);
 }
 
 function displayFactorySite(site: string): string {
@@ -561,7 +557,7 @@ function WorkStatusQueueBoard({
           <span>{role === "field_operator" ? "현장 작업 큐" : "생산 판단 큐"}</span>
           <strong>작업 상태 큐</strong>
         </div>
-        <small>화면 상태 기준 · 선택 상세 API 상태와 분리</small>
+        <small>보조 보드 · 실제 상태 전이는 Closed-loop API 연결 후 처리</small>
       </header>
       <div className="mvp-work-kanban" role="list">
         {WORK_QUEUE_COLUMNS.map((column) => {
@@ -578,7 +574,7 @@ function WorkStatusQueueBoard({
                   const lineLabel = candidate.asset?.line || candidate.asset?.cell || candidate.event.line || "라인 미지정";
                   const assignee = candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
                   const secondary = role === "field_operator"
-                    ? `${candidate.suspectedPart} · ${displayPartLabel(candidate.event.assetId, candidate.event.sparePartAvailable)}`
+                    ? `${candidate.suspectedPart} · ${displayPartLabel(candidate.event.sparePartAvailable)}`
                     : `${lineLabel} · ${DECISION_LABEL[candidate.event.recommendedDecision]}`;
                   return (
                     <button
@@ -724,7 +720,7 @@ export function MvpWorkflowOverviewPage({
   const selectedFactors = detail?.event.assetId === selectedAsset?.assetId && detail.topFactors.length
     ? detail.topFactors
     : selectedAsset?.topFactors ?? [];
-  const needsPartCheck = anomalyEvents.filter((event) => displayPartLabel(event.assetId, event.sparePartAvailable) !== "확보").length;
+  const needsPartCheck = anomalyEvents.filter((event) => displayPartLabel(event.sparePartAvailable) !== "확보").length;
   const dataQualityEvent = model.events.find((event) => event.status === "data_quality_hold") ?? null;
   const dataQualityCount = model.events.filter((event) => event.status === "data_quality_hold").length;
   const spareMissingCount = model.events.filter((event) => event.sparePartAvailable === false).length;
@@ -786,7 +782,7 @@ export function MvpWorkflowOverviewPage({
     : "Closed-loop API 미연결 상태입니다. 현재 화면에서는 상태를 변경하지 않습니다.";
   const fieldSummaryPart = selectedCandidate?.suspectedPart
     ?? (selectedFactors[0] ? fieldFactorItem(selectedFactors[0]) : "의심 부품 확인 필요");
-  const fieldSummaryPartStatus = selectedEvent ? displayPartLabel(selectedEvent.assetId, selectedEvent.sparePartAvailable) : "확인 필요";
+  const fieldSummaryPartStatus = selectedEvent ? displayPartLabel(selectedEvent.sparePartAvailable) : "확인 필요";
   const fieldSummaryQuality = selectedAsset?.status === "data_quality_hold" ? "데이터 품질 확인이 먼저 필요합니다" : "관측 데이터로 바로 확인할 수 있습니다";
   const fieldSummary = selectedAsset
     ? `${fieldSummaryPart}을 먼저 확인하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업요청 ID는 아직 없고, ${fieldSummaryQuality}.`
@@ -917,13 +913,6 @@ export function MvpWorkflowOverviewPage({
         </section>
       )}
 
-      <WorkStatusQueueBoard
-        candidates={workOrderCandidates}
-        role={role}
-        selectedAssetId={selectedAsset?.assetId ?? null}
-        onPreview={previewInDrawer}
-      />
-
       {role === "field_operator" ? (
         <div className="mvp-role-overview mvp-role-overview-wide">
           <MvpPanel title="우선순위" eyebrow="점검 요청 기준" className="mvp-today-panel">
@@ -934,7 +923,7 @@ export function MvpWorkflowOverviewPage({
                     <div><MvpStatusBadge status={candidate.event.status} /><strong>{candidate.suspectedPart}</strong><small>제안 #{String(index + 1).padStart(2, "0")} · {displayEventAssetName(candidate.event)}</small></div>
                     <dl>
                       <div><dt>설비</dt><dd>{displayEventAssetName(candidate.event)}</dd></div>
-                      <div><dt>부품</dt><dd>{displayPartLabel(candidate.event.assetId, candidate.event.sparePartAvailable)}</dd></div>
+                      <div><dt>부품</dt><dd>{displayPartLabel(candidate.event.sparePartAvailable)}</dd></div>
                       <div><dt>담당</dt><dd>{candidate.event.assignedEngineer ?? "미배정"}</dd></div>
                       <div><dt>권고</dt><dd>{DECISION_LABEL[candidate.event.recommendedDecision]}</dd></div>
                     </dl>
@@ -987,7 +976,7 @@ export function MvpWorkflowOverviewPage({
                                     : factorySlotPreview?.slot.id === slot.id;
                                   const tone = asset ? mapTone(asset.status) : "slot";
                                   const title = asset
-                                    ? `${displayFactorySlotName(slot, cell)} · ${formatProbability(asset.failureProbability)} · ${displayPartLabel(asset.assetId, asset.sparePartAvailable)}`
+                                    ? `${displayFactorySlotName(slot, cell)} · ${formatProbability(asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
                                     : `${cell.label} · ${slot.label} · 상태 미연결`;
                                   return (
                                     <button
@@ -1016,6 +1005,13 @@ export function MvpWorkflowOverviewPage({
 
         </div>
       )}
+
+      <WorkStatusQueueBoard
+        candidates={workOrderCandidates}
+        role={role}
+        selectedAssetId={selectedAsset?.assetId ?? null}
+        onPreview={previewInDrawer}
+      />
 
       {(drawerAsset || factorySlotPreview) && detailDrawerOpen ? (
         <div className="mvp-detail-drawer-layer" role="presentation">
@@ -1371,7 +1367,7 @@ function AssetPreviewPanel({
               <dl>
                 <div><dt>공장 위치</dt><dd>{assetDisplayName}</dd></div>
                 <div><dt>계획 상태</dt><dd>{planningImpact ? PLANNING_STATUS_LABEL[planningImpact.status] : "생산 영향 미산정"}</dd></div>
-                <div><dt>부품 제약</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
+                <div><dt>부품 제약</dt><dd>{displayPartLabel(asset.sparePartAvailable)}</dd></div>
                 <div><dt>담당</dt><dd>{assignee}</dd></div>
                 <div><dt>작업 ID</dt><dd>{workId}</dd></div>
                 <div><dt>예상 정지 영향</dt><dd>{formatMinutes(asset.estimatedDowntimeMinutes)}</dd></div>
@@ -1400,7 +1396,7 @@ function AssetPreviewPanel({
                       <button type="button" key={lineAsset.assetId} className={lineAsset.assetId === asset.assetId ? "is-selected" : ""} onClick={() => onPreviewAsset(lineAsset.assetId, lineAsset.eventId)}>
                         <MvpStatusBadge status={lineAsset.status} />
                         <strong>{displayFactoryAssetName(lineAsset.assetId) ?? displayAssetName(lineAsset)}</strong>
-                        <span>{formatProbability(lineAsset.failureProbability)} · {displayPartLabel(lineAsset.assetId, lineAsset.sparePartAvailable)}</span>
+                        <span>{formatProbability(lineAsset.failureProbability)} · {displayPartLabel(lineAsset.sparePartAvailable)}</span>
                       </button>
                     ))}
                   </div>
@@ -1424,7 +1420,7 @@ function AssetPreviewPanel({
                   <div><dt>대상 설비</dt><dd>{assetDisplayName}</dd></div>
                   <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
                   <div><dt>담당</dt><dd>{assignee}</dd></div>
-                  <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
+                  <div><dt>부품</dt><dd>{displayPartLabel(asset.sparePartAvailable)}</dd></div>
                   <div><dt>처리 상태</dt><dd>{WORK_STATUS_LABEL[workStatus]}</dd></div>
                   <div><dt>권한 액션</dt><dd>{workActionLabel ?? "API 연결 전 화면 액션"}</dd></div>
                 </dl>
@@ -1515,7 +1511,7 @@ function AssetPreviewPanel({
                 <div><dt>대상 설비</dt><dd>{assetDisplayName}</dd></div>
                 <div><dt>점검 항목</dt><dd>{candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : "근거 부족")}</dd></div>
                 <div><dt>점검 위치</dt><dd>{asset.cell || asset.line}</dd></div>
-                <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
+                <div><dt>부품</dt><dd>{displayPartLabel(asset.sparePartAvailable)}</dd></div>
                 <div><dt>데이터 품질</dt><dd>{asset.status === "data_quality_hold" ? "데이터 품질 확인 필요" : "확인 가능"}</dd></div>
                 <div><dt>작업 ID</dt><dd>{workId}</dd></div>
                 <div><dt>다음 액션</dt><dd>{workActionLabel ?? planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>

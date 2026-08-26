@@ -329,11 +329,11 @@
 .mvp-work-card dl div { min-width: 0; display: grid; gap: 2px; }
 .mvp-work-card dt { color: var(--mvp-dim); font-size: 9px; font-weight: 800; }
 .mvp-work-card dd { margin: 0; color: var(--mvp-muted); font-size: 11px; font-weight: 800; }
-.mvp-work-queue-board { min-width: 0; display: grid; gap: 10px; overflow: hidden; padding: 12px; border: 1px solid rgba(76,144,240,.2); border-radius: 8px; background: rgba(255,255,255,.016); }
+.mvp-work-queue-board { min-width: 0; display: grid; gap: 8px; overflow: hidden; padding: 10px 12px; border: 1px solid rgba(76,144,240,.16); border-radius: 8px; background: rgba(255,255,255,.012); }
 .mvp-work-queue-board > header { min-width: 0; display: flex; align-items: end; justify-content: space-between; gap: 12px; }
 .mvp-work-queue-board > header div { min-width: 0; display: grid; gap: 3px; }
 .mvp-work-queue-board > header span { color: #9cc5fa; font-size: 10px; font-weight: 900; }
-.mvp-work-queue-board > header strong { font-size: 15px; }
+.mvp-work-queue-board > header strong { font-size: 14px; }
 .mvp-work-queue-board > header small { color: var(--mvp-dim); font-size: 10px; font-weight: 800; }
 .mvp-work-kanban { min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(128px,1fr); grid-template-columns: none; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding-bottom: 6px; }
 .mvp-work-kanban::-webkit-scrollbar { height: 7px; }
