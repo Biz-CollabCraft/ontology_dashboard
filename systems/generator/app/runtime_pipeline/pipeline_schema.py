@@ -18,7 +18,7 @@ class ArtifactReference(BaseModel):
     uri: str = Field(..., description="Logical relative or absolute URI to the artifact")
     sha256: str = Field(..., description="SHA-256 checksum of the artifact payload")
     role: str = Field("generic_artifact", description="Role or purpose of this artifact reference")
-    size_bytes: Optional[int] = Field(None, description="Size in bytes")
+    size_bytes: Optional[int] = Field(None, exclude=True, description="Size in bytes")
 
 
 class PipelineError(BaseModel):
@@ -93,12 +93,12 @@ class ModelPredictionResult(BaseModel):
     score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Predicted numeric score/probability")
     artifact_ref: Optional[ArtifactReference] = Field(None, description="Reference to Model Artifact")
     feature_ref: Optional[ArtifactReference] = Field(None, description="Reference to Runtime Feature bundle")
-    manifest_checksum: Optional[str] = Field(None, description="SHA-256 checksum of Model Artifact manifest")
-    feature_schema_version: Optional[str] = Field(None, description="Feature schema version string")
-    label_schema_version: Optional[str] = Field(None, description="Label schema version string")
-    history_requirement_version: Optional[str] = Field(None, description="History requirement version string")
-    model_set_id: Optional[str] = Field(None, description="Model set ID")
-    model_set_version: Optional[str] = Field(None, description="Model set version")
+    manifest_checksum: Optional[str] = Field(None, exclude=True, description="SHA-256 checksum of Model Artifact manifest")
+    feature_schema_version: Optional[str] = Field(None, exclude=True, description="Feature schema version string")
+    label_schema_version: Optional[str] = Field(None, exclude=True, description="Label schema version string")
+    history_requirement_version: Optional[str] = Field(None, exclude=True, description="History requirement version string")
+    model_set_id: Optional[str] = Field(None, exclude=True, description="internal-only: snapshot mismatch validation")
+    model_set_version: Optional[str] = Field(None, exclude=True, description="internal-only: snapshot mismatch validation")
     error_code: Optional[str] = Field(None, description="Error code if model inference failed")
     error_message: Optional[str] = Field(None, description="Error message if model inference failed")
 

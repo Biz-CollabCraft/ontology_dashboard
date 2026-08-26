@@ -2305,9 +2305,10 @@ def test_missing_pointer_raises_model_set_not_configured(isolated_runtime_env, m
 # =====================================================================
 
 def test_corrupt_artifact_promotion_blocked(isolated_runtime_env):
-    """When updating Active Model Set with corrupt checksum or missing artifact files, update fails and original active-model-set.json is preserved."""
+    """When updating Active Model Set with corrupt artifacts, update fails and original active-model-set.json is preserved across all 6 corrupt cases."""
     from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
     from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetArtifactIntegrityError
+    from systems.generator.file_integrity import compute_file_sha256
 
     env = isolated_runtime_env
     service: PipelineService = env["service"]
@@ -2315,29 +2316,121 @@ def test_corrupt_artifact_promotion_blocked(isolated_runtime_env):
 
     # Initial valid active set
     init_set = active_service.load_active_model_set()
+    artifacts_base = active_service.pointer_file.parent / "artifacts" / "pdm-lightgbm"
 
-    # Create dummy corrupt artifact dir missing model.joblib
-    corrupt_dir = active_service.pointer_file.parent / "artifacts" / "pdm-lightgbm" / "pdm-corrupt-v1.0"
-    corrupt_dir.mkdir(parents=True, exist_ok=True)
-    (corrupt_dir / "manifest.json").write_text(json.dumps({
-        "manifest_sha256": "0"*64,
-        "model_id": "pdm-lightgbm",
-        "model_version": "pdm-corrupt-v1.0",
-        "artifact_files": [{"path": "model.joblib", "sha256": "0"*64}],
-    }), encoding="utf-8")
+    # Helper function to test corrupt promotion failure & pointer preservation
+    def assert_corrupt_fails(target_version: str, mutator_fn):
+        c_dir = artifacts_base / target_version
+        c_dir.mkdir(parents=True, exist_ok=True)
+        mutator_fn(c_dir)
 
-    new_set = ActiveModelSet(
-        model_set_id="pdm-corrupt",
-        model_set_version="2.0.0",
-        models={"lightgbm": ActiveModelConfig(model_version="pdm-corrupt-v1.0", required=True)},
-    )
+        test_set = ActiveModelSet(
+            model_set_id=f"pdm-corrupt-{target_version}",
+            model_set_version="2.0.0",
+            models={"lightgbm": ActiveModelConfig(model_version=target_version, required=True)},
+        )
 
-    with pytest.raises(ModelSetArtifactIntegrityError):
-        active_service.update_active_model_set(new_set, validate_artifacts=True)
+        with pytest.raises(ModelSetArtifactIntegrityError):
+            active_service.update_active_model_set(test_set, validate_artifacts=True)
 
-    # Existing active-model-set.json MUST be preserved
-    current_set = active_service.load_active_model_set()
-    assert current_set.model_set_id == init_set.model_set_id
+        current_set = active_service.load_active_model_set()
+        assert current_set.model_set_id == init_set.model_set_id
+
+    # Case 1: manifest required field missing (model_id missing)
+    def mut_missing_field(dir_path: Path):
+        (dir_path / "manifest.json").write_text(json.dumps({"model_version": "v-c1", "artifact_files": []}), encoding="utf-8")
+    assert_corrupt_fails("v-c1", mut_missing_field)
+
+    # Case 2: required role missing (feature_schema missing from artifact_files)
+    def mut_missing_role(dir_path: Path):
+        manifest = {
+            "model_id": "pdm-lightgbm",
+            "model_version": "v-c2",
+            "schema_version": "1.0",
+            "artifact_files": [
+                {"role": "model", "path": "model.joblib", "sha256": "0"*64},
+                {"role": "label_schema", "path": "label_schema.json", "sha256": "0"*64},
+            ]
+        }
+        (dir_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert_corrupt_fails("v-c2", mut_missing_role)
+
+    # Case 3: duplicate role (role "metrics" declared twice)
+    def mut_duplicate_role(dir_path: Path):
+        manifest = {
+            "model_id": "pdm-lightgbm",
+            "model_version": "v-c3",
+            "schema_version": "1.0",
+            "artifact_files": [
+                {"role": "model", "path": "model.joblib", "sha256": "0"*64},
+                {"role": "feature_schema", "path": "feature_schema.json", "sha256": "0"*64},
+                {"role": "label_schema", "path": "label_schema.json", "sha256": "0"*64},
+                {"role": "history_requirement", "path": "history_requirement.json", "sha256": "0"*64},
+                {"role": "metrics", "path": "metrics.json", "sha256": "0"*64},
+                {"role": "metrics", "path": "metrics_dup.json", "sha256": "0"*64},
+            ]
+        }
+        (dir_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert_corrupt_fails("v-c3", mut_duplicate_role)
+
+    # Case 4: broken JSON syntax in feature_schema.json despite matching SHA-256 in manifest
+    def mut_corrupt_json(dir_path: Path):
+        feat_path = dir_path / "feature_schema.json"
+        feat_path.write_text("{ broken json syntax : ", encoding="utf-8")
+        feat_sha = compute_file_sha256(feat_path)
+        (dir_path / "model.joblib").write_bytes(b"dummy")
+        (dir_path / "label_schema.json").write_text("{}", encoding="utf-8")
+        (dir_path / "history_requirement.json").write_text("{}", encoding="utf-8")
+        (dir_path / "metrics.json").write_text("{}", encoding="utf-8")
+        manifest = {
+            "model_id": "pdm-lightgbm",
+            "model_version": "v-c4",
+            "schema_version": "1.0",
+            "artifact_files": [
+                {"role": "model", "path": "model.joblib", "sha256": compute_file_sha256(dir_path / "model.joblib")},
+                {"role": "feature_schema", "path": "feature_schema.json", "sha256": feat_sha},
+                {"role": "label_schema", "path": "label_schema.json", "sha256": compute_file_sha256(dir_path / "label_schema.json")},
+                {"role": "history_requirement", "path": "history_requirement.json", "sha256": compute_file_sha256(dir_path / "history_requirement.json")},
+                {"role": "metrics", "path": "metrics.json", "sha256": compute_file_sha256(dir_path / "metrics.json")},
+            ]
+        }
+        (dir_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert_corrupt_fails("v-c4", mut_corrupt_json)
+
+    # Case 5: joblib.load fails on corrupted model.joblib file despite matching SHA-256 in manifest
+    def mut_corrupt_joblib(dir_path: Path):
+        m_path = dir_path / "model.joblib"
+        m_path.write_bytes(b"not a valid joblib file content")
+        m_sha = compute_file_sha256(m_path)
+        (dir_path / "feature_schema.json").write_text("{}", encoding="utf-8")
+        (dir_path / "label_schema.json").write_text("{}", encoding="utf-8")
+        (dir_path / "history_requirement.json").write_text("{}", encoding="utf-8")
+        (dir_path / "metrics.json").write_text("{}", encoding="utf-8")
+        manifest = {
+            "model_id": "pdm-lightgbm",
+            "model_version": "v-c5",
+            "schema_version": "1.0",
+            "artifact_files": [
+                {"role": "model", "path": "model.joblib", "sha256": m_sha},
+                {"role": "feature_schema", "path": "feature_schema.json", "sha256": compute_file_sha256(dir_path / "feature_schema.json")},
+                {"role": "label_schema", "path": "label_schema.json", "sha256": compute_file_sha256(dir_path / "label_schema.json")},
+                {"role": "history_requirement", "path": "history_requirement.json", "sha256": compute_file_sha256(dir_path / "history_requirement.json")},
+                {"role": "metrics", "path": "metrics.json", "sha256": compute_file_sha256(dir_path / "metrics.json")},
+            ]
+        }
+        (dir_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert_corrupt_fails("v-c5", mut_corrupt_joblib)
+
+    # Case 6: model_id / model_version mismatch
+    def mut_id_mismatch(dir_path: Path):
+        manifest = {
+            "model_id": "pdm-WRONG-ID",
+            "model_version": "v-c6",
+            "schema_version": "1.0",
+            "artifact_files": []
+        }
+        (dir_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert_corrupt_fails("v-c6", mut_id_mismatch)
 
 
 # =====================================================================
@@ -2501,3 +2594,70 @@ def test_snapshot_pinning_and_model_set_change_invalidates_checkpoint(isolated_r
     run_state2 = service.execute_queue_item(item2)
     assert run_state2.status == "succeeded"
     assert predict_recalculated is True  # Prediction checkpoint was invalidated and recalculated!
+
+
+# =====================================================================
+# 48. Staged Batch Payload Matches Official Schema Test (Component A)
+# =====================================================================
+
+def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monkeypatch):
+    """stage_batches()가 실제로 생성한 payload 파일(staging_dir/{asset_id}.json)이 공식 JSON Schema를 additionalProperties: false 검증 하에 통과하는지 검증."""
+    import json
+    import jsonschema
+    from pathlib import Path
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    notif_service = env["notif_service"]
+
+    # Active Model Set
+    active_service = service.active_model_set_service
+    active_set = ActiveModelSet(
+        model_set_id="pdm-schema-test",
+        model_set_version="1.0.0",
+        models={"lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True)},
+    )
+    active_service.update_active_model_set(active_set, validate_artifacts=False)
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "schema_val.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-schema-val", source_uri=str(src_file), source_checksum=sha)
+
+    run_state = service.execute_queue_item(item)
+    assert run_state.status == "succeeded"
+    assert len(run_state.prediction_event_ids) > 0
+
+    event_id = run_state.prediction_event_ids[0]
+    outbox_item = notif_service.get_outbox_item(event_id)
+    assert outbox_item is not None
+
+    actual_payload = outbox_item.payload.model_dump(mode="json")
+
+    # Build schema map for ref resolution
+    schemas_dir = Path("contracts/schemas")
+    schema_map = {}
+    for schema_file in schemas_dir.rglob("*.schema.json"):
+        with open(schema_file, "r", encoding="utf-8") as sf:
+            sdata = json.load(sf)
+            if "$id" in sdata:
+                schema_map[sdata["$id"]] = sdata
+
+    batch_schema_path = schemas_dir / "generator-prediction-result-batch.schema.json"
+    with open(batch_schema_path, "r", encoding="utf-8") as sf:
+        batch_schema = json.load(sf)
+
+    # Validate actual staged payload against schema
+    try:
+        from referencing import Registry, Resource
+        resources = [(uri, Resource.from_contents(sch)) for uri, sch in schema_map.items()]
+        registry = Registry().with_resources(resources)
+        validator = jsonschema.Draft202012Validator(batch_schema, registry=registry)
+    except ImportError:
+        resolver = jsonschema.RefResolver.from_schema(batch_schema, store=schema_map)
+        validator = jsonschema.Draft202012Validator(batch_schema, resolver=resolver)
+
+    validator.validate(actual_payload)  # Must pass without validation errors!

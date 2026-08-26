@@ -136,52 +136,143 @@ class ActiveModelSetService:
                     if not manifest_file.exists():
                         raise ModelSetArtifactIntegrityError(
                             f"아티팩트 manifest.json이 누락되었습니다: {manifest_file}",
-                            details=[{"model_id": model_id, "version": config.model_version}],
+                            details=[{"model_id": model_id, "version": config.model_version, "reason": "manifest_missing"}],
                             retryable=False,
                         )
 
                     try:
                         with open(manifest_file, "r", encoding="utf-8") as mf:
                             manifest_data = json.load(mf)
+                    except Exception as exc:
+                        raise ModelSetArtifactIntegrityError(
+                            f"manifest.json 파싱 실패: {exc}",
+                            details=[{"model_id": model_id, "version": config.model_version, "reason": "manifest_json_parse_failed"}],
+                            retryable=False,
+                        ) from exc
 
-                        if manifest_data.get("model_id") != model_id or manifest_data.get("model_version") != config.model_version:
+                    # 1. Manifest required fields check
+                    req_manifest_keys = ["model_id", "model_version", "artifact_files"]
+                    for key in req_manifest_keys:
+                        if key not in manifest_data or manifest_data[key] is None or manifest_data[key] == "":
                             raise ModelSetArtifactIntegrityError(
-                                f"manifest.json의 model_id/model_version 불일치 ({model_id}/{config.model_version})",
+                                f"manifest.json에 필수 키 '{key}'가 누락되었습니다.",
+                                details=[{"model_id": model_id, "version": config.model_version, "reason": f"manifest_field_missing:{key}"}],
                                 retryable=False,
                             )
 
-                        for file_entry in manifest_data.get("artifact_files", []):
-                            fname = file_entry.get("path")
-                            expected_sha = file_entry.get("sha256")
-                            if fname:
-                                target_f = artifact_dir / fname
-                                if not target_f.is_file():
-                                    raise ModelSetArtifactIntegrityError(
-                                        f"선언된 아티팩트 파일이 누락되었습니다: {target_f}",
-                                        retryable=False,
-                                    )
-                                if expected_sha and compute_file_sha256(target_f) != expected_sha:
-                                    raise ModelSetArtifactIntegrityError(
-                                        f"아티팩트 파일 체크섬 불일치: {target_f}",
-                                        retryable=False,
-                                    )
+                    # 2. model_id & model_version match
+                    if manifest_data.get("model_id") != model_id or manifest_data.get("model_version") != config.model_version:
+                        raise ModelSetArtifactIntegrityError(
+                            f"manifest.json의 model_id/model_version 불일치 ({manifest_data.get('model_id')}/{manifest_data.get('model_version')} vs {model_id}/{config.model_version})",
+                            details=[{"model_id": model_id, "version": config.model_version, "reason": "model_id_version_mismatch"}],
+                            retryable=False,
+                        )
 
-                        req_files = ["model.joblib", "feature_schema.json", "label_schema.json", "history_requirement.json", "metrics.json"]
-                        for rf in req_files:
-                            if not (artifact_dir / rf).is_file():
+                    # 3. Schema version supported check
+                    schema_ver = manifest_data.get("schema_version") or manifest_data.get("artifact_schema_version")
+                    allowed_schema_versions = {"1.0", "1.0.0", "v1", "model-artifact-v1.0"}
+                    if schema_ver and schema_ver not in allowed_schema_versions:
+                        raise ModelSetArtifactIntegrityError(
+                            f"지원되지 않는 Artifact Schema version 입니다: '{schema_ver}'",
+                            details=[{"model_id": model_id, "version": config.model_version, "reason": "schema_version_unsupported"}],
+                            retryable=False,
+                        )
+
+                    # 4. Check artifact_files roles and paths
+                    artifact_files = manifest_data.get("artifact_files", [])
+                    if not isinstance(artifact_files, list):
+                        raise ModelSetArtifactIntegrityError(
+                            "manifest.json의 artifact_files 필드가 배열 형태가 아닙니다.",
+                            details=[{"model_id": model_id, "version": config.model_version, "reason": "artifact_files_not_list"}],
+                            retryable=False,
+                        )
+
+                    declared_roles: list[str] = []
+                    has_role_entries = False
+                    for entry in artifact_files:
+                        if isinstance(entry, dict) and "role" in entry:
+                            has_role_entries = True
+                            r_name = entry.get("role")
+                            if r_name:
+                                declared_roles.append(r_name)
+
+                    if has_role_entries:
+                        norm_roles = set()
+                        for r in declared_roles:
+                            norm_r = "model" if r == "model_artifact" else r
+                            if norm_r in norm_roles:
                                 raise ModelSetArtifactIntegrityError(
-                                    f"필수 페이로드 파일 누락 ({rf}): {artifact_dir / rf}",
+                                    f"manifest artifact_files에 중복된 role이 존재합니다: '{r}'",
+                                    details=[{"model_id": model_id, "version": config.model_version, "reason": "role_duplicated"}],
+                                    retryable=False,
+                                )
+                            norm_roles.add(norm_r)
+
+                        required_roles = {"model", "feature_schema", "label_schema", "history_requirement", "metrics"}
+                        missing_roles = required_roles - norm_roles
+                        if missing_roles:
+                            raise ModelSetArtifactIntegrityError(
+                                f"manifest artifact_files에 필수 role이 누락되었습니다: {missing_roles}",
+                                details=[{"model_id": model_id, "version": config.model_version, "reason": "required_role_missing"}],
+                                retryable=False,
+                            )
+
+                    # 5. Check all declared artifact_files exist and match checksum
+                    for file_entry in artifact_files:
+                        fname = file_entry.get("path")
+                        expected_sha = file_entry.get("sha256")
+                        if fname:
+                            target_f = artifact_dir / fname
+                            if not target_f.is_file():
+                                raise ModelSetArtifactIntegrityError(
+                                    f"선언된 아티팩트 파일이 누락되었습니다: {target_f}",
+                                    details=[{"model_id": model_id, "version": config.model_version, "reason": "declared_file_missing"}],
+                                    retryable=False,
+                                )
+                            if expected_sha and compute_file_sha256(target_f) != expected_sha:
+                                raise ModelSetArtifactIntegrityError(
+                                    f"아티팩트 파일 체크섬 불일치: {target_f}",
+                                    details=[{"model_id": model_id, "version": config.model_version, "reason": "checksum_mismatch"}],
                                     retryable=False,
                                 )
 
-                    except Exception as m_exc:
-                        if isinstance(m_exc, (ModelSetArtifactIntegrityError, ModelSetArtifactNotFoundError)):
-                            raise
+                    # 6. Verify 4 JSON files exist & can be loaded via json.load
+                    req_json_files = ["feature_schema.json", "label_schema.json", "history_requirement.json", "metrics.json"]
+                    for jf in req_json_files:
+                        jpath = artifact_dir / jf
+                        if not jpath.is_file():
+                            raise ModelSetArtifactIntegrityError(
+                                f"필수 페이로드 파일 누락 ({jf}): {jpath}",
+                                details=[{"model_id": model_id, "version": config.model_version, "reason": f"payload_file_missing:{jf}"}],
+                                retryable=False,
+                            )
+                        try:
+                            with open(jpath, "r", encoding="utf-8") as f:
+                                json.load(f)
+                        except Exception as exc:
+                            raise ModelSetArtifactIntegrityError(
+                                f"페이로드 JSON 파일 파싱 실패 ({jf}): {exc}",
+                                details=[{"model_id": model_id, "version": config.model_version, "reason": f"json_load_failed:{jf}"}],
+                                retryable=False,
+                            ) from exc
+
+                    # 7. Verify model.joblib exists & can be loaded via joblib.load
+                    import joblib
+                    model_joblib_path = artifact_dir / "model.joblib"
+                    if not model_joblib_path.is_file():
                         raise ModelSetArtifactIntegrityError(
-                            f"아티팩트 무결성 검증 실패 ({model_id}/{config.model_version}): {m_exc}",
-                            details=[{"error": str(m_exc)}],
+                            f"필수 모델 파일 model.joblib 누락: {model_joblib_path}",
+                            details=[{"model_id": model_id, "version": config.model_version, "reason": "model_file_missing"}],
                             retryable=False,
-                        ) from m_exc
+                        )
+                    try:
+                        joblib.load(model_joblib_path)
+                    except Exception as exc:
+                        raise ModelSetArtifactIntegrityError(
+                            f"모델 파일 joblib.load() 로드 실패: {exc}",
+                            details=[{"model_id": model_id, "version": config.model_version, "reason": "joblib_load_failed"}],
+                            retryable=False,
+                        ) from exc
 
             # 3. Write temp file and atomic replace
             new_set.updated_at = now_utc_iso()
