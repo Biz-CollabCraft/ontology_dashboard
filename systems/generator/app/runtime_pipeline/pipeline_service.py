@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -22,6 +23,7 @@ from systems.generator.app.preprocessing.preprocessing_repository import (
 )
 from systems.generator.app.preprocessing.preprocessing_service import PreprocessingService
 from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+    EquipmentModelBatch,
     PredictionBatchService,
     PredictionBatchSummary,
 )
@@ -40,8 +42,15 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineInputNotFoundError,
     PipelineIntermediateCleanupFailedError,
     PipelineMappingNotImplementedError,
+    PipelineModelArtifactInvalidError,
     PipelineModelPredictionFailedError,
+    PipelineModelSetChangedError,
+    PipelineModelSnapshotArtifactMissingError,
+    PipelineModelSnapshotChecksumMismatchError,
+    PipelineModelSnapshotIncompatibleError,
     PipelineNoActiveModelError,
+    PipelineOutboxEventConflictError,
+    PipelineOutboxPayloadChecksumMismatchError,
     PipelinePredictionObservationAlignmentNotImplementedError,
     PipelinePreprocessingFailedError,
     PipelineResumeFailedError,
@@ -57,6 +66,7 @@ from systems.generator.app.runtime_pipeline.pipeline_repository import (
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ArtifactReference,
     InternalModelPredictionResult,
+    ModelSnapshotEntry,
     PipelineCheckpoint,
     PipelineQueueItem,
     PipelineRunState,
@@ -80,6 +90,12 @@ from systems.generator.app.runtime_pipeline.runtime_feature_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_canonical_dict_sha256(data_dict: dict[str, Any]) -> str:
+    """Compute SHA-256 checksum of compact canonical JSON serialization."""
+    c_json = json.dumps(data_dict, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(c_json.encode("utf-8")).hexdigest()
 
 
 class PipelineService:
@@ -190,7 +206,11 @@ class PipelineService:
         p = Path(ref.uri)
         if not p.is_file():
             if not p.is_absolute():
+                p_str = ref.uri.replace("\\", "/")
+                rel_p = p_str[len("data_preprocessed/"):] if p_str.startswith("data_preprocessed/") else p_str
                 candidates = [
+                    (PATHS.data_preprocessed / rel_p).resolve(),
+                    (self.repository.base_dir / rel_p).resolve(),
                     (self.repository.base_dir / p).resolve(),
                     (PROJECT_ROOT / p).resolve(),
                 ]
@@ -231,6 +251,41 @@ class PipelineService:
         except Exception:
             return False
 
+    def _build_model_snapshot(
+        self,
+        base_models: list[str],
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, LoadedModelArtifact]]:
+        """Construct Model Snapshot dictionary for active models and return loaded artifacts."""
+        snapshot: dict[str, dict[str, Any]] = {}
+        artifacts: dict[str, LoadedModelArtifact] = {}
+        for bm in base_models:
+            model_id = self.prediction_service.resolve_model_id(bm)
+            art = self.prediction_service.load_active_artifact(bm)
+            artifacts[bm] = art
+
+            if hasattr(art, "manifest_path") and art.manifest_path and Path(art.manifest_path).is_file():
+                manifest_sha = compute_file_sha256(Path(art.manifest_path))
+            elif hasattr(art, "publisher") and hasattr(art.publisher, "manifest"):
+                manifest_sha = hashlib.sha256(art.publisher.manifest.model_dump_json(indent=2).encode("utf-8")).hexdigest()
+            else:
+                manifest_sha = hashlib.sha256(f"{model_id}:{art.model_version}".encode("utf-8")).hexdigest()
+
+            f_schema_ver = art.feature_schema.get("feature_schema_version", "v1")
+            f_schema_sha = _compute_canonical_dict_sha256(art.feature_schema)
+            h_req_ver = art.history_requirement.get("history_requirement_version", "v1")
+            h_req_sha = _compute_canonical_dict_sha256(art.history_requirement)
+
+            snapshot[model_id] = {
+                "model_id": model_id,
+                "model_version": art.model_version,
+                "manifest_sha256": manifest_sha,
+                "feature_schema_version": f_schema_ver,
+                "feature_schema_sha256": f_schema_sha,
+                "history_requirement_version": h_req_ver,
+                "history_requirement_sha256": h_req_sha,
+            }
+        return snapshot, artifacts
+
     def execute_queue_item(self, item: PipelineQueueItem) -> PipelineRunState:
         """Execute complete 5-stage pipeline lifecycle for a claimed queue item with checkpoint resumption."""
         # 1. Path, File Existence and Stability Validation
@@ -264,6 +319,14 @@ class PipelineService:
         )
         logical_source_uri = self.get_logical_source_uri(source_path)
 
+        # Pin active base models for this run
+        current_snapshot, model_artifacts = self._build_model_snapshot(REGISTERED_BASE_MODELS)
+        if not model_artifacts:
+            raise PipelineNoActiveModelError(
+                "활성화된 머신러닝 모델 아티팩트가 0개입니다.",
+                retryable=False,
+            )
+
         # 2. Resumption Planning: Search for existing resumable run
         resumable_run = self.repository.find_resumable_run(source_identity)
         resumed_stage: Optional[str] = None
@@ -290,21 +353,18 @@ class PipelineService:
             manager = PipelineStateManager(resumable_run)
             manager.state.job_id = item.job_id
 
-            # Determine furthest valid checkpoint
             last_stg = checkpoint_to_resume.last_completed_stage
 
-            # Check Checkpoint 1 (Preprocessing) validity
             prep_outputs = checkpoint_to_resume.stage_outputs.get("preprocessing", [])
             prep_valid = bool(prep_outputs) and all(self._validate_checkpoint_output_ref(r) for r in prep_outputs)
 
-            # Check Checkpoint 2 (Runtime Feature) validity
             feat_outputs = checkpoint_to_resume.stage_outputs.get("runtime_feature", [])
             feat_valid = prep_valid and bool(feat_outputs) and all(self._validate_checkpoint_output_ref(r) for r in feat_outputs)
 
-            # Check Checkpoint 3 (Prediction) validity
             pred_valid = feat_valid and bool(resumable_run.prediction_results) and last_stg in ("runtime_prediction", "batch_building", "prediction_delivery")
+            batch_valid = pred_valid and checkpoint_to_resume.batch_manifest_ref is not None and self._validate_checkpoint_output_ref(checkpoint_to_resume.batch_manifest_ref)
 
-            if pred_valid and last_stg in ("batch_building", "prediction_delivery"):
+            if batch_valid and last_stg in ("batch_building", "prediction_delivery"):
                 resumed_stage = "prediction_delivery"
             elif pred_valid:
                 resumed_stage = "batch_building"
@@ -335,6 +395,7 @@ class PipelineService:
             manager.record_checkpoint(
                 stage_name="source_validated",
                 next_stage="preprocessing",
+                model_snapshot=current_snapshot,
                 source_identity=source_identity,
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
@@ -370,7 +431,6 @@ class PipelineService:
             try:
                 raw_df = self._load_source_df(source_path)
 
-                # Strict validation of ID and timestamp
                 id_cols = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id") if c in raw_df.columns]
                 if not id_cols:
                     raise PipelineMappingNotImplementedError(
@@ -422,7 +482,6 @@ class PipelineService:
                             retryable=False,
                         ) from exc
 
-                    # Check for duplicate [asset_id, timestamp] rows
                     raw_df_chk = raw_df.copy()
                     raw_df_chk[target_time] = converted_ts
                     dups = raw_df_chk.duplicated(subset=[target_id, target_time], keep=False)
@@ -437,12 +496,9 @@ class PipelineService:
                         )
 
                 schema_fp = compute_source_schema_fingerprint(raw_df)
-
-                # Build and validate preprocessing plan
                 plan = self.preprocessing_service.planner.build_plan(str(source_path))
                 self.preprocessing_service.validate_plan(raw_df, plan)
 
-                # Publish plan to repository
                 try:
                     logical_src_uri = self.preprocessing_service.repository.get_logical_uri(source_path)
                 except Exception:
@@ -468,10 +524,7 @@ class PipelineService:
                     size_bytes=None,
                 )
 
-                # Execute actual preprocessing
                 preprocessed_df = self.preprocessing_service.preprocess_with_plan(str(source_path), plan)
-
-                # Atomically publish preprocessed dataset to disk
                 dataset_ref = self._publish_preprocessed_dataset(run_id, preprocessed_df)
 
                 manager.register_intermediate_outputs([dataset_ref])
@@ -482,6 +535,7 @@ class PipelineService:
                     stage_name="preprocessing",
                     next_stage="runtime_feature",
                     stage_outputs=[plan_ref, dataset_ref],
+                    model_snapshot=current_snapshot,
                     source_identity=source_identity,
                     dataset_id=item.dataset_id,
                     dataset_version=item.dataset_version,
@@ -500,40 +554,67 @@ class PipelineService:
                 raise
 
         # -------------------------------------------------------------
-        # Stage 2: Runtime Feature (Per-Equipment Isolation & float64 npy)
+        # Stage 2: Runtime Feature (Structured Per-Model Checkpoint)
         # -------------------------------------------------------------
         assert dataset_ref is not None, "dataset_ref must be available"
-        model_artifacts: dict[str, LoadedModelArtifact] = {}
         model_feature_refs: dict[str, ArtifactReference] = {}
         model_feature_bundles: dict[str, RuntimeFeatureBundle] = {}
+        model_feature_outputs_map: dict[str, dict[str, Any]] = {}
         model_feature_errors: dict[str, Any] = {}
         last_feat_error: Optional[Exception] = None
 
-        if resumed_stage in ("runtime_prediction", "batch_building", "prediction_delivery") and checkpoint_to_resume:
-            prep_file_path = Path(dataset_ref.uri)
-            if not prep_file_path.is_file():
-                prep_file_path = (self.repository.base_dir / dataset_ref.uri).resolve()
-            preprocessed_input_df = pd.read_csv(prep_file_path)
-            id_col = plan.get("id_column") or "asset_id"
-            if id_col not in preprocessed_input_df.columns:
-                candidates = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id") if c in preprocessed_input_df.columns]
-                id_col = candidates[0] if candidates else "asset_id"
+        prep_file_path = Path(dataset_ref.uri)
+        if not prep_file_path.is_file():
+            prep_file_path = (self.repository.base_dir / dataset_ref.uri).resolve()
+        preprocessed_input_df = pd.read_csv(prep_file_path)
 
-            cached_feat_refs = {}
-            for r in checkpoint_to_resume.stage_outputs.get("runtime_feature", []):
-                fname = Path(r.uri).name
-                mid = fname.split("_")[0] if "_" in fname else ""
-                if mid:
-                    cached_feat_refs[mid] = r
+        id_col = plan.get("id_column") or "asset_id"
+        if id_col not in preprocessed_input_df.columns:
+            candidates = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id") if c in preprocessed_input_df.columns]
+            if candidates:
+                id_col = candidates[0]
+            else:
+                raise PipelineAssetIdColumnMissingError(
+                    "전처리 데이터셋에 설비 식별자(asset_id) 컬럼이 누락되었습니다.",
+                    retryable=False,
+                )
 
+        # Lookup structured stage outputs from checkpoint
+        cached_model_feat_outputs = (
+            checkpoint_to_resume.model_stage_outputs.get("runtime_feature", {})
+            if checkpoint_to_resume and checkpoint_to_resume.model_stage_outputs
+            else {}
+        )
+        cached_model_snapshot = (
+            checkpoint_to_resume.model_snapshot
+            if checkpoint_to_resume and checkpoint_to_resume.model_snapshot
+            else {}
+        )
+
+        manager.start_stage("runtime_feature", input_refs=[dataset_ref, plan_ref] if plan_ref else [dataset_ref])
+
+        try:
             for base_model in REGISTERED_BASE_MODELS:
                 model_id = self.prediction_service.resolve_model_id(base_model)
-                try:
-                    artifact = self.prediction_service.load_active_artifact(base_model)
-                    model_artifacts[base_model] = artifact
+                artifact = model_artifacts[base_model]
 
-                    cached_ref = cached_feat_refs.get(model_id)
-                    if cached_ref and self._validate_checkpoint_output_ref(cached_ref):
+                # Verify snapshot & feature schema match
+                active_snap_entry = current_snapshot.get(model_id, {})
+                chk_snap_entry = cached_model_snapshot.get(model_id, {})
+                cached_entry = cached_model_feat_outputs.get(model_id, {})
+
+                cached_ref = None
+                if cached_entry and "artifact_ref" in cached_entry:
+                    cached_ref = ArtifactReference.model_validate(cached_entry["artifact_ref"])
+
+                # Check if feature NPY can be reused
+                feature_schema_match = (
+                    active_snap_entry.get("feature_schema_sha256") == chk_snap_entry.get("feature_schema_sha256")
+                    and active_snap_entry.get("history_requirement_sha256") == chk_snap_entry.get("history_requirement_sha256")
+                )
+
+                if cached_ref and feature_schema_match and self._validate_checkpoint_output_ref(cached_ref):
+                    try:
                         bundle = self.runtime_feature_service.load_bundle_from_artifact(
                             artifact_ref=cached_ref,
                             preprocessed_df=preprocessed_input_df,
@@ -545,156 +626,107 @@ class PipelineService:
                         )
                         model_feature_refs[base_model] = cached_ref
                         model_feature_bundles[base_model] = bundle
-                        logger.info(f"[PipelineService] Reused verified feature for '{model_id}' from checkpoint")
-                    else:
-                        bundle, feat_ref = self.runtime_feature_service.extract_and_publish(
-                            preprocessed_df=preprocessed_input_df,
-                            feature_schema_dict=artifact.feature_schema,
-                            history_requirement_dict=artifact.history_requirement,
-                            model_id=model_id,
-                            model_version=artifact.model_version,
-                            id_column=id_col,
-                            time_column=plan.get("time_column"),
-                            dataset_id=item.dataset_id,
-                            dataset_version=item.dataset_version,
-                            run_id=run_id,
-                        )
-                        model_feature_refs[base_model] = feat_ref
-                        model_feature_bundles[base_model] = bundle
-                        logger.info(f"[PipelineService] Re-extracted feature for damaged/missing model '{model_id}'")
+                        model_feature_outputs_map[model_id] = {
+                            "artifact_ref": cached_ref.model_dump(),
+                            "model_version": artifact.model_version,
+                            "feature_schema_version": artifact.feature_schema.get("feature_schema_version", "v1"),
+                            "history_requirement_version": artifact.history_requirement.get("history_requirement_version", "v1"),
+                        }
+                        logger.info(f"[PipelineService] Reused verified feature for '{model_id}' from structured checkpoint")
+                        continue
+                    except Exception as exc:
+                        logger.warning(f"[PipelineService] Failed to load cached feature bundle for '{model_id}': {exc}")
+
+                # Re-extract feature for model_id
+                try:
+                    bundle, feat_ref = self.runtime_feature_service.extract_and_publish(
+                        preprocessed_df=preprocessed_input_df,
+                        feature_schema_dict=artifact.feature_schema,
+                        history_requirement_dict=artifact.history_requirement,
+                        model_id=model_id,
+                        model_version=artifact.model_version,
+                        id_column=id_col,
+                        time_column=plan.get("time_column"),
+                        dataset_id=item.dataset_id,
+                        dataset_version=item.dataset_version,
+                        run_id=run_id,
+                    )
+                    model_feature_refs[base_model] = feat_ref
+                    model_feature_bundles[base_model] = bundle
+                    model_feature_outputs_map[model_id] = {
+                        "artifact_ref": feat_ref.model_dump(),
+                        "model_version": artifact.model_version,
+                        "feature_schema_version": artifact.feature_schema.get("feature_schema_version", "v1"),
+                        "history_requirement_version": artifact.history_requirement.get("history_requirement_version", "v1"),
+                    }
+                    logger.info(f"[PipelineService] Extracted fresh feature for '{model_id}'")
                 except Exception as exc:
                     last_feat_error = exc
                     model_feature_errors[base_model] = exc
-                    logger.warning(f"[PipelineService] Feature loading/extraction failed for '{model_id}': {exc}")
-        else:
-            manager.start_stage("runtime_feature", input_refs=[dataset_ref, plan_ref] if plan_ref else [dataset_ref])
-            try:
-                prep_file_path = Path(dataset_ref.uri)
-                if not prep_file_path.is_file():
-                    prep_file_path = (self.repository.base_dir / dataset_ref.uri).resolve()
-                preprocessed_input_df = pd.read_csv(prep_file_path)
+                    logger.warning(f"[PipelineService] Feature extraction failed for '{model_id}': {exc}")
 
-                id_col = plan.get("id_column") or "asset_id"
-                if id_col not in preprocessed_input_df.columns:
-                    candidates = [c for c in ("asset_id", "Product ID", "UDI", "equipment_id", "machine_id") if c in preprocessed_input_df.columns]
-                    if candidates:
-                        id_col = candidates[0]
-                    else:
-                        raise PipelineAssetIdColumnMissingError(
-                            "전처리 데이터셋에 설비 식별자(asset_id) 컬럼이 누락되었습니다.",
-                            retryable=False,
-                        )
+            if not model_feature_refs:
+                if last_feat_error is not None:
+                    raise last_feat_error
+                raise PipelineRuntimeFeatureFailedError(
+                    "모든 모델에 대해 Runtime Feature 생성이 실패했습니다.",
+                    retryable=False,
+                )
 
-                actual_asset_ids = sorted(preprocessed_input_df[id_col].dropna().astype(str).unique().tolist())
-                if not actual_asset_ids:
-                    raise PipelineAssetIdValueMissingError(
-                        "전처리 데이터셋에서 유효한 설비 식별자 목록을 추출할 수 없습니다.",
-                        retryable=False,
-                    )
-
-                cached_feat_refs = {}
-                if checkpoint_to_resume:
-                    for r in checkpoint_to_resume.stage_outputs.get("runtime_feature", []):
-                        fname = Path(r.uri).name
-                        mid = fname.split("_")[0] if "_" in fname else ""
-                        if mid:
-                            cached_feat_refs[mid] = r
-
-                for base_model in REGISTERED_BASE_MODELS:
-                    model_id = self.prediction_service.resolve_model_id(base_model)
-                    try:
-                        artifact = self.prediction_service.load_active_artifact(base_model)
-                        model_artifacts[base_model] = artifact
-
-                        cached_ref = cached_feat_refs.get(model_id)
-                        if cached_ref and self._validate_checkpoint_output_ref(cached_ref):
-                            bundle = self.runtime_feature_service.load_bundle_from_artifact(
-                                artifact_ref=cached_ref,
-                                preprocessed_df=preprocessed_input_df,
-                                feature_schema_dict=artifact.feature_schema,
-                                id_column=id_col,
-                                time_column=plan.get("time_column"),
-                                dataset_id=item.dataset_id,
-                                dataset_version=item.dataset_version,
-                            )
-                            model_feature_refs[base_model] = cached_ref
-                            model_feature_bundles[base_model] = bundle
-                            logger.info(f"[PipelineService] Reused verified feature for '{model_id}' from checkpoint")
-                        else:
-                            bundle, feat_ref = self.runtime_feature_service.extract_and_publish(
-                                preprocessed_df=preprocessed_input_df,
-                                feature_schema_dict=artifact.feature_schema,
-                                history_requirement_dict=artifact.history_requirement,
-                                model_id=model_id,
-                                model_version=artifact.model_version,
-                                id_column=id_col,
-                                time_column=plan.get("time_column"),
-                                dataset_id=item.dataset_id,
-                                dataset_version=item.dataset_version,
-                                run_id=run_id,
-                            )
-                            model_feature_refs[base_model] = feat_ref
-                            model_feature_bundles[base_model] = bundle
-                    except Exception as exc:
-                        last_feat_error = exc
-                        model_feature_errors[base_model] = exc
-                        logger.warning(f"[PipelineService] Feature extraction failed for '{model_id}': {exc}")
-
-                if not model_artifacts:
-                    raise PipelineNoActiveModelError(
-                        "활성화된 머신러닝 모델 아티팩트가 0개입니다.",
-                        retryable=False,
-                    )
-
-                if not model_feature_refs:
-                    if last_feat_error is not None:
-                        raise last_feat_error
-                    raise PipelineRuntimeFeatureFailedError(
-                        "모든 모델에 대해 Runtime Feature 생성이 실패했습니다.",
-                        retryable=False,
-                    )
-
-                manager.register_intermediate_outputs(list(model_feature_refs.values()))
+            manager.register_intermediate_outputs(list(model_feature_refs.values()))
+            if not (resumed_stage in ("runtime_prediction", "batch_building", "prediction_delivery")):
                 manager.succeed_stage("runtime_feature", output_refs=list(model_feature_refs.values()))
 
-                # Model Snapshot
-                model_snapshot = {
-                    bm: {
-                        "model_id": self.prediction_service.resolve_model_id(bm),
-                        "model_version": art.model_version,
-                    }
-                    for bm, art in model_artifacts.items()
-                }
-
-                # Checkpoint 2: Runtime Feature Completed
-                manager.record_checkpoint(
-                    stage_name="runtime_feature",
-                    next_stage="runtime_prediction",
-                    stage_outputs=list(model_feature_refs.values()),
-                    model_snapshot=model_snapshot,
-                    source_identity=source_identity,
-                    dataset_id=item.dataset_id,
-                    dataset_version=item.dataset_version,
-                    pipeline_contract_version=contract_ver,
-                    status="resumable",
-                )
-                if manager.state.checkpoint:
-                    self.repository.save_checkpoint(manager.state.checkpoint)
-                self.repository.save_run_state(manager.state)
-            except Exception as exc:
-                err_code = getattr(exc, "code", "PIPELINE_RUNTIME_FEATURE_FAILED")
-                retryable = getattr(exc, "retryable", False)
+            # Checkpoint 2: Runtime Feature Completed
+            manager.record_checkpoint(
+                stage_name="runtime_feature",
+                next_stage="runtime_prediction",
+                stage_outputs=list(model_feature_refs.values()),
+                model_stage_outputs={"runtime_feature": model_feature_outputs_map},
+                model_snapshot=current_snapshot,
+                snapshot_validation_status="valid",
+                source_identity=source_identity,
+                dataset_id=item.dataset_id,
+                dataset_version=item.dataset_version,
+                pipeline_contract_version=contract_ver,
+                status="resumable",
+            )
+            if manager.state.checkpoint:
+                self.repository.save_checkpoint(manager.state.checkpoint)
+            self.repository.save_run_state(manager.state)
+        except Exception as exc:
+            err_code = getattr(exc, "code", "PIPELINE_RUNTIME_FEATURE_FAILED")
+            retryable = getattr(exc, "retryable", False)
+            if manager.state.stages.get("runtime_feature") and manager.state.stages["runtime_feature"].status == "running":
                 manager.fail_stage("runtime_feature", err_code, str(exc), retryable=retryable)
-                manager.finish_run("failed")
-                self.repository.save_run_state(manager.state)
-                raise
+            manager.finish_run("failed")
+            self.repository.save_run_state(manager.state)
+            raise
 
         # -------------------------------------------------------------
         # Stage 3: Prediction (Score Calculation across Models per Equipment)
         # -------------------------------------------------------------
         model_results: list[InternalModelPredictionResult] = []
 
-        if resumed_stage in ("batch_building", "prediction_delivery") and resumable_run and resumable_run.prediction_results:
+        # Check if prediction results can be reused based on snapshot match
+        can_reuse_pred = (
+            resumed_stage in ("batch_building", "prediction_delivery")
+            and resumable_run is not None
+            and bool(resumable_run.prediction_results)
+            and checkpoint_to_resume is not None
+        )
+        if can_reuse_pred:
+            # Check model versions & manifest sha256 match for prediction reuse
+            for bm in REGISTERED_BASE_MODELS:
+                mid = self.prediction_service.resolve_model_id(bm)
+                active_entry = current_snapshot.get(mid, {})
+                chk_entry = cached_model_snapshot.get(mid, {})
+                if active_entry.get("model_version") != chk_entry.get("model_version") or active_entry.get("manifest_sha256") != chk_entry.get("manifest_sha256"):
+                    can_reuse_pred = False
+                    logger.info(f"[PipelineService] Model version/manifest changed for '{mid}'. Invalidating prediction reuse.")
+                    break
+
+        if can_reuse_pred and resumable_run:
             model_results = list(resumable_run.prediction_results)
             logger.info(f"[PipelineService] Resuming: Stage 3 Runtime Prediction skipped for run '{run_id}'")
         else:
@@ -725,6 +757,7 @@ class PipelineService:
                     stage_name="runtime_prediction",
                     next_stage="batch_building",
                     stage_outputs=pred_output_refs,
+                    model_snapshot=current_snapshot,
                     source_identity=source_identity,
                     dataset_id=item.dataset_id,
                     dataset_version=item.dataset_version,
@@ -743,18 +776,67 @@ class PipelineService:
                 raise
 
         # -------------------------------------------------------------
-        # Stage 4: Batch Building (Collect Model Results per Equipment)
+        # Stage 4: Batch Building (Batch Staging & Manifest Verification)
         # -------------------------------------------------------------
         manager.start_stage("batch_building")
+        staged_batches: Optional[dict[str, Any]] = None
+
+        if checkpoint_to_resume and checkpoint_to_resume.batch_manifest_ref:
+            if self._validate_checkpoint_output_ref(checkpoint_to_resume.batch_manifest_ref):
+                try:
+                    staged_batches = self.prediction_batch_service.load_staged_batches(checkpoint_to_resume.batch_manifest_ref)
+                    logger.info(f"[PipelineService] Loaded {len(staged_batches)} staged batches from manifest")
+                except Exception as exc:
+                    logger.warning(f"[PipelineService] Failed to load staged batches: {exc}")
+
         try:
-            batch_summary: PredictionBatchSummary = self.prediction_batch_service.collect(model_results)
-            manager.record_predictions(model_results)
-            manager.succeed_stage("batch_building", output_refs=[])
+            if not staged_batches:
+                batch_summary: PredictionBatchSummary = self.prediction_batch_service.collect(model_results)
+                manager.record_predictions(model_results)
+
+                batch_manifest_ref = self.prediction_batch_service.stage_batches(
+                    run_id=run_id,
+                    job_id=item.job_id,
+                    summary=batch_summary,
+                    dataset_id=item.dataset_id,
+                    dataset_version=item.dataset_version,
+                    pipeline_contract_version=contract_ver,
+                    source_lineage=SourceLineage(
+                        source_uri=logical_source_uri,
+                        source_checksum=item.source_checksum,
+                        pipeline_contract_version=contract_ver,
+                    ),
+                    sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
+                )
+                manager.register_intermediate_outputs([batch_manifest_ref])
+            else:
+                eq_batches = {}
+                for aid, payload in staged_batches.items():
+                    eq_batches[aid] = EquipmentModelBatch(
+                        asset_id=aid,
+                        status="succeeded",
+                        observed_at=payload.observed_at,
+                        succeeded_models=list(payload.model_results.keys()),
+                        failed_models=[],
+                        model_results=payload.model_results,
+                    )
+                batch_summary = PredictionBatchSummary(
+                    overall_status="succeeded",
+                    equipment_batches=eq_batches,
+                    total_equipments=len(eq_batches),
+                    succeeded_equipments=list(eq_batches.keys()),
+                )
+                batch_manifest_ref = checkpoint_to_resume.batch_manifest_ref if checkpoint_to_resume else None
+
+            manager.succeed_stage("batch_building", output_refs=[batch_manifest_ref] if batch_manifest_ref else [])
 
             # Checkpoint 4: Batch Built
             manager.record_checkpoint(
                 stage_name="batch_building",
                 next_stage="prediction_delivery",
+                stage_outputs=[batch_manifest_ref] if batch_manifest_ref else [],
+                batch_manifest_ref=batch_manifest_ref,
+                model_snapshot=current_snapshot,
                 source_identity=source_identity,
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
@@ -773,13 +855,12 @@ class PipelineService:
             raise
 
         # -------------------------------------------------------------
-        # Stage 5: Prediction Delivery (Outbox Persistence for ALL equipments)
+        # Stage 5: Prediction Delivery (Idempotent Outbox Persistence)
         # -------------------------------------------------------------
         if batch_summary.equipment_batches:
             manager.start_stage("prediction_delivery")
             manager.record_prediction_delivery("pending")
 
-            # Post-run verification: ensure source file was not modified during pipeline execution
             post_sha = compute_file_sha256(source_path)
             post_size = source_path.stat().st_size
             if post_sha != item.source_checksum or (item.size_bytes is not None and post_size != item.size_bytes):
@@ -791,24 +872,11 @@ class PipelineService:
 
             event_ids: list[str] = []
             events_state: list[PredictionDeliveryEventState] = []
+            delivery_outputs_map: dict[str, dict[str, Any]] = {}
+
+            existing_delivery = checkpoint_to_resume.delivery_outputs if checkpoint_to_resume and checkpoint_to_resume.delivery_outputs else {}
 
             for asset_id, eq_batch in batch_summary.equipment_batches.items():
-                event_id = f"evt-{uuid.uuid4().hex[:16]}"
-                event_ids.append(event_id)
-                events_state.append(
-                    PredictionDeliveryEventState(
-                        event_id=event_id,
-                        asset_id=asset_id,
-                        status="pending",
-                        attempt=0,
-                        max_attempts=5,
-                        next_retry_at=None,
-                        last_error_code=None,
-                        last_error_message=None,
-                        updated_at=now_utc_iso(),
-                    )
-                )
-
                 batch_observed_at = eq_batch.observed_at
                 if not batch_observed_at:
                     raise PipelinePredictionObservationAlignmentNotImplementedError(
@@ -818,7 +886,7 @@ class PipelineService:
                     )
 
                 batch_payload = PredictionResultBatchPayload(
-                    event_id=event_id,
+                    event_id="temp",
                     run_id=run_id,
                     job_id=item.job_id,
                     asset_id=asset_id,
@@ -835,9 +903,53 @@ class PipelineService:
                     sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
                 )
 
-                # Atomically persist to Outbox directory for background worker delivery
-                self.prediction_delivery_service.create_outbox_record(batch_payload)
+                prev_delivery = existing_delivery.get(asset_id)
+                if prev_delivery and prev_delivery.get("status") == "published":
+                    event_id = prev_delivery["event_id"]
+                    payload_sha256 = prev_delivery["payload_sha256"]
+                    existing_outbox = self.prediction_delivery_service.get_outbox_item(event_id)
+                    if existing_outbox is not None:
+                        _, current_sha = self.prediction_delivery_service.compute_canonical_payload_sha256(batch_payload)
+                        if current_sha == payload_sha256:
+                            logger.info(f"[PipelineService] Skipping already published outbox item '{event_id}' for equipment '{asset_id}'")
+                            event_ids.append(event_id)
+                            events_state.append(
+                                PredictionDeliveryEventState(
+                                    event_id=event_id,
+                                    asset_id=asset_id,
+                                    status="sent" if existing_outbox.status == "sent" else "pending",
+                                    attempt=existing_outbox.attempt,
+                                    max_attempts=5,
+                                    updated_at=existing_outbox.updated_at,
+                                )
+                            )
+                            delivery_outputs_map[asset_id] = prev_delivery
+                            continue
+
+                outbox_item, payload_sha256 = self.prediction_delivery_service.register_idempotent_outbox_record(batch_payload)
                 self.repository.save_event(batch_payload)
+
+                event_ids.append(outbox_item.event_id)
+                events_state.append(
+                    PredictionDeliveryEventState(
+                        event_id=outbox_item.event_id,
+                        asset_id=asset_id,
+                        status="pending",
+                        attempt=0,
+                        max_attempts=5,
+                        updated_at=now_utc_iso(),
+                    )
+                )
+                delivery_outputs_map[asset_id] = {
+                    "event_id": outbox_item.event_id,
+                    "payload_sha256": payload_sha256,
+                    "status": "published",
+                    "outbox_ref": {
+                        "uri": f"data/outbox/notification/{outbox_item.event_id}.json",
+                        "sha256": payload_sha256,
+                        "role": "prediction_outbox",
+                    },
+                }
 
             manager.state.prediction_event_ids = event_ids
             manager.state.prediction_events = events_state
@@ -847,6 +959,8 @@ class PipelineService:
             manager.record_checkpoint(
                 stage_name="prediction_delivery",
                 next_stage="completed",
+                delivery_outputs=delivery_outputs_map,
+                model_snapshot=current_snapshot,
                 source_identity=source_identity,
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
@@ -870,10 +984,13 @@ class PipelineService:
             intermediate_refs=manager.state.intermediate_outputs,
         )
 
+        manager.state.cleanup_deleted_paths = deleted_paths
+
         if cleanup_success:
             manager.mark_cleaned()
             final_run_status = batch_summary.overall_status
         else:
+            manager.state.cleanup_failed_paths = [cleanup_error] if cleanup_error else []
             manager.mark_cleanup_failed(
                 error_code="PIPELINE_INTERMEDIATE_CLEANUP_FAILED",
                 error_message=cleanup_error or "Intermediate cleanup failed",

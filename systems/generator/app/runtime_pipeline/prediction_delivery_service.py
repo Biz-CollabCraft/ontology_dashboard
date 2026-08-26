@@ -96,6 +96,64 @@ class PredictionDeliveryService:
                     logger.error(f"[PredictionDeliveryService] Failed to quarantine corrupt file '{file.name}': {exc}")
         return items
 
+    @staticmethod
+    def compute_canonical_payload_sha256(payload: PredictionResultBatchPayload) -> tuple[str, str]:
+        """Compute SHA-256 checksum of canonical payload representation and generate deterministic event_id."""
+        import hashlib
+        d = payload.model_dump(mode="json")
+        d.pop("event_id", None)
+        d.pop("generated_at", None)
+        d.pop("job_id", None)
+
+        canonical_json = json.dumps(d, sort_keys=True, separators=(",", ":"))
+        payload_sha256 = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+        contract_ver = (
+            payload.source_lineage.pipeline_contract_version
+            if hasattr(payload, "source_lineage") and payload.source_lineage
+            else "generator-prediction-result-v1"
+        )
+        raw_key = f"{contract_ver}:{payload.run_id}:{payload.asset_id}:{payload_sha256}"
+        event_id = f"evt-{hashlib.sha256(raw_key.encode('utf-8')).hexdigest()[:32]}"
+        return event_id, payload_sha256
+
+    def register_idempotent_outbox_record(self, payload: PredictionResultBatchPayload) -> tuple[PredictionOutboxItem, str]:
+        """
+        Registers or reuses outbox record with deterministic event ID and payload sha256.
+        If event_id already exists:
+          - If payload sha256 matches: return existing item as idempotent success.
+          - If payload sha256 differs: raise PipelineOutboxEventConflictError.
+        """
+        from systems.generator.app.runtime_pipeline.pipeline_exception import (
+            PipelineOutboxEventConflictError,
+        )
+
+        event_id, payload_sha256 = self.compute_canonical_payload_sha256(payload)
+        payload.event_id = event_id
+
+        existing_item = self.get_outbox_item(event_id)
+        if existing_item is not None:
+            _, existing_sha256 = self.compute_canonical_payload_sha256(existing_item.payload)
+            if existing_sha256 == payload_sha256:
+                logger.info(
+                    f"[PredictionDeliveryService] Idempotent reuse of existing outbox record '{event_id}' for equipment '{payload.asset_id}'"
+                )
+                return existing_item, payload_sha256
+            else:
+                raise PipelineOutboxEventConflictError(
+                    f"Outbox event ID '{event_id}' already exists with different payload checksum for equipment '{payload.asset_id}'",
+                    details=[{
+                        "event_id": event_id,
+                        "asset_id": payload.asset_id,
+                        "existing_sha256": existing_sha256,
+                        "new_sha256": payload_sha256,
+                    }],
+                    retryable=False,
+                )
+
+        item = self.create_outbox_record(payload)
+        return item, payload_sha256
+
     def create_outbox_record(self, payload: PredictionResultBatchPayload) -> PredictionOutboxItem:
         """Create new pending outbox record for payload."""
         item = PredictionOutboxItem(
@@ -110,6 +168,7 @@ class PredictionDeliveryService:
         )
         self.save_outbox_item(item)
         return item
+
 
     def send_once(self, payload: PredictionResultBatchPayload) -> dict[str, Any]:
         """Perform a single HTTP POST dispatch attempt to the backend receiver."""

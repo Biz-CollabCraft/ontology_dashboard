@@ -366,3 +366,45 @@ class PipelineCleanupInProgressError(PipelineBaseError):
     status_code = 409
     code = "PIPELINE_CLEANUP_IN_PROGRESS"
     retryable = False
+
+
+class PipelineModelSnapshotIncompatibleError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_MODEL_SNAPSHOT_INCOMPATIBLE"
+    retryable = False
+
+
+class PipelineModelSnapshotArtifactMissingError(PipelineBaseError):
+    status_code = 404
+    code = "PIPELINE_MODEL_SNAPSHOT_ARTIFACT_MISSING"
+    retryable = False
+
+
+class PipelineModelSnapshotChecksumMismatchError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_MODEL_SNAPSHOT_CHECKSUM_MISMATCH"
+    retryable = False
+
+
+class PipelineModelSetChangedError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_MODEL_SET_CHANGED"
+    retryable = False
+
+
+class PipelineOutboxEventConflictError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_OUTBOX_EVENT_CONFLICT"
+    retryable = False
+
+
+class PipelineOutboxPayloadChecksumMismatchError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_OUTBOX_PAYLOAD_CHECKSUM_MISMATCH"
+    retryable = False
+
+
+class PipelineOutboxPartialPublishError(PipelineBaseError):
+    status_code = 500
+    code = "PIPELINE_OUTBOX_PARTIAL_PUBLISH"
+    retryable = False

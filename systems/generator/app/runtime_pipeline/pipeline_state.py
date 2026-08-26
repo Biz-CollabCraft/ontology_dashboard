@@ -165,7 +165,11 @@ class PipelineStateManager:
         stage_name: str,
         next_stage: Optional[str] = None,
         stage_outputs: Optional[list[ArtifactReference]] = None,
+        model_stage_outputs: Optional[dict[str, dict[str, Any]]] = None,
+        delivery_outputs: Optional[dict[str, dict[str, Any]]] = None,
+        batch_manifest_ref: Optional[ArtifactReference] = None,
         model_snapshot: Optional[dict[str, Any]] = None,
+        snapshot_validation_status: Optional[Literal["valid", "incompatible", "partially_invalid", "unvalidated"]] = "valid",
         source_identity: str = "",
         dataset_id: str = "canonical-ai4i-v1",
         dataset_version: str = "canonical-ai4i-physics-v3.1",
@@ -178,9 +182,20 @@ class PipelineStateManager:
         if stage_outputs is not None:
             existing_outputs[stage_name] = stage_outputs
 
+        existing_model_stage_outputs = dict(self.state.checkpoint.model_stage_outputs) if self.state.checkpoint else {}
+        if model_stage_outputs is not None:
+            for k, v in model_stage_outputs.items():
+                existing_model_stage_outputs.setdefault(k, {}).update(v)
+
+        existing_delivery_outputs = dict(self.state.checkpoint.delivery_outputs) if self.state.checkpoint else {}
+        if delivery_outputs is not None:
+            existing_delivery_outputs.update(delivery_outputs)
+
         existing_snapshot = dict(self.state.checkpoint.model_snapshot) if self.state.checkpoint else {}
         if model_snapshot is not None:
             existing_snapshot.update(model_snapshot)
+
+        b_manifest = batch_manifest_ref or (self.state.checkpoint.batch_manifest_ref if self.state.checkpoint else None)
 
         chk = PipelineCheckpoint(
             checkpoint_version="generator-runtime-checkpoint-v1",
@@ -199,14 +214,22 @@ class PipelineStateManager:
             created_at=self.state.checkpoint.created_at if self.state.checkpoint else now,
             updated_at=now,
             stage_outputs=existing_outputs,
+            model_stage_outputs=existing_model_stage_outputs,
+            delivery_outputs=existing_delivery_outputs,
+            batch_manifest_ref=b_manifest,
             model_snapshot=existing_snapshot,
+            snapshot_validation_status=snapshot_validation_status,
             errors=list(self.state.errors),
         )
         self.state.checkpoint = chk
         self.state.last_completed_stage = stage_name
         self.state.next_stage = next_stage
         self.state.checkpoint_status = status
+        self.state.model_stage_outputs = existing_model_stage_outputs
+        self.state.delivery_outputs = existing_delivery_outputs
+        self.state.batch_manifest_ref = b_manifest
         return chk
+
 
     def mark_resumed(self, from_stage: str) -> None:
         """Record resumption state."""

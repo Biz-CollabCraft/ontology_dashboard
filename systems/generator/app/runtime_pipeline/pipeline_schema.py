@@ -131,6 +131,39 @@ class PredictionDeliveryEventState(BaseModel):
     updated_at: str = Field(default_factory=now_utc_iso, description="ISO update timestamp")
 
 
+class ModelSnapshotEntry(BaseModel):
+    """Pinning metadata recorded per active model artifact."""
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str = Field(..., description="Unique model identifier, e.g. pdm-lightgbm")
+    model_version: str = Field(..., description="Published model artifact version")
+    manifest_sha256: str = Field(..., description="SHA-256 checksum of model artifact manifest")
+    feature_schema_version: str = Field(..., description="Feature schema version string")
+    feature_schema_sha256: str = Field(..., description="SHA-256 checksum of canonical feature schema")
+    history_requirement_version: str = Field(..., description="History requirement version string")
+    history_requirement_sha256: str = Field(..., description="SHA-256 checksum of canonical history requirement")
+
+
+class ModelFeatureStageOutput(BaseModel):
+    """Structured stage output for a single model's runtime feature extraction."""
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_ref: ArtifactReference = Field(..., description="Reference to model feature matrix NPY file")
+    model_version: str = Field(..., description="Associated model artifact version")
+    feature_schema_version: str = Field(..., description="Feature schema version")
+    history_requirement_version: str = Field(..., description="History requirement version")
+
+
+class EquipmentDeliveryOutput(BaseModel):
+    """Per-equipment delivery output state recorded in Checkpoint 5."""
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(..., description="Deterministic event ID for equipment batch")
+    payload_sha256: str = Field(..., description="SHA-256 checksum of canonical batch payload")
+    status: Literal["published", "pending", "failed"] = Field("published", description="Outbox delivery registration status")
+    outbox_ref: Optional[ArtifactReference] = Field(None, description="Artifact reference to stored outbox file")
+
+
 class PipelineCheckpoint(BaseModel):
     """State checkpoint recorded at end of each stage for resumption."""
     model_config = ConfigDict(extra="forbid")
@@ -167,7 +200,13 @@ class PipelineCheckpoint(BaseModel):
     created_at: str = Field(default_factory=now_utc_iso, description="Created timestamp")
     updated_at: str = Field(default_factory=now_utc_iso, description="Updated timestamp")
     stage_outputs: dict[str, list[ArtifactReference]] = Field(default_factory=dict, description="Validated output artifact references by stage")
+    model_stage_outputs: dict[str, dict[str, Any]] = Field(default_factory=dict, description="Structured model-specific outputs, e.g. runtime_feature by model_id")
+    delivery_outputs: dict[str, dict[str, Any]] = Field(default_factory=dict, description="Per-equipment delivery output states by asset_id")
+    batch_manifest_ref: Optional[ArtifactReference] = Field(None, description="Reference to staged batch manifest")
     model_snapshot: dict[str, dict[str, Any]] = Field(default_factory=dict, description="Active model versions, manifest checksums and schemas")
+    snapshot_validation_status: Optional[Literal["valid", "incompatible", "partially_invalid", "unvalidated"]] = Field(
+        "unvalidated", description="Validation status of model snapshot against active model artifacts"
+    )
     errors: list[PipelineError] = Field(default_factory=list, description="Historical error list")
 
 
@@ -220,6 +259,12 @@ class PipelineRunState(BaseModel):
         default_factory=list, description="List of run-dedicated intermediate artifacts subject to cleanup"
     )
     checkpoint: Optional[PipelineCheckpoint] = Field(None, description="Current persistent stage checkpoint")
+    batch_manifest_ref: Optional[ArtifactReference] = Field(None, description="Reference to staged batch manifest")
+    model_stage_outputs: dict[str, dict[str, Any]] = Field(default_factory=dict, description="Structured stage outputs by model_id")
+    delivery_outputs: dict[str, dict[str, Any]] = Field(default_factory=dict, description="Per-equipment delivery output states")
+    cleanup_deleted_paths: list[str] = Field(default_factory=list, description="List of successfully deleted paths during cleanup")
+    cleanup_failed_paths: list[str] = Field(default_factory=list, description="List of paths that failed to delete during cleanup")
+
 
 
 def compute_source_identity(

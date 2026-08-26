@@ -137,5 +137,159 @@ class PredictionBatchService:
             failed_equipments=failed_equipments,
         )
 
+    def stage_batches(
+        self,
+        run_id: str,
+        job_id: str,
+        summary: PredictionBatchSummary,
+        dataset_id: str,
+        dataset_version: str,
+        pipeline_contract_version: str,
+        source_lineage: Any,
+        sensor_data_ref: Optional[dict[str, Any]] = None,
+        base_dir: Optional[Path] = None,
+    ) -> ArtifactReference:
+        """Stage equipment prediction batches and write batch-manifest.json in run-dedicated directory."""
+        import hashlib
+        import json
+        from pathlib import Path
+        from systems.generator.generator_config import PATHS
+        from systems.generator.app.runtime_pipeline.pipeline_schema import (
+            ArtifactReference,
+            PredictionResultBatchPayload,
+        )
+        from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
+            PredictionDeliveryService,
+        )
+
+        root = base_dir or PATHS.data_preprocessed
+        staging_dir = root / "pipeline_datasets" / run_id / "batch_staging"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+
+        batch_manifest_entries: dict[str, dict[str, Any]] = {}
+        for asset_id, batch in summary.equipment_batches.items():
+            temp_payload = PredictionResultBatchPayload(
+                event_id="temp",
+                run_id=run_id,
+                job_id=job_id,
+                asset_id=asset_id,
+                observed_at=batch.observed_at,
+                dataset_id=dataset_id,
+                dataset_version=dataset_version,
+                model_results=batch.model_results,
+                source_lineage=source_lineage,
+                sensor_data_ref=sensor_data_ref,
+            )
+            event_id, payload_sha256 = PredictionDeliveryService.compute_canonical_payload_sha256(temp_payload)
+            temp_payload.event_id = event_id
+
+            asset_file = staging_dir / f"{asset_id}.json"
+            content_bytes = temp_payload.model_dump_json(indent=2).encode("utf-8")
+            with open(asset_file, "wb") as f:
+                f.write(content_bytes)
+
+            batch_manifest_entries[asset_id] = {
+                "path": f"{asset_id}.json",
+                "sha256": payload_sha256,
+                "event_id": event_id,
+            }
+
+        manifest_data = {
+            "run_id": run_id,
+            "job_id": job_id,
+            "contract_version": pipeline_contract_version,
+            "source_checksum": source_lineage.source_checksum if hasattr(source_lineage, "source_checksum") else "",
+            "batches": batch_manifest_entries,
+        }
+        manifest_bytes = json.dumps(manifest_data, indent=2, sort_keys=True).encode("utf-8")
+        manifest_file = staging_dir / "batch-manifest.json"
+        with open(manifest_file, "wb") as f:
+            f.write(manifest_bytes)
+
+        manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+        rel_uri = f"data_preprocessed/pipeline_datasets/{run_id}/batch_staging/batch-manifest.json"
+        return ArtifactReference(
+            uri=rel_uri,
+            sha256=manifest_sha256,
+            role="batch_manifest",
+            size_bytes=len(manifest_bytes),
+        )
+
+    def load_staged_batches(
+        self,
+        manifest_ref: ArtifactReference,
+        base_dir: Optional[Path] = None,
+    ) -> dict[str, Any]:
+        """Load and verify staged equipment prediction result batches from batch-manifest.json."""
+        import hashlib
+        import json
+        from pathlib import Path
+        from systems.generator.generator_config import PATHS, PROJECT_ROOT
+        from systems.generator.app.runtime_pipeline.pipeline_exception import (
+            PipelineCheckpointChecksumMismatchError,
+            PipelineCheckpointOutputMissingError,
+        )
+        from systems.generator.app.runtime_pipeline.pipeline_schema import (
+            PredictionResultBatchPayload,
+        )
+        from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
+            PredictionDeliveryService,
+        )
+
+        uri_str = manifest_ref.uri.replace("\\", "/")
+        rel_path = uri_str[len("data_preprocessed/"):] if uri_str.startswith("data_preprocessed/") else uri_str
+        if rel_path.startswith("data/preprocessed/"):
+            rel_path = rel_path[len("data/preprocessed/"):]
+
+        candidates = [
+            Path(manifest_ref.uri),
+            (base_dir or PATHS.data_preprocessed) / rel_path,
+            (base_dir or PATHS.data_preprocessed).parent / uri_str,
+            PROJECT_ROOT / uri_str,
+        ]
+        manifest_path = None
+        for cand in candidates:
+            if cand.is_file():
+                manifest_path = cand
+                break
+
+        if not manifest_path:
+            raise PipelineCheckpointOutputMissingError(
+                f"Staged batch manifest file not found at '{manifest_ref.uri}'",
+                details=[{"uri": manifest_ref.uri}],
+            )
+
+        with open(manifest_path, "rb") as f:
+            m_bytes = f.read()
+        if hashlib.sha256(m_bytes).hexdigest() != manifest_ref.sha256:
+            raise PipelineCheckpointChecksumMismatchError(
+                f"Batch manifest checksum mismatch for '{manifest_ref.uri}'",
+                details=[{"uri": manifest_ref.uri}],
+            )
+
+        manifest_data = json.loads(m_bytes.decode("utf-8"))
+        batches_dir = manifest_path.parent
+        staged_payloads: dict[str, PredictionResultBatchPayload] = {}
+
+        for asset_id, entry in manifest_data.get("batches", {}).items():
+            asset_file = batches_dir / entry["path"]
+            if not asset_file.is_file():
+                raise PipelineCheckpointOutputMissingError(
+                    f"Staged batch file missing for equipment '{asset_id}' at '{asset_file}'",
+                    details=[{"asset_id": asset_id, "path": str(asset_file)}],
+                )
+            with open(asset_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            payload = PredictionResultBatchPayload.model_validate(data)
+            event_id, payload_sha256 = PredictionDeliveryService.compute_canonical_payload_sha256(payload)
+            if payload_sha256 != entry["sha256"]:
+                raise PipelineCheckpointChecksumMismatchError(
+                    f"Staged batch payload checksum mismatch for asset '{asset_id}'",
+                    details=[{"asset_id": asset_id, "expected": entry["sha256"], "actual": payload_sha256}],
+                )
+            staged_payloads[asset_id] = payload
+
+        return staged_payloads
+
 
 ModelResultCollector = PredictionBatchService

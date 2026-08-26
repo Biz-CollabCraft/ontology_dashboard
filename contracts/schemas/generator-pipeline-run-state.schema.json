@@ -165,7 +165,12 @@
       "enum": ["not_started", "cleanup_pending", "cleaned", "cleanup_failed", "cleanup_skipped", null]
     },
     "intermediate_outputs": { "type": "array" },
-    "checkpoint": { "type": ["object", "null"] }
+    "checkpoint": { "type": ["object", "null"] },
+    "batch_manifest_ref": { "type": ["object", "null"] },
+    "model_stage_outputs": { "type": "object" },
+    "delivery_outputs": { "type": "object" },
+    "cleanup_deleted_paths": { "type": "array" },
+    "cleanup_failed_paths": { "type": "array" }
   },
   "additionalProperties": false
 }

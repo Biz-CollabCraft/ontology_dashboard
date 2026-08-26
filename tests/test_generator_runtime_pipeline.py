@@ -37,6 +37,11 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineMappingNotImplementedError,
     PipelineModelFeatureMissingValueHandlingNotImplementedError,
     PipelineModelPredictionFailedError,
+    PipelineModelSnapshotArtifactMissingError,
+    PipelineModelSnapshotChecksumMismatchError,
+    PipelineModelSnapshotIncompatibleError,
+    PipelineModelSetChangedError,
+    PipelineOutboxEventConflictError,
     PipelineNoActiveModelError,
     PipelinePathNotAllowedError,
     PipelinePredictionObservationAlignmentNotImplementedError,
@@ -1499,3 +1504,486 @@ def test_cleanup_failure_results_in_succeeded_with_cleanup_warning(isolated_runt
     # Prediction delivery Outbox MUST still be published
     assert len(run_state.prediction_event_ids) > 0
     assert len(list(env["outbox_dir"].glob("*.json"))) > 0
+
+
+# =====================================================================
+# 26. Model Snapshot Matching Reuses Features and Predictions Test
+
+# =====================================================================
+
+def test_snapshot_matching_reuses_features_and_predictions(isolated_runtime_env, monkeypatch):
+    """When active model artifact snapshot matches checkpoint, features and predictions are reused."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "snap_match.jsonl", num_rows=3, asset_id="M14860")
+
+    # 1. Interrupt at Stage 5 delivery so checkpoint 4 is saved with status resumable
+    orig_register = service.prediction_delivery_service.register_idempotent_outbox_record
+
+    def failing_delivery(*args, **kwargs):
+        raise PipelineDeliveryFailedError("Simulated delivery crash")
+
+    monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_delivery)
+
+    item1 = queue.enqueue(job_id="job-snap-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineDeliveryFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+    chk1 = repo.get_checkpoint(first_run.run_id)
+    assert chk1 is not None
+    assert "model_snapshot" in chk1.model_dump()
+    assert len(chk1.model_snapshot) >= 1
+
+    # 2. Resume item with same source_identity
+    monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", orig_register)
+
+    extract_called = False
+    orig_extract = service.runtime_feature_service.extract_and_publish
+
+    def spy_extract(*args, **kwargs):
+        nonlocal extract_called
+        extract_called = True
+        return orig_extract(*args, **kwargs)
+
+    monkeypatch.setattr(service.runtime_feature_service, "extract_and_publish", spy_extract)
+
+    item2 = PipelineQueueItem(
+        job_id="job-snap-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+    assert not extract_called, "Features should have been reused from snapshot checkpoint"
+
+
+# =====================================================================
+# 27. Model Snapshot Version Change Recalculates Predictions Test
+# =====================================================================
+
+def test_snapshot_version_change_recalculates_predictions(isolated_runtime_env, monkeypatch):
+    """When active model version changes, prediction results are re-evaluated."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "snap_ver.jsonl", num_rows=3, asset_id="M14860")
+
+    # 1. Fail at batch building to stop at Checkpoint 3
+    orig_collect = service.prediction_batch_service.collect
+
+    def failing_collect(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated batch failure")
+
+    monkeypatch.setattr(service.prediction_batch_service, "collect", failing_collect)
+
+    item1 = queue.enqueue(job_id="job-ver-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+
+    # 2. Update active model snapshot manifest version
+    orig_build_snap = service._build_model_snapshot
+
+    def modified_snap(base_models):
+        snap, arts = orig_build_snap(base_models)
+        for m_id in snap:
+            snap[m_id]["model_version"] = snap[m_id]["model_version"] + "-v2.0"
+            snap[m_id]["manifest_sha256"] = "1" * 64
+        return snap, arts
+
+    monkeypatch.setattr(service, "_build_model_snapshot", modified_snap)
+    monkeypatch.setattr(service.prediction_batch_service, "collect", orig_collect)
+
+    # Track prediction execution calls
+    predict_called = False
+    orig_predict = service.prediction_service.predict_for_models
+
+    def spy_predict(*args, **kwargs):
+        nonlocal predict_called
+        predict_called = True
+        return orig_predict(*args, **kwargs)
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", spy_predict)
+
+    item2 = PipelineQueueItem(
+        job_id="job-ver-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+    assert predict_called, "Prediction should have been re-evaluated due to model version change"
+
+
+# =====================================================================
+# 28. Model Snapshot Feature Schema Change Re-extracts Features Test
+# =====================================================================
+
+def test_snapshot_feature_schema_change_reextracts_features(isolated_runtime_env, monkeypatch):
+    """When feature schema sha256 differs in snapshot, feature matrix is re-extracted for that model."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "snap_schema.jsonl", num_rows=3, asset_id="M14860")
+
+    # Fail at prediction
+    orig_predict = service.prediction_service.predict_for_models
+
+    def failing_predict(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated failure")
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
+
+    item1 = queue.enqueue(job_id="job-sch-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+
+    # Change feature schema sha256 in current snapshot
+    orig_build_snap = service._build_model_snapshot
+
+    def modified_snap(base_models):
+        snap, arts = orig_build_snap(base_models)
+        for m_id in snap:
+            snap[m_id]["feature_schema_sha256"] = "f" * 64
+        return snap, arts
+
+    monkeypatch.setattr(service, "_build_model_snapshot", modified_snap)
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", orig_predict)
+
+    extract_called = False
+    orig_extract = service.runtime_feature_service.extract_and_publish
+
+    def spy_extract(*args, **kwargs):
+        nonlocal extract_called
+        extract_called = True
+        return orig_extract(*args, **kwargs)
+
+    monkeypatch.setattr(service.runtime_feature_service, "extract_and_publish", spy_extract)
+
+    item2 = PipelineQueueItem(
+        job_id="job-sch-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+    assert extract_called, "Feature matrix should be re-extracted when feature schema sha256 differs"
+
+
+# =====================================================================
+# 29. Missing Model Snapshot Artifact Fails Closed Test
+# =====================================================================
+
+def test_missing_model_snapshot_artifact_fails_closed(isolated_runtime_env, monkeypatch):
+    """When active model artifact cannot be loaded, pipeline fails closed without falling back."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "missing_art.jsonl", num_rows=3, asset_id="M14860")
+
+    def failing_load_artifact(base_model):
+        raise PipelineModelSnapshotArtifactMissingError(f"Model artifact missing for {base_model}")
+
+    monkeypatch.setattr(service.prediction_service, "load_active_artifact", failing_load_artifact)
+
+    item = queue.enqueue(job_id="job-miss-art", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineModelSnapshotArtifactMissingError):
+        service.execute_queue_item(item)
+
+
+# =====================================================================
+# 30. Model ID With Underscore Identified Without Filename Splitting Test
+# =====================================================================
+
+def test_model_id_with_underscore_correctly_identified(isolated_runtime_env):
+    """Model IDs containing underscores (e.g. pdm-random_forest) are stored and restored via structured stage outputs without filename splitting."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "underscore_model.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-under-1", source_uri=str(src_file), source_checksum=sha)
+    run_state = service.execute_queue_item(item)
+
+    assert run_state.status == "succeeded"
+    chk = repo.get_checkpoint(run_state.run_id)
+    assert chk is not None
+    assert "runtime_feature" in chk.model_stage_outputs
+
+    feat_map = chk.model_stage_outputs["runtime_feature"]
+    for m_id, entry in feat_map.items():
+        assert m_id in ("pdm-lightgbm", "pdm-xgboost", "pdm-random_forest", "pdm-logistic_regression", "pdm-catboost")
+        assert "artifact_ref" in entry
+        assert entry["artifact_ref"]["uri"]
+
+
+# =====================================================================
+# 31. Checkpoint 4 Stages Batches and Resumes Without Recalculation Test
+# =====================================================================
+
+def test_checkpoint_4_stages_batches_and_resumes_without_recalculation(isolated_runtime_env, monkeypatch):
+    """Stage 4 stages equipment batches to batch-manifest.json and Stage 5 resumption reuses staged batches."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "stage_batches.jsonl", num_rows=3, asset_id="M14860")
+
+    # 1. Interrupt at Stage 5 delivery
+    orig_register = service.prediction_delivery_service.register_idempotent_outbox_record
+
+    def failing_outbox(*args, **kwargs):
+        raise PipelineDeliveryFailedError("Simulated delivery crash")
+
+    monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_outbox)
+
+    item1 = queue.enqueue(job_id="job-stage4-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineDeliveryFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+    chk1 = repo.get_checkpoint(first_run.run_id)
+    assert chk1 is not None
+    assert chk1.batch_manifest_ref is not None
+    assert "batch-manifest.json" in chk1.batch_manifest_ref.uri
+
+    # 2. Resume execution
+    monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", orig_register)
+
+    collect_called = False
+    orig_collect = service.prediction_batch_service.collect
+
+    def spy_collect(*args, **kwargs):
+        nonlocal collect_called
+        collect_called = True
+        return orig_collect(*args, **kwargs)
+
+    monkeypatch.setattr(service.prediction_batch_service, "collect", spy_collect)
+
+    item2 = PipelineQueueItem(
+        job_id="job-stage4-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+    assert not collect_called, "Staged batch manifest should be reused on Stage 5 resumption without re-collecting"
+
+
+# =====================================================================
+# 32. Partial Multi-Equipment Outbox Resumption is Idempotent Test
+# =====================================================================
+
+def test_partial_multi_equipment_outbox_resumption_is_idempotent(isolated_runtime_env, monkeypatch):
+    """When delivery fails after Equipment A outbox item is saved, resumption reuses Equipment A item and registers Equipment B without duplication."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    # Create observation file with 2 equipments: M14860 and L47180
+    src_path1, _ = create_sample_observation_jsonl(incoming_dir / "multi_eq1.jsonl", num_rows=3, asset_id="M14860")
+    src_path2, _ = create_sample_observation_jsonl(incoming_dir / "multi_eq2.jsonl", num_rows=3, asset_id="L47180")
+
+    df1 = pd.read_json(src_path1, lines=True)
+    df2 = pd.read_json(src_path2, lines=True)
+    combined_df = pd.concat([df1, df2], ignore_index=True)
+
+    src_path = incoming_dir / "multi_eq_combined.jsonl"
+    combined_df.to_json(src_path, orient="records", lines=True)
+    sha = compute_file_sha256(src_path)
+
+    # Fail after EQ-001 is registered
+    orig_register = service.prediction_delivery_service.register_idempotent_outbox_record
+
+    def failing_second_register(payload):
+        if payload.asset_id == "M14860":
+            raise PipelineDeliveryFailedError("Simulated crash on EQ-002 outbox registration")
+        return orig_register(payload)
+
+    monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_second_register)
+
+    item1 = queue.enqueue(job_id="job-multi-1", source_uri=str(src_path), source_checksum=sha)
+    with pytest.raises(PipelineDeliveryFailedError):
+        service.execute_queue_item(item1)
+
+    # Check EQ-001 outbox file exists
+    outbox_files_before = list(env["outbox_dir"].glob("*.json"))
+    assert len(outbox_files_before) == 1
+
+    # Resume execution with normal register_idempotent_outbox_record
+    monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", orig_register)
+
+    item2 = PipelineQueueItem(
+        job_id="job-multi-2",
+        source_uri=str(src_path),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+
+    # Total outbox files MUST be exactly 2 (EQ-001 and EQ-002) with 0 duplicates
+    outbox_files_after = list(env["outbox_dir"].glob("*.json"))
+    assert len(outbox_files_after) == 2
+
+
+# =====================================================================
+# 33. Outbox Payload Conflict Raises Error Test
+# =====================================================================
+
+def test_outbox_payload_conflict_raises_error(isolated_runtime_env):
+    """When attempting to register an outbox item with an existing event_id but different payload checksum, raise PipelineOutboxEventConflictError."""
+    env = isolated_runtime_env
+    delivery_service: PredictionDeliveryService = env["notif_service"]
+
+    payload1 = PredictionResultBatchPayload(
+        event_id="temp",
+        run_id="run-conflict-1",
+        job_id="job-conflict-1",
+        asset_id="EQ-100",
+        observed_at="2026-08-26T00:00:00Z",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+        model_results={},
+        source_lineage=SourceLineage(
+            source_uri="data/test.jsonl",
+            source_checksum="0" * 64,
+        ),
+    )
+    item1, sha1 = delivery_service.register_idempotent_outbox_record(payload1)
+    assert item1.event_id is not None
+
+    # Construct different payload with same run_id and asset_id
+    payload2 = PredictionResultBatchPayload(
+        event_id="temp",
+        run_id="run-conflict-1",
+        job_id="job-conflict-1",
+        asset_id="EQ-100",
+        observed_at="2026-08-26T01:00:00Z",  # Different timestamp -> different payload_sha256!
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+        model_results={},
+        source_lineage=SourceLineage(
+            source_uri="data/test.jsonl",
+            source_checksum="0" * 64,
+        ),
+    )
+
+    # Force payload2 to produce the same event_id as payload1
+    orig_compute = delivery_service.compute_canonical_payload_sha256
+
+    def conflicting_compute(payload):
+        _, new_sha = orig_compute(payload)
+        return item1.event_id, new_sha
+
+    delivery_service.compute_canonical_payload_sha256 = conflicting_compute
+
+    with pytest.raises(PipelineOutboxEventConflictError):
+        delivery_service.register_idempotent_outbox_record(payload2)
+
+
+# =====================================================================
+# 34. Invalidated Checkpoint Intermediates Marked Debug Only Test
+# =====================================================================
+
+def test_invalidated_checkpoint_intermediates_marked_debug_only(isolated_runtime_env, monkeypatch):
+    """When a checkpoint is invalidated due to source checksum change, its status is set to invalidated and intermediates are marked debug_only."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha1 = create_sample_observation_jsonl(incoming_dir / "inval_check.jsonl", num_rows=2, asset_id="M14860")
+
+    # Fail at prediction
+    orig_predict = service.prediction_service.predict_for_models
+
+    def failing_predict(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated failure")
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
+
+    item1 = queue.enqueue(job_id="job-inval-1", source_uri=str(src_file), source_checksum=sha1)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+
+    # Restore original predict BEFORE executing item2
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", orig_predict)
+
+    # Modify file content -> new checksum
+    src_file, sha2 = create_sample_observation_jsonl(incoming_dir / "inval_check.jsonl", num_rows=5, asset_id="M14860")
+
+    item2 = PipelineQueueItem(
+        job_id="job-inval-2",
+        source_uri=str(src_file),
+        source_checksum=sha2,
+        source_identity=item1.source_identity,
+    )
+
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+
+    # Old run checkpoint MUST be marked invalidated
+    chk1 = repo.get_checkpoint(first_run.run_id)
+    assert chk1 is not None
+    assert chk1.status == "invalidated"
+
+
+# =====================================================================
+# 35. Cleanup Warning Does Not Invalidate Published Outbox Test
+# =====================================================================
+
+def test_cleanup_warning_does_not_invalidate_published_outbox(isolated_runtime_env, monkeypatch):
+    """When cleanup fails, status is succeeded_with_cleanup_warning, cleanup_failed_paths is recorded, and Outbox remains published."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_warn_track.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-clean-track-1", source_uri=str(src_file), source_checksum=sha)
+
+    def failing_cleanup(*args, **kwargs):
+        return False, ["data/preprocessed/pipeline_datasets/run-1/obs.csv"], "Permission denied on file deletion"
+
+    monkeypatch.setattr(repo, "cleanup_run_intermediate_outputs", failing_cleanup)
+
+    run_state = service.execute_queue_item(item)
+    assert run_state.status == "succeeded_with_cleanup_warning"
+    assert run_state.cleanup_status == "cleanup_failed"
+    assert len(run_state.cleanup_failed_paths) >= 1
+    assert "Permission denied" in run_state.cleanup_failed_paths[0]
