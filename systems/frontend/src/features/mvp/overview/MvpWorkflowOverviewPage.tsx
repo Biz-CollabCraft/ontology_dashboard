@@ -297,6 +297,22 @@ function suspectedPartLabel(event: MvpEvent, asset: MvpAsset | null): string {
   return "부품 근거 없음";
 }
 
+function inspectionBasisLabel(ref: string): string {
+  const normalized = ref
+    .replace(/^factor\.\d+\./, "")
+    .replace(/^sensor_evidence\.sensors\./, "");
+  const label = displaySensorLabel(normalized);
+  if (ref.startsWith("sensor_evidence.sensors.")) return `${label} 센서값`;
+  if (ref.startsWith("factor.")) return `${label} 이상 기여`;
+  return label;
+}
+
+function inspectionBasisSummary(target: MvpInspectionTarget): string {
+  const labels = target.basisRefs.map(inspectionBasisLabel);
+  const uniqueLabels = [...new Set(labels)];
+  return uniqueLabels.length ? uniqueLabels.join(", ") : "Evidence 근거 요약 미제공";
+}
+
 function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
   const groups = new Map<string, MvpAsset[]>();
   assets.forEach((asset) => {
@@ -1669,7 +1685,7 @@ function AssetPreviewPanel({
                         <div>
                           <strong>{target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</strong>
                           <p>{target.target
-                            ? `Evidence 근거 참조: ${target.target.basisRefs.join(", ") || target.target.sourceRef}`
+                            ? `현장 근거: ${inspectionBasisSummary(target.target)}`
                             : target.factor?.direction === "risk_up"
                               ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
