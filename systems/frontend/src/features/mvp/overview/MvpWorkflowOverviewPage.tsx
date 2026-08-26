@@ -94,8 +94,20 @@ interface InspectionTargetView {
   rank: number;
 }
 
-function EquipmentSketchVisual({ assetType }: { assetType: string }) {
+function EquipmentSketchVisual({
+  assetType,
+  inspectionTargets,
+}: {
+  assetType: string;
+  inspectionTargets: InspectionTargetView[];
+}) {
   if (assetType.toLowerCase() === "cnc") {
+    const driveTarget = inspectionTargets.find((item) => (
+      item.target?.componentId.includes("drive")
+      || item.target?.componentLabel.includes("동력")
+      || item.factor?.feature.includes("power")
+      || item.factor?.feature.includes("torque")
+    ));
     return (
       <div className="cnc-visual" aria-hidden="true">
         <span className="cnc-risk-zone" />
@@ -110,6 +122,7 @@ function EquipmentSketchVisual({ assetType }: { assetType: string }) {
         <span className="cnc-servo">서보/구동</span>
         <span className="cnc-coolant">냉각</span>
         <span className="cnc-control">제어반</span>
+        {driveTarget ? <span className="callout cnc-drive-callout">{driveTarget.rank}</span> : null}
       </div>
     );
   }
@@ -1636,7 +1649,7 @@ function AssetPreviewPanel({
               <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검 근거">
                 <header><Wrench size={14} /><strong>점검 근거</strong><span>위치 근거 미제공</span></header>
                 <div className="equipment-sketch" aria-label="설비 참고도">
-                  <EquipmentSketchVisual assetType={asset.assetType} />
+                  <EquipmentSketchVisual assetType={asset.assetType} inspectionTargets={inspectionTargets} />
                   <div>
                     <strong>{inspectionTargets[0]?.target?.componentLabel ?? candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
                     <ul className="sketch-legend">

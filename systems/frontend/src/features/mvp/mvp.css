@@ -693,16 +693,17 @@
 .mvp-side-map-report .compressor-visual .loc-pump-base { left: calc(var(--sketch-origin) + 401px); top: 80px; }
 .mvp-side-map-report .compressor-visual .loc-motor-power { left: calc(var(--sketch-origin) + 222px); top: 122px; }
 .mvp-side-map-report .cnc-visual .cnc-risk-zone { display: none; }
-.mvp-side-map-report .cnc-visual .cnc-base { left: calc(var(--sketch-origin) + 130px); top: 176px; width: 398px; height: 18px; border-radius: 3px; z-index: 2; }
-.mvp-side-map-report .cnc-visual .cnc-column { left: calc(var(--sketch-origin) + 184px); top: 50px; width: 58px; height: 112px; z-index: 2; }
-.mvp-side-map-report .cnc-visual .cnc-head { left: calc(var(--sketch-origin) + 274px); top: 48px; width: 110px; height: 38px; border-color: rgba(76,144,240,.76); z-index: 3; }
-.mvp-side-map-report .cnc-visual .cnc-tool { left: calc(var(--sketch-origin) + 310px); top: 98px; width: 40px; height: 30px; border-color: rgba(246,189,112,.76); z-index: 4; }
-.mvp-side-map-report .cnc-visual .cnc-table { left: calc(var(--sketch-origin) + 270px); top: 150px; width: 206px; height: 20px; border-radius: 4px; z-index: 3; }
-.mvp-side-map-report .cnc-visual .cnc-workpiece { left: calc(var(--sketch-origin) + 378px); top: 120px; width: 58px; height: 24px; border-color: rgba(126,211,134,.72); font-size: 9px; z-index: 4; }
+.mvp-side-map-report .cnc-visual .cnc-base { left: calc(var(--sketch-origin) + 130px); top: 162px; width: 398px; height: 18px; border-radius: 3px; z-index: 2; }
+.mvp-side-map-report .cnc-visual .cnc-column { left: calc(var(--sketch-origin) + 184px); top: 36px; width: 58px; height: 112px; z-index: 2; }
+.mvp-side-map-report .cnc-visual .cnc-head { left: calc(var(--sketch-origin) + 274px); top: 34px; width: 110px; height: 38px; border-color: rgba(76,144,240,.76); z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-tool { left: calc(var(--sketch-origin) + 310px); top: 84px; width: 40px; height: 30px; border-color: rgba(246,189,112,.76); z-index: 4; }
+.mvp-side-map-report .cnc-visual .cnc-table { left: calc(var(--sketch-origin) + 270px); top: 136px; width: 206px; height: 20px; border-radius: 4px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-workpiece { left: calc(var(--sketch-origin) + 378px); top: 106px; width: 58px; height: 24px; border-color: rgba(126,211,134,.72); font-size: 9px; z-index: 4; }
 .mvp-side-map-report .cnc-visual .cnc-axis { display: none; }
-.mvp-side-map-report .cnc-visual .cnc-servo { left: calc(var(--sketch-origin) + 446px); top: 56px; width: 78px; height: 34px; border-color: rgba(236,91,98,.62); font-size: 9px; z-index: 3; }
-.mvp-side-map-report .cnc-visual .cnc-coolant { left: calc(var(--sketch-origin) + 446px); top: 110px; width: 78px; height: 30px; border-radius: 4px; font-size: 9px; z-index: 3; }
-.mvp-side-map-report .cnc-visual .cnc-control { left: calc(var(--sketch-origin) + 72px); top: 120px; width: 58px; height: 40px; border-color: rgba(181,196,214,.52); font-size: 9px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-servo { left: calc(var(--sketch-origin) + 446px); top: 42px; width: 78px; height: 34px; border-color: rgba(236,91,98,.62); font-size: 9px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-coolant { left: calc(var(--sketch-origin) + 446px); top: 96px; width: 78px; height: 30px; border-radius: 4px; font-size: 9px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-control { left: calc(var(--sketch-origin) + 72px); top: 106px; width: 58px; height: 40px; border-color: rgba(181,196,214,.52); font-size: 9px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-drive-callout { left: calc(var(--sketch-origin) + 438px); top: 40px; z-index: 5; transform: none; }
 .mvp-side-map-report .target-list { display: grid; gap: 8px; }
 .mvp-side-map-report .target-list article { min-width: 0; display: grid; grid-template-columns: 30px 30px minmax(0,1fr) auto; gap: 8px; align-items: center; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; background: rgba(255,255,255,.018); padding: 9px; }
 .mvp-side-map-report .target-list article > i { width: 28px; aspect-ratio: 1; display: grid; place-items: center; border: 1px solid rgba(76,144,240,.36); border-radius: 4px; background: var(--mvp-accent-soft); color: #9cc5fa; font-style: normal; }
