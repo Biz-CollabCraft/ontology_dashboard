@@ -313,12 +313,12 @@ type AssetDetailViewModel = {
 | 필드 묶음 | 공식 원천 | 책임 | 없는 경우 |
 |---|---|---|---|
 | `asset`, 표시명, line/cell | Asset/Object read model | Dataset/Equipment API | 필드 생략 또는 `data_status.warnings` |
-| `features[].series` | Backend canonical/overlay Observation read contract + Backend Feature Executor result | `systems/backend` | 빈 배열과 `evidence.gaps[]` |
+| `features[].history.points` | Backend canonical/overlay Observation read contract + Backend Feature Executor result | `systems/backend` | 빈 배열과 `evidence.gaps[]` |
 | `risk.current`, `top_factor`, `baseline` | Product Result Artifact와 `evidence_payload.sensor_evidence` | `systems/backend/app/diagnosis` | null과 `evidence.gaps[]` |
 | `risk_series` | (미구현) Backend Diagnosis Runtime Prediction History Query Contract. canonical source는 `pm_result_artifacts` append-only Product Result history이며, detail payload가 필요할 때만 `prediction_result_id`로 `prediction_results`를 join | `systems/backend/app/diagnosis` | 빈 배열과 `evidence.gaps[]`; `pm_prediction_timeline`, `precomputed_prediction_timeline`, gen_data `model_outputs/prediction_timeline` 직접 대체 금지 |
 | `equipment_history` | Activity, Decision, Maintenance, WorkOrder source | Operations/Maintenance API | 빈 배열과 `evidence.gaps[]` |
 
-`features[].series`는 센서/피처 시계열이고, `risk_series`는 runtime inference 결과의
+`features[].history.points`는 센서/피처 시계열이고, `risk_series`는 runtime inference 결과의
 누적이다. 따라서 센서 Observation series는 Backend canonical/overlay Observation read contract에서
 읽고, 파생 Feature series는 versioned Feature Schema/transform contract를 적용한 Backend Feature
 Executor result에서 제공한다. `systems/generator`는 Feature/Label 의미, History Requirement,
@@ -341,7 +341,7 @@ risk source로 승격하지 않는다.
 | 현재 센서 카드 | 가능 | 없음 | `observation` 또는 `sensor_evidence` 사용 |
 | top factor와 report 근거 | 가능 | 없음 | `evidence_field_id` 유지 |
 | feature baseline | 부분 가능 | Evidence Payload API 노출 | feature별 누락은 `evidence.gaps[]` |
-| 피쳐별 그래프 | 불가 | Backend Observation read contract + Feature Executor result | `features[].series=[]`와 gap 표시 |
+| 피쳐별 그래프 | 불가 | Backend Observation read contract + Feature Executor result | `features[].history.points=[]`와 gap 표시 |
 | 위험도 그래프 | 불가 | Backend Diagnosis Runtime Prediction History Query Contract (`pm_result_artifacts` append-only history + optional `prediction_results` detail join) | `risk_series=[]`와 gap 표시 |
 | 범위 이탈 마커 | 불가 | feature series + baseline | series 없이 계산 금지 |
 | 설비 정비/점검 전체 이력 | 부분 가능 | Activity/Maintenance source | 현재 activity 외 누락은 gap 표시 |
@@ -353,7 +353,7 @@ Backend Observation read contract와 Feature Executor result의 최소 규칙은
 - 같은 `asset_id`와 `source_timestamp`에 속한 센서 row는 하나의 Observation으로 pivot해 `measurements` map을 만든다.
 - `status_code=Bad`, `value=null`, `reason`은 0 또는 정상값으로 보정하지 않고 null value와 data-quality warning/gap으로 전달한다.
 - gen_data의 센서 key와 Product feature key가 다를 수 있으므로 `rpm` -> `rotational_speed_rpm` 같은 Feature Schema 또는 ingestion mapping을 별도 계약으로 둔다.
-- Layer 1 최신값은 `latest_observation` 또는 현재값 보조 확인에는 사용할 수 있지만, `features[].series`의 history source로 사용하지 않는다.
+- Layer 1 최신값은 `latest_observation` 또는 현재값 보조 확인에는 사용할 수 있지만, `features[].history.points`의 history source로 사용하지 않는다.
 - `.raw`는 protocol audit/debug provenance로 보존할 수 있으나 report graph source가 아니다.
 
 ### 3.2 구현 순서

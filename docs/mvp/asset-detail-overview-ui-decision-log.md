@@ -227,7 +227,7 @@ Closed-loop 담당자 handoff:
 근거:
 
 - 현장 관리자는 모델 용어보다 토크, 공구 마모, 회전 속도 같은 현장 점검 항목을 우선 이해해야 한다.
-- `features[].history.points`가 최신 계약이고, 프론트는 값을 계산하거나 `features[].series`를 가정하면 안 된다.
+- `features[].history.points`가 최신 계약이고, 프론트는 legacy feature-level series 필드를 가정하면 안 된다.
 - 현재값은 화면 표현상 최근 관측 흐름에 이어서 보여줄 수 있지만, 계약 payload의 `current`와 `history`를 병합하지 않는다.
 - 그래프는 “많아 보이는 데이터”가 아니라 점검자가 어느 부품과 센서를 먼저 확인할지 판단하게 해주는 evidence여야 한다.
 
@@ -242,13 +242,13 @@ Closed-loop 담당자 handoff:
 
 결정:
 
-- `가동률`, `OEE 개선`, `생산량 증가`, `정비 완료 후 정상화` 같은 실적/성과 표현은 사용하지 않는다.
+- 실제 운영 성과나 정비 효과가 입증된 것처럼 보이는 표현은 사용하지 않는다.
 - 생산 관리자 화면에서는 `예상 생산 영향`, `계획 영향 추정`, `검토 우선순위`, `데이터 품질 보류`로 표현한다.
 
 근거:
 
 - 현재 fixture와 ViewModel로는 실제 uptime/downtime, OEE, production count를 정당하게 산출할 수 없다.
-- `estimated_downtime_minutes`를 가동률로 변환하면 frontend synthesis가 된다.
+- `estimated_downtime_minutes`를 설비 운영 성과 지표로 변환하면 frontend synthesis가 된다.
 - 생산계획 데이터는 아직 ViewModel/API 연결 전이므로 `synthetic_capacity_model 기반 계획 영향 추정` 경계를 명확히 해야 한다.
 
 적용 문구:

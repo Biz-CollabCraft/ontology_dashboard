@@ -189,7 +189,6 @@
       "type": "object",
       "description": "Optional production-planning context composed by Backend. It is not an Evidence/Product Result input and must not change risk, status_grade, top_factors, or recommended_action.",
       "additionalProperties": false,
-      "required": ["load_level", "runtime_hours_7d", "production_impact"],
       "properties": {
         "load_level": {"type": ["string", "null"], "enum": ["low", "normal", "high", null]},
         "runtime_hours_7d": {"type": ["number", "null"], "minimum": 0},
@@ -271,6 +270,10 @@
         },
         "limitations": {"type": "array", "items": {"type": "string"}}
       },
+      "anyOf": [
+        {"required": ["load_level", "runtime_hours_7d", "production_impact"]},
+        {"required": ["context_id", "source_type", "temporal_scope", "production_plan", "capacity_model", "event_impact", "limitations"]}
+      ],
       "allOf": [
         {
           "if": {"required": ["source_type"]},

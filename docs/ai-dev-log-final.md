@@ -49,7 +49,7 @@ Frontend role-specific views
 최신 계약 기준:
 
 - 피처 시계열은 `features[].history.points`다.
-- 과거의 `features[].series` 참조는 제거해야 한다.
+- 과거의 feature-level series 필드 가정은 제거해야 한다.
 - 프론트 내부 모델에서는 `historyPoints`로 매핑해 소비할 수 있다.
 - `risk_series`는 센서 이력이 아니라 Backend Diagnosis Runtime Prediction History다.
 - `equipment_history[]`는 사람에게 보여주는 이력 projection이다.
