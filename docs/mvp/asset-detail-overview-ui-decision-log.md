@@ -177,6 +177,8 @@ PR은 Closed-loop 상태 머신이나 agent workflow를 구현하지 않으므�
 - `work_orders[]`, `maintenance_actions[]`, `maintenance_events[]`, `activities[]`,
   `available_actions[]`, `runtime_status`를 화면 표시용으로 보존한다.
 - 사이드뷰의 현재 상태, 작업 ID, 담당자, 다음 권장 액션은 closed-loop read model이 있으면 그 값을 우선한다.
+- Overview 상단의 작업 상태 KPI도 같은 closed-loop read model을 우선한다. 큐와 사이드뷰가
+  `작업 요청됨`을 보이는데 상단 카드만 `미생성`으로 남으면 사용자가 상태 source를 신뢰하기 어렵다.
 - closed-loop 값이 없으면 기존처럼 후보 추천, 작업요청 미생성, API 미연결 문구로 경계를 표시한다.
 - UI 표시명은 하드코딩된 “33호기” 같은 번호가 아니라 `site/cell/slot` 기반 설비명으로 매핑한다.
 
@@ -185,6 +187,21 @@ PR은 Closed-loop 상태 머신이나 agent workflow를 구현하지 않으므�
 - `M-033` 같은 ID는 Canonical V3.1의 `CNC-Sxx-Lxx-xx` / `CMP-Sxx-Lxx-xx` 배치 추론과 맞지 않는다.
 - 공장 맵은 슬롯 ID와 ViewModel asset ID가 일치해야 상태 색상을 정확히 표시할 수 있다.
 - 이전 서버 프로세스가 fixture를 메모리에 들고 있으면 최신 ID 변경이 반영되지 않아 지도 슬롯이 모두 미연결로 보일 수 있다.
+- `ManufacturingPredictiveMaintenanceService`는 서버 시작 시점에 `data/fixtures/GS-*.json`을 읽어
+  `project_fixtures`에 보관한다. 따라서 GS-004 fixture에 `closed_loop`를 추가한 뒤에도 기존 8100
+  백엔드를 재시작하지 않으면 브라우저에는 예전 `작업요청 미생성` 스냅샷이 계속 보인다.
+- 8100 백엔드를 현재 worktree 기준으로 재기동한 뒤 `EVT-GS-004 / CNC-S04-L02-03`에서
+  `WO-INS-GS-004-001`, `작업 요청됨`, `현재 상태 · API`, `점검 승인` 표시를 확인했다.
+
+Closed-loop 담당자 handoff:
+
+- UI는 `closed_loop.work_orders[]`, `available_actions[]`, `activities[]`를 읽고 표시하는 surface까지 맡는다.
+- `점검 승인`, `작업 요청`, `담당자 배정`, `점검 시작`, `정비 완료`, `정비 후 관측 대기`,
+  `재예측 가능`을 실제 DB/API 상태 전이로 연결하는 일은 Closed-loop mutation/API 작업으로 넘긴다.
+- mutation API가 연결되기 전까지 UI는 WorkOrder ID, MaintenanceAction ID, MaintenanceEvent ID,
+  권한 액션, 완료 상태를 합성하지 않는다.
+- 후속 API는 idempotency, 권한, 상태 전이 실패, Activity append, 정비 후 Product Result/재예측
+  연결 기준을 함께 가져야 한다. 버튼 로딩과 팝업 UX는 이미 화면 흐름을 검증하기 위한 shell로만 남긴다.
 
 대표 매핑:
 

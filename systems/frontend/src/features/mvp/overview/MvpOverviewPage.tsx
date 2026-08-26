@@ -925,8 +925,14 @@ export function MvpOverviewPage({
   const planningBasis = planningBasisFromDetail(selectedDetail);
   const selectedPlanningImpact = planningImpactFromOperationContext(selectedDetail, planningImpactForAsset(selectedAsset?.assetId));
   const maxPlanningImpact = planningImpactFromOperationContext(selectedDetail, PLANNING_IMPACT_ROWS.find((row) => row.eventId === "EVT-GS-004") ?? PLANNING_IMPACT_ROWS[0]);
+  const selectedClosedLoopStatus = workStatusFromClosedLoop(selectedDetail?.closedLoop);
+  const selectedClosedLoopWorkId = closedLoopWorkIdLabel(selectedDetail?.closedLoop);
+  const selectedWorkStatusLabel = selectedClosedLoopStatus ? WORK_STATUS_LABEL[selectedClosedLoopStatus] : "미생성";
+  const selectedWorkStatusDetail = selectedClosedLoopStatus
+    ? `${selectedClosedLoopWorkId} · 담당 ${closedLoopAssignee(selectedDetail?.closedLoop) ?? selectedEvent?.assignedEngineer ?? "미배정"}`
+    : "작업요청 ID 미생성 · 점검 후보";
   const agentSummaryLine = role === "field_operator"
-    ? `점검 후보 ${workOrderCandidates.length}건 · 부품 확인 ${needsPartCheck}건 · 작업요청 ID 미생성`
+    ? `점검 후보 ${workOrderCandidates.length}건 · 부품 확인 ${needsPartCheck}건 · ${selectedWorkStatusLabel}`
     : `위험 라인 ${riskyLines}개 · 라인 ${lineImpactSummaries.length}개 · 평균 위험도 ${formatProbability(metrics.averageRisk)}`;
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
@@ -1147,7 +1153,7 @@ export function MvpOverviewPage({
             <ClipboardList className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>점검 후보</span>
             <strong>{workOrderCandidates.length.toLocaleString()}건</strong>
-            <small>작업요청 미생성 후보</small>
+            <small>전체 점검 후보</small>
           </article>
           <article className="mvp-plan-impact-card is-critical">
             <AlertTriangle className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
@@ -1170,8 +1176,8 @@ export function MvpOverviewPage({
           <article className="mvp-plan-impact-card">
             <Clock3 className="mvp-plan-impact-icon" size={15} aria-hidden="true" />
             <span>작업 상태</span>
-            <strong>미생성</strong>
-            <small>작업요청 ID 미생성 · 점검 후보</small>
+            <strong>{selectedWorkStatusLabel}</strong>
+            <small>{selectedWorkStatusDetail}</small>
           </article>
         </section>
       )}
