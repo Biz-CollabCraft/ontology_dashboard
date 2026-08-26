@@ -120,8 +120,7 @@ interface FactorySlotPreview {
   cell: FactoryCellLayout;
 }
 
-const FALLBACK_TODAY_PLAN_UNITS = 16200;
-const FALLBACK_PLANNING_MODEL_BASIS = "생산계획 데이터 연결 전 임시 추정값입니다.";
+const MISSING_PLANNING_BASIS = "생산계획 ViewModel 미연결";
 const FACTORY_SITE_IDS = ["S01", "S02", "S03", "S04"];
 const FACTORY_CELL_IDS = ["L01", "L02", "L03", "L04", "L05"];
 const FACTORY_LAYOUT_NOTICE = "데모 배치 화면 · 상태와 위험도는 연결된 설비 데이터만 표시";
@@ -404,14 +403,14 @@ function plannedUnitsFromDetail(detail: MvpEventDetailModel | null): { value: nu
   const plannedUnits = detail?.operationContext?.productionPlan?.plannedUnits;
   return typeof plannedUnits === "number"
     ? { value: plannedUnits, fallback: false }
-    : { value: FALLBACK_TODAY_PLAN_UNITS, fallback: true };
+    : { value: null, fallback: true };
 }
 
 function planningBasisFromDetail(detail: MvpEventDetailModel | null): { value: string; fallback: boolean } {
   const basis = detail?.operationContext?.capacityModel?.basis;
   return basis
     ? { value: basis, fallback: false }
-    : { value: FALLBACK_PLANNING_MODEL_BASIS, fallback: true };
+    : { value: MISSING_PLANNING_BASIS, fallback: true };
 }
 
 function lineAssetLabel(asset: MvpAsset): string {
@@ -555,7 +554,7 @@ function WorkStatusPrimaryAction({
         {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
         {loading ? "처리 중" : nextActionLabel}
       </button>
-      <small>{helperText ?? "현재는 화면 상태만 다음 단계로 표시하며 실제 작업요청 API는 실행하지 않습니다."}</small>
+      <small>{helperText ?? "Closed-loop API 연결 전에는 화면에서 작업 상태를 변경하지 않습니다."}</small>
     </div>
   );
 }
@@ -909,7 +908,7 @@ export function MvpWorkflowOverviewPage({
   const needsPartCheck = anomalyEvents.filter((event) => displayPartLabel(event.assetId, event.sparePartAvailable) !== "확보").length;
   const dataQualityEvent = model.events.find((event) => event.status === "data_quality_hold") ?? null;
   const dataQualityCount = model.events.filter((event) => event.status === "data_quality_hold").length;
-  const spareMissingCount = PLANNING_IMPACT_ROWS.filter((row) => row.sparePartAvailable === false).length;
+  const spareMissingCount = model.events.filter((event) => event.sparePartAvailable === false).length;
   const riskyLines = model.lineRisk.filter((line) => line.critical + line.warning + line.dataQualityHold > 0).length;
   const selectedLineSummary = selectedAsset
     ? lineImpactSummaries.find((summary) => summary.line === (selectedAsset.line || selectedAsset.cell || "라인 근거 없음")) ?? null
@@ -924,7 +923,7 @@ export function MvpWorkflowOverviewPage({
   const plannedUnits = plannedUnitsFromDetail(selectedDetail);
   const planningBasis = planningBasisFromDetail(selectedDetail);
   const selectedPlanningImpact = planningImpactFromOperationContext(selectedDetail, planningImpactForAsset(selectedAsset?.assetId));
-  const maxPlanningImpact = planningImpactFromOperationContext(selectedDetail, PLANNING_IMPACT_ROWS.find((row) => row.eventId === "EVT-GS-004") ?? PLANNING_IMPACT_ROWS[0]);
+  const maxPlanningImpact = planningImpactFromOperationContext(selectedDetail, null);
   const selectedClosedLoopStatus = workStatusFromClosedLoop(selectedDetail?.closedLoop);
   const selectedClosedLoopWorkId = closedLoopWorkIdLabel(selectedDetail?.closedLoop);
   const selectedWorkStatusLabel = selectedClosedLoopStatus ? WORK_STATUS_LABEL[selectedClosedLoopStatus] : "미생성";
@@ -978,10 +977,10 @@ export function MvpWorkflowOverviewPage({
     : "미배정";
   const drawerWorkId = closedLoopWorkIdLabel(drawerClosedLoop);
   const drawerActionLabel = drawerClosedLoopAction?.label ?? null;
-  const drawerWorkActionDisabled = Boolean(drawerClosedLoop);
+  const drawerWorkActionDisabled = true;
   const drawerActionHelper = drawerClosedLoop
     ? drawerClosedLoopAction?.disabledReason ?? "Closed-loop read model 기준으로 표시합니다. 실제 실행은 API mutation 연결 후 처리합니다."
-    : "현재는 화면 상태만 다음 단계로 표시하며 실제 작업요청 API는 실행하지 않습니다.";
+    : "Closed-loop API 미연결 상태입니다. 현재 화면에서는 상태를 변경하지 않습니다.";
   const drawerRequestType = drawerAsset ? requestTypeByAssetId[drawerAsset.assetId] ?? WORK_REQUEST_TYPES[0] : WORK_REQUEST_TYPES[0];
   const drawerRequestNote = drawerAsset ? workRequestNoteByAssetId[drawerAsset.assetId] ?? "" : "";
   const drawerCompletionNote = drawerAsset ? completionNoteByAssetId[drawerAsset.assetId] ?? "" : "";
@@ -1106,7 +1105,7 @@ export function MvpWorkflowOverviewPage({
         </div>
         {role === "process_manager" ? (
           <div className="mvp-agent-sample-strip" aria-label="생산 관리 관련 데이터">
-            <span>오늘 계획 {plannedUnits.value ? plannedUnits.value.toLocaleString() : "미연결"}개/일</span>
+            <span>오늘 계획 {plannedUnits.value ? `${plannedUnits.value.toLocaleString()}개/일` : "미연결"}</span>
             <span>{plannedUnits.fallback ? "생산계획 데이터 미연결" : "생산계획 데이터 기준"}</span>
             <span>실제 생산관리 실적 아님</span>
           </div>
