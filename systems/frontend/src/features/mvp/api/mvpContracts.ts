@@ -338,6 +338,18 @@ export interface MvpClosedLoopSummary {
   runtimeStatus: MvpClosedLoopRuntimeStatus;
 }
 
+export interface MvpInspectionTarget {
+  targetId: string;
+  componentId: string;
+  componentLabel: string;
+  association: string;
+  locationLabel: string | null;
+  inspectionMethod: string | null;
+  basisRefs: string[];
+  sourceRef: string;
+  unavailableReason: string | null;
+}
+
 export interface MvpEventDetailModel {
   event: MvpEvent;
   sensors: MvpSensorValue[];
@@ -353,6 +365,7 @@ export interface MvpEventDetailModel {
     similarEvents30d: number | null;
     openWorkOrderExists: boolean | null;
   } | null;
+  inspectionTargets: MvpInspectionTarget[];
   dataQualityWarnings: Array<{ code: string; field: string; message: string; severity: string }>;
   equipmentHistory: MvpEquipmentHistoryItem[];
   evidenceGaps: MvpEvidenceGap[];
@@ -449,6 +462,17 @@ export interface AssetDetailViewModel {
     similar_events_30d: number | null;
     open_work_order_exists: boolean | null;
   };
+  inspection_targets?: Array<{
+    target_id: string;
+    component_id: string;
+    component_label: string;
+    association: string;
+    location_label: string | null;
+    inspection_method: string | null;
+    basis_refs: string[];
+    source_ref: string;
+    unavailable_reason: string | null;
+  }>;
   operation_context: {
     load_level: "low" | "normal" | "high" | null;
     runtime_hours_7d: number | null;

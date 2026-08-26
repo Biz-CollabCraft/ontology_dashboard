@@ -172,6 +172,26 @@
         "open_work_order_exists": {"type": ["boolean", "null"]}
       }
     },
+    "inspection_targets": {
+      "type": "array",
+      "description": "Backend-owned inspection target hints sourced from Product Evidence component hypotheses. Concrete field location and method remain null until Maintenance/Inspection supplies them.",
+      "items": {
+        "type": "object",
+        "required": ["target_id", "component_id", "component_label", "association", "location_label", "inspection_method", "basis_refs", "source_ref", "unavailable_reason"],
+        "additionalProperties": false,
+        "properties": {
+          "target_id": {"type": "string"},
+          "component_id": {"type": "string"},
+          "component_label": {"type": "string"},
+          "association": {"type": "string"},
+          "location_label": {"type": ["string", "null"]},
+          "inspection_method": {"type": ["string", "null"]},
+          "basis_refs": {"type": "array", "items": {"type": "string"}},
+          "source_ref": {"type": "string"},
+          "unavailable_reason": {"type": ["string", "null"]}
+        }
+      }
+    },
     "operation_context": {"$ref": "#/$defs/operationContext"},
     "closed_loop": {"$ref": "#/$defs/closedLoopSummary"},
     "review_priority": {

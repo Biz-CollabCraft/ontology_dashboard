@@ -20,6 +20,7 @@ import type {
   MvpEvent,
   MvpEventDetailModel,
   MvpFeatureHistoryWindow,
+  MvpInspectionTarget,
   MvpReportTab,
   MvpRoleLens,
   MvpSensorWindowId,
@@ -44,7 +45,6 @@ import {
   displayReviewPriority,
   displaySensorLabel,
   fieldFactorItem,
-  fieldFactorLocation,
   fieldFactorSymptom,
   fieldFailureLabel,
 } from "../displayLabels";
@@ -86,6 +86,12 @@ interface PlanningImpactRow {
   status: "plan_at_risk" | "shift_inspection" | "inspection_priority" | "data_quality_hold";
   nextAction: string;
   sparePartAvailable: boolean | null;
+}
+
+interface InspectionTargetView {
+  target: MvpInspectionTarget | null;
+  factor: MvpAsset["topFactors"][number] | null;
+  rank: number;
 }
 
 interface FactoryCellSlot {
@@ -690,7 +696,7 @@ function WorkflowPrintReport({
   asset: MvpAsset;
   detail: MvpEventDetailModel | null;
   factors: MvpAsset["topFactors"];
-  inspectionTargets: Array<{ factor: MvpAsset["topFactors"][number]; rank: number }>;
+  inspectionTargets: InspectionTargetView[];
   planningImpact: ReturnType<typeof planningImpactFromOperationContext>;
   workStatus: WorkStatus;
   assignee: string;
@@ -722,9 +728,9 @@ function WorkflowPrintReport({
         <section>
           <h2>점검 요청 항목</h2>
           {inspectionTargets.length ? inspectionTargets.map((target) => (
-            <article key={target.factor.id}>
-              <b>{target.rank}. {fieldFactorItem(target.factor)}</b>
-              <p>{fieldFactorLocation(target.factor)} · Backend 점검 위치 계약 연결 후 표시됩니다.</p>
+            <article key={target.target?.targetId ?? target.factor?.id ?? `inspection-target-${target.rank}`}>
+              <b>{target.rank}. {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</b>
+              <p>{target.target?.inspectionMethod ?? "Backend 점검 위치 계약 연결 후 표시됩니다."}</p>
             </article>
           )) : <p>점검 위치 근거는 Backend ViewModel 연결 후 표시됩니다.</p>}
         </section>
@@ -1409,10 +1415,17 @@ function AssetPreviewPanel({
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
-  const inspectionTargets = factors.slice(0, 3).map((factor, index) => ({
-    factor,
-    rank: index + 1,
-  }));
+  const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
+    ? detail.inspectionTargets.slice(0, 3).map((target, index) => ({
+      target,
+      factor: factors[index] ?? null,
+      rank: index + 1,
+    }))
+    : factors.slice(0, 3).map((factor, index) => ({
+      target: null,
+      factor,
+      rank: index + 1,
+    }));
   const factoryAssetName = factorySlotPreview ? displayFactorySlotName(factorySlotPreview.slot, factorySlotPreview.cell) : null;
   const assetDisplayName = asset ? factoryAssetName ?? displayAssetName(asset) : "선택된 설비 없음";
   const outputReport = (reportTab: MvpReportTab) => {
@@ -1601,10 +1614,12 @@ function AssetPreviewPanel({
                     <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
                   </div>
                   <div>
-                    <strong>{candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
+                    <strong>{inspectionTargets[0]?.target?.componentLabel ?? candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
                     <ul className="sketch-legend">
                       {inspectionTargets.length ? inspectionTargets.map((target) => (
-                        <li key={target.factor.id}><b>{target.rank}</b>{fieldFactorLocation(target.factor)}: Backend 점검 위치 계약 연결 후 표시</li>
+                        <li key={target.target?.targetId ?? target.factor?.id ?? `inspection-legend-${target.rank}`}>
+                          <b>{target.rank}</b>{target.target?.locationLabel ?? "위치 근거 미제공"}: {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}
+                        </li>
                       )) : <li><b>!</b>위치 근거: 부품 근거 없음</li>}
                     </ul>
                   </div>
@@ -1612,10 +1627,17 @@ function AssetPreviewPanel({
                 <div className="target-list">
                   {inspectionTargets.length ? (
                     inspectionTargets.map((target) => (
-                      <article key={target.factor.id}>
+                      <article key={target.target?.targetId ?? target.factor?.id ?? `inspection-target-${target.rank}`}>
                         <b>{target.rank}</b><i><Wrench size={18} /></i>
-                        <div><strong>{fieldFactorItem(target.factor)}</strong><p>{target.factor.direction === "risk_up" ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.` : `${fieldFactorSymptom(target.factor)}이 위험 판단을 낮춘 보조 근거입니다.`}</p></div>
-                        <span className="target-severity high">{factorValueLabel(target.factor)}</span>
+                        <div>
+                          <strong>{target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</strong>
+                          <p>{target.target
+                            ? `Evidence 근거 참조: ${target.target.basisRefs.join(", ") || target.target.sourceRef}`
+                            : target.factor?.direction === "risk_up"
+                              ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
+                              : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
+                        </div>
+                        <span className="target-severity high">{target.factor ? factorValueLabel(target.factor) : "위치 미제공"}</span>
                       </article>
                     ))
                   ) : (

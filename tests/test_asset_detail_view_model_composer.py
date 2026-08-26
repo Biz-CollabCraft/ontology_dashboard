@@ -249,6 +249,19 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
     )
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["inspection_targets"][0]["component_id"] == "rotating_assembly"
+    assert payload["inspection_targets"][0]["component_label"] == "회전/진동 계통"
+    assert payload["inspection_targets"][0]["location_label"] is None
+    assert payload["inspection_targets"][0]["inspection_method"] is None
+    assert payload["inspection_targets"][0]["basis_refs"] == [
+        "factor.1.rotation_raw",
+        "sensor_evidence.sensors.rotation_raw",
+    ]
+    assert payload["inspection_targets"][0]["source_ref"].endswith("#component_hypotheses[0]")
+    assert (
+        payload["inspection_targets"][0]["unavailable_reason"]
+        == "maintenance_inspection_location_contract_unavailable"
+    )
     assert payload["operation_context"]["source_type"] == "synthetic_capacity_model"
     assert payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
     assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")

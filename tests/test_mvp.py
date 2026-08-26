@@ -243,6 +243,12 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert detail_payload["operation_context"]["production_plan"]["planned_units"] == 16200
     assert detail_payload["operation_context"]["event_impact"]["event_id"] == "EVT-GS-002"
     assert detail_payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
+    assert detail_payload["inspection_targets"][0]["component_id"]
+    assert detail_payload["inspection_targets"][0]["location_label"] is None
+    assert (
+        detail_payload["inspection_targets"][0]["unavailable_reason"]
+        == "maintenance_inspection_location_contract_unavailable"
+    )
     assert detail_payload["risk_series"] == []
     assert any(gap["field"] == "risk_series" for gap in detail_payload["evidence"]["gaps"])
     assert detail_payload["evidence"]["source_kind"] == "runtime_inference"

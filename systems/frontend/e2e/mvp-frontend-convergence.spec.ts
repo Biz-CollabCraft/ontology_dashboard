@@ -120,7 +120,7 @@ test("covers Reports side-tab flow with summary graphs and report types", async 
   await expect(page.getByRole("heading", { name: "점검 항목", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "센서 참고값", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "근거 추적", exact: true })).toBeVisible();
-  await expect(page.getByText("공기압축기 점검 위치")).toBeVisible();
+  await expect(page.getByText("공기압축기 설비 참고도")).toBeVisible();
 
   const query = new URL(page.url()).searchParams;
   expect(query.get("view")).toBe("reports");

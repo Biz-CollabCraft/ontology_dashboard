@@ -266,6 +266,17 @@ describe("MVP adapter contract", () => {
         similar_events_30d: null,
         open_work_order_exists: null,
       },
+      inspection_targets: [{
+        target_id: "inspection-target:RESULT#CNC-001:1",
+        component_id: "rotating_assembly",
+        component_label: "회전/진동 계통",
+        association: "inspection_candidate",
+        location_label: null,
+        inspection_method: null,
+        basis_refs: ["factor.1.tool_wear_min", "sensor_evidence.sensors.tool_wear_min"],
+        source_ref: "storage://result.json#component_hypotheses[0]",
+        unavailable_reason: "maintenance_inspection_location_contract_unavailable",
+      }],
       operation_context: {
         load_level: null,
         runtime_hours_7d: null,
@@ -373,6 +384,16 @@ describe("MVP adapter contract", () => {
       afterStatus: "requested",
       workOrderId: "WO-INS-001",
     }));
+    expect(enriched.inspectionTargets[0]).toEqual(expect.objectContaining({
+      componentId: "rotating_assembly",
+      componentLabel: "회전/진동 계통",
+      locationLabel: null,
+      unavailableReason: "maintenance_inspection_location_contract_unavailable",
+    }));
+    expect(enriched.inspectionTargets[0].basisRefs).toEqual([
+      "factor.1.tool_wear_min",
+      "sensor_evidence.sensors.tool_wear_min",
+    ]);
     expect(enriched.event.criticality).toBeNull();
     expect(enriched.assetCriticality).toBeNull();
     expect(enriched.reviewPriority).toBeNull();

@@ -11,6 +11,7 @@ import type {
   MvpEventDetailModel,
   MvpEvidenceGap,
   MvpFactor,
+  MvpInspectionTarget,
   MvpLineRisk,
   MvpMetrics,
   MvpClosedLoopSummary,
@@ -483,6 +484,20 @@ function evidenceGapsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): 
   }));
 }
 
+function inspectionTargetsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpInspectionTarget[] {
+  return (viewModel.inspection_targets ?? []).map((target) => ({
+    targetId: target.target_id,
+    componentId: target.component_id,
+    componentLabel: target.component_label,
+    association: target.association,
+    locationLabel: target.location_label,
+    inspectionMethod: target.inspection_method,
+    basisRefs: target.basis_refs,
+    sourceRef: target.source_ref,
+    unavailableReason: target.unavailable_reason,
+  }));
+}
+
 function factorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpFactor[] {
   return viewModel.features
     .filter((feature) => feature.top_factor !== null)
@@ -650,6 +665,7 @@ export function composeEventDetail(input: {
     criticalityBasis: [],
     criticalitySource: "unknown",
     maintenanceContext: null,
+    inspectionTargets: [],
     dataQualityWarnings: input.evidence?.data_quality_warnings ?? [],
     equipmentHistory: [],
     evidenceGaps: [],
@@ -697,6 +713,7 @@ export function applyAssetDetailViewModel(
       similarEvents30d: viewModel.maintenance_context.similar_events_30d,
       openWorkOrderExists: viewModel.maintenance_context.open_work_order_exists,
     },
+    inspectionTargets: inspectionTargetsFromAssetDetailViewModel(viewModel),
     equipmentHistory: equipmentHistoryFromAssetDetailViewModel(viewModel),
     evidenceGaps: evidenceGapsFromAssetDetailViewModel(viewModel),
     assetDetailStatus: {

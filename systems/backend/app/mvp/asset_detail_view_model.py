@@ -276,6 +276,7 @@ def compose_asset_detail_view_model(
     )
     if priority_gap is not None:
         gaps.append(priority_gap)
+    inspection_targets = _inspection_targets(result_artifact, provenance)
 
     return {
         "asset": asset_summary,
@@ -284,6 +285,7 @@ def compose_asset_detail_view_model(
         "features": features,
         "equipment_history": equipment_history,
         "maintenance_context": maintenance_context,
+        "inspection_targets": inspection_targets,
         "operation_context": operation_context,
         "review_priority": review_priority,
         **({"closed_loop": closed_loop} if closed_loop is not None else {}),
@@ -662,6 +664,40 @@ def _maintenance_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[di
                 }
             )
     return result, gaps
+
+
+def _inspection_targets(
+    result_artifact: dict[str, Any],
+    provenance: dict[str, Any],
+) -> list[dict[str, Any]]:
+    evidence_payload = result_artifact.get("evidence_payload") or {}
+    component_hypotheses = evidence_payload.get("component_hypotheses") or []
+    evidence_ref = _evidence_payload_reference(provenance)
+    artifact_id = str(result_artifact.get("artifact_id") or result_artifact.get("asset_id") or "unknown")
+    targets: list[dict[str, Any]] = []
+    for index, item in enumerate(component_hypotheses):
+        if not isinstance(item, dict):
+            continue
+        component_id = str(item.get("component_id") or "")
+        if not component_id:
+            continue
+        basis = item.get("basis") if isinstance(item.get("basis"), list) else []
+        targets.append(
+            {
+                "target_id": f"inspection-target:{artifact_id}:{index + 1}",
+                "component_id": component_id,
+                "component_label": str(item.get("component_label") or component_id),
+                "association": str(item.get("association") or "inspection_candidate"),
+                "location_label": None,
+                "inspection_method": None,
+                "basis_refs": [str(value) for value in basis],
+                "source_ref": f"{evidence_ref}#component_hypotheses[{index}]"
+                if evidence_ref
+                else f"product-result-artifact://{artifact_id}#evidence_payload.component_hypotheses[{index}]",
+                "unavailable_reason": "maintenance_inspection_location_contract_unavailable",
+            }
+        )
+    return targets
 
 
 def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
