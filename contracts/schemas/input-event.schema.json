@@ -47,6 +47,7 @@
       }
     },
     "operation_context": {"$ref": "#/$defs/operationContext"},
+    "closed_loop": {"$ref": "#/$defs/closedLoopSummary"},
     "expected": {
       "type": "object",
       "additionalProperties": false,
@@ -145,6 +146,96 @@
           }
         },
         "limitations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "closedLoopSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "work_orders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["work_order_id", "work_type", "status"],
+            "properties": {
+              "work_order_id": {"type": "string"},
+              "work_type": {"enum": ["inspection", "maintenance"]},
+              "status": {"enum": ["requested", "approved", "in_progress", "completed", "blocked", "failed", "cancelled"]},
+              "assigned_to": {"type": ["string", "null"]},
+              "actor_display_name": {"type": ["string", "null"]},
+              "created_at": {"type": ["string", "null"], "format": "date-time"},
+              "updated_at": {"type": ["string", "null"], "format": "date-time"}
+            }
+          }
+        },
+        "maintenance_actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["maintenance_action_id", "status"],
+            "properties": {
+              "maintenance_action_id": {"type": "string"},
+              "work_order_id": {"type": ["string", "null"]},
+              "status": {"enum": ["planned", "in_progress", "completed", "failed", "cancelled"]},
+              "actor_display_name": {"type": ["string", "null"]},
+              "started_at": {"type": ["string", "null"], "format": "date-time"},
+              "completed_at": {"type": ["string", "null"], "format": "date-time"}
+            }
+          }
+        },
+        "maintenance_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["maintenance_event_id"],
+            "properties": {
+              "maintenance_event_id": {"type": "string"},
+              "maintenance_action_id": {"type": ["string", "null"]},
+              "work_order_id": {"type": ["string", "null"]},
+              "completed_at": {"type": ["string", "null"], "format": "date-time"},
+              "actor_display_name": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["activity_id", "activity_type"],
+            "properties": {
+              "activity_id": {"type": "string"},
+              "activity_type": {"type": "string"},
+              "work_type": {"type": ["string", "null"], "enum": ["inspection", "maintenance", null]},
+              "actor_display_name": {"type": ["string", "null"]},
+              "before_status": {"type": ["string", "null"]},
+              "after_status": {"type": ["string", "null"]},
+              "created_at": {"type": ["string", "null"], "format": "date-time"},
+              "work_order_id": {"type": ["string", "null"]},
+              "maintenance_action_id": {"type": ["string", "null"]},
+              "maintenance_event_id": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "available_actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action_id", "target_type"],
+            "properties": {
+              "action_id": {"type": "string"},
+              "target_type": {"enum": ["recommendation", "work_order", "maintenance_action", "inspection_result", "event"]},
+              "target_id": {"type": ["string", "null"]},
+              "label": {"type": "string"},
+              "disabled_reason": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "runtime_status": {"type": ["string", "null"], "enum": ["equipment_under_maintenance", "warming_up", "history_insufficient", "ready", "predicted", null]}
       }
     },
     "observation": {

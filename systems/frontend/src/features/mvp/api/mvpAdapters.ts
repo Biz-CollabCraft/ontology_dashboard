@@ -14,6 +14,7 @@ import type {
   MvpFactor,
   MvpLineRisk,
   MvpMetrics,
+  MvpClosedLoopSummary,
   MvpOperationContext,
   MvpProvenance,
   MvpReportModel,
@@ -161,6 +162,57 @@ function operationContextFromAssetDetailViewModel(viewModel: AssetDetailViewMode
       },
     } : context.event_impact === null ? null : undefined,
     limitations: context.limitations,
+  };
+}
+
+function closedLoopFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpClosedLoopSummary | null {
+  const closedLoop = viewModel.closed_loop;
+  if (!closedLoop) return null;
+  return {
+    workOrders: (closedLoop.work_orders ?? []).map((item) => ({
+      workOrderId: item.work_order_id,
+      workType: item.work_type,
+      status: item.status,
+      assignedTo: item.assigned_to ?? null,
+      actorDisplayName: item.actor_display_name ?? null,
+      createdAt: item.created_at ?? null,
+      updatedAt: item.updated_at ?? null,
+    })),
+    maintenanceActions: (closedLoop.maintenance_actions ?? []).map((item) => ({
+      maintenanceActionId: item.maintenance_action_id,
+      workOrderId: item.work_order_id ?? null,
+      status: item.status,
+      actorDisplayName: item.actor_display_name ?? null,
+      startedAt: item.started_at ?? null,
+      completedAt: item.completed_at ?? null,
+    })),
+    maintenanceEvents: (closedLoop.maintenance_events ?? []).map((item) => ({
+      maintenanceEventId: item.maintenance_event_id,
+      maintenanceActionId: item.maintenance_action_id ?? null,
+      workOrderId: item.work_order_id ?? null,
+      completedAt: item.completed_at ?? null,
+      actorDisplayName: item.actor_display_name ?? null,
+    })),
+    activities: (closedLoop.activities ?? []).map((item) => ({
+      activityId: item.activity_id,
+      activityType: item.activity_type,
+      workType: item.work_type ?? null,
+      actorDisplayName: item.actor_display_name ?? null,
+      beforeStatus: item.before_status ?? null,
+      afterStatus: item.after_status ?? null,
+      createdAt: item.created_at ?? null,
+      workOrderId: item.work_order_id ?? null,
+      maintenanceActionId: item.maintenance_action_id ?? null,
+      maintenanceEventId: item.maintenance_event_id ?? null,
+    })),
+    availableActions: (closedLoop.available_actions ?? []).map((item) => ({
+      actionId: item.action_id,
+      targetType: item.target_type,
+      targetId: item.target_id ?? null,
+      label: item.label,
+      disabledReason: item.disabled_reason ?? null,
+    })),
+    runtimeStatus: closedLoop.runtime_status ?? null,
   };
 }
 
@@ -590,6 +642,7 @@ export function composeEventDetail(input: {
     evidenceGaps: [],
     assetDetailStatus: null,
     operationContext: null,
+    closedLoop: null,
     reviewPriority: null,
     activity: normalizeActivity(input.activity),
     report,
@@ -628,6 +681,7 @@ export function applyAssetDetailViewModel(
       source: viewModel.data_status.source,
     },
     operationContext: operationContextFromAssetDetailViewModel(viewModel),
+    closedLoop: closedLoopFromAssetDetailViewModel(viewModel),
     reviewPriority: viewModel.review_priority ? {
       level: viewModel.review_priority.level,
       reasons: viewModel.review_priority.reasons,

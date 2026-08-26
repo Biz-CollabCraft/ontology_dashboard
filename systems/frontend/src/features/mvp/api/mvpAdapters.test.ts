@@ -262,6 +262,37 @@ describe("MVP adapter contract", () => {
         is_data_quality_hold: false,
         warnings: [],
       },
+      closed_loop: {
+        work_orders: [{
+          work_order_id: "WO-INS-001",
+          work_type: "inspection",
+          status: "requested",
+          assigned_to: null,
+          actor_display_name: "윤하린",
+          created_at: "2026-08-06T03:10:00Z",
+          updated_at: "2026-08-06T03:10:00Z",
+        }],
+        maintenance_actions: [],
+        maintenance_events: [],
+        activities: [{
+          activity_id: "ACT-001",
+          activity_type: "work_order.requested",
+          work_type: "inspection",
+          actor_display_name: "윤하린",
+          before_status: null,
+          after_status: "requested",
+          created_at: "2026-08-06T03:10:00Z",
+          work_order_id: "WO-INS-001",
+        }],
+        available_actions: [{
+          action_id: "approve_inspection_work_order",
+          target_type: "work_order",
+          target_id: "WO-INS-001",
+          label: "점검 승인",
+          disabled_reason: null,
+        }],
+        runtime_status: null,
+      },
     });
 
     expect(enriched.sensors[0]).toEqual(expect.objectContaining({
@@ -283,5 +314,20 @@ describe("MVP adapter contract", () => {
     expect(enriched.evidenceGaps[0]).toEqual(expect.objectContaining({ field: "asset.criticality" }));
     expect(enriched.assetDetailStatus?.isStale).toBeNull();
     expect(enriched.equipmentHistory[0].source).toBe("maintenance-read-model");
+    expect(enriched.closedLoop?.workOrders[0]).toEqual(expect.objectContaining({
+      workOrderId: "WO-INS-001",
+      workType: "inspection",
+      status: "requested",
+      actorDisplayName: "윤하린",
+    }));
+    expect(enriched.closedLoop?.availableActions[0]).toEqual(expect.objectContaining({
+      actionId: "approve_inspection_work_order",
+      targetId: "WO-INS-001",
+    }));
+    expect(enriched.closedLoop?.activities[0]).toEqual(expect.objectContaining({
+      activityType: "work_order.requested",
+      afterStatus: "requested",
+      workOrderId: "WO-INS-001",
+    }));
   });
 });

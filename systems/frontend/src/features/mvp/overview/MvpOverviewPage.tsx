@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import type {
   MvpAsset,
   MvpBootstrapModel,
+  MvpClosedLoopSummary,
   MvpEvent,
   MvpEventDetailModel,
   MvpReportTab,
@@ -417,6 +418,62 @@ function lineAssetLabel(asset: MvpAsset): string {
   return displayFactoryAssetName(asset.assetId) ?? displayAssetName(asset);
 }
 
+function latestClosedLoopWorkOrder(closedLoop: MvpClosedLoopSummary | null | undefined) {
+  return [...(closedLoop?.workOrders ?? [])].sort((left, right) => String(right.updatedAt ?? right.createdAt ?? "").localeCompare(String(left.updatedAt ?? left.createdAt ?? "")))[0] ?? null;
+}
+
+function latestClosedLoopMaintenanceAction(closedLoop: MvpClosedLoopSummary | null | undefined) {
+  return [...(closedLoop?.maintenanceActions ?? [])].sort((left, right) => String(right.completedAt ?? right.startedAt ?? "").localeCompare(String(left.completedAt ?? left.startedAt ?? "")))[0] ?? null;
+}
+
+function latestClosedLoopMaintenanceEvent(closedLoop: MvpClosedLoopSummary | null | undefined) {
+  return [...(closedLoop?.maintenanceEvents ?? [])].sort((left, right) => String(right.completedAt ?? "").localeCompare(String(left.completedAt ?? "")))[0] ?? null;
+}
+
+function workStatusFromClosedLoop(closedLoop: MvpClosedLoopSummary | null | undefined): WorkStatus | null {
+  const runtimeStatus = closedLoop?.runtimeStatus;
+  if (runtimeStatus === "predicted" || runtimeStatus === "ready") return "ready_for_reprediction";
+  if (runtimeStatus === "warming_up" || runtimeStatus === "history_insufficient") return "observation_pending";
+  if (latestClosedLoopMaintenanceEvent(closedLoop)) return "maintenance_completed";
+  const action = latestClosedLoopMaintenanceAction(closedLoop);
+  if (action?.status === "completed") return "maintenance_completed";
+  if (action?.status === "in_progress") return "inspection_started";
+  if (action?.status === "planned") return "assigned";
+  const workOrder = latestClosedLoopWorkOrder(closedLoop);
+  if (workOrder?.status === "completed") return "maintenance_completed";
+  if (workOrder?.status === "in_progress") return "inspection_started";
+  if (workOrder?.status === "approved") return "assigned";
+  if (workOrder?.status === "requested") return "work_requested";
+  return null;
+}
+
+function closedLoopActionForStatus(closedLoop: MvpClosedLoopSummary | null | undefined, status: WorkStatus) {
+  const actionIdsByStatus: Record<WorkStatus, string[]> = {
+    candidate_recommended: ["create_inspection_work_order", "request_inspection_work_order", "request_inspection"],
+    work_requested: ["approve_inspection_work_order", "start_inspection_work_order", "start_inspection"],
+    assigned: ["start_inspection_work_order", "start_inspection"],
+    inspection_started: ["complete_inspection_work_order", "complete_inspection", "complete_work_order"],
+    maintenance_completed: [],
+    observation_pending: [],
+    ready_for_reprediction: ["view_reprediction", "request_reprediction"],
+  };
+  const actionIds = actionIdsByStatus[status];
+  return (closedLoop?.availableActions ?? []).find((action) => actionIds.includes(action.actionId)) ?? null;
+}
+
+function closedLoopAssignee(closedLoop: MvpClosedLoopSummary | null | undefined): string | null {
+  const workOrder = latestClosedLoopWorkOrder(closedLoop);
+  const action = latestClosedLoopMaintenanceAction(closedLoop);
+  const activity = [...(closedLoop?.activities ?? [])].reverse().find((item) => item.actorDisplayName);
+  return workOrder?.actorDisplayName ?? workOrder?.assignedTo ?? action?.actorDisplayName ?? activity?.actorDisplayName ?? null;
+}
+
+function closedLoopWorkIdLabel(closedLoop: MvpClosedLoopSummary | null | undefined): string {
+  const workOrder = latestClosedLoopWorkOrder(closedLoop);
+  if (workOrder) return workOrder.workOrderId;
+  return "작업요청 미생성";
+}
+
 function workStatusForAsset(_asset: MvpAsset | null, _event: MvpEvent | null): WorkStatus {
   return "candidate_recommended";
 }
@@ -441,21 +498,26 @@ function workQueueColumn(status: WorkStatus): WorkQueueColumnId {
 
 function WorkStatusFixedBar({
   status,
+  actionLabel,
+  statusSource,
   disabled = false,
   loading = false,
   onAction,
 }: {
   status: WorkStatus;
+  actionLabel?: string | null;
+  statusSource?: string;
   disabled?: boolean;
   loading?: boolean;
   onAction: () => void;
 }) {
   const action = WORK_STATUS_ACTION[status];
+  const nextActionLabel = actionLabel ?? action.label;
   const actionDisabled = disabled || action.disabled || loading;
   return (
     <section className="mvp-work-status-bar" aria-label="작업 상태">
-      <div><span>현재 상태</span><strong>{WORK_STATUS_LABEL[status]}</strong></div>
-      <div><span>다음 권장 액션</span><strong>{action.label}</strong></div>
+      <div><span>현재 상태{statusSource ? ` · ${statusSource}` : ""}</span><strong>{WORK_STATUS_LABEL[status]}</strong></div>
+      <div><span>다음 권장 액션</span><strong>{nextActionLabel}</strong></div>
       <button
         type="button"
         className="mvp-button primary"
@@ -463,7 +525,7 @@ function WorkStatusFixedBar({
         onClick={onAction}
       >
         {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
-        {loading ? "처리 중" : actionDisabled ? "액션 대기" : action.label}
+        {loading ? "처리 중" : actionDisabled ? "액션 대기" : nextActionLabel}
       </button>
     </section>
   );
@@ -471,24 +533,29 @@ function WorkStatusFixedBar({
 
 function WorkStatusPrimaryAction({
   status,
+  actionLabel,
+  helperText,
   disabled = false,
   loading = false,
   onAction,
 }: {
   status: WorkStatus;
+  actionLabel?: string | null;
+  helperText?: string;
   disabled?: boolean;
   loading?: boolean;
   onAction: () => void;
 }) {
   const action = WORK_STATUS_ACTION[status];
+  const nextActionLabel = actionLabel ?? action.label;
   const actionDisabled = disabled || action.disabled || loading;
   return (
     <div className="mvp-work-primary-action">
       <button type="button" className="mvp-button primary" disabled={actionDisabled} onClick={onAction}>
         {loading ? <RefreshCw className="mvp-action-spinner" size={14} /> : <ClipboardCheck size={14} />}
-        {loading ? "처리 중" : action.label}
+        {loading ? "처리 중" : nextActionLabel}
       </button>
-      <small>현재는 화면 상태만 다음 단계로 표시하며 실제 작업요청 API는 실행하지 않습니다.</small>
+      <small>{helperText ?? "현재는 화면 상태만 다음 단계로 표시하며 실제 작업요청 API는 실행하지 않습니다."}</small>
     </div>
   );
 }
@@ -520,6 +587,7 @@ function WorkStatusQueueBoard({
   candidates,
   role,
   selectedAssetId,
+  selectedDetail,
   statusByAssetId,
   assigneeByAssetId,
   onPreview,
@@ -527,12 +595,16 @@ function WorkStatusQueueBoard({
   candidates: WorkOrderCandidate[];
   role: MvpRoleLens;
   selectedAssetId: string | null;
+  selectedDetail: MvpEventDetailModel | null;
   statusByAssetId: Record<string, WorkStatus>;
   assigneeByAssetId: Record<string, string>;
   onPreview: (assetId: string, eventId: string | null) => void;
 }) {
   const items = candidates.map((candidate) => {
-    const status = statusByAssetId[candidate.event.assetId] ?? workStatusForAsset(candidate.asset, candidate.event);
+    const candidateClosedLoop = selectedDetail?.event.assetId === candidate.event.assetId ? selectedDetail.closedLoop : null;
+    const status = workStatusFromClosedLoop(candidateClosedLoop)
+      ?? statusByAssetId[candidate.event.assetId]
+      ?? workStatusForAsset(candidate.asset, candidate.event);
     return { candidate, status, column: workQueueColumn(status) };
   });
   return (
@@ -557,7 +629,9 @@ function WorkStatusQueueBoard({
                 {columnItems.length ? columnItems.map(({ candidate, status }) => {
                   const assetName = candidate.asset ? displayAssetName(candidate.asset) : displayEventAssetName(candidate.event);
                   const lineLabel = candidate.asset?.line || candidate.asset?.cell || candidate.event.line || "라인 미지정";
-                  const assignee = assigneeByAssetId[candidate.event.assetId] ?? candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
+                  const candidateClosedLoop = selectedDetail?.event.assetId === candidate.event.assetId ? selectedDetail.closedLoop : null;
+                  const assignee = closedLoopAssignee(candidateClosedLoop) ?? assigneeByAssetId[candidate.event.assetId] ?? candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
+                  const workId = closedLoopWorkIdLabel(candidateClosedLoop);
                   const secondary = role === "field_operator"
                     ? `${candidate.suspectedPart} · ${displayPartLabel(candidate.event.assetId, candidate.event.sparePartAvailable)}`
                     : `${lineLabel} · ${DECISION_LABEL[candidate.event.recommendedDecision]}`;
@@ -571,7 +645,7 @@ function WorkStatusQueueBoard({
                       <MvpStatusBadge status={candidate.event.status} />
                       <strong>{assetName}</strong>
                       <small>{secondary}</small>
-                      <span>{WORK_STATUS_LABEL[status]} · 담당 {assignee}</span>
+                      <span>{WORK_STATUS_LABEL[status]} · {workId} · 담당 {assignee}</span>
                     </button>
                   );
                 }) : <p>대기 없음</p>}
@@ -883,14 +957,25 @@ export function MvpOverviewPage({
     ? null
     : Math.round(drawerAsset.failureProbability * 100);
   const drawerDetail = drawerAsset && detail?.event.assetId === drawerAsset.assetId ? detail : null;
+  const drawerClosedLoop = drawerDetail?.closedLoop ?? null;
+  const drawerClosedLoopStatus = workStatusFromClosedLoop(drawerClosedLoop);
+  const drawerClosedLoopAction = drawerClosedLoopStatus
+    ? closedLoopActionForStatus(drawerClosedLoop, drawerClosedLoopStatus)
+    : null;
   const drawerPlanningImpact = planningImpactFromOperationContext(drawerDetail, planningImpactForAsset(drawerAsset?.assetId));
   const drawerWorkStatus = drawerAsset
-    ? workStatusByAssetId[drawerAsset.assetId] ?? workStatusForAsset(drawerAsset, drawerEvent)
+    ? drawerClosedLoopStatus ?? workStatusByAssetId[drawerAsset.assetId] ?? workStatusForAsset(drawerAsset, drawerEvent)
     : "candidate_recommended";
   const drawerWorkActionLoading = drawerAsset?.assetId === loadingWorkActionAssetId;
   const drawerAssignee = drawerAsset
-    ? assigneeByAssetId[drawerAsset.assetId] ?? drawerAsset.assignedEngineer ?? drawerEvent?.assignedEngineer ?? "미배정"
+    ? closedLoopAssignee(drawerClosedLoop) ?? assigneeByAssetId[drawerAsset.assetId] ?? drawerAsset.assignedEngineer ?? drawerEvent?.assignedEngineer ?? "미배정"
     : "미배정";
+  const drawerWorkId = closedLoopWorkIdLabel(drawerClosedLoop);
+  const drawerActionLabel = drawerClosedLoopAction?.label ?? null;
+  const drawerWorkActionDisabled = Boolean(drawerClosedLoop);
+  const drawerActionHelper = drawerClosedLoop
+    ? drawerClosedLoopAction?.disabledReason ?? "Closed-loop read model 기준으로 표시합니다. 실제 실행은 API mutation 연결 후 처리합니다."
+    : "현재는 화면 상태만 다음 단계로 표시하며 실제 작업요청 API는 실행하지 않습니다.";
   const drawerRequestType = drawerAsset ? requestTypeByAssetId[drawerAsset.assetId] ?? WORK_REQUEST_TYPES[0] : WORK_REQUEST_TYPES[0];
   const drawerRequestNote = drawerAsset ? workRequestNoteByAssetId[drawerAsset.assetId] ?? "" : "";
   const drawerCompletionNote = drawerAsset ? completionNoteByAssetId[drawerAsset.assetId] ?? "" : "";
@@ -1095,6 +1180,7 @@ export function MvpOverviewPage({
         candidates={workOrderCandidates}
         role={role}
         selectedAssetId={selectedAsset?.assetId ?? null}
+        selectedDetail={selectedDetail}
         statusByAssetId={workStatusByAssetId}
         assigneeByAssetId={assigneeByAssetId}
         onPreview={previewInDrawer}
@@ -1202,7 +1288,7 @@ export function MvpOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} event={drawerEvent} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workActionLoading={drawerWorkActionLoading} assignee={drawerAssignee} assignees={availableAssignees} assignmentOpen={assignmentAssetId === drawerAsset?.assetId} workActionDialogKind={drawerWorkActionDialogKind} requestType={drawerRequestType} requestNote={drawerRequestNote} completionNote={drawerCompletionNote} selectedAssignee={selectedAssignee} onSelectedAssigneeChange={setSelectedAssignee} onRequestTypeChange={(value) => drawerAsset ? setRequestTypeByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onRequestNoteChange={(value) => drawerAsset ? setWorkRequestNoteByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onCompletionNoteChange={(value) => drawerAsset ? setCompletionNoteByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onConfirmAssignment={confirmDrawerAssignment} onCloseAssignment={() => setAssignmentAssetId(null)} onConfirmWorkAction={confirmDrawerWorkAction} onCloseWorkAction={() => setWorkActionDialog(null)} onTabChange={setDetailDrawerTab} onAdvanceWorkStatus={advanceDrawerWorkStatus} onPreviewAsset={onPreviewAsset} onOpenEvent={onOpenEvent} onOpenReport={onOpenReport} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} event={drawerEvent} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} workActionLoading={drawerWorkActionLoading} assignee={drawerAssignee} assignees={availableAssignees} assignmentOpen={assignmentAssetId === drawerAsset?.assetId} workActionDialogKind={drawerWorkActionDialogKind} requestType={drawerRequestType} requestNote={drawerRequestNote} completionNote={drawerCompletionNote} selectedAssignee={selectedAssignee} onSelectedAssigneeChange={setSelectedAssignee} onRequestTypeChange={(value) => drawerAsset ? setRequestTypeByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onRequestNoteChange={(value) => drawerAsset ? setWorkRequestNoteByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onCompletionNoteChange={(value) => drawerAsset ? setCompletionNoteByAssetId((current) => ({ ...current, [drawerAsset.assetId]: value })) : undefined} onConfirmAssignment={confirmDrawerAssignment} onCloseAssignment={() => setAssignmentAssetId(null)} onConfirmWorkAction={confirmDrawerWorkAction} onCloseWorkAction={() => setWorkActionDialog(null)} onTabChange={setDetailDrawerTab} onAdvanceWorkStatus={advanceDrawerWorkStatus} onPreviewAsset={onPreviewAsset} onOpenEvent={onOpenEvent} onOpenReport={onOpenReport} />
           </aside>
         </div>
       ) : null}
@@ -1420,6 +1506,11 @@ function AssetPreviewPanel({
   role,
   activeTab,
   workStatus,
+  workStatusSource,
+  workId,
+  workActionLabel,
+  workActionHelper,
+  workActionDisabled,
   workActionLoading,
   assignee,
   assignees,
@@ -1457,6 +1548,11 @@ function AssetPreviewPanel({
   role: MvpRoleLens;
   activeTab: DrawerTab;
   workStatus: WorkStatus;
+  workStatusSource: string;
+  workId: string;
+  workActionLabel: string | null;
+  workActionHelper: string;
+  workActionDisabled: boolean;
   workActionLoading: boolean;
   assignee: string;
   assignees: string[];
@@ -1506,7 +1602,7 @@ function AssetPreviewPanel({
             <span className="mvp-slot-status">상태 미연결</span>
             <div><strong>{displayFactorySlotName(slot, cell)}</strong><small>{slot.assetId} · 고장 확정 아님</small></div>
           </header>
-          <WorkStatusFixedBar status={workStatus} disabled loading={workActionLoading} onAction={onAdvanceWorkStatus} />
+          <WorkStatusFixedBar status={workStatus} actionLabel={workActionLabel} statusSource={workStatusSource} disabled loading={workActionLoading} onAction={onAdvanceWorkStatus} />
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
@@ -1519,6 +1615,7 @@ function AssetPreviewPanel({
                 <div><dt>셀</dt><dd>{displayFactoryCell(cell.cell)}</dd></div>
                 <div><dt>설비 유형</dt><dd>{displayAssetType(slot.kind)}</dd></div>
                 <div><dt>상태</dt><dd>상세 데이터 미연결</dd></div>
+                <div><dt>작업 ID</dt><dd>{workId}</dd></div>
                 <div><dt>관측 상세</dt><dd>상세 데이터 미연결</dd></div>
                 <div><dt>계획 기준</dt><dd>생산계획 데이터 미연결</dd></div>
               </dl>
@@ -1552,7 +1649,7 @@ function AssetPreviewPanel({
                 <label><span>요청 메모</span><textarea disabled placeholder="요청 화면 연결 후 입력" /></label>
                 <label><span>담당자</span><input disabled placeholder="미배정" /></label>
               </div>
-              <WorkStatusPrimaryAction status={workStatus} disabled loading={workActionLoading} onAction={onAdvanceWorkStatus} />
+              <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled loading={workActionLoading} onAction={onAdvanceWorkStatus} />
               <p className="mvp-action-note">
                 위험 이벤트와 작업요청이 연결되지 않은 설비는 자동 조치하지 않습니다.
               </p>
@@ -1573,7 +1670,7 @@ function AssetPreviewPanel({
               <Printer size={15} />
             </button>
           </header>
-          <WorkStatusFixedBar status={workStatus} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
+          <WorkStatusFixedBar status={workStatus} actionLabel={workActionLabel} statusSource={workStatusSource} disabled={workActionDisabled} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
@@ -1586,6 +1683,7 @@ function AssetPreviewPanel({
                 <div><dt>계획 상태</dt><dd>{planningImpact ? PLANNING_STATUS_LABEL[planningImpact.status] : "생산 영향 미산정"}</dd></div>
                 <div><dt>부품 제약</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
                 <div><dt>담당</dt><dd>{assignee}</dd></div>
+                <div><dt>작업 ID</dt><dd>{workId}</dd></div>
                 <div><dt>예상 정지 영향</dt><dd>{formatMinutes(asset.estimatedDowntimeMinutes)}</dd></div>
                 <div><dt>신뢰도</dt><dd><MvpConfidenceBadge confidence={asset.confidence} /></dd></div>
                 {lineSummary ? <div><dt>라인 설비</dt><dd>{lineSummary.line} · {lineSummary.assets.length}대</dd></div> : null}
@@ -1629,7 +1727,7 @@ function AssetPreviewPanel({
                   <MvpStatusBadge status={asset.status} />
                   <div>
                     <strong>{assetDisplayName}</strong>
-                    <small>작업요청 ID 미생성 · 권고 {DECISION_LABEL[asset.recommendedDecision]}</small>
+                    <small>{workId} · 권고 {DECISION_LABEL[asset.recommendedDecision]}</small>
                   </div>
                 </div>
                 <dl className="mvp-action-facts">
@@ -1637,8 +1735,8 @@ function AssetPreviewPanel({
                   <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
                   <div><dt>담당</dt><dd>{assignee}</dd></div>
                   <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
-                  <div><dt>처리 상태</dt><dd>후보 검토</dd></div>
-                  <div><dt>권한 액션</dt><dd>처리 탭에서 검토</dd></div>
+                  <div><dt>처리 상태</dt><dd>{WORK_STATUS_LABEL[workStatus]}</dd></div>
+                  <div><dt>권한 액션</dt><dd>{workActionLabel ?? "API 연결 전 화면 액션"}</dd></div>
                 </dl>
                 <div className="mvp-action-placeholder-grid" aria-label="작업요청 입력 자리">
                   <label><span>요청 유형</span><input disabled value={requestType} readOnly /></label>
@@ -1647,7 +1745,7 @@ function AssetPreviewPanel({
                   <label><span>완료 메모</span><textarea disabled value={completionNote || "메모 없음"} readOnly /></label>
                   <label><span>교체 부품</span><input disabled value="교체부품 기록 필드 없음" readOnly /></label>
                 </div>
-                <WorkStatusPrimaryAction status={workStatus} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
+                <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
                 <p className="mvp-action-note">
                   승인, 보류, 반려, 메모 저장은 자동 실행하지 않고 작업요청의 승인 절차에서 처리합니다.
                 </p>
@@ -1720,7 +1818,7 @@ function AssetPreviewPanel({
                 <MvpStatusBadge status={asset.status} />
                 <div>
                   <strong>{candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
-                  <small>작업요청 ID 미생성 · {planningImpact?.nextAction ?? "현장 점검 요청"}</small>
+                  <small>{workId} · {planningImpact?.nextAction ?? "현장 점검 요청"}</small>
                 </div>
               </div>
               <dl className="mvp-action-facts">
@@ -1729,7 +1827,8 @@ function AssetPreviewPanel({
                 <div><dt>점검 위치</dt><dd>{asset.cell || asset.line}</dd></div>
                 <div><dt>부품</dt><dd>{displayPartLabel(asset.assetId, asset.sparePartAvailable)}</dd></div>
                 <div><dt>데이터 품질</dt><dd>{asset.status === "data_quality_hold" ? "데이터 품질 확인 필요" : "확인 가능"}</dd></div>
-                <div><dt>다음 액션</dt><dd>{planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>
+                <div><dt>작업 ID</dt><dd>{workId}</dd></div>
+                <div><dt>다음 액션</dt><dd>{workActionLabel ?? planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>
               </dl>
               <div className="mvp-action-placeholder-grid" aria-label="현장 처리 입력 자리">
                 <label><span>요청 유형</span><input disabled value={requestType} readOnly /></label>
@@ -1737,7 +1836,7 @@ function AssetPreviewPanel({
                 <label><span>담당자</span><input disabled placeholder={assignee} /></label>
                 <label><span>완료 메모</span><textarea disabled value={completionNote || "메모 없음"} readOnly /></label>
               </div>
-              <WorkStatusPrimaryAction status={workStatus} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
+              <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} loading={workActionLoading} onAction={onAdvanceWorkStatus} />
               <p className="mvp-action-note">
                 점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
               </p>

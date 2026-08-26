@@ -261,6 +261,68 @@ export interface MvpOperationContext {
   limitations?: string[];
 }
 
+export type MvpClosedLoopWorkType = "inspection" | "maintenance";
+export type MvpClosedLoopWorkOrderStatus = "requested" | "approved" | "in_progress" | "completed" | "blocked" | "failed" | "cancelled";
+export type MvpClosedLoopMaintenanceActionStatus = "planned" | "in_progress" | "completed" | "failed" | "cancelled";
+export type MvpClosedLoopRuntimeStatus = "equipment_under_maintenance" | "warming_up" | "history_insufficient" | "ready" | "predicted" | null;
+
+export interface MvpClosedLoopAvailableAction {
+  actionId: string;
+  targetType: "recommendation" | "work_order" | "maintenance_action" | "inspection_result" | "event";
+  targetId: string | null;
+  label?: string;
+  disabledReason?: string | null;
+}
+
+export interface MvpClosedLoopWorkOrder {
+  workOrderId: string;
+  workType: MvpClosedLoopWorkType;
+  status: MvpClosedLoopWorkOrderStatus;
+  assignedTo?: string | null;
+  actorDisplayName?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface MvpClosedLoopMaintenanceAction {
+  maintenanceActionId: string;
+  workOrderId: string | null;
+  status: MvpClosedLoopMaintenanceActionStatus;
+  actorDisplayName?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+}
+
+export interface MvpClosedLoopMaintenanceEvent {
+  maintenanceEventId: string;
+  maintenanceActionId: string | null;
+  workOrderId: string | null;
+  completedAt: string | null;
+  actorDisplayName?: string | null;
+}
+
+export interface MvpClosedLoopActivity {
+  activityId: string;
+  activityType: string;
+  workType?: MvpClosedLoopWorkType | null;
+  actorDisplayName?: string | null;
+  beforeStatus?: string | null;
+  afterStatus?: string | null;
+  createdAt?: string | null;
+  workOrderId?: string | null;
+  maintenanceActionId?: string | null;
+  maintenanceEventId?: string | null;
+}
+
+export interface MvpClosedLoopSummary {
+  workOrders: MvpClosedLoopWorkOrder[];
+  maintenanceActions: MvpClosedLoopMaintenanceAction[];
+  maintenanceEvents: MvpClosedLoopMaintenanceEvent[];
+  activities: MvpClosedLoopActivity[];
+  availableActions: MvpClosedLoopAvailableAction[];
+  runtimeStatus: MvpClosedLoopRuntimeStatus;
+}
+
 export interface MvpEventDetailModel {
   event: MvpEvent;
   sensors: MvpSensorValue[];
@@ -273,6 +335,7 @@ export interface MvpEventDetailModel {
   evidenceGaps: MvpEvidenceGap[];
   assetDetailStatus: MvpAssetDetailStatus | null;
   operationContext: MvpOperationContext | null;
+  closedLoop: MvpClosedLoopSummary | null;
   reviewPriority: {
     level: "immediate" | "high" | "medium" | "low";
     reasons: string[];
@@ -392,6 +455,52 @@ export interface AssetDetailViewModel {
     } | null;
     limitations?: string[];
   };
+  closed_loop?: {
+    work_orders?: Array<{
+      work_order_id: string;
+      work_type: MvpClosedLoopWorkType;
+      status: MvpClosedLoopWorkOrderStatus;
+      assigned_to?: string | null;
+      actor_display_name?: string | null;
+      created_at?: string | null;
+      updated_at?: string | null;
+    }>;
+    maintenance_actions?: Array<{
+      maintenance_action_id: string;
+      work_order_id?: string | null;
+      status: MvpClosedLoopMaintenanceActionStatus;
+      actor_display_name?: string | null;
+      started_at?: string | null;
+      completed_at?: string | null;
+    }>;
+    maintenance_events?: Array<{
+      maintenance_event_id: string;
+      maintenance_action_id?: string | null;
+      work_order_id?: string | null;
+      completed_at?: string | null;
+      actor_display_name?: string | null;
+    }>;
+    activities?: Array<{
+      activity_id: string;
+      activity_type: string;
+      work_type?: MvpClosedLoopWorkType | null;
+      actor_display_name?: string | null;
+      before_status?: string | null;
+      after_status?: string | null;
+      created_at?: string | null;
+      work_order_id?: string | null;
+      maintenance_action_id?: string | null;
+      maintenance_event_id?: string | null;
+    }>;
+    available_actions?: Array<{
+      action_id: string;
+      target_type: "recommendation" | "work_order" | "maintenance_action" | "inspection_result" | "event";
+      target_id?: string | null;
+      label?: string;
+      disabled_reason?: string | null;
+    }>;
+    runtime_status?: MvpClosedLoopRuntimeStatus;
+  } | null;
   review_priority?: {
     level: "immediate" | "high" | "medium" | "low";
     reasons: string[];

@@ -148,6 +148,36 @@ PR은 Closed-loop 상태 머신이나 agent workflow를 구현하지 않으므�
 결정:
 
 - GS fixture의 예전 `M-*` asset id를 Canonical V3.1 규칙의 설비 ID로 정리한다.
+
+## Decision 5. Closed-loop Read Surface Boundary
+
+결정:
+
+- Overview의 작업 상태 큐와 사이드뷰 처리 탭은 Closed-loop 실행을 새로 구현하지 않고,
+  `WorkOrder`, `MaintenanceAction`, `MaintenanceEvent`, `Activity`, `available_actions`를
+  받을 수 있는 read surface로 정리한다.
+- API가 closed-loop 요약을 내려주면 그 상태와 ID를 우선 표시하고, 없으면 `작업요청 미생성 후보`와
+  화면용 demo 상태로 남긴다.
+- closed-loop read model이 있는 경우 프론트가 상태를 임의로 다음 단계로 전이하지 않는다. 실제 상태 변경은
+  후속 mutation API와 idempotency 계약이 연결된 뒤 처리한다.
+
+근거:
+
+- Issue #99는 Maintenance Loop Prototype을 그대로 복사하는 작업이 아니라, canonical 시스템 이식 전
+  Integration Gate를 관리하는 이슈다.
+- PR #103으로 Inspection WorkOrder, Operations manual Recommendation, Decision, WorkOrder,
+  Persistence의 기본 계약은 들어왔지만 Runtime Overlay, outbox 운영 복구, 정비 후 Product Result,
+  실제 E2E는 아직 상위 Integration Gate로 남아 있다.
+- 따라서 이번 UI PR은 사용자가 볼 작업 흐름을 막지 않도록 읽기/표시 계약을 준비하되, WorkOrder ID,
+  MaintenanceEvent ID, 권한 액션을 프론트에서 합성하지 않는다.
+
+구현 방향:
+
+- `AssetDetailViewModel.closed_loop`는 optional summary envelope로 소비한다.
+- `work_orders[]`, `maintenance_actions[]`, `maintenance_events[]`, `activities[]`,
+  `available_actions[]`, `runtime_status`를 화면 표시용으로 보존한다.
+- 사이드뷰의 현재 상태, 작업 ID, 담당자, 다음 권장 액션은 closed-loop read model이 있으면 그 값을 우선한다.
+- closed-loop 값이 없으면 기존처럼 후보 추천, 작업요청 미생성, API 미연결 문구로 경계를 표시한다.
 - UI 표시명은 하드코딩된 “33호기” 같은 번호가 아니라 `site/cell/slot` 기반 설비명으로 매핑한다.
 
 근거:

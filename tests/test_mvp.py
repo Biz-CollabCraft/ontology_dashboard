@@ -352,6 +352,15 @@ def test_asset_detail_view_model_exposes_gs004_24h_feature_history(
     assert operation_context["event_impact"]["equipment_id"] == "CNC-S04-L02-03"
     assert operation_context["event_impact"]["screen_priority"] == "plan_at_risk"
     assert operation_context["event_impact"]["estimated_lost_units"] == 51
+    closed_loop = detail_payload["closed_loop"]
+    assert closed_loop["work_orders"][0]["work_order_id"] == "WO-INS-GS-004-001"
+    assert closed_loop["work_orders"][0]["work_type"] == "inspection"
+    assert closed_loop["work_orders"][0]["status"] == "requested"
+    assert closed_loop["activities"][0]["activity_type"] == "work_order.requested"
+    assert closed_loop["available_actions"][0]["action_id"] == "approve_inspection_work_order"
+    assert closed_loop["maintenance_actions"] == []
+    assert closed_loop["maintenance_events"] == []
+    assert closed_loop["runtime_status"] is None
 
     event = client.get("/api/events/EVT-GS-004")
     assert event.status_code == 200
