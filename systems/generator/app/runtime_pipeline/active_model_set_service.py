@@ -16,6 +16,8 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     ModelSetArtifactNotFoundError,
     ModelSetAtomicPublishFailedError,
     ModelSetContractInvalidError,
+    ModelSetModelNotRegisteredError,
+    ModelSetNotConfiguredError,
     ModelSetOptionalModelPolicyNotImplementedError,
     ModelSetUpdateConflictError,
     ModelSetUpdateLockedError,
@@ -42,46 +44,29 @@ class ActiveModelSetService:
         self.pointer_file = self.models_store / pointer_filename
         self.lock_file = self.models_store / f"{pointer_filename}.lock"
 
-    def get_default_active_model_set(self) -> ActiveModelSet:
-        """Construct default active model set using latest.json for registered base models if present."""
-        models_map: dict[str, ActiveModelConfig] = {}
-        base_models = ["lightgbm", "xgboost", "random_forest"]
-        for bm in base_models:
-            model_id = self._resolve_model_id(bm)
-            latest_file = self.artifacts_dir / model_id / "latest.json"
-            ver = "1.0.0"
-            if latest_file.exists():
-                try:
-                    with open(latest_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    ver = data.get("model_version") or data.get("active_version") or "1.0.0"
-                except Exception:
-                    pass
-            models_map[bm] = ActiveModelConfig(model_version=ver, required=True)
-
-        return ActiveModelSet(
-            model_set_id="pdm-default",
-            model_set_version="1.0.0",
-            updated_at=now_utc_iso(),
-            models=models_map,
-        )
-
     def load_active_model_set(self) -> ActiveModelSet:
-        """Load and validate active-model-set.json pointer. Initializes default if not present."""
+        """Load and validate active-model-set.json pointer. Raises ModelSetNotConfiguredError if missing."""
         if not self.pointer_file.exists():
-            default_set = self.get_default_active_model_set()
-            try:
-                self.update_active_model_set(default_set, validate_artifacts=False)
-                return default_set
-            except Exception as exc:
-                logger.warning(f"[ActiveModelSetService] Failed to auto-create default active-model-set.json: {exc}")
-                return default_set
+            raise ModelSetNotConfiguredError(
+                f"active-model-set.json 포인터 파일이 존재하지 않습니다: {self.pointer_file}",
+                details=[{"path": str(self.pointer_file)}],
+                retryable=False,
+            )
 
         try:
             with open(self.pointer_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return ActiveModelSet.model_validate(data)
+            model_set = ActiveModelSet.model_validate(data)
+            if not model_set.models:
+                raise ModelSetNotConfiguredError(
+                    "active-model-set.json에 정의된 모델 목록이 비어 있습니다.",
+                    details=[{"path": str(self.pointer_file)}],
+                    retryable=False,
+                )
+            return model_set
         except Exception as exc:
+            if isinstance(exc, ModelSetNotConfiguredError):
+                raise
             raise ModelSetContractInvalidError(
                 f"active-model-set.json 파싱 또는 계약 검증 실패: {exc}",
                 details=[{"path": str(self.pointer_file), "error": str(exc)}],
@@ -121,7 +106,15 @@ class ActiveModelSetService:
                     retryable=False,
                 )
 
+            registered_allowlist = {"lightgbm", "xgboost", "random_forest", "pdm-lightgbm", "pdm-xgboost", "pdm-random_forest"}
             for base_or_id, config in new_set.models.items():
+                if base_or_id not in registered_allowlist and self._resolve_model_id(base_or_id) not in registered_allowlist:
+                    raise ModelSetModelNotRegisteredError(
+                        f"Model Set에 등록되지 않은 모델이 포함되어 있습니다: {base_or_id}",
+                        details=[{"model": base_or_id}],
+                        retryable=False,
+                    )
+
                 if not config.required:
                     raise ModelSetOptionalModelPolicyNotImplementedError(
                         f"선택 모델(required=false) 정책은 현재 지원되지 않습니다: {base_or_id}",
@@ -148,10 +141,44 @@ class ActiveModelSetService:
                         )
 
                     try:
-                        compute_file_sha256(manifest_file)
+                        with open(manifest_file, "r", encoding="utf-8") as mf:
+                            manifest_data = json.load(mf)
+
+                        if manifest_data.get("model_id") != model_id or manifest_data.get("model_version") != config.model_version:
+                            raise ModelSetArtifactIntegrityError(
+                                f"manifest.json의 model_id/model_version 불일치 ({model_id}/{config.model_version})",
+                                retryable=False,
+                            )
+
+                        for file_entry in manifest_data.get("artifact_files", []):
+                            fname = file_entry.get("path")
+                            expected_sha = file_entry.get("sha256")
+                            if fname:
+                                target_f = artifact_dir / fname
+                                if not target_f.is_file():
+                                    raise ModelSetArtifactIntegrityError(
+                                        f"선언된 아티팩트 파일이 누락되었습니다: {target_f}",
+                                        retryable=False,
+                                    )
+                                if expected_sha and compute_file_sha256(target_f) != expected_sha:
+                                    raise ModelSetArtifactIntegrityError(
+                                        f"아티팩트 파일 체크섬 불일치: {target_f}",
+                                        retryable=False,
+                                    )
+
+                        req_files = ["model.joblib", "feature_schema.json", "label_schema.json", "history_requirement.json", "metrics.json"]
+                        for rf in req_files:
+                            if not (artifact_dir / rf).is_file():
+                                raise ModelSetArtifactIntegrityError(
+                                    f"필수 페이로드 파일 누락 ({rf}): {artifact_dir / rf}",
+                                    retryable=False,
+                                )
+
                     except Exception as m_exc:
+                        if isinstance(m_exc, (ModelSetArtifactIntegrityError, ModelSetArtifactNotFoundError)):
+                            raise
                         raise ModelSetArtifactIntegrityError(
-                            f"아티팩트 manifest 체크섬 계산 실패 ({model_id}/{config.model_version}): {m_exc}",
+                            f"아티팩트 무결성 검증 실패 ({model_id}/{config.model_version}): {m_exc}",
                             details=[{"error": str(m_exc)}],
                             retryable=False,
                         ) from m_exc

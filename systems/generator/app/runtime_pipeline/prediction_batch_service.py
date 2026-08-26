@@ -146,6 +146,8 @@ class PredictionBatchService:
         dataset_version: str,
         pipeline_contract_version: str,
         source_lineage: Any,
+        model_set_id: str = "pdm-default",
+        model_set_version: str = "1.0.0",
         sensor_data_ref: Optional[dict[str, Any]] = None,
         base_dir: Optional[Path] = None,
     ) -> ArtifactReference:
@@ -154,6 +156,9 @@ class PredictionBatchService:
         import json
         from pathlib import Path
         from systems.generator.generator_config import PATHS
+        from systems.generator.app.runtime_pipeline.pipeline_exception import (
+            PipelineModelSetSnapshotMismatchError,
+        )
         from systems.generator.app.runtime_pipeline.pipeline_schema import (
             ArtifactReference,
             PredictionResultBatchPayload,
@@ -168,6 +173,18 @@ class PredictionBatchService:
 
         batch_manifest_entries: dict[str, dict[str, Any]] = {}
         for asset_id, batch in summary.equipment_batches.items():
+            for m_key, m_res in batch.model_results.items():
+                if m_res.model_set_id and m_res.model_set_id != model_set_id:
+                    raise PipelineModelSetSnapshotMismatchError(
+                        f"Model result '{m_key}'의 model_set_id('{m_res.model_set_id}')가 Batch의 model_set_id('{model_set_id}')와 불일치합니다.",
+                        retryable=False,
+                    )
+                if m_res.model_set_version and m_res.model_set_version != model_set_version:
+                    raise PipelineModelSetSnapshotMismatchError(
+                        f"Model result '{m_key}'의 model_set_version('{m_res.model_set_version}')가 Batch의 model_set_version('{model_set_version}')와 불일치합니다.",
+                        retryable=False,
+                    )
+
             temp_payload = PredictionResultBatchPayload(
                 event_id="temp",
                 run_id=run_id,
@@ -176,6 +193,8 @@ class PredictionBatchService:
                 observed_at=batch.observed_at,
                 dataset_id=dataset_id,
                 dataset_version=dataset_version,
+                model_set_id=model_set_id,
+                model_set_version=model_set_version,
                 model_results=batch.model_results,
                 source_lineage=source_lineage,
                 sensor_data_ref=sensor_data_ref,

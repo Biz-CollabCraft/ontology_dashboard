@@ -198,6 +198,9 @@ class PredictionDeliveryWorker:
 
     def process_pending(self) -> int:
         """Scan and process all ready pending/retry_wait items. Returns count of processed items."""
+        from systems.generator.generator_config import PATHS
+        if not PATHS.runtime_prediction_enabled:
+            return 0
         items = self.service.list_outbox_items()
         processed_count = 0
         now_dt = datetime.now(timezone.utc)

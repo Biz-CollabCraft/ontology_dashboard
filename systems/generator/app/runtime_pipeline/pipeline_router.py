@@ -56,18 +56,34 @@ def get_pipeline_queue(status: Optional[str] = Query(None, description="Filter b
 @router.post("/internal/runtime-pipeline/enqueue", response_model=PipelineQueueItem)
 def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
     """Internal evaluation endpoint to enqueue completed observation file into FIFO queue."""
-    return get_manager().enqueue(
-        job_id=req.job_id,
-        source_uri=req.source_uri,
-        source_checksum=req.source_checksum,
-        size_bytes=req.size_bytes,
-        dataset_id=req.dataset_id,
-        dataset_version=req.dataset_version,
-        pipeline_contract_version=req.pipeline_contract_version,
-    )
+    try:
+        return get_manager().enqueue(
+            job_id=req.job_id,
+            source_uri=req.source_uri,
+            source_checksum=req.source_checksum,
+            size_bytes=req.size_bytes,
+            dataset_id=req.dataset_id,
+            dataset_version=req.dataset_version,
+            pipeline_contract_version=req.pipeline_contract_version,
+        )
+    except Exception as exc:
+        status_code = getattr(exc, "status_code", 500)
+        code = getattr(exc, "code", "PIPELINE_ENQUEUE_FAILED")
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": code, "message": str(exc)},
+        ) from exc
 
 
 @router.post("/internal/runtime-pipeline/retry-failed/{job_id}", response_model=PipelineQueueItem)
 def retry_failed_job_endpoint(job_id: str) -> PipelineQueueItem:
     """Explicitly re-enqueue a failed or dead_letter job into the FIFO queue."""
-    return get_manager().retry_failed_job(job_id)
+    try:
+        return get_manager().retry_failed_job(job_id)
+    except Exception as exc:
+        status_code = getattr(exc, "status_code", 500)
+        code = getattr(exc, "code", "PIPELINE_RETRY_FAILED")
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": code, "message": str(exc)},
+        ) from exc

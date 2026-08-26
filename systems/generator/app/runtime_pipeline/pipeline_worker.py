@@ -38,6 +38,9 @@ class PipelineWorker:
 
     def start(self) -> None:
         """Start the single consumer background worker thread."""
+        if not PATHS.runtime_prediction_enabled:
+            logger.info("[PipelineWorker] Runtime Prediction is disabled. Worker start skipped.")
+            return
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return
@@ -55,6 +58,9 @@ class PipelineWorker:
 
     def process_one(self) -> Optional[PipelineRunState]:
         """Claim and process a single item from the queue (synchronous execution)."""
+        if not PATHS.runtime_prediction_enabled:
+            logger.info("[PipelineWorker] Runtime Prediction is disabled. Skipping process_one.")
+            return None
         item = self.queue.claim_next()
         if item is None:
             return None

@@ -474,3 +474,21 @@ class PipelineDeliveryUnauthorizedError(PipelineBaseError):
     status_code = 401
     code = "PIPELINE_DELIVERY_UNAUTHORIZED"
     retryable = False
+
+
+class ModelSetNotConfiguredError(PipelineBaseError):
+    status_code = 404
+    code = "MODEL_SET_NOT_CONFIGURED"
+    retryable = False
+
+
+class ModelSetModelNotRegisteredError(PipelineBaseError):
+    status_code = 422
+    code = "MODEL_SET_MODEL_NOT_REGISTERED"
+    retryable = False
+
+
+class PipelineModelSetSnapshotMismatchError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_MODEL_SET_SNAPSHOT_MISMATCH"
+    retryable = False

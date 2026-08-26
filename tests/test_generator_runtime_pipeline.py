@@ -222,6 +222,21 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             },
         )
 
+    from systems.generator.app.runtime_pipeline.active_model_set_service import ActiveModelSetService
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    active_service = ActiveModelSetService(models_store_dir=models_store)
+    active_set = ActiveModelSet(
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
+        updated_at=now_utc_iso(),
+        models={
+            "lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True),
+            "xgboost": ActiveModelConfig(model_version="pdm-xgboost-v1.0", required=True),
+            "random_forest": ActiveModelConfig(model_version="pdm-random_forest-v1.0", required=True),
+        },
+    )
+    active_service.update_active_model_set(active_set, validate_artifacts=False)
+
     queue = PipelineQueue(db_path=preprocessed_dir / "pipeline_queue" / "queue.db")
     repository = PipelineRepository(base_dir=preprocessed_dir)
     feat_service = RuntimeFeatureService(cache_dir=features_cache_dir)
@@ -394,6 +409,8 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
         observed_at="2026-08-25T10:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
         model_results={
             "pdm-xgboost": ModelPredictionResult(
                 model_version="pdm-xgboost-v1.0",
@@ -703,6 +720,8 @@ def test_delivery_worker_run_state_synchronization_and_aggregation(isolated_runt
         observed_at="2026-08-25T10:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
         model_results={
             "pdm-xgboost": ModelPredictionResult(
                 model_version="pdm-xgboost-v1.0",
@@ -782,6 +801,8 @@ def test_delivery_worker_recover_interrupted_sending_items(isolated_runtime_env)
         observed_at="2026-08-25T10:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
         model_results={
             "pdm-xgboost": ModelPredictionResult(
                 model_version="pdm-xgboost-v1.0",
@@ -1876,6 +1897,8 @@ def test_outbox_payload_conflict_raises_error(isolated_runtime_env):
         observed_at="2026-08-26T00:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
         model_results={},
         source_lineage=SourceLineage(
             source_uri="data/test.jsonl",
@@ -1894,6 +1917,8 @@ def test_outbox_payload_conflict_raises_error(isolated_runtime_env):
         observed_at="2026-08-26T01:00:00Z",  # Different timestamp -> different payload_sha256!
         dataset_id="canonical-ai4i-v1",
         dataset_version="canonical-ai4i-physics-v3.1",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
         model_results={},
         source_lineage=SourceLineage(
             source_uri="data/test.jsonl",
@@ -2142,6 +2167,8 @@ def test_delivery_worker_http_status_codes_handling(isolated_runtime_env, monkey
         observed_at="2026-08-26T09:00:00Z",
         dataset_id="canonical-ai4i-v1",
         dataset_version="v3.1",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
         model_results={},
         source_lineage=SourceLineage(source_uri=str(src_file), source_checksum=sha),
     )
@@ -2176,3 +2203,301 @@ def test_delivery_worker_http_status_codes_handling(isolated_runtime_env, monkey
     monkeypatch.setattr(urllib.request, "urlopen", failing_urlopen_401)
     with pytest.raises(PipelineDeliveryUnauthorizedError):
         delivery_service.send_once(payload)
+
+
+# =====================================================================
+# 41. Single Model Active Model Set Execution Test (9.1)
+# =====================================================================
+
+def test_single_model_active_model_set_execution(isolated_runtime_env, monkeypatch):
+    """When Active Model Set contains only 1 model ('lightgbm'), pipeline executes only that model."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    # Set Active Model Set with only lightgbm
+    active_service = service.active_model_set_service
+    active_set = ActiveModelSet(
+        model_set_id="pdm-single-lgb",
+        model_set_version="1.0.0",
+        models={"lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True)},
+    )
+    active_service.update_active_model_set(active_set, validate_artifacts=False)
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "single_lgb.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-single-lgb", source_uri=str(src_file), source_checksum=sha)
+
+    run_state = service.execute_queue_item(item)
+    assert run_state.status == "succeeded"
+    # Only lightgbm in prediction results
+    assert len(run_state.prediction_results) == 1
+    assert run_state.prediction_results[0].model_id == "pdm-lightgbm"
+
+
+# =====================================================================
+# 42. Partial Model Active Model Set Execution Test (9.2)
+# =====================================================================
+
+def test_partial_model_active_model_set_execution(isolated_runtime_env, monkeypatch):
+    """When Active Model Set contains 2 models ('lightgbm', 'xgboost'), pipeline executes only those 2 models."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    active_service = service.active_model_set_service
+    active_set = ActiveModelSet(
+        model_set_id="pdm-partial-2",
+        model_set_version="1.0.0",
+        models={
+            "lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True),
+            "xgboost": ActiveModelConfig(model_version="pdm-xgboost-v1.0", required=True),
+        },
+    )
+    active_service.update_active_model_set(active_set, validate_artifacts=False)
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "partial_2.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-partial-2", source_uri=str(src_file), source_checksum=sha)
+
+    run_state = service.execute_queue_item(item)
+    assert run_state.status == "succeeded"
+    model_ids = {r.model_id for r in run_state.prediction_results}
+    assert model_ids == {"pdm-lightgbm", "pdm-xgboost"}
+
+
+# =====================================================================
+# 43. Missing Pointer Raises ModelSetNotConfigured Error (9.3)
+# =====================================================================
+
+def test_missing_pointer_raises_model_set_not_configured(isolated_runtime_env, monkeypatch):
+    """When active-model-set.json does not exist, load_active_model_set raises ModelSetNotConfiguredError (404, MODEL_SET_NOT_CONFIGURED)."""
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetNotConfiguredError
+
+    env = isolated_runtime_env
+    service: PipelineService = env["service"]
+    active_service = service.active_model_set_service
+    pointer_file = active_service.pointer_file
+    if pointer_file.exists():
+        pointer_file.unlink()
+
+    # Even if latest.json exists, load_active_model_set MUST raise ModelSetNotConfiguredError
+    latest_file = active_service.pointer_file.parent / "latest.json"
+    latest_file.write_text(json.dumps({"model_version": "pdm-lightgbm-v1.0"}), encoding="utf-8")
+
+    with pytest.raises(ModelSetNotConfiguredError) as exc_info:
+        active_service.load_active_model_set()
+
+    assert exc_info.value.code == "MODEL_SET_NOT_CONFIGURED"
+    assert exc_info.value.status_code == 404
+
+
+# =====================================================================
+# 44. Corrupt Artifact Promotion Blocked Test (9.4)
+# =====================================================================
+
+def test_corrupt_artifact_promotion_blocked(isolated_runtime_env):
+    """When updating Active Model Set with corrupt checksum or missing artifact files, update fails and original active-model-set.json is preserved."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetArtifactIntegrityError
+
+    env = isolated_runtime_env
+    service: PipelineService = env["service"]
+    active_service = service.active_model_set_service
+
+    # Initial valid active set
+    init_set = active_service.load_active_model_set()
+
+    # Create dummy corrupt artifact dir missing model.joblib
+    corrupt_dir = active_service.pointer_file.parent / "artifacts" / "pdm-lightgbm" / "pdm-corrupt-v1.0"
+    corrupt_dir.mkdir(parents=True, exist_ok=True)
+    (corrupt_dir / "manifest.json").write_text(json.dumps({
+        "manifest_sha256": "0"*64,
+        "model_id": "pdm-lightgbm",
+        "model_version": "pdm-corrupt-v1.0",
+        "artifact_files": [{"path": "model.joblib", "sha256": "0"*64}],
+    }), encoding="utf-8")
+
+    new_set = ActiveModelSet(
+        model_set_id="pdm-corrupt",
+        model_set_version="2.0.0",
+        models={"lightgbm": ActiveModelConfig(model_version="pdm-corrupt-v1.0", required=True)},
+    )
+
+    with pytest.raises(ModelSetArtifactIntegrityError):
+        active_service.update_active_model_set(new_set, validate_artifacts=True)
+
+    # Existing active-model-set.json MUST be preserved
+    current_set = active_service.load_active_model_set()
+    assert current_set.model_set_id == init_set.model_set_id
+
+
+# =====================================================================
+# 45. Disabled State Blocks Worker, Enqueue, Retry (9.5)
+# =====================================================================
+
+def test_disabled_state_blocks_worker_enqueue_retry(isolated_runtime_env, monkeypatch):
+    """When GENERATOR_RUNTIME_PREDICTION_ENABLED=false, workers fail to start, enqueue/retry return HTTP 503, status returns mode: disabled."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineRuntimePredictionDisabledError
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", False)
+
+    env = isolated_runtime_env
+    manager: PipelineManager = env["manager"]
+
+    manager.start()
+    assert manager._is_running is False
+
+    with pytest.raises(PipelineRuntimePredictionDisabledError) as exc1:
+        manager.enqueue(
+            job_id="job-dis-1",
+            source_uri="data/test.jsonl",
+            source_checksum="0"*64,
+        )
+    assert exc1.value.status_code == 503
+    assert exc1.value.code == "PIPELINE_RUNTIME_PREDICTION_DISABLED"
+
+    with pytest.raises(PipelineRuntimePredictionDisabledError) as exc2:
+        manager.retry_failed_job("job-dis-1")
+    assert exc2.value.status_code == 503
+
+    status_resp = manager.get_status()
+    assert status_resp["enabled"] is False
+    assert status_resp["mode"] == "disabled"
+    assert status_resp["reason"] == "backend_receiver_not_ready"
+
+
+# =====================================================================
+# 46. Model Set Provenance Contract Alignment Test (9.6)
+# =====================================================================
+
+def test_model_set_provenance_contract_alignment(isolated_runtime_env):
+    """Batch payload includes model_set_id and model_set_version, and mismatched model result raises PipelineModelSetSnapshotMismatchError."""
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+        PredictionBatchService,
+        PredictionBatchSummary,
+        EquipmentModelBatch,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ModelPredictionResult,
+        SourceLineage,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineModelSetSnapshotMismatchError
+
+    batch_svc = PredictionBatchService()
+
+    eq_batch = EquipmentModelBatch(
+        asset_id="M14860",
+        status="succeeded",
+        observed_at="2026-08-26T10:00:00Z",
+        succeeded_models=["lightgbm"],
+        failed_models=[],
+        model_results={
+            "pdm-lightgbm": ModelPredictionResult(
+                model_version="pdm-lightgbm-v1.0",
+                status="succeeded",
+                observed_at="2026-08-26T10:00:00Z",
+                score_type="positive_class_probability",
+                score_source="predict_proba",
+                score=0.88,
+                model_set_id="pdm-MISMATCHED",  # Mismatch!
+                model_set_version="1.0.0",
+            )
+        },
+    )
+
+    summary = PredictionBatchSummary(
+        overall_status="succeeded",
+        equipment_batches={"M14860": eq_batch},
+        total_equipments=1,
+        succeeded_equipments=["M14860"],
+    )
+
+    with pytest.raises(PipelineModelSetSnapshotMismatchError) as exc_info:
+        batch_svc.stage_batches(
+            run_id="run-prov-1",
+            job_id="job-prov-1",
+            summary=summary,
+            dataset_id="canonical-ai4i-v1",
+            dataset_version="v3.1",
+            pipeline_contract_version="v1",
+            source_lineage=SourceLineage(source_uri="test.jsonl", source_checksum="0"*64),
+            model_set_id="pdm-default",
+            model_set_version="1.0.0",
+        )
+    assert exc_info.value.code == "PIPELINE_MODEL_SET_SNAPSHOT_MISMATCH"
+
+
+# =====================================================================
+# 47. Snapshot Pinning and Model Set Change Invalidates Checkpoint (9.7)
+# =====================================================================
+
+def test_snapshot_pinning_and_model_set_change_invalidates_checkpoint(isolated_runtime_env, monkeypatch):
+    """When Model Set changes during run resumption, previous checkpoint is invalidated and predictions are recalculated."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineModelPredictionFailedError
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "snap_pin.jsonl", num_rows=3, asset_id="M14860")
+
+    # Fail at prediction stage on first run to leave resumable checkpoint
+    orig_predict = service.prediction_service.predict_for_models
+    def failing_predict(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated prediction failure")
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
+
+    item1 = queue.enqueue(job_id="job-pin-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    first_run = repo.find_resumable_run(item1.source_identity)
+    assert first_run is not None
+
+    # Update active model set to new version
+    active_service = service.active_model_set_service
+    active_set = ActiveModelSet(
+        model_set_id="pdm-default",
+        model_set_version="2.0.0",  # Version changed!
+        models={
+            "lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True),
+            "xgboost": ActiveModelConfig(model_version="pdm-xgboost-v1.0", required=True),
+            "random_forest": ActiveModelConfig(model_version="pdm-random_forest-v1.0", required=True),
+        },
+    )
+    active_service.update_active_model_set(active_set, validate_artifacts=False)
+
+    # Track if predict_for_models is called during second run
+    predict_recalculated = False
+    def spy_predict(*args, **kwargs):
+        nonlocal predict_recalculated
+        predict_recalculated = True
+        return orig_predict(*args, **kwargs)
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", spy_predict)
+
+    item2 = PipelineQueueItem(
+        job_id="job-pin-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+
+    run_state2 = service.execute_queue_item(item2)
+    assert run_state2.status == "succeeded"
+    assert predict_recalculated is True  # Prediction checkpoint was invalidated and recalculated!

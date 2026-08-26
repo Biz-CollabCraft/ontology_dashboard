@@ -66,6 +66,12 @@ class PipelineManager:
 
     def start(self) -> None:
         """Startup lifecycle hook: recover interrupted jobs and start background workers."""
+        from systems.generator.generator_config import PATHS
+        if not PATHS.runtime_prediction_enabled:
+            self._is_running = False
+            logger.info("[PipelineManager] Generator Runtime Prediction is disabled (GENERATOR_RUNTIME_PREDICTION_ENABLED=false). Background workers will not start.")
+            return
+
         if self._is_running:
             return
         recovered = self.queue.recover_running_on_startup()
@@ -95,6 +101,15 @@ class PipelineManager:
         pipeline_contract_version: str = "generator-prediction-result-v1",
     ) -> PipelineQueueItem:
         """Enqueue new observation source file for processing."""
+        from systems.generator.generator_config import PATHS
+        from systems.generator.app.runtime_pipeline.pipeline_exception import (
+            PipelineRuntimePredictionDisabledError,
+        )
+        if not PATHS.runtime_prediction_enabled:
+            raise PipelineRuntimePredictionDisabledError(
+                "Runtime Prediction Pipeline이 비활성화되어 있어 enqueue 요청을 수락할 수 없습니다. (GENERATOR_RUNTIME_PREDICTION_ENABLED=false)",
+                retryable=False,
+            )
         return self.queue.enqueue(
             job_id=job_id,
             source_uri=source_uri,
@@ -107,16 +122,42 @@ class PipelineManager:
 
     def retry_failed_job(self, job_id: str) -> PipelineQueueItem:
         """Explicitly re-enqueue a failed or dead_letter job."""
+        from systems.generator.generator_config import PATHS
+        from systems.generator.app.runtime_pipeline.pipeline_exception import (
+            PipelineRuntimePredictionDisabledError,
+        )
+        if not PATHS.runtime_prediction_enabled:
+            raise PipelineRuntimePredictionDisabledError(
+                "Runtime Prediction Pipeline이 비활성화되어 있어 작업 재시도를 수락할 수 없습니다. (GENERATOR_RUNTIME_PREDICTION_ENABLED=false)",
+                retryable=False,
+            )
         return self.queue.retry_failed_job(job_id=job_id)
 
     def get_status(self) -> dict[str, Any]:
         """Inspection summary of queue and worker state."""
+        from systems.generator.generator_config import PATHS
+        if not PATHS.runtime_prediction_enabled:
+            return {
+                "enabled": False,
+                "worker_active": False,
+                "delivery_worker_active": False,
+                "mode": "disabled",
+                "reason": "backend_receiver_not_ready",
+                "queued_count": 0,
+                "running_count": 0,
+                "current_job": None,
+                "recent_runs": [],
+            }
+
         queued_items = self.queue.list_items(status="queued")
         running_items = self.queue.list_items(status="running")
         recent_runs = self.repository.list_run_states(limit=10)
 
         return {
+            "enabled": True,
             "worker_active": self._is_running,
+            "delivery_worker_active": getattr(self.prediction_delivery_worker, "_is_running", False),
+            "mode": "active",
             "queued_count": len(queued_items),
             "running_count": len(running_items),
             "current_job": self.worker._current_job.model_dump() if self.worker._current_job else None,

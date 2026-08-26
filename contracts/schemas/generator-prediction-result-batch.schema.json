@@ -12,6 +12,8 @@
     "generated_at",
     "dataset_id",
     "dataset_version",
+    "model_set_id",
+    "model_set_version",
     "model_results",
     "source_lineage"
   ],
@@ -45,6 +47,14 @@
       "minLength": 1
     },
     "dataset_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_set_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_set_version": {
       "type": "string",
       "minLength": 1
     },

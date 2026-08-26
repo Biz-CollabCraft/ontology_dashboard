@@ -123,7 +123,7 @@ class PipelineService:
         self.prediction_service = prediction_service or PredictionService()
         self.prediction_batch_service = prediction_batch_service or PredictionBatchService()
         self.prediction_delivery_service = prediction_delivery_service or PredictionDeliveryService()
-        self.active_model_set_service = active_model_set_service or ActiveModelSetService()
+        self.active_model_set_service = active_model_set_service or ActiveModelSetService(models_store_dir=self.prediction_service.models_store)
 
     def get_logical_source_uri(self, source_path: Path) -> str:
         """Convert filesystem path to logical relative URI without exposing local drives or absolute paths."""
@@ -350,9 +350,10 @@ class PipelineService:
 
         # Load active model set pointer
         active_model_set = self.active_model_set_service.load_active_model_set()
+        active_model_names = tuple(active_model_set.models.keys())
 
         # Pin active base models for this run
-        current_snapshot, model_artifacts = self._build_model_snapshot(REGISTERED_BASE_MODELS, active_model_set=active_model_set)
+        current_snapshot, model_artifacts = self._build_model_snapshot(list(active_model_names), active_model_set=active_model_set)
         if not model_artifacts:
             raise PipelineNoActiveModelError(
                 "활성화된 머신러닝 모델 아티팩트가 0개입니다.",
@@ -378,7 +379,25 @@ class PipelineService:
                     resumable_run.checkpoint_status = "invalidated"
                     self.repository.save_run_state(resumable_run)
                 elif chk.status == "resumable":
-                    checkpoint_to_resume = chk
+                    # Verify Model Set and model versions match checkpoint snapshot
+                    chk_models = chk.model_snapshot or {}
+                    model_set_changed = False
+                    for bm in active_model_names:
+                        mid = self.prediction_service.resolve_model_id(bm)
+                        active_ent = current_snapshot.get(mid, {})
+                        chk_ent = chk_models.get(mid, {})
+                        if not chk_ent or active_ent.get("model_version") != chk_ent.get("model_version") or active_ent.get("manifest_sha256") != chk_ent.get("manifest_sha256"):
+                            model_set_changed = True
+                            break
+                    if model_set_changed:
+                        logger.info(
+                            f"[PipelineService] Model set or version/manifest changed for run '{resumable_run.run_id}'. "
+                            "Invalidating existing prediction checkpoint."
+                        )
+                        chk.status = "invalidated"
+                        self.repository.save_checkpoint(chk)
+                    else:
+                        checkpoint_to_resume = chk
 
         if checkpoint_to_resume and resumable_run:
             run_id = resumable_run.run_id
@@ -626,7 +645,7 @@ class PipelineService:
         manager.start_stage("runtime_feature", input_refs=[dataset_ref, plan_ref] if plan_ref else [dataset_ref])
 
         try:
-            for base_model in REGISTERED_BASE_MODELS:
+            for base_model in active_model_names:
                 model_id = self.prediction_service.resolve_model_id(base_model)
                 artifact = model_artifacts[base_model]
 
@@ -749,7 +768,7 @@ class PipelineService:
         )
         if can_reuse_pred:
             # Check model versions & manifest sha256 match for prediction reuse
-            for bm in REGISTERED_BASE_MODELS:
+            for bm in active_model_names:
                 mid = self.prediction_service.resolve_model_id(bm)
                 active_entry = current_snapshot.get(mid, {})
                 chk_entry = cached_model_snapshot.get(mid, {})
@@ -765,7 +784,7 @@ class PipelineService:
             manager.start_stage("prediction", input_refs=list(model_feature_refs.values()))
             try:
                 model_results = self.prediction_service.predict_for_models(
-                    base_models=REGISTERED_BASE_MODELS,
+                    base_models=list(active_model_names),
                     model_feature_refs=model_feature_refs,
                     model_feature_bundles=model_feature_bundles,
                     model_feature_errors=model_feature_errors,
@@ -839,6 +858,8 @@ class PipelineService:
                         source_checksum=item.source_checksum,
                         pipeline_contract_version=contract_ver,
                     ),
+                    model_set_id=active_model_set.model_set_id,
+                    model_set_version=active_model_set.model_set_version,
                     sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
                 )
                 manager.register_intermediate_outputs([batch_manifest_ref])
@@ -927,6 +948,8 @@ class PipelineService:
                     generated_at=now_utc_iso(),
                     dataset_id=item.dataset_id,
                     dataset_version=item.dataset_version,
+                    model_set_id=active_model_set.model_set_id,
+                    model_set_version=active_model_set.model_set_version,
                     model_results=eq_batch.model_results,
                     source_lineage=SourceLineage(
                         source_uri=logical_source_uri,

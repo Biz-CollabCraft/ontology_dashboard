@@ -7,6 +7,8 @@
   "generated_at": "2026-08-25T14:30:05Z",
   "dataset_id": "canonical-ai4i-v1",
   "dataset_version": "canonical-ai4i-physics-v3.1",
+  "model_set_id": "pdm-default",
+  "model_set_version": "1.0.0",
   "model_results": {
     "pdm-lightgbm": {
       "model_version": "pdm-lightgbm-v1.0",

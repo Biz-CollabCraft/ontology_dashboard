@@ -367,8 +367,8 @@ class PredictionResultBatchPayload(BaseModel):
     generated_at: str = Field(default_factory=now_utc_iso, description="Generation timestamp")
     dataset_id: str = Field(..., description="Dataset identifier")
     dataset_version: str = Field(..., description="Dataset version")
-    model_set_id: Optional[str] = Field("pdm-default", description="Model set identifier")
-    model_set_version: Optional[str] = Field("1.0.0", description="Model set version")
+    model_set_id: str = Field(..., description="Model set identifier")
+    model_set_version: str = Field(..., description="Model set version")
     model_results: dict[str, ModelPredictionResult] = Field(
         ..., description="Map of model_id to model prediction results for this equipment"
     )
