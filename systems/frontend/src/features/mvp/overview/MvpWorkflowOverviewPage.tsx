@@ -102,6 +102,11 @@ function EquipmentSketchVisual({
   inspectionTargets: InspectionTargetView[];
 }) {
   if (assetType.toLowerCase() === "cnc") {
+    const toolingTarget = inspectionTargets.find((item) => (
+      item.target?.componentId.includes("tool")
+      || item.target?.componentLabel.includes("공구")
+      || item.factor?.feature.includes("tool")
+    ));
     const driveTarget = inspectionTargets.find((item) => (
       item.target?.componentId.includes("drive")
       || item.target?.componentLabel.includes("동력")
@@ -122,6 +127,7 @@ function EquipmentSketchVisual({
         <span className="cnc-servo">서보/구동</span>
         <span className="cnc-coolant">냉각</span>
         <span className="cnc-control">제어반</span>
+        {toolingTarget ? <span className="callout cnc-tool-callout">{toolingTarget.rank}</span> : null}
         {driveTarget ? <span className="callout cnc-drive-callout">{driveTarget.rank}</span> : null}
       </div>
     );
@@ -311,6 +317,36 @@ function inspectionBasisSummary(target: MvpInspectionTarget): string {
   const labels = target.basisRefs.map(inspectionBasisLabel);
   const uniqueLabels = [...new Set(labels)];
   return uniqueLabels.length ? uniqueLabels.join(", ") : "Evidence 근거 요약 미제공";
+}
+
+function inspectionFactorChips(target: MvpInspectionTarget, factors: MvpAsset["topFactors"]): Array<{ rank: number; label: string }> {
+  const byFeature = new Map(factors.map((factor, index) => [factor.feature, {
+    rank: index + 1,
+    label: displaySensorLabel(factor.feature, factor.label),
+  }]));
+  const chips = target.basisRefs
+    .map((ref) => ref.match(/^factor\.(\d+)\.([A-Za-z0-9_]+)$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match))
+    .map((match) => byFeature.get(match[2]) ?? {
+      rank: Number(match[1]),
+      label: displaySensorLabel(match[2]),
+    });
+  return [...new Map(chips.map((chip) => [`${chip.rank}:${chip.label}`, chip])).values()]
+    .sort((left, right) => left.rank - right.rank);
+}
+
+function assumedInspectionLocationLabel(target: MvpInspectionTarget): string {
+  const key = `${target.componentId} ${target.componentLabel}`.toLowerCase();
+  if (key.includes("tool") || target.componentLabel.includes("공구")) return "추정 위치: 공구대 주변";
+  if (key.includes("drive") || key.includes("power") || target.componentLabel.includes("동력")) return "추정 위치: 서보/구동부";
+  if (key.includes("cool") || key.includes("thermal") || target.componentLabel.includes("냉각") || target.componentLabel.includes("열")) return "추정 위치: 냉각 계통";
+  if (key.includes("spindle") || key.includes("rotat") || target.componentLabel.includes("회전")) return "추정 위치: 스핀들/구동축 주변";
+  return "추정 위치: 설비 구조도 기준 후보";
+}
+
+function inspectionLocationLabel(target: MvpInspectionTarget | null): string {
+  if (!target) return "위치 근거 미제공";
+  return target.locationLabel ?? assumedInspectionLocationLabel(target);
 }
 
 function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
@@ -1663,7 +1699,7 @@ function AssetPreviewPanel({
           {role === "field_operator" && activeTab === "status" ? (
             <>
               <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검 근거">
-                <header><Wrench size={14} /><strong>점검 근거</strong><span>위치 근거 미제공</span></header>
+                <header><Wrench size={14} /><strong>점검 근거</strong><span>구조도 기준 위치 추정</span></header>
                 <div className="equipment-sketch" aria-label="설비 참고도">
                   <EquipmentSketchVisual assetType={asset.assetType} inspectionTargets={inspectionTargets} />
                   <div>
@@ -1671,7 +1707,7 @@ function AssetPreviewPanel({
                     <ul className="sketch-legend">
                       {inspectionTargets.length ? inspectionTargets.map((target) => (
                         <li key={target.target?.targetId ?? target.factor?.id ?? `inspection-legend-${target.rank}`}>
-                          <b>{target.rank}</b>{target.target?.locationLabel ?? "위치 근거 미제공"}: {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}
+                          <b>{target.rank}</b>{inspectionLocationLabel(target.target)}: {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}
                         </li>
                       )) : <li><b>!</b>위치 근거: 부품 근거 없음</li>}
                     </ul>
@@ -1689,12 +1725,12 @@ function AssetPreviewPanel({
                             : target.factor?.direction === "risk_up"
                               ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
-                          {target.target && factors.length ? (
+                          {target.target && inspectionFactorChips(target.target, factors).length ? (
                             <ul className="top-factor-chips" aria-label="Top factor 근거">
-                              {factors.slice(0, 3).map((factor, factorIndex) => (
-                                <li key={factor.id}>
-                                  <b>{factorIndex + 1}</b>
-                                  <span>{displaySensorLabel(factor.feature, factor.label)}</span>
+                              {inspectionFactorChips(target.target, factors).map((chip) => (
+                                <li key={`${target.target?.targetId}-${chip.rank}-${chip.label}`}>
+                                  <b>{chip.rank}</b>
+                                  <span>{chip.label}</span>
                                 </li>
                               ))}
                             </ul>

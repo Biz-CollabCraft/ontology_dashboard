@@ -703,6 +703,7 @@
 .mvp-side-map-report .cnc-visual .cnc-servo { left: calc(var(--sketch-origin) + 446px); top: 42px; width: 78px; height: 34px; border-color: rgba(236,91,98,.62); font-size: 9px; z-index: 3; }
 .mvp-side-map-report .cnc-visual .cnc-coolant { left: calc(var(--sketch-origin) + 446px); top: 96px; width: 78px; height: 30px; border-radius: 4px; font-size: 9px; z-index: 3; }
 .mvp-side-map-report .cnc-visual .cnc-control { left: calc(var(--sketch-origin) + 72px); top: 106px; width: 58px; height: 40px; border-color: rgba(181,196,214,.52); font-size: 9px; z-index: 3; }
+.mvp-side-map-report .cnc-visual .cnc-tool-callout { left: calc(var(--sketch-origin) + 298px); top: 82px; z-index: 5; transform: none; }
 .mvp-side-map-report .cnc-visual .cnc-drive-callout { left: calc(var(--sketch-origin) + 438px); top: 40px; z-index: 5; transform: none; }
 .mvp-side-map-report .target-list { display: grid; gap: 8px; }
 .mvp-side-map-report .target-list article { min-width: 0; display: grid; grid-template-columns: 30px 30px minmax(0,1fr) auto; gap: 8px; align-items: center; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; background: rgba(255,255,255,.018); padding: 9px; }
