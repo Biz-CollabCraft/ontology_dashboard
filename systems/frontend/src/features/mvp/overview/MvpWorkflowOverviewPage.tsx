@@ -1689,6 +1689,16 @@ function AssetPreviewPanel({
                             : target.factor?.direction === "risk_up"
                               ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
+                          {target.target && factors.length ? (
+                            <ul className="top-factor-chips" aria-label="Top factor 근거">
+                              {factors.slice(0, 3).map((factor, factorIndex) => (
+                                <li key={factor.id}>
+                                  <b>{factorIndex + 1}</b>
+                                  <span>{displaySensorLabel(factor.feature, factor.label)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
                         </div>
                         <span className="target-severity high">{target.factor ? factorValueLabel(target.factor) : "위치 미제공"}</span>
                       </article>
