@@ -5,6 +5,7 @@ Date: 2026-08-26
 Base reference: PR #128 `feat(mvp): 역할별 overview와 asset detail 작업 흐름 정리`
 Related:
 
+- PR #127 `Generator Runtime Prediction Result Pipeline 및 Outbox 전달 경계 구현`
 - `docs/mvp/runtime-ownership-integration.md`
 - `docs/closed-loop-product-consumption-contract.md`
 - `docs/closed-loop-runtime-overlay-contract.md`
@@ -18,17 +19,20 @@ PR #128은 역할별 Overview, Asset Detail Side Task View, 작업 상태 큐, R
 이 계획은 그 read surface를 실제 runtime/simulation/closed-loop 데이터와 연결하기 위한
 후속 구현 단위를 정의한다.
 
-목표는 새 Generator Runtime 경로를 도입하는 것이 아니라, live sensor와 simulation overlay가
-서로 다른 source에서 오더라도 Backend Diagnosis 이후에는 하나의 Product Result/Evidence
-파이프라인으로 수렴시키는 것이다.
+목표는 PR #127의 Generator Runtime Prediction 경로를 upstream prediction producer로 두고,
+Backend Diagnosis가 Prediction Result Batch를 검증해 Product Result/Evidence로 승격하는
+통합 경계를 닫는 것이다. live sensor와 simulation overlay가 서로 다른 source에서 오더라도
+PR #128 UI와 Closed-loop는 Backend가 승격한 Product Result/Evidence만 소비한다.
 
 ```text
 Live Sensor Observation
 또는 Simulation / Maintenance Replay Overlay Observation
-  -> Backend Diagnosis consume
-  -> history_requirement / readiness 판단
-  -> runtime inference
-  -> Product Result Artifact append
+  -> Generator Runtime Prediction
+  -> Prediction Result Batch / Outbox
+  -> Backend Prediction Inbox
+  -> contract / scope / checksum / lineage / idempotency 검증
+  -> Backend product policy 적용
+  -> Product Result Artifact / Evidence append
   -> Evidence / API / ViewModel
   -> PR #128 UI read surface
   -> Closed-loop 작업요청 / 승인 / 정비 / 재관측
@@ -43,8 +47,11 @@ Live Sensor Observation
 
 ```text
 sensor tick 자동 감지
-  -> observation consume
-  -> 새 inference 실행
+  -> Generator observation consume
+  -> Generator runtime inference 실행
+  -> Prediction Result Batch / Outbox
+  -> Backend Prediction Inbox 수신
+  -> Backend validation / policy / idempotency
   -> Product Result append
   -> API/ViewModel 갱신
   -> PR #128 UI live update
@@ -54,22 +61,22 @@ sensor tick 자동 감지
 이 범위를 하나의 PR 또는 같은 PR stack으로 묶어야 하는 이유는, 각 단계가 따로 merge되면
 다음 간극이 다시 남기 때문이다.
 
+- Generator는 score를 만들지만 Backend Inbox/승격 gate가 없어 Product Result가 아님
 - Backend는 Product Result를 만들지만 UI가 latest/readiness를 보지 못함
 - UI는 처리 탭을 보여주지만 Closed-loop persisted state가 없음
 - 정비 완료는 기록되지만 replay/post-maintenance Product Result가 없음
-- Generator는 score를 만들지만 Backend 승격 gate가 없어 Product Result가 아님
 - runtime status가 없어 사용자는 "대기 중", "이력 부족", "실패", "예측 완료"를 구분하지 못함
 
 따라서 이 계획의 구현 단위는 다음처럼 정의한다.
 
-- 1차 통합 PR: Backend Runtime Execution -> Product Result append -> API/ViewModel -> PR #128 UI live update
+- 1차 통합 PR: Generator Prediction Result Batch -> Backend Inbox -> Product Result append -> API/ViewModel -> PR #128 UI live update
 - 같은 PR 또는 즉시 후속 stack: Closed-loop mutation -> Maintenance replay -> post-maintenance Product Result
-- 병렬 shadow PR: Generator Runtime score batch -> Backend Inbox shadow -> parity 비교
-- 별도 후순위 PR: Generator canonical 전환과 Backend direct inference 제거
+- 병렬 Generator PR: Prediction Result Batch/Outbox 계약 freeze, delivery failure 처리, lineage 보강
+- 별도 후순위 PR: Backend direct inference fallback 제거 또는 완전 비활성화
 
-즉, Generator owner가 runtime 전환을 승인하더라도 PR #128과 Closed-loop가 직접 소비하는 계약은
-계속 Backend Product Result/Evidence다. Generator 결과는 Product Result 승격 전까지 shadow
-input 또는 provenance로만 다룬다.
+즉, Generator owner가 runtime prediction을 맡더라도 PR #128과 Closed-loop가 직접 소비하는
+계약은 계속 Backend Product Result/Evidence다. Generator 결과는 Product Result 승격 전까지
+raw upstream input이며, 화면/Closed-loop trigger가 아니다.
 
 ## 3. 현재 기준
 
@@ -92,7 +99,7 @@ Backend에서 안정적으로 만들어 내려주는 것이다.
 
 ### 3.2 기존 runtime 계약
 
-현재 MVP의 안전한 계약은 다음이다.
+현행 baseline 계약은 다음이다.
 
 ```text
 gen_data
@@ -122,24 +129,49 @@ Closed-loop
 Closed-loop trigger는 Backend가 Product Result/Evidence 또는 RecommendationDecision으로
 승격한 뒤에만 발생한다.
 
+PR #127 승인/병합 후 통합 target은 다음으로 둔다.
+
+```text
+gen_data
+  -> canonical / live / simulation observation 생성
+  -> runtime_overlay.observations.available 발행
+
+systems/generator
+  -> observation/history consume
+  -> history_requirement/readiness 판단
+  -> Model Artifact snapshot 검증
+  -> runtime feature 실행
+  -> model inference
+  -> Prediction Result Batch / Outbox 발행
+
+systems/backend/app/diagnosis
+  -> Prediction Inbox 수신
+  -> contract/scope/checksum/lineage/idempotency 검증
+  -> threshold/status/recommendation product policy 적용
+  -> Product Result Artifact / Evidence append
+
+Closed-loop / Frontend
+  -> Backend Product Result / Evidence / AssetDetailViewModel 소비
+```
+
 ### 3.3 #127과의 관계
 
 PR #127의 Generator Runtime Pipeline은 snapshot 검증, checksum/source identity, checkpoint,
-outbox, feature parity 관점에서 재사용 가치가 있다. 그러나 현재 MVP의 canonical runtime path로
-채택하려면 Backend consumer, Product Result 승격, 기존 Backend inference 전환, lineage/E2E까지
-같은 migration unit으로 닫아야 한다.
+outbox, feature parity, Prediction Result Batch 생성 관점에서 통합 upstream 후보로 둔다.
+다만 Backend consumer, Product Result 승격, 기존 Backend inference 전환, lineage/E2E가
+같은 migration unit으로 닫히기 전까지는 Product Result/Evidence 소비 계약을 바꾸지 않는다.
 
-이 계획은 PR #127의 runtime ownership 이전을 전제로 하지 않는다. 필요한 아이디어만 다음처럼
-선별한다.
+이 계획은 PR #127을 Generator runtime prediction upstream으로 반영하되, Product Result/Evidence
+소유권은 Backend Diagnosis에 남기는 방식으로 정리한다.
 
 | 구분 | 처리 |
 |---|---|
-| Model Artifact snapshot 검증 | Backend Diagnosis runtime 로드 전 검증으로 도입 검토 |
-| Feature parity / Golden Vector | Generator가 발행하고 Backend가 CI에서 비교 |
-| source checksum / source identity | Backend consume cursor/idempotency에 반영 |
-| checkpoint/outbox 패턴 | Backend ingestion/replay worker 설계 참고 |
-| Generator Runtime Prediction worker | 현재 MVP canonical path로 채택하지 않음 |
-| Generator -> Backend raw score delivery | Backend consumer가 없는 한 Product Result 입력으로 사용하지 않음 |
+| Model Artifact snapshot 검증 | Generator Runtime Prediction 실행 전 필수 검증 |
+| Feature parity / Golden Vector | Generator가 발행하고 계약/CI에서 회귀 검증 |
+| source checksum / source identity | Generator Batch와 Backend Inbox idempotency에 반영 |
+| checkpoint/outbox 패턴 | Generator delivery와 Backend 수신 재처리 경계로 사용 |
+| Generator Runtime Prediction worker | PR #127 승인 후 upstream prediction producer로 채택 |
+| Generator -> Backend raw score delivery | Backend Prediction Inbox와 승격 gate가 준비된 뒤 Product Result 입력으로 사용 |
 
 ## 4. 핵심 원칙
 
@@ -148,14 +180,14 @@ outbox, feature parity 관점에서 재사용 가치가 있다. 그러나 현재
 3. Closed-loop는 Product Result/Evidence/RecommendationDecision만 소비한다.
 4. 정비 완료는 정상 판정이 아니다. 정비 후 첫 inference-ready Observation에서 새 Product Result가
    생성된 뒤에만 정상/주의/경고/위험을 판단한다.
-5. `warming_up`, `history_insufficient`, `score=null`, partial model failure는 작업요청 생성 금지
+5. `warming_up`, `history_insufficient`, `score=null`, delivery failure, partial model failure는 작업요청 생성 금지
    상태로 fail-closed 처리한다.
 6. 정비 전 Product Result/Evidence는 immutable하게 보존하고, 정비 후 결과는 append-only로 새로 만든다.
 7. `source_kind`와 lineage를 통해 live/simulation/maintenance replay를 구분하되 UI/API 소비 계약은
    같은 shape를 유지한다.
-8. Generator는 feature/model 계약의 owner이고, Backend Diagnosis는 runtime product truth의 owner다.
+8. Generator는 runtime prediction score/batch의 owner이고, Backend Diagnosis는 runtime product truth의 owner다.
 9. 큰 PR 내부에서 트랙을 나누더라도 Product Result/Evidence를 우회하는 임시 UI/Closed-loop 경로는 만들지 않는다.
-10. Backend direct inference 제거는 shadow parity와 rollback 조건이 확인된 뒤 별도 PR에서만 수행한다.
+10. Backend direct inference 제거는 Generator delivery, Backend Inbox, Product Result 승격, rollback 조건이 확인된 뒤 별도 PR에서만 수행한다.
 
 ## 5. 대상 사용자 흐름
 
@@ -165,9 +197,12 @@ outbox, feature parity 관점에서 재사용 가치가 있다. 그러나 현재
 live sensor tick
   -> gen_data live observation 저장
   -> observation available marker
-  -> Backend consume cursor가 새 tick 감지
-  -> same-asset history window 구성
-  -> readiness 판단
+  -> Generator Runtime Pipeline enqueue
+  -> Generator same-asset history window 구성
+  -> Generator readiness 판단
+  -> Prediction Result Batch / Outbox 발행
+  -> Backend Prediction Inbox 수신
+  -> Backend validation / policy 적용
   -> Product Result/Evidence append
   -> latest/timeline/detail API 갱신
   -> PR #128 Overview/Side Task View에서 새 상태 표시
@@ -183,9 +218,10 @@ MaintenanceAction complete
   -> gen_data가 대상 설비 overlay branch 생성
   -> branch-local simulation clock fast-forward
   -> runtime_overlay.observations.available 발행
-  -> Backend consume cursor가 overlay observation 반영
+  -> Generator가 overlay observation 반영
   -> history_requirement 충족 전까지 warming_up/history_insufficient
-  -> 첫 inference-ready observation에서 새 Product Result/Evidence append
+  -> 첫 inference-ready observation에서 Prediction Result Batch 발행
+  -> Backend가 정비 후 새 Product Result/Evidence append
   -> 정비 전/후 Product Result lineage 연결
   -> PR #128 UI가 전후 비교와 재관측 상태 표시
 ```
@@ -194,8 +230,8 @@ MaintenanceAction complete
 
 ### 6.1 Observation source envelope
 
-Backend consumer가 live와 simulation을 같은 파이프라인에서 처리하려면 observation handoff에
-아래 envelope가 필요하다.
+Generator와 Backend가 live와 simulation을 같은 통합 파이프라인에서 처리하려면 observation
+handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 한다.
 
 ```json
 {
@@ -225,7 +261,8 @@ Backend consumer가 live와 simulation을 같은 파이프라인에서 처리하
 - maintenance replay source는 `maintenance_event_id`, `overlay_branch_id`,
   `history_segment_id`, `state_version`을 보존해야 한다.
 - `gen_data`는 availability만 발행하고 readiness를 판정하지 않는다.
-- Backend는 같은 `(source_ref.sha256, asset_id, observed_at, source_kind)`를 중복 처리하지 않는다.
+- Generator는 같은 `(source_ref.sha256, asset_id, observed_at, source_kind)`를 중복 enqueue하지 않는다.
+- Backend Inbox는 같은 `event_id + payload_sha256`을 중복 승격하지 않는다.
 
 ### 6.2 Product Result Artifact lineage
 
@@ -280,63 +317,66 @@ PR #128 UI는 다음 ViewModel 필드를 기대한다.
 
 아래 항목은 각각 독립 제품 기능 PR이라는 뜻이 아니라, 대범위 Integration PR 안에서
 검증 가능한 backend 하위 track 또는 커밋 묶음으로 본다. 최소 완료선은 B1~B4가 서로 이어져
-runtime Product Result가 UI까지 도달하는 것이다.
+Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도달하는 것이다.
 
-### Track B1. Runtime source consume cursor/idempotency
+### Track B1. Prediction Inbox / idempotency
 
 목표:
 
-- live/simulation observation availability를 Backend가 중복 없이 소비한다.
-- 처리 여부, checksum, cursor, failure reason을 DB 또는 durable store에 남긴다.
+- Generator가 전달한 Prediction Result Batch를 Backend가 중복 없이 수신한다.
+- 수신 여부, payload checksum, scope, lineage, failure reason을 DB 또는 durable store에 남긴다.
 
 범위:
 
-- `runtime_overlay.observations.available` reader 정리
-- source envelope parser/validator
-- consume cursor 저장
+- `/internal/prediction-results` 또는 동등 Inbox endpoint
+- Prediction Result Batch schema validator
+- project/workspace/asset scope validator
+- source/model/feature/history lineage validator
+- `event_id + payload_sha256` 저장
 - duplicate skip
-- checksum mismatch fail-closed
+- payload conflict fail-closed
 - `source_kind` 분기
 
 완료 조건:
 
-- 같은 marker를 두 번 소비해도 Product Result가 중복 생성되지 않는다.
-- checksum이 바뀐 동일 URI는 오류로 남고 조용히 덮어쓰지 않는다.
-- live와 maintenance replay source가 같은 consumer entrypoint를 통과한다.
+- 같은 Batch를 두 번 수신해도 Product Result가 중복 생성되지 않는다.
+- 같은 `event_id`의 payload checksum이 바뀌면 오류로 남고 조용히 덮어쓰지 않는다.
+- live와 maintenance replay source가 같은 Inbox entrypoint를 통과한다.
 
 검증:
 
-- unit: cursor duplicate/mismatch cases
-- integration: temp overlay available file -> consumer -> stored cursor
+- unit: Inbox duplicate/conflict cases
+- integration: Prediction Result Batch -> Inbox -> stored receive record
 - architecture check: Backend consumer가 Generator Python 구현을 import하지 않음
 
-### Track B2. Diagnosis readiness/runtime inference 통합
+### Track B2. Backend validation / product policy / materialization
 
 목표:
 
-- Backend Diagnosis가 source observation과 same-asset history를 구성하고, Model Artifact의
-  `history_requirement`에 따라 추론 가능 여부를 판단한다.
+- Backend Diagnosis가 Generator score를 제품 판단 입력으로 검증하고, Product Result/Evidence로
+  승격할지 결정한다.
 
 범위:
 
-- same-asset history window query
-- `observed_at < current_observed_at` invariant
-- Model Artifact manifest/checksum/compatibility validation
-- feature executor compatibility check
+- Prediction Result Batch `output_status` 처리
+- allowed model/model_set/version 검증
+- source checksum과 replay lineage 검증
+- threshold/status/recommendation policy 적용
 - `warming_up` / `history_insufficient` status record
-- `predictor.predict()` execution
+- Product Result Artifact materialization input 구성
+- Backend direct inference는 baseline/fallback 경로로만 유지
 
 완료 조건:
 
-- current observation이 history baseline에 중복되지 않는다.
-- required history가 부족하면 Product Result를 생성하지 않는다.
-- unsupported transform 또는 feature mismatch는 fail-fast/fail-closed로 남긴다.
+- Generator가 `history_insufficient` 또는 fail-closed status를 전달하면 Product Result를 정상으로 만들지 않는다.
+- 허용되지 않은 model/source/status는 Product Result로 승격하지 않는다.
+- Backend가 raw score만으로 Frontend/Closed-loop trigger를 만들지 않는다.
 
 검증:
 
-- unit: history window excludes current row
-- unit: insufficient history does not create Product Result
-- contract: Generator Golden Vector와 Backend runtime feature 결과 비교
+- unit: unsupported model/source/status rejected
+- unit: insufficient history batch does not create Product Result
+- contract: Prediction Result Batch schema + Product Result Artifact schema
 - regression: existing Product Result/Evidence tests pass
 
 ### Track B3. Product Result/Evidence append 및 lineage
@@ -492,15 +532,16 @@ append와 ViewModel 계약이 확인된 뒤 같은 stack에서 병렬 진행한�
 
 목표:
 
-- 정비 완료 이후 Runtime Overlay 생성과 Backend 재예측을 연결한다.
+- 정비 완료 이후 Runtime Overlay 생성, Generator 재예측, Backend Product Result 승격을 연결한다.
 
 범위:
 
 - `MaintenanceEvent` 완료 후 replay request
 - overlay branch lineage 저장
-- Backend consume trigger
+- Generator Runtime Pipeline consume trigger
 - readiness status
-- 첫 inference-ready Product Result append
+- 첫 inference-ready Prediction Result Batch
+- Backend Product Result/Evidence append
 - previous/current result comparison API
 
 완료 조건:
@@ -517,27 +558,27 @@ append와 ViewModel 계약이 확인된 뒤 같은 stack에서 병렬 진행한�
 
 ## 10. Generator 작업 계획
 
-Generator는 runtime product truth를 만들지 않고, Backend runtime이 신뢰할 수 있는
-model/feature 계약을 강화한다. Generator Runtime 전환을 병렬로 준비하더라도, canonical 전환
-전에는 shadow 결과만 만들고 Backend Product Result/Evidence 승격 gate를 우회하지 않는다.
+Generator는 Product Result/Evidence를 만들지 않지만, PR #127 승인 후 runtime prediction
+upstream을 맡는다. 따라서 Generator 작업은 shadow가 아니라 Prediction Result Batch/Outbox를
+안정적으로 생산하는 병렬 track이다.
 
-### Track G1. Feature parity / Golden Vector
+### Track G1. Runtime feature / Golden Vector
 
 목표:
 
-- 학습 시 feature 계산과 Backend runtime feature 계산이 같은 입력에서 같은 값을 내는지 검증한다.
+- 학습 시 feature 계산과 Generator runtime feature 계산이 같은 입력에서 같은 값을 내는지 검증한다.
 
 범위:
 
 - Generator가 Golden Vector input/output 발행
 - feature_schema transform allowlist 명시
 - history_requirement version 명시
-- Backend CI에서 Golden Vector comparison
+- contract/CI에서 Golden Vector comparison
 - unsupported transform fail-fast rule
 
 완료 조건:
 
-- Backend가 지원하지 않는 feature transform을 가진 Model Artifact는 runtime에서 거부된다.
+- Generator runtime이 지원하지 않는 feature transform을 가진 Model Artifact는 runtime에서 거부된다.
 - 같은 Golden Vector에서 feature order/type/value가 일치한다.
 
 검증:
@@ -550,7 +591,7 @@ model/feature 계약을 강화한다. Generator Runtime 전환을 병렬로 준�
 
 목표:
 
-- Backend Diagnosis가 runtime inference 전에 active Model Artifact snapshot의 파일/checksum/schema
+- Generator가 runtime inference 전에 active Model Artifact snapshot의 파일/checksum/schema
   정합성을 확인한다.
 
 범위:
@@ -558,19 +599,19 @@ model/feature 계약을 강화한다. Generator Runtime 전환을 병렬로 준�
 - manifest required roles 검증
 - `model`, `feature_schema`, `label_schema`, `history_requirement`, `metrics` checksum 검증
 - model version / dataset version compatibility
-- threshold metadata는 Product Result policy 입력으로만 사용
+- threshold metadata는 Backend Product Result policy 입력으로만 전달
 
 완료 조건:
 
 - 깨진 Model Artifact로 Product Result를 생성하지 않는다.
 - Artifact mismatch는 evidence gap이 아니라 runtime unavailable/fail-closed로 남는다.
 
-### Track G3. Runtime score batch shadow handoff
+### Track G3. Runtime score batch handoff
 
 목표:
 
-- Generator Runtime owner가 승인된 경우를 대비해, raw score batch를 Backend Inbox에 shadow로
-  전달하고 parity evidence를 만든다.
+- Generator Runtime owner 승인 후 raw score batch를 Backend Inbox에 전달하고, Backend가
+  Product Result/Evidence로 승격할 수 있는 lineage를 제공한다.
 
 범위:
 
@@ -578,13 +619,13 @@ model/feature 계약을 강화한다. Generator Runtime 전환을 병렬로 준�
 - outbox retry/dead-letter
 - `event_id + payload_sha256` 멱등성
 - source/model/feature lineage 필수화
-- Backend runtime result와 same-observation parity 비교
+- Backend 응답 코드별 retry/stop 처리
 
 완료 조건:
 
 - Generator score batch가 Product Result로 즉시 승격되지 않는다.
-- Backend는 score batch를 shadow 저장하고 Product API/UI/Closed-loop에 노출하지 않는다.
-- mismatch는 Product Result overwrite가 아니라 parity failure로 남는다.
+- Backend가 Batch를 검증하기 전까지 Product API/UI/Closed-loop에 노출되지 않는다.
+- delivery failure는 runtime status로 남고 기존 Product Result를 overwrite하지 않는다.
 
 ## 11. API 설계 방향
 
@@ -603,13 +644,13 @@ POST /api/projects/{project_id}/workspaces/{workspace_id}/maintenance/maintenanc
 테스트/운영 보조 후보:
 
 ```text
-POST /internal/runtime-overlay/consume-once
-GET /internal/runtime-overlay/consume-status
+POST /internal/prediction-results
+GET /internal/prediction-results/consume-status
 ```
 
 주의:
 
-- `/internal/runtime-overlay/consume-once`는 public product action이 아니다.
+- `/internal/prediction-results`는 public product action이 아니다.
 - Frontend는 internal endpoint를 직접 호출하지 않는다.
 - Frontend refresh는 public Product API를 기준으로 한다.
 
@@ -619,8 +660,9 @@ GET /internal/runtime-overlay/consume-status
 
 ```text
 Given live observation available marker가 생성됨
-When Backend consumer가 새 observation을 처리함
-And history_requirement가 충족됨
+When Generator가 새 observation을 처리함
+And history_requirement가 충족되어 Prediction Result Batch를 발행함
+And Backend Inbox가 Batch를 검증하고 승격함
 Then 새 Product Result/Evidence가 append됨
 And Overview에 위험 설비가 표시됨
 And Side Task View 처리 탭에 작업요청 후보가 표시됨
@@ -631,7 +673,8 @@ And WorkOrder ID는 실제 mutation 전까지 표시되지 않음
 
 ```text
 Given sensor quality가 invalid 또는 missing임
-When Backend Diagnosis가 observation을 처리함
+When Generator Runtime Prediction이 fail-closed status를 발행함
+And Backend Diagnosis가 Batch를 검증함
 Then Product Result는 정상으로 보정되지 않음
 And ViewModel은 data_quality_hold/evidence gap을 표시함
 And Closed-loop 작업요청은 자동 생성되지 않음
@@ -645,7 +688,8 @@ When maintenance replay가 요청됨
 Then overlay branch가 생성되고 lineage가 저장됨
 And Backend는 warming_up/history_insufficient를 먼저 표시함
 When 충분한 overlay observation이 쌓임
-Then 정비 후 새 Product Result/Evidence가 append됨
+Then Generator가 Prediction Result Batch를 발행함
+And Backend가 정비 후 새 Product Result/Evidence를 append함
 And UI는 정비 전/후 결과를 비교함
 ```
 
@@ -663,7 +707,7 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 
 전체 계획의 완료 기준:
 
-- live와 simulation source가 같은 Backend Diagnosis Product Result path로 수렴한다.
+- live와 simulation source가 Generator Prediction Result Batch -> Backend Product Result path로 수렴한다.
 - Product Result/Evidence는 append-only이며 정비 전/후 lineage를 복원할 수 있다.
 - PR #128 UI가 raw score, raw JSONL, fixture-only value를 제품 truth로 해석하지 않는다.
 - Closed-loop는 Product Result/Evidence/RecommendationDecision만 trigger로 사용한다.
@@ -671,7 +715,7 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 - Backend API와 Frontend가 같은 `AssetDetailViewModel` 계약을 소비한다.
 - E2E에서 "센서/시뮬레이션 observation -> 재예측 -> Evidence -> 작업요청/정비 -> 정비 후 재예측"
   흐름을 재현할 수 있다.
-- Generator Runtime shadow가 켜져도 canonical Product Result/Evidence 소비자는 영향을 받지 않는다.
+- Generator Runtime이 켜져도 Product Result/Evidence 소비자는 Backend 승격 결과만 본다.
 - Backend direct inference 제거는 이 PR의 완료 조건이 아니다.
 
 ## 14. 권장 통합 PR 구성과 병렬 순서
@@ -679,8 +723,9 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 권장 PR 범위는 작게 쪼개진 기능 PR 나열이 아니라, 다음 3개 stack이다.
 
 1. Integration PR 1: Runtime Product Loop
-   - Runtime source envelope/cursor/idempotency
-   - Backend Diagnosis readiness/history/runtime inference
+   - Generator Prediction Result Batch/Outbox
+   - Backend Prediction Inbox/idempotency
+   - Backend validation/product policy
    - Product Result/Evidence lineage append
    - AssetDetailViewModel/API runtime status
    - PR #128 UI live update
@@ -695,16 +740,16 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 3. Shadow PR: Generator Runtime Migration Evidence
    - Golden Vector / feature parity
    - Model Artifact snapshot validation
-   - Runtime score batch outbox
-   - Backend Inbox shadow 저장
-   - parity/mismatch evidence
+   - delivery retry/dead-letter
+   - failure status contract
+   - rollback evidence
 
 Integration PR 1과 2는 겹치는 계약을 `AssetDetailViewModel`, Product Result/Evidence,
-Maintenance API로 고정하면 병렬 진행 가능하다. Shadow PR은 Product Result를 직접 만들지
-않는다는 조건에서 병렬 진행 가능하다.
+Maintenance API로 고정하면 병렬 진행 가능하다. Generator PR은 Product Result를 직접 만들지
+않고 Prediction Result Batch contract만 고정한다는 조건에서 병렬 진행 가능하다.
 
-이 순서는 PR #128이 만든 read surface를 깨지 않고, 먼저 Backend product truth를 안정화한 뒤
-Frontend와 Closed-loop mutation을 붙이는 흐름이다.
+이 순서는 PR #128이 만든 read surface를 깨지 않고, Generator upstream과 Backend Product Result
+gate를 병렬로 안정화한 뒤 Frontend와 Closed-loop mutation을 붙이는 흐름이다.
 
 ## 15. 보류 및 재검토 조건
 
@@ -716,7 +761,7 @@ Generator Runtime 또는 별도 Model Serving은 아래 조건이 생기면 다�
 - GPU 또는 별도 inference 자원이 필요하다.
 - 여러 서비스가 같은 model runtime을 소비해야 한다.
 
-그 전까지 MVP canonical path는 다음으로 유지한다.
+PR #127 승인 전 baseline/fallback path는 다음으로 유지한다.
 
 ```text
 Observation available
