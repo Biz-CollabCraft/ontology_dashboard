@@ -492,3 +492,21 @@ class PipelineModelSetSnapshotMismatchError(PipelineBaseError):
     status_code = 422
     code = "PIPELINE_MODEL_SET_SNAPSHOT_MISMATCH"
     retryable = False
+
+
+class ModelSetArtifactPathUnsupportedError(PipelineBaseError):
+    status_code = 400
+    code = "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+    retryable = False
+
+
+class PipelineModelSetMembershipChangeNotImplementedError(PipelineBaseError):
+    status_code = 501
+    code = "PIPELINE_MODEL_SET_MEMBERSHIP_CHANGE_NOT_IMPLEMENTED"
+    retryable = False
+
+
+class PipelineModelSetHotReloadNotImplementedError(PipelineBaseError):
+    status_code = 501
+    code = "PIPELINE_MODEL_SET_HOT_RELOAD_NOT_IMPLEMENTED"
+    retryable = False

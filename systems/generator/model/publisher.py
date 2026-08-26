@@ -42,6 +42,221 @@ REQUIRED_ARTIFACT_ROLES = ("model", "feature_schema", "label_schema", "history_r
 OFFICIAL_SCHEMA_PATH = Path("contracts/schemas/model-artifact.schema.json")
 
 
+def validate_model_artifact(
+    artifact_dir: Path | str,
+    expected_model_id: str,
+    expected_model_version: str,
+    load_model: bool = True,
+    artifacts_root: Path | str | None = None,
+) -> dict[str, Any]:
+    """Validate a local Model Artifact package against official contract and integrity rules.
+
+    Checks:
+    - Path safety (reject absolute paths in relative configs, '..', root escape, external URIs)
+    - Existences of directory & manifest.json
+    - Schema version support ("model-artifact-v1.0", "1.0", "1.0.0", "v1")
+    - Official manifest required fields (model_id, model_version, artifact_files)
+    - model_id / model_version exact match
+    - 5 required artifact roles ("model", "feature_schema", "label_schema", "history_requirement", "metrics")
+    - No duplicate roles or duplicate paths
+    - All declared files exist & SHA-256 match
+    - 4 JSON files parse successfully via json.load()
+    - model.joblib loads successfully via joblib.load() (if load_model=True)
+    """
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        ModelSetArtifactIntegrityError,
+        ModelSetArtifactNotFoundError,
+        ModelSetArtifactPathUnsupportedError,
+    )
+
+    path_str = str(artifact_dir).replace("\\", "/")
+
+    # 1. Path unsupported / security checks
+    if any(path_str.startswith(scheme) for scheme in ("http://", "https://", "s3://", "file://", "ftp://")):
+        raise ModelSetArtifactPathUnsupportedError(
+            f"외부 URI 아티팩트 경로는 현재 지원되지 않습니다: '{path_str}'",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "external_uri_unsupported"}],
+        )
+
+    if ".." in path_str.split("/"):
+        raise ModelSetArtifactPathUnsupportedError(
+            f"아티팩트 경로에 상위 이동('..') 문자가 포함되어 있어 지원되지 않습니다: '{path_str}'",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_traversal_unsupported"}],
+        )
+
+    target_dir = Path(artifact_dir)
+
+    if artifacts_root is not None:
+        root_dir = Path(artifacts_root).resolve()
+        try:
+            resolved_target = target_dir.resolve()
+            if not resolved_target.is_relative_to(root_dir):
+                raise ModelSetArtifactPathUnsupportedError(
+                    f"아티팩트 경로가 지정된 루트 디렉터리를 벗어났습니다: '{target_dir}' (root: '{root_dir}')",
+                    details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_outside_root"}],
+                )
+        except (ValueError, OSError) as exc:
+            raise ModelSetArtifactPathUnsupportedError(
+                f"아티팩트 경로 검증 실패: {exc}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_resolution_failed"}],
+            ) from exc
+
+    if not target_dir.exists() or not target_dir.is_dir():
+        raise ModelSetArtifactNotFoundError(
+            f"Model Artifact 디렉터리가 존재하지 않습니다: {target_dir}",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "artifact_dir_not_found"}],
+        )
+
+    manifest_file = target_dir / "manifest.json"
+    if not manifest_file.exists() or not manifest_file.is_file():
+        raise ModelSetArtifactIntegrityError(
+            f"아티팩트 manifest.json이 누락되었습니다: {manifest_file}",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "manifest_missing"}],
+        )
+
+    try:
+        with open(manifest_file, "r", encoding="utf-8") as mf:
+            manifest_data = json.load(mf)
+    except Exception as exc:
+        raise ModelSetArtifactIntegrityError(
+            f"manifest.json 파싱 실패: {exc}",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "manifest_json_parse_failed"}],
+        ) from exc
+
+    # 2. Manifest required fields check
+    for key in ("model_id", "model_version", "artifact_files"):
+        if key not in manifest_data or manifest_data[key] is None or manifest_data[key] == "":
+            raise ModelSetArtifactIntegrityError(
+                f"manifest.json에 필수 키 '{key}'가 누락되었습니다.",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": f"manifest_field_missing:{key}"}],
+            )
+
+    # 3. model_id & model_version match
+    if manifest_data.get("model_id") != expected_model_id or manifest_data.get("model_version") != expected_model_version:
+        raise ModelSetArtifactIntegrityError(
+            f"manifest.json의 model_id/model_version 불일치 ({manifest_data.get('model_id')}/{manifest_data.get('model_version')} vs {expected_model_id}/{expected_model_version})",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "model_id_version_mismatch"}],
+        )
+
+    # 4. Schema version check (must exist and be allowed)
+    schema_ver = manifest_data.get("artifact_schema_version") or manifest_data.get("schema_version")
+    if not schema_ver:
+        raise ModelSetArtifactIntegrityError(
+            "manifest.json에 artifact_schema_version / schema_version이 누락되었습니다.",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "schema_version_missing"}],
+        )
+
+    allowed_schema_versions = {"1.0", "1.0.0", "v1", "model-artifact-v1.0"}
+    if schema_ver not in allowed_schema_versions:
+        raise ModelSetArtifactIntegrityError(
+            f"지원되지 않는 Artifact Schema version 입니다: '{schema_ver}'",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "schema_version_unsupported"}],
+        )
+
+    # 5. Check artifact_files array & roles
+    artifact_files = manifest_data.get("artifact_files", [])
+    if not isinstance(artifact_files, list):
+        raise ModelSetArtifactIntegrityError(
+            "manifest.json의 artifact_files 필드가 배열 형태가 아닙니다.",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "artifact_files_not_list"}],
+        )
+
+    seen_roles: set[str] = set()
+    seen_paths: set[str] = set()
+    for entry in artifact_files:
+        if not isinstance(entry, dict):
+            raise ModelSetArtifactIntegrityError(
+                "artifact_files 항목은 객체여야 합니다.",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "artifact_file_not_dict"}],
+            )
+        role = entry.get("role")
+        rel_path = entry.get("path")
+        expected_sha = entry.get("sha256")
+        if not role or not rel_path or not expected_sha:
+            raise ModelSetArtifactIntegrityError(
+                f"Role 항목 필수 필드 누락: {entry}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "role_entry_field_missing"}],
+            )
+
+        norm_role = "model" if role == "model_artifact" else role
+        if norm_role in seen_roles:
+            raise ModelSetArtifactIntegrityError(
+                f"manifest artifact_files에 중복된 role이 존재합니다: '{role}'",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "role_duplicated"}],
+            )
+        if rel_path in seen_paths:
+            raise ModelSetArtifactIntegrityError(
+                f"manifest artifact_files에 중복된 path가 존재합니다: '{rel_path}'",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_duplicated"}],
+            )
+        if ".." in rel_path or Path(rel_path).is_absolute():
+            raise ModelSetArtifactPathUnsupportedError(
+                f"Role '{role}'의 path에 비정상 경로가 포함되어 있습니다: '{rel_path}'",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "invalid_relative_path"}],
+            )
+
+        target_file = target_dir / rel_path
+        if not target_file.exists() or not target_file.is_file():
+            raise ModelSetArtifactIntegrityError(
+                f"선언된 아티팩트 파일이 존재하지 않습니다: {target_file}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "declared_file_missing"}],
+            )
+
+        actual_sha = compute_file_sha256(target_file)
+        if actual_sha != expected_sha:
+            raise ModelSetArtifactIntegrityError(
+                f"아티팩트 파일 체크섬 불일치 ({rel_path}): 기대값={expected_sha}, 실제={actual_sha}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "checksum_mismatch"}],
+            )
+
+        seen_roles.add(norm_role)
+        seen_paths.add(rel_path)
+
+    required_roles = {"model", "feature_schema", "label_schema", "history_requirement", "metrics"}
+    missing_roles = required_roles - seen_roles
+    if missing_roles:
+        raise ModelSetArtifactIntegrityError(
+            f"manifest artifact_files에 필수 role이 누락되었습니다: {missing_roles}",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "required_role_missing"}],
+        )
+
+    # 6. Verify 4 JSON files parse successfully
+    req_json_files = ["feature_schema.json", "label_schema.json", "history_requirement.json", "metrics.json"]
+    for jf in req_json_files:
+        jpath = target_dir / jf
+        if not jpath.is_file():
+            raise ModelSetArtifactIntegrityError(
+                f"필수 페이로드 파일 누락 ({jf}): {jpath}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": f"payload_file_missing:{jf}"}],
+            )
+        try:
+            with open(jpath, "r", encoding="utf-8") as f:
+                json.load(f)
+        except Exception as exc:
+            raise ModelSetArtifactIntegrityError(
+                f"페이로드 JSON 파일 파싱 실패 ({jf}): {exc}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": f"json_parse_failed:{jf}"}],
+            ) from exc
+
+    # 7. Verify model.joblib loads successfully if load_model=True
+    if load_model:
+        model_file = target_dir / "model.joblib"
+        if not model_file.is_file():
+            raise ModelSetArtifactIntegrityError(
+                f"필수 모델 파일 누락 (model.joblib): {model_file}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "model_file_missing"}],
+            )
+        try:
+            joblib.load(model_file)
+        except Exception as exc:
+            raise ModelSetArtifactIntegrityError(
+                f"모델 파일 joblib.load() 로드 실패: {exc}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "joblib_load_failed"}],
+            ) from exc
+
+    return manifest_data
+
+
 @dataclass(frozen=True)
 class ModelArtifactPublicationResult:
     """Explicit result of publishing an immutable Model Artifact and updating its latest pointer."""

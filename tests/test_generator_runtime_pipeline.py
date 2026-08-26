@@ -2661,3 +2661,261 @@ def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monk
         validator = jsonschema.Draft202012Validator(batch_schema, resolver=resolver)
 
     validator.validate(actual_payload)  # Must pass without validation errors!
+
+
+# =====================================================================
+# 49. Direct Staged Disk Batch JSON Schema & Provenance Test (Component 2)
+# =====================================================================
+
+def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
+    """PredictionBatchService.stage_batches() writes staging_dir/{asset_id}.json directly to disk, passing official JSON Schema with additionalProperties: false."""
+    import json
+    import jsonschema
+    from pathlib import Path
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+        PredictionBatchService,
+        PredictionBatchSummary,
+        EquipmentModelBatch,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ModelPredictionResult,
+        SourceLineage,
+    )
+
+    env = isolated_runtime_env
+    preprocessed_dir: Path = env["preprocessed_dir"]
+
+    batch_svc = PredictionBatchService()
+
+    eq_batch = EquipmentModelBatch(
+        asset_id="M14860",
+        status="succeeded",
+        observed_at="2026-08-26T10:00:00Z",
+        succeeded_models=["lightgbm"],
+        failed_models=[],
+        model_results={
+            "pdm-lightgbm": ModelPredictionResult(
+                model_version="pdm-lightgbm-v1.0",
+                status="succeeded",
+                observed_at="2026-08-26T10:00:00Z",
+                score_type="positive_class_probability",
+                score_source="predict_proba",
+                score=0.88,
+                model_set_id="pdm-schema-test",
+                model_set_version="1.0.0",
+            )
+        },
+    )
+
+    summary = PredictionBatchSummary(
+        overall_status="succeeded",
+        equipment_batches={"M14860": eq_batch},
+        total_equipments=1,
+        succeeded_equipments=["M14860"],
+    )
+
+    run_id = "run-disk-schema-test"
+    manifest_ref = batch_svc.stage_batches(
+        run_id=run_id,
+        job_id="job-disk-schema-test",
+        summary=summary,
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v3.1",
+        pipeline_contract_version="v1",
+        source_lineage=SourceLineage(source_uri="test.jsonl", source_checksum="0"*64),
+        model_set_id="pdm-schema-test",
+        model_set_version="1.0.0",
+        base_dir=preprocessed_dir,
+    )
+
+    # Directly read the staged payload file written on disk
+    staged_payload_file = preprocessed_dir / "pipeline_datasets" / run_id / "batch_staging" / "M14860.json"
+    assert staged_payload_file.is_file(), f"Staged disk file not found: {staged_payload_file}"
+
+    with open(staged_payload_file, "r", encoding="utf-8") as f:
+        disk_payload = json.load(f)
+
+    # 1. Top-level Model Set fields exist
+    assert disk_payload.get("model_set_id") == "pdm-schema-test"
+    assert disk_payload.get("model_set_version") == "1.0.0"
+
+    # 2. Internal model set fields excluded from model_results[*]
+    lgbm_res = disk_payload["model_results"]["pdm-lightgbm"]
+    assert "model_set_id" not in lgbm_res
+    assert "model_set_version" not in lgbm_res
+    assert "manifest_checksum" not in lgbm_res
+
+    # 3. K-V dict structure maintained
+    assert isinstance(disk_payload["model_results"], dict)
+    assert lgbm_res["score"] == 0.88
+
+    # 4. Validate against official schema
+    schemas_dir = Path("contracts/schemas")
+    schema_map = {}
+    for schema_file in schemas_dir.rglob("*.schema.json"):
+        with open(schema_file, "r", encoding="utf-8") as sf:
+            sdata = json.load(sf)
+            if "$id" in sdata:
+                schema_map[sdata["$id"]] = sdata
+
+    batch_schema_path = schemas_dir / "generator-prediction-result-batch.schema.json"
+    with open(batch_schema_path, "r", encoding="utf-8") as sf:
+        batch_schema = json.load(sf)
+
+    try:
+        from referencing import Registry, Resource
+        resources = [(uri, Resource.from_contents(sch)) for uri, sch in schema_map.items()]
+        registry = Registry().with_resources(resources)
+        validator = jsonschema.Draft202012Validator(batch_schema, registry=registry)
+    except ImportError:
+        resolver = jsonschema.RefResolver.from_schema(batch_schema, store=schema_map)
+        validator = jsonschema.Draft202012Validator(batch_schema, resolver=resolver)
+
+    validator.validate(disk_payload)
+
+
+# =====================================================================
+# 50. Artifact Path Unsupported & Security Blocking Test (Component 1)
+# =====================================================================
+
+def test_artifact_path_unsupported_security_blocking(isolated_runtime_env):
+    """validate_model_artifact blocks path traversal ('..'), external URIs, and paths escaping root with MODEL_SET_ARTIFACT_PATH_UNSUPPORTED."""
+    from systems.generator.model.publisher import validate_model_artifact
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetArtifactPathUnsupportedError
+
+    env = isolated_runtime_env
+    root_dir: Path = env["artifacts_dir"]
+
+    # Case 1: Path traversal '..'
+    with pytest.raises(ModelSetArtifactPathUnsupportedError) as exc1:
+        validate_model_artifact(
+            artifact_dir=root_dir / ".." / "outside",
+            expected_model_id="pdm-lightgbm",
+            expected_model_version="v1.0",
+            artifacts_root=root_dir,
+        )
+    assert exc1.value.code == "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+
+    # Case 2: External URI scheme
+    with pytest.raises(ModelSetArtifactPathUnsupportedError) as exc2:
+        validate_model_artifact(
+            artifact_dir="http://remote-server.com/models/pdm-lightgbm",
+            expected_model_id="pdm-lightgbm",
+            expected_model_version="v1.0",
+            artifacts_root=root_dir,
+        )
+    assert exc2.value.code == "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+
+    # Case 3: S3 URI scheme
+    with pytest.raises(ModelSetArtifactPathUnsupportedError) as exc3:
+        validate_model_artifact(
+            artifact_dir="s3://my-bucket/artifacts/model",
+            expected_model_id="pdm-lightgbm",
+            expected_model_version="v1.0",
+            artifacts_root=root_dir,
+        )
+    assert exc3.value.code == "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+
+
+# =====================================================================
+# 51. Model Set Membership Change Not Implemented Test (Component 4)
+# =====================================================================
+
+def test_model_set_membership_change_not_implemented(isolated_runtime_env, monkeypatch):
+    """When active model set membership (keys) changes during run resumption, PipelineModelSetMembershipChangeNotImplementedError is raised."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        PipelineModelPredictionFailedError,
+        PipelineModelSetMembershipChangeNotImplementedError,
+    )
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "mem_change.jsonl", num_rows=3, asset_id="M14860")
+
+    # Fail at prediction stage to create resumable run with 3 models in snapshot
+    def failing_predict(*args, **kwargs):
+        raise PipelineModelPredictionFailedError("Simulated failure")
+
+    monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
+
+    item1 = queue.enqueue(job_id="job-mem-1", source_uri=str(src_file), source_checksum=sha)
+    with pytest.raises(PipelineModelPredictionFailedError):
+        service.execute_queue_item(item1)
+
+    # Change active model set to reduced membership (lightgbm only)
+    active_service = service.active_model_set_service
+    active_set = ActiveModelSet(
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
+        models={"lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True)},
+    )
+    active_service.update_active_model_set(active_set, validate_artifacts=False)
+
+    item2 = PipelineQueueItem(
+        job_id="job-mem-2",
+        source_uri=str(src_file),
+        source_checksum=sha,
+        source_identity=item1.source_identity,
+    )
+
+    with pytest.raises(PipelineModelSetMembershipChangeNotImplementedError) as exc_info:
+        service.execute_queue_item(item2)
+
+    assert exc_info.value.code == "PIPELINE_MODEL_SET_MEMBERSHIP_CHANGE_NOT_IMPLEMENTED"
+    assert exc_info.value.status_code == 501
+
+
+# =====================================================================
+# 52. Disabled API TestClient 503 & Real Status Counts Test (Components 5 & 6)
+# =====================================================================
+
+def test_disabled_api_testclient_503_and_real_status_counts(isolated_runtime_env, monkeypatch):
+    """Disabled mode returns actual HTTP 503 with domain error code via TestClient, and get_status returns real queue/run counts."""
+    from fastapi.testclient import TestClient
+    from systems.generator.app.main import app
+    from systems.generator.generator_config import PATHS
+
+    env = isolated_runtime_env
+    queue: PipelineQueue = env["queue"]
+
+    # Enqueue 1 item into DB while enabled
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+    queue.enqueue(job_id="job-dis-counts", source_uri="data/test.jsonl", source_checksum="0"*64)
+
+    # Disable runtime
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", False)
+
+    client = TestClient(app)
+
+    # Test 1: POST /internal/runtime-pipeline/enqueue returns HTTP 503 & PIPELINE_RUNTIME_PREDICTION_DISABLED
+    res_enq = client.post(
+        "/internal/runtime-pipeline/enqueue",
+        json={
+            "job_id": "job-dis-http",
+            "source_uri": "data/test.jsonl",
+            "source_checksum": "0"*64,
+        },
+    )
+    assert res_enq.status_code == 503
+    payload_enq = res_enq.json()
+    assert payload_enq["error"]["code"] == "PIPELINE_RUNTIME_PREDICTION_DISABLED"
+
+    # Test 2: POST /internal/runtime-pipeline/retry-failed/job-1 returns HTTP 503 & PIPELINE_RUNTIME_PREDICTION_DISABLED
+    res_retry = client.post("/internal/runtime-pipeline/retry-failed/job-dis-counts")
+    assert res_retry.status_code == 503
+    payload_retry = res_retry.json()
+    assert payload_retry["error"]["code"] == "PIPELINE_RUNTIME_PREDICTION_DISABLED"
+
+    # Test 3: GET /runtime-pipeline/status when disabled returns real queued_count
+    res_status = client.get("/runtime-pipeline/status")
+    assert res_status.status_code == 200
+    st_data = res_status.json()
+    assert st_data["enabled"] is False
+    assert st_data["mode"] == "disabled"
+    assert st_data["queued_count"] == 1  # Real count, not hardcoded 0!

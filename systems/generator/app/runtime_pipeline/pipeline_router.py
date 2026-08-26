@@ -12,6 +12,8 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PipelineRunState,
 )
 
+from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineBaseError
+
 router = APIRouter(tags=["Runtime Pipeline"])
 
 
@@ -66,6 +68,8 @@ def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
             dataset_version=req.dataset_version,
             pipeline_contract_version=req.pipeline_contract_version,
         )
+    except PipelineBaseError:
+        raise
     except Exception as exc:
         status_code = getattr(exc, "status_code", 500)
         code = getattr(exc, "code", "PIPELINE_ENQUEUE_FAILED")
@@ -80,6 +84,8 @@ def retry_failed_job_endpoint(job_id: str) -> PipelineQueueItem:
     """Explicitly re-enqueue a failed or dead_letter job into the FIFO queue."""
     try:
         return get_manager().retry_failed_job(job_id)
+    except PipelineBaseError:
+        raise
     except Exception as exc:
         status_code = getattr(exc, "status_code", 500)
         code = getattr(exc, "code", "PIPELINE_RETRY_FAILED")

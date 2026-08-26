@@ -61,6 +61,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineSourceChecksumChangedError,
     PipelineSourceFileNotStableError,
     PipelineTimestampInvalidError,
+    PipelineModelSetMembershipChangeNotImplementedError,
 )
 from systems.generator.app.runtime_pipeline.active_model_set_service import (
     ActiveModelSetService,
@@ -379,8 +380,21 @@ class PipelineService:
                     resumable_run.checkpoint_status = "invalidated"
                     self.repository.save_run_state(resumable_run)
                 elif chk.status == "resumable":
-                    # Verify Model Set and model versions match checkpoint snapshot
+                    # Verify Model Set membership & model versions match checkpoint snapshot
                     chk_models = chk.model_snapshot or {}
+                    current_keys = set(current_snapshot.keys())
+                    chk_keys = set(chk_models.keys())
+
+                    if current_keys != chk_keys:
+                        raise PipelineModelSetMembershipChangeNotImplementedError(
+                            f"Model Set 구성원(모델 종류/개수) 변경은 현재 지원되지 않습니다. (Current={sorted(current_keys)}, Checkpoint={sorted(chk_keys)})",
+                            details=[{
+                                "current_models": sorted(current_keys),
+                                "checkpoint_models": sorted(chk_keys),
+                            }],
+                            retryable=False,
+                        )
+
                     model_set_changed = False
                     for bm in active_model_names:
                         mid = self.prediction_service.resolve_model_id(bm)
@@ -391,7 +405,7 @@ class PipelineService:
                             break
                     if model_set_changed:
                         logger.info(
-                            f"[PipelineService] Model set or version/manifest changed for run '{resumable_run.run_id}'. "
+                            f"[PipelineService] Model version or manifest changed for run '{resumable_run.run_id}'. "
                             "Invalidating existing prediction checkpoint."
                         )
                         chk.status = "invalidated"

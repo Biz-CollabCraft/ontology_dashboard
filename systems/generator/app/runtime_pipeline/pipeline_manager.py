@@ -136,6 +136,10 @@ class PipelineManager:
     def get_status(self) -> dict[str, Any]:
         """Inspection summary of queue and worker state."""
         from systems.generator.generator_config import PATHS
+        queued_items = self.queue.list_items(status="queued")
+        running_items = self.queue.list_items(status="running")
+        recent_runs = self.repository.list_run_states(limit=10)
+
         if not PATHS.runtime_prediction_enabled:
             return {
                 "enabled": False,
@@ -143,15 +147,11 @@ class PipelineManager:
                 "delivery_worker_active": False,
                 "mode": "disabled",
                 "reason": "backend_receiver_not_ready",
-                "queued_count": 0,
-                "running_count": 0,
-                "current_job": None,
-                "recent_runs": [],
+                "queued_count": len(queued_items),
+                "running_count": len(running_items),
+                "current_job": self.worker._current_job.model_dump() if self.worker._current_job else None,
+                "recent_runs": [r.model_dump() for r in recent_runs],
             }
-
-        queued_items = self.queue.list_items(status="queued")
-        running_items = self.queue.list_items(status="running")
-        recent_runs = self.repository.list_run_states(limit=10)
 
         return {
             "enabled": True,

@@ -146,8 +146,8 @@ class PredictionBatchService:
         dataset_version: str,
         pipeline_contract_version: str,
         source_lineage: Any,
-        model_set_id: str = "pdm-default",
-        model_set_version: str = "1.0.0",
+        model_set_id: str,
+        model_set_version: str,
         sensor_data_ref: Optional[dict[str, Any]] = None,
         base_dir: Optional[Path] = None,
     ) -> ArtifactReference:

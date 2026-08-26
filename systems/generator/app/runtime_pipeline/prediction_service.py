@@ -111,29 +111,23 @@ class PredictionService:
                 )
 
         target_artifact_dir = self.artifacts_dir / model_id / model_version
-        if not target_artifact_dir.is_dir():
-            raise PipelineModelArtifactInvalidError(
-                f"아티팩트 디렉터리가 존재하지 않습니다: {target_artifact_dir}",
-                retryable=False,
-            )
-
-        manifest_file = target_artifact_dir / "manifest.json"
-        if not manifest_file.exists():
-            raise PipelineModelArtifactInvalidError(
-                f"manifest.json이 누락되었습니다: {manifest_file}",
-                retryable=False,
-            )
-
+        from systems.generator.model.publisher import validate_model_artifact
         try:
-            with open(manifest_file, "r", encoding="utf-8") as f:
-                manifest_data = json.load(f)
-            self.publisher.validate_manifest(manifest_data, target_artifact_dir)
+            manifest_data = validate_model_artifact(
+                artifact_dir=target_artifact_dir,
+                expected_model_id=model_id,
+                expected_model_version=model_version,
+                load_model=False,
+                artifacts_root=self.artifacts_dir,
+            )
         except Exception as exc:
-            raise PipelineModelArtifactInvalidError(
-                f"아티팩트 manifest 검증 실패 ({model_id}/{model_version}): {exc}",
-                details=[{"model_id": model_id, "model_version": model_version, "error": str(exc)}],
-                retryable=False,
-            ) from exc
+            if hasattr(exc, "code") and exc.code in ("MODEL_SET_ARTIFACT_NOT_FOUND", "MODEL_SET_ARTIFACT_INTEGRITY_ERROR", "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"):
+                raise PipelineModelArtifactInvalidError(
+                    f"아티팩트 manifest 검증 실패 ({model_id}/{model_version}): {exc}",
+                    details=[{"model_id": model_id, "model_version": model_version, "error": str(exc)}],
+                    retryable=False,
+                ) from exc
+            raise
 
         # Load payload files
         model_path = target_artifact_dir / "model.joblib"
@@ -154,6 +148,7 @@ class PredictionService:
                 retryable=False,
             ) from exc
 
+        manifest_file = target_artifact_dir / "manifest.json"
         manifest_sha = compute_file_sha256(manifest_file)
         artifact_ref = ArtifactReference(
             uri=str(target_artifact_dir).replace("\\", "/"),
