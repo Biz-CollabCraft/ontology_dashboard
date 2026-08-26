@@ -307,10 +307,12 @@ function distributionScale(values: number[]) {
   const p25 = percentile(sortedValues, 0.25);
   const p75 = percentile(sortedValues, 0.75);
   const p90 = percentile(sortedValues, 0.9);
-  const iqr = Math.max(p75 - p25, maximum - minimum, 1);
+  const absoluteScale = Math.max(Math.abs(maximum), Math.abs(minimum), 1);
+  const spread = Math.max(maximum - minimum, absoluteScale * 0.02, Number.EPSILON);
+  const iqr = Math.max(p75 - p25, spread);
   const domainMinimum = Math.min(minimum, p25 - iqr * 0.65);
   const domainMaximum = Math.max(maximum, p75 + iqr * 0.65);
-  const domainSpan = Math.max(domainMaximum - domainMinimum, 1);
+  const domainSpan = Math.max(domainMaximum - domainMinimum, spread, Number.EPSILON);
   return {
     minimum: domainMinimum - domainSpan * 0.08,
     maximum: domainMaximum + domainSpan * 0.08,
@@ -557,7 +559,7 @@ function WorkStatusQueueBoard({
           <span>{role === "field_operator" ? "현장 작업 큐" : "생산 판단 큐"}</span>
           <strong>작업 상태 큐</strong>
         </div>
-        <small>보조 보드 · 실제 상태 전이는 Closed-loop API 연결 후 처리</small>
+        <small>후보 분류 보드 · 실제 전이 상태는 Closed-loop read model 연결 후 반영</small>
       </header>
       <div className="mvp-work-kanban" role="list">
         {WORK_QUEUE_COLUMNS.map((column) => {
@@ -627,6 +629,79 @@ function ReportOutputDialog({
         <small>현재 사이드뷰 맥락에서 브라우저 출력 창을 엽니다.</small>
       </div>
     </div>
+  );
+}
+
+function WorkflowPrintReport({
+  reportTab,
+  asset,
+  detail,
+  factors,
+  inspectionTargets,
+  planningImpact,
+  workStatus,
+  assignee,
+  workId,
+}: {
+  reportTab: MvpReportTab;
+  asset: MvpAsset;
+  detail: MvpEventDetailModel | null;
+  factors: MvpAsset["topFactors"];
+  inspectionTargets: Array<{ factor: MvpAsset["topFactors"][number]; rank: number; location: ReturnType<typeof inspectionLocationForFeature> }>;
+  planningImpact: ReturnType<typeof planningImpactFromOperationContext>;
+  workStatus: WorkStatus;
+  assignee: string;
+  workId: string;
+}) {
+  const option = REPORT_OUTPUT_OPTIONS.find((item) => item.id === reportTab);
+  const reportTitle = option?.label ?? "보고서";
+  const riskPercent = asset.failureProbability === null || asset.failureProbability === undefined
+    ? "-"
+    : formatProbability(asset.failureProbability);
+  return (
+    <section className="mvp-workflow-print-report" aria-label={`${reportTitle} 출력`}>
+      <header>
+        <span>{reportTitle}</span>
+        <strong>{displayAssetName(asset)}</strong>
+        <small>{asset.line || asset.cell || asset.assetId} · 관측 {formatTimestamp(asset.observedAt)} · 고장 확정 아님</small>
+      </header>
+      <dl>
+        <div><dt>위험 상태</dt><dd><MvpStatusBadge status={asset.status} /></dd></div>
+        <div><dt>24시간 위험 예측</dt><dd>{riskPercent}</dd></div>
+        <div><dt>작업 상태</dt><dd>{WORK_STATUS_LABEL[workStatus]}</dd></div>
+        <div><dt>작업 ID</dt><dd>{workId}</dd></div>
+        <div><dt>담당자</dt><dd>{assignee}</dd></div>
+        <div><dt>부품</dt><dd>{displayPartLabel(asset.sparePartAvailable)}</dd></div>
+        <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
+        <div><dt>판단</dt><dd>{DECISION_LABEL[asset.recommendedDecision]}</dd></div>
+      </dl>
+      {reportTab === "inspection-request" ? (
+        <section>
+          <h2>점검 요청 항목</h2>
+          {inspectionTargets.length ? inspectionTargets.map((target) => (
+            <article key={target.factor.id}>
+              <b>{target.rank}. {fieldFactorItem(target.factor)}</b>
+              <p>{fieldFactorLocation(target.factor)} · {target.location.note}</p>
+            </article>
+          )) : <p>점검 위치 근거는 Backend ViewModel 연결 후 표시됩니다.</p>}
+        </section>
+      ) : null}
+      {reportTab !== "inspection-request" ? (
+        <section>
+          <h2>판단 근거</h2>
+          {factors.length ? factors.slice(0, 5).map((factor) => (
+            <article key={factor.id}>
+              <b>{fieldFactorItem(factor)}</b>
+              <p>{fieldFactorSymptom(factor)} · {factorValueLabel(factor)}</p>
+            </article>
+          )) : <p>Top factor 근거가 제공되지 않았습니다.</p>}
+        </section>
+      ) : null}
+      <section>
+        <h2>데이터 경계</h2>
+        <p>{detail ? "AssetDetailViewModel 기준 출력입니다." : "상세 ViewModel 미연결 상태의 요약 출력입니다."} 이 화면은 작업 생성이나 정비 효과를 확정하지 않습니다.</p>
+      </section>
+    </section>
   );
 }
 
@@ -1263,6 +1338,7 @@ function AssetPreviewPanel({
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
+  const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets = factors.slice(0, 3).map((factor, index) => ({
@@ -1275,10 +1351,20 @@ function AssetPreviewPanel({
   const assetDisplayName = asset ? factoryAssetName ?? displayAssetName(asset) : "선택된 설비 없음";
   const outputReport = (reportTab: MvpReportTab) => {
     if (!asset) return;
-    void reportTab;
+    setPrintReportTab(reportTab);
     setReportOutputOpen(false);
     window.setTimeout(() => window.print(), 100);
   };
+  useEffect(() => {
+    if (!printReportTab) return;
+    document.body.classList.add("mvp-workflow-print-mode");
+    const clearPrintMode = () => setPrintReportTab(null);
+    window.addEventListener("afterprint", clearPrintMode);
+    return () => {
+      document.body.classList.remove("mvp-workflow-print-mode");
+      window.removeEventListener("afterprint", clearPrintMode);
+    };
+  }, [printReportTab]);
   if (factorySlotPreview && !asset) {
     const { slot, cell } = factorySlotPreview;
     return (
@@ -1532,6 +1618,19 @@ function AssetPreviewPanel({
             <ReportOutputDialog
               onSelect={outputReport}
               onClose={() => setReportOutputOpen(false)}
+            />
+          ) : null}
+          {printReportTab ? (
+            <WorkflowPrintReport
+              reportTab={printReportTab}
+              asset={asset}
+              detail={detail}
+              factors={factors}
+              inspectionTargets={inspectionTargets}
+              planningImpact={planningImpact}
+              workStatus={workStatus}
+              assignee={assignee}
+              workId={workId}
             />
           ) : null}
         </div>

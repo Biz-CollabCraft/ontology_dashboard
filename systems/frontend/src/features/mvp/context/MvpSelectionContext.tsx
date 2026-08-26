@@ -89,7 +89,7 @@ export function parseMvpSelection(input: {
 export function selectionSearch(selection: MvpSelection): string {
   const params = new URLSearchParams();
   params.set("view", selection.view);
-  if (selection.view === "overview") params.set("dashboard", selection.dashboard);
+  params.set("dashboard", selection.dashboard);
   if (selection.view === "reports") params.set("report", selection.reportTab);
   params.set("role", selection.role);
   if (selection.workspaceId) params.set("workspace_id", selection.workspaceId);

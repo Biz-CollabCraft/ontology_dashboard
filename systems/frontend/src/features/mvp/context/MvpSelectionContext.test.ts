@@ -69,6 +69,7 @@ describe("MVP URL selection contract", () => {
     });
     const params = new URLSearchParams(query);
     expect(params.get("view")).toBe("reports");
+    expect(params.get("dashboard")).toBe("workflow");
     expect(params.get("report")).toBe("inspection-request");
     expect(params.get("asset_id")).toBe("CNC S01");
     expect(params.get("event_id")).toBe("EVENT#1");

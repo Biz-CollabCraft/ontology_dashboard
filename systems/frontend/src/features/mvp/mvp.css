@@ -366,27 +366,6 @@
 .mvp-assignment-card > footer { display: grid; grid-template-columns: .7fr 1.3fr; gap: 7px; }
 .mvp-assignment-card > footer .mvp-button { justify-content: center; }
 .mvp-assignment-card > small { color: var(--mvp-dim); font-size: 10px; line-height: 1.45; }
-.mvp-work-dialog-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin: 0; }
-.mvp-work-dialog-summary div { min-width: 0; display: grid; gap: 3px; padding: 8px; border: 1px solid rgba(181,196,214,.1); border-radius: 6px; background: rgba(255,255,255,.018); }
-.mvp-work-dialog-summary dt { color: var(--mvp-dim); font-size: 9px; font-weight: 900; }
-.mvp-work-dialog-summary dd { margin: 0; color: var(--mvp-muted); font-size: 11px; font-weight: 850; line-height: 1.4; overflow-wrap: anywhere; }
-.mvp-assignee-list { display: grid; gap: 6px; }
-.mvp-assignee-list button { width: 100%; min-width: 0; display: grid; gap: 3px; padding: 9px; border: 1px solid rgba(181,196,214,.12); border-radius: 6px; background: rgba(255,255,255,.018); color: var(--mvp-text); text-align: left; cursor: pointer; }
-.mvp-assignee-list button:hover,
-.mvp-assignee-list button.is-selected { border-color: rgba(76,144,240,.45); background: rgba(76,144,240,.12); }
-.mvp-assignee-list button:disabled { cursor: wait; opacity: .72; }
-.mvp-assignee-list strong { font-size: 12px; }
-.mvp-assignee-list small,
-.mvp-assignee-list p { margin: 0; color: var(--mvp-dim); font-size: 10px; }
-.mvp-work-dialog-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; }
-.mvp-work-dialog-options button { min-width: 0; min-height: 38px; padding: 8px; border: 1px solid rgba(181,196,214,.12); border-radius: 6px; background: rgba(255,255,255,.018); color: var(--mvp-muted); font-size: 11px; font-weight: 900; cursor: pointer; }
-.mvp-work-dialog-options button:hover,
-.mvp-work-dialog-options button.is-selected { border-color: rgba(76,144,240,.48); background: rgba(76,144,240,.12); color: var(--mvp-text); }
-.mvp-work-dialog-options button:disabled { cursor: wait; opacity: .72; }
-.mvp-work-dialog-note { min-width: 0; display: grid; gap: 5px; }
-.mvp-work-dialog-note span { color: var(--mvp-dim); font-size: 10px; font-weight: 900; }
-.mvp-work-dialog-note b { color: var(--mvp-muted); font-weight: 900; }
-.mvp-work-dialog-note textarea { width: 100%; min-height: 72px; resize: vertical; padding: 9px; border: 1px solid rgba(181,196,214,.14); border-radius: 6px; background: rgba(255,255,255,.025); color: var(--mvp-text); font: inherit; font-size: 12px; }
 .mvp-report-output-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
 .mvp-report-output-options button { min-width: 0; min-height: 64px; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 3px 7px; align-content: center; padding: 9px; border: 1px solid rgba(181,196,214,.12); border-radius: 7px; background: rgba(255,255,255,.018); color: var(--mvp-text); text-align: left; cursor: pointer; }
 .mvp-report-output-options button:hover { border-color: rgba(76,144,240,.48); background: rgba(76,144,240,.12); }
@@ -397,6 +376,7 @@
 .mvp-report-output-options small { color: var(--mvp-dim); font-size: 10px; }
 .mvp-report-output-card > footer { display: flex; justify-content: center; }
 .mvp-report-output-card > footer .mvp-button { min-width: 96px; }
+.mvp-workflow-print-report { display: none; }
 .mvp-plan-impact-note { margin: 0 0 9px; padding: 8px 10px; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; background: rgba(255,255,255,.018); color: var(--mvp-dim); font-size: 10px; font-weight: 800; }
 .mvp-process-map { min-width: 0; display: grid; grid-template-columns: repeat(2,minmax(180px,1fr)); gap: 9px; }
 .mvp-process-line { min-width: 0; min-height: 116px; display: grid; gap: 5px; align-content: center; padding: 14px; border: 1px solid var(--mvp-border); border-left-width: 4px; border-radius: 7px; background: rgba(255,255,255,.018); color: var(--mvp-text); text-align: left; cursor: pointer; }
@@ -1965,4 +1945,42 @@
   .mvp-detail-drawer .mvp-side-map-report .target-list article,
   .mvp-detail-drawer .mvp-side-map-report .asset-series-block { box-shadow: none !important; break-inside: avoid; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .mvp-detail-drawer .mvp-asset-preview > header { display: grid !important; grid-template-columns: auto minmax(0,1fr) !important; padding-bottom: 6px !important; }
+  body.mvp-workflow-print-mode .mvp-app { visibility: hidden !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report,
+  body.mvp-workflow-print-mode .mvp-workflow-print-report * { visibility: visible !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    display: grid !important;
+    gap: 8mm !important;
+    width: 100% !important;
+    min-height: 100% !important;
+    padding: 10mm !important;
+    background: var(--mvp-bg) !important;
+    color: var(--mvp-text) !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report > header,
+  body.mvp-workflow-print-mode .mvp-workflow-print-report dl,
+  body.mvp-workflow-print-mode .mvp-workflow-print-report section {
+    padding: 6mm !important;
+    border: 1px solid rgba(181,196,214,.24) !important;
+    border-radius: 8px !important;
+    background: var(--mvp-surface) !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report > header { display: grid !important; gap: 2mm !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report > header span,
+  body.mvp-workflow-print-mode .mvp-workflow-print-report dt { color: var(--mvp-dim) !important; font-size: 8pt !important; font-weight: 900 !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report > header strong { font-size: 20pt !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report > header small,
+  body.mvp-workflow-print-mode .mvp-workflow-print-report p,
+  body.mvp-workflow-print-mode .mvp-workflow-print-report dd { color: var(--mvp-muted) !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report dl { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 4mm !important; margin: 0 !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report dd { margin: 1mm 0 0 !important; font-weight: 850 !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report h2 { margin: 0 0 4mm !important; font-size: 13pt !important; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report article { padding: 3mm 0 !important; border-top: 1px solid rgba(181,196,214,.14) !important; break-inside: avoid; }
+  body.mvp-workflow-print-mode .mvp-workflow-print-report article:first-of-type { border-top: 0 !important; }
 }

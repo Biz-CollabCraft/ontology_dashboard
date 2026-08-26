@@ -89,11 +89,11 @@ async function capture(page: Page, viewportName: string, name: string, route: st
   }
   if (name === "ontology") {
     const objectSearch = page.getByLabel("Ontology object property search");
-    await objectSearch.fill("M-014");
-    const objectRow = page.locator(".ontology-object-table .fd-resource-table__row").filter({ hasText: "M-014" }).first();
+    await objectSearch.fill("CNC-S04-L04-01");
+    const objectRow = page.locator(".ontology-object-table .fd-resource-table__row").filter({ hasText: "CNC-S04-L04-01" }).first();
     await expect(objectRow).toBeVisible({ timeout: 45_000 });
     await objectRow.click();
-    await expect(page.locator(".ontology-object-entity-header")).toContainText("M-014");
+    await expect(page.locator(".ontology-object-entity-header")).toContainText("CNC-S04-L04-01");
   }
   if (name === "governance") {
     await page.getByRole("button", { name: "Access & Policy", exact: true }).click();
@@ -184,7 +184,7 @@ test("UI-07 Agent terminal links the composer, claims, evidence, checkpoints, an
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page, "quality@ontology.local", "Quality!2026");
-  await page.goto(`/app/projects/${projectId}/workspaces/${workspaceId}/agent?question=M-014+위험+상태+목록을+보여줘&objectType=equipment&objectId=M-014`);
+  await page.goto(`/app/projects/${projectId}/workspaces/${workspaceId}/agent?question=CNC-S04-L04-01+위험+상태+목록을+보여줘&objectType=equipment&objectId=CNC-S04-L04-01`);
   await page.getByLabel("Route", { exact: true }).selectOption("relational");
   await page.getByRole("button", { name: "Run governed query", exact: true }).click();
   await expect(page.getByText("VALIDATED CLAIMS", { exact: true })).toBeVisible();
