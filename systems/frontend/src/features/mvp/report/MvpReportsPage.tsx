@@ -1,6 +1,6 @@
 import { AlertTriangle, CalendarRange, ClipboardCheck, Clock3, DatabaseZap, FileText, Filter, Gauge, Map as MapIcon, Printer, ShieldCheck, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpEventDetailModel, MvpLineRisk, MvpReportTab, MvpRiskStatus } from "../api/mvpContracts";
+import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpEventDetailModel, MvpReportTab, MvpRiskStatus } from "../api/mvpContracts";
 import { DECISION_LABEL, formatMinutes, formatProbability, formatTimestamp } from "../components/MvpUi";
 import { displayAssetName, displayAssetShortName, displayEventAssetName, displayEventLabel, fieldFactorItem, fieldFailureLabel } from "../displayLabels";
 import { MvpExecutiveReportPage } from "./MvpExecutiveReportPage";

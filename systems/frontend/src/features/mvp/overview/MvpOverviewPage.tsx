@@ -54,7 +54,6 @@ export function MvpOverviewPage({
           detailLoading={detailLoading}
           detailError={detailError}
           onPreviewAsset={onPreviewAsset}
-          onOpenEvent={onOpenEvent}
           onRefresh={onRefresh}
         />
       )}

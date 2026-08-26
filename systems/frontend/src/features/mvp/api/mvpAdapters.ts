@@ -5,7 +5,6 @@ import type {
   AssetDetailViewModel,
   MvpAsset,
   MvpConfidence,
-  MvpCriticality,
   MvpDecision,
   MvpEquipmentHistoryItem,
   MvpEvent,

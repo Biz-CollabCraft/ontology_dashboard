@@ -33,7 +33,7 @@ function chartDomain(points: ChartPoint[], threshold?: number | null) {
   if (!anchors.length) return { minimum: 0, maximum: 1 };
   const minimum = Math.min(...anchors);
   const maximum = Math.max(...anchors);
-  const span = Math.max(maximum - minimum, Math.abs(maximum || minimum) * 0.08, 1);
+  const span = Math.max(maximum - minimum, Math.abs(maximum || minimum) * 0.08, Number.EPSILON);
   return { minimum: minimum - span * 0.16, maximum: maximum + span * 0.16 };
 }
 
@@ -62,14 +62,27 @@ function CanonicalSeriesChart({
   const frame = { left: 58, right: 684, top: 18, bottom: 224 };
   const width = frame.right - frame.left;
   const height = frame.bottom - frame.top;
-  const yAt = (value: number) => frame.bottom - ((value - domain.minimum) / Math.max(1, domain.maximum - domain.minimum)) * height;
+  const domainSpan = domain.maximum - domain.minimum || Number.EPSILON;
+  const yAt = (value: number) => frame.bottom - ((value - domain.minimum) / domainSpan) * height;
   const xAt = (index: number) => frame.left + (index / Math.max(1, points.length - 1)) * width;
   const color = tone === "risk" ? "#ec5b62" : "#4c90f0";
   const yTicks = [domain.maximum, (domain.minimum + domain.maximum) / 2, domain.minimum];
-  const polyline = points
-    .map((point, index) => typeof point.value === "number" ? `${xAt(index).toFixed(1)},${yAt(point.value).toFixed(1)}` : null)
-    .filter((value): value is string => Boolean(value))
-    .join(" ");
+  const coords = points.map((point, index) => ({
+    ...point,
+    x: xAt(index),
+    y: typeof point.value === "number" ? yAt(point.value) : null,
+  }));
+  const segments: Array<Array<typeof coords[number] & { value: number; y: number }>> = [];
+  let currentSegment: Array<typeof coords[number] & { value: number; y: number }> = [];
+  coords.forEach((point) => {
+    if (typeof point.value !== "number" || typeof point.y !== "number") {
+      if (currentSegment.length) segments.push(currentSegment);
+      currentSegment = [];
+      return;
+    }
+    currentSegment.push({ ...point, value: point.value, y: point.y });
+  });
+  if (currentSegment.length) segments.push(currentSegment);
   const first = points[0];
   const last = points.at(-1);
 
@@ -94,9 +107,9 @@ function CanonicalSeriesChart({
             );
           })}
           {threshold !== null && threshold !== undefined ? <line className="asset-threshold-line" x1={frame.left} x2={frame.right} y1={yAt(threshold)} y2={yAt(threshold)} /> : null}
-          <polyline className="asset-series-line" points={polyline} style={{ stroke: color }} />
-          {points.map((point, index) => typeof point.value === "number" ? (
-            <circle key={`${point.observedAt}-${index}`} className={index === points.length - 1 ? "asset-current-marker" : "asset-crossing-marker"} cx={xAt(index)} cy={yAt(point.value)} r={index === points.length - 1 ? 5 : 3} style={{ fill: color, opacity: point.qualityStatus === "bad" ? 0.42 : 1 }} />
+          {segments.map((segment, index) => <polyline key={`${title}-segment-${index}`} className="asset-series-line" points={segment.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")} style={{ stroke: color }} />)}
+          {coords.map((point, index) => typeof point.value === "number" && typeof point.y === "number" ? (
+            <circle key={`${point.observedAt}-${index}`} className={index === points.length - 1 ? "asset-current-marker" : "asset-crossing-marker"} cx={point.x} cy={point.y} r={index === points.length - 1 ? 5 : 3} style={{ fill: color, opacity: point.qualityStatus === "bad" ? 0.42 : 1 }} />
           ) : null)}
           {first ? <text className="asset-chart-axis" x={frame.left} y="248" textAnchor="start">{pointLabel(first, "시작")}</text> : null}
           {last ? <text className="asset-chart-axis" x={frame.right} y="248" textAnchor="end">{pointLabel(last, "현재")}</text> : null}

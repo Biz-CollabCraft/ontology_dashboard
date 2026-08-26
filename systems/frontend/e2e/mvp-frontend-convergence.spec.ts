@@ -150,15 +150,15 @@ test("covers Reports side-tab flow with summary graphs and report types", async 
 test("loads the Objects inspector through the AssetDetailViewModel API", async ({ page }) => {
   const detailViewResponses: string[] = [];
   page.on("response", (response) => {
-    if (response.url().includes("/api/objects/M-014/detail-view") && response.ok()) {
+    if (response.url().includes("/api/objects/CNC-S04-L04-01/detail-view") && response.ok()) {
       detailViewResponses.push(response.url());
     }
   });
 
-  await login(page, `${MVP_PATH}?view=objects&asset_id=M-014&event_id=EVT-GS-002`);
+  await login(page, `${MVP_PATH}?view=objects&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`);
   await expect(page.getByTestId("mvp-objects")).toBeVisible();
   await expect.poll(() => detailViewResponses.length).toBeGreaterThan(0);
-  await expect(page.locator(".mvp-object-inspector")).toContainText("절삭 설비 14");
+  await expect(page.locator(".mvp-object-inspector")).toContainText("4구역 · 4셀 · CNC 가공기 1");
   await expect(page.locator(".mvp-sensor-grid")).toContainText("공구 마모");
   expect(detailViewResponses[0]).toContain("dataset_version_id=");
 });

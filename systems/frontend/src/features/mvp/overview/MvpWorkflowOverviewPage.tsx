@@ -5,7 +5,6 @@ import {
   ClipboardCheck,
   ClipboardList,
   DatabaseZap,
-  FileText,
   Gauge,
   LineChart,
   Printer,
@@ -34,7 +33,6 @@ import {
   formatTimestamp,
 } from "../components/MvpUi";
 import {
-  FIELD_FACTOR_LABELS,
   displayAssetName,
   displayAssetShortName,
   displayAssetType,
@@ -48,13 +46,6 @@ import {
   fieldFactorSymptom,
   fieldFailureLabel,
 } from "../displayLabels";
-
-const DECISION_ORDER: MvpEvent["recommendedDecision"][] = [
-  "review_shutdown",
-  "request_inspection",
-  "hold_for_data_check",
-  "continue_monitoring",
-];
 
 interface WorkOrderCandidate {
   event: MvpEvent;
@@ -227,12 +218,6 @@ function displayFactorySlotName(slot: FactoryCellSlot, cell: FactoryCellLayout):
   return `${displayFactorySite(cell.site)} · ${displayFactoryCell(cell.cell)} · ${slot.label}`;
 }
 
-function displayLineLabel(line: string): string {
-  const canonical = line.match(/^(S\d+)-L(\d+)$/);
-  if (canonical) return `${displayFactorySite(canonical[1])} · ${Number(canonical[2])}라인`;
-  return line || "미지정 라인";
-}
-
 function canonicalCellKeyFromAsset(asset: Pick<MvpAsset, "assetId" | "site" | "line" | "cell">): string | null {
   const fromAssetId = asset.assetId.match(/^[A-Z]+-(S\d+-L\d+)-/)?.[1];
   if (fromAssetId) return fromAssetId;
@@ -397,10 +382,6 @@ function planningBasisFromDetail(detail: MvpEventDetailModel | null): { value: s
   return basis
     ? { value: basis, fallback: false }
     : { value: MISSING_PLANNING_BASIS, fallback: true };
-}
-
-function lineAssetLabel(asset: MvpAsset): string {
-  return displayFactoryAssetName(asset.assetId) ?? displayAssetName(asset);
 }
 
 function latestClosedLoopWorkOrder(closedLoop: MvpClosedLoopSummary | null | undefined) {
@@ -638,7 +619,7 @@ function ReportOutputDialog({
         <div className="mvp-report-output-options" role="list">
           {REPORT_OUTPUT_OPTIONS.map((option) => (
             <button type="button" key={option.id} onClick={() => onSelect(option.id)}>
-              <FileText size={14} />
+              <ClipboardList size={14} />
               <span>{option.label}</span>
               <small>{option.detail}</small>
             </button>
@@ -712,7 +693,6 @@ export function MvpWorkflowOverviewPage({
   detailLoading,
   detailError,
   onPreviewAsset,
-  onOpenEvent,
   onRefresh,
 }: {
   model: MvpBootstrapModel;
@@ -722,7 +702,6 @@ export function MvpWorkflowOverviewPage({
   detailLoading: boolean;
   detailError: string | null;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
-  onOpenEvent: (eventId: string, assetId: string) => void;
   onRefresh: () => void;
 }) {
   const { metrics } = model;
@@ -751,15 +730,9 @@ export function MvpWorkflowOverviewPage({
   const spareMissingCount = model.events.filter((event) => event.sparePartAvailable === false).length;
   const immediateDecisionCount = model.events.filter((event) => event.recommendedDecision === "review_shutdown").length;
   const riskyLines = model.lineRisk.filter((line) => line.critical + line.warning + line.dataQualityHold > 0).length;
-  const selectedLineSummary = selectedAsset
-    ? lineImpactSummaries.find((summary) => summary.line === (selectedAsset.line || selectedAsset.cell || "라인 근거 없음")) ?? null
-    : null;
   const selectedCandidate = selectedEvent
     ? workOrderCandidates.find((candidate) => candidate.event.eventId === selectedEvent.eventId) ?? null
     : null;
-  const selectedRiskPercent = selectedAsset?.failureProbability === null || selectedAsset?.failureProbability === undefined
-    ? null
-    : Math.round(selectedAsset.failureProbability * 100);
   const selectedDetail = detail?.event.assetId === selectedAsset?.assetId ? detail : null;
   const plannedUnits = plannedUnitsFromDetail(selectedDetail);
   const planningBasis = planningBasisFromDetail(selectedDetail);
@@ -1053,7 +1026,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} event={drawerEvent} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} onTabChange={setDetailDrawerTab} onPreviewAsset={onPreviewAsset} onOpenEvent={onOpenEvent} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} onTabChange={setDetailDrawerTab} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1067,10 +1040,8 @@ function MapReportFeatureSeries({
   points,
   emptyTitle,
   emptyDetail,
-  qualityStatus,
   currentValue,
   currentObservedAt,
-  fieldItemLabel,
   primary,
 }: {
   title: string;
@@ -1078,10 +1049,8 @@ function MapReportFeatureSeries({
   points: SeriesDatum[];
   emptyTitle: string;
   emptyDetail: string;
-  qualityStatus?: "good" | "bad" | "unknown";
   currentValue?: number | string | boolean | null;
   currentObservedAt?: string | null;
-  fieldItemLabel?: string;
   primary?: boolean;
 }) {
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
@@ -1103,10 +1072,10 @@ function MapReportFeatureSeries({
   const valueAnchors = currentNumericValue === null ? values : [...values, currentNumericValue];
   const rawMinimum = Math.min(scale.minimum, ...valueAnchors);
   const rawMaximum = Math.max(scale.maximum, ...valueAnchors);
-  const rawSpan = Math.max(1, rawMaximum - rawMinimum);
+  const rawSpan = rawMaximum - rawMinimum || Number.EPSILON;
   const min = rawMinimum - rawSpan * 0.08;
   const max = rawMaximum + rawSpan * 0.08;
-  const range = Math.max(1, max - min);
+  const range = max - min || Number.EPSILON;
   const chartWidth = 720;
   const chartHeight = 282;
   const frame = { left: 64, right: 690, top: 22, bottom: 226 };
@@ -1132,7 +1101,6 @@ function MapReportFeatureSeries({
     currentSegment.push(point as typeof point & { y: number; value: number });
   });
   if (currentSegment.length) segments.push(currentSegment);
-  const latest = numericPoints[numericPoints.length - 1];
   const ticks = [max, (min + max) / 2, min];
   const bandLower = clamp(scale.bandLower, min, max);
   const bandUpper = clamp(scale.bandUpper, min, max);
@@ -1213,10 +1181,8 @@ function FeatureSeriesCollection({
               title={sensor.label}
               unit={sensor.unit}
               points={sensor.points}
-              qualityStatus={sensor.currentQuality}
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
-              fieldItemLabel={FIELD_FACTOR_LABELS[sensor.id]?.item}
               primary={PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id)}
               emptyTitle="관측 이력 없음"
               emptyDetail={`${sensor.label} 관측 이력이 비어 있어 임의 그래프를 표시하지 않습니다.`}
@@ -1241,7 +1207,6 @@ function DerivedMetricSlots({ sensors }: { sensors: ReturnType<typeof sensorSeri
               title={sensor.label}
               unit={sensor.unit}
               points={sensor.points}
-              qualityStatus={sensor.currentQuality}
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
               emptyTitle="관측 이력 없음"
@@ -1259,7 +1224,6 @@ function DerivedMetricSlots({ sensors }: { sensors: ReturnType<typeof sensorSeri
 function AssetPreviewPanel({
   asset,
   factorySlotPreview,
-  event,
   candidate,
   lineSummary,
   factors,
@@ -1279,11 +1243,9 @@ function AssetPreviewPanel({
   assignee,
   onTabChange,
   onPreviewAsset,
-  onOpenEvent,
 }: {
   asset: MvpAsset | null;
   factorySlotPreview: FactorySlotPreview | null;
-  event: MvpEvent | null;
   candidate: WorkOrderCandidate | null;
   lineSummary: LineImpactSummary | null;
   factors: MvpAsset["topFactors"];
@@ -1303,7 +1265,6 @@ function AssetPreviewPanel({
   assignee: string;
   onTabChange: (tab: DrawerTab) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
-  onOpenEvent: (eventId: string, assetId: string) => void;
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const featureSnapshots = sensorSeries(detail, asset);

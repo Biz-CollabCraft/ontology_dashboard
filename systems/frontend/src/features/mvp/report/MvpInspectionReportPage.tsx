@@ -4,7 +4,6 @@ import {
   ClipboardCheck,
   Clock3,
   DatabaseZap,
-  FileText,
   Gauge,
   RotateCcw,
   ShieldCheck,
