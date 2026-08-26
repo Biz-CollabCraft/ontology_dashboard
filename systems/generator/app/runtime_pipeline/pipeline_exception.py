@@ -54,6 +54,18 @@ class PipelineDuplicateInputError(PipelineBaseError):
     retryable = False
 
 
+class PipelineSourceAlreadyRegisteredError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_SOURCE_ALREADY_REGISTERED"
+    retryable = False
+
+
+class PipelineSourceAlreadyProcessedError(PipelineBaseError):
+    status_code = 409
+    code = "PIPELINE_SOURCE_ALREADY_PROCESSED"
+    retryable = False
+
+
 class PipelineAlreadyRunningError(PipelineBaseError):
     status_code = 409
     code = "PIPELINE_ALREADY_RUNNING"
@@ -219,6 +231,18 @@ class PipelineNotImplementedError(PipelineBaseError):
 # =====================================================================
 # 2. Retryable Errors (Max 5 Attempts with Exponential Backoff)
 # =====================================================================
+
+class PipelineSourceFileNotStableError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_SOURCE_FILE_NOT_STABLE"
+    retryable = True
+
+
+class PipelineSourceChecksumChangedError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_SOURCE_CHECKSUM_CHANGED"
+    retryable = True
+
 
 class PipelineQueuePersistError(PipelineBaseError):
     status_code = 500

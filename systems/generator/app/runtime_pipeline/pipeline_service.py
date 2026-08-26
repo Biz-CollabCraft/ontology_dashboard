@@ -36,6 +36,8 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelinePredictionObservationAlignmentNotImplementedError,
     PipelinePreprocessingFailedError,
     PipelineRuntimeFeatureFailedError,
+    PipelineSourceChecksumChangedError,
+    PipelineSourceFileNotStableError,
     PipelineTimestampInvalidError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_repository import (
@@ -85,6 +87,20 @@ class PipelineService:
         self.prediction_service = prediction_service or PredictionService()
         self.prediction_batch_service = prediction_batch_service or PredictionBatchService()
         self.prediction_delivery_service = prediction_delivery_service or PredictionDeliveryService()
+
+    def get_logical_source_uri(self, source_path: Path) -> str:
+        """Convert filesystem path to logical relative URI without exposing local drives or absolute paths."""
+        try:
+            p = source_path.resolve()
+            for root in (PATHS.project_root, PATHS.data_incoming, PATHS.data_preprocessed):
+                try:
+                    rel = p.relative_to(root.resolve())
+                    return str(rel).replace("\\", "/")
+                except ValueError:
+                    pass
+        except Exception:
+            pass
+        return f"data/incoming/{source_path.name}"
 
     def _load_source_df(self, source_path: Path) -> pd.DataFrame:
         """Parse source observation protocol file (.jsonl or .csv)."""
@@ -158,24 +174,39 @@ class PipelineService:
 
     def execute_queue_item(self, item: PipelineQueueItem) -> PipelineRunState:
         """Execute complete 5-stage pipeline lifecycle for a claimed queue item."""
-        # 1. Path and Checksum Validation against allowed roots
+        # 1. Path, File Existence and Stability Validation
         source_path = validate_pipeline_source_uri(item.source_uri)
-
-        actual_sha = compute_file_sha256(source_path)
-        if actual_sha != item.source_checksum:
-            raise PipelineInputChecksumMismatchError(
-                f"소스 파일 체크섬 불일치: 기대={item.source_checksum}, 실제={actual_sha}",
-                details=[{"expected": item.source_checksum, "actual": actual_sha}],
+        if not source_path.exists() or not source_path.is_file():
+            raise PipelineInputNotFoundError(
+                f"입력 소스 파일을 찾을 수 없습니다: {source_path}",
+                details=[{"source_path": str(source_path)}],
                 retryable=False,
             )
 
-        # 2. Initialize State Manager
+        actual_size = source_path.stat().st_size
+        if item.size_bytes is not None and actual_size != item.size_bytes:
+            raise PipelineSourceFileNotStableError(
+                f"소스 파일 크기가 변경되었습니다 (작성 중 또는 불안정 상태): 등록 시={item.size_bytes}B, 현재={actual_size}B",
+                details=[{"registered_size": item.size_bytes, "current_size": actual_size}],
+                retryable=True,
+            )
+
+        actual_sha = compute_file_sha256(source_path)
+        if actual_sha != item.source_checksum:
+            raise PipelineSourceChecksumChangedError(
+                f"소스 파일 체크섬이 변경되었습니다: 등록 시={item.source_checksum}, 현재={actual_sha}",
+                details=[{"expected": item.source_checksum, "actual": actual_sha}],
+                retryable=True,
+            )
+
+        # 2. Logical URI and State Manager Initialization
+        logical_source_uri = self.get_logical_source_uri(source_path)
         run_id = f"run-{uuid.uuid4().hex[:12]}"
         source_ref = ArtifactReference(
-            uri=item.source_uri,
+            uri=logical_source_uri,
             sha256=item.source_checksum,
             role="source_observation_protocol",
-            size_bytes=source_path.stat().st_size if source_path.exists() else None,
+            size_bytes=actual_size,
         )
         manager = PipelineStateManager.create(
             run_id=run_id,
@@ -242,6 +273,20 @@ class PipelineService:
                         details=[{"time_column": target_time, "error": str(exc)}],
                         retryable=False,
                     ) from exc
+
+                # Check for duplicate [asset_id, timestamp] rows
+                raw_df_chk = raw_df.copy()
+                raw_df_chk[target_time] = converted_ts
+                dups = raw_df_chk.duplicated(subset=[target_id, target_time], keep=False)
+                if dups.any():
+                    dup_sample = raw_df_chk[dups].iloc[0]
+                    sample_asset = str(dup_sample[target_id])
+                    sample_ts = str(dup_sample[target_time])
+                    raise PipelineTimestampInvalidError(
+                        f"동일 설비 '{sample_asset}' 및 시각 '{sample_ts}'에 대한 중복 관측 행이 {dups.sum()}건 존재합니다. 계약상 중복 병합 정책이 정의되지 않아 처리를 중단합니다.",
+                        details=[{"asset_id": sample_asset, "timestamp": sample_ts, "duplicate_count": int(dups.sum())}],
+                        retryable=False,
+                    )
 
             schema_fp = compute_source_schema_fingerprint(raw_df)
 
@@ -428,8 +473,20 @@ class PipelineService:
         if batch_summary.equipment_batches:
             manager.start_stage("prediction_delivery")
             manager.record_prediction_delivery("pending")
+
+            # Post-run verification: ensure source file was not modified during pipeline execution
+            post_sha = compute_file_sha256(source_path)
+            post_size = source_path.stat().st_size
+            if post_sha != item.source_checksum or (item.size_bytes is not None and post_size != item.size_bytes):
+                raise PipelineSourceChecksumChangedError(
+                    f"파이프라인 실행 도중 소스 파일이 변경되었습니다: 시작={item.source_checksum}, 완료={post_sha}",
+                    details=[{"expected": item.source_checksum, "actual": post_sha, "start_size": item.size_bytes, "finish_size": post_size}],
+                    retryable=True,
+                )
+
             event_ids: list[str] = []
             events_state: list[PredictionDeliveryEventState] = []
+            contract_ver = item.pipeline_contract_version or "generator-prediction-result-v1"
 
             for asset_id, eq_batch in batch_summary.equipment_batches.items():
                 event_id = f"evt-{uuid.uuid4().hex[:16]}"
@@ -467,11 +524,11 @@ class PipelineService:
                     dataset_version=item.dataset_version,
                     model_results=eq_batch.model_results,
                     source_lineage=SourceLineage(
-                        source_uri=item.source_uri,
+                        source_uri=logical_source_uri,
                         source_checksum=item.source_checksum,
-                        pipeline_contract_version="generator-prediction-result-v1",
+                        pipeline_contract_version=contract_ver,
                     ),
-                    sensor_data_ref={"uri": item.source_uri, "sha256": item.source_checksum},
+                    sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
                 )
 
                 # Atomically persist to Outbox directory for background worker delivery

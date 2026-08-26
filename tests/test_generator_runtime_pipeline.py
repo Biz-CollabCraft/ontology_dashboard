@@ -41,6 +41,10 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelinePredictionObservationAlignmentNotImplementedError,
     PipelineRuntimeFeatureFailedError,
     PipelineSensorValueMissingError,
+    PipelineSourceAlreadyProcessedError,
+    PipelineSourceAlreadyRegisteredError,
+    PipelineSourceChecksumChangedError,
+    PipelineSourceFileNotStableError,
     PipelineStateTransitionInvalidError,
     PipelineTimestampInvalidError,
 )
@@ -941,3 +945,314 @@ def test_raw_sensor_value_missing_raises_422(isolated_runtime_env):
     assert exc_info.value.status_code == 422
     assert exc_info.value.code == "PIPELINE_SENSOR_VALUE_MISSING"
     assert exc_info.value.details[0]["source_field"] == "Air temperature [K]"
+
+
+# =====================================================================
+# 12. File Stability & Checksum Change Test
+# =====================================================================
+
+def test_file_size_changed_between_enqueue_and_start_raises_file_not_stable_error(isolated_runtime_env):
+    """If file size changes between enqueue and execution start, raise PIPELINE_SOURCE_FILE_NOT_STABLE (retryable=True)."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file, initial_sha = create_sample_observation_jsonl(incoming_dir / "unstable_size_file.jsonl", num_rows=3)
+    item = queue.enqueue(job_id="job-change-size-1", source_uri=str(src_file), source_checksum=initial_sha)
+
+    # Modify file by appending bytes (changing size)
+    with open(src_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "UDI": 99,
+            "Product ID": "M14860_0099",
+            "asset_id": "M14860",
+            "Type": "M",
+            "Air temperature [K]": 299.5,
+            "Process temperature [K]": 309.5,
+            "Rotational speed [rpm]": 1500,
+            "Torque [Nm]": 43.0,
+            "Tool wear [min]": 50,
+            "timestamp": "2026-08-25T10:50:00Z",
+        }) + "\n")
+
+    with pytest.raises(PipelineSourceFileNotStableError) as exc_info:
+        service.execute_queue_item(item)
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "PIPELINE_SOURCE_FILE_NOT_STABLE"
+    assert exc_info.value.retryable is True
+
+
+def test_file_checksum_changed_between_enqueue_and_start_raises_retryable_error(isolated_runtime_env):
+    """If file checksum changes (same size) between enqueue and execution start, raise PIPELINE_SOURCE_CHECKSUM_CHANGED (retryable=True)."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file, initial_sha = create_sample_observation_jsonl(incoming_dir / "changing_file.jsonl", num_rows=3)
+    item = queue.enqueue(job_id="job-change-1", source_uri=str(src_file), source_checksum=initial_sha)
+
+    # Modify content preserving exact byte length (replace character '1' with '2')
+    content = src_file.read_text(encoding="utf-8")
+    modified_content = content.replace("298.1", "298.2", 1)
+    assert len(content.encode("utf-8")) == len(modified_content.encode("utf-8"))
+    src_file.write_text(modified_content, encoding="utf-8")
+
+    with pytest.raises(PipelineSourceChecksumChangedError) as exc_info:
+        service.execute_queue_item(item)
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "PIPELINE_SOURCE_CHECKSUM_CHANGED"
+    assert exc_info.value.retryable is True
+
+
+# =====================================================================
+# 13. Duplicate Source Identity Enqueue Blocked Test
+# =====================================================================
+
+def test_duplicate_source_identity_enqueue_blocked(isolated_runtime_env):
+    """Enqueuing identical source_identity twice should raise PipelineSourceAlreadyRegisteredError or PipelineSourceAlreadyProcessedError."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "dup_identity.jsonl", num_rows=2)
+    item1 = queue.enqueue(job_id="job-dup-1", source_uri=str(src_file), source_checksum=sha)
+    assert item1.job_id == "job-dup-1"
+
+    # Enqueue same file again while queued
+    with pytest.raises(PipelineSourceAlreadyRegisteredError) as exc_info:
+        queue.enqueue(job_id="job-dup-2", source_uri=str(src_file), source_checksum=sha)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.code == "PIPELINE_SOURCE_ALREADY_REGISTERED"
+
+    # Verify only 1 item in queue
+    items = queue.list_items()
+    assert len(items) == 1
+    assert items[0].job_id == "job-dup-1"
+
+
+# =====================================================================
+# 14. Same Path Different Checksum Enqueued as Separate Job Test
+# =====================================================================
+
+def test_same_path_different_content_enqueued_as_separate_job(isolated_runtime_env):
+    """Overwriting the same path with different content produces a new source_identity and enqueues as a separate job."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+
+    src_file = incoming_dir / "reused_path.jsonl"
+
+    # 1. First content
+    create_sample_observation_jsonl(src_file, num_rows=2, asset_id="M14860")
+    sha1 = compute_file_sha256(src_file)
+    item1 = queue.enqueue(job_id="job-reused-1", source_uri=str(src_file), source_checksum=sha1)
+    queue.mark_succeeded("job-reused-1")
+
+    # 2. Overwrite with new content (different rows)
+    create_sample_observation_jsonl(src_file, num_rows=4, asset_id="M14860")
+    sha2 = compute_file_sha256(src_file)
+    assert sha1 != sha2
+
+    item2 = queue.enqueue(job_id="job-reused-2", source_uri=str(src_file), source_checksum=sha2)
+    assert item2.job_id == "job-reused-2"
+    assert item2.source_identity != item1.source_identity
+
+
+# =====================================================================
+# 15. Different Path Same Content Duplicate Blocked Test
+# =====================================================================
+
+def test_different_path_same_content_duplicate_blocked(isolated_runtime_env):
+    """Two different file paths with identical content share the same source_identity and the second is blocked."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+
+    file1 = incoming_dir / "copy_1.jsonl"
+    file2 = incoming_dir / "copy_2.jsonl"
+
+    create_sample_observation_jsonl(file1, num_rows=2, asset_id="M14860")
+    file2.write_bytes(file1.read_bytes())
+
+    sha = compute_file_sha256(file1)
+    item1 = queue.enqueue(job_id="job-copy-1", source_uri=str(file1), source_checksum=sha)
+    assert item1.job_id == "job-copy-1"
+
+    with pytest.raises(PipelineSourceAlreadyRegisteredError):
+        queue.enqueue(job_id="job-copy-2", source_uri=str(file2), source_checksum=sha)
+
+
+# =====================================================================
+# 16. Unordered Timestamps Deterministically Sorted Test
+# =====================================================================
+
+def test_unordered_timestamps_deterministically_sorted(isolated_runtime_env):
+    """Out-of-order timestamp inputs are deterministically sorted by [asset_id, timestamp]."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    src_file = incoming_dir / "shuffled_times.jsonl"
+    # Unordered timestamps across two assets with complete canonical sensor schema
+    records = [
+        {
+            "UDI": 3,
+            "Product ID": "M14860_0003",
+            "asset_id": "M14860",
+            "Type": "M",
+            "Air temperature [K]": 298.3,
+            "Process temperature [K]": 308.8,
+            "Rotational speed [rpm]": 1530,
+            "Torque [Nm]": 43.5,
+            "Tool wear [min]": 10,
+            "timestamp": "2026-08-25T10:02:00Z",
+        },
+        {
+            "UDI": 2,
+            "Product ID": "L47181_0002",
+            "asset_id": "L47181",
+            "Type": "L",
+            "Air temperature [K]": 298.4,
+            "Process temperature [K]": 308.9,
+            "Rotational speed [rpm]": 1540,
+            "Torque [Nm]": 44.0,
+            "Tool wear [min]": 5,
+            "timestamp": "2026-08-25T10:01:00Z",
+        },
+        {
+            "UDI": 1,
+            "Product ID": "M14860_0001",
+            "asset_id": "M14860",
+            "Type": "M",
+            "Air temperature [K]": 298.1,
+            "Process temperature [K]": 308.6,
+            "Rotational speed [rpm]": 1551,
+            "Torque [Nm]": 42.8,
+            "Tool wear [min]": 0,
+            "timestamp": "2026-08-25T10:00:00Z",
+        },
+        {
+            "UDI": 1,
+            "Product ID": "L47181_0001",
+            "asset_id": "L47181",
+            "Type": "L",
+            "Air temperature [K]": 298.2,
+            "Process temperature [K]": 308.7,
+            "Rotational speed [rpm]": 1545,
+            "Torque [Nm]": 43.1,
+            "Tool wear [min]": 0,
+            "timestamp": "2026-08-25T10:00:00Z",
+        },
+        {
+            "UDI": 2,
+            "Product ID": "M14860_0002",
+            "asset_id": "M14860",
+            "Type": "M",
+            "Air temperature [K]": 298.2,
+            "Process temperature [K]": 308.7,
+            "Rotational speed [rpm]": 1540,
+            "Torque [Nm]": 43.0,
+            "Tool wear [min]": 5,
+            "timestamp": "2026-08-25T10:01:00Z",
+        },
+    ]
+    with open(src_file, "w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r) + "\n")
+
+    sha = compute_file_sha256(src_file)
+    item = queue.enqueue(job_id="job-sort-1", source_uri=str(src_file), source_checksum=sha)
+    run_state = service.execute_queue_item(item)
+
+    assert run_state.status == "succeeded"
+    assert len(run_state.prediction_events) == 2
+
+
+# =====================================================================
+# 17. Observed_at Matches Actual Feature Row Metadata Test
+# =====================================================================
+
+def test_observed_at_matches_actual_feature_row_metadata(isolated_runtime_env):
+    """Prediction result batch observed_at must strictly match the last observed feature row metadata."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "observed_at_match.jsonl", num_rows=3, asset_id="M14860")
+    item = queue.enqueue(job_id="job-obs-1", source_uri=str(src_file), source_checksum=sha)
+    run_state = service.execute_queue_item(item)
+
+    assert run_state.status == "succeeded"
+    event_id = run_state.prediction_event_ids[0]
+    event = repo.get_event(event_id)
+    assert event is not None
+    assert event.observed_at == "2026-08-25T10:02:00Z"
+    for model_id, model_res in event.model_results.items():
+        assert model_res.observed_at == "2026-08-25T10:02:00Z"
+
+
+# =====================================================================
+# 18. Backend Payload Contains No Local Absolute Paths Test
+# =====================================================================
+
+def test_backend_payload_contains_no_local_absolute_paths(isolated_runtime_env):
+    """Source lineage source_uri in PredictionResultBatchPayload must be normalized logical URI without drive letters or absolute local paths."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+    repo: PipelineRepository = env["repository"]
+
+    src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_lineage.jsonl", num_rows=2, asset_id="M14860")
+    item = queue.enqueue(job_id="job-lineage-1", source_uri=str(src_file), source_checksum=sha)
+    run_state = service.execute_queue_item(item)
+
+    event_id = run_state.prediction_event_ids[0]
+    event = repo.get_event(event_id)
+    assert event is not None
+
+    source_uri = event.source_lineage.source_uri
+    assert not source_uri.startswith("C:")
+    assert not source_uri.startswith("c:")
+    assert not source_uri.startswith("\\")
+    assert not source_uri.startswith("/")
+    assert "clean_lineage.jsonl" in source_uri
+
+
+# =====================================================================
+# 19. Failed File Stability Emits No Outbox or Events Test
+# =====================================================================
+
+def test_failed_file_stability_emits_no_outbox_or_events(isolated_runtime_env):
+    """When a file stability or preprocessing failure occurs, no outbox items or prediction events are published."""
+    env = isolated_runtime_env
+    incoming_dir: Path = env["incoming_dir"]
+    outbox_dir: Path = env["outbox_dir"]
+    events_dir: Path = env["repository"].events_dir
+    queue: PipelineQueue = env["queue"]
+    service: PipelineService = env["service"]
+
+    # File with invalid schema to trigger failure
+    src_file = incoming_dir / "unstable_fail.jsonl"
+    with open(src_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"unknown_id": "123", "value": 999}) + "\n")
+
+    sha = compute_file_sha256(src_file)
+    item = queue.enqueue(job_id="job-fail-outbox-1", source_uri=str(src_file), source_checksum=sha)
+
+    with pytest.raises(PipelineMappingNotImplementedError):
+        service.execute_queue_item(item)
+
+    # Verify 0 files in outbox and 0 in events
+    outbox_files = list(outbox_dir.glob("*.json"))
+    event_files = list(events_dir.glob("*.json"))
+    assert len(outbox_files) == 0
+    assert len(event_files) == 0

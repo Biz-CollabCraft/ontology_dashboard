@@ -266,9 +266,22 @@ class RuntimeFeatureService:
                     retryable=False,
                 )
             df_sorted[time_col] = converted_ts.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            df_sorted = df_sorted.sort_values(by=[id_col, time_col]).reset_index(drop=True)
+
+            # Check for duplicates on [asset_id, timestamp]
+            dups = df_sorted.duplicated(subset=[id_col, time_col], keep=False)
+            if dups.any():
+                dup_rows = df_sorted[dups]
+                sample_asset = str(dup_rows[id_col].iloc[0])
+                sample_ts = str(dup_rows[time_col].iloc[0])
+                raise PipelineTimestampInvalidError(
+                    f"동일 설비 '{sample_asset}' 및 시각 '{sample_ts}'에 대한 중복 관측 행이 {dups.sum()}건 존재합니다. 계약상 중복 병합 정책이 정의되지 않아 처리를 중단합니다.",
+                    details=[{"asset_id": sample_asset, "timestamp": sample_ts, "duplicate_count": int(dups.sum())}],
+                    retryable=False,
+                )
+
+            df_sorted = df_sorted.sort_values(by=[id_col, time_col], kind="stable").reset_index(drop=True)
         else:
-            df_sorted = df_sorted.sort_values(by=[id_col]).reset_index(drop=True)
+            df_sorted = df_sorted.sort_values(by=[id_col], kind="stable").reset_index(drop=True)
 
         # 2. Per-equipment History Requirement evaluation
         min_rows = int(history_requirement_dict.get("minimum_history_rows", 1))

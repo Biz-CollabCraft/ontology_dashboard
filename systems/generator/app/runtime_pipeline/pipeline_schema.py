@@ -165,6 +165,22 @@ class PipelineRunState(BaseModel):
     errors: list[PipelineError] = Field(default_factory=list, description="List of errors occurred")
 
 
+def compute_source_identity(
+    source_checksum: str,
+    dataset_id: str = "canonical-ai4i-v1",
+    dataset_version: str = "canonical-ai4i-physics-v3.1",
+    pipeline_contract_version: str = "generator-prediction-result-v1",
+) -> str:
+    """Compute stable, version-aware deduplication identity for source input."""
+    import hashlib
+    clean_checksum = source_checksum.strip().lower()
+    clean_ds = dataset_id.strip()
+    clean_ver = dataset_version.strip()
+    clean_contract = pipeline_contract_version.strip()
+    key = f"{clean_checksum}:{clean_ds}:{clean_ver}:{clean_contract}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
 class PipelineQueueItem(BaseModel):
     """Item managed in persistent FIFO queue."""
     model_config = ConfigDict(extra="forbid")
@@ -172,8 +188,11 @@ class PipelineQueueItem(BaseModel):
     job_id: str = Field(..., description="Unique job identifier")
     source_uri: str = Field(..., description="Source file relative or absolute URI")
     source_checksum: str = Field(..., description="Source file SHA-256 checksum")
+    source_identity: Optional[str] = Field(None, description="SHA-256 deduplication identity of input and contract versions")
+    size_bytes: Optional[int] = Field(None, description="File size in bytes at detection time")
     dataset_id: str = Field("canonical-ai4i-v1", description="Dataset identifier")
     dataset_version: str = Field("canonical-ai4i-physics-v3.1", description="Dataset version")
+    pipeline_contract_version: str = Field("generator-prediction-result-v1", description="Pipeline contract version")
     detected_at: str = Field(default_factory=now_utc_iso, description="ISO detection timestamp")
     sequence: int = Field(1, ge=1, description="FIFO sequence number")
     attempt: int = Field(1, ge=1, description="Execution attempt number")

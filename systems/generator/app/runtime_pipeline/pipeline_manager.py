@@ -89,16 +89,20 @@ class PipelineManager:
         job_id: str,
         source_uri: str,
         source_checksum: str,
+        size_bytes: Optional[int] = None,
         dataset_id: str = "canonical-ai4i-v1",
         dataset_version: str = "canonical-ai4i-physics-v3.1",
+        pipeline_contract_version: str = "generator-prediction-result-v1",
     ) -> PipelineQueueItem:
         """Enqueue new observation source file for processing."""
         return self.queue.enqueue(
             job_id=job_id,
             source_uri=source_uri,
             source_checksum=source_checksum,
+            size_bytes=size_bytes,
             dataset_id=dataset_id,
             dataset_version=dataset_version,
+            pipeline_contract_version=pipeline_contract_version,
         )
 
     def retry_failed_job(self, job_id: str) -> PipelineQueueItem:

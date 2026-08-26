@@ -19,8 +19,10 @@ class EnqueueRequest(BaseModel):
     job_id: str = Field(..., description="Unique job identifier")
     source_uri: str = Field(..., description="Path or URI of completed observation file")
     source_checksum: str = Field(..., description="SHA-256 checksum of source file")
+    size_bytes: Optional[int] = Field(None, description="Optional source file size in bytes")
     dataset_id: str = Field("canonical-ai4i-v1", description="Dataset identifier")
     dataset_version: str = Field("canonical-ai4i-physics-v3.1", description="Dataset version")
+    pipeline_contract_version: str = Field("generator-prediction-result-v1", description="Pipeline contract version")
 
 
 def get_manager() -> PipelineManager:
@@ -58,8 +60,10 @@ def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
         job_id=req.job_id,
         source_uri=req.source_uri,
         source_checksum=req.source_checksum,
+        size_bytes=req.size_bytes,
         dataset_id=req.dataset_id,
         dataset_version=req.dataset_version,
+        pipeline_contract_version=req.pipeline_contract_version,
     )
 
 
