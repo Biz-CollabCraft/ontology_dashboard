@@ -608,8 +608,8 @@ def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict
     result["runtime_hours_7d"] = runtime_hours_7d if _is_number(runtime_hours_7d) else None
     result["production_impact"] = production_impact
     gaps = []
-    for key, value in result.items():
-        if value is None:
+    for key in ("load_level", "runtime_hours_7d", "production_impact"):
+        if result.get(key) is None:
             gaps.append(
                 {
                     "field": f"operation_context.{key}",

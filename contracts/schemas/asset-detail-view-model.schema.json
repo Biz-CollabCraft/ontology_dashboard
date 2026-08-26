@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ontology-dashboard.local/schemas/asset-detail-view-model.schema.json",
-  "title": "Asset Detail ViewModel (candidate contract)",
-  "description": "Candidate contract for GET /objects/{asset_id}/detail-view, as documented in docs/mvp/pdm-evidence-report-ui-integration-plan.md §3.1 and docs/mvp/schema-definition.md §5.3. Status: V2 change proposal. Does not replace the current Event Report API. This object name is deliberately not prefixed with `Mvp`.",
+  "title": "Asset Detail ViewModel",
+  "description": "MVP consumption contract for GET /objects/{asset_id}/detail-view, as documented in docs/mvp/api-specification.md. Does not replace the Event Report API; it composes the Asset Detail and Overview snapshot consumed by UI variants. This object name is deliberately not prefixed with `Mvp`.",
   "type": "object",
   "required": ["asset", "risk", "risk_series", "features", "equipment_history", "maintenance_context", "operation_context", "review_priority", "evidence", "data_status"],
   "additionalProperties": false,

@@ -256,6 +256,9 @@
 .mvp-action-message span { color: var(--mvp-muted); }
 
 /* Overview */
+.mvp-dashboard-switch { width: fit-content; display: inline-flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--mvp-border); border-radius: 8px; background: rgba(12, 18, 26, .72); }
+.mvp-dashboard-switch button { min-height: 30px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--mvp-muted); font-size: 12px; font-weight: 800; cursor: pointer; }
+.mvp-dashboard-switch button[aria-pressed="true"] { background: rgba(76, 144, 240, .22); color: var(--mvp-text); box-shadow: inset 0 0 0 1px rgba(96, 165, 250, .26); }
 .mvp-agent-summary { display: grid; grid-template-columns: 1fr; align-items: start; gap: 12px; padding: 14px 16px; border: 1px solid rgba(76,144,240,.28); border-radius: 8px; background: linear-gradient(135deg, rgba(76,144,240,.13), rgba(69,184,128,.05)); }
 .mvp-agent-summary div { min-width: 0; display: grid; gap: 4px; }
 .mvp-agent-summary span { color: #9cc5fa; font-size: 10px; font-weight: 900; }

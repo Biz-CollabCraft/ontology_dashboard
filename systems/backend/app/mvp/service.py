@@ -406,20 +406,24 @@ class ManufacturingPredictiveMaintenanceService:
             valid_to = _parse_iso_datetime(str(temporal_scope.get("valid_to") or ""))
             if valid_from is None or valid_to is None or not (valid_from <= observed_at < valid_to):
                 continue
-            event_impact = _event_impact_for_fixture(context, fixture, equipment)
+            fixture_context = fixture.get("operation_context") or {}
+            event_impact = fixture_context.get("event_impact") or _event_impact_for_fixture(context, fixture, equipment)
             capacity = context.get("capacity_model") or {}
             planning_window = capacity.get("planning_window") or {}
             oee_basis = capacity.get("oee_basis") or {}
             cycle_time_basis = capacity.get("cycle_time_basis") or {}
             asset_count_basis = capacity.get("asset_count_basis") or {}
-            return {
-                "load_level": None,
-                "runtime_hours_7d": None,
-                "production_impact": _production_impact(
+            production_impact = fixture_context.get("production_impact")
+            if production_impact not in {"none", "low", "medium", "high"}:
+                production_impact = _production_impact(
                     (event_impact or {}).get("basis", {}).get("estimated_downtime_minutes")
                     if event_impact
                     else equipment.get("estimated_downtime_minutes")
-                ),
+                )
+            return {
+                "load_level": fixture_context.get("load_level"),
+                "runtime_hours_7d": fixture_context.get("runtime_hours_7d"),
+                "production_impact": production_impact,
                 "context_id": context["context_id"],
                 "source_type": context["source_type"],
                 "temporal_scope": temporal_scope,

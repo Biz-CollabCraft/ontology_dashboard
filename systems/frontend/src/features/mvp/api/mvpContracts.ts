@@ -1,4 +1,5 @@
 export type MvpView = "overview" | "objects" | "operations" | "reports";
+export type MvpDashboardMode = "workflow" | "classic";
 export type MvpReportTab = "status-map" | "inspection-request" | "summary-report" | "executive-brief";
 export type MvpRoleLens = "process_manager" | "field_operator";
 export type MvpRiskStatus = "normal" | "attention" | "warning" | "critical" | "data_quality_hold";
@@ -537,6 +538,7 @@ export interface AssetDetailViewModel {
 
 export interface MvpSelection {
   view: MvpView;
+  dashboard: MvpDashboardMode;
   reportTab: MvpReportTab;
   projectId: string;
   workspaceId: string | null;

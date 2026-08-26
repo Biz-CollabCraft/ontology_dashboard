@@ -191,8 +191,8 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
         },
         "event_impact": {
             "event_id": "EVT-GS-002",
-            "equipment_id": "M-014",
-            "line": "가공 2라인",
+            "equipment_id": "CNC-S04-L04-01",
+            "line": "S04-L04",
             "product_variant": "M",
             "screen_priority": "shift_inspection",
             "impact_status": "estimated",

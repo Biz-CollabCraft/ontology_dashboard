@@ -152,7 +152,7 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 
 ### 4.6 `GET /objects/{asset_id}/detail-view`
 
-상태: V2 변경 제안. 현행 Event Report API나 `/objects/{asset_id}`를 대체하지 않는다.
+상태: MVP 현행 소비 계약. 현행 Event Report API를 대체하지 않고, Asset Detail/Overview UI가 같은 snapshot을 읽는 composition endpoint로 사용한다.
 
 응답: `AssetDetailViewModel`.
 
@@ -160,9 +160,9 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
 `Mvp*` 타입명은 기존 MVP 화면 구현명으로만 참고하고, Product API 계약명은
 `AssetDetail`, `AssetDetailViewModel`처럼 도메인 객체명으로 표기한다.
 
-설비 상세 화면, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint 후보이다. Backend adapter가 Product Result Artifact/Evidence, Backend Observation read contract와 Feature Executor result, Backend Diagnosis Runtime Prediction History Query Contract, Activity/Maintenance source를 병합한다.
+설비 상세 화면, 피쳐별 센서 그래프, 위험도 그래프, evidence gap 표시를 위한 composition endpoint다. Backend adapter가 Product Result Artifact/Evidence, Backend Observation read contract와 Feature Executor result, Backend Diagnosis Runtime Prediction History Query Contract, Activity/Maintenance source를 병합한다.
 
-필수 Query: `from`, `to`. 선택 Query: `dataset_version_id`, `grain=raw|10m|1h`.
+필수 Query: 없음. 선택 Query: `project_id`, `dataset_version_id`.
 
 ```json
 {
@@ -216,8 +216,8 @@ site/cell/유형/기간 Query는 Target이며 이번 주 필수 변경이 아니
     },
     "event_impact": {
       "event_id": "EVT-GS-002",
-      "equipment_id": "M-014",
-      "line": "가공 2라인",
+      "equipment_id": "CNC-S04-L04-01",
+      "line": "S04-L04",
       "product_variant": "M",
       "screen_priority": "shift_inspection",
       "impact_status": "estimated",
