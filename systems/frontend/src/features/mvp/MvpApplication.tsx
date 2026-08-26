@@ -226,14 +226,16 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else {
-    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onDashboardChange={(dashboard) => updateSelection({ dashboard, view: "overview" })} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   return (
     <MvpShell
       context={model.context}
       activeView={selection.view}
+      dashboard={selection.dashboard}
       role={selection.role}
+      onNavigate={openView}
       onRoleChange={(role: MvpRoleLens) => updateSelection({ role, view: "overview" })}
       onRefresh={refresh}
       refreshing={loading}

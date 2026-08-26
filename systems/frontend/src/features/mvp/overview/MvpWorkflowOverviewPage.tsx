@@ -586,7 +586,6 @@ function WorkStatusQueueBoard({
   candidates,
   role,
   selectedAssetId,
-  selectedDetail,
   statusByAssetId,
   assigneeByAssetId,
   onPreview,
@@ -594,15 +593,12 @@ function WorkStatusQueueBoard({
   candidates: WorkOrderCandidate[];
   role: MvpRoleLens;
   selectedAssetId: string | null;
-  selectedDetail: MvpEventDetailModel | null;
   statusByAssetId: Record<string, WorkStatus>;
   assigneeByAssetId: Record<string, string>;
   onPreview: (assetId: string, eventId: string | null) => void;
 }) {
   const items = candidates.map((candidate) => {
-    const candidateClosedLoop = selectedDetail?.event.assetId === candidate.event.assetId ? selectedDetail.closedLoop : null;
-    const status = workStatusFromClosedLoop(candidateClosedLoop)
-      ?? statusByAssetId[candidate.event.assetId]
+    const status = statusByAssetId[candidate.event.assetId]
       ?? workStatusForAsset(candidate.asset, candidate.event);
     return { candidate, status, column: workQueueColumn(status) };
   });
@@ -613,7 +609,7 @@ function WorkStatusQueueBoard({
           <span>{role === "field_operator" ? "현장 작업 큐" : "생산 판단 큐"}</span>
           <strong>작업 상태 큐</strong>
         </div>
-        <small>사이드뷰 처리 버튼과 같은 상태를 공유합니다</small>
+        <small>화면 상태 기준 · 선택 상세 API 상태와 분리</small>
       </header>
       <div className="mvp-work-kanban" role="list">
         {WORK_QUEUE_COLUMNS.map((column) => {
@@ -628,9 +624,7 @@ function WorkStatusQueueBoard({
                 {columnItems.length ? columnItems.map(({ candidate, status }) => {
                   const assetName = candidate.asset ? displayAssetName(candidate.asset) : displayEventAssetName(candidate.event);
                   const lineLabel = candidate.asset?.line || candidate.asset?.cell || candidate.event.line || "라인 미지정";
-                  const candidateClosedLoop = selectedDetail?.event.assetId === candidate.event.assetId ? selectedDetail.closedLoop : null;
-                  const assignee = closedLoopAssignee(candidateClosedLoop) ?? assigneeByAssetId[candidate.event.assetId] ?? candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
-                  const workId = closedLoopWorkIdLabel(candidateClosedLoop);
+                  const assignee = assigneeByAssetId[candidate.event.assetId] ?? candidate.event.assignedEngineer ?? candidate.asset?.assignedEngineer ?? "미배정";
                   const secondary = role === "field_operator"
                     ? `${candidate.suspectedPart} · ${displayPartLabel(candidate.event.assetId, candidate.event.sparePartAvailable)}`
                     : `${lineLabel} · ${DECISION_LABEL[candidate.event.recommendedDecision]}`;
@@ -644,7 +638,7 @@ function WorkStatusQueueBoard({
                       <MvpStatusBadge status={candidate.event.status} />
                       <strong>{assetName}</strong>
                       <small>{secondary}</small>
-                      <span>{WORK_STATUS_LABEL[status]} · {workId} · 담당 {assignee}</span>
+                      <span>{WORK_STATUS_LABEL[status]} · 담당 {assignee}</span>
                     </button>
                   );
                 }) : <p>대기 없음</p>}
@@ -1185,7 +1179,6 @@ export function MvpWorkflowOverviewPage({
         candidates={workOrderCandidates}
         role={role}
         selectedAssetId={selectedAsset?.assetId ?? null}
-        selectedDetail={selectedDetail}
         statusByAssetId={workStatusByAssetId}
         assigneeByAssetId={assigneeByAssetId}
         onPreview={previewInDrawer}

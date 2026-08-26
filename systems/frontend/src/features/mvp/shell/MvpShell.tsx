@@ -1,5 +1,8 @@
 import {
+  Boxes,
+  ClipboardCheck,
   Factory,
+  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -8,14 +11,26 @@ import {
   X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import type { MvpContextModel, MvpRoleLens, MvpView } from "../api/mvpContracts";
+import type { MvpContextModel, MvpDashboardMode, MvpRoleLens, MvpView } from "../api/mvpContracts";
 import { MvpFreshness } from "../components/MvpUi";
 
 const VIEW_LABELS: Record<MvpView, { label: string; description: string }> = {
   overview: { label: "Overview", description: "운영 상황판" },
   objects: { label: "Assets", description: "설비 상태와 근거" },
   operations: { label: "작업요청", description: "처리할 작업" },
-  reports: { label: "Report", description: "공유용 근거 문서" },
+  reports: { label: "Reports", description: "보고서 출력" },
+};
+
+const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: typeof LayoutDashboard }> = [
+  { id: "overview", label: "Overview", description: "운영 상황판", icon: LayoutDashboard },
+  { id: "objects", label: "Assets", description: "설비 상태와 근거", icon: Boxes },
+  { id: "operations", label: "작업요청", description: "처리할 작업", icon: ClipboardCheck },
+  { id: "reports", label: "Reports", description: "보고서 출력", icon: FileText },
+];
+
+const ROLE_LABELS: Record<MvpRoleLens, { label: string; description: string; icon: typeof LayoutDashboard }> = {
+  field_operator: { label: "현장 관리자", description: "점검 요청 · 의심 부품 · 처리 작업", icon: Wrench },
+  process_manager: { label: "생산 관리자", description: "공정 리스크 · 계획 영향 · 진행 현황", icon: Factory },
 };
 
 const ROLE_SCREENS: Array<{ id: MvpRoleLens; label: string; description: string; icon: typeof LayoutDashboard }> = [
@@ -26,7 +41,9 @@ const ROLE_SCREENS: Array<{ id: MvpRoleLens; label: string; description: string;
 export function MvpShell({
   context,
   activeView,
+  dashboard,
   role,
+  onNavigate,
   onRoleChange,
   onRefresh,
   refreshing,
@@ -35,7 +52,9 @@ export function MvpShell({
 }: {
   context: MvpContextModel;
   activeView: MvpView;
+  dashboard: MvpDashboardMode;
   role: MvpRoleLens;
+  onNavigate: (view: MvpView) => void;
   onRoleChange: (role: MvpRoleLens) => void;
   onRefresh: () => void;
   refreshing: boolean;
@@ -43,16 +62,20 @@ export function MvpShell({
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const active = activeView === "overview"
-    ? ROLE_SCREENS.find((item) => item.id === role) ?? ROLE_SCREENS[0]
-    : VIEW_LABELS[activeView];
-  const headingDetail = activeView === "reports"
-    ? "보고서는 top-level 업무가 아니라 선택 설비와 작업의 근거 문서로 확인합니다."
+  const workflowMode = dashboard === "workflow";
+  const roleMeta = ROLE_LABELS[role];
+  const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
+  const headingDetail = workflowMode && activeView === "overview"
+    ? "하나의 업무판에서 상황, 설비 근거, 작업요청을 역할별로 바로 이어갑니다."
+    : activeView === "reports"
+    ? "map-report UI prototype의 보고서 화면과 선택 Event 브리핑을 하나의 사이드탭에서 전환합니다."
     : activeView !== "overview"
-      ? "이 화면은 역할 업무판에서 선택한 항목의 보조 상세 흐름입니다."
+      ? role === "process_manager"
+        ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
+        : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다."
     : role === "process_manager"
-      ? "전체 공정, 위험 셀, 처리할 작업을 한 화면에서 판단합니다."
-      : "점검 요청과 설비 근거를 작업 단위로 확인합니다.";
+      ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
+      : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
   return (
     <main className="mvp-app">
       <header className="mvp-global-header">
@@ -66,6 +89,15 @@ export function MvpShell({
           <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>Canonical V3.1 · {context.datasetVersionId}</strong></div>
         </div>
         <div className="mvp-header-actions">
+          {!workflowMode ? (
+            <label>
+              <span>역할</span>
+              <select value={role} onChange={(event) => onRoleChange(event.target.value as MvpRoleLens)}>
+                <option value="process_manager">생산 관리자</option>
+                <option value="field_operator">현장 담당자</option>
+              </select>
+            </label>
+          ) : null}
           <button type="button" className="mvp-icon-button" onClick={onRefresh} aria-label="데이터 새로고침" disabled={refreshing}><RefreshCw size={17} className={refreshing ? "is-spinning" : ""} /></button>
           <button type="button" className="mvp-icon-button" onClick={() => void onLogout()} aria-label="로그아웃" title="로그아웃"><LogOut size={17} /></button>
           <button type="button" className="mvp-icon-button mvp-mobile-menu" onClick={() => setMobileOpen((current) => !current)} aria-label="메뉴 열기">{mobileOpen ? <X size={19} /> : <Menu size={19} />}</button>
@@ -86,11 +118,15 @@ export function MvpShell({
 
       <div className="mvp-workspace">
         <aside className={`mvp-navigation ${mobileOpen ? "is-open" : ""}`} aria-label="예지보전 화면">
-          <div className="mvp-nav-intro"><span>WORKFLOW</span><strong>상황 → 설비 → 작업</strong><p>Ontology는 뒤에서 관계를 유지하고, 화면은 처리할 업무만 보여줍니다.</p></div>
+          <div className="mvp-nav-intro">
+            <span>{workflowMode ? "WORKFLOW DASHBOARD" : "MENTORING SCOPE"}</span>
+            <strong>{workflowMode ? "역할 → 업무판" : "Dashboard side tabs"}</strong>
+            <p>{workflowMode ? "역할별 화면 안에서 Overview, Assets, 작업요청 흐름을 한 번에 처리합니다." : "Analysis 없이 운영 판단부터 점검 보고까지 연결합니다."}</p>
+          </div>
           <nav>
-            {ROLE_SCREENS.map((item) => {
+            {(workflowMode ? ROLE_SCREENS : NAV_ITEMS).map((item) => {
               const Icon = item.icon;
-              const activeItem = activeView === "overview" && role === item.id;
+              const activeItem = workflowMode ? activeView === "overview" && role === item.id : activeView === item.id;
               return (
                 <button
                   type="button"
@@ -98,7 +134,11 @@ export function MvpShell({
                   className={activeItem ? "is-active" : ""}
                   aria-current={activeItem ? "page" : undefined}
                   onClick={() => {
-                    onRoleChange(item.id);
+                    if (workflowMode) {
+                      onRoleChange(item.id as MvpRoleLens);
+                    } else {
+                      onNavigate(item.id as MvpView);
+                    }
                     setMobileOpen(false);
                   }}
                 >
@@ -108,7 +148,7 @@ export function MvpShell({
               );
             })}
           </nav>
-          <div className="mvp-nav-footnote"><strong>업무 흐름</strong><span>설비, 근거, 작업요청 관계는 각 상세 화면 안에서 연결합니다.</span></div>
+          <div className="mvp-nav-footnote"><strong>{workflowMode ? "업무 흐름" : "Analysis 제외"}</strong><span>{workflowMode ? "역할별 업무판은 하나의 화면에서 설비, 근거, 작업요청을 연결합니다." : "모델 탐색·Canvas·관리자 Surface는 이번 MVP 범위가 아닙니다."}</span></div>
         </aside>
         <section className="mvp-main">
           <header className="mvp-page-heading"><span>{active.label}</span><h1>{active.description}</h1><p>{headingDetail}</p></header>

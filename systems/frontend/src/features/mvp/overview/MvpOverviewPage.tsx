@@ -16,7 +16,6 @@ export function MvpOverviewPage({
   detail,
   detailLoading,
   detailError,
-  onDashboardChange,
   onOpenAsset,
   onPreviewAsset,
   onOpenEvent,
@@ -30,7 +29,6 @@ export function MvpOverviewPage({
   detail: MvpEventDetailModel | null;
   detailLoading: boolean;
   detailError: string | null;
-  onDashboardChange: (dashboard: MvpDashboardMode) => void;
   onOpenAsset: (assetId: string, eventId: string | null) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onOpenEvent: (eventId: string, assetId: string) => void;
@@ -39,10 +37,6 @@ export function MvpOverviewPage({
 }) {
   return (
     <>
-      <div className="mvp-dashboard-switch" role="group" aria-label="Overview dashboard mode">
-        <button type="button" aria-pressed={dashboard === "workflow"} onClick={() => onDashboardChange("workflow")}>작업 흐름 대시보드</button>
-        <button type="button" aria-pressed={dashboard === "classic"} onClick={() => onDashboardChange("classic")}>기본 대시보드</button>
-      </div>
       {dashboard === "classic" ? (
         <MvpClassicOverviewPage
           model={model}
