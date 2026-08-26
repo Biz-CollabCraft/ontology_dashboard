@@ -66,6 +66,7 @@ interface LineImpactSummary {
 
 type DrawerTab = "status" | "action";
 type FactorySlotKind = "cnc" | "compressor";
+type SensorWindowId = "24h" | "7d" | "30d";
 type WorkStatus =
   | "candidate_recommended"
   | "work_requested"
@@ -162,6 +163,12 @@ const WORK_QUEUE_COLUMNS: Array<{ id: WorkQueueColumnId; label: string; detail: 
   { id: "inspection", label: "점검 중", detail: "현장 진행" },
   { id: "observe", label: "관측 대기", detail: "완료 후 확인" },
   { id: "repredict", label: "재예측", detail: "다음 판단" },
+];
+
+const SENSOR_WINDOW_OPTIONS: Array<{ id: SensorWindowId; label: string; hours: number }> = [
+  { id: "24h", label: "24시간", hours: 24 },
+  { id: "7d", label: "7일", hours: 24 * 7 },
+  { id: "30d", label: "30일", hours: 24 * 30 },
 ];
 
 const DERIVED_FEATURE_KEYS = new Set(["temperature_difference_k", "mechanical_power_w", "overstrain_index"]);
@@ -285,8 +292,36 @@ function formatSeriesTime(value: string): string {
   return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function timestampMillis(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function filterSeriesPoints(points: SeriesDatum[], currentObservedAt: string | null | undefined, windowId: SensorWindowId): SeriesDatum[] {
+  const selected = SENSOR_WINDOW_OPTIONS.find((option) => option.id === windowId) ?? SENSOR_WINDOW_OPTIONS[0];
+  const anchor = timestampMillis(currentObservedAt)
+    ?? points.map((point) => timestampMillis(point.observedAt)).filter((time): time is number => time !== null).sort((left, right) => right - left)[0]
+    ?? null;
+  if (anchor === null) return points;
+  const start = anchor - selected.hours * 60 * 60 * 1000;
+  return points.filter((point) => {
+    const observedAt = timestampMillis(point.observedAt);
+    return observedAt === null || observedAt >= start;
+  });
+}
+
+function seriesRangeLabel(points: SeriesDatum[], windowId: SensorWindowId): string {
+  const selected = SENSOR_WINDOW_OPTIONS.find((option) => option.id === windowId) ?? SENSOR_WINDOW_OPTIONS[0];
+  const timestamps = points.map((point) => timestampMillis(point.observedAt)).filter((time): time is number => time !== null).sort((left, right) => left - right);
+  if (timestamps.length < 2) return `${selected.label} 선택 · 제공된 관측 이력 분포`;
+  const hours = Math.max(1, Math.round((timestamps[timestamps.length - 1] - timestamps[0]) / (60 * 60 * 1000)));
+  const provided = hours < 48 ? `${hours}시간` : `${Math.round(hours / 24)}일`;
+  return `${selected.label} 선택 · 제공 ${provided} 이력 분포`;
 }
 
 function percentile(sortedValues: number[], ratio: number): number {
@@ -647,7 +682,7 @@ function WorkflowPrintReport({
   asset: MvpAsset;
   detail: MvpEventDetailModel | null;
   factors: MvpAsset["topFactors"];
-  inspectionTargets: Array<{ factor: MvpAsset["topFactors"][number]; rank: number; location: ReturnType<typeof inspectionLocationForFeature> }>;
+  inspectionTargets: Array<{ factor: MvpAsset["topFactors"][number]; rank: number }>;
   planningImpact: ReturnType<typeof planningImpactFromOperationContext>;
   workStatus: WorkStatus;
   assignee: string;
@@ -681,7 +716,7 @@ function WorkflowPrintReport({
           {inspectionTargets.length ? inspectionTargets.map((target) => (
             <article key={target.factor.id}>
               <b>{target.rank}. {fieldFactorItem(target.factor)}</b>
-              <p>{fieldFactorLocation(target.factor)} · {target.location.note}</p>
+              <p>{fieldFactorLocation(target.factor)} · Backend 점검 위치 계약 연결 후 표시됩니다.</p>
             </article>
           )) : <p>점검 위치 근거는 Backend ViewModel 연결 후 표시됩니다.</p>}
         </section>
@@ -742,18 +777,6 @@ function buildFactoryCellLayout(assets: MvpAsset[], summaries: LineImpactSummary
 function reviewPriorityLabel(summary: LineImpactSummary, detail: MvpEventDetailModel | null): string {
   const hasSelectedAsset = detail ? summary.assets.some((asset) => asset.assetId === detail.event.assetId) : false;
   return hasSelectedAsset ? displayReviewPriority(detail?.reviewPriority?.level) : "검토 우선순위 미제공";
-}
-
-function inspectionLocationForFeature(feature: string): { range: string; note: string; className: string } {
-  const key = feature.toLowerCase();
-  if (key.includes("tool") || key.includes("wear") || key.includes("mold") || key.includes("die")) return { range: "공구대/금형 접촉부", note: "공구 날끝, 금형 접촉부, 마모 흔적 확인", className: "loc-drive-zone" };
-  if (key.includes("vibration")) return { range: "모터-축/벨트-압축부", note: "간헐적 떨림과 체결 풀림 확인", className: "loc-drive-zone" };
-  if (key.includes("pressure")) return { range: "압축부-배관/밸브", note: "압력 변동과 누설 확인", className: "loc-pump-valve" };
-  if (key.includes("voltage") || key.includes("power")) return { range: "모터 전원부", note: "전원 공급과 전압 저하 확인", className: "loc-motor-power" };
-  if (key.includes("torque") || key.includes("rotation") || key.includes("speed")) return { range: "모터-축/벨트", note: "회전 힘 전달과 속도 저하 확인", className: "loc-motor-drive" };
-  if (key.includes("strain") || key.includes("load")) return { range: "프레스 구동부", note: "부하 변동과 과부하 흔적 확인", className: "loc-drive-pump" };
-  if (key.includes("temperature")) return { range: "압축부 고정부", note: "열 상승과 베이스 상태 확인", className: "loc-pump-base" };
-  return { range: "설비 주요 연결부", note: "현장 점검 위치 확인", className: "loc-pump-base" };
 }
 
 export function MvpWorkflowOverviewPage({
@@ -1109,6 +1132,7 @@ function MapReportFeatureSeries({
   title,
   unit,
   points,
+  windowId,
   emptyTitle,
   emptyDetail,
   currentValue,
@@ -1118,6 +1142,7 @@ function MapReportFeatureSeries({
   title: string;
   unit: string | null;
   points: SeriesDatum[];
+  windowId: SensorWindowId;
   emptyTitle: string;
   emptyDetail: string;
   currentValue?: number | string | boolean | null;
@@ -1125,9 +1150,10 @@ function MapReportFeatureSeries({
   primary?: boolean;
 }) {
   const color = title.includes("진동") || title.includes("토크") ? "#a7630c" : "#285fcb";
-  const numericPoints = points.filter((point): point is SeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
+  const visiblePoints = filterSeriesPoints(points, currentObservedAt, windowId);
+  const numericPoints = visiblePoints.filter((point): point is SeriesDatum & { value: number } => typeof point.value === "number" && Number.isFinite(point.value));
   const currentNumericValue = typeof currentValue === "number" && Number.isFinite(currentValue) ? currentValue : null;
-  if (!points.length || !numericPoints.length) {
+  if (!visiblePoints.length || !numericPoints.length) {
     return (
       <section className="asset-series-block">
         <header className="asset-series-heading">
@@ -1151,11 +1177,11 @@ function MapReportFeatureSeries({
   const chartHeight = 282;
   const frame = { left: 64, right: 690, top: 22, bottom: 226 };
   const width = frame.right - frame.left;
-  const totalSlots = points.length + (currentObservedAt ? 1 : 0);
+  const totalSlots = visiblePoints.length + (currentObservedAt ? 1 : 0);
   const height = frame.bottom - frame.top;
   const yAt = (value: number) => frame.bottom - ((value - min) / range) * height;
   const xAt = (index: number) => totalSlots <= 1 ? (frame.left + frame.right) / 2 : frame.left + (width * index) / (totalSlots - 1);
-  const coords = points.map((point, index) => {
+  const coords = visiblePoints.map((point, index) => {
     const x = xAt(index);
     if (typeof point.value !== "number" || !Number.isFinite(point.value)) return { ...point, x, y: null };
     const y = yAt(point.value);
@@ -1186,12 +1212,12 @@ function MapReportFeatureSeries({
   const crossingLabelY = crossing && typeof crossing.y === "number" ? frame.bottom - 10 : null;
   const latestHistory = [...coords].reverse().find((point) => typeof point.value === "number" && typeof point.y === "number");
   const currentTimeLabel = currentObservedAt ? formatSeriesTime(currentObservedAt) : "현재 시간 없음";
-  const currentPoint = currentNumericValue === null || !currentObservedAt ? null : { x: xAt(points.length), y: yAt(currentNumericValue), value: currentNumericValue };
+  const currentPoint = currentNumericValue === null || !currentObservedAt ? null : { x: xAt(visiblePoints.length), y: yAt(currentNumericValue), value: currentNumericValue };
   return (
     <section className={primary ? "asset-series-block is-primary" : "asset-series-block"}>
       <header className="asset-series-heading">
         <div><RotateCcw size={17} /><strong>{title}</strong></div>
-        <span className="asset-baseline-key"><i style={{ background: color }} />최근 24시간 관측 분포</span>
+        <span className="asset-baseline-key"><i style={{ background: color }} />{seriesRangeLabel(visiblePoints, windowId)}</span>
       </header>
       <svg className="asset-series-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`${title} 관측 흐름`}>
         <rect className="asset-chart-frame" x={frame.left} y={frame.top} width={width} height={height} />
@@ -1221,7 +1247,7 @@ function MapReportFeatureSeries({
             ? <circle key={`${point.observedAt}-${point.value}-${index}`} className="asset-quality-marker" cx={point.x} cy={point.y} r="4.4" style={{ fill: color }} />
             : <circle key={`${point.observedAt}-gap-${index}`} className="asset-gap-marker" cx={point.x} cy={frame.bottom} r="4.2" />
           : null)}
-        <text className="asset-chart-axis" x={frame.left} y="252" textAnchor="start">{formatSeriesTime(points[0].observedAt)}</text>
+        <text className="asset-chart-axis" x={frame.left} y="252" textAnchor="start">{formatSeriesTime(visiblePoints[0].observedAt)}</text>
         {currentPoint ? <text className="asset-chart-axis asset-current-axis" x={currentPoint.x} y="252" textAnchor="end">현재 {currentTimeLabel}</text> : null}
         <text className="asset-chart-axis-title" x="376" y="270" textAnchor="middle">시간</text>
       </svg>
@@ -1232,18 +1258,38 @@ function MapReportFeatureSeries({
 function FeatureSeriesCollection({
   title,
   sensors,
+  windowId,
+  onWindowChange,
   emptyTitle,
   emptyDetail,
 }: {
   title: string;
   sensors: ReturnType<typeof sensorSeries>;
+  windowId: SensorWindowId;
+  onWindowChange: (windowId: SensorWindowId) => void;
   emptyTitle: string;
   emptyDetail: string;
 }) {
   const visibleSensors = sensors;
   return (
     <section className="mvp-feature-series-collection" aria-label={title}>
-      <header><LineChart size={14} /><strong>{title}</strong><span>관측 이력 기반</span></header>
+      <header>
+        <LineChart size={14} />
+        <strong>{title}</strong>
+        <div className="asset-window-control" role="group" aria-label="관측 기간 선택">
+          {SENSOR_WINDOW_OPTIONS.map((option) => (
+            <button
+              type="button"
+              key={option.id}
+              className={option.id === windowId ? "is-active" : ""}
+              onClick={() => onWindowChange(option.id)}
+              aria-pressed={option.id === windowId}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </header>
       {sensors.length ? (
         <>
           {visibleSensors.map((sensor) => (
@@ -1252,6 +1298,7 @@ function FeatureSeriesCollection({
               title={sensor.label}
               unit={sensor.unit}
               points={sensor.points}
+              windowId={windowId}
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
               primary={PRIMARY_FIELD_SENSOR_KEYS.has(sensor.id)}
@@ -1265,7 +1312,7 @@ function FeatureSeriesCollection({
   );
 }
 
-function DerivedMetricSlots({ sensors }: { sensors: ReturnType<typeof sensorSeries> }) {
+function DerivedMetricSlots({ sensors, windowId }: { sensors: ReturnType<typeof sensorSeries>; windowId: SensorWindowId }) {
   const derivedSensors = sensors.filter((sensor) => DERIVED_FEATURE_KEYS.has(sensor.id));
   return (
     <details className="mvp-derived-metric-dropdown" aria-label="파생 지표 관측 흐름">
@@ -1278,6 +1325,7 @@ function DerivedMetricSlots({ sensors }: { sensors: ReturnType<typeof sensorSeri
               title={sensor.label}
               unit={sensor.unit}
               points={sensor.points}
+              windowId={windowId}
               currentValue={sensor.currentValue}
               currentObservedAt={sensor.currentObservedAt}
               emptyTitle="관측 이력 없음"
@@ -1339,14 +1387,13 @@ function AssetPreviewPanel({
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
+  const [sensorWindow, setSensorWindow] = useState<SensorWindowId>("24h");
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets = factors.slice(0, 3).map((factor, index) => ({
     factor,
     rank: index + 1,
-    location: inspectionLocationForFeature(factor.feature),
   }));
-  const fallbackInspectionLocation = inspectionLocationForFeature(asset?.predictedFailureType ?? "");
   const factoryAssetName = factorySlotPreview ? displayFactorySlotName(factorySlotPreview.slot, factorySlotPreview.cell) : null;
   const assetDisplayName = asset ? factoryAssetName ?? displayAssetName(asset) : "선택된 설비 없음";
   const outputReport = (reportTab: MvpReportTab) => {
@@ -1527,21 +1574,18 @@ function AssetPreviewPanel({
 
           {role === "field_operator" && activeTab === "status" ? (
             <>
-              <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검할 설비 부품">
-                <header><Wrench size={14} /><strong>점검할 설비 · 부품</strong><span>점검 요청 블록</span></header>
-                <div className="equipment-sketch" aria-label="점검 위치 안내">
+              <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검 근거">
+                <header><Wrench size={14} /><strong>점검 근거</strong><span>위치 근거 미제공</span></header>
+                <div className="equipment-sketch" aria-label="설비 참고도">
                   <div className="compressor-visual" aria-hidden="true">
                     <span className="vibration-zone" /><span className="pipe pipe-1" /><span className="pipe pipe-2" /><span className="pipe pipe-3" /><span className="pipe pipe-4" />
                     <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
-                    {inspectionTargets.length
-                      ? inspectionTargets.map((target) => <mark key={target.factor.id} className={`callout ${target.location.className}`}>{target.rank}</mark>)
-                      : <mark className={`callout ${fallbackInspectionLocation.className}`}>!</mark>}
                   </div>
                   <div>
                     <strong>{candidate?.suspectedPart ?? (factors[0] ? fieldFactorItem(factors[0]) : fieldFailureLabel(asset.predictedFailureType))}</strong>
                     <ul className="sketch-legend">
                       {inspectionTargets.length ? inspectionTargets.map((target) => (
-                        <li key={target.factor.id}><b>{target.rank}</b>{fieldFactorLocation(target.factor)}: {target.location.note}</li>
+                        <li key={target.factor.id}><b>{target.rank}</b>{fieldFactorLocation(target.factor)}: Backend 점검 위치 계약 연결 후 표시</li>
                       )) : <li><b>!</b>점검 위치: 부품 근거 없음</li>}
                     </ul>
                   </div>
@@ -1558,7 +1602,7 @@ function AssetPreviewPanel({
                   ) : (
                     <article>
                       <b>!</b><i><Wrench size={18} /></i>
-                      <div><strong>{candidate?.suspectedPart ?? fieldFailureLabel(asset.predictedFailureType)}</strong><p>현장 점검 위치 확인이 필요합니다.</p></div>
+                      <div><strong>{candidate?.suspectedPart ?? fieldFailureLabel(asset.predictedFailureType)}</strong><p>점검 위치 근거가 제공되지 않았습니다.</p></div>
                       <span className="target-severity high">근거 부족</span>
                     </article>
                   )}
@@ -1575,10 +1619,12 @@ function AssetPreviewPanel({
                 <FeatureSeriesCollection
                   title="센서 관측 흐름"
                   sensors={directFeatureSnapshots}
+                  windowId={sensorWindow}
+                  onWindowChange={setSensorWindow}
                   emptyTitle="센서 이력 없음"
                   emptyDetail="현재 화면 데이터에는 표시할 센서 관측 이력이 없습니다."
                 />
-                <DerivedMetricSlots sensors={featureSnapshots} />
+                <DerivedMetricSlots sensors={featureSnapshots} windowId={sensorWindow} />
               </section>
             </>
           ) : null}

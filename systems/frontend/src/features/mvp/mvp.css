@@ -560,6 +560,10 @@
 .mvp-side-map-report .asset-series-heading > span { color: var(--mvp-dim); font-size: 11px; font-weight: 900; }
 .mvp-side-map-report .asset-baseline-key { display: inline-flex; align-items: center; gap: 6px; }
 .mvp-side-map-report .asset-baseline-key i { width: 18px; height: 8px; border: 1px solid currentColor; opacity: .18; }
+.mvp-side-map-report .asset-window-control { display: inline-flex; align-items: center; gap: 3px; padding: 2px; border: 1px solid rgba(181,196,214,.12); border-radius: 6px; background: rgba(255,255,255,.024); }
+.mvp-side-map-report .asset-window-control button { min-width: 42px; min-height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--mvp-dim); font-size: 10px; font-weight: 900; cursor: pointer; }
+.mvp-side-map-report .asset-window-control button:hover,
+.mvp-side-map-report .asset-window-control button.is-active { background: rgba(76,144,240,.16); color: var(--mvp-text); }
 .mvp-side-map-report .asset-series-chart { display: block; width: 100%; height: auto; min-height: 150px; background: #121922; }
 .mvp-side-map-report .asset-chart-frame { fill: #151d27; stroke: rgba(181,196,214,.16); }
 .mvp-side-map-report .asset-chart-grid { stroke: rgba(181,196,214,.16); stroke-width: 1; }
