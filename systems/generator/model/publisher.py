@@ -15,22 +15,74 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import hashlib
 import joblib
 import jsonschema
 
 from systems.generator.generator_config import PATHS
 from systems.generator.file_integrity import compute_file_sha256
-from systems.generator.app.training.training_exception import (
-    ModelActivationCommitError,
-    ModelActivationInProgressError,
-    ModelActivationTargetInvalidError,
-    ModelActivationTargetNotFoundError,
-    ModelActivationVerifyError,
-    ModelArtifactConflictError,
-    ModelArtifactPublishError,
-    ModelArtifactValidationError,
-    TrainingContractError,
-)
+class TrainingError(Exception):
+    """Base exception for Generator domain training and model publishing operations."""
+
+    status_code: int = 500
+    code: str = "TRAINING_ERROR"
+
+    def __init__(self, message: str, details: list[Any] | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.details = details or []
+
+
+class ModelPublishError(TrainingError):
+    """Base exception for Model Artifact publishing and activation."""
+
+    code = "MODEL_PUBLISH_ERROR"
+
+
+class ModelArtifactConflictError(TrainingError):
+    status_code = 409
+    code = "MODEL_ARTIFACT_CONFLICT"
+
+
+class ModelArtifactValidationError(TrainingError):
+    status_code = 422
+    code = "MODEL_ARTIFACT_VALIDATION_ERROR"
+
+
+class ModelArtifactPublishError(TrainingError):
+    status_code = 500
+    code = "MODEL_ARTIFACT_PUBLISH_ERROR"
+
+
+class ModelActivationInProgressError(TrainingError):
+    status_code = 409
+    code = "MODEL_LATEST_UPDATE_IN_PROGRESS"
+
+
+class ModelActivationTargetNotFoundError(TrainingError):
+    status_code = 404
+    code = "MODEL_LATEST_TARGET_NOT_FOUND"
+
+
+class ModelActivationTargetInvalidError(TrainingError):
+    status_code = 422
+    code = "MODEL_LATEST_TARGET_INVALID"
+
+
+class ModelActivationCommitError(TrainingError):
+    status_code = 500
+    code = "MODEL_LATEST_UPDATE_FAILED"
+
+
+class ModelActivationVerifyError(TrainingError):
+    status_code = 500
+    code = "MODEL_LATEST_VERIFY_FAILED"
+
+
+class TrainingContractError(TrainingError):
+    status_code = 422
+    code = "TRAINING_CONTRACT_ERROR"
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +92,348 @@ ARTIFACT_TYPE = "predictive_maintenance_model"
 ARTIFACT_SCHEMA_VERSION = "model-artifact-v1.0"
 REQUIRED_ARTIFACT_ROLES = ("model", "feature_schema", "label_schema", "history_requirement", "metrics")
 OFFICIAL_SCHEMA_PATH = Path("contracts/schemas/model-artifact.schema.json")
+
+
+class ModelArtifactContractValidationError(ValueError):
+    """Common exception raised when a Model Artifact fails contract or integrity validation."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        details: list[dict[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.reason = reason
+        self.details = details or []
+
+
+@dataclass
+class ValidatedModelArtifact:
+    """Validated model artifact snapshot metadata and loaded payloads."""
+
+    model_id: str
+    model_version: str
+    artifact_dir: Path
+    manifest: dict[str, Any]
+    manifest_checksum: str
+    feature_schema: dict[str, Any]
+    label_schema: dict[str, Any]
+    history_requirement: dict[str, Any]
+    metrics: dict[str, Any]
+    model: Any | None = None
+
+    def __getitem__(self, key: str) -> Any:
+        if hasattr(self, key):
+            return getattr(self, key)
+        if isinstance(self.manifest, dict) and key in self.manifest:
+            return self.manifest[key]
+        raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
+def validate_model_artifact(
+    artifact_dir: Path | str,
+    *,
+    expected_model_id: str | None = None,
+    expected_model_version: str | None = None,
+    load_model: bool = True,
+    artifacts_root: Path | str | None = None,
+    manifest_dict: dict[str, Any] | None = None,
+) -> ValidatedModelArtifact:
+    """Validate a local Model Artifact package against official contract and integrity rules."""
+    path_str = str(artifact_dir).replace("\\", "/")
+
+    # 1. Path unsupported / security checks
+    if any(path_str.startswith(scheme) for scheme in ("http://", "https://", "s3://", "file://", "ftp://")):
+        raise ModelArtifactContractValidationError(
+            f"외부 URI 아티팩트 경로는 현재 지원되지 않습니다: '{path_str}'",
+            reason="external_uri_unsupported",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "external_uri_unsupported"}],
+        )
+
+    if ".." in path_str.split("/"):
+        raise ModelArtifactContractValidationError(
+            f"아티팩트 경로에 상위 이동('..') 문자가 포함되어 있어 지원되지 않습니다: '{path_str}'",
+            reason="path_traversal",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_traversal"}],
+        )
+
+    target_dir = Path(artifact_dir)
+
+    if artifacts_root is not None:
+        root_dir = Path(artifacts_root).resolve()
+        try:
+            resolved_target = target_dir.resolve()
+            if not resolved_target.is_relative_to(root_dir):
+                raise ModelArtifactContractValidationError(
+                    f"아티팩트 경로가 지정된 루트 디렉터리를 벗어났습니다: '{target_dir}' (root: '{root_dir}')",
+                    reason="path_outside_root",
+                    details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_outside_root"}],
+                )
+        except (ValueError, OSError) as exc:
+            raise ModelArtifactContractValidationError(
+                f"아티팩트 경로 검증 실패: {exc}",
+                reason="path_outside_root",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_resolution_failed"}],
+            ) from exc
+
+    manifest_file = target_dir / "manifest.json"
+    if manifest_dict is not None:
+        manifest_data = manifest_dict
+    else:
+        if not target_dir.exists() or not target_dir.is_dir():
+            raise ModelArtifactContractValidationError(
+                f"Model Artifact 디렉터리가 존재하지 않습니다: {target_dir}",
+                reason="artifact_not_found",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "artifact_dir_not_found"}],
+            )
+
+        if not manifest_file.exists() or not manifest_file.is_file():
+            raise ModelArtifactContractValidationError(
+                f"아티팩트 manifest.json이 누락되었습니다: {manifest_file}",
+                reason="manifest_missing",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "manifest_missing"}],
+            )
+
+        try:
+            with open(manifest_file, "r", encoding="utf-8") as mf:
+                manifest_data = json.load(mf)
+        except Exception as exc:
+            raise ModelArtifactContractValidationError(
+                f"manifest.json 파싱 실패: {exc}",
+                reason="manifest_json_parse_failed",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "manifest_json_parse_failed"}],
+            ) from exc
+
+    # 2. Official JSON Schema validation
+    schema_cand = OFFICIAL_SCHEMA_PATH
+    if not schema_cand.is_file():
+        schema_cand = Path.cwd() / OFFICIAL_SCHEMA_PATH
+
+    if not schema_cand.is_file():
+        raise ModelArtifactContractValidationError(
+            f"공식 Model Artifact Schema를 찾을 수 없습니다: {schema_cand}",
+            reason="official_schema_missing",
+            details=[{"schema_path": str(schema_cand)}],
+        )
+
+    try:
+        schema_data = json.loads(schema_cand.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ModelArtifactContractValidationError(
+            f"공식 Model Artifact Schema 파싱 실패: {exc}",
+            reason="official_schema_parse_failed",
+            details=[{"schema_path": str(schema_cand)}],
+        ) from exc
+
+    try:
+        jsonschema.validate(instance=manifest_data, schema=schema_data)
+    except jsonschema.ValidationError as exc:
+        raise ModelArtifactContractValidationError(
+            f"공식 Model Artifact Manifest 스키마 검증 실패: {exc.message}",
+            reason="manifest_schema_invalid",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "error": exc.message}],
+        ) from exc
+
+    # 3. Manifest required fields check
+    for key in ("model_id", "model_version", "artifact_files"):
+        if key not in manifest_data or manifest_data[key] is None or manifest_data[key] == "":
+            raise ModelArtifactContractValidationError(
+                f"manifest.json에 필수 키 '{key}'가 누락되었습니다.",
+                reason=f"manifest_field_missing:{key}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": f"manifest_field_missing:{key}"}],
+            )
+
+    # 4. model_id & model_version match if expected
+    actual_model_id = manifest_data.get("model_id")
+    actual_model_version = manifest_data.get("model_version")
+    if expected_model_id and actual_model_id != expected_model_id:
+        raise ModelArtifactContractValidationError(
+            f"manifest.json의 model_id 불일치 ({actual_model_id} vs {expected_model_id})",
+            reason="model_id_version_mismatch",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "model_id_mismatch"}],
+        )
+    if expected_model_version and actual_model_version != expected_model_version:
+        raise ModelArtifactContractValidationError(
+            f"manifest.json의 model_version 불일치 ({actual_model_version} vs {expected_model_version})",
+            reason="model_id_version_mismatch",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "model_version_mismatch"}],
+        )
+
+    # 5. Schema version check (must exist and be allowed)
+    schema_ver = manifest_data.get("artifact_schema_version") or manifest_data.get("schema_version")
+    if not schema_ver:
+        raise ModelArtifactContractValidationError(
+            "manifest.json에 artifact_schema_version / schema_version이 누락되었습니다.",
+            reason="schema_version_missing",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "schema_version_missing"}],
+        )
+
+    allowed_schema_versions = {"1.0", "1.0.0", "v1", "model-artifact-v1.0"}
+    if schema_ver not in allowed_schema_versions:
+        raise ModelArtifactContractValidationError(
+            f"지원되지 않는 Artifact Schema version 입니다: '{schema_ver}'",
+            reason="schema_version_unsupported",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "schema_version_unsupported"}],
+        )
+
+    # 6. Check artifact_files array & roles & path resolution bounds
+    artifact_files = manifest_data.get("artifact_files", [])
+    if not isinstance(artifact_files, list):
+        raise ModelArtifactContractValidationError(
+            "manifest.json의 artifact_files 필드가 배열 형태가 아닙니다.",
+            reason="artifact_files_not_list",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "artifact_files_not_list"}],
+        )
+
+    root_resolved = target_dir.resolve()
+    seen_roles: set[str] = set()
+    seen_paths: set[str] = set()
+    for entry in artifact_files:
+        if not isinstance(entry, dict):
+            raise ModelArtifactContractValidationError(
+                "artifact_files 항목은 객체여야 합니다.",
+                reason="artifact_file_not_dict",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "artifact_file_not_dict"}],
+            )
+        role = entry.get("role")
+        rel_path = entry.get("path")
+        expected_sha = entry.get("sha256")
+        if not role or not rel_path or not expected_sha:
+            raise ModelArtifactContractValidationError(
+                f"Role 항목 필수 필드 누락: {entry}",
+                reason="role_entry_field_missing",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "role_entry_field_missing"}],
+            )
+
+        norm_role = "model" if role == "model_artifact" else role
+        if norm_role in seen_roles:
+            raise ModelArtifactContractValidationError(
+                f"manifest artifact_files에 role 중복 발견: '{role}'",
+                reason="role_duplicated",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "role_duplicated"}],
+            )
+        if rel_path in seen_paths:
+            raise ModelArtifactContractValidationError(
+                f"manifest artifact_files에 path 중복 발견: '{rel_path}'",
+                reason="path_duplicated",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_duplicated"}],
+            )
+        if ".." in rel_path or Path(rel_path).is_absolute():
+            raise ModelArtifactContractValidationError(
+                f"Role '{role}'의 path에 비정상 경로가 포함되어 있습니다: '{rel_path}'",
+                reason="invalid_relative_path",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "invalid_relative_path"}],
+            )
+
+        target_file = target_dir / rel_path
+        try:
+            target_file_resolved = target_file.resolve()
+            if not target_file_resolved.is_relative_to(root_resolved):
+                raise ModelArtifactContractValidationError(
+                    f"선언된 아티팩트 파일 경로가 디렉터리 루트를 벗어났습니다: '{rel_path}'",
+                    reason="path_outside_root",
+                    details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_outside_root"}],
+                )
+        except (ValueError, OSError) as exc:
+            raise ModelArtifactContractValidationError(
+                f"선언된 아티팩트 파일 경로 검증 실패 ('{rel_path}'): {exc}",
+                reason="path_outside_root",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_resolution_failed"}],
+            ) from exc
+
+        if not target_file.exists() or not target_file.is_file():
+            raise ModelArtifactContractValidationError(
+                f"선언된 아티팩트 파일이 존재하지 않습니다: {target_file}",
+                reason="declared_file_missing",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "declared_file_missing"}],
+            )
+
+        actual_sha = compute_file_sha256(target_file)
+        if actual_sha != expected_sha:
+            raise ModelArtifactContractValidationError(
+                f"아티팩트 파일 체크섬 불일치 ({rel_path}): 기대값={expected_sha}, 실제={actual_sha}",
+                reason="checksum_mismatch",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "checksum_mismatch"}],
+            )
+
+        seen_roles.add(norm_role)
+        seen_paths.add(rel_path)
+
+    required_roles = {"model", "feature_schema", "label_schema", "history_requirement", "metrics"}
+    missing_roles = required_roles - seen_roles
+    if missing_roles:
+        raise ModelArtifactContractValidationError(
+            f"manifest artifact_files에 필수 role이 누락되었습니다: {missing_roles}",
+            reason="required_role_missing",
+            details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "required_role_missing"}],
+        )
+
+    # 7. Verify 4 JSON files parse successfully
+    req_json_files = ["feature_schema.json", "label_schema.json", "history_requirement.json", "metrics.json"]
+    parsed_jsons: dict[str, dict[str, Any]] = {}
+    for jf in req_json_files:
+        jpath = target_dir / jf
+        if not jpath.is_file():
+            raise ModelArtifactContractValidationError(
+                f"필수 페이로드 파일 누락 ({jf}): {jpath}",
+                reason=f"payload_file_missing:{jf}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": f"payload_file_missing:{jf}"}],
+            )
+        try:
+            with open(jpath, "r", encoding="utf-8") as f:
+                parsed_jsons[jf] = json.load(f)
+        except Exception as exc:
+            raise ModelArtifactContractValidationError(
+                f"페이로드 JSON 파일 파싱 실패 ({jf}): {exc}",
+                reason=f"json_parse_failed:{jf}",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": f"json_parse_failed:{jf}"}],
+            ) from exc
+
+    # 8. Verify model.joblib loads successfully if load_model=True
+    loaded_model_obj: Any | None = None
+    if load_model:
+        model_file = target_dir / "model.joblib"
+        if not model_file.is_file():
+            raise ModelArtifactContractValidationError(
+                f"필수 모델 파일 누락 (model.joblib): {model_file}",
+                reason="model_file_missing",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "model_file_missing"}],
+            )
+        try:
+            loaded_model_obj = joblib.load(model_file)
+        except Exception as exc:
+            raise ModelArtifactContractValidationError(
+                f"모델 파일 joblib.load() 로드 실패: {exc}",
+                reason="joblib_load_failed",
+                details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "joblib_load_failed"}],
+            ) from exc
+
+    if manifest_file.is_file():
+        manifest_checksum = compute_file_sha256(manifest_file)
+    else:
+        manifest_bytes = json.dumps(manifest_data, sort_keys=True).encode("utf-8")
+        manifest_checksum = hashlib.sha256(manifest_bytes).hexdigest()
+    return ValidatedModelArtifact(
+        model_id=actual_model_id,
+        model_version=actual_model_version,
+        artifact_dir=target_dir,
+        manifest=manifest_data,
+        manifest_checksum=manifest_checksum,
+        feature_schema=parsed_jsons["feature_schema.json"],
+        label_schema=parsed_jsons["label_schema.json"],
+        history_requirement=parsed_jsons["history_requirement.json"],
+        metrics=parsed_jsons["metrics.json"],
+        model=loaded_model_obj,
+    )
 
 
 @dataclass(frozen=True)
@@ -238,51 +632,20 @@ class ModelArtifactPublisher:
             return str(path).replace("\\", "/")
 
     def validate_manifest(self, manifest: dict[str, Any], artifact_dir: Path) -> None:
-        """Strictly validate manifest structure, payload roles, relative paths, and checksums."""
-        # 1. JSON Schema validation against official schema
-        schema = self._get_official_schema()
+        """Strictly validate manifest structure, payload roles, relative paths, and checksums using common validator."""
+        model_id = manifest.get("model_id") if isinstance(manifest, dict) else None
+        model_version = manifest.get("model_version") if isinstance(manifest, dict) else None
         try:
-            jsonschema.validate(instance=manifest, schema=schema)
-        except jsonschema.ValidationError as exc:
-            raise ModelArtifactValidationError(f"Model Artifact Manifest 스키마 검증 실패: {exc.message}") from exc
-
-        # 2. Check artifact_files array
-        artifact_files = manifest.get("artifact_files", [])
-        if not isinstance(artifact_files, list):
-            raise ModelArtifactValidationError("artifact_files는 배열 구조여야 합니다.")
-
-        seen_roles: set[str] = set()
-        seen_paths: set[str] = set()
-        for item in artifact_files:
-            if not isinstance(item, dict):
-                raise ModelArtifactValidationError("artifact_files 항목은 객체여야 합니다.")
-            role = item.get("role")
-            rel_path_str = item.get("path")
-            expected_sha = item.get("sha256")
-            if not role or not rel_path_str or not expected_sha:
-                raise ModelArtifactValidationError(f"Role 항목에 필수 필드 누락: {item}")
-            if role in seen_roles:
-                raise ModelArtifactValidationError(f"Manifest artifact_files에 role 중복 발견: '{role}'")
-            if rel_path_str in seen_paths:
-                raise ModelArtifactValidationError(f"Manifest artifact_files에 path 중복 발견: '{rel_path_str}'")
-            if ".." in rel_path_str or Path(rel_path_str).is_absolute():
-                raise ModelArtifactValidationError(f"Role '{role}'의 path에 비정상 경로 감지: '{rel_path_str}'")
-
-            target_file = artifact_dir / rel_path_str
-            if not target_file.exists() or not target_file.is_file():
-                raise ModelArtifactValidationError(f"Role '{role}'의 선언된 파일이 존재하지 않습니다: {target_file}")
-
-            actual_sha = compute_file_sha256(target_file)
-            if actual_sha != expected_sha:
-                raise ModelArtifactValidationError(
-                    f"Role '{role}' 파일 체크섬 불일치 ({rel_path_str}): 기대값={expected_sha}, 실제={actual_sha}"
-                )
-            seen_roles.add(role)
-            seen_paths.add(rel_path_str)
-
-        for role in REQUIRED_ARTIFACT_ROLES:
-            if role not in seen_roles:
-                raise ModelArtifactValidationError(f"Manifest artifact_files에 필수 role 누락: '{role}'")
+            validate_model_artifact(
+                artifact_dir=artifact_dir,
+                expected_model_id=model_id,
+                expected_model_version=model_version,
+                load_model=False,
+                artifacts_root=None,
+                manifest_dict=manifest,
+            )
+        except ModelArtifactContractValidationError as exc:
+            raise ModelArtifactValidationError(exc.message) from exc
 
     def publish_artifact(
         self,

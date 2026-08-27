@@ -36,7 +36,7 @@ from systems.generator.app.preprocessing.preprocessing_repository import (
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = (".csv", ".xlsx", ".xls")
+SUPPORTED_EXTENSIONS = (".csv", ".xlsx", ".xls", ".jsonl")
 _last_plans: dict[str, Any] = {}
 
 
@@ -61,8 +61,11 @@ def preprocess_with_plan(filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
         df = pd.read_csv(filepath)
     elif ext in (".xlsx", ".xls"):
         df = pd.read_excel(filepath)
+    elif ext == ".jsonl":
+        df = pd.read_json(filepath, lines=True)
     else:
         raise DatasetContractError(f"지원하지 않는 파일 형식입니다: {ext}")
+
 
     if df.empty or len(df.columns) == 0:
         raise DatasetContractError("데이터셋이 비어 있거나 유효한 컬럼이 없습니다.")
@@ -264,6 +267,10 @@ class PreprocessingService:
     ) -> None:
         self.planner = planner or PreprocessingPlanner()
         self.repository = repository or PreprocessingRepository()
+
+    def preprocess_with_plan(self, filepath: str, plan: dict[str, Any]) -> pd.DataFrame:
+        """Execute dataframe loading and transformation based on the validated preprocessing plan."""
+        return preprocess_with_plan(filepath, plan)
 
     def _resolve_dataset_path(self, request: PreprocessingRequest) -> Path:
         """Resolve dataset_id / dataset_version / source_uri to a concrete readable file path."""

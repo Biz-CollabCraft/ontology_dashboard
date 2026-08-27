@@ -5,16 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 
-class TrainingError(Exception):
-    """Base exception for Generator Training domain."""
-
-    status_code: int = 500
-    code: str = "TRAINING_ERROR"
-
-    def __init__(self, message: str, details: list[Any] | None = None) -> None:
-        super().__init__(message)
-        self.message = message
-        self.details = details or []
+from systems.generator.model.publisher import (
+    TrainingError,
+    ModelPublishError,
+)
 
 
 class TrainingInputNotFoundError(TrainingError):
@@ -73,60 +67,16 @@ class TrainingDependencyError(TrainingError):
     code = "TRAINING_DEPENDENCY_ERROR"
 
 
-class ModelArtifactConflictError(TrainingError):
-    """Raised when attempting to overwrite an existing immutable model version."""
-
-    status_code = 409
-    code = "MODEL_ARTIFACT_CONFLICT"
-
-
-class ModelArtifactValidationError(TrainingError):
-    """Raised when generated Model Artifact package fails manifest or checksum validation."""
-
-    status_code = 422
-    code = "MODEL_ARTIFACT_VALIDATION_ERROR"
-
-
-class ModelArtifactPublishError(TrainingError):
-    """Raised when atomic publishing of Model Artifact package fails."""
-
-    status_code = 500
-    code = "MODEL_ARTIFACT_PUBLISH_ERROR"
-
-
-class ModelActivationInProgressError(TrainingError):
-    """Raised when an update lock for the model_id cannot be acquired."""
-
-    status_code = 409
-    code = "MODEL_LATEST_UPDATE_IN_PROGRESS"
-
-
-class ModelActivationTargetNotFoundError(TrainingError):
-    """Raised when target model version artifact does not exist during pointer update."""
-
-    status_code = 404
-    code = "MODEL_LATEST_TARGET_NOT_FOUND"
-
-
-class ModelActivationTargetInvalidError(TrainingError):
-    """Raised when target model version artifact fails validation during pointer update."""
-
-    status_code = 422
-    code = "MODEL_LATEST_TARGET_INVALID"
-
-
-class ModelActivationCommitError(TrainingError):
-    """Raised when atomic replacement of latest.json fails."""
-
-    status_code = 500
-    code = "MODEL_LATEST_UPDATE_FAILED"
-
-
-class ModelActivationVerifyError(TrainingError):
-    """Raised when read-back verification of latest.json fails."""
-
-    status_code = 500
-    code = "MODEL_LATEST_VERIFY_FAILED"
+from systems.generator.model.publisher import (
+    ModelActivationCommitError,
+    ModelActivationInProgressError,
+    ModelActivationTargetInvalidError,
+    ModelActivationTargetNotFoundError,
+    ModelActivationVerifyError,
+    ModelArtifactConflictError,
+    ModelArtifactPublishError,
+    ModelArtifactValidationError,
+)
 
 
 # Aliases for latest pointer naming

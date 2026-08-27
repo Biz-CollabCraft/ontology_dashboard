@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/generator-pipeline-run-state.schema.json",
+  "title": "GeneratorPipelineRunState",
+  "type": "object",
+  "required": [
+    "run_id",
+    "job_id",
+    "status",
+    "source_ref",
+    "stages",
+    "prediction_results",
+    "errors"
+  ],
+  "properties": {
+    "run_id": { "type": "string", "minLength": 1 },
+    "job_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "queued", "running", "succeeded", "succeeded_with_cleanup_warning", "partially_succeeded", "failed"]
+    },
+    "current_stage": { "type": ["string", "null"] },
+    "source_ref": {
+      "type": "object",
+      "required": ["uri", "sha256"],
+      "properties": {
+        "uri": { "type": "string" },
+        "sha256": { "type": "string" },
+        "role": { "type": "string" },
+        "size_bytes": { "type": ["integer", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "attempt"],
+        "properties": {
+          "stage_name": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "running", "succeeded", "failed", "skipped"]
+          },
+          "attempt": { "type": "integer", "minimum": 1 },
+          "started_at": { "type": ["string", "null"] },
+          "finished_at": { "type": ["string", "null"] },
+          "input_refs": { "type": "array" },
+          "output_refs": { "type": "array" },
+          "error_code": { "type": ["string", "null"] },
+          "error_message": { "type": ["string", "null"] },
+          "retryable": { "type": ["boolean", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "prediction_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "asset_id",
+          "model_id",
+          "model_version",
+          "status",
+          "observed_at",
+          "score_type",
+          "score_source"
+        ],
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
+          "model_id": { "type": "string", "minLength": 1 },
+          "model_version": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["succeeded", "failed", "unknown"] },
+          "observed_at": { "type": "string", "format": "date-time" },
+          "score_type": { "type": ["string", "null"] },
+          "score_source": {
+            "type": ["string", "null"],
+            "enum": ["predict_proba", "decision_function_compat", "predict_compat", null]
+          },
+          "score": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 },
+          "artifact_ref": {
+            "type": ["object", "null"],
+            "properties": {
+              "uri": { "type": "string" },
+              "sha256": { "type": "string" },
+              "role": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "feature_ref": {
+            "type": ["object", "null"],
+            "properties": {
+              "uri": { "type": "string" },
+              "sha256": { "type": "string" },
+              "role": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "error_code": { "type": ["string", "null"] },
+          "error_message": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "prediction_delivery_status": {
+      "type": ["string", "null"],
+      "enum": ["not_required", "pending", "sent", "failed", null]
+    },
+    "prediction_event_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "prediction_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "asset_id", "status", "attempt", "max_attempts", "updated_at"],
+        "properties": {
+          "event_id": { "type": "string" },
+          "asset_id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "sending", "retry_wait", "sent", "failed"]
+          },
+          "attempt": { "type": "integer", "minimum": 0 },
+          "max_attempts": { "type": "integer", "minimum": 1 },
+          "next_retry_at": { "type": ["string", "null"] },
+          "last_error_code": { "type": ["string", "null"] },
+          "last_error_message": { "type": ["string", "null"] },
+          "updated_at": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "finished_at": { "type": ["string", "null"], "format": "date-time" },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "message", "occurred_at"],
+        "properties": {
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "stage": { "type": "string" },
+          "details": { "type": "array" },
+          "retryable": { "type": "boolean" },
+          "attempt": { "type": "integer" },
+          "occurred_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "last_completed_stage": { "type": ["string", "null"] },
+    "next_stage": { "type": ["string", "null"] },
+    "resume_count": { "type": "integer", "minimum": 0 },
+    "resumed_from_stage": { "type": ["string", "null"] },
+    "checkpoint_status": {
+      "type": ["string", "null"],
+      "enum": ["resumable", "debug_only", "cleanup_pending", "completed", "invalidated", null]
+    },
+    "cleanup_status": {
+      "type": ["string", "null"],
+      "enum": ["not_started", "cleanup_pending", "cleaned", "cleanup_failed", "cleanup_skipped", null]
+    },
+    "intermediate_outputs": { "type": "array" },
+    "checkpoint": { "type": ["object", "null"] },
+    "batch_manifest_ref": { "type": ["object", "null"] },
+    "model_stage_outputs": { "type": "object" },
+    "delivery_outputs": { "type": "object" },
+    "cleanup_deleted_paths": { "type": "array" },
+    "cleanup_failed_paths": { "type": "array" },
+    "model_set_id": { "type": ["string", "null"] },
+    "model_set_version": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

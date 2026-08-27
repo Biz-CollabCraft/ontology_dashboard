@@ -1,12 +1,18 @@
 # ADR-002: Training과 Runtime Prediction 소유권 분리 및 Feature History Execution
 
-- **상태**: Proposed (제안 — 목표 계약)
-- **날짜**: 2026-08-12
-- **결정자**: 팀 공통 (검토 진행 중)
+- **상태**: Superseded (ADR-003에 의해 대체됨)
+- **날짜**: 2026-08-12 (2026-08-25 대체)
+- **결정자**: 팀 공통
+- **대체 문서**: [`ADR-003-generator-runtime-prediction-and-anomaly-signal-ownership.md`](./ADR-003-generator-runtime-prediction-and-anomaly-signal-ownership.md)
+
+> 이 문서는 ADR-003 승인 이전의 역사적 의사결정을 보존한다.
+> 현재 Runtime Prediction 소유권의 규범적 기준으로 사용하지 않는다.
+> 현재 기준은 [`ADR-003-generator-runtime-prediction-and-anomaly-signal-ownership.md`](./ADR-003-generator-runtime-prediction-and-anomaly-signal-ownership.md)이다.
 
 ---
 
 ## 1. 맥락 (Context)
+
 
 - `systems/generator`는 학습과 Model Artifact publish까지만 소유한다. `systems/backend`는 Model Artifact를 로드해 직접 runtime inference를 수행하고, 그 결과로 Product Result Artifact와 Evidence를 생성한다.
 - 그러나 rolling, lag, EMA 등 시계열 피처는 단일 Current Observation만으로 계산할 수 없으므로, Backend가 추론 시 피처를 재현하는 방식에 대한 명확한 결정이 필요하다.
@@ -63,15 +69,14 @@
 
 ---
 
-## 4. 미해결 — 후속 결정 필요
+## 4. 역사적 미해결 논의 — ADR-003 승인 이전 기록
 
-> 이 절은 위 §2(의사결정)의 Decision을 대체하거나 수정하지 않는다. `systems/backend`가
-> Model Artifact를 로드해 직접 runtime inference를 수행한다는 기존 Decision은 그대로
-> 유효하다. 아래는 그 위에 추가될 수 있는 **미해결 대안**일 뿐이며, 확정된
-> 결정이 아니다.
+> 아래 내용은 ADR-003 승인 이전에 미해결 상태였던 논의를 보존한다.
+> ADR-003 승인 이후에는 현재 규범으로 적용하지 않는다.
 
-다음 운영 흐름이 제안되었으나, 위 §2의 Decision과 충돌할 수 있어 이번 Artifact
-계약 확정 과정에서는 임의로 결정하지 않는다.
+다음 운영 흐름이 제안되었으나, 위 §2의 Decision과 충돌할 수 있어 당시 Artifact
+계약 확정 과정에서는 임의로 결정하지 않고 미해결로 남겨두었던 기록이다.
+
 
 ```text
 센서값 주기적 확인
