@@ -194,6 +194,7 @@ def compose_asset_detail_view_model(
     equipment_history: list[dict[str, Any]] | None = None,
     operation_context: dict[str, Any] | None = None,
     closed_loop: dict[str, Any] | None = None,
+    inspection_guidance: dict[str, dict[str, Any]] | None = None,
     data_status: dict[str, Any] | None = None,
     history_window: str = DEFAULT_HISTORY_WINDOW,
 ) -> dict[str, Any]:
@@ -276,7 +277,7 @@ def compose_asset_detail_view_model(
     )
     if priority_gap is not None:
         gaps.append(priority_gap)
-    inspection_targets = _inspection_targets(result_artifact, provenance)
+    inspection_targets = _inspection_targets(result_artifact, provenance, inspection_guidance or {})
 
     return {
         "asset": asset_summary,
@@ -669,6 +670,7 @@ def _maintenance_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[di
 def _inspection_targets(
     result_artifact: dict[str, Any],
     provenance: dict[str, Any],
+    inspection_guidance: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     evidence_payload = result_artifact.get("evidence_payload") or {}
     component_hypotheses = evidence_payload.get("component_hypotheses") or []
@@ -682,22 +684,63 @@ def _inspection_targets(
         if not component_id:
             continue
         basis = item.get("basis") if isinstance(item.get("basis"), list) else []
-        targets.append(
-            {
-                "target_id": f"inspection-target:{artifact_id}:{index + 1}",
-                "component_id": component_id,
-                "component_label": str(item.get("component_label") or component_id),
-                "association": str(item.get("association") or "inspection_candidate"),
-                "location_label": None,
-                "inspection_method": None,
-                "basis_refs": [str(value) for value in basis],
-                "source_ref": f"{evidence_ref}#component_hypotheses[{index}]"
-                if evidence_ref
-                else f"product-result-artifact://{artifact_id}#evidence_payload.component_hypotheses[{index}]",
-                "unavailable_reason": "maintenance_inspection_location_contract_unavailable",
-            }
-        )
+        target = {
+            "target_id": f"inspection-target:{artifact_id}:{index + 1}",
+            "component_id": component_id,
+            "component_label": str(item.get("component_label") or component_id),
+            "association": str(item.get("association") or "inspection_candidate"),
+            "location_label": None,
+            "inspection_method": None,
+            "basis_refs": [str(value) for value in basis],
+            "source_ref": f"{evidence_ref}#component_hypotheses[{index}]"
+            if evidence_ref
+            else f"product-result-artifact://{artifact_id}#evidence_payload.component_hypotheses[{index}]",
+            "unavailable_reason": "maintenance_inspection_location_contract_unavailable",
+        }
+        guidance = inspection_guidance.get(component_id)
+        if guidance:
+            target["inspection_guidance"] = _inspection_guidance(guidance)
+        targets.append(target)
     return targets
+
+
+def _inspection_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
+    source_type = str(guidance.get("source_type") or "")
+    if source_type not in {"demo_sop_fixture", "site_sop"}:
+        raise ValueError(f"unsupported inspection guidance source_type: {source_type}")
+    safety_level = str(guidance.get("safety_level") or "")
+    if safety_level not in {"none", "caution", "permit_required", "shutdown_controlled"}:
+        raise ValueError(f"unsupported inspection guidance safety_level: {safety_level}")
+    return {
+        "source_type": source_type,
+        "sop_id": str(guidance.get("sop_id") or ""),
+        "title": str(guidance.get("title") or ""),
+        "version": str(guidance.get("version") or ""),
+        "reference_location_label": str(guidance.get("reference_location_label") or ""),
+        "suggested_check_method": str(guidance.get("suggested_check_method") or ""),
+        "checklist_draft": [str(item) for item in guidance.get("checklist_draft") or []],
+        "replacement_review_guidance": _replacement_review_guidance(
+            guidance.get("replacement_review_guidance") or {}
+        ),
+        "safety_level": safety_level,
+        "requires_human_approval": bool(guidance.get("requires_human_approval")),
+        "source_ref": str(guidance.get("source_ref") or ""),
+        "disclaimer": str(guidance.get("disclaimer") or ""),
+    }
+
+
+def _replacement_review_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "review_label": str(guidance.get("review_label") or ""),
+        "review_triggers": [str(item) for item in guidance.get("review_triggers") or []],
+        "required_measurements": [
+            str(item) for item in guidance.get("required_measurements") or []
+        ],
+        "human_review_questions": [
+            str(item) for item in guidance.get("human_review_questions") or []
+        ],
+        "decision_boundary": str(guidance.get("decision_boundary") or ""),
+    }
 
 
 def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:

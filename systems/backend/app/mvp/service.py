@@ -68,6 +68,11 @@ class ManufacturingPredictiveMaintenanceService:
             json.loads(path.read_text(encoding="utf-8"))
             for path in operation_context_paths
         ]
+        inspection_sop_paths = sorted((fixture_root / "inspection_sop").glob("*.json"))
+        self.inspection_sops = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in inspection_sop_paths
+        ]
         # Historical Gold regression and manufacturing Ontology projection must
         # remain exactly GS-001..GS-008. Showcase Project fixtures are available
         # through project_fixtures and project-scoped APIs, never this alias.
@@ -201,6 +206,7 @@ class ManufacturingPredictiveMaintenanceService:
             equipment_history=self._equipment_history_for_fixture(fixture),
             operation_context=self._operation_context_for_fixture(fixture, artifact) or fixture.get("operation_context"),
             closed_loop=fixture.get("closed_loop"),
+            inspection_guidance=self._inspection_guidance_for_fixture(fixture, artifact),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
@@ -449,6 +455,66 @@ class ManufacturingPredictiveMaintenanceService:
             }
         return None
 
+    def _inspection_guidance_for_fixture(
+        self,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        equipment = fixture.get("equipment") or {}
+        asset_type = str(equipment.get("asset_type") or artifact.get("asset_type") or "")
+        failure_type = str(artifact.get("predicted_failure_type") or fixture.get("expected", {}).get("predicted_failure_type") or "")
+        risk_grade = str(artifact.get("status_grade") or "")
+        criticality = str(equipment.get("criticality") or "")
+        operation_context = fixture.get("operation_context") or {}
+        production_impact = str(operation_context.get("production_impact") or "")
+        factor_keys = {
+            str(factor.get("feature"))
+            for factor in artifact.get("top_factors") or []
+            if factor.get("feature")
+        }
+        component_hypotheses = (
+            (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
+        )
+        component_ids = {
+            str(item.get("component_id"))
+            for item in component_hypotheses
+            if isinstance(item, dict) and item.get("component_id")
+        }
+        guidance_by_component: dict[str, dict[str, Any]] = {}
+        for sop in self.inspection_sops:
+            if not _is_displayable_inspection_sop(sop):
+                continue
+            if not _matches_any(asset_type, sop.get("asset_types") or []):
+                continue
+            if failure_type and not _matches_any(failure_type, sop.get("failure_modes") or []):
+                continue
+            if factor_keys and factor_keys.isdisjoint({str(item) for item in sop.get("factor_keys") or []}):
+                continue
+            applicability = sop.get("applicability") or {}
+            if risk_grade and not _matches_any(risk_grade, applicability.get("risk_grades") or []):
+                continue
+            if criticality and not _matches_any(criticality, applicability.get("criticality") or []):
+                continue
+            if production_impact and not _matches_any(production_impact, applicability.get("production_impact") or []):
+                continue
+            for component_id in component_ids.intersection({str(item) for item in sop.get("component_ids") or []}):
+                guidance = sop.get("guidance") or {}
+                guidance_by_component[component_id] = {
+                    "source_type": sop["source_kind"],
+                    "sop_id": sop["sop_id"],
+                    "title": sop["title"],
+                    "version": sop["version"],
+                    "reference_location_label": guidance.get("reference_location_label"),
+                    "suggested_check_method": guidance.get("suggested_check_method"),
+                    "checklist_draft": guidance.get("checklist_draft") or [],
+                    "replacement_review_guidance": guidance.get("replacement_review_guidance") or {},
+                    "safety_level": sop["safety_level"],
+                    "requires_human_approval": sop["requires_human_approval"],
+                    "source_ref": f"{sop['source_uri']}#{sop['sop_id']}",
+                    "disclaimer": guidance.get("disclaimer"),
+                }
+        return guidance_by_component
+
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
         evidence = self._projected_legacy_evidence(fixture)
@@ -615,6 +681,19 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
     if estimated_downtime_minutes > 0:
         return "low"
     return "none"
+
+
+def _matches_any(value: str, candidates: list[Any]) -> bool:
+    return value in {str(candidate) for candidate in candidates}
+
+
+def _is_displayable_inspection_sop(sop: dict[str, Any]) -> bool:
+    source_kind = str(sop.get("source_kind") or "")
+    maturity = str(sop.get("maturity") or "")
+    return (
+        (source_kind == "demo_sop_fixture" and maturity == "fixture")
+        or (source_kind == "site_sop" and maturity == "approved")
+    )
 
 
 # Temporary compatibility alias for integrations that still import the historical
