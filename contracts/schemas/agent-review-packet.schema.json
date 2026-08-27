@@ -11,6 +11,7 @@
     "generated_at",
     "risk_summary",
     "review_priority",
+    "sop_retrieval",
     "sop_guidance",
     "human_questions",
     "evidence_gaps",
@@ -44,6 +45,32 @@
         "source_fields": {"type": "array", "items": {"type": "string"}}
       }
     },
+    "sop_retrieval": {
+      "type": "object",
+      "description": "Read-only SOP retrieval metadata. This records the lookup query and provider result count; it is not a mutation authority or repair decision.",
+      "required": ["provider", "query", "top_k", "returned_count", "mutation_allowed"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {"enum": ["local_sop_metadata_retriever"]},
+        "query": {
+          "type": "object",
+          "required": ["asset_type", "failure_mode", "factor_keys", "component_ids", "risk_grade", "criticality", "production_impact"],
+          "additionalProperties": false,
+          "properties": {
+            "asset_type": {"type": "string"},
+            "failure_mode": {"type": "string"},
+            "factor_keys": {"type": "array", "items": {"type": "string"}},
+            "component_ids": {"type": "array", "items": {"type": "string"}},
+            "risk_grade": {"type": "string"},
+            "criticality": {"type": "string"},
+            "production_impact": {"type": "string"}
+          }
+        },
+        "top_k": {"type": "integer"},
+        "returned_count": {"type": "integer"},
+        "mutation_allowed": {"const": false}
+      }
+    },
     "sop_guidance": {
       "type": "array",
       "items": {
@@ -58,6 +85,8 @@
           "checklist_draft",
           "replacement_review_guidance",
           "sensor_judgment",
+          "retrieval_score",
+          "matched_fields",
           "disclaimer",
           "source_ref"
         ],
@@ -72,6 +101,8 @@
           "checklist_draft": {"type": "array", "items": {"type": "string"}},
           "replacement_review_guidance": {"$ref": "#/$defs/replacementReviewGuidance"},
           "sensor_judgment": {"$ref": "#/$defs/sensorJudgment"},
+          "retrieval_score": {"type": "integer", "minimum": 0},
+          "matched_fields": {"type": "array", "items": {"type": "string"}},
           "disclaimer": {"type": "string"},
           "source_ref": {"type": "string"}
         }

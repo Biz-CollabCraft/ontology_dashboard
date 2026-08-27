@@ -20,9 +20,13 @@ def compose_agent_review_packet(
     *,
     project_id: str,
     view_model: dict[str, Any],
-    procedure_groundings: list[dict[str, Any]],
+    sop_retrieval: dict[str, Any],
 ) -> dict[str, Any]:
-    procedures_by_id = {str(item.get("sop_id") or ""): item for item in procedure_groundings}
+    retrieval_results = sop_retrieval.get("results") or []
+    procedures_by_id = {
+        str((item.get("procedure") or {}).get("sop_id") or ""): item
+        for item in retrieval_results
+    }
     sop_guidance = []
     source_refs = []
     human_questions = []
@@ -40,7 +44,8 @@ def compose_agent_review_packet(
         sop_id = str(guidance.get("sop_id") or "")
         if not guidance or not sop_id:
             continue
-        procedure = procedures_by_id.get(sop_id) or {}
+        retrieval_item = procedures_by_id.get(sop_id) or {}
+        procedure = retrieval_item.get("procedure") or {}
         replacement = guidance.get("replacement_review_guidance") or {}
         questions = [str(item) for item in replacement.get("human_review_questions") or []]
         human_questions.extend(questions)
@@ -61,6 +66,10 @@ def compose_agent_review_packet(
                 "checklist_draft": [str(item) for item in guidance.get("checklist_draft") or []],
                 "replacement_review_guidance": replacement,
                 "sensor_judgment": procedure.get("sensor_judgment"),
+                "retrieval_score": retrieval_item.get("retrieval_score", 0),
+                "matched_fields": [
+                    str(item) for item in retrieval_item.get("matched_fields") or []
+                ],
                 "disclaimer": str(guidance.get("disclaimer") or ""),
                 "source_ref": str(guidance.get("source_ref") or ""),
             }
@@ -81,6 +90,13 @@ def compose_agent_review_packet(
             ),
         },
         "review_priority": view_model.get("review_priority"),
+        "sop_retrieval": {
+            "provider": str(sop_retrieval.get("provider") or ""),
+            "query": sop_retrieval.get("query") or {},
+            "top_k": int(sop_retrieval.get("top_k") or 0),
+            "returned_count": int(sop_retrieval.get("returned_count") or 0),
+            "mutation_allowed": False,
+        },
         "sop_guidance": sop_guidance,
         "human_questions": list(dict.fromkeys(human_questions)),
         "evidence_gaps": (view_model.get("evidence") or {}).get("gaps") or [],
