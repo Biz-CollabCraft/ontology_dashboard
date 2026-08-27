@@ -741,9 +741,6 @@
 .mvp-action-placeholder-grid input,
 .mvp-action-placeholder-grid textarea { width: 100%; min-height: 34px; resize: vertical; border: 1px solid rgba(181,196,214,.11); border-radius: 6px; padding: 8px; color: var(--mvp-muted); background: rgba(255,255,255,.018); }
 .mvp-action-placeholder-grid textarea { min-height: 66px; }
-.mvp-agent-review-actions { display: flex; justify-content: flex-start; }
-.mvp-agent-review-actions button { border: 1px solid rgba(76,144,240,.36); border-radius: 5px; padding: 6px 9px; background: var(--mvp-accent-soft); color: #b7d4ff; font-size: 10px; font-weight: 900; }
-.mvp-agent-review-actions button:disabled { opacity: .62; }
 .mvp-agent-review-packet { display: grid; gap: 7px; border-left: 2px solid rgba(76,144,240,.42); padding-left: 8px; }
 .mvp-agent-review-packet header { display: flex; align-items: center; gap: 6px; color: var(--mvp-muted); }
 .mvp-agent-review-packet header strong { color: var(--mvp-text); font-size: 11px; }
