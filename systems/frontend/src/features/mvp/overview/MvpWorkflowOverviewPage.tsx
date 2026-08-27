@@ -322,22 +322,6 @@ function inspectionBasisSummary(target: MvpInspectionTarget): string {
   return uniqueLabels.length ? uniqueLabels.join(", ") : "Evidence 근거 요약 미제공";
 }
 
-function inspectionFactorChips(target: MvpInspectionTarget, factors: MvpAsset["topFactors"]): Array<{ rank: number; label: string }> {
-  const byFeature = new Map(factors.map((factor, index) => [factor.feature, {
-    rank: index + 1,
-    label: displaySensorLabel(factor.feature, factor.label),
-  }]));
-  const chips = target.basisRefs
-    .map((ref) => ref.match(/^factor\.(\d+)\.([A-Za-z0-9_]+)$/))
-    .filter((match): match is RegExpMatchArray => Boolean(match))
-    .map((match) => byFeature.get(match[2]) ?? {
-      rank: Number(match[1]),
-      label: displaySensorLabel(match[2]),
-    });
-  return [...new Map(chips.map((chip) => [`${chip.rank}:${chip.label}`, chip])).values()]
-    .sort((left, right) => left.rank - right.rank);
-}
-
 function inspectionLocationLabel(target: MvpInspectionTarget | null): string {
   if (!target) return "위치 근거 미제공";
   return target.locationLabel ?? target.inspectionGuidance?.referenceLocationLabel ?? "점검 위치 근거 미제공";
@@ -1790,16 +1774,6 @@ function AssetPreviewPanel({
                               </ul>
                               <small>{target.target.inspectionGuidance.replacementReviewGuidance.decisionBoundary}</small>
                             </div>
-                          ) : null}
-                          {target.target && inspectionFactorChips(target.target, factors).length ? (
-                            <ul className="top-factor-chips" aria-label="Top factor 근거">
-                              {inspectionFactorChips(target.target, factors).map((chip) => (
-                                <li key={`${target.target?.targetId}-${chip.rank}-${chip.label}`}>
-                                  <b>{chip.rank}</b>
-                                  <span>{chip.label}</span>
-                                </li>
-                              ))}
-                            </ul>
                           ) : null}
                         </div>
                         <span className="target-severity high">{target.factor ? factorValueLabel(target.factor) : "위치 미제공"}</span>
