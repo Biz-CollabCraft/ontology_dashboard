@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
+
+DEFAULT_HISTORY_WINDOW = "24h"
+HISTORY_WINDOW_HOURS = {
+    "24h": 24,
+    "7d": 24 * 7,
+    "30d": 24 * 30,
+}
 
 FORBIDDEN_FEATURE_SOURCE_MARKERS = (
     "gen_data/",
@@ -58,7 +65,7 @@ class AssetDetailReadPort(Protocol):
         end: datetime,
         dataset_version_id: str | None,
         grain: str,
-    ) -> dict[str, list[dict[str, Any]]]: ...
+    ) -> dict[str, dict[str, Any]]: ...
 
     def runtime_prediction_history(
         self,
@@ -104,6 +111,7 @@ class AssetDetailRequest:
     end: datetime
     dataset_version_id: str | None = None
     grain: str = "raw"
+    history_window: str = DEFAULT_HISTORY_WINDOW
 
 
 class AssetDetailViewModelService:
@@ -173,6 +181,7 @@ class AssetDetailViewModelService:
             runtime_prediction_history=risk_history,
             equipment_history=history,
             data_status=data_status,
+            history_window=request.history_window,
         )
 
 
@@ -180,10 +189,13 @@ def compose_asset_detail_view_model(
     *,
     asset: dict[str, Any],
     result_artifact: dict[str, Any],
-    feature_series: dict[str, list[dict[str, Any]]] | None = None,
+    feature_series: dict[str, dict[str, Any]] | None = None,
     runtime_prediction_history: list[dict[str, Any]] | None = None,
     equipment_history: list[dict[str, Any]] | None = None,
+    operation_context: dict[str, Any] | None = None,
+    closed_loop: dict[str, Any] | None = None,
     data_status: dict[str, Any] | None = None,
+    history_window: str = DEFAULT_HISTORY_WINDOW,
 ) -> dict[str, Any]:
     """Compose the candidate AssetDetailViewModel from canonical contracts.
 
@@ -193,6 +205,7 @@ def compose_asset_detail_view_model(
     """
 
     feature_series = feature_series or {}
+    normalized_history_window = _normalize_history_window(history_window)
     runtime_prediction_history = runtime_prediction_history or []
     equipment_history = equipment_history or []
     evidence_payload = result_artifact.get("evidence_payload") or {}
@@ -207,12 +220,16 @@ def compose_asset_detail_view_model(
             }
         )
 
-    features, feature_gaps = _features_from_artifact(result_artifact, feature_series)
+    features, feature_gaps = _features_from_artifact(
+        result_artifact,
+        feature_series,
+        history_window=normalized_history_window,
+    )
     gaps.extend(feature_gaps)
-    if not any(feature["series"] for feature in features):
+    if not any(feature["history"]["points"] for feature in features):
         gaps.append(
             {
-                "field": "features[].series",
+                "field": "features[].history.points",
                 "reason": "Backend Observation/Feature Executor series is not connected yet",
                 "owner_domain": "dataset",
             }
@@ -234,23 +251,44 @@ def compose_asset_detail_view_model(
                 "owner_domain": "maintenance",
             }
         )
+    asset_summary, asset_gaps = _asset_summary(asset, result_artifact)
+    gaps.extend(asset_gaps)
+    maintenance_context, maintenance_gaps = _maintenance_context(asset)
+    operation_context_source = (
+        {**asset, "operation_context": operation_context}
+        if operation_context is not None
+        else asset
+    )
+    operation_context, operation_gaps = _operation_context(operation_context_source)
+    gaps.extend(maintenance_gaps)
+    gaps.extend(operation_gaps)
+    risk = {
+        "current": result_artifact.get("failure_probability"),
+        "threshold": result_artifact.get("threshold"),
+        "status_grade": _status_grade(result_artifact),
+        "prediction_horizon_hours": result_artifact.get("prediction_horizon_hours"),
+    }
+    review_priority, priority_gap = _review_priority(
+        risk=risk,
+        asset=asset_summary,
+        maintenance_context=maintenance_context,
+        operation_context=operation_context,
+    )
+    if priority_gap is not None:
+        gaps.append(priority_gap)
+    inspection_targets = _inspection_targets(result_artifact, provenance)
 
     return {
-        "asset": {
-            "asset_id": str(asset.get("asset_id") or result_artifact["asset_id"]),
-            "asset_type": str(asset.get("asset_type") or result_artifact["asset_type"]),
-            **_optional(asset, "display_name", "site_id", "cell_id"),
-            "observed_at": str(asset.get("observed_at") or result_artifact["observed_at"]),
-        },
-        "risk": {
-            "current": result_artifact.get("failure_probability"),
-            "threshold": result_artifact.get("threshold"),
-            "status_grade": _status_grade(result_artifact),
-            "prediction_horizon_hours": result_artifact.get("prediction_horizon_hours"),
-        },
+        "asset": asset_summary,
+        "risk": risk,
         "risk_series": risk_series,
         "features": features,
         "equipment_history": equipment_history,
+        "maintenance_context": maintenance_context,
+        "inspection_targets": inspection_targets,
+        "operation_context": operation_context,
+        "review_priority": review_priority,
+        **({"closed_loop": closed_loop} if closed_loop is not None else {}),
         "evidence": {
             "artifact_id": result_artifact.get("artifact_id"),
             "evidence_payload_reference": _evidence_payload_reference(provenance),
@@ -267,7 +305,9 @@ def compose_asset_detail_view_model(
 
 def _features_from_artifact(
     result_artifact: dict[str, Any],
-    feature_series: dict[str, list[dict[str, Any]]],
+    feature_series: dict[str, dict[str, Any]],
+    *,
+    history_window: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     evidence_payload = result_artifact.get("evidence_payload") or {}
     sensors = (evidence_payload.get("sensor_evidence") or {}).get("sensors") or {}
@@ -280,14 +320,18 @@ def _features_from_artifact(
     feature_keys = list(dict.fromkeys([*sensors.keys(), *top_factors.keys(), *feature_series.keys()]))
     features = []
     gaps = []
+    current_observed_at = str(result_artifact["observed_at"])
     for index, key in enumerate(feature_keys):
         feature, gap = _feature(
             key,
             index=index,
+            current_observed_at=current_observed_at,
+            is_data_quality_hold=_is_data_quality_hold(result_artifact),
             sensor=sensors.get(key) or {},
             top_factor=top_factors.get(key),
             factor_evidence=factor_evidence.get(key),
-            series=feature_series.get(key) or [],
+            history=feature_series.get(key) or {},
+            history_window=history_window,
         )
         features.append(feature)
         if gap is not None:
@@ -295,16 +339,70 @@ def _features_from_artifact(
     return features, gaps
 
 
+def _asset_summary(
+    asset: dict[str, Any],
+    result_artifact: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    criticality = _criticality(asset.get("criticality"))
+    basis = [str(item) for item in asset.get("criticality_basis") or []]
+    source = str(asset.get("criticality_source") or "")
+    if source not in {
+        "manual_initial_assessment",
+        "equipment_master",
+        "project_context",
+        "unknown",
+    }:
+        source = "equipment_master" if criticality is not None else "unknown"
+    gaps = []
+    if criticality is None:
+        source = "unknown"
+        basis = []
+        gaps.append(
+            {
+                "field": "asset.criticality",
+                "reason": "criticality_missing_or_unresolved",
+                "owner_domain": _owner_domain(asset.get("criticality_owner_domain"), default="equipment"),
+            }
+        )
+    elif not basis:
+        gaps.append(
+            {
+                "field": "asset.criticality_basis",
+                "reason": "criticality_basis_missing_or_unresolved",
+                "owner_domain": _owner_domain(asset.get("criticality_owner_domain"), default="equipment"),
+            }
+        )
+    return (
+        {
+            "asset_id": str(asset.get("asset_id") or result_artifact["asset_id"]),
+            "asset_type": str(asset.get("asset_type") or result_artifact["asset_type"]),
+            **_optional(asset, "display_name", "site_id", "cell_id"),
+            "observed_at": str(asset.get("observed_at") or result_artifact["observed_at"]),
+            "criticality": criticality,
+            "criticality_basis": basis,
+            "criticality_source": source,
+        },
+        gaps,
+    )
+
+
 def _feature(
     key: str,
     *,
     index: int,
+    current_observed_at: str,
+    is_data_quality_hold: bool,
     sensor: dict[str, Any],
     top_factor: dict[str, Any] | None,
     factor_evidence: dict[str, Any] | None,
-    series: list[dict[str, Any]],
+    history: dict[str, Any],
+    history_window: str,
 ) -> tuple[dict[str, Any], dict[str, str] | None]:
-    checked_series = [_feature_series_point(point) for point in series]
+    checked_history = _feature_history(
+        history,
+        current_observed_at=current_observed_at,
+        history_window=history_window,
+    )
     basis = sensor.get("basis") or {}
     baseline = None
     gap = None
@@ -337,28 +435,108 @@ def _feature(
             "explanation_method": top_factor["explanation_method"],
             **_optional(factor_evidence or {}, "evidence_field_id"),
         }
+    current_value = sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value")
+    current_quality = (
+        "unknown" if is_data_quality_hold or current_value is None else "good"
+    )
     return (
         {
             "key": key,
             "label": str(sensor.get("display_name") or (factor_evidence or {}).get("display_name") or key),
             "unit": str(sensor.get("unit") or (factor_evidence or {}).get("unit") or ""),
-            "current": sensor.get("current") if "current" in sensor else (factor_evidence or {}).get("value"),
+            "current": {
+                "observed_at": current_observed_at,
+                "value": current_value,
+                "quality_status": current_quality,
+            },
             "baseline": baseline,
-            "series": checked_series,
+            "history": checked_history,
             "top_factor": top_factor_summary,
         },
         gap,
     )
 
 
-def _feature_series_point(point: dict[str, Any]) -> dict[str, Any]:
-    source_ref = str(point.get("source_ref") or "")
+def _feature_history(
+    history: dict[str, Any],
+    *,
+    current_observed_at: str,
+    history_window: str,
+) -> dict[str, Any]:
+    source_ref = str(history.get("source_ref") or "")
     _reject_source_ref(source_ref, forbidden=FORBIDDEN_FEATURE_SOURCE_MARKERS)
+    current_instant = _timestamp_instant(current_observed_at)
+    requested_window = _normalize_history_window(history_window)
+    requested_start = current_instant - timedelta(hours=HISTORY_WINDOW_HOURS[requested_window])
+    by_instant: dict[datetime, dict[str, Any]] = {}
+    for point in history.get("points") or []:
+        observed_at = str(point["observed_at"])
+        instant = _timestamp_instant(observed_at)
+        if instant < requested_start or instant >= current_instant:
+            continue
+        checked = {
+            "observed_at": observed_at,
+            "value": point.get("value"),
+            "quality_status": str(point.get("quality_status") or "unknown"),
+        }
+        if instant in by_instant and by_instant[instant] != checked:
+            raise ValueError(f"conflicting feature history points at instant={instant.isoformat()}")
+        by_instant[instant] = checked
+    instants = sorted(by_instant)
     return {
-        "observed_at": str(point["observed_at"]),
-        "value": point.get("value"),
-        **_optional(point, "quality_status", "source_ref"),
+        **({"source_ref": source_ref} if source_ref else {}),
+        "window": _feature_history_window(
+            requested_window=requested_window,
+            requested_start=requested_start,
+            requested_end=current_instant,
+            instants=instants,
+        ),
+        "points": [by_instant[instant] for instant in instants],
     }
+
+
+def _normalize_history_window(value: str) -> str:
+    if value not in HISTORY_WINDOW_HOURS:
+        raise ValueError(f"unsupported AssetDetailViewModel history_window: {value}")
+    return value
+
+
+def _feature_history_window(
+    *,
+    requested_window: str,
+    requested_start: datetime,
+    requested_end: datetime,
+    instants: list[datetime],
+) -> dict[str, Any]:
+    actual_start = instants[0] if instants else None
+    actual_end = instants[-1] if instants else None
+    if not instants:
+        coverage_status = "empty"
+    elif actual_start and actual_start <= requested_start and actual_end and actual_end >= requested_end:
+        coverage_status = "complete"
+    else:
+        coverage_status = "partial"
+    return {
+        "requested": requested_window,
+        "anchor_observed_at": _format_utc_instant(requested_end),
+        "requested_start": _format_utc_instant(requested_start),
+        "requested_end": _format_utc_instant(requested_end),
+        "actual_start": _format_utc_instant(actual_start) if actual_start else None,
+        "actual_end": _format_utc_instant(actual_end) if actual_end else None,
+        "point_count": len(instants),
+        "coverage_status": coverage_status,
+    }
+
+
+def _format_utc_instant(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _timestamp_instant(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("AssetDetailViewModel timestamps must include a timezone offset")
+    return parsed.astimezone(timezone.utc)
 
 
 def _risk_point(point: dict[str, Any]) -> dict[str, Any]:
@@ -387,12 +565,12 @@ def _is_data_quality_hold(source: dict[str, Any]) -> bool:
 
 def _view_model_gap(gap: dict[str, Any]) -> dict[str, str]:
     owner_domain = str(gap.get("owner_domain") or "report")
-    if owner_domain in {"dashboard", "operations", "aggregate", "unknown"}:
+    if owner_domain in {"dashboard", "aggregate", "unknown"}:
         owner_domain = "report"
     return {
         "field": str(gap.get("field") or "unknown"),
         "reason": _gap_reason(gap),
-        "owner_domain": owner_domain,
+        "owner_domain": _owner_domain(owner_domain),
     }
 
 
@@ -450,6 +628,158 @@ def _data_status(
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _criticality(value: Any) -> str | None:
+    normalized = str(value or "").lower()
+    if normalized in {"low", "medium", "high"}:
+        return normalized
+    return None
+
+
+def _maintenance_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    context = asset.get("maintenance_context") or {}
+    last_maintenance_days_ago = context.get("last_maintenance_days_ago")
+    similar_events_30d = context.get("similar_events_30d")
+    open_work_order_exists = context.get("open_work_order_exists")
+    result = {
+        "last_maintenance_days_ago": int(last_maintenance_days_ago)
+        if isinstance(last_maintenance_days_ago, int) and not isinstance(last_maintenance_days_ago, bool)
+        else None,
+        "similar_events_30d": int(similar_events_30d)
+        if isinstance(similar_events_30d, int) and not isinstance(similar_events_30d, bool)
+        else None,
+        "open_work_order_exists": open_work_order_exists
+        if isinstance(open_work_order_exists, bool)
+        else None,
+    }
+    gaps = []
+    for key, value in result.items():
+        if value is None:
+            gaps.append(
+                {
+                    "field": f"maintenance_context.{key}",
+                    "reason": "maintenance_context_missing_or_unresolved",
+                    "owner_domain": "maintenance",
+                }
+            )
+    return result, gaps
+
+
+def _inspection_targets(
+    result_artifact: dict[str, Any],
+    provenance: dict[str, Any],
+) -> list[dict[str, Any]]:
+    evidence_payload = result_artifact.get("evidence_payload") or {}
+    component_hypotheses = evidence_payload.get("component_hypotheses") or []
+    evidence_ref = _evidence_payload_reference(provenance)
+    artifact_id = str(result_artifact.get("artifact_id") or result_artifact.get("asset_id") or "unknown")
+    targets: list[dict[str, Any]] = []
+    for index, item in enumerate(component_hypotheses):
+        if not isinstance(item, dict):
+            continue
+        component_id = str(item.get("component_id") or "")
+        if not component_id:
+            continue
+        basis = item.get("basis") if isinstance(item.get("basis"), list) else []
+        targets.append(
+            {
+                "target_id": f"inspection-target:{artifact_id}:{index + 1}",
+                "component_id": component_id,
+                "component_label": str(item.get("component_label") or component_id),
+                "association": str(item.get("association") or "inspection_candidate"),
+                "location_label": None,
+                "inspection_method": None,
+                "basis_refs": [str(value) for value in basis],
+                "source_ref": f"{evidence_ref}#component_hypotheses[{index}]"
+                if evidence_ref
+                else f"product-result-artifact://{artifact_id}#evidence_payload.component_hypotheses[{index}]",
+                "unavailable_reason": "maintenance_inspection_location_contract_unavailable",
+            }
+        )
+    return targets
+
+
+def _operation_context(asset: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    context = asset.get("operation_context") or {}
+    result = dict(context) if isinstance(context, dict) else {}
+    load_level = str(context.get("load_level") or "")
+    if load_level not in {"low", "normal", "high"}:
+        load_level = None
+    runtime_hours_7d = context.get("runtime_hours_7d")
+    production_impact = str(context.get("production_impact") or "")
+    if production_impact not in {"none", "low", "medium", "high"}:
+        production_impact = None
+    result["load_level"] = load_level
+    result["runtime_hours_7d"] = runtime_hours_7d if _is_number(runtime_hours_7d) else None
+    result["production_impact"] = production_impact
+    gaps = []
+    for key in ("load_level", "runtime_hours_7d", "production_impact"):
+        if result.get(key) is None:
+            gaps.append(
+                {
+                    "field": f"operation_context.{key}",
+                    "reason": "operation_context_missing_or_unresolved",
+                    "owner_domain": "operations",
+                }
+            )
+    return result, gaps
+
+
+def _review_priority(
+    *,
+    risk: dict[str, Any],
+    asset: dict[str, Any],
+    maintenance_context: dict[str, Any],
+    operation_context: dict[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    status = risk.get("status_grade")
+    criticality = asset.get("criticality")
+    production_impact = operation_context.get("production_impact")
+    if status is None or criticality is None or production_impact is None:
+        return None, {
+            "field": "review_priority",
+            "reason": "review_priority_inputs_missing_or_unresolved",
+            "owner_domain": "report",
+        }
+    reasons = [
+        f"risk.status_grade={status}",
+        f"asset.criticality={criticality}",
+    ]
+    source_fields = ["risk.status_grade", "asset.criticality"]
+    open_work_order_exists = maintenance_context.get("open_work_order_exists")
+    if open_work_order_exists is not None:
+        reasons.append(f"maintenance_context.open_work_order_exists={open_work_order_exists}")
+        source_fields.append("maintenance_context.open_work_order_exists")
+    reasons.append(f"operation_context.production_impact={production_impact}")
+    source_fields.append("operation_context.production_impact")
+
+    if status == "critical" and criticality == "high":
+        level = "immediate"
+    elif status in {"critical", "warning"}:
+        level = "high"
+    elif status == "attention" or criticality == "high":
+        level = "medium"
+    else:
+        level = "low"
+    return {"level": level, "reasons": reasons, "source_fields": source_fields}, None
+
+
+def _owner_domain(value: Any, *, default: str = "report") -> str:
+    normalized = str(value or default)
+    if normalized in {
+        "diagnosis",
+        "dataset",
+        "equipment",
+        "project",
+        "operations",
+        "maintenance",
+        "report",
+        "frontend",
+        "unresolved",
+    }:
+        return normalized
+    return default
 
 
 def _reject_source_ref(source_ref: str, *, forbidden: tuple[str, ...]) -> None:

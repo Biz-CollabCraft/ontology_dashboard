@@ -5,7 +5,10 @@
     "display_name": "압축기 S03-L03-01",
     "site_id": "S03",
     "cell_id": "L03",
-    "observed_at": "2026-08-01T00:00:00+09:00"
+    "observed_at": "2026-08-01T00:00:00+09:00",
+    "criticality": "high",
+    "criticality_basis": ["fixture equipment.criticality"],
+    "criticality_source": "equipment_master"
   },
   "risk": {
     "current": 0.92,
@@ -19,7 +22,11 @@
       "key": "rotation_raw",
       "label": "회전 상태",
       "unit": "rpm",
-      "current": 1820.0,
+      "current": {
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "value": 1820.0,
+        "quality_status": "good"
+      },
       "baseline": {
         "mean": 1600.0,
         "std": 67.327,
@@ -27,7 +34,9 @@
         "upper": 1734.654,
         "reference": "all_valid_rows canonical-ai4i-physics-v3.1 compressor_sensor_observation.csv"
       },
-      "series": [],
+      "history": {
+        "points": []
+      },
       "top_factor": {
         "rank": 1,
         "contribution": 0.42,
@@ -40,13 +49,30 @@
       "key": "vibration_raw",
       "label": "진동 신호",
       "unit": "raw",
-      "current": null,
+      "current": {
+        "observed_at": "2026-08-01T00:00:00+09:00",
+        "value": null,
+        "quality_status": "unknown"
+      },
       "baseline": null,
-      "series": [],
+      "history": {
+        "points": []
+      },
       "top_factor": null
     }
   ],
   "equipment_history": [],
+  "maintenance_context": {
+    "last_maintenance_days_ago": null,
+    "similar_events_30d": null,
+    "open_work_order_exists": null
+  },
+  "operation_context": {
+    "load_level": null,
+    "runtime_hours_7d": null,
+    "production_impact": null
+  },
+  "review_priority": null,
   "evidence": {
     "artifact_id": "RESULT#CMP-S03-L03-01#2026-08-01T00:00:00+09:00",
     "evidence_payload_reference": "producer-enriched-critical",
@@ -55,7 +81,7 @@
     "source_kind": "runtime_inference",
     "gaps": [
       {
-        "field": "features[].series",
+        "field": "features[].history.points",
         "reason": "Observation API not connected yet; only the current sensor value from evidence_payload.sensor_evidence is available",
         "owner_domain": "dataset"
       },
@@ -68,6 +94,11 @@
         "field": "equipment_history",
         "reason": "Activity/Decision/Maintenance source is not connected to this composition endpoint yet",
         "owner_domain": "maintenance"
+      },
+      {
+        "field": "review_priority",
+        "reason": "review_priority_inputs_missing_or_unresolved",
+        "owner_domain": "report"
       }
     ]
   },

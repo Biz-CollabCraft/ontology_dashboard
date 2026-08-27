@@ -51,7 +51,8 @@ export function formatProbability(value: number | null): string {
   return value === null ? "—" : `${Math.round(value * 100)}%`;
 }
 
-export function formatMinutes(value: number): string {
+export function formatMinutes(value: number | null): string {
+  if (value === null) return "근거 부족";
   if (value < 60) return `${value.toLocaleString()}분`;
   const hours = Math.floor(value / 60);
   const minutes = value % 60;
@@ -126,17 +127,17 @@ export function MvpState({
 
 export function MvpProvenanceView({ provenance, compact = false }: { provenance: MvpProvenance; compact?: boolean }) {
   const rows = [
-    ["Dataset Version", provenance.datasetVersionId],
-    ["Model", provenance.modelVersion ?? "사용 불가"],
-    ["Policy", provenance.policyVersion ?? "사용 불가"],
-    ["Schema", provenance.schemaVersion ?? "사용 불가"],
-    ["Prompt", provenance.promptVersion ?? "템플릿 또는 미연결"],
+    ["관측 묶음", provenance.datasetVersionId],
+    ["모델", provenance.modelVersion ?? "사용 불가"],
+    ["정책", provenance.policyVersion ?? "사용 불가"],
+    ["데이터 형식", provenance.schemaVersion ?? "사용 불가"],
+    ["보고서 생성", provenance.promptVersion ?? "기본 양식"],
   ];
   return (
     <dl className={`mvp-provenance ${compact ? "is-compact" : ""}`}>
       {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd title={value}>{value}</dd></div>)}
       {!compact && provenance.sourceRefs.length ? (
-        <div className="is-wide"><dt>Source refs</dt><dd>{provenance.sourceRefs.map((ref) => <code key={ref}>{ref}</code>)}</dd></div>
+        <div className="is-wide"><dt>원천 참조</dt><dd>{provenance.sourceRefs.map((ref) => <code key={ref}>{ref}</code>)}</dd></div>
       ) : null}
     </dl>
   );

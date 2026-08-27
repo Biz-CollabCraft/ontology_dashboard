@@ -21,6 +21,7 @@
 13. [PdM Evidence/Report UI 통합 계획](./pdm-evidence-report-ui-integration-plan.md)
 14. [Canonical V3.1 위험 상승 탐지 기준](./preventive-risk-rise-analysis.md)
 15. [예방조치 What-if 개발 계획](./preventive-what-if-development-plan.md)
+16. [Asset Detail / Overview UI 의사결정 로그](./asset-detail-overview-ui-decision-log.md)
 
 Closed-loop 상태 머신의 canonical source는 [`../closed-loop-domain-contract.md`](../closed-loop-domain-contract.md),
 Product/API/UI의 역할·Action·소비 규칙은

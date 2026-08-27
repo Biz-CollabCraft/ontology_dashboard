@@ -4,7 +4,6 @@ import {
   ClipboardCheck,
   Clock3,
   DatabaseZap,
-  FileText,
   Gauge,
   RotateCcw,
   ShieldCheck,
@@ -12,6 +11,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+import { displayAssetName, displayAssetShortName } from "../displayLabels";
 
 const statusMeta = {
   critical: { label: "위험", tone: "critical", sentence: "즉시 점검이 필요한 위험 신호" },
@@ -31,63 +31,52 @@ const reportText = {
 const featureDisplayMap: Record<string, { label: string; checkLabel: string; plainReason: string; category: string }> = {
   rotation_raw_6h_mean: {
     label: "회전 상태 평균값",
-    checkLabel: "회전부 속도 저하 여부 확인",
-    plainReason: "최근 회전 상태가 평소 기준보다 낮게 나타났습니다. 벨트, 축, 모터 부하와 이물 걸림을 우선 확인합니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "회전 계통",
   },
   rotation_raw_6h_abs_mean: {
     label: "회전 변동 크기",
-    checkLabel: "회전 변화가 갑자기 커졌는지 확인",
-    plainReason: "회전값이 일정하게 유지되지 않고 변동 폭이 커졌습니다. 부하 변화, 압력 변화, 운전 조건 변경 여부를 함께 봅니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "회전 계통",
   },
   rotation_raw_6h_std: {
     label: "회전 불안정성",
-    checkLabel: "이상음·진동 동반 여부 확인",
-    plainReason: "회전값 흔들림이 위험 근거로 잡혔습니다. 현장에서 소음, 떨림, 체결 상태를 확인합니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "회전 계통",
   },
   pressure_raw_6h_abs_mean: {
     label: "압력 변동 크기",
-    checkLabel: "배관·밸브 압력 변동 확인",
-    plainReason: "압력 변화 폭이 커졌습니다. 압축부와 배관·밸브 구간의 압력계 표시, 연결부 누설 여부를 확인합니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "압력 계통",
   },
   pressure_raw_current: {
     label: "현재 압력",
-    checkLabel: "현재 압력계와 탱크 압력 확인",
-    plainReason: "현재 압력값이 판단 근거에 포함됐습니다. 압력계 표시와 탱크 압력 상태를 우선 확인합니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "압력 계통",
   },
   vibration_raw_6h_mean: {
     label: "진동 평균값",
-    checkLabel: "압축부 고정부 진동 확인",
-    plainReason: "최근 진동 수준이 평소와 다르게 나타났습니다. 압축부 고정부, 베이스, 체결 상태를 확인합니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "진동 계통",
   },
   vibration_raw_6h_std: {
     label: "진동 불안정성",
-    checkLabel: "간헐적 떨림과 체결 풀림 확인",
-    plainReason: "진동의 흔들림 폭이 커졌습니다. 모터, 축·벨트, 압축부의 간헐적 떨림과 체결 풀림을 확인합니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "진동 계통",
   },
   voltage_raw_6h_mean: {
     label: "전압 평균값",
-    checkLabel: "모터 전원 공급 상태 확인",
-    plainReason: "최근 전압 흐름이 평소와 다르게 나타났습니다. 모터 전원 공급과 전압 저하 여부를 확인합니다.",
+    checkLabel: "Backend 점검 항목 계약 미연결",
+    plainReason: "이 항목은 모델의 주요 위험 근거입니다. 구체적인 현장 점검 위치와 방법은 Backend Evidence 또는 maintenance recommendation 계약 연결 후 표시합니다.",
     category: "전기 계통",
   },
-};
-
-const inspectionLocationMap: Record<string, { range: string; note: string; className: string }> = {
-  rotation_raw_6h_mean: { range: "모터-축/벨트", note: "회전 힘 전달과 속도 저하 확인", className: "loc-motor-drive" },
-  rotation_raw_6h_abs_mean: { range: "축/벨트-압축부", note: "회전 변화와 부하 변동 확인", className: "loc-drive-pump" },
-  rotation_raw_6h_std: { range: "모터-축/벨트-압축부", note: "흔들림과 체결 상태 확인", className: "loc-drive-zone" },
-  pressure_raw_6h_abs_mean: { range: "압축부-배관/밸브", note: "압력 변동과 누설 확인", className: "loc-pump-valve" },
-  pressure_raw_current: { range: "압력계-압력 탱크", note: "현재 압력과 탱크 압력 확인", className: "loc-valve-tank" },
-  vibration_raw_6h_mean: { range: "압축부 고정부", note: "고정부 진동과 베이스 상태 확인", className: "loc-pump-base" },
-  vibration_raw_6h_std: { range: "모터-축/벨트-압축부", note: "간헐적 떨림과 체결 풀림 확인", className: "loc-drive-zone" },
-  voltage_raw_6h_mean: { range: "모터 전원부", note: "전원 공급과 전압 저하 확인", className: "loc-motor-power" },
 };
 
 const sensorDisplayMap: Record<string, { label: string; plainNote: string }> = {
@@ -212,7 +201,8 @@ function featureReason(feature: string) {
 }
 
 function inspectionLocation(feature: string) {
-  return inspectionLocationMap[feature] ?? { range: "설비 주요 연결부", note: "현장 점검 위치 확인", className: "loc-generic" };
+  void feature;
+  return { range: "점검 위치 근거 미제공", note: "Backend 점검 위치 계약 연결 후 표시", className: "loc-generic" };
 }
 
 function contributionTone(label: string) {
@@ -296,13 +286,13 @@ export function MvpInspectionReportPage() {
           <label htmlFor="inspection-asset-select">다른 설비 보기</label>
           <select id="inspection-asset-select" value={activeAssetId} onChange={(event) => setActiveAssetId(event.target.value)}>
             {inspectionAssetOptions.map((asset) => (
-              <option key={asset.assetId} value={asset.assetId}>{asset.displayName} · {statusMeta[asset.status].label}</option>
+              <option key={asset.assetId} value={asset.assetId}>{displayAssetName(asset)} · {statusMeta[asset.status].label}</option>
             ))}
           </select>
           <div className="asset-switcher-chips" aria-label="주요 설비 바로 보기">
             {quickSwitchAssets.map((asset) => (
-              <button key={asset.assetId} type="button" className={asset.assetId === activeAssetId ? "active" : ""} onClick={() => setActiveAssetId(asset.assetId)} title={`${asset.displayName} · ${statusMeta[asset.status].label} · 위험 예측 확률 ${percent(asset.probability)}`}>
-                {asset.assetId.split("-").at(-1)}호
+              <button key={asset.assetId} type="button" className={asset.assetId === activeAssetId ? "active" : ""} onClick={() => setActiveAssetId(asset.assetId)} title={`${displayAssetName(asset)} · ${statusMeta[asset.status].label} · 위험 예측 확률 ${percent(asset.probability)}`}>
+                {displayAssetShortName(asset)}
               </button>
             ))}
           </div>
@@ -345,14 +335,14 @@ export function MvpInspectionReportPage() {
 
         <section className="report-panel">
           <div className="panel-heading compact"><div><span>ENGINEER BLOCK</span><h2>점검 항목</h2></div></div>
-          <div className="equipment-sketch" aria-label="공기압축기 점검 위치 안내">
+          <div className="equipment-sketch" aria-label="공기압축기 설비 참고도">
             <div className="compressor-visual" aria-hidden="true">
               <span className="vibration-zone" /><span className="pipe pipe-1" /><span className="pipe pipe-2" /><span className="pipe pipe-3" /><span className="pipe pipe-4" />
               <span className="motor">모터</span><span className="shaft drive">축/벨트</span><span className="pump">압축부</span><span className="valve">배관/밸브<br />압력계</span><span className="tank">압력 탱크</span><span className="power-unit">전원부</span>
               {activeReport.targets.map((target) => <mark key={target.feature} className={`callout ${inspectionLocation(target.feature).className}`}>{target.rank}</mark>)}
             </div>
             <div>
-              <strong>공기압축기 점검 위치</strong>
+              <strong>공기압축기 설비 참고도</strong>
               <ul className="sketch-legend">
                 {activeReport.targets.map((target) => {
                   const location = inspectionLocation(target.feature);

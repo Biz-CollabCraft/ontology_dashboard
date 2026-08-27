@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowRight, FilterX, Search, Wrench } from "lucide-react";
+import { ArrowRight, ClipboardCheck, FileText, FilterX, Search, Wrench } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { MvpAsset, MvpBootstrapModel, MvpEventDetailModel, MvpRiskStatus } from "../api/mvpContracts";
 import {
@@ -13,12 +13,25 @@ import {
   formatProbability,
   formatTimestamp,
 } from "../components/MvpUi";
+import { displayEventLabel, fieldFailureLabel } from "../displayLabels";
+
+function qualityLabel(value: string | undefined) {
+  if (value === "good") return "정상";
+  if (value === "bad") return "불량";
+  if (value === "unknown") return "확인 필요";
+  return "미제공";
+}
 
 function matches(asset: MvpAsset, search: string) {
   const query = search.trim().toLowerCase();
   if (!query) return true;
   return [asset.assetId, asset.displayName, asset.assetType, asset.site, asset.line, asset.cell, asset.assignedEngineer]
     .some((value) => String(value ?? "").toLowerCase().includes(query));
+}
+
+function valueOrGap(value: unknown, suffix = "") {
+  if (value === null || value === undefined || value === "") return "확인 필요";
+  return `${value}${suffix}`;
 }
 
 export function MvpObjectsPage({
@@ -29,6 +42,7 @@ export function MvpObjectsPage({
   detailError,
   onSelectAsset,
   onOpenOperations,
+  onOpenReport,
   onRetryDetail,
 }: {
   model: MvpBootstrapModel;
@@ -38,6 +52,7 @@ export function MvpObjectsPage({
   detailError: string | null;
   onSelectAsset: (asset: MvpAsset) => void;
   onOpenOperations: (asset: MvpAsset) => void;
+  onOpenReport: (asset: MvpAsset) => void;
   onRetryDetail: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -62,6 +77,7 @@ export function MvpObjectsPage({
   });
   const factors = detail?.topFactors.length ? detail.topFactors : selectedAsset?.topFactors ?? [];
   const provenance = detail?.provenance ?? selectedAsset?.provenance ?? null;
+  const selectedCriticality = detail?.assetCriticality ?? selectedAsset?.criticality ?? null;
 
   function resetFilters() {
     setSearch("");
@@ -73,7 +89,7 @@ export function MvpObjectsPage({
   return (
     <div className="mvp-page mvp-objects-page" data-testid="mvp-objects">
       <div className="mvp-object-layout">
-        <MvpPanel title={`설비 목록 · ${visibleAssets.length.toLocaleString()}`} eyebrow="DENSE OBJECT TABLE" className="mvp-object-table-panel">
+        <MvpPanel title={`Assets · ${visibleAssets.length.toLocaleString()}`} eyebrow="ASSET SURFACE" className="mvp-object-table-panel">
           <div className="mvp-object-filters">
             <label className="mvp-search"><Search size={15} /><input aria-label="설비 검색" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="설비 ID, 이름, 라인, 담당자 검색" /></label>
             <label><span>라인</span><select aria-label="라인 필터" value={line} onChange={(event) => setLine(event.target.value)}><option value="all">전체 라인</option>{lines.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -116,41 +132,74 @@ export function MvpObjectsPage({
 
         <aside className="mvp-object-inspector" aria-label="선택 설비 Inspector">
           {!selectedAsset ? (
-            <MvpState kind="empty" title="설비를 선택하세요" detail={selectedAssetId ? `요청한 설비 ${selectedAssetId}를 현재 Dataset Version에서 찾지 못했습니다.` : "목록에서 설비를 선택하면 속성·근거·업무 연결을 확인할 수 있습니다."} />
+                <MvpState kind="empty" title="설비를 선택하세요" detail={selectedAssetId ? `요청한 설비 ${selectedAssetId}를 현재 데이터에서 찾지 못했습니다.` : "목록에서 설비를 선택하면 상태, 근거, 작업 연결을 확인할 수 있습니다."} />
           ) : (
             <>
               <header className="mvp-inspector-hero">
                 <div><span>ASSET INSPECTOR</span><h2>{selectedAsset.displayName}</h2><code>{selectedAsset.assetId}</code></div>
                 <MvpStatusBadge status={selectedAsset.status} />
               </header>
-              <dl className="mvp-inspector-summary">
-                <div><dt>고장 확률</dt><dd>{formatProbability(selectedAsset.failureProbability)}</dd></div>
-                <div><dt>신뢰도</dt><dd>{selectedAsset.confidenceScore === null ? selectedAsset.confidence : formatProbability(selectedAsset.confidenceScore)}</dd></div>
-                <div><dt>예상 영향</dt><dd>{formatMinutes(selectedAsset.estimatedDowntimeMinutes)}</dd></div>
-                <div><dt>담당자</dt><dd>{selectedAsset.assignedEngineer ?? "미배정"}</dd></div>
-                <div><dt>위치</dt><dd>{selectedAsset.site} · {selectedAsset.line} · {selectedAsset.cell}</dd></div>
-                <div><dt>관측 시각</dt><dd>{formatTimestamp(selectedAsset.observedAt)}</dd></div>
-              </dl>
-
-              {selectedAsset.status === "data_quality_hold" ? <div className="mvp-quality-callout"><strong>데이터 품질 확인 필요</strong><p>확률을 고장으로 해석하지 않고 원천 센서와 파이프라인 상태를 먼저 확인합니다.</p></div> : null}
-              {selectedAsset.confidence === "low" || selectedAsset.confidence === "unavailable" ? <div className="mvp-confidence-callout"><strong>낮은 신뢰도</strong><p>추가 현장 확인 전에는 원인이나 고장을 확정하지 않습니다.</p></div> : null}
-
-              <section className="mvp-inspector-section"><header><span>Prediction</span><strong>{selectedAsset.predictedFailureType}</strong></header><p>권장 조치: <b>{DECISION_LABEL[selectedAsset.recommendedDecision]}</b></p></section>
-
               <section className="mvp-inspector-section">
-                <header><span>핵심 센서</span><strong>{detailLoading ? "불러오는 중" : `${detail?.sensors.length ?? 0} fields`}</strong></header>
-                {detailLoading ? <MvpState kind="loading" title="Evidence 로딩" detail="선택 Event의 센서 근거를 확인하고 있습니다." /> : detailError ? <MvpState kind="error" title="센서 근거를 불러오지 못했습니다" detail={detailError} onRetry={onRetryDetail} /> : detail?.sensors.length ? <dl className="mvp-sensor-grid">{detail.sensors.map((sensor) => <div key={sensor.id}><dt>{sensor.label}</dt><dd>{sensor.value === null || sensor.value === "" ? "—" : String(sensor.value)} {sensor.unit}</dd></div>)}</dl> : <p className="mvp-muted">이 설비와 연결된 Event Evidence가 없습니다.</p>}
+                <header><span>Current State</span><strong>지금 무슨 일이 일어나는가</strong></header>
+                <dl className="mvp-sensor-grid">
+                  <div><dt>Health</dt><dd><MvpStatusBadge status={selectedAsset.status} /></dd></div>
+                  <div><dt>Risk</dt><dd>{formatProbability(selectedAsset.failureProbability)}</dd></div>
+                  <div><dt>Criticality</dt><dd>{selectedCriticality ?? "근거 부족"}</dd></div>
+                  <div><dt>Impact</dt><dd>{formatMinutes(selectedAsset.estimatedDowntimeMinutes)}</dd></div>
+                  <div><dt>Owner</dt><dd>{selectedAsset.assignedEngineer ?? "미배정"}</dd></div>
+                  <div><dt>Location</dt><dd>{selectedAsset.site} · {selectedAsset.line} · {selectedAsset.cell}</dd></div>
+                  <div><dt>Observed</dt><dd>{formatTimestamp(selectedAsset.observedAt)}</dd></div>
+                </dl>
+                {selectedAsset.status === "data_quality_hold" ? <div className="mvp-quality-callout"><strong>데이터 품질 확인 필요</strong><p>확률을 고장으로 해석하지 않고 원천 센서와 파이프라인 상태를 먼저 확인합니다.</p></div> : null}
+                {selectedAsset.confidence === "low" || selectedAsset.confidence === "unavailable" ? <div className="mvp-confidence-callout"><strong>낮은 신뢰도</strong><p>추가 현장 확인 전에는 원인이나 고장을 확정하지 않습니다.</p></div> : null}
               </section>
 
               <section className="mvp-inspector-section">
-                <header><span>Top factors</span><strong>{factors.length} factors</strong></header>
+                <header><span>Context · Review</span><strong>{detail?.reviewPriority?.level ?? "gap-aware"}</strong></header>
+                <dl className="mvp-inspector-summary">
+                  <div><dt>검토 우선순위</dt><dd>{detail?.reviewPriority?.level ?? "확인 필요"}</dd></div>
+                  <div><dt>중요도 근거</dt><dd>{detail?.criticalityBasis.length ? detail.criticalityBasis.join(", ") : "확인 필요"}</dd></div>
+                  <div><dt>마지막 정비</dt><dd>{valueOrGap(detail?.maintenanceContext?.lastMaintenanceDaysAgo, "일 전")}</dd></div>
+                  <div><dt>30일 유사 Event</dt><dd>{valueOrGap(detail?.maintenanceContext?.similarEvents30d, "건")}</dd></div>
+                  <div><dt>열린 작업</dt><dd>{detail?.maintenanceContext?.openWorkOrderExists === null || detail?.maintenanceContext?.openWorkOrderExists === undefined ? "확인 필요" : detail.maintenanceContext.openWorkOrderExists ? "있음" : "없음"}</dd></div>
+                  <div><dt>생산 영향</dt><dd>{detail?.operationContext?.productionImpact ?? "확인 필요"}</dd></div>
+                </dl>
+                {detail?.reviewPriority?.reasons.length ? <p className="mvp-muted">{detail.reviewPriority.reasons.join(" · ")}</p> : <p className="mvp-muted">필요한 운영 맥락이 없으면 우선순위를 임의 계산하지 않습니다.</p>}
+              </section>
+
+              <section className="mvp-inspector-section">
+                <header><span>근거 / 진단</span><strong>{fieldFailureLabel(selectedAsset.predictedFailureType)}</strong></header>
+                <dl className="mvp-sensor-grid">
+                  <div><dt>관련 이벤트</dt><dd>{selectedAsset.eventId ? displayEventLabel(selectedAsset.eventId) : "이벤트 연결 없음"}</dd></div>
+                  <div><dt>진단</dt><dd>{DECISION_LABEL[selectedAsset.recommendedDecision]}</dd></div>
+                  <div><dt>신뢰도</dt><dd>{selectedAsset.confidenceScore === null ? selectedAsset.confidence : formatProbability(selectedAsset.confidenceScore)}</dd></div>
+                </dl>
+                {detailLoading ? <MvpState kind="loading" title="근거 로딩" detail="선택 이벤트의 현재 관측과 과거 이력을 확인하고 있습니다." /> : detailError ? <MvpState kind="error" title="센서 근거를 불러오지 못했습니다" detail={detailError} onRetry={onRetryDetail} /> : detail?.sensors.length ? <dl className="mvp-sensor-grid">{detail.sensors.map((sensor) => <div key={sensor.id}><dt>{sensor.label}</dt><dd>{sensor.value === null || sensor.value === "" ? "—" : String(sensor.value)} {sensor.unit}<small>현재 {qualityLabel(sensor.qualityStatus)} · 이력 {sensor.historyPointCount ?? 0}개{sensor.historySourceRef ? ` · ${sensor.historySourceRef}` : ""}</small></dd></div>)}</dl> : <p className="mvp-muted">이 설비와 연결된 이벤트 근거가 없습니다.</p>}
                 {factors.length ? <div className="mvp-factor-list">{factors.slice(0, 5).map((factor) => <article key={factor.id}><div><strong>{factor.label}</strong><span>{factor.value === null ? "—" : factor.value.toLocaleString()} {factor.unit}</span></div><div className="mvp-factor-track"><i style={{ width: `${Math.max(4, Math.min(100, factor.contribution * 100))}%` }} /></div><b>{factor.direction === "risk_up" ? "위험 증가" : "위험 완화"}</b></article>)}</div> : <p className="mvp-muted">설명 가능한 기여 요인이 제공되지 않았습니다.</p>}
               </section>
 
-              {provenance ? <section className="mvp-inspector-section"><header><span>Provenance</span><strong>Dataset → Model → UI</strong></header><MvpProvenanceView provenance={provenance} /></section> : null}
+              <section className="mvp-inspector-section">
+                <header><span>작업 연결</span><strong>작업요청</strong></header>
+                <dl className="mvp-sensor-grid">
+                  <div><dt>작업요청</dt><dd>{selectedAsset.eventId ? "후보 있음 · ID 미생성" : "연결 없음"}</dd></div>
+                  <div><dt>정비 조치</dt><dd>계약 없음</dd></div>
+                  <div><dt>부품</dt><dd>{selectedAsset.sparePartAvailable === null ? "확인 필요" : selectedAsset.sparePartAvailable ? "확보" : "미확보"}</dd></div>
+                </dl>
+                {detail?.equipmentHistory.length ? <div className="mvp-activity-list">{detail.equipmentHistory.slice(0, 4).map((item) => <article key={`${item.occurredAt}-${item.kind}`}><span className={`activity-${item.tone === "hold" ? "system" : "note"}`} /><div><strong>{item.kind}</strong><p>{item.description}</p><small>{item.source} · {formatTimestamp(item.occurredAt)}</small></div></article>)}</div> : <p className="mvp-muted">정비/운영 context 이력이 제공되지 않았습니다.</p>}
+              </section>
 
-              <button type="button" className="mvp-button primary mvp-inspector-action" onClick={() => onOpenOperations(selectedAsset)} disabled={!selectedAsset.eventId}><Wrench size={15} />Operations에서 조치 검토<ArrowRight size={15} /></button>
-              {!selectedAsset.eventId ? <small className="mvp-muted">이 Result Artifact에는 연결된 운영 Event가 없어 읽기 전용으로 표시됩니다.</small> : null}
+              <section className="mvp-inspector-section">
+                <header><span>가능한 이동</span><strong>현재 가능한 이동</strong></header>
+                <div className="mvp-action-row">
+                  <button type="button" className="mvp-button primary" onClick={() => onOpenOperations(selectedAsset)} disabled={!selectedAsset.eventId}><ClipboardCheck size={15} />작업요청 후보 열기<ArrowRight size={15} /></button>
+                  <button type="button" className="mvp-button secondary" onClick={() => selectedAsset.eventId && onOpenOperations(selectedAsset)} disabled={!selectedAsset.eventId}><Wrench size={15} />조치 판단</button>
+                  {selectedAsset.eventId ? <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(selectedAsset)}><FileText size={15} />관련 보고서</button> : null}
+                </div>
+                {!selectedAsset.eventId ? <small className="mvp-muted">이 설비 판단에는 연결된 운영 이벤트가 없어 읽기 전용으로 표시됩니다.</small> : null}
+              </section>
+
+              {detail?.evidenceGaps.length ? <section className="mvp-inspector-section"><header><span>Gaps</span><strong>{detail.evidenceGaps.length}개</strong></header><ul className="mvp-gap-list">{detail.evidenceGaps.map((gap) => <li key={`${gap.ownerDomain}-${gap.field}`}><strong>{gap.field}</strong><span>{gap.ownerDomain} · {gap.reason}</span></li>)}</ul></section> : null}
+              {provenance ? <section className="mvp-inspector-section"><header><span>Source</span><strong>데이터 · 모델 · 화면</strong></header><MvpProvenanceView provenance={provenance} /></section> : null}
             </>
           )}
         </aside>

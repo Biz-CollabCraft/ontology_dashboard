@@ -5,13 +5,17 @@ import type {
   AssetDetailViewModel,
   MvpAsset,
   MvpConfidence,
-  MvpCriticality,
   MvpDecision,
+  MvpEquipmentHistoryItem,
   MvpEvent,
   MvpEventDetailModel,
+  MvpEvidenceGap,
   MvpFactor,
+  MvpInspectionTarget,
   MvpLineRisk,
   MvpMetrics,
+  MvpClosedLoopSummary,
+  MvpOperationContext,
   MvpProvenance,
   MvpReportModel,
   MvpRiskStatus,
@@ -26,18 +30,14 @@ const STATUS_PRIORITY: Record<MvpRiskStatus, number> = {
   normal: 1,
 };
 
-export function normalizeRiskStatus(value: unknown, probability?: number | null): MvpRiskStatus {
+export function normalizeRiskStatus(value: unknown): MvpRiskStatus {
   const status = String(value ?? "").toLowerCase();
   if (status === "critical" || status === "danger") return "critical";
   if (status === "warning" || status === "warn") return "warning";
   if (status === "attention" || status === "caution") return "attention";
   if (status === "data_quality_hold" || status === "quality_hold" || status === "blocked") return "data_quality_hold";
   if (status === "normal" || status === "healthy" || status === "ok") return "normal";
-  if (probability === null || probability === undefined) return "data_quality_hold";
-  if (probability >= 0.85) return "critical";
-  if (probability >= 0.6) return "warning";
-  if (probability >= 0.35) return "attention";
-  return "normal";
+  return "data_quality_hold";
 }
 
 export function normalizeConfidence(value: unknown): { level: MvpConfidence; score: number | null } {
@@ -65,15 +65,10 @@ export function normalizeDecision(value: unknown): MvpDecision {
   return "continue_monitoring";
 }
 
-function criticalityRank(value: MvpCriticality): number {
-  return value === "high" ? 3 : value === "medium" ? 2 : value === "low" ? 1 : 0;
-}
-
-export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; criticality: MvpCriticality; observedAt?: string | null }>(items: T[]): T[] {
+export function sortRisk<T extends { status: MvpRiskStatus; failureProbability: number | null; observedAt?: string | null }>(items: T[]): T[] {
   return [...items].sort((left, right) => (
     STATUS_PRIORITY[right.status] - STATUS_PRIORITY[left.status]
     || (right.failureProbability ?? -1) - (left.failureProbability ?? -1)
-    || criticalityRank(right.criticality) - criticalityRank(left.criticality)
     || String(right.observedAt ?? "").localeCompare(String(left.observedAt ?? ""))
   ));
 }
@@ -92,13 +87,14 @@ function fallbackProvenance(datasetVersionId: string): MvpProvenance {
   };
 }
 export function adaptEvent(event: EventSummary): MvpEvent {
-  const status = normalizeRiskStatus(event.status, event.failure_probability);
+  const status = normalizeRiskStatus(event.status);
+  const line = event.equipment.line ?? event.equipment.cell_id ?? "미지정 라인";
   return {
     eventId: event.event_id,
     scenarioId: event.scenario_id,
     assetId: event.equipment.equipment_id,
     assetName: event.equipment.display_name,
-    line: event.equipment.line || "미지정 라인",
+    line,
     status,
     failureProbability: status === "data_quality_hold" ? null : event.failure_probability,
     confidence: normalizeConfidence(event.confidence).level,
@@ -108,7 +104,7 @@ export function adaptEvent(event: EventSummary): MvpEvent {
       : normalizeDecision(event.recommended_decision),
     criticality: event.equipment.criticality ?? null,
     assignedEngineer: event.equipment.assigned_engineer || null,
-    estimatedDowntimeMinutes: event.equipment.estimated_downtime_minutes ?? 0,
+    estimatedDowntimeMinutes: event.equipment.estimated_downtime_minutes ?? null,
     sparePartAvailable: event.equipment.spare_part_available ?? null,
     observedAt: event.observed_at ?? null,
     datasetVersionId: event.dataset_version_id ?? "dsv-canonical-v3-1",
@@ -116,16 +112,120 @@ export function adaptEvent(event: EventSummary): MvpEvent {
   };
 }
 
+function operationContextFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpOperationContext | null {
+  const context = viewModel.operation_context;
+  if (!context) return null;
+  return {
+    loadLevel: context.load_level,
+    runtimeHours7d: context.runtime_hours_7d,
+    productionImpact: context.production_impact,
+    contextId: context.context_id,
+    sourceType: context.source_type,
+    temporalScope: context.temporal_scope ? {
+      snapshotId: context.temporal_scope.snapshot_id,
+      timezone: context.temporal_scope.timezone,
+      validFrom: context.temporal_scope.valid_from,
+      validTo: context.temporal_scope.valid_to,
+      generatedAt: context.temporal_scope.generated_at,
+    } : undefined,
+    productionPlan: context.production_plan ? {
+      planId: context.production_plan.plan_id,
+      planDate: context.production_plan.plan_date,
+      plannedUnits: context.production_plan.planned_units,
+      productMix: context.production_plan.product_mix.map((item) => ({
+        variant: item.variant,
+        share: item.share,
+        plannedUnits: item.planned_units,
+      })),
+    } : undefined,
+    capacityModel: context.capacity_model ? {
+      activeAssetCount: context.capacity_model.active_asset_count,
+      plannedOperatingHours: context.capacity_model.planned_operating_hours,
+      oee: context.capacity_model.oee,
+      standardCycleMinutesPerUnit: context.capacity_model.standard_cycle_minutes_per_unit,
+      assetUnitsPerHour: context.capacity_model.asset_units_per_hour,
+      dailyCapacityUnits: context.capacity_model.daily_capacity_units,
+      basis: context.capacity_model.basis,
+    } : undefined,
+    eventImpact: context.event_impact ? {
+      eventId: context.event_impact.event_id,
+      equipmentId: context.event_impact.equipment_id,
+      line: context.event_impact.line,
+      productVariant: context.event_impact.product_variant,
+      screenPriority: context.event_impact.screen_priority,
+      impactStatus: context.event_impact.impact_status,
+      estimatedLostUnits: context.event_impact.estimated_lost_units,
+      basis: {
+        estimatedDowntimeMinutes: context.event_impact.basis.estimated_downtime_minutes,
+        assetUnitsPerHour: context.event_impact.basis.asset_units_per_hour,
+        formula: context.event_impact.basis.formula,
+      },
+    } : context.event_impact === null ? null : undefined,
+    limitations: context.limitations,
+  };
+}
+
+function closedLoopFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpClosedLoopSummary | null {
+  const closedLoop = viewModel.closed_loop;
+  if (!closedLoop) return null;
+  return {
+    workOrders: (closedLoop.work_orders ?? []).map((item) => ({
+      workOrderId: item.work_order_id,
+      workType: item.work_type,
+      status: item.status,
+      assignedTo: item.assigned_to ?? null,
+      actorDisplayName: item.actor_display_name ?? null,
+      createdAt: item.created_at ?? null,
+      updatedAt: item.updated_at ?? null,
+    })),
+    maintenanceActions: (closedLoop.maintenance_actions ?? []).map((item) => ({
+      maintenanceActionId: item.maintenance_action_id,
+      workOrderId: item.work_order_id ?? null,
+      status: item.status,
+      actorDisplayName: item.actor_display_name ?? null,
+      startedAt: item.started_at ?? null,
+      completedAt: item.completed_at ?? null,
+    })),
+    maintenanceEvents: (closedLoop.maintenance_events ?? []).map((item) => ({
+      maintenanceEventId: item.maintenance_event_id,
+      maintenanceActionId: item.maintenance_action_id ?? null,
+      workOrderId: item.work_order_id ?? null,
+      completedAt: item.completed_at ?? null,
+      actorDisplayName: item.actor_display_name ?? null,
+    })),
+    activities: (closedLoop.activities ?? []).map((item) => ({
+      activityId: item.activity_id,
+      activityType: item.activity_type,
+      workType: item.work_type ?? null,
+      actorDisplayName: item.actor_display_name ?? null,
+      beforeStatus: item.before_status ?? null,
+      afterStatus: item.after_status ?? null,
+      createdAt: item.created_at ?? null,
+      workOrderId: item.work_order_id ?? null,
+      maintenanceActionId: item.maintenance_action_id ?? null,
+      maintenanceEventId: item.maintenance_event_id ?? null,
+    })),
+    availableActions: (closedLoop.available_actions ?? []).map((item) => ({
+      actionId: item.action_id,
+      targetType: item.target_type,
+      targetId: item.target_id ?? null,
+      label: item.label,
+      disabledReason: item.disabled_reason ?? null,
+    })),
+    runtimeStatus: closedLoop.runtime_status ?? null,
+  };
+}
+
 function eventAsset(event: MvpEvent): MvpAsset {
   return {
     assetId: event.assetId,
     displayName: event.assetName,
-    assetType: event.assetId.toLowerCase().includes("cnc") || event.assetId.startsWith("M-")
+    assetType: event.assetId.toLowerCase().includes("cnc")
       ? "cnc"
       : event.assetId.toUpperCase().startsWith("CMP-")
         ? "compressor"
         : "equipment",
-    site: "Manufacturing Demo",
+    site: event.assetId.match(/^[A-Z]+-(S\d+)-/)?.[1] ?? "Manufacturing Demo",
     line: event.line,
     cell: event.line,
     status: event.status,
@@ -170,7 +270,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
   const assets = [...latestResultByAsset.values()].map((result): MvpAsset => {
     const related = byAsset.get(result.asset_id);
     const confidence = normalizeConfidence(result.confidence);
-    const status = normalizeRiskStatus(result.status_grade, result.failure_probability);
+    const status = normalizeRiskStatus(result.status_grade);
     return {
       assetId: result.asset_id,
       displayName: related?.assetName ?? result.asset_id,
@@ -184,7 +284,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
       confidenceScore: confidence.score,
       criticality: related?.criticality ?? null,
       assignedEngineer: related?.assignedEngineer ?? null,
-      estimatedDowntimeMinutes: related?.estimatedDowntimeMinutes ?? 0,
+      estimatedDowntimeMinutes: related?.estimatedDowntimeMinutes ?? null,
       sparePartAvailable: related?.sparePartAvailable ?? null,
       predictedFailureType: result.predicted_failure_type,
       recommendedDecision: related?.recommendedDecision ?? normalizeDecision(result.recommended_action?.action),
@@ -229,7 +329,9 @@ export function computeMetrics(assets: MvpAsset[], events: MvpEvent[]): MvpMetri
     totalAssets: assets.length,
     ...counts,
     averageRisk: probabilities.length ? probabilities.reduce((sum, value) => sum + value, 0) / probabilities.length : null,
-    estimatedDowntimeMinutes: events.reduce((sum, event) => sum + event.estimatedDowntimeMinutes, 0),
+    estimatedDowntimeMinutes: events.length > 0 && events.every((event) => event.estimatedDowntimeMinutes !== null)
+      ? events.reduce((sum, event) => sum + event.estimatedDowntimeMinutes!, 0)
+      : null,
     pendingDecisions: events.filter((event) => event.recommendedDecision !== "continue_monitoring").length,
   };
 }
@@ -331,8 +433,68 @@ function sensorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpSe
   return viewModel.features.map((feature) => ({
     id: feature.key,
     label: feature.label,
-    value: feature.current,
+    value: feature.current.value,
     unit: feature.unit || null,
+    observedAt: feature.current.observed_at,
+    qualityStatus: feature.current.quality_status,
+    historySourceRef: feature.history.source_ref ?? null,
+    historyPointCount: feature.history.points.length,
+    historyWindow: feature.history.window ? {
+      requested: feature.history.window.requested,
+      anchorObservedAt: feature.history.window.anchor_observed_at,
+      requestedStart: feature.history.window.requested_start,
+      requestedEnd: feature.history.window.requested_end,
+      actualStart: feature.history.window.actual_start,
+      actualEnd: feature.history.window.actual_end,
+      pointCount: feature.history.window.point_count,
+      coverageStatus: feature.history.window.coverage_status,
+    } : null,
+    historyPoints: feature.history.points.map((point) => ({
+      observedAt: point.observed_at,
+      value: point.value,
+      qualityStatus: point.quality_status,
+    })),
+  }));
+}
+
+function riskSeriesFromAssetDetailViewModel(viewModel: AssetDetailViewModel) {
+  return viewModel.risk_series.map((point) => ({
+    observedAt: point.observed_at,
+    failureProbability: point.failure_probability,
+    status: point.status_grade,
+  }));
+}
+
+function equipmentHistoryFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpEquipmentHistoryItem[] {
+  return viewModel.equipment_history.map((item) => ({
+    occurredAt: item.occurred_at,
+    kind: item.kind,
+    tone: item.tone,
+    description: item.description,
+    source: item.source,
+    memo: item.memo ?? null,
+  }));
+}
+
+function evidenceGapsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpEvidenceGap[] {
+  return viewModel.evidence.gaps.map((gap) => ({
+    field: gap.field,
+    reason: gap.reason,
+    ownerDomain: gap.owner_domain,
+  }));
+}
+
+function inspectionTargetsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpInspectionTarget[] {
+  return (viewModel.inspection_targets ?? []).map((target) => ({
+    targetId: target.target_id,
+    componentId: target.component_id,
+    componentLabel: target.component_label,
+    association: target.association,
+    locationLabel: target.location_label,
+    inspectionMethod: target.inspection_method,
+    basisRefs: target.basis_refs,
+    sourceRef: target.source_ref,
+    unavailableReason: target.unavailable_reason,
   }));
 }
 
@@ -344,7 +506,7 @@ function factorsFromAssetDetailViewModel(viewModel: AssetDetailViewModel): MvpFa
       id: feature.top_factor?.evidence_field_id ?? `${feature.key}:${feature.top_factor?.rank ?? "factor"}`,
       feature: feature.key,
       label: feature.label,
-      value: feature.current,
+      value: feature.current.value,
       unit: feature.unit || null,
       contribution: Math.abs(feature.top_factor?.contribution ?? 0),
       direction: feature.top_factor?.direction ?? "risk_up",
@@ -435,6 +597,7 @@ export function adaptReport(report: Report, revision = 0): MvpReportModel {
 
 export function buildTemplateReport(event: MvpEvent, metrics?: MvpMetrics): MvpReportModel {
   const probability = event.failureProbability === null ? "예측 사용 불가" : `${Math.round(event.failureProbability * 100)}%`;
+  const impact = event.estimatedDowntimeMinutes === null ? "영향 근거 부족" : `${event.estimatedDowntimeMinutes}분`;
   const qualityText = event.status === "data_quality_hold"
     ? "데이터 품질 문제로 판단을 보류하고 원천 데이터 확인이 필요합니다."
     : `현재 실패 위험은 ${probability}이며, 이는 고장 확정이 아닌 운영 우선순위 판단을 위한 모델 결과입니다.`;
@@ -443,7 +606,7 @@ export function buildTemplateReport(event: MvpEvent, metrics?: MvpMetrics): MvpR
     revision: 0,
     mode: "template-fallback",
     headline: `${event.assetName} 설비 위험 대응 보고`,
-    summary: `${event.line}의 ${event.assetName}을 우선 검토 중입니다. 권장 판단은 ${event.recommendedDecision}이며 예상 생산 영향은 ${event.estimatedDowntimeMinutes}분입니다.`,
+    summary: `${event.line}의 ${event.assetName}을 우선 검토 중입니다. 권장 판단은 ${event.recommendedDecision}이며 예상 생산 영향은 ${impact}입니다.`,
     sections: [
       {
         id: "executive-summary",
@@ -495,8 +658,21 @@ export function composeEventDetail(input: {
     event: input.event,
     sensors: evidenceSensors(input.evidence),
     topFactors: evidenceFactors(input.evidence),
+    riskSeries: [],
+    predictionHorizonHours: null,
     threshold: input.evidence?.threshold ?? null,
+    assetCriticality: input.event.criticality,
+    criticalityBasis: [],
+    criticalitySource: "unknown",
+    maintenanceContext: null,
+    inspectionTargets: [],
     dataQualityWarnings: input.evidence?.data_quality_warnings ?? [],
+    equipmentHistory: [],
+    evidenceGaps: [],
+    assetDetailStatus: null,
+    operationContext: null,
+    closedLoop: null,
+    reviewPriority: null,
     activity: normalizeActivity(input.activity),
     report,
     provenance,
@@ -522,7 +698,37 @@ export function applyAssetDetailViewModel(
     ...detail,
     sensors: sensorsFromAssetDetailViewModel(viewModel),
     topFactors: factorsFromAssetDetailViewModel(viewModel),
+    riskSeries: riskSeriesFromAssetDetailViewModel(viewModel),
+    predictionHorizonHours: viewModel.risk.prediction_horizon_hours,
     threshold: viewModel.risk.threshold,
+    event: {
+      ...detail.event,
+      criticality: viewModel.asset.criticality,
+    },
+    assetCriticality: viewModel.asset.criticality,
+    criticalityBasis: viewModel.asset.criticality_basis,
+    criticalitySource: viewModel.asset.criticality_source,
+    maintenanceContext: {
+      lastMaintenanceDaysAgo: viewModel.maintenance_context.last_maintenance_days_ago,
+      similarEvents30d: viewModel.maintenance_context.similar_events_30d,
+      openWorkOrderExists: viewModel.maintenance_context.open_work_order_exists,
+    },
+    inspectionTargets: inspectionTargetsFromAssetDetailViewModel(viewModel),
+    equipmentHistory: equipmentHistoryFromAssetDetailViewModel(viewModel),
+    evidenceGaps: evidenceGapsFromAssetDetailViewModel(viewModel),
+    assetDetailStatus: {
+      isStale: viewModel.data_status.is_stale,
+      isDataQualityHold: viewModel.data_status.is_data_quality_hold,
+      lastUpdatedAt: viewModel.data_status.last_updated_at ?? null,
+      source: viewModel.data_status.source,
+    },
+    operationContext: operationContextFromAssetDetailViewModel(viewModel),
+    closedLoop: closedLoopFromAssetDetailViewModel(viewModel),
+    reviewPriority: viewModel.review_priority ? {
+      level: viewModel.review_priority.level,
+      reasons: viewModel.review_priority.reasons,
+      sourceFields: viewModel.review_priority.source_fields,
+    } : null,
     provenance: {
       ...provenanceFromAssetDetailViewModel(detail.event, viewModel),
       promptVersion: detail.provenance.promptVersion,

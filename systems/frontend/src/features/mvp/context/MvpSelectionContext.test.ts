@@ -12,6 +12,7 @@ describe("MVP URL selection contract", () => {
     expect(selection).toEqual({
       projectId: "project-a",
       view: "operations",
+      dashboard: "workflow",
       reportTab: "status-map",
       assetId: "CNC-2",
       eventId: "EVENT-2",
@@ -42,10 +43,24 @@ describe("MVP URL selection contract", () => {
     expect(selection.reportTab).toBe("executive-brief");
   });
 
+  it("preserves the overview dashboard variant as a presentation choice", () => {
+    const selection = parseMvpSelection({
+      projectId: "project-a",
+      search: "?view=overview&dashboard=classic",
+      defaultRole: "process_manager",
+      sessionValue: JSON.stringify({ dashboard: "workflow" }),
+    });
+    expect(selection.dashboard).toBe("classic");
+
+    const query = selectionSearch(selection);
+    expect(new URLSearchParams(query).get("dashboard")).toBe("classic");
+  });
+
   it("serializes a reproducible deep link", () => {
     const query = selectionSearch({
       projectId: "project-a",
       view: "reports",
+      dashboard: "workflow",
       reportTab: "inspection-request",
       role: "process_manager",
       workspaceId: "workspace-a",
@@ -54,6 +69,7 @@ describe("MVP URL selection contract", () => {
     });
     const params = new URLSearchParams(query);
     expect(params.get("view")).toBe("reports");
+    expect(params.get("dashboard")).toBe("workflow");
     expect(params.get("report")).toBe("inspection-request");
     expect(params.get("asset_id")).toBe("CNC S01");
     expect(params.get("event_id")).toBe("EVENT#1");

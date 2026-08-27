@@ -1,7 +1,8 @@
 import { AlertTriangle, CalendarRange, ClipboardCheck, Clock3, DatabaseZap, FileText, Filter, Gauge, Map as MapIcon, Printer, ShieldCheck, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpEventDetailModel, MvpLineRisk, MvpReportTab, MvpRiskStatus } from "../api/mvpContracts";
+import type { MvpAsset, MvpBootstrapModel, MvpEvent, MvpEventDetailModel, MvpReportTab, MvpRiskStatus } from "../api/mvpContracts";
 import { DECISION_LABEL, formatMinutes, formatProbability, formatTimestamp } from "../components/MvpUi";
+import { displayAssetName, displayAssetShortName, displayEventAssetName, displayEventLabel, fieldFactorItem, fieldFailureLabel } from "../displayLabels";
 import { MvpExecutiveReportPage } from "./MvpExecutiveReportPage";
 import { MvpInspectionReportPage } from "./MvpInspectionReportPage";
 import { MvpMapReportAssetDetailView } from "./MvpMapReportAssetDetailView";
@@ -10,7 +11,7 @@ const REPORT_TABS: Array<{ id: MvpReportTab; label: string; description: string;
   { id: "status-map", label: "상태 요약", description: "설비 상태 맵과 우선순위", icon: MapIcon },
   { id: "inspection-request", label: "점검 요청", description: "현장 확인 항목", icon: ClipboardCheck },
   { id: "summary-report", label: "요약 보고서", description: "관리자 공유본", icon: FileText },
-  { id: "executive-brief", label: "Executive Brief", description: "선택 Event 보고서", icon: FileText },
+  { id: "executive-brief", label: "Executive Brief", description: "선택 이벤트 보고서", icon: FileText },
 ];
 
 const MAP_STATUS_META: Record<MvpRiskStatus, { label: string; tone: string; sentence: string }> = {
@@ -124,8 +125,8 @@ function MvpSummaryGraphBoard({
         <article className="summary-selected-graph" aria-label="선택 설비 위험 그래프">
           <div className="panel-heading compact">
             <div>
-              <span>SELECTED ASSET</span>
-              <h2>{selected?.assetName ?? selectedAsset?.displayName ?? "선택 설비 없음"}</h2>
+              <span>선택 설비</span>
+              <h2>{selected ? displayEventAssetName(selected) : displayAssetName(selectedAsset)}</h2>
             </div>
             {selected ? <MapStatusBadge status={selected.status} /> : selectedAsset ? <MapStatusBadge status={selectedAsset.status} /> : null}
           </div>
@@ -139,8 +140,8 @@ function MvpSummaryGraphBoard({
           </div>
           <dl className="summary-selected-facts">
             <div><dt>권장 조치</dt><dd>{selected ? DECISION_LABEL[selected.recommendedDecision] : "선택 필요"}</dd></div>
-            <div><dt>예상 영향</dt><dd>{formatMinutes(selected?.estimatedDowntimeMinutes ?? selectedAsset?.estimatedDowntimeMinutes ?? 0)}</dd></div>
-            <div><dt>근거</dt><dd>{selectedAsset?.topFactors[0]?.label ?? selected?.predictedFailureType ?? "unavailable"}</dd></div>
+            <div><dt>예상 영향</dt><dd>{formatMinutes(selected?.estimatedDowntimeMinutes ?? selectedAsset?.estimatedDowntimeMinutes ?? null)}</dd></div>
+            <div><dt>근거</dt><dd>{selectedAsset?.topFactors[0] ? fieldFactorItem(selectedAsset.topFactors[0]) : fieldFailureLabel(selected?.predictedFailureType ?? "unavailable")}</dd></div>
           </dl>
         </article>
       </div>
@@ -152,8 +153,6 @@ function lineKey(asset: MvpAsset) {
   return asset.line || asset.cell || asset.site || "미분류 라인";
 }
 
-const MIN_LINE_MAP_NODES = 20;
-
 interface StatusMapNode {
   id: string;
   label: string;
@@ -163,67 +162,15 @@ interface StatusMapNode {
   event: MvpEvent | null;
 }
 
-function lineMapStatus(index: number, averageRisk: number | null, anchorStatus: MvpRiskStatus): MvpRiskStatus {
-  if (averageRisk === null) {
-    return index % 7 === 0 ? "data_quality_hold" : index % 5 === 0 ? "attention" : "normal";
-  }
-  if (anchorStatus === "data_quality_hold" && index % 6 === 0) return "data_quality_hold";
-  if (averageRisk >= 0.75) return index % 5 === 0 ? "critical" : index % 3 === 0 ? "warning" : "attention";
-  if (averageRisk >= 0.55) return index % 6 === 0 ? "critical" : index % 2 === 0 ? "warning" : "attention";
-  if (averageRisk >= 0.25) return index % 5 === 0 ? "warning" : index % 2 === 0 ? "attention" : "normal";
-  return index % 6 === 0 ? "attention" : "normal";
-}
-
-function lineMapProbability(status: MvpRiskStatus, averageRisk: number | null, index: number) {
-  if (status === "data_quality_hold") return null;
-  const baseline = averageRisk ?? (status === "critical" ? 0.82 : status === "warning" ? 0.62 : status === "attention" ? 0.36 : 0.14);
-  const offset = ((index % 5) - 2) * 0.025;
-  return Math.max(0.03, Math.min(0.97, baseline + offset));
-}
-
-function representativeEventForStatus(line: string, status: MvpRiskStatus, assets: MvpAsset[], events: MvpEvent[], eventById: Map<string, MvpEvent>) {
-  const sameStatusAsset = assets.find((asset) => asset.status === status && asset.eventId && eventById.has(asset.eventId));
-  if (sameStatusAsset?.eventId) return eventById.get(sameStatusAsset.eventId) ?? null;
-
-  const sameLineAsset = assets.find((asset) => asset.eventId && eventById.has(asset.eventId));
-  if (sameLineAsset?.eventId) return eventById.get(sameLineAsset.eventId) ?? null;
-
-  return events.find((event) => event.line === line && event.status === status)
-    ?? events.find((event) => event.line === line)
-    ?? events[0]
-    ?? null;
-}
-
-function buildLineMapNodes(line: string, assets: MvpAsset[], summary: MvpLineRisk | undefined, events: MvpEvent[], eventById: Map<string, MvpEvent>) {
-  const actualNodes: StatusMapNode[] = assets.map((asset) => ({
+function buildLineMapNodes(assets: MvpAsset[], eventById: Map<string, MvpEvent>) {
+  return assets.map((asset): StatusMapNode => ({
     id: asset.assetId,
-    label: asset.assetId.split("-").at(-1) ?? asset.assetId,
+    label: displayAssetShortName(asset),
     status: asset.status,
     probability: asset.failureProbability,
     asset,
     event: asset.eventId ? eventById.get(asset.eventId) ?? null : null,
-  }));
-  const targetCount = Math.max(summary?.total ?? 0, actualNodes.length, actualNodes.length < 6 ? MIN_LINE_MAP_NODES : actualNodes.length);
-  const usedLabels = new Set(actualNodes.map((node) => node.label));
-  const nodes = [...actualNodes];
-  const anchorStatus = actualNodes[0]?.status ?? "normal";
-
-  for (let unit = 1; nodes.length < targetCount; unit += 1) {
-    const label = String(unit).padStart(3, "0");
-    if (usedLabels.has(label) || usedLabels.has(String(unit).padStart(2, "0"))) continue;
-    const status = lineMapStatus(unit, summary?.averageRisk ?? null, anchorStatus);
-    nodes.push({
-      id: `${line}-map-${label}`,
-      label,
-      status,
-      probability: lineMapProbability(status, summary?.averageRisk ?? null, unit),
-      asset: null,
-      event: representativeEventForStatus(line, status, assets, events, eventById),
-    });
-    usedLabels.add(label);
-  }
-
-  return nodes.sort((a, b) => a.label.localeCompare(b.label, "ko", { numeric: true }));
+  })).sort((a, b) => a.label.localeCompare(b.label, "ko", { numeric: true }));
 }
 
 function MvpStatusMapReport({
@@ -251,7 +198,7 @@ function MvpStatusMapReport({
       line,
       assets,
       summary: model.lineRisk.find((item) => item.line === line),
-      nodes: buildLineMapNodes(line, assets, model.lineRisk.find((item) => item.line === line), model.events, eventById),
+      nodes: buildLineMapNodes(assets, eventById),
     }));
   }, [eventById, model.assets, model.events, model.lineRisk]);
   const priorityAssets = model.assets
@@ -264,12 +211,12 @@ function MvpStatusMapReport({
         <div>
           <span>상태 요약 보고서</span>
           <h1>예지보전 상태 요약 보고서</h1>
-          <p>현재 MVP의 Result Artifact와 Event 목록을 기준으로 위험 상태, 판단 대기, 데이터 품질 보류를 라인별 맵으로 요약합니다.</p>
+          <p>현재 관측된 설비 판단과 운영 이벤트를 기준으로 위험 상태, 판단 대기, 데이터 품질 보류를 라인별로 요약합니다.</p>
         </div>
         <div className="report-meta">
           <small>생성 시각</small>
           <strong>{formatTimestamp(model.context.refreshedAt)}</strong>
-          <span>{model.context.sourceMode === "canonical-runtime" ? "Runtime 기반" : "Fallback 기반"}</span>
+          <span>{model.context.sourceMode === "canonical-runtime" ? "운영 데이터" : "보조 데이터"}</span>
         </div>
       </header>
 
@@ -277,13 +224,13 @@ function MvpStatusMapReport({
         <ReportKpi icon={Gauge} label="전체 설비" value={`${model.metrics.totalAssets}대`} detail={model.context.datasetVersionId} />
         <ReportKpi icon={AlertTriangle} label="위험/경고" value={`${model.metrics.critical + model.metrics.warning}대`} detail={`위험 ${model.metrics.critical} · 경고 ${model.metrics.warning}`} tone="warm" />
         <ReportKpi icon={ClipboardCheck} label="판단 대기" value={`${model.metrics.pendingDecisions}건`} detail="점검·정지 검토·데이터 확인" />
-        <ReportKpi icon={Clock3} label="예상 영향" value={formatMinutes(model.metrics.estimatedDowntimeMinutes)} detail="Event 합산" />
+        <ReportKpi icon={Clock3} label="예상 영향" value={formatMinutes(model.metrics.estimatedDowntimeMinutes)} detail="이벤트 합산" />
         <ReportKpi icon={DatabaseZap} label="품질 보류" value={`${model.metrics.dataQualityHold}건`} detail="고장 확정 표현 금지" tone="hold" />
       </section>
 
       <section className="priority-panel">
         <div className="panel-heading">
-          <div><span>우선 확인 설비</span><h2>미결정 Event 우선순위</h2></div>
+          <div><span>우선 확인 설비</span><h2>미결정 이벤트 우선순위</h2></div>
           <button type="button" className="filter-button"><Filter size={15} />미결정만</button>
         </div>
         <div className="priority-list">
@@ -292,7 +239,7 @@ function MvpStatusMapReport({
             return (
               <button key={asset.assetId} type="button" className={asset.assetId === selectedAsset?.assetId ? "active" : ""} onClick={() => event && onSelectEvent(event)} disabled={!event}>
                 <MapStatusBadge status={asset.status} />
-                <strong>{asset.displayName}</strong>
+                <strong>{displayAssetName(asset)}</strong>
                 <span>{asset.line}</span>
                 <b>{formatProbability(asset.failureProbability)}</b>
                 <small>{DECISION_LABEL[asset.recommendedDecision]}</small>
@@ -332,7 +279,7 @@ function MvpStatusMapReport({
                           setFocusedMapNodeId(node.id);
                           if (node.event) onSelectEvent(node.event);
                         }}
-                        title={`${node.asset?.displayName ?? `${line.line} ${node.label}호 설비`} · ${MAP_STATUS_META[node.status].label} · 위험 예측 확률 ${formatProbability(node.probability)}${node.asset ? "" : " · 클릭 시 같은 라인 대표 Event로 이동"}`}
+                        title={`${node.asset ? displayAssetName(node.asset) : `${line.line} ${node.label} 설비`} · ${MAP_STATUS_META[node.status].label} · 위험 예측 확률 ${formatProbability(node.probability)}${node.asset ? "" : " · 클릭 시 같은 라인 대표 이벤트로 이동"}`}
                       >
                         <span>{node.label}</span>
                       </button>
@@ -389,10 +336,12 @@ function MvpStatusMapReport({
 function MvpSummaryReport({
   model,
   selectedEvent,
+  detail,
   onSelectEvent,
 }: {
   model: MvpBootstrapModel;
   selectedEvent: MvpEvent | null;
+  detail: MvpEventDetailModel | null;
   onSelectEvent: (event: MvpEvent) => void;
 }) {
   const actionableEvents = model.events
@@ -410,11 +359,11 @@ function MvpSummaryReport({
         <div>
           <span>요약 보고서</span>
           <h1>예지보전 운영 요약 보고서</h1>
-          <p>map-report prototype의 요약 보고서 슬롯을 현재 MVP 데이터로 채운 공유용 보고서입니다. 상태 맵의 전체 흐름과 점검 요청의 현장 항목을 한 장으로 압축합니다.</p>
+          <p>상태 맵의 전체 흐름과 점검 요청의 현장 항목을 공유하기 쉬운 한 장 요약으로 정리합니다.</p>
         </div>
         <div className="report-meta">
           <small>작성 상태</small>
-          <strong>{model.context.sourceMode === "canonical-runtime" ? "Runtime 요약" : "Fallback 요약"}</strong>
+          <strong>{model.context.sourceMode === "canonical-runtime" ? "운영 데이터 요약" : "보조 데이터 요약"}</strong>
           <span>{formatTimestamp(model.context.refreshedAt)}</span>
         </div>
       </header>
@@ -435,15 +384,15 @@ function MvpSummaryReport({
 
       <MvpSummaryGraphBoard model={model} selected={selected} />
 
-      <MvpMapReportAssetDetailView model={model} selectedEvent={selectedEvent} onSelectEvent={onSelectEvent} statusMeta={MAP_STATUS_META} />
+      <MvpMapReportAssetDetailView model={model} selectedEvent={selectedEvent} detail={detail} onSelectEvent={onSelectEvent} statusMeta={MAP_STATUS_META} />
 
       <div className="summary-grid">
         <section className="report-panel">
           <div className="panel-heading compact"><div><span>MANAGER SUMMARY</span><h2>운영 판단 요약</h2></div></div>
           <div className="summary-decision-list">
             <article><strong>1. 우선순위</strong><p>위험/경고 설비를 먼저 확인하고, 생산 영향이 큰 설비는 Operations에서 결정 메모를 남깁니다.</p></article>
-            <article><strong>2. 현장 확인</strong><p>점검 요청 보고서의 설비별 센서 근거와 점검 위치를 현장 담당자에게 전달합니다.</p></article>
-            <article><strong>3. 데이터 품질</strong><p>품질 보류 Event는 위험 수치로 단정하지 않고 원천 데이터 확인 대상으로 분리합니다.</p></article>
+            <article><strong>2. 현장 확인</strong><p>점검 요청 보고서의 설비별 센서 근거와 위치 근거 유무를 현장 담당자에게 전달합니다.</p></article>
+            <article><strong>3. 데이터 품질</strong><p>품질 보류 이벤트는 위험 수치로 단정하지 않고 원천 데이터 확인 대상으로 분리합니다.</p></article>
           </div>
         </section>
 
@@ -462,14 +411,14 @@ function MvpSummaryReport({
 
       <section className="priority-panel summary-event-panel">
         <div className="panel-heading">
-          <div><span>ACTIONABLE EVENTS</span><h2>보고서에 포함할 Event</h2></div>
+          <div><span>검토 이벤트</span><h2>보고서에 포함할 이벤트</h2></div>
           {selected ? <MapStatusBadge status={selected.status} /> : null}
         </div>
         <div className="summary-event-list">
           {actionableEvents.map((event) => (
             <button key={event.eventId} type="button" className={event.eventId === selected?.eventId ? "active" : ""} onClick={() => onSelectEvent(event)}>
-              <strong>{event.assetName}</strong>
-              <span>{event.line} · {event.eventId}</span>
+              <strong>{displayEventAssetName(event)}</strong>
+              <span>{event.line} · {displayEventLabel(event)}</span>
               <b>{formatProbability(event.failureProbability)}</b>
               <small>{DECISION_LABEL[event.recommendedDecision]}</small>
             </button>
@@ -477,8 +426,8 @@ function MvpSummaryReport({
         </div>
         {selected ? (
           <aside className="summary-selected-note">
-            <strong>{selected.assetName}</strong>
-            <p>{selected.status === "data_quality_hold" ? "데이터 품질 확인이 먼저 필요한 Event입니다." : `${DECISION_LABEL[selected.recommendedDecision]} 대상으로 분류됐으며 예상 영향은 ${formatMinutes(selected.estimatedDowntimeMinutes)}입니다.`}</p>
+            <strong>{displayEventAssetName(selected)}</strong>
+            <p>{selected.status === "data_quality_hold" ? "데이터 품질 확인이 먼저 필요한 이벤트입니다." : `${DECISION_LABEL[selected.recommendedDecision]} 대상으로 분류됐으며 예상 영향은 ${formatMinutes(selected.estimatedDowntimeMinutes)}입니다.`}</p>
           </aside>
         ) : null}
       </section>
@@ -517,7 +466,7 @@ export function MvpReportsPage({
   onRetryDetail: () => void;
 }) {
   return (
-    <div className="mvp-page map-report-prototype mvp-reports-page" data-testid="mvp-reports">
+    <div className="mvp-page mvp-reports-page" data-testid="mvp-reports">
       <div className="mvp-report-tabs" role="tablist" aria-label="보고서 종류">
         {REPORT_TABS.map((tab) => {
           const Icon = tab.icon;
@@ -537,7 +486,7 @@ export function MvpReportsPage({
       ) : activeTab === "inspection-request" ? (
         <MvpInspectionReportPage />
       ) : activeTab === "summary-report" ? (
-        <MvpSummaryReport model={model} selectedEvent={selectedEvent} onSelectEvent={onSelectEvent} />
+        <MvpSummaryReport model={model} selectedEvent={selectedEvent} detail={detail} onSelectEvent={onSelectEvent} />
       ) : (
         <MvpExecutiveReportPage model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onBackToOverview={onBackToOverview} onOpenOperations={onOpenOperations} onRetryDetail={onRetryDetail} />
       )}

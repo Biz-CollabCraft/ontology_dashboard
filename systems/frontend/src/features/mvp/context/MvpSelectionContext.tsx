@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { mvpProjectPath, navigate } from "../../../routing";
-import type { MvpReportTab, MvpRoleLens, MvpSelection, MvpView } from "../api/mvpContracts";
+import type { MvpDashboardMode, MvpReportTab, MvpRoleLens, MvpSelection, MvpView } from "../api/mvpContracts";
 
 const SESSION_PREFIX = "ontology-dashboard:mvp-selection:";
 
@@ -36,6 +36,10 @@ function validRole(value: string | null, fallback: MvpRoleLens): MvpRoleLens {
   return value === "field_operator" || value === "process_manager" ? value : fallback;
 }
 
+function validDashboard(value: string | null): MvpDashboardMode {
+  return value === "classic" ? "classic" : "workflow";
+}
+
 function optionalValue(value: string | null): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -59,6 +63,7 @@ export function parseMvpSelection(input: {
   const queryHasView = params.has("view");
   const queryView = params.get("view");
   const queryHasReportTab = params.has("report");
+  const queryHasDashboard = params.has("dashboard");
   const queryHasRole = params.has("role");
   const queryHasWorkspace = params.has("workspace_id");
   const queryHasAsset = params.has("asset_id");
@@ -66,6 +71,9 @@ export function parseMvpSelection(input: {
   return {
     projectId: input.projectId,
     view: queryHasView ? validView(queryView) : validView(typeof session.view === "string" ? session.view : null),
+    dashboard: queryHasDashboard
+      ? validDashboard(params.get("dashboard"))
+      : validDashboard(typeof session.dashboard === "string" ? session.dashboard : null),
     reportTab: queryHasReportTab
       ? validReportTab(params.get("report"), queryView)
       : validReportTab(typeof session.reportTab === "string" ? session.reportTab : null, queryView ?? (typeof session.view === "string" ? session.view : null)),
@@ -81,6 +89,7 @@ export function parseMvpSelection(input: {
 export function selectionSearch(selection: MvpSelection): string {
   const params = new URLSearchParams();
   params.set("view", selection.view);
+  params.set("dashboard", selection.dashboard);
   if (selection.view === "reports") params.set("report", selection.reportTab);
   params.set("role", selection.role);
   if (selection.workspaceId) params.set("workspace_id", selection.workspaceId);

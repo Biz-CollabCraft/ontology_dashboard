@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EventSummary } from "../../../types";
 import {
   adaptEvent,
+  applyAssetDetailViewModel,
   buildTemplateReport,
   composeEventDetail,
   computeLineRisk,
@@ -36,8 +37,9 @@ const event: EventSummary = {
 
 describe("MVP adapter contract", () => {
   it("normalizes statuses and only uses the approved decision enum", () => {
-    expect(normalizeRiskStatus("danger", 0.2)).toBe("critical");
-    expect(normalizeRiskStatus("unknown", null)).toBe("data_quality_hold");
+    expect(normalizeRiskStatus("danger")).toBe("critical");
+    expect(normalizeRiskStatus("unknown")).toBe("data_quality_hold");
+    expect(normalizeRiskStatus(undefined)).toBe("data_quality_hold");
     expect(normalizeDecision("automatic shutdown")).toBe("review_shutdown");
     expect(normalizeDecision("inspect bearings")).toBe("request_inspection");
   });
@@ -99,6 +101,18 @@ describe("MVP adapter contract", () => {
 
     expect(assets[0].status).toBe("critical");
     expect(assets[0].criticality).toBeNull();
+  });
+
+  it("does not synthesize downtime impact when operational context is missing", () => {
+    const adapted = adaptEvent({
+      ...event,
+      equipment: {
+        ...event.equipment,
+        estimated_downtime_minutes: undefined,
+      },
+    } as unknown as EventSummary);
+
+    expect(adapted.estimatedDowntimeMinutes).toBeNull();
   });
 
   it("derives the same metrics and line summary used by all four screens", () => {
@@ -174,5 +188,215 @@ describe("MVP adapter contract", () => {
       "relative_vibration_z",
       "relative_vibration_zone",
     ]);
+  });
+
+  it("preserves AssetDetailViewModel current/history, gaps, and nullable freshness", () => {
+    const adapted = adaptEvent({
+      ...event,
+      equipment: { ...event.equipment, criticality: undefined },
+    } as never);
+    const detail = composeEventDetail({ event: adapted, evidence: null, report: null, activity: null });
+    const enriched = applyAssetDetailViewModel(detail, {
+      asset: {
+        asset_id: "CNC-001",
+        asset_type: "cnc",
+        observed_at: "2026-08-06T03:00:00Z",
+        criticality: null,
+        criticality_basis: [],
+        criticality_source: "unknown",
+      },
+      risk: {
+        current: 0.92,
+        threshold: 0.7,
+        status_grade: "critical",
+        prediction_horizon_hours: 24,
+      },
+      risk_series: [{
+        observed_at: "2026-08-06T02:00:00Z",
+        failure_probability: 0.84,
+        status_grade: "warning",
+        prediction_id: "pred-1",
+        source_kind: "runtime_inference",
+        source_ref: "prediction://pred-1",
+      }],
+      features: [{
+        key: "tool_wear_min",
+        label: "공구 마모",
+        unit: "분",
+        current: {
+          observed_at: "2026-08-06T03:00:00Z",
+          value: 210,
+          quality_status: "good",
+        },
+        history: {
+          source_ref: "observation-series://CNC-001/tool_wear_min",
+          window: {
+            requested: "24h",
+            anchor_observed_at: "2026-08-06T03:00:00Z",
+            requested_start: "2026-08-05T03:00:00Z",
+            requested_end: "2026-08-06T03:00:00Z",
+            actual_start: "2026-08-06T02:00:00Z",
+            actual_end: "2026-08-06T02:00:00Z",
+            point_count: 1,
+            coverage_status: "partial",
+          },
+          points: [{
+            observed_at: "2026-08-06T02:00:00Z",
+            value: 200,
+            quality_status: "good",
+          }],
+        },
+        top_factor: {
+          rank: 1,
+          contribution: 0.42,
+          direction: "risk_up",
+          explanation_method: "shap",
+          evidence_field_id: "features.tool_wear_min",
+        },
+      }],
+      equipment_history: [{
+        occurred_at: "2026-08-05T00:00:00Z",
+        kind: "inspection",
+        tone: "attention",
+        description: "이전 점검 기록",
+        source: "maintenance-read-model",
+      }],
+      maintenance_context: {
+        last_maintenance_days_ago: null,
+        similar_events_30d: null,
+        open_work_order_exists: null,
+      },
+      inspection_targets: [{
+        target_id: "inspection-target:RESULT#CNC-001:1",
+        component_id: "rotating_assembly",
+        component_label: "회전/진동 계통",
+        association: "inspection_candidate",
+        location_label: null,
+        inspection_method: null,
+        basis_refs: ["factor.1.tool_wear_min", "sensor_evidence.sensors.tool_wear_min"],
+        source_ref: "storage://result.json#component_hypotheses[0]",
+        unavailable_reason: "maintenance_inspection_location_contract_unavailable",
+      }],
+      operation_context: {
+        load_level: null,
+        runtime_hours_7d: null,
+        production_impact: null,
+      },
+      review_priority: null,
+      evidence: {
+        artifact_id: "RESULT#CNC-001",
+        model_version: "model-1",
+        dataset_version: "dsv-canonical-v3-1",
+        source_kind: "runtime_inference",
+        gaps: [
+          {
+            field: "asset.criticality",
+            reason: "criticality_missing_or_unresolved",
+            owner_domain: "equipment",
+          },
+          {
+            field: "review_priority",
+            reason: "review_priority_inputs_missing_or_unresolved",
+            owner_domain: "report",
+          },
+        ],
+      },
+      data_status: {
+        source: "canonical",
+        is_stale: null,
+        is_data_quality_hold: false,
+        warnings: [],
+      },
+      closed_loop: {
+        work_orders: [{
+          work_order_id: "WO-INS-001",
+          work_type: "inspection",
+          status: "requested",
+          assigned_to: null,
+          actor_display_name: "윤하린",
+          created_at: "2026-08-06T03:10:00Z",
+          updated_at: "2026-08-06T03:10:00Z",
+        }],
+        maintenance_actions: [],
+        maintenance_events: [],
+        activities: [{
+          activity_id: "ACT-001",
+          activity_type: "work_order.requested",
+          work_type: "inspection",
+          actor_display_name: "윤하린",
+          before_status: null,
+          after_status: "requested",
+          created_at: "2026-08-06T03:10:00Z",
+          work_order_id: "WO-INS-001",
+        }],
+        available_actions: [{
+          action_id: "approve_inspection_work_order",
+          target_type: "work_order",
+          target_id: "WO-INS-001",
+          label: "점검 승인",
+          disabled_reason: null,
+        }],
+        runtime_status: null,
+      },
+    });
+
+    expect(enriched.sensors[0]).toEqual(expect.objectContaining({
+      observedAt: "2026-08-06T03:00:00Z",
+      historySourceRef: "observation-series://CNC-001/tool_wear_min",
+      historyPointCount: 1,
+      historyWindow: {
+        requested: "24h",
+        anchorObservedAt: "2026-08-06T03:00:00Z",
+        requestedStart: "2026-08-05T03:00:00Z",
+        requestedEnd: "2026-08-06T03:00:00Z",
+        actualStart: "2026-08-06T02:00:00Z",
+        actualEnd: "2026-08-06T02:00:00Z",
+        pointCount: 1,
+        coverageStatus: "partial",
+      },
+      historyPoints: [{
+        observedAt: "2026-08-06T02:00:00Z",
+        value: 200,
+        qualityStatus: "good",
+      }],
+    }));
+    expect(enriched.predictionHorizonHours).toBe(24);
+    expect(enriched.riskSeries[0]).toEqual(expect.objectContaining({
+      observedAt: "2026-08-06T02:00:00Z",
+      failureProbability: 0.84,
+      status: "warning",
+    }));
+    expect(enriched.evidenceGaps[0]).toEqual(expect.objectContaining({ field: "asset.criticality" }));
+    expect(enriched.assetDetailStatus?.isStale).toBeNull();
+    expect(enriched.equipmentHistory[0].source).toBe("maintenance-read-model");
+    expect(enriched.closedLoop?.workOrders[0]).toEqual(expect.objectContaining({
+      workOrderId: "WO-INS-001",
+      workType: "inspection",
+      status: "requested",
+      actorDisplayName: "윤하린",
+    }));
+    expect(enriched.closedLoop?.availableActions[0]).toEqual(expect.objectContaining({
+      actionId: "approve_inspection_work_order",
+      targetId: "WO-INS-001",
+    }));
+    expect(enriched.closedLoop?.activities[0]).toEqual(expect.objectContaining({
+      activityType: "work_order.requested",
+      afterStatus: "requested",
+      workOrderId: "WO-INS-001",
+    }));
+    expect(enriched.inspectionTargets[0]).toEqual(expect.objectContaining({
+      componentId: "rotating_assembly",
+      componentLabel: "회전/진동 계통",
+      locationLabel: null,
+      unavailableReason: "maintenance_inspection_location_contract_unavailable",
+    }));
+    expect(enriched.inspectionTargets[0].basisRefs).toEqual([
+      "factor.1.tool_wear_min",
+      "sensor_evidence.sensors.tool_wear_min",
+    ]);
+    expect(enriched.event.criticality).toBeNull();
+    expect(enriched.assetCriticality).toBeNull();
+    expect(enriched.reviewPriority).toBeNull();
+    expect(enriched.warnings.join(" ")).toContain("asset.criticality");
   });
 });

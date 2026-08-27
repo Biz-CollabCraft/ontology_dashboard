@@ -79,6 +79,7 @@ def get_asset_detail_view(
     asset_id: str,
     project_id: str = Query(default="manufacturing-demo-project"),
     dataset_version_id: str | None = Query(default=None, max_length=160),
+    history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
@@ -86,7 +87,12 @@ def get_asset_detail_view(
         raise AuthError(403, "project_scope_denied", "허용된 Project 범위를 벗어난 Object입니다.")
     if principal.active_project_id != project_id:
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
-    return service.asset_detail_view_model(asset_id, project_id, dataset_version_id=dataset_version_id)
+    return service.asset_detail_view_model(
+        asset_id,
+        project_id,
+        dataset_version_id=dataset_version_id,
+        history_window=history_window,
+    )
 
 
 @router.get("/events/{event_id}/evidence")
