@@ -17,6 +17,7 @@ from app.diagnosis.domain import (
     product_result_artifact_to_event_evidence_projection,
 )
 from app.equipment.ports import EquipmentApplicationPort
+from app.mvp.agent_review_packet import compose_agent_review_packet
 from app.mvp.asset_detail_view_model import compose_asset_detail_view_model
 
 from .context import ContextProviderFactory
@@ -213,6 +214,27 @@ class ManufacturingPredictiveMaintenanceService:
                 "warnings": [],
             },
             history_window=history_window,
+        )
+
+    def agent_review_packet(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        dataset_version_id: str | None = None,
+        history_window: str = "24h",
+    ) -> dict[str, Any]:
+        fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
+        artifact = self._product_result_artifact(fixture)
+        return compose_agent_review_packet(
+            project_id=project_id,
+            view_model=self.asset_detail_view_model(
+                asset_id,
+                project_id,
+                dataset_version_id=dataset_version_id,
+                history_window=history_window,
+            ),
+            procedure_groundings=self._matching_inspection_sops(fixture, artifact),
         )
 
     def patch_equipment_state(
@@ -460,18 +482,7 @@ class ManufacturingPredictiveMaintenanceService:
         fixture: dict[str, Any],
         artifact: dict[str, Any],
     ) -> dict[str, dict[str, Any]]:
-        equipment = fixture.get("equipment") or {}
-        asset_type = str(equipment.get("asset_type") or artifact.get("asset_type") or "")
-        failure_type = str(artifact.get("predicted_failure_type") or fixture.get("expected", {}).get("predicted_failure_type") or "")
-        risk_grade = str(artifact.get("status_grade") or "")
-        criticality = str(equipment.get("criticality") or "")
-        operation_context = fixture.get("operation_context") or {}
-        production_impact = str(operation_context.get("production_impact") or "")
-        factor_keys = {
-            str(factor.get("feature"))
-            for factor in artifact.get("top_factors") or []
-            if factor.get("feature")
-        }
+        matching_sops = self._matching_inspection_sops(fixture, artifact)
         component_hypotheses = (
             (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
         )
@@ -481,22 +492,7 @@ class ManufacturingPredictiveMaintenanceService:
             if isinstance(item, dict) and item.get("component_id")
         }
         guidance_by_component: dict[str, dict[str, Any]] = {}
-        for sop in self.inspection_sops:
-            if not _is_displayable_inspection_sop(sop):
-                continue
-            if not _matches_any(asset_type, sop.get("asset_types") or []):
-                continue
-            if failure_type and not _matches_any(failure_type, sop.get("failure_modes") or []):
-                continue
-            if factor_keys and factor_keys.isdisjoint({str(item) for item in sop.get("factor_keys") or []}):
-                continue
-            applicability = sop.get("applicability") or {}
-            if risk_grade and not _matches_any(risk_grade, applicability.get("risk_grades") or []):
-                continue
-            if criticality and not _matches_any(criticality, applicability.get("criticality") or []):
-                continue
-            if production_impact and not _matches_any(production_impact, applicability.get("production_impact") or []):
-                continue
+        for sop in matching_sops:
             for component_id in component_ids.intersection({str(item) for item in sop.get("component_ids") or []}):
                 guidance = sop.get("guidance") or {}
                 guidance_by_component[component_id] = {
@@ -514,6 +510,43 @@ class ManufacturingPredictiveMaintenanceService:
                     "disclaimer": guidance.get("disclaimer"),
                 }
         return guidance_by_component
+
+    def _matching_inspection_sops(
+        self,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        equipment = fixture.get("equipment") or {}
+        asset_type = str(equipment.get("asset_type") or artifact.get("asset_type") or "")
+        failure_type = str(artifact.get("predicted_failure_type") or fixture.get("expected", {}).get("predicted_failure_type") or "")
+        risk_grade = str(artifact.get("status_grade") or "")
+        criticality = str(equipment.get("criticality") or "")
+        operation_context = fixture.get("operation_context") or {}
+        production_impact = str(operation_context.get("production_impact") or "")
+        factor_keys = {
+            str(factor.get("feature"))
+            for factor in artifact.get("top_factors") or []
+            if factor.get("feature")
+        }
+        matches = []
+        for sop in self.inspection_sops:
+            if str(sop.get("source_kind")) not in {"demo_sop_fixture", "site_sop"}:
+                continue
+            if not _matches_any(asset_type, sop.get("asset_types") or []):
+                continue
+            if failure_type and not _matches_any(failure_type, sop.get("failure_modes") or []):
+                continue
+            if factor_keys and factor_keys.isdisjoint({str(item) for item in sop.get("factor_keys") or []}):
+                continue
+            applicability = sop.get("applicability") or {}
+            if risk_grade and not _matches_any(risk_grade, applicability.get("risk_grades") or []):
+                continue
+            if criticality and not _matches_any(criticality, applicability.get("criticality") or []):
+                continue
+            if production_impact and not _matches_any(production_impact, applicability.get("production_impact") or []):
+                continue
+            matches.append(sop)
+        return matches
 
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)

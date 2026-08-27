@@ -23,6 +23,11 @@ from ontology_dashboard_manufacturing_ml.contracts import FAILURE_MODE_COLUMNS, 
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = sorted((ROOT / "data" / "fixtures").glob("GS-*.json"))
+AGENT_REVIEW_PACKET_SCHEMA = json.loads(
+    (ROOT / "contracts" / "schemas" / "agent-review-packet.schema.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 
 @pytest.fixture()
@@ -306,6 +311,24 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     report = client.post("/api/events/EVT-GS-002/report", json={"role": "manager", "use_llm": False})
     assert report.status_code == 200
     assert report.json()["report"]["role"] == "manager"
+
+    activity_before_packet = client.get("/api/events/EVT-GS-002/activity").json()
+    packet_response = client.get("/api/objects/CNC-S04-L04-01/agent-review-packet")
+    assert packet_response.status_code == 200
+    packet = packet_response.json()
+    assert list(Draft202012Validator(AGENT_REVIEW_PACKET_SCHEMA).iter_errors(packet)) == []
+    assert packet["schema_version"] == "agent-review-packet-v1.0"
+    assert packet["asset_id"] == "CNC-S04-L04-01"
+    assert packet["closed_loop_boundary"]["mutation_allowed"] is False
+    assert "create_work_order" in packet["closed_loop_boundary"]["forbidden_actions"]
+    assert "auto_approve" in packet["closed_loop_boundary"]["forbidden_actions"]
+    assert packet["sop_guidance"][0]["sensor_judgment"]["inspection_result_mapping"] == {
+        "records_operational_fact": True,
+        "does_not_create_maintenance_event": True,
+        "manual_recommendation_requires_manager_acceptance": True,
+    }
+    assert "교체 전 생산 정지 가능 시간과 부품 가용성이 확인됐습니까?" in packet["human_questions"]
+    assert client.get("/api/events/EVT-GS-002/activity").json() == activity_before_packet
 
     login_as(client, "engineer@ontology.local", "Engineer!2026")
     layout = client.post(

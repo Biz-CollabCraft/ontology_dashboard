@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  Bot,
   Clock3,
   ClipboardCheck,
   ClipboardList,
@@ -13,7 +14,9 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { getMvpAgentReviewPacket } from "../../../api";
 import type {
+  MvpAgentReviewPacket,
   MvpAsset,
   MvpBootstrapModel,
   MvpClosedLoopSummary,
@@ -1519,6 +1522,10 @@ function AssetPreviewPanel({
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
+  const [agentPacketOpen, setAgentPacketOpen] = useState(false);
+  const [agentPacket, setAgentPacket] = useState<MvpAgentReviewPacket | null>(null);
+  const [agentPacketLoading, setAgentPacketLoading] = useState(false);
+  const [agentPacketError, setAgentPacketError] = useState("");
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
@@ -1539,6 +1546,23 @@ function AssetPreviewPanel({
     setPrintReportTab(reportTab);
     setReportOutputOpen(false);
     window.setTimeout(() => window.print(), 100);
+  };
+  const openAgentPacket = async () => {
+    if (!asset) return;
+    setAgentPacketOpen(true);
+    setAgentPacketLoading(true);
+    setAgentPacketError("");
+    try {
+      setAgentPacket(await getMvpAgentReviewPacket({
+        assetId: asset.assetId,
+        datasetVersionId: candidate?.event.datasetVersionId ?? null,
+        historyWindow: sensorWindow,
+      }));
+    } catch (reason: unknown) {
+      setAgentPacketError(reason instanceof Error ? reason.message : "Agent review packet을 불러오지 못했습니다.");
+    } finally {
+      setAgentPacketLoading(false);
+    }
   };
   useEffect(() => {
     if (!printReportTab) return;
@@ -1823,6 +1847,35 @@ function AssetPreviewPanel({
                 <label><span>담당자</span><input disabled placeholder={assignee} /></label>
                 <label><span>완료 메모</span><textarea disabled value="정비 완료 API 연결 후 입력" readOnly /></label>
               </div>
+              <div className="mvp-agent-review-actions">
+                <button type="button" onClick={() => void openAgentPacket()} disabled={!asset || agentPacketLoading}>
+                  {agentPacketLoading ? "검토 패킷 불러오는 중" : "AI 검토 패킷 열기"}
+                </button>
+              </div>
+              {agentPacketOpen ? (
+                <section className="mvp-agent-review-packet" aria-label="AI 검토 패킷">
+                  <header><Bot size={14} /><strong>AI 검토 초안</strong><span>read-only</span></header>
+                  {agentPacketError ? <p>{agentPacketError}</p> : null}
+                  {agentPacket ? (
+                    <>
+                      <dl>
+                        <div><dt>설비</dt><dd>{agentPacket.asset_id}</dd></div>
+                        <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
+                        <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP` : "SOP 근거 없음"}</dd></div>
+                        <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
+                      </dl>
+                      {agentPacket.human_questions.length ? (
+                        <ul>
+                          {agentPacket.human_questions.slice(0, 3).map((question) => (
+                            <li key={`${agentPacket.asset_id}-question-${question}`}>{question}</li>
+                          ))}
+                        </ul>
+                      ) : <p>추가 확인 질문이 제공되지 않았습니다.</p>}
+                      <small>{agentPacket.closed_loop_boundary.note}</small>
+                    </>
+                  ) : !agentPacketLoading ? <p>검토 패킷을 열 수 없습니다.</p> : null}
+                </section>
+              ) : null}
               <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} />
               <p className="mvp-action-note">
                 점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
