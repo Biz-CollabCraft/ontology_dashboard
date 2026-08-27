@@ -1861,18 +1861,19 @@ function AssetPreviewPanel({
                       <dl>
                         <div><dt>설비</dt><dd>{agentPacket.asset_id}</dd></div>
                         <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
-                        <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP 조회` : "SOP 근거 없음"}</dd></div>
+                        <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP 연결` : "SOP 근거 없음"}</dd></div>
                         <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
-                        <div><dt>조회 방식</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
-                        <div><dt>매칭 점수</dt><dd>{agentPacket.sop_guidance[0]?.retrieval_score ?? 0}</dd></div>
+                        <div><dt>SOP 출처</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
+                        <div><dt>SOP 관련도</dt><dd>{agentPacket.sop_guidance[0]?.retrieval_score ?? 0}</dd></div>
                       </dl>
+                      <small>담당자 확인 질문</small>
                       {agentPacket.human_questions.length ? (
                         <ul>
                           {agentPacket.human_questions.slice(0, 3).map((question) => (
                             <li key={`${agentPacket.asset_id}-question-${question}`}>{question}</li>
                           ))}
                         </ul>
-                      ) : <p>추가 확인 질문이 제공되지 않았습니다.</p>}
+                      ) : <p>담당자 확인 질문이 제공되지 않았습니다.</p>}
                       <small>{agentPacket.closed_loop_boundary.note}</small>
                     </>
                   ) : !agentPacketLoading ? <p>검토 패킷을 열 수 없습니다.</p> : null}
