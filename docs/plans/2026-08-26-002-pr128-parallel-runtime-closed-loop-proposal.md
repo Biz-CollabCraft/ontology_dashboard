@@ -59,7 +59,7 @@ Generator Runtime 전환은 PR #127을 upstream prediction producer로 두고 �
 5. Generator Runtime 전환이 승인되어도 Product Result/Evidence core 의미는 바꾸지 않는다.
 6. Generator 산출물이 추가되면 core schema 재설계가 아니라 provenance/source trace로 연결한다.
 7. Backend Diagnosis는 Product Result/Evidence 승격 gate를 맡는다.
-8. Generator는 raw score / Prediction Result Batch producer contract를 끝까지 책임진다.
+8. Generator는 raw score / PR #127 Generator Prediction Result Batch producer contract를 끝까지 책임진다.
 9. Backend direct inference 제거는 Generator delivery, Backend Inbox, Product Result 승격, rollback 가능 상태 확인 뒤 별도 마지막 PR로만 수행한다.
 
 ## 3. 큰 범위
@@ -151,8 +151,8 @@ Frontend는 위 값을 계산하지 않는다. 값이 없으면 `null`, empty ar
 
 담당: Backend Diagnosis / Product Result owner
 
-이 Track이 PR #128과 Closed-loop를 실제 제품 흐름으로 살리는 critical path다. Backend는 Generator
-Prediction Result Batch를 수신하고, 검증된 결과만 Product Result/Evidence로 승격한다.
+이 Track이 PR #128과 Closed-loop를 실제 제품 흐름으로 살리는 critical path다. Backend는 PR #127
+Generator Prediction Result Batch를 수신하고, 검증된 결과만 Product Result/Evidence로 승격한다.
 
 책임:
 
@@ -167,21 +167,28 @@ Prediction Result Batch를 수신하고, 검증된 결과만 Product Result/Evid
 - latest/timeline/detail read model 갱신
 - `AssetDetailViewModel` composer에 `current_result_summary`와 `runtime_status` 제공
 
-Generator가 Backend로 넘겨야 하는 최소 contract:
+Generator가 Backend로 넘기는 wire contract는 PR #127의
+`prediction-result-batch.schema.json`를 단일 외부 정본으로 둔다. Backend Inbox는 payload
+원본을 보존하고 `received_at`, `payload_sha256`, `validation_status`, `rejection_reason`,
+`promotion_result_id` 같은 수신/검증 metadata만 덧붙인다. 아래 항목은 Inbox가 검증해야 할
+의미적 최소 조건이며, 별도 schema shape를 다시 정의하지 않는다.
 
 ```text
 event_id
 asset_id
 observed_at
-score
-output_status
-source_uri
-source_checksum
-model_id
-model_version
-model_artifact_sha256
-feature_schema_version
-history_requirement_version
+model_results[].score
+model_results[].status
+model_results[].error_code
+model_results[].error_message
+source_lineage.source_uri
+source_lineage.source_checksum
+model_set_id
+model_results[].model_id
+model_results[].model_version
+model_results[].model_artifact_sha256
+model_results[].feature_schema_version
+model_results[].history_requirement_version
 ```
 
 이 최소 handoff는 `contracts/schemas/prediction-result-batch.schema.json`와
@@ -304,7 +311,9 @@ PR #128 UI는 이미 read surface를 제공한다. 후속은 raw data 계산이 
 ## 6. 병렬 진행 방식
 
 병렬 진행의 공통 경계는 Product Result/Evidence와 PR #128 ViewModel이다.
-Generator migration을 병렬로 열 경우에는 `Prediction Result Batch`도 별도 freeze한다.
+Generator migration을 병렬로 열 경우에도 Generator -> Backend wire contract는 PR #127의
+`prediction-result-batch.schema.json`을 단일 외부 정본으로 참조한다. PR #129는
+Backend Inbox wrapper와 validation metadata 위치만 계획한다.
 
 ```text
 Track A Generator Runtime Prediction
@@ -545,7 +554,8 @@ Generator score batch
 1. 큰 Integration PR의 acceptance criteria를 sensor tick -> UI live update까지로 볼지.
 2. PR #127 기반 Generator Runtime을 upstream prediction producer로 freeze할지.
 3. Backend direct inference를 baseline/fallback으로만 남길지.
-4. `Prediction Result Batch` 최소 contract를 어디서 freeze할지.
+4. PR #127 Generator Prediction Result Batch를 어떤 후속 PR에서 additive 확장할지, 그리고
+   Backend Inbox receive metadata를 어디에 저장/노출할지.
 5. 정비 후 runtime status의 public read location을 `AssetDetailViewModel` summary와 상세 Product API 중 어디까지 노출할지.
 6. 기존 Backend direct inference 제거 시점을 어떤 gate 이후로 둘지.
 

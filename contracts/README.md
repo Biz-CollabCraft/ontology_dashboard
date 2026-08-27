@@ -32,7 +32,7 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 현재 `contracts/`의 관리 상태는 다음과 같다.
 
 - `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가된 공유 JSON Schema 관리 (Training Config 및 Runtime Overlay 스키마 포함)
-- `contracts/examples/`: `generator-feature-input/` 및 `generator-training/`에 실제 검증 가능한 요청/설정 예제 관리
+- `contracts/examples/`: `generator-feature-input/`, `generator-training/`에 실제 검증 가능한 요청/설정 예제 관리
 - `contracts/test-vectors/`: `generator-feature-input-v1/` 및 `generator-training-v1/`에 Feature 및 Training Golden Vector 관리
 - `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`), `scripts/`, `tests/` 참조 전환 완료
 - Schema 내용 및 `$id` 식별자 무변경 보존
