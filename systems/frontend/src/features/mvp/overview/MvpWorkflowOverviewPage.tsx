@@ -353,8 +353,14 @@ function inspectionMethodLabel(target: MvpInspectionTarget | null): string {
 function inspectionGuidanceSourceLabel(target: MvpInspectionTarget | null): string {
   if (!target?.inspectionGuidance) return "점검 위치 계약 미연결";
   return target.inspectionGuidance.sourceType === "demo_sop_fixture"
-    ? "데모 SOP 참고"
-    : "SOP 참고";
+    ? "데모 SOP"
+    : "SOP";
+}
+
+function replacementReviewTitle(target: MvpInspectionTarget): string {
+  return target.inspectionGuidance?.replacementReviewGuidance
+    ? "AI 요약: 교체 시기 검토"
+    : "AI 요약";
 }
 
 function replacementReviewPreview(target: MvpInspectionTarget | null): string[] {
@@ -1776,7 +1782,7 @@ function AssetPreviewPanel({
                           ) : null}
                           {target.target?.inspectionGuidance?.replacementReviewGuidance ? (
                             <div className="mvp-inspection-guidance-note">
-                              <strong>{target.target.inspectionGuidance.replacementReviewGuidance.reviewLabel}</strong>
+                              <strong>{replacementReviewTitle(target.target)}</strong>
                               <ul>
                                 {replacementReviewPreview(target.target).map((item) => (
                                   <li key={`${target.target?.targetId}-replacement-${item}`}>{item}</li>
