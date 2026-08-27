@@ -1,15 +1,15 @@
 {
   "contract_version": "prediction-result-batch-v1",
-  "batch_id": "run-test-01:job-test-01:M14860",
+  "batch_id": "batch-run-test-01-m14860",
   "producer": {
     "system": "systems.generator",
-    "runtime_version": "generator-runtime-prediction-v1",
-    "outbox_id": "evt-0102030405060708"
+    "runtime_version": "1.0.0",
+    "outbox_id": null
   },
   "emitted_at": "2026-08-25T11:55:05Z",
   "results": [
     {
-      "event_id": "evt-0102030405060708-lightgbm",
+      "event_id": "evt-0102030405060708",
       "asset_id": "M14860",
       "observed_at": "2026-08-25T11:55:00Z",
       "source_kind": "live_sensor",
@@ -17,16 +17,16 @@
         "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
         "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
       },
-      "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "payload_sha256": "06be14e8743bfb69219969c0629c9a2426bf9e54d85ac094cc22336ff719f82a",
       "output_status": "predicted",
       "score": 0.08,
       "model_id": "pdm-lightgbm",
       "model_version": "pdm-lightgbm-v1.0",
-      "model_artifact_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "model_artifact_manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
       "feature_schema_version": "v1.0",
       "history_requirement_version": "v1.0",
-      "feature_schema_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      "history_requirement_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "feature_schema_sha256": null,
+      "history_requirement_sha256": null,
       "lineage": {
         "simulation_session_id": null,
         "overlay_branch_id": null,
@@ -38,7 +38,7 @@
       "failure_reason": null
     },
     {
-      "event_id": "evt-0102030405060708-xgboost",
+      "event_id": "evt-0102030405060709",
       "asset_id": "M14860",
       "observed_at": "2026-08-25T11:55:00Z",
       "source_kind": "live_sensor",
@@ -46,45 +46,16 @@
         "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
         "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
       },
-      "payload_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "payload_sha256": "ff1b93f974e92f8b7b9e2cd73e81528d6435bee17baac7cd7043e38dd1625681",
       "output_status": "predicted",
       "score": 0.85,
       "model_id": "pdm-xgboost",
       "model_version": "pdm-xgboost-v1.0",
-      "model_artifact_sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
+      "model_artifact_manifest_sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
       "feature_schema_version": "v1.0",
       "history_requirement_version": "v1.0",
-      "feature_schema_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      "history_requirement_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
-      "lineage": {
-        "simulation_session_id": null,
-        "overlay_branch_id": null,
-        "history_segment_id": null,
-        "maintenance_event_id": null,
-        "maintenance_action_id": null,
-        "state_version": null
-      },
-      "failure_reason": null
-    },
-    {
-      "event_id": "evt-0102030405060708-random-forest",
-      "asset_id": "M14860",
-      "observed_at": "2026-08-25T11:55:00Z",
-      "source_kind": "live_sensor",
-      "source_ref": {
-        "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
-        "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-      },
-      "payload_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "output_status": "predicted",
-      "score": 0.79,
-      "model_id": "pdm-random_forest",
-      "model_version": "pdm-random_forest-v1.0",
-      "model_artifact_sha256": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
-      "feature_schema_version": "v1.0",
-      "history_requirement_version": "v1.0",
-      "feature_schema_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      "history_requirement_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "feature_schema_sha256": null,
+      "history_requirement_sha256": null,
       "lineage": {
         "simulation_session_id": null,
         "overlay_branch_id": null,

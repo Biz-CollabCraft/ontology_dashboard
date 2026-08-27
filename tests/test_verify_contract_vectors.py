@@ -56,9 +56,11 @@ def test_prediction_result_batch_rejects_score_for_non_predicted_status():
             / "contracts"
             / "examples"
             / "prediction-result-batch"
-            / "maintenance-history-insufficient.json"
+            / "prediction-result-batch-v1.json"
         ).read_text(encoding="utf-8")
     )
+    payload["results"][0]["output_status"] = "history_insufficient"
+    payload["results"][0]["failure_reason"] = "insufficient history"
     payload["results"][0]["score"] = 0.2
 
     errors = list(validator.iter_errors(payload))
@@ -79,9 +81,21 @@ def test_prediction_result_batch_requires_maintenance_replay_lineage():
             / "contracts"
             / "examples"
             / "prediction-result-batch"
-            / "maintenance-history-insufficient.json"
+            / "prediction-result-batch-v1.json"
         ).read_text(encoding="utf-8")
     )
+    payload["results"][0]["source_kind"] = "maintenance_replay_overlay"
+    payload["results"][0]["output_status"] = "history_insufficient"
+    payload["results"][0]["score"] = None
+    payload["results"][0]["failure_reason"] = "insufficient history"
+    payload["results"][0]["lineage"] = {
+        "simulation_session_id": "sim-1",
+        "overlay_branch_id": "branch-1",
+        "history_segment_id": "segment-1",
+        "maintenance_event_id": "event-1",
+        "maintenance_action_id": "action-1",
+        "state_version": 1,
+    }
     payload["results"][0]["lineage"]["maintenance_event_id"] = None
 
     errors = list(validator.iter_errors(payload))

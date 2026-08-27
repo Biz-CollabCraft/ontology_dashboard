@@ -137,7 +137,7 @@ def make_prediction_result_batch_payload(
                 score=score if output_status == "predicted" else None,
                 model_id=model_id,
                 model_version=f"{model_id}-v1.0",
-                model_artifact_sha256="2" * 64,
+                model_artifact_manifest_sha256="2" * 64,
                 feature_schema_version="v1.0",
                 history_requirement_version="v1.0",
                 feature_schema_sha256="3" * 64,
@@ -2725,8 +2725,8 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
     lgbm_res = disk_payload["results"][0]
     assert "model_set_id" not in lgbm_res
     assert "model_set_version" not in lgbm_res
-    assert lgbm_res.get("model_artifact_sha256") is not None
-    assert len(lgbm_res["model_artifact_sha256"]) == 64
+    assert lgbm_res.get("model_artifact_manifest_sha256") is not None
+    assert len(lgbm_res["model_artifact_manifest_sha256"]) == 64
     assert lgbm_res.get("feature_schema_version") is not None
     assert lgbm_res.get("history_requirement_version") is not None
 

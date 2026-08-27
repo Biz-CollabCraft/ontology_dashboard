@@ -244,7 +244,7 @@ handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 
 
 ```json
 {
-  "source_kind": "live_sensor | simulation_overlay | maintenance_replay",
+  "source_kind": "live_sensor | simulation_overlay | maintenance_replay_overlay",
   "asset_id": "CNC-S04-L02-03",
   "observed_at": "2026-08-26T06:00:00Z",
   "source_ref": {
@@ -295,7 +295,7 @@ history_segment_id
 simulation_session_id
 state_version
 model_artifact_uri
-model_artifact_sha256
+model_artifact_manifest_sha256
 feature_schema_version
 history_requirement_version
 policy_version

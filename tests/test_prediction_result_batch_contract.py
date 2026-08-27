@@ -65,15 +65,30 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "live-predicted.json",
-        "maintenance-history-insufficient.json",
-    ],
-)
-def test_prediction_result_batch_examples_match_backend_model(name: str):
-    batch = PredictionResultBatch.model_validate(load_example(name))
+def load_predicted_example() -> dict:
+    return load_example("prediction-result-batch-v1.json")
+
+
+def load_maintenance_replay_example() -> dict:
+    payload = load_predicted_example()
+    item = payload["results"][0]
+    item["source_kind"] = "maintenance_replay_overlay"
+    item["output_status"] = "history_insufficient"
+    item["score"] = None
+    item["failure_reason"] = "Only 3 prior overlay observations are available; model requires 35 prior rows."
+    item["lineage"] = {
+        "simulation_session_id": "sim-20260826-0001",
+        "overlay_branch_id": "overlay-branch-cnc-001-0001",
+        "history_segment_id": "history-segment-cnc-001-0001",
+        "maintenance_event_id": "maintenance-event-0001",
+        "maintenance_action_id": "maintenance-action-0001",
+        "state_version": 4,
+    }
+    return payload
+
+
+def test_prediction_result_batch_example_matches_backend_model():
+    batch = PredictionResultBatch.model_validate(load_predicted_example())
 
     assert batch.contract_version == "prediction-result-batch-v1"
     assert batch.producer.system == "systems.generator"
@@ -81,7 +96,7 @@ def test_prediction_result_batch_examples_match_backend_model(name: str):
 
 
 def test_prediction_result_batch_keeps_predicted_score_required():
-    payload = load_example("live-predicted.json")
+    payload = load_predicted_example()
     payload["results"][0]["score"] = None
 
     with pytest.raises(ValidationError, match="predicted batch items require score"):
@@ -89,7 +104,7 @@ def test_prediction_result_batch_keeps_predicted_score_required():
 
 
 def test_prediction_result_batch_rejects_failure_reason_on_predicted_item():
-    payload = load_example("live-predicted.json")
+    payload = load_predicted_example()
     payload["results"][0]["failure_reason"] = "model warning"
 
     with pytest.raises(ValidationError, match="must not carry failure_reason"):
@@ -97,7 +112,7 @@ def test_prediction_result_batch_rejects_failure_reason_on_predicted_item():
 
 
 def test_prediction_result_batch_rejects_score_before_prediction_ready():
-    payload = load_example("maintenance-history-insufficient.json")
+    payload = load_maintenance_replay_example()
     payload["results"][0]["score"] = 0.2
 
     with pytest.raises(ValidationError, match="non-predicted batch items must not carry score"):
@@ -105,7 +120,7 @@ def test_prediction_result_batch_rejects_score_before_prediction_ready():
 
 
 def test_prediction_result_batch_requires_failure_reason_before_prediction_ready():
-    payload = load_example("maintenance-history-insufficient.json")
+    payload = load_maintenance_replay_example()
     payload["results"][0]["failure_reason"] = None
 
     with pytest.raises(ValidationError, match="non-predicted batch items require failure_reason"):
@@ -113,15 +128,15 @@ def test_prediction_result_batch_requires_failure_reason_before_prediction_ready
 
 
 def test_prediction_result_batch_requires_replay_lineage_for_maintenance_source():
-    payload = load_example("maintenance-history-insufficient.json")
+    payload = load_maintenance_replay_example()
     payload["results"][0]["lineage"]["maintenance_event_id"] = None
 
-    with pytest.raises(ValidationError, match="maintenance_replay batch items require lineage fields"):
+    with pytest.raises(ValidationError, match="maintenance_replay_overlay batch items require lineage fields"):
         PredictionResultBatch.model_validate(payload)
 
 
 def test_prediction_result_batch_forbids_product_result_fields():
-    payload = load_example("live-predicted.json")
+    payload = load_predicted_example()
     payload["results"][0]["status_grade"] = "critical"
 
     with pytest.raises(ValidationError):
@@ -132,7 +147,7 @@ def test_prediction_result_batch_validation_endpoint_returns_receipt(client: Tes
     response = client.post(
         "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
         "predictive-maintenance/prediction-result-batches/validate",
-        json=load_example("live-predicted.json"),
+        json=load_predicted_example(),
         headers={"X-CSRF-Token": "test"},
     )
 
@@ -145,14 +160,14 @@ def test_prediction_result_batch_validation_endpoint_returns_receipt(client: Tes
     assert body["blocked_results"] == 0
     assert body["idempotency_basis"] == [
         {
-            "event_id": "evt-live-cnc-s04-l02-03-20260826t060000z",
-            "payload_sha256": "b" * 64,
+            "event_id": "evt-001",
+            "payload_sha256": "d2421e9a707b7333cf7f090d24de6025d1df8a605653040e95c6d5e0e88067ce",
         }
     ]
 
 
 def test_prediction_result_batch_validation_endpoint_rejects_product_fields(client: TestClient):
-    payload = load_example("live-predicted.json")
+    payload = load_predicted_example()
     payload["results"][0]["status_grade"] = "critical"
 
     response = client.post(

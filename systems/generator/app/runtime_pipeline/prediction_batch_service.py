@@ -194,12 +194,12 @@ class PredictionBatchService:
                 "score": model_result.score if status == "predicted" else None,
                 "model_id": model_id,
                 "model_version": model_result.model_version,
-                "model_artifact_sha256": model_result.manifest_checksum
-                or (model_result.artifact_ref.sha256 if model_result.artifact_ref else "0" * 64),
+                "model_artifact_manifest_sha256": model_result.manifest_checksum
+                or (model_result.artifact_ref.sha256 if model_result.artifact_ref else None),
                 "feature_schema_version": model_result.feature_schema_version or "unknown",
                 "history_requirement_version": model_result.history_requirement_version or "unknown",
-                "feature_schema_sha256": model_result.feature_ref.sha256 if model_result.feature_ref else "0" * 64,
-                "history_requirement_sha256": "0" * 64,
+                "feature_schema_sha256": model_result.feature_ref.sha256 if model_result.feature_ref else None,
+                "history_requirement_sha256": None,
                 "lineage": lineage.model_dump(mode="json"),
                 "failure_reason": None if status == "predicted" else (model_result.error_message or model_result.error_code or "prediction unavailable"),
             }

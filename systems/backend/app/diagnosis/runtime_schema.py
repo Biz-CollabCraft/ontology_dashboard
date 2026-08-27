@@ -157,7 +157,7 @@ class PredictionResultBatchItem(StrictModel):
     event_id: str = Field(min_length=1, max_length=240)
     asset_id: str = Field(min_length=1, max_length=240)
     observed_at: datetime
-    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay"]
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay_overlay"]
     source_ref: PredictionResultBatchSourceRef
     payload_sha256: str = Field(pattern=SHA256_PATTERN)
     output_status: Literal[
@@ -168,12 +168,11 @@ class PredictionResultBatchItem(StrictModel):
         "failed_model_artifact",
         "failed_feature_execution",
         "failed_model_inference",
-        "failed_delivery",
     ]
     score: float | None = Field(default=None, ge=0, le=1)
     model_id: str = Field(min_length=1, max_length=240)
     model_version: str = Field(min_length=1, max_length=240)
-    model_artifact_sha256: str = Field(pattern=SHA256_PATTERN)
+    model_artifact_manifest_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
     feature_schema_version: str = Field(min_length=1, max_length=240)
     history_requirement_version: str = Field(min_length=1, max_length=240)
     feature_schema_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
@@ -188,12 +187,14 @@ class PredictionResultBatchItem(StrictModel):
                 raise ValueError("predicted batch items require score")
             if self.failure_reason is not None:
                 raise ValueError("predicted batch items must not carry failure_reason")
+            if self.model_artifact_manifest_sha256 is None:
+                raise ValueError("predicted batch items require model_artifact_manifest_sha256")
         else:
             if self.score is not None:
                 raise ValueError("non-predicted batch items must not carry score")
             if not self.failure_reason:
                 raise ValueError("non-predicted batch items require failure_reason")
-        if self.source_kind == "maintenance_replay":
+        if self.source_kind == "maintenance_replay_overlay":
             missing = [
                 field
                 for field in (
@@ -208,7 +209,7 @@ class PredictionResultBatchItem(StrictModel):
             ]
             if missing:
                 raise ValueError(
-                    "maintenance_replay batch items require lineage fields: "
+                    "maintenance_replay_overlay batch items require lineage fields: "
                     + ", ".join(missing)
                 )
         return self

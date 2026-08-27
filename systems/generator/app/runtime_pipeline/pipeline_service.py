@@ -891,11 +891,11 @@ class PipelineService:
                             score=item.score,
                             artifact_ref=ArtifactReference(
                                 uri="model-artifact://unknown",
-                                sha256=item.model_artifact_sha256,
+                                sha256=item.model_artifact_manifest_sha256 or "0" * 64,
                                 role="model_artifact",
                             ),
                             feature_ref=None,
-                            manifest_checksum=item.model_artifact_sha256,
+                            manifest_checksum=item.model_artifact_manifest_sha256,
                             feature_schema_version=item.feature_schema_version,
                             label_schema_version=None,
                             history_requirement_version=item.history_requirement_version,

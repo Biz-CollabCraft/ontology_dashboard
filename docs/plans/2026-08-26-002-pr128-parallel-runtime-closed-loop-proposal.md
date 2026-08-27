@@ -186,7 +186,7 @@ source_lineage.source_checksum
 model_set_id
 model_results[].model_id
 model_results[].model_version
-model_results[].model_artifact_sha256
+model_results[].model_artifact_manifest_sha256
 model_results[].feature_schema_version
 model_results[].history_requirement_version
 ```
