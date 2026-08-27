@@ -717,10 +717,6 @@
 .mvp-side-map-report .mvp-inspection-guidance-note ul { display: grid; gap: 3px; margin: 4px 0 0; padding-left: 14px; }
 .mvp-side-map-report .mvp-inspection-guidance-note li,
 .mvp-side-map-report .mvp-inspection-guidance-note small { color: var(--mvp-dim); font-size: 9px; line-height: 1.35; }
-.mvp-side-map-report .top-factor-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 0; padding: 0; list-style: none; }
-.mvp-side-map-report .top-factor-chips li { display: inline-flex; align-items: center; gap: 4px; max-width: 140px; min-width: 0; padding: 3px 6px; border: 1px solid rgba(181,196,214,.13); border-radius: 5px; background: rgba(255,255,255,.025); color: var(--mvp-muted); font-size: 9px; font-weight: 800; line-height: 1; }
-.mvp-side-map-report .top-factor-chips b { display: grid; place-items: center; width: 14px; aspect-ratio: 1; border-radius: 999px; background: rgba(76,144,240,.16); color: #b7d4ff; font-size: 8px; flex: 0 0 auto; }
-.mvp-side-map-report .top-factor-chips span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mvp-side-map-report .target-severity { justify-self: end; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 7px; border: 1px solid currentColor; border-radius: 5px; font-size: 10px; line-height: 1; text-align: center; font-weight: 900; }
 .mvp-side-map-report .target-severity.high { color: #f6bd70; background: rgba(240,162,58,.09); }
 .mvp-overview-action-panel { display: grid; gap: 10px; padding: 11px; border: 1px solid rgba(181,196,214,.11); border-radius: 7px; background: rgba(255,255,255,.025); }
