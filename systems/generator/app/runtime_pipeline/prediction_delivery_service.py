@@ -38,8 +38,8 @@ class PredictionDeliveryService:
         timeout: float = 10.0,
     ) -> None:
         self.endpoint_url = endpoint_url or os.environ.get(
-            "GENERATOR_PREDICTION_RECEIVER_URL",
-            "http://localhost:8000/api/v1/diagnosis/prediction-batches",
+            "GENERATOR_PREDICTION_RESULT_URL",
+            "http://localhost:8000/internal/prediction-results",
         )
         self.outbox_dir = Path(outbox_dir) if outbox_dir else PATHS.notification_outbox_root
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
@@ -101,21 +101,34 @@ class PredictionDeliveryService:
         """Compute SHA-256 checksum of canonical payload representation and generate deterministic event_id."""
         import hashlib
         d = payload.model_dump(mode="json")
-        d.pop("event_id", None)
-        d.pop("generated_at", None)
-        d.pop("job_id", None)
+        d.pop("emitted_at", None)
+        if isinstance(d.get("producer"), dict):
+            d["producer"].pop("outbox_id", None)
 
         canonical_json = json.dumps(d, sort_keys=True, separators=(",", ":"))
         payload_sha256 = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
-        key_str = f"{payload.source_lineage.pipeline_contract_version}:{payload.run_id}:{payload.asset_id}:{payload_sha256}"
+        key_str = f"{payload.contract_version}:{payload.batch_id}:{payload_sha256}"
         event_id = f"evt-{hashlib.sha256(key_str.encode('utf-8')).hexdigest()[:32]}"
         return event_id, payload_sha256
+
+    @staticmethod
+    def batch_asset_id(payload: PredictionResultBatchPayload) -> str:
+        return payload.results[0].asset_id if payload.results else "unknown"
+
+    @staticmethod
+    def batch_run_id(payload: PredictionResultBatchPayload) -> str:
+        return payload.batch_id.split(":", 1)[0]
+
+    @staticmethod
+    def batch_job_id(payload: PredictionResultBatchPayload) -> str:
+        parts = payload.batch_id.split(":")
+        return parts[1] if len(parts) > 1 else payload.batch_id
 
     def register_idempotent_outbox_record(self, payload: PredictionResultBatchPayload) -> tuple[PredictionOutboxItem, str]:
         """Register outbox record with deterministic event_id. Idempotently returns existing record if present."""
         event_id, payload_sha256 = self.compute_canonical_payload_sha256(payload)
-        payload.event_id = event_id
+        payload.producer.outbox_id = event_id
 
         existing_item = self.get_outbox_item(event_id)
         if existing_item is not None:
@@ -136,10 +149,10 @@ class PredictionDeliveryService:
     def create_outbox_record(self, payload: PredictionResultBatchPayload) -> PredictionOutboxItem:
         """Create new pending outbox record for payload."""
         item = PredictionOutboxItem(
-            event_id=payload.event_id,
-            run_id=payload.run_id,
-            job_id=payload.job_id,
-            asset_id=payload.asset_id,
+            event_id=payload.producer.outbox_id or payload.batch_id,
+            run_id=self.batch_run_id(payload),
+            job_id=self.batch_job_id(payload),
+            asset_id=self.batch_asset_id(payload),
             status="pending",
             attempt=0,
             max_attempts=5,
@@ -153,8 +166,8 @@ class PredictionDeliveryService:
         body = payload.model_dump_json().encode("utf-8")
         headers = {
             "Content-Type": "application/json",
-            "Idempotency-Key": payload.event_id,
-            "X-Request-ID": payload.run_id,
+            "Idempotency-Key": payload.producer.outbox_id or payload.batch_id,
+            "X-Request-ID": self.batch_run_id(payload),
         }
         req = urllib.request.Request(
             self.endpoint_url,
@@ -167,7 +180,7 @@ class PredictionDeliveryService:
                 status_code = resp.getcode()
                 resp_body = resp.read().decode("utf-8")
                 logger.info(
-                    f"[PredictionDeliveryService] Successfully sent prediction batch '{payload.event_id}' "
+                    f"[PredictionDeliveryService] Successfully sent prediction batch '{payload.producer.outbox_id or payload.batch_id}' "
                     f"(HTTP {status_code}) to {self.endpoint_url}"
                 )
                 return {"delivered": True, "status_code": status_code, "response": resp_body}
@@ -175,33 +188,33 @@ class PredictionDeliveryService:
             if h_err.code in (200, 202):
                 return {"delivered": True, "status_code": h_err.code, "response": ""}
             elif h_err.code == 409:
-                logger.error(f"[PredictionDeliveryService] Conflict error (HTTP 409) for batch '{payload.event_id}'")
+                logger.error(f"[PredictionDeliveryService] Conflict error (HTTP 409) for batch '{payload.producer.outbox_id or payload.batch_id}'")
                 raise PipelineOutboxEventConflictError(
-                    f"수신 시스템에서 event ID 충돌이 발생했습니다 (HTTP 409): {payload.event_id}",
-                    details=[{"status_code": 409, "event_id": payload.event_id}],
+                    f"수신 시스템에서 event ID 충돌이 발생했습니다 (HTTP 409): {payload.producer.outbox_id or payload.batch_id}",
+                    details=[{"status_code": 409, "event_id": payload.producer.outbox_id or payload.batch_id}],
                     retryable=False,
                 ) from h_err
             elif h_err.code == 422:
-                logger.error(f"[PredictionDeliveryService] Contract unprocessable error (HTTP 422) for batch '{payload.event_id}'")
+                logger.error(f"[PredictionDeliveryService] Contract unprocessable error (HTTP 422) for batch '{payload.producer.outbox_id or payload.batch_id}'")
                 raise PipelineDeliveryUnprocessableError(
-                    f"수신 시스템이 계약 위반으로 배치를 거부했습니다 (HTTP 422): {payload.event_id}",
-                    details=[{"status_code": 422, "event_id": payload.event_id}],
+                    f"수신 시스템이 계약 위반으로 배치를 거부했습니다 (HTTP 422): {payload.producer.outbox_id or payload.batch_id}",
+                    details=[{"status_code": 422, "event_id": payload.producer.outbox_id or payload.batch_id}],
                     retryable=False,
                 ) from h_err
             elif h_err.code in (401, 403):
-                logger.error(f"[PredictionDeliveryService] Authorization error (HTTP {h_err.code}) for batch '{payload.event_id}'")
+                logger.error(f"[PredictionDeliveryService] Authorization error (HTTP {h_err.code}) for batch '{payload.producer.outbox_id or payload.batch_id}'")
                 raise PipelineDeliveryUnauthorizedError(
-                    f"수신 시스템 인증/권한 오류 (HTTP {h_err.code}): {payload.event_id}",
-                    details=[{"status_code": h_err.code, "event_id": payload.event_id}],
+                    f"수신 시스템 인증/권한 오류 (HTTP {h_err.code}): {payload.producer.outbox_id or payload.batch_id}",
+                    details=[{"status_code": h_err.code, "event_id": payload.producer.outbox_id or payload.batch_id}],
                     retryable=False,
                 ) from h_err
             elif 400 <= h_err.code < 500:
                 logger.error(
-                    f"[PredictionDeliveryService] Receiver rejected prediction batch '{payload.event_id}' with HTTP {h_err.code}"
+                    f"[PredictionDeliveryService] Receiver rejected prediction batch '{payload.producer.outbox_id or payload.batch_id}' with HTTP {h_err.code}"
                 )
                 raise PipelineDeliveryFailedError(
                     f"수신 시스템이 결과 배치를 거부했습니다 (HTTP {h_err.code})",
-                    details=[{"status_code": h_err.code, "event_id": payload.event_id}],
+                    details=[{"status_code": h_err.code, "event_id": payload.producer.outbox_id or payload.batch_id}],
                     retryable=False,
                 ) from h_err
             # 5xx server error
@@ -210,15 +223,15 @@ class PredictionDeliveryService:
             )
             raise PipelineDeliveryServerError(
                 f"수신 시스템 서버 오류 (HTTP {h_err.code}): {h_err}",
-                details=[{"status_code": h_err.code, "event_id": payload.event_id}],
+                details=[{"status_code": h_err.code, "event_id": payload.producer.outbox_id or payload.batch_id}],
                 retryable=True,
             ) from h_err
         except (urllib.error.URLError, TimeoutError, OSError) as net_err:
             logger.warning(
-                f"[PredictionDeliveryService] Network error sending prediction batch '{payload.event_id}': {net_err}"
+                f"[PredictionDeliveryService] Network error sending prediction batch '{payload.producer.outbox_id or payload.batch_id}': {net_err}"
             )
             raise PipelineDeliveryTimeoutError(
                 f"결과 배치 전송 네트워크/타임아웃 오류: {net_err}",
-                details=[{"error": str(net_err), "event_id": payload.event_id}],
+                details=[{"error": str(net_err), "event_id": payload.producer.outbox_id or payload.batch_id}],
                 retryable=True,
             ) from net_err

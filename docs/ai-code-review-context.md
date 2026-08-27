@@ -224,7 +224,7 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 25. Generator가 Product Result Artifact·Evidence·Report를 생성하는가? (Backend 소유권)
 26. Backend가 Generator 대신 Model Artifact를 로드해 중복 추론하는가? (중복 추론 금지, Generator Prediction Result Batch 소비)
 27. `gen_data`가 추론 또는 최종 판정 책임을 침범하는가? (관측 데이터 생성에 국한)
-28. 모델별 결과가 `model_id` 기반 K-V 구조로 전달되는가? (`PredictionResultBatchPayload.model_results` 딕셔너리 구조)
+28. 모델별 결과가 canonical `results[]` item 배열로 전달되는가? (`PredictionResultBatchPayload.results`, `contracts/schemas/prediction-result-batch.schema.json`)
 
 ## 8. v1 레거시 출력 형식 — v2에서는 사용하지 않음
 

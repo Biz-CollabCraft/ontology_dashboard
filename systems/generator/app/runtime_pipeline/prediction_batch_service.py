@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal, Optional
 
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelinePredictionObservationAlignmentNotImplementedError,
@@ -12,6 +12,10 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     InternalModelPredictionResult,
     ModelPredictionResult,
+    PredictionResultBatchItem,
+    PredictionResultBatchLineage,
+    PredictionResultBatchProducer,
+    PredictionResultBatchSourceRef,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +41,18 @@ class PredictionBatchSummary:
     succeeded_equipments: list[str] = field(default_factory=list)
     partially_succeeded_equipments: list[str] = field(default_factory=list)
     failed_equipments: list[str] = field(default_factory=list)
+
+
+def _batch_item_status(result: ModelPredictionResult) -> str:
+    if result.status == "succeeded":
+        return "predicted"
+    if result.error_code == "PIPELINE_HISTORY_INSUFFICIENT" or result.status == "unknown":
+        return "history_insufficient"
+    if result.error_code and "MODEL_ARTIFACT" in result.error_code:
+        return "failed_model_artifact"
+    if result.error_code and "FEATURE" in result.error_code:
+        return "failed_feature_execution"
+    return "failed_model_inference"
 
 
 class PredictionBatchService:
@@ -137,6 +153,76 @@ class PredictionBatchService:
             failed_equipments=failed_equipments,
         )
 
+    def build_payload(
+        self,
+        *,
+        run_id: str,
+        job_id: str,
+        asset_id: str,
+        batch: EquipmentModelBatch,
+        source_lineage: Any,
+        runtime_version: str,
+    ):
+        """Build the canonical #129 Prediction Result Batch handoff payload."""
+        import hashlib
+        import json
+        from systems.generator.app.runtime_pipeline.pipeline_schema import (
+            PredictionResultBatchPayload,
+        )
+
+        source_ref = PredictionResultBatchSourceRef(
+            uri=source_lineage.source_uri,
+            sha256=source_lineage.source_checksum,
+        )
+        lineage = PredictionResultBatchLineage(
+            simulation_session_id=None,
+            overlay_branch_id=None,
+            history_segment_id=None,
+            maintenance_event_id=None,
+            maintenance_action_id=None,
+            state_version=None,
+        )
+        items: list[PredictionResultBatchItem] = []
+        for model_id, model_result in batch.model_results.items():
+            status = _batch_item_status(model_result)
+            item_seed = {
+                "asset_id": asset_id,
+                "observed_at": batch.observed_at,
+                "source_kind": "live_sensor",
+                "source_ref": source_ref.model_dump(mode="json"),
+                "output_status": status,
+                "score": model_result.score if status == "predicted" else None,
+                "model_id": model_id,
+                "model_version": model_result.model_version,
+                "model_artifact_sha256": model_result.manifest_checksum
+                or (model_result.artifact_ref.sha256 if model_result.artifact_ref else "0" * 64),
+                "feature_schema_version": model_result.feature_schema_version or "unknown",
+                "history_requirement_version": model_result.history_requirement_version or "unknown",
+                "feature_schema_sha256": model_result.feature_ref.sha256 if model_result.feature_ref else "0" * 64,
+                "history_requirement_sha256": "0" * 64,
+                "lineage": lineage.model_dump(mode="json"),
+                "failure_reason": None if status == "predicted" else (model_result.error_message or model_result.error_code or "prediction unavailable"),
+            }
+            canonical_json = json.dumps(item_seed, sort_keys=True, separators=(",", ":"))
+            payload_sha256 = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+            event_id = f"evt-{hashlib.sha256((run_id + ':' + model_id + ':' + payload_sha256).encode('utf-8')).hexdigest()[:32]}"
+            items.append(
+                PredictionResultBatchItem(
+                    event_id=event_id,
+                    payload_sha256=payload_sha256,
+                    **item_seed,
+                )
+            )
+
+        return PredictionResultBatchPayload(
+            batch_id=f"{run_id}:{job_id}:{asset_id}",
+            producer=PredictionResultBatchProducer(
+                runtime_version=runtime_version,
+                outbox_id=None,
+            ),
+            results=items,
+        )
+
     def stage_batches(
         self,
         run_id: str,
@@ -185,22 +271,16 @@ class PredictionBatchService:
                         retryable=False,
                     )
 
-            temp_payload = PredictionResultBatchPayload(
-                event_id="temp",
+            temp_payload = self.build_payload(
                 run_id=run_id,
                 job_id=job_id,
                 asset_id=asset_id,
-                observed_at=batch.observed_at,
-                dataset_id=dataset_id,
-                dataset_version=dataset_version,
-                model_set_id=model_set_id,
-                model_set_version=model_set_version,
-                model_results=batch.model_results,
+                batch=batch,
                 source_lineage=source_lineage,
-                sensor_data_ref=sensor_data_ref,
+                runtime_version="generator-runtime-prediction-v1",
             )
             event_id, payload_sha256 = PredictionDeliveryService.compute_canonical_payload_sha256(temp_payload)
-            temp_payload.event_id = event_id
+            temp_payload.producer.outbox_id = event_id
 
             asset_file = staging_dir / f"{asset_id}.json"
             content_bytes = temp_payload.model_dump_json(indent=2).encode("utf-8")

@@ -65,7 +65,11 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ModelPredictionResult,
     PredictionDeliveryEventState,
     PredictionOutboxItem,
+    PredictionResultBatchItem,
+    PredictionResultBatchLineage,
     PredictionResultBatchPayload,
+    PredictionResultBatchProducer,
+    PredictionResultBatchSourceRef,
     PipelineQueueItem,
     PipelineRunState,
     SourceLineage,
@@ -101,6 +105,48 @@ class MockEstimator:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+
+def make_prediction_result_batch_payload(
+    *,
+    batch_id: str = "run-01:job-01:M14860",
+    event_id: str = "evt-test-batch-item-01",
+    asset_id: str = "M14860",
+    observed_at: str = "2026-08-25T10:00:00Z",
+    score: float = 0.88,
+    output_status: str = "predicted",
+    model_id: str = "pdm-xgboost",
+    source_uri: str = "test.jsonl",
+    source_sha256: str = "0" * 64,
+) -> PredictionResultBatchPayload:
+    return PredictionResultBatchPayload(
+        batch_id=batch_id,
+        producer=PredictionResultBatchProducer(
+            runtime_version="generator-runtime-prediction-v1",
+            outbox_id=event_id,
+        ),
+        results=[
+            PredictionResultBatchItem(
+                event_id=event_id,
+                asset_id=asset_id,
+                observed_at=observed_at,
+                source_kind="live_sensor",
+                source_ref=PredictionResultBatchSourceRef(uri=source_uri, sha256=source_sha256),
+                payload_sha256="1" * 64,
+                output_status=output_status,  # type: ignore[arg-type]
+                score=score if output_status == "predicted" else None,
+                model_id=model_id,
+                model_version=f"{model_id}-v1.0",
+                model_artifact_sha256="2" * 64,
+                feature_schema_version="v1.0",
+                history_requirement_version="v1.0",
+                feature_schema_sha256="3" * 64,
+                history_requirement_sha256="4" * 64,
+                lineage=PredictionResultBatchLineage(),
+                failure_reason=None if output_status == "predicted" else "prediction unavailable",
+            )
+        ],
+    )
 
 
 @pytest.fixture
@@ -365,7 +411,7 @@ def test_multi_equipment_prediction_and_batch_building(isolated_runtime_env):
         assert r.status == "unknown"
         assert r.error_code == "PIPELINE_HISTORY_INSUFFICIENT"
 
-    # 2. Check outbox records — model_results is dictionary keyed by model_id, no top-level feature_ref
+    # 2. Check outbox records — canonical #129 handoff uses results[] items, no top-level feature_ref
     outbox_items = env["notif_service"].list_outbox_items()
     outbox_asset_ids = {item.asset_id for item in outbox_items}
     assert len(outbox_items) == 3
@@ -376,18 +422,24 @@ def test_multi_equipment_prediction_and_batch_building(isolated_runtime_env):
     for oi in outbox_items:
         assert oi.status == "pending"
         payload = oi.payload
-        assert isinstance(payload.model_results, dict)
-        assert "pdm-lightgbm" in payload.model_results
-        assert "pdm-xgboost" in payload.model_results
-        assert "pdm-random_forest" in payload.model_results
-        assert payload.observed_at != ""
+        assert payload.contract_version == "prediction-result-batch-v1"
+        model_ids = {item.model_id for item in payload.results}
+        assert "pdm-lightgbm" in model_ids
+        assert "pdm-xgboost" in model_ids
+        assert "pdm-random_forest" in model_ids
         assert not hasattr(payload, "feature_ref") or "feature_ref" not in payload.model_fields
 
-        for mid, mres in payload.model_results.items():
-            assert not hasattr(mres, "model_id") or "model_id" not in mres.model_fields
-            assert not hasattr(mres, "asset_id") or "asset_id" not in mres.model_fields
-            assert mres.observed_at != ""
-            assert mres.score_source in ("predict_proba", "decision_function_compat", "predict_compat", None)
+        for item in payload.results:
+            assert item.asset_id == oi.asset_id
+            assert item.observed_at != ""
+            assert item.source_kind == "live_sensor"
+            assert item.output_status in {
+                "predicted",
+                "history_insufficient",
+                "failed_model_artifact",
+                "failed_feature_execution",
+                "failed_model_inference",
+            }
 
     assert len(run_state.prediction_event_ids) == len(outbox_items)
 
@@ -401,30 +453,9 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
     notif_service = env["notif_service"]
     notif_worker = env["notif_worker"]
 
-    payload = PredictionResultBatchPayload(
+    payload = make_prediction_result_batch_payload(
+        batch_id="run-01:job-01:M14860",
         event_id="evt-retry-01",
-        run_id="run-01",
-        job_id="job-01",
-        asset_id="M14860",
-        observed_at="2026-08-25T10:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={
-            "pdm-xgboost": ModelPredictionResult(
-                model_version="pdm-xgboost-v1.0",
-                status="succeeded",
-                observed_at="2026-08-25T10:00:00Z",
-                score_type="positive_class_probability",
-                score_source="predict_proba",
-                score=0.88,
-            )
-        },
-        source_lineage=SourceLineage(
-            source_uri="test.jsonl",
-            source_checksum="0" * 64,
-        ),
     )
 
     # 1. Create outbox record
@@ -712,32 +743,17 @@ def test_delivery_worker_run_state_synchronization_and_aggregation(isolated_runt
     repo.save_run_state(run_state)
 
     # Create 2 outbox items for this run
-    p1 = PredictionResultBatchPayload(
+    p1 = make_prediction_result_batch_payload(
+        batch_id=f"{run_id}:job-sync-01:Asset-1",
         event_id=ev1_id,
-        run_id=run_id,
-        job_id="job-sync-01",
         asset_id="Asset-1",
-        observed_at="2026-08-25T10:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={
-            "pdm-xgboost": ModelPredictionResult(
-                model_version="pdm-xgboost-v1.0",
-                status="succeeded",
-                observed_at="2026-08-25T10:00:00Z",
-                score_type="positive_class_probability",
-                score_source="predict_proba",
-                score=0.9,
-            )
-        },
-        source_lineage=SourceLineage(
-            source_uri="test.jsonl",
-            source_checksum="0" * 64,
-        ),
+        score=0.9,
     )
-    p2 = p1.model_copy(update={"event_id": ev2_id, "asset_id": "Asset-2"})
+    p2 = make_prediction_result_batch_payload(
+        batch_id=f"{run_id}:job-sync-01:Asset-2",
+        event_id=ev2_id,
+        asset_id="Asset-2",
+    )
     notif_service.create_outbox_record(p1)
     notif_service.create_outbox_record(p2)
 
@@ -793,30 +809,11 @@ def test_delivery_worker_recover_interrupted_sending_items(isolated_runtime_env)
     )
     repo.save_run_state(run_state)
 
-    payload = PredictionResultBatchPayload(
+    payload = make_prediction_result_batch_payload(
+        batch_id=f"{run_id}:job-rec-01:Asset-Rec",
         event_id=event_id,
-        run_id=run_id,
-        job_id="job-rec-01",
         asset_id="Asset-Rec",
-        observed_at="2026-08-25T10:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={
-            "pdm-xgboost": ModelPredictionResult(
-                model_version="pdm-xgboost-v1.0",
-                status="succeeded",
-                observed_at="2026-08-25T10:00:00Z",
-                score_type="positive_class_probability",
-                score_source="predict_proba",
-                score=0.95,
-            )
-        },
-        source_lineage=SourceLineage(
-            source_uri="test.jsonl",
-            source_checksum="0" * 64,
-        ),
+        score=0.95,
     )
     item = notif_service.create_outbox_record(payload)
     item.status = "sending"
@@ -1225,8 +1222,10 @@ def test_observed_at_matches_actual_feature_row_metadata(isolated_runtime_env):
     event = repo.get_event(event_id)
     assert event is not None
     assert event.observed_at == "2026-08-25T10:02:00Z"
-    for model_id, model_res in event.model_results.items():
-        assert model_res.observed_at == "2026-08-25T10:02:00Z"
+    outbox_item = env["notif_service"].get_outbox_item(event_id)
+    assert outbox_item is not None
+    for result in outbox_item.payload.results:
+        assert result.observed_at == "2026-08-25T10:02:00Z"
 
 
 # =====================================================================
@@ -1849,7 +1848,7 @@ def test_partial_multi_equipment_outbox_resumption_is_idempotent(isolated_runtim
     orig_register = service.prediction_delivery_service.register_idempotent_outbox_record
 
     def failing_second_register(payload):
-        if payload.asset_id == "M14860":
+        if service.prediction_delivery_service.batch_asset_id(payload) == "M14860":
             raise PipelineDeliveryFailedError("Simulated crash on EQ-002 outbox registration")
         return orig_register(payload)
 
@@ -1889,41 +1888,23 @@ def test_outbox_payload_conflict_raises_error(isolated_runtime_env):
     env = isolated_runtime_env
     delivery_service: PredictionDeliveryService = env["notif_service"]
 
-    payload1 = PredictionResultBatchPayload(
-        event_id="temp",
-        run_id="run-conflict-1",
-        job_id="job-conflict-1",
+    payload1 = make_prediction_result_batch_payload(
+        batch_id="run-conflict-1:job-conflict-1:EQ-100",
+        event_id="temp-1",
         asset_id="EQ-100",
         observed_at="2026-08-26T00:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={},
-        source_lineage=SourceLineage(
-            source_uri="data/test.jsonl",
-            source_checksum="0" * 64,
-        ),
+        source_uri="data/test.jsonl",
     )
     item1, sha1 = delivery_service.register_idempotent_outbox_record(payload1)
     assert item1.event_id is not None
 
     # Construct different payload with same run_id and asset_id
-    payload2 = PredictionResultBatchPayload(
-        event_id="temp",
-        run_id="run-conflict-1",
-        job_id="job-conflict-1",
+    payload2 = make_prediction_result_batch_payload(
+        batch_id="run-conflict-1:job-conflict-1:EQ-100",
+        event_id="temp-2",
         asset_id="EQ-100",
         observed_at="2026-08-26T01:00:00Z",  # Different timestamp -> different payload_sha256!
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={},
-        source_lineage=SourceLineage(
-            source_uri="data/test.jsonl",
-            source_checksum="0" * 64,
-        ),
+        source_uri="data/test.jsonl",
     )
 
     # Force payload2 to produce the same event_id as payload1
@@ -2159,18 +2140,12 @@ def test_delivery_worker_http_status_codes_handling(isolated_runtime_env, monkey
     delivery_service: PredictionDeliveryService = env["service"].prediction_delivery_service
     src_file, sha = create_sample_observation_jsonl(env["incoming_dir"] / "http_code.jsonl", num_rows=2, asset_id="M14860")
 
-    payload = PredictionResultBatchPayload(
+    payload = make_prediction_result_batch_payload(
+        batch_id="run-http-1:job-http-1:M14860",
         event_id="evt-test-http-codes",
-        run_id="run-http-1",
-        job_id="job-http-1",
-        asset_id="M14860",
         observed_at="2026-08-26T09:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={},
-        source_lineage=SourceLineage(source_uri=str(src_file), source_checksum=sha),
+        source_uri=str(src_file),
+        source_sha256=sha,
     )
 
     class MockHTTPResp:
@@ -2646,7 +2621,7 @@ def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monk
             if "$id" in sdata:
                 schema_map[sdata["$id"]] = sdata
 
-    batch_schema_path = schemas_dir / "generator-prediction-result-batch.schema.json"
+    batch_schema_path = schemas_dir / "prediction-result-batch.schema.json"
     with open(batch_schema_path, "r", encoding="utf-8") as sf:
         batch_schema = json.load(sf)
 
@@ -2741,22 +2716,22 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
     with open(staged_payload_file, "r", encoding="utf-8") as f:
         disk_payload = json.load(f)
 
-    # 1. Top-level Model Set fields exist
-    assert disk_payload.get("model_set_id") == "pdm-schema-test"
-    assert disk_payload.get("model_set_version") == "1.0.0"
+    # 1. Top-level internal Model Set fields are not part of the canonical #129 handoff.
+    assert "model_set_id" not in disk_payload
+    assert "model_set_version" not in disk_payload
 
-    # 2. Internal model set fields excluded from model_results[*], but provenance 4 fields included
-    lgbm_res = disk_payload["model_results"]["pdm-lightgbm"]
+    # 2. Provenance fields live on canonical results[] items.
+    assert isinstance(disk_payload["results"], list)
+    lgbm_res = disk_payload["results"][0]
     assert "model_set_id" not in lgbm_res
     assert "model_set_version" not in lgbm_res
-    assert lgbm_res.get("manifest_checksum") is not None
-    assert len(lgbm_res["manifest_checksum"]) == 64
+    assert lgbm_res.get("model_artifact_sha256") is not None
+    assert len(lgbm_res["model_artifact_sha256"]) == 64
     assert lgbm_res.get("feature_schema_version") is not None
-    assert lgbm_res.get("label_schema_version") is not None
     assert lgbm_res.get("history_requirement_version") is not None
 
-    # 3. K-V dict structure maintained
-    assert isinstance(disk_payload["model_results"], dict)
+    # 3. Canonical results[] structure maintained
+    assert lgbm_res["model_id"] == "pdm-lightgbm"
     assert lgbm_res["score"] == 0.88
 
     # 4. Validate against official schema
@@ -2768,7 +2743,7 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
             if "$id" in sdata:
                 schema_map[sdata["$id"]] = sdata
 
-    batch_schema_path = schemas_dir / "generator-prediction-result-batch.schema.json"
+    batch_schema_path = schemas_dir / "prediction-result-batch.schema.json"
     with open(batch_schema_path, "r", encoding="utf-8") as sf:
         batch_schema = json.load(sf)
 

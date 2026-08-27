@@ -73,6 +73,7 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ActiveModelSet,
     ArtifactReference,
     InternalModelPredictionResult,
+    ModelPredictionResult,
     ModelSnapshotEntry,
     PipelineCheckpoint,
     PipelineQueueItem,
@@ -880,13 +881,36 @@ class PipelineService:
             else:
                 eq_batches = {}
                 for aid, payload in staged_batches.items():
+                    model_results = {
+                        item.model_id: ModelPredictionResult(
+                            model_version=item.model_version,
+                            status="succeeded" if item.output_status == "predicted" else "unknown",
+                            observed_at=item.observed_at,
+                            score_type="positive_class_probability",
+                            score_source="predict_proba" if item.output_status == "predicted" else None,
+                            score=item.score,
+                            artifact_ref=ArtifactReference(
+                                uri="model-artifact://unknown",
+                                sha256=item.model_artifact_sha256,
+                                role="model_artifact",
+                            ),
+                            feature_ref=None,
+                            manifest_checksum=item.model_artifact_sha256,
+                            feature_schema_version=item.feature_schema_version,
+                            label_schema_version=None,
+                            history_requirement_version=item.history_requirement_version,
+                            error_code=None if item.output_status == "predicted" else item.output_status,
+                            error_message=item.failure_reason,
+                        )
+                        for item in payload.results
+                    }
                     eq_batches[aid] = EquipmentModelBatch(
                         asset_id=aid,
                         status="succeeded",
-                        observed_at=payload.observed_at,
-                        succeeded_models=list(payload.model_results.keys()),
-                        failed_models=[],
-                        model_results=payload.model_results,
+                        observed_at=payload.results[0].observed_at,
+                        succeeded_models=[item.model_id for item in payload.results if item.output_status == "predicted"],
+                        failed_models=[item.model_id for item in payload.results if item.output_status != "predicted"],
+                        model_results=model_results,
                     )
                 batch_summary = PredictionBatchSummary(
                     overall_status="succeeded",
@@ -953,24 +977,17 @@ class PipelineService:
                         retryable=False,
                     )
 
-                batch_payload = PredictionResultBatchPayload(
-                    event_id="temp",
+                batch_payload = self.prediction_batch_service.build_payload(
                     run_id=run_id,
                     job_id=item.job_id,
                     asset_id=asset_id,
-                    observed_at=batch_observed_at,
-                    generated_at=now_utc_iso(),
-                    dataset_id=item.dataset_id,
-                    dataset_version=item.dataset_version,
-                    model_set_id=active_model_set.model_set_id,
-                    model_set_version=active_model_set.model_set_version,
-                    model_results=eq_batch.model_results,
+                    batch=eq_batch,
                     source_lineage=SourceLineage(
                         source_uri=logical_source_uri,
                         source_checksum=item.source_checksum,
                         pipeline_contract_version=contract_ver,
                     ),
-                    sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
+                    runtime_version="generator-runtime-prediction-v1",
                 )
 
                 prev_delivery = existing_delivery.get(asset_id)

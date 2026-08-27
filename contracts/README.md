@@ -55,8 +55,7 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Generator Runtime Pipeline Run State Schema | **Current** | `contracts/schemas/generator-pipeline-run-state.schema.json` (런타임 5대 Stage 상태 및 모델별 예측 수치·배치 전송 상태) |
 | Generator Runtime Feature Schema | **Current** | `contracts/schemas/generator-runtime-feature.schema.json` (런타임 피처 행렬 및 설비·시간 metadata) |
 | Generator Model Prediction Result Schema | **Current** | `contracts/schemas/generator-model-prediction-result.schema.json` (모델별 score 수치, score_type, 실행 상태 및 오류 정보) |
-| Generator Prediction Result Batch Schema | **Current** | `contracts/schemas/generator-prediction-result-batch.schema.json` (설비 단위 모델 결과 묶음 및 Outbox/Backend 전달 계약) |
-| Generator Runtime Prediction Golden Vector | **Current** | `contracts/test-vectors/generator-runtime-prediction-v1/` (다중 설비 런타임 예측 수치 및 결과 묶음 배치 검증) |
+| Generator Runtime Prediction Golden Vector | **Current** | `contracts/test-vectors/generator-runtime-prediction-v1/` (다중 설비 런타임 예측 수치 및 `prediction-result-batch.schema.json` 정합성 검증) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |

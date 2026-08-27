@@ -1342,7 +1342,7 @@ class ContractVectorVerifier:
 
         # 2. Validate prediction-result-batch.json
         batch_path = vector_dir / "expected" / "prediction-result-batch.json"
-        batch_schema_path = self.schemas_dir / "generator-prediction-result-batch.schema.json"
+        batch_schema_path = self.schemas_dir / "prediction-result-batch.schema.json"
         try:
             batch_data = json.loads(batch_path.read_text(encoding="utf-8"))
             if not isinstance(batch_data, dict):
@@ -1363,14 +1363,14 @@ class ContractVectorVerifier:
                             actual="Found top-level feature_ref",
                         )
                     )
-                # Assert model_results is a dict
-                if not isinstance(batch_data.get("model_results"), dict):
+                # Assert canonical #129 handoff uses results[] rather than the old model_results dict.
+                if not isinstance(batch_data.get("results"), list) or not batch_data.get("results"):
                     result.errors.append(
                         VerificationError(
                             context=f"{vector_name}/expected/prediction-result-batch.json",
-                            message="'model_results' must be a dictionary keyed by model_id",
-                            expected="JSON object",
-                            actual=type(batch_data.get("model_results")).__name__,
+                            message="'results' must be a non-empty array of raw prediction handoff items",
+                            expected="non-empty JSON array",
+                            actual=type(batch_data.get("results")).__name__,
                         )
                     )
                 if batch_schema_path.is_file():

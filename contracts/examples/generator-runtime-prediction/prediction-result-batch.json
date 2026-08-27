@@ -1,71 +1,70 @@
 {
-  "event_id": "prediction-event-001",
-  "run_id": "runtime-run-001",
-  "job_id": "pipeline-job-001",
-  "asset_id": "CNC-S01-L01-01",
-  "observed_at": "2026-08-25T14:30:00Z",
-  "generated_at": "2026-08-25T14:30:05Z",
-  "dataset_id": "canonical-ai4i-v1",
-  "dataset_version": "canonical-ai4i-physics-v3.1",
-  "model_set_id": "pdm-default",
-  "model_set_version": "1.0.0",
-  "model_results": {
-    "pdm-lightgbm": {
-      "model_version": "pdm-lightgbm-v1.0",
-      "status": "succeeded",
+  "contract_version": "prediction-result-batch-v1",
+  "batch_id": "runtime-run-001:pipeline-job-001:CNC-S01-L01-01",
+  "producer": {
+    "system": "systems.generator",
+    "runtime_version": "generator-runtime-prediction-v1",
+    "outbox_id": "prediction-event-001"
+  },
+  "emitted_at": "2026-08-25T14:30:05Z",
+  "results": [
+    {
+      "event_id": "prediction-event-001-lightgbm",
+      "asset_id": "CNC-S01-L01-01",
       "observed_at": "2026-08-25T14:30:00Z",
-      "score_type": "positive_class_probability",
-      "score_source": "predict_proba",
+      "source_kind": "live_sensor",
+      "source_ref": {
+        "uri": "data/incoming/protocol_sample_01.jsonl",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output_status": "predicted",
       "score": 0.72,
-      "artifact_ref": {
-        "uri": "models_store/artifacts/pdm-lightgbm/pdm-lightgbm-v1.0",
-        "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-        "role": "model_artifact"
-      },
-      "feature_ref": {
-        "uri": "models_store/cache/runtime_features/runtime-feat-001.npy",
-        "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-        "role": "runtime_features"
-      },
-      "manifest_checksum": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "model_id": "pdm-lightgbm",
+      "model_version": "pdm-lightgbm-v1.0",
+      "model_artifact_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
       "feature_schema_version": "v1.0",
-      "label_schema_version": "v1.0",
       "history_requirement_version": "v1.0",
-      "error_code": null,
-      "error_message": null
+      "feature_schema_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "history_requirement_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "lineage": {
+        "simulation_session_id": null,
+        "overlay_branch_id": null,
+        "history_segment_id": null,
+        "maintenance_event_id": null,
+        "maintenance_action_id": null,
+        "state_version": null
+      },
+      "failure_reason": null
     },
-    "pdm-xgboost": {
-      "model_version": "pdm-xgboost-v1.0",
-      "status": "succeeded",
+    {
+      "event_id": "prediction-event-001-xgboost",
+      "asset_id": "CNC-S01-L01-01",
       "observed_at": "2026-08-25T14:30:00Z",
-      "score_type": "positive_class_probability",
-      "score_source": "predict_proba",
+      "source_kind": "live_sensor",
+      "source_ref": {
+        "uri": "data/incoming/protocol_sample_01.jsonl",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "payload_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "output_status": "predicted",
       "score": 0.88,
-      "artifact_ref": {
-        "uri": "models_store/artifacts/pdm-xgboost/pdm-xgboost-v1.0",
-        "sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
-        "role": "model_artifact"
-      },
-      "feature_ref": {
-        "uri": "models_store/cache/runtime_features/runtime-feat-001.npy",
-        "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-        "role": "runtime_features"
-      },
-      "manifest_checksum": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
+      "model_id": "pdm-xgboost",
+      "model_version": "pdm-xgboost-v1.0",
+      "model_artifact_sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
       "feature_schema_version": "v1.0",
-      "label_schema_version": "v1.0",
       "history_requirement_version": "v1.0",
-      "error_code": null,
-      "error_message": null
+      "feature_schema_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "history_requirement_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "lineage": {
+        "simulation_session_id": null,
+        "overlay_branch_id": null,
+        "history_segment_id": null,
+        "maintenance_event_id": null,
+        "maintenance_action_id": null,
+        "state_version": null
+      },
+      "failure_reason": null
     }
-  },
-  "source_lineage": {
-    "source_uri": "data/incoming/protocol_sample_01.jsonl",
-    "source_checksum": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    "pipeline_contract_version": "generator-prediction-result-v1"
-  },
-  "sensor_data_ref": {
-    "uri": "data/incoming/protocol_sample_01.jsonl",
-    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  }
+  ]
 }

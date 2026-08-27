@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def now_utc_iso() -> str:
@@ -355,25 +355,105 @@ class SourceLineage(BaseModel):
     pipeline_contract_version: str = "generator-prediction-result-v1"
 
 
-class PredictionResultBatchPayload(BaseModel):
-    """Prediction Result Batch payload sent per equipment across models."""
+class PredictionResultBatchProducer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    event_id: str = Field(..., description="Unique event identifier (Idempotency Key)")
-    run_id: str = Field(..., description="Associated pipeline run ID")
-    job_id: str = Field(..., description="Associated queue job ID")
-    asset_id: str = Field(..., description="Target equipment identifier")
+    system: Literal["systems.generator"] = "systems.generator"
+    runtime_version: str = Field(..., min_length=1, max_length=128)
+    outbox_id: Optional[str] = Field(None, max_length=240)
+
+
+class PredictionResultBatchSourceRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    uri: str = Field(..., min_length=1, max_length=1000)
+    sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+
+
+class PredictionResultBatchLineage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    simulation_session_id: Optional[str] = Field(None, max_length=240)
+    overlay_branch_id: Optional[str] = Field(None, max_length=240)
+    history_segment_id: Optional[str] = Field(None, max_length=240)
+    maintenance_event_id: Optional[str] = Field(None, max_length=240)
+    maintenance_action_id: Optional[str] = Field(None, max_length=240)
+    state_version: Optional[int] = Field(None, ge=1)
+
+
+class PredictionResultBatchItem(BaseModel):
+    """Raw Generator prediction output before Backend Product Result promotion."""
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(..., min_length=1, max_length=240)
+    asset_id: str = Field(..., min_length=1, max_length=240)
     observed_at: str = Field(..., description="Observation timestamp in UTC ISO format")
-    generated_at: str = Field(default_factory=now_utc_iso, description="Generation timestamp")
-    dataset_id: str = Field(..., description="Dataset identifier")
-    dataset_version: str = Field(..., description="Dataset version")
-    model_set_id: str = Field(..., description="Model set identifier")
-    model_set_version: str = Field(..., description="Model set version")
-    model_results: dict[str, ModelPredictionResult] = Field(
-        ..., description="Map of model_id to model prediction results for this equipment"
-    )
-    source_lineage: SourceLineage = Field(..., description="Input lineage traceability")
-    sensor_data_ref: Optional[dict[str, Any]] = Field(None, description="Sensor data reference")
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay"]
+    source_ref: PredictionResultBatchSourceRef
+    payload_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    output_status: Literal[
+        "predicted",
+        "warming_up",
+        "history_insufficient",
+        "failed_source_unavailable",
+        "failed_model_artifact",
+        "failed_feature_execution",
+        "failed_model_inference",
+        "failed_delivery",
+    ]
+    score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    model_id: str = Field(..., min_length=1, max_length=240)
+    model_version: str = Field(..., min_length=1, max_length=240)
+    model_artifact_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    feature_schema_version: str = Field(..., min_length=1, max_length=240)
+    history_requirement_version: str = Field(..., min_length=1, max_length=240)
+    feature_schema_sha256: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
+    history_requirement_sha256: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
+    lineage: PredictionResultBatchLineage
+    failure_reason: Optional[str] = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def enforce_batch_item_boundary(self) -> "PredictionResultBatchItem":
+        if self.output_status == "predicted":
+            if self.score is None:
+                raise ValueError("predicted batch items require score")
+            if self.failure_reason is not None:
+                raise ValueError("predicted batch items must not carry failure_reason")
+        else:
+            if self.score is not None:
+                raise ValueError("non-predicted batch items must not carry score")
+            if not self.failure_reason:
+                raise ValueError("non-predicted batch items require failure_reason")
+        if self.source_kind == "maintenance_replay":
+            missing = [
+                field
+                for field in (
+                    "simulation_session_id",
+                    "overlay_branch_id",
+                    "history_segment_id",
+                    "maintenance_event_id",
+                    "maintenance_action_id",
+                    "state_version",
+                )
+                if getattr(self.lineage, field) in (None, "")
+            ]
+            if missing:
+                raise ValueError(
+                    "maintenance_replay batch items require lineage fields: "
+                    + ", ".join(missing)
+                )
+        return self
+
+
+class PredictionResultBatchPayload(BaseModel):
+    """Generator -> Backend Inbox handoff; not Product Result/Evidence."""
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["prediction-result-batch-v1"] = "prediction-result-batch-v1"
+    batch_id: str = Field(..., min_length=1, max_length=240)
+    producer: PredictionResultBatchProducer
+    emitted_at: str = Field(default_factory=now_utc_iso, description="Generation timestamp")
+    results: list[PredictionResultBatchItem] = Field(..., min_length=1)
 
 
 class PredictionOutboxItem(BaseModel):
