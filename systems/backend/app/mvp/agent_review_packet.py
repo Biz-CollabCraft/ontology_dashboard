@@ -82,7 +82,9 @@ def compose_agent_review_packet(
         risk=view_model.get("risk") or {},
         review_priority=view_model.get("review_priority"),
         sop_guidance=sop_guidance,
-        human_questions=list(dict.fromkeys(human_questions)),
+        equipment_history=view_model.get("equipment_history") or [],
+        maintenance_context=view_model.get("maintenance_context") or {},
+        closed_loop=closed_loop,
         evidence_gaps=(view_model.get("evidence") or {}).get("gaps") or [],
     )
     return {
@@ -128,7 +130,9 @@ def _compose_review_draft(
     risk: dict[str, Any],
     review_priority: dict[str, Any] | None,
     sop_guidance: list[dict[str, Any]],
-    human_questions: list[str],
+    equipment_history: list[dict[str, Any]],
+    maintenance_context: dict[str, Any],
+    closed_loop: dict[str, Any],
     evidence_gaps: list[dict[str, Any]],
 ) -> dict[str, Any]:
     asset_id = str(asset.get("asset_id") or "")
@@ -141,12 +145,14 @@ def _compose_review_draft(
     checklist = [str(item) for item in primary_guidance.get("checklist_draft") or []][:4]
     if evidence_gaps:
         checklist.append("근거 공백 항목을 먼저 확인하고 확정 판단에서 제외합니다.")
-    questions = human_questions[:4]
-    if not questions:
-        questions = ["현장 담당자가 점검 가능 시간, 부품 상태, 안전 조건을 확인했습니까?"]
+    history_summary = _compose_history_summary(
+        equipment_history=equipment_history,
+        maintenance_context=maintenance_context,
+        closed_loop=closed_loop,
+    )
     priority_level = str((review_priority or {}).get("level") or "medium")
     recommended_next_step = (
-        "담당자가 SOP 기준 점검 질문을 확인하고, 필요한 경우 관리자 승인 절차로 이관합니다."
+        "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다."
     )
     return {
         "title": f"{asset_name} 담당자 검토 초안",
@@ -157,7 +163,46 @@ def _compose_review_draft(
         "priority_label": priority_level,
         "recommended_next_step": recommended_next_step,
         "checklist": checklist,
-        "questions": questions,
+        "history_summary": history_summary,
         "evidence_gap_count": len(evidence_gaps),
         "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
     }
+
+
+def _compose_history_summary(
+    *,
+    equipment_history: list[dict[str, Any]],
+    maintenance_context: dict[str, Any],
+    closed_loop: dict[str, Any],
+) -> list[str]:
+    summaries = []
+    if equipment_history:
+        latest = equipment_history[0]
+        days_ago = maintenance_context.get("last_maintenance_days_ago")
+        days_label = f" · {days_ago}일 전" if isinstance(days_ago, int) and not isinstance(days_ago, bool) else ""
+        summaries.append(
+            f"최근 정비 이력: {latest.get('description', '정비 이력')} · {latest.get('occurred_at', '일시 미제공')}{days_label}"
+        )
+    else:
+        summaries.append("최근 정비 이력: 전용 Activity/Maintenance 이력 조회 결과 없음")
+
+    work_orders = closed_loop.get("work_orders") or []
+    open_work_orders = [
+        item for item in work_orders if str(item.get("status") or "") not in {"completed", "cancelled"}
+    ]
+    if open_work_orders:
+        work_order = open_work_orders[0]
+        summaries.append(
+            f"열린 작업요청: {work_order.get('work_order_id', 'ID 미제공')} · {work_order.get('status', '상태 미제공')}"
+        )
+    elif maintenance_context.get("open_work_order_exists") is False:
+        summaries.append("열린 작업요청: 없음")
+    else:
+        summaries.append("열린 작업요청: Closed-loop 이력 연결 전이라 확정하지 않음")
+
+    similar_events = maintenance_context.get("similar_events_30d")
+    if isinstance(similar_events, int) and not isinstance(similar_events, bool):
+        summaries.append(f"최근 30일 유사 이벤트: {similar_events}건")
+    else:
+        summaries.append("최근 30일 유사 이벤트: 전용 이력 계약 미연결")
+    return summaries

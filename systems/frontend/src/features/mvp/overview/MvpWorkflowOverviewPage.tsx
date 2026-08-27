@@ -1876,14 +1876,14 @@ function AssetPreviewPanel({
                           <div><dt>SOP 출처</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
                           <div><dt>SOP 관련도</dt><dd>{agentPacket.sop_guidance[0]?.retrieval_score ?? 0}</dd></div>
                         </dl>
-                        <small>담당자 확인 질문</small>
-                        {agentPacket.human_questions.length ? (
+                        <small>이력 조회 요약</small>
+                        {agentPacket.review_draft.history_summary.length ? (
                           <ul>
-                            {agentPacket.human_questions.slice(0, 3).map((question) => (
-                              <li key={`${agentPacket.asset_id}-question-${question}`}>{question}</li>
+                            {agentPacket.review_draft.history_summary.slice(0, 3).map((summary) => (
+                              <li key={`${agentPacket.asset_id}-history-${summary}`}>{summary}</li>
                             ))}
                           </ul>
-                        ) : <p>담당자 확인 질문이 제공되지 않았습니다.</p>}
+                        ) : <p>조회된 이력 요약이 없습니다.</p>}
                         <div className="mvp-agent-review-draft">
                           <strong>{agentPacket.review_draft.title}</strong>
                           <p>{agentPacket.review_draft.summary}</p>

@@ -393,7 +393,7 @@ export interface MvpAgentReviewPacket {
     priority_label: string;
     recommended_next_step: string;
     checklist: string[];
-    questions: string[];
+    history_summary: string[];
     evidence_gap_count: number;
     boundary_note: string;
   };
