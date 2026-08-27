@@ -65,7 +65,7 @@ test("keeps workflow role dashboards ordered around each role's first task", asy
   expect(processMap?.y ?? 0).toBeLessThan(processQueue?.y ?? 0);
 });
 
-test("opens the SOP grounded agent review packet without mutating work state", async ({ page }) => {
+test("shows the SOP grounded AI review summary without mutating work state", async ({ page }) => {
   await login(page, `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`, "engineer");
   await expect(page.getByTestId("mvp-overview")).toBeVisible();
   await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
@@ -73,12 +73,11 @@ test("opens the SOP grounded agent review packet without mutating work state", a
   await expect(preview).toBeVisible();
   await preview.getByRole("tab", { name: "처리", exact: true }).click();
   await expect(preview.getByText("점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.")).toBeVisible();
-  await preview.getByRole("button", { name: "AI 검토 패킷 열기", exact: true }).click();
-  await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("read-only");
-  await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("상태 변경");
-  await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("불가");
-  await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("담당자 검토 초안");
-  await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("자동 승인을 수행하지 않습니다");
+  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("검토 전용");
+  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("상태 변경");
+  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("불가");
+  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("담당자 검토 초안");
+  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("자동 승인을 수행하지 않습니다");
 });
 
 test("completes Overview to Objects to Operations to Reports Executive Brief without Analysis", async ({ page }) => {

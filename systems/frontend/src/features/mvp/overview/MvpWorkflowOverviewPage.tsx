@@ -1522,10 +1522,10 @@ function AssetPreviewPanel({
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
-  const [agentPacketOpen, setAgentPacketOpen] = useState(false);
   const [agentPacket, setAgentPacket] = useState<MvpAgentReviewPacket | null>(null);
   const [agentPacketLoading, setAgentPacketLoading] = useState(false);
   const [agentPacketError, setAgentPacketError] = useState("");
+  const [agentPacketRequestKey, setAgentPacketRequestKey] = useState("");
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
@@ -1547,11 +1547,13 @@ function AssetPreviewPanel({
     setReportOutputOpen(false);
     window.setTimeout(() => window.print(), 100);
   };
-  const openAgentPacket = async () => {
+  const agentPacketKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
+  const loadAgentPacket = async () => {
     if (!asset) return;
-    setAgentPacketOpen(true);
     setAgentPacketLoading(true);
     setAgentPacketError("");
+    setAgentPacket(null);
+    setAgentPacketRequestKey(agentPacketKey);
     try {
       setAgentPacket(await getMvpAgentReviewPacket({
         assetId: asset.assetId,
@@ -1559,11 +1561,16 @@ function AssetPreviewPanel({
         historyWindow: sensorWindow,
       }));
     } catch (reason: unknown) {
-      setAgentPacketError(reason instanceof Error ? reason.message : "Agent review packet을 불러오지 못했습니다.");
+      setAgentPacketError(reason instanceof Error ? reason.message : "AI 검토 요약을 불러오지 못했습니다.");
     } finally {
       setAgentPacketLoading(false);
     }
   };
+  useEffect(() => {
+    if (role !== "field_operator" || activeTab !== "action" || !asset || !agentPacketKey) return;
+    if (agentPacketLoading || agentPacketRequestKey === agentPacketKey) return;
+    void loadAgentPacket();
+  }, [activeTab, agentPacketKey, agentPacketLoading, agentPacketRequestKey, asset, role]);
   useEffect(() => {
     if (!printReportTab) return;
     document.body.classList.add("mvp-workflow-print-mode");
@@ -1847,51 +1854,49 @@ function AssetPreviewPanel({
                 <label><span>담당자</span><input disabled placeholder={assignee} /></label>
                 <label><span>완료 메모</span><textarea disabled value="정비 완료 API 연결 후 입력" readOnly /></label>
               </div>
-              <div className="mvp-agent-review-actions">
-                <button type="button" onClick={() => void openAgentPacket()} disabled={!asset || agentPacketLoading}>
-                  {agentPacketLoading ? "검토 패킷 불러오는 중" : "AI 검토 패킷 열기"}
-                </button>
-              </div>
-              {agentPacketOpen ? (
-                <section className="mvp-agent-review-packet" aria-label="AI 검토 패킷">
-                  <header><Bot size={14} /><strong>AI 검토 초안</strong><span>read-only</span></header>
-                  {agentPacketError ? <p>{agentPacketError}</p> : null}
-                  {agentPacket ? (
-                    <>
-                      <dl>
-                        <div><dt>설비</dt><dd>{agentPacket.asset_id}</dd></div>
-                        <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
-                        <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP 연결` : "SOP 근거 없음"}</dd></div>
-                        <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
-                        <div><dt>SOP 출처</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
-                        <div><dt>SOP 관련도</dt><dd>{agentPacket.sop_guidance[0]?.retrieval_score ?? 0}</dd></div>
-                      </dl>
-                      <small>담당자 확인 질문</small>
-                      {agentPacket.human_questions.length ? (
-                        <ul>
-                          {agentPacket.human_questions.slice(0, 3).map((question) => (
-                            <li key={`${agentPacket.asset_id}-question-${question}`}>{question}</li>
-                          ))}
-                        </ul>
-                      ) : <p>담당자 확인 질문이 제공되지 않았습니다.</p>}
-                      <div className="mvp-agent-review-draft">
-                        <strong>{agentPacket.review_draft.title}</strong>
-                        <p>{agentPacket.review_draft.summary}</p>
-                        <small>{agentPacket.review_draft.recommended_next_step}</small>
-                        {agentPacket.review_draft.checklist.length ? (
+              <section className="mvp-agent-review-packet" aria-label="AI 검토 요약">
+                <header><Bot size={14} /><strong>AI 검토 요약</strong><span>검토 전용</span></header>
+                {agentPacketLoading ? <p>AI 요약을 불러오는 중입니다.</p> : null}
+                {!agentPacketLoading ? (
+                  <>
+                    {agentPacketError ? <p>{agentPacketError}</p> : null}
+                    {agentPacket ? (
+                      <>
+                        <dl>
+                          <div><dt>설비</dt><dd>{agentPacket.asset_id}</dd></div>
+                          <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
+                          <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP 연결` : "SOP 근거 없음"}</dd></div>
+                          <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
+                          <div><dt>SOP 출처</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
+                          <div><dt>SOP 관련도</dt><dd>{agentPacket.sop_guidance[0]?.retrieval_score ?? 0}</dd></div>
+                        </dl>
+                        <small>담당자 확인 질문</small>
+                        {agentPacket.human_questions.length ? (
                           <ul>
-                            {agentPacket.review_draft.checklist.slice(0, 4).map((item) => (
-                              <li key={`${agentPacket.asset_id}-draft-check-${item}`}>{item}</li>
+                            {agentPacket.human_questions.slice(0, 3).map((question) => (
+                              <li key={`${agentPacket.asset_id}-question-${question}`}>{question}</li>
                             ))}
                           </ul>
-                        ) : null}
-                        <small>{agentPacket.review_draft.boundary_note}</small>
-                      </div>
-                      <small>{agentPacket.closed_loop_boundary.note}</small>
-                    </>
-                  ) : !agentPacketLoading ? <p>검토 패킷을 열 수 없습니다.</p> : null}
-                </section>
-              ) : null}
+                        ) : <p>담당자 확인 질문이 제공되지 않았습니다.</p>}
+                        <div className="mvp-agent-review-draft">
+                          <strong>{agentPacket.review_draft.title}</strong>
+                          <p>{agentPacket.review_draft.summary}</p>
+                          <small>{agentPacket.review_draft.recommended_next_step}</small>
+                          {agentPacket.review_draft.checklist.length ? (
+                            <ul>
+                              {agentPacket.review_draft.checklist.slice(0, 4).map((item) => (
+                                <li key={`${agentPacket.asset_id}-draft-check-${item}`}>{item}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          <small>{agentPacket.review_draft.boundary_note}</small>
+                        </div>
+                        <small>{agentPacket.closed_loop_boundary.note}</small>
+                      </>
+                    ) : agentPacketError ? null : <p>AI 요약을 불러오는 중입니다.</p>}
+                  </>
+                ) : null}
+              </section>
               <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} />
               <p className="mvp-action-note">
                 점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
