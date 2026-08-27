@@ -322,8 +322,11 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert packet["review_draft"]["title"] == "4구역 · 4셀 · CNC 가공기 1 담당자 검토 초안"
     assert "CNC-S04-L04-01는 현재 warning 상태" in packet["review_draft"]["summary"]
     assert packet["review_draft"]["recommended_next_step"] == (
-        "담당자가 SOP 기준 점검 질문을 확인하고, 필요한 경우 관리자 승인 절차로 이관합니다."
+        "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다."
     )
+    assert packet["review_draft"]["history_summary"][0].startswith("최근 정비 이력: 최근 정비 이력")
+    assert "2026-06-28T00:00:00+09:00" in packet["review_draft"]["history_summary"][0]
+    assert "최근 30일 유사 이벤트: 전용 이력 계약 미연결" in packet["review_draft"]["history_summary"]
     assert packet["review_draft"]["evidence_gap_count"] >= 1
     assert "자동 승인을 수행하지 않습니다" in packet["review_draft"]["boundary_note"]
     assert packet["sop_retrieval"] == {
