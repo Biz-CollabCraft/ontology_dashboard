@@ -161,7 +161,7 @@ Generator Prediction Result Batch를 수신하고, 검증된 결과만 Product R
 - `AssetDetailViewModel` composer에 `current_result_summary`와 `runtime_status` 제공
 
 Generator가 Backend로 넘기는 wire contract는 PR #127의
-`generator-prediction-result-batch.schema.json`를 단일 정본으로 둔다. Backend Inbox는 payload
+`prediction-result-batch.schema.json`를 단일 외부 정본으로 둔다. Backend Inbox는 payload
 원본을 보존하고 `received_at`, `payload_sha256`, `validation_status`, `rejection_reason`,
 `promotion_result_id` 같은 수신/검증 metadata만 덧붙인다. 아래 항목은 Inbox가 검증해야 할
 의미적 최소 조건이며, 별도 schema shape를 다시 정의하지 않는다.
@@ -300,7 +300,7 @@ PR #128 UI는 이미 read surface를 제공한다. 후속은 raw data 계산이 
 
 병렬 진행의 공통 경계는 Product Result/Evidence와 PR #128 ViewModel이다.
 Generator migration을 병렬로 열 경우에도 Generator -> Backend wire contract는 PR #127의
-`generator-prediction-result-batch.schema.json`을 단일 정본으로 참조한다. PR #129는
+`prediction-result-batch.schema.json`을 단일 외부 정본으로 참조한다. PR #129는
 Backend Inbox wrapper와 validation metadata 위치만 계획한다.
 
 ```text

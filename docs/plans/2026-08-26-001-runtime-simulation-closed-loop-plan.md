@@ -71,7 +71,7 @@ sensor tick 자동 감지
 
 - 1차 통합 PR: Generator Prediction Result Batch -> Backend Inbox -> Product Result append -> API/ViewModel -> PR #128 UI live update
 - 같은 PR 또는 즉시 후속 stack: Closed-loop mutation -> Maintenance replay -> post-maintenance Product Result
-- 병렬 Generator PR: PR #127의 `generator-prediction-result-batch.schema.json` 단일 wire 계약을 기준으로 Outbox, delivery failure 처리, lineage 보강
+- 병렬 Generator PR: PR #127의 `prediction-result-batch.schema.json` 단일 외부 wire 계약을 기준으로 Outbox, delivery failure 처리, lineage 보강
 - 별도 후순위 PR: Backend direct inference fallback 제거 또는 완전 비활성화
 
 즉, Generator owner가 runtime prediction을 맡더라도 PR #128과 Closed-loop가 직접 소비하는
@@ -265,7 +265,7 @@ handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 
 - Backend Inbox는 같은 `event_id + payload_sha256`을 중복 승격하지 않는다.
 
 PR #129는 두 번째 Generator -> Backend wire schema를 정의하지 않는다. Backend Inbox 수신 record는
-PR #127의 `generator-prediction-result-batch.schema.json` payload 원본을 보존하고, 그 위에
+PR #127의 `prediction-result-batch.schema.json` payload 원본을 보존하고, 그 위에
 `received_at`, `payload_sha256`, `validation_status`, `rejection_reason`, `promotion_result_id` 같은
 Backend validation metadata를 감싸는 형태로 계획한다. `model_results`와 `source_lineage`는
 Backend가 새 shape로 재작성하지 않는다.
@@ -335,7 +335,7 @@ Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도
 범위:
 
 - `/internal/prediction-results` 또는 동등 Inbox endpoint
-- PR #127 `generator-prediction-result-batch.schema.json` validator
+- PR #127 `prediction-result-batch.schema.json` validator
 - Inbox receive record = original generator payload + Backend validation metadata
 - project/workspace/asset scope validator
 - source/model/feature/history lineage validator
@@ -755,7 +755,7 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 
 Integration PR 1과 2는 겹치는 계약을 `AssetDetailViewModel`, Product Result/Evidence,
 Maintenance API로 고정하면 병렬 진행 가능하다. Generator PR은 Product Result를 직접 만들지
-않고 PR #127의 Generator Prediction Result Batch 계약을 단일 wire contract로 유지한다는
+않고 PR #127의 `prediction-result-batch.schema.json` 외부 wire 계약을 단일 정본으로 유지한다는
 조건에서 병렬 진행 가능하다.
 
 이 순서는 PR #128이 만든 read surface를 깨지 않고, Generator upstream과 Backend Product Result
