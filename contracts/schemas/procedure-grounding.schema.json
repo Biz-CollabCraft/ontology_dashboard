@@ -34,7 +34,11 @@
     "source_kind": {"enum": ["industry_standard_reference", "site_sop", "demo_sop_fixture"]},
     "maturity": {"enum": ["fixture", "draft", "approved", "retired"]},
     "owner_domain": {"enum": ["maintenance", "operations", "safety", "quality"]},
-    "asset_types": {"type": "array", "items": {"type": "string"}},
+    "asset_types": {
+      "type": "array",
+      "description": "Asset types this SOP can guide. Multiple values are allowed only for intentionally shared procedures; each declared asset type must be covered by matching fixture or contract tests.",
+      "items": {"type": "string"}
+    },
     "component_ids": {"type": "array", "items": {"type": "string"}},
     "failure_modes": {"type": "array", "items": {"type": "string"}},
     "factor_keys": {"type": "array", "items": {"type": "string"}},
