@@ -4230,6 +4230,7 @@ def test_delivery_service_send_once_headers_and_post_method(isolated_runtime_env
     import urllib.request
     from systems.generator.app.runtime_pipeline.prediction_delivery_service import PredictionDeliveryService
 
+    monkeypatch.delenv("GENERATOR_PREDICTION_RESULT_TOKEN", raising=False)
     svc = PredictionDeliveryService(endpoint_url="http://localhost:8000/internal/prediction-results")
     payload = create_test_batch_payload(
         event_id="evt-post-01",
@@ -4266,6 +4267,7 @@ def test_delivery_service_send_once_headers_and_post_method(isolated_runtime_env
     assert idempotency_val is not None
     assert idempotency_val.startswith("evt-batch-")
     assert captured_req.headers.get("X-request-id") == "batch-post-01" or captured_req.headers.get("X-Request-ID") == "batch-post-01"
+    assert captured_req.headers.get("Authorization") is None
 
 
 # =====================================================================

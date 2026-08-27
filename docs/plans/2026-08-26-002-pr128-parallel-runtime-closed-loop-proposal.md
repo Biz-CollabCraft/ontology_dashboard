@@ -482,6 +482,9 @@ Generator Prediction Result Batch를 Backend가 승격하는 경로로 확장하
   `POST /internal/prediction-results?project_id=...&workspace_id=...`
 - `pm_prediction_result_inbox_batches` / `pm_prediction_result_inbox_items`
 - raw payload 보존, schema/checksum/scope/idempotency 검증, duplicate/conflict/rejected receipt
+- service-to-service 송신 계약:
+  Backend `PREDICTION_RESULT_INGEST_TOKEN`과 Generator `GENERATOR_PREDICTION_RESULT_TOKEN`을
+  같은 secret으로 설정하고 `Authorization: Bearer ...`로 호출
 
 이 범위는 Product Result 생성, Evidence append, ViewModel 갱신, Closed-loop trigger를 수행하지 않는다.
 

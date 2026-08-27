@@ -194,6 +194,9 @@ class PredictionDeliveryService:
             "Idempotency-Key": event_id,
             "X-Request-ID": batch_id,
         }
+        auth_token = os.environ.get("GENERATOR_PREDICTION_RESULT_TOKEN", "").strip()
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
         req = urllib.request.Request(
             self.endpoint_url,
             data=body,

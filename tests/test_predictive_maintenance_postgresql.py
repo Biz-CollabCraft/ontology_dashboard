@@ -4,7 +4,7 @@ import shutil
 import os
 import subprocess
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -23,6 +23,7 @@ from tests.test_predictive_maintenance_bundle_adapter import (
     build_manifest,
     create_small_package,
 )
+from tests.test_prediction_result_inbox import load_payload
 
 
 def _postgres_tools_available() -> bool:
@@ -125,6 +126,87 @@ def postgresql_database():
             check=False,
             env=_postgres_cli_env(),
         )
+
+
+def test_postgresql_prediction_inbox_repository_idempotency_and_conflicts(
+    postgresql_database: str,
+) -> None:
+    import psycopg
+    from psycopg.rows import dict_row
+
+    repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    payload = load_payload()
+    item = payload["results"][0]
+    received_at = datetime(2026, 8, 27, tzinfo=timezone.utc)
+    common = {
+        "organization_id": "org-test",
+        "project_id": "project-test",
+        "workspace_id": "workspace-test",
+        "batch_id": payload["batch_id"],
+        "payload_sha256": "a" * 64,
+        "validation_status": "accepted",
+        "rejection_reason": None,
+        "raw_payload": payload,
+        "received_at": received_at,
+        "item_receipts": [
+            {
+                "event_id": item["event_id"],
+                "payload_sha256": item["payload_sha256"],
+                "validation_status": "accepted",
+                "rejection_reason": None,
+            }
+        ],
+    }
+
+    first = repository.save_prediction_batch_inbox(**common)
+    duplicate = repository.save_prediction_batch_inbox(**common)
+    batch_conflict = repository.save_prediction_batch_inbox(
+        **{**common, "payload_sha256": "b" * 64}
+    )
+    item_conflict = repository.save_prediction_batch_inbox(
+        **{
+            **common,
+            "batch_id": "batch-item-conflict",
+            "payload_sha256": "c" * 64,
+            "item_receipts": [
+                {
+                    "event_id": item["event_id"],
+                    "payload_sha256": "d" * 64,
+                    "validation_status": "accepted",
+                    "rejection_reason": None,
+                }
+            ],
+        }
+    )
+
+    assert first["validation_status"] == "accepted"
+    assert duplicate["validation_status"] == "duplicate"
+    assert batch_conflict["validation_status"] == "conflict"
+    assert item_conflict["validation_status"] == "conflict"
+
+    with psycopg.connect(postgresql_database, row_factory=dict_row) as connection:
+        batch_rows = connection.execute(
+            """
+            SELECT batch_id,validation_status,promotion_result_id,raw_payload
+            FROM pm_prediction_result_inbox_batches
+            ORDER BY received_at, batch_id, validation_status
+            """
+        ).fetchall()
+        item_rows = connection.execute(
+            """
+            SELECT event_id,validation_status,promotion_result_id
+            FROM pm_prediction_result_inbox_items
+            ORDER BY received_at, batch_id, validation_status
+            """
+        ).fetchall()
+
+    assert [row["validation_status"] for row in batch_rows].count("accepted") == 1
+    assert [row["validation_status"] for row in batch_rows].count("conflict") == 2
+    assert all(row["promotion_result_id"] is None for row in batch_rows)
+    assert batch_rows[0]["raw_payload"]["batch_id"] == payload["batch_id"]
+    assert [row["validation_status"] for row in item_rows].count("accepted") == 1
+    assert [row["validation_status"] for row in item_rows].count("conflict") == 1
+    assert all(row["promotion_result_id"] is None for row in item_rows)
 
 
 def _changed_schema_manifest(manifest: DatasetBundleManifestV2) -> DatasetBundleManifestV2:

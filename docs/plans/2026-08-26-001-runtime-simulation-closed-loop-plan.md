@@ -670,6 +670,9 @@ GET /internal/prediction-results/consume-status
 - `/prediction-result-batches`와 `/internal/prediction-results`는 receive-only Inbox entrypoint다.
 - 수신부는 raw payload와 validation metadata를 저장하지만 Product Result/Evidence를 생성하지 않는다.
 - `/internal/prediction-results`는 public product action이 아니며 동일한 권한/scope gate를 통과해야 한다.
+  운영 송신은 Backend `PREDICTION_RESULT_INGEST_TOKEN`과 Generator
+  `GENERATOR_PREDICTION_RESULT_TOKEN`을 같은 secret으로 설정해
+  `Authorization: Bearer ...` service-to-service 호출로 수행한다.
 - Frontend는 internal endpoint를 직접 호출하지 않는다.
 - Frontend refresh는 public Product API를 기준으로 한다.
 

@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.dependencies import current_principal, get_identity_service, require_csrf
 from app.diagnosis.runtime_router import internal_router, router
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
-from app.identity import Principal
+from app.identity import AuthError, Principal
+from app.identity.identity_router import identity_http_status
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,6 +135,15 @@ def make_service(repository: FakeInboxRepository | None = None) -> PredictiveMai
     return PredictiveMaintenanceRuntimeService(repository or FakeInboxRepository())
 
 
+def add_auth_error_handler(app: FastAPI) -> None:
+    @app.exception_handler(AuthError)
+    async def auth_error_handler(_, exc: AuthError):
+        return JSONResponse(
+            status_code=identity_http_status(exc),
+            content={"detail": exc.message},
+        )
+
+
 def receive(
     service: PredictiveMaintenanceRuntimeService,
     payload: dict[str, Any],
@@ -218,7 +229,8 @@ def test_prediction_inbox_rejects_asset_outside_workspace() -> None:
     assert "scope_invalid" in (receipt.rejection_reason or "")
 
 
-def test_prediction_inbox_routes_return_receipt() -> None:
+def test_prediction_inbox_routes_return_receipt(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
     repository = FakeInboxRepository()
     service = make_service(repository)
     app = FastAPI()
@@ -242,10 +254,33 @@ def test_prediction_inbox_routes_return_receipt() -> None:
             "/internal/prediction-results?project_id=manufacturing-demo-project"
             "&workspace_id=manufacturing-demo",
             json=load_payload(),
-            headers={"X-CSRF-Token": "test"},
+            headers={"Authorization": "Bearer receiver-secret"},
         )
 
     assert public.status_code == 202, public.text
     assert public.json()["product_result_created"] is False
     assert internal.status_code == 200, internal.text
     assert internal.json()["validation_status"] == "duplicate"
+
+
+def test_prediction_inbox_internal_route_requires_configured_service_token(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    service = make_service()
+    app = FastAPI()
+    add_auth_error_handler(app)
+    app.include_router(internal_router)
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=load_payload(),
+            headers={"Authorization": "Bearer wrong-secret"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Prediction Result service token is invalid."
