@@ -6,7 +6,7 @@
   "source_kind": "demo_sop_fixture",
   "maturity": "fixture",
   "owner_domain": "maintenance",
-  "asset_types": ["cnc", "compressor"],
+  "asset_types": ["cnc"],
   "component_ids": ["rotating_assembly", "drive_train", "tooling", "thermal_path"],
   "failure_modes": ["tool_wear_failure", "heat_dissipation_failure", "power_or_overstrain_failure", "multi_factor_risk", "failure_risk"],
   "factor_keys": ["rotation_raw", "vibration_raw", "rotational_speed_rpm", "torque_nm", "mechanical_power_w", "overstrain_index", "tool_wear_min", "process_temperature_k", "temperature_difference_k"],

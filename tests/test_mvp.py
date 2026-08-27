@@ -343,6 +343,32 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert cleared == {"decisions": [], "notes": [], "conversations": []}
 
 
+def test_cnc_sop_guidance_does_not_match_compressor_assets(service: FactorySignalService) -> None:
+    fixture = {
+        "equipment": {
+            "asset_type": "compressor",
+            "criticality": "high",
+        },
+        "operation_context": {
+            "production_impact": "high",
+        },
+        "expected": {
+            "predicted_failure_type": "failure_risk",
+        },
+    }
+    artifact = {
+        "asset_type": "compressor",
+        "predicted_failure_type": "failure_risk",
+        "status_grade": "warning",
+        "top_factors": [{"feature": "vibration_raw"}],
+        "evidence_payload": {
+            "component_hypotheses": [{"component_id": "rotating_assembly"}],
+        },
+    }
+
+    assert service._inspection_guidance_for_fixture(fixture, artifact) == {}
+
+
 def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(
     client: TestClient,
 ) -> None:
