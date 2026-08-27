@@ -354,7 +354,11 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     }
     assert packet["sop_guidance"][0]["retrieval_score"] > 0
     assert {"asset_type", "failure_mode", "component_ids"} <= set(packet["sop_guidance"][0]["matched_fields"])
-    assert "교체 전 생산 정지 가능 시간과 부품 가용성이 확인됐습니까?" in packet["human_questions"]
+    assert "교체 전 생산 정지 가능 시간과 부품 가용성 확인 상태 조회" in packet["history_review_items"]
+    assert "human_questions" not in packet
+    assert packet["sop_guidance"][0]["replacement_review_guidance"]["operator_review_items"] == packet[
+        "history_review_items"
+    ]
     assert client.get("/api/events/EVT-GS-002/activity").json() == activity_before_packet
 
     login_as(client, "engineer@ontology.local", "Engineer!2026")
