@@ -65,18 +65,18 @@ class ActiveModelConfig(BaseModel):
     """Configuration for a single base model in active-model-set.json."""
     model_config = ConfigDict(extra="forbid")
 
-    model_version: str = Field(..., description="Target model artifact version string")
-    required: bool = Field(True, description="Whether failure of this model fails the entire batch")
+    model_version: str = Field(..., min_length=1, description="Target model artifact version string")
+    required: bool = Field(..., description="Whether failure of this model fails the entire batch")
 
 
 class ActiveModelSet(BaseModel):
     """Active model set configuration pointer used during Generator Runtime Prediction."""
     model_config = ConfigDict(extra="forbid")
 
-    model_set_id: str = Field("pdm-default", description="Model set identifier")
-    model_set_version: str = Field("1.0.0", description="Model set version string")
-    updated_at: str = Field(default_factory=now_utc_iso, description="ISO timestamp of last update")
-    models: dict[str, ActiveModelConfig] = Field(..., description="Map of base model identifiers to active model config")
+    model_set_id: str = Field(..., min_length=1, description="Model set identifier")
+    model_set_version: str = Field(..., min_length=1, description="Model set version string")
+    updated_at: datetime = Field(..., description="ISO timestamp of last update")
+    models: dict[str, ActiveModelConfig] = Field(..., min_length=1, description="Map of base model identifiers to active model config")
 
 
 class ModelPredictionResult(BaseModel):

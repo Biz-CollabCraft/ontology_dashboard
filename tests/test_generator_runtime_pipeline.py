@@ -2044,6 +2044,7 @@ def test_active_model_set_pointer_management_and_atomic_update(isolated_runtime_
     invalid_set = ActiveModelSet(
         model_set_id="pdm-opt",
         model_set_version="1.0.1",
+        updated_at=now_utc_iso(),
         models={"lightgbm": ActiveModelConfig(model_version="1.0.0", required=False)},
     )
     with pytest.raises(ModelSetOptionalModelPolicyNotImplementedError):
@@ -2053,6 +2054,7 @@ def test_active_model_set_pointer_management_and_atomic_update(isolated_runtime_
     missing_art_set = ActiveModelSet(
         model_set_id="pdm-missing",
         model_set_version="1.0.2",
+        updated_at=now_utc_iso(),
         models={"lightgbm": ActiveModelConfig(model_version="99.99.99", required=True)},
     )
     with pytest.raises(ModelSetArtifactNotFoundError):
@@ -2225,6 +2227,7 @@ def test_single_model_active_model_set_execution(isolated_runtime_env, monkeypat
     active_set = ActiveModelSet(
         model_set_id="pdm-single-lgb",
         model_set_version="1.0.0",
+        updated_at=now_utc_iso(),
         models={"lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True)},
     )
     active_service.update_active_model_set(active_set, validate_artifacts=False)
@@ -2258,6 +2261,7 @@ def test_partial_model_active_model_set_execution(isolated_runtime_env, monkeypa
     active_set = ActiveModelSet(
         model_set_id="pdm-partial-2",
         model_set_version="1.0.0",
+        updated_at=now_utc_iso(),
         models={
             "lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True),
             "xgboost": ActiveModelConfig(model_version="pdm-xgboost-v1.0", required=True),
@@ -2327,6 +2331,7 @@ def test_corrupt_artifact_promotion_blocked(isolated_runtime_env):
         test_set = ActiveModelSet(
             model_set_id=f"pdm-corrupt-{target_version}",
             model_set_version="2.0.0",
+            updated_at=now_utc_iso(),
             models={"lightgbm": ActiveModelConfig(model_version=target_version, required=True)},
         )
 
@@ -2567,6 +2572,7 @@ def test_snapshot_pinning_and_model_set_change_invalidates_checkpoint(isolated_r
     active_set = ActiveModelSet(
         model_set_id="pdm-default",
         model_set_version="2.0.0",  # Version changed!
+        updated_at=now_utc_iso(),
         models={
             "lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True),
             "xgboost": ActiveModelConfig(model_version="pdm-xgboost-v1.0", required=True),
@@ -2606,7 +2612,7 @@ def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monk
     import jsonschema
     from pathlib import Path
     from systems.generator.generator_config import PATHS
-    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet, now_utc_iso
     monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
 
     env = isolated_runtime_env
@@ -2620,6 +2626,7 @@ def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monk
     active_set = ActiveModelSet(
         model_set_id="pdm-schema-test",
         model_set_version="1.0.0",
+        updated_at=now_utc_iso(),
         models={"lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True)},
     )
     active_service.update_active_model_set(active_set, validate_artifacts=False)
@@ -2865,6 +2872,7 @@ def test_model_set_membership_change_not_implemented(isolated_runtime_env, monke
     active_set = ActiveModelSet(
         model_set_id="pdm-default",
         model_set_version="1.0.0",
+        updated_at=now_utc_iso(),
         models={"lightgbm": ActiveModelConfig(model_version="pdm-lightgbm-v1.0", required=True)},
     )
     active_service.update_active_model_set(active_set, validate_artifacts=False)
@@ -3239,3 +3247,199 @@ def test_prediction_service_constructed_snapshot_prevents_post_validation_file_r
     assert loaded.metrics["primary_metric"] == "f1"
     assert loaded.manifest_checksum is not None
     assert loaded.artifact_ref.sha256 == loaded.manifest_checksum
+
+
+# =====================================================================
+# 56. Active Model Set Fail-Closed Official Schema Verification Tests
+# =====================================================================
+
+def test_active_model_set_official_schema_fail_closed_validation(tmp_path: Path, monkeypatch):
+    """ActiveModelSetService.load_active_model_set() strictly validates raw JSON against official JSON Schema in fail-closed order."""
+    import json
+    from systems.generator.generator_config import PROJECT_ROOT
+    from systems.generator.app.runtime_pipeline.active_model_set_service import ActiveModelSetService
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+
+    models_dir = tmp_path / "models_store"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    pointer_file = models_dir / "active-model-set.json"
+
+    svc = ActiveModelSetService(models_store_dir=models_dir)
+
+    # 1. Normal official example load success
+    valid_data = {
+        "model_set_id": "pdm-default",
+        "model_set_version": "1.0.0",
+        "updated_at": "2026-08-27T10:00:00Z",
+        "models": {
+            "lightgbm": {"model_version": "1.0.0", "required": True}
+        }
+    }
+    pointer_file.write_text(json.dumps(valid_data), encoding="utf-8")
+    loaded = svc.load_active_model_set()
+    assert loaded.model_set_id == "pdm-default"
+    assert loaded.models["lightgbm"].required is True
+
+    # Helper for invalid schema cases
+    def assert_invalid(raw_dict: dict, expected_reason: str):
+        pointer_file.write_text(json.dumps(raw_dict), encoding="utf-8")
+        with pytest.raises(ModelSetContractInvalidError) as exc_info:
+            svc.load_active_model_set()
+        assert exc_info.value.status_code == 422
+        assert exc_info.value.code == "MODEL_SET_CONTRACT_INVALID"
+        details = exc_info.value.details
+        assert any(d.get("reason") == expected_reason for d in details)
+
+    # 2. model_set_id missing
+    d2 = dict(valid_data)
+    del d2["model_set_id"]
+    assert_invalid(d2, "active_model_set_schema_invalid")
+
+    # 3. Empty model_set_id
+    d3 = dict(valid_data, model_set_id="")
+    assert_invalid(d3, "active_model_set_schema_invalid")
+
+    # 4. model_set_version missing
+    d4 = dict(valid_data)
+    del d4["model_set_version"]
+    assert_invalid(d4, "active_model_set_schema_invalid")
+
+    # 5. Empty model_set_version
+    d5 = dict(valid_data, model_set_version="")
+    assert_invalid(d5, "active_model_set_schema_invalid")
+
+    # 6. updated_at missing
+    d6 = dict(valid_data)
+    del d6["updated_at"]
+    assert_invalid(d6, "active_model_set_schema_invalid")
+
+    # 7. Invalid date string
+    d7 = dict(valid_data, updated_at="not-a-date")
+    assert_invalid(d7, "active_model_set_schema_invalid")
+
+    # 8. models[*].model_version missing
+    d8 = {
+        "model_set_id": "pdm-default",
+        "model_set_version": "1.0.0",
+        "updated_at": "2026-08-27T10:00:00Z",
+        "models": {"lightgbm": {"required": True}},
+    }
+    assert_invalid(d8, "active_model_set_schema_invalid")
+
+    # 9. Empty models[*].model_version
+    d9 = {
+        "model_set_id": "pdm-default",
+        "model_set_version": "1.0.0",
+        "updated_at": "2026-08-27T10:00:00Z",
+        "models": {"lightgbm": {"model_version": "", "required": True}},
+    }
+    assert_invalid(d9, "active_model_set_schema_invalid")
+
+    # 10. models[*].required missing
+    d10 = {
+        "model_set_id": "pdm-default",
+        "model_set_version": "1.0.0",
+        "updated_at": "2026-08-27T10:00:00Z",
+        "models": {"lightgbm": {"model_version": "1.0.0"}},
+    }
+    assert_invalid(d10, "active_model_set_schema_invalid")
+
+    # 11. Empty models object
+    d11 = {
+        "model_set_id": "pdm-default",
+        "model_set_version": "1.0.0",
+        "updated_at": "2026-08-27T10:00:00Z",
+        "models": {},
+    }
+    assert_invalid(d11, "active_model_set_schema_invalid")
+
+    # 12. Disallowed extra field
+    d12 = dict(valid_data, extra_unallowed_field=123)
+    assert_invalid(d12, "active_model_set_schema_invalid")
+
+    # 13. Fail-closed when official schema file missing
+    monkeypatch.setattr(
+        "systems.generator.app.runtime_pipeline.active_model_set_service.PROJECT_ROOT",
+        tmp_path / "non_existent_root",
+    )
+    pointer_file.write_text(json.dumps(valid_data), encoding="utf-8")
+    with pytest.raises(ModelSetContractInvalidError) as exc_missing:
+        svc.load_active_model_set()
+    assert any(d.get("reason") == "active_model_set_schema_missing" for d in exc_missing.value.details)
+
+
+def test_active_model_set_corrupt_schema_file_fails_closed(tmp_path: Path, monkeypatch):
+    """When official schema file exists but contains corrupt JSON, load_active_model_set() raises active_model_set_schema_parse_failed."""
+    import json
+    from systems.generator.app.runtime_pipeline.active_model_set_service import ActiveModelSetService
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+
+    fake_root = tmp_path / "fake_repo"
+    schema_dir = fake_root / "contracts" / "schemas"
+    schema_dir.mkdir(parents=True, exist_ok=True)
+    corrupt_schema = schema_dir / "generator-active-model-set.schema.json"
+    corrupt_schema.write_text("{ corrupt json syntax", encoding="utf-8")
+
+    models_dir = tmp_path / "models_store"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    pointer_file = models_dir / "active-model-set.json"
+    pointer_file.write_text(json.dumps({"model_set_id": "v1"}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        "systems.generator.app.runtime_pipeline.active_model_set_service.PROJECT_ROOT",
+        fake_root,
+    )
+
+    svc = ActiveModelSetService(models_store_dir=models_dir)
+    with pytest.raises(ModelSetContractInvalidError) as exc_corrupt:
+        svc.load_active_model_set()
+    assert any(d.get("reason") == "active_model_set_schema_parse_failed" for d in exc_corrupt.value.details)
+
+
+# =====================================================================
+# 57. Service Boundary Artifact Path Error Conversion Tests
+# =====================================================================
+
+def test_service_boundary_artifact_path_error_conversion(isolated_runtime_env):
+    """ActiveModelSetService.update_active_model_set converts artifact path errors into ModelSetArtifactPathUnsupportedError without NameError and preserves existing pointer."""
+    from systems.generator.app.runtime_pipeline.active_model_set_service import ActiveModelSetService
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ActiveModelConfig, ActiveModelSet, now_utc_iso
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        ModelSetArtifactPathUnsupportedError,
+    )
+
+    env = isolated_runtime_env
+    root_dir: Path = env["artifacts_dir"]
+    svc = ActiveModelSetService(models_store_dir=root_dir.parent)
+
+    # Initial valid pointer
+    init_set = svc.load_active_model_set()
+    assert init_set.model_set_id == "pdm-default"
+
+    # Helper function to test path error conversion
+    def assert_path_unsupported(bad_version: str):
+        bad_set = ActiveModelSet(
+            model_set_id="pdm-bad-path",
+            model_set_version="9.9.9",
+            updated_at=now_utc_iso(),
+            models={"lightgbm": ActiveModelConfig(model_version=bad_version, required=True)},
+        )
+
+        with pytest.raises(ModelSetArtifactPathUnsupportedError) as exc_info:
+            svc.update_active_model_set(bad_set, validate_artifacts=True)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.code == "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+
+        # Verify existing pointer is preserved!
+        current_set = svc.load_active_model_set()
+        assert current_set.model_set_id == init_set.model_set_id
+
+    # 1. Path traversal ..
+    assert_path_unsupported("../pdm-lightgbm-v1.0")
+
+    # 2. External URI
+    assert_path_unsupported("http://example.com/pdm-lightgbm-v1.0")
+
+    # 3. Path outside root
+    assert_path_unsupported("../../outside_root")

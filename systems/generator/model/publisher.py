@@ -150,18 +150,19 @@ def validate_model_artifact(
 ) -> ValidatedModelArtifact:
     """Validate a local Model Artifact package against official contract and integrity rules."""
     path_str = str(artifact_dir).replace("\\", "/")
+    version_str = str(expected_model_version).replace("\\", "/") if expected_model_version else ""
 
     # 1. Path unsupported / security checks
-    if any(path_str.startswith(scheme) for scheme in ("http://", "https://", "s3://", "file://", "ftp://")):
+    if any(s.startswith(scheme) for scheme in ("http://", "https://", "s3://", "file://", "ftp://") for s in (path_str, version_str)):
         raise ModelArtifactContractValidationError(
-            f"외부 URI 아티팩트 경로는 현재 지원되지 않습니다: '{path_str}'",
+            f"외부 URI 아티팩트 경로는 현재 지원되지 않습니다: '{expected_model_version or artifact_dir}'",
             reason="external_uri_unsupported",
             details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "external_uri_unsupported"}],
         )
 
-    if ".." in path_str.split("/"):
+    if ".." in path_str.split("/") or ".." in version_str.split("/"):
         raise ModelArtifactContractValidationError(
-            f"아티팩트 경로에 상위 이동('..') 문자가 포함되어 있어 지원되지 않습니다: '{path_str}'",
+            f"아티팩트 경로에 상위 이동('..') 문자가 포함되어 있어 지원되지 않습니다: '{expected_model_version or artifact_dir}'",
             reason="path_traversal",
             details=[{"model_id": expected_model_id, "version": expected_model_version, "reason": "path_traversal"}],
         )

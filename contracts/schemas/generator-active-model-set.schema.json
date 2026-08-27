@@ -28,6 +28,7 @@
     },
     "models": {
       "type": "object",
+      "minProperties": 1,
       "description": "Map of base model identifiers to their active configuration",
       "additionalProperties": {
         "type": "object",
