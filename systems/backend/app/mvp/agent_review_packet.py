@@ -77,6 +77,14 @@ def compose_agent_review_packet(
 
     closed_loop = view_model.get("closed_loop") or {}
     available_actions = closed_loop.get("available_actions") or []
+    review_draft = _compose_review_draft(
+        asset=view_model.get("asset") or {},
+        risk=view_model.get("risk") or {},
+        review_priority=view_model.get("review_priority"),
+        sop_guidance=sop_guidance,
+        human_questions=list(dict.fromkeys(human_questions)),
+        evidence_gaps=(view_model.get("evidence") or {}).get("gaps") or [],
+    )
     return {
         "schema_version": "agent-review-packet-v1.0",
         "project_id": project_id,
@@ -90,6 +98,7 @@ def compose_agent_review_packet(
             ),
         },
         "review_priority": view_model.get("review_priority"),
+        "review_draft": review_draft,
         "sop_retrieval": {
             "provider": str(sop_retrieval.get("provider") or ""),
             "query": sop_retrieval.get("query") or {},
@@ -110,4 +119,45 @@ def compose_agent_review_packet(
             "note": "This packet may reference available actions for context, but it cannot execute or approve them.",
         },
         "limitations": list(dict.fromkeys(limitations)),
+    }
+
+
+def _compose_review_draft(
+    *,
+    asset: dict[str, Any],
+    risk: dict[str, Any],
+    review_priority: dict[str, Any] | None,
+    sop_guidance: list[dict[str, Any]],
+    human_questions: list[str],
+    evidence_gaps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    asset_id = str(asset.get("asset_id") or "")
+    asset_name = str(asset.get("display_name") or asset_id)
+    status_grade = str(risk.get("status_grade") or "unknown")
+    probability = risk.get("current")
+    probability_label = f"{float(probability) * 100:.1f}%" if isinstance(probability, (int, float)) else "미제공"
+    primary_guidance = sop_guidance[0] if sop_guidance else {}
+    component_label = str(primary_guidance.get("component_label") or "의심 부품")
+    checklist = [str(item) for item in primary_guidance.get("checklist_draft") or []][:4]
+    if evidence_gaps:
+        checklist.append("근거 공백 항목을 먼저 확인하고 확정 판단에서 제외합니다.")
+    questions = human_questions[:4]
+    if not questions:
+        questions = ["현장 담당자가 점검 가능 시간, 부품 상태, 안전 조건을 확인했습니까?"]
+    priority_level = str((review_priority or {}).get("level") or "medium")
+    recommended_next_step = (
+        "담당자가 SOP 기준 점검 질문을 확인하고, 필요한 경우 관리자 승인 절차로 이관합니다."
+    )
+    return {
+        "title": f"{asset_name} 담당자 검토 초안",
+        "summary": (
+            f"{asset_id}는 현재 {status_grade} 상태이며 예측 위험도는 {probability_label}입니다. "
+            f"{component_label} 중심으로 SOP 근거와 관측값을 대조해야 합니다."
+        ),
+        "priority_label": priority_level,
+        "recommended_next_step": recommended_next_step,
+        "checklist": checklist,
+        "questions": questions,
+        "evidence_gap_count": len(evidence_gaps),
+        "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
     }

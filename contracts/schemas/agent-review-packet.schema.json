@@ -11,6 +11,7 @@
     "generated_at",
     "risk_summary",
     "review_priority",
+    "review_draft",
     "sop_retrieval",
     "sop_guidance",
     "human_questions",
@@ -43,6 +44,22 @@
         "level": {"enum": ["immediate", "high", "medium", "low"]},
         "reasons": {"type": "array", "items": {"type": "string"}},
         "source_fields": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "review_draft": {
+      "type": "object",
+      "description": "Deterministic human review draft generated from the read-only packet. It is copy-ready guidance, not an approval or mutation command.",
+      "required": ["title", "summary", "priority_label", "recommended_next_step", "checklist", "questions", "evidence_gap_count", "boundary_note"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {"type": "string"},
+        "summary": {"type": "string"},
+        "priority_label": {"type": "string"},
+        "recommended_next_step": {"type": "string"},
+        "checklist": {"type": "array", "items": {"type": "string"}},
+        "questions": {"type": "array", "items": {"type": "string"}},
+        "evidence_gap_count": {"type": "integer", "minimum": 0},
+        "boundary_note": {"type": "string"}
       }
     },
     "sop_retrieval": {

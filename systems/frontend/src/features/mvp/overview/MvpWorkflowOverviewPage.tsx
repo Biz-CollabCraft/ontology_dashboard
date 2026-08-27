@@ -1874,6 +1874,19 @@ function AssetPreviewPanel({
                           ))}
                         </ul>
                       ) : <p>담당자 확인 질문이 제공되지 않았습니다.</p>}
+                      <div className="mvp-agent-review-draft">
+                        <strong>{agentPacket.review_draft.title}</strong>
+                        <p>{agentPacket.review_draft.summary}</p>
+                        <small>{agentPacket.review_draft.recommended_next_step}</small>
+                        {agentPacket.review_draft.checklist.length ? (
+                          <ul>
+                            {agentPacket.review_draft.checklist.slice(0, 4).map((item) => (
+                              <li key={`${agentPacket.asset_id}-draft-check-${item}`}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <small>{agentPacket.review_draft.boundary_note}</small>
+                      </div>
                       <small>{agentPacket.closed_loop_boundary.note}</small>
                     </>
                   ) : !agentPacketLoading ? <p>검토 패킷을 열 수 없습니다.</p> : null}
