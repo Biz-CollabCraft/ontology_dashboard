@@ -35,23 +35,60 @@ def to_external_result_item(
     lineage: Optional[PredictionResultLineage] = None,
 ) -> PredictionResultItem:
     """Convert an InternalModelPredictionResult into an official external PredictionResultItem."""
+    # 1. Strict observed_at validation (fail-closed, no fallback to datetime.now())
+    if not internal.observed_at:
+        raise ModelSetContractInvalidError(
+            f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' is missing required observed_at.",
+            details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
+            retryable=False,
+        )
+
     if isinstance(internal.observed_at, datetime):
         obs_dt = internal.observed_at
-    elif internal.observed_at:
+        if obs_dt.tzinfo is None:
+            obs_dt = obs_dt.replace(tzinfo=timezone.utc)
+    else:
+        s = str(internal.observed_at).strip()
+        if not s:
+            raise ModelSetContractInvalidError(
+                f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has blank observed_at.",
+                details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
+                retryable=False,
+            )
         try:
-            s = internal.observed_at.strip()
             if s.endswith("Z"):
                 s = s[:-1] + "+00:00"
             obs_dt = datetime.fromisoformat(s)
-        except Exception:
-            obs_dt = datetime.now(timezone.utc)
-    else:
-        obs_dt = datetime.now(timezone.utc)
+            if obs_dt.tzinfo is None:
+                obs_dt = obs_dt.replace(tzinfo=timezone.utc)
+        except Exception as exc:
+            raise ModelSetContractInvalidError(
+                f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has invalid observed_at ISO timestamp format '{internal.observed_at}': {exc}",
+                details=[{"asset_id": internal.asset_id, "model_id": internal.model_id, "observed_at": str(internal.observed_at)}],
+                retryable=False,
+            ) from exc
 
+    # 2. Strict source_ref validation (fail-closed, no fallback to dummy uri or zero checksum)
     if source_ref is None:
-        source_ref = PredictionResultSourceRef(
-            uri="data/incoming/sensor_stream.jsonl",
-            sha256="0" * 64,
+        raise ModelSetContractInvalidError(
+            f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' is missing required source_ref.",
+            details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
+            retryable=False,
+        )
+
+    if not source_ref.uri or not str(source_ref.uri).strip():
+        raise ModelSetContractInvalidError(
+            f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has empty source_ref.uri.",
+            details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
+            retryable=False,
+        )
+
+    clean_sha256 = (source_ref.sha256 or "").strip().lower()
+    if not clean_sha256 or len(clean_sha256) != 64 or clean_sha256 == "0" * 64 or any(c not in "0123456789abcdef" for c in clean_sha256):
+        raise ModelSetContractInvalidError(
+            f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has invalid or zero source_ref.sha256 '{source_ref.sha256}'.",
+            details=[{"asset_id": internal.asset_id, "model_id": internal.model_id, "sha256": str(source_ref.sha256)}],
+            retryable=False,
         )
 
     if lineage is None:
@@ -81,8 +118,17 @@ def to_external_result_item(
 
     model_artifact_sha256 = (
         internal.manifest_checksum
-        or (internal.artifact_ref.sha256 if internal.artifact_ref else "0" * 64)
+        or (internal.artifact_ref.sha256 if internal.artifact_ref else None)
     )
+    if not model_artifact_sha256 or model_artifact_sha256 == "0" * 64:
+        if output_status == "predicted":
+            raise ModelSetContractInvalidError(
+                f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has invalid or missing model_artifact_sha256.",
+                details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
+                retryable=False,
+            )
+        else:
+            model_artifact_sha256 = "0" * 64
 
     item_dict = {
         "event_id": event_id,

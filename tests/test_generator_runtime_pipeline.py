@@ -34,12 +34,12 @@ def create_test_batch_payload(
         "asset_id": asset_id,
         "observed_at": obs_dt,
         "source_kind": "live_sensor",
-        "source_ref": {"uri": "test.jsonl", "sha256": "0" * 64},
+        "source_ref": {"uri": "test.jsonl", "sha256": "a" * 64},
         "output_status": output_status,
         "score": score,
         "model_id": model_id,
         "model_version": model_version,
-        "model_artifact_sha256": "0" * 64,
+        "model_artifact_sha256": "a" * 64,
         "feature_schema_version": "v1.0",
         "history_requirement_version": "v1.0",
         "feature_schema_sha256": None,
@@ -62,13 +62,13 @@ def create_test_batch_payload(
         asset_id=asset_id,
         observed_at=obs_dt,
         source_kind="live_sensor",
-        source_ref=PredictionResultSourceRef(uri="test.jsonl", sha256="0" * 64),
+        source_ref=PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64),
         payload_sha256=item_sha,
         output_status=output_status,
         score=score,
         model_id=model_id,
         model_version=model_version,
-        model_artifact_sha256="0" * 64,
+        model_artifact_sha256="a" * 64,
         feature_schema_version="v1.0",
         history_requirement_version="v1.0",
         lineage=PredictionResultLineage(),
@@ -2727,9 +2727,9 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
                 score_type="positive_class_probability",
                 score_source="predict_proba",
                 score=0.88,
-                artifact_ref=ArtifactReference(uri="models_store/artifacts/pdm-lightgbm/v1.0", sha256="0"*64, role="model_artifact"),
-                feature_ref=ArtifactReference(uri="features.npy", sha256="0"*64, role="runtime_features"),
-                manifest_checksum="0"*64,
+                artifact_ref=ArtifactReference(uri="models_store/artifacts/pdm-lightgbm/v1.0", sha256="a"*64, role="model_artifact"),
+                feature_ref=ArtifactReference(uri="features.npy", sha256="a"*64, role="runtime_features"),
+                manifest_checksum="a"*64,
                 feature_schema_version="v1.0",
                 label_schema_version="v1.0",
                 history_requirement_version="v1.0",
@@ -2754,7 +2754,7 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
         dataset_id="canonical-ai4i-v1",
         dataset_version="v3.1",
         pipeline_contract_version="v1",
-        source_lineage=SourceLineage(source_uri="test.jsonl", source_checksum="0"*64),
+        source_lineage=SourceLineage(source_uri="test.jsonl", source_checksum="a"*64),
         model_set_id="pdm-schema-test",
         model_set_version="1.0.0",
         base_dir=preprocessed_dir,
@@ -3834,3 +3834,272 @@ def test_model_inference_out_of_bounds_score_raises_pipeline_model_prediction_fa
         )
 
     assert "out of bounds" in str(exc_info.value)
+
+
+# =====================================================================
+# 60. Delivery Contract and Endpoint URL Configuration Tests
+# =====================================================================
+
+def test_delivery_service_default_endpoint_and_env_config(isolated_runtime_env, monkeypatch):
+    """PredictionDeliveryService defaults to /internal/prediction-results and respects GENERATOR_PREDICTION_RESULT_URL."""
+    from systems.generator.app.runtime_pipeline.prediction_delivery_service import PredictionDeliveryService
+
+    # 1. Default URL
+    monkeypatch.delenv("GENERATOR_PREDICTION_RESULT_URL", raising=False)
+    monkeypatch.delenv("GENERATOR_PREDICTION_RECEIVER_URL", raising=False)
+    svc = PredictionDeliveryService()
+    assert svc.endpoint_url == "http://localhost:8000/internal/prediction-results"
+
+    # 2. Standard ENV override
+    monkeypatch.setenv("GENERATOR_PREDICTION_RESULT_URL", "https://prod-backend:8443/internal/prediction-results")
+    svc2 = PredictionDeliveryService()
+    assert svc2.endpoint_url == "https://prod-backend:8443/internal/prediction-results"
+
+    # 3. Legacy ENV fallback with warning
+    monkeypatch.delenv("GENERATOR_PREDICTION_RESULT_URL", raising=False)
+    monkeypatch.setenv("GENERATOR_PREDICTION_RECEIVER_URL", "https://legacy-backend:8443/internal/prediction-results")
+    svc3 = PredictionDeliveryService()
+    assert svc3.endpoint_url == "https://legacy-backend:8443/internal/prediction-results"
+
+    # 4. Conflicting ENVs raise ValueError
+    monkeypatch.setenv("GENERATOR_PREDICTION_RESULT_URL", "http://backend-1/internal/prediction-results")
+    monkeypatch.setenv("GENERATOR_PREDICTION_RECEIVER_URL", "http://backend-2/internal/prediction-results")
+    with pytest.raises(ValueError) as exc_info:
+        PredictionDeliveryService()
+    assert "conflicting values" in str(exc_info.value)
+
+
+def test_delivery_service_send_once_headers_and_post_method(isolated_runtime_env, monkeypatch):
+    """send_once dispatches HTTP POST with Idempotency-Key and X-Request-ID headers."""
+    import urllib.request
+    from systems.generator.app.runtime_pipeline.prediction_delivery_service import PredictionDeliveryService
+
+    svc = PredictionDeliveryService(endpoint_url="http://localhost:8000/internal/prediction-results")
+    payload = create_test_batch_payload(
+        event_id="evt-post-01",
+        asset_id="M14860",
+        batch_id="batch-post-01",
+    )
+
+    captured_req = None
+
+    class MockResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def getcode(self):
+            return 200
+        def read(self):
+            return b'{"status": "ok"}'
+
+    def mock_urlopen(req, timeout=10.0):
+        nonlocal captured_req
+        captured_req = req
+        return MockResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+    res = svc.send_once(payload)
+    assert res["delivered"] is True
+    assert res["status_code"] == 200
+
+    assert captured_req is not None
+    assert captured_req.get_method() == "POST"
+    assert captured_req.full_url == "http://localhost:8000/internal/prediction-results"
+    assert captured_req.headers.get("Idempotency-key") == "evt-post-01" or captured_req.headers.get("Idempotency-Key") == "evt-post-01"
+    assert captured_req.headers.get("X-request-id") == "batch-post-01" or captured_req.headers.get("X-Request-ID") == "batch-post-01"
+
+
+# =====================================================================
+# 61. Provenance Fail-Closed and Fallback Removal Tests
+# =====================================================================
+
+def test_to_external_result_item_provenance_preservation():
+    """Valid observed_at and source_ref are strictly preserved in external PredictionResultItem."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        PredictionResultSourceRef,
+        ArtifactReference,
+    )
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
+
+    src_ref = PredictionResultSourceRef(uri="data/incoming/raw_sensors.jsonl", sha256="c" * 64)
+    art_ref = ArtifactReference(uri="models_store/lgbm.joblib", sha256="d" * 64, role="model_artifact")
+    internal = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="2026-08-25T14:30:00Z",
+        score_type="probability",
+        score_source="predict_proba",
+        score=0.88,
+        artifact_ref=art_ref,
+        manifest_checksum="d" * 64,
+        feature_schema_version="v1.0",
+        label_schema_version="v1.0",
+        history_requirement_version="v1.0",
+    )
+
+    item = to_external_result_item(internal, source_kind="live_sensor", source_ref=src_ref)
+    assert item.asset_id == "M14860"
+    assert item.model_id == "pdm-lightgbm"
+    assert item.source_ref.uri == "data/incoming/raw_sensors.jsonl"
+    assert item.source_ref.sha256 == "c" * 64
+    assert item.model_artifact_sha256 == "d" * 64
+    assert item.output_status == "predicted"
+    assert item.score == 0.88
+    assert "2026-08-25T14:30:00" in item.observed_at.isoformat()
+
+
+def test_to_external_result_item_missing_or_blank_observed_at_raises():
+    """Missing or blank observed_at raises ModelSetContractInvalidError without fake current time fallback."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        PredictionResultSourceRef,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
+
+    src_ref = PredictionResultSourceRef(uri="data/incoming/raw.jsonl", sha256="c" * 64)
+
+    # 1. None observed_at
+    internal_none = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="",
+        score=0.8,
+        manifest_checksum="d" * 64,
+    )
+    with pytest.raises(ModelSetContractInvalidError) as exc:
+        to_external_result_item(internal_none, source_ref=src_ref)
+    assert "missing required observed_at" in str(exc.value) or "blank" in str(exc.value)
+
+    # 2. Blank whitespace observed_at
+    internal_blank = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="   ",
+        score=0.8,
+        manifest_checksum="d" * 64,
+    )
+    with pytest.raises(ModelSetContractInvalidError) as exc2:
+        to_external_result_item(internal_blank, source_ref=src_ref)
+    assert "blank observed_at" in str(exc2.value)
+
+
+def test_to_external_result_item_invalid_timestamp_format_raises():
+    """Invalid timestamp string raises ModelSetContractInvalidError without fake fallback."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        PredictionResultSourceRef,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
+
+    src_ref = PredictionResultSourceRef(uri="data/incoming/raw.jsonl", sha256="c" * 64)
+    internal_bad = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="2026/08/25 not-a-date",
+        score=0.8,
+        manifest_checksum="d" * 64,
+    )
+    with pytest.raises(ModelSetContractInvalidError) as exc:
+        to_external_result_item(internal_bad, source_ref=src_ref)
+    assert "invalid observed_at ISO timestamp format" in str(exc.value)
+
+
+def test_to_external_result_item_missing_or_empty_source_ref_raises():
+    """Missing source_ref or empty source_ref.uri raises ModelSetContractInvalidError without dummy URI fallback."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        PredictionResultSourceRef,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
+
+    internal = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="2026-08-25T14:30:00Z",
+        score=0.8,
+        manifest_checksum="d" * 64,
+    )
+
+    # 1. source_ref is None
+    with pytest.raises(ModelSetContractInvalidError) as exc:
+        to_external_result_item(internal, source_ref=None)
+    assert "missing required source_ref" in str(exc.value)
+
+    # 2. source_ref.uri is blank
+    bad_ref = PredictionResultSourceRef(uri="   ", sha256="c" * 64)
+    with pytest.raises(ModelSetContractInvalidError) as exc2:
+        to_external_result_item(internal, source_ref=bad_ref)
+    assert "empty source_ref.uri" in str(exc2.value)
+
+
+def test_to_external_result_item_zero_or_invalid_source_sha256_raises():
+    """Zero checksum ('0'*64), non-hex, or invalid length sha256 in source_ref raises ModelSetContractInvalidError."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        PredictionResultSourceRef,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
+
+    internal = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="2026-08-25T14:30:00Z",
+        score=0.8,
+        manifest_checksum="d" * 64,
+    )
+
+    # 1. Zero checksum '0'*64 is rejected
+    zero_ref = PredictionResultSourceRef(uri="data/in.jsonl", sha256="0" * 64)
+    with pytest.raises(ModelSetContractInvalidError) as exc:
+        to_external_result_item(internal, source_ref=zero_ref)
+    assert "invalid or zero source_ref.sha256" in str(exc.value)
+
+    # 2. Short checksum is rejected
+    short_ref = PredictionResultSourceRef(uri="data/in.jsonl", sha256="abc123")
+    with pytest.raises(ModelSetContractInvalidError) as exc2:
+        to_external_result_item(internal, source_ref=short_ref)
+    assert "invalid or zero source_ref.sha256" in str(exc2.value)
+
+
+def test_to_external_result_item_missing_artifact_sha256_for_predicted_raises():
+    """Predicted output_status missing model artifact checksum raises ModelSetContractInvalidError."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        PredictionResultSourceRef,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
+
+    src_ref = PredictionResultSourceRef(uri="data/in.jsonl", sha256="c" * 64)
+    internal = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="2026-08-25T14:30:00Z",
+        score=0.8,
+        manifest_checksum=None,
+        artifact_ref=None,
+    )
+
+    with pytest.raises(ModelSetContractInvalidError) as exc:
+        to_external_result_item(internal, source_ref=src_ref)
+    assert "missing model_artifact_sha256" in str(exc.value)

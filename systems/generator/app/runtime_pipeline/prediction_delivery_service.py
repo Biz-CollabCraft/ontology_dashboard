@@ -37,9 +37,21 @@ class PredictionDeliveryService:
         outbox_dir: Optional[Path] = None,
         timeout: float = 10.0,
     ) -> None:
-        self.endpoint_url = endpoint_url or os.environ.get(
-            "GENERATOR_PREDICTION_RECEIVER_URL",
-            "http://localhost:8000/api/v1/diagnosis/prediction-batches",
+        url_from_env = os.environ.get("GENERATOR_PREDICTION_RESULT_URL")
+        legacy_url = os.environ.get("GENERATOR_PREDICTION_RECEIVER_URL")
+        if url_from_env and legacy_url and url_from_env != legacy_url:
+            raise ValueError(
+                "Both GENERATOR_PREDICTION_RESULT_URL and deprecated GENERATOR_PREDICTION_RECEIVER_URL are set with conflicting values. Please configure GENERATOR_PREDICTION_RESULT_URL only."
+            )
+        if legacy_url and not url_from_env:
+            logger.warning(
+                "[PredictionDeliveryService] GENERATOR_PREDICTION_RECEIVER_URL is deprecated. Use GENERATOR_PREDICTION_RESULT_URL instead."
+            )
+        self.endpoint_url = (
+            endpoint_url
+            or url_from_env
+            or legacy_url
+            or "http://localhost:8000/internal/prediction-results"
         )
         self.outbox_dir = Path(outbox_dir) if outbox_dir else PATHS.notification_outbox_root
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
