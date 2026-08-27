@@ -663,6 +663,7 @@
 .mvp-side-map-report .equipment-sketch strong { display: block; color: var(--mvp-text); font-size: 14px; }
 .mvp-side-map-report .sketch-legend { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; color: var(--mvp-muted); font-size: 11px; line-height: 1.35; }
 .mvp-side-map-report .sketch-legend li { min-width: 0; display: grid; grid-template-columns: 20px minmax(0,1fr); gap: 6px; align-items: start; }
+.mvp-side-map-report .sketch-legend small { grid-column: 2; justify-self: start; width: max-content; max-width: 100%; margin-top: -2px; padding: 2px 6px; border: 1px solid rgba(181,196,214,.14); border-radius: 5px; color: var(--mvp-dim); white-space: nowrap; }
 .mvp-side-map-report .sketch-legend b,
 .mvp-side-map-report .compressor-visual .callout,
 .mvp-side-map-report .cnc-visual .callout,
