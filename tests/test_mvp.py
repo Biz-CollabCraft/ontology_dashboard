@@ -249,6 +249,42 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
         detail_payload["inspection_targets"][0]["unavailable_reason"]
         == "maintenance_inspection_location_contract_unavailable"
     )
+    assert detail_payload["inspection_targets"][0]["inspection_guidance"] == {
+        "source_type": "demo_sop_fixture",
+        "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        "title": "CNC 회전/구동 계통 점검 참고 절차",
+        "version": "demo-2026-08-27",
+        "reference_location_label": "SOP 기준 참고 위치",
+        "suggested_check_method": "센서 이상 기여 요인을 기준으로 회전/구동 계통의 체결, 마모, 이상 소음 여부를 확인합니다.",
+        "checklist_draft": [
+            "점검 전 설비 상태와 작업 가능 여부를 확인합니다.",
+            "상위 위험 요인과 연결된 부품 후보를 현장 담당자가 확인합니다.",
+            "이상 소음, 진동, 마모, 체결 상태를 관찰하고 결과를 기록합니다.",
+        ],
+        "replacement_review_guidance": {
+            "review_label": "교체 시기 검토 기준",
+            "review_triggers": [
+                "동일 부품 후보가 warning 또는 critical 이벤트에서 반복적으로 상위 위험 요인과 연결됩니다.",
+                "마모, 진동, 토크, 온도 관련 관측값이 최근 이력 대비 악화 추세를 보입니다.",
+                "현장 점검에서 이상 소음, 유격, 과열, 마모 흔적 중 하나 이상이 확인됩니다.",
+            ],
+            "required_measurements": [
+                "현재 센서 관측값과 최근 이력 비교",
+                "부품 외관, 체결, 이상 소음, 발열 확인 결과",
+                "열린 WorkOrder와 최근 정비 이력",
+            ],
+            "human_review_questions": [
+                "최근 동일 부품 또는 동일 계통에 대한 점검/교체 이력이 있습니까?",
+                "교체 전 생산 정지 가능 시간과 부품 가용성이 확인됐습니까?",
+                "점검 결과가 교체 요청으로 이어질 만큼 반복적이거나 악화 중입니까?",
+            ],
+            "decision_boundary": "이 기준은 교체 시기 검토 초안이며, 교체 필요 확정·작업요청 생성·정비 승인·자동 승인을 수행하지 않습니다.",
+        },
+        "safety_level": "caution",
+        "requires_human_approval": True,
+        "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        "disclaimer": "데모 SOP fixture 기반 참고 안내이며 Product Evidence가 확정한 점검 위치 또는 수리 지시가 아닙니다.",
+    }
     assert detail_payload["risk_series"] == []
     assert any(gap["field"] == "risk_series" for gap in detail_payload["evidence"]["gaps"])
     assert detail_payload["evidence"]["source_kind"] == "runtime_inference"
@@ -305,6 +341,82 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     service.reset()
     cleared = client.get("/api/events/EVT-GS-002/activity").json()
     assert cleared == {"decisions": [], "notes": [], "conversations": []}
+
+
+def test_cnc_sop_guidance_does_not_match_compressor_assets(service: FactorySignalService) -> None:
+    fixture = {
+        "equipment": {
+            "asset_type": "compressor",
+            "criticality": "high",
+        },
+        "operation_context": {
+            "production_impact": "high",
+        },
+        "expected": {
+            "predicted_failure_type": "failure_risk",
+        },
+    }
+    artifact = {
+        "asset_type": "compressor",
+        "predicted_failure_type": "failure_risk",
+        "status_grade": "warning",
+        "top_factors": [{"feature": "vibration_raw"}],
+        "evidence_payload": {
+            "component_hypotheses": [{"component_id": "rotating_assembly"}],
+        },
+    }
+
+    assert service._inspection_guidance_for_fixture(fixture, artifact) == {}
+
+
+@pytest.mark.parametrize(
+    ("source_kind", "maturity", "expected_guidance"),
+    [
+        ("demo_sop_fixture", "fixture", True),
+        ("demo_sop_fixture", "draft", False),
+        ("site_sop", "approved", True),
+        ("site_sop", "draft", False),
+        ("site_sop", "retired", False),
+        ("industry_standard_reference", "approved", False),
+    ],
+)
+def test_inspection_sop_guidance_requires_displayable_maturity(
+    service: FactorySignalService,
+    source_kind: str,
+    maturity: str,
+    expected_guidance: bool,
+) -> None:
+    fixture = {
+        "equipment": {
+            "asset_type": "cnc",
+            "criticality": "high",
+        },
+        "operation_context": {
+            "production_impact": "high",
+        },
+        "expected": {
+            "predicted_failure_type": "failure_risk",
+        },
+    }
+    artifact = {
+        "asset_type": "cnc",
+        "predicted_failure_type": "failure_risk",
+        "status_grade": "warning",
+        "top_factors": [{"feature": "vibration_raw"}],
+        "evidence_payload": {
+            "component_hypotheses": [{"component_id": "rotating_assembly"}],
+        },
+    }
+    sop = {
+        **service.inspection_sops[0],
+        "source_kind": source_kind,
+        "maturity": maturity,
+    }
+    service.inspection_sops = [sop]
+
+    guidance = service._inspection_guidance_for_fixture(fixture, artifact)
+
+    assert ("rotating_assembly" in guidance) is expected_guidance
 
 
 def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(

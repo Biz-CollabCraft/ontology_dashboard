@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/procedure-grounding.schema.json",
+  "title": "Procedure Grounding",
+  "description": "SOP retrieval and procedure-grounding contract. SOP fixtures provide reference guidance for UI and agent handoff drafts; they are not Product Evidence, mutation commands, or repair instructions.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "sop_id",
+    "title",
+    "version",
+    "source_kind",
+    "maturity",
+    "owner_domain",
+    "asset_types",
+    "component_ids",
+    "failure_modes",
+    "factor_keys",
+    "applicability",
+    "safety_level",
+    "requires_human_approval",
+    "effective_from",
+    "source_uri",
+    "document_hash",
+    "standard_alignment",
+    "guidance"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "procedure-grounding-v1.0"},
+    "sop_id": {"type": "string"},
+    "title": {"type": "string"},
+    "version": {"type": "string"},
+    "source_kind": {"enum": ["industry_standard_reference", "site_sop", "demo_sop_fixture"]},
+    "maturity": {"enum": ["fixture", "draft", "approved", "retired"]},
+    "owner_domain": {"enum": ["maintenance", "operations", "safety", "quality"]},
+    "asset_types": {
+      "type": "array",
+      "description": "Asset types this SOP can guide. Multiple values are allowed only for intentionally shared procedures; each declared asset type must be covered by matching fixture or contract tests.",
+      "items": {"type": "string"}
+    },
+    "component_ids": {"type": "array", "items": {"type": "string"}},
+    "failure_modes": {"type": "array", "items": {"type": "string"}},
+    "factor_keys": {"type": "array", "items": {"type": "string"}},
+    "applicability": {
+      "type": "object",
+      "required": ["risk_grades", "criticality", "production_impact"],
+      "additionalProperties": false,
+      "properties": {
+        "risk_grades": {"type": "array", "items": {"type": "string"}},
+        "criticality": {"type": "array", "items": {"enum": ["low", "medium", "high"]}},
+        "production_impact": {"type": "array", "items": {"enum": ["none", "low", "medium", "high"]}}
+      }
+    },
+    "safety_level": {"enum": ["none", "caution", "permit_required", "shutdown_controlled"]},
+    "requires_human_approval": {"type": "boolean"},
+    "effective_from": {"type": "string"},
+    "source_uri": {"type": "string"},
+    "document_hash": {"type": "string"},
+    "standard_alignment": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["standard", "alignment_scope"],
+        "additionalProperties": false,
+        "properties": {
+          "standard": {"enum": ["ISO_17359", "ISO_14224", "ISA_95", "IEC_62264", "OPA"]},
+          "alignment_scope": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "guidance": {
+      "type": "object",
+      "required": [
+        "reference_location_label",
+        "suggested_check_method",
+        "checklist_draft",
+        "replacement_review_guidance",
+        "disclaimer",
+        "allowed_ui_claims",
+        "forbidden_ui_claims"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "reference_location_label": {"type": "string"},
+        "suggested_check_method": {"type": "string"},
+        "checklist_draft": {"type": "array", "items": {"type": "string"}},
+        "replacement_review_guidance": {
+          "type": "object",
+          "description": "SOP-based replacement timing review guidance for human/agent handoff drafts. This must not be treated as an automatic replacement decision or WorkOrder command.",
+          "required": ["review_label", "review_triggers", "required_measurements", "human_review_questions", "decision_boundary"],
+          "additionalProperties": false,
+          "properties": {
+            "review_label": {"type": "string"},
+            "review_triggers": {"type": "array", "items": {"type": "string"}},
+            "required_measurements": {"type": "array", "items": {"type": "string"}},
+            "human_review_questions": {"type": "array", "items": {"type": "string"}},
+            "decision_boundary": {"type": "string"}
+          }
+        },
+        "disclaimer": {"type": "string"},
+        "allowed_ui_claims": {"type": "array", "items": {"type": "string"}},
+        "forbidden_ui_claims": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
