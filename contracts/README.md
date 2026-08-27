@@ -55,7 +55,7 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Generator Runtime Feature Schema | **Current** | `contracts/schemas/generator-runtime-feature.schema.json` (런타임 피처 행렬 및 설비·시간 metadata) |
 | Generator Model Prediction Result Schema | **Current** | `contracts/schemas/generator-model-prediction-result.schema.json` (모델별 score 수치, score_type, 실행 상태 및 오류 정보) |
 | Prediction Result Batch Schema | **Current** | `contracts/schemas/prediction-result-batch.schema.json` (`prediction-result-batch-v1` 외부 Backend Inbox 전달 정본 배열 계약) |
-| Internal Generator Prediction Stage Schema | **Internal** | `contracts/schemas/generator-prediction-result-batch.schema.json` (Generator 내부 staging 및 checkpoint 전용 계약) |
+| Internal Generator Runtime Prediction Stage Schema | **Internal** | `contracts/schemas/generator-runtime-prediction-stage.schema.json` (Generator 내부 staging 및 checkpoint 재개 전용 계약) |
 | Generator Runtime Prediction Golden Vector | **Current** | `contracts/test-vectors/generator-runtime-prediction-v1/` (다중 설비 런타임 예측 수치 및 결과 묶음 배치 검증) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
@@ -64,6 +64,13 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Generator Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
 | Generator Feature Series Schema | **Target — 미작성** | Feature 후속 확장 단계에서 작성 예정 |
 | Feature Dataset Bundle | **Target — 기존 Schema 재사용·확장 여부 검토 필요** | 기존 `dataset-bundle-manifest.schema.json`의 재사용 가능성을 우선 검토 |
+
+
+### Prediction 관련 내부/외부 계약 경계 원칙
+
+1. **외부 wire 정본**: `contracts/schemas/prediction-result-batch.schema.json` (`prediction-result-batch-v1`) 하나뿐이며, Generator에서 Backend Prediction Inbox로 전송되는 유일한 외부 계약이다.
+2. **내부 저장 계약**: `contracts/schemas/generator-runtime-prediction-stage.schema.json`은 Generator 내부 staging 및 checkpoint 재개를 위한 전용 저장 계약이며 Backend로 절대 전송되지 않는다.
+3. **공식 변환 경계**: 내부 Stage(`InternalPredictionResultBatchStage`)를 외부 Batch(`PredictionResultBatchPayload`)로 변환하는 공식 경계는 `to_external_result_item()`과 `PredictionResultBatchPayload`이다.
 
 
 ### Target 계약 관리 원칙

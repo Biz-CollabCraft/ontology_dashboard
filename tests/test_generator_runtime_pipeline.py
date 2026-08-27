@@ -4717,3 +4717,85 @@ def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path):
     filenames = [f.name for f in created_files]
     assert "batch-manifest.json" in filenames
     assert not any(".." in f.name for f in created_files)
+
+
+# =====================================================================
+# 65. PipelineRepository Default Path & DATA_PREPROCESSED_DIR Tests
+# =====================================================================
+
+def test_pipeline_repository_defaults_to_paths_data_preprocessed(tmp_path, monkeypatch):
+    """PipelineRepository() with no args uses PATHS.data_preprocessed without relative fallback."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
+
+    custom_preprocessed = tmp_path / "custom_preprocessed_target"
+    monkeypatch.setattr(PATHS, "data_preprocessed", custom_preprocessed)
+
+    repo = PipelineRepository()
+    assert repo.base_dir == custom_preprocessed
+    assert repo.runs_dir == custom_preprocessed / "pipeline_runs"
+    assert repo.checkpoints_dir == custom_preprocessed / "pipeline_checkpoints"
+    assert repo.events_dir == custom_preprocessed / "pipeline_events"
+
+    assert (custom_preprocessed / "pipeline_runs").is_dir()
+    assert (custom_preprocessed / "pipeline_checkpoints").is_dir()
+    assert (custom_preprocessed / "pipeline_events").is_dir()
+
+
+def test_pipeline_repository_does_not_create_relative_dir_in_cwd(tmp_path, monkeypatch):
+    """PipelineRepository() does not create a relative 'data_preprocessed' folder in current working directory."""
+    from systems.generator.generator_config import PATHS
+    from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
+
+    target_preprocessed = tmp_path / "target_preprocessed"
+    monkeypatch.setattr(PATHS, "data_preprocessed", target_preprocessed)
+
+    isolated_cwd = tmp_path / "isolated_cwd"
+    isolated_cwd.mkdir()
+    monkeypatch.chdir(isolated_cwd)
+
+    repo = PipelineRepository()
+    assert repo.base_dir == target_preprocessed
+
+    # Verify no 'data_preprocessed' folder was created in isolated_cwd
+    assert not (isolated_cwd / "data_preprocessed").exists()
+
+
+def test_pipeline_repository_explicit_base_dir_honored(tmp_path):
+    """PipelineRepository(base_dir=...) uses the explicitly provided directory."""
+    from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
+
+    explicit_dir = tmp_path / "explicit_dir"
+    repo = PipelineRepository(base_dir=explicit_dir)
+    assert repo.base_dir == explicit_dir
+    assert (explicit_dir / "pipeline_runs").is_dir()
+    assert (explicit_dir / "pipeline_checkpoints").is_dir()
+    assert (explicit_dir / "pipeline_events").is_dir()
+
+
+def test_internal_stage_schema_validation_passes():
+    """generator-runtime-prediction-stage.schema.json validates internal staging payload."""
+    import json
+    import jsonschema
+    from pathlib import Path
+
+    schema_file = Path(__file__).resolve().parent.parent / "contracts" / "schemas" / "generator-runtime-prediction-stage.schema.json"
+    example_file = Path(__file__).resolve().parent.parent / "contracts" / "examples" / "generator-runtime-prediction" / "generator-runtime-prediction-stage.json"
+
+    assert schema_file.is_file()
+    assert example_file.is_file()
+
+    schema = json.loads(schema_file.read_text(encoding="utf-8"))
+    example = json.loads(example_file.read_text(encoding="utf-8"))
+
+    # Need schema registry for generator-model-prediction-result.schema.json reference
+    schemas_dir = Path(__file__).resolve().parent.parent / "contracts" / "schemas"
+    model_res_schema = json.loads((schemas_dir / "generator-model-prediction-result.schema.json").read_text(encoding="utf-8"))
+    import referencing
+    from referencing import Registry, Resource
+    reg = Registry().with_resources([
+        ("https://ontology-dashboard.local/schemas/generator-model-prediction-result.schema.json", Resource.from_contents(model_res_schema)),
+        ("generator-model-prediction-result.schema.json", Resource.from_contents(model_res_schema)),
+    ])
+    validator = jsonschema.Draft202012Validator(schema, registry=reg, format_checker=jsonschema.FormatChecker())
+    validator.validate(example)

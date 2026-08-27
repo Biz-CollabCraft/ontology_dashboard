@@ -30,9 +30,11 @@
    - 수신된 모델별 점수에 Threshold Policy를 적용하여 모델별/설비별 이상 여부를 판정하고, Diagnosis를 수행한다.
    - 관련 센서 데이터와 설비 메타데이터를 조회하여 최종 Product Result Artifact, Evidence 및 Report를 생성하고 Dashboard API로 제공 및 알림을 처리한다.
 
-3. **시스템 간 엄격한 결합 분리**:
+3. **시스템 간 엄격한 결합 분리 및 내부/외부 계약 경계**:
    - Generator와 Backend는 상호 Python 코드를 직접 import하지 않는다.
-   - 오직 공식화된 `Prediction Result Batch Contract` (`contracts/schemas/prediction-result-batch.schema.json`, `prediction-result-batch-v1`) 및 불변 파일 참조(URI, SHA-256 Checksum)만을 유일한 경계로 사용한다.
+   - 외부 wire 정본은 `contracts/schemas/prediction-result-batch.schema.json` (`prediction-result-batch-v1`) 하나뿐이며, 불변 파일 참조(URI, SHA-256 Checksum)와 함께 시스템 간 유일한 경계로 사용한다.
+   - `contracts/schemas/generator-runtime-prediction-stage.schema.json`은 Generator 내부 staging 및 checkpoint 재개를 위한 전용 저장 계약이며 Backend로 절대 전송되지 않는다.
+   - 내부 Stage를 외부 Batch로 변환하는 공식 경계는 `to_external_result_item()`과 `PredictionResultBatchPayload`이다.
 
 4. **금지 범위 (Boundary Invariants)**:
    - Generator는 Threshold Policy를 로드하거나 임계치를 적용하지 않으며, 이상 판정, Product Result Artifact, Evidence, Report, 사용자 알림을 생성하지 않는다.

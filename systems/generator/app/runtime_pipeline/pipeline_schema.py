@@ -519,7 +519,10 @@ class PredictionResultBatchPayload(BaseModel):
 
 
 class InternalPredictionResultBatchStage(BaseModel):
-    """Generator internal staging payload (K-V map representation per equipment)."""
+    """Generator internal staging payload per equipment (contracts/schemas/generator-runtime-prediction-stage.schema.json).
+    Note: This is an internal staging/checkpoint contract and is NOT transmitted to Backend Inbox.
+    The official external wire payload is PredictionResultBatchPayload (prediction-result-batch-v1).
+    """
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(..., description="Unique event identifier")

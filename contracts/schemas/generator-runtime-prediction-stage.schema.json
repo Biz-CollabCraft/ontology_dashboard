@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ontology-dashboard.local/schemas/generator-prediction-result-batch.schema.json",
-  "title": "InternalGeneratorPredictionStage",
+  "$id": "https://ontology-dashboard.local/schemas/generator-runtime-prediction-stage.schema.json",
+  "title": "InternalGeneratorRuntimePredictionStage",
   "description": "Generator 내부 staging 및 checkpoint 전용 스키마. Backend Inbox 외부 전달 계약(prediction-result-batch.schema.json)으로 사용하지 않는다.",
   "type": "object",
   "required": [

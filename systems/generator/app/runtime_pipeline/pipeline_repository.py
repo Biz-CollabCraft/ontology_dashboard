@@ -32,11 +32,11 @@ class PipelineRepository:
     """File-based persistent repository for pipeline run states, checkpoints, and event payloads."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
-        if base_dir is None:
-            preprocessed_dir = getattr(PATHS, "data_preprocessed_dir", Path("data_preprocessed"))
-            self.base_dir = Path(preprocessed_dir)
-        else:
-            self.base_dir = Path(base_dir)
+        self.base_dir = (
+            Path(base_dir)
+            if base_dir is not None
+            else PATHS.data_preprocessed
+        )
 
         self.runs_dir = self.base_dir / "pipeline_runs"
         self.checkpoints_dir = self.base_dir / "pipeline_checkpoints"

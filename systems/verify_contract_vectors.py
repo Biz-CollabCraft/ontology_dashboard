@@ -704,6 +704,32 @@ class ContractVectorVerifier:
                                 )
                             )
 
+        # Verify Generator Runtime Prediction Internal Stage Examples if directory exists
+        stage_examples_dir = self.examples_dir / "generator-runtime-prediction"
+        if stage_examples_dir.is_dir():
+            stage_schema_path = self.schemas_dir / "generator-runtime-prediction-stage.schema.json"
+            stage_file = stage_examples_dir / "generator-runtime-prediction-stage.json"
+            if stage_file.is_file() and stage_schema_path.is_file():
+                rel_path = stage_file.relative_to(self.repo_root)
+                st_data = self._load_json_object(stage_file, str(rel_path), result)
+                if st_data is not None:
+                    try:
+                        st_schema = json.loads(stage_schema_path.read_text(encoding="utf-8"))
+                        reg = self._build_schema_registry()
+                        format_checker = jsonschema.FormatChecker()
+                        if reg is not None:
+                            validator = jsonschema.Draft202012Validator(st_schema, registry=reg, format_checker=format_checker)
+                        else:
+                            validator = jsonschema.Draft202012Validator(st_schema, format_checker=format_checker)
+                        validator.validate(st_data)
+                    except Exception as e:
+                        result.errors.append(
+                            VerificationError(
+                                context=str(rel_path),
+                                message=f"Internal stage example failed schema validation: {e}",
+                            )
+                        )
+
     def _verify_test_vectors(self, result: VerificationResult) -> None:
         if not self.vectors_dir.is_dir():
             result.errors.append(
