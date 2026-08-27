@@ -4,9 +4,14 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app.dependencies import current_principal, get_identity_service, require_csrf
+from app.diagnosis.runtime_router import router
 from app.diagnosis.runtime_schema import PredictionResultBatch
+from app.identity import Principal
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +20,49 @@ EXAMPLES = ROOT / "contracts" / "examples" / "prediction-result-batch"
 
 def load_example(name: str) -> dict:
     return json.loads((EXAMPLES / name).read_text(encoding="utf-8"))
+
+
+class FakeIdentity:
+    def require_permission(self, principal: Principal, permission: str) -> None:
+        if permission not in principal.permissions:
+            raise AssertionError(f"missing permission: {permission}")
+
+    def require_project(self, principal: Principal, project_id: str) -> None:
+        if project_id not in principal.project_scopes:
+            raise AssertionError(f"missing project scope: {project_id}")
+
+    def require_workspace(self, principal: Principal, workspace_id: str) -> None:
+        if workspace_id not in principal.workspace_scopes:
+            raise AssertionError(f"missing workspace scope: {workspace_id}")
+
+
+def principal() -> Principal:
+    return Principal(
+        user_id="user-1",
+        organization_id="org-ontology-demo",
+        email="ml@example.com",
+        display_name="ML Validator",
+        status="active",
+        roles=["ml_validator"],
+        permissions=["predictions.ingest"],
+        workspace_scopes=["manufacturing-demo"],
+        project_scopes=["manufacturing-demo-project"],
+        active_project_id="manufacturing-demo-project",
+        active_project_roles=["ml_validator"],
+        is_admin=False,
+        default_path="/app/projects/manufacturing-demo-project/mvp",
+        landing_key="mvp",
+    )
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[current_principal] = principal
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    app.dependency_overrides[require_csrf] = lambda: None
+    return TestClient(app)
 
 
 @pytest.mark.parametrize(
@@ -78,3 +126,40 @@ def test_prediction_result_batch_forbids_product_result_fields():
 
     with pytest.raises(ValidationError):
         PredictionResultBatch.model_validate(payload)
+
+
+def test_prediction_result_batch_validation_endpoint_returns_receipt(client: TestClient):
+    response = client.post(
+        "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
+        "predictive-maintenance/prediction-result-batches/validate",
+        json=load_example("live-predicted.json"),
+        headers={"X-CSRF-Token": "test"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["promotion_status"] == "validated_only"
+    assert body["product_result_created"] is False
+    assert body["received_results"] == 1
+    assert body["predicted_results"] == 1
+    assert body["blocked_results"] == 0
+    assert body["idempotency_basis"] == [
+        {
+            "event_id": "evt-live-cnc-s04-l02-03-20260826t060000z",
+            "payload_sha256": "b" * 64,
+        }
+    ]
+
+
+def test_prediction_result_batch_validation_endpoint_rejects_product_fields(client: TestClient):
+    payload = load_example("live-predicted.json")
+    payload["results"][0]["status_grade"] = "critical"
+
+    response = client.post(
+        "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
+        "predictive-maintenance/prediction-result-batches/validate",
+        json=payload,
+        headers={"X-CSRF-Token": "test"},
+    )
+
+    assert response.status_code == 422

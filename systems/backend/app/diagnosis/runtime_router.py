@@ -20,6 +20,7 @@ from app.dependencies import (
 from app.identity import IdentityService, Principal
 from app.diagnosis.runtime_schema import (
     DatasetVersionSelectionRequest,
+    PredictionResultBatch,
     ReplayControlRequest,
     ReplayStartRequest,
 )
@@ -408,6 +409,41 @@ def observation_window(
         derived_measures=selected,
         limit=limit,
     ).model_dump(mode="json")
+
+
+@router.post("/prediction-result-batches/validate")
+def validate_prediction_result_batch(
+    project_id: str,
+    workspace_id: str,
+    payload: PredictionResultBatch,
+    principal: Principal = Depends(require_permission("predictions.ingest")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    return {
+        "contract_version": payload.contract_version,
+        "batch_id": payload.batch_id,
+        "received_results": len(payload.results),
+        "predicted_results": sum(
+            1 for item in payload.results if item.output_status == "predicted"
+        ),
+        "blocked_results": sum(
+            1 for item in payload.results if item.output_status != "predicted"
+        ),
+        "source_kinds": sorted({item.source_kind for item in payload.results}),
+        "idempotency_basis": [
+            {"event_id": item.event_id, "payload_sha256": item.payload_sha256}
+            for item in payload.results
+        ],
+        "promotion_status": "validated_only",
+        "product_result_created": False,
+    }
 
 
 @router.post("/replay/sessions", status_code=status.HTTP_201_CREATED)
