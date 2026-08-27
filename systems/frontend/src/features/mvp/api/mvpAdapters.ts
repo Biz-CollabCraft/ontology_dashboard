@@ -492,6 +492,9 @@ function inspectionTargetsFromAssetDetailViewModel(viewModel: AssetDetailViewMod
     association: target.association,
     locationLabel: target.location_label,
     inspectionMethod: target.inspection_method,
+    locationContractId: target.location_contract_id,
+    locationSourceRef: target.location_source_ref,
+    locationMaturity: target.location_maturity,
     inspectionGuidance: target.inspection_guidance ? {
       sourceType: target.inspection_guidance.source_type,
       sopId: target.inspection_guidance.sop_id,

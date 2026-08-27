@@ -28,6 +28,11 @@ AGENT_REVIEW_PACKET_SCHEMA = json.loads(
         encoding="utf-8"
     )
 )
+INSPECTION_LOCATION_REFERENCE_SCHEMA = json.loads(
+    (ROOT / "contracts" / "schemas" / "inspection-location-reference.schema.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 
 @pytest.fixture()
@@ -111,6 +116,15 @@ def test_evidence_packages_pass_json_schema() -> None:
             assert evidence["top_factors"] == []
         else:
             assert evidence["top_factors"]
+
+
+def test_inspection_location_reference_fixture_passes_schema() -> None:
+    validator = Draft202012Validator(INSPECTION_LOCATION_REFERENCE_SCHEMA)
+    path = ROOT / "data" / "fixtures" / "inspection_location" / "demo-cnc-inspection-location-reference-v1.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert list(validator.iter_errors(payload)) == []
+    assert payload["owner_domain"] == "field_inspection_reference"
+    assert "정비 작업요청 생성" in payload["claim_boundaries"]["forbidden_claims"]
 
 
 def test_role_reports_are_grounded_and_different(service: FactorySignalService) -> None:
@@ -249,11 +263,12 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert detail_payload["operation_context"]["event_impact"]["event_id"] == "EVT-GS-002"
     assert detail_payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
     assert detail_payload["inspection_targets"][0]["component_id"]
-    assert detail_payload["inspection_targets"][0]["location_label"] is None
-    assert (
-        detail_payload["inspection_targets"][0]["unavailable_reason"]
-        == "maintenance_inspection_location_contract_unavailable"
-    )
+    assert detail_payload["inspection_targets"][0]["location_label"] == "공구 매거진 및 스핀들 공구 체결부"
+    assert detail_payload["inspection_targets"][0]["inspection_method"].startswith("공구 사용 시간")
+    assert detail_payload["inspection_targets"][0]["location_contract_id"] == "ILR-DEMO-CNC-001"
+    assert detail_payload["inspection_targets"][0]["location_maturity"] == "fixture"
+    assert detail_payload["inspection_targets"][0]["location_source_ref"].endswith("#tooling")
+    assert detail_payload["inspection_targets"][0]["unavailable_reason"] is None
     assert detail_payload["inspection_targets"][0]["inspection_guidance"] == {
         "source_type": "demo_sop_fixture",
         "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
@@ -321,6 +336,8 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert packet["asset_id"] == "CNC-S04-L04-01"
     assert packet["review_draft"]["title"] == "4구역 · 4셀 · CNC 가공기 1 담당자 검토 초안"
     assert "CNC-S04-L04-01는 현재 warning 상태" in packet["review_draft"]["summary"]
+    assert "위치 reference" in packet["review_draft"]["summary"]
+    assert packet["review_draft"]["checklist"][0] == "현장 확인 위치: 공구 매거진 및 스핀들 공구 체결부"
     assert packet["review_draft"]["recommended_next_step"] == (
         "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다."
     )
@@ -352,6 +369,9 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
         "does_not_create_maintenance_event": True,
         "manual_recommendation_requires_manager_acceptance": True,
     }
+    assert packet["sop_guidance"][0]["location_label"] == "공구 매거진 및 스핀들 공구 체결부"
+    assert packet["sop_guidance"][0]["inspection_method"].startswith("공구 사용 시간")
+    assert packet["sop_guidance"][0]["location_source_ref"].endswith("#tooling")
     assert packet["sop_guidance"][0]["retrieval_score"] > 0
     assert {"asset_type", "failure_mode", "component_ids"} <= set(packet["sop_guidance"][0]["matched_fields"])
     assert "교체 전 생산 정지 가능 시간과 부품 가용성 확인 상태 조회" in packet["history_review_items"]

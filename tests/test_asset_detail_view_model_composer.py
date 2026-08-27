@@ -275,6 +275,9 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
     assert payload["inspection_targets"][0]["component_label"] == "회전/진동 계통"
     assert payload["inspection_targets"][0]["location_label"] is None
     assert payload["inspection_targets"][0]["inspection_method"] is None
+    assert payload["inspection_targets"][0]["location_contract_id"] is None
+    assert payload["inspection_targets"][0]["location_source_ref"] is None
+    assert payload["inspection_targets"][0]["location_maturity"] is None
     assert payload["inspection_targets"][0]["inspection_guidance"] == {
         "source_type": "demo_sop_fixture",
         "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
@@ -302,13 +305,63 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
     assert payload["inspection_targets"][0]["source_ref"].endswith("#component_hypotheses[0]")
     assert (
         payload["inspection_targets"][0]["unavailable_reason"]
-        == "maintenance_inspection_location_contract_unavailable"
+        == "field_inspection_location_reference_unavailable"
     )
     assert payload["operation_context"]["source_type"] == "synthetic_capacity_model"
     assert payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
     assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
     assert "features[].history.points" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
     assert "risk_series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
+
+
+def test_composer_attaches_field_inspection_location_reference() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "display_name": "압축기 S03-L03-01",
+            "observed_at": "2026-08-01T00:00:00+09:00",
+        },
+        result_artifact=ARTIFACT,
+        feature_series={
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T21:00:00+09:00",
+                        "value": 1810.0,
+                        "quality_status": "good",
+                    }
+                ],
+            }
+        },
+        runtime_prediction_history=[],
+        equipment_history=[],
+        inspection_locations={
+            "rotating_assembly": {
+                "contract_id": "ILR-DEMO-COMPRESSOR-001",
+                "maturity": "fixture",
+                "location_label": "모터 구동부 및 베어링 하우징",
+                "inspection_method": "회전부 진동과 이상 소음을 확인합니다.",
+                "source_ref": "data/fixtures/inspection_location/demo-compressor.json#rotating_assembly",
+            }
+        },
+        data_status={
+            "source": "canonical",
+            "is_stale": False,
+            "last_updated_at": "2026-08-01T00:00:00+09:00",
+            "warnings": [],
+        },
+    )
+
+    target = payload["inspection_targets"][0]
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert target["location_label"] == "모터 구동부 및 베어링 하우징"
+    assert target["inspection_method"] == "회전부 진동과 이상 소음을 확인합니다."
+    assert target["location_contract_id"] == "ILR-DEMO-COMPRESSOR-001"
+    assert target["location_source_ref"].endswith("#rotating_assembly")
+    assert target["location_maturity"] == "fixture"
+    assert target["unavailable_reason"] is None
 
 
 def test_composer_excludes_current_instant_across_timezone_offsets() -> None:

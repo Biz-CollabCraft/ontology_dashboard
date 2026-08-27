@@ -81,7 +81,7 @@
         "outcome_if_met": "monitor_only",
         "evidence_role": "supporting_sensor",
         "human_check_required": true,
-        "notes": "열 경로 점검 질문을 만들기 위한 보조 기준입니다."
+        "notes": "열 경로 점검 체크리스트를 만들기 위한 보조 기준입니다."
       }
     ],
     "inspection_result_mapping": {
@@ -131,7 +131,7 @@
       "decision_boundary": "이 기준은 교체 시기 검토 초안이며, 교체 필요 확정·작업요청 생성·정비 승인·자동 승인을 수행하지 않습니다."
     },
     "disclaimer": "데모 SOP fixture 기반 참고 안내이며 Product Evidence가 확정한 점검 위치 또는 수리 지시가 아닙니다.",
-    "allowed_ui_claims": ["SOP 기준 참고 위치", "점검 질문 초안", "교체 시기 검토 초안", "절차 문서 연결됨"],
+    "allowed_ui_claims": ["SOP 기준 참고 위치", "점검 체크리스트 초안", "교체 시기 검토 초안", "절차 문서 연결됨"],
     "forbidden_ui_claims": ["확정 점검 위치", "교체 필요 확정", "작업요청 생성", "수리 지시", "자동 승인 완료"]
   }
 }
