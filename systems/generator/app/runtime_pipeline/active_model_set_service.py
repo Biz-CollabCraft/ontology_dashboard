@@ -125,14 +125,33 @@ class ActiveModelSetService:
                 if validate_artifacts:
                     model_id = self._resolve_model_id(base_or_id)
                     artifact_dir = self.artifacts_dir / model_id / config.model_version
-                    from systems.generator.model.publisher import validate_model_artifact
-                    validate_model_artifact(
-                        artifact_dir=artifact_dir,
-                        expected_model_id=model_id,
-                        expected_model_version=config.model_version,
-                        load_model=True,
-                        artifacts_root=self.artifacts_dir,
+                    from systems.generator.model.publisher import (
+                        ModelArtifactContractValidationError,
+                        validate_model_artifact,
                     )
+                    try:
+                        validate_model_artifact(
+                            artifact_dir=artifact_dir,
+                            expected_model_id=model_id,
+                            expected_model_version=config.model_version,
+                            load_model=True,
+                            artifacts_root=self.artifacts_dir,
+                        )
+                    except ModelArtifactContractValidationError as exc:
+                        if exc.reason == "artifact_not_found":
+                            raise ModelSetArtifactNotFoundError(
+                                exc.message,
+                                details=exc.details or [{"model_id": model_id, "version": config.model_version}],
+                            ) from exc
+                        if exc.reason in {"external_uri_unsupported", "path_traversal", "path_outside_root"}:
+                            raise ModelSetArtifactPathUnsupportedError(
+                                exc.message,
+                                details=exc.details or [{"model_id": model_id, "version": config.model_version}],
+                            ) from exc
+                        raise ModelSetArtifactIntegrityError(
+                            exc.message,
+                            details=exc.details or [{"model_id": model_id, "version": config.model_version}],
+                        ) from exc
 
             # 3. Write temp file and atomic replace
             new_set.updated_at = now_utc_iso()

@@ -111,45 +111,33 @@ class PredictionService:
                 )
 
         target_artifact_dir = self.artifacts_dir / model_id / model_version
-        from systems.generator.model.publisher import validate_model_artifact
+        from systems.generator.model.publisher import (
+            ModelArtifactContractValidationError,
+            validate_model_artifact,
+        )
         try:
-            manifest_data = validate_model_artifact(
+            validated = validate_model_artifact(
                 artifact_dir=target_artifact_dir,
                 expected_model_id=model_id,
                 expected_model_version=model_version,
-                load_model=False,
+                load_model=True,
                 artifacts_root=self.artifacts_dir,
             )
-        except Exception as exc:
-            if hasattr(exc, "code") and exc.code in ("MODEL_SET_ARTIFACT_NOT_FOUND", "MODEL_SET_ARTIFACT_INTEGRITY_ERROR", "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"):
-                raise PipelineModelArtifactInvalidError(
-                    f"아티팩트 manifest 검증 실패 ({model_id}/{model_version}): {exc}",
-                    details=[{"model_id": model_id, "model_version": model_version, "error": str(exc)}],
-                    retryable=False,
-                ) from exc
-            raise
-
-        # Load payload files
-        model_path = target_artifact_dir / "model.joblib"
-        feat_schema_path = target_artifact_dir / "feature_schema.json"
-        lbl_schema_path = target_artifact_dir / "label_schema.json"
-        hist_req_path = target_artifact_dir / "history_requirement.json"
-        metrics_path = target_artifact_dir / "metrics.json"
-
-        try:
-            model_obj = joblib.load(model_path)
-            feat_schema = json.loads(feat_schema_path.read_text(encoding="utf-8"))
-            lbl_schema = json.loads(lbl_schema_path.read_text(encoding="utf-8"))
-            hist_req = json.loads(hist_req_path.read_text(encoding="utf-8"))
-            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-        except Exception as exc:
+        except ModelArtifactContractValidationError as exc:
             raise PipelineModelArtifactInvalidError(
-                f"아티팩트 페이로드 파일 로드 실패 ({model_id}/{model_version}): {exc}",
+                f"아티팩트 검증 및 로드 실패 ({model_id}/{model_version}): {exc.message}",
+                details=[{"model_id": model_id, "model_version": model_version, "reason": exc.reason, "error": exc.message}],
                 retryable=False,
             ) from exc
 
-        manifest_file = target_artifact_dir / "manifest.json"
-        manifest_sha = compute_file_sha256(manifest_file)
+        model_obj = validated.model
+        manifest_data = validated.manifest
+        feat_schema = validated.feature_schema
+        lbl_schema = validated.label_schema
+        hist_req = validated.history_requirement
+        metrics = validated.metrics
+        manifest_sha = validated.manifest_checksum
+
         artifact_ref = ArtifactReference(
             uri=str(target_artifact_dir).replace("\\", "/"),
             sha256=manifest_sha,
@@ -244,6 +232,25 @@ class PredictionService:
                     )
                 continue
 
+            feat_schema_ver = (
+                artifact.manifest.get("feature_schema_version")
+                or artifact.feature_schema.get("feature_schema_version")
+                or artifact.feature_schema.get("schema_version")
+                or "v1"
+            )
+            lbl_schema_ver = (
+                artifact.manifest.get("label_schema_version")
+                or artifact.label_schema.get("label_schema_version")
+                or artifact.label_schema.get("schema_version")
+                or "v1"
+            )
+            hist_req_ver = (
+                artifact.manifest.get("history_requirement_version")
+                or artifact.history_requirement.get("history_requirement_version")
+                or artifact.history_requirement.get("version")
+                or "v1"
+            )
+
             feature_ref = model_feature_refs.get(base_model)
             bundle = (model_feature_bundles or {}).get(base_model)
 
@@ -271,9 +278,9 @@ class PredictionService:
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=None,
                             manifest_checksum=artifact.manifest_checksum,
-                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
-                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
-                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            feature_schema_version=feat_schema_ver,
+                            label_schema_version=lbl_schema_ver,
+                            history_requirement_version=hist_req_ver,
                             model_set_id=model_set_id,
                             model_set_version=model_set_version,
                             error_code=err_code,
@@ -312,9 +319,9 @@ class PredictionService:
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
                             manifest_checksum=artifact.manifest_checksum,
-                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
-                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
-                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            feature_schema_version=feat_schema_ver,
+                            label_schema_version=lbl_schema_ver,
+                            history_requirement_version=hist_req_ver,
                             model_set_id=model_set_id,
                             model_set_version=model_set_version,
                             error_code="PIPELINE_RUNTIME_FEATURE_FAILED",
@@ -353,9 +360,9 @@ class PredictionService:
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
                             manifest_checksum=artifact.manifest_checksum,
-                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
-                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
-                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            feature_schema_version=feat_schema_ver,
+                            label_schema_version=lbl_schema_ver,
+                            history_requirement_version=hist_req_ver,
                             model_set_id=model_set_id,
                             model_set_version=model_set_version,
                             error_code="PIPELINE_FEATURE_METADATA_ALIGNMENT_ERROR",
@@ -393,9 +400,9 @@ class PredictionService:
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
                             manifest_checksum=artifact.manifest_checksum,
-                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
-                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
-                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            feature_schema_version=feat_schema_ver,
+                            label_schema_version=lbl_schema_ver,
+                            history_requirement_version=hist_req_ver,
                             model_set_id=model_set_id,
                             model_set_version=model_set_version,
                             error_code="PIPELINE_HISTORY_INSUFFICIENT",
@@ -451,9 +458,9 @@ class PredictionService:
                             artifact_ref=artifact.artifact_ref,
                             feature_ref=feature_ref,
                             manifest_checksum=artifact.manifest_checksum,
-                            feature_schema_version=str(artifact.feature_schema.get("version", "v1")),
-                            label_schema_version=str(artifact.label_schema.get("version", "v1")),
-                            history_requirement_version=str(artifact.history_requirement.get("version", "v1")),
+                            feature_schema_version=feat_schema_ver,
+                            label_schema_version=lbl_schema_ver,
+                            history_requirement_version=hist_req_ver,
                             model_set_id=model_set_id,
                             model_set_version=model_set_version,
                             error_code=None,

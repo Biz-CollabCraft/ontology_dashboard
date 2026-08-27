@@ -53,6 +53,22 @@
       },
       "additionalProperties": false
     },
+    "manifest_checksum": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "feature_schema_version": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "label_schema_version": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "history_requirement_version": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
     "error_code": {
       "type": ["string", "null"]
     },
@@ -60,5 +76,47 @@
       "type": ["string", "null"]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "succeeded" }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "required": [
+          "score",
+          "artifact_ref",
+          "feature_ref",
+          "manifest_checksum",
+          "feature_schema_version",
+          "label_schema_version",
+          "history_requirement_version"
+        ],
+        "properties": {
+          "score": { "type": "number" },
+          "artifact_ref": { "type": "object" },
+          "feature_ref": { "type": "object" },
+          "manifest_checksum": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "feature_schema_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label_schema_version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "history_requirement_version": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ],
   "additionalProperties": false
 }

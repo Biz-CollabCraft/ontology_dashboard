@@ -2701,6 +2701,12 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
                 score_type="positive_class_probability",
                 score_source="predict_proba",
                 score=0.88,
+                artifact_ref=ArtifactReference(uri="models_store/artifacts/pdm-lightgbm/v1.0", sha256="0"*64, role="model_artifact"),
+                feature_ref=ArtifactReference(uri="features.npy", sha256="0"*64, role="runtime_features"),
+                manifest_checksum="0"*64,
+                feature_schema_version="v1.0",
+                label_schema_version="v1.0",
+                history_requirement_version="v1.0",
                 model_set_id="pdm-schema-test",
                 model_set_version="1.0.0",
             )
@@ -2739,11 +2745,15 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
     assert disk_payload.get("model_set_id") == "pdm-schema-test"
     assert disk_payload.get("model_set_version") == "1.0.0"
 
-    # 2. Internal model set fields excluded from model_results[*]
+    # 2. Internal model set fields excluded from model_results[*], but provenance 4 fields included
     lgbm_res = disk_payload["model_results"]["pdm-lightgbm"]
     assert "model_set_id" not in lgbm_res
     assert "model_set_version" not in lgbm_res
-    assert "manifest_checksum" not in lgbm_res
+    assert lgbm_res.get("manifest_checksum") is not None
+    assert len(lgbm_res["manifest_checksum"]) == 64
+    assert lgbm_res.get("feature_schema_version") is not None
+    assert lgbm_res.get("label_schema_version") is not None
+    assert lgbm_res.get("history_requirement_version") is not None
 
     # 3. K-V dict structure maintained
     assert isinstance(disk_payload["model_results"], dict)
@@ -2779,42 +2789,44 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
 # =====================================================================
 
 def test_artifact_path_unsupported_security_blocking(isolated_runtime_env):
-    """validate_model_artifact blocks path traversal ('..'), external URIs, and paths escaping root with MODEL_SET_ARTIFACT_PATH_UNSUPPORTED."""
-    from systems.generator.model.publisher import validate_model_artifact
-    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetArtifactPathUnsupportedError
+    """validate_model_artifact blocks path traversal ('..'), external URIs, and paths escaping root with ModelArtifactContractValidationError."""
+    from systems.generator.model.publisher import (
+        ModelArtifactContractValidationError,
+        validate_model_artifact,
+    )
 
     env = isolated_runtime_env
     root_dir: Path = env["artifacts_dir"]
 
     # Case 1: Path traversal '..'
-    with pytest.raises(ModelSetArtifactPathUnsupportedError) as exc1:
+    with pytest.raises(ModelArtifactContractValidationError) as exc1:
         validate_model_artifact(
             artifact_dir=root_dir / ".." / "outside",
             expected_model_id="pdm-lightgbm",
             expected_model_version="v1.0",
             artifacts_root=root_dir,
         )
-    assert exc1.value.code == "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+    assert exc1.value.reason in {"path_traversal", "path_outside_root"}
 
     # Case 2: External URI scheme
-    with pytest.raises(ModelSetArtifactPathUnsupportedError) as exc2:
+    with pytest.raises(ModelArtifactContractValidationError) as exc2:
         validate_model_artifact(
             artifact_dir="http://remote-server.com/models/pdm-lightgbm",
             expected_model_id="pdm-lightgbm",
             expected_model_version="v1.0",
             artifacts_root=root_dir,
         )
-    assert exc2.value.code == "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+    assert exc2.value.reason == "external_uri_unsupported"
 
     # Case 3: S3 URI scheme
-    with pytest.raises(ModelSetArtifactPathUnsupportedError) as exc3:
+    with pytest.raises(ModelArtifactContractValidationError) as exc3:
         validate_model_artifact(
             artifact_dir="s3://my-bucket/artifacts/model",
             expected_model_id="pdm-lightgbm",
             expected_model_version="v1.0",
             artifacts_root=root_dir,
         )
-    assert exc3.value.code == "MODEL_SET_ARTIFACT_PATH_UNSUPPORTED"
+    assert exc3.value.reason == "external_uri_unsupported"
 
 
 # =====================================================================
@@ -2919,3 +2931,311 @@ def test_disabled_api_testclient_503_and_real_status_counts(isolated_runtime_env
     assert st_data["enabled"] is False
     assert st_data["mode"] == "disabled"
     assert st_data["queued_count"] == 1  # Real count, not hardcoded 0!
+
+
+# =====================================================================
+# 53. Model Artifact Provenance & Common Validator Comprehensive Test
+# =====================================================================
+
+def test_provenance_and_common_validator_comprehensive(isolated_runtime_env):
+    """Comprehensive verification of Model Artifact provenance rules, official Schema validation, and unified Validator."""
+    import sys
+    import jsonschema
+    from systems.generator.model.publisher import (
+        ModelArtifactContractValidationError,
+        ModelArtifactPublisher,
+        ModelArtifactValidationError,
+        validate_model_artifact,
+    )
+    from systems.generator.app.runtime_pipeline.active_model_set_service import ActiveModelSetService
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        ModelSetArtifactIntegrityError,
+        ModelSetArtifactNotFoundError,
+        ModelSetArtifactPathUnsupportedError,
+        PipelineModelArtifactInvalidError,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ActiveModelConfig,
+        ActiveModelSet,
+        ArtifactReference,
+        InternalModelPredictionResult,
+        ModelPredictionResult,
+    )
+
+    env = isolated_runtime_env
+    root_dir: Path = env["artifacts_dir"]
+    target_dir = root_dir / "pdm-lightgbm" / "pdm-lightgbm-v1.0"
+
+    # 1. Model layer does not import app runtime/training exceptions
+    import systems.generator.model.publisher as pub_mod
+    for attr in dir(pub_mod):
+        obj = getattr(pub_mod, attr)
+        if hasattr(obj, "__module__") and getattr(obj, "__module__", "").startswith("systems.generator.app"):
+            pytest.fail(f"systems.generator.model.publisher imports app module symbol: {attr} ({obj.__module__})")
+
+    # 2. Verify ValidatedModelArtifact return type and attribute/key access
+    val_art = validate_model_artifact(
+        artifact_dir=target_dir,
+        expected_model_id="pdm-lightgbm",
+        expected_model_version="pdm-lightgbm-v1.0",
+        load_model=True,
+        artifacts_root=root_dir,
+    )
+    assert val_art.model_id == "pdm-lightgbm"
+    assert val_art.model_version == "pdm-lightgbm-v1.0"
+    assert len(val_art.manifest_checksum) == 64
+    assert val_art["model_id"] == "pdm-lightgbm"
+    assert val_art.get("model_version") == "pdm-lightgbm-v1.0"
+
+    # 3. ModelPredictionResult provenance serialization test
+    succeeded_internal = InternalModelPredictionResult(
+        asset_id="EQUIP-001",
+        model_id="pdm-lightgbm",
+        model_version="pdm-lightgbm-v1.0",
+        status="succeeded",
+        observed_at="2026-08-25T14:30:00Z",
+        score_type="positive_class_probability",
+        score_source="predict_proba",
+        score=0.85,
+        artifact_ref=ArtifactReference(uri=str(target_dir), sha256=val_art.manifest_checksum, role="model_artifact"),
+        feature_ref=ArtifactReference(uri="features.npy", sha256="0"*64, role="runtime_features"),
+        manifest_checksum=val_art.manifest_checksum,
+        feature_schema_version="v1.0",
+        label_schema_version="v1.0",
+        history_requirement_version="v1.0",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
+        error_code=None,
+        error_message=None,
+    )
+
+    payload_res = succeeded_internal.to_payload_result()
+    dumped = payload_res.model_dump(mode="json")
+
+    # Provenance 4 fields present in payload
+    assert dumped["manifest_checksum"] == val_art.manifest_checksum
+    assert dumped["feature_schema_version"] == "v1.0"
+    assert dumped["label_schema_version"] == "v1.0"
+    assert dumped["history_requirement_version"] == "v1.0"
+
+    # Model set fields excluded per-model
+    assert "model_set_id" not in dumped
+    assert "model_set_version" not in dumped
+
+    # 4. Schema validation of succeeded model prediction result (missing checksum fails)
+    schemas_dir = Path("contracts/schemas")
+    schema_path = schemas_dir / "generator-model-prediction-result.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    # Valid payload passes
+    jsonschema.validate(instance=dumped, schema=schema)
+
+    # Missing manifest_checksum on succeeded status fails
+    invalid_dumped = dict(dumped)
+    invalid_dumped["manifest_checksum"] = None
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=invalid_dumped, schema=schema)
+
+    # Invalid checksum pattern fails
+    bad_pattern_dumped = dict(dumped)
+    bad_pattern_dumped["manifest_checksum"] = "INVALID_HASH"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=bad_pattern_dumped, schema=schema)
+
+    # 5. Failed before artifact load allows null provenance
+    failed_before = InternalModelPredictionResult(
+        asset_id="EQUIP-001",
+        model_id="pdm-lightgbm",
+        model_version="v1.0",
+        status="failed",
+        observed_at="",
+        score_type="positive_class_probability",
+        score_source=None,
+        score=None,
+        artifact_ref=None,
+        feature_ref=None,
+        manifest_checksum=None,
+        feature_schema_version=None,
+        label_schema_version=None,
+        history_requirement_version=None,
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
+        error_code="MODEL_NOT_FOUND",
+        error_message="Artifact missing",
+    )
+    failed_dumped = failed_before.to_payload_result().model_dump(mode="json")
+    jsonschema.validate(instance=failed_dumped, schema=schema)
+
+    # 6. Failed after artifact load retains provenance
+    failed_after = InternalModelPredictionResult(
+        asset_id="EQUIP-001",
+        model_id="pdm-lightgbm",
+        model_version="v1.0",
+        status="failed",
+        observed_at="",
+        score_type="positive_class_probability",
+        score_source=None,
+        score=None,
+        artifact_ref=ArtifactReference(uri=str(target_dir), sha256=val_art.manifest_checksum, role="model_artifact"),
+        feature_ref=None,
+        manifest_checksum=val_art.manifest_checksum,
+        feature_schema_version="v1.0",
+        label_schema_version="v1.0",
+        history_requirement_version="v1.0",
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
+        error_code="FEATURE_GEN_FAILED",
+        error_message="Feature generation failed",
+    )
+    failed_after_dumped = failed_after.to_payload_result().model_dump(mode="json")
+    jsonschema.validate(instance=failed_after_dumped, schema=schema)
+
+    # 7. Common Validator exception conversions across callers
+    pub = ModelArtifactPublisher(root_dir)
+    # Publisher converts to ModelArtifactValidationError
+    with pytest.raises(ModelArtifactValidationError):
+        pub.validate_manifest({"model_id": "wrong"}, target_dir)
+
+    # ActiveModelSetService converts reason to ModelSetArtifact*Error
+    ams_service = ActiveModelSetService(models_store_dir=root_dir.parent)
+    invalid_set = ActiveModelSet(
+        model_set_id="pdm-default",
+        model_set_version="1.0.0",
+        updated_at="2026-08-25T14:30:00Z",
+        models={
+            "lightgbm": ActiveModelConfig(model_version="non-existent-v99", required=True),
+        },
+    )
+    with pytest.raises(ModelSetArtifactNotFoundError):
+        ams_service.update_active_model_set(invalid_set, validate_artifacts=True)
+
+    # Mismatch model_id check
+    with pytest.raises(ModelArtifactContractValidationError) as mm_exc:
+        validate_model_artifact(
+            artifact_dir=target_dir,
+            expected_model_id="pdm-wrong-id",
+            expected_model_version="pdm-lightgbm-v1.0",
+            artifacts_root=root_dir,
+        )
+    assert mm_exc.value.reason == "model_id_version_mismatch"
+
+
+# =====================================================================
+# 42. Fail-Closed Official Schema Validation & Snapshot Reuse Tests
+# =====================================================================
+
+class RereadTestMockEstimator:
+    def predict_proba(self, X):
+        import numpy as np
+        return np.array([[0.1, 0.9]])
+
+
+def test_official_schema_missing_raises_contract_validation_error(tmp_path, monkeypatch):
+    """When official schema file is missing, validate_model_artifact fails closed with reason='official_schema_missing'."""
+    from systems.generator.model.publisher import (
+        ModelArtifactContractValidationError,
+        validate_model_artifact,
+    )
+
+    non_existent_schema = tmp_path / "non_existent_schema.json"
+    monkeypatch.setattr("systems.generator.model.publisher.OFFICIAL_SCHEMA_PATH", non_existent_schema)
+
+    staging_dir = tmp_path / "staging"
+    staging_dir.mkdir()
+    (staging_dir / "manifest.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ModelArtifactContractValidationError) as exc_info:
+        validate_model_artifact(staging_dir, load_model=False)
+
+    assert exc_info.value.reason == "official_schema_missing"
+    assert "공식 Model Artifact Schema를 찾을 수 없습니다" in str(exc_info.value)
+
+
+def test_official_schema_parse_failed_raises_contract_validation_error(tmp_path, monkeypatch):
+    """When official schema file contains invalid JSON, validate_model_artifact fails closed with reason='official_schema_parse_failed'."""
+    from systems.generator.model.publisher import (
+        ModelArtifactContractValidationError,
+        validate_model_artifact,
+    )
+
+    corrupt_schema = tmp_path / "corrupt_schema.json"
+    corrupt_schema.write_text("{ invalid json ...", encoding="utf-8")
+    monkeypatch.setattr("systems.generator.model.publisher.OFFICIAL_SCHEMA_PATH", corrupt_schema)
+
+    staging_dir = tmp_path / "staging"
+    staging_dir.mkdir()
+    (staging_dir / "manifest.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ModelArtifactContractValidationError) as exc_info:
+        validate_model_artifact(staging_dir, load_model=False)
+
+    assert exc_info.value.reason == "official_schema_parse_failed"
+    assert "공식 Model Artifact Schema 파싱 실패" in str(exc_info.value)
+
+
+def test_prediction_service_reuses_validated_model_snapshot(isolated_runtime_env, monkeypatch):
+    """Prediction Service uses ValidatedModelArtifact snapshot from validate_model_artifact(load_model=True) without redundant re-reading."""
+    import joblib
+    from systems.generator.app.runtime_pipeline.prediction_service import PredictionService
+
+    env = isolated_runtime_env
+    pred_service: PredictionService = env["service"].prediction_service
+
+    joblib_load_count = 0
+    orig_joblib_load = joblib.load
+
+    def counting_joblib_load(filename, *args, **kwargs):
+        nonlocal joblib_load_count
+        joblib_load_count += 1
+        return orig_joblib_load(filename, *args, **kwargs)
+
+    monkeypatch.setattr("joblib.load", counting_joblib_load)
+
+    # Load active artifact for pdm-lightgbm
+    loaded = pred_service.load_active_artifact("lightgbm")
+
+    # joblib.load should be called exactly once inside validate_model_artifact(load_model=True)
+    assert joblib_load_count == 1
+    assert loaded.model is not None
+    assert loaded.manifest_checksum is not None
+
+
+def test_prediction_service_constructed_snapshot_prevents_post_validation_file_reread(tmp_path):
+    """Prediction Service constructs LoadedModelArtifact directly from ValidatedModelArtifact fields."""
+    from systems.generator.model.publisher import (
+        ModelArtifactPublisher,
+    )
+    from systems.generator.app.runtime_pipeline.prediction_service import PredictionService
+
+    pub = ModelArtifactPublisher(tmp_path / "artifacts")
+    pub.publish_artifact(
+        model_id="pdm-test-reread",
+        model_version="v1.0",
+        base_model="lightgbm",
+        model_obj=RereadTestMockEstimator(),
+        dataset_id="ds-v1",
+        dataset_version="v1.0",
+        feature_dataset_version="feat-v1",
+        feature_schema={
+            "feature_schema_version": "v1.0",
+            "features": [{"feature_name": "f1", "source_field": "col1", "operation": "raw", "parameters": {}}],
+        },
+        label_schema={"label_schema_version": "v1.0", "prediction_horizon_hours": 12, "target_type": "binary_failure_within_horizon"},
+        history_requirement={"minimum_history_rows": 1, "required_columns": ["col1"], "missing_history_policy": "reject"},
+        metrics={"metrics_summary": {"f1": 0.9}, "primary_metric": "f1"},
+        training_config={"training_config_version": "v1.0", "training_config_sha256": "0" * 64},
+        provenance={},
+    )
+
+    pred_service = PredictionService(models_store_dir=tmp_path)
+    loaded = pred_service.load_active_artifact("pdm-test-reread", "v1.0")
+
+    assert loaded.model_id == "pdm-test-reread"
+    assert loaded.model_version == "v1.0"
+    assert loaded.model is not None
+    assert loaded.feature_schema["feature_schema_version"] == "v1.0"
+    assert loaded.label_schema["label_schema_version"] == "v1.0"
+    assert loaded.history_requirement["minimum_history_rows"] == 1
+    assert loaded.metrics["primary_metric"] == "f1"
+    assert loaded.manifest_checksum is not None
+    assert loaded.artifact_ref.sha256 == loaded.manifest_checksum

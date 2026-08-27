@@ -19,6 +19,7 @@ from systems.generator.app.feature.feature_router import router as feature_route
 from systems.generator.app.feature.feature_exception import FeatureError
 from systems.generator.app.training.training_router import router as training_router
 from systems.generator.app.training.training_exception import TrainingError
+from systems.generator.model.publisher import ModelPublishError
 from systems.generator.app.training_compat.training_compat_router import router as training_compat_router
 from systems.generator.app.training_compat.training_lifecycle import lifespan as training_lifespan
 from systems.generator.app.runtime_pipeline.pipeline_router import router as runtime_pipeline_router
@@ -104,16 +105,21 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(TrainingError)
-    async def training_error_handler(request: Request, exc: TrainingError) -> JSONResponse:
+    @app.exception_handler(ModelPublishError)
+    async def training_error_handler(request: Request, exc: TrainingError | ModelPublishError) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
-        logger.warning(f"[TrainingAPI] TrainingError: {exc.code} - {exc.message}")
+        code = getattr(exc, "code", "TRAINING_ERROR")
+        msg = getattr(exc, "message", str(exc))
+        status_c = getattr(exc, "status_code", 500)
+        details = getattr(exc, "details", [])
+        logger.warning(f"[TrainingAPI] {type(exc).__name__}: {code} - {msg}")
         return _build_error_response(
-            status_code=exc.status_code,
-            code=exc.code,
-            message=exc.message,
+            status_code=status_c,
+            code=code,
+            message=msg,
             path=request.url.path,
             request_id=req_id,
-            details=exc.details,
+            details=details,
         )
 
     @app.exception_handler(PipelineBaseError)

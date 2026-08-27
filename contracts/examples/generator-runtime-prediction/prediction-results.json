@@ -16,6 +16,10 @@
       "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
       "role": "runtime_features"
     },
+    "manifest_checksum": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "feature_schema_version": "v1.0",
+    "label_schema_version": "v1.0",
+    "history_requirement_version": "v1.0",
     "error_code": null,
     "error_message": null
   },
@@ -36,6 +40,10 @@
       "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
       "role": "runtime_features"
     },
+    "manifest_checksum": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
+    "feature_schema_version": "v1.0",
+    "label_schema_version": "v1.0",
+    "history_requirement_version": "v1.0",
     "error_code": null,
     "error_message": null
   },
@@ -56,6 +64,10 @@
       "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
       "role": "runtime_features"
     },
+    "manifest_checksum": "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab",
+    "feature_schema_version": "v1.0",
+    "label_schema_version": "v1.0",
+    "history_requirement_version": "v1.0",
     "error_code": null,
     "error_message": null
   }
