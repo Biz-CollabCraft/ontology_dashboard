@@ -9,6 +9,7 @@ import type {
   VisualizationPlannerResponse,
 } from "./features/planner/types";
 import type { AgentQueryInput, AgentRunPage, AgentRunResponse } from "./features/agent/types";
+import type { MvpAgentReviewPacket } from "./features/mvp/api/mvpContracts";
 import type {
   AdminWorkflowApprovals,
   AuditReconstruction,
@@ -610,6 +611,22 @@ export function listAgentRuns(input: {
 export function getAgentRun(projectId: string, workspaceId: string, runId: string): Promise<AgentRunResponse> {
   const params = new URLSearchParams({ project_id: projectId, workspace_id: workspaceId });
   return request<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}?${params.toString()}`);
+}
+
+export function getMvpAgentReviewPacket(input: {
+  assetId: string;
+  projectId?: string;
+  datasetVersionId?: string | null;
+  historyWindow?: string;
+}): Promise<MvpAgentReviewPacket> {
+  const params = new URLSearchParams({
+    project_id: input.projectId ?? "manufacturing-demo-project",
+    history_window: input.historyWindow ?? "24h",
+  });
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  return request<MvpAgentReviewPacket>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
+  );
 }
 
 export function getGovernanceOverview(
