@@ -5,8 +5,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
+from app.infra import live_predictive_maintenance_runtime as live_runtime
 from app.infra.live_predictive_maintenance_runtime import (
     LIVE_SOURCE_VERSION,
+    LiveDatasetIngestionAdapter,
     _materialize_runtime_results,
     active_overlay_asset_ids,
     read_complete_ticks,
@@ -88,6 +92,96 @@ def test_read_complete_ticks_respects_ingestion_checkpoint(tmp_path):
 
     assert len(ticks) == 1
     assert ticks[0][0] == datetime(2026, 8, 18, 5, 40, tzinfo=timezone.utc)
+
+
+def test_read_complete_ticks_excludes_active_overlay_asset_by_identity(tmp_path):
+    observed_at = "2026-08-18T05:30:00+00:00"
+    for line, asset in (
+        ("lineL01", "CMP-1"),
+        ("lineL02", "CNC-1"),
+        ("lineL03", "CNC-2"),
+    ):
+        _write(
+            tmp_path / f"sensor/facS01/{line}/sensor_stream.jsonl",
+            [{"asset_id": asset, "observed_at": observed_at}],
+        )
+
+    ticks = read_complete_ticks(
+        tmp_path,
+        expected_asset_ids={"CMP-1", "CNC-2"},
+        excluded_asset_ids={"CNC-1"},
+    )
+
+    assert len(ticks) == 1
+    assert {row["asset_id"] for row in ticks[0][1]} == {"CMP-1", "CNC-2"}
+
+
+def test_active_overlay_row_cannot_hide_missing_expected_asset(tmp_path):
+    observed_at = "2026-08-18T05:30:00+00:00"
+    for line, asset in (("lineL01", "CMP-1"), ("lineL02", "CNC-1")):
+        _write(
+            tmp_path / f"sensor/facS01/{line}/sensor_stream.jsonl",
+            [{"asset_id": asset, "observed_at": observed_at}],
+        )
+
+    ticks = read_complete_ticks(
+        tmp_path,
+        expected_asset_ids={"CMP-1", "CNC-2"},
+        excluded_asset_ids={"CNC-1"},
+    )
+
+    assert ticks == []
+
+
+def test_read_complete_ticks_rejects_unknown_identity_against_live_dataset(tmp_path):
+    observed_at = "2026-08-18T05:30:00+00:00"
+    _write(
+        tmp_path / "sensor/facS01/lineL01/sensor_stream.jsonl",
+        [
+            {"asset_id": "CNC-1", "observed_at": observed_at},
+            {"asset_id": "UNKNOWN-1", "observed_at": observed_at},
+        ],
+    )
+
+    with pytest.raises(ValueError, match="outside the live Dataset Version.*UNKNOWN-1"):
+        read_complete_ticks(tmp_path, expected_asset_ids={"CNC-1"})
+
+
+def test_live_dataset_adapter_derives_expected_identity_set_from_dataset(
+    tmp_path, monkeypatch
+):
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        live_runtime,
+        "_ensure_live_version",
+        lambda *_args, **_kwargs: ("dataset-1", "version-1"),
+    )
+    monkeypatch.setattr(live_runtime, "_latest_ingested_at", lambda *_args: None)
+    monkeypatch.setattr(
+        live_runtime,
+        "_dataset_asset_ids",
+        lambda *_args: {"CMP-1", "CNC-1", "CNC-2"},
+    )
+
+    def capture_ticks(_stream_root, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(live_runtime, "read_complete_ticks", capture_ticks)
+    adapter = LiveDatasetIngestionAdapter(
+        "postgresql://backend/live",
+        predictor_factory=lambda _asset_type: object(),
+        artifact_builder=lambda **_kwargs: {},
+    )
+
+    batch = adapter.prepare_batch(
+        stream_root=tmp_path,
+        active_overlay_assets={"CNC-1"},
+    )
+
+    assert captured["expected_asset_ids"] == {"CMP-1", "CNC-2"}
+    assert captured["excluded_asset_ids"] == {"CNC-1"}
+    assert batch["expected_asset_ids"] == {"CMP-1", "CNC-2"}
 
 
 def test_wall_clock_live_version_does_not_admit_future_accelerated_ticks(tmp_path):

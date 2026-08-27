@@ -671,13 +671,25 @@ def read_complete_ticks(
     after: datetime | None = None,
     not_after: datetime | None = None,
     expected_asset_count: int = EXPECTED_ASSET_COUNT,
+    expected_asset_ids: set[str] | None = None,
+    excluded_asset_ids: set[str] | None = None,
 ) -> list[tuple[datetime, list[dict[str, Any]]]]:
     """Read complete cross-line ticks from daemon ``sensor_stream.jsonl`` files.
 
     A daemon tick is committed only when every expected asset is present.  This
     prevents the database from seeing a half-written state while the 20 line
-    workers are still appending their records.
+    workers are still appending their records.  When the caller supplies the
+    canonical asset identities, completeness is checked by identity rather than
+    count and active Runtime Overlay equipment is removed before persistence.
     """
+
+    expected_ids = None if expected_asset_ids is None else set(expected_asset_ids)
+    excluded_ids = set(excluded_asset_ids or set())
+    if expected_ids is not None and expected_ids & excluded_ids:
+        overlap = ", ".join(sorted(expected_ids & excluded_ids))
+        raise ValueError(f"expected and excluded live asset identities overlap: {overlap}")
+    if expected_ids == set():
+        return []
 
     root = Path(stream_root).expanduser()
     files = sorted(root.glob("sensor/**/sensor_stream.jsonl"))
@@ -700,11 +712,31 @@ def read_complete_ticks(
                 if not_after is not None and observed_at > not_after:
                     continue
                 grouped[observed_at][asset_id] = payload
-    return [
-        (observed_at, list(by_asset.values()))
-        for observed_at, by_asset in sorted(grouped.items())
-        if len(by_asset) >= expected_asset_count
-    ]
+    complete: list[tuple[datetime, list[dict[str, Any]]]] = []
+    for observed_at, by_asset in sorted(grouped.items()):
+        if expected_ids is not None:
+            unexpected = set(by_asset) - expected_ids - excluded_ids
+            if unexpected:
+                rendered = ", ".join(sorted(unexpected))
+                raise ValueError(
+                    "gen_data stream tick contains asset identities outside the live "
+                    f"Dataset Version at {observed_at.isoformat()}: {rendered}"
+                )
+            if not expected_ids.issubset(by_asset):
+                continue
+            complete.append(
+                (observed_at, [by_asset[asset_id] for asset_id in sorted(expected_ids)])
+            )
+            continue
+
+        filtered = {
+            asset_id: payload
+            for asset_id, payload in by_asset.items()
+            if asset_id not in excluded_ids
+        }
+        if len(filtered) >= expected_asset_count:
+            complete.append((observed_at, list(filtered.values())))
+    return complete
 
 
 def active_overlay_asset_ids(stream_root: str | Path) -> set[str]:
@@ -2112,6 +2144,20 @@ def _latest_ingested_at(database_url: str, dataset_version_id: str) -> datetime 
     return None if row is None else row["observed_at"]
 
 
+def _dataset_asset_ids(database_url: str, dataset_version_id: str) -> set[str]:
+    psycopg, dict_row, _ = _postgres_modules()
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        _set_scope(connection)
+        rows = connection.execute(
+            "SELECT asset_id FROM pm_assets WHERE dataset_version_id=%s",
+            (dataset_version_id,),
+        ).fetchall()
+    asset_ids = {str(row["asset_id"]) for row in rows}
+    if not asset_ids:
+        raise RuntimeError("live Dataset Version has no canonical equipment identities")
+    return asset_ids
+
+
 def _insert_ticks(
     database_url: str,
     dataset_version_id: str,
@@ -2260,13 +2306,21 @@ class LiveDatasetIngestionAdapter:
             artifact_builder=self.artifact_builder,
         )
         latest = _latest_ingested_at(self.database_url, dataset_version_id)
+        canonical_asset_ids = _dataset_asset_ids(self.database_url, dataset_version_id)
+        unknown_overlay_assets = active_overlay_assets - canonical_asset_ids
+        if unknown_overlay_assets:
+            rendered = ", ".join(sorted(unknown_overlay_assets))
+            raise ValueError(
+                "Runtime Overlay checkpoint references equipment outside the live "
+                f"Dataset Version: {rendered}"
+            )
+        expected_asset_ids = canonical_asset_ids - active_overlay_assets
         ticks = read_complete_ticks(
             stream_root,
             after=latest,
             not_after=datetime.now(tz=timezone.utc) + MAX_LIVE_CLOCK_SKEW,
-            expected_asset_count=max(
-                1, EXPECTED_ASSET_COUNT - len(active_overlay_assets)
-            ),
+            expected_asset_ids=expected_asset_ids,
+            excluded_asset_ids=active_overlay_assets,
         )
         return {
             "database_url": self.database_url,
@@ -2274,6 +2328,7 @@ class LiveDatasetIngestionAdapter:
             "dataset_version_id": dataset_version_id,
             "stream_root": stream_root,
             "active_overlay_assets": active_overlay_assets,
+            "expected_asset_ids": expected_asset_ids,
             "ticks": ticks,
             "summary": {
                 "dataset_id": dataset_id,
