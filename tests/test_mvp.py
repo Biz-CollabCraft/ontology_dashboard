@@ -369,6 +369,56 @@ def test_cnc_sop_guidance_does_not_match_compressor_assets(service: FactorySigna
     assert service._inspection_guidance_for_fixture(fixture, artifact) == {}
 
 
+@pytest.mark.parametrize(
+    ("source_kind", "maturity", "expected_guidance"),
+    [
+        ("demo_sop_fixture", "fixture", True),
+        ("demo_sop_fixture", "draft", False),
+        ("site_sop", "approved", True),
+        ("site_sop", "draft", False),
+        ("site_sop", "retired", False),
+        ("industry_standard_reference", "approved", False),
+    ],
+)
+def test_inspection_sop_guidance_requires_displayable_maturity(
+    service: FactorySignalService,
+    source_kind: str,
+    maturity: str,
+    expected_guidance: bool,
+) -> None:
+    fixture = {
+        "equipment": {
+            "asset_type": "cnc",
+            "criticality": "high",
+        },
+        "operation_context": {
+            "production_impact": "high",
+        },
+        "expected": {
+            "predicted_failure_type": "failure_risk",
+        },
+    }
+    artifact = {
+        "asset_type": "cnc",
+        "predicted_failure_type": "failure_risk",
+        "status_grade": "warning",
+        "top_factors": [{"feature": "vibration_raw"}],
+        "evidence_payload": {
+            "component_hypotheses": [{"component_id": "rotating_assembly"}],
+        },
+    }
+    sop = {
+        **service.inspection_sops[0],
+        "source_kind": source_kind,
+        "maturity": maturity,
+    }
+    service.inspection_sops = [sop]
+
+    guidance = service._inspection_guidance_for_fixture(fixture, artifact)
+
+    assert ("rotating_assembly" in guidance) is expected_guidance
+
+
 def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(
     client: TestClient,
 ) -> None:

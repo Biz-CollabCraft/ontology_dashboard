@@ -482,7 +482,7 @@ class ManufacturingPredictiveMaintenanceService:
         }
         guidance_by_component: dict[str, dict[str, Any]] = {}
         for sop in self.inspection_sops:
-            if str(sop.get("source_kind")) not in {"demo_sop_fixture", "site_sop"}:
+            if not _is_displayable_inspection_sop(sop):
                 continue
             if not _matches_any(asset_type, sop.get("asset_types") or []):
                 continue
@@ -685,6 +685,15 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
 
 def _matches_any(value: str, candidates: list[Any]) -> bool:
     return value in {str(candidate) for candidate in candidates}
+
+
+def _is_displayable_inspection_sop(sop: dict[str, Any]) -> bool:
+    source_kind = str(sop.get("source_kind") or "")
+    maturity = str(sop.get("maturity") or "")
+    return (
+        (source_kind == "demo_sop_fixture" and maturity == "fixture")
+        or (source_kind == "site_sop" and maturity == "approved")
+    )
 
 
 # Temporary compatibility alias for integrations that still import the historical
