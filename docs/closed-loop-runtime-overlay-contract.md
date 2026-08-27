@@ -11,14 +11,14 @@ Prediction으로 연결하는 시스템 간 Target 계약이다.
 |---|---|
 | `closed-loop-domain-contract.md` | Recommendation, Decision, WorkOrder, MaintenanceAction, MaintenanceEvent의 상태와 불변식 |
 | `closed-loop-product-consumption-contract.md` | Product API/UI의 역할, Action, 상태·오류 소비 방식 |
-| 이 문서 | Closed-loop 완료 이벤트 → 대상 설비 Runtime Overlay → Backend 재추론 연결 |
+| 이 문서 | Closed-loop 완료 이벤트 → 대상 설비 Runtime Overlay → Generator 런타임 추론 및 Backend 판정 연결 |
 | `closed-loop-implementation-plan.md` | 구현 PR 순서와 담당자별 인계 |
 
 이 문서는 Canonical V3.1 또는 과거 Result/Evidence를 수정하는 계약이 아니다.
 Closed-loop가 발행하는 `maintenance.*` 기계 판독 계약은
 `contracts/schemas/maintenance-replay-event.schema.json`에서 versioned JSON Schema로
 고정한다. `gen_data`가 발행하는 `runtime_overlay.observations.available` 계약은 해당
-producer와 Backend consumer가 별도 Schema로 확정한다.
+producer와 Generator/Backend consumer가 별도 Schema로 확정한다.
 
 ## 2. 결정 요약
 
@@ -29,11 +29,11 @@ producer와 Backend consumer가 별도 Schema로 확정한다.
 - 정비 완료 후 Snapshot에 정비 효과를 반영한다.
 - 실제 시간만큼 기다리지 않고 **대상 설비 Overlay branch의 Simulation Clock만**
   Fast-forward하여 정비 후 Observation 생성을 재개하고 지속한다.
-- 필요한 Observation 수와 이력 충족 여부는 Backend Diagnosis가 현재 Model Artifact의
+- 필요한 Observation 수와 이력 충족 여부는 Generator 런타임 파이프라인이 현재 Model Artifact의
   `history_requirement.json`으로 계산한다. `gen_data`는 Model Artifact를 읽거나
   inference readiness를 판정하지 않는다.
-- Backend는 첫 번째 `inference-ready` Observation에서 신규 Runtime Prediction과
-  Product Result/Evidence를 생성한다.
+- Generator는 첫 번째 `inference-ready` Observation에서 신규 Runtime Prediction(`score`)을 산출하여
+  Backend로 `Prediction Result Batch`를 송신하고, Backend는 Threshold 적용을 통해 새 Product Result/Evidence를 생성한다 (Backend 수신 및 판정은 `후속 구현` 대상).
 - Canonical, 정비 전 Observation, 정비 전 Product Result/Evidence는 immutable하게
   보존한다.
 - 정비 완료 자체를 정상 판정으로 사용하지 않는다.
@@ -41,35 +41,21 @@ producer와 Backend consumer가 별도 Schema로 확정한다.
 ## 3. 전체 흐름
 
 ```text
-Canonical V3.1 Replay
-        ↓
-Runtime Observation
-        ↓
-Backend Runtime Prediction / Product Result / Evidence
-        ↓
-Recommendation → Decision → WorkOrder → MaintenanceAction
-        ↓
-maintenance.started
-        ↓
-대상 설비 Replay·Prediction pause
-        ↓
-maintenance.completed
-        ↓
-정비 효과를 대상 설비 Overlay Snapshot에 적용
-        ↓
-maintenance.replay_requested
-        ↓
-gen_data: 대상 설비 Overlay branch 생성 + Observation 지속 생성
-        ↓ 매 tick 또는 persisted batch
-runtime_overlay.observations.available
-        ↓
-Backend: 새 Observation마다 history_requirement 검증
-        ├─ 부족 + stream 진행 중: warming_up / 다음 Observation 대기
-        ├─ 유효 이력 확보 불가 확정: history_insufficient
-        └─ 충족: ready
-        ↓
-Backend Runtime Prediction / 새 Product Result / Evidence
+gen_data observation
+  → Generator preprocessing/runtime feature
+  → Generator model score inference
+  → Prediction Result Batch
+  → Backend threshold and decision (후속 구현)
+  → Diagnosis / Report / Evidence / Notification (후속 구현)
+  → 필요 시 Backend가 재학습 또는 후속 조치 지시 (후속 구현)
 ```
+
+Closed-loop 책임 원칙:
+- **추론 실행**: Generator (Preprocessing → Runtime Feature → Model score inference → Prediction Result Batch 송신)
+- **threshold 및 최종 판정**: Backend (후속 구현)
+- **유지보수·재학습 지시**: Backend (후속 구현)
+- **Overlay Observation 생성**: `gen_data` (관측 데이터 생성자, readiness 미판정)
+- **Report/Evidence/알림**: Backend (후속 구현)
 
 ## 4. Canonical과 Runtime Overlay 분리
 
@@ -161,7 +147,7 @@ Outbox에 적재한다.
 | `maintenance.started` | Closed-loop | `gen_data` Runtime Overlay adapter | 대상 설비 pause |
 | `maintenance.completed` | Closed-loop | `gen_data` Runtime Overlay adapter | 완료 사실과 effect 전달 |
 | `maintenance.replay_requested` | Closed-loop | `gen_data` Runtime Overlay adapter | restart/branch 생성 요청 |
-| `runtime_overlay.observations.available` | `gen_data` Runtime Overlay | Backend ingestion/diagnosis adapter | 생성 완료된 batch와 Observation 범위 인계. readiness 의미 없음 |
+| `runtime_overlay.observations.available` | `gen_data` Runtime Overlay | Generator / Backend ingestion adapter | 생성 완료된 batch와 Observation 범위 인계. readiness 의미 없음 |
 
 로컬 및 Mac mini 시연의 Closed-loop outbound transport는
 `app.maintenance_replay_dispatcher`가 담당한다. 이 worker는 현재 Organization/Project
@@ -175,21 +161,21 @@ durable append한다. 다른 Domain의 Outbox 이벤트는 claim하지 않는다
 만료 복구는 Backend Outbox worker가 담당한다. 이 JSONL transport는 adapter이므로 향후
 broker로 교체해도 Maintenance Domain event와 Schema는 변경하지 않는다.
 
-Backend Diagnosis는 `maintenance.*` 이벤트만 보고 Prediction하지 않는다.
+Generator 런타임 파이프라인은 `maintenance.*` 이벤트만 보고 Prediction하지 않는다.
 `runtime_overlay.observations.available`의 branch가 append-only Overlay 저장소에 반영된
-뒤 해당 Observation과 현재 Model Artifact를 읽어 history requirement를 평가한다.
+뒤 해당 Observation과 현재 Model Artifact의 `history_requirement.json`을 읽어 history requirement를 평가한다.
 `gen_data`는 Observation batch와 progress를 durable commit한 뒤 available 이벤트를
 발행한다. 같은 persistence를 사용하면 transactional outbox로 함께 commit하고, 다른
 persistence라면 recoverable delivery record와 idempotent publish retry를 사용해 데이터만
-남고 이벤트가 유실되는 dual-write gap을 막는다. Backend가 available 이벤트를 수신할 때
+남고 이벤트가 유실되는 dual-write gap을 막는다. Generator/Backend가 available 이벤트를 수신할 때
 저장 reference를 읽을 수 있어야 한다. 비동기 저장소의 일시적인 가시성 지연은 새 event를
 만들지 않고 동일 event의 멱등 consumer retry로 처리한다.
 
 `gen_data`는 `maintenance.replay_requested` 이후 해당 branch의 Simulation Clock 정책에
-따라 Observation을 계속 생성한다. `available`은 Backend가 저장된 Observation을 소비할
-수 있다는 뜻이며 inference-ready를 뜻하지 않는다. Backend가 이력이 부족하다고 판단해도
+따라 Observation을 계속 생성한다. `available`은 Generator/Backend가 저장된 Observation을 소비할
+수 있다는 뜻이며 inference-ready를 뜻하지 않는다. 이력이 부족하면 Generator는
 역방향 생성 요청을 발행하지 않고 다음 `available` Observation을 기다린다. 충분하면
-`ready`로 전이해 추론한다. Closed-loop 소유 이벤트는
+`ready`로 전이해 추론 점수를 계산하고 `Prediction Result Batch`를 Backend로 송신한다 (Backend 수신 및 Threshold 판정은 `후속 구현`). Closed-loop 소유 이벤트는
 `contracts/schemas/maintenance-replay-event.schema.json`을 따르며,
 Overlay Observation과 `runtime_overlay.observations.available`은 각각
 `contracts/schemas/runtime-overlay-observation.schema.json`과
@@ -400,19 +386,20 @@ Backend 호환용 최상위 센서 필드는 같은 값을 복사한 projection�
 
 - `restart_at`부터 새 `history_segment_id`를 시작한다.
 - 별도 계약이 없으면 정비 전 history를 정비 후 Rolling/Lag Feature에 섞지 않는다.
-- Backend Diagnosis만 현재 Model Artifact의 `history_requirement.json`을 읽고 최소
+- Generator 런타임 파이프라인이 현재 Model Artifact의 `history_requirement.json`을 읽고 최소
   Observation 수, lookback, partition/order와 유효성을 평가한다.
 - `gen_data`는 Runtime Overlay Observation을 지속 생성할 뿐 `history_requirement`을 소비하거나
   `ready`/`history_insufficient`를 판정하지 않는다.
 - 고정된 demo 숫자를 Model contract 대신 사용하지 않는다.
-- 요구 이력이 부족하고 Overlay stream이 진행 중이면 Backend는 `warming_up`으로 유지하고
+- 요구 이력이 부족하고 Overlay stream이 진행 중이면 Generator는 `warming_up`으로 유지하고
   이후 `available` Observation을 기다린다.
 - `history_insufficient`는 단순히 현재 row가 부족하다는 뜻이 아니다. Overlay stream이
   종료·실패했거나 Session 종료 조건, 데이터 유효성 문제 등으로 해당 history segment에서
   유효 이력을 더 이상 확보할 수 없음이 확정된 경우에만 사용한다. 그 종료/status 신호의
   기계 판독 handoff는 후속 versioned Schema에서 고정한다.
 - 요구 이력을 충족하지 못하면 heuristic이나 silent fallback으로 Prediction하지 않는다.
-- 첫 번째 `inference-ready` Observation에서 최초 Prediction을 정확히 한 번 생성한다.
+- 첫 번째 `inference-ready` Observation에서 최초 Runtime Prediction(`score`)을 정확히 한 번 생성하여 `Prediction Result Batch`로 송신한다.
+- Backend는 수신된 score에 Threshold Policy를 적용하여 신규 Product Result/Evidence를 생성한다 (Backend 수신 및 판정은 `후속 구현`).
 - 이후에는 정상 Runtime Prediction 주기를 유지한다.
 
 최초 Prediction 중복 방지 키는 최소 다음 식별자를 결합한다.
@@ -447,11 +434,12 @@ decision이다. 기존 Result의 `status_grade`와 Runtime Overlay 준비 상태
 |---|---|---|
 | 광우 / Closed-loop | Maintenance 상태, transaction, 단계별 Outbox 이벤트, 운영 lineage | Overlay 생성, Feature 계산, Prediction |
 | 성민 / `gen_data` Generator·Replay | 대상 설비 pause/branch, Snapshot effect, branch-local Fast-forward, 지속 Overlay Observation 생성/available | Model Artifact/history requirement 해석, readiness 판정, Product Result/Evidence |
-| 호범 / Backend Diagnosis | Overlay Observation 소비, history requirement/readiness 판정, Runtime Prediction, Product Result/Evidence | Maintenance 상태 변경, Overlay 센서 생성 |
+| Generator / Runtime Pipeline | Overlay Observation 전처리, Runtime Feature 추출, Model Artifact 기반 raw score 추론, `Prediction Result Batch` Outbox 송신 | Threshold 적용, 최종 이상 판정, Product Result/Evidence/Report/알림 생성 |
+| 호범 / Backend Diagnosis (후속 구현) | `Prediction Result Batch` 수신, Threshold 정책 적용, 최종 이상 판정, Diagnosis, Product Result/Evidence/Report/알림 생성, 재학습/후속 조치 지시 | Overlay 센서 생성, ML 피처 직접 계산/중복 추론 |
 | 우수 / Product API·UI·E2E | 진행 상태·결과 노출, 통합 시나리오 검증 | Domain 상태·Prediction 의미 재계산 |
 
-`ontology_dashboard/systems/generator`의 책임은 Feature/Label, training과 Model Artifact
-publish이며 Runtime Overlay 실행 주체가 아니다.
+`ontology_dashboard/systems/generator`의 책임은 Feature/Label, training, Model Artifact
+publish 및 Runtime Prediction Pipeline(추론 점수 계산 및 `Prediction Result Batch` 송신)이며 최종 이상 판정과 Report/Evidence 생성 주체가 아니다.
 
 ## 15. 완료 조건
 
@@ -465,11 +453,11 @@ publish이며 Runtime Overlay 실행 주체가 아니다.
 - [ ] Overlay Observation에 `source_kind`, branch, Maintenance lineage가 기록된다.
 - [ ] Overlay Observation은 Canonical 테이블과 분리된 append-only 저장소에 기록된다.
 - [ ] branch-aware read가 대상 설비의 정비 후 Canonical 미래 행을 다시 섞지 않는다.
-- [ ] Backend만 필요한 이력을 `history_requirement.json`에서 계산하고 readiness를 판정한다.
-- [ ] 이력 부족 시 Backend가 Prediction하지 않고 지속 생성되는 다음 Observation을 기다린다.
+- [ ] Generator만 필요한 이력을 `history_requirement.json`에서 계산하고 readiness를 판정한다.
+- [ ] 이력 부족 시 Generator가 Prediction하지 않고 지속 생성되는 다음 Observation을 기다린다.
 - [ ] `history_insufficient`가 일시적인 warming-up과 명확히 구분된다.
 - [ ] 정비 전후 Feature history가 암묵적으로 혼합되지 않는다.
-- [ ] 첫 inference-ready Observation에서 신규 Result/Evidence가 한 번 생성된다.
+- [ ] 첫 inference-ready Observation에서 신규 score 추론 및 Backend의 Result/Evidence 생성이 한 번 수행된다.
 - [ ] 정비 완료나 warming-up 상태가 정상 Prediction으로 표시되지 않는다.
 - [ ] 정비 전 Result부터 정비 후 Result까지 `maintenance_event_id`로 추적할 수 있다.
 

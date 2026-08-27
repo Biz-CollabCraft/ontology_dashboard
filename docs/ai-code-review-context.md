@@ -19,13 +19,12 @@ Biz-CollabCraft/gen_data
 Source Data Producer / Canonical V3.1 source-reference baseline
         ↓
 systems/generator
-semantic mapping / topology / feature / training
-→ immutable versioned Model Artifact
-        ↓ MODEL_ARTIFACT_URI
-systems/backend/app/diagnosis
-current observation + Model Artifact
-→ runtime inference
-→ Product Result Artifact / Evidence
+semantic mapping / topology / feature / training / runtime inference
+→ immutable versioned Model Artifact & Prediction Result Batch
+        ↓ POST /internal/prediction-results
+systems/backend
+threshold policy / anomaly decision / diagnosis
+→ Product Result Artifact / Evidence / Report / Notification
         ↓
 API / systems/frontend / Report
 ```
@@ -49,20 +48,18 @@ API / systems/frontend / Report
 - feature engineering / materialization
 - model training / evaluation
 - immutable versioned Model Artifact publish
+- Runtime Prediction Pipeline: 입력 처리, Preprocessing, Runtime Feature 계산, Model Artifact 기반 모델별 raw score 추론, 설비별 `Prediction Result Batch` 생성 및 Outbox 멱등 전달
 
-책임 끝점은 Model Artifact publish다. 사용자 요청 기반 runtime inference, Product Result Artifact,
-최종 Evidence 생성은 generator 책임이 아니다.
+Generator는 threshold 적용, 최종 이상 판정, Product Result Artifact, Evidence, Report 및 Dashboard 알림을 생성하지 않는다.
 
 ### `systems/backend`
 
 - 공식 FastAPI application host
-- injected `MODEL_ARTIFACT_URI` provider를 통한 Model Artifact consume
-- manifest/schema/checksum/compatibility 검증
-- current observation runtime inference
+- `Prediction Result Batch` 수신 및 멱등 저장 (`POST /internal/prediction-results`)
+- 모델별 score에 대한 Threshold Policy 적용 및 최종 이상 판정
 - Product Result Artifact / Evidence 최종 생성
+- Diagnosis, Report, Dashboard 알림 및 재학습/후속 조치 지시 소유
 - API/application composition
-
-`systems/backend/app/diagnosis`가 runtime prediction/Evidence의 canonical owner다.
 
 ### `systems/frontend`
 
@@ -101,8 +98,8 @@ API / systems/frontend / Report
 19. 고장 anchor 자체와 active failure interval을 예측 입력으로 사용하면 안 된다.
 20. Model package는 하위 stacked PR의 prediction package를 참조하면 안 된다.
 21. package facade가 ImportError를 None/빈 registry로 숨기면 안 된다.
-22. Generator internal API는 training/publish까지만 담당한다.
-23. runtime inference와 Result Artifact는 Backend diagnosis가 소유한다.
+22. Generator는 입력 처리, Preprocessing, Runtime Feature 계산, Model Artifact 기반 모델별 추론 및 Prediction Result Batch 전달까지 담당한다. Generator는 threshold 적용, 최종 이상 판정, Product Result Artifact, Evidence, Report 및 Dashboard 알림을 생성하지 않는다.
+23. Generator는 모델별 raw score를 생성한다. Backend는 전달받은 모델별 score에 threshold를 적용하고 최종 이상 여부를 판정하며, Diagnosis·Product Result Artifact·Evidence·Report·알림을 소유한다.
 24. Closed-loop 상태 머신은 Backend Domain이 canonical owner이며 Frontend가 role/state 조합으로 별도 상태
     머신을 구현하면 안 된다.
 25. Closed-loop Product Action은 Backend가 role + permission + object state + scope + lineage를 기준으로
@@ -113,8 +110,7 @@ API / systems/frontend / Report
     `process_engineer`와 `maintenance_technician`은 각각 현장 엔지니어와 정비 작업자로 구분한다.
 28. Closed-loop mutation 응답은 Persistence가 확정한 ID와 resulting state, replay 여부를 반환해 Frontend가
     운영 ID나 결과 상태를 추측하지 않게 한다.
-29. Runtime Overlay의 inference readiness는 Backend Diagnosis만 판정한다. `gen_data`가 Model Artifact 또는
-    `history_requirement.json`을 읽거나 Observation availability를 `ready`로 선언하면 안 된다.
+29. gen_data는 관측 데이터 파일을 생성한다. Generator는 입력 파일의 준비 상태와 계약 무결성을 검증하고 모델 추론을 수행한다. Backend는 Prediction Result Batch 수신 이후 threshold·최종 판정·후속 조치를 담당한다.
 30. `systems/backend/app`이 제품 Backend Python package의 유일한 canonical root이며, `common`은 둘 이상의 도메인에서 재사용되는 비업무 cross-cutting 요소에 한해 승격한다 (도메인 고유 개념은 도메인이 계속 소유).
 31. 도메인 간 임의 `*_service.py` 또는 `*_repository.py`/`*_adapter.py` direct import를 금지하며, public port/interface를 경유한다.
 32. 도메인 서비스/로직 레이어에서 `FastAPI`(`HTTPException` 등) 및 DB/Storage 기술 라이브러리를 직접 import/의존하지 않는다.
@@ -131,17 +127,13 @@ API / systems/frontend / Report
 20·21번은 PR 단독 import 및 실행 가능성이라는 기존 코드 결함에 근거하며,
 ADR 승인 여부와 무관하게 즉시 적용되는 merge blocker다.
 
-22·23번은 ADR-001과 ADR-002를 근거로 한다.
-
-> ADR-001/002는 현재 `Proposed` 상태다. 22·23번 목표 계약은 승인 및 관련
-> 구현 PR 적용 전까지 현행 구현 계약을 대체하거나 자동 merge blocker로
-> 사용하지 않는다.
+22·23번은 ADR-003을 근거로 한다.
 
 24~28번은
 [`closed-loop-product-consumption-contract.md`](./closed-loop-product-consumption-contract.md)를 근거로 하며,
 Closed-loop Domain/API/UI를 변경하는 PR에서 적용한다.
 
-29번은 [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md)를
+29번은 [`closed-loop-runtime-overlay-contract.md`](./closed-loop-runtime-overlay-contract.md) 및 ADR-003을
 근거로 하며 정비 후 Observation/Prediction handoff를 변경하는 PR에서 적용한다.
 
 30~36번은 `docs/architecture.md` §5 Backend Domain-First 구조 계약, §9 Architecture CI 목표 및 [`backend-migration-map.md`](./backend-migration-map.md)를 근거로 한다.
@@ -228,6 +220,11 @@ CI PASS는 supporting evidence이지 correctness의 증명이 아니다.
 21. Event/Activity API의 기존 key가 Closed-loop 추가로 삭제·rename되거나 shape-breaking 변경되는가?
 22. `process_manager`, `process_engineer`, `maintenance_technician`의 제품 역할과 Action 경계가 섞이는가?
 23. mutation 이후 Frontend가 ID나 resulting state를 합성·추측해야 하는 응답 계약인가?
+24. Generator가 threshold 또는 `is_anomaly`를 생성하는가? (Generator는 모델별 raw score만 산출해야 함)
+25. Generator가 Product Result Artifact·Evidence·Report를 생성하는가? (Backend 소유권)
+26. Backend가 Generator 대신 Model Artifact를 로드해 중복 추론하는가? (중복 추론 금지, Generator Prediction Result Batch 소비)
+27. `gen_data`가 추론 또는 최종 판정 책임을 침범하는가? (관측 데이터 생성에 국한)
+28. 모델별 결과가 `model_id` 기반 K-V 구조로 전달되는가? (`PredictionResultBatchPayload.model_results` 딕셔너리 구조)
 
 ## 8. v1 레거시 출력 형식 — v2에서는 사용하지 않음
 
