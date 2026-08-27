@@ -56,17 +56,19 @@ class FakeAssetDetailReadPort:
         self.calls.append(("latest_result_artifact", kwargs))
         return self.artifact
 
-    def feature_series(self, **kwargs: Any) -> dict[str, list[dict[str, Any]]]:
+    def feature_series(self, **kwargs: Any) -> dict[str, dict[str, Any]]:
         self.calls.append(("feature_series", kwargs))
         return {
-            "rotation_raw": [
-                {
-                    "observed_at": "2026-08-01T00:00:00+09:00",
-                    "value": 1820.0,
-                    "quality_status": "good",
-                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00",
-                }
-            ]
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T21:00:00+09:00",
+                        "value": 1810.0,
+                        "quality_status": "good",
+                    }
+                ],
+            }
         }
 
     def runtime_prediction_history(self, **kwargs: Any) -> list[dict[str, Any]]:
@@ -162,6 +164,49 @@ def test_service_requires_product_result_artifact() -> None:
 
 
 def test_composer_builds_view_model_without_generator_raw_file_dependency() -> None:
+    operation_context = {
+        "context_id": "production-planning-context-v1",
+        "source_type": "synthetic_capacity_model",
+        "temporal_scope": {
+            "snapshot_id": "OPS-SNAPSHOT-2026-08-01-A-B",
+            "timezone": "Asia/Seoul",
+            "valid_from": "2026-08-01T00:00:00+09:00",
+            "valid_to": "2026-08-02T00:00:00+09:00",
+            "generated_at": "2026-08-01T00:00:00+09:00",
+        },
+        "production_plan": {
+            "plan_id": "PLAN-2026-08-01-GS-DEMO",
+            "plan_date": "2026-08-01",
+            "planned_units": 16200,
+            "product_mix": [{"variant": "M", "share": 0.3, "planned_units": 4860}],
+        },
+        "capacity_model": {
+            "active_asset_count": 80,
+            "planned_operating_hours": 16,
+            "oee": 0.846,
+            "standard_cycle_minutes_per_unit": 4.0,
+            "asset_units_per_hour": 12.69,
+            "daily_capacity_units": 16200,
+            "basis": "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준",
+        },
+        "event_impact": {
+            "event_id": "EVT-GS-002",
+            "equipment_id": "CNC-S04-L04-01",
+            "line": "S04-L04",
+            "product_variant": "M",
+            "screen_priority": "shift_inspection",
+            "impact_status": "estimated",
+            "estimated_lost_units": 25,
+            "basis": {
+                "estimated_downtime_minutes": 120,
+                "asset_units_per_hour": 12.69,
+                "formula": "120 / 60 * 12.69",
+            },
+        },
+        "limitations": [
+            "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action."
+        ],
+    }
     payload = compose_asset_detail_view_model(
         asset={
             "asset_id": "CMP-S03-L03-01",
@@ -173,14 +218,16 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
         },
         result_artifact=ARTIFACT,
         feature_series={
-            "rotation_raw": [
-                {
-                    "observed_at": "2026-08-01T00:00:00+09:00",
-                    "value": 1820.0,
-                    "quality_status": "good",
-                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00",
-                }
-            ]
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T21:00:00+09:00",
+                        "value": 1810.0,
+                        "quality_status": "good",
+                    }
+                ],
+            }
         },
         runtime_prediction_history=[
             {
@@ -192,6 +239,7 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
                 "source_ref": "diagnosis-runtime-history://CMP-S03-L03-01/2026-08-01T00:00:00+09:00",
             }
         ],
+        operation_context=operation_context,
         data_status={
             "source": "canonical",
             "is_stale": False,
@@ -201,9 +249,122 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
     )
 
     assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["inspection_targets"][0]["component_id"] == "rotating_assembly"
+    assert payload["inspection_targets"][0]["component_label"] == "회전/진동 계통"
+    assert payload["inspection_targets"][0]["location_label"] is None
+    assert payload["inspection_targets"][0]["inspection_method"] is None
+    assert payload["inspection_targets"][0]["basis_refs"] == [
+        "factor.1.rotation_raw",
+        "sensor_evidence.sensors.rotation_raw",
+    ]
+    assert payload["inspection_targets"][0]["source_ref"].endswith("#component_hypotheses[0]")
+    assert (
+        payload["inspection_targets"][0]["unavailable_reason"]
+        == "maintenance_inspection_location_contract_unavailable"
+    )
+    assert payload["operation_context"]["source_type"] == "synthetic_capacity_model"
+    assert payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
     assert payload["risk_series"][0]["source_ref"].startswith("diagnosis-runtime-history://")
-    assert "features[].series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
+    assert "features[].history.points" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
     assert "risk_series" not in {gap["field"] for gap in payload["evidence"]["gaps"]}
+
+
+def test_composer_excludes_current_instant_across_timezone_offsets() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        feature_series={
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T15:00:00Z",
+                        "value": 1820.0,
+                        "quality_status": "good",
+                    },
+                    {
+                        "observed_at": "2026-07-31T14:00:00Z",
+                        "value": 1800.0,
+                        "quality_status": "good",
+                    },
+                ],
+            }
+        },
+    )
+
+    history = next(
+        feature["history"] for feature in payload["features"] if feature["key"] == "rotation_raw"
+    )
+    assert [point["observed_at"] for point in history["points"]] == ["2026-07-31T14:00:00Z"]
+    assert history["window"] == {
+        "requested": "24h",
+        "anchor_observed_at": "2026-07-31T15:00:00Z",
+        "requested_start": "2026-07-30T15:00:00Z",
+        "requested_end": "2026-07-31T15:00:00Z",
+        "actual_start": "2026-07-31T14:00:00Z",
+        "actual_end": "2026-07-31T14:00:00Z",
+        "point_count": 1,
+        "coverage_status": "partial",
+    }
+
+
+def test_composer_filters_feature_history_to_requested_window() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        feature_series={
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-30T14:59:59Z",
+                        "value": 1700.0,
+                        "quality_status": "good",
+                    },
+                    {
+                        "observed_at": "2026-07-31T14:00:00Z",
+                        "value": 1800.0,
+                        "quality_status": "good",
+                    },
+                ],
+            }
+        },
+        history_window="24h",
+    )
+
+    history = next(
+        feature["history"] for feature in payload["features"] if feature["key"] == "rotation_raw"
+    )
+    assert [point["observed_at"] for point in history["points"]] == ["2026-07-31T14:00:00Z"]
+    assert history["window"]["requested"] == "24h"
+    assert history["window"]["actual_start"] == "2026-07-31T14:00:00Z"
+    assert history["window"]["point_count"] == 1
+    assert history["window"]["coverage_status"] == "partial"
+
+
+def test_composer_rejects_conflicting_points_for_same_instant() -> None:
+    with pytest.raises(ValueError, match="conflicting feature history"):
+        compose_asset_detail_view_model(
+            asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+            result_artifact=ARTIFACT,
+            feature_series={
+                "rotation_raw": {
+                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                    "points": [
+                        {
+                            "observed_at": "2026-07-31T14:00:00Z",
+                            "value": 1800.0,
+                            "quality_status": "good",
+                        },
+                        {
+                            "observed_at": "2026-07-31T23:00:00+09:00",
+                            "value": 1810.0,
+                            "quality_status": "good",
+                        },
+                    ],
+                }
+            },
+        )
 
 
 @pytest.mark.parametrize(
@@ -340,7 +501,119 @@ def test_composer_projects_canonical_evidence_gaps_to_view_model_schema() -> Non
     operations_gap = next(
         gap for gap in payload["evidence"]["gaps"] if gap["field"] == "equipment_history"
     )
-    assert operations_gap["owner_domain"] == "report"
+    assert operations_gap["owner_domain"] == "operations"
+
+
+def test_composer_preserves_asset_criticality_context_and_review_priority() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "criticality": "high",
+            "criticality_basis": ["equipment master tier"],
+            "criticality_source": "equipment_master",
+            "maintenance_context": {
+                "last_maintenance_days_ago": 12,
+                "similar_events_30d": None,
+                "open_work_order_exists": False,
+            },
+            "operation_context": {
+                "load_level": None,
+                "runtime_hours_7d": None,
+                "production_impact": "high",
+            },
+        },
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["asset"]["criticality"] == "high"
+    assert payload["asset"]["criticality_basis"] == ["equipment master tier"]
+    assert payload["maintenance_context"]["open_work_order_exists"] is False
+    assert payload["operation_context"]["production_impact"] == "high"
+    assert payload["review_priority"] == {
+        "level": "immediate",
+        "reasons": [
+            "risk.status_grade=critical",
+            "asset.criticality=high",
+            "maintenance_context.open_work_order_exists=False",
+            "operation_context.production_impact=high",
+        ],
+        "source_fields": [
+            "risk.status_grade",
+            "asset.criticality",
+            "maintenance_context.open_work_order_exists",
+            "operation_context.production_impact",
+        ],
+    }
+
+
+def test_composer_does_not_default_missing_criticality_or_context() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["asset"]["criticality"] is None
+    assert payload["asset"]["criticality_basis"] == []
+    assert payload["asset"]["criticality_source"] == "unknown"
+    assert payload["maintenance_context"] == {
+        "last_maintenance_days_ago": None,
+        "similar_events_30d": None,
+        "open_work_order_exists": None,
+    }
+    assert payload["operation_context"] == {
+        "load_level": None,
+        "runtime_hours_7d": None,
+        "production_impact": None,
+    }
+    assert payload["review_priority"] is None
+    gaps = {(gap["field"], gap["reason"], gap["owner_domain"]) for gap in payload["evidence"]["gaps"]}
+    assert ("asset.criticality", "criticality_missing_or_unresolved", "equipment") in gaps
+    assert ("review_priority", "review_priority_inputs_missing_or_unresolved", "report") in gaps
+
+
+def test_composer_does_not_synthesize_missing_criticality_basis() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "criticality": "medium",
+            "criticality_source": "equipment_master",
+            "operation_context": {"production_impact": "medium"},
+        },
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["asset"]["criticality"] == "medium"
+    assert payload["asset"]["criticality_basis"] == []
+    gaps = {(gap["field"], gap["reason"], gap["owner_domain"]) for gap in payload["evidence"]["gaps"]}
+    assert ("asset.criticality_basis", "criticality_basis_missing_or_unresolved", "equipment") in gaps
+
+
+def test_composer_requires_production_impact_for_review_priority() -> None:
+    payload = compose_asset_detail_view_model(
+        asset={
+            "asset_id": "CMP-S03-L03-01",
+            "asset_type": "compressor",
+            "criticality": "high",
+            "criticality_basis": ["equipment master tier"],
+            "criticality_source": "equipment_master",
+            "maintenance_context": {"last_maintenance_days_ago": 12},
+        },
+        result_artifact=ARTIFACT,
+        data_status={"source": "canonical", "is_stale": False, "warnings": []},
+    )
+
+    assert list(Draft202012Validator(SCHEMA).iter_errors(payload)) == []
+    assert payload["review_priority"] is None
+    gaps = {(gap["field"], gap["reason"], gap["owner_domain"]) for gap in payload["evidence"]["gaps"]}
+    assert ("review_priority", "review_priority_inputs_missing_or_unresolved", "report") in gaps
 
 
 def test_composer_preserves_nullable_baseline_as_gap_without_type_error() -> None:
@@ -353,14 +626,16 @@ def test_composer_preserves_nullable_baseline_as_gap_without_type_error() -> Non
         asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
         result_artifact=artifact,
         feature_series={
-            "rotation_raw": [
-                {
-                    "observed_at": "2026-08-01T00:00:00+09:00",
-                    "value": 1820.0,
-                    "quality_status": "good",
-                    "source_ref": "observation://CMP-S03-L03-01.rotation_raw/2026-08-01T00:00:00+09:00",
-                }
-            ]
+            "rotation_raw": {
+                "source_ref": "observation://CMP-S03-L03-01.rotation_raw",
+                "points": [
+                    {
+                        "observed_at": "2026-07-31T21:00:00+09:00",
+                        "value": 1810.0,
+                        "quality_status": "good",
+                    }
+                ],
+            }
         },
         data_status={"source": "canonical", "is_stale": False, "warnings": []},
     )
@@ -377,13 +652,16 @@ def test_composer_rejects_raw_generator_feature_series_sources() -> None:
             asset={"asset_id": "CMP-S03-L03-01", "asset_type": "compressor"},
             result_artifact=ARTIFACT,
             feature_series={
-                "rotation_raw": [
-                    {
-                        "observed_at": "2026-08-01T00:00:00+09:00",
-                        "value": 1820.0,
-                        "source_ref": "gen_data/output/sensor/CMP-S03-L03-01/_log.jsonl",
-                    }
-                ]
+                "rotation_raw": {
+                    "source_ref": "gen_data/output/sensor/CMP-S03-L03-01/_log.jsonl",
+                    "points": [
+                        {
+                            "observed_at": "2026-07-31T21:00:00+09:00",
+                            "value": 1810.0,
+                            "quality_status": "good",
+                        }
+                    ],
+                }
             },
         )
 
@@ -395,9 +673,9 @@ def test_composer_marks_missing_series_as_gaps_without_synthesizing_values() -> 
     )
 
     gap_fields = {gap["field"] for gap in payload["evidence"]["gaps"]}
-    assert {"features[].series", "risk_series", "equipment_history"} <= gap_fields
+    assert {"features[].history.points", "risk_series", "equipment_history"} <= gap_fields
     assert payload["risk_series"] == []
-    assert all(feature["series"] == [] for feature in payload["features"])
+    assert all(feature["history"]["points"] == [] for feature in payload["features"])
 
 
 def test_composer_preserves_empty_recommendation_as_gap_without_synthesizing_action() -> None:

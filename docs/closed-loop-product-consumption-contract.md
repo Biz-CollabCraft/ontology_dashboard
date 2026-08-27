@@ -127,6 +127,11 @@ Domain에 `failed` / `cancelled` 상태가 존재한다는 이유만으로 Front
 ## 4. `available_actions` 계약
 
 Frontend는 role, permission, Domain transition을 조합해 가능한 버튼을 자체 계산하지 않는다.
+Asset detail ViewModel의 `asset.criticality`, `maintenance_context`, `operation_context`,
+`review_priority`는 화면 검토 순서와 근거 설명을 위한 read-model field다. 이 값으로
+Recommendation disposition, WorkOrder priority, WorkOrder ID, MaintenanceAction state 또는
+`available_actions`를 Frontend에서 합성하지 않는다. 값이 없으면 `null`/gap으로 표시하고
+Backend가 제공하지 않은 `normal`, `low`, `false`, `0` 기본값을 만들지 않는다.
 
 Backend는 현재 요청 principal과 대상 객체를 기준으로 최소 다음 조건을 평가한다.
 

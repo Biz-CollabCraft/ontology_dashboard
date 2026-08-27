@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.diagnosis.contracts import load_fixture
+from app.diagnosis.contracts import derive_features, load_fixture
 from app.diagnosis.domain import (
     build_evidence_package,
     build_product_result_artifact,
@@ -61,6 +63,11 @@ class ManufacturingPredictiveMaintenanceService:
             payload["event_id"]: payload
             for payload in (load_fixture(path) for path in fixture_paths)
         }
+        operation_context_paths = sorted((fixture_root / "operation_context").glob("*.json"))
+        self.operation_contexts = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in operation_context_paths
+        ]
         # Historical Gold regression and manufacturing Ontology projection must
         # remain exactly GS-001..GS-008. Showcase Project fixtures are available
         # through project_fixtures and project-scoped APIs, never this alias.
@@ -181,6 +188,7 @@ class ManufacturingPredictiveMaintenanceService:
         project_id: str = "manufacturing-demo-project",
         *,
         dataset_version_id: str | None = None,
+        history_window: str = "24h",
     ) -> dict[str, Any]:
         fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
         artifact = self._product_result_artifact(fixture)
@@ -191,11 +199,14 @@ class ManufacturingPredictiveMaintenanceService:
             feature_series=self._feature_series_for_fixture(fixture, artifact),
             runtime_prediction_history=self._runtime_history_for_fixture(fixture, artifact),
             equipment_history=self._equipment_history_for_fixture(fixture),
+            operation_context=self._operation_context_for_fixture(fixture, artifact) or fixture.get("operation_context"),
+            closed_loop=fixture.get("closed_loop"),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
                 "warnings": [],
             },
+            history_window=history_window,
         )
 
     def patch_equipment_state(
@@ -246,20 +257,42 @@ class ManufacturingPredictiveMaintenanceService:
     @staticmethod
     def _asset_summary_for_fixture(fixture: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
         equipment = fixture.get("equipment") or {}
+        last_maintenance_days_ago = _days_between(
+            equipment.get("last_maintenance_date"),
+            artifact["observed_at"],
+        )
+        estimated_downtime = equipment.get("estimated_downtime_minutes")
         return {
             "asset_id": artifact["asset_id"],
-            "asset_type": artifact["asset_type"],
+            "asset_type": equipment.get("asset_type") or artifact["asset_type"],
             "display_name": equipment.get("display_name") or artifact["asset_id"],
-            "site_id": "Manufacturing Demo",
-            "cell_id": equipment.get("line") or artifact.get("cell_id") or "unknown",
+            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Manufacturing Demo",
+            "cell_id": equipment.get("cell_id") or equipment.get("line") or artifact.get("cell_id") or "unknown",
             "observed_at": artifact["observed_at"],
+            "criticality": equipment.get("criticality"),
+            "criticality_basis": ["fixture equipment.criticality"]
+            if equipment.get("criticality") in {"low", "medium", "high"}
+            else [],
+            "criticality_source": "equipment_master"
+            if equipment.get("criticality") in {"low", "medium", "high"}
+            else "unknown",
+            "maintenance_context": {
+                "last_maintenance_days_ago": last_maintenance_days_ago,
+                "similar_events_30d": None,
+                "open_work_order_exists": None,
+            },
+            "operation_context": {
+                "load_level": None,
+                "runtime_hours_7d": None,
+                "production_impact": _production_impact(estimated_downtime),
+            },
         }
 
     @staticmethod
     def _feature_series_for_fixture(
         fixture: dict[str, Any],
         artifact: dict[str, Any],
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> dict[str, dict[str, Any]]:
         feature_keys = list(
             dict.fromkeys(
                 [
@@ -272,25 +305,43 @@ class ManufacturingPredictiveMaintenanceService:
                 ]
             )
         )
-        rows = fixture.get("history") or [fixture.get("observation") or {}]
-        series: dict[str, list[dict[str, Any]]] = {}
+        rows = fixture.get("history") or []
+        current_observed_at = str(artifact["observed_at"])
+        current_instant = _timestamp_instant(current_observed_at)
+        series: dict[str, dict[str, Any]] = {}
         for key in feature_keys:
-            points = []
+            points_by_instant: dict[datetime, dict[str, Any]] = {}
             for row in rows:
-                if key not in row:
+                derived_row: dict[str, Any] = {}
+                try:
+                    derived_row = derive_features(row)
+                except (TypeError, ValueError):
+                    derived_row = {}
+                source_row = {**derived_row, **row}
+                if key not in source_row:
                     continue
-                points.append(
-                    {
-                        "observed_at": str(row.get("timestamp") or artifact["observed_at"]),
-                        "value": row.get(key),
-                        "quality_status": "unknown"
-                        if artifact.get("status_grade") == "data_quality_hold"
-                        else "good",
-                        "source_ref": f"observation-contract://{artifact['asset_id']}/{key}",
-                    }
-                )
+                observed_at = str(row.get("timestamp") or current_observed_at)
+                instant = _timestamp_instant(observed_at)
+                if instant >= current_instant:
+                    continue
+                point = {
+                    "observed_at": observed_at,
+                    "value": source_row.get(key),
+                    "quality_status": "unknown"
+                    if artifact.get("status_grade") == "data_quality_hold"
+                    else "good",
+                }
+                if instant in points_by_instant and points_by_instant[instant] != point:
+                    raise ValueError(
+                        f"conflicting fixture history points at instant={instant.isoformat()}"
+                    )
+                points_by_instant[instant] = point
+            points = [points_by_instant[instant] for instant in sorted(points_by_instant)]
             if points:
-                series[str(key)] = points
+                series[str(key)] = {
+                    "source_ref": f"observation-contract://{artifact['asset_id']}/{key}",
+                    "points": points,
+                }
         return series
 
     @staticmethod
@@ -331,6 +382,72 @@ class ManufacturingPredictiveMaintenanceService:
                 "source": "equipment-maintenance-context",
             }
         ]
+
+    def _operation_context_for_fixture(
+        self,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        equipment = fixture.get("equipment") or {}
+        project_id = self._fixture_project_id(fixture)
+        dataset_version = str(fixture.get("dataset_version") or "")
+        observed_at = _parse_iso_datetime(
+            str((fixture.get("observation") or {}).get("timestamp") or artifact.get("observed_at") or "")
+        )
+        if observed_at is None:
+            return None
+
+        for context in self.operation_contexts:
+            scope = context.get("scope") or {}
+            if str(scope.get("project_id") or "") != project_id:
+                continue
+            if dataset_version and str(scope.get("dataset_version") or "") != dataset_version:
+                continue
+            temporal_scope = context.get("temporal_scope") or {}
+            valid_from = _parse_iso_datetime(str(temporal_scope.get("valid_from") or ""))
+            valid_to = _parse_iso_datetime(str(temporal_scope.get("valid_to") or ""))
+            if valid_from is None or valid_to is None or not (valid_from <= observed_at < valid_to):
+                continue
+            fixture_context = fixture.get("operation_context") or {}
+            event_impact = fixture_context.get("event_impact") or _event_impact_for_fixture(context, fixture, equipment)
+            capacity = context.get("capacity_model") or {}
+            planning_window = capacity.get("planning_window") or {}
+            oee_basis = capacity.get("oee_basis") or {}
+            cycle_time_basis = capacity.get("cycle_time_basis") or {}
+            asset_count_basis = capacity.get("asset_count_basis") or {}
+            production_impact = fixture_context.get("production_impact")
+            if production_impact not in {"none", "low", "medium", "high"}:
+                production_impact = _production_impact(
+                    (event_impact or {}).get("basis", {}).get("estimated_downtime_minutes")
+                    if event_impact
+                    else equipment.get("estimated_downtime_minutes")
+                )
+            return {
+                "load_level": fixture_context.get("load_level"),
+                "runtime_hours_7d": fixture_context.get("runtime_hours_7d"),
+                "production_impact": production_impact,
+                "context_id": context["context_id"],
+                "source_type": context["source_type"],
+                "temporal_scope": temporal_scope,
+                "production_plan": context["production_plan"],
+                "capacity_model": {
+                    "active_asset_count": asset_count_basis.get("active_asset_count"),
+                    "planned_operating_hours": planning_window.get("planned_operating_hours"),
+                    "oee": oee_basis.get("oee"),
+                    "standard_cycle_minutes_per_unit": cycle_time_basis.get("standard_cycle_minutes_per_unit"),
+                    "asset_units_per_hour": capacity.get("asset_units_per_hour"),
+                    "daily_capacity_units": capacity.get("daily_capacity_units"),
+                    "basis": (
+                        f"{asset_count_basis.get('active_asset_count')} assets, "
+                        f"{planning_window.get('planned_operating_hours')}h/day, "
+                        f"OEE {oee_basis.get('oee')}, "
+                        f"cycle {cycle_time_basis.get('standard_cycle_minutes_per_unit')}min 기준"
+                    ),
+                },
+                "event_impact": event_impact,
+                "limitations": context.get("limitations") or [],
+            }
+        return None
 
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
@@ -470,6 +587,61 @@ class ManufacturingPredictiveMaintenanceService:
         )
 
 
+def _timestamp_instant(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("fixture observation timestamps must include a timezone offset")
+    return parsed.astimezone(timezone.utc)
+
+
+def _days_between(start_date: Any, end_timestamp: str) -> int | None:
+    if not start_date:
+        return None
+    try:
+        start = datetime.fromisoformat(f"{start_date}T00:00:00+09:00")
+        end = datetime.fromisoformat(end_timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, (end.date() - start.date()).days)
+
+
+def _production_impact(estimated_downtime_minutes: Any) -> str | None:
+    if not isinstance(estimated_downtime_minutes, int) or isinstance(estimated_downtime_minutes, bool):
+        return None
+    if estimated_downtime_minutes >= 180:
+        return "high"
+    if estimated_downtime_minutes >= 90:
+        return "medium"
+    if estimated_downtime_minutes > 0:
+        return "low"
+    return "none"
+
+
 # Temporary compatibility alias for integrations that still import the historical
 # service name. New code should use ManufacturingPredictiveMaintenanceService.
 FactorySignalService = ManufacturingPredictiveMaintenanceService
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _event_impact_for_fixture(
+    context: dict[str, Any],
+    fixture: dict[str, Any],
+    equipment: dict[str, Any],
+) -> dict[str, Any] | None:
+    event_id = str(fixture.get("event_id") or "")
+    equipment_id = str(equipment.get("equipment_id") or "")
+    for impact in context.get("event_impacts") or []:
+        if str(impact.get("event_id") or "") == event_id:
+            return {**impact, "equipment_id": equipment_id or str(impact.get("equipment_id") or "")}
+    for impact in context.get("event_impacts") or []:
+        if str(impact.get("equipment_id") or "") == equipment_id:
+            return {**impact, "equipment_id": equipment_id}
+    return None

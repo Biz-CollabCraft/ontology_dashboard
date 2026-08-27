@@ -32,8 +32,8 @@ API를 호출해 직접 조립하면 다음 판단이 화면별로 갈라질 수
 - `risk.status_grade`는 모델/근거 기반 고장 위험도다.
 - `asset.criticality`는 고장 발생 시 제조 운영 영향도다.
 - `data_status.is_data_quality_hold`는 위험도가 아니라 데이터 품질 때문에 판단을 보류한 상태다.
-- `features[].current`는 현재 관측/판단 시점의 값이고, `features[].series`는 trend 표시용 이력이다. 두 값을 병합할 경우 중복 제거, 시간순 정렬, baseline 산정 범위를 계약으로 고정해야 한다.
-- `risk_series`, `features[].series`, `equipment_history`는 단일 Event Evidence만으로 항상 채워지지 않는다.
+- fixture 기준선 `40e37b1`에서 `features[].current`는 `{ observed_at, value, quality_status }` 현재 관측 객체이고, `features[].history`는 `{ source_ref, points }` 이력 envelope다. `history.points[]`는 current instant보다 이전인 관측치만 포함하며 current와 병합하지 않는다.
+- `risk_series`, `features[].history`, `equipment_history`는 단일 Event Evidence만으로 항상 채워지지 않는다.
 
 ### Observed Symptoms
 
@@ -118,6 +118,8 @@ Reference grounding:
 - Current repository MVP and architecture-review contracts already define the official surface as Overview / Objects / Operations / Event Executive Brief, with Product Result Artifact/Evidence provenance, role-specific workflow, and Backend-computed `available_actions`. This supports improving the existing Object/Action workflow instead of replacing it with a generic graph-first surface.
 
 Current implementation state to verify before execution:
+- Fixture clean-contract commit `40e37b1` is the prerequisite baseline for this plan. It changes `features[].current` to an observation object and uses `features[].history { source_ref, points }`; fixture adapter and canonical composer share the same pre-current, timezone-aware, duplicate-instant rejection invariants.
+- Focused backend contract/composer/MVP verification for that baseline recorded `64 passed`. Frontend typecheck and browser E2E remain unproven because local frontend dependencies were unavailable at the time of verification; this plan must close that evidence gap before claiming end-to-end adoption.
 - PR #107 has merged and introduced the MVP `AssetDetailViewModel` API, backend composer, and frontend consumption path. Start implementation from updated `main`, not from the superseded PR #100 direction.
 - PR #100 is superseded by the PR #107 `AssetDetailViewModel` direction. Items from PR #100 review must be rechecked against the latest PR #107/main code before remaining work is kept.
 - Already-addressed items such as `runtime_prediction_history` naming, nullable `evidence_field_id`, data-quality-hold mapping, and freshness unknown handling should be recorded as prerequisites or verification checks, not blindly reimplemented.
@@ -136,8 +138,8 @@ Simulation/replay ownership:
 
 ### Action Path
 
-1. PR #107 기준 코드에서 current/series, freshness, nullable field, data-quality hold의 잔존 이슈를 먼저 확인한다.
-2. `features[].current`와 `features[].series`의 표시/병합/정렬/중복 제거 규칙을 계약과 테스트로 고정한다.
+1. PR #107 및 fixture 기준선 `40e37b1`에서 current/history, freshness, nullable field, data-quality hold의 잔존 이슈를 먼저 확인한다.
+2. 이미 확정된 `features[].current` observation object와 `features[].history { source_ref, points }` 계약을 채택하고, frontend typecheck/adapter/browser 경로가 이를 그대로 소비하는지 검증한다.
 3. `asset.criticality`, `criticality_basis`, `criticality_source`, source/owner/gap 규칙을 schema/docs에 추가한다.
 4. composer가 criticality와 context를 보존하되, 결측 시 default를 만들지 않도록 한다.
 5. `operation_context`, `maintenance_context`, `review_priority`를 최소 필드로 추가하고, risk 값을 변경하지 않는 파생값임을 테스트한다.
@@ -176,7 +178,7 @@ In scope:
 - `AssetDetailViewModel` schema에 `asset.criticality` 의미와 출처를 명시한다.
 - 중요도 결측을 임의 기본값으로 채우지 않고 `evidence.gaps[]` 또는 `data_status.warnings[]`로 표현한다.
 - `risk`, `criticality`, `review_priority`의 의미를 문서에서 분리한다.
-- `features[].current`와 `features[].series`의 관계, trend 표시 병합, 정렬, 중복 제거, baseline 산정 범위를 명시한다.
+- `features[].current` observation object와 `features[].history { source_ref, points }`의 관계, pre-current/timezone/duplicate-instant invariant, baseline 산정 범위를 명시한다.
 - 운영/정비 맥락은 현재 source가 제공하는 범위에서 별도 context로 노출하고, 없으면 unavailable/gap으로 표시한다.
 - Objects/Operations/Report UI가 신규 context/review-priority를 소비하도록 수정하고, 같은 위험/근거/추천 설명의 중복을 줄인다.
 - PR100 코멘트에서 확인된 naming/null/freshness 문제는 최신 PR #107/main 기준 잔존 여부를 재검증한 뒤 필요한 항목만 유지한다.
@@ -195,17 +197,24 @@ Out of scope:
 
 ## Data Modeling Decisions
 
-### D0. `features[].current` and `features[].series` must not be ambiguous
+### D0. `features[].current` and `features[].history` have distinct roles
 
-`features[].current` is the current value at the ViewModel snapshot time.
-`features[].series` is the historical/trend series used by the UI.
+The fixture clean contract at `40e37b1` is the prerequisite baseline:
 
-Default contract:
-- Preserve `series` as history/trend input, not as an implicit replacement for `current`.
-- UI may render a trend that includes the current point, but the merge must be deterministic.
-- If history and current are merged for display, dedupe by `observed_at`, sort by `observed_at` ascending, and prefer the authoritative current value on timestamp collision.
-- Baseline calculation must use the contracted baseline/history input only. Do not silently add current into baseline computation unless the schema explicitly says so.
-- Add a regression case where history and current timestamps differ, including a GS-007-style scenario if it remains in the active fixture set.
+```text
+features[].current = { observed_at, value, quality_status }
+features[].history = { source_ref, points[] }
+history.points[] = { observed_at, value, quality_status }
+```
+
+Contract invariants:
+- `current` is the current observation at the ViewModel snapshot boundary, not a scalar copied into history.
+- `history.points[]` contains only observations strictly earlier than the current instant. Compare timezone-aware timestamps as UTC instants.
+- Do not merge current into history in the composer, fixture adapter, or frontend adapter. A chart may render current as a separately typed presentation point, but it must not mutate the contract or use collision preference to hide producer inconsistency.
+- Reject conflicting observations at the same instant instead of arbitrarily synthesizing or preferring one value.
+- Put shared provenance on the `history` envelope through `source_ref`; do not repeat source fields on every point or predeclare speculative backfill/overlay enums.
+- Baseline calculation must use its contracted baseline/history input only. Do not silently add current into baseline computation unless a future versioned contract explicitly says so.
+- Keep regression coverage for differing current/history timestamps, timezone-equivalent instants, current exclusion, and duplicate-instant conflicts.
 
 ### D1. Criticality is asset context, not risk
 
@@ -457,7 +466,7 @@ Verify whether these are already fixed in the base branch:
 
 Keep only unresolved items in the implementation PR.
 
-### Task 1: Fix Current/Series Contract
+### Task 1: Adopt And Verify Current/History Fixture Contract
 
 **Files:**
 - Modify: `contracts/schemas/asset-detail-view-model.schema.json`
@@ -466,26 +475,35 @@ Keep only unresolved items in the implementation PR.
 - Test: `tests/test_asset_detail_view_model_contract.py`
 - Test: `tests/test_asset_detail_view_model_composer.py`
 
-- [ ] **Step 1: Define current and series semantics**
+- [x] **Step 1: Establish the fixture clean-contract baseline**
 
-Document and test that `features[].current` is the current snapshot value and
-`features[].series` is trend/history data.
+Commit `40e37b1` defines `features[].current` as an observation object and
+`features[].history` as a source envelope with historical points. Backend focused
+verification recorded `64 passed`.
 
-- [ ] **Step 2: Add display-merge rules when needed**
+- [ ] **Step 2: Verify frontend contract and adapter adoption**
 
-If the UI needs a trend including the current point, the ViewModel or adapter
-must dedupe by `observed_at`, sort ascending, and prefer current on timestamp
-collision.
+Confirm TypeScript contracts and adapters consume `current` and `history` without
+reconstructing the removed `series` shape, repeating provenance per point, or
+merging current into history. Run typecheck and adapter tests with dependencies installed.
 
-- [ ] **Step 3: Keep baseline separate**
+- [ ] **Step 3: Verify chart presentation keeps roles separate**
 
-Do not include current in baseline calculation unless a future schema revision
-explicitly defines that behavior.
+If a chart renders both history and current, represent current as a separate
+presentation role. Do not mutate `history.points`, silently dedupe conflicts, or
+prefer current on timestamp collision.
 
-- [ ] **Step 4: Add timestamp regression coverage**
+- [ ] **Step 4: Preserve baseline and timestamp invariants**
 
-Add a fixture/test where history and current timestamps differ, including a
-GS-007-style case if that scenario remains available in the active fixture set.
+Keep current out of baseline calculation unless a future versioned contract says
+otherwise. Retain regression coverage for pre-current history, timezone-equivalent
+instants, differing timestamps, and duplicate-instant conflict rejection.
+
+- [ ] **Step 5: Close browser evidence gap**
+
+Run the MVP browser/E2E path against the clean fixture contract and record the
+result. Until frontend typecheck, adapter tests, and browser E2E pass, contract
+adoption is only partially verified.
 
 ### Task 2: Extend Criticality Contract
 
@@ -657,7 +675,7 @@ Expected verification:
 - [ ] **Step 4: Report evidence boundary**
 
 Final report must state:
-- implemented: current/series contract, criticality, context, review priority, UI consumption, docs/tests
+- implemented: current/history fixture contract, criticality, context, review priority, UI consumption, docs/tests
 - not implemented: operating read-port/PostgreSQL source wiring, TSDB/KQL platform, RUL, LLM/agent implementation
 - criticality is operational context, not failure probability or model risk
 
@@ -682,7 +700,7 @@ These are explicitly not part of the criticality/context/review-priority UI impl
 
 1. Start from the latest main containing merged PR #107 and its current `AssetDetailViewModel` API/composer/frontend path.
 2. Recheck PR #100 review remnants and keep only unresolved items.
-3. Fix `features[].current` and `features[].series` semantics.
+3. Adopt fixture baseline `40e37b1`, verify `features[].current`/`features[].history` frontend consumption, and close the typecheck/adapter/E2E evidence gap.
 4. Add criticality source/owner/gap contract.
 5. Add context and review-priority composition.
 6. Update frontend contracts and UI consumption, removing duplicated explanations.
