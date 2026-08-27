@@ -7,6 +7,24 @@
     "outbox_id": null
   },
   "emitted_at": "2026-08-25T11:55:05Z",
+  "model_set": {
+    "model_set_id": "model-set-v1",
+    "model_set_version": "1.0.0",
+    "models": [
+      {
+        "model_id": "pdm-lightgbm",
+        "model_version": "pdm-lightgbm-v1.0",
+        "required": true,
+        "model_artifact_manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      },
+      {
+        "model_id": "pdm-xgboost",
+        "model_version": "pdm-xgboost-v1.0",
+        "required": true,
+        "model_artifact_manifest_sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a"
+      }
+    ]
+  },
   "results": [
     {
       "event_id": "evt-0102030405060708",
@@ -17,7 +35,7 @@
         "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
         "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
       },
-      "payload_sha256": "06be14e8743bfb69219969c0629c9a2426bf9e54d85ac094cc22336ff719f82a",
+      "payload_sha256": "6d1beb9ed4f2fef2629b8a9b1f9f517fcb71235da98f60c502f48d81baf63c8d",
       "output_status": "predicted",
       "score": 0.08,
       "model_id": "pdm-lightgbm",
@@ -25,8 +43,10 @@
       "model_artifact_manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
       "feature_schema_version": "v1.0",
       "history_requirement_version": "v1.0",
-      "feature_schema_sha256": null,
-      "history_requirement_sha256": null,
+      "label_schema_version": "v1.0",
+      "feature_schema_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "history_requirement_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "label_schema_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
       "lineage": {
         "simulation_session_id": null,
         "overlay_branch_id": null,
@@ -46,7 +66,7 @@
         "uri": "contracts/test-vectors/generator-runtime-prediction-v1/input/protocol-sample-01.jsonl",
         "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
       },
-      "payload_sha256": "ff1b93f974e92f8b7b9e2cd73e81528d6435bee17baac7cd7043e38dd1625681",
+      "payload_sha256": "e7c8d9730b153acfffbd7527725c2e3b610277bd9530c2edc1a32b7a64558e0a",
       "output_status": "predicted",
       "score": 0.85,
       "model_id": "pdm-xgboost",
@@ -54,8 +74,10 @@
       "model_artifact_manifest_sha256": "bcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789a",
       "feature_schema_version": "v1.0",
       "history_requirement_version": "v1.0",
-      "feature_schema_sha256": null,
-      "history_requirement_sha256": null,
+      "label_schema_version": "v1.0",
+      "feature_schema_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "history_requirement_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "label_schema_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
       "lineage": {
         "simulation_session_id": null,
         "overlay_branch_id": null,

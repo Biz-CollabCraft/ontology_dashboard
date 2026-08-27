@@ -172,7 +172,8 @@
     "cleanup_deleted_paths": { "type": "array" },
     "cleanup_failed_paths": { "type": "array" },
     "model_set_id": { "type": ["string", "null"] },
-    "model_set_version": { "type": ["string", "null"] }
+    "model_set_version": { "type": ["string", "null"] },
+    "source_context": { "type": ["object", "null"] }
   },
   "additionalProperties": false
 }

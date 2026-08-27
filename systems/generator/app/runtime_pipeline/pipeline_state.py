@@ -34,6 +34,7 @@ class PipelineStateManager:
         run_id: str,
         job_id: str,
         source_ref: ArtifactReference,
+        source_context: Optional[Any] = None,
     ) -> PipelineStateManager:
         """Create a fresh PipelineRunState instance."""
         state = PipelineRunState(
@@ -42,6 +43,7 @@ class PipelineStateManager:
             status="pending",
             current_stage=None,
             source_ref=source_ref,
+            source_context=source_context,
             stages={},
             prediction_results=[],
             prediction_delivery_status=None,
@@ -174,6 +176,11 @@ class PipelineStateManager:
         dataset_id: str = "canonical-ai4i-v1",
         dataset_version: str = "canonical-ai4i-physics-v3.1",
         pipeline_contract_version: str = "generator-prediction-result-v1",
+        source_kind: Optional[str] = None,
+        source_contract_version: Optional[str] = None,
+        source_schema_version: Optional[str] = None,
+        lineage_json: Optional[str] = None,
+        source_context: Optional[Any] = None,
         status: Literal["resumable", "debug_only", "cleanup_pending", "completed", "invalidated"] = "resumable",
     ) -> PipelineCheckpoint:
         """Atomically construct and bind a verified stage checkpoint."""
@@ -208,6 +215,11 @@ class PipelineStateManager:
             dataset_id=dataset_id,
             dataset_version=dataset_version,
             pipeline_contract_version=pipeline_contract_version,
+            source_kind=source_kind or (self.state.checkpoint.source_kind if self.state.checkpoint else self.state.source_context.source_kind),
+            source_contract_version=source_contract_version or (self.state.checkpoint.source_contract_version if self.state.checkpoint else None),
+            source_schema_version=source_schema_version or (self.state.checkpoint.source_schema_version if self.state.checkpoint else None),
+            lineage_json=lineage_json or (self.state.checkpoint.lineage_json if self.state.checkpoint else None),
+            source_context=source_context or (self.state.checkpoint.source_context if self.state.checkpoint else self.state.source_context),
             last_completed_stage=stage_name,  # type: ignore
             next_stage=next_stage,  # type: ignore
             status=status,

@@ -95,10 +95,14 @@ class PipelineManager:
         job_id: str,
         source_uri: str,
         source_checksum: str,
+        dataset_id: str,
+        dataset_version: str,
+        pipeline_contract_version: str,
+        source_kind: str,
+        source_contract_version: str,
+        source_schema_version: str,
         size_bytes: Optional[int] = None,
-        dataset_id: str = "canonical-ai4i-v1",
-        dataset_version: str = "canonical-ai4i-physics-v3.1",
-        pipeline_contract_version: str = "generator-prediction-result-v1",
+        lineage: Optional[Any] = None,
     ) -> PipelineQueueItem:
         """Enqueue new observation source file for processing."""
         from systems.generator.generator_config import PATHS
@@ -118,6 +122,10 @@ class PipelineManager:
             dataset_id=dataset_id,
             dataset_version=dataset_version,
             pipeline_contract_version=pipeline_contract_version,
+            source_kind=source_kind,
+            source_contract_version=source_contract_version,
+            source_schema_version=source_schema_version,
+            lineage=lineage,
         )
 
     def retry_failed_job(self, job_id: str) -> PipelineQueueItem:

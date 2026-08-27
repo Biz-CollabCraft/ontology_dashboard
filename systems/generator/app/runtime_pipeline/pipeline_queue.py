@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from systems.generator.generator_config import PATHS
@@ -21,6 +22,8 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PipelineQueueItem,
+    PredictionResultLineage,
+    RuntimeSourceContext,
     compute_source_identity,
     now_utc_iso,
 )
@@ -70,7 +73,11 @@ class PipelineQueue:
                     size_bytes INTEGER,
                     dataset_id TEXT NOT NULL,
                     dataset_version TEXT NOT NULL,
-                    pipeline_contract_version TEXT NOT NULL DEFAULT 'generator-prediction-result-v1',
+                    pipeline_contract_version TEXT NOT NULL,
+                    source_kind TEXT NOT NULL,
+                    source_contract_version TEXT NOT NULL,
+                    source_schema_version TEXT NOT NULL,
+                    lineage_json TEXT NOT NULL,
                     detected_at TEXT NOT NULL,
                     sequence INTEGER NOT NULL,
                     attempt INTEGER NOT NULL DEFAULT 1,
@@ -90,8 +97,41 @@ class PipelineQueue:
                 conn.execute("ALTER TABLE queue_items ADD COLUMN source_identity TEXT")
             if "size_bytes" not in columns:
                 conn.execute("ALTER TABLE queue_items ADD COLUMN size_bytes INTEGER")
+            context_columns_added = False
             if "pipeline_contract_version" not in columns:
-                conn.execute("ALTER TABLE queue_items ADD COLUMN pipeline_contract_version TEXT DEFAULT 'generator-prediction-result-v1'")
+                conn.execute("ALTER TABLE queue_items ADD COLUMN pipeline_contract_version TEXT")
+                context_columns_added = True
+            if "source_kind" not in columns:
+                conn.execute("ALTER TABLE queue_items ADD COLUMN source_kind TEXT")
+                context_columns_added = True
+            if "source_contract_version" not in columns:
+                conn.execute("ALTER TABLE queue_items ADD COLUMN source_contract_version TEXT")
+                context_columns_added = True
+            if "source_schema_version" not in columns:
+                conn.execute("ALTER TABLE queue_items ADD COLUMN source_schema_version TEXT")
+                context_columns_added = True
+            if "lineage_json" not in columns:
+                conn.execute("ALTER TABLE queue_items ADD COLUMN lineage_json TEXT")
+                context_columns_added = True
+
+            # Old queue rows predate the canonical source-context contract.  Their
+            # provenance cannot be inferred safely, so isolate them instead of
+            # silently labelling them as live sensor input.
+            if context_columns_added:
+                conn.execute(
+                    """
+                    UPDATE queue_items
+                    SET status = 'dead_letter',
+                        error_code = 'PIPELINE_SOURCE_CONTEXT_MIGRATION_REQUIRED',
+                        updated_at = ?
+                    WHERE pipeline_contract_version IS NULL
+                       OR source_kind IS NULL
+                       OR source_contract_version IS NULL
+                       OR source_schema_version IS NULL
+                       OR lineage_json IS NULL
+                    """,
+                    (now_utc_iso(),),
+                )
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_queue_status_seq ON queue_items (status, sequence)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_queue_source_identity ON queue_items (source_identity, status)")
@@ -99,6 +139,66 @@ class PipelineQueue:
 
     def normalize_uri(self, uri: str) -> str:
         return str(Path(uri).as_posix()).strip()
+
+    def _row_to_item(self, r: sqlite3.Row, conn: Optional[sqlite3.Connection] = None) -> PipelineQueueItem:
+        job_id = r["job_id"]
+        try:
+            raw_lineage = r["lineage_json"] if "lineage_json" in r.keys() else None
+            if raw_lineage is None:
+                raise ValueError("lineage_json is missing")
+            lineage_dict = json.loads(raw_lineage) if isinstance(raw_lineage, str) else (raw_lineage or {})
+            lineage = PredictionResultLineage.model_validate(lineage_dict)
+            source_kind = r["source_kind"] if "source_kind" in r.keys() else None
+            source_contract_version = r["source_contract_version"] if "source_contract_version" in r.keys() else None
+            source_schema_version = r["source_schema_version"] if "source_schema_version" in r.keys() else None
+            pipeline_contract_version = r["pipeline_contract_version"] if "pipeline_contract_version" in r.keys() else None
+            if not all((source_kind, source_contract_version, source_schema_version, pipeline_contract_version)):
+                raise ValueError("canonical source context columns are missing")
+
+            # Validate complete source context
+            RuntimeSourceContext(
+                source_uri=r["source_uri"],
+                source_checksum=r["source_checksum"],
+                source_kind=source_kind,
+                source_contract_version=source_contract_version,
+                source_schema_version=source_schema_version,
+                pipeline_contract_version=pipeline_contract_version,
+                lineage=lineage,
+            )
+
+            return PipelineQueueItem(
+                job_id=job_id,
+                source_uri=r["source_uri"],
+                source_checksum=r["source_checksum"],
+                source_identity=r["source_identity"] if "source_identity" in r.keys() else None,
+                size_bytes=r["size_bytes"] if "size_bytes" in r.keys() else None,
+                dataset_id=r["dataset_id"],
+                dataset_version=r["dataset_version"],
+                pipeline_contract_version=pipeline_contract_version,
+                source_kind=source_kind,
+                source_contract_version=source_contract_version,
+                source_schema_version=source_schema_version,
+                lineage=lineage,
+                detected_at=r["detected_at"],
+                sequence=r["sequence"],
+                attempt=r["attempt"],
+                retry_of_job_id=r["retry_of_job_id"] if "retry_of_job_id" in r.keys() else None,
+                status=r["status"],
+                error_code=r["error_code"],
+            )
+        except Exception as exc:
+            logger.error(f"[PipelineQueue] Corrupted source context in queue item '{job_id}': {exc}")
+            if conn is not None:
+                conn.execute(
+                    "UPDATE queue_items SET status = 'dead_letter', error_code = 'PIPELINE_SOURCE_CONTEXT_CORRUPTED', updated_at = ? WHERE job_id = ?",
+                    (now_utc_iso(), job_id),
+                )
+                conn.commit()
+            raise PipelineQueueItemInvalidError(
+                f"Queue item '{job_id}' source context corrupted: {exc}",
+                details=[{"job_id": job_id, "error": str(exc)}],
+                retryable=False,
+            ) from exc
 
     def enqueue(
         self,
@@ -110,9 +210,13 @@ class PipelineQueue:
         dataset_id: str = "canonical-ai4i-v1",
         dataset_version: str = "canonical-ai4i-physics-v3.1",
         pipeline_contract_version: str = "generator-prediction-result-v1",
+        source_kind: str = "live_sensor",
+        source_contract_version: str = "observation-source-v1",
+        source_schema_version: str = "observation-source-v1",
+        lineage: PredictionResultLineage | dict[str, Any] | None = None,
         retry_of_job_id: Optional[str] = None,
     ) -> PipelineQueueItem:
-        """Enqueue a new completed observation source file item with source identity deduplication."""
+        """Enqueue a new completed observation source file item with source identity deduplication and source context."""
         clean_job_id = job_id.strip()
         clean_uri = self.normalize_uri(source_uri)
         clean_checksum = source_checksum.strip()
@@ -129,6 +233,25 @@ class PipelineQueue:
                 details=[{"source_uri": clean_uri}],
             )
 
+        # Validate lineage model
+        if isinstance(lineage, dict):
+            lineage_obj = PredictionResultLineage.model_validate(lineage)
+        elif isinstance(lineage, PredictionResultLineage):
+            lineage_obj = lineage
+        else:
+            lineage_obj = PredictionResultLineage()
+
+        # Validate source context semantics
+        RuntimeSourceContext(
+            source_uri=clean_uri,
+            source_checksum=clean_checksum,
+            source_kind=source_kind,
+            source_contract_version=source_contract_version,
+            source_schema_version=source_schema_version,
+            pipeline_contract_version=pipeline_contract_version,
+            lineage=lineage_obj,
+        )
+
         # Infer size_bytes if not passed and file exists locally
         computed_size = size_bytes
         if computed_size is None:
@@ -144,9 +267,14 @@ class PipelineQueue:
             dataset_id=dataset_id,
             dataset_version=dataset_version,
             pipeline_contract_version=pipeline_contract_version,
+            source_contract_version=source_contract_version,
+            source_schema_version=source_schema_version,
+            source_kind=source_kind,
+            lineage=lineage_obj,
         )
         dedup_key = f"{clean_uri}:{clean_checksum}"
         now = now_utc_iso()
+        lineage_json = json.dumps(lineage_obj.model_dump(mode="json"), ensure_ascii=False)
 
         with self._lock:
             try:
@@ -188,6 +316,10 @@ class PipelineQueue:
                         dataset_id=dataset_id,
                         dataset_version=dataset_version,
                         pipeline_contract_version=pipeline_contract_version,
+                        source_kind=source_kind,
+                        source_contract_version=source_contract_version,
+                        source_schema_version=source_schema_version,
+                        lineage=lineage_obj,
                         detected_at=now,
                         sequence=next_seq,
                         attempt=1,
@@ -199,9 +331,10 @@ class PipelineQueue:
                         """
                         INSERT INTO queue_items (
                             job_id, source_uri, source_checksum, dedup_key, source_identity, size_bytes,
-                            dataset_id, dataset_version, pipeline_contract_version, detected_at, sequence,
-                            attempt, retry_of_job_id, status, error_code, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            dataset_id, dataset_version, pipeline_contract_version, source_kind,
+                            source_contract_version, source_schema_version, lineage_json, detected_at,
+                            sequence, attempt, retry_of_job_id, status, error_code, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             item.job_id,
@@ -213,6 +346,10 @@ class PipelineQueue:
                             item.dataset_id,
                             item.dataset_version,
                             item.pipeline_contract_version,
+                            item.source_kind,
+                            item.source_contract_version,
+                            item.source_schema_version,
+                            lineage_json,
                             item.detected_at,
                             item.sequence,
                             item.attempt,
@@ -233,7 +370,7 @@ class PipelineQueue:
                 raise PipelineQueuePersistError(f"작업 큐 저장 실패: {exc}") from exc
 
     def retry_failed_job(self, job_id: str) -> PipelineQueueItem:
-        """Atomically re-enqueue a failed or dead_letter job as a new queue item."""
+        """Atomically re-enqueue a failed or dead_letter job as a new queue item while preserving source context."""
         now = now_utc_iso()
         with self._lock:
             with self._get_connection() as conn:
@@ -255,9 +392,14 @@ class PipelineQueue:
                         details=[{"job_id": job_id, "status": status}],
                     )
 
+                # Validate the complete persisted context before releasing any
+                # uniqueness keys. Legacy/corrupt rows must remain isolated and
+                # cannot acquire invented live-sensor provenance during retry.
+                original_item = self._row_to_item(row, conn)
+
                 # Release unique constraints on old record while preserving the record
                 old_dedup = row["dedup_key"]
-                old_identity = row["source_identity"] if "source_identity" in row.keys() else None
+                old_identity = original_item.source_identity
                 archived_dedup = f"archived:{job_id}:{old_dedup}"
                 archived_identity = f"archived:{job_id}:{old_identity}" if old_identity else None
                 conn.execute(
@@ -269,8 +411,13 @@ class PipelineQueue:
                 cur = conn.execute("SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM queue_items")
                 next_seq = cur.fetchone()["next_seq"]
 
-                contract_ver = row["pipeline_contract_version"] if "pipeline_contract_version" in row.keys() and row["pipeline_contract_version"] else "generator-prediction-result-v1"
-                size_b = row["size_bytes"] if "size_bytes" in row.keys() else None
+                contract_ver = original_item.pipeline_contract_version
+                source_kind = original_item.source_kind
+                source_contract_ver = original_item.source_contract_version
+                source_schema_ver = original_item.source_schema_version
+                lineage_obj = original_item.lineage
+                raw_lineage = json.dumps(lineage_obj.model_dump(mode="json"), ensure_ascii=False)
+                size_b = original_item.size_bytes
 
                 new_job_id = f"{job_id}-retry-{uuid4().hex[:6]}"
                 new_item = PipelineQueueItem(
@@ -282,6 +429,10 @@ class PipelineQueue:
                     dataset_id=row["dataset_id"],
                     dataset_version=row["dataset_version"],
                     pipeline_contract_version=contract_ver,
+                    source_kind=source_kind,
+                    source_contract_version=source_contract_ver,
+                    source_schema_version=source_schema_ver,
+                    lineage=lineage_obj,
                     detected_at=now,
                     sequence=next_seq,
                     attempt=1,
@@ -293,9 +444,10 @@ class PipelineQueue:
                     """
                     INSERT INTO queue_items (
                         job_id, source_uri, source_checksum, dedup_key, source_identity, size_bytes,
-                        dataset_id, dataset_version, pipeline_contract_version, detected_at, sequence,
-                        attempt, retry_of_job_id, status, error_code, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        dataset_id, dataset_version, pipeline_contract_version, source_kind,
+                        source_contract_version, source_schema_version, lineage_json, detected_at,
+                        sequence, attempt, retry_of_job_id, status, error_code, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_item.job_id,
@@ -307,6 +459,10 @@ class PipelineQueue:
                         new_item.dataset_id,
                         new_item.dataset_version,
                         new_item.pipeline_contract_version,
+                        new_item.source_kind,
+                        new_item.source_contract_version,
+                        new_item.source_schema_version,
+                        raw_lineage if isinstance(raw_lineage, str) else json.dumps(raw_lineage),
                         new_item.detected_at,
                         new_item.sequence,
                         new_item.attempt,
@@ -349,23 +505,7 @@ class PipelineQueue:
                 )
                 conn.commit()
 
-                contract_ver = row["pipeline_contract_version"] if "pipeline_contract_version" in row.keys() and row["pipeline_contract_version"] else "generator-prediction-result-v1"
-                return PipelineQueueItem(
-                    job_id=row["job_id"],
-                    source_uri=row["source_uri"],
-                    source_checksum=row["source_checksum"],
-                    source_identity=row["source_identity"] if "source_identity" in row.keys() else None,
-                    size_bytes=row["size_bytes"] if "size_bytes" in row.keys() else None,
-                    dataset_id=row["dataset_id"],
-                    dataset_version=row["dataset_version"],
-                    pipeline_contract_version=contract_ver,
-                    detected_at=row["detected_at"],
-                    sequence=row["sequence"],
-                    attempt=row["attempt"],
-                    retry_of_job_id=row["retry_of_job_id"] if "retry_of_job_id" in row.keys() else None,
-                    status="running",
-                    error_code=row["error_code"],
-                )
+                return self._row_to_item(row, conn)
 
     def mark_succeeded(self, job_id: str) -> None:
         now = now_utc_iso()
@@ -399,6 +539,14 @@ class PipelineQueue:
             )
             conn.commit()
 
+    def get_item(self, job_id: str) -> Optional[PipelineQueueItem]:
+        with self._lock, self._get_connection() as conn:
+            cur = conn.execute("SELECT * FROM queue_items WHERE job_id = ?", (job_id,))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            return self._row_to_item(row, conn)
+
     def list_items(self, status: Optional[str] = None) -> list[PipelineQueueItem]:
         with self._lock, self._get_connection() as conn:
             if status:
@@ -409,25 +557,7 @@ class PipelineQueue:
             else:
                 cur = conn.execute("SELECT * FROM queue_items ORDER BY sequence ASC")
             rows = cur.fetchall()
-            return [
-                PipelineQueueItem(
-                    job_id=r["job_id"],
-                    source_uri=r["source_uri"],
-                    source_checksum=r["source_checksum"],
-                    source_identity=r["source_identity"] if "source_identity" in r.keys() else None,
-                    size_bytes=r["size_bytes"] if "size_bytes" in r.keys() else None,
-                    dataset_id=r["dataset_id"],
-                    dataset_version=r["dataset_version"],
-                    pipeline_contract_version=r["pipeline_contract_version"] if "pipeline_contract_version" in r.keys() and r["pipeline_contract_version"] else "generator-prediction-result-v1",
-                    detected_at=r["detected_at"],
-                    sequence=r["sequence"],
-                    attempt=r["attempt"],
-                    retry_of_job_id=r["retry_of_job_id"] if "retry_of_job_id" in r.keys() else None,
-                    status=r["status"],
-                    error_code=r["error_code"],
-                )
-                for r in rows
-            ]
+            return [self._row_to_item(r, conn) for r in rows]
 
     def recover_running_on_startup(self) -> int:
         """Reset any interrupted 'running' jobs back to 'queued' on startup."""

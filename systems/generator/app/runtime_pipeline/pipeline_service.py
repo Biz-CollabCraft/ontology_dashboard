@@ -28,6 +28,7 @@ from systems.generator.app.runtime_pipeline.prediction_batch_service import (
     EquipmentModelBatch,
     PredictionBatchService,
     PredictionBatchSummary,
+    build_external_prediction_batch,
     sort_prediction_result_items,
     to_external_result_item,
     validate_external_results_array,
@@ -52,7 +53,6 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineModelSetChangedError,
     PipelineModelSnapshotArtifactMissingError,
     PipelineModelSnapshotChecksumMismatchError,
-    PipelineModelSnapshotChecksumMismatchError,
     PipelineModelSnapshotIncompatibleError,
     PipelineNoActiveModelError,
     PipelineOutboxEventConflictError,
@@ -76,6 +76,8 @@ from systems.generator.app.runtime_pipeline.pipeline_repository import (
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ActiveModelSet,
+    ActiveModelSetSnapshot,
+    ActiveModelSnapshotItem,
     ArtifactReference,
     InternalModelPredictionResult,
     ModelSnapshotEntry,
@@ -88,6 +90,7 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PredictionResultLineage,
     PredictionResultProducer,
     PredictionResultSourceRef,
+    RuntimeSourceContext,
     SourceLineage,
     compute_source_identity,
     now_utc_iso,
@@ -298,10 +301,12 @@ class PipelineService:
 
             manifest_sha = art.manifest_checksum
 
-            f_schema_ver = art.feature_schema.get("feature_schema_version", "v1")
-            f_schema_sha = _compute_canonical_dict_sha256(art.feature_schema)
-            h_req_ver = art.history_requirement.get("history_requirement_version", "v1")
-            h_req_sha = _compute_canonical_dict_sha256(art.history_requirement)
+            f_schema_ver = (art.feature_schema or {}).get("feature_schema_version", "v1")
+            f_schema_sha = _compute_canonical_dict_sha256(art.feature_schema or {})
+            h_req_ver = (art.history_requirement or {}).get("history_requirement_version", "v1")
+            h_req_sha = _compute_canonical_dict_sha256(art.history_requirement or {})
+            l_schema_ver = (art.label_schema or {}).get("label_schema_version", getattr(art, "label_schema_version", "1.0.0") if hasattr(art, "label_schema_version") else "1.0.0")
+            l_schema_sha = _compute_canonical_dict_sha256(art.label_schema or {"model_id": model_id, "manifest_checksum": manifest_sha})
 
             snapshot[model_id] = {
                 "model_id": model_id,
@@ -311,6 +316,8 @@ class PipelineService:
                 "feature_schema_sha256": f_schema_sha,
                 "history_requirement_version": h_req_ver,
                 "history_requirement_sha256": h_req_sha,
+                "label_schema_version": l_schema_ver,
+                "label_schema_sha256": l_schema_sha,
             }
         return snapshot, artifacts
 
@@ -352,11 +359,30 @@ class PipelineService:
                 retryable=True,
             )
 
-        contract_ver = item.pipeline_contract_version or "generator-prediction-result-v1"
-        source_identity = item.source_identity or compute_source_identity(
-            actual_sha, item.dataset_id, item.dataset_version, contract_ver
-        )
+        contract_ver = item.pipeline_contract_version
         logical_source_uri = self.get_logical_source_uri(source_path)
+
+        runtime_source_context = RuntimeSourceContext(
+            source_uri=logical_source_uri,
+            source_checksum=actual_sha,
+            source_kind=item.source_kind,
+            source_contract_version=item.source_contract_version,
+            source_schema_version=item.source_schema_version,
+            pipeline_contract_version=contract_ver,
+            lineage=item.lineage,
+        )
+
+        source_identity = item.source_identity or compute_source_identity(
+            actual_sha,
+            item.dataset_id,
+            item.dataset_version,
+            contract_ver,
+            source_uri=logical_source_uri,
+            source_kind=item.source_kind,
+            source_contract_version=item.source_contract_version,
+            source_schema_version=item.source_schema_version,
+            lineage=item.lineage,
+        )
 
         # Load active model set pointer
         active_model_set = self.active_model_set_service.load_active_model_set()
@@ -370,6 +396,32 @@ class PipelineService:
                 retryable=False,
             )
 
+        active_snapshot_items = [
+            ActiveModelSnapshotItem(
+                model_id=self.prediction_service.resolve_model_id(bm),
+                model_version=current_snapshot[self.prediction_service.resolve_model_id(bm)]["model_version"],
+                required=active_model_set.models[bm].required if bm in active_model_set.models else True,
+                model_artifact_manifest_sha256=current_snapshot[self.prediction_service.resolve_model_id(bm)]["manifest_sha256"],
+            )
+            for bm in active_model_names
+        ]
+        active_model_set_snapshot = ActiveModelSetSnapshot(
+            model_set_id=active_model_set.model_set_id,
+            model_set_version=active_model_set.model_set_version,
+            models=active_snapshot_items,
+        )
+
+        model_schema_map = {}
+        for bm in active_model_names:
+            mid = self.prediction_service.resolve_model_id(bm)
+            snap_info = current_snapshot.get(mid, {})
+            model_schema_map[mid] = {
+                "feature_schema_sha256": snap_info.get("feature_schema_sha256"),
+                "history_requirement_sha256": snap_info.get("history_requirement_sha256"),
+                "label_schema_sha256": snap_info.get("label_schema_sha256"),
+                "label_schema_version": snap_info.get("label_schema_version"),
+            }
+
         # 2. Resumption Planning: Search for existing resumable run
         resumable_run = self.repository.find_resumable_run(source_identity)
         resumed_stage: Optional[str] = None
@@ -378,9 +430,15 @@ class PipelineService:
         if resumable_run:
             chk = self.repository.get_checkpoint(resumable_run.run_id) or resumable_run.checkpoint
             if chk:
-                if chk.source_checksum != actual_sha:
+                source_context_mismatch = (
+                    chk.source_checksum != actual_sha
+                    or (chk.source_kind and chk.source_kind != item.source_kind)
+                    or (chk.source_contract_version and chk.source_contract_version != item.source_contract_version)
+                    or (chk.source_schema_version and chk.source_schema_version != item.source_schema_version)
+                )
+                if source_context_mismatch:
                     logger.warning(
-                        f"[PipelineService] Source checksum changed for run '{resumable_run.run_id}'. "
+                        f"[PipelineService] Source context or checksum changed for run '{resumable_run.run_id}'. "
                         "Marking existing checkpoint as invalidated and starting fresh run."
                     )
                     chk.status = "invalidated"
@@ -426,6 +484,8 @@ class PipelineService:
             run_id = resumable_run.run_id
             manager = PipelineStateManager(resumable_run)
             manager.state.job_id = item.job_id
+            if not manager.state.source_context:
+                manager.state.source_context = runtime_source_context
 
             last_stg = checkpoint_to_resume.last_completed_stage
 
@@ -462,6 +522,7 @@ class PipelineService:
                 run_id=run_id,
                 job_id=item.job_id,
                 source_ref=source_ref,
+                source_context=runtime_source_context,
             )
             manager.start_run()
 
@@ -474,6 +535,11 @@ class PipelineService:
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
                 pipeline_contract_version=contract_ver,
+                source_kind=item.source_kind,
+                source_contract_version=item.source_contract_version,
+                source_schema_version=item.source_schema_version,
+                lineage_json=json.dumps(item.lineage.model_dump(mode="json")) if item.lineage else None,
+                source_context=runtime_source_context,
                 status="resumable",
             )
             if manager.state.checkpoint:
@@ -614,6 +680,11 @@ class PipelineService:
                     dataset_id=item.dataset_id,
                     dataset_version=item.dataset_version,
                     pipeline_contract_version=contract_ver,
+                    source_kind=item.source_kind,
+                    source_contract_version=item.source_contract_version,
+                    source_schema_version=item.source_schema_version,
+                    lineage_json=json.dumps(item.lineage.model_dump(mode="json")) if item.lineage else None,
+                    source_context=runtime_source_context,
                     status="resumable",
                 )
                 if manager.state.checkpoint:
@@ -763,6 +834,11 @@ class PipelineService:
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
                 pipeline_contract_version=contract_ver,
+                source_kind=item.source_kind,
+                source_contract_version=item.source_contract_version,
+                source_schema_version=item.source_schema_version,
+                lineage_json=json.dumps(item.lineage.model_dump(mode="json")) if item.lineage else None,
+                source_context=runtime_source_context,
                 status="resumable",
             )
             if manager.state.checkpoint:
@@ -837,6 +913,11 @@ class PipelineService:
                     dataset_id=item.dataset_id,
                     dataset_version=item.dataset_version,
                     pipeline_contract_version=contract_ver,
+                    source_kind=item.source_kind,
+                    source_contract_version=item.source_contract_version,
+                    source_schema_version=item.source_schema_version,
+                    lineage_json=json.dumps(item.lineage.model_dump(mode="json")) if item.lineage else None,
+                    source_context=runtime_source_context,
                     status="resumable",
                 )
                 if manager.state.checkpoint:
@@ -884,6 +965,9 @@ class PipelineService:
                     model_set_id=active_model_set.model_set_id,
                     model_set_version=active_model_set.model_set_version,
                     sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
+                    source_context=runtime_source_context,
+                    active_model_set_snapshot=active_model_set_snapshot,
+                    model_schema_map=model_schema_map,
                 )
                 manager.register_intermediate_outputs([batch_manifest_ref])
             else:
@@ -921,6 +1005,11 @@ class PipelineService:
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
                 pipeline_contract_version=contract_ver,
+                source_kind=item.source_kind,
+                source_contract_version=item.source_contract_version,
+                source_schema_version=item.source_schema_version,
+                lineage_json=json.dumps(item.lineage.model_dump(mode="json")) if item.lineage else None,
+                source_context=runtime_source_context,
                 status="resumable",
             )
             if manager.state.checkpoint:
@@ -968,12 +1057,9 @@ class PipelineService:
                 if staged_batches and asset_id in staged_batches:
                     batch_payload = staged_batches[asset_id]
                 else:
-                    items: list[PredictionResultItem] = []
-                    src_ref = PredictionResultSourceRef(uri=logical_source_uri, sha256=item.source_checksum)
-                    lineage_obj = PredictionResultLineage()
+                    internal_items: list[InternalModelPredictionResult] = []
                     if eq_batch.internal_results:
-                        for internal_r in eq_batch.internal_results:
-                            items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+                        internal_items = list(eq_batch.internal_results)
                     else:
                         for m_id, m_res in eq_batch.model_results.items():
                             internal_r = InternalModelPredictionResult(
@@ -996,21 +1082,13 @@ class PipelineService:
                                 error_code=m_res.error_code,
                                 error_message=m_res.error_message,
                             )
-                            items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+                            internal_items.append(internal_r)
 
-                    sorted_items = sort_prediction_result_items(items)
-                    validate_external_results_array(sorted_items)
-
-                    now_dt = datetime.now(timezone.utc)
-                    canonical_batch_seed = f"prediction-result-batch-v1:{run_id}:{asset_id}:{src_ref.sha256}:{','.join(it.event_id for it in sorted_items)}"
-                    batch_id = f"batch-{hashlib.sha256(canonical_batch_seed.encode('utf-8')).hexdigest()[:24]}"
-                    producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
-                    batch_payload = PredictionResultBatchPayload(
-                        contract_version="prediction-result-batch-v1",
-                        batch_id=batch_id,
-                        producer=producer,
-                        emitted_at=now_dt,
-                        results=sorted_items,
+                    batch_payload = build_external_prediction_batch(
+                        internal_results=internal_items,
+                        source_context=runtime_source_context,
+                        active_model_set_snapshot=active_model_set_snapshot,
+                        model_schema_map=model_schema_map,
                     )
 
                 prev_delivery = existing_delivery.get(asset_id)
@@ -1075,6 +1153,11 @@ class PipelineService:
                 dataset_id=item.dataset_id,
                 dataset_version=item.dataset_version,
                 pipeline_contract_version=contract_ver,
+                source_kind=item.source_kind,
+                source_contract_version=item.source_contract_version,
+                source_schema_version=item.source_schema_version,
+                lineage_json=json.dumps(item.lineage.model_dump(mode="json")) if item.lineage else None,
+                source_context=runtime_source_context,
                 status="completed",
             )
             if manager.state.checkpoint:

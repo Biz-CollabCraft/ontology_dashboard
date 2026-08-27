@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from systems.generator.app.runtime_pipeline.pipeline_manager import PipelineManager
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
+    SHA256_PATTERN,
     PipelineQueueItem,
     PipelineRunState,
+    PredictionResultLineage,
 )
 
 from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineBaseError
@@ -18,13 +20,49 @@ router = APIRouter(tags=["Runtime Pipeline"])
 
 
 class EnqueueRequest(BaseModel):
-    job_id: str = Field(..., description="Unique job identifier")
-    source_uri: str = Field(..., description="Path or URI of completed observation file")
-    source_checksum: str = Field(..., description="SHA-256 checksum of source file")
-    size_bytes: Optional[int] = Field(None, description="Optional source file size in bytes")
-    dataset_id: str = Field("canonical-ai4i-v1", description="Dataset identifier")
-    dataset_version: str = Field("canonical-ai4i-physics-v3.1", description="Dataset version")
-    pipeline_contract_version: str = Field("generator-prediction-result-v1", description="Pipeline contract version")
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str = Field(..., min_length=1, description="Unique job identifier")
+    source_uri: str = Field(..., min_length=1, description="Path or URI of completed observation file")
+    source_checksum: str = Field(..., pattern=SHA256_PATTERN, description="SHA-256 checksum of source file")
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay_overlay"] = Field(
+        ..., description="Source kind"
+    )
+    source_contract_version: str = Field(..., min_length=1, description="Source contract version")
+    source_schema_version: str = Field(..., min_length=1, description="Source schema version")
+    pipeline_contract_version: str = Field(..., min_length=1, description="Pipeline contract version")
+    dataset_id: str = Field(..., min_length=1, description="Dataset identifier")
+    dataset_version: str = Field(..., min_length=1, description="Dataset version")
+    size_bytes: Optional[int] = Field(None, ge=0, description="Optional source file size in bytes")
+    lineage: PredictionResultLineage = Field(default_factory=PredictionResultLineage, description="Overlay lineage metadata")
+
+    @field_validator("source_checksum")
+    @classmethod
+    def validate_non_zero_checksum(cls, v: str) -> str:
+        if v == "0" * 64:
+            raise ValueError("source_checksum cannot be all zeros.")
+        return v
+
+    @model_validator(mode="after")
+    def validate_overlay_lineage(self) -> EnqueueRequest:
+        if self.source_kind == "maintenance_replay_overlay":
+            lin = self.lineage
+            if (
+                not lin
+                or not lin.simulation_session_id
+                or not lin.overlay_branch_id
+                or not lin.history_segment_id
+                or not lin.maintenance_event_id
+                or not lin.maintenance_action_id
+                or lin.state_version is None
+                or lin.state_version < 1
+            ):
+                raise ValueError(
+                    "When source_kind is 'maintenance_replay_overlay', all 6 lineage fields "
+                    "(simulation_session_id, overlay_branch_id, history_segment_id, maintenance_event_id, "
+                    "maintenance_action_id, state_version >= 1) are required."
+                )
+        return self
 
 
 def get_manager() -> PipelineManager:
@@ -67,6 +105,10 @@ def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
             dataset_id=req.dataset_id,
             dataset_version=req.dataset_version,
             pipeline_contract_version=req.pipeline_contract_version,
+            source_kind=req.source_kind,
+            source_contract_version=req.source_contract_version,
+            source_schema_version=req.source_schema_version,
+            lineage=req.lineage,
         )
     except PipelineBaseError:
         raise

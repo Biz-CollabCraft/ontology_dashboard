@@ -7,6 +7,9 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+SHA256_PATTERN = r"^[a-f0-9]{64}$"
+
+
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -77,6 +80,42 @@ class ActiveModelSet(BaseModel):
     model_set_version: str = Field(..., min_length=1, description="Model set version string")
     updated_at: datetime = Field(..., description="ISO timestamp of last update")
     models: dict[str, ActiveModelConfig] = Field(..., min_length=1, description="Map of base model identifiers to active model config")
+
+
+class ActiveModelSnapshotItem(BaseModel):
+    """Snapshot entry for an active model included in an external Prediction Result Batch."""
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str = Field(..., min_length=1, description="Model identifier, e.g. pdm-lightgbm")
+    model_version: str = Field(..., min_length=1, description="Model version string")
+    required: bool = Field(True, description="Whether this model is required")
+    model_artifact_manifest_sha256: str = Field(..., pattern=SHA256_PATTERN, description="Model artifact manifest SHA-256")
+
+    @field_validator("model_artifact_manifest_sha256")
+    @classmethod
+    def validate_non_zero_manifest_sha(cls, v: str) -> str:
+        if v == "0" * 64:
+            raise ValueError("model_artifact_manifest_sha256 cannot be all zeros.")
+        return v
+
+
+class ActiveModelSetSnapshot(BaseModel):
+    """Snapshot of active model set pinned at batch execution time and transmitted in external batch."""
+    model_config = ConfigDict(extra="forbid")
+
+    model_set_id: str = Field(..., min_length=1, description="Model set identifier")
+    model_set_version: str = Field(..., min_length=1, description="Model set version string")
+    models: list[ActiveModelSnapshotItem] = Field(..., min_length=1, description="List of active model snapshots")
+
+    @model_validator(mode="after")
+    def validate_unique_models(self) -> ActiveModelSetSnapshot:
+        seen = set()
+        for m in self.models:
+            key = (m.model_id, m.model_version)
+            if key in seen:
+                raise ValueError(f"Duplicate model in model_set snapshot: {key}")
+            seen.add(key)
+        return self
 
 
 class ModelPredictionResult(BaseModel):
@@ -200,6 +239,72 @@ class EquipmentDeliveryOutput(BaseModel):
     outbox_ref: Optional[ArtifactReference] = Field(None, description="Artifact reference to stored outbox file")
 
 
+class PredictionResultSourceRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    uri: str = Field(..., min_length=1)
+    sha256: str = Field(..., pattern=SHA256_PATTERN)
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_non_zero_sha256(cls, v: str) -> str:
+        if v == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros.")
+        return v
+
+
+class PredictionResultLineage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    simulation_session_id: Optional[str] = None
+    overlay_branch_id: Optional[str] = None
+    history_segment_id: Optional[str] = None
+    maintenance_event_id: Optional[str] = None
+    maintenance_action_id: Optional[str] = None
+    state_version: Optional[int] = None
+
+
+class RuntimeSourceContext(BaseModel):
+    """Canonical runtime source context preserved across Enqueue, Queue, RunState, Checkpoint, and Batch."""
+    model_config = ConfigDict(extra="forbid")
+
+    source_uri: str = Field(..., min_length=1)
+    source_checksum: str = Field(..., pattern=SHA256_PATTERN)
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay_overlay"]
+    source_contract_version: str = Field(..., min_length=1)
+    source_schema_version: str = Field(..., min_length=1)
+    pipeline_contract_version: str = Field(..., min_length=1)
+    lineage: PredictionResultLineage = Field(default_factory=PredictionResultLineage)
+
+    @field_validator("source_checksum")
+    @classmethod
+    def validate_non_zero_source_checksum(cls, v: str) -> str:
+        if v == "0" * 64:
+            raise ValueError("source_checksum cannot be all zeros.")
+        return v
+
+    @model_validator(mode="after")
+    def validate_overlay_lineage(self) -> RuntimeSourceContext:
+        if self.source_kind == "maintenance_replay_overlay":
+            lin = self.lineage
+            if (
+                not lin
+                or not lin.simulation_session_id
+                or not lin.overlay_branch_id
+                or not lin.history_segment_id
+                or not lin.maintenance_event_id
+                or not lin.maintenance_action_id
+                or lin.state_version is None
+                or lin.state_version < 1
+            ):
+                raise ValueError(
+                    "When source_kind is 'maintenance_replay_overlay', all 6 lineage fields "
+                    "(simulation_session_id, overlay_branch_id, history_segment_id, maintenance_event_id, "
+                    "maintenance_action_id, state_version >= 1) are required."
+                )
+        return self
+
+
 class PipelineCheckpoint(BaseModel):
     """State checkpoint recorded at end of each stage for resumption."""
     model_config = ConfigDict(extra="forbid")
@@ -214,6 +319,11 @@ class PipelineCheckpoint(BaseModel):
     dataset_id: str = Field(..., description="Dataset ID")
     dataset_version: str = Field(..., description="Dataset version")
     pipeline_contract_version: str = Field("generator-prediction-result-v1", description="Pipeline contract version")
+    source_kind: str = Field(..., min_length=1, description="Source kind")
+    source_contract_version: str = Field(..., min_length=1, description="Source contract version")
+    source_schema_version: str = Field(..., min_length=1, description="Source schema version")
+    lineage_json: str = Field(..., description="Lineage JSON serialization")
+    source_context: RuntimeSourceContext = Field(..., description="Snapshot of RuntimeSourceContext")
     last_completed_stage: Optional[Literal[
         "source_validated",
         "preprocessing",
@@ -263,6 +373,10 @@ class PipelineRunState(BaseModel):
     ] = Field("pending", description="Overall pipeline run status")
     current_stage: Optional[str] = Field(None, description="Currently active stage")
     source_ref: ArtifactReference = Field(..., description="Source observation protocol file reference")
+    source_context: Optional[RuntimeSourceContext] = Field(
+        None,
+        description="Snapshot of RuntimeSourceContext at run start; absent only on legacy persisted run records",
+    )
     stages: dict[str, StageState] = Field(default_factory=dict, description="Stage execution map")
     prediction_results: list[InternalModelPredictionResult] = Field(
         default_factory=list, description="Array of prediction results for all registered models across equipments"
@@ -302,35 +416,63 @@ class PipelineRunState(BaseModel):
     cleanup_failed_paths: list[str] = Field(default_factory=list, description="List of paths that failed to delete during cleanup")
 
 
-
 def compute_source_identity(
+    *,
     source_checksum: str,
-    dataset_id: str = "canonical-ai4i-v1",
-    dataset_version: str = "canonical-ai4i-physics-v3.1",
-    pipeline_contract_version: str = "generator-prediction-result-v1",
+    dataset_id: str,
+    dataset_version: str,
+    pipeline_contract_version: str,
+    source_contract_version: str,
+    source_schema_version: str,
+    source_kind: str,
+    lineage: PredictionResultLineage | dict[str, Any] | None = None,
 ) -> str:
-    """Compute stable, version-aware deduplication identity for source input."""
+    """Compute stable, version-aware deduplication identity for source input including full source context."""
     import hashlib
-    clean_checksum = source_checksum.strip().lower()
-    clean_ds = dataset_id.strip()
-    clean_ver = dataset_version.strip()
-    clean_contract = pipeline_contract_version.strip()
-    key = f"{clean_checksum}:{clean_ds}:{clean_ver}:{clean_contract}"
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+    import json
+
+    if isinstance(lineage, PredictionResultLineage):
+        lineage_dict = lineage.model_dump(mode="json")
+    elif isinstance(lineage, dict):
+        lineage_dict = dict(lineage)
+    else:
+        lineage_dict = {}
+
+    identity_payload = {
+        "dataset_id": dataset_id.strip(),
+        "dataset_version": dataset_version.strip(),
+        "lineage": lineage_dict,
+        "pipeline_contract_version": pipeline_contract_version.strip(),
+        "source_checksum": source_checksum.strip().lower(),
+        "source_contract_version": source_contract_version.strip(),
+        "source_kind": source_kind.strip(),
+        "source_schema_version": source_schema_version.strip(),
+    }
+    canonical_json = json.dumps(
+        identity_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
 
 class PipelineQueueItem(BaseModel):
     """Item managed in persistent FIFO queue."""
     model_config = ConfigDict(extra="forbid")
 
-    job_id: str = Field(..., description="Unique job identifier")
-    source_uri: str = Field(..., description="Source file relative or absolute URI")
-    source_checksum: str = Field(..., description="Source file SHA-256 checksum")
+    job_id: str = Field(..., min_length=1, description="Unique job identifier")
+    source_uri: str = Field(..., min_length=1, description="Source file relative or absolute URI")
+    source_checksum: str = Field(..., pattern=SHA256_PATTERN, description="Source file SHA-256 checksum")
     source_identity: Optional[str] = Field(None, description="SHA-256 deduplication identity of input and contract versions")
-    size_bytes: Optional[int] = Field(None, description="File size in bytes at detection time")
-    dataset_id: str = Field("canonical-ai4i-v1", description="Dataset identifier")
-    dataset_version: str = Field("canonical-ai4i-physics-v3.1", description="Dataset version")
-    pipeline_contract_version: str = Field("generator-prediction-result-v1", description="Pipeline contract version")
+    size_bytes: Optional[int] = Field(None, ge=0, description="File size in bytes at detection time")
+    dataset_id: str = Field(..., min_length=1, description="Dataset identifier")
+    dataset_version: str = Field(..., min_length=1, description="Dataset version")
+    pipeline_contract_version: str = Field(..., min_length=1, description="Pipeline contract version")
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay_overlay"]
+    source_contract_version: str = Field(..., min_length=1, description="Source contract version")
+    source_schema_version: str = Field(..., min_length=1, description="Source schema version")
+    lineage: PredictionResultLineage = Field(default_factory=PredictionResultLineage, description="Overlay lineage metadata")
     detected_at: str = Field(default_factory=now_utc_iso, description="ISO detection timestamp")
     sequence: int = Field(1, ge=1, description="FIFO sequence number")
     attempt: int = Field(1, ge=1, description="Execution attempt number")
@@ -346,6 +488,13 @@ class PipelineQueueItem(BaseModel):
     ] = Field("queued", description="Queue item state")
     error_code: Optional[str] = Field(None, description="Error code if item failed")
 
+    @field_validator("source_checksum")
+    @classmethod
+    def validate_non_zero_source_checksum(cls, v: str) -> str:
+        if v == "0" * 64:
+            raise ValueError("source_checksum cannot be all zeros.")
+        return v
+
 
 class SourceLineage(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -359,36 +508,8 @@ class PredictionResultProducer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     system: Literal["systems.generator"] = "systems.generator"
-    runtime_version: str = Field("1.0.0", min_length=1)
+    runtime_version: str = Field(..., min_length=1)
     outbox_id: Optional[str] = None
-
-
-SHA256_PATTERN = r"^[a-f0-9]{64}$"
-
-
-class PredictionResultSourceRef(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    uri: str = Field(..., min_length=1)
-    sha256: str = Field(..., pattern=SHA256_PATTERN)
-
-    @field_validator("sha256")
-    @classmethod
-    def validate_non_zero_sha256(cls, v: str) -> str:
-        if v == "0" * 64:
-            raise ValueError("SHA-256 checksum cannot be all zeros.")
-        return v
-
-
-class PredictionResultLineage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    simulation_session_id: Optional[str] = None
-    overlay_branch_id: Optional[str] = None
-    history_segment_id: Optional[str] = None
-    maintenance_event_id: Optional[str] = None
-    maintenance_action_id: Optional[str] = None
-    state_version: Optional[int] = None
 
 
 class PredictionResultItem(BaseModel):
@@ -397,7 +518,7 @@ class PredictionResultItem(BaseModel):
     event_id: str = Field(..., min_length=1)
     asset_id: str = Field(..., min_length=1)
     observed_at: datetime
-    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay_overlay"] = "live_sensor"
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay_overlay"]
     source_ref: PredictionResultSourceRef
     payload_sha256: str = Field(..., pattern=SHA256_PATTERN)
     output_status: Literal[
@@ -413,14 +534,22 @@ class PredictionResultItem(BaseModel):
     model_id: str = Field(..., min_length=1)
     model_version: str = Field(..., min_length=1)
     model_artifact_manifest_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
-    feature_schema_version: str = Field(..., min_length=1)
-    history_requirement_version: str = Field(..., min_length=1)
+    feature_schema_version: Optional[str] = Field(None, min_length=1)
+    history_requirement_version: Optional[str] = Field(None, min_length=1)
+    label_schema_version: Optional[str] = Field(None, min_length=1)
     feature_schema_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
     history_requirement_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
+    label_schema_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
     lineage: PredictionResultLineage
     failure_reason: Optional[str] = None
 
-    @field_validator("payload_sha256", "model_artifact_manifest_sha256", "feature_schema_sha256", "history_requirement_sha256")
+    @field_validator(
+        "payload_sha256",
+        "model_artifact_manifest_sha256",
+        "feature_schema_sha256",
+        "history_requirement_sha256",
+        "label_schema_sha256",
+    )
     @classmethod
     def validate_non_zero_sha256(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v == "0" * 64:
@@ -443,6 +572,14 @@ class PredictionResultItem(BaseModel):
                 raise ValueError("failure_reason must be None when output_status is 'predicted'")
             if not self.model_artifact_manifest_sha256:
                 raise ValueError("model_artifact_manifest_sha256 is required when output_status is 'predicted'")
+            if not self.feature_schema_sha256:
+                raise ValueError("feature_schema_sha256 is required when output_status is 'predicted'")
+            if not self.history_requirement_sha256:
+                raise ValueError("history_requirement_sha256 is required when output_status is 'predicted'")
+            if not self.label_schema_sha256:
+                raise ValueError("label_schema_sha256 is required when output_status is 'predicted'")
+            if not self.feature_schema_version or not self.history_requirement_version or not self.label_schema_version:
+                raise ValueError("Feature, history, and label schema versions are required when output_status is 'predicted'")
         else:
             if self.score is not None:
                 raise ValueError(f"Score must be None when output_status is '{self.output_status}', got {self.score}")
@@ -451,6 +588,16 @@ class PredictionResultItem(BaseModel):
             if self.output_status in ("warming_up", "history_insufficient", "failed_feature_execution", "failed_model_inference"):
                 if not self.model_artifact_manifest_sha256:
                     raise ValueError(f"model_artifact_manifest_sha256 is required when output_status is '{self.output_status}'")
+                if not self.feature_schema_sha256:
+                    raise ValueError(f"feature_schema_sha256 is required when output_status is '{self.output_status}'")
+                if not self.history_requirement_sha256:
+                    raise ValueError(f"history_requirement_sha256 is required when output_status is '{self.output_status}'")
+                if not self.label_schema_sha256:
+                    raise ValueError(f"label_schema_sha256 is required when output_status is '{self.output_status}'")
+                if not self.feature_schema_version or not self.history_requirement_version or not self.label_schema_version:
+                    raise ValueError(
+                        f"Feature, history, and label schema versions are required when output_status is '{self.output_status}'"
+                    )
 
         if self.source_kind == "maintenance_replay_overlay":
             lin = self.lineage
@@ -515,6 +662,7 @@ class PredictionResultBatchPayload(BaseModel):
     batch_id: str = Field(..., min_length=1)
     producer: PredictionResultProducer
     emitted_at: datetime
+    model_set: ActiveModelSetSnapshot
     results: list[PredictionResultItem] = Field(..., min_length=1)
 
 

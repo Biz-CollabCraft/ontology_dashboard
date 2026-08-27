@@ -19,6 +19,19 @@ _config_loaded = False
 # 프로젝트 최상위 루트 디렉토리 (systems/generator/generator_config.py 이므로 parents[2])
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+def get_generator_runtime_version() -> str:
+    """Return the explicitly configured Generator runtime version.
+
+    Runtime provenance must never be invented.  Deployments and tests that emit
+    an external Prediction Result Batch therefore have to provide this value.
+    """
+    value = os.getenv("GENERATOR_RUNTIME_VERSION", "").strip()
+    if not value:
+        raise RuntimeError(
+            "GENERATOR_RUNTIME_VERSION is required when publishing a Prediction Result Batch."
+        )
+    return value
+
 
 def load_config(force: bool = False) -> None:
     """.env 파일에서 전역 환경변수를 읽어 설정한다."""

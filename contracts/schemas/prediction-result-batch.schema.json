@@ -9,6 +9,7 @@
     "batch_id",
     "producer",
     "emitted_at",
+    "model_set",
     "results"
   ],
   "properties": {
@@ -48,6 +49,56 @@
       "type": "string",
       "format": "date-time"
     },
+    "model_set": {
+      "type": "object",
+      "required": [
+        "model_set_id",
+        "model_set_version",
+        "models"
+      ],
+      "properties": {
+        "model_set_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_set_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "model_id",
+              "model_version",
+              "required",
+              "model_artifact_manifest_sha256"
+            ],
+            "properties": {
+              "model_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "model_version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "model_artifact_manifest_sha256": {
+                "type": "string",
+                "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "results": {
       "type": "array",
       "minItems": 1,
@@ -67,6 +118,7 @@
           "model_artifact_manifest_sha256",
           "feature_schema_version",
           "history_requirement_version",
+          "label_schema_version",
           "lineage",
           "failure_reason"
         ],
@@ -151,11 +203,15 @@
             ]
           },
           "feature_schema_version": {
-            "type": "string",
+            "type": ["string", "null"],
             "minLength": 1
           },
           "history_requirement_version": {
-            "type": "string",
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "label_schema_version": {
+            "type": ["string", "null"],
             "minLength": 1
           },
           "feature_schema_sha256": {
@@ -170,6 +226,17 @@
             ]
           },
           "history_requirement_sha256": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label_schema_sha256": {
             "oneOf": [
               {
                 "type": "string",
@@ -259,6 +326,30 @@
                 "model_artifact_manifest_sha256": {
                   "type": "string",
                   "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "feature_schema_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "history_requirement_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "label_schema_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "feature_schema_version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "history_requirement_version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label_schema_version": {
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             }
@@ -288,6 +379,30 @@
                 "model_artifact_manifest_sha256": {
                   "type": "string",
                   "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "feature_schema_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "history_requirement_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "label_schema_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                },
+                "feature_schema_version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "history_requirement_version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label_schema_version": {
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             }
