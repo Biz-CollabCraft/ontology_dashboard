@@ -387,6 +387,16 @@ export interface MvpAgentReviewPacket {
     reasons: string[];
     source_fields: string[];
   } | null;
+  review_draft: {
+    title: string;
+    summary: string;
+    priority_label: string;
+    recommended_next_step: string;
+    checklist: string[];
+    questions: string[];
+    evidence_gap_count: number;
+    boundary_note: string;
+  };
   sop_retrieval: {
     provider: "local_sop_metadata_retriever";
     query: {

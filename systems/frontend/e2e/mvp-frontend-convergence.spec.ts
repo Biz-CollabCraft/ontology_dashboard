@@ -77,6 +77,8 @@ test("opens the SOP grounded agent review packet without mutating work state", a
   await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("read-only");
   await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("상태 변경");
   await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("불가");
+  await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("담당자 검토 초안");
+  await expect(preview.getByRole("region", { name: "AI 검토 패킷" })).toContainText("자동 승인을 수행하지 않습니다");
 });
 
 test("completes Overview to Objects to Operations to Reports Executive Brief without Analysis", async ({ page }) => {
