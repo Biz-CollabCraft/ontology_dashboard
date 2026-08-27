@@ -174,10 +174,10 @@
     },
     "inspection_targets": {
       "type": "array",
-      "description": "Backend-owned inspection target hints sourced from Product Evidence component hypotheses. Concrete field location and method remain null until Maintenance/Inspection supplies them. Optional inspection_guidance is SOP grounding for UI questions/checklist drafts, not Product Evidence.",
+      "description": "Backend-owned inspection target hints sourced from Product Evidence component hypotheses. Concrete field location and method are read-only Field Inspection Reference metadata when available. Optional inspection_guidance is SOP grounding for UI checklist drafts, not Product Evidence.",
       "items": {
         "type": "object",
-        "required": ["target_id", "component_id", "component_label", "association", "location_label", "inspection_method", "basis_refs", "source_ref", "unavailable_reason"],
+        "required": ["target_id", "component_id", "component_label", "association", "location_label", "inspection_method", "location_contract_id", "location_source_ref", "location_maturity", "basis_refs", "source_ref", "unavailable_reason"],
         "additionalProperties": false,
         "properties": {
           "target_id": {"type": "string"},
@@ -186,6 +186,9 @@
           "association": {"type": "string"},
           "location_label": {"type": ["string", "null"]},
           "inspection_method": {"type": ["string", "null"]},
+          "location_contract_id": {"type": ["string", "null"]},
+          "location_source_ref": {"type": ["string", "null"]},
+          "location_maturity": {"type": ["string", "null"], "enum": ["fixture", "draft", "approved", "retired", null]},
           "basis_refs": {"type": "array", "items": {"type": "string"}},
           "source_ref": {"type": "string"},
           "inspection_guidance": {"$ref": "#/$defs/inspectionGuidance"},
