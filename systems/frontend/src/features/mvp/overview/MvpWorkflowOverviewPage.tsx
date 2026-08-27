@@ -335,18 +335,23 @@ function inspectionFactorChips(target: MvpInspectionTarget, factors: MvpAsset["t
     .sort((left, right) => left.rank - right.rank);
 }
 
-function assumedInspectionLocationLabel(target: MvpInspectionTarget): string {
-  const key = `${target.componentId} ${target.componentLabel}`.toLowerCase();
-  if (key.includes("tool") || target.componentLabel.includes("공구")) return "추정 위치: 공구대 주변";
-  if (key.includes("drive") || key.includes("power") || target.componentLabel.includes("동력")) return "추정 위치: 서보/구동부";
-  if (key.includes("cool") || key.includes("thermal") || target.componentLabel.includes("냉각") || target.componentLabel.includes("열")) return "추정 위치: 냉각 계통";
-  if (key.includes("spindle") || key.includes("rotat") || target.componentLabel.includes("회전")) return "추정 위치: 스핀들/구동축 주변";
-  return "추정 위치: 설비 구조도 기준 후보";
-}
-
 function inspectionLocationLabel(target: MvpInspectionTarget | null): string {
   if (!target) return "위치 근거 미제공";
-  return target.locationLabel ?? assumedInspectionLocationLabel(target);
+  return target.locationLabel ?? target.inspectionGuidance?.referenceLocationLabel ?? "점검 위치 근거 미제공";
+}
+
+function inspectionMethodLabel(target: MvpInspectionTarget | null): string {
+  if (!target) return "Backend 점검 위치 계약 연결 후 표시됩니다.";
+  return target.inspectionMethod
+    ?? target.inspectionGuidance?.suggestedCheckMethod
+    ?? "Backend 점검 위치 계약 연결 후 표시됩니다.";
+}
+
+function inspectionGuidanceSourceLabel(target: MvpInspectionTarget | null): string {
+  if (!target?.inspectionGuidance) return "점검 위치 계약 미연결";
+  return target.inspectionGuidance.sourceType === "demo_sop_fixture"
+    ? "데모 SOP 참고"
+    : "SOP 참고";
 }
 
 function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
@@ -822,7 +827,7 @@ function WorkflowPrintReport({
           {inspectionTargets.length ? inspectionTargets.map((target) => (
             <article key={target.target?.targetId ?? target.factor?.id ?? `inspection-target-${target.rank}`}>
               <b>{target.rank}. {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</b>
-              <p>{target.target?.inspectionMethod ?? "Backend 점검 위치 계약 연결 후 표시됩니다."}</p>
+              <p>{inspectionMethodLabel(target.target)}</p>
             </article>
           )) : <p>점검 위치 근거는 Backend ViewModel 연결 후 표시됩니다.</p>}
         </section>
@@ -1699,7 +1704,7 @@ function AssetPreviewPanel({
           {role === "field_operator" && activeTab === "status" ? (
             <>
               <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검 근거">
-                <header><Wrench size={14} /><strong>점검 근거</strong><span>구조도 기준 위치 추정</span></header>
+                <header><Wrench size={14} /><strong>점검 근거</strong><span>SOP 참고 안내</span></header>
                 <div className="equipment-sketch" aria-label="설비 참고도">
                   <EquipmentSketchVisual assetType={asset.assetType} inspectionTargets={inspectionTargets} />
                   <div>
@@ -1708,6 +1713,7 @@ function AssetPreviewPanel({
                       {inspectionTargets.length ? inspectionTargets.map((target) => (
                         <li key={target.target?.targetId ?? target.factor?.id ?? `inspection-legend-${target.rank}`}>
                           <b>{target.rank}</b>{inspectionLocationLabel(target.target)}: {target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}
+                          {target.target?.inspectionGuidance ? <small>{inspectionGuidanceSourceLabel(target.target)}</small> : null}
                         </li>
                       )) : <li><b>!</b>위치 근거: 부품 근거 없음</li>}
                     </ul>
@@ -1725,6 +1731,9 @@ function AssetPreviewPanel({
                             : target.factor?.direction === "risk_up"
                               ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
+                          {target.target?.inspectionGuidance ? (
+                            <p>{target.target.inspectionGuidance.disclaimer}</p>
+                          ) : null}
                           {target.target && inspectionFactorChips(target.target, factors).length ? (
                             <ul className="top-factor-chips" aria-label="Top factor 근거">
                               {inspectionFactorChips(target.target, factors).map((chip) => (

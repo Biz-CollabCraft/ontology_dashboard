@@ -1,0 +1,45 @@
+{
+  "schema_version": "procedure-grounding-v1.0",
+  "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+  "title": "CNC 회전/구동 계통 점검 참고 절차",
+  "version": "demo-2026-08-27",
+  "source_kind": "demo_sop_fixture",
+  "maturity": "fixture",
+  "owner_domain": "maintenance",
+  "asset_types": ["cnc", "compressor"],
+  "component_ids": ["rotating_assembly", "drive_train", "tooling", "thermal_path"],
+  "failure_modes": ["tool_wear_failure", "heat_dissipation_failure", "power_or_overstrain_failure", "multi_factor_risk", "failure_risk"],
+  "factor_keys": ["rotation_raw", "vibration_raw", "rotational_speed_rpm", "torque_nm", "mechanical_power_w", "overstrain_index", "tool_wear_min", "process_temperature_k", "temperature_difference_k"],
+  "applicability": {
+    "risk_grades": ["attention", "warning", "critical"],
+    "criticality": ["low", "medium", "high"],
+    "production_impact": ["none", "low", "medium", "high"]
+  },
+  "safety_level": "caution",
+  "requires_human_approval": true,
+  "effective_from": "2026-08-27",
+  "source_uri": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json",
+  "document_hash": "demo-fixture-editable",
+  "standard_alignment": [
+    {
+      "standard": "ISO_17359",
+      "alignment_scope": ["condition_monitoring_review", "inspection_question"]
+    },
+    {
+      "standard": "ISO_14224",
+      "alignment_scope": ["equipment_failure_maintenance_metadata"]
+    }
+  ],
+  "guidance": {
+    "reference_location_label": "SOP 기준 참고 위치",
+    "suggested_check_method": "센서 이상 기여 요인을 기준으로 회전/구동 계통의 체결, 마모, 이상 소음 여부를 확인합니다.",
+    "checklist_draft": [
+      "점검 전 설비 상태와 작업 가능 여부를 확인합니다.",
+      "상위 위험 요인과 연결된 부품 후보를 현장 담당자가 확인합니다.",
+      "이상 소음, 진동, 마모, 체결 상태를 관찰하고 결과를 기록합니다."
+    ],
+    "disclaimer": "데모 SOP fixture 기반 참고 안내이며 Product Evidence가 확정한 점검 위치 또는 수리 지시가 아닙니다.",
+    "allowed_ui_claims": ["SOP 기준 참고 위치", "점검 질문 초안", "절차 문서 연결됨"],
+    "forbidden_ui_claims": ["확정 점검 위치", "수리 지시", "자동 승인 완료"]
+  }
+}

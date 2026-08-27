@@ -240,6 +240,21 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
             }
         ],
         operation_context=operation_context,
+        inspection_guidance={
+            "rotating_assembly": {
+                "source_type": "demo_sop_fixture",
+                "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                "title": "CNC 회전/구동 계통 점검 참고 절차",
+                "version": "demo-2026-08-27",
+                "reference_location_label": "SOP 기준 참고 위치",
+                "suggested_check_method": "회전/구동 계통의 체결, 마모, 이상 소음 여부를 확인합니다.",
+                "checklist_draft": ["점검 전 설비 상태를 확인합니다."],
+                "safety_level": "caution",
+                "requires_human_approval": True,
+                "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+                "disclaimer": "데모 SOP fixture 기반 참고 안내이며 Product Evidence가 확정한 점검 위치 또는 수리 지시가 아닙니다.",
+            }
+        },
         data_status={
             "source": "canonical",
             "is_stale": False,
@@ -253,6 +268,19 @@ def test_composer_builds_view_model_without_generator_raw_file_dependency() -> N
     assert payload["inspection_targets"][0]["component_label"] == "회전/진동 계통"
     assert payload["inspection_targets"][0]["location_label"] is None
     assert payload["inspection_targets"][0]["inspection_method"] is None
+    assert payload["inspection_targets"][0]["inspection_guidance"] == {
+        "source_type": "demo_sop_fixture",
+        "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        "title": "CNC 회전/구동 계통 점검 참고 절차",
+        "version": "demo-2026-08-27",
+        "reference_location_label": "SOP 기준 참고 위치",
+        "suggested_check_method": "회전/구동 계통의 체결, 마모, 이상 소음 여부를 확인합니다.",
+        "checklist_draft": ["점검 전 설비 상태를 확인합니다."],
+        "safety_level": "caution",
+        "requires_human_approval": True,
+        "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        "disclaimer": "데모 SOP fixture 기반 참고 안내이며 Product Evidence가 확정한 점검 위치 또는 수리 지시가 아닙니다.",
+    }
     assert payload["inspection_targets"][0]["basis_refs"] == [
         "factor.1.rotation_raw",
         "sensor_evidence.sensors.rotation_raw",

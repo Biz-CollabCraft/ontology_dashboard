@@ -174,7 +174,7 @@
     },
     "inspection_targets": {
       "type": "array",
-      "description": "Backend-owned inspection target hints sourced from Product Evidence component hypotheses. Concrete field location and method remain null until Maintenance/Inspection supplies them.",
+      "description": "Backend-owned inspection target hints sourced from Product Evidence component hypotheses. Concrete field location and method remain null until Maintenance/Inspection supplies them. Optional inspection_guidance is SOP grounding for UI questions/checklist drafts, not Product Evidence.",
       "items": {
         "type": "object",
         "required": ["target_id", "component_id", "component_label", "association", "location_label", "inspection_method", "basis_refs", "source_ref", "unavailable_reason"],
@@ -188,6 +188,7 @@
           "inspection_method": {"type": ["string", "null"]},
           "basis_refs": {"type": "array", "items": {"type": "string"}},
           "source_ref": {"type": "string"},
+          "inspection_guidance": {"$ref": "#/$defs/inspectionGuidance"},
           "unavailable_reason": {"type": ["string", "null"]}
         }
       }
@@ -246,6 +247,25 @@
     }
   },
   "$defs": {
+    "inspectionGuidance": {
+      "type": "object",
+      "description": "SOP-based reference guidance for UI and agent handoff drafts. This does not fill location_label/inspection_method and must not be treated as Product Evidence or a mutation command.",
+      "required": ["source_type", "sop_id", "title", "version", "reference_location_label", "suggested_check_method", "checklist_draft", "safety_level", "requires_human_approval", "source_ref", "disclaimer"],
+      "additionalProperties": false,
+      "properties": {
+        "source_type": {"enum": ["demo_sop_fixture", "site_sop"]},
+        "sop_id": {"type": "string"},
+        "title": {"type": "string"},
+        "version": {"type": "string"},
+        "reference_location_label": {"type": "string"},
+        "suggested_check_method": {"type": "string"},
+        "checklist_draft": {"type": "array", "items": {"type": "string"}},
+        "safety_level": {"enum": ["none", "caution", "permit_required", "shutdown_controlled"]},
+        "requires_human_approval": {"type": "boolean"},
+        "source_ref": {"type": "string"},
+        "disclaimer": {"type": "string"}
+      }
+    },
     "operationContext": {
       "type": "object",
       "description": "Optional production-planning context composed by Backend. It is not an Evidence/Product Result input and must not change risk, status_grade, top_factors, or recommended_action.",
