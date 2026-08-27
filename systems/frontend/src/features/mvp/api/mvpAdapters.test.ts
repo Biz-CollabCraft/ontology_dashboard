@@ -273,6 +273,9 @@ describe("MVP adapter contract", () => {
         association: "inspection_candidate",
         location_label: null,
         inspection_method: null,
+        location_contract_id: null,
+        location_source_ref: null,
+        location_maturity: null,
         inspection_guidance: {
           source_type: "demo_sop_fixture",
           sop_id: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
@@ -295,7 +298,7 @@ describe("MVP adapter contract", () => {
         },
         basis_refs: ["factor.1.tool_wear_min", "sensor_evidence.sensors.tool_wear_min"],
         source_ref: "storage://result.json#component_hypotheses[0]",
-        unavailable_reason: "maintenance_inspection_location_contract_unavailable",
+        unavailable_reason: "field_inspection_location_reference_unavailable",
       }],
       operation_context: {
         load_level: null,
@@ -423,7 +426,7 @@ describe("MVP adapter contract", () => {
           decisionBoundary: "교체 시기 검토 초안이며 작업요청을 생성하지 않습니다.",
         },
       }),
-      unavailableReason: "maintenance_inspection_location_contract_unavailable",
+      unavailableReason: "field_inspection_location_reference_unavailable",
     }));
     expect(enriched.inspectionTargets[0].basisRefs).toEqual([
       "factor.1.tool_wear_min",

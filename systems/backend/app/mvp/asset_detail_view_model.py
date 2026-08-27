@@ -195,6 +195,7 @@ def compose_asset_detail_view_model(
     operation_context: dict[str, Any] | None = None,
     closed_loop: dict[str, Any] | None = None,
     inspection_guidance: dict[str, dict[str, Any]] | None = None,
+    inspection_locations: dict[str, dict[str, Any]] | None = None,
     data_status: dict[str, Any] | None = None,
     history_window: str = DEFAULT_HISTORY_WINDOW,
 ) -> dict[str, Any]:
@@ -277,7 +278,12 @@ def compose_asset_detail_view_model(
     )
     if priority_gap is not None:
         gaps.append(priority_gap)
-    inspection_targets = _inspection_targets(result_artifact, provenance, inspection_guidance or {})
+    inspection_targets = _inspection_targets(
+        result_artifact,
+        provenance,
+        inspection_guidance or {},
+        inspection_locations or {},
+    )
 
     return {
         "asset": asset_summary,
@@ -671,6 +677,7 @@ def _inspection_targets(
     result_artifact: dict[str, Any],
     provenance: dict[str, Any],
     inspection_guidance: dict[str, dict[str, Any]],
+    inspection_locations: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     evidence_payload = result_artifact.get("evidence_payload") or {}
     component_hypotheses = evidence_payload.get("component_hypotheses") or []
@@ -684,18 +691,24 @@ def _inspection_targets(
         if not component_id:
             continue
         basis = item.get("basis") if isinstance(item.get("basis"), list) else []
+        location = inspection_locations.get(component_id) or {}
         target = {
             "target_id": f"inspection-target:{artifact_id}:{index + 1}",
             "component_id": component_id,
             "component_label": str(item.get("component_label") or component_id),
             "association": str(item.get("association") or "inspection_candidate"),
-            "location_label": None,
-            "inspection_method": None,
+            "location_label": str(location.get("location_label") or "") or None,
+            "inspection_method": str(location.get("inspection_method") or "") or None,
+            "location_contract_id": str(location.get("contract_id") or "") or None,
+            "location_source_ref": str(location.get("source_ref") or "") or None,
+            "location_maturity": str(location.get("maturity") or "") or None,
             "basis_refs": [str(value) for value in basis],
             "source_ref": f"{evidence_ref}#component_hypotheses[{index}]"
             if evidence_ref
             else f"product-result-artifact://{artifact_id}#evidence_payload.component_hypotheses[{index}]",
-            "unavailable_reason": "maintenance_inspection_location_contract_unavailable",
+            "unavailable_reason": None
+            if location
+            else "field_inspection_location_reference_unavailable",
         }
         guidance = inspection_guidance.get(component_id)
         if guidance:

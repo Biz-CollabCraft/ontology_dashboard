@@ -75,6 +75,11 @@ class ManufacturingPredictiveMaintenanceService:
             json.loads(path.read_text(encoding="utf-8"))
             for path in inspection_sop_paths
         ]
+        inspection_location_paths = sorted((fixture_root / "inspection_location").glob("*.json"))
+        self.inspection_location_references = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in inspection_location_paths
+        ]
         # Historical Gold regression and manufacturing Ontology projection must
         # remain exactly GS-001..GS-008. Showcase Project fixtures are available
         # through project_fixtures and project-scoped APIs, never this alias.
@@ -209,6 +214,7 @@ class ManufacturingPredictiveMaintenanceService:
             operation_context=self._operation_context_for_fixture(fixture, artifact) or fixture.get("operation_context"),
             closed_loop=fixture.get("closed_loop"),
             inspection_guidance=self._inspection_guidance_for_fixture(fixture, artifact),
+            inspection_locations=self._inspection_location_references_for_fixture(fixture, artifact),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
@@ -511,6 +517,37 @@ class ManufacturingPredictiveMaintenanceService:
                     "disclaimer": guidance.get("disclaimer"),
                 }
         return guidance_by_component
+
+    def _inspection_location_references_for_fixture(
+        self,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        component_hypotheses = (
+            (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
+        )
+        component_ids = {
+            str(item.get("component_id"))
+            for item in component_hypotheses
+            if isinstance(item, dict) and item.get("component_id")
+        }
+        asset_type = str(artifact.get("asset_type") or fixture.get("asset_type") or "")
+        references: dict[str, dict[str, Any]] = {}
+        for contract in self.inspection_location_references:
+            if asset_type and asset_type not in {str(item) for item in contract.get("asset_types") or []}:
+                continue
+            for location in contract.get("locations") or []:
+                component_id = str(location.get("component_id") or "")
+                if component_id not in component_ids:
+                    continue
+                references[component_id] = {
+                    "contract_id": contract.get("contract_id"),
+                    "maturity": contract.get("maturity"),
+                    "location_label": location.get("location_label"),
+                    "inspection_method": location.get("inspection_method"),
+                    "source_ref": f"{contract['source_uri']}#{component_id}",
+                }
+        return references
 
     def _matching_inspection_sops(
         self,

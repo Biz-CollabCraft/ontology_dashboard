@@ -366,6 +366,9 @@ export interface MvpInspectionTarget {
   association: string;
   locationLabel: string | null;
   inspectionMethod: string | null;
+  locationContractId: string | null;
+  locationSourceRef: string | null;
+  locationMaturity: "fixture" | "draft" | "approved" | "retired" | null;
   inspectionGuidance: MvpInspectionGuidance | null;
   basisRefs: string[];
   sourceRef: string;
@@ -416,6 +419,9 @@ export interface MvpAgentReviewPacket {
     target_id: string;
     component_id: string;
     component_label: string;
+    location_label: string | null;
+    inspection_method: string | null;
+    location_source_ref: string | null;
     sop_id: string;
     source_type: "demo_sop_fixture" | "site_sop";
     maturity: "fixture" | "draft" | "approved" | "retired";
@@ -564,6 +570,9 @@ export interface AssetDetailViewModel {
     association: string;
     location_label: string | null;
     inspection_method: string | null;
+    location_contract_id: string | null;
+    location_source_ref: string | null;
+    location_maturity: "fixture" | "draft" | "approved" | "retired" | null;
     inspection_guidance?: {
       source_type: "demo_sop_fixture" | "site_sop";
       sop_id: string;

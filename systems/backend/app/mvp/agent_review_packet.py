@@ -63,6 +63,9 @@ def compose_agent_review_packet(
                 "target_id": str(target.get("target_id") or ""),
                 "component_id": str(target.get("component_id") or ""),
                 "component_label": str(target.get("component_label") or ""),
+                "location_label": target.get("location_label"),
+                "inspection_method": target.get("inspection_method"),
+                "location_source_ref": target.get("location_source_ref"),
                 "sop_id": sop_id,
                 "source_type": str(guidance.get("source_type") or ""),
                 "maturity": str(procedure.get("maturity") or "fixture"),
@@ -145,7 +148,10 @@ def _compose_review_draft(
     probability_label = f"{float(probability) * 100:.1f}%" if isinstance(probability, (int, float)) else "미제공"
     primary_guidance = sop_guidance[0] if sop_guidance else {}
     component_label = str(primary_guidance.get("component_label") or "의심 부품")
+    location_label = str(primary_guidance.get("location_label") or "")
     checklist = [str(item) for item in primary_guidance.get("checklist_draft") or []][:4]
+    if location_label:
+        checklist.insert(0, f"현장 확인 위치: {location_label}")
     if evidence_gaps:
         checklist.append("근거 공백 항목을 먼저 확인하고 확정 판단에서 제외합니다.")
     history_summary = _compose_history_summary(
@@ -161,7 +167,7 @@ def _compose_review_draft(
         "title": f"{asset_name} 담당자 검토 초안",
         "summary": (
             f"{asset_id}는 현재 {status_grade} 상태이며 예측 위험도는 {probability_label}입니다. "
-            f"{component_label} 중심으로 SOP 근거와 관측값을 대조해야 합니다."
+            f"{component_label} 중심으로 SOP 근거, 위치 reference, 관측값을 대조해야 합니다."
         ),
         "priority_label": priority_level,
         "recommended_next_step": recommended_next_step,
