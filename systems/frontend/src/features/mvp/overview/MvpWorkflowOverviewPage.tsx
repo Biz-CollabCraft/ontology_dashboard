@@ -322,6 +322,15 @@ function inspectionBasisSummary(target: MvpInspectionTarget): string {
   return uniqueLabels.length ? uniqueLabels.join(", ") : "Evidence 근거 요약 미제공";
 }
 
+function inspectionTopFactorBundleSummary(target: MvpInspectionTarget): string | null {
+  const factorLabels = target.basisRefs
+    .filter((ref) => ref.startsWith("factor."))
+    .map(inspectionBasisLabel);
+  const uniqueLabels = [...new Set(factorLabels)];
+  if (!uniqueLabels.length) return null;
+  return `상위 근거 ${uniqueLabels.length}개 묶음: ${uniqueLabels.join(", ")}`;
+}
+
 function inspectionLocationLabel(target: MvpInspectionTarget | null): string {
   if (!target) return "위치 근거 미제공";
   return target.locationLabel ?? target.inspectionGuidance?.referenceLocationLabel ?? "점검 위치 근거 미제공";
@@ -1761,6 +1770,7 @@ function AssetPreviewPanel({
                             : target.factor?.direction === "risk_up"
                               ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
+                          {target.target ? <p>{inspectionTopFactorBundleSummary(target.target)}</p> : null}
                           {target.target?.inspectionGuidance ? (
                             <p>{target.target.inspectionGuidance.disclaimer}</p>
                           ) : null}
