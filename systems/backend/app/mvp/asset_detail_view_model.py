@@ -719,10 +719,27 @@ def _inspection_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
         "reference_location_label": str(guidance.get("reference_location_label") or ""),
         "suggested_check_method": str(guidance.get("suggested_check_method") or ""),
         "checklist_draft": [str(item) for item in guidance.get("checklist_draft") or []],
+        "replacement_review_guidance": _replacement_review_guidance(
+            guidance.get("replacement_review_guidance") or {}
+        ),
         "safety_level": safety_level,
         "requires_human_approval": bool(guidance.get("requires_human_approval")),
         "source_ref": str(guidance.get("source_ref") or ""),
         "disclaimer": str(guidance.get("disclaimer") or ""),
+    }
+
+
+def _replacement_review_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "review_label": str(guidance.get("review_label") or ""),
+        "review_triggers": [str(item) for item in guidance.get("review_triggers") or []],
+        "required_measurements": [
+            str(item) for item in guidance.get("required_measurements") or []
+        ],
+        "human_review_questions": [
+            str(item) for item in guidance.get("human_review_questions") or []
+        ],
+        "decision_boundary": str(guidance.get("decision_boundary") or ""),
     }
 
 

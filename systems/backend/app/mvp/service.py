@@ -507,6 +507,7 @@ class ManufacturingPredictiveMaintenanceService:
                     "reference_location_label": guidance.get("reference_location_label"),
                     "suggested_check_method": guidance.get("suggested_check_method"),
                     "checklist_draft": guidance.get("checklist_draft") or [],
+                    "replacement_review_guidance": guidance.get("replacement_review_guidance") or {},
                     "safety_level": sop["safety_level"],
                     "requires_human_approval": sop["requires_human_approval"],
                     "source_ref": f"{sop['source_uri']}#{sop['sop_id']}",

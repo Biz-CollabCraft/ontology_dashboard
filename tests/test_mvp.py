@@ -261,6 +261,25 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
             "상위 위험 요인과 연결된 부품 후보를 현장 담당자가 확인합니다.",
             "이상 소음, 진동, 마모, 체결 상태를 관찰하고 결과를 기록합니다.",
         ],
+        "replacement_review_guidance": {
+            "review_label": "교체 시기 검토 기준",
+            "review_triggers": [
+                "동일 부품 후보가 warning 또는 critical 이벤트에서 반복적으로 상위 위험 요인과 연결됩니다.",
+                "마모, 진동, 토크, 온도 관련 관측값이 최근 이력 대비 악화 추세를 보입니다.",
+                "현장 점검에서 이상 소음, 유격, 과열, 마모 흔적 중 하나 이상이 확인됩니다.",
+            ],
+            "required_measurements": [
+                "현재 센서 관측값과 최근 이력 비교",
+                "부품 외관, 체결, 이상 소음, 발열 확인 결과",
+                "열린 WorkOrder와 최근 정비 이력",
+            ],
+            "human_review_questions": [
+                "최근 동일 부품 또는 동일 계통에 대한 점검/교체 이력이 있습니까?",
+                "교체 전 생산 정지 가능 시간과 부품 가용성이 확인됐습니까?",
+                "점검 결과가 교체 요청으로 이어질 만큼 반복적이거나 악화 중입니까?",
+            ],
+            "decision_boundary": "이 기준은 교체 시기 검토 초안이며, 교체 필요 확정·작업요청 생성·정비 승인·자동 승인을 수행하지 않습니다.",
+        },
         "safety_level": "caution",
         "requires_human_approval": True,
         "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",

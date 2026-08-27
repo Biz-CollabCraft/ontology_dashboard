@@ -79,6 +79,9 @@ def test_inspection_sop_fixtures_match_procedure_grounding_schema() -> None:
         assert list(validator.iter_errors(payload)) == []
         assert payload["source_kind"] == "demo_sop_fixture"
         assert payload["maturity"] == "fixture"
+        assert "교체 시기 검토 초안" in payload["guidance"]["allowed_ui_claims"]
+        assert "교체 필요 확정" in payload["guidance"]["forbidden_ui_claims"]
+        assert "자동 승인 완료" in payload["guidance"]["forbidden_ui_claims"]
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))

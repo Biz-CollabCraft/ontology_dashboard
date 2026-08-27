@@ -281,6 +281,13 @@ describe("MVP adapter contract", () => {
           reference_location_label: "SOP 기준 참고 위치",
           suggested_check_method: "회전/구동 계통의 체결, 마모, 이상 소음 여부를 확인합니다.",
           checklist_draft: ["점검 전 설비 상태를 확인합니다."],
+          replacement_review_guidance: {
+            review_label: "교체 시기 검토 기준",
+            review_triggers: ["동일 부품 후보가 반복적으로 상위 위험 요인과 연결됩니다."],
+            required_measurements: ["현재 센서 관측값과 최근 이력 비교"],
+            human_review_questions: ["교체 전 생산 정지 가능 시간이 확인됐습니까?"],
+            decision_boundary: "교체 시기 검토 초안이며 작업요청을 생성하지 않습니다.",
+          },
           safety_level: "caution",
           requires_human_approval: true,
           source_ref: "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
@@ -408,6 +415,13 @@ describe("MVP adapter contract", () => {
         suggestedCheckMethod: "회전/구동 계통의 체결, 마모, 이상 소음 여부를 확인합니다.",
         safetyLevel: "caution",
         requiresHumanApproval: true,
+        replacementReviewGuidance: {
+          reviewLabel: "교체 시기 검토 기준",
+          reviewTriggers: ["동일 부품 후보가 반복적으로 상위 위험 요인과 연결됩니다."],
+          requiredMeasurements: ["현재 센서 관측값과 최근 이력 비교"],
+          humanReviewQuestions: ["교체 전 생산 정지 가능 시간이 확인됐습니까?"],
+          decisionBoundary: "교체 시기 검토 초안이며 작업요청을 생성하지 않습니다.",
+        },
       }),
       unavailableReason: "maintenance_inspection_location_contract_unavailable",
     }));

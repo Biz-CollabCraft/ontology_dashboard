@@ -354,6 +354,15 @@ function inspectionGuidanceSourceLabel(target: MvpInspectionTarget | null): stri
     : "SOP 참고";
 }
 
+function replacementReviewPreview(target: MvpInspectionTarget | null): string[] {
+  const guidance = target?.inspectionGuidance?.replacementReviewGuidance;
+  if (!guidance) return [];
+  return [
+    ...guidance.reviewTriggers.slice(0, 2),
+    ...guidance.humanReviewQuestions.slice(0, 1),
+  ];
+}
+
 function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
   const groups = new Map<string, MvpAsset[]>();
   assets.forEach((asset) => {
@@ -1733,6 +1742,17 @@ function AssetPreviewPanel({
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
                           {target.target?.inspectionGuidance ? (
                             <p>{target.target.inspectionGuidance.disclaimer}</p>
+                          ) : null}
+                          {target.target?.inspectionGuidance?.replacementReviewGuidance ? (
+                            <div className="mvp-inspection-guidance-note">
+                              <strong>{target.target.inspectionGuidance.replacementReviewGuidance.reviewLabel}</strong>
+                              <ul>
+                                {replacementReviewPreview(target.target).map((item) => (
+                                  <li key={`${target.target?.targetId}-replacement-${item}`}>{item}</li>
+                                ))}
+                              </ul>
+                              <small>{target.target.inspectionGuidance.replacementReviewGuidance.decisionBoundary}</small>
+                            </div>
                           ) : null}
                           {target.target && inspectionFactorChips(target.target, factors).length ? (
                             <ul className="top-factor-chips" aria-label="Top factor 근거">
