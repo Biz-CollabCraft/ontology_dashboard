@@ -13,6 +13,7 @@ from app.infra.generator_runtime_pipeline import (
 )
 from app.infra.live_predictive_maintenance_runtime import (
     _materialize_overlay_pipeline_snapshot,
+    _overlay_generator_enqueue_payload,
     _read_overlay_history_rows,
 )
 from app.infra.runtime_overlay_contract import (
@@ -24,7 +25,13 @@ from app.infra.runtime_overlay_contract import (
 def _event() -> dict[str, object]:
     return {
         "event_id": "OVERLAY-AVAILABLE:MAINT-1:post:1",
+        "simulation_session_id": "SIM-1",
+        "maintenance_action_id": "ACTION-1",
+        "maintenance_event_id": "MAINT-1",
         "overlay_branch_id": "MAINT-1:post",
+        "history_segment_id": "MAINT-1:post",
+        "source_kind": "maintenance_replay_overlay",
+        "state_version": 3,
         "equipment_id": "CNC-1",
     }
 
@@ -34,9 +41,13 @@ def _row() -> dict[str, object]:
         "asset_id": "CNC-1",
         "equipment_id": "CNC-1",
         "observed_at": "2026-08-27T01:00:00+00:00",
+        "simulation_session_id": "SIM-1",
+        "maintenance_action_id": "ACTION-1",
         "maintenance_event_id": "MAINT-1",
         "overlay_branch_id": "MAINT-1:post",
         "history_segment_id": "MAINT-1:post",
+        "source_kind": "maintenance_replay_overlay",
+        "state_version": 3,
         "tool_wear_min": 0,
     }
 
@@ -140,20 +151,62 @@ def test_generator_enqueue_client_sends_pr127_contract() -> None:
         "http://generator/internal/runtime-pipeline/enqueue",
         client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
-    payload = {
+    snapshot = {
         "job_id": "runtime-overlay-job",
         "source_uri": "/shared/runtime_pipeline_input/source.jsonl",
         "source_checksum": "a" * 64,
         "size_bytes": 123,
-        "dataset_id": "canonical-ai4i-v1",
-        "dataset_version": "canonical-ai4i-physics-v3.1",
-        "pipeline_contract_version": "generator-prediction-result-v1",
     }
+    payload = _overlay_generator_enqueue_payload(
+        snapshot,
+        _event(),
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+    )
 
     result = client.enqueue(payload)
 
     assert captured == payload
     assert result["status"] == "queued"
+
+
+def test_overlay_enqueue_payload_preserves_operational_lineage() -> None:
+    payload = _overlay_generator_enqueue_payload(
+        {
+            "job_id": "runtime-overlay-job",
+            "source_uri": "/shared/runtime_pipeline_input/source.jsonl",
+            "source_checksum": "a" * 64,
+            "size_bytes": 123,
+        },
+        _event(),
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+    )
+
+    assert payload["source_kind"] == "maintenance_replay_overlay"
+    assert payload["lineage"] == {
+        "simulation_session_id": "SIM-1",
+        "overlay_branch_id": "MAINT-1:post",
+        "history_segment_id": "MAINT-1:post",
+        "maintenance_event_id": "MAINT-1",
+        "maintenance_action_id": "ACTION-1",
+        "state_version": 3,
+    }
+
+
+def test_overlay_enqueue_payload_rejects_non_overlay_source_kind() -> None:
+    with pytest.raises(ValueError, match="source_kind=maintenance_replay_overlay"):
+        _overlay_generator_enqueue_payload(
+            {
+                "job_id": "runtime-overlay-job",
+                "source_uri": "/shared/runtime_pipeline_input/source.jsonl",
+                "source_checksum": "a" * 64,
+                "size_bytes": 123,
+            },
+            {**_event(), "source_kind": "canonical_observation"},
+            dataset_id="canonical-ai4i-v1",
+            dataset_version="canonical-ai4i-physics-v3.1",
+        )
 
 
 @pytest.mark.parametrize(

@@ -950,6 +950,44 @@ def _materialize_overlay_pipeline_snapshot(
     }
 
 
+def _overlay_generator_enqueue_payload(
+    snapshot: dict[str, Any],
+    event: dict[str, Any],
+    *,
+    dataset_id: str,
+    dataset_version: str,
+) -> dict[str, Any]:
+    """Map the canonical Overlay event to Generator's enqueue boundary.
+
+    The immutable snapshot carries the observations themselves.  This envelope
+    preserves the operational lineage separately so Generator can project it
+    unchanged into each Prediction Result instead of inferring it from file
+    contents or treating it as Model Artifact provenance.
+    """
+
+    source_kind = str(event["source_kind"])
+    if source_kind != "maintenance_replay_overlay":
+        raise ValueError(
+            "Runtime Overlay Generator enqueue requires "
+            "source_kind=maintenance_replay_overlay"
+        )
+    return {
+        **snapshot,
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "pipeline_contract_version": "generator-prediction-result-v1",
+        "source_kind": source_kind,
+        "lineage": {
+            "simulation_session_id": str(event["simulation_session_id"]),
+            "overlay_branch_id": str(event["overlay_branch_id"]),
+            "history_segment_id": str(event["history_segment_id"]),
+            "maintenance_event_id": str(event["maintenance_event_id"]),
+            "maintenance_action_id": str(event["maintenance_action_id"]),
+            "state_version": int(event["state_version"]),
+        },
+    }
+
+
 def _required_prior_rows(predictor: Any) -> int:
     feature_schema = getattr(predictor, "feature_schema", {}) or {}
     engineering = feature_schema.get("feature_engineering") or {}
@@ -1451,12 +1489,12 @@ def _consume_overlay_event(
         event,
         history_rows,
     )
-    enqueue_payload = {
-        **snapshot,
-        "dataset_id": dataset_id,
-        "dataset_version": dataset_version_id,
-        "pipeline_contract_version": "generator-prediction-result-v1",
-    }
+    enqueue_payload = _overlay_generator_enqueue_payload(
+        snapshot,
+        event,
+        dataset_id=dataset_id,
+        dataset_version=dataset_version_id,
+    )
     queued = enqueue_client.enqueue(enqueue_payload)
     return {
         "event_id": event_id,
