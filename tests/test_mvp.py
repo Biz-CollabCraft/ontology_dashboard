@@ -319,6 +319,21 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert list(Draft202012Validator(AGENT_REVIEW_PACKET_SCHEMA).iter_errors(packet)) == []
     assert packet["schema_version"] == "agent-review-packet-v1.0"
     assert packet["asset_id"] == "CNC-S04-L04-01"
+    assert packet["sop_retrieval"] == {
+        "provider": "local_sop_metadata_retriever",
+        "query": {
+            "asset_type": "cnc",
+            "failure_mode": "tool_wear_failure",
+            "factor_keys": ["overstrain_index", "tool_wear_min", "torque_nm"],
+            "component_ids": ["drive_power", "tooling"],
+            "risk_grade": "warning",
+            "criticality": "high",
+            "production_impact": "medium",
+        },
+        "top_k": 5,
+        "returned_count": 1,
+        "mutation_allowed": False,
+    }
     assert packet["closed_loop_boundary"]["mutation_allowed"] is False
     assert "create_work_order" in packet["closed_loop_boundary"]["forbidden_actions"]
     assert "auto_approve" in packet["closed_loop_boundary"]["forbidden_actions"]
@@ -327,6 +342,8 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
         "does_not_create_maintenance_event": True,
         "manual_recommendation_requires_manager_acceptance": True,
     }
+    assert packet["sop_guidance"][0]["retrieval_score"] > 0
+    assert {"asset_type", "failure_mode", "component_ids"} <= set(packet["sop_guidance"][0]["matched_fields"])
     assert "교체 전 생산 정지 가능 시간과 부품 가용성이 확인됐습니까?" in packet["human_questions"]
     assert client.get("/api/events/EVT-GS-002/activity").json() == activity_before_packet
 
