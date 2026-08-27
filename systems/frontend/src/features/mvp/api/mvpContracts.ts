@@ -387,6 +387,21 @@ export interface MvpAgentReviewPacket {
     reasons: string[];
     source_fields: string[];
   } | null;
+  sop_retrieval: {
+    provider: "local_sop_metadata_retriever";
+    query: {
+      asset_type: string;
+      failure_mode: string;
+      factor_keys: string[];
+      component_ids: string[];
+      risk_grade: string;
+      criticality: string;
+      production_impact: string;
+    };
+    top_k: number;
+    returned_count: number;
+    mutation_allowed: false;
+  };
   sop_guidance: Array<{
     target_id: string;
     component_id: string;
@@ -403,6 +418,8 @@ export interface MvpAgentReviewPacket {
       decision_boundary: string;
     };
     sensor_judgment: Record<string, unknown> | null;
+    retrieval_score: number;
+    matched_fields: string[];
     disclaimer: string;
     source_ref: string;
   }>;

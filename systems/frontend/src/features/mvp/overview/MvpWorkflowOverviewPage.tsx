@@ -1861,8 +1861,10 @@ function AssetPreviewPanel({
                       <dl>
                         <div><dt>설비</dt><dd>{agentPacket.asset_id}</dd></div>
                         <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
-                        <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP` : "SOP 근거 없음"}</dd></div>
+                        <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP 조회` : "SOP 근거 없음"}</dd></div>
                         <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
+                        <div><dt>조회 방식</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
+                        <div><dt>매칭 점수</dt><dd>{agentPacket.sop_guidance[0]?.retrieval_score ?? 0}</dd></div>
                       </dl>
                       {agentPacket.human_questions.length ? (
                         <ul>
