@@ -247,6 +247,7 @@ def build_live_predictive_maintenance_service(
         LiveMaintenanceOverlayAdapter,
         LiveOntologyProjectionAdapter,
     )
+    from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 
     target = database_url or database_target()
     shared = {
@@ -256,7 +257,9 @@ def build_live_predictive_maintenance_service(
     return LivePredictiveMaintenanceService(
         dataset=LiveDatasetIngestionAdapter(target, **shared),
         diagnosis=LiveDiagnosisApplicationAdapter(**shared),
-        maintenance=LiveMaintenanceOverlayAdapter(**shared),
+        maintenance=LiveMaintenanceOverlayAdapter(
+            enqueue_client=GeneratorRuntimePipelineClient(),
+        ),
         ontology=LiveOntologyProjectionAdapter(),
     )
 
