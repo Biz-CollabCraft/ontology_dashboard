@@ -647,6 +647,7 @@ upstream을 맡는다. 따라서 Generator 작업은 shadow가 아니라 Predict
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/results/latest
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/timeline
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/observations
+POST /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/prediction-result-batches/validate
 GET /api/projects/{project_id}/workspaces/{workspace_id}/maintenance/events/{event_id}/lineage
 POST /api/projects/{project_id}/workspaces/{workspace_id}/maintenance/maintenance-events/{id}/replay
 ```
@@ -660,6 +661,7 @@ GET /internal/prediction-results/consume-status
 
 주의:
 
+- `/prediction-result-batches/validate`는 contract validation receipt만 반환하며 Product Result를 생성하지 않는다.
 - `/internal/prediction-results`는 public product action이 아니다.
 - Frontend는 internal endpoint를 직접 호출하지 않는다.
 - Frontend refresh는 public Product API를 기준으로 한다.

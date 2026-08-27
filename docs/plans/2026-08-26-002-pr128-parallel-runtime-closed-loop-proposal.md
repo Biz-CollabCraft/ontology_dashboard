@@ -444,6 +444,17 @@ Track E Frontend
 
 ## 8. Contract Freeze
 
+현재 freeze된 범위:
+
+- `contracts/schemas/prediction-result-batch.schema.json`
+- `contracts/examples/prediction-result-batch/*.json`
+- Backend typed validator `PredictionResultBatch`
+- validation receipt endpoint:
+  `POST /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/prediction-result-batches/validate`
+
+이 endpoint는 Product Result 생성, DB 저장, Inbox idempotency persistence, Closed-loop trigger를
+수행하지 않는다. 그 구현은 다음 Backend Prediction Inbox / Product Result Gate 단계다.
+
 ### 유지
 
 - Product Result core:
