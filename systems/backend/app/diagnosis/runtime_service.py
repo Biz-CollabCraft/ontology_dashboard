@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
+
+from pydantic import ValidationError
 
 from .diagnosis_schema import (
     DataQuality,
@@ -33,6 +36,9 @@ from .runtime_schema import (
     ObservationQueryResponse,
     PolicyRecommendation,
     PredictiveMaintenanceDashboardResponse,
+    PredictionInboxItemReceipt,
+    PredictionInboxReceipt,
+    PredictionResultBatch,
     ProductFactor,
     ProductResultPage,
     ProductResultProvenance,
@@ -185,6 +191,165 @@ def _list(value: Any) -> list[Any]:
 class PredictiveMaintenanceRuntimeService:
     def __init__(self, repository: DiagnosisRuntimeRepositoryPort) -> None:
         self.repository = repository
+
+    @staticmethod
+    def _canonical_json_sha256(value: dict[str, Any]) -> str:
+        canonical = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _prediction_item_sha256(cls, item: dict[str, Any]) -> str:
+        seed = dict(item)
+        seed.pop("payload_sha256", None)
+        return cls._canonical_json_sha256(seed)
+
+    @classmethod
+    def _prediction_batch_sha256(cls, payload: dict[str, Any]) -> str:
+        seed = dict(payload)
+        seed.pop("emitted_at", None)
+        seed.pop("batch_id", None)
+        if isinstance(seed.get("producer"), dict):
+            producer = dict(seed["producer"])
+            producer.pop("outbox_id", None)
+            seed["producer"] = producer
+        if isinstance(seed.get("results"), list):
+            seed["results"] = sorted(
+                seed["results"],
+                key=lambda item: (
+                    str(item.get("asset_id", "")) if isinstance(item, dict) else "",
+                    str(item.get("model_id", "")) if isinstance(item, dict) else "",
+                    str(item.get("model_version", "")) if isinstance(item, dict) else "",
+                    str(item.get("observed_at", "")) if isinstance(item, dict) else "",
+                    str(item.get("event_id", "")) if isinstance(item, dict) else "",
+                ),
+            )
+        return cls._canonical_json_sha256(seed)
+
+    def receive_prediction_result_batch(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        payload: dict[str, Any],
+    ) -> PredictionInboxReceipt:
+        """Receive-only gate for Generator Prediction Result Batch payloads."""
+
+        raw_payload = dict(payload)
+        raw_payload_sha256 = self._canonical_json_sha256(raw_payload)
+        batch_id = str(raw_payload.get("batch_id") or f"invalid-{raw_payload_sha256[:32]}")
+        received_at = self.repository.clock_now()
+        try:
+            batch = PredictionResultBatch.model_validate(raw_payload)
+        except ValidationError as error:
+            row = self.repository.save_prediction_batch_inbox(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                batch_id=batch_id,
+                payload_sha256=raw_payload_sha256,
+                validation_status="rejected",
+                rejection_reason=f"schema_invalid: {error.errors()[0]['msg']}",
+                raw_payload=raw_payload,
+                received_at=received_at,
+                item_receipts=[],
+            )
+            return self._prediction_inbox_receipt_from_row(row)
+
+        batch_payload = batch.model_dump(mode="json")
+        batch_payload_sha256 = self._prediction_batch_sha256(batch_payload)
+        item_receipts: list[dict[str, Any]] = []
+        invalid_reasons: list[str] = []
+        asset_ids = {item.asset_id for item in batch.results}
+        scoped_assets = self.repository.assets_exist_in_workspace(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_ids=sorted(asset_ids),
+        )
+        missing_assets = sorted(asset_ids - set(scoped_assets))
+        if missing_assets:
+            invalid_reasons.append(f"scope_invalid: unknown assets {missing_assets}")
+
+        for item in batch_payload["results"]:
+            expected = self._prediction_item_sha256(item)
+            actual = str(item["payload_sha256"])
+            if expected != actual:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "rejected",
+                        "rejection_reason": (
+                            "payload_sha256_mismatch: "
+                            f"expected {expected}, got {actual}"
+                        ),
+                    }
+                )
+                invalid_reasons.append(f"payload_sha256_mismatch:{item['event_id']}")
+            elif item["asset_id"] in missing_assets:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "rejected",
+                        "rejection_reason": "scope_invalid: asset is not in workspace",
+                    }
+                )
+            else:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "accepted",
+                        "rejection_reason": None,
+                    }
+                )
+
+        validation_status = "rejected" if invalid_reasons else "accepted"
+        row = self.repository.save_prediction_batch_inbox(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch.batch_id,
+            payload_sha256=batch_payload_sha256,
+            validation_status=validation_status,
+            rejection_reason="; ".join(invalid_reasons) or None,
+            raw_payload=batch_payload,
+            received_at=received_at,
+            item_receipts=item_receipts,
+        )
+        return self._prediction_inbox_receipt_from_row(row)
+
+    @staticmethod
+    def _prediction_inbox_receipt_from_row(row: dict[str, Any]) -> PredictionInboxReceipt:
+        item_receipts = [
+            PredictionInboxItemReceipt.model_validate(item)
+            for item in row.get("item_receipts", [])
+        ]
+        counts = {
+            "accepted": sum(1 for item in item_receipts if item.validation_status == "accepted"),
+            "duplicate": sum(1 for item in item_receipts if item.validation_status == "duplicate"),
+            "conflict": sum(1 for item in item_receipts if item.validation_status == "conflict"),
+            "rejected": sum(1 for item in item_receipts if item.validation_status == "rejected"),
+        }
+        return PredictionInboxReceipt(
+            batch_id=str(row["batch_id"]),
+            payload_sha256=str(row["payload_sha256"]),
+            validation_status=row["validation_status"],
+            rejection_reason=row.get("rejection_reason"),
+            received_results=len(item_receipts),
+            accepted_results=counts["accepted"],
+            duplicate_results=counts["duplicate"],
+            conflict_results=counts["conflict"],
+            rejected_results=counts["rejected"],
+            item_receipts=item_receipts,
+        )
 
     @staticmethod
     def _supports_dashboard_evidence_detail(

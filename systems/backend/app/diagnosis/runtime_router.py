@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.mvp.contracts import AppLocale
 from app.dependencies import (
@@ -30,6 +30,7 @@ router = APIRouter(
     prefix="/api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance",
     tags=["predictive-maintenance-runtime"],
 )
+internal_router = APIRouter(prefix="/internal", tags=["prediction-result-inbox"])
 
 
 def require_scope(
@@ -59,6 +60,20 @@ def selected_dataset_version(
         workspace_id=workspace_id,
         user_id=principal.user_id,
     ).default_dataset_version_id
+
+
+def _prediction_inbox_response(receipt):
+    body = receipt.model_dump(mode="json")
+    if receipt.validation_status == "conflict":
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=body)
+    if receipt.validation_status == "rejected":
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content=body,
+        )
+    if receipt.validation_status == "duplicate":
+        return JSONResponse(status_code=status.HTTP_200_OK, content=body)
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=body)
 
 
 @router.get("/context")
@@ -410,6 +425,56 @@ def observation_window(
     ).model_dump(mode="json")
 
 
+@router.post("/prediction-result-batches")
+def receive_prediction_result_batch(
+    project_id: str,
+    workspace_id: str,
+    payload: dict[str, Any] = Body(...),
+    principal: Principal = Depends(require_permission("predictions.ingest")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    receipt = service.receive_prediction_result_batch(
+        organization_id=principal.organization_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        payload=payload,
+    )
+    return _prediction_inbox_response(receipt)
+
+
+@router.post("/prediction-result-batches/validate")
+def validate_prediction_result_batch(
+    project_id: str,
+    workspace_id: str,
+    payload: dict[str, Any] = Body(...),
+    principal: Principal = Depends(require_permission("predictions.ingest")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    return receive_prediction_result_batch(
+        project_id=project_id,
+        workspace_id=workspace_id,
+        payload=payload,
+        principal=principal,
+        _=_,
+        identity=identity,
+        service=service,
+    )
+
+
 @router.post("/replay/sessions", status_code=status.HTTP_201_CREATED)
 def start_replay(
     project_id: str,
@@ -560,3 +625,30 @@ async def replay_events(
             "Connection": "keep-alive",
         },
     )
+
+
+@internal_router.post("/prediction-results")
+def receive_internal_prediction_results(
+    payload: dict[str, Any] = Body(...),
+    project_id: str = Query(max_length=160),
+    workspace_id: str = Query(max_length=160),
+    principal: Principal = Depends(require_permission("predictions.ingest")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    receipt = service.receive_prediction_result_batch(
+        organization_id=principal.organization_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        payload=payload,
+    )
+    return _prediction_inbox_response(receipt)

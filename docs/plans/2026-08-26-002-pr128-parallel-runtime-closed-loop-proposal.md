@@ -469,6 +469,19 @@ Generator Prediction Result Batch를 Backend가 승격하는 경로로 확장하
 
 ## 8. Contract Freeze
 
+현재 구현된 receive-only 범위:
+
+- `contracts/schemas/prediction-result-batch.schema.json`
+- Backend typed validator `PredictionResultBatch`
+- public receive endpoint:
+  `POST /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/prediction-result-batches`
+- internal receive endpoint:
+  `POST /internal/prediction-results?project_id=...&workspace_id=...`
+- `pm_prediction_result_inbox_batches` / `pm_prediction_result_inbox_items`
+- raw payload 보존, schema/checksum/scope/idempotency 검증, duplicate/conflict/rejected receipt
+
+이 범위는 Product Result 생성, Evidence append, ViewModel 갱신, Closed-loop trigger를 수행하지 않는다.
+
 ### 유지
 
 - Product Result core:

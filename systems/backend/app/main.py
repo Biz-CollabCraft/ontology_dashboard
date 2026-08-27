@@ -45,6 +45,7 @@ from app.dataset.ingestion.router import router as adapters_router
 from app.dataset.dataset_router import router as datasets_router
 from app.mvp.router import router as manufacturing_router
 from app.diagnosis.runtime_router import (
+    internal_router as prediction_result_inbox_router,
     router as predictive_maintenance_runtime_router,
 )
 from app.mvp.service import EventNotFound
@@ -194,6 +195,7 @@ for router in (
     datasets_router,
     adapters_router,
     predictive_maintenance_runtime_router,
+    prediction_result_inbox_router,
     manufacturing_router,
     dashboard_router,
     report_router,

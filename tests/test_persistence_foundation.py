@@ -49,6 +49,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0031_recommendation_materialization_strategy",
             "0032_operations_manual_recommendation",
             "0033_inspection_results",
+            "0034_prediction_result_inbox",
         ]
     assert second == []
 
@@ -72,6 +73,10 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         "closed_loop_activities",
         "closed_loop_idempotency_records",
         "closed_loop_inspection_results",
+    } <= tables
+    assert {
+        "pm_prediction_result_inbox_batches",
+        "pm_prediction_result_inbox_items",
     } <= tables
     with sqlite3.connect(database) as connection:
         activity_columns = {

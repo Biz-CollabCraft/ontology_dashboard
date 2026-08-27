@@ -651,6 +651,7 @@ Result Batch/Outbox를 안정적으로 생산하는 병렬 track이다.
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/results/latest
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/timeline
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/observations
+POST /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/prediction-result-batches
 GET /api/projects/{project_id}/workspaces/{workspace_id}/maintenance/events/{event_id}/lineage
 POST /api/projects/{project_id}/workspaces/{workspace_id}/maintenance/maintenance-events/{id}/replay
 ```
@@ -664,7 +665,9 @@ GET /internal/prediction-results/consume-status
 
 주의:
 
-- `/internal/prediction-results`는 public product action이 아니다.
+- `/prediction-result-batches`와 `/internal/prediction-results`는 receive-only Inbox entrypoint다.
+- 수신부는 raw payload와 validation metadata를 저장하지만 Product Result/Evidence를 생성하지 않는다.
+- `/internal/prediction-results`는 public product action이 아니며 동일한 권한/scope gate를 통과해야 한다.
 - Frontend는 internal endpoint를 직접 호출하지 않는다.
 - Frontend refresh는 public Product API를 기준으로 한다.
 
