@@ -8,6 +8,7 @@ Reference:
 
 - PR #127 `Generator Runtime Prediction Result Pipeline 및 Outbox 전달 경계 구현`
 - Issue #99 `Maintenance Loop Prototype 검증 근거 및 이식 전 계약 Gate`
+- `contracts/schemas/prediction-result-batch.schema.json`
 
 ## 1. 제안 목적
 
@@ -183,6 +184,10 @@ feature_schema_version
 history_requirement_version
 ```
 
+이 최소 handoff는 `contracts/schemas/prediction-result-batch.schema.json`와
+`contracts/examples/prediction-result-batch/` 예제로 freeze한다. 이 계약은 raw upstream
+batch이며 Product Result Artifact, Event Evidence, UI trigger가 아니다.
+
 Simulation / maintenance replay source이면 추가:
 
 ```text
@@ -322,7 +327,7 @@ Track E Frontend
 
 ```text
 0. PR #127/#128/#129의 최신 base/head와 팀 승인 상태를 확인한다.
-1. Prediction Result Batch 최소 contract를 freeze한다.
+1. Prediction Result Batch 최소 contract를 `contracts/schemas/prediction-result-batch.schema.json`로 freeze한다.
 2. Backend Prediction Inbox가 Batch를 검증하고 Product Result/Evidence로 승격한다.
 3. PR #128 UI는 Backend Product API/ViewModel 변화를 refetch한다.
 4. Closed-loop는 Product Result/Evidence와 persisted mutation response 기반으로 작업요청/정비/replay를 연결한다.

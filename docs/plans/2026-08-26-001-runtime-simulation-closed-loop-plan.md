@@ -7,6 +7,7 @@ Evidence state: 문서-only 계획; 구현과 E2E runtime 동작은 이 PR에서
 Related:
 
 - PR #127 `Generator Runtime Prediction Result Pipeline 및 Outbox 전달 경계 구현`
+- `contracts/schemas/prediction-result-batch.schema.json`
 - `docs/mvp/runtime-ownership-integration.md`
 - `docs/closed-loop-product-consumption-contract.md`
 - `docs/closed-loop-runtime-overlay-contract.md`
@@ -238,6 +239,8 @@ MaintenanceAction complete
 
 Generator와 Backend가 live와 simulation을 같은 통합 파이프라인에서 처리하려면 observation
 handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 한다.
+정식 batch envelope는 `contracts/schemas/prediction-result-batch.schema.json`를 기준으로
+검증한다.
 
 ```json
 {
@@ -351,6 +354,7 @@ Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도
 
 검증:
 
+- contract: `contracts/examples/prediction-result-batch/*.json`
 - unit: Inbox duplicate/conflict cases
 - integration: Prediction Result Batch -> Inbox -> stored receive record
 - architecture check: Backend consumer가 Generator Python 구현을 import하지 않음

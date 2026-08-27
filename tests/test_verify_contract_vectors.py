@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from systems.verify_contract_vectors import ContractVectorVerifier, compute_sha256
 
@@ -21,6 +22,69 @@ def test_real_repository_contract_vectors_pass():
     assert result.manifest_count >= 2
     assert result.payload_count >= 2
     assert "generator-feature-input-v1" in result.verified_vectors
+
+
+def test_prediction_result_batch_examples_match_schema():
+    repo_root = Path(__file__).resolve().parents[1]
+    schema = json.loads(
+        (repo_root / "contracts" / "schemas" / "prediction-result-batch.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    validator = Draft202012Validator(schema)
+    examples_dir = repo_root / "contracts" / "examples" / "prediction-result-batch"
+    example_files = sorted(examples_dir.glob("*.json"))
+
+    assert example_files, "prediction-result-batch examples must not be empty"
+    for example_file in example_files:
+        payload = json.loads(example_file.read_text(encoding="utf-8"))
+        validator.validate(payload)
+
+
+def test_prediction_result_batch_rejects_score_for_non_predicted_status():
+    repo_root = Path(__file__).resolve().parents[1]
+    schema = json.loads(
+        (repo_root / "contracts" / "schemas" / "prediction-result-batch.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    validator = Draft202012Validator(schema)
+    payload = json.loads(
+        (
+            repo_root
+            / "contracts"
+            / "examples"
+            / "prediction-result-batch"
+            / "maintenance-history-insufficient.json"
+        ).read_text(encoding="utf-8")
+    )
+    payload["results"][0]["score"] = 0.2
+
+    errors = list(validator.iter_errors(payload))
+    assert any(error.json_path == "$.results[0].score" for error in errors)
+
+
+def test_prediction_result_batch_requires_maintenance_replay_lineage():
+    repo_root = Path(__file__).resolve().parents[1]
+    schema = json.loads(
+        (repo_root / "contracts" / "schemas" / "prediction-result-batch.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    validator = Draft202012Validator(schema)
+    payload = json.loads(
+        (
+            repo_root
+            / "contracts"
+            / "examples"
+            / "prediction-result-batch"
+            / "maintenance-history-insufficient.json"
+        ).read_text(encoding="utf-8")
+    )
+    payload["results"][0]["lineage"]["maintenance_event_id"] = None
+
+    errors = list(validator.iter_errors(payload))
+    assert any(error.json_path == "$.results[0].lineage.maintenance_event_id" for error in errors)
 
 
 def _setup_isolated_contracts(tmp_path: Path) -> tuple[Path, ContractVectorVerifier]:
