@@ -87,11 +87,15 @@ class PipelineRepository:
 
     def save_event(self, event: PredictionResultBatchPayload) -> None:
         """Atomically persist PredictionResultBatchPayload to disk."""
-        target_file = self.events_dir / f"{event.event_id}.json"
+        from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
+            PredictionDeliveryService,
+        )
+        event_id, _ = PredictionDeliveryService.compute_canonical_payload_sha256(event)
+        target_file = self.events_dir / f"{event_id}.json"
         try:
-            self._atomic_write_json(target_file, event.model_dump())
+            self._atomic_write_json(target_file, event.model_dump(mode="json"))
         except Exception as exc:
-            logger.warning(f"[PipelineRepository] Failed to save prediction event '{event.event_id}': {exc}")
+            logger.warning(f"[PipelineRepository] Failed to save prediction event '{event_id}': {exc}")
 
     def get_event(self, event_id: str) -> Optional[PredictionResultBatchPayload]:
         """Fetch PredictionResultBatchPayload by event ID."""

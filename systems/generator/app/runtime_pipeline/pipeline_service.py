@@ -12,6 +12,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from datetime import datetime, timezone
+
 from systems.generator.generator_config import (
     PROJECT_ROOT,
     PATHS,
@@ -26,6 +28,8 @@ from systems.generator.app.runtime_pipeline.prediction_batch_service import (
     EquipmentModelBatch,
     PredictionBatchService,
     PredictionBatchSummary,
+    to_external_result_item,
+    validate_external_results_array,
 )
 from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
     PredictionDeliveryService,
@@ -79,6 +83,10 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PipelineRunState,
     PredictionDeliveryEventState,
     PredictionResultBatchPayload,
+    PredictionResultItem,
+    PredictionResultLineage,
+    PredictionResultProducer,
+    PredictionResultSourceRef,
     SourceLineage,
     compute_source_identity,
     now_utc_iso,
@@ -880,13 +888,16 @@ class PipelineService:
             else:
                 eq_batches = {}
                 for aid, payload in staged_batches.items():
+                    obs_str = payload.results[0].observed_at.isoformat() if payload.results else ""
+                    succeeded_m = [r.model_id for r in payload.results if r.output_status == "predicted"]
+                    failed_m = [r.model_id for r in payload.results if r.output_status != "predicted"]
                     eq_batches[aid] = EquipmentModelBatch(
                         asset_id=aid,
-                        status="succeeded",
-                        observed_at=payload.observed_at,
-                        succeeded_models=list(payload.model_results.keys()),
-                        failed_models=[],
-                        model_results=payload.model_results,
+                        status="succeeded" if not failed_m else "partially_succeeded",
+                        observed_at=obs_str,
+                        succeeded_models=succeeded_m,
+                        failed_models=failed_m,
+                        model_results={},
                     )
                 batch_summary = PredictionBatchSummary(
                     overall_status="succeeded",
@@ -953,25 +964,52 @@ class PipelineService:
                         retryable=False,
                     )
 
-                batch_payload = PredictionResultBatchPayload(
-                    event_id="temp",
-                    run_id=run_id,
-                    job_id=item.job_id,
-                    asset_id=asset_id,
-                    observed_at=batch_observed_at,
-                    generated_at=now_utc_iso(),
-                    dataset_id=item.dataset_id,
-                    dataset_version=item.dataset_version,
-                    model_set_id=active_model_set.model_set_id,
-                    model_set_version=active_model_set.model_set_version,
-                    model_results=eq_batch.model_results,
-                    source_lineage=SourceLineage(
-                        source_uri=logical_source_uri,
-                        source_checksum=item.source_checksum,
-                        pipeline_contract_version=contract_ver,
-                    ),
-                    sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
-                )
+                if staged_batches and asset_id in staged_batches:
+                    batch_payload = staged_batches[asset_id]
+                else:
+                    items: list[PredictionResultItem] = []
+                    src_ref = PredictionResultSourceRef(uri=logical_source_uri, sha256=item.source_checksum)
+                    lineage_obj = PredictionResultLineage()
+                    if eq_batch.internal_results:
+                        for internal_r in eq_batch.internal_results:
+                            items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+                    else:
+                        for m_id, m_res in eq_batch.model_results.items():
+                            internal_r = InternalModelPredictionResult(
+                                asset_id=asset_id,
+                                model_id=m_id,
+                                model_version=m_res.model_version,
+                                status=m_res.status,
+                                observed_at=m_res.observed_at,
+                                score_type=m_res.score_type,
+                                score_source=m_res.score_source,
+                                score=m_res.score,
+                                artifact_ref=m_res.artifact_ref,
+                                feature_ref=m_res.feature_ref,
+                                manifest_checksum=m_res.manifest_checksum,
+                                feature_schema_version=m_res.feature_schema_version,
+                                label_schema_version=m_res.label_schema_version,
+                                history_requirement_version=m_res.history_requirement_version,
+                                model_set_id=m_res.model_set_id or active_model_set.model_set_id,
+                                model_set_version=m_res.model_set_version or active_model_set.model_set_version,
+                                error_code=m_res.error_code,
+                                error_message=m_res.error_message,
+                            )
+                            items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+
+                    validate_external_results_array(items)
+
+                    now_dt = datetime.now(timezone.utc)
+                    batch_key = f"{run_id}:{asset_id}:{now_dt.isoformat()}"
+                    batch_id = f"batch-{hashlib.sha256(batch_key.encode('utf-8')).hexdigest()[:24]}"
+                    producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
+                    batch_payload = PredictionResultBatchPayload(
+                        contract_version="prediction-result-batch-v1",
+                        batch_id=batch_id,
+                        producer=producer,
+                        emitted_at=now_dt,
+                        results=items,
+                    )
 
                 prev_delivery = existing_delivery.get(asset_id)
                 if prev_delivery and prev_delivery.get("status") == "published":
@@ -996,7 +1034,7 @@ class PipelineService:
                             delivery_outputs_map[asset_id] = prev_delivery
                             continue
 
-                outbox_item, payload_sha256 = self.prediction_delivery_service.register_idempotent_outbox_record(batch_payload)
+                outbox_item, payload_sha256 = self.prediction_delivery_service.register_idempotent_outbox_record(batch_payload, run_id=run_id)
                 self.repository.save_event(batch_payload)
 
                 event_ids.append(outbox_item.event_id)

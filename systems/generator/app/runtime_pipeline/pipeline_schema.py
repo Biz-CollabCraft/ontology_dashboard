@@ -355,11 +355,98 @@ class SourceLineage(BaseModel):
     pipeline_contract_version: str = "generator-prediction-result-v1"
 
 
-class PredictionResultBatchPayload(BaseModel):
-    """Prediction Result Batch payload sent per equipment across models."""
+class PredictionResultProducer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    event_id: str = Field(..., description="Unique event identifier (Idempotency Key)")
+    system: Literal["systems.generator"] = "systems.generator"
+    runtime_version: str = Field("1.0.0", min_length=1)
+    outbox_id: Optional[str] = None
+
+
+class PredictionResultSourceRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    uri: str = Field(..., min_length=1)
+    sha256: str = Field(..., min_length=1)
+
+
+class PredictionResultLineage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    simulation_session_id: Optional[str] = None
+    overlay_branch_id: Optional[str] = None
+    history_segment_id: Optional[str] = None
+    maintenance_event_id: Optional[str] = None
+    maintenance_action_id: Optional[str] = None
+    state_version: Optional[int] = None
+
+
+class PredictionResultItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(..., min_length=1)
+    asset_id: str = Field(..., min_length=1)
+    observed_at: datetime
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay"] = "live_sensor"
+    source_ref: PredictionResultSourceRef
+    payload_sha256: str = Field(..., pattern=r"^[a-f0-9]{64}$")
+    output_status: Literal[
+        "predicted",
+        "warming_up",
+        "history_insufficient",
+        "failed_source_unavailable",
+        "failed_model_artifact",
+        "failed_feature_execution",
+        "failed_model_inference",
+    ]
+    score: Optional[float] = None
+    model_id: str = Field(..., min_length=1)
+    model_version: str = Field(..., min_length=1)
+    model_artifact_sha256: str = Field(..., min_length=1)
+    feature_schema_version: str = Field(..., min_length=1)
+    history_requirement_version: str = Field(..., min_length=1)
+    feature_schema_sha256: Optional[str] = None
+    history_requirement_sha256: Optional[str] = None
+    lineage: PredictionResultLineage
+    failure_reason: Optional[str] = None
+
+
+def compute_prediction_result_item_sha256(item_dict: dict[str, Any]) -> str:
+    """Compute canonical SHA-256 for a PredictionResultItem excluding payload_sha256."""
+    import hashlib
+    import json
+    d = dict(item_dict)
+    d.pop("payload_sha256", None)
+    # Convert datetime objects if any to ISO string
+    for k, v in list(d.items()):
+        if isinstance(v, datetime):
+            d[k] = v.isoformat().replace("+00:00", "Z")
+        elif isinstance(v, dict):
+            sub_d = dict(v)
+            for sub_k, sub_v in list(sub_d.items()):
+                if isinstance(sub_v, datetime):
+                    sub_d[sub_k] = sub_v.isoformat().replace("+00:00", "Z")
+            d[k] = sub_d
+    canonical_json = json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+class PredictionResultBatchPayload(BaseModel):
+    """Official external Prediction Result Batch payload (prediction-result-batch-v1)."""
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal["prediction-result-batch-v1"] = "prediction-result-batch-v1"
+    batch_id: str = Field(..., min_length=1)
+    producer: PredictionResultProducer
+    emitted_at: datetime
+    results: list[PredictionResultItem] = Field(..., min_length=1)
+
+
+class InternalPredictionResultBatchStage(BaseModel):
+    """Generator internal staging payload (K-V map representation per equipment)."""
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(..., description="Unique event identifier")
     run_id: str = Field(..., description="Associated pipeline run ID")
     job_id: str = Field(..., description="Associated queue job ID")
     asset_id: str = Field(..., description="Target equipment identifier")

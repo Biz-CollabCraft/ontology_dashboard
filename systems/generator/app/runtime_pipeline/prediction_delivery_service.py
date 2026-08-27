@@ -97,25 +97,50 @@ class PredictionDeliveryService:
         return items
 
     @staticmethod
-    def compute_canonical_payload_sha256(payload: PredictionResultBatchPayload) -> tuple[str, str]:
+    def compute_canonical_payload_sha256(payload: Any) -> tuple[str, str]:
         """Compute SHA-256 checksum of canonical payload representation and generate deterministic event_id."""
         import hashlib
-        d = payload.model_dump(mode="json")
-        d.pop("event_id", None)
-        d.pop("generated_at", None)
-        d.pop("job_id", None)
+        import json
+        if isinstance(payload, dict):
+            d = dict(payload)
+        else:
+            d = payload.model_dump(mode="json")
 
-        canonical_json = json.dumps(d, sort_keys=True, separators=(",", ":"))
+        d_clean = dict(d)
+        d_clean.pop("emitted_at", None)
+        d_clean.pop("batch_id", None)
+        if isinstance(d_clean.get("producer"), dict):
+            d_clean["producer"] = dict(d_clean["producer"])
+            d_clean["producer"].pop("outbox_id", None)
+
+        canonical_json = json.dumps(d_clean, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         payload_sha256 = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
-        key_str = f"{payload.source_lineage.pipeline_contract_version}:{payload.run_id}:{payload.asset_id}:{payload_sha256}"
-        event_id = f"evt-{hashlib.sha256(key_str.encode('utf-8')).hexdigest()[:32]}"
+        if isinstance(payload, dict):
+            results = payload.get("results", [])
+            if results and isinstance(results, list) and isinstance(results[0], dict) and results[0].get("event_id"):
+                event_id = results[0]["event_id"]
+            elif payload.get("event_id"):
+                event_id = payload["event_id"]
+            else:
+                event_id = f"evt-{payload_sha256[:32]}"
+        else:
+            if hasattr(payload, "results") and payload.results and payload.results[0].event_id:
+                event_id = payload.results[0].event_id
+            elif hasattr(payload, "event_id") and getattr(payload, "event_id"):
+                event_id = getattr(payload, "event_id")
+            elif hasattr(payload, "batch_id"):
+                event_id = f"evt-{hashlib.sha256(payload.batch_id.encode('utf-8')).hexdigest()[:32]}"
+            else:
+                event_id = f"evt-{payload_sha256[:32]}"
+
         return event_id, payload_sha256
 
-    def register_idempotent_outbox_record(self, payload: PredictionResultBatchPayload) -> tuple[PredictionOutboxItem, str]:
+    def register_idempotent_outbox_record(
+        self, payload: PredictionResultBatchPayload, run_id: Optional[str] = None
+    ) -> tuple[PredictionOutboxItem, str]:
         """Register outbox record with deterministic event_id. Idempotently returns existing record if present."""
         event_id, payload_sha256 = self.compute_canonical_payload_sha256(payload)
-        payload.event_id = event_id
 
         existing_item = self.get_outbox_item(event_id)
         if existing_item is not None:
@@ -130,16 +155,21 @@ class PredictionDeliveryService:
                     retryable=False,
                 )
 
-        item = self.create_outbox_record(payload)
+        item = self.create_outbox_record(payload, run_id=run_id)
         return item, payload_sha256
 
-    def create_outbox_record(self, payload: PredictionResultBatchPayload) -> PredictionOutboxItem:
+    def create_outbox_record(
+        self, payload: PredictionResultBatchPayload, run_id: Optional[str] = None
+    ) -> PredictionOutboxItem:
         """Create new pending outbox record for payload."""
+        event_id, _ = self.compute_canonical_payload_sha256(payload)
+        asset_id = payload.results[0].asset_id if (hasattr(payload, "results") and payload.results) else "unknown"
+        actual_run_id = run_id or getattr(payload, "run_id", None) or getattr(payload, "batch_id", event_id)
         item = PredictionOutboxItem(
-            event_id=payload.event_id,
-            run_id=payload.run_id,
-            job_id=payload.job_id,
-            asset_id=payload.asset_id,
+            event_id=event_id,
+            run_id=actual_run_id,
+            job_id=actual_run_id,
+            asset_id=asset_id,
             status="pending",
             attempt=0,
             max_attempts=5,
@@ -151,10 +181,12 @@ class PredictionDeliveryService:
     def send_once(self, payload: PredictionResultBatchPayload) -> dict[str, Any]:
         """Perform a single HTTP POST dispatch attempt to the backend receiver."""
         body = payload.model_dump_json().encode("utf-8")
+        event_id, _ = self.compute_canonical_payload_sha256(payload)
+        batch_id = getattr(payload, "batch_id", event_id)
         headers = {
             "Content-Type": "application/json",
-            "Idempotency-Key": payload.event_id,
-            "X-Request-ID": payload.run_id,
+            "Idempotency-Key": event_id,
+            "X-Request-ID": batch_id,
         }
         req = urllib.request.Request(
             self.endpoint_url,
@@ -167,7 +199,7 @@ class PredictionDeliveryService:
                 status_code = resp.getcode()
                 resp_body = resp.read().decode("utf-8")
                 logger.info(
-                    f"[PredictionDeliveryService] Successfully sent prediction batch '{payload.event_id}' "
+                    f"[PredictionDeliveryService] Successfully sent prediction batch '{event_id}' "
                     f"(HTTP {status_code}) to {self.endpoint_url}"
                 )
                 return {"delivered": True, "status_code": status_code, "response": resp_body}
@@ -175,50 +207,48 @@ class PredictionDeliveryService:
             if h_err.code in (200, 202):
                 return {"delivered": True, "status_code": h_err.code, "response": ""}
             elif h_err.code == 409:
-                logger.error(f"[PredictionDeliveryService] Conflict error (HTTP 409) for batch '{payload.event_id}'")
+                logger.error(f"[PredictionDeliveryService] Conflict error (HTTP 409) for batch '{event_id}'")
                 raise PipelineOutboxEventConflictError(
-                    f"수신 시스템에서 event ID 충돌이 발생했습니다 (HTTP 409): {payload.event_id}",
-                    details=[{"status_code": 409, "event_id": payload.event_id}],
+                    f"수신 시스템에서 event ID 충돌이 발생했습니다 (HTTP 409): {event_id}",
+                    details=[{"status_code": 409, "event_id": event_id}],
                     retryable=False,
                 ) from h_err
             elif h_err.code == 422:
-                logger.error(f"[PredictionDeliveryService] Contract unprocessable error (HTTP 422) for batch '{payload.event_id}'")
+                logger.error(f"[PredictionDeliveryService] Contract unprocessable error (HTTP 422) for batch '{event_id}'")
                 raise PipelineDeliveryUnprocessableError(
-                    f"수신 시스템이 계약 위반으로 배치를 거부했습니다 (HTTP 422): {payload.event_id}",
-                    details=[{"status_code": 422, "event_id": payload.event_id}],
+                    f"수신 시스템이 계약 위반으로 배치를 거부했습니다 (HTTP 422): {event_id}",
+                    details=[{"status_code": 422, "event_id": event_id}],
                     retryable=False,
                 ) from h_err
             elif h_err.code in (401, 403):
-                logger.error(f"[PredictionDeliveryService] Authorization error (HTTP {h_err.code}) for batch '{payload.event_id}'")
+                logger.error(f"[PredictionDeliveryService] Authorization error (HTTP {h_err.code}) for batch '{event_id}'")
                 raise PipelineDeliveryUnauthorizedError(
-                    f"수신 시스템 인증/권한 오류 (HTTP {h_err.code}): {payload.event_id}",
-                    details=[{"status_code": h_err.code, "event_id": payload.event_id}],
+                    f"수신 시스템 인증/권한 오류 (HTTP {h_err.code}): {event_id}",
+                    details=[{"status_code": h_err.code, "event_id": event_id}],
                     retryable=False,
                 ) from h_err
             elif 400 <= h_err.code < 500:
                 logger.error(
-                    f"[PredictionDeliveryService] Receiver rejected prediction batch '{payload.event_id}' with HTTP {h_err.code}"
+                    f"[PredictionDeliveryService] Client error (HTTP {h_err.code}) for batch '{event_id}'"
                 )
                 raise PipelineDeliveryFailedError(
-                    f"수신 시스템이 결과 배치를 거부했습니다 (HTTP {h_err.code})",
-                    details=[{"status_code": h_err.code, "event_id": payload.event_id}],
+                    f"수신 시스템 클라이언트 오류 (HTTP {h_err.code}): {event_id}",
+                    details=[{"status_code": h_err.code, "event_id": event_id}],
                     retryable=False,
                 ) from h_err
-            # 5xx server error
-            logger.warning(
-                f"[PredictionDeliveryService] Server error from receiver (HTTP {h_err.code}): {h_err}"
-            )
-            raise PipelineDeliveryServerError(
-                f"수신 시스템 서버 오류 (HTTP {h_err.code}): {h_err}",
-                details=[{"status_code": h_err.code, "event_id": payload.event_id}],
+            else:
+                logger.warning(
+                    f"[PredictionDeliveryService] Server error (HTTP {h_err.code}) for batch '{event_id}'"
+                )
+                raise PipelineDeliveryServerError(
+                    f"수신 시스템 서버 오류 (HTTP {h_err.code}): {event_id}",
+                    details=[{"status_code": h_err.code, "event_id": event_id}],
+                    retryable=True,
+                ) from h_err
+        except Exception as exc:
+            logger.warning(f"[PredictionDeliveryService] Network or unexpected error sending batch '{event_id}': {exc}")
+            raise PipelineDeliveryFailedError(
+                f"예측 결과 전송 중 오류 발생: {exc}",
+                details=[{"event_id": event_id, "error": str(exc)}],
                 retryable=True,
-            ) from h_err
-        except (urllib.error.URLError, TimeoutError, OSError) as net_err:
-            logger.warning(
-                f"[PredictionDeliveryService] Network error sending prediction batch '{payload.event_id}': {net_err}"
-            )
-            raise PipelineDeliveryTimeoutError(
-                f"결과 배치 전송 네트워크/타임아웃 오류: {net_err}",
-                details=[{"error": str(net_err), "event_id": payload.event_id}],
-                retryable=True,
-            ) from net_err
+            ) from exc

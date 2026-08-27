@@ -1342,7 +1342,7 @@ class ContractVectorVerifier:
 
         # 2. Validate prediction-result-batch.json
         batch_path = vector_dir / "expected" / "prediction-result-batch.json"
-        batch_schema_path = self.schemas_dir / "generator-prediction-result-batch.schema.json"
+        batch_schema_path = self.schemas_dir / "prediction-result-batch.schema.json"
         try:
             batch_data = json.loads(batch_path.read_text(encoding="utf-8"))
             if not isinstance(batch_data, dict):
@@ -1353,33 +1353,23 @@ class ContractVectorVerifier:
                     )
                 )
             else:
-                # Assert top-level feature_ref is removed
-                if "feature_ref" in batch_data:
+                if not isinstance(batch_data.get("results"), list) or len(batch_data.get("results")) == 0:
                     result.errors.append(
                         VerificationError(
                             context=f"{vector_name}/expected/prediction-result-batch.json",
-                            message="Top-level 'feature_ref' must be removed from prediction-result-batch",
-                            expected="No top-level feature_ref",
-                            actual="Found top-level feature_ref",
-                        )
-                    )
-                # Assert model_results is a dict
-                if not isinstance(batch_data.get("model_results"), dict):
-                    result.errors.append(
-                        VerificationError(
-                            context=f"{vector_name}/expected/prediction-result-batch.json",
-                            message="'model_results' must be a dictionary keyed by model_id",
-                            expected="JSON object",
-                            actual=type(batch_data.get("model_results")).__name__,
+                            message="'results' must be a non-empty list of PredictionResultItem objects",
+                            expected="Non-empty array",
+                            actual=type(batch_data.get("results")).__name__,
                         )
                     )
                 if batch_schema_path.is_file():
                     batch_schema = json.loads(batch_schema_path.read_text(encoding="utf-8"))
                     reg = self._build_schema_registry()
+                    format_checker = jsonschema.FormatChecker()
                     if reg is not None:
-                        validator = jsonschema.Draft202012Validator(batch_schema, registry=reg)
+                        validator = jsonschema.Draft202012Validator(batch_schema, registry=reg, format_checker=format_checker)
                     else:
-                        validator = jsonschema.Draft202012Validator(batch_schema)
+                        validator = jsonschema.Draft202012Validator(batch_schema, format_checker=format_checker)
                     validator.validate(batch_data)
         except Exception as e:
             result.errors.append(

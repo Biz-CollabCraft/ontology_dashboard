@@ -471,8 +471,46 @@ class PredictionService:
                         f"[PredictionService] Equipment '{asset_id}', Model '{model_id}' ({artifact.model_version}): "
                         f"score={score_val:.4f} (source={score_source_val}, observed_at={observed_at_val})"
                     )
+                except PipelineModelPredictionFailedError:
+                    raise
                 except Exception as exc:
-                    err_code = getattr(exc, "code", "PIPELINE_MODEL_PREDICTION_FAILED")
                     logger.warning(f"[PredictionService] Model '{model_id}' prediction execution failed for asset '{asset_id}': {exc}")
+                    if is_required:
+                        raise PipelineModelPredictionFailedError(
+                            f"필수 모델 '{model_id}'의 추론 실패: {exc}",
+                            details=[
+                                {
+                                    "asset_id": asset_id,
+                                    "model_id": model_id,
+                                    "model_version": artifact.model_version,
+                                    "observed_at": observed_at_val,
+                                    "error": str(exc),
+                                }
+                            ],
+                            retryable=False,
+                        ) from exc
+                    else:
+                        results.append(
+                            InternalModelPredictionResult(
+                                asset_id=asset_id,
+                                model_id=model_id,
+                                model_version=artifact.model_version,
+                                status="failed",
+                                observed_at=observed_at_val,
+                                score_type="positive_class_probability",
+                                score_source=None,
+                                score=None,
+                                artifact_ref=artifact.artifact_ref,
+                                feature_ref=feature_ref,
+                                manifest_checksum=artifact.manifest_checksum,
+                                feature_schema_version=feat_schema_ver,
+                                label_schema_version=lbl_schema_ver,
+                                history_requirement_version=hist_req_ver,
+                                model_set_id=model_set_id,
+                                model_set_version=model_set_version,
+                                error_code="PIPELINE_MODEL_PREDICTION_FAILED",
+                                error_message=str(exc),
+                            )
+                        )
 
         return results

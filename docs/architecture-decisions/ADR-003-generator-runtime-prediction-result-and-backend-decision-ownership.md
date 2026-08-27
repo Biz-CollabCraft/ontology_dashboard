@@ -22,7 +22,7 @@
 
 1. **Generator의 런타임 예측 및 결과 배치 송신 소유권**:
    - `systems/generator`가 관측 데이터의 전처리(Preprocessing), 설비별 시계열 피처 추출(Runtime Feature), 활성 Model Artifact 로드 및 다중 모델 점수 계산(Runtime Prediction, `score`), 설비별 결과 묶음 구성(Batch Building)을 전담한다.
-   - Generator는 임계치를 적용하거나 `is_anomaly` 등 이상 판정을 내리지 않으며, 모델 결과가 생성된 모든 설비에 대해 `Prediction Result Batch` (`model_results`는 model_id 키 기반 딕셔너리 구조)를 생성하여 Outbox에 등록하고 Backend 수신 엔드포인트(`GENERATOR_PREDICTION_RESULT_URL`)로 멱등 송신한다.
+   - Generator는 임계치를 적용하거나 `is_anomaly` 등 이상 판정을 내리지 않으며, 모델 결과가 생성된 모든 설비에 대해 `Prediction Result Batch` (`results[]` 배열 기반 구조)를 생성하여 Outbox에 등록하고 Backend 수신 엔드포인트(`GENERATOR_PREDICTION_RESULT_URL`)로 멱등 송신한다.
    - 모델별 예측 대상 관측 시각(`observed_at`)은 실제 추론에 사용된 피처 행 메타데이터에서 추출하여 정합성을 보장하며, 결측/시각 불일치 시 조용한 fallback 없이 `501 Not Implemented` 오류로 fail-closed 처리한다.
 
 2. **Backend의 예측 결과 수신, 정책 기반 이상 판정 및 근거/리포트 생성 소유권**:
@@ -32,7 +32,7 @@
 
 3. **시스템 간 엄격한 결합 분리**:
    - Generator와 Backend는 상호 Python 코드를 직접 import하지 않는다.
-   - 오직 공식화된 `Prediction Result Batch Contract` (`contracts/schemas/generator-prediction-result-batch.schema.json`) 및 불변 파일 참조(URI, SHA-256 Checksum)만을 유일한 경계로 사용한다.
+   - 오직 공식화된 `Prediction Result Batch Contract` (`contracts/schemas/prediction-result-batch.schema.json`, `prediction-result-batch-v1`) 및 불변 파일 참조(URI, SHA-256 Checksum)만을 유일한 경계로 사용한다.
 
 4. **금지 범위 (Boundary Invariants)**:
    - Generator는 Threshold Policy를 로드하거나 임계치를 적용하지 않으며, 이상 판정, Product Result Artifact, Evidence, Report, 사용자 알림을 생성하지 않는다.

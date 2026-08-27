@@ -6,15 +6,155 @@ import logging
 from dataclasses import dataclass, field
 from typing import Literal
 
+from datetime import datetime, timezone
+import hashlib
+
 from systems.generator.app.runtime_pipeline.pipeline_exception import (
+    ModelSetContractInvalidError,
     PipelinePredictionObservationAlignmentNotImplementedError,
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     InternalModelPredictionResult,
     ModelPredictionResult,
+    PredictionResultBatchPayload,
+    PredictionResultItem,
+    PredictionResultLineage,
+    PredictionResultProducer,
+    PredictionResultSourceRef,
+    compute_prediction_result_item_sha256,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def to_external_result_item(
+    internal: InternalModelPredictionResult,
+    *,
+    source_kind: str = "live_sensor",
+    source_ref: Optional[PredictionResultSourceRef] = None,
+    lineage: Optional[PredictionResultLineage] = None,
+) -> PredictionResultItem:
+    """Convert an InternalModelPredictionResult into an official external PredictionResultItem."""
+    if isinstance(internal.observed_at, datetime):
+        obs_dt = internal.observed_at
+    elif internal.observed_at:
+        try:
+            s = internal.observed_at.strip()
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            obs_dt = datetime.fromisoformat(s)
+        except Exception:
+            obs_dt = datetime.now(timezone.utc)
+    else:
+        obs_dt = datetime.now(timezone.utc)
+
+    if source_ref is None:
+        source_ref = PredictionResultSourceRef(
+            uri="data/incoming/sensor_stream.jsonl",
+            sha256="0" * 64,
+        )
+
+    if lineage is None:
+        lineage = PredictionResultLineage()
+
+    if internal.status == "succeeded":
+        output_status = "predicted"
+        score_val = internal.score
+        failure_reason_val = None
+    elif internal.status == "unknown":
+        output_status = "history_insufficient"
+        score_val = None
+        failure_reason_val = internal.error_message or "History requirement insufficient"
+    else:
+        err_code = (internal.error_code or "").upper()
+        if "ARTIFACT" in err_code:
+            output_status = "failed_model_artifact"
+        elif "FEATURE" in err_code:
+            output_status = "failed_feature_execution"
+        else:
+            output_status = "failed_model_inference"
+        score_val = None
+        failure_reason_val = internal.error_message or "Model execution failed"
+
+    item_key = f"{internal.asset_id}:{internal.model_id}:{obs_dt.isoformat()}"
+    event_id = f"evt-{hashlib.sha256(item_key.encode('utf-8')).hexdigest()[:32]}"
+
+    model_artifact_sha256 = (
+        internal.manifest_checksum
+        or (internal.artifact_ref.sha256 if internal.artifact_ref else "0" * 64)
+    )
+
+    item_dict = {
+        "event_id": event_id,
+        "asset_id": internal.asset_id,
+        "observed_at": obs_dt,
+        "source_kind": source_kind,
+        "source_ref": source_ref.model_dump(mode="json"),
+        "output_status": output_status,
+        "score": score_val,
+        "model_id": internal.model_id,
+        "model_version": internal.model_version,
+        "model_artifact_sha256": model_artifact_sha256,
+        "feature_schema_version": internal.feature_schema_version or "v1.0.0",
+        "history_requirement_version": internal.history_requirement_version or "v1.0.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": lineage.model_dump(mode="json"),
+        "failure_reason": failure_reason_val,
+    }
+
+    item_payload_sha256 = compute_prediction_result_item_sha256(item_dict)
+
+    return PredictionResultItem(
+        event_id=event_id,
+        asset_id=internal.asset_id,
+        observed_at=obs_dt,
+        source_kind=source_kind,
+        source_ref=source_ref,
+        payload_sha256=item_payload_sha256,
+        output_status=output_status,
+        score=score_val,
+        model_id=internal.model_id,
+        model_version=internal.model_version,
+        model_artifact_sha256=model_artifact_sha256,
+        feature_schema_version=internal.feature_schema_version or "v1.0.0",
+        history_requirement_version=internal.history_requirement_version or "v1.0.0",
+        feature_schema_sha256=None,
+        history_requirement_sha256=None,
+        lineage=lineage,
+        failure_reason=failure_reason_val,
+    )
+
+
+def validate_external_results_array(items: list[PredictionResultItem]) -> None:
+    """Validate external results array against composite key duplication, event_id duplication, and non-empty rules."""
+    if not items:
+        raise ModelSetContractInvalidError(
+            "Prediction Result Batch의 results 배열이 비어 있습니다.",
+            retryable=False,
+        )
+
+    seen_composite_keys: set[tuple[str, str, str]] = set()
+    seen_event_ids: set[str] = set()
+
+    for item in items:
+        if item.event_id in seen_event_ids:
+            raise ModelSetContractInvalidError(
+                f"Prediction Result Batch 안에서 중복된 event_id '{item.event_id}'가 감지되었습니다.",
+                details=[{"event_id": item.event_id}],
+                retryable=False,
+            )
+        seen_event_ids.add(item.event_id)
+
+        obs_str = item.observed_at.isoformat() if isinstance(item.observed_at, datetime) else str(item.observed_at)
+        composite_key = (item.asset_id, item.model_id, obs_str)
+        if composite_key in seen_composite_keys:
+            raise ModelSetContractInvalidError(
+                f"Prediction Result Batch 안에서 중복된 복합키 (asset_id='{item.asset_id}', model_id='{item.model_id}', observed_at='{obs_str}')가 감지되었습니다.",
+                details=[{"asset_id": item.asset_id, "model_id": item.model_id, "observed_at": obs_str}],
+                retryable=False,
+            )
+        seen_composite_keys.add(composite_key)
 
 
 @dataclass
@@ -26,6 +166,7 @@ class EquipmentModelBatch:
     succeeded_models: list[str]
     failed_models: list[str]
     model_results: dict[str, ModelPredictionResult]
+    internal_results: list[InternalModelPredictionResult] = field(default_factory=list)
 
 
 @dataclass
@@ -119,6 +260,7 @@ class PredictionBatchService:
                 succeeded_models=succeeded_models,
                 failed_models=failed_models,
                 model_results=model_results_dict,
+                internal_results=asset_results,
             )
 
         if not any_success:
@@ -185,25 +327,64 @@ class PredictionBatchService:
                         retryable=False,
                     )
 
-            temp_payload = PredictionResultBatchPayload(
-                event_id="temp",
-                run_id=run_id,
-                job_id=job_id,
-                asset_id=asset_id,
-                observed_at=batch.observed_at,
-                dataset_id=dataset_id,
-                dataset_version=dataset_version,
-                model_set_id=model_set_id,
-                model_set_version=model_set_version,
-                model_results=batch.model_results,
-                source_lineage=source_lineage,
-                sensor_data_ref=sensor_data_ref,
+            # Convert internal results to external PredictionResultItem list
+            items: list[PredictionResultItem] = []
+            s_uri = source_lineage.source_uri if hasattr(source_lineage, "source_uri") and source_lineage.source_uri else "data/incoming/protocol.jsonl"
+            s_checksum = source_lineage.source_checksum if hasattr(source_lineage, "source_checksum") and source_lineage.source_checksum else "0" * 64
+            src_ref = PredictionResultSourceRef(uri=s_uri, sha256=s_checksum)
+            lineage_obj = PredictionResultLineage()
+
+            if batch.internal_results:
+                for internal_r in batch.internal_results:
+                    items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+            else:
+                for m_id, m_res in batch.model_results.items():
+                    internal_r = InternalModelPredictionResult(
+                        asset_id=asset_id,
+                        model_id=m_id,
+                        model_version=m_res.model_version,
+                        status=m_res.status,
+                        observed_at=m_res.observed_at,
+                        score_type=m_res.score_type,
+                        score_source=m_res.score_source,
+                        score=m_res.score,
+                        artifact_ref=m_res.artifact_ref,
+                        feature_ref=m_res.feature_ref,
+                        manifest_checksum=m_res.manifest_checksum,
+                        feature_schema_version=m_res.feature_schema_version,
+                        label_schema_version=m_res.label_schema_version,
+                        history_requirement_version=m_res.history_requirement_version,
+                        model_set_id=m_res.model_set_id or model_set_id,
+                        model_set_version=m_res.model_set_version or model_set_version,
+                        error_code=m_res.error_code,
+                        error_message=m_res.error_message,
+                    )
+                    items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+
+            validate_external_results_array(items)
+
+            now_dt = datetime.now(timezone.utc)
+            batch_key = f"{run_id}:{asset_id}:{now_dt.isoformat()}"
+            batch_id = f"batch-{hashlib.sha256(batch_key.encode('utf-8')).hexdigest()[:24]}"
+
+            producer = PredictionResultProducer(
+                system="systems.generator",
+                runtime_version="1.0.0",
+                outbox_id=None,
             )
-            event_id, payload_sha256 = PredictionDeliveryService.compute_canonical_payload_sha256(temp_payload)
-            temp_payload.event_id = event_id
+
+            external_payload = PredictionResultBatchPayload(
+                contract_version="prediction-result-batch-v1",
+                batch_id=batch_id,
+                producer=producer,
+                emitted_at=now_dt,
+                results=items,
+            )
+
+            event_id, payload_sha256 = PredictionDeliveryService.compute_canonical_payload_sha256(external_payload)
 
             asset_file = staging_dir / f"{asset_id}.json"
-            content_bytes = temp_payload.model_dump_json(indent=2).encode("utf-8")
+            content_bytes = external_payload.model_dump_json(indent=2).encode("utf-8")
             with open(asset_file, "wb") as f:
                 f.write(content_bytes)
 
@@ -300,6 +481,7 @@ class PredictionBatchService:
             with open(asset_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             payload = PredictionResultBatchPayload.model_validate(data)
+            validate_external_results_array(payload.results)
             event_id, payload_sha256 = PredictionDeliveryService.compute_canonical_payload_sha256(payload)
             if payload_sha256 != entry["sha256"]:
                 raise PipelineCheckpointChecksumMismatchError(

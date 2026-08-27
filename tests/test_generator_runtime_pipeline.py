@@ -1,6 +1,90 @@
-"""Comprehensive test suite for the Generator Runtime Prediction Pipeline."""
 
 from __future__ import annotations
+
+def create_test_batch_payload(
+    event_id: str = "evt-001",
+    asset_id: str = "M14860",
+    observed_at: str = "2026-08-25T10:00:00Z",
+    model_id: str = "pdm-lightgbm",
+    model_version: str = "1.0.0",
+    score: float = 0.88,
+    output_status: str = "predicted",
+    batch_id: str = "batch-001",
+) -> PredictionResultBatchPayload:
+    from datetime import datetime, timezone
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultBatchPayload,
+        PredictionResultItem,
+        PredictionResultProducer,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+        compute_prediction_result_item_sha256,
+    )
+
+    if isinstance(observed_at, str):
+        s = observed_at.strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        obs_dt = datetime.fromisoformat(s)
+    else:
+        obs_dt = observed_at
+
+    item_dict = {
+        "event_id": event_id,
+        "asset_id": asset_id,
+        "observed_at": obs_dt,
+        "source_kind": "live_sensor",
+        "source_ref": {"uri": "test.jsonl", "sha256": "0" * 64},
+        "output_status": output_status,
+        "score": score,
+        "model_id": model_id,
+        "model_version": model_version,
+        "model_artifact_sha256": "0" * 64,
+        "feature_schema_version": "v1.0",
+        "history_requirement_version": "v1.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": {
+            "simulation_session_id": None,
+            "overlay_branch_id": None,
+            "history_segment_id": None,
+            "maintenance_event_id": None,
+            "maintenance_action_id": None,
+            "state_version": None,
+        },
+        "failure_reason": None,
+    }
+
+    item_sha = compute_prediction_result_item_sha256(item_dict)
+
+    item = PredictionResultItem(
+        event_id=event_id,
+        asset_id=asset_id,
+        observed_at=obs_dt,
+        source_kind="live_sensor",
+        source_ref=PredictionResultSourceRef(uri="test.jsonl", sha256="0" * 64),
+        payload_sha256=item_sha,
+        output_status=output_status,
+        score=score,
+        model_id=model_id,
+        model_version=model_version,
+        model_artifact_sha256="0" * 64,
+        feature_schema_version="v1.0",
+        history_requirement_version="v1.0",
+        lineage=PredictionResultLineage(),
+        failure_reason=None,
+    )
+
+    producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
+    return PredictionResultBatchPayload(
+        contract_version="prediction-result-batch-v1",
+        batch_id=batch_id,
+        producer=producer,
+        emitted_at=datetime.now(timezone.utc),
+        results=[item],
+    )
+
+"""Comprehensive test suite for the Generator Runtime Prediction Pipeline."""
 
 import json
 import os
@@ -376,18 +460,15 @@ def test_multi_equipment_prediction_and_batch_building(isolated_runtime_env):
     for oi in outbox_items:
         assert oi.status == "pending"
         payload = oi.payload
-        assert isinstance(payload.model_results, dict)
-        assert "pdm-lightgbm" in payload.model_results
-        assert "pdm-xgboost" in payload.model_results
-        assert "pdm-random_forest" in payload.model_results
-        assert payload.observed_at != ""
-        assert not hasattr(payload, "feature_ref") or "feature_ref" not in payload.model_fields
-
-        for mid, mres in payload.model_results.items():
-            assert not hasattr(mres, "model_id") or "model_id" not in mres.model_fields
-            assert not hasattr(mres, "asset_id") or "asset_id" not in mres.model_fields
-            assert mres.observed_at != ""
-            assert mres.score_source in ("predict_proba", "decision_function_compat", "predict_compat", None)
+        assert isinstance(payload.results, list)
+        assert len(payload.results) == 3
+        model_ids = {r.model_id for r in payload.results}
+        assert "pdm-lightgbm" in model_ids
+        assert "pdm-xgboost" in model_ids
+        assert "pdm-random_forest" in model_ids
+        for r in payload.results:
+            assert r.observed_at is not None
+            assert r.output_status in ("predicted", "history_insufficient")
 
     assert len(run_state.prediction_event_ids) == len(outbox_items)
 
@@ -401,34 +482,17 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
     notif_service = env["notif_service"]
     notif_worker = env["notif_worker"]
 
-    payload = PredictionResultBatchPayload(
+    payload = create_test_batch_payload(
         event_id="evt-retry-01",
-        run_id="run-01",
-        job_id="job-01",
         asset_id="M14860",
         observed_at="2026-08-25T10:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={
-            "pdm-xgboost": ModelPredictionResult(
-                model_version="pdm-xgboost-v1.0",
-                status="succeeded",
-                observed_at="2026-08-25T10:00:00Z",
-                score_type="positive_class_probability",
-                score_source="predict_proba",
-                score=0.88,
-            )
-        },
-        source_lineage=SourceLineage(
-            source_uri="test.jsonl",
-            source_checksum="0" * 64,
-        ),
+        model_id="pdm-xgboost",
+        score=0.88,
+        batch_id="batch-retry-01",
     )
 
-    # 1. Create outbox record
     item = notif_service.create_outbox_record(payload)
+    event_id = item.event_id
     assert item.status == "pending"
     assert item.attempt == 0
 
@@ -442,7 +506,7 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
     processed = notif_worker.process_pending()
     assert processed == 1
 
-    updated_item = notif_service.get_outbox_item("evt-retry-01")
+    updated_item = notif_service.get_outbox_item(event_id)
     assert updated_item is not None
     assert updated_item.status == "retry_wait"
     assert updated_item.attempt == 1
@@ -459,13 +523,18 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
     processed = notif_worker.process_pending()
     assert processed == 1
 
-    failed_item = notif_service.get_outbox_item("evt-retry-01")
+    failed_item = notif_service.get_outbox_item(event_id)
     assert failed_item.status == "failed"
     assert failed_item.attempt == 2
 
     # 4. Successful delivery for a new item
-    success_payload = payload.model_copy(update={"event_id": "evt-success-01"})
-    notif_service.create_outbox_record(success_payload)
+    success_payload = create_test_batch_payload(
+        event_id="evt-success-01",
+        asset_id="M14860",
+        score=0.12,
+        batch_id="batch-success-01",
+    )
+    success_item = notif_service.create_outbox_record(success_payload)
 
     def mock_send_200(pl):
         return {"delivered": True, "status_code": 200}
@@ -474,7 +543,7 @@ def test_delivery_worker_decoupled_retry_and_backoff(isolated_runtime_env, monke
 
     processed = notif_worker.process_pending()
     assert processed >= 1
-    sent_item = notif_service.get_outbox_item("evt-success-01")
+    sent_item = notif_service.get_outbox_item(success_item.event_id)
     assert sent_item.status == "sent"
     assert sent_item.attempt == 1
 
@@ -678,6 +747,25 @@ def test_delivery_worker_run_state_synchronization_and_aggregation(isolated_runt
     ev1_id = "evt-sync-01"
     ev2_id = "evt-sync-02"
 
+    p1 = create_test_batch_payload(
+        event_id="evt-sync-01",
+        asset_id="Asset-1",
+        model_id="pdm-xgboost",
+        score=0.9,
+        batch_id="batch-sync-01",
+    )
+    p2 = create_test_batch_payload(
+        event_id="evt-sync-02",
+        asset_id="Asset-2",
+        model_id="pdm-xgboost",
+        score=0.9,
+        batch_id="batch-sync-02",
+    )
+    item1, _ = notif_service.register_idempotent_outbox_record(p1, run_id=run_id)
+    item2, _ = notif_service.register_idempotent_outbox_record(p2, run_id=run_id)
+    ev1_id = item1.event_id
+    ev2_id = item2.event_id
+
     # Initial RunState with 2 prediction delivery events in pending
     run_state = PipelineRunState(
         run_id=run_id,
@@ -710,36 +798,6 @@ def test_delivery_worker_run_state_synchronization_and_aggregation(isolated_runt
         errors=[],
     )
     repo.save_run_state(run_state)
-
-    # Create 2 outbox items for this run
-    p1 = PredictionResultBatchPayload(
-        event_id=ev1_id,
-        run_id=run_id,
-        job_id="job-sync-01",
-        asset_id="Asset-1",
-        observed_at="2026-08-25T10:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={
-            "pdm-xgboost": ModelPredictionResult(
-                model_version="pdm-xgboost-v1.0",
-                status="succeeded",
-                observed_at="2026-08-25T10:00:00Z",
-                score_type="positive_class_probability",
-                score_source="predict_proba",
-                score=0.9,
-            )
-        },
-        source_lineage=SourceLineage(
-            source_uri="test.jsonl",
-            source_checksum="0" * 64,
-        ),
-    )
-    p2 = p1.model_copy(update={"event_id": ev2_id, "asset_id": "Asset-2"})
-    notif_service.create_outbox_record(p1)
-    notif_service.create_outbox_record(p2)
 
     # 1. Process Event 1 successfully (Mock HTTP 200)
     monkeypatch.setattr(notif_service, "send_once", lambda pl: {"delivered": True, "status_code": 200})
@@ -775,7 +833,17 @@ def test_delivery_worker_recover_interrupted_sending_items(isolated_runtime_env)
     notif_worker: PredictionDeliveryWorker = env["notif_worker"]
 
     run_id = "run-recover-01"
-    event_id = "evt-recover-01"
+    payload = create_test_batch_payload(
+        event_id="evt-recover-01",
+        asset_id="Asset-Rec",
+        model_id="pdm-xgboost",
+        score=0.95,
+        batch_id="batch-rec-01",
+    )
+    item = notif_service.create_outbox_record(payload, run_id=run_id)
+    event_id = item.event_id
+    item.status = "sending"
+    notif_service.save_outbox_item(item)
 
     # Save run state
     run_state = PipelineRunState(
@@ -788,39 +856,19 @@ def test_delivery_worker_recover_interrupted_sending_items(isolated_runtime_env)
         prediction_results=[],
         prediction_delivery_status="pending",
         prediction_event_ids=[event_id],
-        prediction_events=[],
+        prediction_events=[
+            PredictionDeliveryEventState(
+                event_id=event_id,
+                asset_id="Asset-Rec",
+                status="sending",
+                attempt=0,
+                max_attempts=5,
+                updated_at=now_utc_iso(),
+            )
+        ],
         errors=[],
     )
     repo.save_run_state(run_state)
-
-    payload = PredictionResultBatchPayload(
-        event_id=event_id,
-        run_id=run_id,
-        job_id="job-rec-01",
-        asset_id="Asset-Rec",
-        observed_at="2026-08-25T10:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={
-            "pdm-xgboost": ModelPredictionResult(
-                model_version="pdm-xgboost-v1.0",
-                status="succeeded",
-                observed_at="2026-08-25T10:00:00Z",
-                score_type="positive_class_probability",
-                score_source="predict_proba",
-                score=0.95,
-            )
-        },
-        source_lineage=SourceLineage(
-            source_uri="test.jsonl",
-            source_checksum="0" * 64,
-        ),
-    )
-    item = notif_service.create_outbox_record(payload)
-    item.status = "sending"
-    notif_service.save_outbox_item(item)
 
     # Execute recovery hook
     recovered_count = notif_worker.recover_interrupted_items()
@@ -1224,9 +1272,11 @@ def test_observed_at_matches_actual_feature_row_metadata(isolated_runtime_env):
     event_id = run_state.prediction_event_ids[0]
     event = repo.get_event(event_id)
     assert event is not None
-    assert event.observed_at == "2026-08-25T10:02:00Z"
-    for model_id, model_res in event.model_results.items():
-        assert model_res.observed_at == "2026-08-25T10:02:00Z"
+    assert isinstance(event.results, list)
+    assert len(event.results) > 0
+    for r in event.results:
+        obs_str = r.observed_at.isoformat() if hasattr(r.observed_at, "isoformat") else str(r.observed_at)
+        assert "2026-08-25T10:02:00" in obs_str
 
 
 # =====================================================================
@@ -1249,7 +1299,7 @@ def test_backend_payload_contains_no_local_absolute_paths(isolated_runtime_env):
     event = repo.get_event(event_id)
     assert event is not None
 
-    source_uri = event.source_lineage.source_uri
+    source_uri = event.results[0].source_ref.uri
     assert not source_uri.startswith("C:")
     assert not source_uri.startswith("c:")
     assert not source_uri.startswith("\\")
@@ -1845,13 +1895,15 @@ def test_partial_multi_equipment_outbox_resumption_is_idempotent(isolated_runtim
     combined_df.to_json(src_path, orient="records", lines=True)
     sha = compute_file_sha256(src_path)
 
-    # Fail after EQ-001 is registered
     orig_register = service.prediction_delivery_service.register_idempotent_outbox_record
+    registered_count = 0
 
-    def failing_second_register(payload):
-        if payload.asset_id == "M14860":
+    def failing_second_register(payload, run_id=None):
+        nonlocal registered_count
+        registered_count += 1
+        if registered_count == 2:
             raise PipelineDeliveryFailedError("Simulated crash on EQ-002 outbox registration")
-        return orig_register(payload)
+        return orig_register(payload, run_id=run_id)
 
     monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_second_register)
 
@@ -1889,41 +1941,22 @@ def test_outbox_payload_conflict_raises_error(isolated_runtime_env):
     env = isolated_runtime_env
     delivery_service: PredictionDeliveryService = env["notif_service"]
 
-    payload1 = PredictionResultBatchPayload(
-        event_id="temp",
-        run_id="run-conflict-1",
-        job_id="job-conflict-1",
+    payload1 = create_test_batch_payload(
+        event_id="evt-conf-1",
         asset_id="EQ-100",
         observed_at="2026-08-26T00:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={},
-        source_lineage=SourceLineage(
-            source_uri="data/test.jsonl",
-            source_checksum="0" * 64,
-        ),
+        batch_id="batch-conflict-1",
     )
     item1, sha1 = delivery_service.register_idempotent_outbox_record(payload1)
     assert item1.event_id is not None
 
-    # Construct different payload with same run_id and asset_id
-    payload2 = PredictionResultBatchPayload(
-        event_id="temp",
-        run_id="run-conflict-1",
-        job_id="job-conflict-1",
+    # Construct different payload with different score -> different payload_sha256!
+    payload2 = create_test_batch_payload(
+        event_id="evt-conf-2",
         asset_id="EQ-100",
-        observed_at="2026-08-26T01:00:00Z",  # Different timestamp -> different payload_sha256!
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="canonical-ai4i-physics-v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={},
-        source_lineage=SourceLineage(
-            source_uri="data/test.jsonl",
-            source_checksum="0" * 64,
-        ),
+        observed_at="2026-08-26T01:00:00Z",
+        score=0.12,
+        batch_id="batch-conflict-2",
     )
 
     # Force payload2 to produce the same event_id as payload1
@@ -2161,18 +2194,13 @@ def test_delivery_worker_http_status_codes_handling(isolated_runtime_env, monkey
     delivery_service: PredictionDeliveryService = env["service"].prediction_delivery_service
     src_file, sha = create_sample_observation_jsonl(env["incoming_dir"] / "http_code.jsonl", num_rows=2, asset_id="M14860")
 
-    payload = PredictionResultBatchPayload(
+    payload = create_test_batch_payload(
         event_id="evt-test-http-codes",
-        run_id="run-http-1",
-        job_id="job-http-1",
         asset_id="M14860",
         observed_at="2026-08-26T09:00:00Z",
-        dataset_id="canonical-ai4i-v1",
-        dataset_version="v3.1",
-        model_set_id="pdm-default",
-        model_set_version="1.0.0",
-        model_results={},
-        source_lineage=SourceLineage(source_uri=str(src_file), source_checksum=sha),
+        model_id="pdm-lightgbm",
+        score=0.88,
+        batch_id="batch-http-1",
     )
 
     class MockHTTPResp:
@@ -2653,19 +2681,10 @@ def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monk
             if "$id" in sdata:
                 schema_map[sdata["$id"]] = sdata
 
-    batch_schema_path = schemas_dir / "generator-prediction-result-batch.schema.json"
+    batch_schema_path = schemas_dir / "prediction-result-batch.schema.json"
     with open(batch_schema_path, "r", encoding="utf-8") as sf:
         batch_schema = json.load(sf)
-
-    # Validate actual staged payload against schema
-    try:
-        from referencing import Registry, Resource
-        resources = [(uri, Resource.from_contents(sch)) for uri, sch in schema_map.items()]
-        registry = Registry().with_resources(resources)
-        validator = jsonschema.Draft202012Validator(batch_schema, registry=registry)
-    except ImportError:
-        resolver = jsonschema.RefResolver.from_schema(batch_schema, store=schema_map)
-        validator = jsonschema.Draft202012Validator(batch_schema, resolver=resolver)
+    validator = jsonschema.Draft202012Validator(batch_schema, format_checker=jsonschema.FormatChecker())
 
     validator.validate(actual_payload)  # Must pass without validation errors!
 
@@ -2748,46 +2767,26 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
     with open(staged_payload_file, "r", encoding="utf-8") as f:
         disk_payload = json.load(f)
 
-    # 1. Top-level Model Set fields exist
-    assert disk_payload.get("model_set_id") == "pdm-schema-test"
-    assert disk_payload.get("model_set_version") == "1.0.0"
+    # 1. Top-level prediction-result-batch-v1 fields
+    assert disk_payload.get("contract_version") == "prediction-result-batch-v1"
+    assert disk_payload.get("batch_id") is not None
+    assert isinstance(disk_payload.get("results"), list)
+    assert len(disk_payload["results"]) == 1
 
-    # 2. Internal model set fields excluded from model_results[*], but provenance 4 fields included
-    lgbm_res = disk_payload["model_results"]["pdm-lightgbm"]
-    assert "model_set_id" not in lgbm_res
-    assert "model_set_version" not in lgbm_res
-    assert lgbm_res.get("manifest_checksum") is not None
-    assert len(lgbm_res["manifest_checksum"]) == 64
-    assert lgbm_res.get("feature_schema_version") is not None
-    assert lgbm_res.get("label_schema_version") is not None
-    assert lgbm_res.get("history_requirement_version") is not None
-
-    # 3. K-V dict structure maintained
-    assert isinstance(disk_payload["model_results"], dict)
-    assert lgbm_res["score"] == 0.88
+    item_0 = disk_payload["results"][0]
+    assert item_0.get("model_id") == "pdm-lightgbm"
+    assert item_0.get("score") == 0.88
+    assert item_0.get("output_status") == "predicted"
+    assert item_0.get("feature_schema_version") is not None
+    assert item_0.get("history_requirement_version") is not None
 
     # 4. Validate against official schema
     schemas_dir = Path("contracts/schemas")
-    schema_map = {}
-    for schema_file in schemas_dir.rglob("*.schema.json"):
-        with open(schema_file, "r", encoding="utf-8") as sf:
-            sdata = json.load(sf)
-            if "$id" in sdata:
-                schema_map[sdata["$id"]] = sdata
-
-    batch_schema_path = schemas_dir / "generator-prediction-result-batch.schema.json"
+    batch_schema_path = schemas_dir / "prediction-result-batch.schema.json"
     with open(batch_schema_path, "r", encoding="utf-8") as sf:
         batch_schema = json.load(sf)
 
-    try:
-        from referencing import Registry, Resource
-        resources = [(uri, Resource.from_contents(sch)) for uri, sch in schema_map.items()]
-        registry = Registry().with_resources(resources)
-        validator = jsonschema.Draft202012Validator(batch_schema, registry=registry)
-    except ImportError:
-        resolver = jsonschema.RefResolver.from_schema(batch_schema, store=schema_map)
-        validator = jsonschema.Draft202012Validator(batch_schema, resolver=resolver)
-
+    validator = jsonschema.Draft202012Validator(batch_schema, format_checker=jsonschema.FormatChecker())
     validator.validate(disk_payload)
 
 
@@ -3443,3 +3442,395 @@ def test_service_boundary_artifact_path_error_conversion(isolated_runtime_env):
 
     # 3. Path outside root
     assert_path_unsupported("../../outside_root")
+
+
+# =====================================================================
+# 58. Array Prediction Result Batch Schema & Serialization Tests (Part C-1)
+# =====================================================================
+
+def test_prediction_result_batch_array_serialization_and_validation():
+    """Verify PredictionResultBatchPayload array model serialization, schema validation, and checksum calculation."""
+    from datetime import datetime, timezone
+    import json
+    import jsonschema
+    from systems.generator.generator_config import PROJECT_ROOT
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultBatchPayload,
+        PredictionResultItem,
+        PredictionResultProducer,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+        compute_prediction_result_item_sha256,
+    )
+
+    schema_file = PROJECT_ROOT / "contracts" / "schemas" / "prediction-result-batch.schema.json"
+    assert schema_file.is_file()
+    schema = json.loads(schema_file.read_text(encoding="utf-8"))
+
+    item_dict = {
+        "event_id": "evt-001",
+        "asset_id": "CNC-001",
+        "observed_at": "2026-08-27T00:00:00Z",
+        "source_kind": "live_sensor",
+        "source_ref": {
+            "uri": "data/incoming/protocol.jsonl",
+            "sha256": "0" * 64,
+        },
+        "output_status": "predicted",
+        "score": 0.85,
+        "model_id": "pdm-lightgbm",
+        "model_version": "1.0.0",
+        "model_artifact_sha256": "a" * 64,
+        "feature_schema_version": "v1.0.0",
+        "history_requirement_version": "v1.0.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": {
+            "simulation_session_id": None,
+            "overlay_branch_id": None,
+            "history_segment_id": None,
+            "maintenance_event_id": None,
+            "maintenance_action_id": None,
+            "state_version": None,
+        },
+        "failure_reason": None,
+    }
+
+    item_sha = compute_prediction_result_item_sha256(item_dict)
+
+    item = PredictionResultItem(
+        event_id="evt-001",
+        asset_id="CNC-001",
+        observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+        source_kind="live_sensor",
+        source_ref=PredictionResultSourceRef(uri="data/incoming/protocol.jsonl", sha256="0" * 64),
+        payload_sha256=item_sha,
+        output_status="predicted",
+        score=0.85,
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        model_artifact_sha256="a" * 64,
+        feature_schema_version="v1.0.0",
+        history_requirement_version="v1.0.0",
+        lineage=PredictionResultLineage(),
+        failure_reason=None,
+    )
+
+    producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
+    batch = PredictionResultBatchPayload(
+        contract_version="prediction-result-batch-v1",
+        batch_id="batch-001",
+        producer=producer,
+        emitted_at=datetime.fromisoformat("2026-08-27T00:00:05+00:00"),
+        results=[item],
+    )
+
+    batch_json = json.loads(batch.model_dump_json())
+    validator = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
+    validator.validate(batch_json)
+
+
+def test_prediction_result_batch_array_duplicate_composite_key_fails_closed():
+    """Duplicate composite key (asset_id, model_id, observed_at) in results array fails closed with ModelSetContractInvalidError."""
+    from datetime import datetime
+    import pytest
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import validate_external_results_array
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultItem,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+    )
+
+    dt = datetime.fromisoformat("2026-08-27T00:00:00+00:00")
+    item1 = PredictionResultItem(
+        event_id="evt-dup-1",
+        asset_id="CNC-001",
+        observed_at=dt,
+        source_kind="live_sensor",
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
+        payload_sha256="a" * 64,
+        output_status="predicted",
+        score=0.8,
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        model_artifact_sha256="a" * 64,
+        feature_schema_version="v1.0.0",
+        history_requirement_version="v1.0.0",
+        lineage=PredictionResultLineage(),
+        failure_reason=None,
+    )
+    item2 = PredictionResultItem(
+        event_id="evt-dup-2",
+        asset_id="CNC-001",
+        observed_at=dt,
+        source_kind="live_sensor",
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
+        payload_sha256="b" * 64,
+        output_status="predicted",
+        score=0.9,
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        model_artifact_sha256="a" * 64,
+        feature_schema_version="v1.0.0",
+        history_requirement_version="v1.0.0",
+        lineage=PredictionResultLineage(),
+        failure_reason=None,
+    )
+
+    with pytest.raises(ModelSetContractInvalidError) as exc_info:
+        validate_external_results_array([item1, item2])
+    assert "중복된 복합키" in str(exc_info.value)
+
+
+def test_prediction_result_batch_array_duplicate_event_id_fails_closed():
+    """Duplicate event_id in results array fails closed with ModelSetContractInvalidError."""
+    from datetime import datetime
+    import pytest
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import validate_external_results_array
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultItem,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+    )
+
+    dt = datetime.fromisoformat("2026-08-27T00:00:00+00:00")
+    item1 = PredictionResultItem(
+        event_id="evt-dup-same",
+        asset_id="CNC-001",
+        observed_at=dt,
+        source_kind="live_sensor",
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
+        payload_sha256="a" * 64,
+        output_status="predicted",
+        score=0.8,
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        model_artifact_sha256="a" * 64,
+        feature_schema_version="v1.0.0",
+        history_requirement_version="v1.0.0",
+        lineage=PredictionResultLineage(),
+        failure_reason=None,
+    )
+    item2 = PredictionResultItem(
+        event_id="evt-dup-same",
+        asset_id="CNC-001",
+        observed_at=dt,
+        source_kind="live_sensor",
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
+        payload_sha256="b" * 64,
+        output_status="predicted",
+        score=0.9,
+        model_id="pdm-xgboost",
+        model_version="1.0.0",
+        model_artifact_sha256="a" * 64,
+        feature_schema_version="v1.0.0",
+        history_requirement_version="v1.0.0",
+        lineage=PredictionResultLineage(),
+        failure_reason=None,
+    )
+
+    with pytest.raises(ModelSetContractInvalidError) as exc_info:
+        validate_external_results_array([item1, item2])
+    assert "중복된 event_id" in str(exc_info.value)
+
+
+def test_prediction_result_batch_empty_results_fails_closed():
+    """Empty results array fails closed with ModelSetContractInvalidError."""
+    import pytest
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import validate_external_results_array
+
+    with pytest.raises(ModelSetContractInvalidError) as exc_info:
+        validate_external_results_array([])
+    assert "results 배열이 비어 있습니다" in str(exc_info.value)
+
+
+# =====================================================================
+# 59. Model Inference Failure Fail-Closed Tests (Part C-2)
+# =====================================================================
+
+def test_model_inference_exception_raises_pipeline_model_prediction_failed_error(isolated_runtime_env, monkeypatch):
+    """When model inference raises an arbitrary exception (e.g. ValueError), predict_for_models raises PipelineModelPredictionFailedError for required models."""
+    import pytest
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineModelPredictionFailedError
+    from systems.generator.app.runtime_pipeline.prediction_service import PredictionService
+
+    import numpy as np
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ArtifactReference, RuntimeFeatureRowMetadata
+    from systems.generator.app.runtime_pipeline.runtime_feature_service import RuntimeFeatureBundle
+
+    env = isolated_runtime_env
+    svc: PredictionService = env["service"].prediction_service
+
+    feat_path = env["preprocessed_dir"] / "test_dummy_feat.npy"
+    np.save(feat_path, np.array([[1.0, 2.0, 3.0]]))
+    feat_ref = ArtifactReference(uri=str(feat_path), sha256="0"*64, role="runtime_features")
+    row_meta = RuntimeFeatureRowMetadata(row_index=0, asset_id="M14860", observed_at="2026-08-27T00:00:00Z")
+    bundle = RuntimeFeatureBundle(
+        features=np.array([[1.0, 2.0, 3.0]]),
+        feature_columns=["f1", "f2", "f3"],
+        row_metadata=[row_meta],
+        runtime_feature_version="1.0",
+        feature_schema_version="v1.0",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v3.1",
+        asset_history_status={"M14860": {"ready": True, "count": 5, "minimum_history_rows": 1}},
+    )
+
+    class BrokenModel:
+        def predict_proba(self, X):
+            raise ValueError("Internal model crash during predict_proba")
+
+    artifact = svc.load_active_artifact("lightgbm")
+    monkeypatch.setattr(artifact, "model", BrokenModel())
+    monkeypatch.setattr(svc, "load_active_artifact", lambda base_model, target_version=None: artifact)
+
+    with pytest.raises(PipelineModelPredictionFailedError) as exc_info:
+        svc.predict_for_models(
+            base_models=["lightgbm"],
+            model_feature_refs={"lightgbm": feat_ref},
+            model_feature_bundles={"lightgbm": bundle},
+            asset_ids=["M14860"],
+        )
+
+    assert "추론 실패" in str(exc_info.value) or "predict_proba" in str(exc_info.value)
+
+
+def test_model_inference_nan_score_raises_pipeline_model_prediction_failed_error(isolated_runtime_env, monkeypatch):
+    """When model inference returns NaN score, predict_for_models raises PipelineModelPredictionFailedError."""
+    import numpy as np
+    import pytest
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineModelPredictionFailedError
+    from systems.generator.app.runtime_pipeline.prediction_service import PredictionService
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ArtifactReference, RuntimeFeatureRowMetadata
+    from systems.generator.app.runtime_pipeline.runtime_feature_service import RuntimeFeatureBundle
+
+    env = isolated_runtime_env
+    svc: PredictionService = env["service"].prediction_service
+
+    feat_path = env["preprocessed_dir"] / "test_dummy_feat.npy"
+    np.save(feat_path, np.array([[1.0, 2.0, 3.0]]))
+    feat_ref = ArtifactReference(uri=str(feat_path), sha256="0"*64, role="runtime_features")
+    row_meta = RuntimeFeatureRowMetadata(row_index=0, asset_id="M14860", observed_at="2026-08-27T00:00:00Z")
+    bundle = RuntimeFeatureBundle(
+        features=np.array([[1.0, 2.0, 3.0]]),
+        feature_columns=["f1", "f2", "f3"],
+        row_metadata=[row_meta],
+        runtime_feature_version="1.0",
+        feature_schema_version="v1.0",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v3.1",
+        asset_history_status={"M14860": {"ready": True, "count": 5, "minimum_history_rows": 1}},
+    )
+
+    class NaNModel:
+        def predict_proba(self, X):
+            return np.array([[0.5, np.nan]])
+
+    artifact = svc.load_active_artifact("lightgbm")
+    monkeypatch.setattr(artifact, "model", NaNModel())
+    monkeypatch.setattr(svc, "load_active_artifact", lambda base_model, target_version=None: artifact)
+
+    with pytest.raises(PipelineModelPredictionFailedError) as exc_info:
+        svc.predict_for_models(
+            base_models=["lightgbm"],
+            model_feature_refs={"lightgbm": feat_ref},
+            model_feature_bundles={"lightgbm": bundle},
+            asset_ids=["M14860"],
+        )
+
+    assert "non-finite score" in str(exc_info.value)
+
+
+def test_model_inference_inf_score_raises_pipeline_model_prediction_failed_error(isolated_runtime_env, monkeypatch):
+    """When model inference returns Inf score, predict_for_models raises PipelineModelPredictionFailedError."""
+    import numpy as np
+    import pytest
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineModelPredictionFailedError
+    from systems.generator.app.runtime_pipeline.prediction_service import PredictionService
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ArtifactReference, RuntimeFeatureRowMetadata
+    from systems.generator.app.runtime_pipeline.runtime_feature_service import RuntimeFeatureBundle
+
+    env = isolated_runtime_env
+    svc: PredictionService = env["service"].prediction_service
+
+    feat_path = env["preprocessed_dir"] / "test_dummy_feat.npy"
+    np.save(feat_path, np.array([[1.0, 2.0, 3.0]]))
+    feat_ref = ArtifactReference(uri=str(feat_path), sha256="0"*64, role="runtime_features")
+    row_meta = RuntimeFeatureRowMetadata(row_index=0, asset_id="M14860", observed_at="2026-08-27T00:00:00Z")
+    bundle = RuntimeFeatureBundle(
+        features=np.array([[1.0, 2.0, 3.0]]),
+        feature_columns=["f1", "f2", "f3"],
+        row_metadata=[row_meta],
+        runtime_feature_version="1.0",
+        feature_schema_version="v1.0",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v3.1",
+        asset_history_status={"M14860": {"ready": True, "count": 5, "minimum_history_rows": 1}},
+    )
+
+    class InfModel:
+        def predict_proba(self, X):
+            return np.array([[0.0, np.inf]])
+
+    artifact = svc.load_active_artifact("lightgbm")
+    monkeypatch.setattr(artifact, "model", InfModel())
+    monkeypatch.setattr(svc, "load_active_artifact", lambda base_model, target_version=None: artifact)
+
+    with pytest.raises(PipelineModelPredictionFailedError) as exc_info:
+        svc.predict_for_models(
+            base_models=["lightgbm"],
+            model_feature_refs={"lightgbm": feat_ref},
+            model_feature_bundles={"lightgbm": bundle},
+            asset_ids=["M14860"],
+        )
+
+    assert "non-finite score" in str(exc_info.value)
+
+
+def test_model_inference_out_of_bounds_score_raises_pipeline_model_prediction_failed_error(isolated_runtime_env, monkeypatch):
+    """When model inference returns score outside [0.0, 1.0], predict_for_models raises PipelineModelPredictionFailedError."""
+    import numpy as np
+    import pytest
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineModelPredictionFailedError
+    from systems.generator.app.runtime_pipeline.prediction_service import PredictionService
+    from systems.generator.app.runtime_pipeline.pipeline_schema import ArtifactReference, RuntimeFeatureRowMetadata
+    from systems.generator.app.runtime_pipeline.runtime_feature_service import RuntimeFeatureBundle
+
+    env = isolated_runtime_env
+    svc: PredictionService = env["service"].prediction_service
+
+    feat_path = env["preprocessed_dir"] / "test_dummy_feat.npy"
+    np.save(feat_path, np.array([[1.0, 2.0, 3.0]]))
+    feat_ref = ArtifactReference(uri=str(feat_path), sha256="0"*64, role="runtime_features")
+    row_meta = RuntimeFeatureRowMetadata(row_index=0, asset_id="M14860", observed_at="2026-08-27T00:00:00Z")
+    bundle = RuntimeFeatureBundle(
+        features=np.array([[1.0, 2.0, 3.0]]),
+        feature_columns=["f1", "f2", "f3"],
+        row_metadata=[row_meta],
+        runtime_feature_version="1.0",
+        feature_schema_version="v1.0",
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v3.1",
+        asset_history_status={"M14860": {"ready": True, "count": 5, "minimum_history_rows": 1}},
+    )
+
+    class OOBModel:
+        def predict_proba(self, X):
+            return np.array([[0.0, 1.5]])
+
+    artifact = svc.load_active_artifact("lightgbm")
+    monkeypatch.setattr(artifact, "model", OOBModel())
+    monkeypatch.setattr(svc, "load_active_artifact", lambda base_model, target_version=None: artifact)
+
+    with pytest.raises(PipelineModelPredictionFailedError) as exc_info:
+        svc.predict_for_models(
+            base_models=["lightgbm"],
+            model_feature_refs={"lightgbm": feat_ref},
+            model_feature_bundles={"lightgbm": bundle},
+            asset_ids=["M14860"],
+        )
+
+    assert "out of bounds" in str(exc_info.value)
