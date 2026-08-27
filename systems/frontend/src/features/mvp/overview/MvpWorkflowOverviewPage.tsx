@@ -325,10 +325,10 @@ function inspectionBasisSummary(target: MvpInspectionTarget): string {
 function inspectionTopFactorBundleSummary(target: MvpInspectionTarget): string | null {
   const factorLabels = target.basisRefs
     .filter((ref) => ref.startsWith("factor."))
-    .map(inspectionBasisLabel);
+    .map((ref) => inspectionBasisLabel(ref).replace(/ 이상 기여$/, ""));
   const uniqueLabels = [...new Set(factorLabels)];
   if (!uniqueLabels.length) return null;
-  return `상위 근거 ${uniqueLabels.length}개 묶음: ${uniqueLabels.join(", ")}`;
+  return `위험 판단에 반영된 지표 ${uniqueLabels.length}개: ${uniqueLabels.join(", ")}`;
 }
 
 function inspectionLocationLabel(target: MvpInspectionTarget | null): string {
@@ -1766,7 +1766,7 @@ function AssetPreviewPanel({
                         <div>
                           <strong>{target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</strong>
                           <p>{target.target
-                            ? `현장 근거: ${inspectionBasisSummary(target.target)}`
+                            ? `확인 이유: ${inspectionBasisSummary(target.target)}`
                             : target.factor?.direction === "risk_up"
                               ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
