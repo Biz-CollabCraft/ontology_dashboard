@@ -372,6 +372,52 @@ export interface MvpInspectionTarget {
   unavailableReason: string | null;
 }
 
+export interface MvpAgentReviewPacket {
+  schema_version: "agent-review-packet-v1.0";
+  project_id: string;
+  asset_id: string;
+  generated_at: string;
+  risk_summary: {
+    status_grade: "normal" | "attention" | "warning" | "critical" | null;
+    failure_probability: number | null;
+    prediction_horizon_hours: number | null;
+  };
+  review_priority: {
+    level: "immediate" | "high" | "medium" | "low";
+    reasons: string[];
+    source_fields: string[];
+  } | null;
+  sop_guidance: Array<{
+    target_id: string;
+    component_id: string;
+    component_label: string;
+    sop_id: string;
+    source_type: "demo_sop_fixture" | "site_sop";
+    maturity: "fixture" | "draft" | "approved" | "retired";
+    checklist_draft: string[];
+    replacement_review_guidance: {
+      review_label: string;
+      review_triggers: string[];
+      required_measurements: string[];
+      human_review_questions: string[];
+      decision_boundary: string;
+    };
+    sensor_judgment: Record<string, unknown> | null;
+    disclaimer: string;
+    source_ref: string;
+  }>;
+  human_questions: string[];
+  evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
+  source_refs: string[];
+  closed_loop_boundary: {
+    mutation_allowed: false;
+    available_action_ids: string[];
+    forbidden_actions: string[];
+    note: string;
+  };
+  limitations: string[];
+}
+
 export interface MvpEventDetailModel {
   event: MvpEvent;
   sensors: MvpSensorValue[];
