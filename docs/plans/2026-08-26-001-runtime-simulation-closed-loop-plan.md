@@ -71,7 +71,7 @@ sensor tick 자동 감지
 
 - 1차 통합 PR: Generator Prediction Result Batch -> Backend Inbox -> Product Result append -> API/ViewModel -> PR #128 UI live update
 - 같은 PR 또는 즉시 후속 stack: Closed-loop mutation -> Maintenance replay -> post-maintenance Product Result
-- 병렬 Generator PR: Prediction Result Batch/Outbox 계약 freeze, delivery failure 처리, lineage 보강
+- 병렬 Generator PR: PR #127의 `generator-prediction-result-batch.schema.json` 단일 wire 계약을 기준으로 Outbox, delivery failure 처리, lineage 보강
 - 별도 후순위 PR: Backend direct inference fallback 제거 또는 완전 비활성화
 
 즉, Generator owner가 runtime prediction을 맡더라도 PR #128과 Closed-loop가 직접 소비하는
@@ -264,6 +264,12 @@ handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 
 - Generator는 같은 `(source_ref.sha256, asset_id, observed_at, source_kind)`를 중복 enqueue하지 않는다.
 - Backend Inbox는 같은 `event_id + payload_sha256`을 중복 승격하지 않는다.
 
+PR #129는 두 번째 Generator -> Backend wire schema를 정의하지 않는다. Backend Inbox 수신 record는
+PR #127의 `generator-prediction-result-batch.schema.json` payload 원본을 보존하고, 그 위에
+`received_at`, `payload_sha256`, `validation_status`, `rejection_reason`, `promotion_result_id` 같은
+Backend validation metadata를 감싸는 형태로 계획한다. `model_results`와 `source_lineage`는
+Backend가 새 shape로 재작성하지 않는다.
+
 ### 6.2 Product Result Artifact lineage
 
 정비 후 Product Result에는 아래 필드를 보존해야 한다.
@@ -329,7 +335,8 @@ Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도
 범위:
 
 - `/internal/prediction-results` 또는 동등 Inbox endpoint
-- Prediction Result Batch schema validator
+- PR #127 `generator-prediction-result-batch.schema.json` validator
+- Inbox receive record = original generator payload + Backend validation metadata
 - project/workspace/asset scope validator
 - source/model/feature/history lineage validator
 - `event_id + payload_sha256` 저장
@@ -358,10 +365,12 @@ Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도
 
 범위:
 
-- Prediction Result Batch `output_status` 처리
+- PR #127 payload의 `model_results[].status`, `error_code`, `error_message` 처리
 - allowed model/model_set/version 검증
 - source checksum과 replay lineage 검증
 - threshold/status/recommendation policy 적용
+- `warming_up` / `history_insufficient`는 PR #127 계약의 additive extension 또는 Backend validation status로
+  결정되기 전까지 별도 wire schema로 정의하지 않음
 - `warming_up` / `history_insufficient` status record
 - Product Result Artifact materialization input 구성
 - Backend direct inference는 baseline/fallback 경로로만 유지
@@ -376,7 +385,7 @@ Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도
 
 - unit: unsupported model/source/status rejected
 - unit: insufficient history batch does not create Product Result
-- contract: Prediction Result Batch schema + Product Result Artifact schema
+- contract: PR #127 Generator Prediction Result Batch schema + Product Result Artifact schema
 - regression: existing Product Result/Evidence tests pass
 
 ### Track B3. Product Result/Evidence append 및 lineage
@@ -559,8 +568,8 @@ append와 ViewModel 계약이 확인된 뒤 같은 stack에서 병렬 진행한�
 ## 10. Generator 작업 계획
 
 Generator는 Product Result/Evidence를 만들지 않지만, PR #127 승인 후 runtime prediction
-upstream을 맡는다. 따라서 Generator 작업은 shadow가 아니라 Prediction Result Batch/Outbox를
-안정적으로 생산하는 병렬 track이다.
+upstream을 맡는다. 따라서 Generator 작업은 shadow가 아니라 PR #127의 Generator Prediction
+Result Batch/Outbox를 안정적으로 생산하는 병렬 track이다.
 
 ### Track G1. Runtime feature / Golden Vector
 
@@ -723,7 +732,7 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 권장 PR 범위는 작게 쪼개진 기능 PR 나열이 아니라, 다음 3개 stack이다.
 
 1. Integration PR 1: Runtime Product Loop
-   - Generator Prediction Result Batch/Outbox
+   - PR #127 Generator Prediction Result Batch/Outbox
    - Backend Prediction Inbox/idempotency
    - Backend validation/product policy
    - Product Result/Evidence lineage append
@@ -737,7 +746,7 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
    - Maintenance complete -> replay
    - post-maintenance Product Result 비교
 
-3. Shadow PR: Generator Runtime Migration Evidence
+3. Generator Runtime Migration Evidence PR
    - Golden Vector / feature parity
    - Model Artifact snapshot validation
    - delivery retry/dead-letter
@@ -746,7 +755,8 @@ And maintenance_technician만 작업 시작/완료를 수행할 수 있음
 
 Integration PR 1과 2는 겹치는 계약을 `AssetDetailViewModel`, Product Result/Evidence,
 Maintenance API로 고정하면 병렬 진행 가능하다. Generator PR은 Product Result를 직접 만들지
-않고 Prediction Result Batch contract만 고정한다는 조건에서 병렬 진행 가능하다.
+않고 PR #127의 Generator Prediction Result Batch 계약을 단일 wire contract로 유지한다는
+조건에서 병렬 진행 가능하다.
 
 이 순서는 PR #128이 만든 read surface를 깨지 않고, Generator upstream과 Backend Product Result
 gate를 병렬로 안정화한 뒤 Frontend와 Closed-loop mutation을 붙이는 흐름이다.

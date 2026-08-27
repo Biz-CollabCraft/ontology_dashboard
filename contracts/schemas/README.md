@@ -14,7 +14,6 @@
 - `dataset-manifest.schema.json`: Project별 dataset source, checksum, schema alias와 quality rule 계약
 - `runtime-overlay-observation.schema.json`, `runtime-overlay-observations-available.schema.json`: 정비 후 Observation과 availability 이벤트 계약. 경로 identity와 Unicode checksum의 canonical 예시는 `contracts/test-vectors/runtime-overlay-output-v1/`을 따른다.
 - `prediction-result.schema.json`: Prediction Module과 Dashboard 사이의 Evidence·Model·Action 포함 결과 계약
-- `prediction-result-batch.schema.json`: Generator Runtime이 Backend Prediction Inbox로 전달하는 raw upstream Prediction Result Batch 계약. Product Result Artifact 또는 Event Evidence가 아니며 Backend 승격 gate 전에는 UI/Closed-loop가 소비하지 않는다.
 - `product-result-artifact.schema.json`: Diagnosis Product Result와 추천 미생성(null/empty) 정합성 계약
 - `event-evidence-projection.schema.json`: Product Result에서 파생한 Event Evidence와 별도 운영 Decision field 계약
 - `asset-detail-view-model.schema.json`: 설비 상세 화면용 Backend composition ViewModel 후보 계약. current/history, asset criticality, 운영/정비 context, review priority, evidence gap owner를 포함한다.

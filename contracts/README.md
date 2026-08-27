@@ -32,7 +32,7 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 현재 `contracts/`의 관리 상태는 다음과 같다.
 
 - `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가된 공유 JSON Schema 관리 (Training Config 및 Runtime Overlay 스키마 포함)
-- `contracts/examples/`: `generator-feature-input/`, `generator-training/`, `prediction-result-batch/`에 실제 검증 가능한 요청/설정/전달 예제 관리
+- `contracts/examples/`: `generator-feature-input/`, `generator-training/`에 실제 검증 가능한 요청/설정 예제 관리
 - `contracts/test-vectors/`: `generator-feature-input-v1/` 및 `generator-training-v1/`에 Feature 및 Training Golden Vector 관리
 - `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`), `scripts/`, `tests/` 참조 전환 완료
 - Schema 내용 및 `$id` 식별자 무변경 보존
@@ -51,7 +51,6 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Generator Training Golden Vector | **Current** | `contracts/test-vectors/generator-training-v1/` (데이터 분할 결정성 및 불변 Model Artifact 검증) |
 | Model Artifact Schema | **Current** | `contracts/schemas/model-artifact.schema.json` (6개 파일 불변 아티팩트 및 manifest 무결성 정본) |
 | Runtime Overlay Observation / Available | **Current** | `contracts/schemas/runtime-overlay-observation.schema.json`, `runtime-overlay-observations-available.schema.json`, `contracts/test-vectors/runtime-overlay-output-v1/` (정비 후 CNC Overlay, digest 경로 identity, Unicode canonical checksum) |
-| Prediction Result Batch | **Current** | `contracts/schemas/prediction-result-batch.schema.json`, `contracts/examples/prediction-result-batch/` (Generator Runtime -> Backend Prediction Inbox raw upstream handoff) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
