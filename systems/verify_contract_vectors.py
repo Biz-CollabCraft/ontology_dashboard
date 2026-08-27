@@ -66,6 +66,36 @@ def compute_sha256(filepath: Path) -> str:
     return h.hexdigest()
 
 
+def compute_runtime_overlay_observation_sha256(payload: dict[str, Any]) -> str:
+    """Compute the official v1 semantic checksum over canonical UTF-8 JSON bytes."""
+    semantic = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"generated_at", "observation_sha256"}
+    }
+    encoded = json.dumps(
+        semantic,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def runtime_overlay_storage_component(
+    simulation_session_id: str,
+    overlay_branch_id: str,
+) -> str:
+    identity = json.dumps(
+        [str(simulation_session_id), str(overlay_branch_id)],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"sha256-{hashlib.sha256(identity).hexdigest()}"
+
+
 class ContractVectorVerifier:
     def __init__(self, repo_root: Optional[Path] = None):
         if repo_root is None:
@@ -513,6 +543,18 @@ class ContractVectorVerifier:
                     )
                 else:
                     for p_name, p_val in model_params.items():
+                        if p_name in {"random_state", "seed", "random_seed"}:
+                            result.errors.append(
+                                VerificationError(
+                                    context=context,
+                                    message=(
+                                        f"hyperparameters.{model_name} contains reserved seed key '{p_name}'. "
+                                        "Use top-level 'random_seed' instead."
+                                    ),
+                                    expected="No reserved seed key in model hyperparameters",
+                                    actual=f"Found '{p_name}' in hyperparameters.{model_name}",
+                                )
+                            )
                         if isinstance(p_val, float) and (math.isnan(p_val) or math.isinf(p_val)):
                             result.errors.append(
                                 VerificationError(
@@ -655,6 +697,8 @@ class ContractVectorVerifier:
                 self._verify_feature_input_vector(vname, vdir, manifest_validator, result)
             elif vname.startswith("generator-training"):
                 self._verify_training_vector(vname, vdir, result)
+            elif vname.startswith("runtime-overlay-output"):
+                self._verify_runtime_overlay_output_vector(vname, vdir, result)
             else:
                 result.errors.append(
                     VerificationError(
@@ -665,6 +709,140 @@ class ContractVectorVerifier:
 
             if len(result.errors) == error_count_before:
                 result.verified_vectors.append(vname)
+
+    def _verify_runtime_overlay_output_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        observation_path = vector_dir / "observation-unicode.json"
+        expected_path = vector_dir / "expected-observation-sha256.txt"
+        identities_path = vector_dir / "path-identities.json"
+        missing = [
+            path.name
+            for path in (observation_path, expected_path, identities_path)
+            if not path.is_file()
+        ]
+        if missing:
+            result.errors.append(
+                VerificationError(
+                    context=vector_name,
+                    message=f"Missing required Runtime Overlay vector file(s): {', '.join(missing)}",
+                )
+            )
+            return
+
+        observation = self._load_json_object(
+            observation_path,
+            f"{vector_name}/observation-unicode.json",
+            result,
+        )
+        identities = self._load_json_object(
+            identities_path,
+            f"{vector_name}/path-identities.json",
+            result,
+        )
+        if observation is None or identities is None:
+            return
+
+        try:
+            expected_checksum = expected_path.read_text(encoding="utf-8").strip()
+            schema = json.loads(
+                (self.schemas_dir / "runtime-overlay-observation.schema.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            validator = jsonschema.Draft202012Validator(
+                schema,
+                format_checker=jsonschema.FormatChecker(),
+            )
+        except Exception as exc:
+            result.errors.append(
+                VerificationError(
+                    context=vector_name,
+                    message=f"Failed to load Runtime Overlay vector contract: {exc}",
+                )
+            )
+            return
+
+        schema_errors = sorted(
+            validator.iter_errors(observation),
+            key=lambda error: list(error.absolute_path),
+        )
+        if schema_errors:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/observation-unicode.json",
+                    message=f"Runtime Overlay observation schema validation failed: {schema_errors[0].message}",
+                )
+            )
+        actual_checksum = compute_runtime_overlay_observation_sha256(observation)
+        declared_checksum = str(observation.get("observation_sha256", ""))
+        if not (
+            actual_checksum == expected_checksum == declared_checksum
+        ):
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/observation-unicode.json",
+                    message="Runtime Overlay canonical Unicode checksum mismatch",
+                    expected=expected_checksum,
+                    actual=f"computed={actual_checksum} declared={declared_checksum}",
+                )
+            )
+
+        cases = identities.get("cases")
+        if not isinstance(cases, list) or not cases:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/path-identities.json",
+                    message="Runtime Overlay path identity cases must be a non-empty array",
+                )
+            )
+            return
+        generated: set[str] = set()
+        for index, case in enumerate(cases):
+            if not isinstance(case, dict):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/path-identities.json[{index}]",
+                        message="Path identity case must be an object",
+                    )
+                )
+                continue
+            try:
+                expected_reference = str(case["expected_storage_reference"])
+                actual_reference = (
+                    "runtime_overlay/"
+                    f"{runtime_overlay_storage_component(str(case['simulation_session_id']), str(case['overlay_branch_id']))}.jsonl"
+                )
+            except KeyError as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/path-identities.json[{index}]",
+                        message=f"Missing path identity field: {exc}",
+                    )
+                )
+                continue
+            if actual_reference != expected_reference:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/path-identities.json[{index}]",
+                        message="Runtime Overlay storage path digest mismatch",
+                        expected=expected_reference,
+                        actual=actual_reference,
+                    )
+                )
+            if actual_reference in generated:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/path-identities.json[{index}]",
+                        message="Distinct Runtime Overlay vector identities alias the same path",
+                        actual=actual_reference,
+                    )
+                )
+            generated.add(actual_reference)
+        result.payload_count += 1
 
     def _verify_feature_input_vector(
         self,

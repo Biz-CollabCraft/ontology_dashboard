@@ -238,14 +238,16 @@ Extraction
 
 ---
 
-### 4.4 4단계: Training (Target)
-- **입력**: Feature Dataset Bundle
+### 4.4 4단계: Training (Current)
+- **입력**: `Feature Dataset Bundle` (5개 필수 파일) + `Training Config` (`generator-training-config.schema.json`)
 - **처리**:
-  - Feature Bundle 파일/체크섬/차원/타입 전수 검증
-  - `asset_time_split` 기반 train/val/test 시간순 분할
+  - `TrainingConfigProvider`를 통한 설정 로드, 스키마 검증, 분할 비율 및 SHA-256 검증
+  - Feature Bundle 파일/체크섬/차원/타입 전수 검증 및 Feature/Label Schema 스냅샷 보존
+  - Feature Schema 레시피로부터 원본 센서 필드 목록(`required_columns`) 및 `minimum_history_rows` 결정론적 산출
+  - `asset_time_split` 기반 설비별 시간순 분할 (설비 ID 또는 타임스탬프 결측/NaT 시 `422` fail-closed)
   - 등록 모델(`lightgbm`, `xgboost`, `random_forest`) 학습 및 지표 산출 (모델별 실패 격리)
-  - 불변 Model Artifact 패키지 발행 및 Validator 검증
-  - `activation_policy`(`latest`/`manual`)에 따른 `latest.json` 포인터 갱신 및 실패 복구 지원
+  - 6개 파일 불변 Model Artifact 패키지 발행 및 Validator 검증 (동일 버전 재발행 시 `409` 차단)
+  - `activation_policy == "activate_on_success"` 시 새 아티팩트 발행 완료 후에만 `latest.json` 포인터 원자적 갱신
 - **출력**: 불변 Model Artifact 패키지 (`model-artifact-v1.0`), 활성 모델 포인터 (`latest.json`)
 
 ---
@@ -262,8 +264,8 @@ Extraction
 | POST | `/extraction` | Target — 미병합 | **gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108)** |
 | POST | `/preprocessing` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (신규 2단계)** |
 | POST | `/feature` | Current — 구현 및 정본 Generator App 등록 완료 | **Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계)** |
-| POST | `/train` | Target — 미병합 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
-| POST | `/train/{base_model}` | Target — 미병합 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/train` | Current — 구현 및 정본 Generator App 등록 완료 | **전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
+| POST | `/train/{base_model}` | Current — 구현 및 정본 Generator App 등록 완료 | **특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계)** |
 | POST | `/models/{base_model}/activate/{model_version}` | Target — 미병합 | **기존 발행된 불변 Model Artifact 패키지 수동 활성화** |
 | GET | `/models/{base_model}/active` | Target — 미병합 | **현재 활성화된 Model Artifact 정보 조회** |
 

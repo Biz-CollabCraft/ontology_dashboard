@@ -15,6 +15,8 @@ from systems.generator.app.preprocessing.preprocessing_exception import Preproce
 from systems.generator.app.preprocessing.preprocessing_schema import ErrorEnvelope, ErrorEnvelopeBody
 from systems.generator.app.feature.feature_router import router as feature_router
 from systems.generator.app.feature.feature_exception import FeatureError
+from systems.generator.app.training.training_router import router as training_router
+from systems.generator.app.training.training_exception import TrainingError
 from systems.generator.app.training_compat.training_compat_router import router as training_compat_router
 from systems.generator.app.training_compat.training_lifecycle import lifespan
 
@@ -82,6 +84,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             details=exc.details,
         )
 
+    @app.exception_handler(TrainingError)
+    async def training_error_handler(request: Request, exc: TrainingError) -> JSONResponse:
+        req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
+        logger.warning(f"[TrainingAPI] TrainingError: {exc.code} - {exc.message}")
+        return _build_error_response(
+            status_code=exc.status_code,
+            code=exc.code,
+            message=exc.message,
+            path=request.url.path,
+            request_id=req_id,
+            details=exc.details,
+        )
+
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
@@ -93,8 +108,8 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "type": err.get("type", ""),
             })
         logger.warning(f"[GeneratorAPI] Request validation error: {details}")
-        # Return ErrorEnvelope for preprocessing and feature, standard detail for training compat if needed
-        if request.url.path.startswith(("/preprocessing", "/feature")):
+        # Return ErrorEnvelope for domain routes, standard detail for training compat if needed
+        if request.url.path.startswith(("/preprocessing", "/feature", "/train")):
             return _build_error_response(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 code="REQUEST_VALIDATION_ERROR",
@@ -112,7 +127,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.info(f"[GeneratorAPI] HTTP Exception {exc.status_code} on {request.url.path}: {exc.detail}")
-        if request.url.path.startswith(("/preprocessing", "/feature")):
+        if request.url.path.startswith(("/preprocessing", "/feature", "/train")):
             return _build_error_response(
                 status_code=exc.status_code,
                 code=f"HTTP_{exc.status_code}",
@@ -129,7 +144,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.exception(f"[GeneratorAPI] Unhandled error on {request.url.path}: {exc}")
-        if request.url.path.startswith(("/preprocessing", "/feature")):
+        if request.url.path.startswith(("/preprocessing", "/feature", "/train")):
             return _build_error_response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 code="INTERNAL_SERVER_ERROR",
@@ -151,6 +166,7 @@ def register_routers(app: FastAPI) -> None:
 
     app.include_router(preprocessing_router)
     app.include_router(feature_router)
+    app.include_router(training_router)
     app.include_router(training_compat_router)
 
 

@@ -65,8 +65,8 @@
   "event_impacts": [
     {
       "event_id": "EVT-GS-001",
-      "equipment_id": "M-001",
-      "line": "가공 1라인",
+      "equipment_id": "CNC-S01-L01-01",
+      "line": "S01-L01",
       "product_variant": "M",
       "screen_priority": "none",
       "impact_status": "not_applicable",
@@ -79,8 +79,8 @@
     },
     {
       "event_id": "EVT-GS-002",
-      "equipment_id": "M-014",
-      "line": "가공 2라인",
+      "equipment_id": "CNC-S04-L04-01",
+      "line": "S04-L04",
       "product_variant": "M",
       "screen_priority": "shift_inspection",
       "impact_status": "estimated",
@@ -93,8 +93,8 @@
     },
     {
       "event_id": "EVT-GS-003",
-      "equipment_id": "M-021",
-      "line": "성형 1라인",
+      "equipment_id": "CNC-S01-L04-03",
+      "line": "S01-L04",
       "product_variant": "H",
       "screen_priority": "shift_inspection",
       "impact_status": "estimated",
@@ -107,8 +107,8 @@
     },
     {
       "event_id": "EVT-GS-004",
-      "equipment_id": "M-033",
-      "line": "프레스 1라인",
+      "equipment_id": "CNC-S04-L02-03",
+      "line": "S04-L02",
       "product_variant": "L",
       "screen_priority": "plan_at_risk",
       "impact_status": "estimated",
@@ -121,8 +121,8 @@
     },
     {
       "event_id": "EVT-GS-005",
-      "equipment_id": "M-042",
-      "line": "가공 3라인",
+      "equipment_id": "CNC-S03-L01-03",
+      "line": "S03-L01",
       "product_variant": "M",
       "screen_priority": "shift_inspection",
       "impact_status": "estimated",
@@ -135,8 +135,8 @@
     },
     {
       "event_id": "EVT-GS-006",
-      "equipment_id": "M-055",
-      "line": "조립 1라인",
+      "equipment_id": "CNC-S02-L02-02",
+      "line": "S02-L02",
       "product_variant": "M",
       "screen_priority": "monitor",
       "impact_status": "estimated",
@@ -149,8 +149,8 @@
     },
     {
       "event_id": "EVT-GS-007",
-      "equipment_id": "M-063",
-      "line": "검사 1라인",
+      "equipment_id": "CNC-S04-L05-01",
+      "line": "S04-L05",
       "product_variant": "M",
       "screen_priority": "data_check_required",
       "impact_status": "withheld_data_quality_hold",
@@ -163,8 +163,8 @@
     },
     {
       "event_id": "EVT-GS-008",
-      "equipment_id": "M-014",
-      "line": "가공 2라인",
+      "equipment_id": "CNC-S04-L04-02",
+      "line": "S04-L04",
       "product_variant": "M",
       "screen_priority": "shift_inspection",
       "impact_status": "estimated",

@@ -22,6 +22,7 @@ def test_real_repository_contract_vectors_pass():
     assert result.manifest_count >= 2
     assert result.payload_count >= 2
     assert "generator-feature-input-v1" in result.verified_vectors
+    assert "runtime-overlay-output-v1" in result.verified_vectors
 
 
 def test_prediction_result_batch_examples_match_schema():
@@ -103,6 +104,43 @@ def test_valid_isolated_contracts_pass(tmp_path: Path):
     _, verifier = _setup_isolated_contracts(tmp_path)
     result = verifier.verify_all()
     assert result.passed
+
+
+def test_runtime_overlay_unicode_checksum_vector_mismatch_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    expected = (
+        contracts_dir
+        / "test-vectors"
+        / "runtime-overlay-output-v1"
+        / "expected-observation-sha256.txt"
+    )
+    expected.write_text("0" * 64 + "\n", encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("canonical Unicode checksum mismatch" in error.message for error in result.errors)
+
+
+def test_runtime_overlay_path_identity_vector_mismatch_fails(tmp_path: Path):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    identities_path = (
+        contracts_dir
+        / "test-vectors"
+        / "runtime-overlay-output-v1"
+        / "path-identities.json"
+    )
+    identities = json.loads(identities_path.read_text(encoding="utf-8"))
+    identities["cases"][0]["expected_storage_reference"] = (
+        "runtime_overlay/sha256-" + "0" * 64 + ".jsonl"
+    )
+    identities_path.write_text(
+        json.dumps(identities, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("storage path digest mismatch" in error.message for error in result.errors)
 
 
 def test_invalid_schema_json_fails(tmp_path: Path):
@@ -756,6 +794,7 @@ def _setup_valid_training_examples(contracts_dir: Path) -> Path:
             "validation": 0.15,
             "test": 0.15
         },
+        "random_seed": 42,
         "primary_metric": "f1",
         "metrics": ["f1", "precision", "recall"],
         "hyperparameters": {
@@ -900,3 +939,20 @@ def test_training_examples_optional_model_version_null_or_omitted_passes(tmp_pat
 
     result = verifier.verify_all()
     assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
+
+
+@pytest.mark.parametrize("model_name,reserved_key", [
+    ("lightgbm", "random_state"),
+    ("xgboost", "seed"),
+    ("random_forest", "random_seed"),
+])
+def test_training_examples_config_reserved_seed_keys_fails(tmp_path: Path, model_name: str, reserved_key: str):
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    ex_dir = _setup_valid_training_examples(contracts_dir)
+    cfg = json.loads((ex_dir / "training-config-v1.json").read_text(encoding="utf-8"))
+    cfg["hyperparameters"][model_name] = {reserved_key: 42, "n_estimators": 50}
+    (ex_dir / "training-config-v1.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any(f"hyperparameters.{model_name} contains reserved seed key '{reserved_key}'" in e.message for e in result.errors)

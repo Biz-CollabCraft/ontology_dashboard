@@ -29,6 +29,7 @@ import type {
   MvpEventDetailModel,
   MvpMetrics,
   MvpRoleLens,
+  MvpSensorWindowId,
 } from "./mvpContracts";
 
 async function getEventActivity(eventId: string): Promise<unknown> {
@@ -51,10 +52,12 @@ async function getAssetDetailViewModel(
   projectId: string,
   assetId: string,
   datasetVersionId: string,
+  historyWindow: MvpSensorWindowId,
 ): Promise<AssetDetailViewModel> {
   const params = new URLSearchParams({
     project_id: projectId,
     dataset_version_id: datasetVersionId,
+    history_window: historyWindow,
   });
   const response = await fetch(
     `${API_BASE}/api/objects/${encodeURIComponent(assetId)}/detail-view?${params.toString()}`,
@@ -86,6 +89,14 @@ function warningMessage(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
 }
 
+function sourceStatusLabel(value: string | null | undefined): string {
+  const normalized = String(value ?? "").toLowerCase();
+  if (normalized === "available" || normalized === "ready" || normalized === "active") return "연결됨";
+  if (normalized === "stale") return "오래된 관측";
+  if (normalized === "unavailable" || normalized === "error") return "일부 미연결";
+  return value ? String(value) : "상태 확인 중";
+}
+
 export async function loadMvpBootstrap(
   projectId: string,
   requestedWorkspaceId?: string | null,
@@ -106,8 +117,8 @@ export async function loadMvpBootstrap(
     intent: "overview",
     locale: "ko-KR",
   });
-  // The governed latest-results API caps a page at 500 rows. The current MVP
-  // needs one latest result per asset, so a single maximum-sized page covers
+  // The governed latest-results API caps a page at 500 rows. The current
+  // dashboard needs one latest result per asset, so a single maximum-sized page covers
   // the Canonical V3.1 fleet without triggering a 422 and silently falling
   // back to event-only asset metadata.
   const resultPromise = getPredictiveMaintenanceLatestResults(projectId, workspace.id, 500);
@@ -116,18 +127,18 @@ export async function loadMvpBootstrap(
   const warnings: string[] = [];
   let rawEvents = dashboardState.status === "fulfilled" ? dashboardState.value.events : [];
   if (dashboardState.status === "rejected") {
-    warnings.push(`Canonical Runtime Dashboard: ${warningMessage(dashboardState.reason, "사용 불가")}`);
+    warnings.push(`운영 현황 일부 지연: ${warningMessage(dashboardState.reason, "사용 불가")}`);
     try {
       rawEvents = await getProjectEvents(projectId);
     } catch (reason) {
-      warnings.push(`Gold Fixture Events: ${warningMessage(reason, "사용 불가")}`);
+      warnings.push(`Event 목록 조회 실패: ${warningMessage(reason, "사용 불가")}`);
     }
   }
 
   const events = sortRisk(rawEvents.map(adaptEvent));
   const results = resultState.status === "fulfilled" ? resultState.value.items : [];
   if (resultState.status === "rejected") {
-    warnings.push(`Canonical Result Artifact: ${warningMessage(resultState.reason, "사용 불가")}`);
+    warnings.push(`설비 판단 결과 일부 지연: ${warningMessage(resultState.reason, "사용 불가")}`);
   }
   const assets = mergeAssets(results, events);
   const metrics = computeMetrics(assets, events);
@@ -166,8 +177,8 @@ export async function loadMvpBootstrap(
       schemaVersion: dataSource?.result_artifact_schema_version ?? context?.result_artifact_schema_version ?? null,
       sourceMode,
       sourceStatus: sourceMode === "canonical-runtime"
-        ? `${dataSource?.dataset_status ?? context?.dataset_status ?? "available"} · Result Artifact`
-        : "Gold Fixture fallback · Canonical Runtime unavailable",
+        ? `${sourceStatusLabel(dataSource?.dataset_status ?? context?.dataset_status)} · 최신 설비 판단`
+        : "운영 데이터 일부 미연결 · 보조 데이터로 표시 중",
       refreshedAt: new Date().toISOString(),
       observedAt: latestObservedAt,
       stale: staleFrom(latestObservedAt),
@@ -188,12 +199,12 @@ async function loadLegacyReport(eventId: string): Promise<{ report: Report | nul
       const report = await getReport(eventId, "manager", false, "ko-KR");
       return {
         report,
-        warning: `LLM report failed; deterministic fallback used: ${warningMessage(llmReason, "unknown error")}`,
+        warning: `자동 보고서 생성 일부 지연, 검증된 기본 보고서 사용: ${warningMessage(llmReason, "unknown error")}`,
       };
     } catch (fallbackReason) {
       return {
         report: null,
-        warning: `Report API unavailable; template fallback used: ${warningMessage(fallbackReason, "unknown error")}`,
+        warning: `보고서 조회 지연, 기본 양식으로 표시: ${warningMessage(fallbackReason, "unknown error")}`,
       };
     }
   }
@@ -205,6 +216,7 @@ export async function loadMvpEventDetail(input: {
   datasetVersionId: string;
   event: MvpEvent;
   role: MvpRoleLens;
+  historyWindow: MvpSensorWindowId;
   metrics?: MvpMetrics;
 }): Promise<MvpEventDetailModel> {
   const predictivePromise = getPredictiveMaintenanceDashboard(input.projectId, input.workspaceId, {
@@ -217,7 +229,12 @@ export async function loadMvpEventDetail(input: {
   const evidencePromise = getEvidence(input.event.eventId);
   const reportPromise = loadLegacyReport(input.event.eventId);
   const activityPromise = getEventActivity(input.event.eventId);
-  const assetDetailPromise = getAssetDetailViewModel(input.projectId, input.event.assetId, input.datasetVersionId);
+  const assetDetailPromise = getAssetDetailViewModel(
+    input.projectId,
+    input.event.assetId,
+    input.datasetVersionId,
+    input.historyWindow,
+  );
   const [predictiveState, evidenceState, reportState, activityState, assetDetailState] = await Promise.allSettled([
     predictivePromise,
     evidencePromise,
@@ -237,13 +254,13 @@ export async function loadMvpEventDetail(input: {
   const warnings = [
     legacyReport.warning,
     evidenceState.status === "rejected" && !predictiveDetail?.evidence
-      ? `Evidence API: ${warningMessage(evidenceState.reason, "사용 불가")}`
+      ? `상세 근거 조회 지연: ${warningMessage(evidenceState.reason, "사용 불가")}`
       : null,
     activityState.status === "rejected"
-      ? `Activity API: ${warningMessage(activityState.reason, "사용 불가")}`
+      ? `활동 이력 조회 지연: ${warningMessage(activityState.reason, "사용 불가")}`
       : null,
     assetDetailState.status === "rejected"
-      ? `AssetDetailViewModel API: ${warningMessage(assetDetailState.reason, "사용 불가")}`
+      ? `설비 상세 조회 지연: ${warningMessage(assetDetailState.reason, "사용 불가")}`
       : null,
   ].filter((value): value is string => Boolean(value));
   const detail = composeEventDetail({
