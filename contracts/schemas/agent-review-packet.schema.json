@@ -14,7 +14,7 @@
     "review_draft",
     "sop_retrieval",
     "sop_guidance",
-    "human_questions",
+    "history_review_items",
     "evidence_gaps",
     "source_refs",
     "closed_loop_boundary",
@@ -125,7 +125,7 @@
         }
       }
     },
-    "human_questions": {"type": "array", "items": {"type": "string"}},
+    "history_review_items": {"type": "array", "items": {"type": "string"}},
     "evidence_gaps": {
       "type": "array",
       "items": {
@@ -156,13 +156,13 @@
   "$defs": {
     "replacementReviewGuidance": {
       "type": "object",
-      "required": ["review_label", "review_triggers", "required_measurements", "human_review_questions", "decision_boundary"],
+      "required": ["review_label", "review_triggers", "required_measurements", "operator_review_items", "decision_boundary"],
       "additionalProperties": false,
       "properties": {
         "review_label": {"type": "string"},
         "review_triggers": {"type": "array", "items": {"type": "string"}},
         "required_measurements": {"type": "array", "items": {"type": "string"}},
-        "human_review_questions": {"type": "array", "items": {"type": "string"}},
+        "operator_review_items": {"type": "array", "items": {"type": "string"}},
         "decision_boundary": {"type": "string"}
       }
     },

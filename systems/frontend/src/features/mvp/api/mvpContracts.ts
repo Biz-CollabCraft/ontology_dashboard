@@ -424,7 +424,7 @@ export interface MvpAgentReviewPacket {
       review_label: string;
       review_triggers: string[];
       required_measurements: string[];
-      human_review_questions: string[];
+      operator_review_items: string[];
       decision_boundary: string;
     };
     sensor_judgment: Record<string, unknown> | null;
@@ -433,7 +433,7 @@ export interface MvpAgentReviewPacket {
     disclaimer: string;
     source_ref: string;
   }>;
-  human_questions: string[];
+  history_review_items: string[];
   evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
   source_refs: string[];
   closed_loop_boundary: {
