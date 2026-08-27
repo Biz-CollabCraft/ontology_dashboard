@@ -352,7 +352,7 @@ function replacementReviewPreview(target: MvpInspectionTarget | null): string[] 
   if (!guidance) return [];
   return [
     ...guidance.reviewTriggers.slice(0, 2),
-    ...guidance.humanReviewQuestions.slice(0, 1),
+    ...guidance.requiredMeasurements.slice(0, 1),
   ];
 }
 

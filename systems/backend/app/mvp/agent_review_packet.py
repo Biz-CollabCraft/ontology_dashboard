@@ -29,7 +29,7 @@ def compose_agent_review_packet(
     }
     sop_guidance = []
     source_refs = []
-    human_questions = []
+    history_review_items = []
     limitations = [
         "Agent Review Packet is read-only and does not mutate Recommendation, WorkOrder, MaintenanceAction, MaintenanceEvent, or Replay state.",
         "SOP grounding supports inspection and replacement timing review drafts; it is not Product Evidence or a repair instruction.",
@@ -47,8 +47,11 @@ def compose_agent_review_packet(
         retrieval_item = procedures_by_id.get(sop_id) or {}
         procedure = retrieval_item.get("procedure") or {}
         replacement = guidance.get("replacement_review_guidance") or {}
-        questions = [str(item) for item in replacement.get("human_review_questions") or []]
-        human_questions.extend(questions)
+        review_items = [
+            _history_review_item_from_question(str(item))
+            for item in replacement.get("human_review_questions") or []
+        ]
+        history_review_items.extend(item for item in review_items if item)
         if guidance.get("source_ref"):
             source_refs.append(str(guidance["source_ref"]))
         if target.get("source_ref"):
@@ -64,7 +67,7 @@ def compose_agent_review_packet(
                 "source_type": str(guidance.get("source_type") or ""),
                 "maturity": str(procedure.get("maturity") or "fixture"),
                 "checklist_draft": [str(item) for item in guidance.get("checklist_draft") or []],
-                "replacement_review_guidance": replacement,
+                "replacement_review_guidance": _agent_replacement_review_guidance(replacement),
                 "sensor_judgment": procedure.get("sensor_judgment"),
                 "retrieval_score": retrieval_item.get("retrieval_score", 0),
                 "matched_fields": [
@@ -109,7 +112,7 @@ def compose_agent_review_packet(
             "mutation_allowed": False,
         },
         "sop_guidance": sop_guidance,
-        "human_questions": list(dict.fromkeys(human_questions)),
+        "history_review_items": list(dict.fromkeys(history_review_items)),
         "evidence_gaps": (view_model.get("evidence") or {}).get("gaps") or [],
         "source_refs": list(dict.fromkeys(source_refs)),
         "closed_loop_boundary": {
@@ -167,6 +170,44 @@ def _compose_review_draft(
         "evidence_gap_count": len(evidence_gaps),
         "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
     }
+
+
+def _agent_replacement_review_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "review_label": str(guidance.get("review_label") or ""),
+        "review_triggers": [str(item) for item in guidance.get("review_triggers") or []],
+        "required_measurements": [
+            str(item) for item in guidance.get("required_measurements") or []
+        ],
+        "operator_review_items": [
+            item
+            for item in (
+                _history_review_item_from_question(str(value))
+                for value in guidance.get("human_review_questions") or []
+            )
+            if item
+        ],
+        "decision_boundary": str(guidance.get("decision_boundary") or ""),
+    }
+
+
+def _history_review_item_from_question(value: str) -> str:
+    text = value.strip().rstrip("?")
+    if not text:
+        return ""
+    for suffix in ("확인됐습니까", "확인되었습니까"):
+        if text.endswith(suffix):
+            return f"{_without_subject_particle(text.removesuffix(suffix))} 확인 상태 조회"
+    if text.endswith("있습니까"):
+        return f"{_without_subject_particle(text.removesuffix('있습니까'))} 유무 조회"
+    if text.endswith("입니까"):
+        return f"{_without_subject_particle(text.removesuffix('입니까'))} 여부 조회"
+    return f"이력 조회 필요: {text}"
+
+
+def _without_subject_particle(value: str) -> str:
+    text = value.strip()
+    return text[:-1] if text.endswith(("이", "가", "은", "는")) else text
 
 
 def _compose_history_summary(
