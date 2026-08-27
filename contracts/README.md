@@ -31,7 +31,7 @@ Schema validation, Publisher/Loader round-trip, Feature parity, Label boundary �
 
 현재 `contracts/`의 관리 상태는 다음과 같다.
 
-- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가 계약을 포함한 20개 공유 JSON Schema 관리
+- `contracts/schemas/`: 기존 Schema의 물리 이동과 이후 추가 계약을 포함한 공유 JSON Schema 관리
 - `contracts/examples/`: `generator-feature-input/`에 실제 검증 가능한 `FeatureRequest` 및 Versioned Dataset Manifest 예제 관리
 - `contracts/test-vectors/`: `generator-feature-input-v1/`에 Multi-asset Lookahead Horizon 라벨링 및 활성 고장 제외를 검증하는 Golden Vector 관리
 - `project_root()` 마커, `Dockerfile`, `render.yaml`, CI(`architecture.yml`, `backend-contract-ci.yml`), `scripts/`, `tests/` 참조 전환 완료
@@ -47,6 +47,7 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 |---|---|---|
 | Generator Dataset Input Manifest | **Current** | `contracts/schemas/generator-dataset-input-manifest.schema.json` (자동 검증 및 예제/테스트 벡터 존재) |
 | Generator Feature Input Golden Vector | **Current** | `contracts/test-vectors/generator-feature-input-v1/` (Multi-asset 라벨링 및 활성 고장 제외 자동 검증) |
+| Prediction Result Batch | **Current** | `contracts/schemas/prediction-result-batch.schema.json`, `contracts/examples/prediction-result-batch/` (Generator Runtime -> Backend Prediction Inbox raw upstream handoff) |
 | Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
 | Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
 | Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
