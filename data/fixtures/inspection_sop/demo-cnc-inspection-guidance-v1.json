@@ -30,6 +30,79 @@
       "alignment_scope": ["equipment_failure_maintenance_metadata"]
     }
   ],
+  "sensor_judgment": {
+    "judgment_scope": "inspection_result",
+    "allowed_outcomes": ["maintenance_recommended", "monitor_only", "data_quality_hold"],
+    "criteria": [
+      {
+        "criterion_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001:C1",
+        "factor_key": "tool_wear_min",
+        "operator": ">=",
+        "threshold": {
+          "kind": "absolute",
+          "value": 220,
+          "values": null,
+          "unit": "min"
+        },
+        "outcome_if_met": "maintenance_recommended",
+        "evidence_role": "primary_sensor",
+        "human_check_required": true,
+        "notes": "공구 교체 필요성 판단을 위한 데모 SOP 기준이며 실제 제조사 한계값이 아닙니다."
+      },
+      {
+        "criterion_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001:C2",
+        "factor_key": "overstrain_index",
+        "operator": ">=",
+        "threshold": {
+          "kind": "product_type_map",
+          "value": null,
+          "values": {
+            "L": 11000,
+            "M": 12000,
+            "H": 13000
+          },
+          "unit": "min*N*m"
+        },
+        "outcome_if_met": "maintenance_recommended",
+        "evidence_role": "corroborating_sensor",
+        "human_check_required": true,
+        "notes": "공구 마모와 토크가 함께 높은 경우 현장 확인을 강화합니다."
+      },
+      {
+        "criterion_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001:C3",
+        "factor_key": "temperature_difference_k",
+        "operator": ">=",
+        "threshold": {
+          "kind": "absolute",
+          "value": 8,
+          "values": null,
+          "unit": "K"
+        },
+        "outcome_if_met": "monitor_only",
+        "evidence_role": "supporting_sensor",
+        "human_check_required": true,
+        "notes": "열 경로 점검 질문을 만들기 위한 보조 기준입니다."
+      }
+    ],
+    "inspection_result_mapping": {
+      "records_operational_fact": true,
+      "does_not_create_maintenance_event": true,
+      "manual_recommendation_requires_manager_acceptance": true
+    },
+    "claim_boundaries": {
+      "allowed_claims": [
+        "SOP 기준상 정비 필요 점검 결과",
+        "센서 기준이 점검 결과를 지지",
+        "정비 전 위험 판단과 정비 후 재관측을 연결"
+      ],
+      "forbidden_claims": [
+        "실제 고장 예방 입증",
+        "정비로 downtime 절감",
+        "정비 완료 후 정상화",
+        "SOP가 자동 정비 승인"
+      ]
+    }
+  },
   "guidance": {
     "reference_location_label": "SOP 기준 참고 위치",
     "suggested_check_method": "센서 이상 기여 요인을 기준으로 회전/구동 계통의 체결, 마모, 이상 소음 여부를 확인합니다.",
