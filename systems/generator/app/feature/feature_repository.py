@@ -42,13 +42,16 @@ class PublishedFeatureBundle:
 
 @dataclass(frozen=True)
 class LoadedFeatureBundle:
-    """Loaded data container for model training consumption."""
+    """Represents loaded in-memory data from a validated Feature Dataset Bundle."""
+    dataset_id: str
+    dataset_version: str
     feature_dataset_version: str
     features: np.ndarray
     labels: np.ndarray
     feature_columns: list[str]
     row_metadata: list[dict[str, Any]]
     feature_metadata: dict[str, Any]
+    feature_metadata_sha256: str
     bundle_dir: Path
 
 
@@ -217,10 +220,17 @@ class FeatureRepository:
 
         with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
             row_meta = json.load(f)
+            if not isinstance(row_meta, list):
+                raise FeatureDatasetIntegrityError("row_metadata.json은 JSON 배열이어야 합니다.")
             if len(row_meta) != row_count:
                 raise FeatureDatasetIntegrityError(
                     f"row_metadata.json 항목 수({len(row_meta)})와 Feature 행 수({row_count})가 일치하지 않습니다."
                 )
+            for index, item in enumerate(row_meta):
+                if not isinstance(item, dict):
+                    raise FeatureDatasetIntegrityError(
+                        f"row_metadata.json의 {index}번째 항목은 JSON 객체여야 합니다."
+                    )
 
         with open(bundle_dir / "feature_columns.json", "r", encoding="utf-8") as f:
             col_data = json.load(f)
@@ -248,32 +258,66 @@ class FeatureRepository:
         dataset_version: str,
         feature_dataset_version: str,
     ) -> LoadedFeatureBundle | None:
-        """Load and return all bundle files into memory for downstream training consumption."""
+        """Load full array and metadata objects for training after integrity validation."""
         bundle = self.find_feature_bundle(dataset_id, dataset_version, feature_dataset_version)
         if bundle is None:
             return None
 
         bundle_dir = bundle.bundle_dir
+        meta_path = bundle_dir / "feature_metadata.json"
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
         features = np.load(bundle_dir / "features.npy", allow_pickle=False)
         labels = np.load(bundle_dir / "labels.npy", allow_pickle=False)
 
+        if not np.isfinite(features).all():
+            raise FeatureDatasetIntegrityError("features.npy에 NaN 또는 Inf 값이 포함되어 있습니다.")
+        if features.ndim != 2:
+            raise FeatureDatasetIntegrityError(f"features.npy는 2차원 배열이어야 합니다 (실제 차원: {features.ndim})")
+        if labels.ndim != 1:
+            raise FeatureDatasetIntegrityError(f"labels.npy는 1차원 배열이어야 합니다 (실제 차원: {labels.ndim})")
+
+        row_count = int(features.shape[0])
+        if labels.shape[0] != row_count:
+            raise FeatureDatasetIntegrityError(
+                f"Feature 행 수({row_count})와 Label 행 수({labels.shape[0]})가 일치하지 않습니다."
+            )
+
         with open(bundle_dir / "feature_columns.json", "r", encoding="utf-8") as f:
-            col_data = json.load(f)
-            feature_columns = col_data.get("columns", [])
+            feat_cols_data = json.load(f)
+            feature_columns = feat_cols_data.get("columns", [])
+            if len(feature_columns) != features.shape[1]:
+                raise FeatureDatasetIntegrityError(
+                    f"feature_columns.json 컬럼 수({len(feature_columns)})와 features.npy 열 수({features.shape[1]})가 일치하지 않습니다."
+                )
 
         with open(bundle_dir / "row_metadata.json", "r", encoding="utf-8") as f:
-            row_metadata = json.load(f)
+            row_meta = json.load(f)
+            if not isinstance(row_meta, list):
+                raise FeatureDatasetIntegrityError("row_metadata.json은 JSON 배열이어야 합니다.")
+            if len(row_meta) != row_count:
+                raise FeatureDatasetIntegrityError(
+                    f"row_metadata.json 항목 수({len(row_meta)})와 Feature 행 수({row_count})가 일치하지 않습니다."
+                )
+            for index, item in enumerate(row_meta):
+                if not isinstance(item, dict):
+                    raise FeatureDatasetIntegrityError(
+                        f"row_metadata.json의 {index}번째 항목은 JSON 객체여야 합니다."
+                    )
 
-        with open(bundle_dir / "feature_metadata.json", "r", encoding="utf-8") as f:
-            feature_metadata = json.load(f)
+        metadata_sha256 = compute_file_sha256(meta_path)
 
         return LoadedFeatureBundle(
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
             feature_dataset_version=feature_dataset_version,
             features=features,
             labels=labels,
             feature_columns=feature_columns,
-            row_metadata=row_metadata,
-            feature_metadata=feature_metadata,
+            row_metadata=row_meta,
+            feature_metadata=meta,
+            feature_metadata_sha256=metadata_sha256,
             bundle_dir=bundle_dir,
         )
 

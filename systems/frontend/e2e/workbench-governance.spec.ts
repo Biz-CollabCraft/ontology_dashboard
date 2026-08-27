@@ -78,10 +78,10 @@ test("Agent Evidence Workbench runs a scoped query, links claims to evidence and
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page, "quality@ontology.local", "Quality!2026");
-  await page.goto(`${agentRoute}?question=M-014+위험+상태+목록을+보여줘&objectType=equipment&objectId=M-014`);
+  await page.goto(`${agentRoute}?question=CNC-S04-L04-01+위험+상태+목록을+보여줘&objectType=equipment&objectId=CNC-S04-L04-01`);
 
   await expect(page.getByText("AGENT EVIDENCE WORKBENCH", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Question", { exact: true })).toHaveValue("M-014 위험 상태 목록을 보여줘");
+  await expect(page.getByLabel("Question", { exact: true })).toHaveValue("CNC-S04-L04-01 위험 상태 목록을 보여줘");
   await page.getByLabel("Route", { exact: true }).selectOption("relational");
   await page.getByRole("button", { name: "Run governed query", exact: true }).click();
 
@@ -89,9 +89,9 @@ test("Agent Evidence Workbench runs a scoped query, links claims to evidence and
   await expect(page.getByText("EVIDENCE TRACE", { exact: true })).toBeVisible();
   await expect(page.getByText("ORCHESTRATION LINEAGE", { exact: true })).toBeVisible();
   await expect(page.getByText("PERSISTED RUNS", { exact: true })).toBeVisible();
-  await expect(page.locator(".agent-server-runs button").filter({ hasText: "M-014 위험 상태 목록을 보여줘" }).first()).toBeVisible();
-  await page.getByPlaceholder("Question filter").fill("M-014 위험");
-  await expect(page.locator(".agent-server-runs button").filter({ hasText: "M-014 위험 상태 목록을 보여줘" }).first()).toBeVisible();
+  await expect(page.locator(".agent-server-runs button").filter({ hasText: "CNC-S04-L04-01 위험 상태 목록을 보여줘" }).first()).toBeVisible();
+  await page.getByPlaceholder("Question filter").fill("CNC-S04-L04-01 위험");
+  await expect(page.locator(".agent-server-runs button").filter({ hasText: "CNC-S04-L04-01 위험 상태 목록을 보여줘" }).first()).toBeVisible();
   await page.getByPlaceholder("Question filter").fill("not-present-query");
   await expect(page.getByText("조건에 맞는 persisted run이 없습니다.", { exact: true })).toBeVisible();
   await page.getByPlaceholder("Question filter").fill("");
@@ -127,7 +127,7 @@ test("quality auditor restores the Governance Workbench and captures its referen
   await login(page, "quality@ontology.local", "Quality!2026");
   await page.goto(ontologyRoute);
   await expect(page.getByText("ONTOLOGY WORKBENCH", { exact: true })).toBeVisible();
-  await page.getByPlaceholder(/M-014와 연결된 최근 위험 사건/).fill("선택 설비의 위험 사건과 관계, 근거 문서를 보여줘");
+  await page.getByPlaceholder(/CNC-S04-L04-01와 연결된 최근 위험 사건/).fill("선택 설비의 위험 사건과 관계, 근거 문서를 보여줘");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(page.locator(".ontology-agent-result")).toBeVisible();
 

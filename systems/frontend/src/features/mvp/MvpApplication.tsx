@@ -9,6 +9,7 @@ import type {
   MvpEventDetailModel,
   MvpReportTab,
   MvpRoleLens,
+  MvpSensorWindowId,
   MvpView,
 } from "./api/mvpContracts";
 import {
@@ -54,6 +55,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailVersion, setDetailVersion] = useState(0);
+  const [sensorWindow, setSensorWindow] = useState<MvpSensorWindowId>("24h");
 
   const refresh = useCallback(() => setRefreshVersion((value) => value + 1), []);
   const retryDetail = useCallback(() => setDetailVersion((value) => value + 1), []);
@@ -94,7 +96,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
-        setError(reason instanceof Error ? reason.message : "MVP 데이터를 불러오지 못했습니다.");
+        setError(reason instanceof Error ? reason.message : "운영 데이터를 불러오지 못했습니다.");
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
@@ -121,6 +123,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       datasetVersionId: model.context.datasetVersionId,
       event: selectedEvent,
       role: selection.role,
+      historyWindow: sensorWindow,
       metrics: model.metrics,
     })
       .then((payload) => !cancelled && setDetail(payload))
@@ -131,7 +134,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       })
       .finally(() => !cancelled && setDetailLoading(false));
     return () => { cancelled = true; };
-  }, [detailVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role]);
+  }, [detailVersion, model?.context.datasetVersionId, model?.context.workspaceId, projectId, selectedEvent?.eventId, selection.role, sensorWindow]);
 
   const openView = useCallback((view: MvpView) => {
     const patch: Parameters<typeof updateSelection>[0] = { view };
@@ -150,15 +153,19 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     updateSelection({ view: "operations", eventId, assetId });
   }, [updateSelection]);
 
-  const openReport = useCallback((eventId: string | null, assetId: string | null) => {
+  const openReport = useCallback((eventId: string | null, assetId: string | null, reportTab: MvpReportTab = "executive-brief") => {
     const fallback = model?.events[0] ?? null;
     updateSelection({
       view: "reports",
-      reportTab: "executive-brief",
+      reportTab,
       eventId: eventId ?? fallback?.eventId ?? null,
       assetId: assetId ?? fallback?.assetId ?? null,
     });
   }, [model?.events, updateSelection]);
+
+  const previewAsset = useCallback((assetId: string, eventId: string | null) => {
+    updateSelection({ assetId, eventId });
+  }, [updateSelection]);
 
   const selectAsset = useCallback((asset: MvpAsset) => {
     updateSelection({ assetId: asset.assetId, eventId: asset.eventId });
@@ -167,6 +174,10 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   const openAssetOperations = useCallback((asset: MvpAsset) => {
     if (!asset.eventId) return;
     updateSelection({ view: "operations", assetId: asset.assetId, eventId: asset.eventId });
+  }, [updateSelection]);
+
+  const openAssetReport = useCallback((asset: MvpAsset) => {
+    updateSelection({ view: "reports", reportTab: "executive-brief", assetId: asset.assetId, eventId: asset.eventId });
   }, [updateSelection]);
 
   const selectEvent = useCallback((event: MvpEvent) => {
@@ -202,9 +213,9 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     retryDetail();
   }, [retryDetail, selectedEvent, user]);
 
-  if (loading && !model) return <div className="mvp-route-state"><MvpState kind="loading" title="멘토링 기준 MVP 구성 중" detail="Project, Canonical V3.1 Result Artifact와 네 화면 문맥을 연결하고 있습니다." /></div>;
-  if (error && !model) return <div className="mvp-route-state"><MvpState kind="error" title="MVP를 열지 못했습니다" detail={error} onRetry={refresh} /></div>;
-  if (!model) return <div className="mvp-route-state"><MvpState kind="empty" title="MVP 데이터가 없습니다" detail="Project와 Workspace 연결 상태를 확인하세요." /></div>;
+  if (loading && !model) return <div className="mvp-route-state"><MvpState kind="loading" title="예지보전 화면 구성 중" detail="Project, Workspace, 설비 판단 데이터를 연결하고 있습니다." /></div>;
+  if (error && !model) return <div className="mvp-route-state"><MvpState kind="error" title="예지보전 화면을 열지 못했습니다" detail={error} onRetry={refresh} /></div>;
+  if (!model) return <div className="mvp-route-state"><MvpState kind="empty" title="표시할 운영 데이터가 없습니다" detail="Project와 Workspace 연결 상태를 확인하세요." /></div>;
 
   const canDecide = Boolean(user?.permissions.includes("events.decision"));
   const canNote = Boolean(user?.permissions.includes("events.note"));
@@ -212,22 +223,23 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   let content;
   if (selection.view === "objects") {
-    content = <MvpObjectsPage model={model} selectedAssetId={selectedAssetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectAsset={selectAsset} onOpenOperations={openAssetOperations} onRetryDetail={retryDetail} />;
+    content = <MvpObjectsPage model={model} selectedAssetId={selectedAssetId} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectAsset={selectAsset} onOpenOperations={openAssetOperations} onOpenReport={openAssetReport} onRetryDetail={retryDetail} />;
   } else if (selection.view === "operations") {
     content = <MvpOperationsPage model={model} selectedEventId={selection.eventId} detail={detail} detailLoading={detailLoading} detailError={detailError} canDecide={canDecide} canNote={canNote} onSelectEvent={selectEvent} onOpenAsset={openEventAsset} onOpenReport={openEventReport} onDecision={submitDecision} onNote={submitNote} onRetryDetail={retryDetail} />;
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else {
-    content = <MvpOverviewPage model={model} onOpenAsset={openAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   return (
     <MvpShell
       context={model.context}
       activeView={selection.view}
+      dashboard={selection.dashboard}
       role={selection.role}
       onNavigate={openView}
-      onRoleChange={(role: MvpRoleLens) => updateSelection({ role })}
+      onRoleChange={(role: MvpRoleLens) => updateSelection({ role, view: "overview" })}
       onRefresh={refresh}
       refreshing={loading}
       onLogout={signOut}

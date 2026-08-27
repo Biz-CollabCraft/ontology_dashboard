@@ -203,7 +203,7 @@ Backend composer
   -> fixture.history를 읽어 feature_series로 변환
 
 AssetDetailViewModel
-  -> features[].series
+  -> features[].history.points
 ```
 
 용어 경계:
@@ -212,7 +212,7 @@ AssetDetailViewModel
 | --- | --- | --- |
 | `history` | `input-event.schema.json`, `data/fixtures/GS-*.json` | 현재 관측 전후의 source observation rows |
 | `feature_series` | Backend composer 내부 인자 | `history`를 feature별 그래프 입력으로 변환한 중간값 |
-| `features[].series` | `AssetDetailViewModel` | 프론트가 그래프로 렌더링하는 ViewModel 필드 |
+| `features[].history.points` | `AssetDetailViewModel` | 프론트가 그래프로 렌더링하는 ViewModel 필드 |
 | `risk_series` | `AssetDetailViewModel` | 센서 이력이 아니라 runtime prediction/Product Result history |
 
 파생값 시계열도 같은 경계를 따른다.
@@ -383,7 +383,7 @@ maintenance.replay_requested
 - Backend composer는 overlay observation을 읽어 정비 전/정비 gap/정비 후 segment를 구분하고,
   history 충분 여부와 재예측 가능 여부를 별도로 판단한다.
 - Frontend는 overlay JSONL을 직접 읽지 않고, Backend ViewModel/API가 조립한
-  `features[].series`, `equipment_history`, `risk_series` 또는 후속 overlay section만 렌더링한다.
+  `features[].history.points`, `equipment_history`, `risk_series` 또는 후속 overlay section만 렌더링한다.
 
 시간 정합성 요구:
 
@@ -400,7 +400,7 @@ maintenance.replay_requested
 UI 표현 경계:
 
 - 표시 가능: `정비 후 관측 수집 중`, `재예측 대기`, `history 부족`, `정비 후 시계열 segment 존재`.
-- 금지: `정비 완료 후 정상화`, `고장률 개선`, `생산량 증가 실적`, `OEE 개선`, `실제 downtime 절감`.
+- 금지: 정비 효과, 운영 성과, 생산 개선이 입증된 것처럼 보이는 표현.
 - 생산 KPI 실적 산출은 실제 생산량, downtime, 정비 완료 결과, 재예측 결과가 연결되기 전까지
   후순위 backlog로 둔다.
 
@@ -428,7 +428,7 @@ fixture 보강, Backend ViewModel 조립, UI 렌더링 요구사항만 명시한
 
 2. Backend ViewModel 조립
    - `fixture.history`의 각 row에 동일한 파생 공식 `derive_features()`를 적용한다.
-   - 계산된 파생값은 기존 `AssetDetailViewModel.features[].series`에 포함한다.
+   - 계산된 파생값은 기존 `AssetDetailViewModel.features[].history.points`에 포함한다.
    - Frontend가 `temperature_difference_k`, `mechanical_power_w`, `overstrain_index`를 직접 계산하지 않는다.
    - 계산 불가 row가 있으면 `value: null`, `quality_status: "bad"` 또는 evidence gap으로 표시한다.
 
@@ -440,7 +440,7 @@ fixture 보강, Backend ViewModel 조립, UI 렌더링 요구사항만 명시한
 
 정합성 규칙:
 
-- `history`는 원천 fixture 필드이고, `features[].series`는 ViewModel 필드다.
+- `history`는 원천 fixture 필드이고, `features[].history.points`는 ViewModel 필드다.
 - `risk_series`와 혼동하지 않는다. `risk_series`는 runtime prediction/Product Result history다.
 - 파생값 시계열이 없다고 프론트에서 임의 보간하거나 생성하지 않는다.
 - 파생값 그래프는 Product Result/Evidence의 위험도, 확률, Top factor를 수정하지 않는다.
@@ -448,7 +448,7 @@ fixture 보강, Backend ViewModel 조립, UI 렌더링 요구사항만 명시한
 ### 후순위: 예방 점검 생산영향 KPI
 
 예방 점검으로 인해 생산량이 얼마나 개선됐는지 보여주는 KPI는 후순위로 둔다. 현재
-데이터와 fixture만으로는 실제 생산량 증가, 실제 납기 방어, 실제 OEE 개선을 실적 KPI로
+데이터와 fixture만으로는 실제 생산 개선, 실제 납기 방어, 실제 설비효율 개선을 실적 KPI로
 주장할 수 없다.
 
 후속 구현에서 허용할 수 있는 범위는 다음처럼 `synthetic_scenario_estimate`로 제한한다.

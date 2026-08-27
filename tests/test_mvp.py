@@ -134,8 +134,8 @@ def test_reports_are_generated_as_separate_locale_variants(service: FactorySigna
     assert korean.report_id != english.report_id
     assert "근거 분석" in korean.headline
     assert "evidence analysis" in english.headline
-    assert "절삭 설비" in korean.headline
-    assert "Cutting Machine" in english.headline
+    assert "CNC 가공기" in korean.headline
+    assert "CNC" in english.headline
     assert any(section.title == "점검 체크리스트" for section in korean.sections)
     assert any(section.title == "Inspection checklist" for section in english.sections)
 
@@ -232,10 +232,10 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert len(events) == 8
     assert events[0]["status"] == "critical"
 
-    detail_view = client.get("/api/objects/M-014/detail-view")
+    detail_view = client.get("/api/objects/CNC-S04-L04-01/detail-view")
     assert detail_view.status_code == 200
     detail_payload = detail_view.json()
-    assert detail_payload["asset"]["asset_id"] == "M-014"
+    assert detail_payload["asset"]["asset_id"] == "CNC-S04-L04-01"
     assert detail_payload["risk"]["status_grade"] == "warning"
     assert detail_payload["features"]
     assert detail_payload["features"][0]["history"]["points"]
@@ -243,6 +243,12 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert detail_payload["operation_context"]["production_plan"]["planned_units"] == 16200
     assert detail_payload["operation_context"]["event_impact"]["event_id"] == "EVT-GS-002"
     assert detail_payload["operation_context"]["event_impact"]["estimated_lost_units"] == 25
+    assert detail_payload["inspection_targets"][0]["component_id"]
+    assert detail_payload["inspection_targets"][0]["location_label"] is None
+    assert (
+        detail_payload["inspection_targets"][0]["unavailable_reason"]
+        == "maintenance_inspection_location_contract_unavailable"
+    )
     assert detail_payload["risk_series"] == []
     assert any(gap["field"] == "risk_series" for gap in detail_payload["evidence"]["gaps"])
     assert detail_payload["evidence"]["source_kind"] == "runtime_inference"
@@ -304,11 +310,11 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
 def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(
     client: TestClient,
 ) -> None:
-    detail_view = client.get("/api/objects/M-063/detail-view")
+    detail_view = client.get("/api/objects/CNC-S04-L05-01/detail-view")
     assert detail_view.status_code == 200
     detail_payload = detail_view.json()
 
-    assert detail_payload["asset"]["asset_id"] == "M-063"
+    assert detail_payload["asset"]["asset_id"] == "CNC-S04-L05-01"
     assert detail_payload["risk"]["status_grade"] is None
     assert detail_payload["data_status"]["is_data_quality_hold"] is True
 
@@ -320,8 +326,87 @@ def test_asset_detail_view_model_keeps_current_observation_out_of_history_points
         assert observed_times == sorted(observed_times)
         assert current_observed_at not in observed_times
         assert all(set(point) == {"observed_at", "value", "quality_status"} for point in points)
+        assert feature["history"]["window"]["requested"] == "24h"
+        assert feature["history"]["window"]["point_count"] == len(points)
         if points:
             assert feature["history"]["source_ref"].startswith("observation-contract://")
+
+
+def test_asset_detail_view_model_exposes_gs004_24h_feature_history(
+    client: TestClient,
+) -> None:
+    detail_view = client.get("/api/objects/CNC-S04-L02-03/detail-view")
+    assert detail_view.status_code == 200
+    detail_payload = detail_view.json()
+
+    assert detail_payload["asset"]["asset_id"] == "CNC-S04-L02-03"
+    current_observed_at = detail_payload["asset"]["observed_at"]
+    feature_points = {
+        feature["key"]: feature["history"]["points"]
+        for feature in detail_payload["features"]
+    }
+
+    assert len(feature_points["torque_nm"]) == 24
+    assert len(feature_points["mechanical_power_w"]) == 24
+    assert len(feature_points["overstrain_index"]) == 24
+    assert feature_points["torque_nm"][0]["observed_at"] == "2026-07-31T00:00:00+09:00"
+    assert feature_points["torque_nm"][-1]["observed_at"] == "2026-07-31T23:00:00+09:00"
+    assert current_observed_at not in {
+        point["observed_at"]
+        for points in feature_points.values()
+        for point in points
+    }
+    torque_window = next(
+        feature["history"]["window"]
+        for feature in detail_payload["features"]
+        if feature["key"] == "torque_nm"
+    )
+    assert torque_window["requested"] == "24h"
+    assert torque_window["requested_start"] == "2026-07-30T15:00:00Z"
+    assert torque_window["requested_end"] == "2026-07-31T15:00:00Z"
+    assert torque_window["actual_start"] == "2026-07-30T15:00:00Z"
+    assert torque_window["actual_end"] == "2026-07-31T14:00:00Z"
+    assert torque_window["point_count"] == 24
+    assert torque_window["coverage_status"] == "partial"
+
+
+def test_asset_detail_view_model_accepts_7d_feature_history_window(
+    client: TestClient,
+) -> None:
+    detail_view = client.get("/api/objects/CNC-S04-L02-03/detail-view?history_window=7d")
+    assert detail_view.status_code == 200
+    detail_payload = detail_view.json()
+    torque_history = next(
+        feature["history"]
+        for feature in detail_payload["features"]
+        if feature["key"] == "torque_nm"
+    )
+
+    assert torque_history["window"]["requested"] == "7d"
+    assert torque_history["window"]["requested_start"] == "2026-07-24T15:00:00Z"
+    assert torque_history["window"]["point_count"] == len(torque_history["points"])
+    assert torque_history["window"]["coverage_status"] == "partial"
+
+    operation_context = detail_payload["operation_context"]
+    assert operation_context["production_plan"]["planned_units"] == 16200
+    assert operation_context["capacity_model"]["asset_units_per_hour"] == 12.69
+    assert operation_context["event_impact"]["event_id"] == "EVT-GS-004"
+    assert operation_context["event_impact"]["equipment_id"] == "CNC-S04-L02-03"
+    assert operation_context["event_impact"]["screen_priority"] == "plan_at_risk"
+    assert operation_context["event_impact"]["estimated_lost_units"] == 51
+    closed_loop = detail_payload["closed_loop"]
+    assert closed_loop["work_orders"][0]["work_order_id"] == "WO-INS-GS-004-001"
+    assert closed_loop["work_orders"][0]["work_type"] == "inspection"
+    assert closed_loop["work_orders"][0]["status"] == "requested"
+    assert closed_loop["activities"][0]["activity_type"] == "work_order.requested"
+    assert closed_loop["available_actions"][0]["action_id"] == "approve_inspection_work_order"
+    assert closed_loop["maintenance_actions"] == []
+    assert closed_loop["maintenance_events"] == []
+    assert closed_loop["runtime_status"] is None
+
+    event = client.get("/api/events/EVT-GS-004")
+    assert event.status_code == 200
+    assert event.json()["equipment"]["spare_part_available"] is False
 
 
 def test_follow_up_reconfigures_layout_and_rejects_injection(client: TestClient) -> None:
@@ -362,7 +447,7 @@ def test_project3_context_failure_falls_back() -> None:
         Project3HttpContextProvider(base_url="http://127.0.0.1:1", timeout_seconds=0.01),
         FixtureContextProvider(),
     )
-    context = provider.get_context("M-014", "tool_wear_failure")
+    context = provider.get_context("CNC-S04-L04-01", "tool_wear_failure")
     assert context["provider"] == "fixture_fallback"
     assert context["source_refs"]
 

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.diagnosis.contracts import load_fixture
+from app.diagnosis.contracts import derive_features, load_fixture
 from app.diagnosis.domain import (
     build_evidence_package,
     build_product_result_artifact,
@@ -188,6 +188,7 @@ class ManufacturingPredictiveMaintenanceService:
         project_id: str = "manufacturing-demo-project",
         *,
         dataset_version_id: str | None = None,
+        history_window: str = "24h",
     ) -> dict[str, Any]:
         fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
         artifact = self._product_result_artifact(fixture)
@@ -198,12 +199,14 @@ class ManufacturingPredictiveMaintenanceService:
             feature_series=self._feature_series_for_fixture(fixture, artifact),
             runtime_prediction_history=self._runtime_history_for_fixture(fixture, artifact),
             equipment_history=self._equipment_history_for_fixture(fixture),
-            operation_context=self._operation_context_for_fixture(fixture, artifact),
+            operation_context=self._operation_context_for_fixture(fixture, artifact) or fixture.get("operation_context"),
+            closed_loop=fixture.get("closed_loop"),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
                 "warnings": [],
             },
+            history_window=history_window,
         )
 
     def patch_equipment_state(
@@ -261,10 +264,10 @@ class ManufacturingPredictiveMaintenanceService:
         estimated_downtime = equipment.get("estimated_downtime_minutes")
         return {
             "asset_id": artifact["asset_id"],
-            "asset_type": artifact["asset_type"],
+            "asset_type": equipment.get("asset_type") or artifact["asset_type"],
             "display_name": equipment.get("display_name") or artifact["asset_id"],
-            "site_id": "Manufacturing Demo",
-            "cell_id": equipment.get("line") or artifact.get("cell_id") or "unknown",
+            "site_id": equipment.get("site_id") or artifact.get("site_id") or "Manufacturing Demo",
+            "cell_id": equipment.get("cell_id") or equipment.get("line") or artifact.get("cell_id") or "unknown",
             "observed_at": artifact["observed_at"],
             "criticality": equipment.get("criticality"),
             "criticality_basis": ["fixture equipment.criticality"]
@@ -309,7 +312,13 @@ class ManufacturingPredictiveMaintenanceService:
         for key in feature_keys:
             points_by_instant: dict[datetime, dict[str, Any]] = {}
             for row in rows:
-                if key not in row:
+                derived_row: dict[str, Any] = {}
+                try:
+                    derived_row = derive_features(row)
+                except (TypeError, ValueError):
+                    derived_row = {}
+                source_row = {**derived_row, **row}
+                if key not in source_row:
                     continue
                 observed_at = str(row.get("timestamp") or current_observed_at)
                 instant = _timestamp_instant(observed_at)
@@ -317,7 +326,7 @@ class ManufacturingPredictiveMaintenanceService:
                     continue
                 point = {
                     "observed_at": observed_at,
-                    "value": row.get(key),
+                    "value": source_row.get(key),
                     "quality_status": "unknown"
                     if artifact.get("status_grade") == "data_quality_hold"
                     else "good",
@@ -399,20 +408,24 @@ class ManufacturingPredictiveMaintenanceService:
             valid_to = _parse_iso_datetime(str(temporal_scope.get("valid_to") or ""))
             if valid_from is None or valid_to is None or not (valid_from <= observed_at < valid_to):
                 continue
-            event_impact = _event_impact_for_fixture(context, fixture, equipment)
+            fixture_context = fixture.get("operation_context") or {}
+            event_impact = fixture_context.get("event_impact") or _event_impact_for_fixture(context, fixture, equipment)
             capacity = context.get("capacity_model") or {}
             planning_window = capacity.get("planning_window") or {}
             oee_basis = capacity.get("oee_basis") or {}
             cycle_time_basis = capacity.get("cycle_time_basis") or {}
             asset_count_basis = capacity.get("asset_count_basis") or {}
-            return {
-                "load_level": None,
-                "runtime_hours_7d": None,
-                "production_impact": _production_impact(
+            production_impact = fixture_context.get("production_impact")
+            if production_impact not in {"none", "low", "medium", "high"}:
+                production_impact = _production_impact(
                     (event_impact or {}).get("basis", {}).get("estimated_downtime_minutes")
                     if event_impact
                     else equipment.get("estimated_downtime_minutes")
-                ),
+                )
+            return {
+                "load_level": fixture_context.get("load_level"),
+                "runtime_hours_7d": fixture_context.get("runtime_hours_7d"),
+                "production_impact": production_impact,
                 "context_id": context["context_id"],
                 "source_type": context["source_type"],
                 "temporal_scope": temporal_scope,
@@ -627,8 +640,8 @@ def _event_impact_for_fixture(
     equipment_id = str(equipment.get("equipment_id") or "")
     for impact in context.get("event_impacts") or []:
         if str(impact.get("event_id") or "") == event_id:
-            return impact
+            return {**impact, "equipment_id": equipment_id or str(impact.get("equipment_id") or "")}
     for impact in context.get("event_impacts") or []:
         if str(impact.get("equipment_id") or "") == equipment_id:
-            return impact
+            return {**impact, "equipment_id": equipment_id}
     return None

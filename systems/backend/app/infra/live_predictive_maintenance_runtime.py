@@ -22,6 +22,11 @@ from app.infra.db.predictive_maintenance_ontology_projection import (
     PredictiveMaintenanceOntologyMaterializer,
 )
 from app.infra.db.settings import database_location
+from app.infra.runtime_overlay_contract import (
+    resolve_storage_reference,
+    validate_overlay_available_event,
+    validate_overlay_observation,
+)
 
 
 ORGANIZATION_ID = "org-ontology-demo"
@@ -700,13 +705,6 @@ def read_complete_ticks(
     ]
 
 
-def _safe_overlay_component(value: str) -> str:
-    return "".join(
-        char if char.isalnum() or char in {"-", "_", "."} else "_"
-        for char in str(value)
-    )
-
-
 def active_overlay_asset_ids(stream_root: str | Path) -> set[str]:
     """Return equipment whose Canonical/live stream is paused by Runtime Overlay."""
 
@@ -740,11 +738,13 @@ def read_overlay_available_events(stream_root: str | Path) -> list[dict[str, Any
             raise ValueError(f"invalid Runtime Overlay outbox JSON at {path}:{line_number}") from exc
         if not isinstance(event, dict):
             raise ValueError(f"Runtime Overlay outbox event must be an object at {path}:{line_number}")
-        if event.get("event_type") != "runtime_overlay.observations.available":
-            raise ValueError(f"unsupported Runtime Overlay outbox event at {path}:{line_number}")
+        try:
+            validate_overlay_available_event(event)
+        except ValueError as exc:
+            raise ValueError(
+                f"invalid Runtime Overlay outbox event at {path}:{line_number}: {exc}"
+            ) from exc
         event_id = str(event.get("event_id") or "")
-        if not event_id:
-            raise ValueError(f"Runtime Overlay outbox event_id is missing at {path}:{line_number}")
         digest = _record_checksum(event)
         previous = events.get(event_id)
         if previous is not None and previous[0] != digest:
@@ -754,9 +754,7 @@ def read_overlay_available_events(stream_root: str | Path) -> list[dict[str, Any
 
 
 def _overlay_branch_path(stream_root: str | Path, event: dict[str, Any]) -> Path:
-    session = _safe_overlay_component(str(event["simulation_session_id"]))
-    branch = _safe_overlay_component(str(event["overlay_branch_id"]))
-    return Path(stream_root).expanduser() / "runtime_overlay" / session / f"{branch}.jsonl"
+    return resolve_storage_reference(stream_root, event)
 
 
 def _read_overlay_event_rows(
@@ -774,9 +772,14 @@ def _read_overlay_event_rows(
             continue
         try:
             row = json.loads(raw_line)
+            if not isinstance(row, dict):
+                raise ValueError("Runtime Overlay observation must be an object")
+            validate_overlay_observation(row)
             observed_at = _parse_observed_at(row["observed_at"])
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
-            raise ValueError(f"invalid Runtime Overlay observation at {path}:{line_number}") from exc
+            raise ValueError(
+                f"invalid Runtime Overlay observation at {path}:{line_number}: {exc}"
+            ) from exc
         if str(row.get("overlay_branch_id")) != str(event["overlay_branch_id"]):
             continue
         if str(row.get("equipment_id") or row.get("asset_id")) != str(event["equipment_id"]):
@@ -785,6 +788,18 @@ def _read_overlay_event_rows(
             continue
         if int(row.get("state_version", -1)) != int(event["state_version"]):
             raise ValueError("Runtime Overlay observation state_version differs from availability event")
+        for field in (
+            "simulation_session_id",
+            "maintenance_action_id",
+            "maintenance_event_id",
+            "overlay_branch_id",
+            "history_segment_id",
+            "source_kind",
+        ):
+            if str(row[field]) != str(event[field]):
+                raise ValueError(
+                    f"Runtime Overlay observation {field} differs from availability event"
+                )
         rows.append(row)
     rows.sort(key=lambda item: _parse_observed_at(item["observed_at"]))
     if len(rows) != int(event["batch_rows"]):
