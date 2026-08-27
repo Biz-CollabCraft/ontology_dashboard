@@ -665,6 +665,71 @@ class ContractVectorVerifier:
                             expected_version="training-config-v1",
                         )
 
+        # Verify Prediction Result Batch Examples if prediction-result-batch examples directory exists
+        prediction_examples_dir = self.examples_dir / "prediction-result-batch"
+        if prediction_examples_dir.is_dir():
+            batch_schema_path = self.schemas_dir / "prediction-result-batch.schema.json"
+            for ex_file in sorted(prediction_examples_dir.glob("*.json")):
+                rel_path = ex_file.relative_to(self.repo_root)
+                ex_data = self._load_json_object(ex_file, str(rel_path), result)
+                if ex_data is not None and batch_schema_path.is_file():
+                    try:
+                        batch_schema = json.loads(batch_schema_path.read_text(encoding="utf-8"))
+                        reg = self._build_schema_registry()
+                        format_checker = jsonschema.FormatChecker()
+                        if reg is not None:
+                            validator = jsonschema.Draft202012Validator(batch_schema, registry=reg, format_checker=format_checker)
+                        else:
+                            validator = jsonschema.Draft202012Validator(batch_schema, format_checker=format_checker)
+                        validator.validate(ex_data)
+                    except Exception as e:
+                        result.errors.append(
+                            VerificationError(
+                                context=str(rel_path),
+                                message=f"Prediction result batch example failed schema validation: {e}",
+                            )
+                        )
+                    for i, it in enumerate(ex_data.get("results", [])):
+                        it_copy = dict(it)
+                        claimed_sha = it_copy.pop("payload_sha256", None)
+                        c_json = json.dumps(it_copy, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                        expected_sha = hashlib.sha256(c_json.encode("utf-8")).hexdigest()
+                        if claimed_sha != expected_sha:
+                            result.errors.append(
+                                VerificationError(
+                                    context=f"{rel_path}/results[{i}]",
+                                    message=f"payload_sha256 checksum mismatch for item '{it.get('event_id')}'",
+                                    expected=expected_sha,
+                                    actual=str(claimed_sha),
+                                )
+                            )
+
+        # Verify Generator Runtime Prediction Internal Stage Examples if directory exists
+        stage_examples_dir = self.examples_dir / "generator-runtime-prediction"
+        if stage_examples_dir.is_dir():
+            stage_schema_path = self.schemas_dir / "generator-runtime-prediction-stage.schema.json"
+            stage_file = stage_examples_dir / "generator-runtime-prediction-stage.json"
+            if stage_file.is_file() and stage_schema_path.is_file():
+                rel_path = stage_file.relative_to(self.repo_root)
+                st_data = self._load_json_object(stage_file, str(rel_path), result)
+                if st_data is not None:
+                    try:
+                        st_schema = json.loads(stage_schema_path.read_text(encoding="utf-8"))
+                        reg = self._build_schema_registry()
+                        format_checker = jsonschema.FormatChecker()
+                        if reg is not None:
+                            validator = jsonschema.Draft202012Validator(st_schema, registry=reg, format_checker=format_checker)
+                        else:
+                            validator = jsonschema.Draft202012Validator(st_schema, format_checker=format_checker)
+                        validator.validate(st_data)
+                    except Exception as e:
+                        result.errors.append(
+                            VerificationError(
+                                context=str(rel_path),
+                                message=f"Internal stage example failed schema validation: {e}",
+                            )
+                        )
+
     def _verify_test_vectors(self, result: VerificationResult) -> None:
         if not self.vectors_dir.is_dir():
             result.errors.append(
@@ -699,6 +764,10 @@ class ContractVectorVerifier:
                 self._verify_training_vector(vname, vdir, result)
             elif vname.startswith("runtime-overlay-output"):
                 self._verify_runtime_overlay_output_vector(vname, vdir, result)
+            elif vname.startswith("generator-runtime-prediction"):
+                self._verify_runtime_prediction_vector(vname, vdir, result)
+
+
             else:
                 result.errors.append(
                     VerificationError(
@@ -1264,6 +1333,159 @@ class ContractVectorVerifier:
                     message=f"Sum of partition row_counts ({partition_row_sum}) does not match total_rows ({total_rows})",
                     expected=str(total_rows),
                     actual=str(partition_row_sum),
+                )
+            )
+
+    def _build_schema_registry(self) -> Any:
+        if not hasattr(self, "_registry") or self._registry is None:
+            if not self.schemas_dir.is_dir():
+                return None
+            try:
+                import referencing
+                reg = referencing.Registry()
+                for sf in self.schemas_dir.glob("**/*.schema.json"):
+                    try:
+                        s_data = json.loads(sf.read_text(encoding="utf-8"))
+                        res = referencing.Resource.from_contents(s_data)
+                        if "$id" in s_data:
+                            reg = reg.with_resource(s_data["$id"], res)
+                        reg = reg.with_resource(sf.name, res)
+                    except Exception:
+                        pass
+                self._registry = reg
+            except Exception:
+                self._registry = None
+        return self._registry
+
+    def _verify_runtime_prediction_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        req_files = [
+            vector_dir / "input" / "protocol-sample-01.jsonl",
+            vector_dir / "expected" / "prediction-results.json",
+            vector_dir / "expected" / "prediction-result-batch.json",
+        ]
+        missing = [f.relative_to(vector_dir) for f in req_files if not f.is_file()]
+        if missing:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}",
+                    message=f"Missing required test vector file(s): {', '.join(str(m) for m in missing)}",
+                    expected="All required test vector files present",
+                    actual=f"Missing {missing}",
+                )
+            )
+            return
+
+        # 1. Validate prediction-results.json
+        pred_res_path = vector_dir / "expected" / "prediction-results.json"
+        pred_schema_path = self.schemas_dir / "generator-model-prediction-result.schema.json"
+        try:
+            pred_data = json.loads(pred_res_path.read_text(encoding="utf-8"))
+            if not isinstance(pred_data, list) or len(pred_data) == 0:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/prediction-results.json",
+                        message="prediction-results.json must be a non-empty list of model prediction results",
+                    )
+                )
+            elif pred_schema_path.is_file():
+                pred_schema = json.loads(pred_schema_path.read_text(encoding="utf-8"))
+                validator = jsonschema.Draft202012Validator(pred_schema)
+                for item in pred_data:
+                    validator.validate(item)
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/prediction-results.json",
+                    message=f"Failed validating prediction-results.json: {e}",
+                )
+            )
+
+        # 2. Validate prediction-result-batch.json
+        batch_path = vector_dir / "expected" / "prediction-result-batch.json"
+        batch_schema_path = self.schemas_dir / "prediction-result-batch.schema.json"
+        try:
+            batch_data = json.loads(batch_path.read_text(encoding="utf-8"))
+            if not isinstance(batch_data, dict):
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/prediction-result-batch.json",
+                        message="prediction-result-batch.json must be a JSON object",
+                    )
+                )
+            else:
+                if not isinstance(batch_data.get("results"), list) or len(batch_data.get("results")) == 0:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/prediction-result-batch.json",
+                            message="'results' must be a non-empty list of PredictionResultItem objects",
+                            expected="Non-empty array",
+                            actual=type(batch_data.get("results")).__name__,
+                        )
+                    )
+                if batch_schema_path.is_file():
+                    batch_schema = json.loads(batch_schema_path.read_text(encoding="utf-8"))
+                    reg = self._build_schema_registry()
+                    format_checker = jsonschema.FormatChecker()
+                    if reg is not None:
+                        validator = jsonschema.Draft202012Validator(batch_schema, registry=reg, format_checker=format_checker)
+                    else:
+                        validator = jsonschema.Draft202012Validator(batch_schema, format_checker=format_checker)
+                    validator.validate(batch_data)
+
+                for i, it in enumerate(batch_data.get("results", [])):
+                    it_copy = dict(it)
+                    claimed_sha = it_copy.pop("payload_sha256", None)
+                    c_json = json.dumps(it_copy, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    expected_sha = hashlib.sha256(c_json.encode("utf-8")).hexdigest()
+                    if claimed_sha != expected_sha:
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/prediction-result-batch.json/results[{i}]",
+                                message=f"payload_sha256 checksum mismatch for item '{it.get('event_id')}'",
+                                expected=expected_sha,
+                                actual=str(claimed_sha),
+                            )
+                        )
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/prediction-result-batch.json",
+                    message=f"Failed validating prediction-result-batch.json: {e}",
+                )
+            )
+
+
+        # 3. Validate input jsonl format
+        input_path = vector_dir / "input" / "protocol-sample-01.jsonl"
+        try:
+            lines = [l.strip() for l in input_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+            if not lines:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/input/protocol-sample-01.jsonl",
+                        message="Input jsonl file is empty",
+                    )
+                )
+            else:
+                for idx, line in enumerate(lines):
+                    parsed = json.loads(line)
+                    if not isinstance(parsed, dict):
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/input/protocol-sample-01.jsonl:line {idx+1}",
+                                message=f"Line {idx+1} must be a JSON object",
+                            )
+                        )
+        except Exception as e:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/input/protocol-sample-01.jsonl",
+                    message=f"Failed parsing input jsonl: {e}",
                 )
             )
 
