@@ -82,6 +82,12 @@ def test_inspection_sop_fixtures_match_procedure_grounding_schema() -> None:
         assert "교체 시기 검토 초안" in payload["guidance"]["allowed_ui_claims"]
         assert "교체 필요 확정" in payload["guidance"]["forbidden_ui_claims"]
         assert "자동 승인 완료" in payload["guidance"]["forbidden_ui_claims"]
+        assert payload["sensor_judgment"]["inspection_result_mapping"] == {
+            "records_operational_fact": True,
+            "does_not_create_maintenance_event": True,
+            "manual_recommendation_requires_manager_acceptance": True,
+        }
+        assert "실제 고장 예방 입증" in payload["sensor_judgment"]["claim_boundaries"]["forbidden_claims"]
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))
