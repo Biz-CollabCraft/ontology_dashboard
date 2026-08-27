@@ -74,8 +74,20 @@ SOP Grounding은 Product Evidence가 아니다. Product Evidence는 왜 위험�
 
 ## 5. 소비 가능 조건
 
-Backend consumer는 SOP를 UI guidance 또는 agent handoff 초안으로 승격하기 전에 `source_kind`와
-`maturity`를 함께 검사해야 한다.
+Backend consumer는 SOP를 UI guidance 또는 agent handoff 초안으로 승격하기 전에 구조 검증,
+문서 lifecycle gate, 적용 조건 matching을 순서대로 수행해야 한다.
+
+```text
+procedure-grounding schema validation
+-> source_kind + maturity gate
+-> applicability matching
+-> inspection_guidance projection
+```
+
+`procedure-grounding` schema validation은 maturity와 applicability 판정보다 먼저 수행한다.
+필수 필드가 누락되었거나 schema shape가 맞지 않는 SOP payload는 사용자-facing guidance 후보에
+넣지 않고 fail-closed로 배제한다. schema를 통과한 뒤에만 `source_kind`와 `maturity`를 함께
+검사한다.
 
 | `source_kind` | `maturity` | 소비 정책 |
 |---|---|---|
@@ -127,6 +139,7 @@ industry_standard_reference -> 별도 정책 전까지 직접 guidance 금지
 - `site_sop + approved`는 applicability가 맞으면 guidance를 노출한다.
 - `site_sop + draft`는 applicability가 맞아도 guidance를 노출하지 않는다.
 - `site_sop + retired`는 applicability가 맞아도 guidance를 노출하지 않는다.
+- schema validation에 실패한 SOP payload는 maturity/applicability 판정 전에 차단된다.
 - guidance가 없으면 기존 gap 또는 unavailable 표현을 유지한다.
 
 ## 8. 후속 문서화 위치
