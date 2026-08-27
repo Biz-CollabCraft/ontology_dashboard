@@ -19,10 +19,11 @@ PR #128은 역할별 Overview, Asset Detail Side Task View, 작업 상태 큐, R
 이 계획은 그 read surface를 실제 runtime/simulation/closed-loop 데이터와 연결하기 위한
 후속 구현 단위를 정의한다.
 
-목표는 PR #127의 Generator Runtime Prediction 경로를 upstream prediction producer로 두고,
-Backend Diagnosis가 Prediction Result Batch를 검증해 Product Result/Evidence로 승격하는
-통합 경계를 닫는 것이다. live sensor와 simulation overlay가 서로 다른 source에서 오더라도
-PR #128 UI와 Closed-loop는 Backend가 승격한 Product Result/Evidence만 소비한다.
+목표는 PR #127 머지 후 Generator Runtime Prediction 경로를 upstream prediction producer로
+채택하고, Backend Diagnosis 쪽에서 먼저 Prediction Inbox receive/gate를 닫는 것이다.
+그 다음 검증된 Prediction Result Batch만 Product Result/Evidence로 승격한다. live sensor와
+simulation overlay가 서로 다른 source에서 오더라도 PR #128 UI와 Closed-loop는 Backend가
+승격한 Product Result/Evidence만 소비한다.
 
 ```text
 Live Sensor Observation
@@ -67,12 +68,13 @@ sensor tick 자동 감지
 - 정비 완료는 기록되지만 replay/post-maintenance Product Result가 없음
 - runtime status가 없어 사용자는 "대기 중", "이력 부족", "실패", "예측 완료"를 구분하지 못함
 
-따라서 이 계획의 구현 단위는 다음처럼 정의한다.
+따라서 이 계획의 구현 단위는 다음처럼 다시 정의한다.
 
-- 1차 통합 PR: Generator Prediction Result Batch -> Backend Inbox -> Product Result append -> API/ViewModel -> PR #128 UI live update
-- 같은 PR 또는 즉시 후속 stack: Closed-loop mutation -> Maintenance replay -> post-maintenance Product Result
-- 병렬 Generator PR: PR #127의 `prediction-result-batch.schema.json` 단일 외부 wire 계약을 기준으로 Outbox, delivery failure 처리, lineage 보강
-- 별도 후순위 PR: Backend direct inference fallback 제거 또는 완전 비활성화
+- 선행 조건: PR #127 머지. Generator Runtime Prediction Result Batch/Outbox는 upstream producer 계약으로 본다.
+- 1차 Backend PR: Prediction Inbox receive-only gate. PR #127 payload 원본 저장, checksum/schema/scope/lineage/idempotency 검증, rejection/conflict status 저장.
+- 2차 Backend PR: 검증된 Inbox record -> Product Result Artifact/Evidence append, runtime status/readiness record, API/ViewModel read model 연결.
+- 후속 stack: PR #128 UI refetch/live read surface, Closed-loop mutation, Maintenance replay, post-maintenance Product Result 비교.
+- 별도 후순위 PR: Backend direct inference fallback 제거 또는 완전 비활성화.
 
 즉, Generator owner가 runtime prediction을 맡더라도 PR #128과 Closed-loop가 직접 소비하는
 계약은 계속 Backend Product Result/Evidence다. Generator 결과는 Product Result 승격 전까지
@@ -267,8 +269,8 @@ handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 
 PR #129는 두 번째 Generator -> Backend wire schema를 정의하지 않는다. Backend Inbox 수신 record는
 PR #127의 `prediction-result-batch.schema.json` payload 원본을 보존하고, 그 위에
 `received_at`, `payload_sha256`, `validation_status`, `rejection_reason`, `promotion_result_id` 같은
-Backend validation metadata를 감싸는 형태로 계획한다. `model_results`와 `source_lineage`는
-Backend가 새 shape로 재작성하지 않는다.
+Backend validation metadata를 감싸는 형태로 계획한다. Inbox 검증 기준은 PR #127 외부 계약의
+`results[]`, `results[].source_ref`, `results[].model_artifact_manifest_sha256` 이름을 따른다.
 
 ### 6.2 Product Result Artifact lineage
 
@@ -286,7 +288,7 @@ history_segment_id
 simulation_session_id
 state_version
 model_artifact_uri
-model_artifact_sha256
+model_artifact_manifest_sha256
 feature_schema_version
 history_requirement_version
 policy_version
@@ -321,16 +323,17 @@ PR #128 UI는 다음 ViewModel 필드를 기대한다.
 
 ## 7. Backend 작업 계획
 
-아래 항목은 각각 독립 제품 기능 PR이라는 뜻이 아니라, 대범위 Integration PR 안에서
-검증 가능한 backend 하위 track 또는 커밋 묶음으로 본다. 최소 완료선은 B1~B4가 서로 이어져
-Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도달하는 것이다.
+아래 항목은 단계별 Backend 구현 단위다. 첫 완료선은 B1 receive-only gate로 두고, B2~B4는
+검증된 Inbox record를 Product Result/Evidence와 ViewModel으로 확장하는 후속 단위로 본다.
 
-### Track B1. Prediction Inbox / idempotency
+### Track B1. Prediction Inbox receive-only gate / idempotency
 
 목표:
 
 - Generator가 전달한 Prediction Result Batch를 Backend가 중복 없이 수신한다.
 - 수신 여부, payload checksum, scope, lineage, failure reason을 DB 또는 durable store에 남긴다.
+- 이 단계에서는 Product Result/Evidence를 만들지 않는다. Inbox가 받을 수 있는 payload와
+  거절해야 하는 payload를 먼저 고정한다.
 
 범위:
 
@@ -340,20 +343,22 @@ Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도
 - project/workspace/asset scope validator
 - source/model/feature/history lineage validator
 - `event_id + payload_sha256` 저장
-- duplicate skip
+- duplicate replay는 기존 receive record 재사용
 - payload conflict fail-closed
 - `source_kind` 분기
 
 완료 조건:
 
-- 같은 Batch를 두 번 수신해도 Product Result가 중복 생성되지 않는다.
+- 같은 Batch를 두 번 수신해도 Inbox receive record가 중복 생성되지 않는다.
 - 같은 `event_id`의 payload checksum이 바뀌면 오류로 남고 조용히 덮어쓰지 않는다.
 - live와 maintenance replay source가 같은 Inbox entrypoint를 통과한다.
+- schema-invalid, checksum-invalid, scope-invalid batch가 Product Result 없이 rejected 상태로 남는다.
 
 검증:
 
 - unit: Inbox duplicate/conflict cases
 - integration: Prediction Result Batch -> Inbox -> stored receive record
+- contract: PR #127 `prediction-result-batch.schema.json` valid/invalid vectors
 - architecture check: Backend consumer가 Generator Python 구현을 import하지 않음
 
 ### Track B2. Backend validation / product policy / materialization
@@ -365,7 +370,7 @@ Generator Prediction Result Batch가 Product Result로 승격되고 UI까지 도
 
 범위:
 
-- PR #127 payload의 `model_results[].status`, `error_code`, `error_message` 처리
+- PR #127 payload의 `results[].output_status`, `results[].failure_reason` 처리
 - allowed model/model_set/version 검증
 - source checksum과 replay lineage 검증
 - threshold/status/recommendation policy 적용

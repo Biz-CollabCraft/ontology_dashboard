@@ -39,9 +39,10 @@ sensor tick 자동 감지
   -> Closed-loop 작업요청/정비/replay 연결
 ```
 
-Generator Runtime 전환은 PR #127을 upstream prediction producer로 두고 병렬 개발한다.
-첫 Integration target은 Generator Prediction Result Batch를 Backend가 수신해 Product Result/Evidence로
-승격하는 E2E다.
+Generator Runtime 전환은 PR #127 머지 후 upstream prediction producer 계약으로 채택한다.
+내가 먼저 진행할 첫 구현 단위는 Backend Prediction Inbox receive-only gate다. 즉 PR #127
+Prediction Result Batch를 원본 그대로 받고, schema/checksum/scope/lineage/idempotency 검증과
+rejection/conflict 상태를 닫은 뒤, 별도 후속 PR에서 Product Result/Evidence 승격 E2E로 확장한다.
 
 ## 2. 고정 원칙
 
@@ -144,21 +145,25 @@ Frontend는 위 값을 계산하지 않는다. 값이 없으면 `null`, empty ar
 
 담당: Backend Diagnosis / Product Result owner
 
-이 Track이 PR #128과 Closed-loop를 실제 제품 흐름으로 살리는 critical path다. Backend는 PR #127
-Generator Prediction Result Batch를 수신하고, 검증된 결과만 Product Result/Evidence로 승격한다.
+이 Track이 PR #128과 Closed-loop를 실제 제품 흐름으로 살리는 critical path다. PR #127 머지 후
+첫 Backend 작업은 Inbox receive-only gate로 시작한다. Backend는 Generator Prediction Result
+Batch를 수신해 원본 payload와 검증 metadata를 보존하고, 검증된 결과만 다음 PR에서
+Product Result/Evidence로 승격한다.
 
 책임:
 
 - Prediction Result Batch 수신
-- contract/scope/lineage 검증
+- contract/scope/checksum/lineage 검증
 - `event_id + payload_sha256` idempotency/conflict 처리
 - allowed source/model/status 검증
-- threshold/status/recommendation product policy 적용
-- `build_product_result_artifact()` 호출
-- Product Result Artifact / Evidence append-only 저장
-- runtime status/readiness record 생성
-- latest/timeline/detail read model 갱신
-- `AssetDetailViewModel` composer에 `current_result_summary`와 `runtime_status` 제공
+- receive-only 단계: schema/scope/checksum/lineage/idempotency 검증
+- receive-only 단계: duplicate replay reuse, payload conflict fail-closed, rejection reason 저장
+- 후속 승격 단계: threshold/status/recommendation product policy 적용
+- 후속 승격 단계: `build_product_result_artifact()` 호출
+- 후속 승격 단계: Product Result Artifact / Evidence append-only 저장
+- 후속 승격 단계: runtime status/readiness record 생성
+- 후속 승격 단계: latest/timeline/detail read model 갱신
+- 후속 승격 단계: `AssetDetailViewModel` composer에 `current_result_summary`와 `runtime_status` 제공
 
 Generator가 Backend로 넘기는 wire contract는 PR #127의
 `prediction-result-batch.schema.json`를 단일 외부 정본으로 둔다. Backend Inbox는 payload
@@ -167,21 +172,28 @@ Generator가 Backend로 넘기는 wire contract는 PR #127의
 의미적 최소 조건이며, 별도 schema shape를 다시 정의하지 않는다.
 
 ```text
+batch_id
 event_id
-asset_id
-observed_at
-model_results[].score
-model_results[].status
-model_results[].error_code
-model_results[].error_message
-source_lineage.source_uri
-source_lineage.source_checksum
-model_set_id
-model_results[].model_id
-model_results[].model_version
-model_results[].model_artifact_sha256
-model_results[].feature_schema_version
-model_results[].history_requirement_version
+producer.id
+producer.version
+emitted_at
+payload_sha256
+results[].asset_id
+results[].observed_at
+results[].score
+results[].output_status
+results[].failure_reason
+results[].source_ref.uri
+results[].source_ref.sha256
+results[].model_set_id
+results[].model_id
+results[].model_version
+results[].model_artifact_manifest_sha256
+results[].feature_schema_version
+results[].feature_schema_sha256
+results[].history_requirement_version
+results[].history_requirement_sha256
+results[].lineage
 ```
 
 Simulation / maintenance replay source이면 추가:
@@ -320,19 +332,37 @@ Track E Frontend
   -> PR #128 live read surface API 연결
 ```
 
-초기 통합 정본은 Generator Prediction Result Batch를 Backend가 승격하는 경로로 둔다.
+초기 진행 정본은 PR #127 머지 후 Backend Inbox receive-only gate를 먼저 닫고, 그 다음
+Generator Prediction Result Batch를 Backend가 승격하는 경로로 확장하는 것이다.
 
 ```text
-1. Generator Runtime Prediction으로 sensor/overlay observation -> Prediction Result Batch를 먼저 닫는다.
-2. Closed-loop는 Product Result/Evidence 기반으로 작업요청/정비/replay를 병렬 연결한다.
-3. Backend Prediction Inbox가 Batch를 검증하고 Product Result/Evidence로 승격한다.
+1. PR #127을 머지해 Generator Runtime Prediction Result Batch/Outbox를 upstream producer 계약으로 고정한다.
+2. 내가 Backend Prediction Inbox receive-only gate를 먼저 구현한다.
+3. Backend가 검증된 Inbox record만 Product Result/Evidence로 승격한다.
 4. PR #128 UI는 Backend Product API/ViewModel 변화를 refetch한다.
-5. rollback 가능 상태 확인 후 기존 Backend direct inference 제거를 별도 마지막 PR로 진행한다.
+5. Closed-loop는 Product Result/Evidence 기반으로 작업요청/정비/replay를 연결한다.
+6. rollback 가능 상태 확인 후 기존 Backend direct inference 제거를 별도 마지막 PR로 진행한다.
 ```
 
 ## 7. 큰 범위 구현 순서
 
-### Step 1. Runtime tick consume / idempotency
+### Step 1. Backend Prediction Inbox receive-only gate
+
+- PR #127 `prediction-result-batch.schema.json` payload를 Backend가 원본 그대로 수신한다.
+- Inbox record에 `received_at`, `payload_sha256`, `validation_status`, `rejection_reason`,
+  `promotion_result_id` 같은 Backend metadata만 추가한다.
+- schema/scope/checksum/lineage/idempotency를 검증한다.
+- duplicate replay는 기존 receive record를 재사용하고, 같은 `event_id`의 다른 payload는 conflict로 남긴다.
+- receive-only 단계에서는 Product Result/Evidence, ViewModel, Closed-loop trigger를 만들지 않는다.
+
+완료 기준:
+
+- valid PR #127 batch가 Inbox receive record로 보존된다.
+- invalid schema/checksum/scope/lineage batch가 rejected 상태로 남는다.
+- duplicate/conflict 케이스가 deterministic하게 검증된다.
+- Backend가 Generator Python 구현을 import하지 않는다.
+
+### Step 2. Runtime tick consume / idempotency
 
 - live sensor 또는 simulation overlay available marker를 Generator worker가 감지한다.
 - 처리 cursor, source checksum, consume status를 저장한다.
@@ -343,7 +373,7 @@ Track E Frontend
 - 같은 marker를 두 번 처리해도 Product Result가 중복 생성되지 않는다.
 - 처리 실패 상태가 runtime status로 조회된다.
 
-### Step 2. Observation -> Diagnosis execution
+### Step 3. Observation -> Diagnosis execution
 
 - Generator가 새 observation과 same-asset history window를 구성한다.
 - Generator가 `history_requirement`를 확인한다.
@@ -356,7 +386,7 @@ Track E Frontend
 - inference 가능한 tick에서 Generator runtime prediction이 실행된다.
 - 불가능한 tick은 정상으로 보정되지 않는다.
 
-### Step 3. Backend Prediction Inbox -> Product Result/Evidence append
+### Step 4. Backend Prediction Inbox -> Product Result/Evidence append
 
 - 기존 Product Result/Evidence core 계약을 유지한다.
 - Backend가 Prediction Result Batch의 contract/scope/checksum/lineage/idempotency를 검증한다.
@@ -370,7 +400,7 @@ Track E Frontend
 - 기존 Result가 overwrite되지 않는다.
 - Evidence projection/report consumer가 raw input을 재생성하지 않는다.
 
-### Step 4. Runtime status + AssetDetailViewModel + API
+### Step 5. Runtime status + AssetDetailViewModel + API
 
 - `current_result_summary`와 `runtime_status`를 분리한다.
 - Product Result 판단 시점과 runtime 진행 시점을 따로 노출한다.
@@ -381,7 +411,7 @@ Track E Frontend
 - Overview, Side Task View, Operations, Report entry가 같은 ViewModel snapshot을 소비한다.
 - runtime 대기/실패 상태가 기존 Product Result를 덮어쓰지 않는다.
 
-### Step 5. Frontend live update
+### Step 6. Frontend live update
 
 - polling 또는 replay/live signal로 runtime status/latest result 변화를 감지한다.
 - 변화가 있으면 latest/detail/evidence/ViewModel API를 refetch한다.
@@ -392,7 +422,7 @@ Track E Frontend
 - 새 Product Result가 생기면 #128 Overview와 Side Task View가 갱신된다.
 - `history_insufficient`/`warming_up`이 UI에 별도 상태로 표시된다.
 
-### Step 6. Closed-loop mutation/API 연결
+### Step 7. Closed-loop mutation/API 연결
 
 - 작업요청, 승인, 점검 시작/완료, RecommendationDecision, MaintenanceAction을 API로 연결한다.
 - mutation 응답은 persisted ID와 resulting state를 반환한다.
@@ -403,7 +433,7 @@ Track E Frontend
 - PR #128 처리 탭이 persisted ID/state만 표시한다.
 - 권한 없는 액션은 disabled reason 또는 403으로 일관되게 처리된다.
 
-### Step 7. Maintenance replay / simulation overlay 연결
+### Step 8. Maintenance replay / simulation overlay 연결
 
 - MaintenanceEvent 완료 후 replay request를 발행한다.
 - Runtime Overlay observation available을 Generator Runtime Pipeline이 소비한다.
@@ -415,7 +445,7 @@ Track E Frontend
 
 - PR #128 UI에서 정비 전/후 상태가 같은 asset lineage로 비교된다.
 
-### Step 8. Generator Runtime delivery integration
+### Step 9. Generator Runtime delivery integration
 
 - Generator score batch를 Backend Inbox에 전달한다.
 - Backend는 검증 전 score/source/model lineage를 Product API/UI/Closed-loop에 노출하지 않는다.
@@ -426,7 +456,7 @@ Track E Frontend
 - delivery retry, dead-letter, mismatch 처리 규칙이 문서화된다.
 - Generator 산출물 누락을 Backend가 추론 보정하지 않는다.
 
-### Step 9. Backend direct inference 제거 여부 결정
+### Step 10. Backend direct inference 제거 여부 결정
 
 - 팀 승인, Generator delivery, Backend Inbox, Product Result/Evidence E2E, rollback 조건이 모두 충족되면 제거한다.
 - 제거 전까지 Backend direct inference는 baseline/fallback path로만 둔다.
