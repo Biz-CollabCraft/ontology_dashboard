@@ -64,7 +64,7 @@
           "score",
           "model_id",
           "model_version",
-          "model_artifact_sha256",
+          "model_artifact_manifest_sha256",
           "feature_schema_version",
           "history_requirement_version",
           "lineage",
@@ -88,7 +88,7 @@
             "enum": [
               "live_sensor",
               "simulation_overlay",
-              "maintenance_replay"
+              "maintenance_replay_overlay"
             ]
           },
           "source_ref": {
@@ -99,17 +99,19 @@
             ],
             "properties": {
               "uri": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "sha256": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
               }
             },
             "additionalProperties": false
           },
           "payload_sha256": {
             "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
           },
           "output_status": {
             "type": "string",
@@ -137,8 +139,16 @@
             "type": "string",
             "minLength": 1
           },
-          "model_artifact_sha256": {
-            "type": "string"
+          "model_artifact_manifest_sha256": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "feature_schema_version": {
             "type": "string",
@@ -149,15 +159,25 @@
             "minLength": 1
           },
           "feature_schema_sha256": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "history_requirement_sha256": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "lineage": {
@@ -217,6 +237,136 @@
             ]
           }
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "output_status": {
+                  "const": "predicted"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "score": {
+                  "type": "number",
+                  "minimum": 0.0,
+                  "maximum": 1.0
+                },
+                "failure_reason": {
+                  "type": "null"
+                },
+                "model_artifact_manifest_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "output_status": {
+                  "enum": [
+                    "warming_up",
+                    "history_insufficient",
+                    "failed_feature_execution",
+                    "failed_model_inference"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "score": {
+                  "type": "null"
+                },
+                "failure_reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "model_artifact_manifest_sha256": {
+                  "type": "string",
+                  "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "output_status": {
+                  "enum": [
+                    "failed_model_artifact",
+                    "failed_source_unavailable"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "score": {
+                  "type": "null"
+                },
+                "failure_reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "source_kind": {
+                  "const": "maintenance_replay_overlay"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "lineage": {
+                  "type": "object",
+                  "required": [
+                    "simulation_session_id",
+                    "overlay_branch_id",
+                    "history_segment_id",
+                    "maintenance_event_id",
+                    "maintenance_action_id",
+                    "state_version"
+                  ],
+                  "properties": {
+                    "simulation_session_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "overlay_branch_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "history_segment_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maintenance_event_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maintenance_action_id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "state_version": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        ],
         "additionalProperties": false
       }
     }

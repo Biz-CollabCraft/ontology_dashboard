@@ -28,6 +28,7 @@ from systems.generator.app.runtime_pipeline.prediction_batch_service import (
     EquipmentModelBatch,
     PredictionBatchService,
     PredictionBatchSummary,
+    sort_prediction_result_items,
     to_external_result_item,
     validate_external_results_array,
 )
@@ -997,18 +998,19 @@ class PipelineService:
                             )
                             items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
 
-                    validate_external_results_array(items)
+                    sorted_items = sort_prediction_result_items(items)
+                    validate_external_results_array(sorted_items)
 
                     now_dt = datetime.now(timezone.utc)
-                    batch_key = f"{run_id}:{asset_id}:{now_dt.isoformat()}"
-                    batch_id = f"batch-{hashlib.sha256(batch_key.encode('utf-8')).hexdigest()[:24]}"
+                    canonical_batch_seed = f"prediction-result-batch-v1:{run_id}:{asset_id}:{src_ref.sha256}:{','.join(it.event_id for it in sorted_items)}"
+                    batch_id = f"batch-{hashlib.sha256(canonical_batch_seed.encode('utf-8')).hexdigest()[:24]}"
                     producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
                     batch_payload = PredictionResultBatchPayload(
                         contract_version="prediction-result-batch-v1",
                         batch_id=batch_id,
                         producer=producer,
                         emitted_at=now_dt,
-                        results=items,
+                        results=sorted_items,
                     )
 
                 prev_delivery = existing_delivery.get(asset_id)

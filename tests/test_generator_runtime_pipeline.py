@@ -39,7 +39,7 @@ def create_test_batch_payload(
         "score": score,
         "model_id": model_id,
         "model_version": model_version,
-        "model_artifact_sha256": "a" * 64,
+        "model_artifact_manifest_sha256": "a" * 64,
         "feature_schema_version": "v1.0",
         "history_requirement_version": "v1.0",
         "feature_schema_sha256": None,
@@ -68,7 +68,7 @@ def create_test_batch_payload(
         score=score,
         model_id=model_id,
         model_version=model_version,
-        model_artifact_sha256="a" * 64,
+        model_artifact_manifest_sha256="a" * 64,
         feature_schema_version="v1.0",
         history_requirement_version="v1.0",
         lineage=PredictionResultLineage(),
@@ -2555,7 +2555,7 @@ def test_model_set_provenance_contract_alignment(isolated_runtime_env):
             dataset_id="canonical-ai4i-v1",
             dataset_version="v3.1",
             pipeline_contract_version="v1",
-            source_lineage=SourceLineage(source_uri="test.jsonl", source_checksum="0"*64),
+            source_lineage=SourceLineage(source_uri="test.jsonl", source_checksum="a"*64),
             model_set_id="pdm-default",
             model_set_version="1.0.0",
         )
@@ -2761,7 +2761,9 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
     )
 
     # Directly read the staged payload file written on disk
-    staged_payload_file = preprocessed_dir / "pipeline_datasets" / run_id / "batch_staging" / "M14860.json"
+    import hashlib
+    storage_key = hashlib.sha256("M14860".encode("utf-8")).hexdigest()[:24]
+    staged_payload_file = preprocessed_dir / "pipeline_datasets" / run_id / "batch_staging" / f"{storage_key}.json"
     assert staged_payload_file.is_file(), f"Staged disk file not found: {staged_payload_file}"
 
     with open(staged_payload_file, "r", encoding="utf-8") as f:
@@ -3474,13 +3476,13 @@ def test_prediction_result_batch_array_serialization_and_validation():
         "source_kind": "live_sensor",
         "source_ref": {
             "uri": "data/incoming/protocol.jsonl",
-            "sha256": "0" * 64,
+            "sha256": "a" * 64,
         },
         "output_status": "predicted",
         "score": 0.85,
         "model_id": "pdm-lightgbm",
         "model_version": "1.0.0",
-        "model_artifact_sha256": "a" * 64,
+        "model_artifact_manifest_sha256": "b" * 64,
         "feature_schema_version": "v1.0.0",
         "history_requirement_version": "v1.0.0",
         "feature_schema_sha256": None,
@@ -3503,13 +3505,13 @@ def test_prediction_result_batch_array_serialization_and_validation():
         asset_id="CNC-001",
         observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
         source_kind="live_sensor",
-        source_ref=PredictionResultSourceRef(uri="data/incoming/protocol.jsonl", sha256="0" * 64),
+        source_ref=PredictionResultSourceRef(uri="data/incoming/protocol.jsonl", sha256="a" * 64),
         payload_sha256=item_sha,
         output_status="predicted",
         score=0.85,
         model_id="pdm-lightgbm",
         model_version="1.0.0",
-        model_artifact_sha256="a" * 64,
+        model_artifact_manifest_sha256="b" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
         lineage=PredictionResultLineage(),
@@ -3540,21 +3542,59 @@ def test_prediction_result_batch_array_duplicate_composite_key_fails_closed():
         PredictionResultItem,
         PredictionResultLineage,
         PredictionResultSourceRef,
+        compute_prediction_result_item_sha256,
     )
 
     dt = datetime.fromisoformat("2026-08-27T00:00:00+00:00")
+    d1 = {
+        "event_id": "evt-dup-1",
+        "asset_id": "CNC-001",
+        "observed_at": dt,
+        "source_kind": "live_sensor",
+        "source_ref": {"uri": "data/incoming/p.jsonl", "sha256": "c" * 64},
+        "output_status": "predicted",
+        "score": 0.8,
+        "model_id": "pdm-lightgbm",
+        "model_version": "1.0.0",
+        "model_artifact_manifest_sha256": "d" * 64,
+        "feature_schema_version": "v1.0.0",
+        "history_requirement_version": "v1.0.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
+        "failure_reason": None,
+    }
+    d2 = {
+        "event_id": "evt-dup-2",
+        "asset_id": "CNC-001",
+        "observed_at": dt,
+        "source_kind": "live_sensor",
+        "source_ref": {"uri": "data/incoming/p.jsonl", "sha256": "c" * 64},
+        "output_status": "predicted",
+        "score": 0.9,
+        "model_id": "pdm-lightgbm",
+        "model_version": "1.0.0",
+        "model_artifact_manifest_sha256": "d" * 64,
+        "feature_schema_version": "v1.0.0",
+        "history_requirement_version": "v1.0.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
+        "failure_reason": None,
+    }
+
     item1 = PredictionResultItem(
         event_id="evt-dup-1",
         asset_id="CNC-001",
         observed_at=dt,
         source_kind="live_sensor",
-        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
-        payload_sha256="a" * 64,
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="c" * 64),
+        payload_sha256=compute_prediction_result_item_sha256(d1),
         output_status="predicted",
         score=0.8,
         model_id="pdm-lightgbm",
         model_version="1.0.0",
-        model_artifact_sha256="a" * 64,
+        model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
         lineage=PredictionResultLineage(),
@@ -3565,13 +3605,13 @@ def test_prediction_result_batch_array_duplicate_composite_key_fails_closed():
         asset_id="CNC-001",
         observed_at=dt,
         source_kind="live_sensor",
-        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
-        payload_sha256="b" * 64,
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="c" * 64),
+        payload_sha256=compute_prediction_result_item_sha256(d2),
         output_status="predicted",
         score=0.9,
         model_id="pdm-lightgbm",
         model_version="1.0.0",
-        model_artifact_sha256="a" * 64,
+        model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
         lineage=PredictionResultLineage(),
@@ -3593,21 +3633,59 @@ def test_prediction_result_batch_array_duplicate_event_id_fails_closed():
         PredictionResultItem,
         PredictionResultLineage,
         PredictionResultSourceRef,
+        compute_prediction_result_item_sha256,
     )
 
     dt = datetime.fromisoformat("2026-08-27T00:00:00+00:00")
+    d1 = {
+        "event_id": "evt-dup-same",
+        "asset_id": "CNC-001",
+        "observed_at": dt,
+        "source_kind": "live_sensor",
+        "source_ref": {"uri": "data/incoming/p.jsonl", "sha256": "c" * 64},
+        "output_status": "predicted",
+        "score": 0.8,
+        "model_id": "pdm-lightgbm",
+        "model_version": "1.0.0",
+        "model_artifact_manifest_sha256": "d" * 64,
+        "feature_schema_version": "v1.0.0",
+        "history_requirement_version": "v1.0.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
+        "failure_reason": None,
+    }
+    d2 = {
+        "event_id": "evt-dup-same",
+        "asset_id": "CNC-001",
+        "observed_at": dt,
+        "source_kind": "live_sensor",
+        "source_ref": {"uri": "data/incoming/p.jsonl", "sha256": "c" * 64},
+        "output_status": "predicted",
+        "score": 0.9,
+        "model_id": "pdm-xgboost",
+        "model_version": "1.0.0",
+        "model_artifact_manifest_sha256": "d" * 64,
+        "feature_schema_version": "v1.0.0",
+        "history_requirement_version": "v1.0.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
+        "failure_reason": None,
+    }
+
     item1 = PredictionResultItem(
         event_id="evt-dup-same",
         asset_id="CNC-001",
         observed_at=dt,
         source_kind="live_sensor",
-        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
-        payload_sha256="a" * 64,
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="c" * 64),
+        payload_sha256=compute_prediction_result_item_sha256(d1),
         output_status="predicted",
         score=0.8,
         model_id="pdm-lightgbm",
         model_version="1.0.0",
-        model_artifact_sha256="a" * 64,
+        model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
         lineage=PredictionResultLineage(),
@@ -3618,13 +3696,13 @@ def test_prediction_result_batch_array_duplicate_event_id_fails_closed():
         asset_id="CNC-001",
         observed_at=dt,
         source_kind="live_sensor",
-        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="0" * 64),
-        payload_sha256="b" * 64,
+        source_ref=PredictionResultSourceRef(uri="data/incoming/p.jsonl", sha256="c" * 64),
+        payload_sha256=compute_prediction_result_item_sha256(d2),
         output_status="predicted",
         score=0.9,
         model_id="pdm-xgboost",
         model_version="1.0.0",
-        model_artifact_sha256="a" * 64,
+        model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
         lineage=PredictionResultLineage(),
@@ -3906,7 +3984,9 @@ def test_delivery_service_send_once_headers_and_post_method(isolated_runtime_env
     assert captured_req is not None
     assert captured_req.get_method() == "POST"
     assert captured_req.full_url == "http://localhost:8000/internal/prediction-results"
-    assert captured_req.headers.get("Idempotency-key") == "evt-post-01" or captured_req.headers.get("Idempotency-Key") == "evt-post-01"
+    idempotency_val = captured_req.headers.get("Idempotency-key") or captured_req.headers.get("Idempotency-Key")
+    assert idempotency_val is not None
+    assert idempotency_val.startswith("evt-batch-")
     assert captured_req.headers.get("X-request-id") == "batch-post-01" or captured_req.headers.get("X-Request-ID") == "batch-post-01"
 
 
@@ -3946,7 +4026,7 @@ def test_to_external_result_item_provenance_preservation():
     assert item.model_id == "pdm-lightgbm"
     assert item.source_ref.uri == "data/incoming/raw_sensors.jsonl"
     assert item.source_ref.sha256 == "c" * 64
-    assert item.model_artifact_sha256 == "d" * 64
+    assert item.model_artifact_manifest_sha256 == "d" * 64
     assert item.output_status == "predicted"
     assert item.score == 0.88
     assert "2026-08-25T14:30:00" in item.observed_at.isoformat()
@@ -4048,35 +4128,21 @@ def test_to_external_result_item_missing_or_empty_source_ref_raises():
 
 
 def test_to_external_result_item_zero_or_invalid_source_sha256_raises():
-    """Zero checksum ('0'*64), non-hex, or invalid length sha256 in source_ref raises ModelSetContractInvalidError."""
+    """Zero checksum ('0'*64), non-hex, or invalid length sha256 in source_ref is rejected."""
+    from pydantic import ValidationError
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
-        InternalModelPredictionResult,
         PredictionResultSourceRef,
-    )
-    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
-    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
-
-    internal = InternalModelPredictionResult(
-        asset_id="M14860",
-        model_id="pdm-lightgbm",
-        model_version="1.0.0",
-        status="succeeded",
-        observed_at="2026-08-25T14:30:00Z",
-        score=0.8,
-        manifest_checksum="d" * 64,
     )
 
     # 1. Zero checksum '0'*64 is rejected
-    zero_ref = PredictionResultSourceRef(uri="data/in.jsonl", sha256="0" * 64)
-    with pytest.raises(ModelSetContractInvalidError) as exc:
-        to_external_result_item(internal, source_ref=zero_ref)
-    assert "invalid or zero source_ref.sha256" in str(exc.value)
+    with pytest.raises(ValidationError) as exc:
+        PredictionResultSourceRef(uri="data/in.jsonl", sha256="0" * 64)
+    assert "SHA-256 checksum cannot be all zeros" in str(exc.value)
 
     # 2. Short checksum is rejected
-    short_ref = PredictionResultSourceRef(uri="data/in.jsonl", sha256="abc123")
-    with pytest.raises(ModelSetContractInvalidError) as exc2:
-        to_external_result_item(internal, source_ref=short_ref)
-    assert "invalid or zero source_ref.sha256" in str(exc2.value)
+    with pytest.raises(ValidationError) as exc2:
+        PredictionResultSourceRef(uri="data/in.jsonl", sha256="abc123")
+    assert "String should match pattern" in str(exc2.value) or "pattern" in str(exc2.value).lower()
 
 
 def test_to_external_result_item_missing_artifact_sha256_for_predicted_raises():
@@ -4102,4 +4168,552 @@ def test_to_external_result_item_missing_artifact_sha256_for_predicted_raises():
 
     with pytest.raises(ModelSetContractInvalidError) as exc:
         to_external_result_item(internal, source_ref=src_ref)
-    assert "missing model_artifact_sha256" in str(exc.value)
+    assert "missing model_artifact_manifest_sha256" in str(exc.value)
+
+
+# =====================================================================
+# 62. Prediction Result Batch v1 Schema Semantic & Pattern Tests
+# =====================================================================
+
+def _get_batch_schema():
+    import json
+    from pathlib import Path
+    schema_path = Path(__file__).resolve().parent.parent / "contracts" / "schemas" / "prediction-result-batch.schema.json"
+    return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+def _make_sample_batch_dict(**item_overrides):
+    import json
+    import hashlib
+    base_item = {
+        "event_id": "evt-001",
+        "asset_id": "M14860",
+        "observed_at": "2026-08-27T00:00:00Z",
+        "source_kind": "live_sensor",
+        "source_ref": {
+            "uri": "data/incoming/protocol.jsonl",
+            "sha256": "a" * 64,
+        },
+        "output_status": "predicted",
+        "score": 0.85,
+        "model_id": "pdm-lightgbm",
+        "model_version": "1.0.0",
+        "model_artifact_manifest_sha256": "b" * 64,
+        "feature_schema_version": "v1.0",
+        "history_requirement_version": "v1.0",
+        "feature_schema_sha256": None,
+        "history_requirement_sha256": None,
+        "lineage": {
+            "simulation_session_id": None,
+            "overlay_branch_id": None,
+            "history_segment_id": None,
+            "maintenance_event_id": None,
+            "maintenance_action_id": None,
+            "state_version": None,
+        },
+        "failure_reason": None,
+    }
+    base_item.update(item_overrides)
+    if "payload_sha256" not in base_item:
+        d_for_sha = dict(base_item)
+        d_for_sha.pop("payload_sha256", None)
+        c = json.dumps(d_for_sha, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        base_item["payload_sha256"] = hashlib.sha256(c.encode("utf-8")).hexdigest()
+
+    return {
+        "contract_version": "prediction-result-batch-v1",
+        "batch_id": "batch-001",
+        "producer": {
+            "system": "systems.generator",
+            "runtime_version": "1.0.0",
+            "outbox_id": None,
+        },
+        "emitted_at": "2026-08-27T00:00:05Z",
+        "results": [base_item],
+    }
+
+
+def test_schema_predicted_with_score_none_fails():
+    """Schema rejects output_status='predicted' when score is null."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(output_status="predicted", score=None)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_predicted_with_failure_reason_fails():
+    """Schema rejects output_status='predicted' when failure_reason is provided."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(output_status="predicted", score=0.85, failure_reason="unexpected error")
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_predicted_with_missing_manifest_sha_fails():
+    """Schema rejects output_status='predicted' when model_artifact_manifest_sha256 is null."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(output_status="predicted", score=0.85, model_artifact_manifest_sha256=None)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_predicted_with_zero_manifest_sha_fails():
+    """Schema rejects model_artifact_manifest_sha256 consisting of 64 zeros."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(output_status="predicted", score=0.85, model_artifact_manifest_sha256="0" * 64)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_predicted_with_score_out_of_range_fails():
+    """Schema rejects score outside [0.0, 1.0]."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch_high = _make_sample_batch_dict(output_status="predicted", score=1.5)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch_high, schema)
+
+    batch_neg = _make_sample_batch_dict(output_status="predicted", score=-0.1)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch_neg, schema)
+
+
+def test_schema_failed_status_with_non_null_score_fails():
+    """Schema rejects failed output_status when score is not null."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(output_status="failed_model_inference", score=0.5, failure_reason="OOM error")
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_failed_status_with_null_failure_reason_fails():
+    """Schema rejects failed output_status when failure_reason is null or empty."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch_null = _make_sample_batch_dict(output_status="failed_model_inference", score=None, failure_reason=None)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch_null, schema)
+
+    batch_empty = _make_sample_batch_dict(output_status="failed_model_inference", score=None, failure_reason="")
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch_empty, schema)
+
+
+def test_schema_history_insufficient_with_missing_manifest_sha_fails():
+    """Schema rejects history_insufficient when model_artifact_manifest_sha256 is null."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(
+        output_status="history_insufficient",
+        score=None,
+        failure_reason="Need 10 data points",
+        model_artifact_manifest_sha256=None,
+    )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_maintenance_replay_overlay_missing_lineage_fails():
+    """Schema rejects maintenance_replay_overlay when lineage fields are missing or state_version < 1."""
+    import jsonschema
+    schema = _get_batch_schema()
+    bad_lineage = {
+        "simulation_session_id": "sim-001",
+        "overlay_branch_id": None,
+        "history_segment_id": "seg-001",
+        "maintenance_event_id": "m-001",
+        "maintenance_action_id": "act-001",
+        "state_version": 1,
+    }
+    batch = _make_sample_batch_dict(
+        source_kind="maintenance_replay_overlay",
+        lineage=bad_lineage,
+    )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_maintenance_replay_overlay_valid_lineage_passes():
+    """Schema accepts maintenance_replay_overlay with all 6 required lineage fields."""
+    import jsonschema
+    schema = _get_batch_schema()
+    valid_lineage = {
+        "simulation_session_id": "sim-001",
+        "overlay_branch_id": "branch-001",
+        "history_segment_id": "seg-001",
+        "maintenance_event_id": "m-001",
+        "maintenance_action_id": "act-001",
+        "state_version": 2,
+    }
+    batch = _make_sample_batch_dict(
+        source_kind="maintenance_replay_overlay",
+        lineage=valid_lineage,
+    )
+    reg = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
+    reg.validate(batch)
+
+
+def test_schema_zero_source_sha256_fails():
+    """Schema rejects source_ref.sha256 consisting of 64 zeros."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(source_ref={"uri": "data/in.jsonl", "sha256": "0" * 64})
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+def test_schema_zero_payload_sha256_fails():
+    """Schema rejects payload_sha256 consisting of 64 zeros."""
+    import jsonschema
+    schema = _get_batch_schema()
+    batch = _make_sample_batch_dict(payload_sha256="0" * 64)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(batch, schema)
+
+
+# =====================================================================
+# 63. Pydantic Model Validator Negative & Positive Tests
+# =====================================================================
+
+def test_pydantic_score_nan_or_inf_rejected():
+    """Pydantic rejects NaN or Inf score in PredictionResultItem."""
+    from datetime import datetime
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultItem,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+    )
+
+    src_ref = PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64)
+    lin = PredictionResultLineage()
+
+    with pytest.raises(ValueError, match="finite"):
+        PredictionResultItem(
+            event_id="evt-nan",
+            asset_id="M14860",
+            observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+            source_kind="live_sensor",
+            source_ref=src_ref,
+            payload_sha256="a" * 64,
+            output_status="predicted",
+            score=float("nan"),
+            model_id="pdm-lightgbm",
+            model_version="1.0.0",
+            model_artifact_manifest_sha256="b" * 64,
+            feature_schema_version="v1.0",
+            history_requirement_version="v1.0",
+            lineage=lin,
+        )
+
+    with pytest.raises(ValueError, match="finite"):
+        PredictionResultItem(
+            event_id="evt-inf",
+            asset_id="M14860",
+            observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+            source_kind="live_sensor",
+            source_ref=src_ref,
+            payload_sha256="a" * 64,
+            output_status="predicted",
+            score=float("inf"),
+            model_id="pdm-lightgbm",
+            model_version="1.0.0",
+            model_artifact_manifest_sha256="b" * 64,
+            feature_schema_version="v1.0",
+            history_requirement_version="v1.0",
+            lineage=lin,
+        )
+
+
+def test_pydantic_predicted_without_score_or_with_failure_reason_rejected():
+    """Pydantic rejects output_status='predicted' with score=None or failure_reason not None."""
+    from datetime import datetime
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultItem,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+    )
+
+    src_ref = PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64)
+    lin = PredictionResultLineage()
+
+    with pytest.raises(ValueError, match="Score is required"):
+        PredictionResultItem(
+            event_id="evt-no-score",
+            asset_id="M14860",
+            observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+            source_kind="live_sensor",
+            source_ref=src_ref,
+            payload_sha256="a" * 64,
+            output_status="predicted",
+            score=None,
+            model_id="pdm-lightgbm",
+            model_version="1.0.0",
+            model_artifact_manifest_sha256="b" * 64,
+            feature_schema_version="v1.0",
+            history_requirement_version="v1.0",
+            lineage=lin,
+        )
+
+    with pytest.raises(ValueError, match="failure_reason must be None"):
+        PredictionResultItem(
+            event_id="evt-with-reason",
+            asset_id="M14860",
+            observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+            source_kind="live_sensor",
+            source_ref=src_ref,
+            payload_sha256="a" * 64,
+            output_status="predicted",
+            score=0.8,
+            model_id="pdm-lightgbm",
+            model_version="1.0.0",
+            model_artifact_manifest_sha256="b" * 64,
+            feature_schema_version="v1.0",
+            history_requirement_version="v1.0",
+            lineage=lin,
+            failure_reason="some error",
+        )
+
+
+def test_pydantic_failed_with_score_or_without_reason_rejected():
+    """Pydantic rejects failed output_status with non-None score or missing failure_reason."""
+    from datetime import datetime
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultItem,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+    )
+
+    src_ref = PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64)
+    lin = PredictionResultLineage()
+
+    with pytest.raises(ValueError, match="Score must be None"):
+        PredictionResultItem(
+            event_id="evt-failed-with-score",
+            asset_id="M14860",
+            observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+            source_kind="live_sensor",
+            source_ref=src_ref,
+            payload_sha256="a" * 64,
+            output_status="failed_model_inference",
+            score=0.5,
+            model_id="pdm-lightgbm",
+            model_version="1.0.0",
+            model_artifact_manifest_sha256="b" * 64,
+            feature_schema_version="v1.0",
+            history_requirement_version="v1.0",
+            lineage=lin,
+            failure_reason="failed",
+        )
+
+    with pytest.raises(ValueError, match="failure_reason is required"):
+        PredictionResultItem(
+            event_id="evt-failed-no-reason",
+            asset_id="M14860",
+            observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+            source_kind="live_sensor",
+            source_ref=src_ref,
+            payload_sha256="a" * 64,
+            output_status="failed_model_inference",
+            score=None,
+            model_id="pdm-lightgbm",
+            model_version="1.0.0",
+            model_artifact_manifest_sha256="b" * 64,
+            feature_schema_version="v1.0",
+            history_requirement_version="v1.0",
+            lineage=lin,
+            failure_reason=None,
+        )
+
+
+def test_pydantic_maintenance_replay_overlay_missing_lineage_rejected():
+    """Pydantic rejects maintenance_replay_overlay without complete lineage."""
+    from datetime import datetime
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultItem,
+        PredictionResultLineage,
+        PredictionResultSourceRef,
+    )
+
+    src_ref = PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64)
+    bad_lin = PredictionResultLineage(simulation_session_id="sim-01")
+
+    with pytest.raises(ValueError, match="all 6 lineage fields"):
+        PredictionResultItem(
+            event_id="evt-overlay-incomplete",
+            asset_id="M14860",
+            observed_at=datetime.fromisoformat("2026-08-27T00:00:00+00:00"),
+            source_kind="maintenance_replay_overlay",
+            source_ref=src_ref,
+            payload_sha256="a" * 64,
+            output_status="predicted",
+            score=0.8,
+            model_id="pdm-lightgbm",
+            model_version="1.0.0",
+            model_artifact_manifest_sha256="b" * 64,
+            feature_schema_version="v1.0",
+            history_requirement_version="v1.0",
+            lineage=bad_lin,
+        )
+
+
+# =====================================================================
+# 64. Checksum Tamper Detection & Order-Independent Batch Tests
+# =====================================================================
+
+def test_item_payload_sha256_tamper_detected():
+    """Mutating item properties without updating payload_sha256 is detected and raises ModelSetContractInvalidError."""
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+        to_external_result_item,
+        validate_prediction_result_item_checksum,
+        validate_external_results_array,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        PredictionResultSourceRef,
+    )
+
+    src_ref = PredictionResultSourceRef(uri="data/in.jsonl", sha256="c" * 64)
+    internal = InternalModelPredictionResult(
+        asset_id="M14860",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="2026-08-25T14:30:00Z",
+        score=0.88,
+        manifest_checksum="d" * 64,
+    )
+
+    item = to_external_result_item(internal, source_ref=src_ref)
+    validate_prediction_result_item_checksum(item)
+
+    # Tamper with score
+    item_tampered = item.model_copy(update={"score": 0.12})
+    with pytest.raises(ModelSetContractInvalidError, match="payload_sha256 mismatch"):
+        validate_prediction_result_item_checksum(item_tampered)
+
+    with pytest.raises(ModelSetContractInvalidError, match="payload_sha256 mismatch"):
+        validate_external_results_array([item_tampered])
+
+
+def test_batch_id_and_outbox_id_independent_of_item_ordering():
+    """Changing order of items in batch produces identical canonical SHA-256 and Outbox ID."""
+    from datetime import datetime
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultBatchPayload,
+        PredictionResultItem,
+        PredictionResultLineage,
+        PredictionResultProducer,
+        PredictionResultSourceRef,
+        compute_prediction_result_item_sha256,
+    )
+    from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
+        PredictionDeliveryService,
+    )
+
+    dt = datetime.fromisoformat("2026-08-27T00:00:00+00:00")
+    src_ref = PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64)
+    lin = PredictionResultLineage()
+
+    d1 = {"event_id": "evt-01", "asset_id": "M14860", "observed_at": dt, "source_kind": "live_sensor", "source_ref": src_ref.model_dump(mode="json"), "output_status": "predicted", "score": 0.8, "model_id": "pdm-lightgbm", "model_version": "1.0", "model_artifact_manifest_sha256": "b" * 64, "feature_schema_version": "v1.0", "history_requirement_version": "v1.0", "feature_schema_sha256": None, "history_requirement_sha256": None, "lineage": lin.model_dump(mode="json"), "failure_reason": None}
+    d2 = {"event_id": "evt-02", "asset_id": "M14860", "observed_at": dt, "source_kind": "live_sensor", "source_ref": src_ref.model_dump(mode="json"), "output_status": "predicted", "score": 0.9, "model_id": "pdm-xgboost", "model_version": "1.0", "model_artifact_manifest_sha256": "c" * 64, "feature_schema_version": "v1.0", "history_requirement_version": "v1.0", "feature_schema_sha256": None, "history_requirement_sha256": None, "lineage": lin.model_dump(mode="json"), "failure_reason": None}
+
+    item1 = PredictionResultItem(**d1, payload_sha256=compute_prediction_result_item_sha256(d1))
+    item2 = PredictionResultItem(**d2, payload_sha256=compute_prediction_result_item_sha256(d2))
+
+    producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
+    batch_order_1 = PredictionResultBatchPayload(
+        contract_version="prediction-result-batch-v1",
+        batch_id="batch-001",
+        producer=producer,
+        emitted_at=dt,
+        results=[item1, item2],
+    )
+    batch_order_2 = PredictionResultBatchPayload(
+        contract_version="prediction-result-batch-v1",
+        batch_id="batch-001",
+        producer=producer,
+        emitted_at=dt,
+        results=[item2, item1],
+    )
+
+    evt1, sha1 = PredictionDeliveryService.compute_canonical_payload_sha256(batch_order_1)
+    evt2, sha2 = PredictionDeliveryService.compute_canonical_payload_sha256(batch_order_2)
+
+    assert evt1 == evt2
+    assert sha1 == sha2
+    assert evt1.startswith("evt-batch-")
+
+
+def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path):
+    """Staging derives filename from SHA-256 storage key and prevents directory traversal attacks."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        InternalModelPredictionResult,
+        SourceLineage,
+    )
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+        EquipmentModelBatch,
+        PredictionBatchService,
+        PredictionBatchSummary,
+    )
+
+    svc = PredictionBatchService()
+    summary = PredictionBatchSummary(
+        overall_status="succeeded",
+        equipment_batches={
+            "../../malicious/asset": EquipmentModelBatch(
+                asset_id="../../malicious/asset",
+                status="succeeded",
+                observed_at="2026-08-27T00:00:00Z",
+                succeeded_models=["pdm-lightgbm"],
+                failed_models=[],
+                model_results={},
+                internal_results=[
+                    InternalModelPredictionResult(
+                        asset_id="../../malicious/asset",
+                        model_id="pdm-lightgbm",
+                        model_version="1.0",
+                        status="succeeded",
+                        observed_at="2026-08-27T00:00:00Z",
+                        score=0.85,
+                        manifest_checksum="b" * 64,
+                    )
+                ],
+            )
+        },
+        total_equipments=1,
+        succeeded_equipments=1,
+        partially_succeeded_equipments=0,
+        failed_equipments=0,
+    )
+
+    src_lineage = SourceLineage(
+        source_uri="data/in.jsonl",
+        source_checksum="a" * 64,
+    )
+
+    art_ref = svc.stage_batches(
+        run_id="run-safe-test",
+        job_id="job-safe-test",
+        summary=summary,
+        dataset_id="ds-01",
+        dataset_version="v1.0",
+        pipeline_contract_version="prediction-result-batch-v1",
+        source_lineage=src_lineage,
+        model_set_id="ms-01",
+        model_set_version="1.0",
+        base_dir=tmp_path,
+    )
+
+    staging_dir = tmp_path / "pipeline_datasets" / "run-safe-test" / "batch_staging"
+    assert staging_dir.is_dir()
+    created_files = list(staging_dir.glob("*.json"))
+    assert len(created_files) == 2
+    filenames = [f.name for f in created_files]
+    assert "batch-manifest.json" in filenames
+    assert not any(".." in f.name for f in created_files)

@@ -110,7 +110,7 @@ class PredictionDeliveryService:
 
     @staticmethod
     def compute_canonical_payload_sha256(payload: Any) -> tuple[str, str]:
-        """Compute SHA-256 checksum of canonical payload representation and generate deterministic event_id."""
+        """Compute SHA-256 checksum of canonical payload representation and generate deterministic batch event_id."""
         import hashlib
         import json
         if isinstance(payload, dict):
@@ -125,27 +125,21 @@ class PredictionDeliveryService:
             d_clean["producer"] = dict(d_clean["producer"])
             d_clean["producer"].pop("outbox_id", None)
 
+        if isinstance(d_clean.get("results"), list):
+            d_clean["results"] = sorted(
+                d_clean["results"],
+                key=lambda it: (
+                    it.get("asset_id", "") if isinstance(it, dict) else getattr(it, "asset_id", ""),
+                    it.get("model_id", "") if isinstance(it, dict) else getattr(it, "model_id", ""),
+                    it.get("model_version", "") if isinstance(it, dict) else getattr(it, "model_version", ""),
+                    str(it.get("observed_at", "")) if isinstance(it, dict) else str(getattr(it, "observed_at", "")),
+                    it.get("event_id", "") if isinstance(it, dict) else getattr(it, "event_id", ""),
+                ),
+            )
+
         canonical_json = json.dumps(d_clean, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         payload_sha256 = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
-
-        if isinstance(payload, dict):
-            results = payload.get("results", [])
-            if results and isinstance(results, list) and isinstance(results[0], dict) and results[0].get("event_id"):
-                event_id = results[0]["event_id"]
-            elif payload.get("event_id"):
-                event_id = payload["event_id"]
-            else:
-                event_id = f"evt-{payload_sha256[:32]}"
-        else:
-            if hasattr(payload, "results") and payload.results and payload.results[0].event_id:
-                event_id = payload.results[0].event_id
-            elif hasattr(payload, "event_id") and getattr(payload, "event_id"):
-                event_id = getattr(payload, "event_id")
-            elif hasattr(payload, "batch_id"):
-                event_id = f"evt-{hashlib.sha256(payload.batch_id.encode('utf-8')).hexdigest()[:32]}"
-            else:
-                event_id = f"evt-{payload_sha256[:32]}"
-
+        event_id = f"evt-batch-{payload_sha256[:32]}"
         return event_id, payload_sha256
 
     def register_idempotent_outbox_record(

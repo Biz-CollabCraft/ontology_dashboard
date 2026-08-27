@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def now_utc_iso() -> str:
@@ -363,11 +363,21 @@ class PredictionResultProducer(BaseModel):
     outbox_id: Optional[str] = None
 
 
+SHA256_PATTERN = r"^[a-f0-9]{64}$"
+
+
 class PredictionResultSourceRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     uri: str = Field(..., min_length=1)
-    sha256: str = Field(..., min_length=1)
+    sha256: str = Field(..., pattern=SHA256_PATTERN)
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_non_zero_sha256(cls, v: str) -> str:
+        if v == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros.")
+        return v
 
 
 class PredictionResultLineage(BaseModel):
@@ -387,9 +397,9 @@ class PredictionResultItem(BaseModel):
     event_id: str = Field(..., min_length=1)
     asset_id: str = Field(..., min_length=1)
     observed_at: datetime
-    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay"] = "live_sensor"
+    source_kind: Literal["live_sensor", "simulation_overlay", "maintenance_replay_overlay"] = "live_sensor"
     source_ref: PredictionResultSourceRef
-    payload_sha256: str = Field(..., pattern=r"^[a-f0-9]{64}$")
+    payload_sha256: str = Field(..., pattern=SHA256_PATTERN)
     output_status: Literal[
         "predicted",
         "warming_up",
@@ -402,13 +412,65 @@ class PredictionResultItem(BaseModel):
     score: Optional[float] = None
     model_id: str = Field(..., min_length=1)
     model_version: str = Field(..., min_length=1)
-    model_artifact_sha256: str = Field(..., min_length=1)
+    model_artifact_manifest_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
     feature_schema_version: str = Field(..., min_length=1)
     history_requirement_version: str = Field(..., min_length=1)
-    feature_schema_sha256: Optional[str] = None
-    history_requirement_sha256: Optional[str] = None
+    feature_schema_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
+    history_requirement_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
     lineage: PredictionResultLineage
     failure_reason: Optional[str] = None
+
+    @field_validator("payload_sha256", "model_artifact_manifest_sha256", "feature_schema_sha256", "history_requirement_sha256")
+    @classmethod
+    def validate_non_zero_sha256(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros.")
+        return v
+
+    @model_validator(mode="after")
+    def validate_semantics(self) -> PredictionResultItem:
+        import math
+        if self.score is not None:
+            if not math.isfinite(self.score):
+                raise ValueError(f"Score must be a finite number, got {self.score}")
+
+        if self.output_status == "predicted":
+            if self.score is None:
+                raise ValueError("Score is required when output_status is 'predicted'")
+            if not (0.0 <= self.score <= 1.0):
+                raise ValueError(f"Score must be between 0.0 and 1.0, got {self.score}")
+            if self.failure_reason is not None:
+                raise ValueError("failure_reason must be None when output_status is 'predicted'")
+            if not self.model_artifact_manifest_sha256:
+                raise ValueError("model_artifact_manifest_sha256 is required when output_status is 'predicted'")
+        else:
+            if self.score is not None:
+                raise ValueError(f"Score must be None when output_status is '{self.output_status}', got {self.score}")
+            if not self.failure_reason or not str(self.failure_reason).strip():
+                raise ValueError(f"Non-empty failure_reason is required when output_status is '{self.output_status}'")
+            if self.output_status in ("warming_up", "history_insufficient", "failed_feature_execution", "failed_model_inference"):
+                if not self.model_artifact_manifest_sha256:
+                    raise ValueError(f"model_artifact_manifest_sha256 is required when output_status is '{self.output_status}'")
+
+        if self.source_kind == "maintenance_replay_overlay":
+            lin = self.lineage
+            if (
+                not lin
+                or not lin.simulation_session_id
+                or not lin.overlay_branch_id
+                or not lin.history_segment_id
+                or not lin.maintenance_event_id
+                or not lin.maintenance_action_id
+                or lin.state_version is None
+                or lin.state_version < 1
+            ):
+                raise ValueError(
+                    "When source_kind is 'maintenance_replay_overlay', all 6 lineage fields "
+                    "(simulation_session_id, overlay_branch_id, history_segment_id, maintenance_event_id, "
+                    "maintenance_action_id, state_version >= 1) are required."
+                )
+
+        return self
 
 
 def compute_prediction_result_item_sha256(item_dict: dict[str, Any]) -> str:
@@ -417,7 +479,7 @@ def compute_prediction_result_item_sha256(item_dict: dict[str, Any]) -> str:
     import json
     d = dict(item_dict)
     d.pop("payload_sha256", None)
-    # Convert datetime objects if any to ISO string
+    # Convert datetime objects if any to ISO string with Z
     for k, v in list(d.items()):
         if isinstance(v, datetime):
             d[k] = v.isoformat().replace("+00:00", "Z")
@@ -429,6 +491,20 @@ def compute_prediction_result_item_sha256(item_dict: dict[str, Any]) -> str:
             d[k] = sub_d
     canonical_json = json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def validate_prediction_result_item_checksum(item: PredictionResultItem) -> None:
+    """Recompute canonical SHA-256 for item and verify payload_sha256 integrity."""
+    from systems.generator.app.runtime_pipeline.pipeline_exception import ModelSetContractInvalidError
+    item_dict = item.model_dump(mode="json")
+    item_dict.pop("payload_sha256", None)
+    computed = compute_prediction_result_item_sha256(item_dict)
+    if computed != item.payload_sha256:
+        raise ModelSetContractInvalidError(
+            f"PredictionResultItem '{item.event_id}' payload_sha256 mismatch: expected '{computed}', got '{item.payload_sha256}'.",
+            details=[{"event_id": item.event_id, "expected": computed, "actual": item.payload_sha256}],
+            retryable=False,
+        )
 
 
 class PredictionResultBatchPayload(BaseModel):

@@ -665,6 +665,45 @@ class ContractVectorVerifier:
                             expected_version="training-config-v1",
                         )
 
+        # Verify Prediction Result Batch Examples if prediction-result-batch examples directory exists
+        prediction_examples_dir = self.examples_dir / "prediction-result-batch"
+        if prediction_examples_dir.is_dir():
+            batch_schema_path = self.schemas_dir / "prediction-result-batch.schema.json"
+            for ex_file in sorted(prediction_examples_dir.glob("*.json")):
+                rel_path = ex_file.relative_to(self.repo_root)
+                ex_data = self._load_json_object(ex_file, str(rel_path), result)
+                if ex_data is not None and batch_schema_path.is_file():
+                    try:
+                        batch_schema = json.loads(batch_schema_path.read_text(encoding="utf-8"))
+                        reg = self._build_schema_registry()
+                        format_checker = jsonschema.FormatChecker()
+                        if reg is not None:
+                            validator = jsonschema.Draft202012Validator(batch_schema, registry=reg, format_checker=format_checker)
+                        else:
+                            validator = jsonschema.Draft202012Validator(batch_schema, format_checker=format_checker)
+                        validator.validate(ex_data)
+                    except Exception as e:
+                        result.errors.append(
+                            VerificationError(
+                                context=str(rel_path),
+                                message=f"Prediction result batch example failed schema validation: {e}",
+                            )
+                        )
+                    for i, it in enumerate(ex_data.get("results", [])):
+                        it_copy = dict(it)
+                        claimed_sha = it_copy.pop("payload_sha256", None)
+                        c_json = json.dumps(it_copy, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                        expected_sha = hashlib.sha256(c_json.encode("utf-8")).hexdigest()
+                        if claimed_sha != expected_sha:
+                            result.errors.append(
+                                VerificationError(
+                                    context=f"{rel_path}/results[{i}]",
+                                    message=f"payload_sha256 checksum mismatch for item '{it.get('event_id')}'",
+                                    expected=expected_sha,
+                                    actual=str(claimed_sha),
+                                )
+                            )
+
     def _verify_test_vectors(self, result: VerificationResult) -> None:
         if not self.vectors_dir.is_dir():
             result.errors.append(
@@ -1371,6 +1410,21 @@ class ContractVectorVerifier:
                     else:
                         validator = jsonschema.Draft202012Validator(batch_schema, format_checker=format_checker)
                     validator.validate(batch_data)
+
+                for i, it in enumerate(batch_data.get("results", [])):
+                    it_copy = dict(it)
+                    claimed_sha = it_copy.pop("payload_sha256", None)
+                    c_json = json.dumps(it_copy, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    expected_sha = hashlib.sha256(c_json.encode("utf-8")).hexdigest()
+                    if claimed_sha != expected_sha:
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/prediction-result-batch.json/results[{i}]",
+                                message=f"payload_sha256 checksum mismatch for item '{it.get('event_id')}'",
+                                expected=expected_sha,
+                                actual=str(claimed_sha),
+                            )
+                        )
         except Exception as e:
             result.errors.append(
                 VerificationError(
