@@ -49,7 +49,7 @@
     "review_draft": {
       "type": "object",
       "description": "Deterministic human review draft generated from the read-only packet. It is copy-ready guidance, not an approval or mutation command.",
-      "required": ["title", "summary", "priority_label", "recommended_next_step", "checklist", "questions", "evidence_gap_count", "boundary_note"],
+      "required": ["title", "summary", "priority_label", "recommended_next_step", "checklist", "history_summary", "evidence_gap_count", "boundary_note"],
       "additionalProperties": false,
       "properties": {
         "title": {"type": "string"},
@@ -57,7 +57,7 @@
         "priority_label": {"type": "string"},
         "recommended_next_step": {"type": "string"},
         "checklist": {"type": "array", "items": {"type": "string"}},
-        "questions": {"type": "array", "items": {"type": "string"}},
+        "history_summary": {"type": "array", "items": {"type": "string"}},
         "evidence_gap_count": {"type": "integer", "minimum": 0},
         "boundary_note": {"type": "string"}
       }

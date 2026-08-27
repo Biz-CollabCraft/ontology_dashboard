@@ -76,6 +76,8 @@ test("shows the SOP grounded AI review summary without mutating work state", asy
   await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("검토 전용");
   await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("상태 변경");
   await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("불가");
+  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("이력 조회 요약");
+  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("최근 정비 이력");
   await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("담당자 검토 초안");
   await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("자동 승인을 수행하지 않습니다");
 });
