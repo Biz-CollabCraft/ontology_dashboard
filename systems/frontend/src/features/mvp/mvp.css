@@ -711,6 +711,11 @@
 .mvp-side-map-report .target-list article > div { min-width: 0; }
 .mvp-side-map-report .target-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; color: var(--mvp-text); font-size: 11px; }
 .mvp-side-map-report .target-list p { margin: 4px 0 0; color: var(--mvp-dim); font-size: 10px; line-height: 1.4; }
+.mvp-side-map-report .mvp-inspection-guidance-note { margin-top: 7px; border-left: 2px solid rgba(76,144,240,.42); padding-left: 8px; color: var(--mvp-muted); }
+.mvp-side-map-report .mvp-inspection-guidance-note strong { white-space: normal; color: #b7d4ff; font-size: 10px; }
+.mvp-side-map-report .mvp-inspection-guidance-note ul { display: grid; gap: 3px; margin: 4px 0 0; padding-left: 14px; }
+.mvp-side-map-report .mvp-inspection-guidance-note li,
+.mvp-side-map-report .mvp-inspection-guidance-note small { color: var(--mvp-dim); font-size: 9px; line-height: 1.35; }
 .mvp-side-map-report .top-factor-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 0; padding: 0; list-style: none; }
 .mvp-side-map-report .top-factor-chips li { display: inline-flex; align-items: center; gap: 4px; max-width: 140px; min-width: 0; padding: 3px 6px; border: 1px solid rgba(181,196,214,.13); border-radius: 5px; background: rgba(255,255,255,.025); color: var(--mvp-muted); font-size: 9px; font-weight: 800; line-height: 1; }
 .mvp-side-map-report .top-factor-chips b { display: grid; place-items: center; width: 14px; aspect-ratio: 1; border-radius: 999px; background: rgba(76,144,240,.16); color: #b7d4ff; font-size: 8px; flex: 0 0 auto; }

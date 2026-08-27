@@ -22,7 +22,9 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "contracts" / "schemas" / "asset-detail-view-model.schema.json"
+PROCEDURE_GROUNDING_SCHEMA_PATH = ROOT / "contracts" / "schemas" / "procedure-grounding.schema.json"
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "asset_detail_view_model"
+INSPECTION_SOP_FIXTURE_ROOT = ROOT / "data" / "fixtures" / "inspection_sop"
 
 SCENARIO_FILES = {
     "current_evidence_only": "current-evidence-only.json",
@@ -50,6 +52,10 @@ def schema() -> dict:
     return load_json(SCHEMA_PATH)
 
 
+def procedure_grounding_schema() -> dict:
+    return load_json(PROCEDURE_GROUNDING_SCHEMA_PATH)
+
+
 def fixture(name: str) -> dict:
     return load_json(FIXTURE_ROOT / SCENARIO_FILES[name])
 
@@ -61,6 +67,21 @@ def schema_errors(payload: dict) -> list:
 @pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))
 def test_fixture_matches_asset_detail_view_model_schema(scenario: str) -> None:
     assert schema_errors(fixture(scenario)) == []
+
+
+def test_inspection_sop_fixtures_match_procedure_grounding_schema() -> None:
+    fixtures = sorted(INSPECTION_SOP_FIXTURE_ROOT.glob("*.json"))
+
+    assert fixtures
+    validator = Draft202012Validator(procedure_grounding_schema())
+    for path in fixtures:
+        payload = load_json(path)
+        assert list(validator.iter_errors(payload)) == []
+        assert payload["source_kind"] == "demo_sop_fixture"
+        assert payload["maturity"] == "fixture"
+        assert "교체 시기 검토 초안" in payload["guidance"]["allowed_ui_claims"]
+        assert "교체 필요 확정" in payload["guidance"]["forbidden_ui_claims"]
+        assert "자동 승인 완료" in payload["guidance"]["forbidden_ui_claims"]
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))

@@ -338,6 +338,27 @@ export interface MvpClosedLoopSummary {
   runtimeStatus: MvpClosedLoopRuntimeStatus;
 }
 
+export interface MvpInspectionGuidance {
+  sourceType: "demo_sop_fixture" | "site_sop";
+  sopId: string;
+  title: string;
+  version: string;
+  referenceLocationLabel: string;
+  suggestedCheckMethod: string;
+  checklistDraft: string[];
+  replacementReviewGuidance: {
+    reviewLabel: string;
+    reviewTriggers: string[];
+    requiredMeasurements: string[];
+    humanReviewQuestions: string[];
+    decisionBoundary: string;
+  };
+  safetyLevel: "none" | "caution" | "permit_required" | "shutdown_controlled";
+  requiresHumanApproval: boolean;
+  sourceRef: string;
+  disclaimer: string;
+}
+
 export interface MvpInspectionTarget {
   targetId: string;
   componentId: string;
@@ -345,6 +366,7 @@ export interface MvpInspectionTarget {
   association: string;
   locationLabel: string | null;
   inspectionMethod: string | null;
+  inspectionGuidance: MvpInspectionGuidance | null;
   basisRefs: string[];
   sourceRef: string;
   unavailableReason: string | null;
@@ -469,6 +491,26 @@ export interface AssetDetailViewModel {
     association: string;
     location_label: string | null;
     inspection_method: string | null;
+    inspection_guidance?: {
+      source_type: "demo_sop_fixture" | "site_sop";
+      sop_id: string;
+      title: string;
+      version: string;
+      reference_location_label: string;
+      suggested_check_method: string;
+      checklist_draft: string[];
+      replacement_review_guidance: {
+        review_label: string;
+        review_triggers: string[];
+        required_measurements: string[];
+        human_review_questions: string[];
+        decision_boundary: string;
+      };
+      safety_level: "none" | "caution" | "permit_required" | "shutdown_controlled";
+      requires_human_approval: boolean;
+      source_ref: string;
+      disclaimer: string;
+    };
     basis_refs: string[];
     source_ref: string;
     unavailable_reason: string | null;
