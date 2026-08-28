@@ -238,6 +238,8 @@ def build_adapter_service(
 
 def build_live_predictive_maintenance_service(
     database_url: str | None = None,
+    *,
+    runtime_pipeline_input_root: str | Path,
 ) -> LivePredictiveMaintenanceService:
     """Compose the live worker application service with its infrastructure adapter."""
 
@@ -247,6 +249,7 @@ def build_live_predictive_maintenance_service(
         LiveMaintenanceOverlayAdapter,
         LiveOntologyProjectionAdapter,
     )
+    from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 
     target = database_url or database_target()
     shared = {
@@ -256,7 +259,10 @@ def build_live_predictive_maintenance_service(
     return LivePredictiveMaintenanceService(
         dataset=LiveDatasetIngestionAdapter(target, **shared),
         diagnosis=LiveDiagnosisApplicationAdapter(**shared),
-        maintenance=LiveMaintenanceOverlayAdapter(**shared),
+        maintenance=LiveMaintenanceOverlayAdapter(
+            snapshot_root=runtime_pipeline_input_root,
+            enqueue_client=GeneratorRuntimePipelineClient(),
+        ),
         ontology=LiveOntologyProjectionAdapter(),
     )
 

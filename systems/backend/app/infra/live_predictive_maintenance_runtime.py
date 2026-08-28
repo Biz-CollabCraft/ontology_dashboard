@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,7 @@ from app.infra.db.predictive_maintenance_ontology_projection import (
     PredictiveMaintenanceOntologyMaterializer,
 )
 from app.infra.db.settings import database_location
+from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 from app.infra.runtime_overlay_contract import (
     resolve_storage_reference,
     validate_overlay_available_event,
@@ -669,13 +671,25 @@ def read_complete_ticks(
     after: datetime | None = None,
     not_after: datetime | None = None,
     expected_asset_count: int = EXPECTED_ASSET_COUNT,
+    expected_asset_ids: set[str] | None = None,
+    excluded_asset_ids: set[str] | None = None,
 ) -> list[tuple[datetime, list[dict[str, Any]]]]:
     """Read complete cross-line ticks from daemon ``sensor_stream.jsonl`` files.
 
     A daemon tick is committed only when every expected asset is present.  This
     prevents the database from seeing a half-written state while the 20 line
-    workers are still appending their records.
+    workers are still appending their records.  When the caller supplies the
+    canonical asset identities, completeness is checked by identity rather than
+    count and active Runtime Overlay equipment is removed before persistence.
     """
+
+    expected_ids = None if expected_asset_ids is None else set(expected_asset_ids)
+    excluded_ids = set(excluded_asset_ids or set())
+    if expected_ids is not None and expected_ids & excluded_ids:
+        overlap = ", ".join(sorted(expected_ids & excluded_ids))
+        raise ValueError(f"expected and excluded live asset identities overlap: {overlap}")
+    if expected_ids == set():
+        return []
 
     root = Path(stream_root).expanduser()
     files = sorted(root.glob("sensor/**/sensor_stream.jsonl"))
@@ -698,11 +712,31 @@ def read_complete_ticks(
                 if not_after is not None and observed_at > not_after:
                     continue
                 grouped[observed_at][asset_id] = payload
-    return [
-        (observed_at, list(by_asset.values()))
-        for observed_at, by_asset in sorted(grouped.items())
-        if len(by_asset) >= expected_asset_count
-    ]
+    complete: list[tuple[datetime, list[dict[str, Any]]]] = []
+    for observed_at, by_asset in sorted(grouped.items()):
+        if expected_ids is not None:
+            unexpected = set(by_asset) - expected_ids - excluded_ids
+            if unexpected:
+                rendered = ", ".join(sorted(unexpected))
+                raise ValueError(
+                    "gen_data stream tick contains asset identities outside the live "
+                    f"Dataset Version at {observed_at.isoformat()}: {rendered}"
+                )
+            if not expected_ids.issubset(by_asset):
+                continue
+            complete.append(
+                (observed_at, [by_asset[asset_id] for asset_id in sorted(expected_ids)])
+            )
+            continue
+
+        filtered = {
+            asset_id: payload
+            for asset_id, payload in by_asset.items()
+            if asset_id not in excluded_ids
+        }
+        if len(filtered) >= expected_asset_count:
+            complete.append((observed_at, list(filtered.values())))
+    return complete
 
 
 def active_overlay_asset_ids(stream_root: str | Path) -> set[str]:
@@ -808,6 +842,171 @@ def _read_overlay_event_rows(
             f"event={event['event_id']} expected={event['batch_rows']} actual={len(rows)}"
         )
     return rows
+
+
+def _read_overlay_history_rows(
+    stream_root: str | Path,
+    event: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Read the cumulative post-maintenance history visible at this event."""
+
+    path = _overlay_branch_path(stream_root, event)
+    if not path.exists():
+        raise ValueError(f"Runtime Overlay branch storage is missing: {path}")
+    observed_to = _parse_observed_at(event["observed_to"])
+    rows: list[dict[str, Any]] = []
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+            if not isinstance(row, dict):
+                raise ValueError("Runtime Overlay observation must be an object")
+            validate_overlay_observation(row)
+            observed_at = _parse_observed_at(row["observed_at"])
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+            raise ValueError(
+                f"invalid Runtime Overlay observation at {path}:{line_number}: {exc}"
+            ) from exc
+        if str(row.get("overlay_branch_id")) != str(event["overlay_branch_id"]):
+            continue
+        if str(row.get("history_segment_id")) != str(event["history_segment_id"]):
+            continue
+        if str(row.get("equipment_id") or row.get("asset_id")) != str(event["equipment_id"]):
+            continue
+        if observed_at > observed_to:
+            continue
+        if int(row.get("state_version", -1)) != int(event["state_version"]):
+            raise ValueError(
+                "Runtime Overlay history state_version differs from availability event"
+            )
+        rows.append(row)
+    rows.sort(key=lambda item: _parse_observed_at(item["observed_at"]))
+    if len(rows) != int(event["generated_rows"]):
+        raise ValueError(
+            "Runtime Overlay cumulative history does not match availability event: "
+            f"event={event['event_id']} expected={event['generated_rows']} actual={len(rows)}"
+        )
+    return rows
+
+
+def _materialize_overlay_pipeline_snapshot(
+    snapshot_root: str | Path,
+    event: dict[str, Any],
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Freeze cumulative segment history into Generator's immutable input.
+
+    The producer-owned branch file remains append-only.  Enqueueing that mutable
+    file directly would violate Generator's size/checksum stability invariant, so
+    only the validated history prefix visible at the event is copied into a
+    content-addressed snapshot.
+    """
+
+    if not rows:
+        raise ValueError("Runtime Overlay pipeline snapshot requires observations")
+
+    source_contract_versions = {
+        str(row.get("contract_version") or "").strip() for row in rows
+    }
+    source_schema_versions = {
+        str(row.get("schema_version") or "").strip() for row in rows
+    }
+    if "" in source_contract_versions or len(source_contract_versions) != 1:
+        raise ValueError(
+            "Runtime Overlay pipeline snapshot requires one explicit "
+            "Observation contract_version"
+        )
+    if "" in source_schema_versions or len(source_schema_versions) != 1:
+        raise ValueError(
+            "Runtime Overlay pipeline snapshot requires one explicit "
+            "Observation schema_version"
+        )
+
+    encoded_rows = [
+        json.dumps(
+            row,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        for row in rows
+    ]
+    content = ("\n".join(encoded_rows) + "\n").encode("utf-8")
+    checksum = hashlib.sha256(content).hexdigest()
+    snapshot_dir = Path(snapshot_root).expanduser().resolve()
+    snapshot_path = snapshot_dir / f"sha256-{checksum}.jsonl"
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    if snapshot_path.exists():
+        existing = snapshot_path.read_bytes()
+        if hashlib.sha256(existing).hexdigest() != checksum or existing != content:
+            raise ValueError(
+                f"Runtime Overlay immutable snapshot conflict: {snapshot_path}"
+            )
+    else:
+        # Keep the temporary name short enough for Windows demo worktrees.
+        temporary = snapshot_dir / f".tmp-{uuid.uuid4().hex}.jsonl"
+        try:
+            with temporary.open("xb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, snapshot_path)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+
+    event_digest = hashlib.sha256(str(event["event_id"]).encode("utf-8")).hexdigest()
+    return {
+        "job_id": f"runtime-overlay-{event_digest[:32]}",
+        "source_uri": str(snapshot_path),
+        "source_checksum": checksum,
+        "size_bytes": len(content),
+        "source_contract_version": next(iter(source_contract_versions)),
+        "source_schema_version": next(iter(source_schema_versions)),
+    }
+
+
+def _overlay_generator_enqueue_payload(
+    snapshot: dict[str, Any],
+    event: dict[str, Any],
+    *,
+    dataset_id: str,
+    dataset_version: str,
+) -> dict[str, Any]:
+    """Map the canonical Overlay event to Generator's enqueue boundary.
+
+    The immutable snapshot carries the observations themselves.  This envelope
+    preserves the operational lineage separately so Generator can project it
+    unchanged into each Prediction Result instead of inferring it from file
+    contents or treating it as Model Artifact provenance.
+    """
+
+    source_kind = str(event["source_kind"])
+    if source_kind != "maintenance_replay_overlay":
+        raise ValueError(
+            "Runtime Overlay Generator enqueue requires "
+            "source_kind=maintenance_replay_overlay"
+        )
+    return {
+        **snapshot,
+        "dataset_id": dataset_id,
+        "dataset_version": dataset_version,
+        "pipeline_contract_version": "generator-prediction-result-v1",
+        "source_kind": source_kind,
+        "lineage": {
+            "simulation_session_id": str(event["simulation_session_id"]),
+            "overlay_branch_id": str(event["overlay_branch_id"]),
+            "history_segment_id": str(event["history_segment_id"]),
+            "maintenance_event_id": str(event["maintenance_event_id"]),
+            "maintenance_action_id": str(event["maintenance_action_id"]),
+            "state_version": int(event["state_version"]),
+        },
+    }
 
 
 def _required_prior_rows(predictor: Any) -> int:
@@ -1211,13 +1410,15 @@ def _consume_overlay_event(
     stream_root: str | Path,
     event: dict[str, Any],
     *,
-    predictor_factory: Callable[[str], Any],
-    artifact_builder: Callable[..., dict[str, Any]],
+    dataset_id: str,
+    snapshot_root: str | Path,
+    enqueue_client: GeneratorRuntimePipelineClient,
 ) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
     event_id = str(event["event_id"])
     event_checksum = _record_checksum(event)
     rows = _read_overlay_event_rows(stream_root, event)
+    history_rows = _read_overlay_history_rows(stream_root, event)
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         with connection.transaction():
             _set_scope(connection)
@@ -1305,23 +1506,37 @@ def _consume_overlay_event(
                         event_checksum,
                     ),
                 )
-    state = _evaluate_overlay_branch(
-        database_url,
-        dataset_version_id,
+    snapshot = _materialize_overlay_pipeline_snapshot(
+        snapshot_root,
         event,
-        predictor_factory=predictor_factory,
-        artifact_builder=artifact_builder,
+        history_rows,
     )
-    return {"event_id": event_id, "reused": existing is not None, **state}
+    enqueue_payload = _overlay_generator_enqueue_payload(
+        snapshot,
+        event,
+        dataset_id=dataset_id,
+        dataset_version=dataset_version_id,
+    )
+    queued = enqueue_client.enqueue(enqueue_payload)
+    return {
+        "event_id": event_id,
+        "reused": existing is not None,
+        "overlay_branch_id": str(event["overlay_branch_id"]),
+        "equipment_id": str(event["equipment_id"]),
+        "generator_job_id": str(queued.get("job_id") or snapshot["job_id"]),
+        "delivery_status": str(queued.get("status") or "queued"),
+        "source_checksum": snapshot["source_checksum"],
+    }
 
 
 def process_overlay_available_events(
     *,
     stream_root: str | Path,
     database_url: str,
+    dataset_id: str,
     dataset_version_id: str,
-    predictor_factory: Callable[[str], Any],
-    artifact_builder: Callable[..., dict[str, Any]],
+    snapshot_root: str | Path,
+    enqueue_client: GeneratorRuntimePipelineClient,
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for event in read_overlay_available_events(stream_root):
@@ -1331,8 +1546,9 @@ def process_overlay_available_events(
                 dataset_version_id,
                 stream_root,
                 event,
-                predictor_factory=predictor_factory,
-                artifact_builder=artifact_builder,
+                dataset_id=dataset_id,
+                snapshot_root=snapshot_root,
+                enqueue_client=enqueue_client,
             )
         )
     return results
@@ -1990,6 +2206,20 @@ def _latest_ingested_at(database_url: str, dataset_version_id: str) -> datetime 
     return None if row is None else row["observed_at"]
 
 
+def _dataset_asset_ids(database_url: str, dataset_version_id: str) -> set[str]:
+    psycopg, dict_row, _ = _postgres_modules()
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        _set_scope(connection)
+        rows = connection.execute(
+            "SELECT asset_id FROM pm_assets WHERE dataset_version_id=%s",
+            (dataset_version_id,),
+        ).fetchall()
+    asset_ids = {str(row["asset_id"]) for row in rows}
+    if not asset_ids:
+        raise RuntimeError("live Dataset Version has no canonical equipment identities")
+    return asset_ids
+
+
 def _insert_ticks(
     database_url: str,
     dataset_version_id: str,
@@ -2138,13 +2368,21 @@ class LiveDatasetIngestionAdapter:
             artifact_builder=self.artifact_builder,
         )
         latest = _latest_ingested_at(self.database_url, dataset_version_id)
+        canonical_asset_ids = _dataset_asset_ids(self.database_url, dataset_version_id)
+        unknown_overlay_assets = active_overlay_assets - canonical_asset_ids
+        if unknown_overlay_assets:
+            rendered = ", ".join(sorted(unknown_overlay_assets))
+            raise ValueError(
+                "Runtime Overlay checkpoint references equipment outside the live "
+                f"Dataset Version: {rendered}"
+            )
+        expected_asset_ids = canonical_asset_ids - active_overlay_assets
         ticks = read_complete_ticks(
             stream_root,
             after=latest,
             not_after=datetime.now(tz=timezone.utc) + MAX_LIVE_CLOCK_SKEW,
-            expected_asset_count=max(
-                1, EXPECTED_ASSET_COUNT - len(active_overlay_assets)
-            ),
+            expected_asset_ids=expected_asset_ids,
+            excluded_asset_ids=active_overlay_assets,
         )
         return {
             "database_url": self.database_url,
@@ -2152,6 +2390,7 @@ class LiveDatasetIngestionAdapter:
             "dataset_version_id": dataset_version_id,
             "stream_root": stream_root,
             "active_overlay_assets": active_overlay_assets,
+            "expected_asset_ids": expected_asset_ids,
             "ticks": ticks,
             "summary": {
                 "dataset_id": dataset_id,
@@ -2197,11 +2436,11 @@ class LiveMaintenanceOverlayAdapter:
     def __init__(
         self,
         *,
-        predictor_factory: Callable[[str], Any],
-        artifact_builder: Callable[..., dict[str, Any]],
+        snapshot_root: str | Path,
+        enqueue_client: GeneratorRuntimePipelineClient,
     ) -> None:
-        self.predictor_factory = predictor_factory
-        self.artifact_builder = artifact_builder
+        self.snapshot_root = Path(snapshot_root).expanduser().resolve()
+        self.enqueue_client = enqueue_client
 
     def active_asset_ids(self, *, stream_root: str | Path) -> set[str]:
         return active_overlay_asset_ids(stream_root)
@@ -2210,9 +2449,10 @@ class LiveMaintenanceOverlayAdapter:
         return process_overlay_available_events(
             stream_root=batch["stream_root"],
             database_url=str(batch["database_url"]),
+            dataset_id=str(batch["dataset_id"]),
             dataset_version_id=str(batch["dataset_version_id"]),
-            predictor_factory=self.predictor_factory,
-            artifact_builder=self.artifact_builder,
+            snapshot_root=self.snapshot_root,
+            enqueue_client=self.enqueue_client,
         )
 
 
