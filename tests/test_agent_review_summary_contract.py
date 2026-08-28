@@ -33,7 +33,6 @@ GOLD_ROOT = ROOT / "tests" / "fixtures" / "agent_review_packets"
 
 
 def _valid_summary() -> dict:
-    target = PACKET["inspection_targets"][0]
     return {
         "schema_version": "agent-review-summary-v1.0",
         "packet_schema_version": PACKET["schema_version"],
@@ -49,12 +48,17 @@ def _valid_summary() -> dict:
                 "component_label": target["component_label"],
                 "location_label": target["location_label"],
                 "basis_refs": target["basis_refs"],
-                "source_refs": [target["source_ref"]],
+                "source_refs": [
+                    ref
+                    for ref in (target["source_ref"], target["location_source_ref"])
+                    if ref
+                ],
             }
+            for target in PACKET["inspection_targets"]
         ],
         "evidence_gaps": PACKET["evidence_gaps"],
         "source_refs": [PACKET["source_refs"][0]],
-        "boundary_note": "읽기 전용 검토 요약이며 정비 상태를 변경하지 않습니다.",
+        "boundary_note": PACKET["review_draft"]["boundary_note"],
         "confidence_label": "grounded",
         "limitations": PACKET["limitations"],
     }
@@ -124,6 +128,63 @@ def test_validated_agent_review_summary_discards_invalid_candidate() -> None:
     assert errors == []
     assert summary["mode"] == "deterministic_fallback"
     assert summary["summary"] != bad_candidate["summary"]
+
+
+def test_agent_review_summary_validator_rejects_prose_only_action_claims() -> None:
+    summary = {
+        **_valid_summary(),
+        "summary": "위험도는 99.9%이며 우선순위 immediate입니다. 즉시 공구 홀더를 교체하고 정비를 마감 처리하십시오.",
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "forbidden_prose_claims:마감 처리,정비를 마감 처리" in errors
+    assert "prose_probability_mismatch:99.9%" in errors
+    assert "prose_priority_mismatch:immediate" in errors
+
+
+def test_agent_review_summary_validator_rejects_boundary_inversion_and_deleted_limits() -> None:
+    summary = {
+        **_valid_summary(),
+        "boundary_note": "본 요약 확인 시 승인 절차가 자동으로 진행됩니다.",
+        "limitations": [],
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "boundary_note_mismatch" in errors
+    assert "limitations_missing" in errors
+    assert "forbidden_prose_claims:승인 절차가 자동으로 진행,자동으로 진행" in errors
+
+
+def test_agent_review_summary_validator_rejects_available_action_echo_as_command() -> None:
+    packet = json.loads((GOLD_ROOT / "GS-004.json").read_text(encoding="utf-8"))
+    summary = compose_deterministic_agent_review_summary(packet)
+    summary["mode"] = "llm"
+    summary["summary"] = "approve_inspection_work_order 를 실행해 승인하십시오."
+
+    errors = validate_agent_review_summary_contract(summary, packet=packet)
+
+    assert "available_action_echo:approve_inspection_work_order" in errors
+
+
+def test_agent_review_summary_validator_rejects_invented_history_summary() -> None:
+    summary = {
+        **_valid_summary(),
+        "history_summary": [
+            "최근 정비 이력: 2026-08-20 스핀들 베어링 교체 완료 · 작업요청 종결"
+        ],
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "history_summary_mismatch" in errors
+    assert any(
+        error.startswith("forbidden_prose_claims:")
+        and "교체 완료" in error
+        and "작업요청 종결" in error
+        for error in errors
+    )
 
 
 def test_validated_agent_review_summary_discards_ungrounded_hold_candidate() -> None:
@@ -201,6 +262,51 @@ def test_agent_review_summary_validator_rejects_missing_packet_evidence_gap() ->
     assert any(error.startswith("evidence_gaps_missing:") for error in errors)
 
 
+def test_agent_review_summary_validator_rejects_unknown_evidence_gap() -> None:
+    summary = {
+        **_valid_summary(),
+        "evidence_gaps": [
+            *PACKET["evidence_gaps"],
+            {
+                "field": "invented_gap",
+                "reason": "not_in_packet",
+                "owner_domain": "diagnosis",
+            },
+        ],
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "evidence_gaps_unknown:invented_gap|not_in_packet|diagnosis" in errors
+
+
+def test_agent_review_summary_validator_rejects_missing_inspection_focus() -> None:
+    summary = {**_valid_summary(), "inspection_focus": _valid_summary()["inspection_focus"][:1]}
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "inspection_focus_count_mismatch:1!=2" in errors
+
+
+def test_agent_review_summary_validator_rejects_focus_ref_from_other_target() -> None:
+    summary = _valid_summary()
+    summary["inspection_focus"] = [
+        {
+            **summary["inspection_focus"][0],
+            "source_refs": [PACKET["inspection_targets"][1]["source_ref"]],
+        },
+        summary["inspection_focus"][1],
+    ]
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert (
+        "inspection_focus[0].source_refs_not_target_grounded:"
+        + PACKET["inspection_targets"][1]["source_ref"]
+        in errors
+    )
+
+
 def test_validated_agent_review_summary_discards_schema_invalid_candidate() -> None:
     bad_candidate = _valid_summary()
     del bad_candidate["title"]
@@ -247,12 +353,14 @@ def test_agent_review_summary_validator_rejects_unknown_source_ref() -> None:
 def test_agent_review_summary_validator_rejects_nested_unknown_source_ref() -> None:
     summary = _valid_summary()
     summary["inspection_focus"] = [
-        {**summary["inspection_focus"][0], "source_refs": ["unknown://nested"]}
+        {**summary["inspection_focus"][0], "source_refs": ["unknown://nested"]},
+        summary["inspection_focus"][1],
     ]
 
-    assert validate_agent_review_summary(summary, packet=PACKET) == [
-        "source_refs_unknown:unknown://nested"
-    ]
+    assert "source_refs_unknown:unknown://nested" in validate_agent_review_summary(
+        summary,
+        packet=PACKET,
+    )
 
 
 def test_agent_review_summary_validator_rejects_missing_source_ref() -> None:
