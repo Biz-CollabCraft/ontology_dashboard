@@ -633,3 +633,107 @@ class ExtractionFragmentVerifyFailedError(ExtractionError):
             details=details,
             retryable=False,
         )
+
+
+class ExtractionFragmentInvalidError(ExtractionError):
+    """Raised when an intermediate fragment directory or manifest is corrupted/invalid."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_FRAGMENT_INVALID",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionFragmentChecksumMismatchError(ExtractionError):
+    """Raised when an intermediate fragment file checksum does not match its manifest."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_FRAGMENT_CHECKSUM_MISMATCH",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionDatasetIntegrityError(ExtractionError):
+    """Raised when published dataset files or manifests fail checksum/integrity verification."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_DATASET_INTEGRITY_ERROR",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionWindowConfigInvalidError(ExtractionError):
+    """Raised when extraction window configuration (e.g. window_minutes) is invalid."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_WINDOW_CONFIG_INVALID",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionDuplicateObservationNotSupportedError(ExtractionError):
+    """Raised when duplicate observations with identical (asset_id, observed_at) are detected in a window."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_DUPLICATE_OBSERVATION_NOT_SUPPORTED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionLateRecordNotSupportedError(ExtractionError):
+    """Raised when records arrive for an already published and closed UTC window."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_LATE_RECORD_NOT_SUPPORTED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionFragmentCleanupFailedError(ExtractionError):
+    """Raised when removing fully consumed fragment directories fails."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_FRAGMENT_CLEANUP_FAILED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionPublicationReceiptFailedError(ExtractionError):
+    """Raised when creating or persisting publication receipts fails."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_PUBLICATION_RECEIPT_FAILED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )

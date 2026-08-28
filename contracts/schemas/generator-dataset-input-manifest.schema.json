@@ -129,6 +129,81 @@
           }
         }
       }
+    },
+    "extraction_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_format",
+        "source_identity",
+        "source_uri",
+        "site_id",
+        "cell_id",
+        "window_start",
+        "window_end",
+        "source_start_offset",
+        "source_end_offset",
+        "mapping_id",
+        "mapping_version",
+        "mapping_sha256"
+      ],
+      "properties": {
+        "source_format": {
+          "type": "string"
+        },
+        "source_identity": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "site_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cell_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "window_start": {
+          "type": "string"
+        },
+        "window_end": {
+          "type": "string"
+        },
+        "source_start_offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_end_offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mapping_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_fragment_manifest_sha256": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "$schema": {
+      "type": "string"
     }
   }
 }

@@ -49,6 +49,14 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionFragmentConflictError,
     ExtractionFragmentWriteFailedError,
     ExtractionFragmentVerifyFailedError,
+    ExtractionFragmentInvalidError,
+    ExtractionFragmentChecksumMismatchError,
+    ExtractionDatasetIntegrityError,
+    ExtractionWindowConfigInvalidError,
+    ExtractionDuplicateObservationNotSupportedError,
+    ExtractionLateRecordNotSupportedError,
+    ExtractionFragmentCleanupFailedError,
+    ExtractionPublicationReceiptFailedError,
 )
 from systems.generator.app.extraction.extraction_schema import (
     ExtractionRequest,
@@ -92,6 +100,28 @@ from systems.generator.app.extraction.gen_data_fragment import (
 from systems.generator.app.extraction.gen_data_incremental_service import (
     GenDataIncrementalExtractionService,
     IncrementalExtractionResult,
+)
+from systems.generator.app.extraction.window_identity import (
+    ExtractionWindow,
+    compute_window_dataset_identity,
+    resolve_utc_window,
+)
+from systems.generator.app.extraction.window_assembler import (
+    AssembledExtractionWindow,
+    ExtractionWindowAssembler,
+    FragmentReference,
+)
+from systems.generator.app.extraction.window_publisher import (
+    ExtractionWindowPublisher,
+    PublishedObservationDataset,
+)
+from systems.generator.app.extraction.fragment_lifecycle import (
+    FragmentConsumptionRecord,
+    GenDataFragmentLifecycleManager,
+)
+from systems.generator.app.extraction.window_publish_service import (
+    ExtractionWindowPublishService,
+    WindowPublishResult,
 )
 from systems.generator.app.extraction.extraction_service import ExtractionService
 from systems.generator.app.extraction.extraction_router import router
@@ -145,6 +175,14 @@ __all__ = [
     "ExtractionFragmentConflictError",
     "ExtractionFragmentWriteFailedError",
     "ExtractionFragmentVerifyFailedError",
+    "ExtractionFragmentInvalidError",
+    "ExtractionFragmentChecksumMismatchError",
+    "ExtractionDatasetIntegrityError",
+    "ExtractionWindowConfigInvalidError",
+    "ExtractionDuplicateObservationNotSupportedError",
+    "ExtractionLateRecordNotSupportedError",
+    "ExtractionFragmentCleanupFailedError",
+    "ExtractionPublicationReceiptFailedError",
     "ExtractionRequest",
     "ExtractionResponse",
     "ExtractionResultPayload",
@@ -172,6 +210,18 @@ __all__ = [
     "GenDataFragmentRepository",
     "IncrementalExtractionResult",
     "GenDataIncrementalExtractionService",
+    "ExtractionWindow",
+    "resolve_utc_window",
+    "compute_window_dataset_identity",
+    "FragmentReference",
+    "AssembledExtractionWindow",
+    "ExtractionWindowAssembler",
+    "PublishedObservationDataset",
+    "ExtractionWindowPublisher",
+    "FragmentConsumptionRecord",
+    "GenDataFragmentLifecycleManager",
+    "WindowPublishResult",
+    "ExtractionWindowPublishService",
     "ExtractionService",
     "router",
 ]
