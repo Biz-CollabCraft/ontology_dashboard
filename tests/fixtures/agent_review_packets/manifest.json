@@ -26,6 +26,12 @@
     "history_review_items_present",
     "factor_bundle_to_single_inspection_target",
     "data_quality_hold",
+    "data_quality_hold_review_draft",
+    "summary_structured_grounding",
+    "summary_natural_language_grounding",
+    "evidence_gap_completeness",
+    "inspection_focus_completeness",
+    "target_source_refs_grounded",
     "closed_loop_available_action_readonly",
     "closed_loop_boundary_readonly",
     "no_inspection_target"
@@ -40,6 +46,11 @@
         "sop_guidance_present",
         "field_location_present",
         "history_review_items_present",
+        "summary_structured_grounding",
+        "summary_natural_language_grounding",
+        "evidence_gap_completeness",
+        "inspection_focus_completeness",
+        "target_source_refs_grounded",
         "closed_loop_boundary_readonly"
       ]
     },
@@ -52,6 +63,11 @@
         "sop_guidance_absent",
         "field_location_present",
         "factor_bundle_to_single_inspection_target",
+        "summary_structured_grounding",
+        "summary_natural_language_grounding",
+        "evidence_gap_completeness",
+        "inspection_focus_completeness",
+        "target_source_refs_grounded",
         "closed_loop_available_action_readonly",
         "closed_loop_boundary_readonly"
       ]
@@ -63,6 +79,11 @@
       "description": "Data-quality hold where the packet must not invent risk probability, priority, SOP guidance, inspection targets, or maintenance actions.",
       "covers": [
         "data_quality_hold",
+        "data_quality_hold_review_draft",
+        "summary_structured_grounding",
+        "summary_natural_language_grounding",
+        "evidence_gap_completeness",
+        "inspection_focus_completeness",
         "sop_guidance_absent",
         "no_inspection_target",
         "closed_loop_boundary_readonly"

@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from app.mvp.agent_review_summary import FORBIDDEN_SUMMARY_CLAIMS
+from app.mvp.agent_review_summary import (
+    FORBIDDEN_SUMMARY_CLAIMS,
+    compose_deterministic_agent_review_summary,
+    validate_agent_review_summary_contract,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,7 +85,32 @@ def _is_data_quality_hold(packet: dict) -> bool:
         packet["risk_summary"]["status_grade"] is None
         and packet["risk_summary"]["failure_probability"] is None
         and packet["review_priority"] is None
+        and packet["review_draft"]["priority_label"] == "미확정"
+        and "데이터 품질 보류" in packet["review_draft"]["summary"]
+        and "SOP 근거" not in packet["review_draft"]["summary"]
         and bool(packet["evidence_gaps"])
+    )
+
+
+def _summary_contract_valid(packet: dict) -> bool:
+    summary = compose_deterministic_agent_review_summary(packet)
+    return validate_agent_review_summary_contract(summary, packet=packet) == []
+
+
+def _inspection_focus_complete(packet: dict) -> bool:
+    summary = compose_deterministic_agent_review_summary(packet)
+    return len(summary["inspection_focus"]) == len(packet["inspection_targets"])
+
+
+def _target_source_refs_grounded(packet: dict) -> bool:
+    packet_refs = set(packet["source_refs"])
+    return all(
+        target.get("source_ref") in packet_refs
+        and (
+            not target.get("location_source_ref")
+            or target.get("location_source_ref") in packet_refs
+        )
+        for target in packet["inspection_targets"]
     )
 
 
@@ -112,6 +141,12 @@ COVERAGE_CHECKS: dict[str, Callable[[dict], bool]] = {
     == 1
     and _has_factor_bundle_target(packet),
     "data_quality_hold": _is_data_quality_hold,
+    "data_quality_hold_review_draft": _is_data_quality_hold,
+    "summary_structured_grounding": _summary_contract_valid,
+    "summary_natural_language_grounding": _summary_contract_valid,
+    "evidence_gap_completeness": _summary_contract_valid,
+    "inspection_focus_completeness": _inspection_focus_complete,
+    "target_source_refs_grounded": _target_source_refs_grounded,
     "closed_loop_available_action_readonly": _has_readonly_available_action,
     "closed_loop_boundary_readonly": _has_readonly_closed_loop_boundary,
     "no_inspection_target": lambda packet: packet["inspection_targets"] == [],

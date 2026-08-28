@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,24 @@ FORBIDDEN_SUMMARY_CLAIMS = (
     "create_maintenance_event",
     "request_replay",
     "auto_approve",
+)
+
+FORBIDDEN_PROSE_CLAIMS = (
+    "승인 절차가 자동으로 진행",
+    "자동으로 진행",
+    "자동승인 완료",
+    "자동 승인 완료",
+    "정비를 마감 처리",
+    "정비 마감 처리",
+    "마감 처리",
+    "작업요청 종결",
+    "작업 요청 종결",
+    "교체 완료",
+    "정비 완료",
+    "수리 완료",
+    "repair success",
+    "execute approval",
+    "auto approval",
 )
 
 
@@ -154,6 +173,8 @@ def validate_agent_review_summary(
     errors.extend(inspection_errors)
     gap_errors = _validate_evidence_gaps(summary, packet=packet)
     errors.extend(gap_errors)
+    text_errors = _validate_natural_language_grounding(summary, packet=packet)
+    errors.extend(text_errors)
 
     return errors
 
@@ -239,14 +260,15 @@ def _packet_source_refs(packet: dict[str, Any]) -> list[str]:
 
 def _validate_inspection_focus(summary: dict[str, Any], *, packet: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    targets_by_component = {
-        str(target.get("component_id") or ""): target
-        for target in packet.get("inspection_targets") or []
-        if str(target.get("component_id") or "")
-    }
+    packet_targets = packet.get("inspection_targets") or []
+    targets_by_component = _targets_by_component(packet)
     focus_items = summary.get("inspection_focus") or []
     if focus_items and not targets_by_component:
         return ["inspection_focus_unavailable"]
+    if len(focus_items) != len(packet_targets):
+        errors.append(
+            f"inspection_focus_count_mismatch:{len(focus_items)}!={len(packet_targets)}"
+        )
 
     for index, focus in enumerate(focus_items):
         component_id = str(focus.get("component_id") or "")
@@ -268,6 +290,17 @@ def _validate_inspection_focus(summary: dict[str, Any], *, packet: dict[str, Any
             errors.append(
                 f"inspection_focus[{index}].basis_refs_unknown:{','.join(unknown_basis_refs)}"
             )
+        allowed_source_refs = _target_allowed_source_refs(target, packet=packet)
+        focus_source_refs = {
+            str(ref) for ref in focus.get("source_refs") or [] if str(ref)
+        }
+        if not focus_source_refs:
+            errors.append(f"inspection_focus[{index}].source_refs_missing")
+        unknown_source_refs = sorted(focus_source_refs - allowed_source_refs)
+        if unknown_source_refs:
+            errors.append(
+                f"inspection_focus[{index}].source_refs_not_target_grounded:{','.join(unknown_source_refs)}"
+            )
     return errors
 
 
@@ -275,10 +308,53 @@ def _validate_evidence_gaps(summary: dict[str, Any], *, packet: dict[str, Any]) 
     packet_gaps = {_gap_key(gap) for gap in packet.get("evidence_gaps") or []}
     summary_gaps = {_gap_key(gap) for gap in summary.get("evidence_gaps") or []}
     missing_gaps = sorted(packet_gaps - summary_gaps)
-    if not missing_gaps:
-        return []
-    rendered = ",".join("|".join(gap) for gap in missing_gaps)
-    return [f"evidence_gaps_missing:{rendered}"]
+    extra_gaps = sorted(summary_gaps - packet_gaps)
+    errors = []
+    if missing_gaps:
+        rendered = ",".join("|".join(gap) for gap in missing_gaps)
+        errors.append(f"evidence_gaps_missing:{rendered}")
+    if extra_gaps:
+        rendered = ",".join("|".join(gap) for gap in extra_gaps)
+        errors.append(f"evidence_gaps_unknown:{rendered}")
+    return errors
+
+
+def _validate_natural_language_grounding(
+    summary: dict[str, Any],
+    *,
+    packet: dict[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    draft = packet.get("review_draft") or {}
+    if summary.get("boundary_note") != draft.get("boundary_note"):
+        errors.append("boundary_note_mismatch")
+
+    missing_limitations = sorted(
+        set(str(item) for item in packet.get("limitations") or [])
+        - set(str(item) for item in summary.get("limitations") or [])
+    )
+    if missing_limitations:
+        errors.append("limitations_missing")
+
+    if [str(item) for item in summary.get("history_summary") or []] != [
+        str(item) for item in draft.get("history_summary") or []
+    ]:
+        errors.append("history_summary_mismatch")
+
+    prose_values = _natural_language_values(summary)
+    forbidden_claims = sorted(_normalized_forbidden_prose_claims(prose_values))
+    if forbidden_claims:
+        errors.append(f"forbidden_prose_claims:{','.join(forbidden_claims)}")
+
+    echoed_actions = sorted(_available_action_echoes(prose_values, packet=packet))
+    if echoed_actions:
+        errors.append(f"available_action_echo:{','.join(echoed_actions)}")
+
+    probability_errors = _validate_prose_probabilities(prose_values, packet=packet)
+    errors.extend(probability_errors)
+    priority_errors = _validate_prose_priorities(prose_values, packet=packet)
+    errors.extend(priority_errors)
+    return errors
 
 
 def _gap_key(gap: dict[str, Any]) -> tuple[str, str, str]:
@@ -287,6 +363,112 @@ def _gap_key(gap: dict[str, Any]) -> tuple[str, str, str]:
         str(gap.get("reason") or ""),
         str(gap.get("owner_domain") or ""),
     )
+
+
+def _targets_by_component(packet: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(target.get("component_id") or ""): target
+        for target in packet.get("inspection_targets") or []
+        if str(target.get("component_id") or "")
+    }
+
+
+def _target_allowed_source_refs(
+    target: dict[str, Any],
+    *,
+    packet: dict[str, Any],
+) -> set[str]:
+    refs = {
+        str(target.get("source_ref") or ""),
+        str(target.get("location_source_ref") or ""),
+    }
+    component_id = str(target.get("component_id") or "")
+    refs.update(
+        str(guidance.get("source_ref") or "")
+        for guidance in packet.get("sop_guidance") or []
+        if str(guidance.get("component_id") or "") == component_id
+    )
+    refs.update(
+        str(guidance.get("location_source_ref") or "")
+        for guidance in packet.get("sop_guidance") or []
+        if str(guidance.get("component_id") or "") == component_id
+    )
+    return {ref for ref in refs if ref}
+
+
+def _natural_language_values(summary: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in ("title", "summary", "boundary_note"):
+        value = summary.get(key)
+        if isinstance(value, str):
+            values.append(value)
+    for key in ("history_summary", "limitations"):
+        values.extend(str(item) for item in summary.get(key) or [])
+    return values
+
+
+def _normalized_forbidden_prose_claims(values: list[str]) -> set[str]:
+    text = _normalize_claim_text(" ".join(values))
+    return {
+        claim
+        for claim in FORBIDDEN_PROSE_CLAIMS
+        if _normalize_claim_text(claim) in text
+    }
+
+
+def _available_action_echoes(values: list[str], *, packet: dict[str, Any]) -> set[str]:
+    text = _normalize_claim_text(" ".join(values))
+    return {
+        action_id
+        for action_id in (
+            str(item)
+            for item in (packet.get("closed_loop_boundary") or {}).get(
+                "available_action_ids"
+            )
+            or []
+        )
+        if action_id and _normalize_claim_text(action_id) in text
+    }
+
+
+def _validate_prose_probabilities(
+    values: list[str],
+    *,
+    packet: dict[str, Any],
+) -> list[str]:
+    percentages = sorted(set(re.findall(r"\d+(?:\.\d+)?\s*%", " ".join(values))))
+    if not percentages:
+        return []
+    probability = (packet.get("risk_summary") or {}).get("failure_probability")
+    if isinstance(probability, (int, float)) and not isinstance(probability, bool):
+        allowed = {f"{float(probability) * 100:.1f}%"}
+    else:
+        allowed = set()
+    unknown = [value.replace(" ", "") for value in percentages if value.replace(" ", "") not in allowed]
+    if unknown:
+        return [f"prose_probability_mismatch:{','.join(unknown)}"]
+    return []
+
+
+def _validate_prose_priorities(
+    values: list[str],
+    *,
+    packet: dict[str, Any],
+) -> list[str]:
+    text = _normalize_claim_text(" ".join(values))
+    labels = ("immediate", "high", "medium", "low")
+    mentioned = sorted(label for label in labels if label in text)
+    if not mentioned:
+        return []
+    allowed = str((packet.get("review_priority") or {}).get("level") or "")
+    unknown = [label for label in mentioned if label != allowed]
+    if unknown:
+        return [f"prose_priority_mismatch:{','.join(unknown)}"]
+    return []
+
+
+def _normalize_claim_text(value: str) -> str:
+    return re.sub(r"[\W_]+", "", value.casefold())
 
 
 def _summary_schema_errors(summary: dict[str, Any]) -> list[str]:
