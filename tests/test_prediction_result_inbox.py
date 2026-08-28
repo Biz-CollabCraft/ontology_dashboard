@@ -102,6 +102,7 @@ class FakeInboxRepository:
             "payload_sha256": payload_sha256,
             "validation_status": status,
             "rejection_reason": reason,
+            "raw_payload": kwargs["raw_payload"],
             "item_receipts": persisted,
         }
         self.saved.append(row)
@@ -234,6 +235,21 @@ def test_prediction_inbox_example_passes_schema_pydantic_receipt_roundtrip() -> 
 
     assert receipt.validation_status == "accepted"
     assert receipt.received_results == len(payload["results"])
+
+
+def test_prediction_inbox_preserves_generator_source_context_and_model_set() -> None:
+    repository = FakeInboxRepository()
+    payload = load_payload()
+
+    receipt = receive(make_service(repository), payload)
+
+    assert receipt.validation_status == "accepted"
+    stored_payload = repository.saved[0]["raw_payload"]
+    assert stored_payload["source_context"] == payload["source_context"]
+    assert stored_payload["model_set"] == payload["model_set"]
+    assert stored_payload["results"][0]["label_schema_sha256"] == (
+        payload["results"][0]["label_schema_sha256"]
+    )
 
 
 def test_prediction_inbox_records_schema_invalid_payload() -> None:
