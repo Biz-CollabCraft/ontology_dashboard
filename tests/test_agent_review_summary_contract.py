@@ -5,7 +5,12 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from app.mvp.agent_review_summary import validate_agent_review_summary
+from app.mvp.agent_review_summary import (
+    compose_deterministic_agent_review_summary,
+    validate_agent_review_summary,
+    validate_agent_review_summary_contract,
+    validated_agent_review_summary,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +24,7 @@ PACKET = json.loads(
         encoding="utf-8"
     )
 )
+GOLD_ROOT = ROOT / "tests" / "fixtures" / "agent_review_packets"
 
 
 def _valid_summary() -> dict:
@@ -54,6 +60,86 @@ def test_agent_review_summary_schema_accepts_read_only_grounded_summary() -> Non
 
     assert list(Draft202012Validator(SUMMARY_SCHEMA).iter_errors(summary)) == []
     assert validate_agent_review_summary(summary, packet=PACKET) == []
+
+
+def test_deterministic_agent_review_summary_validates_all_gold_packets() -> None:
+    validator = Draft202012Validator(SUMMARY_SCHEMA)
+
+    for scenario in ("GS-002", "GS-004", "GS-007"):
+        packet = json.loads((GOLD_ROOT / f"{scenario}.json").read_text(encoding="utf-8"))
+        summary = compose_deterministic_agent_review_summary(packet)
+
+        assert list(validator.iter_errors(summary)) == []
+        assert validate_agent_review_summary_contract(summary, packet=packet) == []
+        assert summary["mode"] == "deterministic_fallback"
+        assert summary["source_refs"] == packet["source_refs"]
+
+
+def test_deterministic_agent_review_summary_explains_factor_bundle_focus() -> None:
+    packet = json.loads((GOLD_ROOT / "GS-004.json").read_text(encoding="utf-8"))
+
+    summary = compose_deterministic_agent_review_summary(packet)
+
+    assert summary["confidence_label"] == "partial"
+    assert len(summary["inspection_focus"]) == 1
+    focus = summary["inspection_focus"][0]
+    assert focus["component_id"] == "drive_power"
+    assert focus["location_label"] == "주축 모터, 커플링, 동력 전달 하우징"
+    assert focus["basis_refs"][:3] == [
+        "factor.1.mechanical_power_w",
+        "factor.2.overstrain_index",
+        "factor.3.torque_nm",
+    ]
+
+
+def test_deterministic_agent_review_summary_fails_closed_on_data_quality_hold() -> None:
+    packet = json.loads((GOLD_ROOT / "GS-007.json").read_text(encoding="utf-8"))
+
+    summary = compose_deterministic_agent_review_summary(packet)
+
+    assert summary["confidence_label"] == "data_quality_hold"
+    assert summary["inspection_focus"] == []
+    assert "확정하지 않습니다" in summary["summary"]
+    assert "정비" not in summary["summary"]
+
+
+def test_validated_agent_review_summary_discards_invalid_candidate() -> None:
+    bad_candidate = {
+        **_valid_summary(),
+        "summary": "SOP가 자동 정비 승인 기준이며 정비로 downtime 절감 효과가 입증됐습니다.",
+    }
+
+    summary, errors = validated_agent_review_summary(
+        packet=PACKET,
+        candidate=bad_candidate,
+    )
+
+    assert errors == []
+    assert summary["mode"] == "deterministic_fallback"
+    assert summary["summary"] != bad_candidate["summary"]
+
+
+def test_validated_agent_review_summary_discards_schema_invalid_candidate() -> None:
+    bad_candidate = _valid_summary()
+    del bad_candidate["title"]
+
+    summary, errors = validated_agent_review_summary(
+        packet=PACKET,
+        candidate=bad_candidate,
+    )
+
+    assert errors == []
+    assert summary["mode"] == "deterministic_fallback"
+    assert summary["title"]
+
+
+def test_validated_agent_review_summary_accepts_valid_candidate() -> None:
+    candidate = _valid_summary()
+
+    summary, errors = validated_agent_review_summary(packet=PACKET, candidate=candidate)
+
+    assert errors == []
+    assert summary == candidate
 
 
 def test_agent_review_summary_schema_rejects_mutation_field() -> None:
