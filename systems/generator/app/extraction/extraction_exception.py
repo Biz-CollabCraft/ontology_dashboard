@@ -347,3 +347,81 @@ class ExtractionFeatureNotImplementedError(ExtractionError):
             details=details,
             retryable=False,
         )
+
+
+class ExtractionGenDataRootNotConfiguredError(ExtractionError):
+    """Raised when GEN_DATA_OUTPUT_DIR is not configured in environment or settings."""
+
+    def __init__(self, message: str = "GEN_DATA_OUTPUT_DIR is not configured", details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_GEN_DATA_ROOT_NOT_CONFIGURED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionGenDataRootInvalidError(ExtractionError):
+    """Raised when GEN_DATA_OUTPUT_DIR or sensor_root path is invalid or not a directory."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_GEN_DATA_ROOT_INVALID",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionGenDataSourcePathUnsupportedError(ExtractionError):
+    """Raised when discovered stream file or folder violates structure, bounds, or security invariants."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_GEN_DATA_SOURCE_PATH_UNSUPPORTED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionGenDataSourceDiscoveryFailedError(ExtractionError):
+    """Raised when discovering gen_data sensor streams fails unexpectedly (e.g. permission error)."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_GEN_DATA_SOURCE_DISCOVERY_FAILED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionSourceOffsetInvalidError(ExtractionError):
+    """Raised when start_offset is negative, beyond file size, or violates offset bounds."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_OFFSET_INVALID",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionSourceOffsetNotAlignedError(ExtractionError):
+    """Raised when start_offset does not align to the end of a previous complete line (missing preceding newline)."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_OFFSET_NOT_ALIGNED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )

@@ -78,6 +78,15 @@ class GeneratorPaths:
             Path(ontology_env).resolve() if ontology_env else (PROJECT_ROOT / "ontology").resolve()
         )
 
+        # 1-1. gen_data 출력 루트 경로 (.env GEN_DATA_OUTPUT_DIR 우선, 미설정 시 None)
+        gen_data_env = os.getenv("GEN_DATA_OUTPUT_DIR")
+        self.gen_data_output_dir: Optional[Path] = (
+            Path(gen_data_env).resolve() if gen_data_env and gen_data_env.strip() else None
+        )
+        self.gen_data_sensor_root: Optional[Path] = (
+            (self.gen_data_output_dir / "sensor").resolve() if self.gen_data_output_dir else None
+        )
+
         # 2. 핵심 영속 파일 전용 경로
         self.extraction_plan_cache: Path = self.data_preprocessed / "extraction_plan_cache.json"
         self.source_family_registry: Path = self.data_preprocessed / "source_family_registry.json"
