@@ -24,6 +24,7 @@ from systems.generator.app.training_compat.training_compat_router import router 
 from systems.generator.app.training_compat.training_lifecycle import lifespan as training_lifespan
 from systems.generator.app.extraction.extraction_router import router as extraction_router
 from systems.generator.app.extraction.extraction_exception import ExtractionError
+from systems.generator.app.extraction.extraction_manager import ExtractionManager
 from systems.generator.app.runtime_pipeline.pipeline_router import router as runtime_pipeline_router
 from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineBaseError
 from systems.generator.app.runtime_pipeline.pipeline_manager import PipelineManager
@@ -33,7 +34,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
-    """Combined lifespan coordinating training compat tasks and runtime pipeline worker."""
+    """Combined lifespan coordinating training compat tasks, extraction worker, and runtime pipeline worker."""
+    extraction_mgr = ExtractionManager.get_instance()
+    if extraction_mgr.enabled:
+        await extraction_mgr.start()
+    app.state.extraction_manager = extraction_mgr
+
     async with training_lifespan(app):
         pipeline_mgr = PipelineManager.get_instance()
         pipeline_mgr.start()
@@ -42,6 +48,8 @@ async def combined_lifespan(app: FastAPI):
             yield
         finally:
             pipeline_mgr.stop()
+            if extraction_mgr.running:
+                await extraction_mgr.stop()
 
 
 

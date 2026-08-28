@@ -19,13 +19,18 @@ logger = logging.getLogger(__name__)
 class MappingRepository:
     """Loads and caches static mapping tables from verified locations."""
 
-    def __init__(self, search_roots: Optional[list[Path]] = None) -> None:
-        self.search_roots = search_roots or [
-            PATHS.ontology / "mappings",
+    def __init__(
+        self,
+        mapping_root: Optional[Path] = None,
+        search_roots: Optional[list[Path]] = None,
+    ) -> None:
+        default_roots = [
+            mapping_root or (PATHS.ontology / "mappings"),
             PROJECT_ROOT / "contracts" / "examples" / "generator-protocol-extraction",
             PROJECT_ROOT / "contracts" / "test-vectors" / "generator-protocol-extraction-v1" / "input",
             PATHS.data_dir / "mappings",
         ]
+        self.search_roots = search_roots or default_roots
 
     def find_mapping_file(
         self,

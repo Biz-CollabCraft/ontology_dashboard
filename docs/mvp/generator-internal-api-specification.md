@@ -59,7 +59,8 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 | Method | Path | 현재 의미 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (구현 완료) |
-| POST | `/extraction` | gen_data SensorRecord v2 프로토콜 로그를 승인된 정적 매핑으로 파싱하여 불변 Versioned Canonical Observation Dataset 발행 (동기 방식, 단일 작성자 Lock 및 멱등성 보장) | Implemented — integration pending (Issue #108) |
+| POST | `/extraction` | gen_data sensor_stream.jsonl 또는 프로토콜 로그에 승인된 정적 매핑을 적용하여 불변 Versioned Canonical Observation Dataset 발행 (단일/전체 Source 처리, 단일 작성자 Lock 및 멱등성 보장) | Current (구현 완료) |
+| GET | `/extraction/status` | Extraction Manager 및 Background Polling Worker 상태, Source별 체크포인트 offset 및 최근 오류 조회 | Current (구현 완료) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |

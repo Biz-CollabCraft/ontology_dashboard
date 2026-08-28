@@ -153,3 +153,140 @@ class RejectedRecord(BaseModel):
     run_id: Optional[str] = None
     raw_record_checksum: Optional[str] = None
     rejected_at: str
+
+
+# --- Task 5: Polling Worker and API Models ---
+
+class ExtractionSourceStatus(BaseModel):
+    """Source-level extraction status tracking."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_identity: Optional[str] = None
+    source_uri: str
+    site_id: str
+    cell_id: str
+    status: Literal[
+        "discovered",
+        "queued",
+        "processing",
+        "waiting",
+        "blocked",
+        "failed",
+    ]
+    last_started_at: Optional[str] = None
+    last_succeeded_at: Optional[str] = None
+    last_failed_at: Optional[str] = None
+    last_committed_offset: int = 0
+    last_observed_at: Optional[str] = None
+    last_published_window: Optional[str] = None
+    attempt: int = 0
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    retryable: Optional[bool] = None
+
+
+class ExtractionManagerStatus(BaseModel):
+    """Manager-level global extraction and worker status."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    running: bool
+    poll_interval_seconds: float
+    discovered_source_count: int
+    queued_source_count: int
+    processing_source_count: int
+    blocked_source_count: int
+    last_poll_started_at: Optional[str] = None
+    last_poll_completed_at: Optional[str] = None
+    sources: list[ExtractionSourceStatus] = Field(default_factory=list)
+
+
+class PublishedDatasetSummary(BaseModel):
+    """Summary of a published dataset within a source processing cycle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str
+    dataset_version: str
+    manifest_uri: str
+
+
+class SourceProcessingResult(BaseModel):
+    """Execution result for a single source extraction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_uri: str
+    source_identity: Optional[str] = None
+    status: Literal["succeeded", "no_data", "failed", "blocked"]
+    start_offset: int
+    committed_offset: int
+    records_read: int
+    observations_staged: int
+    rejected_staged: int
+    published_datasets: list[PublishedDatasetSummary] = Field(default_factory=list)
+    pending_windows: list[str] = Field(default_factory=list)
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class GenDataExtractionRequest(BaseModel):
+    """Request payload for POST /extraction (gen_data sensor stream mode)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_mode: Literal["gen_data_sensor_stream"] = "gen_data_sensor_stream"
+    source_uri: Optional[str] = None
+    mapping_id: Optional[str] = None
+    mapping_version: Optional[str] = None
+    mapping_sha256: Optional[str] = None
+    flush_before: Optional[datetime] = None
+    max_records: Optional[int] = None
+
+    @field_validator("source_uri")
+    @classmethod
+    def validate_source_uri(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        cleaned = str(v).strip().replace("\\", "/")
+        if not cleaned:
+            raise ValueError("source_uri는 빈 문자열일 수 없습니다.")
+        if ".." in cleaned.split("/"):
+            raise ValueError(f"source_uri에 상위 디렉터리 탐색(..)이 포함될 수 없습니다: '{v}'")
+        if cleaned.startswith("/"):
+            raise ValueError(f"source_uri는 논리 상대 경로여야 합니다 (절대 경로 불가): '{v}'")
+        return cleaned
+
+    @field_validator("max_records")
+    @classmethod
+    def validate_max_records(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError(f"max_records는 0보다 커야 합니다: {v}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_mapping_fields(self) -> GenDataExtractionRequest:
+        mapping_fields = [self.mapping_id, self.mapping_version, self.mapping_sha256]
+        provided = [f for f in mapping_fields if f is not None]
+        if provided and len(provided) != 3:
+            raise ValueError("mapping_id, mapping_version, mapping_sha256는 모두 지정하거나 모두 생략해야 합니다.")
+        if self.mapping_sha256 is not None:
+            if not re.match(SHA256_PATTERN, self.mapping_sha256):
+                raise ValueError(f"mapping_sha256의 형식이 올바르지 않습니다: '{self.mapping_sha256}'")
+        return self
+
+
+class GenDataExtractionResponse(BaseModel):
+    """Response payload for POST /extraction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    run_id: str
+    status: Literal["succeeded", "partially_succeeded", "no_data"]
+    processed_sources: int
+    succeeded_sources: int
+    failed_sources: int
+    sources: list[SourceProcessingResult] = Field(default_factory=list)

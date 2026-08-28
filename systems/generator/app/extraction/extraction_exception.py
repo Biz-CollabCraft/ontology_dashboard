@@ -737,3 +737,55 @@ class ExtractionPublicationReceiptFailedError(ExtractionError):
             details=details,
             retryable=False,
         )
+
+
+class ExtractionConfigurationInvalidError(ExtractionError):
+    """Raised when extraction environment variables or worker parameters are invalid."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_CONFIGURATION_INVALID",
+            status_code=503,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionMappingConfigurationMissingError(ExtractionError):
+    """Raised when extraction is enabled but approved mapping table configuration is missing."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_MAPPING_CONFIGURATION_MISSING",
+            status_code=503,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionRetryExhaustedError(ExtractionError):
+    """Raised when maximum retry attempts for a source extraction are exceeded."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_RETRY_EXHAUSTED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionPollTemporaryIOError(ExtractionError):
+    """Raised when a transient IO error occurs while polling extraction sources."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_POLL_TEMPORARY_IO_ERROR",
+            status_code=500,
+            details=details,
+            retryable=True,
+        )

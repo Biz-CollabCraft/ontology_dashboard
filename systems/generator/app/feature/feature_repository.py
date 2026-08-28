@@ -450,7 +450,12 @@ class FeatureRepository:
                         shutil.rmtree(temp_dir, ignore_errors=True)
                         return existing
 
-                temp_dir.replace(bundle_dir)
+                try:
+                    temp_dir.replace(bundle_dir)
+                except OSError:
+                    if bundle_dir.exists():
+                        shutil.rmtree(bundle_dir, ignore_errors=True)
+                    shutil.move(str(temp_dir), str(bundle_dir))
                 logger.info(f"[FeatureRepository] Atomically published Feature Bundle to {bundle_dir}")
 
                 return PublishedFeatureBundle(

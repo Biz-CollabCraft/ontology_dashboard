@@ -57,11 +57,21 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionLateRecordNotSupportedError,
     ExtractionFragmentCleanupFailedError,
     ExtractionPublicationReceiptFailedError,
+    ExtractionConfigurationInvalidError,
+    ExtractionMappingConfigurationMissingError,
+    ExtractionRetryExhaustedError,
+    ExtractionPollTemporaryIOError,
 )
 from systems.generator.app.extraction.extraction_schema import (
+    ExtractionManagerStatus,
     ExtractionRequest,
     ExtractionResponse,
     ExtractionResultPayload,
+    ExtractionSourceStatus,
+    GenDataExtractionRequest,
+    GenDataExtractionResponse,
+    PublishedDatasetSummary,
+    SourceProcessingResult,
 )
 from systems.generator.app.extraction.gen_data_source import (
     GenDataSensorStreamSource,
@@ -123,6 +133,11 @@ from systems.generator.app.extraction.window_publish_service import (
     ExtractionWindowPublishService,
     WindowPublishResult,
 )
+from systems.generator.app.extraction.extraction_manager import (
+    ExtractionManager,
+    get_extraction_manager,
+)
+from systems.generator.app.extraction.extraction_worker import ExtractionWorker
 from systems.generator.app.extraction.extraction_service import ExtractionService
 from systems.generator.app.extraction.extraction_router import router
 
@@ -183,9 +198,19 @@ __all__ = [
     "ExtractionLateRecordNotSupportedError",
     "ExtractionFragmentCleanupFailedError",
     "ExtractionPublicationReceiptFailedError",
+    "ExtractionConfigurationInvalidError",
+    "ExtractionMappingConfigurationMissingError",
+    "ExtractionRetryExhaustedError",
+    "ExtractionPollTemporaryIOError",
     "ExtractionRequest",
     "ExtractionResponse",
     "ExtractionResultPayload",
+    "ExtractionSourceStatus",
+    "ExtractionManagerStatus",
+    "PublishedDatasetSummary",
+    "SourceProcessingResult",
+    "GenDataExtractionRequest",
+    "GenDataExtractionResponse",
     "GenDataSensorStreamSource",
     "discover_gen_data_sensor_streams",
     "GenDataReadResult",
@@ -222,6 +247,9 @@ __all__ = [
     "GenDataFragmentLifecycleManager",
     "WindowPublishResult",
     "ExtractionWindowPublishService",
+    "ExtractionManager",
+    "get_extraction_manager",
+    "ExtractionWorker",
     "ExtractionService",
     "router",
 ]

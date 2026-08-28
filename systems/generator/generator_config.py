@@ -177,6 +177,85 @@ class GeneratorPaths:
                 (PROJECT_ROOT / "output").resolve(),
             ]
 
+        # 4-1. Extraction Polling Worker and API Configuration
+        ext_enabled_env = os.getenv("GENERATOR_EXTRACTION_ENABLED", "false").strip().lower()
+        self.extraction_enabled: bool = ext_enabled_env in ("true", "1", "yes")
+
+        ext_poll_env = os.getenv("GENERATOR_EXTRACTION_POLL_INTERVAL_SECONDS")
+        self.extraction_poll_interval_seconds: float = float(ext_poll_env) if ext_poll_env else 5.0
+
+        ext_win_env = os.getenv("GENERATOR_EXTRACTION_WINDOW_MINUTES")
+        self.extraction_window_minutes: int = int(ext_win_env) if ext_win_env else 60
+
+        ext_max_rec_env = os.getenv("GENERATOR_EXTRACTION_MAX_RECORDS")
+        self.extraction_max_records: int = int(ext_max_rec_env) if ext_max_rec_env else 10000
+
+        ext_max_att_env = os.getenv("GENERATOR_EXTRACTION_MAX_ATTEMPTS")
+        self.extraction_max_attempts: int = int(ext_max_att_env) if ext_max_att_env else 5
+
+        ext_backoff_env = os.getenv("GENERATOR_EXTRACTION_RETRY_BACKOFF_SECONDS")
+        self.extraction_retry_backoff_seconds: float = float(ext_backoff_env) if ext_backoff_env else 1.0
+
+        ext_conc_env = os.getenv("GENERATOR_EXTRACTION_MAX_CONCURRENCY")
+        self.extraction_max_concurrency: int = int(ext_conc_env) if ext_conc_env else 4
+
+        self.extraction_mapping_id: str = os.getenv(
+            "GENERATOR_EXTRACTION_MAPPING_ID", "gen-data-sensor-stream-canonical"
+        ).strip()
+        self.extraction_mapping_version: str = os.getenv(
+            "GENERATOR_EXTRACTION_MAPPING_VERSION", "v1"
+        ).strip()
+        mapping_sha_env = os.getenv("GENERATOR_EXTRACTION_MAPPING_SHA256")
+        self.extraction_mapping_sha256: Optional[str] = (
+            mapping_sha_env.strip() if mapping_sha_env and mapping_sha_env.strip() else None
+        )
+
+    def validate_extraction_config(self) -> None:
+        """Validate extraction environment configuration."""
+        from systems.generator.app.extraction.extraction_exception import (
+            ExtractionConfigurationInvalidError,
+            ExtractionMappingConfigurationMissingError,
+        )
+
+        if self.extraction_poll_interval_seconds <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_POLL_INTERVAL_SECONDS must be > 0, got {self.extraction_poll_interval_seconds}"
+            )
+        if self.extraction_window_minutes <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_WINDOW_MINUTES must be > 0, got {self.extraction_window_minutes}"
+            )
+        if self.extraction_max_records <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_MAX_RECORDS must be > 0, got {self.extraction_max_records}"
+            )
+        if self.extraction_max_attempts < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_MAX_ATTEMPTS must be >= 1, got {self.extraction_max_attempts}"
+            )
+        if self.extraction_retry_backoff_seconds < 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_RETRY_BACKOFF_SECONDS must be >= 0, got {self.extraction_retry_backoff_seconds}"
+            )
+        if self.extraction_max_concurrency < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_MAX_CONCURRENCY must be >= 1, got {self.extraction_max_concurrency}"
+            )
+        if not self.extraction_mapping_id or not self.extraction_mapping_version:
+            raise ExtractionConfigurationInvalidError(
+                "GENERATOR_EXTRACTION_MAPPING_ID and GENERATOR_EXTRACTION_MAPPING_VERSION must not be empty"
+            )
+
+        if self.extraction_enabled:
+            if not self.gen_data_output_dir or not self.gen_data_output_dir.exists():
+                raise ExtractionConfigurationInvalidError(
+                    f"Background extraction enabled but GEN_DATA_OUTPUT_DIR is missing or invalid: {self.gen_data_output_dir}"
+                )
+            if not self.extraction_mapping_sha256 or len(self.extraction_mapping_sha256) != 64:
+                raise ExtractionMappingConfigurationMissingError(
+                    "Background extraction enabled but GENERATOR_EXTRACTION_MAPPING_SHA256 is missing or invalid 64-char hex string."
+                )
+
     def ensure_directories(self) -> None:
         """필요 디렉토리가 존재하는지 검사하고 자동 생성한다."""
         for path in (
