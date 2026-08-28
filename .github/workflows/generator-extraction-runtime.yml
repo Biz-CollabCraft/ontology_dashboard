@@ -1,0 +1,62 @@
+name: generator-extraction-runtime
+
+on:
+  pull_request:
+    paths:
+      - "contracts/examples/generator-protocol-extraction/**"
+      - "contracts/schemas/generator-protocol-record.schema.json"
+      - "contracts/schemas/generator-protocol-run-manifest.schema.json"
+      - "contracts/schemas/generator-static-mapping-table.schema.json"
+      - "contracts/schemas/generator-dataset-input-manifest.schema.json"
+      - "contracts/test-vectors/generator-protocol-extraction-v1/**"
+      - "systems/generator/**"
+      - "tests/test_generator_extraction_api.py"
+      - "tests/test_generator_extraction_recovery.py"
+      - ".github/workflows/generator-extraction-runtime.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "contracts/examples/generator-protocol-extraction/**"
+      - "contracts/schemas/generator-protocol-record.schema.json"
+      - "contracts/schemas/generator-protocol-run-manifest.schema.json"
+      - "contracts/schemas/generator-static-mapping-table.schema.json"
+      - "contracts/schemas/generator-dataset-input-manifest.schema.json"
+      - "contracts/test-vectors/generator-protocol-extraction-v1/**"
+      - "systems/generator/**"
+      - "tests/test_generator_extraction_api.py"
+      - "tests/test_generator_extraction_recovery.py"
+      - ".github/workflows/generator-extraction-runtime.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: generator-extraction-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generator-extraction-runtime:
+    name: generator-extraction-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v4
+
+      - name: Build Generator runtime image
+        run: docker build --file systems/generator/Dockerfile --tag ontology-generator:extraction-check .
+
+      - name: Run Extraction API and recovery tests inside image
+        run: >-
+          docker run --rm
+          --user 0:0
+          --entrypoint sh
+          --env DATA_DIR=/data/source
+          --env DATA_PREPROCESSED_DIR=/data/preprocessed
+          --env ONTOLOGY_DIR=/data/ontology
+          --env MODELS_STORE_DIR=/data/models
+          --env MODEL_ARTIFACT_URI=/artifacts
+          --volume "${{ github.workspace }}/tests:/app/tests:ro"
+          --volume "${{ github.workspace }}/contracts:/app/contracts:ro"
+          ontology-generator:extraction-check
+          -c "python -m pip install --no-cache-dir pytest && python -m pytest -q tests/test_generator_extraction_api.py tests/test_generator_extraction_recovery.py"

@@ -87,6 +87,8 @@
     },
     "auxiliary_files": {
       "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
       "items": {
         "type": "object",
         "additionalProperties": false,

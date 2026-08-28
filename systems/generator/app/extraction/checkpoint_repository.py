@@ -1,10 +1,12 @@
-"""Mutable run state and atomic checkpoint repository for extraction runs."""
+"""Mutable run state, atomic checkpoint, and fragment storage repository for extraction runs."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -16,9 +18,6 @@ logger = logging.getLogger(__name__)
 
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-import time
 
 
 def _atomic_write_json(file_path: Path, data: dict[str, Any]) -> None:
@@ -40,7 +39,6 @@ def _atomic_write_json(file_path: Path, data: dict[str, Any]) -> None:
         except (PermissionError, OSError):
             if attempt < 4:
                 time.sleep(0.01)
-    # Direct write fallback if Windows file locking persists
     file_path.write_text(content, encoding="utf-8")
     if temp_path.exists():
         try:
@@ -50,7 +48,7 @@ def _atomic_write_json(file_path: Path, data: dict[str, Any]) -> None:
 
 
 class CheckpointRepository:
-    """Manages mutable extraction run state and step checkpoints atomically."""
+    """Manages mutable extraction run state, step checkpoints, and batch fragments atomically."""
 
     def __init__(self, runs_root: Optional[Path] = None) -> None:
         self.runs_root = runs_root or (PATHS.data_preprocessed / "extraction_runs")
@@ -127,3 +125,65 @@ class CheckpointRepository:
             return json.loads(chk_file.read_text(encoding="utf-8"))
         except Exception:
             return None
+
+    # --- Batch Fragment Storage ---
+
+    def write_batch_fragment(
+        self,
+        run_id: str,
+        batch_id: str,
+        obs_records: list[dict[str, Any]],
+        prov_records: list[dict[str, Any]],
+        rej_records: list[dict[str, Any]],
+    ) -> tuple[str, str, str]:
+        """Write batch fragments to committed_fragments directory with flush and fsync."""
+        frag_dir = self._get_run_dir(run_id) / "committed_fragments"
+        frag_dir.mkdir(parents=True, exist_ok=True)
+
+        def _write_records(filename: str, records: list[dict[str, Any]]) -> str:
+            target = frag_dir / filename
+            lines = [json.dumps(r, ensure_ascii=False) for r in records]
+            content = ("\n".join(lines) + "\n").encode("utf-8") if lines else b""
+            with open(target, "wb") as f:
+                f.write(content)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    pass
+            return hashlib.sha256(content).hexdigest()
+
+        obs_sha = _write_records(f"{batch_id}.observations.jsonl", obs_records)
+        prov_sha = _write_records(f"{batch_id}.provenance.jsonl", prov_records)
+        rej_sha = _write_records(f"{batch_id}.rejected.jsonl", rej_records)
+        return obs_sha, prov_sha, rej_sha
+
+    def load_committed_fragments(
+        self,
+        run_id: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        """Load all committed fragments for run in order."""
+        frag_dir = self._get_run_dir(run_id) / "committed_fragments"
+        if not frag_dir.is_dir():
+            return [], [], []
+
+        all_obs: list[dict[str, Any]] = []
+        all_prov: list[dict[str, Any]] = []
+        all_rej: list[dict[str, Any]] = []
+
+        for f in sorted(frag_dir.glob("*.observations.jsonl")):
+            for line in f.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    all_obs.append(json.loads(line))
+
+        for f in sorted(frag_dir.glob("*.provenance.jsonl")):
+            for line in f.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    all_prov.append(json.loads(line))
+
+        for f in sorted(frag_dir.glob("*.rejected.jsonl")):
+            for line in f.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    all_rej.append(json.loads(line))
+
+        return all_obs, all_prov, all_rej

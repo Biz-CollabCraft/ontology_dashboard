@@ -588,17 +588,32 @@ class ContractVectorVerifier:
 
             result.example_count += 1
 
-            # If it's a dataset manifest example, validate against dataset manifest schema
-            if "manifest" in efile.name.lower() and manifest_validator:
-                try:
-                    manifest_validator.validate(data)
-                except jsonschema.ValidationError as e:
-                    result.errors.append(
-                        VerificationError(
-                            context=str(rel_path),
-                            message=f"Example manifest fails schema validation: {e.message}",
+            # If it's a dataset manifest or protocol run manifest example, validate against corresponding schema
+            if "manifest" in efile.name.lower():
+                if data.get("manifest_version") == "generator-protocol-run-v1" or "source-run-manifest" in efile.name.lower():
+                    run_schema_p = self.schemas_dir / "generator-protocol-run-manifest.schema.json"
+                    if run_schema_p.is_file():
+                        try:
+                            r_schema = json.loads(run_schema_p.read_text(encoding="utf-8"))
+                            r_val = jsonschema.Draft202012Validator(r_schema, format_checker=jsonschema.FormatChecker())
+                            r_val.validate(data)
+                        except jsonschema.ValidationError as e:
+                            result.errors.append(
+                                VerificationError(
+                                    context=str(rel_path),
+                                    message=f"Example run manifest fails schema validation: {e.message}",
+                                )
+                            )
+                elif manifest_validator:
+                    try:
+                        manifest_validator.validate(data)
+                    except jsonschema.ValidationError as e:
+                        result.errors.append(
+                            VerificationError(
+                                context=str(rel_path),
+                                message=f"Example manifest fails schema validation: {e.message}",
+                            )
                         )
-                    )
 
         # Verify Training Examples if generator-training examples directory exists
         training_examples_dir = self.examples_dir / "generator-training"
@@ -1889,6 +1904,25 @@ class ContractVectorVerifier:
                     )
                 )
 
+        # 2.5 Validate source-run-manifest.json if present
+        source_manifest_path = input_dir / "source-run-manifest.json"
+        if source_manifest_path.is_file():
+            run_manifest_schema_path = self.schemas_dir / "generator-protocol-run-manifest.schema.json"
+            if run_manifest_schema_path.is_file():
+                try:
+                    run_man_schema = json.loads(run_manifest_schema_path.read_text(encoding="utf-8"))
+                    run_man_validator = jsonschema.Draft202012Validator(run_man_schema, format_checker=jsonschema.FormatChecker())
+                    run_man_data = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+                    run_man_validator.validate(run_man_data)
+                    result.manifest_count += 1
+                except Exception as exc:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/input/source-run-manifest.json",
+                            message=f"Source run manifest validation failed: {exc}",
+                        )
+                    )
+
         # 3. Validate dataset_manifest.json in expected/
         manifest_path = expected_dir / "dataset_manifest.json"
         if not manifest_path.is_file():
@@ -1908,6 +1942,17 @@ class ContractVectorVerifier:
                 manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
                 man_validator.validate(manifest_data)
                 result.manifest_count += 1
+
+                # Verify auxiliary files structure: exactly 1 provenance, 1 rejected
+                aux_files = manifest_data.get("auxiliary_files", [])
+                aux_roles = [f.get("role") for f in aux_files]
+                if aux_roles != ["provenance", "rejected"] and set(aux_roles) != {"provenance", "rejected"}:
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/expected/dataset_manifest.json",
+                            message=f"auxiliary_files must contain exactly one 'provenance' and one 'rejected' role, got {aux_roles}",
+                        )
+                    )
 
                 # Verify files declared in manifest
                 all_declared_files = list(manifest_data.get("files", [])) + list(manifest_data.get("auxiliary_files", []))

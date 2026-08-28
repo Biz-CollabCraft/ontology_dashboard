@@ -37,14 +37,15 @@ class ExtractionRequest(BaseModel):
         default="received",
         description="Target transmission direction to extract. Only matching direction records are consumed."
     )
-    source_run_manifest_uri: Optional[str] = Field(
-        default=None,
-        description="Optional upstream gen_data run manifest URI to verify finalization"
+    source_run_manifest_uri: str = Field(
+        ...,
+        min_length=1,
+        description="Upstream gen_data run manifest URI certifying protocol finalization"
     )
-    source_run_manifest_sha256: Optional[str] = Field(
-        default=None,
+    source_run_manifest_sha256: str = Field(
+        ...,
         pattern=SHA256_PATTERN,
-        description="Optional upstream gen_data run manifest SHA-256 checksum"
+        description="Upstream gen_data run manifest SHA-256 checksum"
     )
     source_schema_version: str = Field(..., min_length=1, description="Source sensor protocol schema version")
     protocol_version: str = Field(..., min_length=1, description="Protocol version string")
@@ -69,14 +70,14 @@ class ExtractionRequest(BaseModel):
     def validate_dataset_identifiers(cls, v: str) -> str:
         return _validate_safe_identifier(v, "dataset identifier")
 
-    @field_validator("source_uri")
+    @field_validator("source_uri", "source_run_manifest_uri")
     @classmethod
     def validate_source_uri(cls, v: str) -> str:
         cleaned = str(v).strip().replace("\\", "/")
         if not cleaned:
-            raise ValueError("source_uri는 빈 문자열일 수 없습니다.")
+            raise ValueError("경로 URI는 빈 문자열일 수 없습니다.")
         if ".." in cleaned.split("/"):
-            raise ValueError(f"source_uri에 상위 디렉터리 탐색(..)이 포함될 수 없습니다: '{v}'")
+            raise ValueError(f"경로 URI에 상위 디렉터리 탐색(..)이 포함될 수 없습니다: '{v}'")
         return cleaned
 
 

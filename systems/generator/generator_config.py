@@ -149,6 +149,12 @@ class GeneratorPaths:
         mapping_env = os.getenv("GENERATOR_MAPPING_ROOT")
         self.mapping_root: Path = Path(mapping_env).resolve() if mapping_env else (self.ontology / "mappings").resolve()
 
+        batch_size_env = os.getenv("GENERATOR_EXTRACTION_BATCH_SIZE")
+        self.extraction_batch_size: int = int(batch_size_env) if batch_size_env else 1000
+
+        lease_env = os.getenv("GENERATOR_EXTRACTION_LOCK_LEASE_SECONDS")
+        self.extraction_lock_lease_seconds: float = float(lease_env) if lease_env else 300.0
+
         extract_roots_env = os.getenv("GENERATOR_EXTRACTION_INPUT_ROOTS")
         if extract_roots_env:
             self.extraction_input_roots: list[Path] = [

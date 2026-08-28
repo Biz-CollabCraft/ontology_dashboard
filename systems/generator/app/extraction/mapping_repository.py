@@ -44,15 +44,17 @@ class MappingRepository:
         candidate_paths = []
         for root in self.search_roots:
             candidate_paths.extend([
+                root / clean_id / clean_ver / "mapping.json",
                 root / clean_id / f"{clean_ver}.json",
                 root / f"{clean_id}_{clean_ver}.json",
                 root / f"{clean_id}.json",
             ])
             if root.is_dir():
-                for cand_file in root.glob("*.json"):
+                for cand_file in root.rglob("*.json"):
                     candidate_paths.append(cand_file)
 
         candidate_paths.extend([
+            PATHS.ontology / "mappings" / clean_id / clean_ver / "mapping.json",
             PATHS.ontology / "mappings" / clean_id / f"{clean_ver}.json",
             PATHS.ontology / "mappings" / f"{clean_id}_{clean_ver}.json",
             PATHS.ontology / "mappings" / f"{clean_id}.json",

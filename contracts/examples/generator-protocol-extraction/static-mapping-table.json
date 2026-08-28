@@ -2,11 +2,11 @@
   "$schema": "https://ontology-dashboard.local/schemas/generator-static-mapping-table.schema.json",
   "mapping_id": "gen-data-canonical-observation",
   "mapping_version": "v1",
-  "mapping_sha256": "5808d5a4eec43e4b8e066cba4b29476e58cf8f909ca8e1a40393071c43eb0224",
+  "mapping_sha256": "f1ab2ef5af3a015beba4eb7680254e6740a5e7f3c906a6aa16e45c8dba280df1",
   "status": "approved",
   "protocol_version": "v2",
   "source_schema_version": "sensor-record-v2",
-  "source_schema_fingerprint": "67b7951388d5b463505f7ff0380d5174272db14000e8c91d72374a6edb422810",
+  "source_schema_fingerprint": "9a7d8492bb57e1693c0481d1e879f7dc4efef705edf10ce94989ae85d4c7df80",
   "fingerprint_algorithm_version": "v1",
   "description": "Approved static mapping table for gen_data SensorRecord v2 protocol",
   "field_mappings": [

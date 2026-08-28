@@ -124,15 +124,21 @@ class MappingValidator:
                 details=[{"mapping_id": mapping_data.get("mapping_id"), "status": status}],
             )
 
-        # 4. Checksum verification
+        # 4. Checksum verification: request SHA == declared SHA == canonical SHA
         declared_sha = mapping_data.get("mapping_sha256")
         canonical_sha = compute_mapping_canonical_sha256(mapping_data)
-        if expected_mapping_sha256:
-            if declared_sha != expected_mapping_sha256 and canonical_sha != expected_mapping_sha256:
-                raise ExtractionMappingChecksumMismatchError(
-                    f"매핑 테이블 SHA-256 체크섬 불일치: 요청={expected_mapping_sha256}, 파일={declared_sha or canonical_sha}",
-                    details=[{"expected": expected_mapping_sha256, "declared": declared_sha, "canonical": canonical_sha}],
-                )
+
+        if declared_sha != canonical_sha:
+            raise ExtractionMappingChecksumMismatchError(
+                f"매핑 테이블 선언 SHA-256('{declared_sha}')이 정규화 계산값('{canonical_sha}')과 일치하지 않습니다.",
+                details=[{"declared": declared_sha, "canonical": canonical_sha}],
+            )
+
+        if expected_mapping_sha256 and expected_mapping_sha256 != canonical_sha:
+            raise ExtractionMappingChecksumMismatchError(
+                f"요청 mapping_sha256('{expected_mapping_sha256}')이 정규화 계산값('{canonical_sha}')과 일치하지 않습니다.",
+                details=[{"expected": expected_mapping_sha256, "canonical": canonical_sha}],
+            )
 
         # 5. Schema fingerprint verification
         mapping_fingerprint = mapping_data.get("source_schema_fingerprint")

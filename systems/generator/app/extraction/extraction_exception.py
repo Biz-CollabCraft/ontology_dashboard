@@ -63,6 +63,58 @@ class ExtractionSourcePathUnsupportedError(ExtractionError):
         )
 
 
+class ExtractionSourceManifestRequiredError(ExtractionError):
+    """Raised when source_run_manifest_uri is missing or empty."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_MANIFEST_REQUIRED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionSourceManifestInvalidError(ExtractionError):
+    """Raised when source run manifest fails schema or content validation."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_MANIFEST_INVALID",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionSourceNotFinalizedError(ExtractionError):
+    """Raised when source run manifest status is not finalized/completed."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_NOT_FINALIZED",
+            status_code=409,
+            details=details,
+            retryable=True,
+        )
+
+
+class ExtractionSourceDescriptorMismatchError(ExtractionError):
+    """Raised when source file SHA-256, size, or role does not match manifest descriptor."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_DESCRIPTOR_MISMATCH",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
 class ExtractionSourceIncompleteError(ExtractionError):
     """Raised when source file is actively being written or last line is incomplete/torn JSONL."""
 
@@ -193,6 +245,19 @@ class ExtractionDatasetConflictError(ExtractionError):
         )
 
 
+class ExtractionNoValidObservationsError(ExtractionError):
+    """Raised when extraction yielded 0 valid canonical observation records."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_NO_VALID_OBSERVATIONS",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
 class ExtractionAlreadyRunningError(ExtractionError):
     """Raised when another extraction run is already in progress for the target dataset."""
 
@@ -200,6 +265,19 @@ class ExtractionAlreadyRunningError(ExtractionError):
         super().__init__(
             message=message,
             code="EXTRACTION_ALREADY_RUNNING",
+            status_code=409,
+            details=details,
+            retryable=True,
+        )
+
+
+class ExtractionLockLostError(ExtractionError):
+    """Raised when single-writer lock lease is lost during execution."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_LOCK_LOST",
             status_code=409,
             details=details,
             retryable=True,
@@ -216,6 +294,19 @@ class ExtractionIdempotencyConflictError(ExtractionError):
             status_code=409,
             details=details,
             retryable=False,
+        )
+
+
+class ExtractionRequestInProgressError(ExtractionError):
+    """Raised when same idempotency_key is already running concurrently."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_REQUEST_IN_PROGRESS",
+            status_code=409,
+            details=details,
+            retryable=True,
         )
 
 

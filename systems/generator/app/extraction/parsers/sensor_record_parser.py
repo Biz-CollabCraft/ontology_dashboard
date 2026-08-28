@@ -5,9 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Iterator, Optional, Union
 
 import jsonschema
 
@@ -20,6 +21,16 @@ from systems.generator.app.extraction.extraction_exception import (
 from systems.generator.app.extraction.mapping_validator import MappingValidator
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ParsedSourceRecord:
+    """Represents a single parsed protocol record with byte boundaries and raw checksum."""
+    byte_start: int
+    byte_end: int
+    line_number: int
+    raw_sha256: str
+    data: dict[str, Any]
 
 
 def normalize_iso_utc(ts_raw: Union[str, datetime]) -> str:
@@ -39,7 +50,7 @@ def normalize_iso_utc(ts_raw: Union[str, datetime]) -> str:
 
 
 class SensorRecordParser:
-    """Parses, validates, and groups SensorRecord v2 JSONL lines into Canonical Observations."""
+    """Parses, validates, streams, and groups SensorRecord v2 protocol lines into Canonical Observations."""
 
     def __init__(
         self,
@@ -62,6 +73,58 @@ class SensorRecordParser:
                 raise ExtractionRequestInvalidError(f"Failed to parse protocol record schema: {e}") from e
         return self._schema_cache
 
+    def iter_protocol_records(
+        self,
+        source_path: Path,
+        *,
+        start_offset: int = 0,
+        is_source_finalized: bool = True,
+    ) -> Iterator[ParsedSourceRecord]:
+        """Binary stream iterator yielding individual parsed protocol records with precise byte offsets."""
+        if not source_path.is_file():
+            raise ExtractionRequestInvalidError(f"Source file not found: {source_path}")
+
+        with open(source_path, "rb") as stream:
+            if start_offset > 0:
+                stream.seek(start_offset)
+            line_no = 0
+
+            while True:
+                byte_start = stream.tell()
+                raw_line = stream.readline()
+                byte_end = stream.tell()
+
+                if not raw_line:
+                    break
+
+                line_no += 1
+                raw_sha256 = hashlib.sha256(raw_line).hexdigest()
+                line_str = raw_line.decode("utf-8", errors="replace").strip()
+                if not line_str:
+                    continue
+
+                try:
+                    data = json.loads(line_str)
+                except Exception as exc:
+                    if is_source_finalized:
+                        raise ExtractionSourceIntegrityError(
+                            f"입력 파일이 finalized 상태이나 레코드가 손상되었습니다 (바이트 {byte_start}-{byte_end}): {exc}",
+                            details=[{"byte_start": byte_start, "byte_end": byte_end, "raw": line_str[:100]}],
+                        ) from exc
+                    else:
+                        raise ExtractionSourceIncompleteError(
+                            f"입력 파일의 마지막 행이 완성되지 않은 불완전한 JSONL 레코드입니다 (바이트 {byte_start}-{byte_end}): {exc}",
+                            details=[{"byte_start": byte_start, "byte_end": byte_end, "raw": line_str[:100]}],
+                        ) from exc
+
+                yield ParsedSourceRecord(
+                    byte_start=byte_start,
+                    byte_end=byte_end,
+                    line_number=line_no,
+                    raw_sha256=raw_sha256,
+                    data=data,
+                )
+
     def parse_file(
         self,
         source_path: Path,
@@ -71,15 +134,13 @@ class SensorRecordParser:
         dedup_checker: Optional[Any] = None,
         source_identity: Optional[str] = None,
         is_source_finalized: bool = True,
+        start_offset: int = 0,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        """Parse source JSONL file, transform records, group long-format rows, and detect rejections.
+        """Parse records starting from start_offset into canonical observations, provenance, and rejected records.
 
         Returns:
             (observations, provenance_records, rejected_records, processed_source_records, stats_dict)
         """
-        if not source_path.is_file():
-            raise ExtractionRequestInvalidError(f"Source file not found: {source_path}")
-
         schema = self._get_schema()
         validator = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
 
@@ -88,81 +149,42 @@ class SensorRecordParser:
         mapping_sha256 = mapping_data.get("mapping_sha256", "")
         field_mappings = mapping_data.get("field_mappings", [])
 
-        # Build quick lookup: source_field (measurement_key) -> field_mapping definition
         mapping_lookup: dict[str, dict[str, Any]] = {
             fm["source_field"]: fm for fm in field_mappings if "source_field" in fm
         }
         required_target_fields = [
             fm["target_field"] for fm in field_mappings if fm.get("required", False)
         ]
-        # Mapping column ordering
         target_column_order = [fm["target_field"] for fm in field_mappings if "target_field" in fm]
 
-        # 1. Read lines and detect incomplete tail
-        with open(source_path, "r", encoding="utf-8") as f:
-            raw_lines = f.readlines()
-
-        if not raw_lines:
-            return [], [], [], [], {
-                "total_lines": 0,
-                "parsed_records": 0,
-                "rejected_records": 0,
-                "observations_count": 0,
-                "asset_ids": [],
-                "min_time": None,
-                "max_time": None,
-            }
-
-        # Test if the last non-empty line is valid JSON
-        last_non_empty_idx = -1
-        for idx in range(len(raw_lines) - 1, -1, -1):
-            if raw_lines[idx].strip():
-                last_non_empty_idx = idx
-                break
-
-        if last_non_empty_idx >= 0:
-            last_line = raw_lines[last_non_empty_idx].strip()
-            try:
-                json.loads(last_line)
-            except Exception as exc:
-                if is_source_finalized:
-                    raise ExtractionSourceIntegrityError(
-                        f"입력 파일이 finalized 상태이나 마지막 행이 손상되었습니다 (라인 {last_non_empty_idx + 1}): {exc}",
-                        details=[{"line_number": last_non_empty_idx + 1, "raw_snippet": last_line[:100]}],
-                    ) from exc
-                else:
-                    raise ExtractionSourceIncompleteError(
-                        f"입력 파일의 마지막 행이 완성되지 않은 불완전한 JSONL 레코드입니다 (라인 {last_non_empty_idx + 1}): {exc}",
-                        details=[{"line_number": last_non_empty_idx + 1, "raw_snippet": last_line[:100]}],
-                    ) from exc
-
-        # 2. Group long-format records by (run_id, branch_kind, asset_id, normalized_observed_at)
         grouping: dict[tuple[str, str, str, str], dict[str, Any]] = {}
         group_ordering: list[tuple[str, str, str, str]] = []
         rejected_records: list[dict[str, Any]] = []
         provenance_records: list[dict[str, Any]] = []
         processed_source_records: list[dict[str, Any]] = []
         total_records = 0
+        last_byte_offset = start_offset
         now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-        for line_no, raw_line in enumerate(raw_lines, start=1):
-            line_str = raw_line.strip()
-            if not line_str:
-                continue
-
+        # Stream records using binary iterator
+        for parsed_rec in self.iter_protocol_records(
+            source_path=source_path,
+            start_offset=start_offset,
+            is_source_finalized=is_source_finalized,
+        ):
+            last_byte_offset = parsed_rec.byte_end
             total_records += 1
-            record_offset = line_no
-            raw_sha256 = hashlib.sha256(raw_line.encode("utf-8")).hexdigest()
+            line_no = parsed_rec.line_number
+            raw_sha256 = parsed_rec.raw_sha256
+            rec = parsed_rec.data
 
-            try:
-                rec = json.loads(line_str)
-            except Exception as exc:
+            if not isinstance(rec, dict):
                 rejected_records.append({
-                    "source_offset": line_no,
+                    "source_offset": parsed_rec.byte_start,
                     "source_sequence": None,
                     "source_observation_id": None,
-                    "error_code": "JSON_PARSE_ERROR",
-                    "error_message": f"JSON parse error: {exc}",
+                    "error_code": "JSON_SCHEMA_TYPE_ERROR",
+                    "error_message": "Record is not a JSON object",
                     "mapping_id": mapping_id,
                     "mapping_version": mapping_version,
                     "run_id": None,
@@ -176,35 +198,34 @@ class SensorRecordParser:
                 validator.validate(rec)
             except jsonschema.ValidationError as exc:
                 rejected_records.append({
-                    "source_offset": line_no,
-                    "source_sequence": rec.get("sequence") if isinstance(rec, dict) else None,
-                    "source_observation_id": rec.get("observation_id") if isinstance(rec, dict) else None,
+                    "source_offset": parsed_rec.byte_start,
+                    "source_sequence": rec.get("sequence"),
+                    "source_observation_id": rec.get("observation_id"),
                     "error_code": "SCHEMA_VALIDATION_ERROR",
                     "error_message": f"Schema validation failed: {exc.message}",
                     "mapping_id": mapping_id,
                     "mapping_version": mapping_version,
-                    "run_id": rec.get("run_id") if isinstance(rec, dict) else None,
+                    "run_id": rec.get("run_id"),
                     "raw_record_checksum": raw_sha256,
                     "rejected_at": now_iso,
                 })
                 continue
 
-            direction = str(rec.get("direction", ""))
-            # Filter by single source_direction
+            # Strict direct field access (zero heuristic fallbacks)
+            direction = rec["direction"]
             if direction != source_direction:
-                # Silently skip different direction or record as unselected direction
                 continue
 
-            observation_id = str(rec.get("observation_id", f"obs-{line_no}"))
-            run_id = str(rec.get("run_id", ""))
-            branch_kind = str(rec.get("branch_kind", "canonical"))
-            asset_id = str(rec.get("asset_id", ""))
-            raw_ts = rec.get("observed_at_source") or rec.get("timestamp")
-            measurement_key = str(rec.get("measurement_key", rec.get("channel", "")))
-            raw_val = rec.get("value")
-            status_code = rec.get("status_code")
-            quality = rec.get("quality")
-            sequence = rec.get("sequence", line_no)
+            observation_id = rec["observation_id"]
+            run_id = rec["run_id"]
+            branch_kind = rec["branch_kind"]
+            asset_id = rec["asset_id"]
+            raw_ts = rec["observed_at_source"]
+            measurement_key = rec["measurement_key"]
+            sequence = rec["sequence"]
+            raw_val = rec["value"]
+            status_code = rec.get("status_code", "Good")
+            quality = rec.get("quality", "Good")
 
             # Check dedup ledger if available
             if dedup_checker and source_identity:
@@ -216,7 +237,7 @@ class SensorRecordParser:
             fm = mapping_lookup.get(measurement_key)
             if not fm:
                 rejected_records.append({
-                    "source_offset": line_no,
+                    "source_offset": parsed_rec.byte_start,
                     "source_sequence": sequence,
                     "source_observation_id": observation_id,
                     "error_code": "UNMAPPED_MEASUREMENT_KEY",
@@ -229,10 +250,10 @@ class SensorRecordParser:
                 })
                 continue
 
-            # Quality policy check: Bad, Uncertain, or null value cannot be consumed as numeric observation
+            # Quality policy check: null value or Bad/Uncertain quality isolated to rejected
             if raw_val is None or quality in ("Bad", "Uncertain") or status_code in ("Bad", "Uncertain"):
                 rejected_records.append({
-                    "source_offset": line_no,
+                    "source_offset": parsed_rec.byte_start,
                     "source_sequence": sequence,
                     "source_observation_id": observation_id,
                     "error_code": "QUALITY_POLICY_NOT_IMPLEMENTED",
@@ -257,7 +278,7 @@ class SensorRecordParser:
                 )
             except Exception as exc:
                 rejected_records.append({
-                    "source_offset": line_no,
+                    "source_offset": parsed_rec.byte_start,
                     "source_sequence": sequence,
                     "source_observation_id": observation_id,
                     "error_code": "TRANSFORM_ERROR",
@@ -274,7 +295,7 @@ class SensorRecordParser:
                 norm_ts = normalize_iso_utc(raw_ts)
             except Exception as exc:
                 rejected_records.append({
-                    "source_offset": line_no,
+                    "source_offset": parsed_rec.byte_start,
                     "source_sequence": sequence,
                     "source_observation_id": observation_id,
                     "error_code": "TIMESTAMP_NORMALIZATION_ERROR",
@@ -307,7 +328,6 @@ class SensorRecordParser:
             if target_field in grp["measurements"]:
                 prev_val = grp["measurements"][target_field]
                 if prev_val != transformed_val:
-                    # Conflicting values
                     grp["conflicts"].append({
                         "target_field": target_field,
                         "existing_value": prev_val,
@@ -316,7 +336,7 @@ class SensorRecordParser:
                         "required": fm.get("required", False),
                     })
                     rejected_records.append({
-                        "source_offset": line_no,
+                        "source_offset": parsed_rec.byte_start,
                         "source_sequence": sequence,
                         "source_observation_id": observation_id,
                         "error_code": "MEASUREMENT_CONFLICT",
@@ -329,7 +349,6 @@ class SensorRecordParser:
                     })
                     continue
                 else:
-                    # Exact duplicate -> idempotent reuse
                     continue
 
             grp["measurements"][target_field] = transformed_val
@@ -350,6 +369,8 @@ class SensorRecordParser:
             grp["measurement_provenances"][target_field] = prov_item
             processed_source_records.append({
                 "observation_id": observation_id,
+                "byte_start": parsed_rec.byte_start,
+                "byte_end": parsed_rec.byte_end,
                 "line_number": line_no,
                 "asset_id": asset_id,
                 "observed_at": norm_ts,
@@ -363,7 +384,6 @@ class SensorRecordParser:
         for group_key in group_ordering:
             grp = grouping[group_key]
 
-            # If there are conflicts in required fields, reject the entire observation row
             has_required_conflict = any(c.get("required", False) for c in grp["conflicts"])
             if has_required_conflict:
                 rejected_records.append({
@@ -380,7 +400,6 @@ class SensorRecordParser:
                 })
                 continue
 
-            # Check missing required fields
             missing_reqs = [rf for rf in required_target_fields if rf not in grp["measurements"]]
             if missing_reqs:
                 rejected_records.append({
@@ -397,12 +416,10 @@ class SensorRecordParser:
                 })
                 continue
 
-            # Build flat wide-format row
             obs_row: dict[str, Any] = {
                 "asset_id": grp["asset_id"],
                 "observed_at": grp["observed_at"],
             }
-            # Add sensor columns in deterministic mapping declaration order
             for col in target_column_order:
                 if col in grp["measurements"]:
                     obs_row[col] = grp["measurements"][col]
@@ -414,7 +431,6 @@ class SensorRecordParser:
             asset_ids_set.add(grp["asset_id"])
             timestamps.append(grp["observed_at"])
 
-            # Append provenances for valid measurements
             for target_field, prov_entry in grp["measurement_provenances"].items():
                 if target_field in obs_row:
                     provenance_records.append(prov_entry)
@@ -423,13 +439,14 @@ class SensorRecordParser:
         max_time = max(timestamps) if timestamps else None
 
         stats = {
-            "total_lines": len(raw_lines),
+            "total_records": total_records,
             "parsed_records": total_records,
             "rejected_records": len(rejected_records),
             "observations_count": len(valid_observations),
             "asset_ids": sorted(asset_ids_set),
             "min_time": min_time,
             "max_time": max_time,
+            "end_byte_offset": last_byte_offset,
         }
 
         return valid_observations, provenance_records, rejected_records, processed_source_records, stats

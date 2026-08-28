@@ -19,12 +19,14 @@ from systems.generator.app.extraction.extraction_schema import (
 )
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionAlreadyRunningError,
+    ExtractionLockLostError,
     ExtractionDatasetConflictError,
     ExtractionIdempotencyConflictError,
     ExtractionSourceIncompleteError,
     ExtractionSourceIntegrityError,
     ExtractionIntegrityError,
     ExtractionSchemaFingerprintMismatchError,
+    ExtractionError,
 )
 from systems.generator.app.extraction.mapping_validator import (
     MappingValidator,
@@ -36,7 +38,24 @@ from systems.generator.app.extraction.parsers.sensor_record_parser import Sensor
 from systems.generator.app.extraction.dedup_repository import DedupRepository
 from systems.generator.app.extraction.checkpoint_repository import CheckpointRepository
 from systems.generator.app.extraction.extraction_repository import ExtractionRepository
-from systems.generator.app.extraction.extraction_service import ExtractionService
+from systems.generator.app.extraction.extraction_service import (
+    ExtractionService,
+    ExtractionFailureInjector,
+)
+
+
+class MockFailureInjector(ExtractionFailureInjector):
+    """Custom failure injector that triggers an exception at a specific point."""
+
+    def __init__(self, fail_point: str, exception: Exception) -> None:
+        self.fail_point = fail_point
+        self.exception = exception
+        self.hit_count = 0
+
+    def hit(self, point: str) -> None:
+        if point == self.fail_point:
+            self.hit_count += 1
+            raise self.exception
 
 
 @pytest.fixture
@@ -87,7 +106,18 @@ def recovery_env(tmp_path):
     }
 
 
-def make_proto_file(file_path: Path, num_timestamps: int = 3, asset_id: str = "CNC-S01-L01-01", direction: str = "received") -> tuple[Path, str]:
+def get_current_protocol_schema_fingerprint() -> str:
+    schema_path = PROJECT_ROOT / "contracts" / "schemas" / "generator-protocol-record.schema.json"
+    schema_data = json.loads(schema_path.read_text(encoding="utf-8"))
+    return compute_source_schema_fingerprint(schema_data, algorithm_version="v1")
+
+
+def make_proto_file(
+    file_path: Path,
+    num_timestamps: int = 3,
+    asset_id: str = "CNC-S01-L01-01",
+    direction: str = "received",
+) -> tuple[Path, str, int]:
     lines = []
     seq = 1
     for t in range(num_timestamps):
@@ -99,7 +129,7 @@ def make_proto_file(file_path: Path, num_timestamps: int = 3, asset_id: str = "C
             "source_kind": "simulation",
             "record_kind": "observation",
             "quality": "Good",
-            "run_id": "run-rec-001",
+            "run_id": "run-gen-001",
             "sequence": seq,
             "asset_id": asset_id,
             "measurement_key": "voltage",
@@ -125,7 +155,7 @@ def make_proto_file(file_path: Path, num_timestamps: int = 3, asset_id: str = "C
             "source_kind": "simulation",
             "record_kind": "observation",
             "quality": "Good",
-            "run_id": "run-rec-001",
+            "run_id": "run-gen-001",
             "sequence": seq,
             "asset_id": asset_id,
             "measurement_key": "rotation",
@@ -151,20 +181,59 @@ def make_proto_file(file_path: Path, num_timestamps: int = 3, asset_id: str = "C
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(content_bytes)
     sha256 = compute_file_sha256(file_path)
-    return file_path, sha256
+    return file_path, sha256, len(content_bytes)
 
 
-def make_mapping_file(file_path: Path, mapping_id: str = "rec-sensor-mapping", mapping_version: str = "v1.0") -> tuple[dict[str, Any], Path, str]:
-    mapping_dict = {
-        "$schema": "https://ontology-dashboard.local/schemas/generator-static-mapping-table.schema.json",
-        "mapping_id": mapping_id,
-        "mapping_version": mapping_version,
-        "status": "approved",
+def make_run_manifest(
+    manifest_path: Path,
+    source_file_path: Path,
+    source_sha256: str,
+    source_size: int,
+    status: str = "completed",
+    run_id: str = "run-gen-001",
+) -> tuple[Path, str]:
+    manifest_payload = {
+        "manifest_version": "generator-protocol-run-v1",
+        "run_id": run_id,
+        "status": status,
         "protocol_version": "v2",
         "source_schema_version": "sensor-record-v2",
-        "source_schema_fingerprint": "67b7951388d5b463505f7ff0380d5174272db14000e8c91d72374a6edb422810",
+        "finalized_at": "2026-08-27T01:05:00Z",
+        "total_records": 6,
+        "files": [
+            {
+                "role": "protocol_log",
+                "path": str(source_file_path).replace("\\", "/"),
+                "media_type": "application/x-ndjson",
+                "sha256": source_sha256,
+                "size_bytes": source_size,
+                "record_count": 6,
+                "last_sequence": 6,
+            }
+        ],
+    }
+    content = json.dumps(manifest_payload, indent=2, ensure_ascii=False) + "\n"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(content, encoding="utf-8")
+    sha256 = compute_file_sha256(manifest_path)
+    return manifest_path, sha256
+
+
+def make_mapping(
+    file_path: Path,
+    status: str = "approved",
+) -> tuple[dict[str, Any], Path, str]:
+    fp = get_current_protocol_schema_fingerprint()
+    mapping_dict = {
+        "$schema": "https://ontology-dashboard.local/schemas/generator-static-mapping-table.schema.json",
+        "mapping_id": "test-sensor-mapping",
+        "mapping_version": "v1.0",
+        "status": status,
+        "protocol_version": "v2",
+        "source_schema_version": "sensor-record-v2",
+        "source_schema_fingerprint": fp,
         "fingerprint_algorithm_version": "v1",
-        "description": "Recovery test mapping table",
+        "description": "Test static mapping table",
         "field_mappings": [
             {
                 "source_field": "voltage",
@@ -188,548 +257,351 @@ def make_mapping_file(file_path: Path, mapping_id: str = "rec-sensor-mapping", m
             },
         ],
     }
-    sha256 = compute_mapping_canonical_sha256(mapping_dict)
-    mapping_dict["mapping_sha256"] = sha256
+    canonical_sha = compute_mapping_canonical_sha256(mapping_dict)
+    mapping_dict["mapping_sha256"] = canonical_sha
+
+    content = json.dumps(mapping_dict, indent=2, ensure_ascii=False) + "\n"
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(json.dumps(mapping_dict, indent=2, ensure_ascii=False).encode("utf-8"))
-    return mapping_dict, file_path, sha256
+    file_path.write_text(content, encoding="utf-8")
+    return mapping_dict, file_path, canonical_sha
 
 
-# =====================================================================
-# 1-5. Batch State Transition & Crash Recovery Scenarios
-# =====================================================================
+# --- Fault Injection & Recovery Test Cases ---
 
-def test_1_crash_after_dedup_pending_before_staging(recovery_env):
-    """1. Dedup pending 기록 후 staging 작성 전 장애 발생 시 재실행에서 정상 복구된다."""
+def test_failure_after_idempotency_reserved_and_recovery(recovery_env):
     env = recovery_env
-    dedup = env["dedup_repo"]
-    service = env["service"]
-
-    src_file, src_sha = make_proto_file(env["data_dir"] / "crash1_source.jsonl", num_timestamps=2)
-    _, _, map_sha = make_mapping_file(env["mappings_dir"] / "map1.json")
-
-    # Manually create pending batch to simulate crash before staging
-    dedup.create_batch(
-        batch_id="batch_crash_01",
-        run_id="run_crash_01",
-        source_identity=f"{src_file}:{src_sha}",
-        source_start_offset=1,
-        source_end_offset=0,
-        record_count=0,
-        dataset_id="ds_crash_01",
-        dataset_version="v1",
-    )
-    batch_record = dedup.get_batch("batch_crash_01", "ds_crash_01", "v1")
-    assert batch_record["status"] == "pending"
-
-    # Execution completes and recovers
-    req = ExtractionRequest(
-        request_id="req-c1",
-        idempotency_key="idem-c1",
-        run_id="run_crash_01",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
-        source_schema_version="sensor-record-v2",
-        protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
-        mapping_version="v1.0",
-        mapping_sha256=map_sha,
-        dataset_id="ds_crash_01",
-        dataset_version="v1",
-    )
-    resp = service.execute_extraction(req)
-    assert resp.status == "succeeded"
-    assert resp.result.observations_count == 2
-
-
-def test_2_crash_after_staging_before_dedup_commit(recovery_env):
-    """2. Staging 작성 후 dedup commit 전 장애 발생 시 재실행에서 checksum 검증 후 정상 진행된다."""
-    env = recovery_env
-    dedup = env["dedup_repo"]
-    service = env["service"]
-
-    src_file, src_sha = make_proto_file(env["data_dir"] / "crash2_source.jsonl", num_timestamps=3)
-    _, _, map_sha = make_mapping_file(env["mappings_dir"] / "map2.json")
-
-    dedup.create_batch(
-        batch_id="batch_crash_02",
-        run_id="run_crash_02",
-        source_identity=f"{src_file}:{src_sha}",
-        source_start_offset=1,
-        source_end_offset=6,
-        record_count=6,
-        dataset_id="ds_crash_02",
-        dataset_version="v1",
-    )
-    dedup.mark_batch_staged("batch_crash_02", "some_staging_sha", "ds_crash_02", "v1")
-    batch_record = dedup.get_batch("batch_crash_02", "ds_crash_02", "v1")
-    assert batch_record["status"] == "staged"
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = make_proto_file(source_p)
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = make_run_manifest(manifest_p, source_p, actual_sha, size_b)
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = make_mapping(map_p)
 
     req = ExtractionRequest(
-        request_id="req-c2",
-        idempotency_key="idem-c2",
-        run_id="run_crash_02",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+        request_id="req-fi-01",
+        idempotency_key="idem-fi-01",
+        run_id="run-fi-01",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
+        mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="ds_crash_02",
+        dataset_id="fi-dataset-01",
         dataset_version="v1",
     )
-    resp = service.execute_extraction(req)
-    assert resp.status == "succeeded"
-    assert resp.result.observations_count == 3
 
+    # 1. Inject failure after idempotency reservation
+    injector = MockFailureInjector("after_idempotency_reserved", RuntimeError("Crash after idempotency reserved"))
+    env["service"].failure_injector = injector
 
-def test_3_crash_after_dedup_commit_before_checkpoint(recovery_env):
-    """3. Dedup commit 후 checkpoint 갱신 전 장애 발생 시 재실행에서 마지막 committed batch부터 정상 재개된다."""
-    env = recovery_env
-    dedup = env["dedup_repo"]
-    service = env["service"]
+    with pytest.raises(RuntimeError, match="Crash after idempotency reserved"):
+        env["service"].execute_extraction(req)
 
-    src_file, src_sha = make_proto_file(env["data_dir"] / "crash3_source.jsonl", num_timestamps=2)
-    _, _, map_sha = make_mapping_file(env["mappings_dir"] / "map3.json")
+    # Verify failed run state recorded
+    state = env["checkpoint_repo"].get_run_state(req.run_id)
+    assert state["status"] == "failed"
 
-    dedup.record_processed_batch(
-        f"{src_file}:{src_sha}",
-        ["obs-0001", "obs-0002"],
-        "ds_crash_03",
-        "v1",
-    )
-
-    req = ExtractionRequest(
-        request_id="req-c3",
-        idempotency_key="idem-c3",
-        run_id="run_crash_03",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
-        source_schema_version="sensor-record-v2",
-        protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
-        mapping_version="v1.0",
-        mapping_sha256=map_sha,
-        dataset_id="ds_crash_03",
-        dataset_version="v1",
-    )
-    resp = service.execute_extraction(req)
+    # 2. Retry without failure injector
+    env["service"].failure_injector = None
+    resp = env["service"].execute_extraction(req)
     assert resp.status == "succeeded"
 
 
-def test_4_crash_after_checkpoint_before_publish(recovery_env):
-    """4. Checkpoint 갱신 후 최종 publish 전 장애 발생 시 staging을 재구성하여 원자적으로 발행된다."""
+def test_failure_after_lock_acquired_releases_lock(recovery_env):
     env = recovery_env
-    chk_repo = env["checkpoint_repo"]
-    service = env["service"]
-
-    src_file, src_sha = make_proto_file(env["data_dir"] / "crash4_source.jsonl", num_timestamps=3)
-    _, _, map_sha = make_mapping_file(env["mappings_dir"] / "map4.json")
-
-    chk_repo.save_checkpoint(
-        run_id="run_crash_04",
-        source_identity=f"{src_file}:{src_sha}",
-        source_offset=6,
-        processed_count=6,
-    )
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = make_proto_file(source_p)
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = make_run_manifest(manifest_p, source_p, actual_sha, size_b)
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = make_mapping(map_p)
 
     req = ExtractionRequest(
-        request_id="req-c4",
-        idempotency_key="idem-c4",
-        run_id="run_crash_04",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+        request_id="req-fi-02",
+        idempotency_key="idem-fi-02",
+        run_id="run-fi-02",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
+        mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="ds_crash_04",
+        dataset_id="fi-dataset-02",
         dataset_version="v1",
     )
-    resp = service.execute_extraction(req)
+
+    # Inject failure right after lock acquired
+    injector = MockFailureInjector("after_lock_acquired", RuntimeError("Crash after lock acquired"))
+    env["service"].failure_injector = injector
+
+    with pytest.raises(RuntimeError, match="Crash after lock acquired"):
+        env["service"].execute_extraction(req)
+
+    # Verify lock was released in finally block
+    conn = env["dedup_repo"]._get_connection(req.dataset_id, req.dataset_version)
+    cur = conn.execute("SELECT * FROM single_writer_locks WHERE dataset_key = ?", (f"{req.dataset_id}:{req.dataset_version}",))
+    assert cur.fetchone() is None
+
+    # Next run can acquire lock and succeed
+    env["service"].failure_injector = None
+    resp = env["service"].execute_extraction(req)
     assert resp.status == "succeeded"
-    assert resp.result.observations_count == 3
 
 
-def test_5_crash_after_publish_before_idempotency_saved(recovery_env):
-    """5. 최종 Dataset rename 직후 응답 저장 전 장애 발생 시 재실행 시 기존 Dataset 무결성을 검증하고 정상 결과를 반환한다."""
+def test_failure_after_batch_pending_and_recovery(recovery_env):
     env = recovery_env
-    service = env["service"]
-
-    src_file, src_sha = make_proto_file(env["data_dir"] / "crash5_source.jsonl", num_timestamps=2)
-    _, _, map_sha = make_mapping_file(env["mappings_dir"] / "map5.json")
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = make_proto_file(source_p)
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = make_run_manifest(manifest_p, source_p, actual_sha, size_b)
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = make_mapping(map_p)
 
     req = ExtractionRequest(
-        request_id="req-c5",
-        idempotency_key="idem-c5",
-        run_id="run_crash_05",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+        request_id="req-fi-03",
+        idempotency_key="idem-fi-03",
+        run_id="run-fi-03",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
+        mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="ds_crash_05",
+        dataset_id="fi-dataset-03",
         dataset_version="v1",
     )
-    resp1 = service.execute_extraction(req)
 
-    # Simulate missing idempotency record (e.g. crash before saving ledger)
-    conn = env["dedup_repo"]._get_idempotency_connection()
-    with conn:
-        conn.execute("DELETE FROM idempotency_ledger WHERE idempotency_key = 'idem-c5'")
+    injector = MockFailureInjector("after_batch_pending", RuntimeError("Crash after batch pending"))
+    env["service"].failure_injector = injector
 
-    # Second call with same request should detect identical dataset and succeed without crash
-    resp2 = service.execute_extraction(req)
-    assert resp2.status == "succeeded"
-    assert resp2.result.manifest_sha256 == resp1.result.manifest_sha256
+    with pytest.raises(RuntimeError, match="Crash after batch pending"):
+        env["service"].execute_extraction(req)
+
+    # Verify batch was saved as pending
+    batches = env["dedup_repo"].list_batches(req.dataset_id, req.dataset_version, run_id=req.run_id)
+    assert len(batches) == 1
+    assert batches[0]["status"] == "pending"
+
+    # Retry and complete
+    env["service"].failure_injector = None
+    resp = env["service"].execute_extraction(req)
+    assert resp.status == "succeeded"
+
+    batches_after = env["dedup_repo"].list_batches(req.dataset_id, req.dataset_version, run_id=req.run_id)
+    assert batches_after[0]["status"] == "committed"
 
 
-# =====================================================================
-# 6-8. Lock Lease & Idempotency Edge Scenarios
-# =====================================================================
-
-def test_6_lock_holder_crashed_and_stale_lease_recovery(recovery_env):
-    """6. Lock 소유 프로세스 비정상 종료 후 lease 만료 시 새로운 실행이 lease를 정상 탈취 및 복구한다."""
+def test_failure_after_fragment_written_and_recovery(recovery_env):
     env = recovery_env
-    dedup = env["dedup_repo"]
-
-    # Acquire lock with immediate past expiry
-    dedup.acquire_lock("ds_lease_01", "v1", "crashed_run_id", timeout_seconds=-10.0)
-
-    # Next acquire should succeed by overtaking the stale lock
-    dedup.acquire_lock("ds_lease_01", "v1", "new_active_run_id", timeout_seconds=60.0)
-    dedup.release_lock("ds_lease_01", "v1", "new_active_run_id")
-
-
-def test_7_active_lease_blocks_other_runs(recovery_env):
-    """7. Active lease가 유효한 동안 다른 실행은 409 EXTRACTION_ALREADY_RUNNING으로 즉시 실패한다."""
-    env = recovery_env
-    dedup = env["dedup_repo"]
-
-    dedup.acquire_lock("ds_lease_02", "v1", "holder_run", timeout_seconds=300.0)
-    with pytest.raises(ExtractionAlreadyRunningError) as exc_info:
-        dedup.acquire_lock("ds_lease_02", "v1", "intruder_run", timeout_seconds=300.0)
-    assert exc_info.value.code == "EXTRACTION_ALREADY_RUNNING"
-    assert exc_info.value.status_code == 409
-    dedup.release_lock("ds_lease_02", "v1", "holder_run")
-
-
-def test_8_same_idempotency_key_different_payload_conflict(recovery_env):
-    """8. 동일 idempotency key에 다른 request payload 요청 시 409 EXTRACTION_IDEMPOTENCY_CONFLICT를 반환한다."""
-    env = recovery_env
-    service = env["service"]
-
-    src_file, src_sha = make_proto_file(env["data_dir"] / "idem_src.jsonl", num_timestamps=2)
-    _, _, map_sha = make_mapping_file(env["mappings_dir"] / "idem_map.json")
-
-    req1 = ExtractionRequest(
-        request_id="req-idem-1",
-        idempotency_key="shared_idem_key_01",
-        run_id="run-idem-1",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
-        source_schema_version="sensor-record-v2",
-        protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
-        mapping_version="v1.0",
-        mapping_sha256=map_sha,
-        dataset_id="ds_idem_01",
-        dataset_version="v1",
-    )
-    service.execute_extraction(req1)
-
-    req2 = req1.model_copy(update={"dataset_id": "different_ds"})
-    with pytest.raises(ExtractionIdempotencyConflictError) as exc_info:
-        service.execute_extraction(req2)
-    assert exc_info.value.code == "EXTRACTION_IDEMPOTENCY_CONFLICT"
-    assert exc_info.value.status_code == 409
-
-
-# =====================================================================
-# 9-12. Source Finalization & Checksum Tampering Tests
-# =====================================================================
-
-def test_9_source_non_finalized_torn_last_line_retries(recovery_env):
-    """9. Source non-finalized 상태에서 마지막 행 불완전 시 EXTRACTION_SOURCE_INCOMPLETE (409)를 반환한다."""
-    env = recovery_env
-    src_file, _ = make_proto_file(env["data_dir"] / "torn_non_final.jsonl", num_timestamps=2)
-    with open(src_file, "a", encoding="utf-8") as f:
-        f.write('{"observation_id": "incomplete_tail"\n')
-
-    mapping_dict, _, _ = make_mapping_file(env["mappings_dir"] / "map.json")
-    parser = env["parser"]
-
-    with pytest.raises(ExtractionSourceIncompleteError) as exc_info:
-        parser.parse_file(
-            source_path=src_file,
-            mapping_data=mapping_dict,
-            extraction_run_id="run-torn-01",
-            is_source_finalized=False,
-        )
-    assert exc_info.value.code == "EXTRACTION_SOURCE_INCOMPLETE"
-    assert exc_info.value.status_code == 409
-
-
-def test_10_source_finalized_broken_last_line_integrity_error(recovery_env):
-    """10. Source finalized 상태인데 마지막 행이 깨져 있으면 EXTRACTION_SOURCE_INTEGRITY_ERROR를 발생시킨다."""
-    env = recovery_env
-    src_file, _ = make_proto_file(env["data_dir"] / "broken_final.jsonl", num_timestamps=2)
-    with open(src_file, "a", encoding="utf-8") as f:
-        f.write('{"observation_id": "incomplete_tail"\n')
-
-    mapping_dict, _, _ = make_mapping_file(env["mappings_dir"] / "map.json")
-    parser = env["parser"]
-
-    with pytest.raises(ExtractionSourceIntegrityError) as exc_info:
-        parser.parse_file(
-            source_path=src_file,
-            mapping_data=mapping_dict,
-            extraction_run_id="run-broken-01",
-            is_source_finalized=True,
-        )
-    assert exc_info.value.code == "EXTRACTION_SOURCE_INTEGRITY_ERROR"
-
-
-def test_11_tampered_provenance_checksum_detected(recovery_env):
-    """11. Provenance 파일 변조 시 dataset 확인 과정에서 무결성 불일치가 탐지된다."""
-    env = recovery_env
-    repo = env["extraction_repo"]
-
-    ds_dir = env["obs_dir"] / "ds_tamper_prov" / "v1"
-    ds_dir.mkdir(parents=True, exist_ok=True)
-    obs_file = ds_dir / "observations.jsonl"
-    obs_file.write_text('{"asset_id": "A1", "observed_at": "2026-08-27T01:00:00Z", "voltage": 220.0}\n', encoding="utf-8")
-    prov_file = ds_dir / "provenance.jsonl"
-    prov_file.write_text('{"asset_id": "A1"}\n', encoding="utf-8")
-    manifest_file = ds_dir / "dataset_manifest.json"
-    manifest_file.write_text(json.dumps({
-        "manifest_version": "generator-dataset-input-v1",
-        "dataset_type": "observation",
-        "dataset_id": "ds_tamper_prov",
-        "dataset_version": "v1",
-        "schema_version": "canonical-observation-v1",
-        "created_at": "2026-08-27T01:00:00Z",
-        "files": [{"role": "observations", "path": "observations.jsonl", "media_type": "application/x-ndjson", "sha256": compute_file_sha256(obs_file), "size_bytes": obs_file.stat().st_size}],
-    }), encoding="utf-8")
-
-    with pytest.raises(ExtractionDatasetConflictError):
-        repo.check_existing_dataset(
-            "ds_tamper_prov",
-            "v1",
-            expected_obs_sha256=compute_file_sha256(obs_file),
-            expected_prov_sha256="0" * 64,  # Mismatched expected prov
-        )
-
-
-def test_12_tampered_rejected_checksum_detected(recovery_env):
-    """12. Rejected 파일 변조 또는 삭제 시 불완전 디렉터리 충돌로 감지된다."""
-    env = recovery_env
-    repo = env["extraction_repo"]
-
-    ds_dir = env["obs_dir"] / "ds_tamper_rej" / "v1"
-    ds_dir.mkdir(parents=True, exist_ok=True)
-    # Missing observations.jsonl -> incomplete
-    (ds_dir / "dataset_manifest.json").write_text("{}", encoding="utf-8")
-
-    with pytest.raises(ExtractionDatasetConflictError):
-        repo.check_existing_dataset("ds_tamper_rej", "v1")
-
-
-# =====================================================================
-# 13-16. Determinism, Immutability, E2E & Fingerprint Tests
-# =====================================================================
-
-def test_13_deterministic_reexecution_identical_manifest_and_data(recovery_env):
-    """13. 동일 입력·동일 Mapping의 결정론적 재실행 결과 sha256이 100% 일치한다."""
-    env = recovery_env
-    service = env["service"]
-
-    src_file, src_sha = make_proto_file(env["data_dir"] / "det_source.jsonl", num_timestamps=4)
-    _, _, map_sha = make_mapping_file(env["mappings_dir"] / "det_map.json")
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = make_proto_file(source_p)
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = make_run_manifest(manifest_p, source_p, actual_sha, size_b)
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = make_mapping(map_p)
 
     req = ExtractionRequest(
-        request_id="req-det-1",
-        idempotency_key="idem-det-1",
-        run_id="run-det-1",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+        request_id="req-fi-04",
+        idempotency_key="idem-fi-04",
+        run_id="run-fi-04",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
+        mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="ds_det_01",
+        dataset_id="fi-dataset-04",
         dataset_version="v1",
     )
-    resp1 = service.execute_extraction(req)
-    resp2 = service.execute_extraction(req)
 
-    assert resp1.result.observations_sha256 == resp2.result.observations_sha256
-    assert resp1.result.manifest_sha256 == resp2.result.manifest_sha256
-    assert resp1.result.provenance_sha256 == resp2.result.provenance_sha256
+    injector = MockFailureInjector("after_fragment_written", RuntimeError("Crash after fragment written"))
+    env["service"].failure_injector = injector
+
+    with pytest.raises(RuntimeError, match="Crash after fragment written"):
+        env["service"].execute_extraction(req)
+
+    # Retry and complete
+    env["service"].failure_injector = None
+    resp = env["service"].execute_extraction(req)
+    assert resp.status == "succeeded"
 
 
-def test_14_different_mapping_version_blocks_append_to_existing_dataset(recovery_env):
-    """14. 동일 입력에 다른 Mapping version으로 기존 완료된 Dataset version에 append/overwrite 시도 시 409로 차단된다."""
+def test_failure_after_batch_staged_and_recovery(recovery_env):
     env = recovery_env
-    service = env["service"]
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = make_proto_file(source_p)
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = make_run_manifest(manifest_p, source_p, actual_sha, size_b)
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = make_mapping(map_p)
 
-    src_file, src_sha = make_proto_file(env["data_dir"] / "map_ver_src.jsonl", num_timestamps=2)
-    _, _, map_sha1 = make_mapping_file(env["mappings_dir"] / "map_v1.json", mapping_version="v1.0")
-    _, _, map_sha2 = make_mapping_file(env["mappings_dir"] / "map_v2.json", mapping_version="v2.0")
-
-    req1 = ExtractionRequest(
-        request_id="req-mv-1",
-        idempotency_key="idem-mv-1",
-        run_id="run-mv-1",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+    req = ExtractionRequest(
+        request_id="req-fi-05",
+        idempotency_key="idem-fi-05",
+        run_id="run-fi-05",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
+        mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
-        mapping_sha256=map_sha1,
-        dataset_id="ds_immutable_version",
+        mapping_sha256=map_sha,
+        dataset_id="fi-dataset-05",
         dataset_version="v1",
     )
-    service.execute_extraction(req1)
 
-    # Attempt to write to same dataset_version with different mapping
-    req2 = ExtractionRequest(
-        request_id="req-mv-2",
-        idempotency_key="idem-mv-2",
-        run_id="run-mv-2",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+    injector = MockFailureInjector("after_batch_staged", RuntimeError("Crash after batch staged"))
+    env["service"].failure_injector = injector
+
+    with pytest.raises(RuntimeError, match="Crash after batch staged"):
+        env["service"].execute_extraction(req)
+
+    # Retry and complete
+    env["service"].failure_injector = None
+    resp = env["service"].execute_extraction(req)
+    assert resp.status == "succeeded"
+
+
+def test_failure_after_checkpoint_written_and_recovery(recovery_env):
+    env = recovery_env
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = make_proto_file(source_p)
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = make_run_manifest(manifest_p, source_p, actual_sha, size_b)
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = make_mapping(map_p)
+
+    req = ExtractionRequest(
+        request_id="req-fi-06",
+        idempotency_key="idem-fi-06",
+        run_id="run-fi-06",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
-        mapping_id="rec-sensor-mapping",
-        mapping_version="v2.0",
-        mapping_sha256=map_sha2,
-        dataset_id="ds_immutable_version",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="fi-dataset-06",
         dataset_version="v1",
     )
 
-    with pytest.raises(ExtractionDatasetConflictError) as exc_info:
-        service.execute_extraction(req2)
-    assert exc_info.value.code == "EXTRACTION_DATASET_CONFLICT"
-    assert exc_info.value.status_code == 409
+    injector = MockFailureInjector("after_checkpoint_written", RuntimeError("Crash after checkpoint written"))
+    env["service"].failure_injector = injector
+
+    with pytest.raises(RuntimeError, match="Crash after checkpoint written"):
+        env["service"].execute_extraction(req)
+
+    chk = env["checkpoint_repo"].get_checkpoint(req.run_id)
+    assert chk is not None
+
+    # Retry and complete
+    env["service"].failure_injector = None
+    resp = env["service"].execute_extraction(req)
+    assert resp.status == "succeeded"
 
 
-def test_15_e2e_extraction_to_preprocessing_to_feature_bundle():
-    """15. Extraction 발행 산출물을 Preprocessing이 읽고 Plan 수립 및 실행까지 완결되는 E2E 검증."""
-    from fastapi.testclient import TestClient
-    from systems.generator.app.main import app
-    import uuid
+def test_failure_after_dataset_published_and_recovery(recovery_env):
+    env = recovery_env
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = make_proto_file(source_p)
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = make_run_manifest(manifest_p, source_p, actual_sha, size_b)
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = make_mapping(map_p)
 
-    client = TestClient(app)
-    src_file = PATHS.data_dir / "e2e_rec_source.jsonl"
-    src_file, src_sha = make_proto_file(src_file, num_timestamps=5, asset_id="CNC-E01")
+    req = ExtractionRequest(
+        request_id="req-fi-07",
+        idempotency_key="idem-fi-07",
+        run_id="run-fi-07",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="fi-dataset-07",
+        dataset_version="v1",
+    )
 
-    # Put mapping in ontology/mappings/
-    map_dir = PATHS.ontology / "mappings" / "e2e-rec-mapping"
-    map_dir.mkdir(parents=True, exist_ok=True)
-    map_file = map_dir / "v1.0.json"
-    mapping_dict, _, map_sha = make_mapping_file(map_file, mapping_id="e2e-rec-mapping", mapping_version="v1.0")
+    # Fail right after directory publish
+    injector = MockFailureInjector("after_dataset_published", RuntimeError("Crash after publish"))
+    env["service"].failure_injector = injector
 
-    uid = uuid.uuid4().hex[:8]
-    dataset_id = f"ds_e2e_rec_{uid}"
+    with pytest.raises(RuntimeError, match="Crash after publish"):
+        env["service"].execute_extraction(req)
+
+    # Target directory already exists and is valid
+    target_dir = env["obs_dir"] / "fi-dataset-07" / "v1"
+    assert (target_dir / "observations.jsonl").is_file()
+
+    # Retry with same idempotency key should safely validate disk and return success
+    env["service"].failure_injector = None
+    resp = env["service"].execute_extraction(req)
+    assert resp.status == "succeeded"
+
+
+def test_stale_lock_override(recovery_env):
+    env = recovery_env
+    dataset_id = "lock-override-ds"
     dataset_version = "v1"
 
-    # Clean up target obs if any
-    target_obs = PATHS.data_dir / "observations" / dataset_id / dataset_version
-    if target_obs.exists():
-        shutil.rmtree(target_obs, ignore_errors=True)
+    # 1. Acquire lock with 0.1s expiry
+    env["dedup_repo"].acquire_lock(dataset_id, dataset_version, run_id="stale-run", timeout_seconds=0.1)
+    time.sleep(0.2)  # wait for lock to become stale
 
-    # 1. POST /extraction
-    ext_resp = client.post("/extraction", json={
-        "request_id": f"req-rec-{uid}",
-        "idempotency_key": f"idem-rec-{uid}",
-        "run_id": f"run-rec-{uid}",
-        "source_uri": "data/e2e_rec_source.jsonl",
-        "source_sha256": src_sha,
-        "source_direction": "received",
-        "source_schema_version": "sensor-record-v2",
-        "protocol_version": "v2",
-        "mapping_id": "e2e-rec-mapping",
-        "mapping_version": "v1.0",
-        "mapping_sha256": map_sha,
-        "dataset_id": dataset_id,
-        "dataset_version": dataset_version,
-    })
-    assert ext_resp.status_code == 200, ext_resp.text
-    assert ext_resp.json()["status"] == "succeeded"
+    # 2. New run acquires lock successfully overtaking stale lock
+    env["dedup_repo"].acquire_lock(dataset_id, dataset_version, run_id="active-run", timeout_seconds=30.0)
 
-    # 2. POST /preprocessing
-    prep_resp = client.post("/preprocessing", json={
-        "dataset_id": dataset_id,
-        "dataset_version": dataset_version,
-        "force_reanalyze": True,
-    })
-    assert prep_resp.status_code == 200, prep_resp.text
-    prep_data = prep_resp.json()
-    assert prep_data["status"] == "succeeded"
-    assert prep_data["result"]["id_column"] == "asset_id"
-    assert prep_data["result"]["time_column"] == "observed_at"
+    conn = env["dedup_repo"]._get_connection(dataset_id, dataset_version)
+    cur = conn.execute("SELECT run_id FROM single_writer_locks WHERE dataset_key = ?", (f"{dataset_id}:{dataset_version}",))
+    row = cur.fetchone()
+    assert row["run_id"] == "active-run"
 
 
-def test_16_schema_fingerprint_deterministic_and_sensitive_to_structure():
-    """16. Schema fingerprint는 필드 순서와 무관하게 동일하며, 타입이나 required 변경 시 민감하게 달라진다."""
-    base_schema = {
-        "title": "SensorRecord",
-        "required": ["asset_id", "value"],
-        "properties": {
-            "asset_id": {"type": "string"},
-            "value": {"type": "number"},
-        },
-    }
-    fp_base = compute_source_schema_fingerprint(base_schema)
+def test_active_lock_conflict_raises_409(recovery_env):
+    env = recovery_env
+    dataset_id = "lock-conflict-ds"
+    dataset_version = "v1"
 
-    # Reordered properties -> same fingerprint
-    reordered_schema = {
-        "title": "SensorRecord",
-        "required": ["value", "asset_id"],
-        "properties": {
-            "value": {"type": "number"},
-            "asset_id": {"type": "string"},
-        },
-    }
-    fp_reordered = compute_source_schema_fingerprint(reordered_schema)
-    assert fp_base == fp_reordered
+    # Acquire active lock
+    env["dedup_repo"].acquire_lock(dataset_id, dataset_version, run_id="run-owner", timeout_seconds=60.0)
 
-    # Type changed -> different fingerprint
-    type_changed_schema = {
-        "title": "SensorRecord",
-        "required": ["asset_id", "value"],
-        "properties": {
-            "asset_id": {"type": "string"},
-            "value": {"type": "string"},  # changed from number to string
-        },
-    }
-    fp_type_changed = compute_source_schema_fingerprint(type_changed_schema)
-    assert fp_base != fp_type_changed
+    # Second run tries to acquire -> raises 409
+    with pytest.raises(ExtractionAlreadyRunningError):
+        env["dedup_repo"].acquire_lock(dataset_id, dataset_version, run_id="run-intruder", timeout_seconds=60.0)
 
-    # Required changed -> different fingerprint
-    required_changed_schema = {
-        "title": "SensorRecord",
-        "required": ["asset_id"],
-        "properties": {
-            "asset_id": {"type": "string"},
-            "value": {"type": "number"},
-        },
-    }
-    fp_required_changed = compute_source_schema_fingerprint(required_changed_schema)
-    assert fp_base != fp_required_changed
+
+def test_lock_loss_raises_409(recovery_env):
+    env = recovery_env
+    dataset_id = "lock-loss-ds"
+    dataset_version = "v1"
+
+    env["dedup_repo"].acquire_lock(dataset_id, dataset_version, run_id="run-original", timeout_seconds=60.0)
+
+    # Release lock externally
+    env["dedup_repo"].release_lock(dataset_id, dataset_version, run_id="run-original")
+
+    # Heartbeat should detect lost lock
+    with pytest.raises(ExtractionLockLostError):
+        env["dedup_repo"].heartbeat_lock(dataset_id, dataset_version, run_id="run-original", lease_seconds=60.0)

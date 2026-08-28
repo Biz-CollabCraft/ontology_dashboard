@@ -18,6 +18,7 @@
     "node_id",
     "data_type",
     "unit",
+    "value",
     "status_code",
     "observed_at_source",
     "branch_kind",
@@ -125,7 +126,7 @@
         "null"
       ],
       "format": "date-time",
-      "description": "Optional raw sensor source timestamp"
+      "description": "Raw sensor source timestamp"
     },
     "server_timestamp": {
       "type": [
@@ -133,7 +134,7 @@
         "null"
       ],
       "format": "date-time",
-      "description": "Optional server reception timestamp"
+      "description": "Server reception timestamp"
     },
     "published_at": {
       "type": [
@@ -169,5 +170,74 @@
       "minLength": 1,
       "description": "Protocol mapping schema version string"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "direction": {
+            "const": "published"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "source_timestamp",
+          "published_at"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "direction": {
+            "const": "received"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "source_timestamp",
+          "server_timestamp",
+          "received_at",
+          "status_code_value"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "branch_kind": {
+            "const": "canonical"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "overlay": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "branch_kind": {
+            "enum": [
+              "simulation_overlay",
+              "maintenance_replay_overlay"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "overlay": {
+            "const": true
+          }
+        }
+      }
+    }
+  ]
 }

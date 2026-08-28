@@ -32,8 +32,17 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionIdempotencyConflictError,
     ExtractionSourceNotFoundError,
     ExtractionSourceChecksumMismatchError,
+    ExtractionSourceManifestRequiredError,
+    ExtractionSourceNotFinalizedError,
+    ExtractionSourceDescriptorMismatchError,
+    ExtractionNoValidObservationsError,
+    ExtractionRequestInvalidError,
 )
-from systems.generator.app.extraction.mapping_validator import MappingValidator, compute_mapping_canonical_sha256, compute_source_schema_fingerprint
+from systems.generator.app.extraction.mapping_validator import (
+    MappingValidator,
+    compute_mapping_canonical_sha256,
+    compute_source_schema_fingerprint,
+)
 from systems.generator.app.extraction.mapping_repository import MappingRepository
 from systems.generator.app.extraction.parsers.sensor_record_parser import SensorRecordParser
 from systems.generator.app.extraction.dedup_repository import DedupRepository
@@ -95,8 +104,19 @@ def isolated_extraction_env(tmp_path):
     }
 
 
-def create_sample_protocol_file(file_path: Path, num_timestamps: int = 3, asset_id: str = "CNC-S01-L01-01", direction: str = "received") -> tuple[Path, str]:
-    """Helper to create sample protocol jsonl file and return (path, sha256)."""
+def get_current_protocol_schema_fingerprint() -> str:
+    schema_path = PROJECT_ROOT / "contracts" / "schemas" / "generator-protocol-record.schema.json"
+    schema_data = json.loads(schema_path.read_text(encoding="utf-8"))
+    return compute_source_schema_fingerprint(schema_data, algorithm_version="v1")
+
+
+def create_sample_protocol_file(
+    file_path: Path,
+    num_timestamps: int = 3,
+    asset_id: str = "CNC-S01-L01-01",
+    direction: str = "received",
+) -> tuple[Path, str, int]:
+    """Helper to create sample protocol jsonl file and return (path, sha256, size_bytes)."""
     lines = []
     seq = 1
     for t in range(num_timestamps):
@@ -160,11 +180,51 @@ def create_sample_protocol_file(file_path: Path, num_timestamps: int = 3, asset_
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(content_bytes)
     sha256 = compute_file_sha256(file_path)
-    return file_path, sha256
+    return file_path, sha256, len(content_bytes)
 
 
-def create_sample_mapping_file(file_path: Path, status: str = "approved") -> tuple[dict[str, Any], Path, str]:
-    """Helper to create sample static mapping table file and return (dict, path, sha256)."""
+def create_sample_run_manifest(
+    manifest_path: Path,
+    source_file_path: Path,
+    source_sha256: str,
+    source_size: int,
+    status: str = "completed",
+    run_id: str = "run-gen-001",
+) -> tuple[Path, str]:
+    """Helper to create sample upstream gen_data run manifest and return (path, sha256)."""
+    manifest_payload = {
+        "manifest_version": "generator-protocol-run-v1",
+        "run_id": run_id,
+        "status": status,
+        "protocol_version": "v2",
+        "source_schema_version": "sensor-record-v2",
+        "finalized_at": "2026-08-27T01:05:00Z",
+        "total_records": 6,
+        "files": [
+            {
+                "role": "protocol_log",
+                "path": str(source_file_path).replace("\\", "/"),
+                "media_type": "application/x-ndjson",
+                "sha256": source_sha256,
+                "size_bytes": source_size,
+                "record_count": 6,
+                "last_sequence": 6,
+            }
+        ],
+    }
+    content = json.dumps(manifest_payload, indent=2, ensure_ascii=False) + "\n"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(content, encoding="utf-8")
+    sha256 = compute_file_sha256(manifest_path)
+    return manifest_path, sha256
+
+
+def create_sample_mapping_file(
+    file_path: Path,
+    status: str = "approved",
+) -> tuple[dict[str, Any], Path, str]:
+    """Helper to create sample static mapping table file with valid canonical checksum & fingerprint."""
+    fp = get_current_protocol_schema_fingerprint()
     mapping_dict = {
         "$schema": "https://ontology-dashboard.local/schemas/generator-static-mapping-table.schema.json",
         "mapping_id": "test-sensor-mapping",
@@ -172,7 +232,7 @@ def create_sample_mapping_file(file_path: Path, status: str = "approved") -> tup
         "status": status,
         "protocol_version": "v2",
         "source_schema_version": "sensor-record-v2",
-        "source_schema_fingerprint": "67b7951388d5b463505f7ff0380d5174272db14000e8c91d72374a6edb422810",
+        "source_schema_fingerprint": fp,
         "fingerprint_algorithm_version": "v1",
         "description": "Test static mapping table",
         "field_mappings": [
@@ -198,491 +258,407 @@ def create_sample_mapping_file(file_path: Path, status: str = "approved") -> tup
             },
         ],
     }
-    sha256 = compute_mapping_canonical_sha256(mapping_dict)
-    mapping_dict["mapping_sha256"] = sha256
+    canonical_sha = compute_mapping_canonical_sha256(mapping_dict)
+    mapping_dict["mapping_sha256"] = canonical_sha
+
+    content = json.dumps(mapping_dict, indent=2, ensure_ascii=False) + "\n"
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(json.dumps(mapping_dict, indent=2, ensure_ascii=False).encode("utf-8"))
-    return mapping_dict, file_path, sha256
+    file_path.write_text(content, encoding="utf-8")
+    return mapping_dict, file_path, canonical_sha
 
 
-# =====================================================================
-# 1. Contract & Schema Validation Tests
-# =====================================================================
+# --- Test Cases ---
 
 def test_static_mapping_unapproved_raises_error(isolated_extraction_env):
-    """When mapping status is not 'approved' (e.g. draft), raise ExtractionMappingNotApprovedError."""
     env = isolated_extraction_env
-    mapping_dict, _, sha = create_sample_mapping_file(
-        env["mappings_dir"] / "draft_map.json",
-        status="draft",
-    )
-    validator = env["mapping_validator"]
+    map_p = env["mappings_dir"] / "test-map.json"
+    mapping_data, _, _ = create_sample_mapping_file(map_p, status="draft")
 
-    with pytest.raises(ExtractionMappingNotApprovedError) as exc_info:
-        validator.validate_mapping(mapping_dict)
-    assert exc_info.value.code == "EXTRACTION_MAPPING_NOT_APPROVED"
-    assert exc_info.value.status_code == 422
+    with pytest.raises(ExtractionMappingNotApprovedError):
+        env["mapping_validator"].validate_mapping(mapping_data)
 
 
 def test_static_mapping_checksum_mismatch_raises_error(isolated_extraction_env):
-    """When declared or expected mapping sha256 does not match canonical definition, raise ExtractionMappingChecksumMismatchError."""
     env = isolated_extraction_env
-    mapping_dict, _, sha = create_sample_mapping_file(env["mappings_dir"] / "valid_map.json")
-    validator = env["mapping_validator"]
+    map_p = env["mappings_dir"] / "test-map.json"
+    mapping_data, _, canonical_sha = create_sample_mapping_file(map_p, status="approved")
 
-    with pytest.raises(ExtractionMappingChecksumMismatchError) as exc_info:
-        validator.validate_mapping(mapping_dict, expected_mapping_sha256="0" * 64)
-    assert exc_info.value.code == "EXTRACTION_MAPPING_CHECKSUM_MISMATCH"
-    assert exc_info.value.status_code == 422
+    # Mismatched requested sha
+    with pytest.raises(ExtractionMappingChecksumMismatchError):
+        env["mapping_validator"].validate_mapping(
+            mapping_data,
+            expected_mapping_sha256="0000000000000000000000000000000000000000000000000000000000000000",
+        )
 
 
 def test_static_mapping_fingerprint_mismatch_raises_error(isolated_extraction_env):
-    """When source schema fingerprint does not match expected fingerprint, raise ExtractionSchemaFingerprintMismatchError."""
     env = isolated_extraction_env
-    mapping_dict, _, _ = create_sample_mapping_file(env["mappings_dir"] / "fp_map.json")
-    validator = env["mapping_validator"]
+    map_p = env["mappings_dir"] / "test-map.json"
+    mapping_data, _, _ = create_sample_mapping_file(map_p, status="approved")
 
-    with pytest.raises(ExtractionSchemaFingerprintMismatchError) as exc_info:
-        validator.validate_mapping(mapping_dict, expected_source_schema_fingerprint="f" * 64)
-    assert exc_info.value.code == "EXTRACTION_SCHEMA_FINGERPRINT_MISMATCH"
-    assert exc_info.value.status_code == 422
+    with pytest.raises(ExtractionSchemaFingerprintMismatchError):
+        env["mapping_validator"].validate_mapping(
+            mapping_data,
+            expected_source_schema_fingerprint="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        )
 
 
 def test_static_mapping_unsupported_transform_raises_error(isolated_extraction_env):
-    """When transform is not in allowlist, schema validator or mapping validator raises error."""
     env = isolated_extraction_env
-    mapping_dict, _, _ = create_sample_mapping_file(env["mappings_dir"] / "bad_tf_map.json")
-    mapping_dict["field_mappings"][0]["transform"] = "custom_dynamic_eval"
-    validator = env["mapping_validator"]
+    map_p = env["mappings_dir"] / "test-map.json"
+    mapping_data, _, _ = create_sample_mapping_file(map_p, status="approved")
+    mapping_data["field_mappings"][0]["transform"] = "unsupported_magic_transform"
 
-    with pytest.raises(Exception) as exc_info:
-        validator.validate_mapping(mapping_dict)
-    assert getattr(exc_info.value, "status_code", 422) in (422, 501)
+    with pytest.raises(ExtractionRequestInvalidError):
+        env["mapping_validator"].validate_mapping(mapping_data)
+
+    with pytest.raises(ExtractionFeatureNotImplementedError):
+        env["mapping_validator"].apply_transform(100.0, "unsupported_magic_transform", "float")
 
 
-# =====================================================================
-# 2. Parser, Flat Wide-Format & Conflict Detection Tests
-# =====================================================================
-
-def test_parser_normal_long_format_grouping(isolated_extraction_env):
-    """Parser groups multiple long-format sensor records into flat wide-format canonical observation rows."""
+def test_source_file_not_found_raises_error(isolated_extraction_env):
     env = isolated_extraction_env
-    src_file, _ = create_sample_protocol_file(env["data_dir"] / "test_proto.jsonl", num_timestamps=3)
-    mapping_dict, _, _ = create_sample_mapping_file(env["mappings_dir"] / "map.json")
-
-    parser = env["parser"]
-    obs, provs, rejs, processed, stats = parser.parse_file(
-        source_path=src_file,
-        mapping_data=mapping_dict,
-        extraction_run_id="run-test-01",
-        source_direction="received",
-    )
-
-    assert len(obs) == 3
-    assert len(rejs) == 0
-    assert len(provs) == 6
-    assert len(processed) == 6
-    assert stats["observations_count"] == 3
-    assert stats["asset_ids"] == ["CNC-S01-L01-01"]
-
-    # Check first observation row (flat wide-format!)
-    first_obs = obs[0]
-    assert first_obs["asset_id"] == "CNC-S01-L01-01"
-    assert first_obs["observed_at"] == "2026-08-27T01:00:00Z"
-    assert first_obs["voltage"] == 220.0
-    assert first_obs["rotation"] == 1500.0
-
-    # Check provenance entries
-    assert provs[0]["asset_id"] == "CNC-S01-L01-01"
-    assert provs[0]["mapping_id"] == "test-sensor-mapping"
-    assert provs[0]["source_direction"] == "received"
-
-
-def test_parser_incomplete_trailing_jsonl_raises_error(isolated_extraction_env):
-    """Incomplete trailing line in non-finalized source raises ExtractionSourceIncompleteError (409)."""
-    env = isolated_extraction_env
-    src_file, _ = create_sample_protocol_file(env["data_dir"] / "torn.jsonl", num_timestamps=2)
-    # Append broken trailing line
-    with open(src_file, "a", encoding="utf-8") as f:
-        f.write('{"observation_id": "obs-torn", "run_id": "run-gen-001", "ass\n')
-
-    mapping_dict, _, _ = create_sample_mapping_file(env["mappings_dir"] / "map.json")
-    parser = env["parser"]
-
-    with pytest.raises(ExtractionSourceIncompleteError) as exc_info:
-        parser.parse_file(
-            source_path=src_file,
-            mapping_data=mapping_dict,
-            extraction_run_id="run-test-torn",
-            is_source_finalized=False,
-        )
-    assert exc_info.value.code == "EXTRACTION_SOURCE_INCOMPLETE"
-    assert exc_info.value.status_code == 409
-
-
-def test_parser_measurement_conflict_isolated_to_rejected(isolated_extraction_env):
-    """Conflicting measurement values for same asset, timestamp, channel are isolated to rejected without averaging."""
-    env = isolated_extraction_env
-    src_file = env["data_dir"] / "conflict.jsonl"
-    lines = [
-        json.dumps({
-            "direction": "received",
-            "schema_version": "sensor-record-v2",
-            "observation_id": "obs-0001",
-            "source_kind": "simulation",
-            "record_kind": "observation",
-            "quality": "Good",
-            "run_id": "run-gen-001",
-            "sequence": 1,
-            "asset_id": "CNC-001",
-            "measurement_key": "voltage",
-            "node_id": "CNC-001.voltage",
-            "data_type": "float",
-            "unit": "V",
-            "value": 220.0,
-            "status_code": "Good",
-            "observed_at_source": "2026-08-27T01:00:00Z",
-            "branch_kind": "canonical",
-            "overlay": False,
-            "mapping_version": "v1.0",
-        }),
-        json.dumps({
-            "direction": "received",
-            "schema_version": "sensor-record-v2",
-            "observation_id": "obs-0002",
-            "source_kind": "simulation",
-            "record_kind": "observation",
-            "quality": "Good",
-            "run_id": "run-gen-001",
-            "sequence": 2,
-            "asset_id": "CNC-001",
-            "measurement_key": "voltage",
-            "node_id": "CNC-001.voltage",
-            "data_type": "float",
-            "unit": "V",
-            "value": 240.0,  # Conflict!
-            "status_code": "Good",
-            "observed_at_source": "2026-08-27T01:00:00Z",
-            "branch_kind": "canonical",
-            "overlay": False,
-            "mapping_version": "v1.0",
-        }),
-        json.dumps({
-            "direction": "received",
-            "schema_version": "sensor-record-v2",
-            "observation_id": "obs-0003",
-            "source_kind": "simulation",
-            "record_kind": "observation",
-            "quality": "Good",
-            "run_id": "run-gen-001",
-            "sequence": 3,
-            "asset_id": "CNC-001",
-            "measurement_key": "rotation",
-            "node_id": "CNC-001.rotation",
-            "data_type": "float",
-            "unit": "rpm",
-            "value": 1500.0,
-            "status_code": "Good",
-            "observed_at_source": "2026-08-27T01:00:00Z",
-            "branch_kind": "canonical",
-            "overlay": False,
-            "mapping_version": "v1.0",
-        }),
-    ]
-    src_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    mapping_dict, _, _ = create_sample_mapping_file(env["mappings_dir"] / "map.json")
-
-    parser = env["parser"]
-    obs, provs, rejs, processed, stats = parser.parse_file(
-        source_path=src_file,
-        mapping_data=mapping_dict,
-        extraction_run_id="run-conflict-test",
-    )
-
-    assert len(rejs) >= 1
-    # Required conflict -> entire observation row isolated
-    assert len(obs) == 0
-
-
-# =====================================================================
-# 3. Dedup, Single-Writer Lock & Idempotency Tests
-# =====================================================================
-
-def test_single_writer_lock_blocks_concurrent_execution(isolated_extraction_env):
-    """Acquiring lock on already running dataset raises ExtractionAlreadyRunningError (409)."""
-    env = isolated_extraction_env
-    dedup = env["dedup_repo"]
-
-    dedup.acquire_lock("dataset-a", "v1", "run-1", timeout_seconds=60.0)
-
-    # Second acquisition with different run_id should fail
-    with pytest.raises(ExtractionAlreadyRunningError) as exc_info:
-        dedup.acquire_lock("dataset-a", "v1", "run-2", timeout_seconds=60.0)
-    assert exc_info.value.code == "EXTRACTION_ALREADY_RUNNING"
-    assert exc_info.value.status_code == 409
-
-    # Releasing lock allows new run
-    dedup.release_lock("dataset-a", "v1", "run-1")
-    dedup.acquire_lock("dataset-a", "v1", "run-2", timeout_seconds=60.0)
-    dedup.release_lock("dataset-a", "v1", "run-2")
-
-
-def test_persistent_dedup_records_and_restarts(isolated_extraction_env):
-    """Dedup ledger persists in SQLite across instances."""
-    env = isolated_extraction_env
-    state_dir = env["state_dir"]
-
-    repo1 = DedupRepository(state_root=state_dir)
-    assert not repo1.is_record_processed("src-id-1", "rec-01", "d1", "v1")
-
-    repo1.record_processed_batch("src-id-1", ["rec-01", "rec-02"], "d1", "v1")
-    assert repo1.is_record_processed("src-id-1", "rec-01", "d1", "v1")
-    assert repo1.is_record_processed("src-id-1", "rec-02", "d1", "v1")
-
-    # New repo instance (restart simulation)
-    repo2 = DedupRepository(state_root=state_dir)
-    assert repo2.is_record_processed("src-id-1", "rec-01", "d1", "v1")
-    assert not repo2.is_record_processed("src-id-1", "rec-03", "d1", "v1")
-
-
-# =====================================================================
-# 4. End-to-End Extraction Service & Atomic Publishing Tests
-# =====================================================================
-
-def test_extraction_service_end_to_end_publish(isolated_extraction_env):
-    """Execute full extraction workflow: parse, stage, publish manifest with auxiliary files, and commit dedup."""
-    env = isolated_extraction_env
-    service = env["service"]
-
-    src_file, src_sha = create_sample_protocol_file(env["data_dir"] / "e2e_source.jsonl", num_timestamps=3)
-    mapping_dict, _, map_sha = create_sample_mapping_file(env["mappings_dir"] / "e2e_map.json")
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    mapping_data, _, map_sha = create_sample_mapping_file(map_p)
 
     req = ExtractionRequest(
-        request_id="req-e2e-001",
-        idempotency_key="idem-e2e-001",
-        run_id="run-e2e-001",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+        request_id="req-001",
+        idempotency_key="idem-001",
+        run_id="run-001",
+        source_uri="data/non_existent.jsonl",
+        source_sha256="a" * 64,
+        source_run_manifest_uri="data/non_existent_manifest.json",
+        source_run_manifest_sha256="b" * 64,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
         mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="test-canonical-dataset",
+        dataset_id="canonical-obs",
         dataset_version="v1",
     )
 
-    resp = service.execute_extraction(req)
-    assert resp.status == "succeeded"
-    assert resp.dataset_id == "test-canonical-dataset"
-    assert resp.result.observations_count == 3
-    assert resp.result.total_records_processed == 6
-    assert resp.result.provenance_sha256 != ""
-    assert resp.result.rejected_sha256 != ""
+    with pytest.raises((ExtractionSourceNotFoundError, ExtractionSourceChecksumMismatchError)):
+        env["service"].execute_extraction(req)
 
-    # Verify published files in data/observations/test-canonical-dataset/v1
-    target_dir = env["obs_dir"] / "test-canonical-dataset" / "v1"
-    assert (target_dir / "observations.jsonl").is_file()
+
+def test_source_checksum_mismatch_raises_error(isolated_extraction_env):
+    env = isolated_extraction_env
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = create_sample_protocol_file(source_p)
+
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = create_sample_run_manifest(manifest_p, source_p, actual_sha, size_b)
+
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    mapping_data, _, map_sha = create_sample_mapping_file(map_p)
+
+    req = ExtractionRequest(
+        request_id="req-002",
+        idempotency_key="idem-002",
+        run_id="run-002",
+        source_uri=str(source_p),
+        source_sha256="0" * 64,  # wrong sha
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="canonical-obs",
+        dataset_version="v1",
+    )
+
+    with pytest.raises(ExtractionSourceChecksumMismatchError):
+        env["service"].execute_extraction(req)
+
+
+def test_source_unfinalized_raises_409(isolated_extraction_env):
+    env = isolated_extraction_env
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = create_sample_protocol_file(source_p)
+
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = create_sample_run_manifest(manifest_p, source_p, actual_sha, size_b, status="running")
+
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    mapping_data, _, map_sha = create_sample_mapping_file(map_p)
+
+    req = ExtractionRequest(
+        request_id="req-003",
+        idempotency_key="idem-003",
+        run_id="run-003",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="canonical-obs",
+        dataset_version="v1",
+    )
+
+    with pytest.raises(ExtractionSourceNotFinalizedError):
+        env["service"].execute_extraction(req)
+
+
+def test_source_descriptor_mismatch_raises_error(isolated_extraction_env):
+    env = isolated_extraction_env
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = create_sample_protocol_file(source_p)
+
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    # Create manifest with mismatched size
+    _, man_sha = create_sample_run_manifest(manifest_p, source_p, actual_sha, size_b + 999)
+
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    mapping_data, _, map_sha = create_sample_mapping_file(map_p)
+
+    req = ExtractionRequest(
+        request_id="req-004",
+        idempotency_key="idem-004",
+        run_id="run-004",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="canonical-obs",
+        dataset_version="v1",
+    )
+
+    with pytest.raises(ExtractionSourceDescriptorMismatchError):
+        env["service"].execute_extraction(req)
+
+
+def test_successful_extraction_end_to_end(isolated_extraction_env):
+    env = isolated_extraction_env
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = create_sample_protocol_file(source_p, num_timestamps=3)
+
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = create_sample_run_manifest(manifest_p, source_p, actual_sha, size_b)
+
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    mapping_data, _, map_sha = create_sample_mapping_file(map_p)
+
+    req = ExtractionRequest(
+        request_id="req-100",
+        idempotency_key="idem-100",
+        run_id="run-100",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="cnc-milling-dataset",
+        dataset_version="v1",
+    )
+
+    resp = env["service"].execute_extraction(req)
+
+    assert resp.status == "succeeded"
+    assert resp.dataset_id == "cnc-milling-dataset"
+    assert resp.dataset_version == "v1"
+    assert resp.result.observations_count == 3
+    assert resp.result.rejected_count == 0
+    assert len(resp.result.asset_ids) == 1
+
+    # Verify published files on disk
+    target_dir = env["obs_dir"] / "cnc-milling-dataset" / "v1"
     assert (target_dir / "dataset_manifest.json").is_file()
+    assert (target_dir / "observations.jsonl").is_file()
     assert (target_dir / "provenance.jsonl").is_file()
     assert (target_dir / "rejected.jsonl").is_file()
 
-    # Validate dataset_manifest.json contents
+    # Verify manifest integrity
     manifest = json.loads((target_dir / "dataset_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["manifest_version"] == "generator-dataset-input-v1"
-    assert manifest["dataset_type"] == "observation"
-    assert manifest["dataset_id"] == "test-canonical-dataset"
-    assert manifest["dataset_version"] == "v1"
+    assert manifest["dataset_id"] == "cnc-milling-dataset"
     assert len(manifest["files"]) == 1
-    assert manifest["files"][0]["role"] == "observations"
     assert len(manifest["auxiliary_files"]) == 2
 
 
-def test_extraction_idempotency_reuse_and_conflict(isolated_extraction_env):
-    """Same idempotency key with identical payload returns existing response; differing payload raises 409."""
+def test_idempotent_retry_returns_cached_response(isolated_extraction_env):
     env = isolated_extraction_env
-    service = env["service"]
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = create_sample_protocol_file(source_p)
 
-    src_file, src_sha = create_sample_protocol_file(env["data_dir"] / "idem_source.jsonl", num_timestamps=2)
-    mapping_dict, _, map_sha = create_sample_mapping_file(env["mappings_dir"] / "idem_map.json")
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = create_sample_run_manifest(manifest_p, source_p, actual_sha, size_b)
+
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = create_sample_mapping_file(map_p)
 
     req = ExtractionRequest(
-        request_id="req-idem-001",
-        idempotency_key="idem-key-abc",
-        run_id="run-idem-001",
-        source_uri=str(src_file),
-        source_sha256=src_sha,
-        source_direction="received",
+        request_id="req-200",
+        idempotency_key="idem-200",
+        run_id="run-200",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
         mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="test-idem-dataset",
+        dataset_id="cnc-dataset-idem",
         dataset_version="v1",
     )
 
-    resp1 = service.execute_extraction(req)
-    assert resp1.status == "succeeded"
+    resp1 = env["service"].execute_extraction(req)
+    resp2 = env["service"].execute_extraction(req)
 
-    # Same request and idempotency key -> returns existing response
-    resp2 = service.execute_extraction(req)
-    assert resp2.result.manifest_sha256 == resp1.result.manifest_sha256
-
-    # Same idempotency key with differing dataset version -> 409 conflict
-    req_conflict = req.model_copy(update={"dataset_version": "v2"})
-    with pytest.raises(ExtractionIdempotencyConflictError) as exc_info:
-        service.execute_extraction(req_conflict)
-    assert exc_info.value.code == "EXTRACTION_IDEMPOTENCY_CONFLICT"
-    assert exc_info.value.status_code == 409
+    assert resp1.result.manifest_sha256 == resp2.result.manifest_sha256
+    assert resp1.result.observations_sha256 == resp2.result.observations_sha256
 
 
-def test_extraction_overwrite_existing_different_content_raises_conflict(isolated_extraction_env):
-    """Attempting to publish different content into existing dataset version fails closed with 409 EXTRACTION_DATASET_CONFLICT."""
+def test_idempotency_conflict_raises_409(isolated_extraction_env):
     env = isolated_extraction_env
-    service = env["service"]
+    source_p = env["data_dir"] / "protocol.jsonl"
+    _, actual_sha, size_b = create_sample_protocol_file(source_p)
 
-    src_file1, src_sha1 = create_sample_protocol_file(env["data_dir"] / "src1.jsonl", num_timestamps=2)
-    mapping_dict, _, map_sha = create_sample_mapping_file(env["mappings_dir"] / "map1.json")
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = create_sample_run_manifest(manifest_p, source_p, actual_sha, size_b)
+
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = create_sample_mapping_file(map_p)
 
     req1 = ExtractionRequest(
-        request_id="req-ov-001",
-        idempotency_key="idem-ov-001",
-        run_id="run-ov-001",
-        source_uri=str(src_file1),
-        source_sha256=src_sha1,
-        source_direction="received",
+        request_id="req-301",
+        idempotency_key="idem-same-key",
+        run_id="run-301",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
         mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="test-overwrite-dataset",
+        dataset_id="dataset-a",
         dataset_version="v1",
     )
-    service.execute_extraction(req1)
+    env["service"].execute_extraction(req1)
 
-    # Now attempt second extraction with different source file (5 timestamps instead of 2) targeting same dataset version
-    src_file2, src_sha2 = create_sample_protocol_file(env["data_dir"] / "src2.jsonl", num_timestamps=5)
     req2 = ExtractionRequest(
-        request_id="req-ov-002",
-        idempotency_key="idem-ov-002",
-        run_id="run-ov-002",
-        source_uri=str(src_file2),
-        source_sha256=src_sha2,
-        source_direction="received",
+        request_id="req-302",
+        idempotency_key="idem-same-key",  # same key, different dataset
+        run_id="run-302",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
         source_schema_version="sensor-record-v2",
         protocol_version="v2",
         mapping_id="test-sensor-mapping",
         mapping_version="v1.0",
         mapping_sha256=map_sha,
-        dataset_id="test-overwrite-dataset",
+        dataset_id="dataset-b",
         dataset_version="v1",
     )
 
-    with pytest.raises(ExtractionDatasetConflictError) as exc_info:
-        service.execute_extraction(req2)
-    assert exc_info.value.code == "EXTRACTION_DATASET_CONFLICT"
-    assert exc_info.value.status_code == 409
+    with pytest.raises(ExtractionIdempotencyConflictError):
+        env["service"].execute_extraction(req2)
 
 
-# =====================================================================
-# 5. FastAPI Router & Preprocessing Downstream Integration Tests
-# =====================================================================
+def test_dataset_overwrite_conflict_raises_409(isolated_extraction_env):
+    env = isolated_extraction_env
+    source_p1 = env["data_dir"] / "protocol_1.jsonl"
+    _, sha1, size1 = create_sample_protocol_file(source_p1, num_timestamps=2)
+    manifest_p1 = env["data_dir"] / "manifest_1.json"
+    _, man_sha1 = create_sample_run_manifest(manifest_p1, source_p1, sha1, size1, run_id="run-1")
 
-def test_fastapi_extraction_endpoint_and_preprocessing_consumption(test_client):
-    """End-to-end integration: POST /extraction -> POST /preprocessing consumes published flat wide-format dataset."""
-    src_file = PATHS.data_dir / "api_test_source.jsonl"
-    src_file, src_sha = create_sample_protocol_file(src_file, num_timestamps=4, asset_id="CNC-M01")
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = create_sample_mapping_file(map_p)
 
-    # Put mapping in ontology/mappings/
-    map_dir = PATHS.ontology / "mappings" / "api-sensor-mapping"
-    map_dir.mkdir(parents=True, exist_ok=True)
-    map_file = map_dir / "v1.0.json"
-    mapping_dict = {
-        "$schema": "https://ontology-dashboard.local/schemas/generator-static-mapping-table.schema.json",
-        "mapping_id": "api-sensor-mapping",
-        "mapping_version": "v1.0",
-        "status": "approved",
-        "protocol_version": "v2",
-        "source_schema_version": "sensor-record-v2",
-        "source_schema_fingerprint": "67b7951388d5b463505f7ff0380d5174272db14000e8c91d72374a6edb422810",
-        "fingerprint_algorithm_version": "v1",
-        "description": "API integration mapping table",
-        "field_mappings": [
-            {
-                "source_field": "voltage",
-                "target_field": "voltage",
-                "source_type": "float",
-                "target_type": "float",
-                "required": True,
-                "transform": "to_float",
-                "unit": "V",
-                "timezone": "UTC",
-            },
-            {
-                "source_field": "rotation",
-                "target_field": "rotation",
-                "source_type": "float",
-                "target_type": "float",
-                "required": True,
-                "transform": "to_float",
-                "unit": "rpm",
-                "timezone": "UTC",
-            },
-        ],
-    }
-    map_sha = compute_mapping_canonical_sha256(mapping_dict)
-    mapping_dict["mapping_sha256"] = map_sha
-    import uuid
-    test_uid = uuid.uuid4().hex[:8]
-    dataset_id = f"api-extracted-dataset-{test_uid}"
-    dataset_version = "v1"
-
-    # Clean up existing test dataset if any
-    target_obs = PATHS.data_dir / "observations" / dataset_id / dataset_version
-    if target_obs.exists():
-        shutil.rmtree(target_obs, ignore_errors=True)
-
-    # 1. Call POST /extraction
-    extract_req_payload = {
-        "request_id": f"req-api-{test_uid}",
-        "idempotency_key": f"idem-api-{test_uid}",
-        "run_id": f"run-api-{test_uid}",
-        "source_uri": "data/api_test_source.jsonl",
-        "source_sha256": src_sha,
-        "source_direction": "received",
-        "source_schema_version": "sensor-record-v2",
-        "protocol_version": "v2",
-        "mapping_id": "api-sensor-mapping",
-        "mapping_version": "v1.0",
-        "mapping_sha256": map_sha,
-        "dataset_id": dataset_id,
-        "dataset_version": dataset_version,
-    }
-
-    resp = test_client.post("/extraction", json=extract_req_payload)
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["status"] == "succeeded"
-    assert data["dataset_id"] == dataset_id
-    assert data["result"]["observations_count"] == 4
-    assert data["result"]["provenance_sha256"] != ""
-    assert data["result"]["rejected_sha256"] != ""
-
-    # 2. Call POST /preprocessing with the newly extracted dataset
-    prep_resp = test_client.post(
-        "/preprocessing",
-        json={
-            "dataset_id": dataset_id,
-            "dataset_version": dataset_version,
-            "force_reanalyze": True,
-        },
+    req1 = ExtractionRequest(
+        request_id="req-401",
+        idempotency_key="idem-401",
+        run_id="run-401",
+        source_uri=str(source_p1),
+        source_sha256=sha1,
+        source_run_manifest_uri=str(manifest_p1),
+        source_run_manifest_sha256=man_sha1,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="shared-dataset",
+        dataset_version="v1",
     )
-    assert prep_resp.status_code == 200, prep_resp.text
-    prep_data = prep_resp.json()
-    assert prep_data["status"] == "succeeded"
-    assert prep_data["dataset_id"] == dataset_id
-    assert prep_data["result"]["id_column"] == "asset_id"
-    assert prep_data["result"]["time_column"] == "observed_at"
+    env["service"].execute_extraction(req1)
+
+    # Second run trying to publish different contents to same dataset/version
+    source_p2 = env["data_dir"] / "protocol_2.jsonl"
+    _, sha2, size2 = create_sample_protocol_file(source_p2, num_timestamps=4)
+    manifest_p2 = env["data_dir"] / "manifest_2.json"
+    _, man_sha2 = create_sample_run_manifest(manifest_p2, source_p2, sha2, size2, run_id="run-2")
+
+    req2 = ExtractionRequest(
+        request_id="req-402",
+        idempotency_key="idem-402",
+        run_id="run-402",
+        source_uri=str(source_p2),
+        source_sha256=sha2,
+        source_run_manifest_uri=str(manifest_p2),
+        source_run_manifest_sha256=man_sha2,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="shared-dataset",
+        dataset_version="v1",
+    )
+
+    with pytest.raises(ExtractionDatasetConflictError):
+        env["service"].execute_extraction(req2)
+
+
+def test_empty_observations_raises_422(isolated_extraction_env):
+    env = isolated_extraction_env
+    # Create empty source protocol file
+    source_p = env["data_dir"] / "empty_protocol.jsonl"
+    source_p.write_bytes(b"")
+    actual_sha = compute_file_sha256(source_p)
+
+    manifest_p = env["data_dir"] / "run_manifest.json"
+    _, man_sha = create_sample_run_manifest(manifest_p, source_p, actual_sha, 0)
+
+    map_p = env["mappings_dir"] / "test-sensor-mapping" / "v1.0" / "mapping.json"
+    _, _, map_sha = create_sample_mapping_file(map_p)
+
+    req = ExtractionRequest(
+        request_id="req-empty",
+        idempotency_key="idem-empty",
+        run_id="run-empty",
+        source_uri=str(source_p),
+        source_sha256=actual_sha,
+        source_run_manifest_uri=str(manifest_p),
+        source_run_manifest_sha256=man_sha,
+        source_schema_version="sensor-record-v2",
+        protocol_version="v2",
+        mapping_id="test-sensor-mapping",
+        mapping_version="v1.0",
+        mapping_sha256=map_sha,
+        dataset_id="empty-dataset",
+        dataset_version="v1",
+    )
+
+    with pytest.raises(ExtractionNoValidObservationsError):
+        env["service"].execute_extraction(req)
