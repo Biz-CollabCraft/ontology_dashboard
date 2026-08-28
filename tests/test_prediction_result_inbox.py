@@ -225,6 +225,39 @@ def test_prediction_inbox_rejects_official_schema_violation_before_pydantic() ->
     assert "source_ref" in (receipt.rejection_reason or "")
 
 
+def test_prediction_inbox_rejects_missing_predicted_provenance_checksum() -> None:
+    payload = load_payload()
+    payload["results"][0]["label_schema_sha256"] = None
+
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "rejected"
+    assert receipt.received_results == 0
+    assert "schema_invalid" in (receipt.rejection_reason or "")
+    assert "label_schema_sha256" in (receipt.rejection_reason or "")
+
+
+def test_prediction_inbox_rejects_incomplete_source_context_lineage() -> None:
+    payload = load_payload()
+    payload["source_context"]["source_kind"] = "maintenance_replay_overlay"
+    payload["source_context"]["lineage"] = {
+        "simulation_session_id": "simulation-session-1",
+        "overlay_branch_id": "overlay-branch-1",
+        "history_segment_id": "history-segment-1",
+        "maintenance_event_id": "maintenance-event-1",
+        "maintenance_action_id": "maintenance-action-1",
+        "state_version": 1,
+    }
+    payload["source_context"]["lineage"]["maintenance_event_id"] = None
+
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "rejected"
+    assert receipt.received_results == 0
+    assert "schema_invalid" in (receipt.rejection_reason or "")
+    assert "maintenance_event_id" in (receipt.rejection_reason or "")
+
+
 def test_prediction_inbox_example_passes_schema_pydantic_receipt_roundtrip() -> None:
     payload = load_payload()
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
