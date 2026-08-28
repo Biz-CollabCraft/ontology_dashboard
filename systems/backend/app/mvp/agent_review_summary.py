@@ -44,12 +44,10 @@ FORBIDDEN_SUMMARY_CLAIMS = (
 
 FORBIDDEN_PROSE_CLAIMS = (
     "승인 절차가 자동으로 진행",
-    "자동으로 진행",
     "자동승인 완료",
     "자동 승인 완료",
     "정비를 마감 처리",
     "정비 마감 처리",
-    "마감 처리",
     "작업요청 종결",
     "작업 요청 종결",
     "교체 완료",
@@ -341,10 +339,14 @@ def _validate_natural_language_grounding(
     ]:
         errors.append("history_summary_mismatch")
 
-    prose_values = _natural_language_values(summary)
+    prose_values = _generated_natural_language_values(summary)
     forbidden_claims = sorted(_normalized_forbidden_prose_claims(prose_values))
     if forbidden_claims:
         errors.append(f"forbidden_prose_claims:{','.join(forbidden_claims)}")
+
+    directive_claims = sorted(_directive_prose_claims(prose_values))
+    if directive_claims:
+        errors.append(f"directive_prose_claims:{','.join(directive_claims)}")
 
     echoed_actions = sorted(_available_action_echoes(prose_values, packet=packet))
     if echoed_actions:
@@ -396,14 +398,12 @@ def _target_allowed_source_refs(
     return {ref for ref in refs if ref}
 
 
-def _natural_language_values(summary: dict[str, Any]) -> list[str]:
+def _generated_natural_language_values(summary: dict[str, Any]) -> list[str]:
     values: list[str] = []
-    for key in ("title", "summary", "boundary_note"):
+    for key in ("title", "summary"):
         value = summary.get(key)
         if isinstance(value, str):
             values.append(value)
-    for key in ("history_summary", "limitations"):
-        values.extend(str(item) for item in summary.get(key) or [])
     return values
 
 
@@ -414,6 +414,18 @@ def _normalized_forbidden_prose_claims(values: list[str]) -> set[str]:
         for claim in FORBIDDEN_PROSE_CLAIMS
         if _normalize_claim_text(claim) in text
     }
+
+
+def _directive_prose_claims(values: list[str]) -> set[str]:
+    text = " ".join(values)
+    patterns = (
+        r"(?:교체|생성|승인|발행|마감|종결|완료|수리|정비)[^.?!\n]{0,20}(?:하십시오|하세요|바랍니다)",
+        r"(?:정비|교체|수리)[^.?!\n]{0,20}반드시\s*필요",
+    )
+    claims: set[str] = set()
+    for pattern in patterns:
+        claims.update(match.group(0).strip() for match in re.finditer(pattern, text, flags=re.IGNORECASE))
+    return claims
 
 
 def _available_action_echoes(values: list[str], *, packet: dict[str, Any]) -> set[str]:
@@ -436,15 +448,25 @@ def _validate_prose_probabilities(
     *,
     packet: dict[str, Any],
 ) -> list[str]:
-    percentages = sorted(set(re.findall(r"\d+(?:\.\d+)?\s*%", " ".join(values))))
-    if not percentages:
+    percentage_matches = sorted(
+        set(re.findall(r"\d+(?:\.\d+)?\s*%", " ".join(values)))
+    )
+    if not percentage_matches:
         return []
     probability = (packet.get("risk_summary") or {}).get("failure_probability")
+    unknown: list[str] = []
+    expected = None
     if isinstance(probability, (int, float)) and not isinstance(probability, bool):
-        allowed = {f"{float(probability) * 100:.1f}%"}
-    else:
-        allowed = set()
-    unknown = [value.replace(" ", "") for value in percentages if value.replace(" ", "") not in allowed]
+        expected = float(probability) * 100
+    for value in percentage_matches:
+        rendered = value.replace(" ", "")
+        if expected is None:
+            unknown.append(rendered)
+            continue
+        observed = float(rendered.rstrip("%"))
+        tolerance = 0.5 if "." not in rendered else 0.05
+        if abs(observed - expected) > tolerance:
+            unknown.append(rendered)
     if unknown:
         return [f"prose_probability_mismatch:{','.join(unknown)}"]
     return []
@@ -455,9 +477,13 @@ def _validate_prose_priorities(
     *,
     packet: dict[str, Any],
 ) -> list[str]:
-    text = _normalize_claim_text(" ".join(values))
+    text = " ".join(values).casefold()
     labels = ("immediate", "high", "medium", "low")
-    mentioned = sorted(label for label in labels if label in text)
+    mentioned = sorted(
+        label
+        for label in labels
+        if re.search(rf"(?<![a-z0-9_]){re.escape(label)}(?![a-z0-9_])", text)
+    )
     if not mentioned:
         return []
     allowed = str((packet.get("review_priority") or {}).get("level") or "")
