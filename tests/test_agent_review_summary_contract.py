@@ -19,6 +19,11 @@ SUMMARY_SCHEMA = json.loads(
         encoding="utf-8"
     )
 )
+PACKET_SCHEMA = json.loads(
+    (ROOT / "contracts" / "schemas" / "agent-review-packet.schema.json").read_text(
+        encoding="utf-8"
+    )
+)
 PACKET = json.loads(
     (ROOT / "tests" / "fixtures" / "agent_review_packets" / "GS-002.json").read_text(
         encoding="utf-8"
@@ -90,6 +95,8 @@ def test_deterministic_agent_review_summary_explains_factor_bundle_focus() -> No
         "factor.2.overstrain_index",
         "factor.3.torque_nm",
     ]
+    assert packet["inspection_targets"][0]["location_source_ref"] in packet["source_refs"]
+    assert packet["inspection_targets"][0]["location_source_ref"] in focus["source_refs"]
 
 
 def test_deterministic_agent_review_summary_fails_closed_on_data_quality_hold() -> None:
@@ -117,6 +124,81 @@ def test_validated_agent_review_summary_discards_invalid_candidate() -> None:
     assert errors == []
     assert summary["mode"] == "deterministic_fallback"
     assert summary["summary"] != bad_candidate["summary"]
+
+
+def test_validated_agent_review_summary_discards_ungrounded_hold_candidate() -> None:
+    packet = json.loads((GOLD_ROOT / "GS-007.json").read_text(encoding="utf-8"))
+    bad_candidate = compose_deterministic_agent_review_summary(packet)
+    bad_candidate.update(
+        {
+            "mode": "llm",
+            "generated_at": "2099-01-01T00:00:00+09:00",
+            "confidence_label": "grounded",
+            "summary": "주축 베어링 마모가 확인되어 즉시 점검 후 교체가 필요합니다. 위험도 92%, 우선순위 immediate.",
+            "evidence_gaps": [],
+            "inspection_focus": [
+                {
+                    "component_id": "spindle_bearing",
+                    "component_label": "주축 베어링",
+                    "location_label": "가짜 위치",
+                    "basis_refs": ["factor.1.invented_metric", "sop://made-up"],
+                    "source_refs": packet["source_refs"],
+                }
+            ],
+        }
+    )
+
+    errors = validate_agent_review_summary_contract(bad_candidate, packet=packet)
+    assert "generated_at_mismatch" in errors
+    assert "confidence_label_mismatch" in errors
+    assert "inspection_focus_unavailable" in errors
+    assert any(error.startswith("evidence_gaps_missing:") for error in errors)
+
+    summary, fallback_errors = validated_agent_review_summary(
+        packet=packet,
+        candidate=bad_candidate,
+    )
+    assert fallback_errors == []
+    assert summary["mode"] == "deterministic_fallback"
+    assert summary["confidence_label"] == "data_quality_hold"
+    assert summary["inspection_focus"] == []
+
+
+def test_agent_review_summary_validator_rejects_unknown_component_and_basis_refs() -> None:
+    summary = _valid_summary()
+    summary["inspection_focus"] = [
+        {
+            **summary["inspection_focus"][0],
+            "component_id": "unknown_component",
+            "basis_refs": ["factor.1.invented_metric"],
+        }
+    ]
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "inspection_focus[0].component_id_unknown:unknown_component" in errors
+
+
+def test_agent_review_summary_validator_rejects_basis_ref_outside_matching_target() -> None:
+    summary = _valid_summary()
+    summary["inspection_focus"] = [
+        {
+            **summary["inspection_focus"][0],
+            "basis_refs": ["factor.99.invented_metric"],
+        }
+    ]
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "inspection_focus[0].basis_refs_unknown:factor.99.invented_metric" in errors
+
+
+def test_agent_review_summary_validator_rejects_missing_packet_evidence_gap() -> None:
+    summary = {**_valid_summary(), "evidence_gaps": PACKET["evidence_gaps"][:-1]}
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert any(error.startswith("evidence_gaps_missing:") for error in errors)
 
 
 def test_validated_agent_review_summary_discards_schema_invalid_candidate() -> None:
@@ -195,3 +277,12 @@ def test_agent_review_summary_validator_rejects_packet_mismatch() -> None:
     summary = {**_valid_summary(), "asset_id": "CNC-OTHER"}
 
     assert validate_agent_review_summary(summary, packet=PACKET) == ["asset_id_mismatch"]
+
+
+def test_agent_review_packet_schema_rejects_empty_source_refs() -> None:
+    packet = json.loads((GOLD_ROOT / "GS-007.json").read_text(encoding="utf-8"))
+    packet["source_refs"] = []
+
+    errors = list(Draft202012Validator(PACKET_SCHEMA).iter_errors(packet))
+
+    assert errors

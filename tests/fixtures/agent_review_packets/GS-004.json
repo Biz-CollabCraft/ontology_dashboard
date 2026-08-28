@@ -72,7 +72,7 @@
     ],
     "priority_label": "immediate",
     "recommended_next_step": "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다.",
-    "summary": "CNC-S04-L02-03는 현재 critical 상태이며 예측 위험도는 90.8%입니다. 의심 부품 중심으로 SOP 근거, 위치 reference, 관측값을 대조해야 합니다.",
+    "summary": "CNC-S04-L02-03는 현재 critical 상태이며 예측 위험도는 90.8%입니다. 동력 전달 계통 중심으로 현장 위치 reference, 관측값, 조회된 이력을 대조해야 합니다.",
     "title": "4구역 · 2셀 · CNC 가공기 3 담당자 검토 초안"
   },
   "review_priority": {
@@ -117,6 +117,8 @@
     "top_k": 5
   },
   "source_refs": [
-    "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00"
+    "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+    "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+    "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
   ]
 }

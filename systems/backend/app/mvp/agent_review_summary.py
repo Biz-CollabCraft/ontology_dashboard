@@ -94,6 +94,8 @@ def validated_agent_review_summary(
 
     if candidate is not None:
         errors = validate_agent_review_summary_contract(candidate, packet=packet)
+        if candidate.get("mode") != "llm":
+            errors.append("mode_invalid_for_candidate")
         if not errors:
             return candidate, []
 
@@ -141,8 +143,17 @@ def validate_agent_review_summary(
 
     if summary.get("asset_id") != packet.get("asset_id"):
         errors.append("asset_id_mismatch")
+    if summary.get("generated_at") != packet.get("generated_at"):
+        errors.append("generated_at_mismatch")
     if summary.get("packet_schema_version") != packet.get("schema_version"):
         errors.append("packet_schema_version_mismatch")
+    if summary.get("confidence_label") != _confidence_label(packet):
+        errors.append("confidence_label_mismatch")
+
+    inspection_errors = _validate_inspection_focus(summary, packet=packet)
+    errors.extend(inspection_errors)
+    gap_errors = _validate_evidence_gaps(summary, packet=packet)
+    errors.extend(gap_errors)
 
     return errors
 
@@ -196,12 +207,17 @@ def _inspection_focus(
     target: dict[str, Any],
     fallback_source_refs: list[str],
 ) -> dict[str, Any]:
+    refs = [
+        str(target.get("source_ref") or ""),
+        str(target.get("location_source_ref") or ""),
+    ]
+    source_refs = [ref for ref in refs if ref and ref in fallback_source_refs]
     return {
         "component_id": str(target.get("component_id") or ""),
         "component_label": str(target.get("component_label") or ""),
         "location_label": target.get("location_label"),
         "basis_refs": [str(ref) for ref in target.get("basis_refs") or []],
-        "source_refs": fallback_source_refs[:1],
+        "source_refs": source_refs or fallback_source_refs[:1],
     }
 
 
@@ -218,11 +234,59 @@ def _confidence_label(packet: dict[str, Any]) -> str:
 
 def _packet_source_refs(packet: dict[str, Any]) -> list[str]:
     refs = [str(ref) for ref in packet.get("source_refs") or [] if str(ref)]
-    if refs:
-        return list(dict.fromkeys(refs))
-    asset_id = str(packet.get("asset_id") or "unknown")
-    generated_at = str(packet.get("generated_at") or "unknown")
-    return [f"agent-review-packet:{asset_id}:{generated_at}"]
+    return list(dict.fromkeys(refs))
+
+
+def _validate_inspection_focus(summary: dict[str, Any], *, packet: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    targets_by_component = {
+        str(target.get("component_id") or ""): target
+        for target in packet.get("inspection_targets") or []
+        if str(target.get("component_id") or "")
+    }
+    focus_items = summary.get("inspection_focus") or []
+    if focus_items and not targets_by_component:
+        return ["inspection_focus_unavailable"]
+
+    for index, focus in enumerate(focus_items):
+        component_id = str(focus.get("component_id") or "")
+        target = targets_by_component.get(component_id)
+        if target is None:
+            errors.append(f"inspection_focus[{index}].component_id_unknown:{component_id}")
+            continue
+        if focus.get("component_label") != target.get("component_label"):
+            errors.append(f"inspection_focus[{index}].component_label_mismatch")
+        if focus.get("location_label") != target.get("location_label"):
+            errors.append(f"inspection_focus[{index}].location_label_mismatch")
+        allowed_basis_refs = {str(ref) for ref in target.get("basis_refs") or [] if str(ref)}
+        unknown_basis_refs = sorted(
+            str(ref)
+            for ref in focus.get("basis_refs") or []
+            if str(ref) not in allowed_basis_refs
+        )
+        if unknown_basis_refs:
+            errors.append(
+                f"inspection_focus[{index}].basis_refs_unknown:{','.join(unknown_basis_refs)}"
+            )
+    return errors
+
+
+def _validate_evidence_gaps(summary: dict[str, Any], *, packet: dict[str, Any]) -> list[str]:
+    packet_gaps = {_gap_key(gap) for gap in packet.get("evidence_gaps") or []}
+    summary_gaps = {_gap_key(gap) for gap in summary.get("evidence_gaps") or []}
+    missing_gaps = sorted(packet_gaps - summary_gaps)
+    if not missing_gaps:
+        return []
+    rendered = ",".join("|".join(gap) for gap in missing_gaps)
+    return [f"evidence_gaps_missing:{rendered}"]
+
+
+def _gap_key(gap: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(gap.get("field") or ""),
+        str(gap.get("reason") or ""),
+        str(gap.get("owner_domain") or ""),
+    )
 
 
 def _summary_schema_errors(summary: dict[str, Any]) -> list[str]:

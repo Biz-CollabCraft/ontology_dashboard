@@ -40,6 +40,9 @@ def test_gs002_gold_carries_tooling_sop_location_and_history_review() -> None:
     assert packet["asset_id"] == "CNC-S04-L04-01"
     assert packet["inspection_targets"][0]["component_id"] == "tooling"
     assert packet["inspection_targets"][0]["location_label"] == "공구 매거진 및 스핀들 공구 체결부"
+    for target in packet["inspection_targets"]:
+        assert target["source_ref"] in packet["source_refs"]
+        assert target["location_source_ref"] in packet["source_refs"]
     assert packet["sop_guidance"][0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     assert packet["sop_guidance"][0]["sensor_judgment"]["inspection_result_mapping"] == {
         "records_operational_fact": True,
@@ -60,6 +63,10 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
     target = packet["inspection_targets"][0]
     assert target["component_id"] == "drive_power"
     assert target["location_label"] == "주축 모터, 커플링, 동력 전달 하우징"
+    assert target["source_ref"] in packet["source_refs"]
+    assert target["location_source_ref"] in packet["source_refs"]
+    assert "동력 전달 계통 중심" in packet["review_draft"]["summary"]
+    assert "SOP 근거" not in packet["review_draft"]["summary"]
     assert target["basis_refs"][:3] == [
         "factor.1.mechanical_power_w",
         "factor.2.overstrain_index",
@@ -82,6 +89,10 @@ def test_gs007_gold_fails_closed_for_data_quality_hold() -> None:
     assert packet["risk_summary"]["status_grade"] is None
     assert packet["risk_summary"]["failure_probability"] is None
     assert packet["review_priority"] is None
+    assert packet["review_draft"]["priority_label"] == "미확정"
+    assert "데이터 품질 보류" in packet["review_draft"]["summary"]
+    assert "의심 부품 중심" not in packet["review_draft"]["summary"]
+    assert "SOP 근거" not in packet["review_draft"]["summary"]
     assert packet["inspection_targets"] == []
     assert packet["sop_guidance"] == []
     assert packet["review_draft"]["evidence_gap_count"] >= 1
@@ -105,6 +116,12 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         assert current["schema_version"] == gold["schema_version"]
         assert current["asset_id"] == gold["asset_id"]
         assert current["risk_summary"] == gold["risk_summary"]
+        assert current["review_priority"] == gold["review_priority"]
+        assert current["review_draft"] == gold["review_draft"]
         assert current["inspection_targets"] == gold["inspection_targets"]
         assert current["sop_retrieval"] == gold["sop_retrieval"]
+        assert current["sop_guidance"] == gold["sop_guidance"]
+        assert current["history_review_items"] == gold["history_review_items"]
+        assert current["evidence_gaps"] == gold["evidence_gaps"]
+        assert current["source_refs"] == gold["source_refs"]
         assert current["closed_loop_boundary"] == gold["closed_loop_boundary"]
