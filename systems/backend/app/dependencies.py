@@ -238,6 +238,8 @@ def build_adapter_service(
 
 def build_live_predictive_maintenance_service(
     database_url: str | None = None,
+    *,
+    runtime_pipeline_input_root: str | Path,
 ) -> LivePredictiveMaintenanceService:
     """Compose the live worker application service with its infrastructure adapter."""
 
@@ -258,6 +260,7 @@ def build_live_predictive_maintenance_service(
         dataset=LiveDatasetIngestionAdapter(target, **shared),
         diagnosis=LiveDiagnosisApplicationAdapter(**shared),
         maintenance=LiveMaintenanceOverlayAdapter(
+            snapshot_root=runtime_pipeline_input_root,
             enqueue_client=GeneratorRuntimePipelineClient(),
         ),
         ontology=LiveOntologyProjectionAdapter(),

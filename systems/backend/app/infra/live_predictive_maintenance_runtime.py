@@ -893,7 +893,7 @@ def _read_overlay_history_rows(
 
 
 def _materialize_overlay_pipeline_snapshot(
-    stream_root: str | Path,
+    snapshot_root: str | Path,
     event: dict[str, Any],
     rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -937,8 +937,7 @@ def _materialize_overlay_pipeline_snapshot(
     ]
     content = ("\n".join(encoded_rows) + "\n").encode("utf-8")
     checksum = hashlib.sha256(content).hexdigest()
-    root = Path(stream_root).expanduser().resolve()
-    snapshot_dir = root / "runtime_pipeline_input"
+    snapshot_dir = Path(snapshot_root).expanduser().resolve()
     snapshot_path = snapshot_dir / f"sha256-{checksum}.jsonl"
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1412,6 +1411,7 @@ def _consume_overlay_event(
     event: dict[str, Any],
     *,
     dataset_id: str,
+    snapshot_root: str | Path,
     enqueue_client: GeneratorRuntimePipelineClient,
 ) -> dict[str, Any]:
     psycopg, dict_row, Jsonb = _postgres_modules()
@@ -1507,7 +1507,7 @@ def _consume_overlay_event(
                     ),
                 )
     snapshot = _materialize_overlay_pipeline_snapshot(
-        stream_root,
+        snapshot_root,
         event,
         history_rows,
     )
@@ -1535,6 +1535,7 @@ def process_overlay_available_events(
     database_url: str,
     dataset_id: str,
     dataset_version_id: str,
+    snapshot_root: str | Path,
     enqueue_client: GeneratorRuntimePipelineClient,
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
@@ -1546,6 +1547,7 @@ def process_overlay_available_events(
                 stream_root,
                 event,
                 dataset_id=dataset_id,
+                snapshot_root=snapshot_root,
                 enqueue_client=enqueue_client,
             )
         )
@@ -2434,8 +2436,10 @@ class LiveMaintenanceOverlayAdapter:
     def __init__(
         self,
         *,
+        snapshot_root: str | Path,
         enqueue_client: GeneratorRuntimePipelineClient,
     ) -> None:
+        self.snapshot_root = Path(snapshot_root).expanduser().resolve()
         self.enqueue_client = enqueue_client
 
     def active_asset_ids(self, *, stream_root: str | Path) -> set[str]:
@@ -2447,6 +2451,7 @@ class LiveMaintenanceOverlayAdapter:
             database_url=str(batch["database_url"]),
             dataset_id=str(batch["dataset_id"]),
             dataset_version_id=str(batch["dataset_version_id"]),
+            snapshot_root=self.snapshot_root,
             enqueue_client=self.enqueue_client,
         )
 

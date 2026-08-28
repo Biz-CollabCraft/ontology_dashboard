@@ -57,14 +57,15 @@ def _row() -> dict[str, object]:
 
 def test_overlay_delta_is_frozen_as_content_addressed_generator_input(tmp_path: Path) -> None:
     rows = [_row()]
+    snapshot_root = tmp_path / "shared-runtime-pipeline-input"
 
-    first = _materialize_overlay_pipeline_snapshot(tmp_path, _event(), rows)
-    second = _materialize_overlay_pipeline_snapshot(tmp_path, _event(), rows)
+    first = _materialize_overlay_pipeline_snapshot(snapshot_root, _event(), rows)
+    second = _materialize_overlay_pipeline_snapshot(snapshot_root, _event(), rows)
 
     snapshot = Path(first["source_uri"])
     content = snapshot.read_bytes()
     assert first == second
-    assert snapshot.parent == tmp_path / "runtime_pipeline_input"
+    assert snapshot.parent == snapshot_root
     assert snapshot.name == f"sha256-{first['source_checksum']}.jsonl"
     assert hashlib.sha256(content).hexdigest() == first["source_checksum"]
     assert first["size_bytes"] == len(content)
@@ -74,10 +75,13 @@ def test_overlay_delta_is_frozen_as_content_addressed_generator_input(tmp_path: 
 
 
 def test_overlay_snapshot_does_not_change_when_branch_file_keeps_growing(tmp_path: Path) -> None:
-    branch = tmp_path / "runtime_overlay" / "branch.jsonl"
+    producer_root = tmp_path / "producer-owned-output"
+    snapshot_root = tmp_path / "shared-runtime-pipeline-input"
+    branch = producer_root / "runtime_overlay" / "branch.jsonl"
     branch.parent.mkdir(parents=True)
     branch.write_text(json.dumps(_row()) + "\n", encoding="utf-8")
-    snapshot = _materialize_overlay_pipeline_snapshot(tmp_path, _event(), [_row()])
+    original_branch = branch.read_bytes()
+    snapshot = _materialize_overlay_pipeline_snapshot(snapshot_root, _event(), [_row()])
     frozen = Path(snapshot["source_uri"]).read_bytes()
 
     branch.write_text(
@@ -87,11 +91,54 @@ def test_overlay_snapshot_does_not_change_when_branch_file_keeps_growing(tmp_pat
 
     assert Path(snapshot["source_uri"]).read_bytes() == frozen
     assert hashlib.sha256(frozen).hexdigest() == snapshot["source_checksum"]
+    assert not producer_root.joinpath("runtime_pipeline_input").exists()
+    assert original_branch != branch.read_bytes()
+    assert Path(snapshot["source_uri"]).parent == snapshot_root
+
+
+def test_runtime_pipeline_snapshot_does_not_mutate_producer_output(tmp_path: Path) -> None:
+    producer_root = tmp_path / "producer-owned-output"
+    producer_root.mkdir()
+    marker = producer_root / "overlay.jsonl"
+    marker.write_text(json.dumps(_row()) + "\n", encoding="utf-8")
+    before = marker.read_bytes()
+    snapshot_root = tmp_path / "shared-runtime-pipeline-input"
+
+    snapshot = _materialize_overlay_pipeline_snapshot(
+        snapshot_root,
+        _event(),
+        [_row()],
+    )
+
+    assert marker.read_bytes() == before
+    assert Path(snapshot["source_uri"]).parent == snapshot_root
+    assert not producer_root.joinpath("runtime_pipeline_input").exists()
+
+
+def test_runtime_pipeline_snapshot_root_is_required_and_absolute(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from app.live_predictive_maintenance import runtime_pipeline_input_root
+
+    monkeypatch.delenv("ONTOLOGY_DASHBOARD_RUNTIME_PIPELINE_INPUT_ROOT", raising=False)
+    with pytest.raises(RuntimeError, match="is required"):
+        runtime_pipeline_input_root()
+
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_RUNTIME_PIPELINE_INPUT_ROOT", "relative/path")
+    with pytest.raises(RuntimeError, match="must be an absolute path"):
+        runtime_pipeline_input_root()
+
+    expected = tmp_path / "shared-runtime-pipeline-input"
+    monkeypatch.setenv("ONTOLOGY_DASHBOARD_RUNTIME_PIPELINE_INPUT_ROOT", str(expected))
+    assert runtime_pipeline_input_root() == expected.resolve()
 
 
 def test_generator_snapshot_uses_cumulative_history_not_only_latest_delta(
     tmp_path: Path,
 ) -> None:
+    producer_root = tmp_path / "producer-owned-output"
+    snapshot_root = tmp_path / "shared-runtime-pipeline-input"
     vector_path = (
         Path(__file__).parents[1]
         / "contracts"
@@ -124,15 +171,15 @@ def test_generator_snapshot_uses_cumulative_history_not_only_latest_delta(
         "storage_reference": "",
     }
     event["storage_reference"] = expected_storage_reference(event)
-    storage = tmp_path.joinpath(*Path(event["storage_reference"]).parts)
+    storage = producer_root.joinpath(*Path(event["storage_reference"]).parts)
     storage.parent.mkdir(parents=True)
     storage.write_text(
         "\n".join(json.dumps(row, ensure_ascii=False) for row in (first, second)) + "\n",
         encoding="utf-8",
     )
 
-    history = _read_overlay_history_rows(tmp_path, event)
-    snapshot = _materialize_overlay_pipeline_snapshot(tmp_path, event, history)
+    history = _read_overlay_history_rows(producer_root, event)
+    snapshot = _materialize_overlay_pipeline_snapshot(snapshot_root, event, history)
     frozen_rows = [
         json.loads(line)
         for line in Path(snapshot["source_uri"]).read_text(encoding="utf-8").splitlines()
@@ -272,7 +319,7 @@ def test_overlay_lineage_round_trips_through_generator_queue_checkpoint_and_batc
     )
 
     snapshot = _materialize_overlay_pipeline_snapshot(
-        tmp_path,
+        tmp_path / "shared-runtime-pipeline-input",
         _event(),
         [_row()],
     )

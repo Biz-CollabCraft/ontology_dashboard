@@ -29,9 +29,20 @@ The production `.env` is server-only, mode `0600`, and must never be committed.
 ## Persistent layout
 
 `ONTOLOGY_DATA_ROOT` contains `postgres/`, `generator/{source,data_preprocessed,ontology,models_store,logs}`,
-`artifacts/`, and `backups/{neon,postgres,generator}`. Generated feature caches
+`artifacts/`, `runtime-pipeline-input/`, and `backups/{neon,postgres,generator}`. Generated feature caches
 can be recreated. PostgreSQL dumps, immutable Model Artifacts, mapping metadata,
 and the source snapshot metadata are backup-worthy.
+
+`GEN_DATA_RUNTIME_OUTPUT_ROOT` remains producer-owned and read-only to the
+live-ingestor. The live-ingestor writes immutable, content-addressed Runtime
+Prediction inputs only to `RUNTIME_PIPELINE_INPUT_ROOT`; Generator mounts that
+same host directory at `/runtime-pipeline-input` read-only.
+
+Create `RUNTIME_PIPELINE_INPUT_ROOT` with permissions that allow the
+`live-ingestor` container to write and the Generator runtime to read. Set
+`ONTOLOGY_DASHBOARD_GENERATOR_RUNTIME_ENQUEUE_URL` only when the persistent
+Generator Runtime API is deployed; an Overlay event fails closed while that
+endpoint is absent or unreachable.
 
 ## Startup / shutdown / logs
 

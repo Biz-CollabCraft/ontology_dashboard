@@ -26,6 +26,10 @@ def test_macmini_compose_runs_canonical_live_worker() -> None:
 
     assert 'command: ["python", "-m", "app.live_predictive_maintenance"]' in compose
     assert "ontology_dashboard.live_predictive_maintenance" not in compose
+    assert "${GEN_DATA_RUNTIME_OUTPUT_ROOT}:/gen-data-runtime:ro" in compose
+    assert "${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input" in compose
+    assert "${RUNTIME_PIPELINE_INPUT_ROOT}:/runtime-pipeline-input:ro" in compose
+    assert "ONTOLOGY_DASHBOARD_RUNTIME_PIPELINE_INPUT_ROOT: /runtime-pipeline-input" in compose
     assert not (
         root / "systems" / "backend" / "ontology_dashboard" / "live_predictive_maintenance.py"
     ).exists()
