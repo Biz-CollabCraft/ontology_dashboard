@@ -9,7 +9,6 @@
     "mapping_version",
     "mapping_sha256",
     "status",
-    "protocol_version",
     "source_schema_version",
     "source_schema_fingerprint",
     "fingerprint_algorithm_version",
@@ -44,6 +43,14 @@
         "deprecated"
       ],
       "description": "Approval lifecycle state. Must be 'approved' for operational execution."
+    },
+    "source_format": {
+      "type": "string",
+      "enum": [
+        "sensor_record_v2",
+        "gen_data_sensor_stream"
+      ],
+      "description": "Source protocol format classification: sensor_record_v2 or gen_data_sensor_stream"
     },
     "protocol_version": {
       "type": "string",

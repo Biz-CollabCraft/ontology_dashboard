@@ -425,3 +425,68 @@ class ExtractionSourceOffsetNotAlignedError(ExtractionError):
             details=details,
             retryable=False,
         )
+
+
+class ExtractionMappingSourceFormatMismatchError(ExtractionError):
+    """Raised when mapping table source_format does not match expected source format."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_MAPPING_SOURCE_FORMAT_MISMATCH",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionMappingDuplicateSourceFieldError(ExtractionError):
+    """Raised when mapping table contains duplicate declarations of the same source_field."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_MAPPING_DUPLICATE_SOURCE_FIELD",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionMappingTargetCollisionError(ExtractionError):
+    """Raised when two or more distinct source_fields map to the same target_field."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_MAPPING_TARGET_COLLISION",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionMappingReservedTargetFieldError(ExtractionError):
+    """Raised when mapping target_field collides with reserved Identity or Provenance fields."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_MAPPING_RESERVED_TARGET_FIELD",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionMappingEmptyError(ExtractionError):
+    """Raised when mapping table does not define at least one valid sensor field mapping."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_MAPPING_EMPTY",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )

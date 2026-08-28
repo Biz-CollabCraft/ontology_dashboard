@@ -33,6 +33,11 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionGenDataSourceDiscoveryFailedError,
     ExtractionSourceOffsetInvalidError,
     ExtractionSourceOffsetNotAlignedError,
+    ExtractionMappingSourceFormatMismatchError,
+    ExtractionMappingDuplicateSourceFieldError,
+    ExtractionMappingTargetCollisionError,
+    ExtractionMappingReservedTargetFieldError,
+    ExtractionMappingEmptyError,
 )
 from systems.generator.app.extraction.extraction_schema import (
     ExtractionRequest,
@@ -48,6 +53,12 @@ from systems.generator.app.extraction.parsers.gen_data_sensor_stream_parser impo
     GenDataSensorStreamParser,
     ParsedGenDataRecord,
     RejectedGenDataRecord,
+)
+from systems.generator.app.extraction.gen_data_mapping import (
+    CanonicalObservationCandidate,
+    GenDataMappingResult,
+    GenDataStaticMappingConverter,
+    RejectedMappingRecord,
 )
 from systems.generator.app.extraction.extraction_service import ExtractionService
 from systems.generator.app.extraction.extraction_router import router
@@ -85,6 +96,11 @@ __all__ = [
     "ExtractionGenDataSourceDiscoveryFailedError",
     "ExtractionSourceOffsetInvalidError",
     "ExtractionSourceOffsetNotAlignedError",
+    "ExtractionMappingSourceFormatMismatchError",
+    "ExtractionMappingDuplicateSourceFieldError",
+    "ExtractionMappingTargetCollisionError",
+    "ExtractionMappingReservedTargetFieldError",
+    "ExtractionMappingEmptyError",
     "ExtractionRequest",
     "ExtractionResponse",
     "ExtractionResultPayload",
@@ -94,6 +110,10 @@ __all__ = [
     "GenDataSensorStreamParser",
     "ParsedGenDataRecord",
     "RejectedGenDataRecord",
+    "CanonicalObservationCandidate",
+    "RejectedMappingRecord",
+    "GenDataMappingResult",
+    "GenDataStaticMappingConverter",
     "ExtractionService",
     "router",
 ]

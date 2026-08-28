@@ -17,6 +17,11 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionSchemaFingerprintMismatchError,
     ExtractionFeatureNotImplementedError,
     ExtractionRequestInvalidError,
+    ExtractionMappingSourceFormatMismatchError,
+    ExtractionMappingDuplicateSourceFieldError,
+    ExtractionMappingTargetCollisionError,
+    ExtractionMappingReservedTargetFieldError,
+    ExtractionMappingEmptyError,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +34,20 @@ ALLOWED_TRANSFORMS = {
     "scale_10x",
     "kelvin_to_celsius",
     "celsius_to_kelvin",
+}
+
+RESERVED_TARGET_FIELDS = {
+    "asset_id",
+    "observed_at",
+    "site_id",
+    "cell_id",
+    "label",
+    "target",
+    "failure",
+    "degradation_start",
+    "extraction_run_id",
+    "source_uri",
+    "source_checksum",
 }
 
 
@@ -91,8 +110,9 @@ class MappingValidator:
         expected_mapping_version: Optional[str] = None,
         expected_mapping_sha256: Optional[str] = None,
         expected_source_schema_fingerprint: Optional[str] = None,
+        expected_source_format: Optional[str] = None,
     ) -> None:
-        """Strictly validate mapping against JSON schema, approved status, checksums, and transforms."""
+        """Strictly validate mapping against JSON schema, approved status, checksums, format, collisions, and transforms."""
         # 1. JSON Schema validation
         schema = self._get_schema()
         try:
@@ -149,14 +169,58 @@ class MappingValidator:
                     details=[{"expected": expected_source_schema_fingerprint, "actual": mapping_fingerprint}],
                 )
 
-        # 6. Transforms allowlist verification
+        # 6. Source format verification
+        actual_source_format = mapping_data.get("source_format")
+        if actual_source_format is None and "protocol_version" in mapping_data:
+            actual_source_format = "sensor_record_v2"
+        if expected_source_format:
+            if actual_source_format != expected_source_format:
+                raise ExtractionMappingSourceFormatMismatchError(
+                    f"매핑 source_format 불일치: 요구='{expected_source_format}', 실제='{actual_source_format}'",
+                    details=[{"expected": expected_source_format, "actual": actual_source_format}],
+                )
+
+        # 7. Field mappings integrity: duplicates, collisions, reserved fields, transforms
         field_mappings = mapping_data.get("field_mappings", [])
+        if not field_mappings:
+            raise ExtractionMappingEmptyError("매핑 테이블에 최소 1개 이상의 field_mappings가 정의되어야 합니다.")
+
+        seen_sources: set[str] = set()
+        seen_targets: set[str] = set()
+
         for fm in field_mappings:
+            src = fm.get("source_field")
+            tgt = fm.get("target_field")
             transform = fm.get("transform")
+
+            # Check duplicate source_field
+            if src in seen_sources:
+                raise ExtractionMappingDuplicateSourceFieldError(
+                    f"중복된 source_field 선언이 발견되었습니다: '{src}'",
+                    details=[{"source_field": src}],
+                )
+            seen_sources.add(src)
+
+            # Check target collision
+            if tgt in seen_targets:
+                raise ExtractionMappingTargetCollisionError(
+                    f"중복된 target_field 선언이 발견되었습니다 (Target Collision): '{tgt}'",
+                    details=[{"target_field": tgt}],
+                )
+            seen_targets.add(tgt)
+
+            # Check reserved target field
+            if tgt in RESERVED_TARGET_FIELDS:
+                raise ExtractionMappingReservedTargetFieldError(
+                    f"예약된 식별자/Provenance 필드는 target_field로 사용할 수 없습니다: '{tgt}'",
+                    details=[{"target_field": tgt, "reserved_fields": sorted(RESERVED_TARGET_FIELDS)}],
+                )
+
+            # Check transform allowlist
             if transform not in ALLOWED_TRANSFORMS:
                 raise ExtractionFeatureNotImplementedError(
                     f"지원하지 않는 변환(transform) 함수입니다: '{transform}' (허용: {sorted(ALLOWED_TRANSFORMS)})",
-                    details=[{"field": fm.get("source_field"), "transform": transform}],
+                    details=[{"field": src, "transform": transform}],
                 )
 
     def apply_transform(
