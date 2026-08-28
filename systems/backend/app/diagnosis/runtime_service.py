@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Literal
@@ -38,6 +39,8 @@ from .runtime_schema import (
     GraphReadiness,
     ObservationQueryResponse,
     PolicyRecommendation,
+    PredictionBatchPromotionItemReceipt,
+    PredictionBatchPromotionReceipt,
     PredictiveMaintenanceDashboardResponse,
     PredictionInboxItemReceipt,
     PredictionInboxReceipt,
@@ -380,6 +383,453 @@ class PredictiveMaintenanceRuntimeService:
             conflict_results=counts["conflict"],
             rejected_results=counts["rejected"],
             item_receipts=item_receipts,
+        )
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _threshold_policy() -> dict[str, Any]:
+        path = project_root() / "systems" / "backend" / "app" / "diagnosis" / "threshold_policy.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    @classmethod
+    def _status_for_generator_score(cls, score: float) -> str:
+        rules = cls._threshold_policy()["severity_rules"]
+        if score >= float(rules["critical"]):
+            return "critical"
+        if score >= float(rules["warning"]):
+            return "warning"
+        if score >= float(rules["attention"]):
+            return "attention"
+        return "normal"
+
+    @classmethod
+    def _promotion_action(cls, status: str) -> dict[str, str]:
+        action = str(cls._threshold_policy()["decision_mapping"][status])
+        priority = {
+            "critical": "urgent",
+            "warning": "high",
+            "attention": "medium",
+            "normal": "normal",
+        }[status]
+        return {"action": action, "priority": priority}
+
+    @staticmethod
+    def _confidence_for_generator_score(score: float, threshold: float) -> float:
+        return round(max(0.01, min(0.99, abs(score - threshold) * 2.0)), 6)
+
+    @staticmethod
+    def _record_sha256(record: dict[str, Any]) -> str:
+        rendered = json.dumps(
+            record,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+        return hashlib.sha256(rendered).hexdigest()
+
+    @classmethod
+    def _product_artifact_from_prediction_item(
+        cls,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        dataset_version_id: str,
+        asset_type: str,
+        batch: PredictionResultBatch,
+        item: Any,
+    ) -> dict[str, Any]:
+        score = float(item.score)
+        threshold = float(cls._threshold_policy()["decision_threshold"])
+        status = cls._status_for_generator_score(score)
+        predicted_type = "failure_risk" if score >= threshold else "no_significant_risk"
+        prediction_id = f"GEN-{uuid.uuid5(uuid.NAMESPACE_URL, f'{batch.batch_id}:{item.event_id}')}"
+        artifact_id = f"RESULT#{prediction_id}"
+        action = cls._promotion_action(status)
+        confidence = cls._confidence_for_generator_score(score, threshold)
+        source_reference = (
+            f"prediction-result-batch:{batch.batch_id}:event:{item.event_id}:"
+            f"sha256:{item.payload_sha256}"
+        )
+        top_factors = [
+            {
+                "rank": 1,
+                "feature": "generator_failure_score",
+                "feature_value": score,
+                "signed_contribution": round(score - threshold, 6),
+                "direction": "risk_up" if score >= threshold else "risk_down",
+                "explanation_method": "generator_prediction_score",
+            },
+            {
+                "rank": 2,
+                "feature": "backend_decision_threshold",
+                "feature_value": threshold,
+                "signed_contribution": 0.0,
+                "direction": "risk_down",
+                "explanation_method": "backend_threshold_policy",
+            },
+            {
+                "rank": 3,
+                "feature": "generator_model_artifact_manifest",
+                "feature_value": 1.0,
+                "signed_contribution": 0.0,
+                "direction": "risk_up",
+                "explanation_method": "lineage_presence_check",
+            },
+        ]
+        ranked_factor_evidence = [
+            {
+                "evidence_field_id": f"prediction_batch.{name}",
+                "feature": name,
+                "display_name": label,
+                "value": value,
+                "unit": unit,
+                "normal_range": normal_range,
+                "direction": direction,
+                "contribution": contribution,
+                "source_type": "generator_prediction_result_batch",
+            }
+            for name, label, value, unit, normal_range, direction, contribution in (
+                (
+                    "generator_failure_score",
+                    "Generator failure score",
+                    score,
+                    "probability",
+                    f"< {threshold}",
+                    "risk_up" if score >= threshold else "risk_down",
+                    abs(score - threshold),
+                ),
+                (
+                    "backend_decision_threshold",
+                    "Backend decision threshold",
+                    threshold,
+                    "probability",
+                    "policy value",
+                    "risk_down",
+                    0.0,
+                ),
+                (
+                    "generator_model_artifact_manifest",
+                    "Generator model artifact manifest",
+                    1.0,
+                    "present",
+                    "required",
+                    "risk_up",
+                    0.0,
+                ),
+            )
+        ]
+        source_fields = [
+            {
+                "field_id": "prediction_batch.score",
+                "source_path": f"results[event_id={item.event_id}].score",
+                "label": "Generator failure score",
+                "description": "Raw prediction score emitted by Generator and consumed by Backend policy.",
+            },
+            {
+                "field_id": "prediction_batch.payload_sha256",
+                "source_path": f"results[event_id={item.event_id}].payload_sha256",
+                "label": "Prediction payload checksum",
+                "description": "Canonical checksum of the raw Generator prediction item.",
+            },
+            {
+                "field_id": "prediction_batch.model_artifact_manifest_sha256",
+                "source_path": f"results[event_id={item.event_id}].model_artifact_manifest_sha256",
+                "label": "Model artifact manifest checksum",
+                "description": "Generator model artifact lineage checksum used for this prediction.",
+            },
+            {
+                "field_id": "backend_policy.decision_threshold",
+                "source_path": "systems/backend/app/diagnosis/threshold_policy.json",
+                "label": "Backend decision threshold",
+                "description": "Backend-owned threshold policy applied during Product Result promotion.",
+            },
+        ]
+        evidence_payload = {
+            "sensor_evidence": {"window_rows": 0, "sensors": {}},
+            "component_hypotheses": [],
+            "status_flags": {
+                "multiple_risk_factors": False,
+                "insufficient_data": False,
+            },
+            "recommended_actions": [
+                {
+                    "action_id": action["action"],
+                    "label": action["action"],
+                    "kind": "backend_policy_recommendation",
+                    "requires_human_approval": True,
+                    "basis": ["prediction_batch.score", "backend_policy.decision_threshold"],
+                }
+            ],
+            "source_fields": source_fields,
+            "evidence_gaps": [
+                {
+                    "gap_id": "generator-batch-sensor-window-unavailable",
+                    "field": "evidence_payload.sensor_evidence",
+                    "reason": "missing_source",
+                    "required_source": "observation window and feature attribution payload",
+                    "owner_domain": "diagnosis",
+                    "display_policy": "show_limitation",
+                },
+                {
+                    "gap_id": "generator-batch-component-hypotheses-unavailable",
+                    "field": "evidence_payload.component_hypotheses",
+                    "reason": "insufficient_context",
+                    "required_source": "component attribution or inspection-target mapping",
+                    "owner_domain": "diagnosis",
+                    "display_policy": "show_limitation",
+                },
+                {
+                    "gap_id": "generator-batch-maintenance-context-unavailable",
+                    "field": "evidence_payload.maintenance_context",
+                    "reason": "missing_source",
+                    "required_source": "maintenance context provider",
+                    "owner_domain": "maintenance",
+                    "display_policy": "show_limitation",
+                },
+            ],
+        }
+        artifact = {
+            "artifact_id": artifact_id,
+            "artifact_type": "predictive_maintenance_result",
+            "schema_version": V3_1_RESULT_SCHEMA,
+            "asset_id": item.asset_id,
+            "asset_type": asset_type,
+            "observed_at": item.observed_at.isoformat(),
+            "generated_at": batch.emitted_at.isoformat(),
+            "threshold": threshold,
+            "prediction_horizon_hours": 24,
+            "prediction_task": PREDICTION_TASK,
+            "failure_probability": score,
+            "predicted_failure_type": predicted_type,
+            "status_grade": status,
+            "confidence": confidence,
+            "confidence_label": (
+                "high" if confidence >= 0.7 else "medium" if confidence >= 0.4 else "low"
+            ),
+            "top_factors": top_factors,
+            "ranked_factor_evidence": ranked_factor_evidence,
+            "recommended_action": action,
+            "data_quality_warnings": [],
+            "observation": {},
+            "history": [],
+            "detected_interval": {
+                "start": item.observed_at.isoformat(),
+                "end": item.observed_at.isoformat(),
+            },
+            "policy_version": str(cls._threshold_policy()["policy_version"]),
+            "model_mode": "generator_prediction_batch",
+            "lineage": {
+                "batch_id": batch.batch_id,
+                "event_id": item.event_id,
+                "source_context": batch.source_context.model_dump(mode="json"),
+                "item_lineage": item.lineage.model_dump(mode="json"),
+            },
+            "evidence_payload": evidence_payload,
+            "provenance": {
+                "dataset_version": batch.source_context.dataset_version,
+                "model_version": item.model_version,
+                "prediction_id": prediction_id,
+                "source_type": "product_runtime_inference",
+                "canonical_source_mutated": False,
+                "model_artifact": {
+                    "model_id": item.model_id,
+                    "model_version": item.model_version,
+                    "model_artifact_manifest_sha256": item.model_artifact_manifest_sha256,
+                    "feature_schema_version": item.feature_schema_version,
+                    "history_requirement_version": item.history_requirement_version,
+                    "label_schema_version": item.label_schema_version,
+                    "feature_schema_sha256": item.feature_schema_sha256,
+                    "history_requirement_sha256": item.history_requirement_sha256,
+                    "label_schema_sha256": item.label_schema_sha256,
+                },
+                "evidence_payload_reference": {
+                    "source": "product_result_artifact",
+                    "reference": artifact_id,
+                    "generated_by": "systems.backend.diagnosis.generator_batch_promotion",
+                },
+                "source_reference": source_reference,
+            },
+        }
+        validate_product_result_artifact(artifact)
+        return artifact
+
+    def promote_prediction_result_batch(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str,
+    ) -> PredictionBatchPromotionReceipt:
+        context = self.repository.prediction_batch_promotion_context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+        )
+        if context is None:
+            raise KeyError(batch_id)
+        batch = PredictionResultBatch.model_validate(context["raw_payload"])
+        assets = context.get("assets", {})
+        promotions: list[dict[str, Any]] = []
+        item_receipts: list[PredictionBatchPromotionItemReceipt] = []
+        for item in batch.results:
+            if item.output_status != "predicted":
+                item_receipts.append(
+                    PredictionBatchPromotionItemReceipt(
+                        event_id=item.event_id,
+                        promotion_status="skipped",
+                        reason=f"output_status={item.output_status}",
+                    )
+                )
+                continue
+            asset = assets.get(item.asset_id)
+            if not asset:
+                item_receipts.append(
+                    PredictionBatchPromotionItemReceipt(
+                        event_id=item.event_id,
+                        promotion_status="skipped",
+                        reason="asset_not_found_in_dataset_version",
+                    )
+                )
+                continue
+            artifact = self._product_artifact_from_prediction_item(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                dataset_version_id=str(context["dataset_version_id"]),
+                asset_type=str(asset["asset_type"]),
+                batch=batch,
+                item=item,
+            )
+            prediction_result = PredictionResult(
+                prediction_id=artifact["provenance"]["prediction_id"],
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                source_run_id=artifact["artifact_id"],
+                subject=PredictionSubject(
+                    object_type="equipment",
+                    object_id=item.asset_id,
+                    observed_at=item.observed_at,
+                ),
+                prediction=PredictionValue(
+                    task="classification",
+                    status=artifact["status_grade"],
+                    label=artifact["predicted_failure_type"],
+                    score=artifact["failure_probability"],
+                    confidence=artifact["confidence"],
+                    horizon="24h",
+                    value=artifact["predicted_failure_type"],
+                ),
+                evidence=[
+                    PredictionEvidence(
+                        evidence_id=f"artifact:{artifact['artifact_id']}",
+                        kind="artifact",
+                        label="Generator Prediction Result Batch",
+                        value={
+                            "source_contract": "prediction-result-batch-v1",
+                            "batch_id": batch.batch_id,
+                            "event_id": item.event_id,
+                            "backend_policy_version": artifact["policy_version"],
+                        },
+                        source=EvidenceSource(
+                            system="systems.generator",
+                            reference=artifact["provenance"]["source_reference"],
+                            checksum=item.payload_sha256,
+                        ),
+                    )
+                ],
+                recommended_actions=[
+                    RecommendedAction(
+                        action_type=artifact["recommended_action"]["action"],
+                        label=artifact["recommended_action"]["action"],
+                        reason="Backend threshold policy applied to Generator prediction score; approval and execution have not occurred.",
+                        requires_approval=True,
+                        parameters={
+                            "priority": artifact["recommended_action"]["priority"],
+                            "semantic_type": "policy_recommendation",
+                            "execution_state": "not_executed",
+                            "creates_work_order_automatically": False,
+                        },
+                    )
+                ],
+                model=PredictionModel(
+                    provider="systems.generator",
+                    model_name=item.model_id,
+                    model_version=item.model_version,
+                    dataset_version=batch.source_context.dataset_version,
+                    policy_version=artifact["policy_version"],
+                ),
+                data_quality=DataQuality(status="pass", issues=[]),
+                created_at=batch.emitted_at,
+            )
+            promotions.append(
+                {
+                    "event_id": item.event_id,
+                    "artifact": artifact,
+                    "prediction_result": prediction_result.model_dump(mode="json"),
+                    "prediction_result_id": artifact["provenance"]["prediction_id"],
+                    "source_sha256": self._record_sha256(artifact),
+                }
+            )
+            item_receipts.append(
+                PredictionBatchPromotionItemReceipt(
+                    event_id=item.event_id,
+                    promotion_status="promoted",
+                    product_result_id=artifact["provenance"]["prediction_id"],
+                    artifact_id=artifact["artifact_id"],
+                )
+            )
+        stored = self.repository.save_prediction_batch_promotions(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+            dataset_version_id=str(context["dataset_version_id"]),
+            promotions=promotions,
+        )
+        by_event = {item.event_id: item for item in item_receipts}
+        stored_receipts = []
+        for item in stored.get("item_receipts", []):
+            original = by_event.get(str(item["event_id"]))
+            stored_receipts.append(
+                PredictionBatchPromotionItemReceipt(
+                    event_id=str(item["event_id"]),
+                    promotion_status=str(item["promotion_status"]),
+                    product_result_id=item.get("product_result_id"),
+                    artifact_id=item.get("artifact_id"),
+                    reason=item.get("reason") or (original.reason if original else None),
+                )
+            )
+        skipped = [item for item in item_receipts if item.promotion_status == "skipped"]
+        final_receipts = stored_receipts + skipped
+        promoted = sum(1 for item in final_receipts if item.promotion_status == "promoted")
+        already = sum(1 for item in final_receipts if item.promotion_status == "already_promoted")
+        skipped_count = sum(1 for item in final_receipts if item.promotion_status == "skipped")
+        if promoted:
+            status_value = "promoted" if not skipped_count else "partially_promoted"
+        elif already and not skipped_count:
+            status_value = "already_promoted"
+        elif already:
+            status_value = "partially_promoted"
+        else:
+            status_value = "not_promoted"
+        return PredictionBatchPromotionReceipt(
+            batch_id=batch_id,
+            promotion_status=status_value,
+            product_result_created=promoted > 0,
+            received_results=len(batch.results),
+            promoted_results=promoted,
+            already_promoted_results=already,
+            skipped_results=skipped_count,
+            product_result_ids=[
+                item.product_result_id for item in final_receipts if item.product_result_id
+            ],
+            artifact_ids=[item.artifact_id for item in final_receipts if item.artifact_id],
+            item_receipts=final_receipts,
         )
 
     @staticmethod

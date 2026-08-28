@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Sequence
@@ -1312,6 +1313,350 @@ class PredictiveMaintenanceRuntimeRepository:
             "rejection_reason": batch_reason,
             "item_receipts": persisted_items,
         }
+
+    def prediction_batch_promotion_context(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str,
+    ) -> dict[str, Any] | None:
+        with self._connection(organization_id, project_id) as connection:
+            batch = connection.execute(
+                """
+                SELECT receive_id,batch_id,raw_payload,promotion_result_id
+                FROM pm_prediction_result_inbox_batches
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND batch_id=%s AND validation_status='accepted'
+                ORDER BY received_at DESC
+                LIMIT 1
+                """,
+                (organization_id, project_id, workspace_id, batch_id),
+            ).fetchone()
+            if batch is None:
+                return None
+            raw_payload = dict(batch["raw_payload"])
+            source_context = raw_payload.get("source_context") or {}
+            dataset_id = str(source_context.get("dataset_id") or "")
+            source_version = str(source_context.get("dataset_version") or "")
+            dataset = connection.execute(
+                """
+                SELECT v.id AS dataset_version_id,v.source_version,v.version_number,
+                       v.checksum_sha256 AS bundle_checksum_sha256,
+                       v.record_count,v.status AS dataset_status,
+                       d.display_name AS dataset_name
+                FROM dataset_versions v
+                JOIN datasets d ON d.id=v.dataset_id
+                WHERE v.organization_id=%s AND v.project_id=%s AND v.workspace_id=%s
+                  AND v.dataset_id=%s
+                  AND (v.id=%s OR v.source_version=%s)
+                ORDER BY v.version_number DESC
+                LIMIT 1
+                """,
+                (
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    dataset_id,
+                    source_version,
+                    source_version,
+                ),
+            ).fetchone()
+            if dataset is None:
+                raise ValueError(
+                    "prediction batch source_context does not resolve to a Dataset Version"
+                )
+            accepted_items = connection.execute(
+                """
+                SELECT event_id,promotion_result_id
+                FROM pm_prediction_result_inbox_items
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND batch_id=%s AND validation_status='accepted'
+                """,
+                (organization_id, project_id, workspace_id, batch_id),
+            ).fetchall()
+            asset_ids = sorted(
+                {
+                    str(item.get("asset_id"))
+                    for item in raw_payload.get("results", [])
+                    if isinstance(item, dict) and item.get("asset_id")
+                }
+            )
+            assets = {}
+            if asset_ids:
+                asset_rows = connection.execute(
+                    """
+                    SELECT asset_id,asset_type,site_id,cell_id
+                    FROM pm_assets
+                    WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                      AND dataset_version_id=%s AND asset_id = ANY(%s)
+                    """,
+                    (
+                        organization_id,
+                        project_id,
+                        workspace_id,
+                        dataset["dataset_version_id"],
+                        asset_ids,
+                    ),
+                ).fetchall()
+                assets = {str(row["asset_id"]): dict(row) for row in asset_rows}
+        return {
+            **dict(dataset),
+            "batch_id": str(batch["batch_id"]),
+            "raw_payload": raw_payload,
+            "already_promoted_batch": batch["promotion_result_id"],
+            "accepted_items": [dict(row) for row in accepted_items],
+            "assets": assets,
+        }
+
+    def save_prediction_batch_promotions(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str,
+        dataset_version_id: str,
+        promotions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        item_receipts: list[dict[str, Any]] = []
+        now = self._now()
+        with self._connection(organization_id, project_id) as connection:
+            receive = connection.execute(
+                """
+                SELECT receive_id,promotion_result_id
+                FROM pm_prediction_result_inbox_batches
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND batch_id=%s AND validation_status='accepted'
+                ORDER BY received_at DESC
+                LIMIT 1
+                FOR UPDATE
+                """,
+                (organization_id, project_id, workspace_id, batch_id),
+            ).fetchone()
+            if receive is None:
+                raise KeyError(batch_id)
+
+            for promotion in promotions:
+                event_id = str(promotion["event_id"])
+                artifact = dict(promotion["artifact"])
+                prediction_result_id = str(promotion["prediction_result_id"])
+                artifact_id = str(artifact["artifact_id"])
+                prediction_id = str(artifact["provenance"]["prediction_id"])
+                model_version = str(artifact["provenance"]["model_version"])
+                source_sha256 = str(promotion["source_sha256"])
+                existing = connection.execute(
+                    """
+                    SELECT artifact_id,prediction_result_id
+                    FROM pm_result_artifacts
+                    WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                      AND dataset_version_id=%s AND artifact_id=%s
+                    FOR UPDATE
+                    """,
+                    (
+                        organization_id,
+                        project_id,
+                        workspace_id,
+                        dataset_version_id,
+                        artifact_id,
+                    ),
+                ).fetchone()
+                if existing is not None:
+                    item_receipts.append(
+                        {
+                            "event_id": event_id,
+                            "promotion_status": "already_promoted",
+                            "product_result_id": str(existing["prediction_result_id"]),
+                            "artifact_id": str(existing["artifact_id"]),
+                            "reason": None,
+                        }
+                    )
+                else:
+                    connection.execute(
+                        """
+                        INSERT INTO prediction_results(
+                            prediction_id,organization_id,project_id,workspace_id,
+                            subject_object_type,subject_object_id,prediction_status,
+                            model_version,dataset_version,payload_json,created_at,received_at
+                        ) VALUES (%s,%s,%s,%s,'equipment',%s,%s,%s,%s,%s::jsonb,%s,%s)
+                        """,
+                        (
+                            prediction_result_id,
+                            organization_id,
+                            project_id,
+                            workspace_id,
+                            artifact["asset_id"],
+                            artifact["status_grade"],
+                            model_version,
+                            artifact["provenance"]["dataset_version"],
+                            json.dumps(artifact, sort_keys=True),
+                            artifact["generated_at"],
+                            now,
+                        ),
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO pm_prediction_snapshots(
+                            organization_id,project_id,workspace_id,dataset_version_id,
+                            prediction_id,prediction_result_id,asset_id,asset_type,observed_at,
+                            prediction_horizon_hours,failure_probability,predicted_failure_type,
+                            confidence,status,model_version,feature_scope,source_sha256
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,24,%s,%s,%s,%s,%s,%s::jsonb,%s)
+                        """,
+                        (
+                            organization_id,
+                            project_id,
+                            workspace_id,
+                            dataset_version_id,
+                            prediction_id,
+                            prediction_result_id,
+                            artifact["asset_id"],
+                            artifact["asset_type"],
+                            artifact["observed_at"],
+                            artifact["failure_probability"],
+                            artifact["predicted_failure_type"],
+                            artifact["confidence"],
+                            artifact["status_grade"],
+                            model_version,
+                            json.dumps({"source": "generator_prediction_result_batch"}, sort_keys=True),
+                            source_sha256,
+                        ),
+                    )
+                    for factor in artifact["top_factors"]:
+                        signed = float(factor["signed_contribution"])
+                        connection.execute(
+                            """
+                            INSERT INTO pm_prediction_factors(
+                                organization_id,project_id,workspace_id,dataset_version_id,
+                                prediction_id,rank,feature,feature_value,signed_contribution,
+                                absolute_contribution,direction,explanation_method,source_type,
+                                source_sha256
+                            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                                      'generator_prediction_result_batch',%s)
+                            """,
+                            (
+                                organization_id,
+                                project_id,
+                                workspace_id,
+                                dataset_version_id,
+                                prediction_id,
+                                int(factor["rank"]),
+                                factor["feature"],
+                                float(factor["feature_value"]),
+                                signed,
+                                abs(signed),
+                                factor["direction"],
+                                factor["explanation_method"],
+                                source_sha256,
+                            ),
+                        )
+                    connection.execute(
+                        """
+                        INSERT INTO pm_prediction_timeline(
+                            organization_id,project_id,workspace_id,dataset_version_id,
+                            prediction_id,asset_id,asset_type,observed_at,
+                            prediction_horizon_hours,failure_probability,status,top_factors,
+                            model_version,feature_scope,source_type,source_sha256
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,24,%s,%s,%s::jsonb,%s,%s::jsonb,
+                                  'generator_prediction_result_batch',%s)
+                        """,
+                        (
+                            organization_id,
+                            project_id,
+                            workspace_id,
+                            dataset_version_id,
+                            prediction_id,
+                            artifact["asset_id"],
+                            artifact["asset_type"],
+                            artifact["observed_at"],
+                            artifact["failure_probability"],
+                            artifact["status_grade"],
+                            json.dumps(artifact["top_factors"], sort_keys=True),
+                            model_version,
+                            json.dumps({"source": "generator_prediction_result_batch"}, sort_keys=True),
+                            source_sha256,
+                        ),
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO pm_result_artifacts(
+                            organization_id,project_id,workspace_id,dataset_version_id,
+                            artifact_id,prediction_id,prediction_result_id,asset_id,asset_type,
+                            observed_at,prediction_horizon_hours,prediction_task,
+                            failure_probability,predicted_failure_type,status_grade,confidence,
+                            top_factors,recommended_action,provenance,schema_version,
+                            model_version,source_sha256
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,24,
+                                  'binary_failure_within_horizon',%s,%s,%s,%s,%s::jsonb,
+                                  %s::jsonb,%s::jsonb,'result-artifact-v1.0',%s,%s)
+                        """,
+                        (
+                            organization_id,
+                            project_id,
+                            workspace_id,
+                            dataset_version_id,
+                            artifact_id,
+                            prediction_id,
+                            prediction_result_id,
+                            artifact["asset_id"],
+                            artifact["asset_type"],
+                            artifact["observed_at"],
+                            artifact["failure_probability"],
+                            artifact["predicted_failure_type"],
+                            artifact["status_grade"],
+                            artifact["confidence"],
+                            json.dumps(artifact["top_factors"], sort_keys=True),
+                            json.dumps(artifact["recommended_action"], sort_keys=True),
+                            json.dumps(artifact["provenance"], sort_keys=True),
+                            model_version,
+                            source_sha256,
+                        ),
+                    )
+                    item_receipts.append(
+                        {
+                            "event_id": event_id,
+                            "promotion_status": "promoted",
+                            "product_result_id": prediction_result_id,
+                            "artifact_id": artifact_id,
+                            "reason": None,
+                        }
+                    )
+                connection.execute(
+                    """
+                    UPDATE pm_prediction_result_inbox_items
+                    SET promotion_result_id=%s, updated_at=%s
+                    WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                      AND batch_id=%s AND event_id=%s AND validation_status='accepted'
+                    """,
+                    (
+                        prediction_result_id,
+                        now,
+                        organization_id,
+                        project_id,
+                        workspace_id,
+                        batch_id,
+                        event_id,
+                    ),
+                )
+            if item_receipts:
+                first_product_result_id = next(
+                    (
+                        item["product_result_id"]
+                        for item in item_receipts
+                        if item.get("product_result_id")
+                    ),
+                    None,
+                )
+                connection.execute(
+                    """
+                    UPDATE pm_prediction_result_inbox_batches
+                    SET promotion_result_id=%s, updated_at=%s
+                    WHERE receive_id=%s
+                    """,
+                    (first_product_result_id, now, receive["receive_id"]),
+                )
+        return {"item_receipts": item_receipts}
 
     def update_session(
         self,

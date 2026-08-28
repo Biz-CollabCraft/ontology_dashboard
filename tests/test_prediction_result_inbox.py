@@ -42,6 +42,7 @@ class FakeInboxRepository:
         self.batches: dict[str, str] = {}
         self.items: dict[str, str] = {}
         self.saved: list[dict[str, Any]] = []
+        self.promotions: list[dict[str, Any]] = []
 
     @staticmethod
     def clock_now() -> datetime:
@@ -108,6 +109,72 @@ class FakeInboxRepository:
         self.saved.append(row)
         return row
 
+    def prediction_batch_promotion_context(self, **kwargs: Any) -> dict[str, Any] | None:
+        batch_id = kwargs["batch_id"]
+        row = next(
+            (
+                item
+                for item in reversed(self.saved)
+                if item["batch_id"] == batch_id and item["validation_status"] == "accepted"
+            ),
+            None,
+        )
+        if row is None:
+            return None
+        payload = row["raw_payload"]
+        asset_rows = {
+            asset_id: {
+                "asset_id": asset_id,
+                "asset_type": "cnc",
+                "site_id": "site-1",
+                "cell_id": "cell-1",
+            }
+            for asset_id in self.assets
+        }
+        return {
+            "dataset_version_id": "dataset-version-test",
+            "dataset_name": "Dataset Test",
+            "bundle_checksum_sha256": "f" * 64,
+            "record_count": 1,
+            "dataset_status": "ready",
+            "raw_payload": payload,
+            "assets": asset_rows,
+        }
+
+    def save_prediction_batch_promotions(self, **kwargs: Any) -> dict[str, Any]:
+        receipts = []
+        for promotion in kwargs["promotions"]:
+            existing = next(
+                (
+                    item
+                    for item in self.promotions
+                    if item["artifact"]["artifact_id"] == promotion["artifact"]["artifact_id"]
+                ),
+                None,
+            )
+            if existing is None:
+                self.promotions.append(promotion)
+                receipts.append(
+                    {
+                        "event_id": promotion["event_id"],
+                        "promotion_status": "promoted",
+                        "product_result_id": promotion["prediction_result_id"],
+                        "artifact_id": promotion["artifact"]["artifact_id"],
+                        "reason": None,
+                    }
+                )
+            else:
+                receipts.append(
+                    {
+                        "event_id": promotion["event_id"],
+                        "promotion_status": "already_promoted",
+                        "product_result_id": existing["prediction_result_id"],
+                        "artifact_id": existing["artifact"]["artifact_id"],
+                        "reason": None,
+                    }
+                )
+        return {"item_receipts": receipts}
+
 
 def principal() -> Principal:
     return Principal(
@@ -168,6 +235,57 @@ def test_prediction_inbox_accepts_valid_batch_without_product_result() -> None:
     assert receipt.accepted_results == 1
     assert receipt.promotion_status == "not_promoted"
     assert receipt.product_result_created is False
+
+
+def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    assert receive(service, payload).validation_status == "accepted"
+
+    receipt = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert receipt.promotion_status == "promoted"
+    assert receipt.product_result_created is True
+    assert receipt.promoted_results == 1
+    assert receipt.product_result_ids == [repository.promotions[0]["prediction_result_id"]]
+    artifact = repository.promotions[0]["artifact"]
+    assert artifact["schema_version"] == "result-artifact-v1.0"
+    assert artifact["provenance"]["source_type"] == "product_runtime_inference"
+    assert artifact["provenance"]["canonical_source_mutated"] is False
+    assert artifact["evidence_payload"]["recommended_actions"][0]["action_id"] == (
+        "request_inspection"
+    )
+    assert artifact["evidence_payload"]["evidence_gaps"]
+
+
+def test_prediction_batch_promotion_is_idempotent() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    assert receive(service, payload).validation_status == "accepted"
+
+    first = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+    second = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert first.promotion_status == "promoted"
+    assert second.promotion_status == "already_promoted"
+    assert second.already_promoted_results == 1
 
 
 def test_prediction_inbox_duplicate_reuses_existing_event() -> None:
@@ -330,6 +448,12 @@ def test_prediction_inbox_routes_return_receipt(monkeypatch) -> None:
             json=load_payload(),
             headers={"X-CSRF-Token": "test"},
         )
+        promotion = client.post(
+            "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
+            "predictive-maintenance/prediction-result-batches/"
+            "batch-20260827-cnc-001/promote",
+            headers={"X-CSRF-Token": "test"},
+        )
         internal = client.post(
             "/internal/prediction-results?project_id=manufacturing-demo-project"
             "&workspace_id=manufacturing-demo",
@@ -339,6 +463,9 @@ def test_prediction_inbox_routes_return_receipt(monkeypatch) -> None:
 
     assert public.status_code == 202, public.text
     assert public.json()["product_result_created"] is False
+    assert promotion.status_code == 200, promotion.text
+    assert promotion.json()["product_result_created"] is True
+    assert promotion.json()["promoted_results"] == 1
     assert internal.status_code == 200, internal.text
     assert internal.json()["validation_status"] == "duplicate"
 

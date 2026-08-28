@@ -426,6 +426,27 @@ class PredictionInboxReceipt(StrictModel):
     product_result_created: Literal[False] = False
 
 
+class PredictionBatchPromotionItemReceipt(StrictModel):
+    event_id: str
+    promotion_status: Literal["promoted", "already_promoted", "skipped"]
+    product_result_id: str | None = None
+    artifact_id: str | None = None
+    reason: str | None = None
+
+
+class PredictionBatchPromotionReceipt(StrictModel):
+    batch_id: str
+    promotion_status: Literal["promoted", "already_promoted", "partially_promoted", "not_promoted"]
+    product_result_created: bool
+    received_results: int = Field(ge=0)
+    promoted_results: int = Field(ge=0)
+    already_promoted_results: int = Field(ge=0)
+    skipped_results: int = Field(ge=0)
+    product_result_ids: list[str] = Field(default_factory=list)
+    artifact_ids: list[str] = Field(default_factory=list)
+    item_receipts: list[PredictionBatchPromotionItemReceipt] = Field(default_factory=list)
+
+
 class DashboardDataSource(StrictModel):
     dataset_id: str
     dataset_name: str

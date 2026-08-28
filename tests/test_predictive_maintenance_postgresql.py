@@ -14,6 +14,7 @@ import pytest
 
 from app.dataset.bundle_contract import DatasetBundleManifestV2, compute_bundle_checksum
 from app.dataset.ingestion.bundle_file_adapter import BundleFileAdapter
+from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
 from app.infra.db.diagnosis_runtime_repository import (
     PredictiveMaintenanceRuntimeRepository,
 )
@@ -295,6 +296,80 @@ def test_postgresql_prediction_inbox_concurrent_delivery_is_serialized(
 
     assert same_results == ["accepted", "duplicate"]
     assert conflict_results == ["accepted", "conflict"]
+
+
+def test_postgresql_prediction_batch_promotion_materializes_product_result(
+    tmp_path: Path,
+    postgresql_database: str,
+) -> None:
+    import psycopg
+    from psycopg.rows import dict_row
+
+    package_root = create_small_package(tmp_path)
+    manifest = build_manifest(package_root)
+    validation = BundleFileAdapter(allowed_roots=[package_root]).validate(manifest)
+    ingestion = PostgreSQLPredictiveMaintenanceBundleIngestor(
+        postgresql_database
+    ).ingest_validated_bundle(manifest=manifest, validation=validation)
+
+    repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    service = PredictiveMaintenanceRuntimeService(repository)
+    payload = load_payload()
+    payload["source_context"]["dataset_id"] = ingestion.dataset_id
+    payload["source_context"]["dataset_version"] = ingestion.source_version
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+
+    inbox = service.receive_prediction_result_batch(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        payload=payload,
+    )
+    promotion = service.promote_prediction_result_batch(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        batch_id=payload["batch_id"],
+    )
+    replay = service.promote_prediction_result_batch(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        batch_id=payload["batch_id"],
+    )
+
+    assert inbox.validation_status == "accepted"
+    assert promotion.promotion_status == "promoted"
+    assert promotion.product_result_created is True
+    assert promotion.promoted_results == 1
+    assert replay.promotion_status == "already_promoted"
+
+    with psycopg.connect(postgresql_database, row_factory=dict_row) as connection:
+        connection.execute("SELECT set_config('app.organization_id','org-test',true)")
+        connection.execute("SELECT set_config('app.project_id','project-test',true)")
+        artifact = connection.execute(
+            """
+            SELECT r.artifact_id,r.prediction_result_id,r.status_grade,
+                   r.failure_probability,p.payload_json,
+                   b.promotion_result_id AS batch_promotion_result_id,
+                   i.promotion_result_id AS item_promotion_result_id
+            FROM pm_result_artifacts r
+            JOIN prediction_results p ON p.prediction_id=r.prediction_result_id
+            JOIN pm_prediction_result_inbox_batches b ON b.batch_id=%s
+            JOIN pm_prediction_result_inbox_items i ON i.batch_id=b.batch_id
+            WHERE r.dataset_version_id=%s
+            """,
+            (payload["batch_id"], ingestion.dataset_version_id),
+        ).fetchone()
+
+    assert artifact is not None
+    assert artifact["batch_promotion_result_id"] == artifact["prediction_result_id"]
+    assert artifact["item_promotion_result_id"] == artifact["prediction_result_id"]
+    assert artifact["status_grade"] == "warning"
+    assert float(artifact["failure_probability"]) == 0.82
+    assert artifact["payload_json"]["evidence_payload"]["evidence_gaps"]
 
 
 def test_postgresql_prediction_inbox_tables_are_rls_scoped(

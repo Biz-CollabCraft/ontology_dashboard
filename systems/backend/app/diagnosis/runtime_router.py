@@ -538,6 +538,43 @@ def validate_prediction_result_batch(
     )
 
 
+@router.post("/prediction-result-batches/{batch_id}/promote")
+def promote_prediction_result_batch(
+    project_id: str,
+    workspace_id: str,
+    batch_id: str,
+    principal: Principal = Depends(require_permission("predictions.ingest")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    try:
+        return service.promote_prediction_result_batch(
+            organization_id=principal.organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+        ).model_dump(mode="json")
+    except KeyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prediction Result Batch is not accepted or does not exist.",
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from error
+
+
 @router.post("/replay/sessions", status_code=status.HTTP_201_CREATED)
 def start_replay(
     project_id: str,
