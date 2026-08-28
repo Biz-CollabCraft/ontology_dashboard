@@ -905,6 +905,26 @@ def _materialize_overlay_pipeline_snapshot(
     content-addressed snapshot.
     """
 
+    if not rows:
+        raise ValueError("Runtime Overlay pipeline snapshot requires observations")
+
+    source_contract_versions = {
+        str(row.get("contract_version") or "").strip() for row in rows
+    }
+    source_schema_versions = {
+        str(row.get("schema_version") or "").strip() for row in rows
+    }
+    if "" in source_contract_versions or len(source_contract_versions) != 1:
+        raise ValueError(
+            "Runtime Overlay pipeline snapshot requires one explicit "
+            "Observation contract_version"
+        )
+    if "" in source_schema_versions or len(source_schema_versions) != 1:
+        raise ValueError(
+            "Runtime Overlay pipeline snapshot requires one explicit "
+            "Observation schema_version"
+        )
+
     encoded_rows = [
         json.dumps(
             row,
@@ -947,6 +967,8 @@ def _materialize_overlay_pipeline_snapshot(
         "source_uri": str(snapshot_path),
         "source_checksum": checksum,
         "size_bytes": len(content),
+        "source_contract_version": next(iter(source_contract_versions)),
+        "source_schema_version": next(iter(source_schema_versions)),
     }
 
 

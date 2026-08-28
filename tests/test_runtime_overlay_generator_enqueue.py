@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -38,6 +39,8 @@ def _event() -> dict[str, object]:
 
 def _row() -> dict[str, object]:
     return {
+        "contract_version": "runtime-overlay-observation-v1",
+        "schema_version": "2",
         "asset_id": "CNC-1",
         "equipment_id": "CNC-1",
         "observed_at": "2026-08-27T01:00:00+00:00",
@@ -65,6 +68,8 @@ def test_overlay_delta_is_frozen_as_content_addressed_generator_input(tmp_path: 
     assert snapshot.name == f"sha256-{first['source_checksum']}.jsonl"
     assert hashlib.sha256(content).hexdigest() == first["source_checksum"]
     assert first["size_bytes"] == len(content)
+    assert first["source_contract_version"] == "runtime-overlay-observation-v1"
+    assert first["source_schema_version"] == "2"
     assert json.loads(content.decode("utf-8")) == rows[0]
 
 
@@ -156,6 +161,8 @@ def test_generator_enqueue_client_sends_pr127_contract() -> None:
         "source_uri": "/shared/runtime_pipeline_input/source.jsonl",
         "source_checksum": "a" * 64,
         "size_bytes": 123,
+        "source_contract_version": "runtime-overlay-observation-v1",
+        "source_schema_version": "2",
     }
     payload = _overlay_generator_enqueue_payload(
         snapshot,
@@ -177,6 +184,8 @@ def test_overlay_enqueue_payload_preserves_operational_lineage() -> None:
             "source_uri": "/shared/runtime_pipeline_input/source.jsonl",
             "source_checksum": "a" * 64,
             "size_bytes": 123,
+            "source_contract_version": "runtime-overlay-observation-v1",
+            "source_schema_version": "2",
         },
         _event(),
         dataset_id="canonical-ai4i-v1",
@@ -202,6 +211,8 @@ def test_overlay_enqueue_payload_rejects_non_overlay_source_kind() -> None:
                 "source_uri": "/shared/runtime_pipeline_input/source.jsonl",
                 "source_checksum": "a" * 64,
                 "size_bytes": 123,
+                "source_contract_version": "runtime-overlay-observation-v1",
+                "source_schema_version": "2",
             },
             {**_event(), "source_kind": "canonical_observation"},
             dataset_id="canonical-ai4i-v1",
@@ -241,3 +252,121 @@ def test_generator_enqueue_client_fails_closed_without_endpoint() -> None:
         match="ONTOLOGY_DASHBOARD_GENERATOR_RUNTIME_ENQUEUE_URL",
     ):
         client.enqueue({"job_id": "job"})
+
+
+def test_overlay_lineage_round_trips_through_generator_queue_checkpoint_and_batch(
+    tmp_path: Path,
+) -> None:
+    from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
+    from systems.generator.app.runtime_pipeline.pipeline_router import EnqueueRequest
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ActiveModelSetSnapshot,
+        ActiveModelSnapshotItem,
+        ArtifactReference,
+        InternalModelPredictionResult,
+        PredictionResultProducer,
+        RuntimeSourceContext,
+    )
+    from systems.generator.app.runtime_pipeline.pipeline_state import PipelineStateManager
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import (
+        build_external_prediction_batch,
+    )
+
+    snapshot = _materialize_overlay_pipeline_snapshot(
+        tmp_path,
+        _event(),
+        [_row()],
+    )
+    payload = _overlay_generator_enqueue_payload(
+        snapshot,
+        _event(),
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="canonical-ai4i-physics-v3.1",
+    )
+    request = EnqueueRequest.model_validate(payload)
+    queue = PipelineQueue(db_path=tmp_path / "runtime-pipeline-queue.db")
+    item = queue.enqueue(**request.model_dump())
+
+    source_context = RuntimeSourceContext(
+        source_uri=item.source_uri,
+        source_checksum=item.source_checksum,
+        source_kind=item.source_kind,
+        source_contract_version=item.source_contract_version,
+        source_schema_version=item.source_schema_version,
+        pipeline_contract_version=item.pipeline_contract_version,
+        lineage=item.lineage,
+    )
+    state = PipelineStateManager.create(
+        run_id="runtime-overlay-run-1",
+        job_id=item.job_id,
+        source_ref=ArtifactReference(
+            uri=item.source_uri,
+            sha256=item.source_checksum,
+            role="observation_source",
+            size_bytes=item.size_bytes,
+        ),
+        source_context=source_context,
+    )
+    checkpoint = state.record_checkpoint(
+        stage_name="source_validated",
+        next_stage="preprocessing",
+        source_identity=item.source_identity or "",
+        dataset_id=item.dataset_id,
+        dataset_version=item.dataset_version,
+        pipeline_contract_version=item.pipeline_contract_version,
+        source_kind=item.source_kind,
+        source_contract_version=item.source_contract_version,
+        source_schema_version=item.source_schema_version,
+        lineage_json=json.dumps(item.lineage.model_dump(mode="json")),
+        source_context=source_context,
+    )
+
+    internal_result = InternalModelPredictionResult(
+        asset_id="CNC-1",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="succeeded",
+        observed_at="2026-08-27T01:00:00+00:00",
+        score=0.2,
+        manifest_checksum="b" * 64,
+        feature_schema_version="pdm-feature-v2",
+        history_requirement_version="pdm-history-v1",
+        label_schema_version="pdm-label-v3",
+    )
+    batch = build_external_prediction_batch(
+        internal_results=[internal_result],
+        source_context=checkpoint.source_context,
+        active_model_set_snapshot=ActiveModelSetSnapshot(
+            model_set_id="pdm-runtime",
+            model_set_version="1.0.0",
+            models=[
+                ActiveModelSnapshotItem(
+                    model_id="pdm-lightgbm",
+                    model_version="1.0.0",
+                    required=True,
+                    model_artifact_manifest_sha256="b" * 64,
+                )
+            ],
+        ),
+        producer_snapshot=PredictionResultProducer(
+            system="systems.generator",
+            runtime_version="test-runtime-v1",
+        ),
+        emitted_at=datetime(2026, 8, 27, 1, 1, tzinfo=timezone.utc),
+        model_schema_map={
+            "pdm-lightgbm": {
+                "feature_schema_sha256": "c" * 64,
+                "history_requirement_sha256": "d" * 64,
+                "label_schema_sha256": "e" * 64,
+                "label_schema_version": "pdm-label-v3",
+            }
+        },
+    )
+
+    result = batch.results[0]
+    assert item.source_contract_version == "runtime-overlay-observation-v1"
+    assert item.source_schema_version == "2"
+    assert checkpoint.source_context == source_context
+    assert result.source_kind == "maintenance_replay_overlay"
+    assert result.source_ref.sha256 == snapshot["source_checksum"]
+    assert result.lineage == item.lineage
