@@ -11,6 +11,29 @@ Runtime Overlay가 소비하도록 운영 경로를 연결한다. `gen_data`가 
 이 문서는 운영 DB 직접 접근 권한 없이 수행 가능한 코드/파일 계약 검증 결과와,
 운영 담당자가 배포 환경에서 설정해야 하는 항목을 분리한다.
 
+## 2026-08-28 보강: 실제 검증 상태
+
+운영 DB 접속 정보는 현재 로컬 개발 환경과 repository에 존재하지 않는다. 따라서 운영 DB
+직접 접속 검증은 수행하지 않았다. 대신 로컬 임시 PostgreSQL과 실제 FastAPI 서버를
+사용해 PostgreSQL runtime path가 동작하는지 확인했다.
+
+- 임시 PostgreSQL: Docker `postgres:16-alpine`, host `127.0.0.1:55432`
+- API 서버: `uvicorn app.main:app`, `http://127.0.0.1:8110`
+- `/health`: HTTP 200
+- public login: HTTP 200
+- public Prediction Batch receive: HTTP 202, `validation_status=accepted`,
+  `product_result_created=false`
+- public Prediction Batch promote: HTTP 200, `promotion_status=promoted`,
+  `product_result_created=true`, `promoted_results=1`
+- `/results/latest`: HTTP 200, `latest_product_contract=result_artifact`,
+  `status_grade=warning`, `failure_probability=0.82`,
+  `recommended_action=request_inspection`
+- PostgreSQL 확인: `pm_result_artifacts`와 inbox `promotion_result_id` 기록 확인
+- PostgreSQL focused test: `4 passed, 3 deselected, 1 warning`
+
+이 결과는 "운영 DB 검증 완료"가 아니라, "운영과 같은 PostgreSQL/실제 서버 실행 경로에서
+receive -> promote -> Product Result read까지 성공"을 의미한다.
+
 ## 현재 확인된 사실
 
 - Backend에는 Closed-loop `maintenance.*` transactional outbox 이벤트를
@@ -33,10 +56,74 @@ Runtime Overlay가 소비하도록 운영 경로를 연결한다. `gen_data`가 
 - 운영 서버 또는 컨테이너 간 shared volume mount
 - 운영 `simulation_session_id`가 Closed-loop event와 `gen_data` run에 동일하게
   바인딩되는지
-- overlay observation을 Product Result/Evidence로 승격하는 후속 worker
+- 운영 배포 계정이 Prediction Result Batch promote endpoint를 호출할 수 있는지
+- 운영 또는 staging DB에서 Product Result/Evidence 승격 결과가 Dashboard read path에
+  노출되는지
 
 현재 결론은 "코드와 파일 계약은 연결 가능하며, 운영 DB/배포 연결은 운영 권한을 가진
 담당자가 확인해야 한다"이다.
+
+## 운영 DB 검증 권한 요청
+
+운영 DB 검증은 쓰기 권한을 바로 요청하지 말고, 다음 순서의 최소 권한으로 진행한다.
+
+1. `staging` 또는 운영과 동일한 schema를 가진 disposable workspace에 대한 read-only DB
+   URL을 요청한다.
+2. read-only 계정으로 migration 상태, table/column 존재, RLS scope 설정 여부만 확인한다.
+3. smoke용 workspace가 허용된 경우에만 scoped write 계정 또는 service token을 별도로
+   요청한다.
+4. 실제 운영 workspace에는 synthetic batch를 쓰지 않는다. 운영 검증은 기존 real batch
+   조회 또는 staging/disposable workspace promotion으로 제한한다.
+
+권장 read-only 확인 SQL:
+
+```sql
+SELECT version
+FROM schema_migrations
+ORDER BY version DESC
+LIMIT 5;
+
+SELECT table_name
+FROM information_schema.tables
+WHERE table_name IN (
+  'pm_prediction_result_inbox_batches',
+  'pm_prediction_result_inbox_items',
+  'prediction_results',
+  'pm_prediction_snapshots',
+  'pm_prediction_factors',
+  'pm_prediction_timeline',
+  'pm_result_artifacts'
+)
+ORDER BY table_name;
+
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name IN (
+  'pm_prediction_result_inbox_batches',
+  'pm_prediction_result_inbox_items'
+)
+  AND column_name='promotion_result_id';
+```
+
+권장 staging smoke 입력:
+
+- `organization_id`, `project_id`, `workspace_id`: staging/disposable scope
+- `source_context.dataset_id`: 실제 staging Dataset id
+- `source_context.dataset_version`: 해당 Dataset Version의 `source_version`
+- `asset_id`: 해당 Dataset Version의 실제 `pm_assets.asset_id`
+- `batch_id`, `event_id`: smoke 전용 고유 id
+
+성공 기준:
+
+- receive 응답이 HTTP 202와 `validation_status=accepted`를 반환한다.
+- receive 응답은 여전히 `promotion_status=not_promoted`,
+  `product_result_created=false`를 반환한다.
+- promote 응답이 HTTP 200과 `promotion_status=promoted`,
+  `product_result_created=true`를 반환한다.
+- 재호출 시 `promotion_status=already_promoted`가 반환된다.
+- `pm_result_artifacts`, `pm_prediction_timeline`, `prediction_results`,
+  inbox `promotion_result_id`가 같은 Product Result identity를 가리킨다.
+- `/results/latest`가 `latest_product_contract=result_artifact`로 승격 결과를 읽는다.
 
 ## 운영 연결 방식
 
@@ -192,17 +279,24 @@ python3 scripts/smoke_runtime_overlay_local_bridge.py \
 8. `GEN_DATA_OUTPUT_DIR/runtime_overlay/observations_available.jsonl`에
    `runtime_overlay.observations.available` 이벤트가 생성되는지 확인한다.
 9. Backend reader가 availability event와 storage reference를 읽고 검증하는지 확인한다.
+10. Backend Prediction Batch receive endpoint에 Generator batch를 전달한다.
+11. accepted batch를 promote endpoint로 승격한다.
+12. `/results/latest`와 DB read-only query로 Product Result Artifact가 보이는지
+    확인한다.
 
 ## 후속 구현 범위
 
-이 연결은 Runtime Overlay observation availability까지의 운영 연결이다. 다음 항목은
-별도 backend 작업으로 남는다.
+이 연결은 Runtime Overlay observation availability와 Prediction Result Batch의
+Product Result/Evidence 승격 수신부까지 포함한다. 다음 항목은 별도 작업으로 남는다.
 
-- overlay observation을 Runtime Diagnosis 입력으로 수신
-- 현재 Model Artifact의 history requirement를 충족했는지 판정
-- Threshold/Decision Policy 적용
-- post-maintenance Product Result/Evidence 생성
-- Dashboard ViewModel 및 Closed-loop 후속 trigger 반영
+- 운영/staging DB 권한으로 실제 배포 환경 smoke 검증
+- Dashboard ViewModel에서 승격된 Product Result/Evidence를 전용 표시로 반영
+- Closed-loop trigger 연결
+- 기존 Backend direct inference 경로 전환/제거
+- Generator batch가 sensor window 또는 feature attribution을 제공할 때 Evidence gap을
+  실제 sensor/component evidence로 축소
 
-즉, 이 문서의 범위는 Closed-loop outbox와 `gen_data` Runtime Overlay의 운영 연결이며,
-Product Result/Evidence 승격은 후속 backend 수신부 작업에서 완료한다.
+즉, 이 문서의 범위는 Closed-loop outbox와 `gen_data` Runtime Overlay의 운영 연결,
+그리고 Generator Prediction Result Batch를 Backend Product Result/Evidence로 승격하는
+수신부까지다. 운영 DB 직접 검증은 운영 또는 staging credential이 제공된 뒤 별도 smoke로
+완료한다.
