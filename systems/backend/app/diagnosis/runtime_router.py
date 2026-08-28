@@ -538,6 +538,69 @@ def validate_prediction_result_batch(
     )
 
 
+@router.get("/prediction-result-batches")
+def prediction_result_batch_inbox_status(
+    project_id: str,
+    workspace_id: str,
+    validation_status: Literal[
+        "accepted",
+        "duplicate",
+        "conflict",
+        "rejected",
+    ] | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    return service.prediction_inbox_operational_status(
+        organization_id=principal.organization_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        validation_status=validation_status,
+        limit=limit,
+    ).model_dump(mode="json")
+
+
+@router.get("/prediction-result-batches/{batch_id}")
+def prediction_result_batch_inbox_detail(
+    project_id: str,
+    workspace_id: str,
+    batch_id: str,
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    try:
+        return service.prediction_inbox_operational_detail(
+            organization_id=principal.organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+        ).model_dump(mode="json")
+    except KeyError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prediction Inbox batch not found: {error.args[0]}",
+        ) from error
+
+
 @router.post("/replay/sessions", status_code=status.HTTP_201_CREATED)
 def start_replay(
     project_id: str,

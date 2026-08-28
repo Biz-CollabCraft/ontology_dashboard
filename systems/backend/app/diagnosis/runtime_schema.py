@@ -426,6 +426,58 @@ class PredictionInboxReceipt(StrictModel):
     product_result_created: Literal[False] = False
 
 
+class PredictionInboxOperationalBatch(StrictModel):
+    """Read-only operational view of a received Generator batch."""
+
+    batch_id: str
+    payload_sha256: str
+    validation_status: Literal["accepted", "duplicate", "conflict", "rejected"]
+    rejection_reason: str | None = None
+    received_at: datetime
+    updated_at: datetime | None = None
+    received_results: int = Field(ge=0)
+    accepted_results: int = Field(ge=0)
+    duplicate_results: int = Field(ge=0)
+    conflict_results: int = Field(ge=0)
+    rejected_results: int = Field(ge=0)
+    producer_system: str | None = None
+    producer_runtime_version: str | None = None
+    source_kind: Literal[
+        "live_sensor",
+        "simulation_overlay",
+        "maintenance_replay_overlay",
+    ] | None = None
+    source_uri: str | None = None
+    source_checksum: str | None = None
+    model_set_id: str | None = None
+    model_set_version: str | None = None
+    promotion_status: Literal[
+        "promotion_candidate",
+        "not_eligible",
+        "already_promoted",
+    ]
+    product_result_created: bool
+
+
+class PredictionInboxOperationalDetail(PredictionInboxOperationalBatch):
+    source_context: dict[str, Any] = Field(default_factory=dict)
+    model_set: dict[str, Any] = Field(default_factory=dict)
+    item_receipts: list[PredictionInboxItemReceipt] = Field(default_factory=list)
+
+
+class PredictionInboxOperationalStatus(StrictModel):
+    organization_id: str
+    project_id: str
+    workspace_id: str
+    returned_batches: int = Field(ge=0)
+    pending_promotion_candidates: int = Field(ge=0)
+    accepted_batches: int = Field(ge=0)
+    conflict_batches: int = Field(ge=0)
+    rejected_batches: int = Field(ge=0)
+    duplicate_batches: int = Field(ge=0)
+    items: list[PredictionInboxOperationalBatch]
+
+
 class DashboardDataSource(StrictModel):
     dataset_id: str
     dataset_name: str

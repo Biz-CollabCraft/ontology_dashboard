@@ -1313,6 +1313,100 @@ class PredictiveMaintenanceRuntimeRepository:
             "item_receipts": persisted_items,
         }
 
+    def _prediction_batch_inbox_rows(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str | None = None,
+        validation_status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        clauses = [
+            "b.organization_id=%s",
+            "b.project_id=%s",
+            "b.workspace_id=%s",
+        ]
+        params: list[Any] = [organization_id, project_id, workspace_id]
+        if batch_id:
+            clauses.append("b.batch_id=%s")
+            params.append(batch_id)
+        if validation_status:
+            clauses.append("b.validation_status=%s")
+            params.append(validation_status)
+        params.append(limit)
+        with self._connection(organization_id, project_id) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                  b.receive_id,
+                  b.batch_id,
+                  b.payload_sha256,
+                  b.validation_status,
+                  b.rejection_reason,
+                  b.raw_payload,
+                  b.promotion_result_id,
+                  b.received_at,
+                  b.updated_at,
+                  COALESCE(
+                    jsonb_agg(
+                      jsonb_build_object(
+                        'event_id', i.event_id,
+                        'payload_sha256', i.payload_sha256,
+                        'validation_status', i.validation_status,
+                        'rejection_reason', i.rejection_reason
+                      )
+                      ORDER BY i.received_at, i.receive_item_id
+                    ) FILTER (WHERE i.receive_item_id IS NOT NULL),
+                    '[]'::jsonb
+                  ) AS item_receipts
+                FROM pm_prediction_result_inbox_batches b
+                LEFT JOIN pm_prediction_result_inbox_items i
+                  ON i.receive_id=b.receive_id
+                WHERE {" AND ".join(clauses)}
+                GROUP BY b.receive_id
+                ORDER BY b.received_at DESC, b.updated_at DESC
+                LIMIT %s
+                """,
+                tuple(params),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_prediction_batch_inbox(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        validation_status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        return self._prediction_batch_inbox_rows(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            validation_status=validation_status,
+            limit=limit,
+        )
+
+    def prediction_batch_inbox(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str,
+    ) -> dict[str, Any] | None:
+        rows = self._prediction_batch_inbox_rows(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+            limit=1,
+        )
+        return rows[0] if rows else None
+
     def update_session(
         self,
         *,

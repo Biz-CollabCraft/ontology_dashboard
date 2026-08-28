@@ -103,10 +103,31 @@ class FakeInboxRepository:
             "validation_status": status,
             "rejection_reason": reason,
             "raw_payload": kwargs["raw_payload"],
+            "promotion_result_id": None,
+            "received_at": kwargs["received_at"],
+            "updated_at": kwargs["received_at"],
             "item_receipts": persisted,
         }
         self.saved.append(row)
         return row
+
+    def list_prediction_batch_inbox(self, **kwargs: Any) -> list[dict[str, Any]]:
+        validation_status = kwargs.get("validation_status")
+        limit = kwargs.get("limit", 50)
+        rows = [
+            row
+            for row in reversed(self.saved)
+            if validation_status is None
+            or row["validation_status"] == validation_status
+        ]
+        return rows[:limit]
+
+    def prediction_batch_inbox(self, **kwargs: Any) -> dict[str, Any] | None:
+        batch_id = kwargs["batch_id"]
+        return next(
+            (row for row in reversed(self.saved) if row["batch_id"] == batch_id),
+            None,
+        )
 
 
 def principal() -> Principal:
@@ -117,7 +138,7 @@ def principal() -> Principal:
         display_name="ML Validator",
         status="active",
         roles=["ml_validator"],
-        permissions=["predictions.ingest"],
+        permissions=["events.read", "predictions.ingest"],
         workspace_scopes=["manufacturing-demo"],
         project_scopes=["manufacturing-demo-project"],
         active_project_id="manufacturing-demo-project",
@@ -285,6 +306,50 @@ def test_prediction_inbox_preserves_generator_source_context_and_model_set() -> 
     )
 
 
+def test_prediction_inbox_operational_status_marks_promotion_candidate() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+
+    assert receive(service, payload).validation_status == "accepted"
+    status = service.prediction_inbox_operational_status(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+    )
+
+    assert status.returned_batches == 1
+    assert status.pending_promotion_candidates == 1
+    assert status.accepted_batches == 1
+    assert status.items[0].batch_id == payload["batch_id"]
+    assert status.items[0].promotion_status == "promotion_candidate"
+    assert status.items[0].product_result_created is False
+    assert status.items[0].source_kind == payload["source_context"]["source_kind"]
+    assert status.items[0].source_uri == payload["source_context"]["source_uri"]
+    assert status.items[0].model_set_id == payload["model_set"]["model_set_id"]
+    assert "raw_payload" not in status.items[0].model_dump(mode="json")
+
+
+def test_prediction_inbox_operational_detail_keeps_provenance_without_promotion() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+
+    assert receive(service, payload).validation_status == "accepted"
+    detail = service.prediction_inbox_operational_detail(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert detail.promotion_status == "promotion_candidate"
+    assert detail.source_context == payload["source_context"]
+    assert detail.model_set == payload["model_set"]
+    assert detail.item_receipts[0].validation_status == "accepted"
+    assert detail.product_result_created is False
+
+
 def test_prediction_inbox_records_schema_invalid_payload() -> None:
     payload = load_payload()
     payload.pop("results")
@@ -341,6 +406,47 @@ def test_prediction_inbox_routes_return_receipt(monkeypatch) -> None:
     assert public.json()["product_result_created"] is False
     assert internal.status_code == 200, internal.text
     assert internal.json()["validation_status"] == "duplicate"
+
+
+def test_prediction_inbox_routes_expose_operational_status(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[current_principal] = principal
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    app.dependency_overrides[require_csrf] = lambda: None
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+
+    with TestClient(app) as client:
+        ingest = client.post(
+            "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
+            "predictive-maintenance/prediction-result-batches",
+            json=load_payload(),
+            headers={"X-CSRF-Token": "test"},
+        )
+        status_response = client.get(
+            "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
+            "predictive-maintenance/prediction-result-batches"
+        )
+        detail_response = client.get(
+            "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
+            "predictive-maintenance/prediction-result-batches/"
+            "batch-20260827-cnc-001"
+        )
+
+    assert ingest.status_code == 202, ingest.text
+    assert status_response.status_code == 200, status_response.text
+    status_body = status_response.json()
+    assert status_body["returned_batches"] == 1
+    assert status_body["pending_promotion_candidates"] == 1
+    assert status_body["items"][0]["promotion_status"] == "promotion_candidate"
+    assert "raw_payload" not in status_body["items"][0]
+    assert detail_response.status_code == 200, detail_response.text
+    assert detail_response.json()["source_context"]["source_kind"] == "live_sensor"
 
 
 def test_prediction_inbox_internal_route_requires_configured_service_token(monkeypatch) -> None:

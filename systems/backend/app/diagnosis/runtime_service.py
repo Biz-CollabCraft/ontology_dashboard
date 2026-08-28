@@ -40,6 +40,9 @@ from .runtime_schema import (
     PolicyRecommendation,
     PredictiveMaintenanceDashboardResponse,
     PredictionInboxItemReceipt,
+    PredictionInboxOperationalBatch,
+    PredictionInboxOperationalDetail,
+    PredictionInboxOperationalStatus,
     PredictionInboxReceipt,
     PredictionResultBatch,
     ProductFactor,
@@ -381,6 +384,123 @@ class PredictiveMaintenanceRuntimeService:
             rejected_results=counts["rejected"],
             item_receipts=item_receipts,
         )
+
+    @classmethod
+    def _prediction_inbox_operational_batch_from_row(
+        cls,
+        row: dict[str, Any],
+    ) -> PredictionInboxOperationalBatch:
+        raw_payload = _dict(row.get("raw_payload"))
+        source_context = _dict(raw_payload.get("source_context"))
+        model_set = _dict(raw_payload.get("model_set"))
+        producer = _dict(raw_payload.get("producer"))
+        item_receipts = [
+            PredictionInboxItemReceipt.model_validate(item)
+            for item in row.get("item_receipts", [])
+        ]
+        counts = {
+            "accepted": sum(1 for item in item_receipts if item.validation_status == "accepted"),
+            "duplicate": sum(1 for item in item_receipts if item.validation_status == "duplicate"),
+            "conflict": sum(1 for item in item_receipts if item.validation_status == "conflict"),
+            "rejected": sum(1 for item in item_receipts if item.validation_status == "rejected"),
+        }
+        validation_status = str(row["validation_status"])
+        product_result_created = bool(row.get("promotion_result_id"))
+        if product_result_created:
+            promotion_status = "already_promoted"
+        elif validation_status == "accepted":
+            promotion_status = "promotion_candidate"
+        else:
+            promotion_status = "not_eligible"
+        return PredictionInboxOperationalBatch(
+            batch_id=str(row["batch_id"]),
+            payload_sha256=str(row["payload_sha256"]),
+            validation_status=validation_status,
+            rejection_reason=row.get("rejection_reason"),
+            received_at=row["received_at"],
+            updated_at=row.get("updated_at"),
+            received_results=len(item_receipts),
+            accepted_results=counts["accepted"],
+            duplicate_results=counts["duplicate"],
+            conflict_results=counts["conflict"],
+            rejected_results=counts["rejected"],
+            producer_system=producer.get("system"),
+            producer_runtime_version=producer.get("runtime_version"),
+            source_kind=source_context.get("source_kind"),
+            source_uri=source_context.get("source_uri"),
+            source_checksum=source_context.get("source_checksum"),
+            model_set_id=model_set.get("model_set_id"),
+            model_set_version=model_set.get("model_set_version"),
+            promotion_status=promotion_status,
+            product_result_created=product_result_created,
+        )
+
+    @classmethod
+    def _prediction_inbox_operational_detail_from_row(
+        cls,
+        row: dict[str, Any],
+    ) -> PredictionInboxOperationalDetail:
+        summary = cls._prediction_inbox_operational_batch_from_row(row)
+        raw_payload = _dict(row.get("raw_payload"))
+        return PredictionInboxOperationalDetail(
+            **summary.model_dump(mode="python"),
+            source_context=_dict(raw_payload.get("source_context")),
+            model_set=_dict(raw_payload.get("model_set")),
+            item_receipts=[
+                PredictionInboxItemReceipt.model_validate(item)
+                for item in row.get("item_receipts", [])
+            ],
+        )
+
+    def prediction_inbox_operational_status(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        validation_status: str | None = None,
+        limit: int = 50,
+    ) -> PredictionInboxOperationalStatus:
+        rows = self.repository.list_prediction_batch_inbox(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            validation_status=validation_status,
+            limit=limit,
+        )
+        items = [self._prediction_inbox_operational_batch_from_row(row) for row in rows]
+        return PredictionInboxOperationalStatus(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            returned_batches=len(items),
+            pending_promotion_candidates=sum(
+                1 for item in items if item.promotion_status == "promotion_candidate"
+            ),
+            accepted_batches=sum(1 for item in items if item.validation_status == "accepted"),
+            conflict_batches=sum(1 for item in items if item.validation_status == "conflict"),
+            rejected_batches=sum(1 for item in items if item.validation_status == "rejected"),
+            duplicate_batches=sum(1 for item in items if item.validation_status == "duplicate"),
+            items=items,
+        )
+
+    def prediction_inbox_operational_detail(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str,
+    ) -> PredictionInboxOperationalDetail:
+        row = self.repository.prediction_batch_inbox(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+        )
+        if row is None:
+            raise KeyError(batch_id)
+        return self._prediction_inbox_operational_detail_from_row(row)
 
     @staticmethod
     def _supports_dashboard_evidence_detail(

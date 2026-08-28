@@ -212,6 +212,55 @@ def test_postgresql_prediction_inbox_repository_idempotency_and_conflicts(
     assert all(row["promotion_result_id"] is None for row in item_rows)
 
 
+def test_postgresql_prediction_inbox_operational_read_model(
+    postgresql_database: str,
+) -> None:
+    repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    payload = load_payload()
+    item = payload["results"][0]
+    received_at = datetime(2026, 8, 27, tzinfo=timezone.utc)
+    repository.save_prediction_batch_inbox(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        batch_id=payload["batch_id"],
+        payload_sha256="a" * 64,
+        validation_status="accepted",
+        rejection_reason=None,
+        raw_payload=payload,
+        received_at=received_at,
+        item_receipts=[
+            {
+                "event_id": item["event_id"],
+                "payload_sha256": item["payload_sha256"],
+                "validation_status": "accepted",
+                "rejection_reason": None,
+            }
+        ],
+    )
+
+    rows = repository.list_prediction_batch_inbox(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+    )
+    detail = repository.prediction_batch_inbox(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        batch_id=payload["batch_id"],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["raw_payload"]["source_context"] == payload["source_context"]
+    assert rows[0]["raw_payload"]["model_set"] == payload["model_set"]
+    assert rows[0]["promotion_result_id"] is None
+    assert rows[0]["item_receipts"][0]["validation_status"] == "accepted"
+    assert detail is not None
+    assert detail["batch_id"] == payload["batch_id"]
+    assert detail["item_receipts"][0]["event_id"] == item["event_id"]
+
+
 def test_postgresql_prediction_inbox_concurrent_delivery_is_serialized(
     postgresql_database: str,
 ) -> None:
