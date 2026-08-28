@@ -10,7 +10,7 @@ Related:
 - `docs/closed-loop-product-consumption-contract.md`
 - `docs/closed-loop-runtime-overlay-contract.md`
 - `docs/mvp/asset-detail-overview-ui-decision-log.md`
-- `docs/plans/2026-08-24-001-feat-asset-detail-ui-agent-flow-plan.md`
+- `docs/plans/ai-workflow/2026-08-27-001-pr130-sop-sensor-judgment-proposal.md`
 
 ## 1. 목적
 
