@@ -265,8 +265,11 @@ function runtimeContext() {
 }
 
 function productResult(assetId: string, probability: number, status: string, action: string) {
+  const artifactId = `artifact-${assetId}`;
+
   return {
-    artifact_id: `artifact-${assetId}`,
+    artifact_id: artifactId,
+    source_contract: "result_artifact",
     asset_id: assetId,
     asset_type: assetId.startsWith("CNC") ? "cnc" : "compressor",
     site_id: "SEOUL-01",
@@ -282,6 +285,37 @@ function productResult(assetId: string, probability: number, status: string, act
       { rank: 2, feature: "temperature_gap_k", feature_value: 14.8, signed_contribution: 0.17, direction: "risk_up", explanation_method: "linear_contribution" },
     ],
     recommended_action: { action, priority: probability > 0.8 ? "P1" : "P2", semantic_type: "policy_recommendation", approval_state: "not_requested", execution_state: "not_executed", creates_work_order_automatically: false },
+    evidence_summary: {
+      available: true,
+      evidence_payload_reference: {
+        source: "product_result_artifact",
+        reference: artifactId,
+        generated_by: "systems.backend.diagnosis.generator_batch_promotion",
+      },
+      sensor_window_rows: 0,
+      sensor_window: {},
+      component_hypotheses: [],
+      recommended_actions: [
+        {
+          action_id: action,
+          label: action,
+          kind: "backend_policy_recommendation",
+          requires_human_approval: true,
+          basis: ["prediction_batch.score", "backend_policy.decision_threshold"],
+        },
+      ],
+      source_fields: [
+        { field_id: "prediction_batch.score", label: "Generator failure score", source_path: `results[event_id=${assetId}].score`, description: "Raw prediction score emitted by Generator and consumed by Backend policy." },
+        { field_id: "prediction_batch.payload_sha256", label: "Prediction payload checksum", source_path: `results[event_id=${assetId}].payload_sha256`, description: "Checksum captured for immutable batch payload evidence." },
+        { field_id: "prediction_batch.model_artifact_manifest_sha256", label: "Model artifact manifest checksum", source_path: `results[event_id=${assetId}].model_artifact_manifest_sha256`, description: "Model artifact lineage checksum supplied by Generator." },
+        { field_id: "backend_policy.decision_threshold", label: "Backend decision threshold", source_path: "threshold_policy.json", description: "Decision threshold owned by Backend promotion policy." },
+      ],
+      evidence_gaps: [
+        { gap_id: "sensor-window-not-attached", field: "sensor_window", owner_domain: "diagnosis", display_policy: "show_limitation", reason: "Batch result does not include the raw observation window.", required_source: "time-windowed observation rows" },
+        { gap_id: "component-hypothesis-not-inferred", field: "component_hypotheses", owner_domain: "diagnosis", display_policy: "show_limitation", reason: "Backend does not infer component causes from prediction score alone.", required_source: "diagnostic component mapping" },
+        { gap_id: "maintenance-history-not-joined", field: "maintenance_context", owner_domain: "maintenance", display_policy: "show_limitation", reason: "Maintenance work history is not joined during batch promotion.", required_source: "closed-loop maintenance records" },
+      ],
+    },
     provenance: { dataset_id: "dataset-predictive-maintenance", dataset_version_id: "dsv-1914858a-cc17-57d8-819c-d8a2435fd805", source_version: "canonical-ai4i-physics-v3.1", bundle_checksum_sha256: checksum, model_version: "independent-logreg-v3.1", schema_version: "result-artifact-v1.0", prediction_task: "binary_failure_within_horizon" },
   };
 }

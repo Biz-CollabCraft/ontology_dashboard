@@ -39,6 +39,10 @@ from .runtime_schema import (
     GraphReadiness,
     ObservationQueryResponse,
     PolicyRecommendation,
+    ProductEvidenceActionSummary,
+    ProductEvidenceGapSummary,
+    ProductEvidenceSourceFieldSummary,
+    ProductResultEvidenceSummary,
     PredictionBatchPromotionItemReceipt,
     PredictionBatchPromotionReceipt,
     PredictiveMaintenanceDashboardResponse,
@@ -1400,6 +1404,76 @@ class PredictiveMaintenanceRuntimeService:
             raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
         return artifact
 
+    @staticmethod
+    def _product_result_evidence_summary(
+        producer_artifact: dict[str, Any] | None,
+    ) -> ProductResultEvidenceSummary | None:
+        if producer_artifact is None:
+            return None
+        payload = _dict(producer_artifact.get("evidence_payload"))
+        provenance = _dict(producer_artifact.get("provenance"))
+        sensor_evidence = _dict(payload.get("sensor_evidence"))
+        sensor_window = _dict(sensor_evidence.get("window"))
+        return ProductResultEvidenceSummary(
+            available=True,
+            evidence_payload_reference=_dict(
+                provenance.get("evidence_payload_reference")
+            )
+            or None,
+            sensor_window_rows=int(sensor_evidence.get("window_rows") or 0),
+            sensor_window=sensor_window,
+            component_hypotheses=[
+                _dict(item)
+                for item in payload.get("component_hypotheses") or []
+                if isinstance(item, dict)
+            ],
+            recommended_actions=[
+                ProductEvidenceActionSummary(
+                    action_id=str(item.get("action_id") or ""),
+                    label=str(item.get("label") or item.get("action_id") or ""),
+                    kind=str(item.get("kind") or ""),
+                    requires_human_approval=bool(
+                        item.get("requires_human_approval", True)
+                    ),
+                    basis=[str(ref) for ref in item.get("basis") or []],
+                )
+                for item in payload.get("recommended_actions") or []
+                if isinstance(item, dict)
+            ],
+            source_fields=[
+                ProductEvidenceSourceFieldSummary(
+                    field_id=str(item.get("field_id") or ""),
+                    label=str(item.get("label") or item.get("field_id") or ""),
+                    source_path=str(item.get("source_path") or ""),
+                    description=(
+                        None
+                        if item.get("description") is None
+                        else str(item.get("description"))
+                    ),
+                )
+                for item in payload.get("source_fields") or []
+                if isinstance(item, dict)
+            ],
+            evidence_gaps=[
+                ProductEvidenceGapSummary(
+                    gap_id=str(item.get("gap_id") or ""),
+                    field=str(item.get("field") or ""),
+                    owner_domain=str(item.get("owner_domain") or ""),
+                    display_policy=str(item.get("display_policy") or ""),
+                    reason=(
+                        None if item.get("reason") is None else str(item.get("reason"))
+                    ),
+                    required_source=(
+                        None
+                        if item.get("required_source") is None
+                        else str(item.get("required_source"))
+                    ),
+                )
+                for item in payload.get("evidence_gaps") or []
+                if isinstance(item, dict)
+            ],
+        )
+
     def _product_result(
         self,
         *,
@@ -1493,6 +1567,7 @@ class PredictiveMaintenanceRuntimeService:
             confidence=float(row["confidence"]),
             top_factors=factors,
             recommended_action=recommendation,
+            evidence_summary=self._product_result_evidence_summary(producer_artifact),
             provenance=ProductResultProvenance(
                 dataset_id=context.dataset_id,
                 dataset_version_id=context.dataset_version_id,

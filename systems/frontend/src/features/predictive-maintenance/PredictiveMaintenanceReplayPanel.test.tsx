@@ -6,6 +6,8 @@ import {
   countStatusGrades,
   graphStatusLabel,
   PredictiveMaintenanceReplayPanel,
+  productResultContractLabel,
+  productResultEvidencePreview,
   replayTimestamp,
   roleRuntimeMode,
 } from "./PredictiveMaintenanceReplayPanel";
@@ -88,6 +90,49 @@ describe("PredictiveMaintenanceReplayPanel", () => {
       { status_grade: "warning" },
       { status_grade: "critical" },
     ] as never)).toEqual({ critical: 2, warning: 1, attention: 0, normal: 0 });
+  });
+
+  it("surfaces promoted Product Result evidence without parsing raw payload in the view", () => {
+    const result = {
+      source_contract: "result_artifact",
+      evidence_summary: {
+        available: true,
+        evidence_payload_reference: {
+          source: "product_result_artifact",
+          reference: "GEN-001",
+        },
+        sensor_window_rows: 0,
+        sensor_window: {},
+        component_hypotheses: [],
+        recommended_actions: [],
+        source_fields: [
+          { field_id: "prediction_batch.score", label: "Generator failure score", source_path: "results[0].score", description: null },
+          { field_id: "prediction_batch.payload_sha256", label: "Prediction payload checksum", source_path: "results[0].payload_sha256", description: null },
+          { field_id: "prediction_batch.model_artifact_manifest_sha256", label: "Model artifact manifest checksum", source_path: "results[0].model_artifact_manifest_sha256", description: null },
+          { field_id: "backend_policy.decision_threshold", label: "Backend decision threshold", source_path: "threshold_policy.json", description: null },
+          { field_id: "extra.hidden", label: "Extra field", source_path: "extra", description: null },
+        ],
+        evidence_gaps: [
+          { gap_id: "gap-1", field: "sensor", owner_domain: "diagnosis", display_policy: "show_limitation", reason: "missing_source", required_source: "observation window" },
+          { gap_id: "gap-2", field: "component", owner_domain: "diagnosis", display_policy: "show_limitation", reason: "missing_source", required_source: "component mapping" },
+          { gap_id: "gap-3", field: "maintenance", owner_domain: "maintenance", display_policy: "show_limitation", reason: "missing_source", required_source: "maintenance context" },
+          { gap_id: "gap-4", field: "extra", owner_domain: "diagnosis", display_policy: "show_limitation", reason: "missing_source", required_source: "extra" },
+        ],
+      },
+    } as never;
+
+    expect(productResultContractLabel(result, (key) => key)).toBe("pm.promotedResultArtifact");
+    expect(productResultEvidencePreview(result).inspectionReasons.map((field) => field.field_id)).toEqual([
+      "prediction_batch.score",
+      "prediction_batch.payload_sha256",
+      "prediction_batch.model_artifact_manifest_sha256",
+      "backend_policy.decision_threshold",
+    ]);
+    expect(productResultEvidencePreview(result).evidenceGaps.map((gap) => gap.gap_id)).toEqual([
+      "gap-1",
+      "gap-2",
+      "gap-3",
+    ]);
   });
 
   it("normalizes datetime-local replay controls to a timezone-aware contract", () => {

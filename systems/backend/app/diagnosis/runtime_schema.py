@@ -552,6 +552,41 @@ class PolicyRecommendation(StrictModel):
     creates_work_order_automatically: Literal[False] = False
 
 
+class ProductEvidenceGapSummary(StrictModel):
+    gap_id: str
+    field: str
+    owner_domain: str
+    display_policy: str
+    reason: str | None = None
+    required_source: str | None = None
+
+
+class ProductEvidenceSourceFieldSummary(StrictModel):
+    field_id: str
+    label: str
+    source_path: str
+    description: str | None = None
+
+
+class ProductEvidenceActionSummary(StrictModel):
+    action_id: str
+    label: str
+    kind: str
+    requires_human_approval: bool = True
+    basis: list[str] = Field(default_factory=list)
+
+
+class ProductResultEvidenceSummary(StrictModel):
+    available: bool
+    evidence_payload_reference: dict[str, Any] | None = None
+    sensor_window_rows: int = Field(default=0, ge=0)
+    sensor_window: dict[str, Any] = Field(default_factory=dict)
+    component_hypotheses: list[dict[str, Any]] = Field(default_factory=list)
+    recommended_actions: list[ProductEvidenceActionSummary] = Field(default_factory=list)
+    source_fields: list[ProductEvidenceSourceFieldSummary] = Field(default_factory=list)
+    evidence_gaps: list[ProductEvidenceGapSummary] = Field(default_factory=list)
+
+
 class ProductResultProvenance(StrictModel):
     dataset_id: str
     dataset_version_id: str
@@ -586,6 +621,7 @@ class GovernedProductResult(StrictModel):
     confidence: float = Field(ge=0, le=1)
     top_factors: list[ProductFactor] = Field(default_factory=list, max_length=3)
     recommended_action: PolicyRecommendation | None = None
+    evidence_summary: ProductResultEvidenceSummary | None = None
     provenance: ProductResultProvenance
     governance: GovernanceProvenance
     graph: GraphReadiness

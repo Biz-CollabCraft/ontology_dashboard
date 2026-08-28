@@ -28,7 +28,7 @@ interface PredictiveMaintenanceReplayPanelProps {
 }
 
 type StatusGrade = GovernedProductResultSummary["status_grade"];
-type Translate = (key: MessageKey, values?: Record<string, string | number>) => string;
+export type Translate = (key: MessageKey, values?: Record<string, string | number>) => string;
 
 const STATUS_ORDER: StatusGrade[] = ["critical", "warning", "attention", "normal"];
 export const AI4I_V3_1_DATASET_NAME = "UCI AI4I 2020 Manufacturing Predictive Maintenance — Physics & Maintenance Canonical V3.1";
@@ -138,6 +138,25 @@ function featureLabel(feature: string, t: Translate): string {
 function measureLabel(measure: string, t: Translate): string {
   const key = MEASURE_KEYS[measure];
   return key ? t(key) : measure.replaceAll("_", " ");
+}
+
+export function productResultContractLabel(
+  result: GovernedProductResultSummary | null,
+  t: Translate,
+): string {
+  if (!result) return t("pm.notAvailableValue");
+  if (result.source_contract !== "result_artifact") return t("pm.snapshotCompatibility");
+  return result.evidence_summary?.available ? t("pm.promotedResultArtifact") : t("pm.evidenceUnavailable");
+}
+
+export function productResultEvidencePreview(result: GovernedProductResultSummary | null): {
+  inspectionReasons: NonNullable<GovernedProductResultSummary["evidence_summary"]>["source_fields"];
+  evidenceGaps: NonNullable<GovernedProductResultSummary["evidence_summary"]>["evidence_gaps"];
+} {
+  return {
+    inspectionReasons: result?.evidence_summary?.source_fields.slice(0, 4) ?? [],
+    evidenceGaps: result?.evidence_summary?.evidence_gaps.slice(0, 3) ?? [],
+  };
 }
 
 function statusLabel(status: StatusGrade, t: Translate): string {
@@ -285,6 +304,11 @@ export function PredictiveMaintenanceReplayPanel({
     [results],
   );
   const latestObservation = observations?.observations.at(-1) ?? null;
+  const selectedEvidence = selectedResult?.evidence_summary ?? null;
+  const { inspectionReasons, evidenceGaps } = useMemo(
+    () => productResultEvidencePreview(selectedResult),
+    [selectedResult],
+  );
 
   async function startReplay() {
     setBusy(true);
@@ -428,6 +452,12 @@ export function PredictiveMaintenanceReplayPanel({
               {runtimeMode === "engineer" ? (
                 <>
                   <header><strong>{t("pm.sensorFactorEvidence", { asset: selectedResult?.asset_id ?? t("pm.selectEquipment") })}</strong><small>{t("pm.sensorFactorDetail")}</small></header>
+                  <dl className="pm-contract-list pm-evidence-contract">
+                    <div><dt>{t("pm.productContract")}</dt><dd>{productResultContractLabel(selectedResult, t)}</dd></div>
+                    <div><dt>{t("pm.evidenceRef")}</dt><dd>{String(selectedEvidence?.evidence_payload_reference?.reference ?? "—")}</dd></div>
+                    <div><dt>{t("pm.sensorWindowRows")}</dt><dd>{(selectedEvidence?.sensor_window_rows ?? 0).toLocaleString(locale)}</dd></div>
+                    <div><dt>{t("pm.closedLoopBoundary")}</dt><dd>{t("pm.humanApprovalRequired")}</dd></div>
+                  </dl>
                   <div className="pm-factor-list">
                     {selectedResult?.top_factors.map((factor) => (
                       <span key={`${selectedResult.asset_id}:${factor.rank}`}>
@@ -435,6 +465,26 @@ export function PredictiveMaintenanceReplayPanel({
                         <small>{t(`pm.direction.${factor.direction}` as MessageKey)} · {t("pm.contribution")} {factor.signed_contribution.toFixed(4)}</small>
                       </span>
                     ))}
+                  </div>
+                  <div className="pm-evidence-list" aria-label={t("pm.inspectionReasons")}>
+                    <strong>{t("pm.inspectionReasons")}</strong>
+                    {inspectionReasons.map((field) => (
+                      <span key={field.field_id}>
+                        <small>{field.field_id}</small>
+                        <b>{field.label}</b>
+                      </span>
+                    ))}
+                    {!inspectionReasons.length ? <p className="pm-empty-state">{t("pm.noEvidenceSources")}</p> : null}
+                  </div>
+                  <div className="pm-evidence-list pm-evidence-gaps" aria-label={t("pm.evidenceLimitations")}>
+                    <strong>{t("pm.evidenceLimitations")}</strong>
+                    {evidenceGaps.map((gap) => (
+                      <span key={gap.gap_id}>
+                        <small>{gap.owner_domain} · {gap.display_policy}</small>
+                        <b>{gap.required_source ?? gap.field}</b>
+                      </span>
+                    ))}
+                    {!evidenceGaps.length ? <p className="pm-empty-state">{t("pm.noEvidenceGaps")}</p> : null}
                   </div>
                   <div className="pm-derived-grid">
                     {Object.entries(latestObservation?.derived_measures ?? {}).map(([key, value]) => (

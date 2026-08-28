@@ -262,6 +262,22 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
         "request_inspection"
     )
     assert artifact["evidence_payload"]["evidence_gaps"]
+    summary = service._product_result_evidence_summary(artifact)
+    assert summary is not None
+    assert summary.available is True
+    assert summary.evidence_payload_reference == {
+        "source": "product_result_artifact",
+        "reference": artifact["artifact_id"],
+        "generated_by": "systems.backend.diagnosis.generator_batch_promotion",
+    }
+    assert [field.field_id for field in summary.source_fields] == [
+        "prediction_batch.score",
+        "prediction_batch.payload_sha256",
+        "prediction_batch.model_artifact_manifest_sha256",
+        "backend_policy.decision_threshold",
+    ]
+    assert summary.recommended_actions[0].requires_human_approval is True
+    assert summary.evidence_gaps[0].display_policy == "show_limitation"
 
 
 def test_prediction_batch_promotion_is_idempotent() -> None:

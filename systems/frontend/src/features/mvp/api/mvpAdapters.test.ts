@@ -55,6 +55,7 @@ describe("MVP adapter contract", () => {
     const operational = adaptEvent(event);
     const assets = mergeAssets([{
       artifact_id: "RESULT#CNC-001",
+      source_contract: "result_artifact",
       asset_id: "CNC-001",
       asset_type: "cnc",
       site_id: "SITE-1",
@@ -67,6 +68,7 @@ describe("MVP adapter contract", () => {
       confidence: 0.88,
       top_factors: [{ rank: 1, feature: "tool_wear_min", feature_value: 210, signed_contribution: 0.42, direction: "risk_up", explanation_method: "shap" }],
       recommended_action: { action: "review_shutdown", priority: "critical", semantic_type: "policy_recommendation", approval_state: "not_requested", execution_state: "not_executed", creates_work_order_automatically: false },
+      evidence_summary: null,
       provenance: { dataset_id: "dataset-1", dataset_version_id: "dsv-canonical-v3-1", source_version: "Canonical V3.1", bundle_checksum_sha256: "a".repeat(64), model_version: "model-1", schema_version: "result-artifact-v1.0", prediction_task: "binary_failure_within_horizon" },
     }], [operational]);
 
@@ -84,6 +86,7 @@ describe("MVP adapter contract", () => {
   it("does not synthesize criticality from risk when operational context is missing", () => {
     const assets = mergeAssets([{
       artifact_id: "RESULT#CNC-009",
+      source_contract: "result_artifact",
       asset_id: "CNC-009",
       asset_type: "cnc",
       site_id: "SITE-1",
@@ -96,6 +99,7 @@ describe("MVP adapter contract", () => {
       confidence: 0.88,
       top_factors: [],
       recommended_action: { action: "review_shutdown", priority: "critical", semantic_type: "policy_recommendation", approval_state: "not_requested", execution_state: "not_executed", creates_work_order_automatically: false },
+      evidence_summary: null,
       provenance: { dataset_id: "dataset-1", dataset_version_id: "dsv-canonical-v3-1", source_version: "Canonical V3.1", bundle_checksum_sha256: "a".repeat(64), model_version: "model-1", schema_version: "result-artifact-v1.0", prediction_task: "binary_failure_within_horizon" },
     }], []);
 

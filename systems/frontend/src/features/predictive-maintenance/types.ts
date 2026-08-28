@@ -137,6 +137,7 @@ export interface PredictiveMaintenanceDashboardResponse {
 
 export interface GovernedProductResultSummary {
   artifact_id: string | null;
+  source_contract: "result_artifact" | "prediction_snapshot_compatibility";
   asset_id: string;
   asset_type: "compressor" | "cnc";
   site_id: string;
@@ -162,6 +163,34 @@ export interface GovernedProductResultSummary {
     approval_state: "not_requested";
     execution_state: "not_executed";
     creates_work_order_automatically: false;
+  } | null;
+  evidence_summary: {
+    available: boolean;
+    evidence_payload_reference: Record<string, unknown> | null;
+    sensor_window_rows: number;
+    sensor_window: Record<string, unknown>;
+    component_hypotheses: Array<Record<string, unknown>>;
+    recommended_actions: Array<{
+      action_id: string;
+      label: string;
+      kind: string;
+      requires_human_approval: boolean;
+      basis: string[];
+    }>;
+    source_fields: Array<{
+      field_id: string;
+      label: string;
+      source_path: string;
+      description: string | null;
+    }>;
+    evidence_gaps: Array<{
+      gap_id: string;
+      field: string;
+      owner_domain: string;
+      display_policy: string;
+      reason: string | null;
+      required_source: string | null;
+    }>;
   } | null;
   provenance: {
     dataset_id: string;
