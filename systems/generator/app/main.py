@@ -22,6 +22,8 @@ from systems.generator.app.training.training_exception import TrainingError
 from systems.generator.model.publisher import ModelPublishError
 from systems.generator.app.training_compat.training_compat_router import router as training_compat_router
 from systems.generator.app.training_compat.training_lifecycle import lifespan as training_lifespan
+from systems.generator.app.extraction.extraction_router import router as extraction_router
+from systems.generator.app.extraction.extraction_exception import ExtractionError
 from systems.generator.app.runtime_pipeline.pipeline_router import router as runtime_pipeline_router
 from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineBaseError
 from systems.generator.app.runtime_pipeline.pipeline_manager import PipelineManager
@@ -78,6 +80,19 @@ def register_middleware(app: FastAPI) -> None:
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register standard domain and framework exception handlers."""
+    @app.exception_handler(ExtractionError)
+    async def extraction_error_handler(request: Request, exc: ExtractionError) -> JSONResponse:
+        req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
+        logger.warning(f"[ExtractionAPI] ExtractionError: {exc.code} - {exc.message}")
+        return _build_error_response(
+            status_code=exc.status_code,
+            code=exc.code,
+            message=exc.message,
+            path=request.url.path,
+            request_id=req_id,
+            details=exc.details,
+        )
+
     @app.exception_handler(PreprocessingError)
     async def preprocessing_error_handler(request: Request, exc: PreprocessingError) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
@@ -147,7 +162,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             })
         logger.warning(f"[GeneratorAPI] Request validation error: {details}")
         # Return ErrorEnvelope for domain routes, standard detail for training compat if needed
-        if request.url.path.startswith(("/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
+        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
             return _build_error_response(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 code="REQUEST_VALIDATION_ERROR",
@@ -165,7 +180,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.info(f"[GeneratorAPI] HTTP Exception {exc.status_code} on {request.url.path}: {exc.detail}")
-        if request.url.path.startswith(("/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
+        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
             return _build_error_response(
                 status_code=exc.status_code,
                 code=f"HTTP_{exc.status_code}",
@@ -182,7 +197,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.exception(f"[GeneratorAPI] Unhandled error on {request.url.path}: {exc}")
-        if request.url.path.startswith(("/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
+        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
             return _build_error_response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 code="INTERNAL_SERVER_ERROR",
@@ -202,11 +217,13 @@ def register_routers(app: FastAPI) -> None:
     def health() -> dict[str, str]:
         return {"status": "ok", "system": "generator"}
 
+    app.include_router(extraction_router)
     app.include_router(preprocessing_router)
     app.include_router(feature_router)
     app.include_router(training_router)
     app.include_router(runtime_pipeline_router)
     app.include_router(training_compat_router)
+
 
 
 def create_app() -> FastAPI:

@@ -52,10 +52,17 @@ systems/generator/
 │  ├─ main.py                 # FastAPI Application Factory (create_app)
 │  ├─ dependencies.py         # 공통 의존성 주입 (Repository/Service/Settings)
 │  ├─ api/                    # 중앙 Router 조립
-│  ├─ extraction/             # [1단계 Target] Observation / Failure Extraction 도메인
+│  ├─ extraction/             # [1단계 Current] gen_data Protocol Extraction 및 Canonical Observation 발행 도메인
 │  │  ├─ extraction_router.py
 │  │  ├─ extraction_service.py
 │  │  ├─ extraction_repository.py
+│  │  ├─ mapping_validator.py
+│  │  ├─ mapping_repository.py
+│  │  ├─ dedup_repository.py
+│  │  ├─ checkpoint_repository.py
+│  │  ├─ extraction_exception.py
+│  │  ├─ parsers/
+│  │  │  └─ sensor_record_parser.py
 │  │  └─ extraction_schema.py
 │  ├─ preprocessing/          # [2단계 Target] 데이터셋 분석, 불변 Plan 수립 도메인 (기존 extraction 이전)
 │  │  ├─ preprocessing_router.py

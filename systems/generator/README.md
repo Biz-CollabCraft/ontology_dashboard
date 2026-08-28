@@ -14,6 +14,18 @@ Generator는 `systems/generator/app/main.py`를 정본 FastAPI 애플리케이�
 systems/generator/
 ├─ app/                       # FastAPI Application 및 도메인 계층
 │  ├─ main.py                 # 정본 FastAPI Application Factory (create_app)
+│  ├─ extraction/             # [1단계 Current] gen_data Protocol Extraction 및 Canonical Observation 발행
+│  │  ├─ extraction_schema.py
+│  │  ├─ extraction_service.py
+│  │  ├─ extraction_repository.py
+│  │  ├─ mapping_validator.py
+│  │  ├─ mapping_repository.py
+│  │  ├─ dedup_repository.py
+│  │  ├─ checkpoint_repository.py
+│  │  ├─ extraction_exception.py
+│  │  ├─ extraction_router.py
+│  │  └─ parsers/
+│  │     └─ sensor_record_parser.py
 │  ├─ preprocessing/          # [2단계 Current] Observation Dataset 분석 및 Preprocessing Plan 수립·발행
 │  │  ├─ preprocessing_schema.py
 │  │  ├─ preprocessing_service.py
@@ -71,7 +83,7 @@ systems/generator/
 >
 > **Python 실행 환경 계약 (Execution Environment Contract)**:
 > - Generator 시스템은 저장소 루트(Repository Root)를 표준 `PYTHONPATH`로 사용하는 패키지 구조를 가집니다.
-> - 저장소 루트 실행: `python -c "import systems.generator.app.preprocessing; import systems.generator.app.feature; import systems.generator.app.training; import systems.generator.app.runtime_pipeline"`
+> - 저장소 루트 실행: `python -c "import systems.generator.app.extraction; import systems.generator.app.preprocessing; import systems.generator.app.feature; import systems.generator.app.training; import systems.generator.app.runtime_pipeline"`
 > - `systems/generator` 작업 디렉터리 실행: `PYTHONPATH=<repository-root>` 환경변수를 제공하여 legacy facade 및 모듈을 실행합니다.
 
 ---
@@ -85,6 +97,7 @@ systems/generator/
 | Method | Path | 현재 의미 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 및 시스템 식별자 확인 | Current (구현 완료) |
+| POST | `/extraction` | gen_data SensorRecord v2 프로토콜 로그를 승인된 정적 매핑으로 파싱하여 불변 Versioned Canonical Observation Dataset 발행 (동기 방식, 단일 작성자 Lock 및 멱등성 보장) | Implemented — integration pending (Issue #108) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |

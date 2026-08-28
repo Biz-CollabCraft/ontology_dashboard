@@ -323,6 +323,11 @@ class PreprocessingService:
             )
 
         candidates = [
+            PATHS.data_dir / "observations" / request.dataset_id / request.dataset_version / "observations.jsonl",
+            PATHS.data_dir / "observations" / request.dataset_id / request.dataset_version,
+            PATHS.data_dir / "observations" / request.dataset_id,
+            PATHS.data_dir / request.dataset_id / request.dataset_version / "observations.jsonl",
+            PATHS.data_dir / request.dataset_id / request.dataset_version,
             PATHS.data_dir / request.dataset_id / f"{request.dataset_version}.csv",
             PATHS.data_dir / f"{request.dataset_id}_{request.dataset_version}.csv",
             PATHS.data_dir / f"{request.dataset_id}.csv",
@@ -431,6 +436,8 @@ class PreprocessingService:
             df_full = pd.read_csv(dataset_path)
         elif ext in (".xlsx", ".xls"):
             df_full = pd.read_excel(dataset_path)
+        elif ext == ".jsonl":
+            df_full = pd.read_json(dataset_path, lines=True)
         else:
             raise DatasetContractError(f"지원하지 않는 파일 형식입니다: {ext}")
 

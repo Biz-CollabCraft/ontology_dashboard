@@ -766,6 +766,8 @@ class ContractVectorVerifier:
                 self._verify_runtime_overlay_output_vector(vname, vdir, result)
             elif vname.startswith("generator-runtime-prediction"):
                 self._verify_runtime_prediction_vector(vname, vdir, result)
+            elif vname.startswith("generator-protocol-extraction"):
+                self._verify_protocol_extraction_vector(vname, vdir, result)
 
 
             else:
@@ -1810,6 +1812,148 @@ class ContractVectorVerifier:
                     actual=f"sum: {pos_count + neg_count}",
                 )
             )
+
+    def _verify_protocol_extraction_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        """Verify generator-protocol-extraction test vector contracts, schemas, and payload integrity."""
+        input_dir = vector_dir / "input"
+        expected_dir = vector_dir / "expected"
+
+        if not input_dir.is_dir() or not expected_dir.is_dir():
+            result.errors.append(
+                VerificationError(
+                    context=vector_name,
+                    message="Missing input/ or expected/ directory in test vector",
+                )
+            )
+            return
+
+        # 1. Validate input protocol records schema
+        records_path = input_dir / "protocol-records.jsonl"
+        if not records_path.is_file():
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/input",
+                    message="Missing input/protocol-records.jsonl",
+                )
+            )
+            return
+
+        rec_schema_path = self.schemas_dir / "generator-protocol-record.schema.json"
+        if rec_schema_path.is_file():
+            try:
+                rec_schema = json.loads(rec_schema_path.read_text(encoding="utf-8"))
+                rec_validator = jsonschema.Draft202012Validator(rec_schema, format_checker=jsonschema.FormatChecker())
+                with open(records_path, "r", encoding="utf-8") as f:
+                    for line_no, line in enumerate(f, start=1):
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        rec_item = json.loads(stripped)
+                        rec_validator.validate(rec_item)
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/input/protocol-records.jsonl",
+                        message=f"Protocol record validation failed: {exc}",
+                    )
+                )
+
+        # 2. Validate static mapping table schema
+        mapping_path = input_dir / "static-mapping-table.json"
+        if not mapping_path.is_file():
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/input",
+                    message="Missing input/static-mapping-table.json",
+                )
+            )
+            return
+
+        map_schema_path = self.schemas_dir / "generator-static-mapping-table.schema.json"
+        if map_schema_path.is_file():
+            try:
+                map_schema = json.loads(map_schema_path.read_text(encoding="utf-8"))
+                map_validator = jsonschema.Draft202012Validator(map_schema, format_checker=jsonschema.FormatChecker())
+                map_data = json.loads(mapping_path.read_text(encoding="utf-8"))
+                map_validator.validate(map_data)
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/input/static-mapping-table.json",
+                        message=f"Static mapping table validation failed: {exc}",
+                    )
+                )
+
+        # 3. Validate dataset_manifest.json in expected/
+        manifest_path = expected_dir / "dataset_manifest.json"
+        if not manifest_path.is_file():
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected",
+                    message="Missing expected/dataset_manifest.json",
+                )
+            )
+            return
+
+        manifest_schema_path = self.schemas_dir / "generator-dataset-input-manifest.schema.json"
+        if manifest_schema_path.is_file():
+            try:
+                man_schema = json.loads(manifest_schema_path.read_text(encoding="utf-8"))
+                man_validator = jsonschema.Draft202012Validator(man_schema, format_checker=jsonschema.FormatChecker())
+                manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                man_validator.validate(manifest_data)
+                result.manifest_count += 1
+
+                # Verify files declared in manifest
+                all_declared_files = list(manifest_data.get("files", [])) + list(manifest_data.get("auxiliary_files", []))
+                for file_entry in all_declared_files:
+                    rel_path = file_entry.get("path")
+                    target_file = expected_dir / rel_path
+                    if not target_file.is_file():
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/dataset_manifest.json",
+                                message=f"Declared manifest file '{rel_path}' does not exist",
+                            )
+                        )
+                        continue
+
+                    actual_sha = compute_sha256(target_file)
+                    expected_sha = file_entry.get("sha256")
+                    if expected_sha and actual_sha != expected_sha:
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/{rel_path}",
+                                message=f"SHA-256 mismatch for '{rel_path}'",
+                                expected=expected_sha,
+                                actual=actual_sha,
+                            )
+                        )
+
+                    actual_size = target_file.stat().st_size
+                    expected_size = file_entry.get("size_bytes")
+                    if expected_size is not None and actual_size != expected_size:
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/{rel_path}",
+                                message=f"size_bytes mismatch for '{rel_path}'",
+                                expected=str(expected_size),
+                                actual=str(actual_size),
+                            )
+                        )
+                    result.payload_count += 1
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/dataset_manifest.json",
+                        message=f"Dataset manifest validation failed: {exc}",
+                    )
+                )
 
 
 def main() -> int:

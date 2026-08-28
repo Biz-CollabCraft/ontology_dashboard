@@ -20,7 +20,10 @@
     },
     "dataset_type": {
       "type": "string",
-      "enum": ["observation", "failure"]
+      "enum": [
+        "observation",
+        "failure"
+      ]
     },
     "dataset_id": {
       "type": "string",
@@ -54,7 +57,10 @@
         "properties": {
           "role": {
             "type": "string",
-            "enum": ["observations", "failures"]
+            "enum": [
+              "observations",
+              "failures"
+            ]
           },
           "path": {
             "type": "string",
@@ -75,6 +81,49 @@
           "size_bytes": {
             "type": "integer",
             "minimum": 1
+          }
+        }
+      }
+    },
+    "auxiliary_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "path",
+          "media_type",
+          "sha256",
+          "size_bytes"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "provenance",
+              "rejected"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+          },
+          "media_type": {
+            "type": "string",
+            "enum": [
+              "text/csv",
+              "application/x-ndjson",
+              "application/jsonl"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }

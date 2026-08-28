@@ -136,6 +136,32 @@ class GeneratorPaths:
         pred_enabled_env = os.getenv("GENERATOR_RUNTIME_PREDICTION_ENABLED", "false").strip().lower()
         self.runtime_prediction_enabled: bool = pred_enabled_env in ("true", "1", "yes")
 
+        # 4. Extraction Pipeline 전용 경로 및 환경 변수 설정
+        obs_env = os.getenv("GENERATOR_OBSERVATIONS_ROOT")
+        self.observations_root: Path = Path(obs_env).resolve() if obs_env else (self.data_dir / "observations").resolve()
+
+        runs_env = os.getenv("GENERATOR_EXTRACTION_RUNS_ROOT")
+        self.extraction_runs_root: Path = Path(runs_env).resolve() if runs_env else (self.data_preprocessed / "extraction_runs").resolve()
+
+        state_env = os.getenv("GENERATOR_EXTRACTION_STATE_ROOT")
+        self.extraction_state_root: Path = Path(state_env).resolve() if state_env else (self.data_preprocessed / "extraction_state").resolve()
+
+        mapping_env = os.getenv("GENERATOR_MAPPING_ROOT")
+        self.mapping_root: Path = Path(mapping_env).resolve() if mapping_env else (self.ontology / "mappings").resolve()
+
+        extract_roots_env = os.getenv("GENERATOR_EXTRACTION_INPUT_ROOTS")
+        if extract_roots_env:
+            self.extraction_input_roots: list[Path] = [
+                Path(p.strip()).resolve() for p in extract_roots_env.split(",") if p.strip()
+            ]
+        else:
+            self.extraction_input_roots = [
+                self.data_dir,
+                self.data_preprocessed,
+                (PROJECT_ROOT / "contracts").resolve(),
+                (PROJECT_ROOT / "output").resolve(),
+            ]
+
     def ensure_directories(self) -> None:
         """필요 디렉토리가 존재하는지 검사하고 자동 생성한다."""
         for path in (
@@ -147,6 +173,9 @@ class GeneratorPaths:
             self.pipeline_state_root,
             self.runtime_feature_root,
             self.notification_outbox_root,
+            self.observations_root,
+            self.extraction_runs_root,
+            self.extraction_state_root,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
