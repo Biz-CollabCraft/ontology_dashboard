@@ -27,6 +27,8 @@ import { MvpReportsPage } from "./report/MvpReportsPage";
 import { MvpShell } from "./shell/MvpShell";
 import "./mvp.css";
 
+const MVP_REFRESH_INTERVAL_SECONDS = 10;
+
 function defaultRoleLens(roles: string[]): MvpRoleLens {
   return roles.some((role) => role === "process_engineer" || role === "maintenance_technician")
     ? "field_operator"
@@ -67,7 +69,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   useEffect(() => {
     const timer = window.setInterval(() => {
       setRefreshVersion((value) => value + 1);
-    }, 30_000);
+    }, MVP_REFRESH_INTERVAL_SECONDS * 1_000);
     return () => window.clearInterval(timer);
   }, [projectId, selection.workspaceId]);
 
@@ -242,6 +244,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       onRoleChange={(role: MvpRoleLens) => updateSelection({ role, view: "overview" })}
       onRefresh={refresh}
       refreshing={loading}
+      refreshIntervalSeconds={MVP_REFRESH_INTERVAL_SECONDS}
       onLogout={signOut}
     >
       {error ? <div className="mvp-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
