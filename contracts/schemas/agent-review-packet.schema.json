@@ -13,6 +13,7 @@
     "review_priority",
     "review_draft",
     "sop_retrieval",
+    "inspection_targets",
     "sop_guidance",
     "history_review_items",
     "evidence_gaps",
@@ -128,6 +129,38 @@
           "matched_fields": {"type": "array", "items": {"type": "string"}},
           "disclaimer": {"type": "string"},
           "source_ref": {"type": "string"}
+        }
+      }
+    },
+    "inspection_targets": {
+      "type": "array",
+      "description": "Read-only inspection target summaries from AssetDetailViewModel component hypotheses. These help an agent explain why multiple risk factors can map to one field inspection target without creating actions or approvals.",
+      "items": {
+        "type": "object",
+        "required": [
+          "target_id",
+          "component_id",
+          "component_label",
+          "association",
+          "location_label",
+          "inspection_method",
+          "location_source_ref",
+          "basis_refs",
+          "source_ref",
+          "unavailable_reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "target_id": {"type": "string"},
+          "component_id": {"type": "string"},
+          "component_label": {"type": "string"},
+          "association": {"type": "string"},
+          "location_label": {"type": ["string", "null"]},
+          "inspection_method": {"type": ["string", "null"]},
+          "location_source_ref": {"type": ["string", "null"]},
+          "basis_refs": {"type": "array", "items": {"type": "string"}},
+          "source_ref": {"type": "string"},
+          "unavailable_reason": {"type": ["string", "null"]}
         }
       }
     },

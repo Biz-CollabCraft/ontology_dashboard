@@ -1,0 +1,129 @@
+{
+  "asset_id": "CNC-S04-L05-01",
+  "closed_loop_boundary": {
+    "available_action_ids": [],
+    "forbidden_actions": [
+      "create_work_order",
+      "approve_work_order",
+      "start_maintenance_action",
+      "complete_maintenance_action",
+      "create_maintenance_event",
+      "request_replay",
+      "auto_approve"
+    ],
+    "mutation_allowed": false,
+    "note": "This packet may reference available actions for context, but it cannot execute or approve them."
+  },
+  "evidence_gaps": [
+    {
+      "field": "top_factors",
+      "owner_domain": "diagnosis",
+      "reason": "insufficient_context (required_source=observation_history, display_policy=show_limitation)"
+    },
+    {
+      "field": "history[2].air_temperature_k",
+      "owner_domain": "diagnosis",
+      "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)"
+    },
+    {
+      "field": "history[2].torque_nm",
+      "owner_domain": "diagnosis",
+      "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)"
+    },
+    {
+      "field": "observation.air_temperature_k",
+      "owner_domain": "diagnosis",
+      "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)"
+    },
+    {
+      "field": "observation.torque_nm",
+      "owner_domain": "diagnosis",
+      "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)"
+    },
+    {
+      "field": "history.timestamp",
+      "owner_domain": "diagnosis",
+      "reason": "insufficient_context (required_source=valid_runtime_observation, display_policy=show_limitation)"
+    },
+    {
+      "field": "risk_series",
+      "owner_domain": "diagnosis",
+      "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet"
+    },
+    {
+      "field": "maintenance_context.similar_events_30d",
+      "owner_domain": "maintenance",
+      "reason": "maintenance_context_missing_or_unresolved"
+    },
+    {
+      "field": "maintenance_context.open_work_order_exists",
+      "owner_domain": "maintenance",
+      "reason": "maintenance_context_missing_or_unresolved"
+    },
+    {
+      "field": "operation_context.load_level",
+      "owner_domain": "operations",
+      "reason": "operation_context_missing_or_unresolved"
+    },
+    {
+      "field": "operation_context.runtime_hours_7d",
+      "owner_domain": "operations",
+      "reason": "operation_context_missing_or_unresolved"
+    },
+    {
+      "field": "review_priority",
+      "owner_domain": "report",
+      "reason": "review_priority_inputs_missing_or_unresolved"
+    }
+  ],
+  "generated_at": "2026-08-01T00:00:00+09:00",
+  "history_review_items": [],
+  "inspection_targets": [],
+  "limitations": [
+    "Agent Review Packet is read-only and does not mutate Recommendation, WorkOrder, MaintenanceAction, MaintenanceEvent, or Replay state.",
+    "SOP grounding supports inspection and replacement timing review drafts; it is not Product Evidence or a repair instruction."
+  ],
+  "project_id": "manufacturing-demo-project",
+  "review_draft": {
+    "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
+    "checklist": [
+      "근거 공백 항목을 먼저 확인하고 확정 판단에서 제외합니다."
+    ],
+    "evidence_gap_count": 12,
+    "history_summary": [
+      "최근 정비 이력: 최근 정비 이력 · 2026-07-25T00:00:00+09:00 · 7일 전",
+      "열린 작업요청: Closed-loop 이력 연결 전이라 확정하지 않음",
+      "최근 30일 유사 이벤트: 전용 이력 계약 미연결"
+    ],
+    "priority_label": "medium",
+    "recommended_next_step": "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다.",
+    "summary": "CNC-S04-L05-01는 현재 unknown 상태이며 예측 위험도는 미제공입니다. 의심 부품 중심으로 SOP 근거, 위치 reference, 관측값을 대조해야 합니다.",
+    "title": "4구역 · 5셀 · CNC 가공기 1 담당자 검토 초안"
+  },
+  "review_priority": null,
+  "risk_summary": {
+    "failure_probability": null,
+    "prediction_horizon_hours": 24,
+    "status_grade": null
+  },
+  "schema_version": "agent-review-packet-v1.0",
+  "sop_guidance": [],
+  "sop_retrieval": {
+    "mutation_allowed": false,
+    "provider": "local_sop_metadata_retriever",
+    "query": {
+      "asset_type": "cnc",
+      "component_ids": [],
+      "criticality": "medium",
+      "factor_keys": [],
+      "failure_mode": "unavailable",
+      "production_impact": "",
+      "risk_grade": "data_quality_hold"
+    },
+    "returned_count": 0,
+    "top_k": 5
+  },
+  "source_refs": [
+    "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00"
+  ]
+}
