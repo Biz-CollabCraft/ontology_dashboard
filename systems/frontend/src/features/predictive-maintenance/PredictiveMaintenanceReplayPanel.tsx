@@ -33,6 +33,7 @@ export type Translate = (key: MessageKey, values?: Record<string, string | numbe
 const STATUS_ORDER: StatusGrade[] = ["critical", "warning", "attention", "normal"];
 export const AI4I_V3_1_DATASET_NAME = "UCI AI4I 2020 Manufacturing Predictive Maintenance — Physics & Maintenance Canonical V3.1";
 const AI4I_V2_DATASET_NAME = "UCI AI4I 2020 Manufacturing Predictive Maintenance — Canonical V2 compatibility snapshot";
+const LATEST_RESULTS_POLL_SECONDS = 10;
 
 export function replayTimestamp(value: string): string | undefined {
   if (!value) return undefined;
@@ -285,7 +286,7 @@ export function PredictiveMaintenanceReplayPanel({
     if (!selectedVersionId) return undefined;
     const timer = window.setInterval(() => {
       void refreshLatestResults();
-    }, 10_000);
+    }, LATEST_RESULTS_POLL_SECONDS * 1000);
     return () => window.clearInterval(timer);
   }, [refreshLatestResults, selectedVersionId]);
 
@@ -496,6 +497,7 @@ export function PredictiveMaintenanceReplayPanel({
                     <div><dt>{t("pm.latestBatch")}</dt><dd>{String(selectedBatchLineage?.batch_id ?? "—")}</dd></div>
                     <div><dt>{t("pm.batchEvent")}</dt><dd>{String(selectedBatchLineage?.event_id ?? "—")}</dd></div>
                     <div><dt>{t("pm.batchSource")}</dt><dd>{String(selectedBatchLineage?.source_kind ?? "—")}</dd></div>
+                    <div><dt>{t("pm.batchPolling")}</dt><dd>{t("pm.batchPollingEvery", { seconds: LATEST_RESULTS_POLL_SECONDS })}</dd></div>
                     <div><dt>{t("pm.lastResultRefresh")}</dt><dd>{timeLabel(lastResultsRefreshedAt, locale)}</dd></div>
                     <div><dt>{t("pm.sensorWindowRows")}</dt><dd>{(selectedEvidence?.sensor_window_rows ?? 0).toLocaleString(locale)}</dd></div>
                     <div><dt>{t("pm.closedLoopBoundary")}</dt><dd>{t("pm.humanApprovalRequired")}</dd></div>

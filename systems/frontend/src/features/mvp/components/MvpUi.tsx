@@ -146,7 +146,7 @@ export function MvpProvenanceView({ provenance, compact = false }: { provenance:
 export function MvpFreshness({ observedAt, stale }: { observedAt: string | null; stale: boolean }) {
   return (
     <span className={`mvp-freshness ${stale ? "is-stale" : ""}`}>
-      <Clock3 size={13} />{stale ? "오래된 데이터" : "최근 관측"} · {formatTimestamp(observedAt)}
+      <Clock3 size={13} />{stale ? "관측 지연" : "최근 관측"} · {formatTimestamp(observedAt)}
     </span>
   );
 }
