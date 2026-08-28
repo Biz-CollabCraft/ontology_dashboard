@@ -371,13 +371,18 @@ Baseline 표준편차 기준 이동량과
 → 동일 모델 재평가
 ```
 
-### 9.3 구현 순서
+### 9.3 현재 프로젝트 Action 범위
 
-| 순서 | `action_code` | 내용 | 대상 |
-|---:|---|---|---|
-| 1 | `TOOL_REPLACEMENT` | Tool wear 초기화와 이후 마모 재계산 | TWF·OSF |
-| 2 | `CUTTING_LOAD_REDUCTION` | Torque와 제품 부하 조정 | OSF·PWF |
-| 3 | `COOLING_SYSTEM_RESTORE` | 공정·공기 온도 차 정상화 | HDF |
+| 상태 | `action_code` | 내용 | 대상 |
+|---|---|---|---|
+| 현재 구현 | `TOOL_REPLACEMENT` | Tool wear 초기화와 이후 마모 재계산 | TWF·OSF |
+| 후속 vertical slice | `COOLING_SYSTEM_RESTORE` | 공정·공기 온도 차 정상화 | HDF |
+
+`CUTTING_LOAD_REDUCTION`은 실제 정비보다 운전 조건을 변경하는 OperationalAction에
+가깝고, 현재 프로젝트에는 별도 OperationalAction 승인·실행 경로가 없다. 따라서
+Maintenance Action vocabulary와 구현 순서에서 제외한다. Torque·overstrain 징후는
+제거하지 않으며 Inspection에서 공구 마모 또는 냉각 문제가 확인될 때만 각각
+`TOOL_REPLACEMENT` 또는 `COOLING_SYSTEM_RESTORE` 후보로 연결한다.
 
 RNF는 센서 조건과 무관하므로 예방조치 효과 비교 대상에서 제외한다.
 
@@ -680,11 +685,14 @@ Feature·모델·추론 계약이 확정되기 전에는 `intervention_probabili
 ### 17.3 후속 도메인 확장 기준
 
 CNC 공구 교체 파이프라인을 검증하고 전체 적용한 후 다음 예방조치를 별도 정책으로
-확장한다.
+확장할 수 있다.
 
-- `CUTTING_LOAD_REDUCTION`
 - `COOLING_SYSTEM_RESTORE`
 - Compressor 진동·압력·공기 공급 관련 예방조치
+
+`CUTTING_LOAD_REDUCTION`은 이 문서의 후속 Maintenance Action 확장 대상에도 포함하지
+않는다. 향후 별도 OperationalAction 도메인과 사람 승인·실행 계약을 설계하는 경우에만
+독립 안건으로 다시 검토한다.
 
 각 예방조치는 별도의 typed parameter, 물리 변환 정책, 적용 가능 조건과 검증 기준을
 가져야 한다. CNC 공구 교체 정책과 같은 임계값 또는 변환 규칙을 공유한다고 가정하지
@@ -708,3 +716,4 @@ CNC 공구 교체 파이프라인을 검증하고 전체 적용한 후 다음 �
 | 2026-08-12 | 대표 사례 vertical slice와 전체 CNC 프로젝트 완료 기준 분리 |
 | 2026-08-12 | Product Result Artifact 권위 경계와 후보·합성 표현 제한 반영 |
 | 2026-08-12 | PR #20 완료 상태, PR #21~#24 의존성 대기와 개발 재개 조건 반영 |
+| 2026-08-28 | `CUTTING_LOAD_REDUCTION`을 현재·후속 Maintenance Action 범위에서 제외하고 지원 상태를 구분 |
