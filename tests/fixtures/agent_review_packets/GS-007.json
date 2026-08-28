@@ -95,9 +95,9 @@
       "열린 작업요청: Closed-loop 이력 연결 전이라 확정하지 않음",
       "최근 30일 유사 이벤트: 전용 이력 계약 미연결"
     ],
-    "priority_label": "medium",
-    "recommended_next_step": "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다.",
-    "summary": "CNC-S04-L05-01는 현재 unknown 상태이며 예측 위험도는 미제공입니다. 의심 부품 중심으로 SOP 근거, 위치 reference, 관측값을 대조해야 합니다.",
+    "priority_label": "미확정",
+    "recommended_next_step": "근거 공백을 먼저 해소한 뒤 위험도와 검토 우선순위를 다시 산정합니다.",
+    "summary": "CNC-S04-L05-01는 데이터 품질 보류 상태라 위험 등급과 예측 위험도를 확정하지 않습니다. 근거 공백이 있어 확정 판단보다 데이터 보강과 이력 조회가 우선입니다.",
     "title": "4구역 · 5셀 · CNC 가공기 1 담당자 검토 초안"
   },
   "review_priority": null,

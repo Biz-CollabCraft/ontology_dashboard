@@ -42,6 +42,10 @@ def compose_agent_review_packet(
 
     for target in view_model.get("inspection_targets") or []:
         inspection_targets.append(_agent_inspection_target(target))
+        if target.get("source_ref"):
+            source_refs.append(str(target["source_ref"]))
+        if target.get("location_source_ref"):
+            source_refs.append(str(target["location_source_ref"]))
         guidance = target.get("inspection_guidance") or {}
         sop_id = str(guidance.get("sop_id") or "")
         if not guidance or not sop_id:
@@ -56,8 +60,8 @@ def compose_agent_review_packet(
         history_review_items.extend(item for item in review_items if item)
         if guidance.get("source_ref"):
             source_refs.append(str(guidance["source_ref"]))
-        if target.get("source_ref"):
-            source_refs.append(str(target["source_ref"]))
+        if guidance.get("location_source_ref"):
+            source_refs.append(str(guidance["location_source_ref"]))
         if guidance.get("disclaimer"):
             limitations.append(str(guidance["disclaimer"]))
         sop_guidance.append(
@@ -89,6 +93,7 @@ def compose_agent_review_packet(
         asset=view_model.get("asset") or {},
         risk=view_model.get("risk") or {},
         review_priority=view_model.get("review_priority"),
+        inspection_targets=inspection_targets,
         sop_guidance=sop_guidance,
         equipment_history=view_model.get("equipment_history") or [],
         maintenance_context=view_model.get("maintenance_context") or {},
@@ -153,6 +158,7 @@ def _compose_review_draft(
     asset: dict[str, Any],
     risk: dict[str, Any],
     review_priority: dict[str, Any] | None,
+    inspection_targets: list[dict[str, Any]],
     sop_guidance: list[dict[str, Any]],
     equipment_history: list[dict[str, Any]],
     maintenance_context: dict[str, Any],
@@ -161,11 +167,18 @@ def _compose_review_draft(
 ) -> dict[str, Any]:
     asset_id = str(asset.get("asset_id") or "")
     asset_name = str(asset.get("display_name") or asset_id)
-    status_grade = str(risk.get("status_grade") or "unknown")
+    raw_status_grade = risk.get("status_grade")
+    status_grade = str(raw_status_grade or "unknown")
     probability = risk.get("current")
     probability_label = f"{float(probability) * 100:.1f}%" if isinstance(probability, (int, float)) else "미제공"
+    is_data_quality_hold = raw_status_grade is None or probability is None
     primary_guidance = sop_guidance[0] if sop_guidance else {}
-    component_label = str(primary_guidance.get("component_label") or "의심 부품")
+    primary_target = inspection_targets[0] if inspection_targets else {}
+    component_label = str(
+        primary_guidance.get("component_label")
+        or primary_target.get("component_label")
+        or "의심 부품"
+    )
     location_label = str(primary_guidance.get("location_label") or "")
     checklist = [str(item) for item in primary_guidance.get("checklist_draft") or []][:4]
     if location_label:
@@ -177,16 +190,30 @@ def _compose_review_draft(
         maintenance_context=maintenance_context,
         closed_loop=closed_loop,
     )
-    priority_level = str((review_priority or {}).get("level") or "medium")
-    recommended_next_step = (
-        "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다."
-    )
+    if is_data_quality_hold:
+        priority_level = "미확정"
+        recommended_next_step = (
+            "근거 공백을 먼저 해소한 뒤 위험도와 검토 우선순위를 다시 산정합니다."
+        )
+        summary = (
+            f"{asset_id}는 데이터 품질 보류 상태라 위험 등급과 예측 위험도를 확정하지 않습니다. "
+            "근거 공백이 있어 확정 판단보다 데이터 보강과 이력 조회가 우선입니다."
+        )
+    else:
+        priority_level = str((review_priority or {}).get("level") or "medium")
+        recommended_next_step = (
+            "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다."
+        )
+        grounding_label = "SOP 근거, 위치 reference, 관측값"
+        if not sop_guidance:
+            grounding_label = "현장 위치 reference, 관측값, 조회된 이력"
+        summary = (
+            f"{asset_id}는 현재 {status_grade} 상태이며 예측 위험도는 {probability_label}입니다. "
+            f"{component_label} 중심으로 {grounding_label}을 대조해야 합니다."
+        )
     return {
         "title": f"{asset_name} 담당자 검토 초안",
-        "summary": (
-            f"{asset_id}는 현재 {status_grade} 상태이며 예측 위험도는 {probability_label}입니다. "
-            f"{component_label} 중심으로 SOP 근거, 위치 reference, 관측값을 대조해야 합니다."
-        ),
+        "summary": summary,
         "priority_label": priority_level,
         "recommended_next_step": recommended_next_step,
         "checklist": checklist,

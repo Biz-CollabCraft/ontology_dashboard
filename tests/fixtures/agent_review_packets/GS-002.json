@@ -265,7 +265,10 @@
   },
   "source_refs": [
     "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00",
+    "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+    "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
     "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
-    "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[0]"
+    "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
+    "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
   ]
 }
