@@ -16,6 +16,7 @@ from app.infra.llm import VertexAIProvider, configured_provider
 from app.main import app
 from app.dependencies import build_manufacturing_service, get_identity_service, get_service
 from app.planner import LayoutPlanner
+from app.mvp.agent_review_summary import compose_deterministic_agent_review_summary
 from app.mvp.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 from identity_test_support import build_identity_service
 from ontology_dashboard_manufacturing_ml import HeuristicPredictor, build_evidence_package, load_fixture
@@ -28,11 +29,26 @@ AGENT_REVIEW_PACKET_SCHEMA = json.loads(
         encoding="utf-8"
     )
 )
+AGENT_REVIEW_SUMMARY_SCHEMA = json.loads(
+    (ROOT / "contracts" / "schemas" / "agent-review-summary.schema.json").read_text(
+        encoding="utf-8"
+    )
+)
 INSPECTION_LOCATION_REFERENCE_SCHEMA = json.loads(
     (ROOT / "contracts" / "schemas" / "inspection-location-reference.schema.json").read_text(
         encoding="utf-8"
     )
 )
+
+
+class FakeAgentReviewSummaryProvider:
+    name = "fake-agent-review-summary"
+
+    def __init__(self, payload_factory):
+        self.payload_factory = payload_factory
+
+    def generate(self, packet: dict) -> dict:
+        return self.payload_factory(packet)
 
 
 @pytest.fixture()
@@ -379,6 +395,23 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     assert packet["sop_guidance"][0]["replacement_review_guidance"]["operator_review_items"] == packet[
         "history_review_items"
     ]
+    service.agent_review_summary_provider = None
+    summary_response = client.post("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    assert summary_response.status_code == 200
+    summary_payload = summary_response.json()
+    summary = summary_payload["summary"]
+    assert summary_payload["trace"] == {
+        "provider": "none",
+        "fallback": True,
+        "reason": "agent_review_summary_provider_disabled",
+        "validation_errors": [],
+    }
+    assert list(Draft202012Validator(AGENT_REVIEW_SUMMARY_SCHEMA).iter_errors(summary)) == []
+    assert summary["schema_version"] == "agent-review-summary-v1.0"
+    assert summary["mode"] == "deterministic_fallback"
+    assert summary["asset_id"] == packet["asset_id"]
+    assert summary["history_summary"] == packet["review_draft"]["history_summary"]
+    assert summary["inspection_focus"][0]["component_label"] == "공구/마모 계통"
     assert client.get("/api/events/EVT-GS-002/activity").json() == activity_before_packet
 
     login_as(client, "engineer@ontology.local", "Engineer!2026")
@@ -415,6 +448,45 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     service.reset()
     cleared = client.get("/api/events/EVT-GS-002/activity").json()
     assert cleared == {"decisions": [], "notes": [], "conversations": []}
+
+
+def test_agent_review_summary_service_accepts_valid_provider_candidate(
+    service: FactorySignalService,
+) -> None:
+    def payload_factory(packet: dict) -> dict:
+        summary = compose_deterministic_agent_review_summary(packet)
+        return {**summary, "mode": "llm", "title": "AI 요약 후보"}
+
+    service.agent_review_summary_provider = FakeAgentReviewSummaryProvider(payload_factory)
+
+    summary, trace = service.agent_review_summary("CNC-S04-L04-01")
+
+    assert summary["mode"] == "llm"
+    assert summary["title"] == "AI 요약 후보"
+    assert trace == {
+        "provider": "fake-agent-review-summary",
+        "fallback": False,
+        "reason": None,
+        "validation_errors": [],
+    }
+
+
+def test_agent_review_summary_service_falls_back_when_provider_candidate_is_invalid(
+    service: FactorySignalService,
+) -> None:
+    def payload_factory(packet: dict) -> dict:
+        summary = compose_deterministic_agent_review_summary(packet)
+        return {**summary, "mode": "llm", "summary": "정비 완료 후 정상화되었습니다."}
+
+    service.agent_review_summary_provider = FakeAgentReviewSummaryProvider(payload_factory)
+
+    summary, trace = service.agent_review_summary("CNC-S04-L04-01")
+
+    assert summary["mode"] == "deterministic_fallback"
+    assert trace["provider"] == "fake-agent-review-summary"
+    assert trace["fallback"] is True
+    assert trace["reason"] == "summary_validation_failed"
+    assert any(error.startswith("forbidden_claims:") for error in trace["validation_errors"])
 
 
 def test_cnc_sop_guidance_does_not_match_compressor_assets(service: FactorySignalService) -> None:

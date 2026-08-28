@@ -451,6 +451,40 @@ export interface MvpAgentReviewPacket {
   limitations: string[];
 }
 
+export interface MvpAgentReviewSummary {
+  schema_version: "agent-review-summary-v1.0";
+  packet_schema_version: "agent-review-packet-v1.0";
+  asset_id: string;
+  generated_at: string;
+  mode: "llm" | "deterministic_fallback";
+  title: string;
+  summary: string;
+  history_summary: string[];
+  inspection_focus: Array<{
+    component_id: string;
+    component_label: string;
+    location_label: string | null;
+    basis_refs: string[];
+    source_refs: string[];
+  }>;
+  evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
+  source_refs: string[];
+  boundary_note: string;
+  confidence_label: "grounded" | "partial" | "fallback" | "data_quality_hold";
+  limitations: string[];
+}
+
+export interface MvpAgentReviewSummaryResponse {
+  summary: MvpAgentReviewSummary;
+  trace: {
+    provider: string;
+    fallback: boolean;
+    reason: string | null;
+    validation_errors: string[];
+    fallback_validation_errors?: string[];
+  };
+}
+
 export interface MvpEventDetailModel {
   event: MvpEvent;
   sensors: MvpSensorValue[];
