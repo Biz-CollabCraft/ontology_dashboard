@@ -1540,52 +1540,52 @@ def _consume_overlay_event(
             if asset is None:
                 raise ValueError(f"Runtime Overlay references unknown live asset: {event['equipment_id']}")
             asset_type = str(asset["asset_type"])
+            for row in rows:
+                observed_at = _parse_observed_at(row["observed_at"])
+                source_sha256 = str(row.get("observation_sha256") or _record_checksum(row))
+                inserted = connection.execute(
+                    """
+                    INSERT INTO pm_runtime_overlay_observations(
+                        organization_id,project_id,workspace_id,dataset_version_id,
+                        simulation_session_id,overlay_branch_id,history_segment_id,
+                        maintenance_action_id,maintenance_event_id,asset_id,asset_type,
+                        site_id,cell_id,observed_at,state_version,source_kind,
+                        observation_json,source_sha256,created_at
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                              'maintenance_replay_overlay',%s,%s,now())
+                    ON CONFLICT (dataset_version_id,overlay_branch_id,observed_at)
+                    DO UPDATE SET source_sha256=pm_runtime_overlay_observations.source_sha256
+                    WHERE pm_runtime_overlay_observations.source_sha256=EXCLUDED.source_sha256
+                    RETURNING source_sha256
+                    """,
+                    (
+                        ORGANIZATION_ID,
+                        PROJECT_ID,
+                        WORKSPACE_ID,
+                        dataset_version_id,
+                        str(event["simulation_session_id"]),
+                        str(event["overlay_branch_id"]),
+                        str(event["history_segment_id"]),
+                        str(event["maintenance_action_id"]),
+                        str(event["maintenance_event_id"]),
+                        str(event["equipment_id"]),
+                        asset_type,
+                        str(row["site_id"]),
+                        str(row["cell_id"]),
+                        observed_at,
+                        int(event["state_version"]),
+                        Jsonb(row),
+                        source_sha256,
+                    ),
+                ).fetchone()
+                if inserted is None:
+                    raise ValueError(
+                        "Runtime Overlay observation identity conflict: "
+                        f"dataset_version_id={dataset_version_id} "
+                        f"overlay_branch_id={event['overlay_branch_id']} "
+                        f"observed_at={observed_at.isoformat()}"
+                    )
             if existing is None:
-                for row in rows:
-                    observed_at = _parse_observed_at(row["observed_at"])
-                    source_sha256 = str(row.get("observation_sha256") or _record_checksum(row))
-                    inserted = connection.execute(
-                        """
-                        INSERT INTO pm_runtime_overlay_observations(
-                            organization_id,project_id,workspace_id,dataset_version_id,
-                            simulation_session_id,overlay_branch_id,history_segment_id,
-                            maintenance_action_id,maintenance_event_id,asset_id,asset_type,
-                            site_id,cell_id,observed_at,state_version,source_kind,
-                            observation_json,source_sha256,created_at
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                                  'maintenance_replay_overlay',%s,%s,now())
-                        ON CONFLICT (dataset_version_id,overlay_branch_id,observed_at)
-                        DO UPDATE SET source_sha256=pm_runtime_overlay_observations.source_sha256
-                        WHERE pm_runtime_overlay_observations.source_sha256=EXCLUDED.source_sha256
-                        RETURNING source_sha256
-                        """,
-                        (
-                            ORGANIZATION_ID,
-                            PROJECT_ID,
-                            WORKSPACE_ID,
-                            dataset_version_id,
-                            str(event["simulation_session_id"]),
-                            str(event["overlay_branch_id"]),
-                            str(event["history_segment_id"]),
-                            str(event["maintenance_action_id"]),
-                            str(event["maintenance_event_id"]),
-                            str(event["equipment_id"]),
-                            asset_type,
-                            str(row["site_id"]),
-                            str(row["cell_id"]),
-                            observed_at,
-                            int(event["state_version"]),
-                            Jsonb(row),
-                            source_sha256,
-                        ),
-                    ).fetchone()
-                    if inserted is None:
-                        raise ValueError(
-                            "Runtime Overlay observation identity conflict: "
-                            f"dataset_version_id={dataset_version_id} "
-                            f"overlay_branch_id={event['overlay_branch_id']} "
-                            f"observed_at={observed_at.isoformat()}"
-                        )
                 connection.execute(
                     """
                     INSERT INTO pm_runtime_overlay_events(

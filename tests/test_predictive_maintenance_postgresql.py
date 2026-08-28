@@ -257,6 +257,18 @@ def test_postgresql_runtime_overlay_rejects_identity_and_lineage_conflicts(
     conflicting_row["measurements"]["tool_wear_min"] = 1.0
     conflicting_row["tool_wear_min"] = 1.0
     conflicting_row["observation_sha256"] = semantic_observation_sha256(conflicting_row)
+    _write_runtime_overlay_input(stream_root, event, conflicting_row)
+    with pytest.raises(ValueError, match="observation identity conflict"):
+        _consume_overlay_event(
+            postgresql_database,
+            ingestion.dataset_version_id,
+            stream_root,
+            event,
+            dataset_id=ingestion.dataset_id,
+            snapshot_root=snapshot_root,
+            enqueue_client=client,
+        )
+
     conflicting_event = {**event, "event_id": "OVERLAY-AVAILABLE:MAINT-001:conflict"}
     _write_runtime_overlay_input(stream_root, conflicting_event, conflicting_row)
     with pytest.raises(ValueError, match="observation identity conflict"):
