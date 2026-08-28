@@ -490,3 +490,146 @@ class ExtractionMappingEmptyError(ExtractionError):
             details=details,
             retryable=False,
         )
+
+
+class ExtractionSourceLockedError(ExtractionError):
+    """Raised when an exclusive file lock on a source stream cannot be acquired within timeout."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_LOCKED",
+            status_code=409,
+            details=details,
+            retryable=True,
+        )
+
+
+class ExtractionSourceLockFailedError(ExtractionError):
+    """Raised when opening or manipulating the OS lock file fails unexpectedly."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_LOCK_FAILED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionSourceTruncatedError(ExtractionError):
+    """Raised when a source file has been truncated below its last committed offset."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_TRUNCATED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionSourceReplacedError(ExtractionError):
+    """Raised when a source file has been swapped or replaced with different content."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_REPLACED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionSourcePrefixMismatchError(ExtractionError):
+    """Raised when the verified prefix SHA-256 of the source file does not match recorded checkpoint."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_SOURCE_PREFIX_MISMATCH",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionCheckpointWriteFailedError(ExtractionError):
+    """Raised when atomic write or fsync of a checkpoint file fails."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_CHECKPOINT_WRITE_FAILED",
+            status_code=500,
+            details=details,
+            retryable=True,
+        )
+
+
+class ExtractionCheckpointVerifyFailedError(ExtractionError):
+    """Raised when read-back verification of a written checkpoint file fails."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_CHECKPOINT_VERIFY_FAILED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionCheckpointInvalidError(ExtractionError):
+    """Raised when a checkpoint file is corrupted or fails schema/integrity validation."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_CHECKPOINT_INVALID",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionFragmentConflictError(ExtractionError):
+    """Raised when a fragment with the same batch_id already exists with different contents."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_FRAGMENT_CONFLICT",
+            status_code=409,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionFragmentWriteFailedError(ExtractionError):
+    """Raised when writing intermediate fragment files fails."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_FRAGMENT_WRITE_FAILED",
+            status_code=500,
+            details=details,
+            retryable=True,
+        )
+
+
+class ExtractionFragmentVerifyFailedError(ExtractionError):
+    """Raised when intermediate fragment files fail manifest or checksum verification."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_FRAGMENT_VERIFY_FAILED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )

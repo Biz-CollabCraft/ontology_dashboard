@@ -38,6 +38,17 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionMappingTargetCollisionError,
     ExtractionMappingReservedTargetFieldError,
     ExtractionMappingEmptyError,
+    ExtractionSourceLockedError,
+    ExtractionSourceLockFailedError,
+    ExtractionSourceTruncatedError,
+    ExtractionSourceReplacedError,
+    ExtractionSourcePrefixMismatchError,
+    ExtractionCheckpointWriteFailedError,
+    ExtractionCheckpointVerifyFailedError,
+    ExtractionCheckpointInvalidError,
+    ExtractionFragmentConflictError,
+    ExtractionFragmentWriteFailedError,
+    ExtractionFragmentVerifyFailedError,
 )
 from systems.generator.app.extraction.extraction_schema import (
     ExtractionRequest,
@@ -59,6 +70,28 @@ from systems.generator.app.extraction.gen_data_mapping import (
     GenDataMappingResult,
     GenDataStaticMappingConverter,
     RejectedMappingRecord,
+)
+from systems.generator.app.extraction.gen_data_identity import (
+    compute_extraction_batch_id,
+    compute_gen_data_source_identity,
+    compute_source_prefix_info,
+    verify_source_prefix,
+)
+from systems.generator.app.extraction.gen_data_lock import GenDataSourceLock
+from systems.generator.app.extraction.checkpoint_repository import (
+    CheckpointRepository,
+    GenDataExtractionCheckpoint,
+    GenDataExtractionCheckpointRepository,
+    PendingExtractionBatch,
+)
+from systems.generator.app.extraction.gen_data_fragment import (
+    ExtractionFragmentManifest,
+    FragmentFileDescriptor,
+    GenDataFragmentRepository,
+)
+from systems.generator.app.extraction.gen_data_incremental_service import (
+    GenDataIncrementalExtractionService,
+    IncrementalExtractionResult,
 )
 from systems.generator.app.extraction.extraction_service import ExtractionService
 from systems.generator.app.extraction.extraction_router import router
@@ -101,6 +134,17 @@ __all__ = [
     "ExtractionMappingTargetCollisionError",
     "ExtractionMappingReservedTargetFieldError",
     "ExtractionMappingEmptyError",
+    "ExtractionSourceLockedError",
+    "ExtractionSourceLockFailedError",
+    "ExtractionSourceTruncatedError",
+    "ExtractionSourceReplacedError",
+    "ExtractionSourcePrefixMismatchError",
+    "ExtractionCheckpointWriteFailedError",
+    "ExtractionCheckpointVerifyFailedError",
+    "ExtractionCheckpointInvalidError",
+    "ExtractionFragmentConflictError",
+    "ExtractionFragmentWriteFailedError",
+    "ExtractionFragmentVerifyFailedError",
     "ExtractionRequest",
     "ExtractionResponse",
     "ExtractionResultPayload",
@@ -114,6 +158,20 @@ __all__ = [
     "RejectedMappingRecord",
     "GenDataMappingResult",
     "GenDataStaticMappingConverter",
+    "compute_gen_data_source_identity",
+    "compute_extraction_batch_id",
+    "compute_source_prefix_info",
+    "verify_source_prefix",
+    "GenDataSourceLock",
+    "PendingExtractionBatch",
+    "GenDataExtractionCheckpoint",
+    "GenDataExtractionCheckpointRepository",
+    "CheckpointRepository",
+    "ExtractionFragmentManifest",
+    "FragmentFileDescriptor",
+    "GenDataFragmentRepository",
+    "IncrementalExtractionResult",
+    "GenDataIncrementalExtractionService",
     "ExtractionService",
     "router",
 ]

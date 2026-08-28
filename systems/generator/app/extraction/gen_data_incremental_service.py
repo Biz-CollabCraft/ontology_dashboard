@@ -1,0 +1,360 @@
+"""Incremental append extraction service with checkpoints, file locking, and crash recovery."""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Literal, Optional, Sequence, Union
+
+from pydantic import BaseModel
+
+from systems.generator.app.extraction.checkpoint_repository import (
+    GenDataExtractionCheckpoint,
+    GenDataExtractionCheckpointRepository,
+    PendingExtractionBatch,
+)
+from systems.generator.app.extraction.extraction_exception import (
+    ExtractionError,
+    ExtractionSourceNotFoundError,
+    ExtractionSourceTruncatedError,
+)
+from systems.generator.app.extraction.gen_data_fragment import (
+    GenDataFragmentRepository,
+)
+from systems.generator.app.extraction.gen_data_identity import (
+    compute_extraction_batch_id,
+    compute_gen_data_source_identity,
+    compute_source_prefix_info,
+    verify_source_prefix,
+)
+from systems.generator.app.extraction.gen_data_lock import GenDataSourceLock
+from systems.generator.app.extraction.gen_data_mapping import (
+    GenDataStaticMappingConverter,
+)
+from systems.generator.app.extraction.gen_data_source import (
+    GenDataSensorStreamSource,
+)
+from systems.generator.app.extraction.parsers.gen_data_sensor_stream_parser import (
+    GenDataSensorStreamParser,
+    RejectedGenDataRecord,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class IncrementalExtractionResult(BaseModel):
+    """Result of an incremental extraction cycle on a gen_data sensor stream."""
+
+    source_identity: str
+    source_uri: str
+    run_id: str
+    batch_id: Optional[str] = None
+
+    start_offset: int
+    committed_offset: int
+
+    records_read: int
+    observations_staged: int
+    rejected_staged: int
+
+    fragment_manifest_uri: Optional[str] = None
+    fragment_manifest_sha256: Optional[str] = None
+
+    status: Literal["no_data", "fragment_committed"]
+
+
+class GenDataIncrementalExtractionService:
+    """Orchestrates single-writer locked incremental parsing, mapping, fragment staging, and checkpointing."""
+
+    def __init__(
+        self,
+        checkpoint_repo: Optional[GenDataExtractionCheckpointRepository] = None,
+        fragment_repo: Optional[GenDataFragmentRepository] = None,
+        parser: Optional[GenDataSensorStreamParser] = None,
+        converter: Optional[GenDataStaticMappingConverter] = None,
+        lock_dir: Optional[Path] = None,
+        failure_injector: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        from systems.generator.generator_config import PATHS
+
+        self.checkpoint_repo = checkpoint_repo or GenDataExtractionCheckpointRepository()
+        self.fragment_repo = fragment_repo or GenDataFragmentRepository()
+        self.parser = parser or GenDataSensorStreamParser()
+        self.converter = converter or GenDataStaticMappingConverter()
+        self.lock_dir = Path(
+            lock_dir or (PATHS.data_preprocessed / "extraction_state" / "gen_data" / "locks")
+        ).resolve()
+        self.failure_injector = failure_injector
+
+    def process_available_records(
+        self,
+        *,
+        source: GenDataSensorStreamSource,
+        mapping_data: dict[str, Any],
+        run_id: str,
+        max_records: int = 10000,
+        max_bytes: Optional[int] = None,
+    ) -> IncrementalExtractionResult:
+        """Process completed records from source stream since last checkpoint.
+
+        Invariants:
+        1. Source OS-level lock is acquired.
+        2. First completed record SHA-256 establishes deterministic source identity.
+        3. Checkpoint is loaded and verified against file prefix and offset bounds.
+        4. Crash recovery: if previous run left fragment_staged with valid manifest, checkpoint commits immediately.
+        5. Completed lines are read and mapped in memory.
+        6. Fragment files and manifest are written atomically and verified.
+        7. Checkpoint advances through 'processing' -> 'fragment_staged' -> 'idle'.
+        """
+        source_path = Path(source.source_path).resolve()
+        if not source_path.is_file() or source_path.stat().st_size == 0:
+            return IncrementalExtractionResult(
+                source_identity="",
+                source_uri=source.source_uri,
+                run_id=run_id,
+                start_offset=0,
+                committed_offset=0,
+                records_read=0,
+                observations_staged=0,
+                rejected_staged=0,
+                status="no_data",
+            )
+
+        # 1. Peek first line for source identity computation
+        first_peek = self.parser.read_completed_records(source_path, start_offset=0, max_records=1)
+        if len(first_peek.records) == 0 and len(first_peek.rejected_records) == 0:
+            # File has bytes but no completed newline yet
+            return IncrementalExtractionResult(
+                source_identity="",
+                source_uri=source.source_uri,
+                run_id=run_id,
+                start_offset=0,
+                committed_offset=0,
+                records_read=0,
+                observations_staged=0,
+                rejected_staged=0,
+                status="no_data",
+            )
+
+        first_rec = first_peek.records[0] if first_peek.records else first_peek.rejected_records[0]
+        source_identity = compute_gen_data_source_identity(
+            source_uri=source.source_uri,
+            site_id=source.site_id,
+            cell_id=source.cell_id,
+            first_record_sha256=first_rec.raw_sha256,
+        )
+
+        # 2. Acquire exclusive OS file lock
+        lock = GenDataSourceLock(self.lock_dir, source_identity=source_identity)
+        with lock:
+            if self.failure_injector:
+                self.failure_injector("after_lock_acquired")
+
+            # Clean up older temporary checkpoint files
+            self.checkpoint_repo.cleanup_orphan_tmp_files()
+
+            # 3. Load or initialize checkpoint
+            chk = self.checkpoint_repo.load_checkpoint(source_identity)
+            if chk is not None:
+                self.checkpoint_repo.validate_checkpoint_source(chk, source)
+
+                # Verify file bounds and prefix integrity
+                if chk.verified_prefix_length > 0:
+                    verify_source_prefix(
+                        source_path=source_path,
+                        expected_length=chk.verified_prefix_length,
+                        expected_sha256=chk.verified_prefix_sha256,
+                        last_committed_offset=chk.last_committed_offset,
+                    )
+
+                # 4. Crash Recovery: Check if recovering from fragment_staged
+                if chk.status == "fragment_staged" and chk.pending_batch is not None:
+                    pb = chk.pending_batch
+                    frag_dir = self.fragment_repo.base_runs_dir / pb.run_id / "fragments" / pb.batch_id
+                    # Verify staged fragment
+                    self.fragment_repo.verify_fragment(frag_dir, pb.fragment_manifest_sha256)
+                    # Commit staged batch
+                    chk.last_committed_offset = pb.source_end_offset
+                    chk.last_committed_line = pb.source_end_line
+                    chk.last_committed_batch_id = pb.batch_id
+                    chk.committed_batch_ids = (chk.committed_batch_ids + [pb.batch_id])[-100:]
+                    chk.pending_batch = None
+                    chk.status = "idle"
+                    chk.updated_at = now_utc_iso()
+                    self.checkpoint_repo.save_checkpoint_atomic(chk, failure_injector=self.failure_injector)
+                    logger.info(f"[IncrementalService] Recovered and committed pending batch '{pb.batch_id}'")
+
+                start_offset = chk.last_committed_offset
+                start_line = chk.last_committed_line
+            else:
+                start_offset = 0
+                start_line = 0
+                now_str = now_utc_iso()
+                chk = GenDataExtractionCheckpoint(
+                    source_identity=source_identity,
+                    source_uri=source.source_uri,
+                    site_id=source.site_id,
+                    cell_id=source.cell_id,
+                    last_committed_offset=0,
+                    last_committed_line=0,
+                    verified_prefix_length=0,
+                    verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    status="idle",
+                    created_at=now_str,
+                    updated_at=now_str,
+                )
+
+            # Check if there is new data beyond committed offset
+            file_size = source_path.stat().st_size
+            if start_offset >= file_size:
+                return IncrementalExtractionResult(
+                    source_identity=source_identity,
+                    source_uri=source.source_uri,
+                    run_id=run_id,
+                    start_offset=start_offset,
+                    committed_offset=start_offset,
+                    records_read=0,
+                    observations_staged=0,
+                    rejected_staged=0,
+                    status="no_data",
+                )
+
+            # 5. Mark status 'processing'
+            chk.status = "processing"
+            chk.updated_at = now_utc_iso()
+            self.checkpoint_repo.save_checkpoint_atomic(chk, failure_injector=self.failure_injector)
+
+            # 6. Read completed records
+            read_result = self.parser.read_completed_records(
+                source_path,
+                start_offset=start_offset,
+                max_records=max_records,
+                max_bytes=max_bytes,
+            )
+
+            total_read = len(read_result.records) + len(read_result.rejected_records)
+            if total_read == 0:
+                chk.status = "idle"
+                chk.updated_at = now_utc_iso()
+                self.checkpoint_repo.save_checkpoint_atomic(chk)
+                return IncrementalExtractionResult(
+                    source_identity=source_identity,
+                    source_uri=source.source_uri,
+                    run_id=run_id,
+                    start_offset=start_offset,
+                    committed_offset=start_offset,
+                    records_read=0,
+                    observations_staged=0,
+                    rejected_staged=0,
+                    status="no_data",
+                )
+
+            # 7. Convert parsed records using static mapping
+            observations = []
+            rejected_records: list[Union[Any, RejectedGenDataRecord]] = list(read_result.rejected_records)
+            latest_observed_at = chk.last_observed_at
+
+            for parsed_rec in read_result.records:
+                map_result = self.converter.convert(
+                    record=parsed_rec,
+                    source=source,
+                    mapping_data=mapping_data,
+                )
+                if map_result.observation is not None:
+                    observations.append(map_result.observation)
+                    latest_observed_at = map_result.observation.observed_at
+                elif map_result.rejected is not None:
+                    rejected_records.append(map_result.rejected)
+
+            end_offset = read_result.committed_candidate_offset
+            end_line = start_line + total_read
+
+            mapping_sha256 = mapping_data.get("mapping_sha256", "")
+            mapping_id = mapping_data.get("mapping_id", "")
+            mapping_version = mapping_data.get("mapping_version", "")
+
+            batch_id = compute_extraction_batch_id(
+                source_identity=source_identity,
+                source_start_offset=start_offset,
+                source_end_offset=end_offset,
+                mapping_sha256=mapping_sha256,
+            )
+
+            # 8. Save Fragment atomically
+            frag_dir, manifest, manifest_sha256 = self.fragment_repo.save_fragment_atomic(
+                run_id=run_id,
+                batch_id=batch_id,
+                source_identity=source_identity,
+                source_uri=source.source_uri,
+                source_start_offset=start_offset,
+                source_end_offset=end_offset,
+                source_start_line=start_line + 1,
+                source_end_line=end_line,
+                mapping_id=mapping_id,
+                mapping_version=mapping_version,
+                mapping_sha256=mapping_sha256,
+                observations=observations,
+                rejected_records=rejected_records,
+                failure_injector=self.failure_injector,
+            )
+
+            # 9. If brand new source, compute prefix checksum
+            if chk.verified_prefix_length == 0:
+                p_len, p_sha = compute_source_prefix_info(source_path, end_offset)
+                chk.verified_prefix_length = p_len
+                chk.verified_prefix_sha256 = p_sha
+
+            # 10. Update Checkpoint to 'fragment_staged'
+            staged_now = now_utc_iso()
+            chk.status = "fragment_staged"
+            chk.pending_batch = PendingExtractionBatch(
+                batch_id=batch_id,
+                run_id=run_id,
+                source_start_offset=start_offset,
+                source_end_offset=end_offset,
+                source_start_line=start_line + 1,
+                source_end_line=end_line,
+                record_count=total_read,
+                observation_count=len(observations),
+                rejected_count=len(rejected_records),
+                mapping_id=mapping_id,
+                mapping_version=mapping_version,
+                mapping_sha256=mapping_sha256,
+                fragment_manifest_uri=f"data_preprocessed/extraction_runs/{run_id}/fragments/{batch_id}/fragment_manifest.json",
+                fragment_manifest_sha256=manifest_sha256,
+                staged_at=staged_now,
+            )
+            chk.updated_at = staged_now
+            self.checkpoint_repo.save_checkpoint_atomic(chk, failure_injector=self.failure_injector)
+
+            # 11. Final Commit: update committed offset and status 'idle'
+            committed_now = now_utc_iso()
+            chk.last_committed_offset = end_offset
+            chk.last_committed_line = end_line
+            chk.last_observed_at = latest_observed_at
+            chk.last_committed_batch_id = batch_id
+            chk.committed_batch_ids = (chk.committed_batch_ids + [batch_id])[-100:]
+            chk.pending_batch = None
+            chk.status = "idle"
+            chk.updated_at = committed_now
+            self.checkpoint_repo.save_checkpoint_atomic(chk, failure_injector=self.failure_injector)
+
+            return IncrementalExtractionResult(
+                source_identity=source_identity,
+                source_uri=source.source_uri,
+                run_id=run_id,
+                batch_id=batch_id,
+                start_offset=start_offset,
+                committed_offset=end_offset,
+                records_read=total_read,
+                observations_staged=len(observations),
+                rejected_staged=len(rejected_records),
+                fragment_manifest_uri=f"data_preprocessed/extraction_runs/{run_id}/fragments/{batch_id}/fragment_manifest.json",
+                fragment_manifest_sha256=manifest_sha256,
+                status="fragment_committed",
+            )

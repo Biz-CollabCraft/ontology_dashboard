@@ -604,6 +604,20 @@ class ContractVectorVerifier:
                                     message=f"Example run manifest fails schema validation: {e.message}",
                                 )
                             )
+                elif data.get("fragment_schema_version") == "generator-extraction-fragment-v1" or "fragment-manifest" in efile.name.lower():
+                    frag_schema_p = self.schemas_dir / "generator-extraction-fragment-manifest.schema.json"
+                    if frag_schema_p.is_file():
+                        try:
+                            f_schema = json.loads(frag_schema_p.read_text(encoding="utf-8"))
+                            f_val = jsonschema.Draft202012Validator(f_schema, format_checker=jsonschema.FormatChecker())
+                            f_val.validate(data)
+                        except jsonschema.ValidationError as e:
+                            result.errors.append(
+                                VerificationError(
+                                    context=str(rel_path),
+                                    message=f"Example fragment manifest fails schema validation: {e.message}",
+                                )
+                            )
                 elif manifest_validator:
                     try:
                         manifest_validator.validate(data)
