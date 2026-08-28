@@ -166,6 +166,16 @@ export interface GovernedProductResultSummary {
   } | null;
   evidence_summary: {
     available: boolean;
+    batch_lineage: {
+      batch_id: string | null;
+      event_id: string | null;
+      emitted_at: string | null;
+      generated_at: string | null;
+      source_kind: string | null;
+      producer_id: string | null;
+      model_id: string | null;
+      source_reference: string | null;
+    } | null;
     evidence_payload_reference: Record<string, unknown> | null;
     sensor_window_rows: number;
     sensor_window: Record<string, unknown>;

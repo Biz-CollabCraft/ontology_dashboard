@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   controlPredictiveMaintenanceReplay,
   getPredictiveMaintenanceLatestResults,
@@ -191,6 +191,8 @@ export function PredictiveMaintenanceReplayPanel({
   const [replay, setReplay] = useState<ReplaySessionSnapshot | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshingResults, setRefreshingResults] = useState(false);
+  const [lastResultsRefreshedAt, setLastResultsRefreshedAt] = useState("");
   const [error, setError] = useState("");
   const [speed, setSpeed] = useState(60);
   const [seekTime, setSeekTime] = useState("");
@@ -237,6 +239,7 @@ export function PredictiveMaintenanceReplayPanel({
       .then(([nextContext, nextResults]) => {
         setContext(nextContext);
         setResults(nextResults);
+        setLastResultsRefreshedAt(new Date().toISOString());
         setSelectedAssetId((current) => (
           current && nextResults.items.some((item) => item.asset_id === current)
             ? current
@@ -251,6 +254,40 @@ export function PredictiveMaintenanceReplayPanel({
       });
     return () => controller.abort();
   }, [projectId, selectedVersionId, t, workspaceId]);
+
+  const refreshLatestResults = useCallback(async () => {
+    if (!projectId || !workspaceId || !selectedVersionId) return;
+    const controller = new AbortController();
+    setRefreshingResults(true);
+    try {
+      const nextResults = await getPredictiveMaintenanceLatestResults(
+        projectId,
+        workspaceId,
+        100,
+        controller.signal,
+        selectedVersionId,
+      );
+      setResults(nextResults);
+      setLastResultsRefreshedAt(new Date().toISOString());
+      setSelectedAssetId((current) => (
+        current && nextResults.items.some((item) => item.asset_id === current)
+          ? current
+          : nextResults.items[0]?.asset_id ?? ""
+      ));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("pm.error.runtime"));
+    } finally {
+      setRefreshingResults(false);
+    }
+  }, [projectId, selectedVersionId, t, workspaceId]);
+
+  useEffect(() => {
+    if (!selectedVersionId) return undefined;
+    const timer = window.setInterval(() => {
+      void refreshLatestResults();
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [refreshLatestResults, selectedVersionId]);
 
   const selectedResult = useMemo(
     () => results?.items.find((item) => item.asset_id === selectedAssetId) ?? null,
@@ -305,6 +342,7 @@ export function PredictiveMaintenanceReplayPanel({
   );
   const latestObservation = observations?.observations.at(-1) ?? null;
   const selectedEvidence = selectedResult?.evidence_summary ?? null;
+  const selectedBatchLineage = selectedEvidence?.batch_lineage ?? null;
   const { inspectionReasons, evidenceGaps } = useMemo(
     () => productResultEvidencePreview(selectedResult),
     [selectedResult],
@@ -455,9 +493,16 @@ export function PredictiveMaintenanceReplayPanel({
                   <dl className="pm-contract-list pm-evidence-contract">
                     <div><dt>{t("pm.productContract")}</dt><dd>{productResultContractLabel(selectedResult, t)}</dd></div>
                     <div><dt>{t("pm.evidenceRef")}</dt><dd>{String(selectedEvidence?.evidence_payload_reference?.reference ?? "—")}</dd></div>
+                    <div><dt>{t("pm.latestBatch")}</dt><dd>{String(selectedBatchLineage?.batch_id ?? "—")}</dd></div>
+                    <div><dt>{t("pm.batchEvent")}</dt><dd>{String(selectedBatchLineage?.event_id ?? "—")}</dd></div>
+                    <div><dt>{t("pm.batchSource")}</dt><dd>{String(selectedBatchLineage?.source_kind ?? "—")}</dd></div>
+                    <div><dt>{t("pm.lastResultRefresh")}</dt><dd>{timeLabel(lastResultsRefreshedAt, locale)}</dd></div>
                     <div><dt>{t("pm.sensorWindowRows")}</dt><dd>{(selectedEvidence?.sensor_window_rows ?? 0).toLocaleString(locale)}</dd></div>
                     <div><dt>{t("pm.closedLoopBoundary")}</dt><dd>{t("pm.humanApprovalRequired")}</dd></div>
                   </dl>
+                  <button className="secondary pm-refresh-button" type="button" onClick={() => void refreshLatestResults()} disabled={refreshingResults}>
+                    {refreshingResults ? t("pm.refreshingBatches") : t("pm.refreshBatches")}
+                  </button>
                   <div className="pm-factor-list">
                     {selectedResult?.top_factors.map((factor) => (
                       <span key={`${selectedResult.asset_id}:${factor.rank}`}>

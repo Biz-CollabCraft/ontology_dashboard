@@ -287,6 +287,16 @@ function productResult(assetId: string, probability: number, status: string, act
     recommended_action: { action, priority: probability > 0.8 ? "P1" : "P2", semantic_type: "policy_recommendation", approval_state: "not_requested", execution_state: "not_executed", creates_work_order_automatically: false },
     evidence_summary: {
       available: true,
+      batch_lineage: {
+        batch_id: `batch-${assetId}`,
+        event_id: assetId,
+        emitted_at: "2026-08-05T00:00:00Z",
+        generated_at: "2026-08-05T00:00:00Z",
+        source_kind: "maintenance_replay_overlay",
+        producer_id: "gen-data-local",
+        model_id: "independent-logreg-v3.1",
+        source_reference: `prediction-result-batch:batch-${assetId}:event:${assetId}`,
+      },
       evidence_payload_reference: {
         source: "product_result_artifact",
         reference: artifactId,

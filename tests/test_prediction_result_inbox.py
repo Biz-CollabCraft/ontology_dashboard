@@ -270,6 +270,13 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
         "reference": artifact["artifact_id"],
         "generated_by": "systems.backend.diagnosis.generator_batch_promotion",
     }
+    assert summary.batch_lineage is not None
+    assert summary.batch_lineage.batch_id == payload["batch_id"]
+    assert summary.batch_lineage.event_id == payload["results"][0]["event_id"]
+    assert summary.batch_lineage.source_kind == payload["source_context"]["source_kind"]
+    assert summary.batch_lineage.source_reference.startswith(
+        f"prediction-result-batch:{payload['batch_id']}:event:"
+    )
     assert [field.field_id for field in summary.source_fields] == [
         "prediction_batch.score",
         "prediction_batch.payload_sha256",
@@ -484,6 +491,33 @@ def test_prediction_inbox_routes_return_receipt(monkeypatch) -> None:
     assert promotion.json()["promoted_results"] == 1
     assert internal.status_code == 200, internal.text
     assert internal.json()["validation_status"] == "duplicate"
+
+
+def test_internal_prediction_inbox_promotes_accepted_batch(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    service = make_service(FakeInboxRepository())
+    app = FastAPI()
+    app.include_router(internal_router)
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=load_payload(),
+            headers={"Authorization": "Bearer receiver-secret"},
+        )
+
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["validation_status"] == "accepted"
+    assert body["promotion_status"] == "promoted"
+    assert body["product_result_created"] is True
+    assert body["promoted_results"] == 1
+    assert body["artifact_ids"]
 
 
 def test_prediction_inbox_internal_route_requires_configured_service_token(monkeypatch) -> None:

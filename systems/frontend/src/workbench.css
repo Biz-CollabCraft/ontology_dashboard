@@ -177,6 +177,16 @@
   margin-bottom: 2px;
 }
 
+.pm-refresh-button {
+  justify-self: start;
+  min-height: 32px;
+  margin-top: 2px;
+  margin-bottom: 4px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .pm-evidence-list {
   margin-top: 2px;
 }

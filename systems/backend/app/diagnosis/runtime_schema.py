@@ -422,8 +422,13 @@ class PredictionInboxReceipt(StrictModel):
     conflict_results: int = Field(ge=0)
     rejected_results: int = Field(ge=0)
     item_receipts: list[PredictionInboxItemReceipt] = Field(default_factory=list)
-    promotion_status: Literal["not_promoted"] = "not_promoted"
-    product_result_created: Literal[False] = False
+    promotion_status: Literal["promoted", "already_promoted", "partially_promoted", "not_promoted"] = "not_promoted"
+    product_result_created: bool = False
+    promoted_results: int = Field(default=0, ge=0)
+    already_promoted_results: int = Field(default=0, ge=0)
+    skipped_results: int = Field(default=0, ge=0)
+    product_result_ids: list[str] = Field(default_factory=list)
+    artifact_ids: list[str] = Field(default_factory=list)
 
 
 class PredictionBatchPromotionItemReceipt(StrictModel):
@@ -576,8 +581,20 @@ class ProductEvidenceActionSummary(StrictModel):
     basis: list[str] = Field(default_factory=list)
 
 
+class ProductResultBatchLineageSummary(StrictModel):
+    batch_id: str | None = None
+    event_id: str | None = None
+    emitted_at: datetime | None = None
+    generated_at: datetime | None = None
+    source_kind: str | None = None
+    producer_id: str | None = None
+    model_id: str | None = None
+    source_reference: str | None = None
+
+
 class ProductResultEvidenceSummary(StrictModel):
     available: bool
+    batch_lineage: ProductResultBatchLineageSummary | None = None
     evidence_payload_reference: dict[str, Any] | None = None
     sensor_window_rows: int = Field(default=0, ge=0)
     sensor_window: dict[str, Any] = Field(default_factory=dict)

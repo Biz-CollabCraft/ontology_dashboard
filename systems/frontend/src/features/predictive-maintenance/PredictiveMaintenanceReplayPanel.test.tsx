@@ -97,6 +97,16 @@ describe("PredictiveMaintenanceReplayPanel", () => {
       source_contract: "result_artifact",
       evidence_summary: {
         available: true,
+        batch_lineage: {
+          batch_id: "batch-001",
+          event_id: "GEN-EVT-001",
+          emitted_at: "2026-08-05T00:00:00Z",
+          generated_at: "2026-08-05T00:00:00Z",
+          source_kind: "maintenance_replay_overlay",
+          producer_id: "gen-data-local",
+          model_id: "independent-logreg",
+          source_reference: "prediction-result-batch:batch-001:event:GEN-EVT-001",
+        },
         evidence_payload_reference: {
           source: "product_result_artifact",
           reference: "GEN-001",

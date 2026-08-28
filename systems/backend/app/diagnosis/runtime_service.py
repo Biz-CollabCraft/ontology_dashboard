@@ -42,6 +42,7 @@ from .runtime_schema import (
     ProductEvidenceActionSummary,
     ProductEvidenceGapSummary,
     ProductEvidenceSourceFieldSummary,
+    ProductResultBatchLineageSummary,
     ProductResultEvidenceSummary,
     PredictionBatchPromotionItemReceipt,
     PredictionBatchPromotionReceipt,
@@ -197,6 +198,17 @@ def _list(value: Any) -> list[Any]:
         parsed = json.loads(value)
         return parsed if isinstance(parsed, list) else []
     return []
+
+
+def _datetime_or_none(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 @lru_cache(maxsize=1)
@@ -1412,10 +1424,41 @@ class PredictiveMaintenanceRuntimeService:
             return None
         payload = _dict(producer_artifact.get("evidence_payload"))
         provenance = _dict(producer_artifact.get("provenance"))
+        lineage = _dict(producer_artifact.get("lineage"))
+        source_context = _dict(lineage.get("source_context"))
+        model_artifact = _dict(provenance.get("model_artifact"))
         sensor_evidence = _dict(payload.get("sensor_evidence"))
         sensor_window = _dict(sensor_evidence.get("window"))
         return ProductResultEvidenceSummary(
             available=True,
+            batch_lineage=ProductResultBatchLineageSummary(
+                batch_id=(
+                    None if lineage.get("batch_id") is None else str(lineage.get("batch_id"))
+                ),
+                event_id=(
+                    None if lineage.get("event_id") is None else str(lineage.get("event_id"))
+                ),
+                emitted_at=_datetime_or_none(producer_artifact.get("generated_at")),
+                generated_at=_datetime_or_none(producer_artifact.get("generated_at")),
+                source_kind=(
+                    None
+                    if source_context.get("source_kind") is None
+                    else str(source_context.get("source_kind"))
+                ),
+                producer_id=(
+                    None
+                    if source_context.get("producer_run_id") is None
+                    else str(source_context.get("producer_run_id"))
+                ),
+                model_id=(
+                    None if model_artifact.get("model_id") is None else str(model_artifact.get("model_id"))
+                ),
+                source_reference=(
+                    None
+                    if provenance.get("source_reference") is None
+                    else str(provenance.get("source_reference"))
+                ),
+            ),
             evidence_payload_reference=_dict(
                 provenance.get("evidence_payload_reference")
             )

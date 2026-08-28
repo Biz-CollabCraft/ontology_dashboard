@@ -751,4 +751,22 @@ def receive_internal_prediction_results(
         workspace_id=workspace_id,
         payload=payload,
     )
+    if receipt.validation_status == "accepted":
+        promotion = service.promote_prediction_result_batch(
+            organization_id=principal.organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=receipt.batch_id,
+        )
+        receipt = receipt.model_copy(
+            update={
+                "promotion_status": promotion.promotion_status,
+                "product_result_created": promotion.product_result_created,
+                "promoted_results": promotion.promoted_results,
+                "already_promoted_results": promotion.already_promoted_results,
+                "skipped_results": promotion.skipped_results,
+                "product_result_ids": promotion.product_result_ids,
+                "artifact_ids": promotion.artifact_ids,
+            }
+        )
     return _prediction_inbox_response(receipt)
