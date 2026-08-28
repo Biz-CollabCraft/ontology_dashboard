@@ -797,6 +797,8 @@ class ContractVectorVerifier:
                 self._verify_runtime_prediction_vector(vname, vdir, result)
             elif vname.startswith("generator-protocol-extraction"):
                 self._verify_protocol_extraction_vector(vname, vdir, result)
+            elif vname.startswith("generator-extraction-runtime-handoff"):
+                self._verify_extraction_runtime_handoff_vector(vname, vdir, result)
 
 
             else:
@@ -2013,6 +2015,52 @@ class ContractVectorVerifier:
                         message=f"Dataset manifest validation failed: {exc}",
                     )
                 )
+
+    def _verify_extraction_runtime_handoff_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        in_dir = vector_dir / "input"
+        exp_dir = vector_dir / "expected"
+        if not in_dir.is_dir() or not exp_dir.is_dir():
+            result.errors.append(
+                VerificationError(
+                    context=vector_name,
+                    message="Missing input or expected directory",
+                )
+            )
+            return
+
+        schema_p = self.schemas_dir / "generator-extraction-runtime-handoff.schema.json"
+        if not schema_p.is_file():
+            result.errors.append(
+                VerificationError(
+                    context=vector_name,
+                    message=f"Missing schema file {schema_p}",
+                )
+            )
+            return
+
+        try:
+            schema = json.loads(schema_p.read_text(encoding="utf-8"))
+            validator = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
+            for jfile in sorted(in_dir.glob("*.json")):
+                data = json.loads(jfile.read_text(encoding="utf-8"))
+                validator.validate(data)
+                result.payload_count += 1
+            for jfile in sorted(exp_dir.glob("*.json")):
+                data = json.loads(jfile.read_text(encoding="utf-8"))
+                validator.validate(data)
+                result.payload_count += 1
+        except Exception as exc:
+            result.errors.append(
+                VerificationError(
+                    context=vector_name,
+                    message=f"Handoff vector schema validation failed: {exc}",
+                )
+            )
 
 
 def main() -> int:

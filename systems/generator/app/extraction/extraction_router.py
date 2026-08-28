@@ -7,6 +7,10 @@ import uuid
 from typing import Optional, Union
 from fastapi import APIRouter, Depends, Header, Request, status
 
+from systems.generator.app.extraction.extraction_exception import (
+    ExtractionRequestInvalidError,
+    ExtractionSourceNotFoundError,
+)
 from systems.generator.app.extraction.extraction_manager import (
     ExtractionManager,
     get_extraction_manager,
@@ -15,6 +19,7 @@ from systems.generator.app.extraction.extraction_schema import (
     ExtractionManagerStatus,
     ExtractionRequest,
     ExtractionResponse,
+    ExtractionRuntimeHandoff,
     GenDataExtractionRequest,
     GenDataExtractionResponse,
 )
@@ -85,3 +90,56 @@ async def extract_protocol_records(
         f"mapping={request_body.mapping_id}/{request_body.mapping_version}"
     )
     return service.execute_extraction(request_body)
+
+@router.get(
+    "/extraction/handoffs/{handoff_id}",
+    response_model=ExtractionRuntimeHandoff,
+    status_code=status.HTTP_200_OK,
+    summary="Get extraction runtime handoff record by ID",
+    description="Returns the status and delivery details of a specific Extraction -> Runtime Prediction handoff record.",
+)
+def get_extraction_handoff(
+    handoff_id: str,
+    manager: ExtractionManager = Depends(get_extraction_manager),
+) -> ExtractionRuntimeHandoff:
+    """Retrieve handoff record by handoff_id."""
+    clean_id = handoff_id.strip()
+    if not clean_id or len(clean_id) != 64:
+        raise ExtractionRequestInvalidError(
+            f"Invalid handoff_id format: '{handoff_id}'. Must be a 64-character hex string."
+        )
+    handoff, _ = manager.handoff_repo.find_handoff_by_id(clean_id)
+    if handoff is None:
+        raise ExtractionSourceNotFoundError(
+            f"Handoff record with ID '{clean_id}' not found."
+        )
+    return handoff
+
+
+@router.post(
+    "/extraction/handoffs/{handoff_id}/retry",
+    response_model=ExtractionRuntimeHandoff,
+    status_code=status.HTTP_200_OK,
+    summary="Retry a failed or pending extraction runtime handoff record",
+    description="Explicitly attempts to re-deliver a pending, retry_wait, or retry_exhausted handoff record to the Runtime Prediction Queue.",
+)
+def retry_extraction_handoff(
+    handoff_id: str,
+    manager: ExtractionManager = Depends(get_extraction_manager),
+) -> ExtractionRuntimeHandoff:
+    """Retry handoff delivery."""
+    clean_id = handoff_id.strip()
+    if not clean_id or len(clean_id) != 64:
+        raise ExtractionRequestInvalidError(
+            f"Invalid handoff_id format: '{handoff_id}'. Must be a 64-character hex string."
+        )
+    handoff, _ = manager.handoff_repo.find_handoff_by_id(clean_id)
+    if handoff is None:
+        raise ExtractionSourceNotFoundError(
+            f"Handoff record with ID '{clean_id}' not found."
+        )
+    if handoff.status == "blocked":
+        raise ExtractionRequestInvalidError(
+            f"Cannot retry blocked handoff '{clean_id}'. Verify and fix dataset integrity first."
+        )
+    return manager.handoff_service.process_handoff(handoff)

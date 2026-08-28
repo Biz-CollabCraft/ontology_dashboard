@@ -210,6 +210,26 @@ class GeneratorPaths:
             mapping_sha_env.strip() if mapping_sha_env and mapping_sha_env.strip() else None
         )
 
+        # 4-2. Extraction Runtime Handoff Configuration
+        handoff_root_env = os.getenv("GENERATOR_EXTRACTION_HANDOFFS_ROOT")
+        self.extraction_handoffs_root: Path = (
+            Path(handoff_root_env).resolve()
+            if handoff_root_env
+            else (self.data_preprocessed / "extraction_handoffs").resolve()
+        )
+
+        handoff_enabled_env = os.getenv("GENERATOR_EXTRACTION_RUNTIME_HANDOFF_ENABLED", "false").strip().lower()
+        self.extraction_runtime_handoff_enabled: bool = handoff_enabled_env in ("true", "1", "yes")
+
+        handoff_poll_env = os.getenv("GENERATOR_EXTRACTION_HANDOFF_POLL_INTERVAL_SECONDS")
+        self.extraction_handoff_poll_interval_seconds: float = float(handoff_poll_env) if handoff_poll_env else 5.0
+
+        handoff_retries_env = os.getenv("GENERATOR_EXTRACTION_HANDOFF_MAX_RETRIES")
+        self.extraction_handoff_max_retries: int = int(handoff_retries_env) if handoff_retries_env else 5
+
+        handoff_conc_env = os.getenv("GENERATOR_EXTRACTION_HANDOFF_MAX_CONCURRENCY")
+        self.extraction_handoff_max_concurrency: int = int(handoff_conc_env) if handoff_conc_env else 1
+
     def validate_extraction_config(self) -> None:
         """Validate extraction environment configuration."""
         from systems.generator.app.extraction.extraction_exception import (
@@ -240,6 +260,18 @@ class GeneratorPaths:
         if self.extraction_max_concurrency < 1:
             raise ExtractionConfigurationInvalidError(
                 f"GENERATOR_EXTRACTION_MAX_CONCURRENCY must be >= 1, got {self.extraction_max_concurrency}"
+            )
+        if self.extraction_handoff_poll_interval_seconds <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_HANDOFF_POLL_INTERVAL_SECONDS must be > 0, got {self.extraction_handoff_poll_interval_seconds}"
+            )
+        if self.extraction_handoff_max_retries < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_HANDOFF_MAX_RETRIES must be >= 1, got {self.extraction_handoff_max_retries}"
+            )
+        if self.extraction_handoff_max_concurrency < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_HANDOFF_MAX_CONCURRENCY must be >= 1, got {self.extraction_handoff_max_concurrency}"
             )
         if not self.extraction_mapping_id or not self.extraction_mapping_version:
             raise ExtractionConfigurationInvalidError(

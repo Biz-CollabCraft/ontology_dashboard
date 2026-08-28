@@ -47,6 +47,7 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 |---|---|---|
 | Generator Protocol Record Schema | **Current** | `contracts/schemas/generator-protocol-record.schema.json` (SensorRecord v2 계약 정본) |
 | Generator Static Mapping Table Schema | **Current** | `contracts/schemas/generator-static-mapping-table.schema.json` (승인된 정적 매핑 계약 정본) |
+| Generator Extraction Runtime Handoff Schema | **Current** | `contracts/schemas/generator-extraction-runtime-handoff.schema.json` (Extraction -> Runtime Prediction 전달 및 큐 연동 계약 정본) |
 | Generator Protocol Extraction Golden Vector | **Current** | `contracts/test-vectors/generator-protocol-extraction-v1/` (SensorRecord v2 -> Canonical Observation 변환 및 무결성 검증) |
 | Generator Dataset Input Manifest | **Current** | `contracts/schemas/generator-dataset-input-manifest.schema.json` (자동 검증 및 예제/테스트 벡터 존재) |
 | Generator Feature Input Golden Vector | **Current** | `contracts/test-vectors/generator-feature-input-v1/` (Multi-asset 라벨링 및 활성 고장 제외 자동 검증) |

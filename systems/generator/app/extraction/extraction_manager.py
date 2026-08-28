@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from systems.generator.generator_config import PATHS
+from systems.generator.generator_config import PATHS, PROJECT_ROOT
 from systems.generator.app.extraction.checkpoint_repository import (
     GenDataExtractionCheckpointRepository,
 )
@@ -21,12 +21,19 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionRetryExhaustedError,
     ExtractionSourceNotFoundError,
 )
+from systems.generator.app.extraction.extraction_handoff_repository import (
+    ExtractionHandoffRepository,
+)
+from systems.generator.app.extraction.extraction_runtime_handoff_service import (
+    ExtractionRuntimeHandoffService,
+)
 from systems.generator.app.extraction.extraction_schema import (
     ExtractionManagerStatus,
     ExtractionSourceStatus,
     GenDataExtractionRequest,
     GenDataExtractionResponse,
     PublishedDatasetSummary,
+    RuntimeHandoffStatusSummary,
     SourceProcessingResult,
 )
 from systems.generator.app.extraction.fragment_lifecycle import (
@@ -75,6 +82,8 @@ class ExtractionManager:
         incremental_service: Optional[GenDataIncrementalExtractionService] = None,
         publish_service: Optional[ExtractionWindowPublishService] = None,
         lifecycle_mgr: Optional[GenDataFragmentLifecycleManager] = None,
+        handoff_repo: Optional[ExtractionHandoffRepository] = None,
+        handoff_service: Optional[ExtractionRuntimeHandoffService] = None,
         lock_dir: Optional[Path] = None,
     ) -> None:
         self.checkpoint_repo = checkpoint_repo or GenDataExtractionCheckpointRepository()
@@ -93,12 +102,17 @@ class ExtractionManager:
             fragment_repo=self.fragment_repo,
             lifecycle_mgr=self.lifecycle_mgr,
         )
+        self.handoff_repo = handoff_repo or ExtractionHandoffRepository()
+        self.handoff_service = handoff_service or ExtractionRuntimeHandoffService(
+            repository=self.handoff_repo
+        )
 
         self._source_states: dict[str, ExtractionSourceStatus] = {}
         self._source_async_locks: dict[str, asyncio.Lock] = {}
         self._global_semaphore = asyncio.Semaphore(PATHS.extraction_max_concurrency)
 
         self._worker: Optional[Any] = None
+        self._handoff_worker: Optional[Any] = None
         self._last_poll_started_at: Optional[str] = None
         self._last_poll_completed_at: Optional[str] = None
 
@@ -118,31 +132,49 @@ class ExtractionManager:
 
     @property
     def running(self) -> bool:
-        return self._worker is not None and getattr(self._worker, "is_running", False)
+        worker_running = self._worker is not None and getattr(self._worker, "is_running", False)
+        handoff_running = self._handoff_worker is not None and getattr(self._handoff_worker, "is_running", False)
+        return worker_running or handoff_running
 
     async def start(self) -> None:
-        """Start background extraction worker if enabled."""
+        """Start background extraction worker and handoff worker if enabled."""
         PATHS.validate_extraction_config()
-        if not self.enabled:
+
+        # 1. Extraction Polling Worker
+        if self.enabled and (self._worker is None or not getattr(self._worker, "is_running", False)):
+            from systems.generator.app.extraction.extraction_worker import ExtractionWorker
+
+            self._worker = ExtractionWorker(manager=self)
+            await self._worker.start()
+            logger.info("[ExtractionManager] Background extraction worker started.")
+        elif not self.enabled:
             logger.info("[ExtractionManager] Background extraction worker is disabled by configuration.")
-            return
 
-        if self.running:
-            logger.info("[ExtractionManager] Background extraction worker is already running.")
-            return
+        # 2. Runtime Handoff Worker
+        if PATHS.extraction_runtime_handoff_enabled and (
+            self._handoff_worker is None or not getattr(self._handoff_worker, "is_running", False)
+        ):
+            from systems.generator.app.extraction.extraction_handoff_worker import (
+                ExtractionHandoffWorker,
+            )
 
-        from systems.generator.app.extraction.extraction_worker import ExtractionWorker
-
-        self._worker = ExtractionWorker(manager=self)
-        await self._worker.start()
-        logger.info("[ExtractionManager] Background extraction worker started.")
+            self._handoff_worker = ExtractionHandoffWorker(service=self.handoff_service)
+            await self._handoff_worker.start()
+            logger.info("[ExtractionManager] Background handoff worker started.")
+        elif not PATHS.extraction_runtime_handoff_enabled:
+            logger.info("[ExtractionManager] Background handoff worker is disabled by configuration.")
 
     async def stop(self) -> None:
-        """Stop background extraction worker if running."""
+        """Stop background extraction worker and handoff worker if running."""
         if self._worker is not None:
             await self._worker.stop()
             self._worker = None
             logger.info("[ExtractionManager] Background extraction worker stopped.")
+
+        if self._handoff_worker is not None:
+            await self._handoff_worker.stop()
+            self._handoff_worker = None
+            logger.info("[ExtractionManager] Background handoff worker stopped.")
 
     def get_source_lock(self, key: str) -> asyncio.Lock:
         if key not in self._source_async_locks:
@@ -150,12 +182,26 @@ class ExtractionManager:
         return self._source_async_locks[key]
 
     def get_status(self) -> ExtractionManagerStatus:
-        """Return current status of ExtractionManager and all tracked sources."""
+        """Return current status of ExtractionManager, tracked sources, and runtime handoff queue."""
         sources_list = list(self._source_states.values())
         discovered = len(sources_list)
         queued = sum(1 for s in sources_list if s.status == "queued")
         processing = sum(1 for s in sources_list if s.status == "processing")
         blocked = sum(1 for s in sources_list if s.status == "blocked")
+
+        # Handoff counts
+        handoff_counts = self.handoff_repo.count_by_status()
+        handoff_summary = RuntimeHandoffStatusSummary(
+            enabled=PATHS.extraction_runtime_handoff_enabled,
+            runtime_prediction_enabled=PATHS.runtime_prediction_enabled,
+            pending=handoff_counts.get("pending", 0),
+            runtime_disabled=handoff_counts.get("runtime_disabled", 0),
+            enqueueing=handoff_counts.get("enqueueing", 0),
+            enqueued=handoff_counts.get("enqueued", 0),
+            retry_wait=handoff_counts.get("retry_wait", 0),
+            blocked=handoff_counts.get("blocked", 0),
+            retry_exhausted=handoff_counts.get("retry_exhausted", 0),
+        )
 
         return ExtractionManagerStatus(
             enabled=self.enabled,
@@ -168,6 +214,7 @@ class ExtractionManager:
             last_poll_started_at=self._last_poll_started_at,
             last_poll_completed_at=self._last_poll_completed_at,
             sources=sources_list,
+            runtime_handoff=handoff_summary,
         )
 
     def _resolve_mapping_data(
@@ -185,11 +232,9 @@ class ExtractionManager:
         try:
             mapping_data = self.mapping_repo.load_mapping(m_id, m_ver)
         except Exception:
-            # Fallback check for default mapping
             mapping_data = None
 
         if mapping_data is None:
-            # Construct approved mapping definition if known or raise
             raise ExtractionMappingNotFoundError(
                 f"Mapping table '{m_id}/{m_ver}' not found in repository."
             )
@@ -241,7 +286,6 @@ class ExtractionManager:
                 effective_run_id = run_id or f"run-ext-{uuid4().hex[:12]}"
                 now_str = now_utc_iso()
 
-                # Update or initialize state
                 state = self._source_states.get(
                     source_key,
                     ExtractionSourceStatus(
@@ -308,6 +352,22 @@ class ExtractionManager:
                         )
                         for ds in pub_res.published_datasets
                     ]
+
+                    # 4. Create Handoff Record and optionally deliver to Runtime Prediction Queue
+                    for ds in pub_res.published_datasets:
+                        try:
+                            manifest_path = Path(ds.manifest_uri)
+                            if not manifest_path.is_file():
+                                manifest_path = PROJECT_ROOT / ds.manifest_uri
+                            if not manifest_path.is_file():
+                                manifest_path = (PATHS.data_dir / "observations" / ds.dataset_id / ds.dataset_version / "dataset_manifest.json").resolve()
+                            handoff = self.handoff_service.create_or_get_handoff(manifest_path)
+                            if PATHS.extraction_runtime_handoff_enabled and PATHS.runtime_prediction_enabled:
+                                self.handoff_service.process_handoff(handoff)
+                        except Exception as h_exc:
+                            logger.error(
+                                f"[ExtractionManager] Handoff creation/processing failed for dataset '{ds.dataset_id}/{ds.dataset_version}': {h_exc}"
+                            )
 
                     if pub_summaries:
                         state.last_published_window = pub_summaries[-1].dataset_version

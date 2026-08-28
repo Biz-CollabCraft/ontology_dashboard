@@ -186,6 +186,24 @@ class ExtractionSourceStatus(BaseModel):
     retryable: Optional[bool] = None
 
 
+class RuntimeHandoffStatusSummary(BaseModel):
+    """Status summary of runtime prediction handoff queues."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    runtime_prediction_enabled: bool = False
+    pending: int = 0
+    runtime_disabled: int = 0
+    enqueueing: int = 0
+    enqueued: int = 0
+    retry_wait: int = 0
+    blocked: int = 0
+    retry_exhausted: int = 0
+    last_enqueued_at: Optional[str] = None
+    last_error_code: Optional[str] = None
+
+
 class ExtractionManagerStatus(BaseModel):
     """Manager-level global extraction and worker status."""
 
@@ -201,6 +219,7 @@ class ExtractionManagerStatus(BaseModel):
     last_poll_started_at: Optional[str] = None
     last_poll_completed_at: Optional[str] = None
     sources: list[ExtractionSourceStatus] = Field(default_factory=list)
+    runtime_handoff: Optional[RuntimeHandoffStatusSummary] = None
 
 
 class PublishedDatasetSummary(BaseModel):
@@ -290,3 +309,91 @@ class GenDataExtractionResponse(BaseModel):
     succeeded_sources: int
     failed_sources: int
     sources: list[SourceProcessingResult] = Field(default_factory=list)
+
+
+# --- Task 6: Runtime Handoff Models ---
+
+class ExtractionRuntimeHandoffDataset(BaseModel):
+    """Dataset file reference within handoff payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = Field(..., min_length=1)
+    dataset_version: str = Field(..., min_length=1)
+    manifest_uri: str = Field(..., min_length=1)
+    observations_uri: str = Field(..., min_length=1)
+    observations_sha256: str = Field(..., pattern=SHA256_PATTERN)
+    observations_size_bytes: int = Field(..., ge=0)
+
+
+class ExtractionRuntimeHandoffLineage(BaseModel):
+    """Lineage context for runtime input."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    simulation_session_id: Optional[str] = None
+    overlay_branch_id: Optional[str] = None
+    history_segment_id: Optional[str] = None
+    maintenance_event_id: Optional[str] = None
+    maintenance_action_id: Optional[str] = None
+    state_version: Optional[int] = None
+
+
+class ExtractionRuntimeHandoffSource(BaseModel):
+    """Source context within runtime input identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_uri: str = Field(..., min_length=1)
+    source_checksum: str = Field(..., pattern=SHA256_PATTERN)
+    source_kind: Literal["live_sensor"] = "live_sensor"
+    source_contract_version: str = Field(..., min_length=1)
+    source_schema_version: str = Field(..., min_length=1)
+    pipeline_contract_version: Literal["generator-prediction-result-v1"] = "generator-prediction-result-v1"
+    lineage: ExtractionRuntimeHandoffLineage = Field(default_factory=ExtractionRuntimeHandoffLineage)
+
+
+class ExtractionRuntimeHandoffRuntimeInput(BaseModel):
+    """Input identity to enqueue into runtime prediction queue."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = Field(..., min_length=1)
+    dataset_version: str = Field(..., min_length=1)
+    source: ExtractionRuntimeHandoffSource
+
+
+class ExtractionRuntimeHandoffDelivery(BaseModel):
+    """Delivery and retry state of handoff item."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempt_count: int = Field(0, ge=0)
+    runtime_job_id: Optional[str] = None
+    queue_item_id: Optional[str] = None
+    last_error_code: Optional[str] = None
+    last_error_message: Optional[str] = None
+    next_retry_at: Optional[str] = None
+
+
+class ExtractionRuntimeHandoff(BaseModel):
+    """Canonical Extraction -> Runtime Prediction Handoff Record."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    handoff_schema_version: Literal["generator-extraction-runtime-handoff-v1"] = "generator-extraction-runtime-handoff-v1"
+    handoff_id: str = Field(..., pattern=SHA256_PATTERN)
+    status: Literal[
+        "pending",
+        "runtime_disabled",
+        "enqueueing",
+        "enqueued",
+        "retry_wait",
+        "blocked",
+        "retry_exhausted",
+    ]
+    created_at: str
+    updated_at: str
+    dataset: ExtractionRuntimeHandoffDataset
+    runtime_input: ExtractionRuntimeHandoffRuntimeInput
+    delivery: ExtractionRuntimeHandoffDelivery

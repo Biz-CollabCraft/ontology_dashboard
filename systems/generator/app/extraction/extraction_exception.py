@@ -789,3 +789,174 @@ class ExtractionPollTemporaryIOError(ExtractionError):
             details=details,
             retryable=True,
         )
+
+
+# --- Task 6: Runtime Handoff Exceptions ---
+
+class ExtractionHandoffDisabledError(ExtractionError):
+    """Raised when runtime handoff feature is disabled."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_DISABLED",
+            status_code=503,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffRuntimeDisabledError(ExtractionError):
+    """Raised when runtime prediction pipeline is disabled during handoff enqueue."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_RUNTIME_DISABLED",
+            status_code=503,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffManifestInvalidError(ExtractionError):
+    """Raised when dataset manifest fails schema or format validation during handoff."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_MANIFEST_INVALID",
+            status_code=400,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffDatasetIdentityMismatchError(ExtractionError):
+    """Raised when dataset ID/version in manifest does not match directory path or handoff request."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_DATASET_IDENTITY_MISMATCH",
+            status_code=400,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffObservationsMissingError(ExtractionError):
+    """Raised when observations.jsonl is missing in dataset directory."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_OBSERVATIONS_MISSING",
+            status_code=404,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffChecksumMismatchError(ExtractionError):
+    """Raised when observations.jsonl checksum does not match manifest."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_CHECKSUM_MISMATCH",
+            status_code=400,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffPathUnsupportedError(ExtractionError):
+    """Raised when dataset path contains unsafe traversals or is outside allowed root."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_PATH_UNSUPPORTED",
+            status_code=400,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffContextInvalidError(ExtractionError):
+    """Raised when runtime input context or lineage is invalid."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_CONTEXT_INVALID",
+            status_code=400,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffIdentityConflictError(ExtractionError):
+    """Raised when existing handoff ID is associated with a different dataset payload."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_IDENTITY_CONFLICT",
+            status_code=409,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffQueueConflictError(ExtractionError):
+    """Raised when existing queue job ID has conflicting runtime input identity."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_QUEUE_CONFLICT",
+            status_code=409,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffEnqueueFailedError(ExtractionError):
+    """Raised when enqueueing into runtime prediction queue fails due to transient error."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_ENQUEUE_FAILED",
+            status_code=500,
+            details=details,
+            retryable=True,
+        )
+
+
+class ExtractionHandoffRetryExhaustedError(ExtractionError):
+    """Raised when maximum retries for handoff delivery are exceeded."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_RETRY_EXHAUSTED",
+            status_code=500,
+            details=details,
+            retryable=False,
+        )
+
+
+class ExtractionHandoffStatePersistFailedError(ExtractionError):
+    """Raised when persisting handoff state fails."""
+
+    def __init__(self, message: str, details: Optional[list[dict[str, Any]]] = None) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_HANDOFF_STATE_PERSIST_FAILED",
+            status_code=500,
+            details=details,
+            retryable=True,
+        )
