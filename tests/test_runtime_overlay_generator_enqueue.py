@@ -265,7 +265,6 @@ def test_overlay_lineage_round_trips_through_generator_queue_checkpoint_and_batc
         ArtifactReference,
         InternalModelPredictionResult,
         PredictionResultProducer,
-        RuntimeSourceContext,
     )
     from systems.generator.app.runtime_pipeline.pipeline_state import PipelineStateManager
     from systems.generator.app.runtime_pipeline.prediction_batch_service import (
@@ -284,18 +283,15 @@ def test_overlay_lineage_round_trips_through_generator_queue_checkpoint_and_batc
         dataset_version="canonical-ai4i-physics-v3.1",
     )
     request = EnqueueRequest.model_validate(payload)
+    runtime_input = request.to_input_identity()
     queue = PipelineQueue(db_path=tmp_path / "runtime-pipeline-queue.db")
-    item = queue.enqueue(**request.model_dump())
-
-    source_context = RuntimeSourceContext(
-        source_uri=item.source_uri,
-        source_checksum=item.source_checksum,
-        source_kind=item.source_kind,
-        source_contract_version=item.source_contract_version,
-        source_schema_version=item.source_schema_version,
-        pipeline_contract_version=item.pipeline_contract_version,
-        lineage=item.lineage,
+    item = queue.enqueue(
+        job_id=request.job_id,
+        runtime_input=runtime_input,
+        size_bytes=request.size_bytes,
     )
+
+    source_context = runtime_input.source
     state = PipelineStateManager.create(
         run_id="runtime-overlay-run-1",
         job_id=item.job_id,
@@ -311,14 +307,10 @@ def test_overlay_lineage_round_trips_through_generator_queue_checkpoint_and_batc
         stage_name="source_validated",
         next_stage="preprocessing",
         source_identity=item.source_identity or "",
-        dataset_id=item.dataset_id,
-        dataset_version=item.dataset_version,
-        pipeline_contract_version=item.pipeline_contract_version,
-        source_kind=item.source_kind,
-        source_contract_version=item.source_contract_version,
-        source_schema_version=item.source_schema_version,
-        lineage_json=json.dumps(item.lineage.model_dump(mode="json")),
-        source_context=source_context,
+        runtime_input=runtime_input,
+        model_set_id="pdm-runtime",
+        model_set_version="1.0.0",
+        model_set_payload_sha256="f" * 64,
     )
 
     internal_result = InternalModelPredictionResult(
@@ -335,7 +327,7 @@ def test_overlay_lineage_round_trips_through_generator_queue_checkpoint_and_batc
     )
     batch = build_external_prediction_batch(
         internal_results=[internal_result],
-        source_context=checkpoint.source_context,
+        source_context=runtime_input,
         active_model_set_snapshot=ActiveModelSetSnapshot(
             model_set_id="pdm-runtime",
             model_set_version="1.0.0",
