@@ -97,6 +97,13 @@ systems/generator/
 
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (단일 프로세스 Lock 제어) | Current (호환성 유지) |
 
+`POST /internal/runtime-pipeline/enqueue`는 `source_kind`, source contract/schema version,
+pipeline contract version, Dataset 식별자와 lineage를 입력 시점에 확정한다. 이 문맥은
+Queue, retry, RunState, Checkpoint와 외부 Prediction Result Batch까지 변경 없이 보존된다.
+과거 Queue 행에 이 문맥이 없으면 임의로 `live_sensor`로 보정하지 않고
+`PIPELINE_SOURCE_CONTEXT_MIGRATION_REQUIRED` dead-letter로 격리한다. 외부 Batch를
+발행하는 실행 환경은 provenance용 `GENERATOR_RUNTIME_VERSION`도 반드시 설정해야 한다.
+
 
 ### 2.2 Target API (후속 목표 설계)
 

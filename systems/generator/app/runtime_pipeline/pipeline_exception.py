@@ -488,6 +488,12 @@ class ModelSetModelNotRegisteredError(PipelineBaseError):
     retryable = False
 
 
+class PipelineModelSetChangedError(PipelineBaseError):
+    status_code = 422
+    code = "PIPELINE_MODEL_SET_CHANGED"
+    retryable = False
+
+
 class PipelineModelSetSnapshotMismatchError(PipelineBaseError):
     status_code = 422
     code = "PIPELINE_MODEL_SET_SNAPSHOT_MISMATCH"

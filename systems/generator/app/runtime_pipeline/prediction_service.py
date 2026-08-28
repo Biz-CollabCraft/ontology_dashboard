@@ -187,10 +187,11 @@ class PredictionService:
             for bm, cfg in active_model_set.models.items():
                 model_items.append((bm, cfg.model_version, cfg.required))
         else:
-            model_set_id = "pdm-default"
-            model_set_version = "1.0.0"
-            for bm in base_models:
-                model_items.append((bm, None, True))
+            raise PipelineModelPredictionFailedError(
+                "Runtime Prediction requires an explicitly pinned Active Model Set.",
+                details=[{"base_models": list(base_models)}],
+                retryable=False,
+            )
 
         for base_model, target_ver, is_required in model_items:
             model_id = self.resolve_model_id(base_model)
@@ -212,7 +213,7 @@ class PredictionService:
                         InternalModelPredictionResult(
                             asset_id=target_asset,
                             model_id=model_id,
-                            model_version=target_ver or "unknown",
+                            model_version=target_ver,
                             status="failed",
                             observed_at="",
                             score_type="positive_class_probability",
@@ -236,20 +237,33 @@ class PredictionService:
                 artifact.manifest.get("feature_schema_version")
                 or artifact.feature_schema.get("feature_schema_version")
                 or artifact.feature_schema.get("schema_version")
-                or "v1"
             )
             lbl_schema_ver = (
                 artifact.manifest.get("label_schema_version")
                 or artifact.label_schema.get("label_schema_version")
                 or artifact.label_schema.get("schema_version")
-                or "v1"
             )
             hist_req_ver = (
                 artifact.manifest.get("history_requirement_version")
                 or artifact.history_requirement.get("history_requirement_version")
                 or artifact.history_requirement.get("version")
-                or "v1"
             )
+
+            missing_versions = [
+                name
+                for name, value in (
+                    ("feature_schema_version", feat_schema_ver),
+                    ("label_schema_version", lbl_schema_ver),
+                    ("history_requirement_version", hist_req_ver),
+                )
+                if not value or not str(value).strip()
+            ]
+            if missing_versions:
+                raise PipelineModelPredictionFailedError(
+                    f"모델 '{model_id}' Artifact에 필수 계약 버전이 누락되었습니다: {', '.join(missing_versions)}",
+                    details=[{"model_id": model_id, "missing_fields": missing_versions}],
+                    retryable=False,
+                )
 
             feature_ref = model_feature_refs.get(base_model)
             bundle = (model_feature_bundles or {}).get(base_model)

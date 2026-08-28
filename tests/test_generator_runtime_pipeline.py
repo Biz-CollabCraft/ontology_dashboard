@@ -10,10 +10,15 @@ def create_test_batch_payload(
     score: float = 0.88,
     output_status: str = "predicted",
     batch_id: str = "batch-001",
+    model_set_id: str = "model-set-v1",
+    model_set_version: str = "1.0.0",
 ) -> PredictionResultBatchPayload:
     from datetime import datetime, timezone
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ActiveModelSetSnapshot,
+        ActiveModelSnapshotItem,
         PredictionResultBatchPayload,
+        PredictionResultBatchSourceContext,
         PredictionResultItem,
         PredictionResultProducer,
         PredictionResultLineage,
@@ -29,6 +34,10 @@ def create_test_batch_payload(
     else:
         obs_dt = observed_at
 
+    f_sha = "1" * 64
+    h_sha = "2" * 64
+    l_sha = "3" * 64
+
     item_dict = {
         "event_id": event_id,
         "asset_id": asset_id,
@@ -36,14 +45,16 @@ def create_test_batch_payload(
         "source_kind": "live_sensor",
         "source_ref": {"uri": "test.jsonl", "sha256": "a" * 64},
         "output_status": output_status,
-        "score": score,
+        "score": score if output_status == "predicted" else None,
         "model_id": model_id,
         "model_version": model_version,
         "model_artifact_manifest_sha256": "a" * 64,
         "feature_schema_version": "v1.0",
         "history_requirement_version": "v1.0",
-        "feature_schema_sha256": None,
-        "history_requirement_sha256": None,
+        "label_schema_version": "v1.0",
+        "feature_schema_sha256": f_sha,
+        "history_requirement_sha256": h_sha,
+        "label_schema_sha256": l_sha,
         "lineage": {
             "simulation_session_id": None,
             "overlay_branch_id": None,
@@ -52,7 +63,7 @@ def create_test_batch_payload(
             "maintenance_action_id": None,
             "state_version": None,
         },
-        "failure_reason": None,
+        "failure_reason": None if output_status == "predicted" else "failure reason",
     }
 
     item_sha = compute_prediction_result_item_sha256(item_dict)
@@ -65,14 +76,43 @@ def create_test_batch_payload(
         source_ref=PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64),
         payload_sha256=item_sha,
         output_status=output_status,
-        score=score,
+        score=score if output_status == "predicted" else None,
         model_id=model_id,
         model_version=model_version,
         model_artifact_manifest_sha256="a" * 64,
         feature_schema_version="v1.0",
         history_requirement_version="v1.0",
+        label_schema_version="v1.0",
+        feature_schema_sha256=f_sha,
+        history_requirement_sha256=h_sha,
+        label_schema_sha256=l_sha,
         lineage=PredictionResultLineage(),
-        failure_reason=None,
+        failure_reason=None if output_status == "predicted" else "failure reason",
+    )
+
+    model_set = ActiveModelSetSnapshot(
+        model_set_id=model_set_id,
+        model_set_version=model_set_version,
+        models=[
+            ActiveModelSnapshotItem(
+                model_id=model_id,
+                model_version=model_version,
+                required=True,
+                model_artifact_manifest_sha256="a" * 64,
+            )
+        ],
+    )
+
+    source_context = PredictionResultBatchSourceContext(
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v1.0",
+        source_uri="test.jsonl",
+        source_checksum="a" * 64,
+        source_kind="live_sensor",
+        source_contract_version="observation-source-v1",
+        source_schema_version="sensor-record-v2",
+        pipeline_contract_version="generator-prediction-result-v1",
+        lineage=PredictionResultLineage(),
     )
 
     producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
@@ -81,7 +121,96 @@ def create_test_batch_payload(
         batch_id=batch_id,
         producer=producer,
         emitted_at=datetime.now(timezone.utc),
+        source_context=source_context,
+        model_set=model_set,
         results=[item],
+    )
+
+
+def create_test_runtime_source_context(
+    *,
+    source_uri: str = "test.jsonl",
+    source_checksum: str = "a" * 64,
+):
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultLineage,
+        RuntimeSourceContext,
+    )
+
+    return RuntimeSourceContext(
+        source_uri=source_uri,
+        source_checksum=source_checksum,
+        source_kind="live_sensor",
+        source_contract_version="observation-source-v1",
+        source_schema_version="observation-source-v1",
+        pipeline_contract_version="prediction-result-batch-v1",
+        lineage=PredictionResultLineage(),
+    )
+
+
+def create_test_runtime_input_identity(
+    *,
+    dataset_id: str = "canonical-ai4i-v1",
+    dataset_version: str = "canonical-ai4i-physics-v3.1",
+    source_uri: str = "test.jsonl",
+    source_checksum: str = "a" * 64,
+    source_kind: str = "live_sensor",
+    source_contract_version: str = "observation-source-v1",
+    source_schema_version: str = "observation-source-v1",
+    pipeline_contract_version: str = "generator-prediction-result-v1",
+    lineage=None,
+):
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultLineage,
+        RuntimeInputIdentity,
+        RuntimeSourceContext,
+    )
+
+    if lineage is None:
+        lineage_obj = PredictionResultLineage()
+    elif isinstance(lineage, dict):
+        lineage_obj = PredictionResultLineage.model_validate(lineage)
+    else:
+        lineage_obj = lineage
+
+    return RuntimeInputIdentity(
+        dataset_id=dataset_id,
+        dataset_version=dataset_version,
+        source=RuntimeSourceContext(
+            source_uri=source_uri,
+            source_checksum=source_checksum,
+            source_kind=source_kind,
+            source_contract_version=source_contract_version,
+            source_schema_version=source_schema_version,
+            pipeline_contract_version=pipeline_contract_version,
+            lineage=lineage_obj,
+        ),
+    )
+
+
+def create_test_active_model_set_snapshot(
+    *,
+    model_set_id: str = "pdm-default",
+    model_set_version: str = "1.0.0",
+    model_id: str = "pdm-lightgbm",
+    model_version: str = "pdm-lightgbm-v1.0",
+):
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ActiveModelSetSnapshot,
+        ActiveModelSnapshotItem,
+    )
+
+    return ActiveModelSetSnapshot(
+        model_set_id=model_set_id,
+        model_set_version=model_set_version,
+        models=[
+            ActiveModelSnapshotItem(
+                model_id=model_id,
+                model_version=model_version,
+                required=True,
+                model_artifact_manifest_sha256="a" * 64,
+            )
+        ],
     )
 
 """Comprehensive test suite for the Generator Runtime Prediction Pipeline."""
@@ -211,6 +340,7 @@ def isolated_runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(PATHS, "pipeline_queue_db", preprocessed_dir / "pipeline_queue" / "queue.db")
     monkeypatch.setattr(PATHS, "pipeline_state_root", preprocessed_dir / "pipeline_runs")
     monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+    monkeypatch.setenv("GENERATOR_RUNTIME_VERSION", "test-runtime-1.0.0")
 
     publisher = ModelArtifactPublisher(artifacts_dir)
 
@@ -417,8 +547,7 @@ def test_multi_equipment_prediction_and_batch_building(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-multi-eq-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -567,8 +696,7 @@ def test_missing_or_blank_asset_id_fails_closed(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-blank-id-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -592,8 +720,7 @@ def test_invalid_timestamp_fails_closed(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-bad-ts-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -617,8 +744,7 @@ def test_unsupported_mapping_fails_with_501(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-unmapped-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -639,8 +765,7 @@ def test_retry_failed_job_transaction(isolated_runtime_env):
     # 1. Enqueue and let it fail (1 row -> history insufficient)
     item = env["queue"].enqueue(
         job_id="job-fail-first",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
     env["worker"].process_one()
 
@@ -658,8 +783,7 @@ def test_retry_failed_job_transaction(isolated_runtime_env):
     succeeded_file, s_sha = create_sample_observation_jsonl(incoming / "succ.jsonl", num_rows=5)
     s_item = env["queue"].enqueue(
         job_id="job-succ",
-        source_uri=str(succeeded_file),
-        source_checksum=s_sha,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(succeeded_file), source_checksum=s_sha),
     )
     env["worker"].process_one()
 
@@ -680,7 +804,13 @@ def test_path_security_and_allowed_roots(isolated_runtime_env):
             PipelineQueueItem(
                 job_id="job-trav",
                 source_uri="../outside.jsonl",
-                source_checksum="0" * 64,
+                source_checksum="a" * 64,
+                dataset_id="canonical-ai4i-v1",
+                dataset_version="canonical-ai4i-physics-v3.1",
+                    pipeline_contract_version="generator-prediction-result-v1",
+                    source_kind="live_sensor",
+                    source_contract_version="observation-source-v1",
+                source_schema_version="observation-source-v1",
             )
         )
 
@@ -691,7 +821,13 @@ def test_path_security_and_allowed_roots(isolated_runtime_env):
             PipelineQueueItem(
                 job_id="job-outside",
                 source_uri=str(outside_file),
-                source_checksum="0" * 64,
+                source_checksum="b" * 64,
+                dataset_id="canonical-ai4i-v1",
+                dataset_version="canonical-ai4i-physics-v3.1",
+                    pipeline_contract_version="generator-prediction-result-v1",
+                    source_kind="live_sensor",
+                    source_contract_version="observation-source-v1",
+                source_schema_version="observation-source-v1",
             )
         )
 
@@ -715,8 +851,12 @@ def test_runtime_pipeline_router_api_with_retry_failed(isolated_runtime_env):
             "job_id": "job-api-01",
             "source_uri": str(src_file),
             "source_checksum": sha256,
-            "dataset_id": "canonical-ai4i-v1",
-            "dataset_version": "canonical-ai4i-physics-v3.1",
+                "dataset_id": "canonical-ai4i-v1",
+                "dataset_version": "canonical-ai4i-physics-v3.1",
+                "source_kind": "live_sensor",
+                "source_contract_version": "observation-source-v1",
+            "source_schema_version": "observation-source-v1",
+            "pipeline_contract_version": "generator-prediction-result-v1",
         },
     )
     assert resp.status_code == 200
@@ -1037,7 +1177,7 @@ def test_file_size_changed_between_enqueue_and_start_raises_file_not_stable_erro
     service: PipelineService = env["service"]
 
     src_file, initial_sha = create_sample_observation_jsonl(incoming_dir / "unstable_size_file.jsonl", num_rows=3)
-    item = queue.enqueue(job_id="job-change-size-1", source_uri=str(src_file), source_checksum=initial_sha)
+    item = queue.enqueue(job_id="job-change-size-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=initial_sha))
 
     # Modify file by appending bytes (changing size)
     with open(src_file, "a", encoding="utf-8") as f:
@@ -1070,7 +1210,7 @@ def test_file_checksum_changed_between_enqueue_and_start_raises_retryable_error(
     service: PipelineService = env["service"]
 
     src_file, initial_sha = create_sample_observation_jsonl(incoming_dir / "changing_file.jsonl", num_rows=3)
-    item = queue.enqueue(job_id="job-change-1", source_uri=str(src_file), source_checksum=initial_sha)
+    item = queue.enqueue(job_id="job-change-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=initial_sha))
 
     # Modify content preserving exact byte length (replace character '1' with '2')
     content = src_file.read_text(encoding="utf-8")
@@ -1097,12 +1237,12 @@ def test_duplicate_source_identity_enqueue_blocked(isolated_runtime_env):
     queue: PipelineQueue = env["queue"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "dup_identity.jsonl", num_rows=2)
-    item1 = queue.enqueue(job_id="job-dup-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-dup-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     assert item1.job_id == "job-dup-1"
 
     # Enqueue same file again while queued
     with pytest.raises(PipelineSourceAlreadyRegisteredError) as exc_info:
-        queue.enqueue(job_id="job-dup-2", source_uri=str(src_file), source_checksum=sha)
+        queue.enqueue(job_id="job-dup-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.code == "PIPELINE_SOURCE_ALREADY_REGISTERED"
@@ -1128,7 +1268,7 @@ def test_same_path_different_content_enqueued_as_separate_job(isolated_runtime_e
     # 1. First content
     create_sample_observation_jsonl(src_file, num_rows=2, asset_id="M14860")
     sha1 = compute_file_sha256(src_file)
-    item1 = queue.enqueue(job_id="job-reused-1", source_uri=str(src_file), source_checksum=sha1)
+    item1 = queue.enqueue(job_id="job-reused-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha1))
     queue.mark_succeeded("job-reused-1")
 
     # 2. Overwrite with new content (different rows)
@@ -1136,7 +1276,7 @@ def test_same_path_different_content_enqueued_as_separate_job(isolated_runtime_e
     sha2 = compute_file_sha256(src_file)
     assert sha1 != sha2
 
-    item2 = queue.enqueue(job_id="job-reused-2", source_uri=str(src_file), source_checksum=sha2)
+    item2 = queue.enqueue(job_id="job-reused-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha2))
     assert item2.job_id == "job-reused-2"
     assert item2.source_identity != item1.source_identity
 
@@ -1158,11 +1298,11 @@ def test_different_path_same_content_duplicate_blocked(isolated_runtime_env):
     file2.write_bytes(file1.read_bytes())
 
     sha = compute_file_sha256(file1)
-    item1 = queue.enqueue(job_id="job-copy-1", source_uri=str(file1), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-copy-1", runtime_input=create_test_runtime_input_identity(source_uri=str(file1), source_checksum=sha))
     assert item1.job_id == "job-copy-1"
 
     with pytest.raises(PipelineSourceAlreadyRegisteredError):
-        queue.enqueue(job_id="job-copy-2", source_uri=str(file2), source_checksum=sha)
+        queue.enqueue(job_id="job-copy-2", runtime_input=create_test_runtime_input_identity(source_uri=str(file2), source_checksum=sha))
 
 
 # =====================================================================
@@ -1245,7 +1385,7 @@ def test_unordered_timestamps_deterministically_sorted(isolated_runtime_env):
             f.write(json.dumps(r) + "\n")
 
     sha = compute_file_sha256(src_file)
-    item = queue.enqueue(job_id="job-sort-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-sort-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1265,7 +1405,7 @@ def test_observed_at_matches_actual_feature_row_metadata(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "observed_at_match.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-obs-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-obs-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1292,7 +1432,7 @@ def test_backend_payload_contains_no_local_absolute_paths(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_lineage.jsonl", num_rows=2, asset_id="M14860")
-    item = queue.enqueue(job_id="job-lineage-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-lineage-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     event_id = run_state.prediction_event_ids[0]
@@ -1326,7 +1466,7 @@ def test_failed_file_stability_emits_no_outbox_or_events(isolated_runtime_env):
         f.write(json.dumps({"unknown_id": "123", "value": 999}) + "\n")
 
     sha = compute_file_sha256(src_file)
-    item = queue.enqueue(job_id="job-fail-outbox-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-fail-outbox-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     with pytest.raises(PipelineMappingNotImplementedError):
         service.execute_queue_item(item)
@@ -1351,7 +1491,7 @@ def test_stage_checkpoints_recorded_and_persisted(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "chk_flow.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-chk-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-chk-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1400,7 +1540,7 @@ def test_resumption_from_stage_2_skips_preprocessing(isolated_runtime_env, monke
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-resume-prep-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-resume-prep-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1418,6 +1558,12 @@ def test_resumption_from_stage_2_skips_preprocessing(isolated_runtime_env, monke
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
     run_state2 = service.execute_queue_item(item2)
 
@@ -1450,7 +1596,7 @@ def test_partial_model_feature_recovery(isolated_runtime_env, monkeypatch):
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-part-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-part-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1474,6 +1620,12 @@ def test_partial_model_feature_recovery(isolated_runtime_env, monkeypatch):
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
     run_state2 = service.execute_queue_item(item2)
     assert run_state2.status == "succeeded"
@@ -1501,7 +1653,7 @@ def test_source_checksum_change_rejects_old_checkpoint(isolated_runtime_env, mon
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-mod-1", source_uri=str(src_file), source_checksum=sha1)
+    item1 = queue.enqueue(job_id="job-mod-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha1))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1512,7 +1664,7 @@ def test_source_checksum_change_rejects_old_checkpoint(isolated_runtime_env, mon
     src_file, sha2 = create_sample_observation_jsonl(incoming_dir / "mod_check.jsonl", num_rows=4, asset_id="M14860")
     monkeypatch.setattr(service.prediction_service, "predict_for_models", orig_predict)
 
-    item2 = queue.enqueue(job_id="job-mod-2", source_uri=str(src_file), source_checksum=sha2)
+    item2 = queue.enqueue(job_id="job-mod-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha2))
     run_state2 = service.execute_queue_item(item2)
 
     assert run_state2.status == "succeeded"
@@ -1532,7 +1684,7 @@ def test_safe_cleanup_removes_run_dedicated_intermediates_preserves_models(isola
     models_store: Path = env.get("models_dir", getattr(PATHS, "models_store", Path("models_store")))
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "cleanup_test.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-clean-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-clean-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1564,7 +1716,7 @@ def test_cleanup_failure_results_in_succeeded_with_cleanup_warning(isolated_runt
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_warn.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-clean-warn-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-clean-warn-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     # Monkeypatch cleanup to fail
     def failing_cleanup(*args, **kwargs):
@@ -1603,7 +1755,7 @@ def test_snapshot_matching_reuses_features_and_predictions(isolated_runtime_env,
 
     monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_delivery)
 
-    item1 = queue.enqueue(job_id="job-snap-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-snap-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineDeliveryFailedError):
         service.execute_queue_item(item1)
 
@@ -1632,6 +1784,12 @@ def test_snapshot_matching_reuses_features_and_predictions(isolated_runtime_env,
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
     run_state2 = service.execute_queue_item(item2)
     assert run_state2.status == "succeeded"
@@ -1660,7 +1818,7 @@ def test_snapshot_version_change_recalculates_predictions(isolated_runtime_env, 
 
     monkeypatch.setattr(service.prediction_batch_service, "collect", failing_collect)
 
-    item1 = queue.enqueue(job_id="job-ver-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-ver-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1696,6 +1854,12 @@ def test_snapshot_version_change_recalculates_predictions(isolated_runtime_env, 
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
     run_state2 = service.execute_queue_item(item2)
     assert run_state2.status == "succeeded"
@@ -1724,7 +1888,7 @@ def test_snapshot_feature_schema_change_reextracts_features(isolated_runtime_env
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-sch-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-sch-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1758,6 +1922,12 @@ def test_snapshot_feature_schema_change_reextracts_features(isolated_runtime_env
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
     run_state2 = service.execute_queue_item(item2)
     assert run_state2.status == "succeeded"
@@ -1782,7 +1952,7 @@ def test_missing_model_snapshot_artifact_fails_closed(isolated_runtime_env, monk
 
     monkeypatch.setattr(service.prediction_service, "load_active_artifact", failing_load_artifact)
 
-    item = queue.enqueue(job_id="job-miss-art", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-miss-art", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelSnapshotArtifactMissingError):
         service.execute_queue_item(item)
 
@@ -1800,7 +1970,7 @@ def test_model_id_with_underscore_correctly_identified(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "underscore_model.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-under-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-under-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1837,7 +2007,7 @@ def test_checkpoint_4_stages_batches_and_resumes_without_recalculation(isolated_
 
     monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_outbox)
 
-    item1 = queue.enqueue(job_id="job-stage4-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-stage4-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineDeliveryFailedError):
         service.execute_queue_item(item1)
 
@@ -1866,6 +2036,12 @@ def test_checkpoint_4_stages_batches_and_resumes_without_recalculation(isolated_
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
     run_state2 = service.execute_queue_item(item2)
     assert run_state2.status == "succeeded"
@@ -1907,7 +2083,7 @@ def test_partial_multi_equipment_outbox_resumption_is_idempotent(isolated_runtim
 
     monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_second_register)
 
-    item1 = queue.enqueue(job_id="job-multi-1", source_uri=str(src_path), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-multi-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_path), source_checksum=sha))
     with pytest.raises(PipelineDeliveryFailedError):
         service.execute_queue_item(item1)
 
@@ -1923,6 +2099,12 @@ def test_partial_multi_equipment_outbox_resumption_is_idempotent(isolated_runtim
         source_uri=str(src_path),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
     run_state2 = service.execute_queue_item(item2)
     assert run_state2.status == "succeeded"
@@ -1994,7 +2176,7 @@ def test_invalidated_checkpoint_intermediates_marked_debug_only(isolated_runtime
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-inval-1", source_uri=str(src_file), source_checksum=sha1)
+    item1 = queue.enqueue(job_id="job-inval-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha1))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -2012,6 +2194,12 @@ def test_invalidated_checkpoint_intermediates_marked_debug_only(isolated_runtime
         source_uri=str(src_file),
         source_checksum=sha2,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
 
     run_state2 = service.execute_queue_item(item2)
@@ -2036,7 +2224,7 @@ def test_cleanup_warning_does_not_invalidate_published_outbox(isolated_runtime_e
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_warn_track.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-clean-track-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-clean-track-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     def failing_cleanup(*args, **kwargs):
         return False, ["data/preprocessed/pipeline_datasets/run-1/obs.csv"], "Permission denied on file deletion"
@@ -2109,7 +2297,7 @@ def test_real_manifest_checksum_recorded_in_prediction_result(isolated_runtime_e
     service: PipelineService = env["service"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "real_manifest.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-real-manifest-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-real-manifest-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -2151,7 +2339,7 @@ def test_required_model_failure_blocks_batch_publishing(isolated_runtime_env, mo
 
     monkeypatch.setattr(service.prediction_service, "load_active_artifact", failing_load)
 
-    item = queue.enqueue(job_id="job-req-fail-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-req-fail-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises((PipelineModelPredictionFailedError, PipelineModelArtifactInvalidError)):
         service.execute_queue_item(item)
 
@@ -2173,7 +2361,7 @@ def test_generator_runtime_prediction_disabled_by_default(isolated_runtime_env, 
     service: PipelineService = env["service"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "disabled_test.jsonl", num_rows=2, asset_id="M14860")
-    item = queue.enqueue(job_id="job-disabled-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-disabled-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     with pytest.raises(PipelineRuntimePredictionDisabledError):
         service.execute_queue_item(item)
@@ -2261,7 +2449,7 @@ def test_single_model_active_model_set_execution(isolated_runtime_env, monkeypat
     active_service.update_active_model_set(active_set, validate_artifacts=False)
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "single_lgb.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-single-lgb", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-single-lgb", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -2298,7 +2486,7 @@ def test_partial_model_active_model_set_execution(isolated_runtime_env, monkeypa
     active_service.update_active_model_set(active_set, validate_artifacts=False)
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "partial_2.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-partial-2", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-partial-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -2487,6 +2675,12 @@ def test_disabled_state_blocks_worker_enqueue_retry(isolated_runtime_env, monkey
             job_id="job-dis-1",
             source_uri="data/test.jsonl",
             source_checksum="0"*64,
+            dataset_id="test-dataset",
+            dataset_version="v1",
+            pipeline_contract_version="prediction-result-batch-v1",
+            source_kind="live_sensor",
+            source_contract_version="observation-source-v1",
+            source_schema_version="observation-source-v1",
         )
     assert exc1.value.status_code == 503
     assert exc1.value.code == "PIPELINE_RUNTIME_PREDICTION_DISABLED"
@@ -2558,6 +2752,9 @@ def test_model_set_provenance_contract_alignment(isolated_runtime_env):
             source_lineage=SourceLineage(source_uri="test.jsonl", source_checksum="a"*64),
             model_set_id="pdm-default",
             model_set_version="1.0.0",
+            source_context=create_test_runtime_source_context(),
+            active_model_set_snapshot=create_test_active_model_set_snapshot(),
+            model_schema_map={},
         )
     assert exc_info.value.code == "PIPELINE_MODEL_SET_SNAPSHOT_MISMATCH"
 
@@ -2588,7 +2785,7 @@ def test_snapshot_pinning_and_model_set_change_invalidates_checkpoint(isolated_r
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-pin-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-pin-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -2623,6 +2820,12 @@ def test_snapshot_pinning_and_model_set_change_invalidates_checkpoint(isolated_r
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
 
     run_state2 = service.execute_queue_item(item2)
@@ -2660,7 +2863,7 @@ def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monk
     active_service.update_active_model_set(active_set, validate_artifacts=False)
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "schema_val.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-schema-val", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-schema-val", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -2758,6 +2961,18 @@ def test_staged_disk_batch_json_matches_official_schema(isolated_runtime_env):
         model_set_id="pdm-schema-test",
         model_set_version="1.0.0",
         base_dir=preprocessed_dir,
+        source_context=create_test_runtime_source_context(),
+        active_model_set_snapshot=create_test_active_model_set_snapshot(
+            model_set_id="pdm-schema-test",
+        ),
+        model_schema_map={
+            "pdm-lightgbm": {
+                "feature_schema_sha256": "1" * 64,
+                "history_requirement_sha256": "2" * 64,
+                "label_schema_sha256": "3" * 64,
+                "label_schema_version": "v1.0",
+            }
+        },
     )
 
     # Directly read the staged payload file written on disk
@@ -2864,7 +3079,7 @@ def test_model_set_membership_change_not_implemented(isolated_runtime_env, monke
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-mem-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-mem-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -2883,6 +3098,12 @@ def test_model_set_membership_change_not_implemented(isolated_runtime_env, monke
         source_uri=str(src_file),
         source_checksum=sha,
         source_identity=item1.source_identity,
+        dataset_id=item1.dataset_id,
+        dataset_version=item1.dataset_version,
+            pipeline_contract_version=item1.pipeline_contract_version,
+            source_kind=item1.source_kind,
+            source_contract_version=item1.source_contract_version,
+        source_schema_version=item1.source_schema_version,
     )
 
     with pytest.raises(PipelineModelSetMembershipChangeNotImplementedError) as exc_info:
@@ -2907,7 +3128,7 @@ def test_disabled_api_testclient_503_and_real_status_counts(isolated_runtime_env
 
     # Enqueue 1 item into DB while enabled
     monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
-    queue.enqueue(job_id="job-dis-counts", source_uri="data/test.jsonl", source_checksum="0"*64)
+    queue.enqueue(job_id="job-dis-counts", runtime_input=create_test_runtime_input_identity(source_uri="data/test.jsonl", source_checksum="a"*64))
 
     # Disable runtime
     monkeypatch.setattr(PATHS, "runtime_prediction_enabled", False)
@@ -2920,7 +3141,13 @@ def test_disabled_api_testclient_503_and_real_status_counts(isolated_runtime_env
         json={
             "job_id": "job-dis-http",
             "source_uri": "data/test.jsonl",
-            "source_checksum": "0"*64,
+            "source_checksum": "a"*64,
+            "source_kind": "live_sensor",
+            "source_contract_version": "observation-source-v1",
+            "source_schema_version": "observation-source-v1",
+            "pipeline_contract_version": "prediction-result-batch-v1",
+            "dataset_id": "test-dataset",
+            "dataset_version": "v1",
         },
     )
     assert res_enq.status_code == 503
@@ -3458,6 +3685,7 @@ def test_prediction_result_batch_array_serialization_and_validation():
     from systems.generator.generator_config import PROJECT_ROOT
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
         PredictionResultBatchPayload,
+        PredictionResultBatchSourceContext,
         PredictionResultItem,
         PredictionResultProducer,
         PredictionResultLineage,
@@ -3485,8 +3713,10 @@ def test_prediction_result_batch_array_serialization_and_validation():
         "model_artifact_manifest_sha256": "b" * 64,
         "feature_schema_version": "v1.0.0",
         "history_requirement_version": "v1.0.0",
-        "feature_schema_sha256": None,
-        "history_requirement_sha256": None,
+        "label_schema_version": "v1.0.0",
+        "feature_schema_sha256": "e" * 64,
+        "history_requirement_sha256": "f" * 64,
+        "label_schema_sha256": "a" * 64,
         "lineage": {
             "simulation_session_id": None,
             "overlay_branch_id": None,
@@ -3514,6 +3744,10 @@ def test_prediction_result_batch_array_serialization_and_validation():
         model_artifact_manifest_sha256="b" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
+        label_schema_version="v1.0.0",
+        feature_schema_sha256="e" * 64,
+        history_requirement_sha256="f" * 64,
+        label_schema_sha256="a" * 64,
         lineage=PredictionResultLineage(),
         failure_reason=None,
     )
@@ -3524,6 +3758,22 @@ def test_prediction_result_batch_array_serialization_and_validation():
         batch_id="batch-001",
         producer=producer,
         emitted_at=datetime.fromisoformat("2026-08-27T00:00:05+00:00"),
+        source_context=PredictionResultBatchSourceContext(
+            dataset_id="canonical-ai4i-v1",
+            dataset_version="v1.0",
+            source_uri="data/incoming/protocol.jsonl",
+            source_checksum="a" * 64,
+            source_kind="live_sensor",
+            source_contract_version="observation-source-v1",
+            source_schema_version="sensor-record-v2",
+            pipeline_contract_version="generator-prediction-result-v1",
+            lineage=PredictionResultLineage(),
+        ),
+        model_set=create_test_active_model_set_snapshot(
+            model_set_id="model-set-v1",
+            model_set_version="1.0.0",
+            model_version="1.0.0",
+        ),
         results=[item],
     )
 
@@ -3559,8 +3809,10 @@ def test_prediction_result_batch_array_duplicate_composite_key_fails_closed():
         "model_artifact_manifest_sha256": "d" * 64,
         "feature_schema_version": "v1.0.0",
         "history_requirement_version": "v1.0.0",
-        "feature_schema_sha256": None,
-        "history_requirement_sha256": None,
+        "label_schema_version": "v1.0.0",
+        "feature_schema_sha256": "e" * 64,
+        "history_requirement_sha256": "f" * 64,
+        "label_schema_sha256": "a" * 64,
         "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
         "failure_reason": None,
     }
@@ -3577,8 +3829,10 @@ def test_prediction_result_batch_array_duplicate_composite_key_fails_closed():
         "model_artifact_manifest_sha256": "d" * 64,
         "feature_schema_version": "v1.0.0",
         "history_requirement_version": "v1.0.0",
-        "feature_schema_sha256": None,
-        "history_requirement_sha256": None,
+        "label_schema_version": "v1.0.0",
+        "feature_schema_sha256": "e" * 64,
+        "history_requirement_sha256": "f" * 64,
+        "label_schema_sha256": "a" * 64,
         "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
         "failure_reason": None,
     }
@@ -3597,6 +3851,10 @@ def test_prediction_result_batch_array_duplicate_composite_key_fails_closed():
         model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
+        label_schema_version="v1.0.0",
+        feature_schema_sha256="e" * 64,
+        history_requirement_sha256="f" * 64,
+        label_schema_sha256="a" * 64,
         lineage=PredictionResultLineage(),
         failure_reason=None,
     )
@@ -3614,6 +3872,10 @@ def test_prediction_result_batch_array_duplicate_composite_key_fails_closed():
         model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
+        label_schema_version="v1.0.0",
+        feature_schema_sha256="e" * 64,
+        history_requirement_sha256="f" * 64,
+        label_schema_sha256="a" * 64,
         lineage=PredictionResultLineage(),
         failure_reason=None,
     )
@@ -3650,8 +3912,10 @@ def test_prediction_result_batch_array_duplicate_event_id_fails_closed():
         "model_artifact_manifest_sha256": "d" * 64,
         "feature_schema_version": "v1.0.0",
         "history_requirement_version": "v1.0.0",
-        "feature_schema_sha256": None,
-        "history_requirement_sha256": None,
+        "label_schema_version": "v1.0.0",
+        "feature_schema_sha256": "e" * 64,
+        "history_requirement_sha256": "f" * 64,
+        "label_schema_sha256": "a" * 64,
         "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
         "failure_reason": None,
     }
@@ -3668,8 +3932,10 @@ def test_prediction_result_batch_array_duplicate_event_id_fails_closed():
         "model_artifact_manifest_sha256": "d" * 64,
         "feature_schema_version": "v1.0.0",
         "history_requirement_version": "v1.0.0",
-        "feature_schema_sha256": None,
-        "history_requirement_sha256": None,
+        "label_schema_version": "v1.0.0",
+        "feature_schema_sha256": "e" * 64,
+        "history_requirement_sha256": "f" * 64,
+        "label_schema_sha256": "a" * 64,
         "lineage": {"simulation_session_id": None, "overlay_branch_id": None, "history_segment_id": None, "maintenance_event_id": None, "maintenance_action_id": None, "state_version": None},
         "failure_reason": None,
     }
@@ -3688,6 +3954,10 @@ def test_prediction_result_batch_array_duplicate_event_id_fails_closed():
         model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
+        label_schema_version="v1.0.0",
+        feature_schema_sha256="e" * 64,
+        history_requirement_sha256="f" * 64,
+        label_schema_sha256="a" * 64,
         lineage=PredictionResultLineage(),
         failure_reason=None,
     )
@@ -3705,6 +3975,10 @@ def test_prediction_result_batch_array_duplicate_event_id_fails_closed():
         model_artifact_manifest_sha256="d" * 64,
         feature_schema_version="v1.0.0",
         history_requirement_version="v1.0.0",
+        label_schema_version="v1.0.0",
+        feature_schema_sha256="e" * 64,
+        history_requirement_sha256="f" * 64,
+        label_schema_sha256="a" * 64,
         lineage=PredictionResultLineage(),
         failure_reason=None,
     )
@@ -3771,6 +4045,7 @@ def test_model_inference_exception_raises_pipeline_model_prediction_failed_error
             model_feature_refs={"lightgbm": feat_ref},
             model_feature_bundles={"lightgbm": bundle},
             asset_ids=["M14860"],
+            active_model_set=env["service"].active_model_set_service.load_active_model_set(),
         )
 
     assert "추론 실패" in str(exc_info.value) or "predict_proba" in str(exc_info.value)
@@ -3817,6 +4092,7 @@ def test_model_inference_nan_score_raises_pipeline_model_prediction_failed_error
             model_feature_refs={"lightgbm": feat_ref},
             model_feature_bundles={"lightgbm": bundle},
             asset_ids=["M14860"],
+            active_model_set=env["service"].active_model_set_service.load_active_model_set(),
         )
 
     assert "non-finite score" in str(exc_info.value)
@@ -3863,6 +4139,7 @@ def test_model_inference_inf_score_raises_pipeline_model_prediction_failed_error
             model_feature_refs={"lightgbm": feat_ref},
             model_feature_bundles={"lightgbm": bundle},
             asset_ids=["M14860"],
+            active_model_set=env["service"].active_model_set_service.load_active_model_set(),
         )
 
     assert "non-finite score" in str(exc_info.value)
@@ -3909,6 +4186,7 @@ def test_model_inference_out_of_bounds_score_raises_pipeline_model_prediction_fa
             model_feature_refs={"lightgbm": feat_ref},
             model_feature_bundles={"lightgbm": bundle},
             asset_ids=["M14860"],
+            active_model_set=env["service"].active_model_set_service.load_active_model_set(),
         )
 
     assert "out of bounds" in str(exc_info.value)
@@ -4021,7 +4299,14 @@ def test_to_external_result_item_provenance_preservation():
         history_requirement_version="v1.0",
     )
 
-    item = to_external_result_item(internal, source_kind="live_sensor", source_ref=src_ref)
+    item = to_external_result_item(
+        internal,
+        source_kind="live_sensor",
+        source_ref=src_ref,
+        feature_schema_sha256="a" * 64,
+        history_requirement_sha256="b" * 64,
+        label_schema_sha256="c" * 64,
+    )
     assert item.asset_id == "M14860"
     assert item.model_id == "pdm-lightgbm"
     assert item.source_ref.uri == "data/incoming/raw_sensors.jsonl"
@@ -4054,7 +4339,7 @@ def test_to_external_result_item_missing_or_blank_observed_at_raises():
         manifest_checksum="d" * 64,
     )
     with pytest.raises(ModelSetContractInvalidError) as exc:
-        to_external_result_item(internal_none, source_ref=src_ref)
+        to_external_result_item(internal_none, source_kind="live_sensor", source_ref=src_ref)
     assert "missing required observed_at" in str(exc.value) or "blank" in str(exc.value)
 
     # 2. Blank whitespace observed_at
@@ -4068,7 +4353,7 @@ def test_to_external_result_item_missing_or_blank_observed_at_raises():
         manifest_checksum="d" * 64,
     )
     with pytest.raises(ModelSetContractInvalidError) as exc2:
-        to_external_result_item(internal_blank, source_ref=src_ref)
+        to_external_result_item(internal_blank, source_kind="live_sensor", source_ref=src_ref)
     assert "blank observed_at" in str(exc2.value)
 
 
@@ -4092,7 +4377,7 @@ def test_to_external_result_item_invalid_timestamp_format_raises():
         manifest_checksum="d" * 64,
     )
     with pytest.raises(ModelSetContractInvalidError) as exc:
-        to_external_result_item(internal_bad, source_ref=src_ref)
+        to_external_result_item(internal_bad, source_kind="live_sensor", source_ref=src_ref)
     assert "invalid observed_at ISO timestamp format" in str(exc.value)
 
 
@@ -4117,13 +4402,13 @@ def test_to_external_result_item_missing_or_empty_source_ref_raises():
 
     # 1. source_ref is None
     with pytest.raises(ModelSetContractInvalidError) as exc:
-        to_external_result_item(internal, source_ref=None)
+        to_external_result_item(internal, source_kind="live_sensor", source_ref=None)
     assert "missing required source_ref" in str(exc.value)
 
     # 2. source_ref.uri is blank
     bad_ref = PredictionResultSourceRef(uri="   ", sha256="c" * 64)
     with pytest.raises(ModelSetContractInvalidError) as exc2:
-        to_external_result_item(internal, source_ref=bad_ref)
+        to_external_result_item(internal, source_kind="live_sensor", source_ref=bad_ref)
     assert "empty source_ref.uri" in str(exc2.value)
 
 
@@ -4167,7 +4452,7 @@ def test_to_external_result_item_missing_artifact_sha256_for_predicted_raises():
     )
 
     with pytest.raises(ModelSetContractInvalidError) as exc:
-        to_external_result_item(internal, source_ref=src_ref)
+        to_external_result_item(internal, source_kind="live_sensor", source_ref=src_ref)
     assert "missing model_artifact_manifest_sha256" in str(exc.value)
 
 
@@ -4201,8 +4486,10 @@ def _make_sample_batch_dict(**item_overrides):
         "model_artifact_manifest_sha256": "b" * 64,
         "feature_schema_version": "v1.0",
         "history_requirement_version": "v1.0",
-        "feature_schema_sha256": None,
-        "history_requirement_sha256": None,
+        "label_schema_version": "v1.0",
+        "feature_schema_sha256": "1" * 64,
+        "history_requirement_sha256": "2" * 64,
+        "label_schema_sha256": "3" * 64,
         "lineage": {
             "simulation_session_id": None,
             "overlay_branch_id": None,
@@ -4229,6 +4516,36 @@ def _make_sample_batch_dict(**item_overrides):
             "outbox_id": None,
         },
         "emitted_at": "2026-08-27T00:00:05Z",
+        "source_context": {
+            "dataset_id": "canonical-ai4i-v1",
+            "dataset_version": "v1.0",
+            "source_uri": "data/incoming/protocol.jsonl",
+            "source_checksum": "a" * 64,
+            "source_kind": base_item.get("source_kind", "live_sensor"),
+            "source_contract_version": "observation-source-v1",
+            "source_schema_version": "sensor-record-v2",
+            "pipeline_contract_version": "generator-prediction-result-v1",
+            "lineage": base_item.get("lineage", {
+                "simulation_session_id": None,
+                "overlay_branch_id": None,
+                "history_segment_id": None,
+                "maintenance_event_id": None,
+                "maintenance_action_id": None,
+                "state_version": None,
+            }),
+        },
+        "model_set": {
+            "model_set_id": "model-set-v1",
+            "model_set_version": "1.0.0",
+            "models": [
+                {
+                    "model_id": "pdm-lightgbm",
+                    "model_version": "1.0.0",
+                    "required": True,
+                    "model_artifact_manifest_sha256": "b" * 64,
+                }
+            ],
+        },
         "results": [base_item],
     }
 
@@ -4407,6 +4724,10 @@ def test_pydantic_score_nan_or_inf_rejected():
             model_artifact_manifest_sha256="b" * 64,
             feature_schema_version="v1.0",
             history_requirement_version="v1.0",
+            label_schema_version="v1.0",
+            feature_schema_sha256="1" * 64,
+            history_requirement_sha256="2" * 64,
+            label_schema_sha256="3" * 64,
             lineage=lin,
         )
 
@@ -4425,6 +4746,10 @@ def test_pydantic_score_nan_or_inf_rejected():
             model_artifact_manifest_sha256="b" * 64,
             feature_schema_version="v1.0",
             history_requirement_version="v1.0",
+            label_schema_version="v1.0",
+            feature_schema_sha256="1" * 64,
+            history_requirement_sha256="2" * 64,
+            label_schema_sha256="3" * 64,
             lineage=lin,
         )
 
@@ -4456,6 +4781,10 @@ def test_pydantic_predicted_without_score_or_with_failure_reason_rejected():
             model_artifact_manifest_sha256="b" * 64,
             feature_schema_version="v1.0",
             history_requirement_version="v1.0",
+            label_schema_version="v1.0",
+            feature_schema_sha256="1" * 64,
+            history_requirement_sha256="2" * 64,
+            label_schema_sha256="3" * 64,
             lineage=lin,
         )
 
@@ -4474,6 +4803,10 @@ def test_pydantic_predicted_without_score_or_with_failure_reason_rejected():
             model_artifact_manifest_sha256="b" * 64,
             feature_schema_version="v1.0",
             history_requirement_version="v1.0",
+            label_schema_version="v1.0",
+            feature_schema_sha256="1" * 64,
+            history_requirement_sha256="2" * 64,
+            label_schema_sha256="3" * 64,
             lineage=lin,
             failure_reason="some error",
         )
@@ -4506,6 +4839,10 @@ def test_pydantic_failed_with_score_or_without_reason_rejected():
             model_artifact_manifest_sha256="b" * 64,
             feature_schema_version="v1.0",
             history_requirement_version="v1.0",
+            label_schema_version="v1.0",
+            feature_schema_sha256="1" * 64,
+            history_requirement_sha256="2" * 64,
+            label_schema_sha256="3" * 64,
             lineage=lin,
             failure_reason="failed",
         )
@@ -4525,6 +4862,10 @@ def test_pydantic_failed_with_score_or_without_reason_rejected():
             model_artifact_manifest_sha256="b" * 64,
             feature_schema_version="v1.0",
             history_requirement_version="v1.0",
+            label_schema_version="v1.0",
+            feature_schema_sha256="1" * 64,
+            history_requirement_sha256="2" * 64,
+            label_schema_sha256="3" * 64,
             lineage=lin,
             failure_reason=None,
         )
@@ -4557,6 +4898,10 @@ def test_pydantic_maintenance_replay_overlay_missing_lineage_rejected():
             model_artifact_manifest_sha256="b" * 64,
             feature_schema_version="v1.0",
             history_requirement_version="v1.0",
+            label_schema_version="v1.0",
+            feature_schema_sha256="1" * 64,
+            history_requirement_sha256="2" * 64,
+            label_schema_sha256="3" * 64,
             lineage=bad_lin,
         )
 
@@ -4587,9 +4932,19 @@ def test_item_payload_sha256_tamper_detected():
         observed_at="2026-08-25T14:30:00Z",
         score=0.88,
         manifest_checksum="d" * 64,
+        feature_schema_version="v1.0",
+        history_requirement_version="v1.0",
+        label_schema_version="v1.0",
     )
 
-    item = to_external_result_item(internal, source_ref=src_ref)
+    item = to_external_result_item(
+        internal,
+        source_kind="live_sensor",
+        source_ref=src_ref,
+        feature_schema_sha256="1" * 64,
+        history_requirement_sha256="2" * 64,
+        label_schema_sha256="3" * 64,
+    )
     validate_prediction_result_item_checksum(item)
 
     # Tamper with score
@@ -4605,7 +4960,10 @@ def test_batch_id_and_outbox_id_independent_of_item_ordering():
     """Changing order of items in batch produces identical canonical SHA-256 and Outbox ID."""
     from datetime import datetime
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        ActiveModelSetSnapshot,
+        ActiveModelSnapshotItem,
         PredictionResultBatchPayload,
+        PredictionResultBatchSourceContext,
         PredictionResultItem,
         PredictionResultLineage,
         PredictionResultProducer,
@@ -4620,18 +4978,78 @@ def test_batch_id_and_outbox_id_independent_of_item_ordering():
     src_ref = PredictionResultSourceRef(uri="test.jsonl", sha256="a" * 64)
     lin = PredictionResultLineage()
 
-    d1 = {"event_id": "evt-01", "asset_id": "M14860", "observed_at": dt, "source_kind": "live_sensor", "source_ref": src_ref.model_dump(mode="json"), "output_status": "predicted", "score": 0.8, "model_id": "pdm-lightgbm", "model_version": "1.0", "model_artifact_manifest_sha256": "b" * 64, "feature_schema_version": "v1.0", "history_requirement_version": "v1.0", "feature_schema_sha256": None, "history_requirement_sha256": None, "lineage": lin.model_dump(mode="json"), "failure_reason": None}
-    d2 = {"event_id": "evt-02", "asset_id": "M14860", "observed_at": dt, "source_kind": "live_sensor", "source_ref": src_ref.model_dump(mode="json"), "output_status": "predicted", "score": 0.9, "model_id": "pdm-xgboost", "model_version": "1.0", "model_artifact_manifest_sha256": "c" * 64, "feature_schema_version": "v1.0", "history_requirement_version": "v1.0", "feature_schema_sha256": None, "history_requirement_sha256": None, "lineage": lin.model_dump(mode="json"), "failure_reason": None}
+    d1 = {
+        "event_id": "evt-01",
+        "asset_id": "M14860",
+        "observed_at": dt,
+        "source_kind": "live_sensor",
+        "source_ref": src_ref.model_dump(mode="json"),
+        "output_status": "predicted",
+        "score": 0.8,
+        "model_id": "pdm-lightgbm",
+        "model_version": "1.0",
+        "model_artifact_manifest_sha256": "b" * 64,
+        "feature_schema_version": "v1.0",
+        "history_requirement_version": "v1.0",
+        "label_schema_version": "v1.0",
+        "feature_schema_sha256": "1" * 64,
+        "history_requirement_sha256": "2" * 64,
+        "label_schema_sha256": "3" * 64,
+        "lineage": lin.model_dump(mode="json"),
+        "failure_reason": None,
+    }
+    d2 = {
+        "event_id": "evt-02",
+        "asset_id": "M14860",
+        "observed_at": dt,
+        "source_kind": "live_sensor",
+        "source_ref": src_ref.model_dump(mode="json"),
+        "output_status": "predicted",
+        "score": 0.9,
+        "model_id": "pdm-xgboost",
+        "model_version": "1.0",
+        "model_artifact_manifest_sha256": "c" * 64,
+        "feature_schema_version": "v1.0",
+        "history_requirement_version": "v1.0",
+        "label_schema_version": "v1.0",
+        "feature_schema_sha256": "4" * 64,
+        "history_requirement_sha256": "5" * 64,
+        "label_schema_sha256": "6" * 64,
+        "lineage": lin.model_dump(mode="json"),
+        "failure_reason": None,
+    }
 
     item1 = PredictionResultItem(**d1, payload_sha256=compute_prediction_result_item_sha256(d1))
     item2 = PredictionResultItem(**d2, payload_sha256=compute_prediction_result_item_sha256(d2))
 
+    model_set = ActiveModelSetSnapshot(
+        model_set_id="ms-01",
+        model_set_version="1.0.0",
+        models=[
+            ActiveModelSnapshotItem(model_id="pdm-lightgbm", model_version="1.0", required=True, model_artifact_manifest_sha256="b" * 64),
+            ActiveModelSnapshotItem(model_id="pdm-xgboost", model_version="1.0", required=True, model_artifact_manifest_sha256="c" * 64),
+        ],
+    )
+
     producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
+    source_ctx = PredictionResultBatchSourceContext(
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v1.0",
+        source_uri="data/test.jsonl",
+        source_checksum="a" * 64,
+        source_kind="live_sensor",
+        source_contract_version="observation-source-v1",
+        source_schema_version="sensor-record-v2",
+        pipeline_contract_version="generator-prediction-result-v1",
+        lineage=PredictionResultLineage(),
+    )
     batch_order_1 = PredictionResultBatchPayload(
         contract_version="prediction-result-batch-v1",
         batch_id="batch-001",
         producer=producer,
         emitted_at=dt,
+        source_context=source_ctx,
+        model_set=model_set,
         results=[item1, item2],
     )
     batch_order_2 = PredictionResultBatchPayload(
@@ -4639,6 +5057,8 @@ def test_batch_id_and_outbox_id_independent_of_item_ordering():
         batch_id="batch-001",
         producer=producer,
         emitted_at=dt,
+        source_context=source_ctx,
+        model_set=model_set,
         results=[item2, item1],
     )
 
@@ -4650,7 +5070,7 @@ def test_batch_id_and_outbox_id_independent_of_item_ordering():
     assert evt1.startswith("evt-batch-")
 
 
-def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path):
+def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path, monkeypatch):
     """Staging derives filename from SHA-256 storage key and prevents directory traversal attacks."""
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
         InternalModelPredictionResult,
@@ -4662,6 +5082,7 @@ def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path):
         PredictionBatchSummary,
     )
 
+    monkeypatch.setenv("GENERATOR_RUNTIME_VERSION", "test-runtime-1.0.0")
     svc = PredictionBatchService()
     summary = PredictionBatchSummary(
         overall_status="succeeded",
@@ -4682,6 +5103,9 @@ def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path):
                         observed_at="2026-08-27T00:00:00Z",
                         score=0.85,
                         manifest_checksum="b" * 64,
+                        feature_schema_version="v1.0",
+                        history_requirement_version="v1.0",
+                        label_schema_version="v1.0",
                     )
                 ],
             )
@@ -4697,6 +5121,15 @@ def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path):
         source_checksum="a" * 64,
     )
 
+    model_schema_map = {
+        "pdm-lightgbm": {
+            "feature_schema_sha256": "1" * 64,
+            "history_requirement_sha256": "2" * 64,
+            "label_schema_sha256": "3" * 64,
+            "label_schema_version": "v1.0",
+        }
+    }
+
     art_ref = svc.stage_batches(
         run_id="run-safe-test",
         job_id="job-safe-test",
@@ -4708,6 +5141,16 @@ def test_staging_asset_storage_key_sha256_and_traversal_protection(tmp_path):
         model_set_id="ms-01",
         model_set_version="1.0",
         base_dir=tmp_path,
+        model_schema_map=model_schema_map,
+        source_context=create_test_runtime_source_context(
+            source_uri="data/in.jsonl",
+            source_checksum="a" * 64,
+        ),
+        active_model_set_snapshot=create_test_active_model_set_snapshot(
+            model_set_id="ms-01",
+            model_set_version="1.0",
+            model_version="1.0",
+        ),
     )
 
     staging_dir = tmp_path / "pipeline_datasets" / "run-safe-test" / "batch_staging"
@@ -4799,3 +5242,126 @@ def test_internal_stage_schema_validation_passes():
     ])
     validator = jsonschema.Draft202012Validator(schema, registry=reg, format_checker=jsonschema.FormatChecker())
     validator.validate(example)
+
+
+def test_queue_retry_preserves_overlay_source_context(tmp_path):
+    """Retry preserves the exact source kind, contract versions, and overlay lineage."""
+    from systems.generator.app.runtime_pipeline.pipeline_schema import PredictionResultLineage
+
+    queue = PipelineQueue(db_path=tmp_path / "queue.db")
+    lineage = PredictionResultLineage(
+        simulation_session_id="sim-1",
+        overlay_branch_id="branch-1",
+        history_segment_id="history-1",
+        maintenance_event_id="maint-event-1",
+        maintenance_action_id="maint-action-1",
+        state_version=2,
+    )
+    item = queue.enqueue(
+        job_id="overlay-job-1",
+        runtime_input=create_test_runtime_input_identity(
+            source_uri="overlay/snapshot.jsonl",
+            source_checksum="a" * 64,
+            dataset_id="overlay-dataset",
+            dataset_version="v1",
+            pipeline_contract_version="prediction-result-batch-v1",
+            source_kind="maintenance_replay_overlay",
+            source_contract_version="runtime-overlay-observation-v1",
+            source_schema_version="runtime-overlay-observation-v1",
+            lineage=lineage,
+        ),
+    )
+    queue.mark_failed(item.job_id, error_code="PIPELINE_RETRYABLE_TEST")
+
+    retried = queue.retry_failed_job(item.job_id)
+
+    assert retried.source_kind == item.source_kind
+    assert retried.source_contract_version == item.source_contract_version
+    assert retried.source_schema_version == item.source_schema_version
+    assert retried.lineage == lineage
+    assert retried.source_identity == item.source_identity
+
+
+def test_legacy_queue_rows_are_dead_lettered_without_invented_source_context(tmp_path):
+    """Pre-contract rows are isolated rather than silently labelled live_sensor."""
+    import sqlite3
+
+    db_path = tmp_path / "legacy-queue.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE queue_items (
+                job_id TEXT PRIMARY KEY, source_uri TEXT NOT NULL,
+                source_checksum TEXT NOT NULL, dedup_key TEXT UNIQUE NOT NULL,
+                dataset_id TEXT NOT NULL, dataset_version TEXT NOT NULL,
+                detected_at TEXT NOT NULL, sequence INTEGER NOT NULL,
+                attempt INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL,
+                error_code TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO queue_items (
+                job_id, source_uri, source_checksum, dedup_key, dataset_id,
+                dataset_version, detected_at, sequence, attempt, status,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-job", "legacy.jsonl", "a" * 64, "legacy-dedup",
+                "legacy-dataset", "v1", "2026-08-27T00:00:00Z", 1, 1,
+                "queued", "2026-08-27T00:00:00Z", "2026-08-27T00:00:00Z",
+            ),
+        )
+        conn.commit()
+
+    queue = PipelineQueue(db_path=db_path)
+
+    with sqlite3.connect(db_path) as conn:
+        status, error_code, source_kind = conn.execute(
+            "SELECT status, error_code, source_kind FROM queue_items WHERE job_id = ?",
+            ("legacy-job",),
+        ).fetchone()
+    assert status == "dead_letter"
+    assert error_code == "PIPELINE_SOURCE_CONTEXT_MIGRATION_REQUIRED"
+    assert source_kind is None
+
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineQueueItemInvalidError
+
+    with pytest.raises(PipelineQueueItemInvalidError):
+        queue.retry_failed_job("legacy-job")
+
+
+def test_failed_source_result_does_not_invent_schema_versions():
+    """Artifact-unavailable statuses use null provenance, never v1/unknown placeholders."""
+    from systems.generator.app.runtime_pipeline.prediction_batch_service import to_external_result_item
+    from systems.generator.app.runtime_pipeline.pipeline_schema import PredictionResultSourceRef
+
+    internal = InternalModelPredictionResult(
+        asset_id="asset-1",
+        model_id="pdm-lightgbm",
+        model_version="1.0.0",
+        status="failed",
+        observed_at="2026-08-27T00:00:00Z",
+        error_code="PIPELINE_SOURCE_UNAVAILABLE",
+        error_message="source unavailable",
+    )
+    item = to_external_result_item(
+        internal,
+        source_kind="live_sensor",
+        source_ref=PredictionResultSourceRef(uri="missing.jsonl", sha256="a" * 64),
+    )
+
+    assert item.output_status == "failed_source_unavailable"
+    assert item.feature_schema_version is None
+    assert item.history_requirement_version is None
+    assert item.label_schema_version is None
+
+
+def test_generator_runtime_version_must_be_explicit(monkeypatch):
+    from systems.generator.generator_config import get_generator_runtime_version
+
+    monkeypatch.delenv("GENERATOR_RUNTIME_VERSION", raising=False)
+    with pytest.raises(RuntimeError, match="GENERATOR_RUNTIME_VERSION"):
+        get_generator_runtime_version()

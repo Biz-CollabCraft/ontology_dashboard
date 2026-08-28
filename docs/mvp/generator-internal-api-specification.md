@@ -71,6 +71,28 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 | POST | `/internal/train` | 데몬 최초 학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 | POST | `/internal/retrain` | 데몬 새 버전 재학습 실행 (내부 Lock 제어, 호환성 유지) | Current (호환성 유지) |
 
+#### Runtime Pipeline enqueue 문맥 계약
+
+`POST /internal/runtime-pipeline/enqueue` 요청은 다음 값을 필수로 제공하며 알려지지 않은
+추가 필드는 `422`로 거부한다.
+
+- `job_id`, `source_uri`, lowercase SHA-256 `source_checksum`
+- `source_kind`: `live_sensor`, `simulation_overlay`, `maintenance_replay_overlay` 중 하나
+- `source_contract_version`, `source_schema_version`, `pipeline_contract_version`
+- `dataset_id`, `dataset_version`
+- `lineage`: 일반 센서 입력은 빈 객체를 허용하지만,
+  `maintenance_replay_overlay`는 session/branch/history/maintenance/state lineage 6개를 요구한다.
+
+입력 문맥은 Queue 영속화, retry, RunState, Checkpoint, 내부 staging과 외부
+`prediction-result-batch-v1`까지 그대로 전달한다. 기존 Queue 행에 문맥이 없으면
+`live_sensor`나 임의 버전으로 추정하지 않고
+`PIPELINE_SOURCE_CONTEXT_MIGRATION_REQUIRED` dead-letter로 분리한다.
+
+외부 Batch의 `producer.runtime_version`은 환경변수 `GENERATOR_RUNTIME_VERSION`에서만
+가져오며, 누락 시 Batch 발행을 중단한다. Artifact가 로드되기 전에 실패해 실제
+Feature/History/Label 버전을 알 수 없는 상태는 `null`로 표현하고 `v1`, `v1.0`,
+`unknown` 같은 가짜 provenance를 만들지 않는다.
+
 
 
 ### 3.2 Target API (후속 목표 설계)

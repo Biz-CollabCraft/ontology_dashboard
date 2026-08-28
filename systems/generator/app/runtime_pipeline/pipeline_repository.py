@@ -221,21 +221,26 @@ class PipelineRepository:
             return None
 
     def find_resumable_run(self, source_identity: str) -> Optional[PipelineRunState]:
-        """Find the most recent resumable run state matching source_identity."""
+        """Find the most recent resumable run state matching source_identity.
+
+        Legacy run states lacking source_identity or valid context cannot be safely resumed and are skipped.
+        """
+        if not source_identity or not str(source_identity).strip():
+            return None
+
         runs = self.list_run_states(limit=100)
         for r in runs:
-            # Must match source_identity (either in checkpoint or source_ref computation)
-            chk = self.get_checkpoint(r.run_id) or r.checkpoint
-            chk_identity = chk.source_identity if chk else None
-            if not chk_identity and r.source_ref:
-                # Compute default identity
-                from systems.generator.app.runtime_pipeline.pipeline_schema import compute_source_identity
-                chk_identity = compute_source_identity(r.source_ref.sha256)
+            try:
+                chk = self.get_checkpoint(r.run_id) or r.checkpoint
+                chk_identity = chk.source_identity if chk else None
 
-            if chk_identity == source_identity:
-                # Only resumable if status is running/failed/partially_succeeded and checkpoint status is resumable
-                if r.status in ("running", "failed", "partially_succeeded") and (not chk or chk.status == "resumable"):
-                    return r
+                # Only match when an explicit source_identity is present and equal
+                if chk_identity and chk_identity == source_identity:
+                    if r.status in ("running", "failed", "partially_succeeded") and (not chk or chk.status == "resumable"):
+                        return r
+            except Exception as exc:
+                logger.warning(f"[PipelineRepository] Skipping invalid run '{getattr(r, 'run_id', 'unknown')}' during resumption search: {exc}")
+                continue
         return None
 
     def cleanup_run_intermediate_outputs(

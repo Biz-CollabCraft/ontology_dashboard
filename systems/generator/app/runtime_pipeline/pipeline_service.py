@@ -28,6 +28,7 @@ from systems.generator.app.runtime_pipeline.prediction_batch_service import (
     EquipmentModelBatch,
     PredictionBatchService,
     PredictionBatchSummary,
+    build_external_prediction_batch,
     sort_prediction_result_items,
     to_external_result_item,
     validate_external_results_array,
@@ -52,7 +53,6 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
     PipelineModelSetChangedError,
     PipelineModelSnapshotArtifactMissingError,
     PipelineModelSnapshotChecksumMismatchError,
-    PipelineModelSnapshotChecksumMismatchError,
     PipelineModelSnapshotIncompatibleError,
     PipelineNoActiveModelError,
     PipelineOutboxEventConflictError,
@@ -76,6 +76,8 @@ from systems.generator.app.runtime_pipeline.pipeline_repository import (
 )
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     ActiveModelSet,
+    ActiveModelSetSnapshot,
+    ActiveModelSnapshotItem,
     ArtifactReference,
     InternalModelPredictionResult,
     ModelSnapshotEntry,
@@ -88,7 +90,10 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PredictionResultLineage,
     PredictionResultProducer,
     PredictionResultSourceRef,
+    RuntimeInputIdentity,
+    RuntimeSourceContext,
     SourceLineage,
+    compute_model_set_payload_sha256,
     compute_source_identity,
     now_utc_iso,
 )
@@ -298,10 +303,12 @@ class PipelineService:
 
             manifest_sha = art.manifest_checksum
 
-            f_schema_ver = art.feature_schema.get("feature_schema_version", "v1")
-            f_schema_sha = _compute_canonical_dict_sha256(art.feature_schema)
-            h_req_ver = art.history_requirement.get("history_requirement_version", "v1")
-            h_req_sha = _compute_canonical_dict_sha256(art.history_requirement)
+            f_schema_ver = (art.feature_schema or {}).get("feature_schema_version", "v1")
+            f_schema_sha = _compute_canonical_dict_sha256(art.feature_schema or {})
+            h_req_ver = (art.history_requirement or {}).get("history_requirement_version", "v1")
+            h_req_sha = _compute_canonical_dict_sha256(art.history_requirement or {})
+            l_schema_ver = (art.label_schema or {}).get("label_schema_version", getattr(art, "label_schema_version", "1.0.0") if hasattr(art, "label_schema_version") else "1.0.0")
+            l_schema_sha = _compute_canonical_dict_sha256(art.label_schema or {"model_id": model_id, "manifest_checksum": manifest_sha})
 
             snapshot[model_id] = {
                 "model_id": model_id,
@@ -311,6 +318,8 @@ class PipelineService:
                 "feature_schema_sha256": f_schema_sha,
                 "history_requirement_version": h_req_ver,
                 "history_requirement_sha256": h_req_sha,
+                "label_schema_version": l_schema_ver,
+                "label_schema_sha256": l_schema_sha,
             }
         return snapshot, artifacts
 
@@ -352,11 +361,35 @@ class PipelineService:
                 retryable=True,
             )
 
-        contract_ver = item.pipeline_contract_version or "generator-prediction-result-v1"
-        source_identity = item.source_identity or compute_source_identity(
-            actual_sha, item.dataset_id, item.dataset_version, contract_ver
-        )
+        contract_ver = item.pipeline_contract_version
         logical_source_uri = self.get_logical_source_uri(source_path)
+
+        runtime_source_context = RuntimeSourceContext(
+            source_uri=logical_source_uri,
+            source_checksum=actual_sha,
+            source_kind=item.source_kind,
+            source_contract_version=item.source_contract_version,
+            source_schema_version=item.source_schema_version,
+            pipeline_contract_version=contract_ver,
+            lineage=item.lineage,
+        )
+
+        runtime_input = RuntimeInputIdentity(
+            dataset_id=item.dataset_id,
+            dataset_version=item.dataset_version,
+            source=runtime_source_context,
+        )
+
+        source_identity = item.source_identity or compute_source_identity(
+            source_checksum=actual_sha,
+            dataset_id=runtime_input.dataset_id,
+            dataset_version=runtime_input.dataset_version,
+            pipeline_contract_version=runtime_input.source.pipeline_contract_version,
+            source_contract_version=runtime_input.source.source_contract_version,
+            source_schema_version=runtime_input.source.source_schema_version,
+            source_kind=runtime_input.source.source_kind,
+            lineage=runtime_input.source.lineage,
+        )
 
         # Load active model set pointer
         active_model_set = self.active_model_set_service.load_active_model_set()
@@ -370,62 +403,170 @@ class PipelineService:
                 retryable=False,
             )
 
+        active_snapshot_items = [
+            ActiveModelSnapshotItem(
+                model_id=self.prediction_service.resolve_model_id(bm),
+                model_version=current_snapshot[self.prediction_service.resolve_model_id(bm)]["model_version"],
+                required=active_model_set.models[bm].required if bm in active_model_set.models else True,
+                model_artifact_manifest_sha256=current_snapshot[self.prediction_service.resolve_model_id(bm)]["manifest_sha256"],
+            )
+            for bm in active_model_names
+        ]
+        active_model_set_snapshot = ActiveModelSetSnapshot(
+            model_set_id=active_model_set.model_set_id,
+            model_set_version=active_model_set.model_set_version,
+            models=active_snapshot_items,
+        )
+
+        current_model_set_payload_sha256 = compute_model_set_payload_sha256(
+            model_set_id=active_model_set.model_set_id,
+            model_set_version=active_model_set.model_set_version,
+            models=active_snapshot_items,
+        )
+
+        model_schema_map = {}
+        for bm in active_model_names:
+            mid = self.prediction_service.resolve_model_id(bm)
+            snap_info = current_snapshot.get(mid, {})
+            model_schema_map[mid] = {
+                "feature_schema_sha256": snap_info.get("feature_schema_sha256"),
+                "history_requirement_sha256": snap_info.get("history_requirement_sha256"),
+                "label_schema_sha256": snap_info.get("label_schema_sha256"),
+                "label_schema_version": snap_info.get("label_schema_version"),
+            }
+
         # 2. Resumption Planning: Search for existing resumable run
         resumable_run = self.repository.find_resumable_run(source_identity)
         resumed_stage: Optional[str] = None
         checkpoint_to_resume: Optional[PipelineCheckpoint] = None
 
         if resumable_run:
-            chk = self.repository.get_checkpoint(resumable_run.run_id) or resumable_run.checkpoint
-            if chk:
-                if chk.source_checksum != actual_sha:
+            try:
+                chk = self.repository.get_checkpoint(resumable_run.run_id) or resumable_run.checkpoint
+                if (
+                    chk is None
+                    or not chk.source_identity
+                    or chk.source_context is None
+                    or not chk.dataset_id
+                    or not chk.dataset_version
+                    or not chk.pipeline_contract_version
+                    or not chk.source_kind
+                    or not chk.source_contract_version
+                    or not chk.source_schema_version
+                    or not chk.lineage_json
+                    or not getattr(chk, "model_set_id", None)
+                    or not getattr(chk, "model_set_version", None)
+                    or not getattr(chk, "model_set_payload_sha256", None)
+                ):
                     logger.warning(
-                        f"[PipelineService] Source checksum changed for run '{resumable_run.run_id}'. "
-                        "Marking existing checkpoint as invalidated and starting fresh run."
+                        f"[PipelineService] Run '{resumable_run.run_id}' lacks mandatory source/model_set context or identity. "
+                        "Marking as invalidated (PIPELINE_SOURCE_CONTEXT_MIGRATION_REQUIRED)."
                     )
-                    chk.status = "invalidated"
-                    self.repository.save_checkpoint(chk)
+                    if chk:
+                        chk.status = "invalidated"
+                        self.repository.save_checkpoint(chk)
                     resumable_run.status = "failed"
                     resumable_run.checkpoint_status = "invalidated"
                     self.repository.save_run_state(resumable_run)
-                elif chk.status == "resumable":
-                    # Verify Model Set membership & model versions match checkpoint snapshot
-                    chk_models = chk.model_snapshot or {}
-                    current_keys = set(current_snapshot.keys())
-                    chk_keys = set(chk_models.keys())
-
-                    if current_keys != chk_keys:
-                        raise PipelineModelSetMembershipChangeNotImplementedError(
-                            f"Model Set 구성원(모델 종류/개수) 변경은 현재 지원되지 않습니다. (Current={sorted(current_keys)}, Checkpoint={sorted(chk_keys)})",
-                            details=[{
-                                "current_models": sorted(current_keys),
-                                "checkpoint_models": sorted(chk_keys),
-                            }],
-                            retryable=False,
-                        )
-
-                    model_set_changed = False
-                    for bm in active_model_names:
-                        mid = self.prediction_service.resolve_model_id(bm)
-                        active_ent = current_snapshot.get(mid, {})
-                        chk_ent = chk_models.get(mid, {})
-                        if not chk_ent or active_ent.get("model_version") != chk_ent.get("model_version") or active_ent.get("manifest_sha256") != chk_ent.get("manifest_sha256"):
-                            model_set_changed = True
-                            break
-                    if model_set_changed:
-                        logger.info(
-                            f"[PipelineService] Model version or manifest changed for run '{resumable_run.run_id}'. "
-                            "Invalidating existing prediction checkpoint."
+                else:
+                    source_context_mismatch = (
+                        chk.source_checksum != actual_sha
+                        or chk.dataset_id != runtime_input.dataset_id
+                        or chk.dataset_version != runtime_input.dataset_version
+                        or chk.source_kind != runtime_input.source.source_kind
+                        or chk.source_contract_version != runtime_input.source.source_contract_version
+                        or chk.source_schema_version != runtime_input.source.source_schema_version
+                        or chk.pipeline_contract_version != runtime_input.source.pipeline_contract_version
+                    )
+                    if source_context_mismatch:
+                        logger.warning(
+                            f"[PipelineService] Source context or checksum changed for run '{resumable_run.run_id}'. "
+                            "Marking existing checkpoint as invalidated and starting fresh run."
                         )
                         chk.status = "invalidated"
                         self.repository.save_checkpoint(chk)
-                    else:
-                        checkpoint_to_resume = chk
+                        resumable_run.status = "failed"
+                        resumable_run.checkpoint_status = "invalidated"
+                        self.repository.save_run_state(resumable_run)
+                    elif chk.status == "resumable":
+                        chk_models = chk.model_snapshot or {}
+                        current_keys = set(current_snapshot.keys())
+                        chk_keys = set(chk_models.keys())
+
+                        if current_keys != chk_keys:
+                            raise PipelineModelSetMembershipChangeNotImplementedError(
+                                f"Model Set 구성원(모델 종류/개수) 변경은 현재 지원되지 않습니다. (Current={sorted(current_keys)}, Checkpoint={sorted(chk_keys)})",
+                                details=[{
+                                    "current_models": sorted(current_keys),
+                                    "checkpoint_models": sorted(chk_keys),
+                                }],
+                                retryable=False,
+                            )
+
+                        model_set_digest_mismatch = (
+                            chk.model_set_id != active_model_set.model_set_id
+                            or chk.model_set_version != active_model_set.model_set_version
+                            or chk.model_set_payload_sha256 != current_model_set_payload_sha256
+                        )
+
+                        if model_set_digest_mismatch:
+                            logger.info(
+                                f"[PipelineService] Active Model Set changed for run '{resumable_run.run_id}' "
+                                f"(chk_ver='{chk.model_set_version}', current_ver='{active_model_set.model_set_version}', "
+                                f"chk_sha='{chk.model_set_payload_sha256[:8]}', curr_sha='{current_model_set_payload_sha256[:8]}'). "
+                                "Invalidating cached prediction and batch outputs."
+                            )
+                            # Check if feature schema or history requirement changed
+                            feature_schemas_changed = False
+                            for bm in active_model_names:
+                                mid = self.prediction_service.resolve_model_id(bm)
+                                active_ent = current_snapshot.get(mid, {})
+                                chk_ent = chk_models.get(mid, {})
+                                if (
+                                    active_ent.get("feature_schema_sha256") != chk_ent.get("feature_schema_sha256")
+                                    or active_ent.get("history_requirement_sha256") != chk_ent.get("history_requirement_sha256")
+                                ):
+                                    feature_schemas_changed = True
+                                    break
+
+                            # Invalidate cached prediction results and batch manifest
+                            resumable_run.prediction_results = []
+                            chk.batch_manifest_ref = None
+                            chk.delivery_outputs = {}
+                            if feature_schemas_changed:
+                                chk.stage_outputs.pop("runtime_feature", None)
+                                chk.model_stage_outputs.pop("runtime_feature", None)
+                                chk.last_completed_stage = "preprocessing"
+                                chk.next_stage = "runtime_feature"
+                            else:
+                                if chk.last_completed_stage in ("runtime_prediction", "batch_building", "prediction_delivery"):
+                                    chk.last_completed_stage = "runtime_feature"
+                                    chk.next_stage = "runtime_prediction"
+
+                            # Update checkpoint model_set info to current
+                            chk.model_set_id = active_model_set.model_set_id
+                            chk.model_set_version = active_model_set.model_set_version
+                            chk.model_set_payload_sha256 = current_model_set_payload_sha256
+                            chk.model_snapshot = current_snapshot
+                            checkpoint_to_resume = chk
+                        else:
+                            checkpoint_to_resume = chk
+            except Exception as exc:
+                if isinstance(exc, PipelineModelSetMembershipChangeNotImplementedError):
+                    raise
+                logger.warning(
+                    f"[PipelineService] Error inspecting resumable run '{resumable_run.run_id}': {exc}"
+                )
+                resumable_run.status = "failed"
+                resumable_run.checkpoint_status = "invalidated"
+                self.repository.save_run_state(resumable_run)
 
         if checkpoint_to_resume and resumable_run:
             run_id = resumable_run.run_id
             manager = PipelineStateManager(resumable_run)
             manager.state.job_id = item.job_id
+            if not manager.state.source_context:
+                manager.state.source_context = runtime_source_context
 
             last_stg = checkpoint_to_resume.last_completed_stage
 
@@ -462,6 +603,7 @@ class PipelineService:
                 run_id=run_id,
                 job_id=item.job_id,
                 source_ref=source_ref,
+                source_context=runtime_source_context,
             )
             manager.start_run()
 
@@ -469,11 +611,12 @@ class PipelineService:
             manager.record_checkpoint(
                 stage_name="source_validated",
                 next_stage="preprocessing",
-                model_snapshot=current_snapshot,
                 source_identity=source_identity,
-                dataset_id=item.dataset_id,
-                dataset_version=item.dataset_version,
-                pipeline_contract_version=contract_ver,
+                runtime_input=runtime_input,
+                model_set_id=active_model_set.model_set_id,
+                model_set_version=active_model_set.model_set_version,
+                model_set_payload_sha256=current_model_set_payload_sha256,
+                model_snapshot=current_snapshot,
                 status="resumable",
             )
             if manager.state.checkpoint:
@@ -608,12 +751,13 @@ class PipelineService:
                 manager.record_checkpoint(
                     stage_name="preprocessing",
                     next_stage="runtime_feature",
+                    source_identity=source_identity,
+                    runtime_input=runtime_input,
+                    model_set_id=active_model_set.model_set_id,
+                    model_set_version=active_model_set.model_set_version,
+                    model_set_payload_sha256=current_model_set_payload_sha256,
                     stage_outputs=[plan_ref, dataset_ref],
                     model_snapshot=current_snapshot,
-                    source_identity=source_identity,
-                    dataset_id=item.dataset_id,
-                    dataset_version=item.dataset_version,
-                    pipeline_contract_version=contract_ver,
                     status="resumable",
                 )
                 if manager.state.checkpoint:
@@ -755,14 +899,15 @@ class PipelineService:
             manager.record_checkpoint(
                 stage_name="runtime_feature",
                 next_stage="runtime_prediction",
+                source_identity=source_identity,
+                runtime_input=runtime_input,
+                model_set_id=active_model_set.model_set_id,
+                model_set_version=active_model_set.model_set_version,
+                model_set_payload_sha256=current_model_set_payload_sha256,
                 stage_outputs=list(model_feature_refs.values()),
                 model_stage_outputs={"runtime_feature": model_feature_outputs_map},
                 model_snapshot=current_snapshot,
                 snapshot_validation_status="valid",
-                source_identity=source_identity,
-                dataset_id=item.dataset_id,
-                dataset_version=item.dataset_version,
-                pipeline_contract_version=contract_ver,
                 status="resumable",
             )
             if manager.state.checkpoint:
@@ -831,12 +976,13 @@ class PipelineService:
                 manager.record_checkpoint(
                     stage_name="runtime_prediction",
                     next_stage="batch_building",
+                    source_identity=source_identity,
+                    runtime_input=runtime_input,
+                    model_set_id=active_model_set.model_set_id,
+                    model_set_version=active_model_set.model_set_version,
+                    model_set_payload_sha256=current_model_set_payload_sha256,
                     stage_outputs=pred_output_refs,
                     model_snapshot=current_snapshot,
-                    source_identity=source_identity,
-                    dataset_id=item.dataset_id,
-                    dataset_version=item.dataset_version,
-                    pipeline_contract_version=contract_ver,
                     status="resumable",
                 )
                 if manager.state.checkpoint:
@@ -884,6 +1030,9 @@ class PipelineService:
                     model_set_id=active_model_set.model_set_id,
                     model_set_version=active_model_set.model_set_version,
                     sensor_data_ref={"uri": logical_source_uri, "sha256": item.source_checksum},
+                    source_context=runtime_source_context,
+                    active_model_set_snapshot=active_model_set_snapshot,
+                    model_schema_map=model_schema_map,
                 )
                 manager.register_intermediate_outputs([batch_manifest_ref])
             else:
@@ -914,13 +1063,14 @@ class PipelineService:
             manager.record_checkpoint(
                 stage_name="batch_building",
                 next_stage="prediction_delivery",
+                source_identity=source_identity,
+                runtime_input=runtime_input,
+                model_set_id=active_model_set.model_set_id,
+                model_set_version=active_model_set.model_set_version,
+                model_set_payload_sha256=current_model_set_payload_sha256,
                 stage_outputs=[batch_manifest_ref] if batch_manifest_ref else [],
                 batch_manifest_ref=batch_manifest_ref,
                 model_snapshot=current_snapshot,
-                source_identity=source_identity,
-                dataset_id=item.dataset_id,
-                dataset_version=item.dataset_version,
-                pipeline_contract_version=contract_ver,
                 status="resumable",
             )
             if manager.state.checkpoint:
@@ -968,12 +1118,9 @@ class PipelineService:
                 if staged_batches and asset_id in staged_batches:
                     batch_payload = staged_batches[asset_id]
                 else:
-                    items: list[PredictionResultItem] = []
-                    src_ref = PredictionResultSourceRef(uri=logical_source_uri, sha256=item.source_checksum)
-                    lineage_obj = PredictionResultLineage()
+                    internal_items: list[InternalModelPredictionResult] = []
                     if eq_batch.internal_results:
-                        for internal_r in eq_batch.internal_results:
-                            items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+                        internal_items = list(eq_batch.internal_results)
                     else:
                         for m_id, m_res in eq_batch.model_results.items():
                             internal_r = InternalModelPredictionResult(
@@ -996,21 +1143,15 @@ class PipelineService:
                                 error_code=m_res.error_code,
                                 error_message=m_res.error_message,
                             )
-                            items.append(to_external_result_item(internal_r, source_kind="live_sensor", source_ref=src_ref, lineage=lineage_obj))
+                            internal_items.append(internal_r)
 
-                    sorted_items = sort_prediction_result_items(items)
-                    validate_external_results_array(sorted_items)
-
-                    now_dt = datetime.now(timezone.utc)
-                    canonical_batch_seed = f"prediction-result-batch-v1:{run_id}:{asset_id}:{src_ref.sha256}:{','.join(it.event_id for it in sorted_items)}"
-                    batch_id = f"batch-{hashlib.sha256(canonical_batch_seed.encode('utf-8')).hexdigest()[:24]}"
-                    producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
-                    batch_payload = PredictionResultBatchPayload(
-                        contract_version="prediction-result-batch-v1",
-                        batch_id=batch_id,
-                        producer=producer,
-                        emitted_at=now_dt,
-                        results=sorted_items,
+                    batch_payload = build_external_prediction_batch(
+                        internal_results=internal_items,
+                        source_context=runtime_source_context,
+                        dataset_id=item.dataset_id,
+                        dataset_version=item.dataset_version,
+                        active_model_set_snapshot=active_model_set_snapshot,
+                        model_schema_map=model_schema_map,
                     )
 
                 prev_delivery = existing_delivery.get(asset_id)
@@ -1069,12 +1210,13 @@ class PipelineService:
             manager.record_checkpoint(
                 stage_name="prediction_delivery",
                 next_stage="completed",
+                source_identity=source_identity,
+                runtime_input=runtime_input,
+                model_set_id=active_model_set.model_set_id,
+                model_set_version=active_model_set.model_set_version,
+                model_set_payload_sha256=current_model_set_payload_sha256,
                 delivery_outputs=delivery_outputs_map,
                 model_snapshot=current_snapshot,
-                source_identity=source_identity,
-                dataset_id=item.dataset_id,
-                dataset_version=item.dataset_version,
-                pipeline_contract_version=contract_ver,
                 status="completed",
             )
             if manager.state.checkpoint:
