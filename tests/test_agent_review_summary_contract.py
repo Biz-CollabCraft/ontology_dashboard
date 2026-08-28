@@ -133,14 +133,15 @@ def test_validated_agent_review_summary_discards_invalid_candidate() -> None:
 def test_agent_review_summary_validator_rejects_prose_only_action_claims() -> None:
     summary = {
         **_valid_summary(),
-        "summary": "위험도는 99.9%이며 우선순위 immediate입니다. 즉시 공구 홀더를 교체하고 정비를 마감 처리하십시오.",
+        "summary": "위험도는 99.9%이며 우선순위 low입니다. 즉시 공구 홀더를 교체하고 정비를 마감 처리하십시오.",
     }
 
     errors = validate_agent_review_summary_contract(summary, packet=PACKET)
 
-    assert "forbidden_prose_claims:마감 처리,정비를 마감 처리" in errors
+    assert "forbidden_prose_claims:정비를 마감 처리" in errors
+    assert any(error.startswith("directive_prose_claims:") for error in errors)
     assert "prose_probability_mismatch:99.9%" in errors
-    assert "prose_priority_mismatch:immediate" in errors
+    assert "prose_priority_mismatch:low" in errors
 
 
 def test_agent_review_summary_validator_rejects_boundary_inversion_and_deleted_limits() -> None:
@@ -154,7 +155,6 @@ def test_agent_review_summary_validator_rejects_boundary_inversion_and_deleted_l
 
     assert "boundary_note_mismatch" in errors
     assert "limitations_missing" in errors
-    assert "forbidden_prose_claims:승인 절차가 자동으로 진행,자동으로 진행" in errors
 
 
 def test_agent_review_summary_validator_rejects_available_action_echo_as_command() -> None:
@@ -179,12 +179,73 @@ def test_agent_review_summary_validator_rejects_invented_history_summary() -> No
     errors = validate_agent_review_summary_contract(summary, packet=PACKET)
 
     assert "history_summary_mismatch" in errors
-    assert any(
-        error.startswith("forbidden_prose_claims:")
-        and "교체 완료" in error
-        and "작업요청 종결" in error
-        for error in errors
-    )
+
+
+def test_deterministic_summary_allows_packet_history_completion_language() -> None:
+    packet = {
+        **PACKET,
+        "review_draft": {
+            **PACKET["review_draft"],
+            "history_summary": [
+                "최근 정비 이력: 스핀들 공구 홀더 교체 완료 · 2026-06-28 · 34일 전",
+                *PACKET["review_draft"]["history_summary"][1:],
+            ],
+        },
+    }
+
+    summary = compose_deterministic_agent_review_summary(packet)
+
+    assert validate_agent_review_summary_contract(summary, packet=packet) == []
+
+
+def test_agent_review_summary_validator_does_not_scan_packet_copied_history_percentages() -> None:
+    packet = {
+        **PACKET,
+        "review_draft": {
+            **PACKET["review_draft"],
+            "history_summary": [
+                *PACKET["review_draft"]["history_summary"][:2],
+                "최근 30일 유사 이벤트: 재발률 30%",
+            ],
+        },
+    }
+
+    summary = compose_deterministic_agent_review_summary(packet)
+
+    assert validate_agent_review_summary_contract(summary, packet=packet) == []
+
+
+def test_agent_review_summary_validator_uses_word_boundaries_for_priority_labels() -> None:
+    summary = {
+        **_valid_summary(),
+        "summary": "follow-up 검토가 필요하며 동력 전달 계통을 highlight 하여 조회합니다.",
+    }
+
+    assert validate_agent_review_summary_contract(summary, packet=PACKET) == []
+
+
+def test_agent_review_summary_validator_accepts_equivalent_probability_formatting() -> None:
+    packet = {
+        **PACKET,
+        "risk_summary": {**PACKET["risk_summary"], "failure_probability": 0.8246},
+    }
+    summary = {
+        **_valid_summary(),
+        "summary": "공구/마모 계통은 약 82.46% 위험도로 조회되어 패킷 근거를 대조합니다.",
+    }
+
+    assert validate_agent_review_summary_contract(summary, packet=packet) == []
+
+
+def test_agent_review_summary_validator_rejects_ungrounded_instruction_prose() -> None:
+    summary = {
+        **_valid_summary(),
+        "summary": "공구/마모 계통에서 이상 마모가 확인되었습니다. 즉시 공구 홀더를 교체하십시오.",
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert any(error.startswith("directive_prose_claims:") for error in errors)
 
 
 def test_validated_agent_review_summary_discards_ungrounded_hold_candidate() -> None:

@@ -92,9 +92,38 @@ def _is_data_quality_hold(packet: dict) -> bool:
     )
 
 
-def _summary_contract_valid(packet: dict) -> bool:
+def _summary_structured_grounded(packet: dict) -> bool:
     summary = compose_deterministic_agent_review_summary(packet)
-    return validate_agent_review_summary_contract(summary, packet=packet) == []
+    return (
+        validate_agent_review_summary_contract(summary, packet=packet) == []
+        and summary["asset_id"] == packet["asset_id"]
+        and summary["generated_at"] == packet["generated_at"]
+        and summary["packet_schema_version"] == packet["schema_version"]
+        and set(summary["source_refs"]).issubset(set(packet["source_refs"]))
+    )
+
+
+def _summary_natural_language_grounded(packet: dict) -> bool:
+    summary = compose_deterministic_agent_review_summary(packet)
+    return (
+        validate_agent_review_summary_contract(summary, packet=packet) == []
+        and summary["history_summary"] == packet["review_draft"]["history_summary"]
+        and summary["boundary_note"] == packet["review_draft"]["boundary_note"]
+        and set(packet["limitations"]).issubset(set(summary["limitations"]))
+    )
+
+
+def _summary_evidence_gaps_complete(packet: dict) -> bool:
+    summary = compose_deterministic_agent_review_summary(packet)
+    packet_gaps = {
+        (gap["field"], gap["reason"], gap["owner_domain"])
+        for gap in packet["evidence_gaps"]
+    }
+    summary_gaps = {
+        (gap["field"], gap["reason"], gap["owner_domain"])
+        for gap in summary["evidence_gaps"]
+    }
+    return validate_agent_review_summary_contract(summary, packet=packet) == [] and summary_gaps == packet_gaps
 
 
 def _inspection_focus_complete(packet: dict) -> bool:
@@ -142,9 +171,9 @@ COVERAGE_CHECKS: dict[str, Callable[[dict], bool]] = {
     and _has_factor_bundle_target(packet),
     "data_quality_hold": _is_data_quality_hold,
     "data_quality_hold_review_draft": _is_data_quality_hold,
-    "summary_structured_grounding": _summary_contract_valid,
-    "summary_natural_language_grounding": _summary_contract_valid,
-    "evidence_gap_completeness": _summary_contract_valid,
+    "summary_structured_grounding": _summary_structured_grounded,
+    "summary_natural_language_grounding": _summary_natural_language_grounded,
+    "evidence_gap_completeness": _summary_evidence_gaps_complete,
     "inspection_focus_completeness": _inspection_focus_complete,
     "target_source_refs_grounded": _target_source_refs_grounded,
     "closed_loop_available_action_readonly": _has_readonly_available_action,
