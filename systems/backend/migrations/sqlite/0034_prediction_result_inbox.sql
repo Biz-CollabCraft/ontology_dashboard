@@ -53,7 +53,19 @@ CREATE INDEX IF NOT EXISTS idx_pm_prediction_inbox_batches_identity
     organization_id,project_id,workspace_id,batch_id,payload_sha256
   );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pm_prediction_inbox_batches_accepted_identity
+  ON pm_prediction_result_inbox_batches(
+    organization_id,project_id,workspace_id,batch_id
+  )
+  WHERE validation_status='accepted';
+
 CREATE INDEX IF NOT EXISTS idx_pm_prediction_inbox_items_identity
   ON pm_prediction_result_inbox_items(
     organization_id,project_id,workspace_id,event_id,payload_sha256
   );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pm_prediction_inbox_items_accepted_identity
+  ON pm_prediction_result_inbox_items(
+    organization_id,project_id,workspace_id,event_id
+  )
+  WHERE validation_status='accepted';

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import json
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -9,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator, FormatChecker
 
 from app.dependencies import current_principal, get_identity_service, require_csrf
 from app.diagnosis.runtime_router import internal_router, router
@@ -19,6 +22,7 @@ from app.identity.identity_router import identity_http_status
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "contracts" / "examples" / "prediction-result-batch" / "prediction-result-batch-v1.json"
+SCHEMA = ROOT / "contracts" / "schemas" / "prediction-result-batch.schema.json"
 
 
 class FakeIdentity:
@@ -205,6 +209,33 @@ def test_prediction_inbox_rejects_payload_sha256_mismatch() -> None:
     assert "payload_sha256_mismatch" in (receipt.rejection_reason or "")
 
 
+def test_prediction_inbox_rejects_official_schema_violation_before_pydantic() -> None:
+    payload = load_payload()
+    payload["results"][0]["source_ref"]["sha256"] = "0" * 64
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "rejected"
+    assert receipt.received_results == 0
+    assert "schema_invalid" in (receipt.rejection_reason or "")
+    assert "source_ref" in (receipt.rejection_reason or "")
+
+
+def test_prediction_inbox_example_passes_schema_pydantic_receipt_roundtrip() -> None:
+    payload = load_payload()
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+
+    assert list(validator.iter_errors(payload)) == []
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "accepted"
+    assert receipt.received_results == len(payload["results"])
+
+
 def test_prediction_inbox_records_schema_invalid_payload() -> None:
     payload = load_payload()
     payload.pop("results")
@@ -284,3 +315,70 @@ def test_prediction_inbox_internal_route_requires_configured_service_token(monke
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Prediction Result service token is invalid."
+
+
+def test_generator_delivery_service_reaches_backend_internal_route(monkeypatch) -> None:
+    from systems.generator.app.runtime_pipeline.prediction_delivery_service import (
+        PredictionDeliveryService,
+    )
+
+    class PayloadAdapter:
+        batch_id = "batch-delivery-integration"
+
+        def __init__(self) -> None:
+            self.payload = load_payload()
+            self.payload["batch_id"] = self.batch_id
+
+        def model_dump_json(self) -> str:
+            return json.dumps(self.payload)
+
+        def model_dump(self, mode: str = "json") -> dict[str, Any]:
+            return copy.deepcopy(self.payload)
+
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    monkeypatch.setenv("GENERATOR_PREDICTION_RESULT_TOKEN", "receiver-secret")
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    app = FastAPI()
+    app.include_router(internal_router)
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+
+    class MockResponse:
+        def __init__(self, response) -> None:
+            self.response = response
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def getcode(self) -> int:
+            return self.response.status_code
+
+        def read(self) -> bytes:
+            return self.response.content
+
+    with TestClient(app) as client:
+        def mock_urlopen(req, timeout=10.0):
+            parsed = urllib.parse.urlsplit(req.full_url)
+            path = urllib.parse.urlunsplit(("", "", parsed.path, parsed.query, ""))
+            response = client.post(
+                path,
+                content=req.data,
+                headers=dict(req.headers),
+            )
+            return MockResponse(response)
+
+        monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+        delivery = PredictionDeliveryService(
+            endpoint_url="http://testserver/internal/prediction-results"
+        )
+        result = delivery.send_once(PayloadAdapter())
+
+    assert result["delivered"] is True
+    assert result["status_code"] == 202
+    assert repository.saved[0]["validation_status"] == "accepted"

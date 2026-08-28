@@ -1079,6 +1079,33 @@ class PredictiveMaintenanceRuntimeRepository:
             ).fetchall()
         return {str(row["asset_id"]) for row in rows}
 
+    @staticmethod
+    def _prediction_inbox_lock_key(*parts: str) -> str:
+        return "prediction-result-inbox:" + ":".join(parts)
+
+    def _lock_prediction_inbox_identity(
+        self,
+        connection,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        kind: str,
+        identity: str,
+    ) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (
+                self._prediction_inbox_lock_key(
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    kind,
+                    identity,
+                ),
+            ),
+        )
+
     def save_prediction_batch_inbox(
         self,
         *,
@@ -1095,6 +1122,25 @@ class PredictiveMaintenanceRuntimeRepository:
     ) -> dict[str, Any]:
         now = self._now()
         with self._connection(organization_id, project_id) as connection:
+            self._lock_prediction_inbox_identity(
+                connection,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                kind="batch",
+                identity=batch_id,
+            )
+            for event_id in sorted(
+                str(receipt["event_id"]) for receipt in item_receipts
+            ):
+                self._lock_prediction_inbox_identity(
+                    connection,
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    kind="event",
+                    identity=event_id,
+                )
             same_batch = connection.execute(
                 """
                 SELECT receive_id

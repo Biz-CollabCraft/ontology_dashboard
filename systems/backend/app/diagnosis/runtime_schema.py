@@ -141,6 +141,13 @@ class PredictionResultBatchSourceRef(StrictModel):
     uri: str = Field(min_length=1, max_length=1000)
     sha256: str = Field(pattern=SHA256_PATTERN)
 
+    @field_validator("sha256")
+    @classmethod
+    def reject_zero_sha256(cls, value: str) -> str:
+        if value == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros")
+        return value
+
 
 class PredictionResultBatchLineage(StrictModel):
     simulation_session_id: str | None = Field(default=None, max_length=240)

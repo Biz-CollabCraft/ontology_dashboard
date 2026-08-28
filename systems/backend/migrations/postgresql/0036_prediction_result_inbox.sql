@@ -53,7 +53,48 @@ CREATE INDEX IF NOT EXISTS idx_pm_prediction_inbox_batches_identity
     organization_id,project_id,workspace_id,batch_id,payload_sha256
   );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pm_prediction_inbox_batches_accepted_identity
+  ON pm_prediction_result_inbox_batches(
+    organization_id,project_id,workspace_id,batch_id
+  )
+  WHERE validation_status='accepted';
+
 CREATE INDEX IF NOT EXISTS idx_pm_prediction_inbox_items_identity
   ON pm_prediction_result_inbox_items(
     organization_id,project_id,workspace_id,event_id,payload_sha256
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pm_prediction_inbox_items_accepted_identity
+  ON pm_prediction_result_inbox_items(
+    organization_id,project_id,workspace_id,event_id
+  )
+  WHERE validation_status='accepted';
+
+ALTER TABLE pm_prediction_result_inbox_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pm_prediction_result_inbox_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS pm_prediction_result_inbox_batches_scope
+  ON pm_prediction_result_inbox_batches;
+CREATE POLICY pm_prediction_result_inbox_batches_scope
+  ON pm_prediction_result_inbox_batches
+  USING (
+    organization_id = nullif(current_setting('app.organization_id', true), '')
+    AND project_id = nullif(current_setting('app.project_id', true), '')
+  )
+  WITH CHECK (
+    organization_id = nullif(current_setting('app.organization_id', true), '')
+    AND project_id = nullif(current_setting('app.project_id', true), '')
+  );
+
+DROP POLICY IF EXISTS pm_prediction_result_inbox_items_scope
+  ON pm_prediction_result_inbox_items;
+CREATE POLICY pm_prediction_result_inbox_items_scope
+  ON pm_prediction_result_inbox_items
+  USING (
+    organization_id = nullif(current_setting('app.organization_id', true), '')
+    AND project_id = nullif(current_setting('app.project_id', true), '')
+  )
+  WITH CHECK (
+    organization_id = nullif(current_setting('app.organization_id', true), '')
+    AND project_id = nullif(current_setting('app.project_id', true), '')
   );

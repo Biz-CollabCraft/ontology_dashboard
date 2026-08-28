@@ -3,7 +3,9 @@ from __future__ import annotations
 import shutil
 import os
 import subprocess
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -95,6 +97,7 @@ def postgresql_database():
         assert "0033_recommendation_materialization_strategy" in applied
         assert "0034_operations_manual_recommendation" in applied
         assert "0035_inspection_results" in applied
+        assert "0036_prediction_result_inbox" in applied
         assert migrate(dsn) == []
         import psycopg
 
@@ -207,6 +210,179 @@ def test_postgresql_prediction_inbox_repository_idempotency_and_conflicts(
     assert [row["validation_status"] for row in item_rows].count("accepted") == 1
     assert [row["validation_status"] for row in item_rows].count("conflict") == 1
     assert all(row["promotion_result_id"] is None for row in item_rows)
+
+
+def test_postgresql_prediction_inbox_concurrent_delivery_is_serialized(
+    postgresql_database: str,
+) -> None:
+    repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    payload = load_payload()
+    item = payload["results"][0]
+    received_at = datetime(2026, 8, 27, tzinfo=timezone.utc)
+
+    def save(
+        *,
+        batch_id: str,
+        batch_sha: str,
+        item_sha: str,
+        barrier: threading.Barrier,
+    ) -> str:
+        barrier.wait(timeout=10)
+        result = repository.save_prediction_batch_inbox(
+            organization_id="org-test",
+            project_id="project-test",
+            workspace_id="workspace-test",
+            batch_id=batch_id,
+            payload_sha256=batch_sha,
+            validation_status="accepted",
+            rejection_reason=None,
+            raw_payload={**payload, "batch_id": batch_id},
+            received_at=received_at,
+            item_receipts=[
+                {
+                    "event_id": f"{item['event_id']}-{batch_id}",
+                    "payload_sha256": item_sha,
+                    "validation_status": "accepted",
+                    "rejection_reason": None,
+                }
+            ],
+        )
+        return str(result["validation_status"])
+
+    same_barrier = threading.Barrier(2)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        same_results = sorted(
+            future.result(timeout=20)
+            for future in (
+                executor.submit(
+                    save,
+                    batch_id="batch-concurrent-same",
+                    batch_sha="a" * 64,
+                    item_sha="b" * 64,
+                    barrier=same_barrier,
+                ),
+                executor.submit(
+                    save,
+                    batch_id="batch-concurrent-same",
+                    batch_sha="a" * 64,
+                    item_sha="b" * 64,
+                    barrier=same_barrier,
+                ),
+            )
+        )
+
+    conflict_barrier = threading.Barrier(2)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        conflict_results = sorted(
+            future.result(timeout=20)
+            for future in (
+                executor.submit(
+                    save,
+                    batch_id="batch-concurrent-conflict",
+                    batch_sha="c" * 64,
+                    item_sha="d" * 64,
+                    barrier=conflict_barrier,
+                ),
+                executor.submit(
+                    save,
+                    batch_id="batch-concurrent-conflict",
+                    batch_sha="e" * 64,
+                    item_sha="f" * 64,
+                    barrier=conflict_barrier,
+                ),
+            )
+        )
+
+    assert same_results == ["accepted", "duplicate"]
+    assert conflict_results == ["accepted", "conflict"]
+
+
+def test_postgresql_prediction_inbox_tables_are_rls_scoped(
+    postgresql_database: str,
+) -> None:
+    import psycopg
+    from psycopg import sql
+    from psycopg.rows import dict_row
+
+    repository = PredictiveMaintenanceRuntimeRepository(postgresql_database)
+    payload = load_payload()
+    item = payload["results"][0]
+    repository.save_prediction_batch_inbox(
+        organization_id="org-test",
+        project_id="project-test",
+        workspace_id="workspace-test",
+        batch_id="batch-rls-visible",
+        payload_sha256="a" * 64,
+        validation_status="accepted",
+        rejection_reason=None,
+        raw_payload=payload,
+        received_at=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        item_receipts=[
+            {
+                "event_id": "event-rls-visible",
+                "payload_sha256": item["payload_sha256"],
+                "validation_status": "accepted",
+                "rejection_reason": None,
+            }
+        ],
+    )
+
+    role = f"pm_inbox_rls_{uuid.uuid4().hex[:10]}"
+    try:
+        with psycopg.connect(postgresql_database, autocommit=True) as admin:
+            admin.execute(
+                sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                    sql.Identifier(role),
+                    sql.Literal("runtime-test-password"),
+                )
+            )
+            admin.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(role)))
+            for table in (
+                "pm_prediction_result_inbox_batches",
+                "pm_prediction_result_inbox_items",
+            ):
+                admin.execute(
+                    sql.SQL("GRANT SELECT ON {} TO {}").format(
+                        sql.Identifier(table),
+                        sql.Identifier(role),
+                    )
+                )
+        with psycopg.connect(
+            _dsn_for_user(postgresql_database, role, "runtime-test-password"),
+            row_factory=dict_row,
+        ) as scoped:
+            scoped.execute("SELECT set_config('app.organization_id','org-test',false)")
+            scoped.execute("SELECT set_config('app.project_id','project-test',false)")
+            visible_batches = int(
+                scoped.execute(
+                    "SELECT COUNT(*) AS count FROM pm_prediction_result_inbox_batches"
+                ).fetchone()["count"]
+            )
+            visible_items = int(
+                scoped.execute(
+                    "SELECT COUNT(*) AS count FROM pm_prediction_result_inbox_items"
+                ).fetchone()["count"]
+            )
+            scoped.execute("SELECT set_config('app.project_id','project-other',false)")
+            hidden_batches = int(
+                scoped.execute(
+                    "SELECT COUNT(*) AS count FROM pm_prediction_result_inbox_batches"
+                ).fetchone()["count"]
+            )
+            hidden_items = int(
+                scoped.execute(
+                    "SELECT COUNT(*) AS count FROM pm_prediction_result_inbox_items"
+                ).fetchone()["count"]
+            )
+
+        assert visible_batches == 1
+        assert visible_items == 1
+        assert hidden_batches == 0
+        assert hidden_items == 0
+    finally:
+        with psycopg.connect(postgresql_database, autocommit=True) as admin:
+            admin.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role)))
+            admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role)))
 
 
 def _changed_schema_manifest(manifest: DatasetBundleManifestV2) -> DatasetBundleManifestV2:
