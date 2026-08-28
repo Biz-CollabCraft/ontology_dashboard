@@ -9,7 +9,10 @@ import type {
   VisualizationPlannerResponse,
 } from "./features/planner/types";
 import type { AgentQueryInput, AgentRunPage, AgentRunResponse } from "./features/agent/types";
-import type { MvpAgentReviewPacket } from "./features/mvp/api/mvpContracts";
+import type {
+  MvpAgentReviewPacket,
+  MvpAgentReviewSummaryResponse,
+} from "./features/mvp/api/mvpContracts";
 import type {
   AdminWorkflowApprovals,
   AuditReconstruction,
@@ -626,6 +629,23 @@ export function getMvpAgentReviewPacket(input: {
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
   return request<MvpAgentReviewPacket>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
+  );
+}
+
+export function getMvpAgentReviewSummary(input: {
+  assetId: string;
+  projectId?: string;
+  datasetVersionId?: string | null;
+  historyWindow?: string;
+}): Promise<MvpAgentReviewSummaryResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId ?? "manufacturing-demo-project",
+    history_window: input.historyWindow ?? "24h",
+  });
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  return request<MvpAgentReviewSummaryResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { method: "POST" },
   );
 }
 

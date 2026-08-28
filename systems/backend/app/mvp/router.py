@@ -116,6 +116,28 @@ def get_agent_review_packet(
     )
 
 
+@router.post("/objects/{asset_id}/agent-review-summary")
+def create_agent_review_summary(
+    asset_id: str,
+    project_id: str = Query(default="manufacturing-demo-project"),
+    dataset_version_id: str | None = Query(default=None, max_length=160),
+    history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
+    principal: Principal = Depends(require_permission("events.read")),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+):
+    if not principal.is_admin and project_id not in principal.project_scopes:
+        raise AuthError(403, "project_scope_denied", "허용된 Object 범위를 벗어난 Agent Review Summary입니다.")
+    if principal.active_project_id != project_id:
+        raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    summary, trace = service.agent_review_summary(
+        asset_id,
+        project_id,
+        dataset_version_id=dataset_version_id,
+        history_window=history_window,
+    )
+    return {"summary": summary, "trace": trace}
+
+
 @router.get("/events/{event_id}/evidence")
 def get_evidence(
     event_id: str,

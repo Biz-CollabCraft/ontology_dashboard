@@ -14,9 +14,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getMvpAgentReviewPacket } from "../../../api";
+import { getMvpAgentReviewPacket, getMvpAgentReviewSummary } from "../../../api";
 import type {
   MvpAgentReviewPacket,
+  MvpAgentReviewSummary,
   MvpAsset,
   MvpBootstrapModel,
   MvpClosedLoopSummary,
@@ -1522,6 +1523,7 @@ function AssetPreviewPanel({
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
   const [agentPacket, setAgentPacket] = useState<MvpAgentReviewPacket | null>(null);
+  const [agentSummary, setAgentSummary] = useState<MvpAgentReviewSummary | null>(null);
   const [agentPacketLoading, setAgentPacketLoading] = useState(false);
   const [agentPacketError, setAgentPacketError] = useState("");
   const [agentPacketRequestKey, setAgentPacketRequestKey] = useState("");
@@ -1552,13 +1554,25 @@ function AssetPreviewPanel({
     setAgentPacketLoading(true);
     setAgentPacketError("");
     setAgentPacket(null);
+    setAgentSummary(null);
     setAgentPacketRequestKey(agentPacketKey);
     try {
-      setAgentPacket(await getMvpAgentReviewPacket({
+      const packet = await getMvpAgentReviewPacket({
         assetId: asset.assetId,
         datasetVersionId: candidate?.event.datasetVersionId ?? null,
         historyWindow: sensorWindow,
-      }));
+      });
+      setAgentPacket(packet);
+      try {
+        const summaryResponse = await getMvpAgentReviewSummary({
+          assetId: asset.assetId,
+          datasetVersionId: candidate?.event.datasetVersionId ?? null,
+          historyWindow: sensorWindow,
+        });
+        setAgentSummary(summaryResponse.summary);
+      } catch {
+        setAgentPacketError("AI 요약 API 응답을 검증하지 못해 패킷 기준 요약을 표시합니다.");
+      }
     } catch (reason: unknown) {
       setAgentPacketError(reason instanceof Error ? reason.message : "AI 검토 요약을 불러오지 못했습니다.");
     } finally {
@@ -1580,6 +1594,10 @@ function AssetPreviewPanel({
       window.removeEventListener("afterprint", clearPrintMode);
     };
   }, [printReportTab]);
+  const agentHistoryItems = agentPacket
+    ? agentSummary?.history_summary ?? agentPacket.review_draft.history_summary
+    : [];
+  const agentFocusItems = agentSummary?.inspection_focus ?? [];
   if (factorySlotPreview && !asset) {
     const { slot, cell } = factorySlotPreview;
     return (
@@ -1853,33 +1871,37 @@ function AssetPreviewPanel({
                     {agentPacket ? (
                       <>
                         <dl>
-                          <div><dt>설비</dt><dd>{agentPacket.asset_id}</dd></div>
+                          <div><dt>설비</dt><dd>{agentSummary?.asset_id ?? agentPacket.asset_id}</dd></div>
                           <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
                           <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP 연결` : "SOP 근거 없음"}</dd></div>
                           <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
                           <div><dt>SOP 출처</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
-                          <div><dt>SOP 관련도</dt><dd>{agentPacket.sop_guidance[0]?.retrieval_score ?? 0}</dd></div>
+                          <div><dt>요약 방식</dt><dd>{agentSummary?.mode === "llm" ? "LLM 검증 통과" : "규칙 기반 fallback"}</dd></div>
                         </dl>
+                        {agentSummary?.mode === "deterministic_fallback" ? (
+                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 패킷 기준으로 요약했습니다.</small>
+                        ) : null}
                         <small>이력 조회 요약</small>
-                        {agentPacket.review_draft.history_summary.length ? (
+                        {agentHistoryItems.length ? (
                           <ul>
-                            {agentPacket.review_draft.history_summary.slice(0, 3).map((summary) => (
-                              <li key={`${agentPacket.asset_id}-history-${summary}`}>{summary}</li>
+                            {agentHistoryItems.slice(0, 3).map((item) => (
+                              <li key={`${agentPacket.asset_id}-history-${item}`}>{item}</li>
                             ))}
                           </ul>
                         ) : <p>조회된 이력 요약이 없습니다.</p>}
                         <div className="mvp-agent-review-draft">
-                          <strong>{agentPacket.review_draft.title}</strong>
-                          <p>{agentPacket.review_draft.summary}</p>
-                          <small>{agentPacket.review_draft.recommended_next_step}</small>
-                          {agentPacket.review_draft.checklist.length ? (
+                          <strong>{agentSummary?.title ?? agentPacket.review_draft.title}</strong>
+                          <p>{agentSummary?.summary ?? agentPacket.review_draft.summary}</p>
+                          {agentFocusItems.length ? (
                             <ul>
-                              {agentPacket.review_draft.checklist.slice(0, 4).map((item) => (
-                                <li key={`${agentPacket.asset_id}-draft-check-${item}`}>{item}</li>
+                              {agentFocusItems.slice(0, 4).map((item) => (
+                                <li key={`${agentPacket.asset_id}-focus-${item.component_id}`}>
+                                  {item.component_label}{item.location_label ? ` · ${item.location_label}` : ""}
+                                </li>
                               ))}
                             </ul>
                           ) : null}
-                          <small>{agentPacket.review_draft.boundary_note}</small>
+                          <small>{agentSummary?.boundary_note ?? agentPacket.review_draft.boundary_note}</small>
                         </div>
                         <small>{agentPacket.closed_loop_boundary.note}</small>
                       </>

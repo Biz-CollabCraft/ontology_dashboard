@@ -18,6 +18,11 @@ from app.diagnosis.domain import (
 )
 from app.equipment.ports import EquipmentApplicationPort
 from app.mvp.agent_review_packet import compose_agent_review_packet
+from app.mvp.agent_review_summary import (
+    validate_agent_review_summary_contract,
+    validated_agent_review_summary,
+)
+from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.mvp.asset_detail_view_model import compose_asset_detail_view_model
 from app.mvp.sop_retrieval import retrieve_inspection_sops
 
@@ -53,6 +58,7 @@ class ManufacturingPredictiveMaintenanceService:
         report_agent: ReportAgentPort,
         layout_planner: LayoutPlannerPort,
         context_provider_factory: ContextProviderFactory,
+        agent_review_summary_provider: AgentReviewSummaryProvider | None = None,
     ) -> None:
         self.root = Path(root)
         fixture_root = self.root / "data" / "fixtures"
@@ -93,6 +99,7 @@ class ManufacturingPredictiveMaintenanceService:
         self.report_agent = report_agent
         self.layout_planner = layout_planner
         self.context_provider_factory = context_provider_factory
+        self.agent_review_summary_provider = agent_review_summary_provider
         self.intent_router = IntentRouter()
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
@@ -243,6 +250,61 @@ class ManufacturingPredictiveMaintenanceService:
             ),
             sop_retrieval=self._retrieve_inspection_sops(fixture, artifact),
         )
+
+    def agent_review_summary(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        dataset_version_id: str | None = None,
+        history_window: str = "24h",
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return a validated read-only review summary with deterministic fallback."""
+
+        packet = self.agent_review_packet(
+            asset_id,
+            project_id,
+            dataset_version_id=dataset_version_id,
+            history_window=history_window,
+        )
+        provider = self.agent_review_summary_provider
+        if provider is None:
+            summary, errors = validated_agent_review_summary(packet=packet)
+            return summary, {
+                "provider": "none",
+                "fallback": True,
+                "reason": "agent_review_summary_provider_disabled",
+                "validation_errors": errors,
+            }
+
+        try:
+            candidate = provider.generate(packet)
+            candidate_errors = validate_agent_review_summary_contract(candidate, packet=packet)
+            if candidate.get("mode") != "llm":
+                candidate_errors.append("mode_invalid_for_candidate")
+            if not candidate_errors:
+                return candidate, {
+                    "provider": provider.name,
+                    "fallback": False,
+                    "reason": None,
+                    "validation_errors": [],
+                }
+            summary, errors = validated_agent_review_summary(packet=packet)
+            return summary, {
+                "provider": provider.name,
+                "fallback": True,
+                "reason": "summary_validation_failed",
+                "validation_errors": candidate_errors,
+                "fallback_validation_errors": errors,
+            }
+        except Exception as exc:
+            summary, errors = validated_agent_review_summary(packet=packet)
+            return summary, {
+                "provider": getattr(provider, "name", "unknown"),
+                "fallback": True,
+                "reason": type(exc).__name__,
+                "validation_errors": errors,
+            }
 
     def patch_equipment_state(
         self,
