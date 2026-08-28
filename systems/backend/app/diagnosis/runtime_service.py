@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any, Literal
 
+from pydantic import ValidationError
+from jsonschema import Draft202012Validator, FormatChecker
+
+from app.common.runtime_settings import project_root
 from .diagnosis_schema import (
     DataQuality,
     EvidenceSource,
@@ -33,6 +39,9 @@ from .runtime_schema import (
     ObservationQueryResponse,
     PolicyRecommendation,
     PredictiveMaintenanceDashboardResponse,
+    PredictionInboxItemReceipt,
+    PredictionInboxReceipt,
+    PredictionResultBatch,
     ProductFactor,
     ProductResultPage,
     ProductResultProvenance,
@@ -54,6 +63,7 @@ V3_1_SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
 V3_1_MODEL_VERSION = "independent-logreg-v3.1"
 V3_1_RESULT_SCHEMA = "result-artifact-v1.0"
 PREDICTION_TASK = "binary_failure_within_horizon"
+PREDICTION_RESULT_BATCH_SCHEMA_NAME = "prediction-result-batch.schema.json"
 
 PM_STATUS_LABELS: dict[AppLocale, dict[str, str]] = {
     "ko-KR": {"critical": "긴급 검토", "warning": "경고", "attention": "관찰", "normal": "정상"},
@@ -182,9 +192,195 @@ def _list(value: Any) -> list[Any]:
     return []
 
 
+@lru_cache(maxsize=1)
+def _prediction_result_batch_json_schema_validator() -> Draft202012Validator:
+    schema_path = (
+        project_root() / "contracts" / "schemas" / PREDICTION_RESULT_BATCH_SCHEMA_NAME
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema, format_checker=FormatChecker())
+
+
 class PredictiveMaintenanceRuntimeService:
     def __init__(self, repository: DiagnosisRuntimeRepositoryPort) -> None:
         self.repository = repository
+
+    @staticmethod
+    def _canonical_json_sha256(value: dict[str, Any]) -> str:
+        canonical = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _prediction_item_sha256(cls, item: dict[str, Any]) -> str:
+        seed = dict(item)
+        seed.pop("payload_sha256", None)
+        return cls._canonical_json_sha256(seed)
+
+    @classmethod
+    def _prediction_batch_sha256(cls, payload: dict[str, Any]) -> str:
+        seed = dict(payload)
+        seed.pop("emitted_at", None)
+        seed.pop("batch_id", None)
+        if isinstance(seed.get("producer"), dict):
+            producer = dict(seed["producer"])
+            producer.pop("outbox_id", None)
+            seed["producer"] = producer
+        if isinstance(seed.get("results"), list):
+            seed["results"] = sorted(
+                seed["results"],
+                key=lambda item: (
+                    str(item.get("asset_id", "")) if isinstance(item, dict) else "",
+                    str(item.get("model_id", "")) if isinstance(item, dict) else "",
+                    str(item.get("model_version", "")) if isinstance(item, dict) else "",
+                    str(item.get("observed_at", "")) if isinstance(item, dict) else "",
+                    str(item.get("event_id", "")) if isinstance(item, dict) else "",
+                ),
+            )
+        return cls._canonical_json_sha256(seed)
+
+    @staticmethod
+    def _validate_prediction_result_batch_json_schema(payload: dict[str, Any]) -> None:
+        errors = sorted(
+            _prediction_result_batch_json_schema_validator().iter_errors(payload),
+            key=lambda item: list(item.absolute_path),
+        )
+        if not errors:
+            return
+        first = errors[0]
+        path = "/".join(str(part) for part in first.absolute_path) or "<root>"
+        raise ValueError(f"{path}: {first.message}")
+
+    def receive_prediction_result_batch(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        payload: dict[str, Any],
+    ) -> PredictionInboxReceipt:
+        """Receive-only gate for Generator Prediction Result Batch payloads."""
+
+        raw_payload = dict(payload)
+        raw_payload_sha256 = self._canonical_json_sha256(raw_payload)
+        batch_id = str(raw_payload.get("batch_id") or f"invalid-{raw_payload_sha256[:32]}")
+        received_at = self.repository.clock_now()
+        try:
+            self._validate_prediction_result_batch_json_schema(raw_payload)
+            batch = PredictionResultBatch.model_validate(raw_payload)
+        except (ValidationError, ValueError) as error:
+            if isinstance(error, ValidationError):
+                message = error.errors()[0]["msg"]
+            else:
+                message = str(error)
+            row = self.repository.save_prediction_batch_inbox(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                batch_id=batch_id,
+                payload_sha256=raw_payload_sha256,
+                validation_status="rejected",
+                rejection_reason=f"schema_invalid: {message}",
+                raw_payload=raw_payload,
+                received_at=received_at,
+                item_receipts=[],
+            )
+            return self._prediction_inbox_receipt_from_row(row)
+
+        batch_payload = batch.model_dump(mode="json")
+        batch_payload_sha256 = self._prediction_batch_sha256(batch_payload)
+        item_receipts: list[dict[str, Any]] = []
+        invalid_reasons: list[str] = []
+        asset_ids = {item.asset_id for item in batch.results}
+        scoped_assets = self.repository.assets_exist_in_workspace(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_ids=sorted(asset_ids),
+        )
+        missing_assets = sorted(asset_ids - set(scoped_assets))
+        if missing_assets:
+            invalid_reasons.append(f"scope_invalid: unknown assets {missing_assets}")
+
+        for item in batch_payload["results"]:
+            expected = self._prediction_item_sha256(item)
+            actual = str(item["payload_sha256"])
+            if expected != actual:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "rejected",
+                        "rejection_reason": (
+                            "payload_sha256_mismatch: "
+                            f"expected {expected}, got {actual}"
+                        ),
+                    }
+                )
+                invalid_reasons.append(f"payload_sha256_mismatch:{item['event_id']}")
+            elif item["asset_id"] in missing_assets:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "rejected",
+                        "rejection_reason": "scope_invalid: asset is not in workspace",
+                    }
+                )
+            else:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "accepted",
+                        "rejection_reason": None,
+                    }
+                )
+
+        validation_status = "rejected" if invalid_reasons else "accepted"
+        row = self.repository.save_prediction_batch_inbox(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch.batch_id,
+            payload_sha256=batch_payload_sha256,
+            validation_status=validation_status,
+            rejection_reason="; ".join(invalid_reasons) or None,
+            raw_payload=batch_payload,
+            received_at=received_at,
+            item_receipts=item_receipts,
+        )
+        return self._prediction_inbox_receipt_from_row(row)
+
+    @staticmethod
+    def _prediction_inbox_receipt_from_row(row: dict[str, Any]) -> PredictionInboxReceipt:
+        item_receipts = [
+            PredictionInboxItemReceipt.model_validate(item)
+            for item in row.get("item_receipts", [])
+        ]
+        counts = {
+            "accepted": sum(1 for item in item_receipts if item.validation_status == "accepted"),
+            "duplicate": sum(1 for item in item_receipts if item.validation_status == "duplicate"),
+            "conflict": sum(1 for item in item_receipts if item.validation_status == "conflict"),
+            "rejected": sum(1 for item in item_receipts if item.validation_status == "rejected"),
+        }
+        return PredictionInboxReceipt(
+            batch_id=str(row["batch_id"]),
+            payload_sha256=str(row["payload_sha256"]),
+            validation_status=row["validation_status"],
+            rejection_reason=row.get("rejection_reason"),
+            received_results=len(item_receipts),
+            accepted_results=counts["accepted"],
+            duplicate_results=counts["duplicate"],
+            conflict_results=counts["conflict"],
+            rejected_results=counts["rejected"],
+            item_receipts=item_receipts,
+        )
 
     @staticmethod
     def _supports_dashboard_evidence_detail(

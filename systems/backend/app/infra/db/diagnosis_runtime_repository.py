@@ -30,6 +30,9 @@ class PredictiveMaintenanceRuntimeRepository:
             raise ValueError("runtime repository clock must return a timezone-aware datetime")
         return value
 
+    def clock_now(self) -> datetime:
+        return self._now()
+
     def _connection(self, organization_id: str, project_id: str):
         return pooled_tenant_connection(
             self.database_url,
@@ -1050,6 +1053,265 @@ class PredictiveMaintenanceRuntimeRepository:
                 ),
             ).fetchone()
         return bool(row and row["asset_exists"])
+
+    def assets_exist_in_workspace(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_ids: Sequence[str],
+    ) -> set[str]:
+        if not asset_ids:
+            return set()
+        with self._connection(organization_id, project_id) as connection:
+            rows = connection.execute(
+                """
+                SELECT DISTINCT a.asset_id
+                FROM dataset_versions v
+                JOIN pm_assets a ON a.dataset_version_id=v.id
+                WHERE v.organization_id=%s
+                  AND v.project_id=%s
+                  AND v.workspace_id=%s
+                  AND a.asset_id=ANY(%s)
+                """,
+                (organization_id, project_id, workspace_id, list(asset_ids)),
+            ).fetchall()
+        return {str(row["asset_id"]) for row in rows}
+
+    @staticmethod
+    def _prediction_inbox_lock_key(*parts: str) -> str:
+        return "prediction-result-inbox:" + ":".join(parts)
+
+    def _lock_prediction_inbox_identity(
+        self,
+        connection,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        kind: str,
+        identity: str,
+    ) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (
+                self._prediction_inbox_lock_key(
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    kind,
+                    identity,
+                ),
+            ),
+        )
+
+    def save_prediction_batch_inbox(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str,
+        payload_sha256: str,
+        validation_status: str,
+        rejection_reason: str | None,
+        raw_payload: dict[str, Any],
+        received_at: datetime,
+        item_receipts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._connection(organization_id, project_id) as connection:
+            self._lock_prediction_inbox_identity(
+                connection,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                kind="batch",
+                identity=batch_id,
+            )
+            for event_id in sorted(
+                str(receipt["event_id"]) for receipt in item_receipts
+            ):
+                self._lock_prediction_inbox_identity(
+                    connection,
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    kind="event",
+                    identity=event_id,
+                )
+            same_batch = connection.execute(
+                """
+                SELECT receive_id
+                FROM pm_prediction_result_inbox_batches
+                WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                  AND batch_id=%s AND payload_sha256=%s
+                FOR UPDATE
+                """,
+                (organization_id, project_id, workspace_id, batch_id, payload_sha256),
+            ).fetchone()
+            other_batch = None
+            if same_batch is None:
+                other_batch = connection.execute(
+                    """
+                    SELECT receive_id
+                    FROM pm_prediction_result_inbox_batches
+                    WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                      AND batch_id=%s
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    (organization_id, project_id, workspace_id, batch_id),
+                ).fetchone()
+
+            batch_status = validation_status
+            batch_reason = rejection_reason
+            if same_batch is not None:
+                batch_status = "duplicate"
+                batch_reason = None
+            elif other_batch is not None:
+                batch_status = "conflict"
+                batch_reason = (
+                    "batch_payload_conflict: same batch_id received with "
+                    "different payload_sha256"
+                )
+
+            persisted_items: list[dict[str, Any]] = []
+            raw_items = [
+                item for item in raw_payload.get("results", []) if isinstance(item, dict)
+            ]
+            for receipt in item_receipts:
+                event_id = str(receipt["event_id"])
+                item_sha = str(receipt["payload_sha256"])
+                same_item = connection.execute(
+                    """
+                    SELECT receive_item_id
+                    FROM pm_prediction_result_inbox_items
+                    WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                      AND event_id=%s AND payload_sha256=%s
+                    FOR UPDATE
+                    """,
+                    (organization_id, project_id, workspace_id, event_id, item_sha),
+                ).fetchone()
+                other_item = None
+                if same_item is None:
+                    other_item = connection.execute(
+                        """
+                        SELECT receive_item_id
+                        FROM pm_prediction_result_inbox_items
+                        WHERE organization_id=%s AND project_id=%s AND workspace_id=%s
+                          AND event_id=%s
+                        LIMIT 1
+                        FOR UPDATE
+                        """,
+                        (organization_id, project_id, workspace_id, event_id),
+                    ).fetchone()
+                item_status = str(receipt["validation_status"])
+                item_reason = receipt.get("rejection_reason")
+                if same_item is not None:
+                    item_status = "duplicate"
+                    item_reason = None
+                elif other_item is not None:
+                    item_status = "conflict"
+                    item_reason = (
+                        "event_payload_conflict: same event_id received "
+                        "with different payload_sha256"
+                    )
+                if item_status == "conflict":
+                    batch_status = "conflict"
+                    batch_reason = batch_reason or "one or more items conflicted"
+                elif item_status == "rejected" and batch_status not in {"conflict"}:
+                    batch_status = "rejected"
+                    batch_reason = batch_reason or "one or more items were rejected"
+                raw_item = next(
+                    (item for item in raw_items if str(item.get("event_id")) == event_id),
+                    {},
+                )
+                persisted_items.append(
+                    {
+                        "event_id": event_id,
+                        "payload_sha256": item_sha,
+                        "validation_status": item_status,
+                        "rejection_reason": item_reason,
+                    }
+                )
+
+            if same_batch is not None and persisted_items and all(
+                item["validation_status"] == "duplicate" for item in persisted_items
+            ):
+                batch_status = "duplicate"
+                batch_reason = None
+
+            should_insert_attempt = batch_status != "duplicate"
+            if should_insert_attempt:
+                receive_id = f"prediction-inbox-{uuid.uuid4()}"
+                connection.execute(
+                    """
+                    INSERT INTO pm_prediction_result_inbox_batches(
+                        receive_id,organization_id,project_id,workspace_id,batch_id,
+                        payload_sha256,validation_status,rejection_reason,
+                        raw_payload,promotion_result_id,received_at,updated_at
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,NULL,%s,%s)
+                    """,
+                    (
+                        receive_id,
+                        organization_id,
+                        project_id,
+                        workspace_id,
+                        batch_id,
+                        payload_sha256,
+                        batch_status,
+                        batch_reason,
+                        json.dumps(raw_payload, sort_keys=True),
+                        received_at,
+                        now,
+                    ),
+                )
+                for item in persisted_items:
+                    if item["validation_status"] == "duplicate":
+                        continue
+                    raw_item = next(
+                        (
+                            raw
+                            for raw in raw_items
+                            if str(raw.get("event_id")) == item["event_id"]
+                        ),
+                        {},
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO pm_prediction_result_inbox_items(
+                            receive_item_id,receive_id,
+                            organization_id,project_id,workspace_id,batch_id,event_id,
+                            payload_sha256,validation_status,rejection_reason,
+                            raw_item,promotion_result_id,received_at,updated_at
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,NULL,%s,%s)
+                        """,
+                        (
+                            f"prediction-inbox-item-{uuid.uuid4()}",
+                            receive_id,
+                            organization_id,
+                            project_id,
+                            workspace_id,
+                            batch_id,
+                            item["event_id"],
+                            item["payload_sha256"],
+                            item["validation_status"],
+                            item["rejection_reason"],
+                            json.dumps(raw_item, sort_keys=True),
+                            received_at,
+                            now,
+                        ),
+                    )
+
+        return {
+            "batch_id": batch_id,
+            "payload_sha256": payload_sha256,
+            "validation_status": batch_status,
+            "rejection_reason": batch_reason,
+            "item_receipts": persisted_items,
+        }
 
     def update_session(
         self,

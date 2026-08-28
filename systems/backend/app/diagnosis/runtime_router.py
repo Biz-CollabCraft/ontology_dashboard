@@ -3,21 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
+import os
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.mvp.contracts import AppLocale
 from app.dependencies import (
+    client_ip,
     get_identity_service,
     get_predictive_maintenance_runtime_service,
     require_csrf,
     require_permission,
 )
-from app.identity import IdentityService, Principal
+from app.identity import CSRF_COOKIE, SESSION_COOKIE, AuthError, IdentityService, Principal
 from app.diagnosis.runtime_schema import (
     DatasetVersionSelectionRequest,
     ReplayControlRequest,
@@ -30,6 +33,9 @@ router = APIRouter(
     prefix="/api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance",
     tags=["predictive-maintenance-runtime"],
 )
+internal_router = APIRouter(prefix="/internal", tags=["prediction-result-inbox"])
+PREDICTION_RESULT_INGEST_TOKEN_ENV = "PREDICTION_RESULT_INGEST_TOKEN"
+PREDICTION_RESULT_INGEST_ORG_ENV = "PREDICTION_RESULT_INGEST_ORGANIZATION_ID"
 
 
 def require_scope(
@@ -59,6 +65,78 @@ def selected_dataset_version(
         workspace_id=workspace_id,
         user_id=principal.user_id,
     ).default_dataset_version_id
+
+
+def _prediction_inbox_response(receipt):
+    body = receipt.model_dump(mode="json")
+    if receipt.validation_status == "conflict":
+        return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=body)
+    if receipt.validation_status == "rejected":
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content=body,
+        )
+    if receipt.validation_status == "duplicate":
+        return JSONResponse(status_code=status.HTTP_200_OK, content=body)
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=body)
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, value = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not value.strip():
+        return None
+    return value.strip()
+
+
+def _prediction_result_service_principal(*, project_id: str, workspace_id: str) -> Principal:
+    return Principal(
+        user_id="service:generator-runtime",
+        organization_id=os.getenv(PREDICTION_RESULT_INGEST_ORG_ENV, "org-ontology-demo"),
+        email="generator-runtime@service.local",
+        display_name="Generator Runtime",
+        status="active",
+        roles=["service"],
+        permissions=["predictions.ingest"],
+        workspace_scopes=[workspace_id],
+        project_scopes=[project_id],
+        active_project_id=project_id,
+        active_project_roles=["service"],
+        is_admin=False,
+        default_path="/internal/prediction-results",
+        landing_key="internal",
+    )
+
+
+def internal_prediction_ingest_principal(
+    request: Request,
+    project_id: str = Query(max_length=160),
+    workspace_id: str = Query(max_length=160),
+    identity: IdentityService = Depends(get_identity_service),
+) -> Principal:
+    configured_token = os.getenv(PREDICTION_RESULT_INGEST_TOKEN_ENV, "").strip()
+    supplied_token = _bearer_token(request.headers.get("Authorization"))
+    if configured_token:
+        if supplied_token and hmac.compare_digest(supplied_token, configured_token):
+            return _prediction_result_service_principal(
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+        if supplied_token:
+            raise AuthError("authentication_required", "Prediction Result service token is invalid.")
+
+    session_token = request.cookies.get(SESSION_COOKIE)
+    if not session_token:
+        raise AuthError("authentication_required", "로그인이 필요합니다.")
+    principal = identity.principal_for_token(
+        session_token,
+        user_agent=request.headers.get("User-Agent"),
+        client_ip=client_ip(request),
+    )
+    identity.require_permission(principal, "predictions.ingest")
+    identity.verify_csrf(request.cookies.get(CSRF_COOKIE), request.headers.get("X-CSRF-Token"))
+    return principal
 
 
 @router.get("/context")
@@ -410,6 +488,56 @@ def observation_window(
     ).model_dump(mode="json")
 
 
+@router.post("/prediction-result-batches")
+def receive_prediction_result_batch(
+    project_id: str,
+    workspace_id: str,
+    payload: dict[str, Any] = Body(...),
+    principal: Principal = Depends(require_permission("predictions.ingest")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    receipt = service.receive_prediction_result_batch(
+        organization_id=principal.organization_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        payload=payload,
+    )
+    return _prediction_inbox_response(receipt)
+
+
+@router.post("/prediction-result-batches/validate")
+def validate_prediction_result_batch(
+    project_id: str,
+    workspace_id: str,
+    payload: dict[str, Any] = Body(...),
+    principal: Principal = Depends(require_permission("predictions.ingest")),
+    _: None = Depends(require_csrf),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    return receive_prediction_result_batch(
+        project_id=project_id,
+        workspace_id=workspace_id,
+        payload=payload,
+        principal=principal,
+        _=_,
+        identity=identity,
+        service=service,
+    )
+
+
 @router.post("/replay/sessions", status_code=status.HTTP_201_CREATED)
 def start_replay(
     project_id: str,
@@ -560,3 +688,30 @@ async def replay_events(
             "Connection": "keep-alive",
         },
     )
+
+
+@internal_router.post("/prediction-results")
+def receive_internal_prediction_results(
+    payload: dict[str, Any] = Body(...),
+    project_id: str = Query(max_length=160),
+    workspace_id: str = Query(max_length=160),
+    principal: Principal = Depends(internal_prediction_ingest_principal),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    identity.require_permission(principal, "predictions.ingest")
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    receipt = service.receive_prediction_result_batch(
+        organization_id=principal.organization_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        payload=payload,
+    )
+    return _prediction_inbox_response(receipt)

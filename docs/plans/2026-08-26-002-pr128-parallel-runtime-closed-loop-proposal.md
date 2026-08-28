@@ -433,19 +433,7 @@ Generator Prediction Result Batch를 Backend가 승격하는 경로로 확장하
 - PR #128 처리 탭이 persisted ID/state만 표시한다.
 - 권한 없는 액션은 disabled reason 또는 403으로 일관되게 처리된다.
 
-### Step 8. Maintenance replay / simulation overlay 연결
-
-- MaintenanceEvent 완료 후 replay request를 발행한다.
-- Runtime Overlay observation available을 Generator Runtime Pipeline이 소비한다.
-- 이력 부족이면 `warming_up`/`history_insufficient`를 표시한다.
-- 첫 inference-ready observation에서 Generator가 Prediction Result Batch를 발행한다.
-- Backend가 Batch를 검증한 뒤 새 Product Result/Evidence를 append한다.
-
-완료 기준:
-
-- PR #128 UI에서 정비 전/후 상태가 같은 asset lineage로 비교된다.
-
-### Step 9. Generator Runtime delivery integration
+### Step 8. Generator Runtime delivery integration
 
 - Generator score batch를 Backend Inbox에 전달한다.
 - Backend는 검증 전 score/source/model lineage를 Product API/UI/Closed-loop에 노출하지 않는다.
@@ -455,6 +443,21 @@ Generator Prediction Result Batch를 Backend가 승격하는 경로로 확장하
 
 - delivery retry, dead-letter, mismatch 처리 규칙이 문서화된다.
 - Generator 산출물 누락을 Backend가 추론 보정하지 않는다.
+
+### Step 9. Maintenance replay / simulation overlay 연결
+
+- MaintenanceEvent 완료 후 replay request를 발행한다.
+- Runtime Overlay observation available을 Generator Runtime Pipeline이 소비한다.
+- replay source kind는 공식 계약의 `maintenance_replay_overlay`를 사용한다.
+- 이력 부족이면 `warming_up`/`history_insufficient`를 표시한다.
+- 첫 inference-ready observation에서 Generator가 Prediction Result Batch를 발행한다.
+- Backend Inbox delivery가 연결된 뒤에만 Batch 검증과 새 Product Result/Evidence append를 수행한다.
+
+완료 기준:
+
+- PR #128 UI에서 정비 전/후 상태가 같은 asset lineage로 비교된다.
+- `simulation_session_id`, `overlay_branch_id`, `history_segment_id`,
+  `maintenance_event_id`, `maintenance_action_id`, `state_version` lineage가 보존된다.
 
 ### Step 10. Backend direct inference 제거 여부 결정
 
@@ -468,6 +471,22 @@ Generator Prediction Result Batch를 Backend가 승격하는 경로로 확장하
 - Backend direct inference 제거는 별도 후속 PR로 진행한다.
 
 ## 8. Contract Freeze
+
+현재 구현된 receive-only 범위:
+
+- `contracts/schemas/prediction-result-batch.schema.json`
+- Backend typed validator `PredictionResultBatch`
+- public receive endpoint:
+  `POST /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/prediction-result-batches`
+- internal receive endpoint:
+  `POST /internal/prediction-results?project_id=...&workspace_id=...`
+- `pm_prediction_result_inbox_batches` / `pm_prediction_result_inbox_items`
+- raw payload 보존, schema/checksum/scope/idempotency 검증, duplicate/conflict/rejected receipt
+- service-to-service 송신 계약:
+  Backend `PREDICTION_RESULT_INGEST_TOKEN`과 Generator `GENERATOR_PREDICTION_RESULT_TOKEN`을
+  같은 secret으로 설정하고 `Authorization: Bearer ...`로 호출
+
+이 범위는 Product Result 생성, Evidence append, ViewModel 갱신, Closed-loop trigger를 수행하지 않는다.
 
 ### 유지
 

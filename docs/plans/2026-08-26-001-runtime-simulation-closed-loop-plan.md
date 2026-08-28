@@ -237,7 +237,7 @@ handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 
 
 ```json
 {
-  "source_kind": "live_sensor | simulation_overlay | maintenance_replay",
+  "source_kind": "live_sensor | simulation_overlay | maintenance_replay_overlay",
   "asset_id": "CNC-S04-L02-03",
   "observed_at": "2026-08-26T06:00:00Z",
   "source_ref": {
@@ -260,8 +260,10 @@ handoff와 Prediction Result Batch에 아래 source envelope가 보존되어야 
 
 - `source_kind`는 Product Result의 provenance에 보존한다.
 - live source는 maintenance lineage가 `null`일 수 있다.
-- maintenance replay source는 `maintenance_event_id`, `overlay_branch_id`,
-  `history_segment_id`, `state_version`을 보존해야 한다.
+- `maintenance_replay_overlay` source는 공식 계약이 요구하는
+  `simulation_session_id`, `overlay_branch_id`, `history_segment_id`,
+  `maintenance_event_id`, `maintenance_action_id`, `state_version` 6개 lineage
+  필드를 모두 보존해야 한다.
 - `gen_data`는 availability만 발행하고 readiness를 판정하지 않는다.
 - Generator는 같은 `(source_ref.sha256, asset_id, observed_at, source_kind)`를 중복 enqueue하지 않는다.
 - Backend Inbox는 같은 `event_id + payload_sha256`을 중복 승격하지 않는다.
@@ -651,6 +653,7 @@ Result Batch/Outbox를 안정적으로 생산하는 병렬 track이다.
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/results/latest
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/timeline
 GET /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/observations
+POST /api/projects/{project_id}/workspaces/{workspace_id}/predictive-maintenance/prediction-result-batches
 GET /api/projects/{project_id}/workspaces/{workspace_id}/maintenance/events/{event_id}/lineage
 POST /api/projects/{project_id}/workspaces/{workspace_id}/maintenance/maintenance-events/{id}/replay
 ```
@@ -664,7 +667,12 @@ GET /internal/prediction-results/consume-status
 
 주의:
 
-- `/internal/prediction-results`는 public product action이 아니다.
+- `/prediction-result-batches`와 `/internal/prediction-results`는 receive-only Inbox entrypoint다.
+- 수신부는 raw payload와 validation metadata를 저장하지만 Product Result/Evidence를 생성하지 않는다.
+- `/internal/prediction-results`는 public product action이 아니며 동일한 권한/scope gate를 통과해야 한다.
+  운영 송신은 Backend `PREDICTION_RESULT_INGEST_TOKEN`과 Generator
+  `GENERATOR_PREDICTION_RESULT_TOKEN`을 같은 secret으로 설정해
+  `Authorization: Bearer ...` service-to-service 호출로 수행한다.
 - Frontend는 internal endpoint를 직접 호출하지 않는다.
 - Frontend refresh는 public Product API를 기준으로 한다.
 
@@ -699,7 +707,9 @@ And Closed-loop 작업요청은 자동 생성되지 않음
 ```text
 Given critical Product Result에서 점검/정비가 완료됨
 When maintenance replay가 요청됨
-Then overlay branch가 생성되고 lineage가 저장됨
+Then `maintenance_replay_overlay` observation이 append-only로 생성되고
+And `simulation_session_id`, `overlay_branch_id`, `history_segment_id`,
+`maintenance_event_id`, `maintenance_action_id`, `state_version` lineage가 저장됨
 And Backend는 warming_up/history_insufficient를 먼저 표시함
 When 충분한 overlay observation이 쌓임
 Then Generator가 Prediction Result Batch를 발행함

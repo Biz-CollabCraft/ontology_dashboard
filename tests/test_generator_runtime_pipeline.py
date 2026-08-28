@@ -4204,18 +4204,27 @@ def test_delivery_service_default_endpoint_and_env_config(isolated_runtime_env, 
     monkeypatch.delenv("GENERATOR_PREDICTION_RESULT_URL", raising=False)
     monkeypatch.delenv("GENERATOR_PREDICTION_RECEIVER_URL", raising=False)
     svc = PredictionDeliveryService()
-    assert svc.endpoint_url == "http://localhost:8000/internal/prediction-results"
+    assert svc.endpoint_url == (
+        "http://localhost:8000/internal/prediction-results"
+        "?project_id=manufacturing-demo-project&workspace_id=manufacturing-demo"
+    )
 
     # 2. Standard ENV override
     monkeypatch.setenv("GENERATOR_PREDICTION_RESULT_URL", "https://prod-backend:8443/internal/prediction-results")
     svc2 = PredictionDeliveryService()
-    assert svc2.endpoint_url == "https://prod-backend:8443/internal/prediction-results"
+    assert svc2.endpoint_url == (
+        "https://prod-backend:8443/internal/prediction-results"
+        "?project_id=manufacturing-demo-project&workspace_id=manufacturing-demo"
+    )
 
     # 3. Legacy ENV fallback with warning
     monkeypatch.delenv("GENERATOR_PREDICTION_RESULT_URL", raising=False)
     monkeypatch.setenv("GENERATOR_PREDICTION_RECEIVER_URL", "https://legacy-backend:8443/internal/prediction-results")
     svc3 = PredictionDeliveryService()
-    assert svc3.endpoint_url == "https://legacy-backend:8443/internal/prediction-results"
+    assert svc3.endpoint_url == (
+        "https://legacy-backend:8443/internal/prediction-results"
+        "?project_id=manufacturing-demo-project&workspace_id=manufacturing-demo"
+    )
 
     # 4. Conflicting ENVs raise ValueError
     monkeypatch.setenv("GENERATOR_PREDICTION_RESULT_URL", "http://backend-1/internal/prediction-results")
@@ -4230,6 +4239,7 @@ def test_delivery_service_send_once_headers_and_post_method(isolated_runtime_env
     import urllib.request
     from systems.generator.app.runtime_pipeline.prediction_delivery_service import PredictionDeliveryService
 
+    monkeypatch.delenv("GENERATOR_PREDICTION_RESULT_TOKEN", raising=False)
     svc = PredictionDeliveryService(endpoint_url="http://localhost:8000/internal/prediction-results")
     payload = create_test_batch_payload(
         event_id="evt-post-01",
@@ -4261,11 +4271,15 @@ def test_delivery_service_send_once_headers_and_post_method(isolated_runtime_env
 
     assert captured_req is not None
     assert captured_req.get_method() == "POST"
-    assert captured_req.full_url == "http://localhost:8000/internal/prediction-results"
+    assert captured_req.full_url == (
+        "http://localhost:8000/internal/prediction-results"
+        "?project_id=manufacturing-demo-project&workspace_id=manufacturing-demo"
+    )
     idempotency_val = captured_req.headers.get("Idempotency-key") or captured_req.headers.get("Idempotency-Key")
     assert idempotency_val is not None
     assert idempotency_val.startswith("evt-batch-")
     assert captured_req.headers.get("X-request-id") == "batch-post-01" or captured_req.headers.get("X-Request-ID") == "batch-post-01"
+    assert captured_req.headers.get("Authorization") is None
 
 
 # =====================================================================

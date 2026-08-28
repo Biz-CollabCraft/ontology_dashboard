@@ -131,6 +131,301 @@ class DatasetVersionSelectionRequest(StrictModel):
     dataset_version_id: str | None = Field(default=None, max_length=160)
 
 
+class PredictionResultBatchProducer(StrictModel):
+    system: Literal["systems.generator"]
+    runtime_version: str = Field(min_length=1, max_length=128)
+    outbox_id: str | None = Field(default=None, max_length=240)
+
+
+class PredictionResultBatchSourceRef(StrictModel):
+    uri: str = Field(min_length=1, max_length=1000)
+    sha256: str = Field(pattern=SHA256_PATTERN)
+
+    @field_validator("sha256")
+    @classmethod
+    def reject_zero_sha256(cls, value: str) -> str:
+        if value == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros")
+        return value
+
+
+class PredictionResultBatchLineage(StrictModel):
+    simulation_session_id: str | None = Field(default=None, max_length=240)
+    overlay_branch_id: str | None = Field(default=None, max_length=240)
+    history_segment_id: str | None = Field(default=None, max_length=240)
+    maintenance_event_id: str | None = Field(default=None, max_length=240)
+    maintenance_action_id: str | None = Field(default=None, max_length=240)
+    state_version: int | None = Field(default=None, ge=1)
+
+
+class PredictionResultBatchSourceContext(StrictModel):
+    dataset_id: str = Field(min_length=1, max_length=240)
+    dataset_version: str = Field(min_length=1, max_length=240)
+    source_uri: str = Field(min_length=1, max_length=1000)
+    source_checksum: str = Field(pattern=SHA256_PATTERN)
+    source_kind: Literal[
+        "live_sensor",
+        "simulation_overlay",
+        "maintenance_replay_overlay",
+    ]
+    source_contract_version: str = Field(min_length=1, max_length=240)
+    source_schema_version: str = Field(min_length=1, max_length=240)
+    pipeline_contract_version: str = Field(min_length=1, max_length=240)
+    lineage: PredictionResultBatchLineage
+
+    @field_validator("source_checksum")
+    @classmethod
+    def reject_zero_sha256(cls, value: str) -> str:
+        if value == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros")
+        return value
+
+    @model_validator(mode="after")
+    def enforce_source_context_lineage(self) -> "PredictionResultBatchSourceContext":
+        if self.source_kind == "maintenance_replay_overlay":
+            missing = _missing_maintenance_replay_lineage(self.lineage)
+            if missing:
+                raise ValueError(
+                    "maintenance_replay_overlay source_context requires lineage fields: "
+                    + ", ".join(missing)
+                )
+        return self
+
+
+class PredictionResultBatchModelSetItem(StrictModel):
+    model_id: str = Field(min_length=1, max_length=240)
+    model_version: str = Field(min_length=1, max_length=240)
+    required: bool = True
+    model_artifact_manifest_sha256: str = Field(pattern=SHA256_PATTERN)
+
+    @field_validator("model_artifact_manifest_sha256")
+    @classmethod
+    def reject_zero_sha256(cls, value: str) -> str:
+        if value == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros")
+        return value
+
+
+class PredictionResultBatchModelSet(StrictModel):
+    model_set_id: str = Field(min_length=1, max_length=240)
+    model_set_version: str = Field(min_length=1, max_length=240)
+    models: list[PredictionResultBatchModelSetItem] = Field(min_length=1)
+
+
+def _missing_maintenance_replay_lineage(
+    lineage: PredictionResultBatchLineage,
+) -> list[str]:
+    return [
+        field
+        for field in (
+            "simulation_session_id",
+            "overlay_branch_id",
+            "history_segment_id",
+            "maintenance_event_id",
+            "maintenance_action_id",
+            "state_version",
+        )
+        if getattr(lineage, field) in (None, "")
+    ]
+
+
+class PredictionResultBatchItem(StrictModel):
+    """Raw Generator prediction output before Backend Product Result promotion."""
+
+    event_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    observed_at: datetime
+    source_kind: Literal[
+        "live_sensor",
+        "simulation_overlay",
+        "maintenance_replay_overlay",
+    ]
+    source_ref: PredictionResultBatchSourceRef
+    payload_sha256: str = Field(pattern=SHA256_PATTERN)
+    output_status: Literal[
+        "predicted",
+        "warming_up",
+        "history_insufficient",
+        "failed_source_unavailable",
+        "failed_model_artifact",
+        "failed_feature_execution",
+        "failed_model_inference",
+    ]
+    score: float | None = Field(default=None, ge=0, le=1)
+    model_id: str = Field(min_length=1, max_length=240)
+    model_version: str = Field(min_length=1, max_length=240)
+    model_artifact_manifest_sha256: str | None = Field(
+        default=None,
+        pattern=SHA256_PATTERN,
+    )
+    feature_schema_version: str | None = Field(default=None, min_length=1, max_length=240)
+    history_requirement_version: str | None = Field(default=None, min_length=1, max_length=240)
+    label_schema_version: str | None = Field(default=None, min_length=1, max_length=240)
+    feature_schema_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    history_requirement_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    label_schema_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
+    lineage: PredictionResultBatchLineage
+    failure_reason: str | None = Field(default=None, max_length=1000)
+
+    @field_validator(
+        "payload_sha256",
+        "model_artifact_manifest_sha256",
+        "feature_schema_sha256",
+        "history_requirement_sha256",
+        "label_schema_sha256",
+    )
+    @classmethod
+    def reject_zero_sha256(cls, value: str | None) -> str | None:
+        if value == "0" * 64:
+            raise ValueError("SHA-256 checksum cannot be all zeros")
+        return value
+
+    @model_validator(mode="after")
+    def enforce_raw_batch_boundary(self) -> "PredictionResultBatchItem":
+        if self.output_status == "predicted":
+            if self.score is None:
+                raise ValueError("predicted batch items require score")
+            if self.failure_reason is not None:
+                raise ValueError("predicted batch items must not carry failure_reason")
+            if not self.model_artifact_manifest_sha256:
+                raise ValueError(
+                    "predicted batch items require model_artifact_manifest_sha256"
+                )
+            if not self.feature_schema_version:
+                raise ValueError("predicted batch items require feature_schema_version")
+            if not self.history_requirement_version:
+                raise ValueError(
+                    "predicted batch items require history_requirement_version"
+                )
+            if not self.label_schema_version:
+                raise ValueError("predicted batch items require label_schema_version")
+            if not self.feature_schema_sha256:
+                raise ValueError("predicted batch items require feature_schema_sha256")
+            if not self.history_requirement_sha256:
+                raise ValueError(
+                    "predicted batch items require history_requirement_sha256"
+                )
+            if not self.label_schema_sha256:
+                raise ValueError("predicted batch items require label_schema_sha256")
+        else:
+            if self.score is not None:
+                raise ValueError("non-predicted batch items must not carry score")
+            if not self.failure_reason:
+                raise ValueError("non-predicted batch items require failure_reason")
+            if self.output_status in {
+                "warming_up",
+                "history_insufficient",
+                "failed_feature_execution",
+                "failed_model_inference",
+            }:
+                if not self.model_artifact_manifest_sha256:
+                    raise ValueError(
+                        f"{self.output_status} batch items require "
+                        "model_artifact_manifest_sha256"
+                    )
+                if not self.feature_schema_version:
+                    raise ValueError(
+                        f"{self.output_status} batch items require feature_schema_version"
+                    )
+                if not self.history_requirement_version:
+                    raise ValueError(
+                        f"{self.output_status} batch items require history_requirement_version"
+                    )
+                if not self.label_schema_version:
+                    raise ValueError(
+                        f"{self.output_status} batch items require label_schema_version"
+                    )
+                if not self.feature_schema_sha256:
+                    raise ValueError(
+                        f"{self.output_status} batch items require feature_schema_sha256"
+                    )
+                if not self.history_requirement_sha256:
+                    raise ValueError(
+                        f"{self.output_status} batch items require history_requirement_sha256"
+                    )
+                if not self.label_schema_sha256:
+                    raise ValueError(
+                        f"{self.output_status} batch items require label_schema_sha256"
+                    )
+            elif self.output_status in {
+                "failed_model_artifact",
+                "failed_source_unavailable",
+            }:
+                if self.model_artifact_manifest_sha256 is not None:
+                    raise ValueError(
+                        f"{self.output_status} batch items must not carry "
+                        "model_artifact_manifest_sha256"
+                    )
+                if self.feature_schema_version is not None:
+                    raise ValueError(
+                        f"{self.output_status} batch items must not carry feature_schema_version"
+                    )
+                if self.history_requirement_version is not None:
+                    raise ValueError(
+                        f"{self.output_status} batch items must not carry "
+                        "history_requirement_version"
+                    )
+                if self.label_schema_version is not None:
+                    raise ValueError(
+                        f"{self.output_status} batch items must not carry label_schema_version"
+                    )
+                if self.feature_schema_sha256 is not None:
+                    raise ValueError(
+                        f"{self.output_status} batch items must not carry feature_schema_sha256"
+                    )
+                if self.history_requirement_sha256 is not None:
+                    raise ValueError(
+                        f"{self.output_status} batch items must not carry "
+                        "history_requirement_sha256"
+                    )
+                if self.label_schema_sha256 is not None:
+                    raise ValueError(
+                        f"{self.output_status} batch items must not carry label_schema_sha256"
+                    )
+        if self.source_kind == "maintenance_replay_overlay":
+            missing = _missing_maintenance_replay_lineage(self.lineage)
+            if missing:
+                raise ValueError(
+                    "maintenance_replay_overlay batch items require lineage fields: "
+                    + ", ".join(missing)
+                )
+        return self
+
+
+class PredictionResultBatch(StrictModel):
+    """Generator -> Backend Inbox handoff; not Product Result/Evidence."""
+
+    contract_version: Literal["prediction-result-batch-v1"]
+    batch_id: str = Field(min_length=1, max_length=240)
+    producer: PredictionResultBatchProducer
+    emitted_at: datetime
+    source_context: PredictionResultBatchSourceContext
+    model_set: PredictionResultBatchModelSet
+    results: list[PredictionResultBatchItem] = Field(min_length=1)
+
+
+class PredictionInboxItemReceipt(StrictModel):
+    event_id: str
+    payload_sha256: str
+    validation_status: Literal["accepted", "duplicate", "conflict", "rejected"]
+    rejection_reason: str | None = None
+
+
+class PredictionInboxReceipt(StrictModel):
+    batch_id: str
+    payload_sha256: str
+    validation_status: Literal["accepted", "duplicate", "conflict", "rejected"]
+    rejection_reason: str | None = None
+    received_results: int = Field(ge=0)
+    accepted_results: int = Field(ge=0)
+    duplicate_results: int = Field(ge=0)
+    conflict_results: int = Field(ge=0)
+    rejected_results: int = Field(ge=0)
+    item_receipts: list[PredictionInboxItemReceipt] = Field(default_factory=list)
+    promotion_status: Literal["not_promoted"] = "not_promoted"
+    product_result_created: Literal[False] = False
+
+
 class DashboardDataSource(StrictModel):
     dataset_id: str
     dataset_name: str

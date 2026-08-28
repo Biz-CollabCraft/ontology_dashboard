@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Optional
@@ -36,6 +37,8 @@ class PredictionDeliveryService:
         endpoint_url: Optional[str] = None,
         outbox_dir: Optional[Path] = None,
         timeout: float = 10.0,
+        project_id: Optional[str] = None,
+        workspace_id: Optional[str] = None,
     ) -> None:
         url_from_env = os.environ.get("GENERATOR_PREDICTION_RESULT_URL")
         legacy_url = os.environ.get("GENERATOR_PREDICTION_RECEIVER_URL")
@@ -47,15 +50,40 @@ class PredictionDeliveryService:
             logger.warning(
                 "[PredictionDeliveryService] GENERATOR_PREDICTION_RECEIVER_URL is deprecated. Use GENERATOR_PREDICTION_RESULT_URL instead."
             )
-        self.endpoint_url = (
+        base_endpoint_url = (
             endpoint_url
             or url_from_env
             or legacy_url
             or "http://localhost:8000/internal/prediction-results"
         )
+        self.project_id = (
+            project_id
+            or os.environ.get("GENERATOR_PREDICTION_RESULT_PROJECT_ID")
+            or "manufacturing-demo-project"
+        )
+        self.workspace_id = (
+            workspace_id
+            or os.environ.get("GENERATOR_PREDICTION_RESULT_WORKSPACE_ID")
+            or "manufacturing-demo"
+        )
+        self.endpoint_url = self._endpoint_with_scope(
+            base_endpoint_url,
+            project_id=self.project_id,
+            workspace_id=self.workspace_id,
+        )
         self.outbox_dir = Path(outbox_dir) if outbox_dir else PATHS.notification_outbox_root
         self.outbox_dir.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
+
+    @staticmethod
+    def _endpoint_with_scope(endpoint_url: str, *, project_id: str, workspace_id: str) -> str:
+        parsed = urllib.parse.urlsplit(endpoint_url)
+        query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+        query.setdefault("project_id", project_id)
+        query.setdefault("workspace_id", workspace_id)
+        return urllib.parse.urlunsplit(
+            parsed._replace(query=urllib.parse.urlencode(query))
+        )
 
     def save_outbox_item(self, item: PredictionOutboxItem) -> Path:
         """Atomic save of outbox item to outbox_dir/{event_id}.json."""
@@ -194,6 +222,9 @@ class PredictionDeliveryService:
             "Idempotency-Key": event_id,
             "X-Request-ID": batch_id,
         }
+        auth_token = os.environ.get("GENERATOR_PREDICTION_RESULT_TOKEN", "").strip()
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
         req = urllib.request.Request(
             self.endpoint_url,
             data=body,

@@ -49,6 +49,7 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
             "0031_recommendation_materialization_strategy",
             "0032_operations_manual_recommendation",
             "0033_inspection_results",
+            "0034_prediction_result_inbox",
         ]
     assert second == []
 
@@ -73,6 +74,26 @@ def test_migrations_are_idempotent_and_create_outbox(tmp_path: Path) -> None:
         "closed_loop_idempotency_records",
         "closed_loop_inspection_results",
     } <= tables
+    assert {
+        "pm_prediction_result_inbox_batches",
+        "pm_prediction_result_inbox_items",
+    } <= tables
+    with sqlite3.connect(database) as connection:
+        indexes = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA index_list(pm_prediction_result_inbox_batches)"
+            )
+        } | {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA index_list(pm_prediction_result_inbox_items)"
+            )
+        }
+    assert {
+        "uq_pm_prediction_inbox_batches_accepted_identity",
+        "uq_pm_prediction_inbox_items_accepted_identity",
+    } <= indexes
     with sqlite3.connect(database) as connection:
         activity_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(closed_loop_activities)")
