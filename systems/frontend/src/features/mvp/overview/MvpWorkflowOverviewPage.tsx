@@ -354,11 +354,11 @@ function inspectionGuidanceSourceLabel(target: MvpInspectionTarget | null): stri
     : "SOP 참고";
 }
 
-function replacementReviewPreview(target: MvpInspectionTarget | null): string[] {
-  const guidance = target?.inspectionGuidance?.replacementReviewGuidance;
+function maintenanceReviewPrerequisitePreview(target: MvpInspectionTarget | null): string[] {
+  const guidance = target?.inspectionGuidance?.maintenanceReviewPrerequisites;
   if (!guidance) return [];
   return [
-    ...guidance.reviewTriggers.slice(0, 2),
+    ...guidance.reviewConditions.slice(0, 2),
     ...guidance.humanReviewQuestions.slice(0, 1),
   ];
 }
@@ -1743,15 +1743,15 @@ function AssetPreviewPanel({
                           {target.target?.inspectionGuidance ? (
                             <p>{target.target.inspectionGuidance.disclaimer}</p>
                           ) : null}
-                          {target.target?.inspectionGuidance?.replacementReviewGuidance ? (
+                          {target.target?.inspectionGuidance?.maintenanceReviewPrerequisites ? (
                             <div className="mvp-inspection-guidance-note">
-                              <strong>{target.target.inspectionGuidance.replacementReviewGuidance.reviewLabel}</strong>
+                              <strong>{target.target.inspectionGuidance.maintenanceReviewPrerequisites.label}</strong>
                               <ul>
-                                {replacementReviewPreview(target.target).map((item) => (
-                                  <li key={`${target.target?.targetId}-replacement-${item}`}>{item}</li>
+                                {maintenanceReviewPrerequisitePreview(target.target).map((item) => (
+                                  <li key={`${target.target?.targetId}-maintenance-review-${item}`}>{item}</li>
                                 ))}
                               </ul>
-                              <small>{target.target.inspectionGuidance.replacementReviewGuidance.decisionBoundary}</small>
+                              <small>{target.target.inspectionGuidance.maintenanceReviewPrerequisites.decisionBoundary}</small>
                             </div>
                           ) : null}
                           {target.target && inspectionFactorChips(target.target, factors).length ? (

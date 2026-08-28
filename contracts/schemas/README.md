@@ -22,6 +22,6 @@
 - `runtime-overlay-observations-available.schema.json`: 새 Overlay Observation delta batch를 Backend에 인계하는 이벤트 계약
 - `preventive-what-if.schema.json`: 합성 예방조치 Producer의 위험 상승·선행 지표·조치 전후 효과·한계 계약
 - `operation-context.schema.json`: 생산관리자 화면용 synthetic 생산계획·생산영향 fixture 계약. Product Result/Evidence 산출에는 사용하지 않는다.
-- `procedure-grounding.schema.json`: SOP 검색·절차 grounding fixture 계약. Product Evidence나 수리 지시가 아니라 점검 질문·체크리스트 초안의 출처를 표시한다.
+- `procedure-grounding.schema.json`: `procedure-grounding-v1.1` SOP 검색·절차 grounding fixture 계약. Product Evidence나 수리 지시가 아니라 점검 질문·체크리스트와 정비 판단 전 확인사항의 출처를 표시하며 비용·시점 추천을 만들지 않는다.
 
 스키마를 변경할 때는 fixture, Pydantic model, backend tests, Gold evaluator와 TypeScript type을 함께 변경해야 한다. LLM 출력은 스키마와 grounding 검사를 모두 통과하지 못하면 폐기하고 deterministic fallback을 사용한다.
