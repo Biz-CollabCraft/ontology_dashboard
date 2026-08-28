@@ -52,6 +52,15 @@ EXPECTED_ASSET_COUNT = 100
 MAX_LIVE_CLOCK_SKEW = timedelta(minutes=2)
 LIVE_STATIC_LINEAGE_ROLES = ("asset_master", "asset_relation")
 LIVE_SENSOR_ROLES = ("cnc_sensor_observation", "compressor_sensor_observation")
+OVERLAY_EVENT_LINEAGE_FIELDS = (
+    ("simulation_session_id", "simulation_session_id"),
+    ("overlay_branch_id", "overlay_branch_id"),
+    ("history_segment_id", "history_segment_id"),
+    ("maintenance_action_id", "maintenance_action_id"),
+    ("maintenance_event_id", "maintenance_event_id"),
+    ("equipment_id", "asset_id"),
+    ("state_version", "state_version"),
+)
 
 
 def database_target() -> str:
@@ -665,6 +674,58 @@ def _record_checksum(record: dict[str, Any]) -> str:
     return hashlib.sha256(rendered).hexdigest()
 
 
+def _assert_overlay_event_lineage(
+    event: dict[str, Any],
+    stored: dict[str, Any],
+    *,
+    label: str,
+) -> None:
+    """Reject reuse of one Overlay branch for a different maintenance lineage."""
+
+    for event_field, stored_field in OVERLAY_EVENT_LINEAGE_FIELDS:
+        incoming = event[event_field]
+        current = stored[stored_field]
+        if event_field == "state_version":
+            matches = int(incoming) == int(current)
+        else:
+            matches = str(incoming) == str(current)
+        if not matches:
+            raise ValueError(
+                "Runtime Overlay branch lineage conflict: "
+                f"{label}.{stored_field}={current!r} "
+                f"event.{event_field}={incoming!r}"
+            )
+
+
+def _record_overlay_observation(
+    rows_by_identity: dict[
+        tuple[str, str, str, datetime],
+        tuple[str, dict[str, Any]],
+    ],
+    row: dict[str, Any],
+    observed_at: datetime,
+) -> None:
+    """Deduplicate exact retries and reject conflicting Observation identities."""
+
+    identity = (
+        str(row["simulation_session_id"]),
+        str(row["overlay_branch_id"]),
+        str(row.get("equipment_id") or row["asset_id"]),
+        observed_at,
+    )
+    checksum = str(row["observation_sha256"])
+    previous = rows_by_identity.get(identity)
+    if previous is not None:
+        if previous[0] != checksum:
+            raise ValueError(
+                "Runtime Overlay observation identity conflict: "
+                f"session={identity[0]} branch={identity[1]} "
+                f"equipment={identity[2]} observed_at={identity[3].isoformat()}"
+            )
+        return
+    rows_by_identity[identity] = (checksum, row)
+
+
 def read_complete_ticks(
     stream_root: str | Path,
     *,
@@ -800,7 +861,10 @@ def _read_overlay_event_rows(
         raise ValueError(f"Runtime Overlay branch storage is missing: {path}")
     observed_from = _parse_observed_at(event["observed_from"])
     observed_to = _parse_observed_at(event["observed_to"])
-    rows: list[dict[str, Any]] = []
+    rows_by_identity: dict[
+        tuple[str, str, str, datetime],
+        tuple[str, dict[str, Any]],
+    ] = {}
     for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw_line.strip():
             continue
@@ -834,7 +898,8 @@ def _read_overlay_event_rows(
                 raise ValueError(
                     f"Runtime Overlay observation {field} differs from availability event"
                 )
-        rows.append(row)
+        _record_overlay_observation(rows_by_identity, row, observed_at)
+    rows = [item[1] for item in rows_by_identity.values()]
     rows.sort(key=lambda item: _parse_observed_at(item["observed_at"]))
     if len(rows) != int(event["batch_rows"]):
         raise ValueError(
@@ -854,7 +919,10 @@ def _read_overlay_history_rows(
     if not path.exists():
         raise ValueError(f"Runtime Overlay branch storage is missing: {path}")
     observed_to = _parse_observed_at(event["observed_to"])
-    rows: list[dict[str, Any]] = []
+    rows_by_identity: dict[
+        tuple[str, str, str, datetime],
+        tuple[str, dict[str, Any]],
+    ] = {}
     for line_number, raw_line in enumerate(
         path.read_text(encoding="utf-8").splitlines(), start=1
     ):
@@ -882,7 +950,20 @@ def _read_overlay_history_rows(
             raise ValueError(
                 "Runtime Overlay history state_version differs from availability event"
             )
-        rows.append(row)
+        for field in (
+            "simulation_session_id",
+            "maintenance_action_id",
+            "maintenance_event_id",
+            "overlay_branch_id",
+            "history_segment_id",
+            "source_kind",
+        ):
+            if str(row[field]) != str(event[field]):
+                raise ValueError(
+                    f"Runtime Overlay history {field} differs from availability event"
+                )
+        _record_overlay_observation(rows_by_identity, row, observed_at)
+    rows = [item[1] for item in rows_by_identity.values()]
     rows.sort(key=lambda item: _parse_observed_at(item["observed_at"]))
     if len(rows) != int(event["generated_rows"]):
         raise ValueError(
@@ -1422,6 +1503,10 @@ def _consume_overlay_event(
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         with connection.transaction():
             _set_scope(connection)
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                (f"runtime-overlay:{dataset_version_id}:{event['overlay_branch_id']}",),
+            )
             existing = connection.execute(
                 """
                 SELECT source_sha256 FROM pm_runtime_overlay_events
@@ -1431,6 +1516,23 @@ def _consume_overlay_event(
             ).fetchone()
             if existing is not None and str(existing["source_sha256"]) != event_checksum:
                 raise ValueError(f"Runtime Overlay availability event identity conflict: {event_id}")
+            branch_lineage = connection.execute(
+                """
+                SELECT simulation_session_id,overlay_branch_id,history_segment_id,
+                       maintenance_action_id,maintenance_event_id,asset_id,state_version
+                FROM pm_runtime_overlay_events
+                WHERE dataset_version_id=%s AND overlay_branch_id=%s
+                ORDER BY consumed_at,event_id
+                LIMIT 1
+                """,
+                (dataset_version_id, str(event["overlay_branch_id"])),
+            ).fetchone()
+            if branch_lineage is not None:
+                _assert_overlay_event_lineage(
+                    event,
+                    dict(branch_lineage),
+                    label="stored_event",
+                )
             asset = connection.execute(
                 "SELECT asset_type FROM pm_assets WHERE dataset_version_id=%s AND asset_id=%s",
                 (dataset_version_id, str(event["equipment_id"])),
@@ -1442,7 +1544,7 @@ def _consume_overlay_event(
                 for row in rows:
                     observed_at = _parse_observed_at(row["observed_at"])
                     source_sha256 = str(row.get("observation_sha256") or _record_checksum(row))
-                    connection.execute(
+                    inserted = connection.execute(
                         """
                         INSERT INTO pm_runtime_overlay_observations(
                             organization_id,project_id,workspace_id,dataset_version_id,
@@ -1452,7 +1554,10 @@ def _consume_overlay_event(
                             observation_json,source_sha256,created_at
                         ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
                                   'maintenance_replay_overlay',%s,%s,now())
-                        ON CONFLICT (dataset_version_id,overlay_branch_id,observed_at) DO NOTHING
+                        ON CONFLICT (dataset_version_id,overlay_branch_id,observed_at)
+                        DO UPDATE SET source_sha256=pm_runtime_overlay_observations.source_sha256
+                        WHERE pm_runtime_overlay_observations.source_sha256=EXCLUDED.source_sha256
+                        RETURNING source_sha256
                         """,
                         (
                             ORGANIZATION_ID,
@@ -1473,7 +1578,14 @@ def _consume_overlay_event(
                             Jsonb(row),
                             source_sha256,
                         ),
-                    )
+                    ).fetchone()
+                    if inserted is None:
+                        raise ValueError(
+                            "Runtime Overlay observation identity conflict: "
+                            f"dataset_version_id={dataset_version_id} "
+                            f"overlay_branch_id={event['overlay_branch_id']} "
+                            f"observed_at={observed_at.isoformat()}"
+                        )
                 connection.execute(
                     """
                     INSERT INTO pm_runtime_overlay_events(
