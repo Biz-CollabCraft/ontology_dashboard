@@ -1,0 +1,122 @@
+{
+  "asset_id": "CNC-S04-L02-03",
+  "closed_loop_boundary": {
+    "available_action_ids": [
+      "approve_inspection_work_order"
+    ],
+    "forbidden_actions": [
+      "create_work_order",
+      "approve_work_order",
+      "start_maintenance_action",
+      "complete_maintenance_action",
+      "create_maintenance_event",
+      "request_replay",
+      "auto_approve"
+    ],
+    "mutation_allowed": false,
+    "note": "This packet may reference available actions for context, but it cannot execute or approve them."
+  },
+  "evidence_gaps": [
+    {
+      "field": "risk_series",
+      "owner_domain": "diagnosis",
+      "reason": "Backend Diagnosis Runtime Prediction History Query is not materialized yet"
+    },
+    {
+      "field": "maintenance_context.similar_events_30d",
+      "owner_domain": "maintenance",
+      "reason": "maintenance_context_missing_or_unresolved"
+    },
+    {
+      "field": "maintenance_context.open_work_order_exists",
+      "owner_domain": "maintenance",
+      "reason": "maintenance_context_missing_or_unresolved"
+    }
+  ],
+  "generated_at": "2026-08-01T00:00:00+09:00",
+  "history_review_items": [],
+  "inspection_targets": [
+    {
+      "association": "inspection_candidate",
+      "basis_refs": [
+        "factor.1.mechanical_power_w",
+        "factor.2.overstrain_index",
+        "factor.3.torque_nm",
+        "sensor_evidence.sensors.torque_nm"
+      ],
+      "component_id": "drive_power",
+      "component_label": "동력 전달 계통",
+      "inspection_method": "토크 상승, 출력 부하, 과부하 누적 이력과 함께 체결, 발열, 진동 상태를 확인합니다.",
+      "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+      "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+      "source_ref": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
+      "target_id": "inspection-target:RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00:1",
+      "unavailable_reason": null
+    }
+  ],
+  "limitations": [
+    "Agent Review Packet is read-only and does not mutate Recommendation, WorkOrder, MaintenanceAction, MaintenanceEvent, or Replay state.",
+    "SOP grounding supports inspection and replacement timing review drafts; it is not Product Evidence or a repair instruction."
+  ],
+  "project_id": "manufacturing-demo-project",
+  "review_draft": {
+    "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
+    "checklist": [
+      "근거 공백 항목을 먼저 확인하고 확정 판단에서 제외합니다."
+    ],
+    "evidence_gap_count": 3,
+    "history_summary": [
+      "최근 정비 이력: 최근 정비 이력 · 2026-06-15T00:00:00+09:00 · 47일 전",
+      "열린 작업요청: WO-INS-GS-004-001 · requested",
+      "최근 30일 유사 이벤트: 전용 이력 계약 미연결"
+    ],
+    "priority_label": "immediate",
+    "recommended_next_step": "조회된 이력과 SOP 근거를 대조한 뒤, 필요한 경우 관리자 승인 절차로 이관합니다.",
+    "summary": "CNC-S04-L02-03는 현재 critical 상태이며 예측 위험도는 90.8%입니다. 의심 부품 중심으로 SOP 근거, 위치 reference, 관측값을 대조해야 합니다.",
+    "title": "4구역 · 2셀 · CNC 가공기 3 담당자 검토 초안"
+  },
+  "review_priority": {
+    "level": "immediate",
+    "reasons": [
+      "risk.status_grade=critical",
+      "asset.criticality=high",
+      "operation_context.production_impact=high"
+    ],
+    "source_fields": [
+      "risk.status_grade",
+      "asset.criticality",
+      "operation_context.production_impact"
+    ]
+  },
+  "risk_summary": {
+    "failure_probability": 0.908411,
+    "prediction_horizon_hours": 24,
+    "status_grade": "critical"
+  },
+  "schema_version": "agent-review-packet-v1.0",
+  "sop_guidance": [],
+  "sop_retrieval": {
+    "mutation_allowed": false,
+    "provider": "local_sop_metadata_retriever",
+    "query": {
+      "asset_type": "cnc",
+      "component_ids": [
+        "drive_power"
+      ],
+      "criticality": "high",
+      "factor_keys": [
+        "mechanical_power_w",
+        "overstrain_index",
+        "torque_nm"
+      ],
+      "failure_mode": "power_or_overstrain_failure",
+      "production_impact": "high",
+      "risk_grade": "critical"
+    },
+    "returned_count": 0,
+    "top_k": 5
+  },
+  "source_refs": [
+    "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00"
+  ]
+}

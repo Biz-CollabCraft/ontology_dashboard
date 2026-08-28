@@ -28,6 +28,7 @@ def compose_agent_review_packet(
         for item in retrieval_results
     }
     sop_guidance = []
+    inspection_targets = []
     source_refs = []
     history_review_items = []
     limitations = [
@@ -40,6 +41,7 @@ def compose_agent_review_packet(
         source_refs.append(evidence_ref)
 
     for target in view_model.get("inspection_targets") or []:
+        inspection_targets.append(_agent_inspection_target(target))
         guidance = target.get("inspection_guidance") or {}
         sop_id = str(guidance.get("sop_id") or "")
         if not guidance or not sop_id:
@@ -114,6 +116,7 @@ def compose_agent_review_packet(
             "returned_count": int(sop_retrieval.get("returned_count") or 0),
             "mutation_allowed": False,
         },
+        "inspection_targets": inspection_targets,
         "sop_guidance": sop_guidance,
         "history_review_items": list(dict.fromkeys(history_review_items)),
         "evidence_gaps": (view_model.get("evidence") or {}).get("gaps") or [],
@@ -127,6 +130,21 @@ def compose_agent_review_packet(
             "note": "This packet may reference available actions for context, but it cannot execute or approve them.",
         },
         "limitations": list(dict.fromkeys(limitations)),
+    }
+
+
+def _agent_inspection_target(target: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "target_id": str(target.get("target_id") or ""),
+        "component_id": str(target.get("component_id") or ""),
+        "component_label": str(target.get("component_label") or ""),
+        "association": str(target.get("association") or ""),
+        "location_label": target.get("location_label"),
+        "inspection_method": target.get("inspection_method"),
+        "location_source_ref": target.get("location_source_ref"),
+        "basis_refs": [str(value) for value in target.get("basis_refs") or []],
+        "source_ref": str(target.get("source_ref") or ""),
+        "unavailable_reason": target.get("unavailable_reason"),
     }
 
 
