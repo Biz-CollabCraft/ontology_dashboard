@@ -20,12 +20,19 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     InternalModelPredictionResult,
     ModelPredictionResult,
     PredictionResultBatchPayload,
+    PredictionResultBatchSourceContext,
     PredictionResultItem,
     PredictionResultLineage,
     PredictionResultProducer,
     PredictionResultSourceRef,
+    RuntimeInputIdentity,
     RuntimeSourceContext,
+    compute_model_set_payload_sha256,
+    compute_prediction_result_batch_id,
+    compute_prediction_result_item_event_id,
     compute_prediction_result_item_sha256,
+    compute_source_context_digest,
+    compute_source_identity,
     validate_prediction_result_item_checksum,
 )
 
@@ -51,6 +58,7 @@ def to_external_result_item(
     *,
     source_kind: str,
     source_ref: Optional[PredictionResultSourceRef] = None,
+    source_context_digest: Optional[str] = None,
     lineage: Optional[PredictionResultLineage] = None,
     label_schema_version: Optional[str] = None,
     feature_schema_sha256: Optional[str] = None,
@@ -99,80 +107,87 @@ def to_external_result_item(
             retryable=False,
         )
 
-    if not source_ref.uri or not str(source_ref.uri).strip():
+    clean_uri = str(source_ref.uri).strip()
+    if not clean_uri:
         raise ModelSetContractInvalidError(
             f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has empty source_ref.uri.",
             details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
             retryable=False,
         )
 
-    clean_sha256 = (source_ref.sha256 or "").strip().lower()
-    if not clean_sha256 or len(clean_sha256) != 64 or clean_sha256 == "0" * 64 or any(c not in "0123456789abcdef" for c in clean_sha256):
+    clean_sha256 = str(source_ref.sha256).strip().lower()
+    if not clean_sha256 or len(clean_sha256) != 64 or clean_sha256 == "0" * 64:
         raise ModelSetContractInvalidError(
-            f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has invalid or zero source_ref.sha256 '{source_ref.sha256}'.",
-            details=[{"asset_id": internal.asset_id, "model_id": internal.model_id, "sha256": str(source_ref.sha256)}],
+            f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has invalid/all-zero source_ref.sha256 '{source_ref.sha256}'.",
+            details=[{"asset_id": internal.asset_id, "model_id": internal.model_id, "sha256": source_ref.sha256}],
             retryable=False,
         )
 
-    if lineage is None:
-        lineage = PredictionResultLineage()
-
-    if internal.status == "succeeded":
+    # 3. Strict output_status & score validation
+    status_lower = str(internal.status).strip().lower() if internal.status else ""
+    err_code = str(internal.error_code or "").upper()
+    if status_lower == "succeeded":
         output_status = "predicted"
-        score_val = internal.score
-        failure_reason_val = None
-    elif internal.status == "unknown":
-        output_status = "history_insufficient"
-        score_val = None
-        failure_reason_val = internal.error_message or "History requirement insufficient"
-    else:
-        err_code = (internal.error_code or "").upper()
-        if "ARTIFACT" in err_code:
-            output_status = "failed_model_artifact"
-        elif "FEATURE" in err_code:
-            output_status = "failed_feature_execution"
-        elif "SOURCE" in err_code:
-            output_status = "failed_source_unavailable"
-        else:
-            output_status = "failed_model_inference"
-        score_val = None
-        failure_reason_val = internal.error_message or "Model execution failed"
-
-    raw_manifest_sha = (
-        internal.manifest_checksum
-        or (internal.artifact_ref.sha256 if internal.artifact_ref else None)
-    )
-    if raw_manifest_sha and (raw_manifest_sha == "0" * 64 or len(raw_manifest_sha) != 64 or any(c not in "0123456789abcdef" for c in raw_manifest_sha.lower())):
-        manifest_sha = None
-    else:
-        manifest_sha = raw_manifest_sha.lower() if raw_manifest_sha else None
-
-    if not manifest_sha:
-        if output_status == "predicted" or output_status in ("warming_up", "history_insufficient", "failed_feature_execution", "failed_model_inference"):
+        if internal.score is None:
             raise ModelSetContractInvalidError(
-                f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has invalid or missing model_artifact_manifest_sha256.",
+                f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has status 'succeeded' but missing score.",
                 details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
                 retryable=False,
             )
+        try:
+            score_val = float(internal.score)
+            if not (0.0 <= score_val <= 1.0):
+                raise ValueError(f"Score {score_val} is out of bounds [0.0, 1.0].")
+        except Exception as exc:
+            raise ModelSetContractInvalidError(
+                f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has invalid score '{internal.score}': {exc}",
+                details=[{"asset_id": internal.asset_id, "model_id": internal.model_id, "score": str(internal.score)}],
+                retryable=False,
+            ) from exc
+        failure_reason_val = None
+    elif status_lower in ("warming_up", "history_insufficient") or status_lower == "unknown" or "HISTORY" in err_code:
+        output_status = "history_insufficient" if ("HISTORY" in err_code or status_lower in ("history_insufficient", "unknown")) else "warming_up"
+        score_val = None
+        failure_reason_val = internal.error_message or f"Model history requirement insufficient for '{internal.asset_id}'."
+    else:
+        # Map failure reasons
+        if "SOURCE" in err_code:
+            output_status = "failed_source_unavailable"
+        elif "ARTIFACT" in err_code:
+            output_status = "failed_model_artifact"
+        elif "FEATURE" in err_code:
+            output_status = "failed_feature_execution"
+        else:
+            output_status = "failed_model_inference"
+        score_val = None
+        failure_reason_val = internal.error_message or f"Prediction failed with code '{internal.error_code}'."
 
+    raw_manifest = internal.manifest_checksum or (internal.artifact_ref.sha256 if internal.artifact_ref else None)
+    manifest_sha = raw_manifest.lower() if (raw_manifest and raw_manifest != "0" * 64) else None
     feat_ver = internal.feature_schema_version
     hist_ver = internal.history_requirement_version
     lbl_ver = label_schema_version or internal.label_schema_version
 
     if output_status in ("predicted", "warming_up", "history_insufficient", "failed_feature_execution", "failed_model_inference"):
-        if not feat_ver or not str(feat_ver).strip():
+        if not manifest_sha:
+            raise ModelSetContractInvalidError(
+                f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' has missing model_artifact_manifest_sha256.",
+                details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
+                retryable=False,
+            )
+        if not feat_ver:
             raise ModelSetContractInvalidError(
                 f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' is missing required feature_schema_version.",
                 details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
                 retryable=False,
             )
-        if not hist_ver or not str(hist_ver).strip():
+        if not hist_ver:
             raise ModelSetContractInvalidError(
                 f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' is missing required history_requirement_version.",
                 details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
                 retryable=False,
             )
-        if not lbl_ver or not str(lbl_ver).strip():
+        if not lbl_ver:
             raise ModelSetContractInvalidError(
                 f"Prediction result for asset '{internal.asset_id}', model '{internal.model_id}' is missing required label_schema_version.",
                 details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
@@ -196,12 +211,39 @@ def to_external_result_item(
                 details=[{"asset_id": internal.asset_id, "model_id": internal.model_id}],
                 retryable=False,
             )
-    # 3. Item event ID canonical formula
-    item_key = (
-        f"prediction-result-batch-v1:{internal.asset_id}:{obs_dt.isoformat()}:"
-        f"{source_kind}:{clean_sha256}:{internal.model_id}:{internal.model_version}:{manifest_sha or ''}"
+    elif output_status in ("failed_model_artifact", "failed_source_unavailable"):
+        manifest_sha = None
+        feat_ver = None
+        hist_ver = None
+        lbl_ver = None
+        feature_schema_sha256 = None
+        history_requirement_sha256 = None
+        label_schema_sha256 = None
+
+    if lineage is None:
+        lineage = PredictionResultLineage()
+
+    ctx_digest = source_context_digest
+    if not ctx_digest:
+        ctx_digest = compute_source_identity(
+            source_checksum=clean_sha256,
+            dataset_id="unknown-dataset",
+            dataset_version="v1.0",
+            pipeline_contract_version="generator-prediction-result-v1",
+            source_contract_version="observation-source-v1",
+            source_schema_version="sensor-record-v2",
+            source_kind=source_kind,
+            lineage=lineage,
+        )
+
+    event_id = compute_prediction_result_item_event_id(
+        source_context_digest=ctx_digest,
+        asset_id=internal.asset_id,
+        observed_at=obs_dt,
+        model_id=internal.model_id,
+        model_version=internal.model_version,
+        model_artifact_manifest_sha256=manifest_sha,
     )
-    event_id = f"evt-{hashlib.sha256(item_key.encode('utf-8')).hexdigest()[:32]}"
 
     item_dict = {
         "event_id": event_id,
@@ -254,8 +296,10 @@ def to_external_result_item(
 def build_external_prediction_batch(
     *,
     internal_results: list[InternalModelPredictionResult],
-    source_context: RuntimeSourceContext,
+    source_context: PredictionResultBatchSourceContext | RuntimeInputIdentity | RuntimeSourceContext,
     active_model_set_snapshot: ActiveModelSetSnapshot,
+    dataset_id: Optional[str] = None,
+    dataset_version: Optional[str] = None,
     producer_snapshot: Optional[PredictionResultProducer] = None,
     emitted_at: Optional[datetime] = None,
     batch_id: Optional[str] = None,
@@ -268,14 +312,43 @@ def build_external_prediction_batch(
             retryable=False,
         )
 
-    # 1. Source ref & Lineage from Source Context
-    source_ref = PredictionResultSourceRef(
-        uri=source_context.source_uri,
-        sha256=source_context.source_checksum,
-    )
-    lineage = source_context.lineage
+    # 1. Normalize batch source context
+    if isinstance(source_context, PredictionResultBatchSourceContext):
+        batch_source_context = source_context
+    elif isinstance(source_context, RuntimeInputIdentity):
+        batch_source_context = PredictionResultBatchSourceContext.from_runtime_input(source_context)
+    elif isinstance(source_context, RuntimeSourceContext):
+        if not dataset_id or not dataset_version:
+            raise ModelSetContractInvalidError(
+                "Prediction Result Batch를 생성하려면 dataset_id와 dataset_version이 반드시 필요합니다.",
+                retryable=False,
+            )
+        batch_source_context = PredictionResultBatchSourceContext(
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            source_uri=source_context.source_uri,
+            source_checksum=source_context.source_checksum,
+            source_kind=source_context.source_kind,
+            source_contract_version=source_context.source_contract_version,
+            source_schema_version=source_context.source_schema_version,
+            pipeline_contract_version=source_context.pipeline_contract_version,
+            lineage=source_context.lineage,
+        )
+    else:
+        raise ModelSetContractInvalidError(
+            f"유효하지 않은 source_context 타입입니다: {type(source_context)}",
+            retryable=False,
+        )
 
-    # 2. Build external items
+    # 2. Source context digest & Source ref
+    source_context_digest = compute_source_context_digest(batch_source_context)
+    source_ref = PredictionResultSourceRef(
+        uri=batch_source_context.source_uri,
+        sha256=batch_source_context.source_checksum,
+    )
+    lineage = batch_source_context.lineage
+
+    # 3. Build external items
     external_items: list[PredictionResultItem] = []
     for internal in internal_results:
         f_sha = None
@@ -291,8 +364,9 @@ def build_external_prediction_batch(
 
         item = to_external_result_item(
             internal,
-            source_kind=source_context.source_kind,
+            source_kind=batch_source_context.source_kind,
             source_ref=source_ref,
+            source_context_digest=source_context_digest,
             lineage=lineage,
             label_schema_version=lbl_ver or internal.label_schema_version,
             feature_schema_sha256=f_sha,
@@ -301,36 +375,43 @@ def build_external_prediction_batch(
         )
         external_items.append(item)
 
-    # 3. Canonical sort & validation
+    # 4. Canonical sort & validation
     sorted_items = sort_prediction_result_items(external_items)
     validate_external_results_array(sorted_items)
 
-    # 4. Emitted datetime
+    # 5. Emitted datetime
     emitted_dt = emitted_at or datetime.now(timezone.utc)
     if emitted_dt.tzinfo is None:
         emitted_dt = emitted_dt.replace(tzinfo=timezone.utc)
 
-    # 5. Producer snapshot
+    # 6. Producer snapshot
     producer = producer_snapshot or PredictionResultProducer(
         system="systems.generator",
         runtime_version=get_generator_runtime_version(),
         outbox_id=None,
     )
 
-    # 6. Canonical batch ID if not passed
+    # 7. Canonical batch ID if not passed
     if not batch_id:
-        batch_key = (
-            f"prediction-result-batch-v1:{source_context.source_kind}:{source_context.source_checksum}:"
-            f"{active_model_set_snapshot.model_set_id}:{active_model_set_snapshot.model_set_version}:"
-            f"{','.join(it.event_id for it in sorted_items)}"
+        model_set_payload_sha256 = compute_model_set_payload_sha256(
+            model_set_id=active_model_set_snapshot.model_set_id,
+            model_set_version=active_model_set_snapshot.model_set_version,
+            models=active_model_set_snapshot.models,
         )
-        batch_id = f"batch-{hashlib.sha256(batch_key.encode('utf-8')).hexdigest()[:24]}"
+        batch_id = compute_prediction_result_batch_id(
+            source_context_digest=source_context_digest,
+            model_set_id=active_model_set_snapshot.model_set_id,
+            model_set_version=active_model_set_snapshot.model_set_version,
+            model_set_payload_sha256=model_set_payload_sha256,
+            sorted_event_ids=[it.event_id for it in sorted_items],
+        )
 
     payload = PredictionResultBatchPayload(
         contract_version="prediction-result-batch-v1",
         batch_id=batch_id,
         producer=producer,
         emitted_at=emitted_dt,
+        source_context=batch_source_context,
         model_set=active_model_set_snapshot,
         results=sorted_items,
     )
@@ -599,6 +680,8 @@ class PredictionBatchService:
             external_payload = build_external_prediction_batch(
                 internal_results=internal_items,
                 source_context=source_context,
+                dataset_id=dataset_id,
+                dataset_version=dataset_version,
                 active_model_set_snapshot=active_model_set_snapshot,
                 model_schema_map=model_schema_map,
             )

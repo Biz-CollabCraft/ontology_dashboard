@@ -15,8 +15,11 @@ from systems.generator.app.runtime_pipeline.pipeline_queue import PipelineQueue
 from systems.generator.app.runtime_pipeline.pipeline_repository import PipelineRepository
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PredictionResultBatchPayload,
+    PredictionResultLineage,
     PipelineQueueItem,
     PipelineRunState,
+    RuntimeInputIdentity,
+    RuntimeSourceContext,
 )
 from systems.generator.app.runtime_pipeline.pipeline_service import PipelineService
 from systems.generator.app.runtime_pipeline.pipeline_worker import PipelineWorker
@@ -93,18 +96,21 @@ class PipelineManager:
         self,
         *,
         job_id: str,
-        source_uri: str,
-        source_checksum: str,
-        dataset_id: str,
-        dataset_version: str,
-        pipeline_contract_version: str,
-        source_kind: str,
-        source_contract_version: str,
-        source_schema_version: str,
+        runtime_input: Optional[RuntimeInputIdentity] = None,
+        input_identity: Optional[RuntimeInputIdentity] = None,
+        source_uri: Optional[str] = None,
+        source_checksum: Optional[str] = None,
+        dataset_id: Optional[str] = None,
+        dataset_version: Optional[str] = None,
+        pipeline_contract_version: Optional[str] = None,
+        source_kind: Optional[str] = None,
+        source_contract_version: Optional[str] = None,
+        source_schema_version: Optional[str] = None,
         size_bytes: Optional[int] = None,
         lineage: Optional[Any] = None,
+        retry_of_job_id: Optional[str] = None,
     ) -> PipelineQueueItem:
-        """Enqueue new observation source file for processing."""
+        """Enqueue new observation source file using canonical RuntimeInputIdentity."""
         from systems.generator.generator_config import PATHS
         from systems.generator.app.runtime_pipeline.pipeline_exception import (
             PipelineRuntimePredictionDisabledError,
@@ -114,18 +120,33 @@ class PipelineManager:
                 "Runtime Prediction Pipeline이 비활성화되어 있어 enqueue 요청을 수락할 수 없습니다. (GENERATOR_RUNTIME_PREDICTION_ENABLED=false)",
                 retryable=False,
             )
+
+        identity = runtime_input or input_identity
+        if identity is None:
+            if not isinstance(lineage, PredictionResultLineage):
+                lineage_obj = PredictionResultLineage.model_validate(lineage or {})
+            else:
+                lineage_obj = lineage
+
+            identity = RuntimeInputIdentity(
+                dataset_id=dataset_id or "",
+                dataset_version=dataset_version or "",
+                source=RuntimeSourceContext(
+                    source_uri=source_uri or "",
+                    source_checksum=source_checksum or "",
+                    source_kind=source_kind or "live_sensor",  # type: ignore
+                    source_contract_version=source_contract_version or "",
+                    source_schema_version=source_schema_version or "",
+                    pipeline_contract_version=pipeline_contract_version or "",
+                    lineage=lineage_obj,
+                ),
+            )
+
         return self.queue.enqueue(
             job_id=job_id,
-            source_uri=source_uri,
-            source_checksum=source_checksum,
+            runtime_input=identity,
             size_bytes=size_bytes,
-            dataset_id=dataset_id,
-            dataset_version=dataset_version,
-            pipeline_contract_version=pipeline_contract_version,
-            source_kind=source_kind,
-            source_contract_version=source_contract_version,
-            source_schema_version=source_schema_version,
-            lineage=lineage,
+            retry_of_job_id=retry_of_job_id,
         )
 
     def retry_failed_job(self, job_id: str) -> PipelineQueueItem:

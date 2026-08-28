@@ -51,7 +51,7 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Generator Training Golden Vector | **Current** | `contracts/test-vectors/generator-training-v1/` (데이터 분할 결정성 및 불변 Model Artifact 검증) |
 | Model Artifact Schema | **Current** | `contracts/schemas/model-artifact.schema.json` (6개 파일 불변 아티팩트 및 manifest 무결성 정본) |
 | Runtime Overlay Observation / Available | **Current** | `contracts/schemas/runtime-overlay-observation.schema.json`, `runtime-overlay-observations-available.schema.json`, `contracts/test-vectors/runtime-overlay-output-v1/` (정비 후 CNC Overlay, digest 경로 identity, Unicode canonical checksum) |
-| Generator Runtime Pipeline Run State Schema | **Current** | `contracts/schemas/generator-pipeline-run-state.schema.json` (런타임 5대 Stage 상태 및 모델별 예측 수치·배치 전송 상태) |
+| Generator Runtime Pipeline Run State Schema | **Current** | `contracts/schemas/generator-pipeline-run-state.schema.json` (런타임 5대 Stage 상태, 정본 RuntimeSourceContext, Resumable Checkpoint 및 Model Set digest 불변식 정합화) |
 | Generator Runtime Feature Schema | **Current** | `contracts/schemas/generator-runtime-feature.schema.json` (런타임 피처 행렬 및 설비·시간 metadata) |
 | Generator Model Prediction Result Schema | **Current** | `contracts/schemas/generator-model-prediction-result.schema.json` (모델별 score 수치, score_type, 실행 상태 및 오류 정보) |
 | Prediction Result Batch Schema | **Current** | `contracts/schemas/prediction-result-batch.schema.json` (`prediction-result-batch-v1` 외부 Backend Inbox 전달 정본 배열 계약) |

@@ -18,6 +18,7 @@ def create_test_batch_payload(
         ActiveModelSetSnapshot,
         ActiveModelSnapshotItem,
         PredictionResultBatchPayload,
+        PredictionResultBatchSourceContext,
         PredictionResultItem,
         PredictionResultProducer,
         PredictionResultLineage,
@@ -102,12 +103,25 @@ def create_test_batch_payload(
         ],
     )
 
+    source_context = PredictionResultBatchSourceContext(
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v1.0",
+        source_uri="test.jsonl",
+        source_checksum="a" * 64,
+        source_kind="live_sensor",
+        source_contract_version="observation-source-v1",
+        source_schema_version="sensor-record-v2",
+        pipeline_contract_version="generator-prediction-result-v1",
+        lineage=PredictionResultLineage(),
+    )
+
     producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
     return PredictionResultBatchPayload(
         contract_version="prediction-result-batch-v1",
         batch_id=batch_id,
         producer=producer,
         emitted_at=datetime.now(timezone.utc),
+        source_context=source_context,
         model_set=model_set,
         results=[item],
     )
@@ -131,6 +145,46 @@ def create_test_runtime_source_context(
         source_schema_version="observation-source-v1",
         pipeline_contract_version="prediction-result-batch-v1",
         lineage=PredictionResultLineage(),
+    )
+
+
+def create_test_runtime_input_identity(
+    *,
+    dataset_id: str = "canonical-ai4i-v1",
+    dataset_version: str = "canonical-ai4i-physics-v3.1",
+    source_uri: str = "test.jsonl",
+    source_checksum: str = "a" * 64,
+    source_kind: str = "live_sensor",
+    source_contract_version: str = "observation-source-v1",
+    source_schema_version: str = "observation-source-v1",
+    pipeline_contract_version: str = "generator-prediction-result-v1",
+    lineage=None,
+):
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PredictionResultLineage,
+        RuntimeInputIdentity,
+        RuntimeSourceContext,
+    )
+
+    if lineage is None:
+        lineage_obj = PredictionResultLineage()
+    elif isinstance(lineage, dict):
+        lineage_obj = PredictionResultLineage.model_validate(lineage)
+    else:
+        lineage_obj = lineage
+
+    return RuntimeInputIdentity(
+        dataset_id=dataset_id,
+        dataset_version=dataset_version,
+        source=RuntimeSourceContext(
+            source_uri=source_uri,
+            source_checksum=source_checksum,
+            source_kind=source_kind,
+            source_contract_version=source_contract_version,
+            source_schema_version=source_schema_version,
+            pipeline_contract_version=pipeline_contract_version,
+            lineage=lineage_obj,
+        ),
     )
 
 
@@ -493,8 +547,7 @@ def test_multi_equipment_prediction_and_batch_building(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-multi-eq-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -643,8 +696,7 @@ def test_missing_or_blank_asset_id_fails_closed(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-blank-id-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -668,8 +720,7 @@ def test_invalid_timestamp_fails_closed(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-bad-ts-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -693,8 +744,7 @@ def test_unsupported_mapping_fails_with_501(isolated_runtime_env):
 
     item = env["queue"].enqueue(
         job_id="job-unmapped-01",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
 
     run_state = env["worker"].process_one()
@@ -715,8 +765,7 @@ def test_retry_failed_job_transaction(isolated_runtime_env):
     # 1. Enqueue and let it fail (1 row -> history insufficient)
     item = env["queue"].enqueue(
         job_id="job-fail-first",
-        source_uri=str(src_file),
-        source_checksum=sha256,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha256),
     )
     env["worker"].process_one()
 
@@ -734,8 +783,7 @@ def test_retry_failed_job_transaction(isolated_runtime_env):
     succeeded_file, s_sha = create_sample_observation_jsonl(incoming / "succ.jsonl", num_rows=5)
     s_item = env["queue"].enqueue(
         job_id="job-succ",
-        source_uri=str(succeeded_file),
-        source_checksum=s_sha,
+        runtime_input=create_test_runtime_input_identity(source_uri=str(succeeded_file), source_checksum=s_sha),
     )
     env["worker"].process_one()
 
@@ -1129,7 +1177,7 @@ def test_file_size_changed_between_enqueue_and_start_raises_file_not_stable_erro
     service: PipelineService = env["service"]
 
     src_file, initial_sha = create_sample_observation_jsonl(incoming_dir / "unstable_size_file.jsonl", num_rows=3)
-    item = queue.enqueue(job_id="job-change-size-1", source_uri=str(src_file), source_checksum=initial_sha)
+    item = queue.enqueue(job_id="job-change-size-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=initial_sha))
 
     # Modify file by appending bytes (changing size)
     with open(src_file, "a", encoding="utf-8") as f:
@@ -1162,7 +1210,7 @@ def test_file_checksum_changed_between_enqueue_and_start_raises_retryable_error(
     service: PipelineService = env["service"]
 
     src_file, initial_sha = create_sample_observation_jsonl(incoming_dir / "changing_file.jsonl", num_rows=3)
-    item = queue.enqueue(job_id="job-change-1", source_uri=str(src_file), source_checksum=initial_sha)
+    item = queue.enqueue(job_id="job-change-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=initial_sha))
 
     # Modify content preserving exact byte length (replace character '1' with '2')
     content = src_file.read_text(encoding="utf-8")
@@ -1189,12 +1237,12 @@ def test_duplicate_source_identity_enqueue_blocked(isolated_runtime_env):
     queue: PipelineQueue = env["queue"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "dup_identity.jsonl", num_rows=2)
-    item1 = queue.enqueue(job_id="job-dup-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-dup-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     assert item1.job_id == "job-dup-1"
 
     # Enqueue same file again while queued
     with pytest.raises(PipelineSourceAlreadyRegisteredError) as exc_info:
-        queue.enqueue(job_id="job-dup-2", source_uri=str(src_file), source_checksum=sha)
+        queue.enqueue(job_id="job-dup-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.code == "PIPELINE_SOURCE_ALREADY_REGISTERED"
@@ -1220,7 +1268,7 @@ def test_same_path_different_content_enqueued_as_separate_job(isolated_runtime_e
     # 1. First content
     create_sample_observation_jsonl(src_file, num_rows=2, asset_id="M14860")
     sha1 = compute_file_sha256(src_file)
-    item1 = queue.enqueue(job_id="job-reused-1", source_uri=str(src_file), source_checksum=sha1)
+    item1 = queue.enqueue(job_id="job-reused-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha1))
     queue.mark_succeeded("job-reused-1")
 
     # 2. Overwrite with new content (different rows)
@@ -1228,7 +1276,7 @@ def test_same_path_different_content_enqueued_as_separate_job(isolated_runtime_e
     sha2 = compute_file_sha256(src_file)
     assert sha1 != sha2
 
-    item2 = queue.enqueue(job_id="job-reused-2", source_uri=str(src_file), source_checksum=sha2)
+    item2 = queue.enqueue(job_id="job-reused-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha2))
     assert item2.job_id == "job-reused-2"
     assert item2.source_identity != item1.source_identity
 
@@ -1250,11 +1298,11 @@ def test_different_path_same_content_duplicate_blocked(isolated_runtime_env):
     file2.write_bytes(file1.read_bytes())
 
     sha = compute_file_sha256(file1)
-    item1 = queue.enqueue(job_id="job-copy-1", source_uri=str(file1), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-copy-1", runtime_input=create_test_runtime_input_identity(source_uri=str(file1), source_checksum=sha))
     assert item1.job_id == "job-copy-1"
 
     with pytest.raises(PipelineSourceAlreadyRegisteredError):
-        queue.enqueue(job_id="job-copy-2", source_uri=str(file2), source_checksum=sha)
+        queue.enqueue(job_id="job-copy-2", runtime_input=create_test_runtime_input_identity(source_uri=str(file2), source_checksum=sha))
 
 
 # =====================================================================
@@ -1337,7 +1385,7 @@ def test_unordered_timestamps_deterministically_sorted(isolated_runtime_env):
             f.write(json.dumps(r) + "\n")
 
     sha = compute_file_sha256(src_file)
-    item = queue.enqueue(job_id="job-sort-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-sort-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1357,7 +1405,7 @@ def test_observed_at_matches_actual_feature_row_metadata(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "observed_at_match.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-obs-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-obs-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1384,7 +1432,7 @@ def test_backend_payload_contains_no_local_absolute_paths(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_lineage.jsonl", num_rows=2, asset_id="M14860")
-    item = queue.enqueue(job_id="job-lineage-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-lineage-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     event_id = run_state.prediction_event_ids[0]
@@ -1418,7 +1466,7 @@ def test_failed_file_stability_emits_no_outbox_or_events(isolated_runtime_env):
         f.write(json.dumps({"unknown_id": "123", "value": 999}) + "\n")
 
     sha = compute_file_sha256(src_file)
-    item = queue.enqueue(job_id="job-fail-outbox-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-fail-outbox-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     with pytest.raises(PipelineMappingNotImplementedError):
         service.execute_queue_item(item)
@@ -1443,7 +1491,7 @@ def test_stage_checkpoints_recorded_and_persisted(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "chk_flow.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-chk-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-chk-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1492,7 +1540,7 @@ def test_resumption_from_stage_2_skips_preprocessing(isolated_runtime_env, monke
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-resume-prep-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-resume-prep-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1548,7 +1596,7 @@ def test_partial_model_feature_recovery(isolated_runtime_env, monkeypatch):
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-part-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-part-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1605,7 +1653,7 @@ def test_source_checksum_change_rejects_old_checkpoint(isolated_runtime_env, mon
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-mod-1", source_uri=str(src_file), source_checksum=sha1)
+    item1 = queue.enqueue(job_id="job-mod-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha1))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1616,7 +1664,7 @@ def test_source_checksum_change_rejects_old_checkpoint(isolated_runtime_env, mon
     src_file, sha2 = create_sample_observation_jsonl(incoming_dir / "mod_check.jsonl", num_rows=4, asset_id="M14860")
     monkeypatch.setattr(service.prediction_service, "predict_for_models", orig_predict)
 
-    item2 = queue.enqueue(job_id="job-mod-2", source_uri=str(src_file), source_checksum=sha2)
+    item2 = queue.enqueue(job_id="job-mod-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha2))
     run_state2 = service.execute_queue_item(item2)
 
     assert run_state2.status == "succeeded"
@@ -1636,7 +1684,7 @@ def test_safe_cleanup_removes_run_dedicated_intermediates_preserves_models(isola
     models_store: Path = env.get("models_dir", getattr(PATHS, "models_store", Path("models_store")))
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "cleanup_test.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-clean-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-clean-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1668,7 +1716,7 @@ def test_cleanup_failure_results_in_succeeded_with_cleanup_warning(isolated_runt
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_warn.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-clean-warn-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-clean-warn-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     # Monkeypatch cleanup to fail
     def failing_cleanup(*args, **kwargs):
@@ -1707,7 +1755,7 @@ def test_snapshot_matching_reuses_features_and_predictions(isolated_runtime_env,
 
     monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_delivery)
 
-    item1 = queue.enqueue(job_id="job-snap-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-snap-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineDeliveryFailedError):
         service.execute_queue_item(item1)
 
@@ -1770,7 +1818,7 @@ def test_snapshot_version_change_recalculates_predictions(isolated_runtime_env, 
 
     monkeypatch.setattr(service.prediction_batch_service, "collect", failing_collect)
 
-    item1 = queue.enqueue(job_id="job-ver-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-ver-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1840,7 +1888,7 @@ def test_snapshot_feature_schema_change_reextracts_features(isolated_runtime_env
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-sch-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-sch-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -1904,7 +1952,7 @@ def test_missing_model_snapshot_artifact_fails_closed(isolated_runtime_env, monk
 
     monkeypatch.setattr(service.prediction_service, "load_active_artifact", failing_load_artifact)
 
-    item = queue.enqueue(job_id="job-miss-art", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-miss-art", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelSnapshotArtifactMissingError):
         service.execute_queue_item(item)
 
@@ -1922,7 +1970,7 @@ def test_model_id_with_underscore_correctly_identified(isolated_runtime_env):
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "underscore_model.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-under-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-under-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     run_state = service.execute_queue_item(item)
 
     assert run_state.status == "succeeded"
@@ -1959,7 +2007,7 @@ def test_checkpoint_4_stages_batches_and_resumes_without_recalculation(isolated_
 
     monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_outbox)
 
-    item1 = queue.enqueue(job_id="job-stage4-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-stage4-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineDeliveryFailedError):
         service.execute_queue_item(item1)
 
@@ -2035,7 +2083,7 @@ def test_partial_multi_equipment_outbox_resumption_is_idempotent(isolated_runtim
 
     monkeypatch.setattr(service.prediction_delivery_service, "register_idempotent_outbox_record", failing_second_register)
 
-    item1 = queue.enqueue(job_id="job-multi-1", source_uri=str(src_path), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-multi-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_path), source_checksum=sha))
     with pytest.raises(PipelineDeliveryFailedError):
         service.execute_queue_item(item1)
 
@@ -2128,7 +2176,7 @@ def test_invalidated_checkpoint_intermediates_marked_debug_only(isolated_runtime
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-inval-1", source_uri=str(src_file), source_checksum=sha1)
+    item1 = queue.enqueue(job_id="job-inval-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha1))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -2176,7 +2224,7 @@ def test_cleanup_warning_does_not_invalidate_published_outbox(isolated_runtime_e
     repo: PipelineRepository = env["repository"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "clean_warn_track.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-clean-track-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-clean-track-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     def failing_cleanup(*args, **kwargs):
         return False, ["data/preprocessed/pipeline_datasets/run-1/obs.csv"], "Permission denied on file deletion"
@@ -2249,7 +2297,7 @@ def test_real_manifest_checksum_recorded_in_prediction_result(isolated_runtime_e
     service: PipelineService = env["service"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "real_manifest.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-real-manifest-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-real-manifest-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -2291,7 +2339,7 @@ def test_required_model_failure_blocks_batch_publishing(isolated_runtime_env, mo
 
     monkeypatch.setattr(service.prediction_service, "load_active_artifact", failing_load)
 
-    item = queue.enqueue(job_id="job-req-fail-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-req-fail-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises((PipelineModelPredictionFailedError, PipelineModelArtifactInvalidError)):
         service.execute_queue_item(item)
 
@@ -2313,7 +2361,7 @@ def test_generator_runtime_prediction_disabled_by_default(isolated_runtime_env, 
     service: PipelineService = env["service"]
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "disabled_test.jsonl", num_rows=2, asset_id="M14860")
-    item = queue.enqueue(job_id="job-disabled-1", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-disabled-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     with pytest.raises(PipelineRuntimePredictionDisabledError):
         service.execute_queue_item(item)
@@ -2401,7 +2449,7 @@ def test_single_model_active_model_set_execution(isolated_runtime_env, monkeypat
     active_service.update_active_model_set(active_set, validate_artifacts=False)
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "single_lgb.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-single-lgb", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-single-lgb", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -2438,7 +2486,7 @@ def test_partial_model_active_model_set_execution(isolated_runtime_env, monkeypa
     active_service.update_active_model_set(active_set, validate_artifacts=False)
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "partial_2.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-partial-2", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-partial-2", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -2737,7 +2785,7 @@ def test_snapshot_pinning_and_model_set_change_invalidates_checkpoint(isolated_r
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-pin-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-pin-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -2815,7 +2863,7 @@ def test_staged_batch_payload_matches_official_schema(isolated_runtime_env, monk
     active_service.update_active_model_set(active_set, validate_artifacts=False)
 
     src_file, sha = create_sample_observation_jsonl(incoming_dir / "schema_val.jsonl", num_rows=3, asset_id="M14860")
-    item = queue.enqueue(job_id="job-schema-val", source_uri=str(src_file), source_checksum=sha)
+    item = queue.enqueue(job_id="job-schema-val", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
 
     run_state = service.execute_queue_item(item)
     assert run_state.status == "succeeded"
@@ -3031,7 +3079,7 @@ def test_model_set_membership_change_not_implemented(isolated_runtime_env, monke
 
     monkeypatch.setattr(service.prediction_service, "predict_for_models", failing_predict)
 
-    item1 = queue.enqueue(job_id="job-mem-1", source_uri=str(src_file), source_checksum=sha)
+    item1 = queue.enqueue(job_id="job-mem-1", runtime_input=create_test_runtime_input_identity(source_uri=str(src_file), source_checksum=sha))
     with pytest.raises(PipelineModelPredictionFailedError):
         service.execute_queue_item(item1)
 
@@ -3080,7 +3128,7 @@ def test_disabled_api_testclient_503_and_real_status_counts(isolated_runtime_env
 
     # Enqueue 1 item into DB while enabled
     monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
-    queue.enqueue(job_id="job-dis-counts", source_uri="data/test.jsonl", source_checksum="a"*64)
+    queue.enqueue(job_id="job-dis-counts", runtime_input=create_test_runtime_input_identity(source_uri="data/test.jsonl", source_checksum="a"*64))
 
     # Disable runtime
     monkeypatch.setattr(PATHS, "runtime_prediction_enabled", False)
@@ -3637,6 +3685,7 @@ def test_prediction_result_batch_array_serialization_and_validation():
     from systems.generator.generator_config import PROJECT_ROOT
     from systems.generator.app.runtime_pipeline.pipeline_schema import (
         PredictionResultBatchPayload,
+        PredictionResultBatchSourceContext,
         PredictionResultItem,
         PredictionResultProducer,
         PredictionResultLineage,
@@ -3709,6 +3758,17 @@ def test_prediction_result_batch_array_serialization_and_validation():
         batch_id="batch-001",
         producer=producer,
         emitted_at=datetime.fromisoformat("2026-08-27T00:00:05+00:00"),
+        source_context=PredictionResultBatchSourceContext(
+            dataset_id="canonical-ai4i-v1",
+            dataset_version="v1.0",
+            source_uri="data/incoming/protocol.jsonl",
+            source_checksum="a" * 64,
+            source_kind="live_sensor",
+            source_contract_version="observation-source-v1",
+            source_schema_version="sensor-record-v2",
+            pipeline_contract_version="generator-prediction-result-v1",
+            lineage=PredictionResultLineage(),
+        ),
         model_set=create_test_active_model_set_snapshot(
             model_set_id="model-set-v1",
             model_set_version="1.0.0",
@@ -4456,6 +4516,24 @@ def _make_sample_batch_dict(**item_overrides):
             "outbox_id": None,
         },
         "emitted_at": "2026-08-27T00:00:05Z",
+        "source_context": {
+            "dataset_id": "canonical-ai4i-v1",
+            "dataset_version": "v1.0",
+            "source_uri": "data/incoming/protocol.jsonl",
+            "source_checksum": "a" * 64,
+            "source_kind": base_item.get("source_kind", "live_sensor"),
+            "source_contract_version": "observation-source-v1",
+            "source_schema_version": "sensor-record-v2",
+            "pipeline_contract_version": "generator-prediction-result-v1",
+            "lineage": base_item.get("lineage", {
+                "simulation_session_id": None,
+                "overlay_branch_id": None,
+                "history_segment_id": None,
+                "maintenance_event_id": None,
+                "maintenance_action_id": None,
+                "state_version": None,
+            }),
+        },
         "model_set": {
             "model_set_id": "model-set-v1",
             "model_set_version": "1.0.0",
@@ -4885,6 +4963,7 @@ def test_batch_id_and_outbox_id_independent_of_item_ordering():
         ActiveModelSetSnapshot,
         ActiveModelSnapshotItem,
         PredictionResultBatchPayload,
+        PredictionResultBatchSourceContext,
         PredictionResultItem,
         PredictionResultLineage,
         PredictionResultProducer,
@@ -4953,11 +5032,23 @@ def test_batch_id_and_outbox_id_independent_of_item_ordering():
     )
 
     producer = PredictionResultProducer(system="systems.generator", runtime_version="1.0.0", outbox_id=None)
+    source_ctx = PredictionResultBatchSourceContext(
+        dataset_id="canonical-ai4i-v1",
+        dataset_version="v1.0",
+        source_uri="data/test.jsonl",
+        source_checksum="a" * 64,
+        source_kind="live_sensor",
+        source_contract_version="observation-source-v1",
+        source_schema_version="sensor-record-v2",
+        pipeline_contract_version="generator-prediction-result-v1",
+        lineage=PredictionResultLineage(),
+    )
     batch_order_1 = PredictionResultBatchPayload(
         contract_version="prediction-result-batch-v1",
         batch_id="batch-001",
         producer=producer,
         emitted_at=dt,
+        source_context=source_ctx,
         model_set=model_set,
         results=[item1, item2],
     )
@@ -4966,6 +5057,7 @@ def test_batch_id_and_outbox_id_independent_of_item_ordering():
         batch_id="batch-001",
         producer=producer,
         emitted_at=dt,
+        source_context=source_ctx,
         model_set=model_set,
         results=[item2, item1],
     )
@@ -5167,15 +5259,17 @@ def test_queue_retry_preserves_overlay_source_context(tmp_path):
     )
     item = queue.enqueue(
         job_id="overlay-job-1",
-        source_uri="overlay/snapshot.jsonl",
-        source_checksum="a" * 64,
-        dataset_id="overlay-dataset",
-        dataset_version="v1",
-        pipeline_contract_version="prediction-result-batch-v1",
-        source_kind="maintenance_replay_overlay",
-        source_contract_version="runtime-overlay-observation-v1",
-        source_schema_version="runtime-overlay-observation-v1",
-        lineage=lineage,
+        runtime_input=create_test_runtime_input_identity(
+            source_uri="overlay/snapshot.jsonl",
+            source_checksum="a" * 64,
+            dataset_id="overlay-dataset",
+            dataset_version="v1",
+            pipeline_contract_version="prediction-result-batch-v1",
+            source_kind="maintenance_replay_overlay",
+            source_contract_version="runtime-overlay-observation-v1",
+            source_schema_version="runtime-overlay-observation-v1",
+            lineage=lineage,
+        ),
     )
     queue.mark_failed(item.job_id, error_code="PIPELINE_RETRYABLE_TEST")
 

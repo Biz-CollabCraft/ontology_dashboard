@@ -9,6 +9,7 @@
     "batch_id",
     "producer",
     "emitted_at",
+    "source_context",
     "model_set",
     "results"
   ],
@@ -48,6 +49,162 @@
     "emitted_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "source_context": {
+      "type": "object",
+      "required": [
+        "dataset_id",
+        "dataset_version",
+        "source_uri",
+        "source_checksum",
+        "source_kind",
+        "source_contract_version",
+        "source_schema_version",
+        "pipeline_contract_version",
+        "lineage"
+      ],
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_checksum": {
+          "type": "string",
+          "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+        },
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "live_sensor",
+            "simulation_overlay",
+            "maintenance_replay_overlay"
+          ]
+        },
+        "source_contract_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_schema_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pipeline_contract_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lineage": {
+          "type": "object",
+          "required": [
+            "simulation_session_id",
+            "overlay_branch_id",
+            "history_segment_id",
+            "maintenance_event_id",
+            "maintenance_action_id",
+            "state_version"
+          ],
+          "properties": {
+            "simulation_session_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "overlay_branch_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "history_segment_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "maintenance_event_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "maintenance_action_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "state_version": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source_kind": {
+                "const": "maintenance_replay_overlay"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "lineage": {
+                "type": "object",
+                "required": [
+                  "simulation_session_id",
+                  "overlay_branch_id",
+                  "history_segment_id",
+                  "maintenance_event_id",
+                  "maintenance_action_id",
+                  "state_version"
+                ],
+                "properties": {
+                  "simulation_session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "overlay_branch_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "history_segment_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maintenance_event_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maintenance_action_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state_version": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
     },
     "model_set": {
       "type": "object",
@@ -119,6 +276,9 @@
           "feature_schema_version",
           "history_requirement_version",
           "label_schema_version",
+          "feature_schema_sha256",
+          "history_requirement_sha256",
+          "label_schema_sha256",
           "lineage",
           "failure_reason"
         ],
@@ -426,6 +586,27 @@
                 "failure_reason": {
                   "type": "string",
                   "minLength": 1
+                },
+                "model_artifact_manifest_sha256": {
+                  "type": "null"
+                },
+                "feature_schema_version": {
+                  "type": "null"
+                },
+                "history_requirement_version": {
+                  "type": "null"
+                },
+                "label_schema_version": {
+                  "type": "null"
+                },
+                "feature_schema_sha256": {
+                  "type": "null"
+                },
+                "history_requirement_sha256": {
+                  "type": "null"
+                },
+                "label_schema_sha256": {
+                  "type": "null"
                 }
               }
             }

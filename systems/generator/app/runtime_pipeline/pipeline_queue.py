@@ -23,6 +23,7 @@ from systems.generator.app.runtime_pipeline.pipeline_exception import (
 from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PipelineQueueItem,
     PredictionResultLineage,
+    RuntimeInputIdentity,
     RuntimeSourceContext,
     compute_source_identity,
     now_utc_iso,
@@ -142,47 +143,76 @@ class PipelineQueue:
 
     def _row_to_item(self, r: sqlite3.Row, conn: Optional[sqlite3.Connection] = None) -> PipelineQueueItem:
         job_id = r["job_id"]
-        try:
-            raw_lineage = r["lineage_json"] if "lineage_json" in r.keys() else None
-            if raw_lineage is None:
-                raise ValueError("lineage_json is missing")
-            lineage_dict = json.loads(raw_lineage) if isinstance(raw_lineage, str) else (raw_lineage or {})
-            lineage = PredictionResultLineage.model_validate(lineage_dict)
-            source_kind = r["source_kind"] if "source_kind" in r.keys() else None
-            source_contract_version = r["source_contract_version"] if "source_contract_version" in r.keys() else None
-            source_schema_version = r["source_schema_version"] if "source_schema_version" in r.keys() else None
-            pipeline_contract_version = r["pipeline_contract_version"] if "pipeline_contract_version" in r.keys() else None
-            if not all((source_kind, source_contract_version, source_schema_version, pipeline_contract_version)):
-                raise ValueError("canonical source context columns are missing")
+        col_keys = r.keys()
 
-            # Validate complete source context
-            RuntimeSourceContext(
-                source_uri=r["source_uri"],
-                source_checksum=r["source_checksum"],
-                source_kind=source_kind,
-                source_contract_version=source_contract_version,
-                source_schema_version=source_schema_version,
-                pipeline_contract_version=pipeline_contract_version,
-                lineage=lineage,
+        raw_lineage = r["lineage_json"] if "lineage_json" in col_keys else None
+        source_kind = r["source_kind"] if "source_kind" in col_keys else None
+        source_contract_version = r["source_contract_version"] if "source_contract_version" in col_keys else None
+        source_schema_version = r["source_schema_version"] if "source_schema_version" in col_keys else None
+        pipeline_contract_version = r["pipeline_contract_version"] if "pipeline_contract_version" in col_keys else None
+        dataset_id = r["dataset_id"] if "dataset_id" in col_keys else None
+        dataset_version = r["dataset_version"] if "dataset_version" in col_keys else None
+
+        if (
+            raw_lineage is None
+            or source_kind is None
+            or source_contract_version is None
+            or source_schema_version is None
+            or pipeline_contract_version is None
+            or dataset_id is None
+            or dataset_version is None
+        ):
+            if conn is not None:
+                conn.execute(
+                    "UPDATE queue_items SET status = 'dead_letter', error_code = 'PIPELINE_SOURCE_CONTEXT_MIGRATION_REQUIRED', updated_at = ? WHERE job_id = ?",
+                    (now_utc_iso(), job_id),
+                )
+                conn.commit()
+            raise PipelineQueueItemInvalidError(
+                f"Queue item '{job_id}' is a legacy row lacking mandatory source context columns.",
+                code="PIPELINE_SOURCE_CONTEXT_MIGRATION_REQUIRED",
+                details=[{"job_id": job_id, "error": "missing_context_columns"}],
+                retryable=False,
+            )
+
+        try:
+            lineage_dict = json.loads(raw_lineage) if isinstance(raw_lineage, str) else raw_lineage
+            if not isinstance(lineage_dict, dict):
+                raise ValueError("lineage_json must decode to a JSON object")
+            lineage = PredictionResultLineage.model_validate(lineage_dict)
+
+            # Validate complete canonical RuntimeInputIdentity
+            runtime_input = RuntimeInputIdentity(
+                dataset_id=dataset_id,
+                dataset_version=dataset_version,
+                source=RuntimeSourceContext(
+                    source_uri=r["source_uri"],
+                    source_checksum=r["source_checksum"],
+                    source_kind=source_kind,
+                    source_contract_version=source_contract_version,
+                    source_schema_version=source_schema_version,
+                    pipeline_contract_version=pipeline_contract_version,
+                    lineage=lineage,
+                ),
             )
 
             return PipelineQueueItem(
                 job_id=job_id,
                 source_uri=r["source_uri"],
                 source_checksum=r["source_checksum"],
-                source_identity=r["source_identity"] if "source_identity" in r.keys() else None,
-                size_bytes=r["size_bytes"] if "size_bytes" in r.keys() else None,
-                dataset_id=r["dataset_id"],
-                dataset_version=r["dataset_version"],
-                pipeline_contract_version=pipeline_contract_version,
-                source_kind=source_kind,
-                source_contract_version=source_contract_version,
-                source_schema_version=source_schema_version,
-                lineage=lineage,
+                source_identity=r["source_identity"] if "source_identity" in col_keys else None,
+                size_bytes=r["size_bytes"] if "size_bytes" in col_keys else None,
+                dataset_id=runtime_input.dataset_id,
+                dataset_version=runtime_input.dataset_version,
+                pipeline_contract_version=runtime_input.source.pipeline_contract_version,
+                source_kind=runtime_input.source.source_kind,
+                source_contract_version=runtime_input.source.source_contract_version,
+                source_schema_version=runtime_input.source.source_schema_version,
+                lineage=runtime_input.source.lineage,
                 detected_at=r["detected_at"],
                 sequence=r["sequence"],
                 attempt=r["attempt"],
-                retry_of_job_id=r["retry_of_job_id"] if "retry_of_job_id" in r.keys() else None,
+                retry_of_job_id=r["retry_of_job_id"] if "retry_of_job_id" in col_keys else None,
                 status=r["status"],
                 error_code=r["error_code"],
             )
@@ -196,6 +226,7 @@ class PipelineQueue:
                 conn.commit()
             raise PipelineQueueItemInvalidError(
                 f"Queue item '{job_id}' source context corrupted: {exc}",
+                code="PIPELINE_SOURCE_CONTEXT_CORRUPTED",
                 details=[{"job_id": job_id, "error": str(exc)}],
                 retryable=False,
             ) from exc
@@ -204,53 +235,38 @@ class PipelineQueue:
         self,
         *,
         job_id: str,
-        source_uri: str,
-        source_checksum: str,
+        runtime_input: RuntimeInputIdentity,
         size_bytes: Optional[int] = None,
-        dataset_id: str = "canonical-ai4i-v1",
-        dataset_version: str = "canonical-ai4i-physics-v3.1",
-        pipeline_contract_version: str = "generator-prediction-result-v1",
-        source_kind: str = "live_sensor",
-        source_contract_version: str = "observation-source-v1",
-        source_schema_version: str = "observation-source-v1",
-        lineage: PredictionResultLineage | dict[str, Any] | None = None,
         retry_of_job_id: Optional[str] = None,
     ) -> PipelineQueueItem:
-        """Enqueue a new completed observation source file item with source identity deduplication and source context."""
-        clean_job_id = job_id.strip()
-        clean_uri = self.normalize_uri(source_uri)
-        clean_checksum = source_checksum.strip()
-
-        if not clean_job_id or not clean_uri or not clean_checksum:
+        """Enqueue a new completed observation source file item using canonical RuntimeInputIdentity without fallback defaults."""
+        clean_job_id = job_id.strip() if isinstance(job_id, str) else ""
+        if not clean_job_id:
             raise PipelineQueueItemInvalidError(
-                "job_id, source_uri, and source_checksum must not be empty",
-                details=[{"job_id": job_id, "source_uri": source_uri}],
+                "job_id must not be empty",
+                details=[{"job_id": job_id}],
+                retryable=False,
             )
+
+        if not isinstance(runtime_input, RuntimeInputIdentity):
+            try:
+                runtime_input = RuntimeInputIdentity.model_validate(runtime_input)
+            except Exception as exc:
+                raise PipelineQueueItemInvalidError(
+                    f"Invalid runtime_input: {exc}",
+                    details=[{"error": str(exc)}],
+                    retryable=False,
+                ) from exc
+
+        clean_uri = self.normalize_uri(runtime_input.source.source_uri)
+        clean_checksum = runtime_input.source.source_checksum.strip()
 
         if is_temporary_file(clean_uri):
             raise PipelineQueueItemInvalidError(
                 f"임시 파일('{clean_uri}')은 큐 등록 대상에서 제외됩니다.",
                 details=[{"source_uri": clean_uri}],
+                retryable=False,
             )
-
-        # Validate lineage model
-        if isinstance(lineage, dict):
-            lineage_obj = PredictionResultLineage.model_validate(lineage)
-        elif isinstance(lineage, PredictionResultLineage):
-            lineage_obj = lineage
-        else:
-            lineage_obj = PredictionResultLineage()
-
-        # Validate source context semantics
-        RuntimeSourceContext(
-            source_uri=clean_uri,
-            source_checksum=clean_checksum,
-            source_kind=source_kind,
-            source_contract_version=source_contract_version,
-            source_schema_version=source_schema_version,
-            pipeline_contract_version=pipeline_contract_version,
-            lineage=lineage_obj,
-        )
 
         # Infer size_bytes if not passed and file exists locally
         computed_size = size_bytes
@@ -264,17 +280,17 @@ class PipelineQueue:
 
         source_identity = compute_source_identity(
             source_checksum=clean_checksum,
-            dataset_id=dataset_id,
-            dataset_version=dataset_version,
-            pipeline_contract_version=pipeline_contract_version,
-            source_contract_version=source_contract_version,
-            source_schema_version=source_schema_version,
-            source_kind=source_kind,
-            lineage=lineage_obj,
+            dataset_id=runtime_input.dataset_id,
+            dataset_version=runtime_input.dataset_version,
+            pipeline_contract_version=runtime_input.source.pipeline_contract_version,
+            source_contract_version=runtime_input.source.source_contract_version,
+            source_schema_version=runtime_input.source.source_schema_version,
+            source_kind=runtime_input.source.source_kind,
+            lineage=runtime_input.source.lineage,
         )
         dedup_key = f"{clean_uri}:{clean_checksum}"
         now = now_utc_iso()
-        lineage_json = json.dumps(lineage_obj.model_dump(mode="json"), ensure_ascii=False)
+        lineage_json = json.dumps(runtime_input.source.lineage.model_dump(mode="json"), ensure_ascii=False)
 
         with self._lock:
             try:
@@ -313,13 +329,13 @@ class PipelineQueue:
                         source_checksum=clean_checksum,
                         source_identity=source_identity,
                         size_bytes=computed_size,
-                        dataset_id=dataset_id,
-                        dataset_version=dataset_version,
-                        pipeline_contract_version=pipeline_contract_version,
-                        source_kind=source_kind,
-                        source_contract_version=source_contract_version,
-                        source_schema_version=source_schema_version,
-                        lineage=lineage_obj,
+                        dataset_id=runtime_input.dataset_id,
+                        dataset_version=runtime_input.dataset_version,
+                        pipeline_contract_version=runtime_input.source.pipeline_contract_version,
+                        source_kind=runtime_input.source.source_kind,
+                        source_contract_version=runtime_input.source.source_contract_version,
+                        source_schema_version=runtime_input.source.source_schema_version,
+                        lineage=runtime_input.source.lineage,
                         detected_at=now,
                         sequence=next_seq,
                         attempt=1,
@@ -355,7 +371,7 @@ class PipelineQueue:
                             item.attempt,
                             item.retry_of_job_id,
                             item.status,
-                            item.error_code,
+                            None,
                             now,
                             now,
                         ),

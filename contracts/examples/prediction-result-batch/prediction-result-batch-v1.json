@@ -7,6 +7,24 @@
     "outbox_id": "outbox-001"
   },
   "emitted_at": "2026-08-27T00:00:00Z",
+  "source_context": {
+    "dataset_id": "canonical-ai4i-v1",
+    "dataset_version": "v1.0",
+    "source_uri": "data/incoming/protocol_sample_01.jsonl",
+    "source_checksum": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "source_kind": "live_sensor",
+    "source_contract_version": "observation-source-v1",
+    "source_schema_version": "sensor-record-v2",
+    "pipeline_contract_version": "generator-prediction-result-v1",
+    "lineage": {
+      "simulation_session_id": null,
+      "overlay_branch_id": null,
+      "history_segment_id": null,
+      "maintenance_event_id": null,
+      "maintenance_action_id": null,
+      "state_version": null
+    }
+  },
   "model_set": {
     "model_set_id": "model-set-v1",
     "model_set_version": "1.0.0",

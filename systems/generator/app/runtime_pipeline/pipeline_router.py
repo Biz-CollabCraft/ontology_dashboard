@@ -12,6 +12,8 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PipelineQueueItem,
     PipelineRunState,
     PredictionResultLineage,
+    RuntimeInputIdentity,
+    RuntimeSourceContext,
 )
 
 from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineBaseError
@@ -49,11 +51,11 @@ class EnqueueRequest(BaseModel):
             lin = self.lineage
             if (
                 not lin
-                or not lin.simulation_session_id
-                or not lin.overlay_branch_id
-                or not lin.history_segment_id
-                or not lin.maintenance_event_id
-                or not lin.maintenance_action_id
+                or not (lin.simulation_session_id and str(lin.simulation_session_id).strip())
+                or not (lin.overlay_branch_id and str(lin.overlay_branch_id).strip())
+                or not (lin.history_segment_id and str(lin.history_segment_id).strip())
+                or not (lin.maintenance_event_id and str(lin.maintenance_event_id).strip())
+                or not (lin.maintenance_action_id and str(lin.maintenance_action_id).strip())
                 or lin.state_version is None
                 or lin.state_version < 1
             ):
@@ -63,6 +65,22 @@ class EnqueueRequest(BaseModel):
                     "maintenance_action_id, state_version >= 1) are required."
                 )
         return self
+
+    def to_input_identity(self) -> RuntimeInputIdentity:
+        """Convert validated EnqueueRequest to canonical RuntimeInputIdentity."""
+        return RuntimeInputIdentity(
+            dataset_id=self.dataset_id,
+            dataset_version=self.dataset_version,
+            source=RuntimeSourceContext(
+                source_uri=self.source_uri,
+                source_checksum=self.source_checksum,
+                source_kind=self.source_kind,
+                source_contract_version=self.source_contract_version,
+                source_schema_version=self.source_schema_version,
+                pipeline_contract_version=self.pipeline_contract_version,
+                lineage=self.lineage,
+            ),
+        )
 
 
 def get_manager() -> PipelineManager:
@@ -97,18 +115,11 @@ def get_pipeline_queue(status: Optional[str] = Query(None, description="Filter b
 def enqueue_observation_source(req: EnqueueRequest) -> PipelineQueueItem:
     """Internal evaluation endpoint to enqueue completed observation file into FIFO queue."""
     try:
+        input_identity = req.to_input_identity()
         return get_manager().enqueue(
             job_id=req.job_id,
-            source_uri=req.source_uri,
-            source_checksum=req.source_checksum,
+            input_identity=input_identity,
             size_bytes=req.size_bytes,
-            dataset_id=req.dataset_id,
-            dataset_version=req.dataset_version,
-            pipeline_contract_version=req.pipeline_contract_version,
-            source_kind=req.source_kind,
-            source_contract_version=req.source_contract_version,
-            source_schema_version=req.source_schema_version,
-            lineage=req.lineage,
         )
     except PipelineBaseError:
         raise

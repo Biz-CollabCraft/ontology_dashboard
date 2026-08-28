@@ -1,7 +1,4 @@
-"""State transition manager for individual Pipeline runs."""
-
-from __future__ import annotations
-
+import json
 import logging
 from typing import Any, Literal, Optional
 
@@ -14,6 +11,7 @@ from systems.generator.app.runtime_pipeline.pipeline_schema import (
     PipelineCheckpoint,
     PipelineError,
     PipelineRunState,
+    RuntimeInputIdentity,
     StageState,
     now_utc_iso,
 )
@@ -165,6 +163,11 @@ class PipelineStateManager:
         self,
         *,
         stage_name: str,
+        source_identity: str,
+        runtime_input: RuntimeInputIdentity,
+        model_set_id: str,
+        model_set_version: str,
+        model_set_payload_sha256: str,
         next_stage: Optional[str] = None,
         stage_outputs: Optional[list[ArtifactReference]] = None,
         model_stage_outputs: Optional[dict[str, dict[str, Any]]] = None,
@@ -172,18 +175,24 @@ class PipelineStateManager:
         batch_manifest_ref: Optional[ArtifactReference] = None,
         model_snapshot: Optional[dict[str, Any]] = None,
         snapshot_validation_status: Optional[Literal["valid", "incompatible", "partially_invalid", "unvalidated"]] = "valid",
-        source_identity: str = "",
-        dataset_id: str = "canonical-ai4i-v1",
-        dataset_version: str = "canonical-ai4i-physics-v3.1",
-        pipeline_contract_version: str = "generator-prediction-result-v1",
-        source_kind: Optional[str] = None,
-        source_contract_version: Optional[str] = None,
-        source_schema_version: Optional[str] = None,
-        lineage_json: Optional[str] = None,
-        source_context: Optional[Any] = None,
         status: Literal["resumable", "debug_only", "cleanup_pending", "completed", "invalidated"] = "resumable",
     ) -> PipelineCheckpoint:
-        """Atomically construct and bind a verified stage checkpoint."""
+        """Atomically construct and bind a verified stage checkpoint with canonical RuntimeInputIdentity & Model Set snapshots."""
+        if not source_identity or not str(source_identity).strip():
+            raise ValueError("source_identity must not be empty when recording a checkpoint")
+
+        if not isinstance(runtime_input, RuntimeInputIdentity):
+            raise TypeError(f"runtime_input must be an instance of RuntimeInputIdentity, got {type(runtime_input)}")
+
+        if not model_set_id or not str(model_set_id).strip():
+            raise ValueError("model_set_id must not be empty when recording a checkpoint")
+
+        if not model_set_version or not str(model_set_version).strip():
+            raise ValueError("model_set_version must not be empty when recording a checkpoint")
+
+        if not model_set_payload_sha256 or not str(model_set_payload_sha256).strip():
+            raise ValueError("model_set_payload_sha256 must not be empty when recording a checkpoint")
+
         now = now_utc_iso()
         existing_outputs = dict(self.state.checkpoint.stage_outputs) if self.state.checkpoint else {}
         if stage_outputs is not None:
@@ -203,23 +212,27 @@ class PipelineStateManager:
             existing_snapshot.update(model_snapshot)
 
         b_manifest = batch_manifest_ref or (self.state.checkpoint.batch_manifest_ref if self.state.checkpoint else None)
+        lineage_json_str = json.dumps(runtime_input.source.lineage.model_dump(mode="json"), ensure_ascii=False)
 
         chk = PipelineCheckpoint(
             checkpoint_version="generator-runtime-checkpoint-v1",
             run_id=self.state.run_id,
             job_id=self.state.job_id,
-            source_identity=source_identity or (self.state.checkpoint.source_identity if self.state.checkpoint else ""),
-            source_uri=self.state.source_ref.uri,
-            source_checksum=self.state.source_ref.sha256,
+            source_identity=source_identity,
+            source_uri=runtime_input.source.source_uri,
+            source_checksum=runtime_input.source.source_checksum,
             source_size_bytes=self.state.source_ref.size_bytes,
-            dataset_id=dataset_id,
-            dataset_version=dataset_version,
-            pipeline_contract_version=pipeline_contract_version,
-            source_kind=source_kind or (self.state.checkpoint.source_kind if self.state.checkpoint else self.state.source_context.source_kind),
-            source_contract_version=source_contract_version or (self.state.checkpoint.source_contract_version if self.state.checkpoint else None),
-            source_schema_version=source_schema_version or (self.state.checkpoint.source_schema_version if self.state.checkpoint else None),
-            lineage_json=lineage_json or (self.state.checkpoint.lineage_json if self.state.checkpoint else None),
-            source_context=source_context or (self.state.checkpoint.source_context if self.state.checkpoint else self.state.source_context),
+            dataset_id=runtime_input.dataset_id,
+            dataset_version=runtime_input.dataset_version,
+            model_set_id=model_set_id,
+            model_set_version=model_set_version,
+            model_set_payload_sha256=model_set_payload_sha256,
+            pipeline_contract_version=runtime_input.source.pipeline_contract_version,
+            source_kind=runtime_input.source.source_kind,
+            source_contract_version=runtime_input.source.source_contract_version,
+            source_schema_version=runtime_input.source.source_schema_version,
+            lineage_json=lineage_json_str,
+            source_context=runtime_input.source,
             last_completed_stage=stage_name,  # type: ignore
             next_stage=next_stage,  # type: ignore
             status=status,
