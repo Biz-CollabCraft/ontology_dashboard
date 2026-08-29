@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/maintenance-cost-scenario.schema.json",
+  "$defs": {
+    "nonEmptyId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "moneyRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "low_minor": {"type": "integer", "minimum": 0},
+        "base_minor": {"type": "integer", "minimum": 0},
+        "high_minor": {"type": "integer", "minimum": 0}
+      },
+      "required": ["low_minor", "base_minor", "high_minor"]
+    },
+    "durationRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "low_minutes": {"type": "integer", "minimum": 0},
+        "base_minutes": {"type": "integer", "minimum": 0},
+        "high_minutes": {"type": "integer", "minimum": 0}
+      },
+      "required": ["low_minutes", "base_minutes", "high_minutes"]
+    },
+    "nullableMoneyRange": {
+      "anyOf": [
+        {"$ref": "#/$defs/moneyRange"},
+        {"type": "null"}
+      ]
+    },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "option_id": {"$ref": "#/$defs/nonEmptyId"},
+        "action_candidate_id": {"$ref": "#/$defs/nonEmptyId"},
+        "action_code": {
+          "enum": ["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"]
+        },
+        "execution_timing": {
+          "enum": [
+            "immediate",
+            "planned_window",
+            "reinspect_after",
+            "no_action_baseline"
+          ]
+        },
+        "calculation_status": {"enum": ["calculated", "insufficient"]},
+        "parts_cost": {"$ref": "#/$defs/nullableMoneyRange"},
+        "labor_cost": {"$ref": "#/$defs/nullableMoneyRange"},
+        "production_loss": {"$ref": "#/$defs/nullableMoneyRange"},
+        "expected_failure_loss": {"$ref": "#/$defs/nullableMoneyRange"},
+        "total_expected_cost": {"$ref": "#/$defs/nullableMoneyRange"},
+        "expected_downtime": {
+          "anyOf": [
+            {"$ref": "#/$defs/durationRange"},
+            {"type": "null"}
+          ]
+        },
+        "confidence": {"enum": ["high", "medium", "low", "insufficient"]},
+        "missing_inputs": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "option_id",
+        "action_candidate_id",
+        "action_code",
+        "execution_timing",
+        "calculation_status",
+        "parts_cost",
+        "labor_cost",
+        "production_loss",
+        "expected_failure_loss",
+        "total_expected_cost",
+        "expected_downtime",
+        "confidence",
+        "missing_inputs"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {"calculation_status": {"const": "calculated"}},
+            "required": ["calculation_status"]
+          },
+          "then": {
+            "properties": {
+              "parts_cost": {"$ref": "#/$defs/moneyRange"},
+              "labor_cost": {"$ref": "#/$defs/moneyRange"},
+              "production_loss": {"$ref": "#/$defs/moneyRange"},
+              "expected_failure_loss": {"$ref": "#/$defs/moneyRange"},
+              "total_expected_cost": {"$ref": "#/$defs/moneyRange"},
+              "expected_downtime": {"$ref": "#/$defs/durationRange"},
+              "confidence": {"enum": ["high", "medium", "low"]},
+              "missing_inputs": {"maxItems": 0}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"calculation_status": {"const": "insufficient"}},
+            "required": ["calculation_status"]
+          },
+          "then": {
+            "properties": {
+              "total_expected_cost": {"type": "null"},
+              "confidence": {"const": "insufficient"},
+              "missing_inputs": {"minItems": 1}
+            }
+          }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "title": "MaintenanceCostScenarioResult",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "maintenance-cost-scenario-v1.0"},
+    "analysis_id": {"$ref": "#/$defs/nonEmptyId"},
+    "organization_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "project_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "workspace_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "asset_id": {"$ref": "#/$defs/nonEmptyId"},
+    "equipment_id": {"$ref": "#/$defs/nonEmptyId"},
+    "calculated_at": {"type": "string", "format": "date-time"},
+    "based_on": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "product_result_id": {"$ref": "#/$defs/nonEmptyId"},
+        "evidence_id": {"$ref": "#/$defs/nonEmptyId"},
+        "inspection_work_order_id": {"$ref": "#/$defs/nonEmptyId"},
+        "inspection_result_id": {"$ref": "#/$defs/nonEmptyId"},
+        "sop_id": {"$ref": "#/$defs/nonEmptyId"},
+        "sop_version": {"type": "string", "minLength": 1, "maxLength": 160}
+      },
+      "required": [
+        "product_result_id",
+        "evidence_id",
+        "inspection_work_order_id",
+        "inspection_result_id",
+        "sop_id",
+        "sop_version"
+      ]
+    },
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "currency_minor_unit": {"enum": [0, 2, 3]},
+    "options": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/option"}
+    },
+    "lowest_calculated_cost_option_id": {
+      "anyOf": [
+        {"$ref": "#/$defs/nonEmptyId"},
+        {"type": "null"}
+      ]
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "input_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "input_name": {"type": "string", "minLength": 1, "maxLength": 160},
+          "source_kind": {"enum": ["observed", "quoted", "policy", "assumption"]},
+          "source_reference": {"type": "string", "minLength": 1, "maxLength": 500},
+          "confidence": {"enum": ["high", "medium", "low"]}
+        },
+        "required": ["input_name", "source_kind", "source_reference", "confidence"]
+      }
+    },
+    "missing_inputs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "price_version": {"type": "string", "minLength": 1, "maxLength": 160},
+    "calculation_policy_version": {"type": "string", "minLength": 1, "maxLength": 160},
+    "limitations": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "DECISION_SUPPORT_ONLY",
+          "NOT_RECOMMENDATION",
+          "NOT_APPROVAL",
+          "NOT_EXECUTION_COMMAND",
+          "COST_ESTIMATE_NOT_GUARANTEE"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "organization_id",
+    "project_id",
+    "workspace_id",
+    "asset_id",
+    "equipment_id",
+    "calculated_at",
+    "based_on",
+    "currency",
+    "currency_minor_unit",
+    "options",
+    "lowest_calculated_cost_option_id",
+    "assumptions",
+    "input_sources",
+    "missing_inputs",
+    "price_version",
+    "calculation_policy_version",
+    "limitations"
+  ]
+}

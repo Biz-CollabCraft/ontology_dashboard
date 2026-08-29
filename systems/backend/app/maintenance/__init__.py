@@ -2,6 +2,20 @@
 
 from app.diagnosis.recommendation_schema import ProducerRecommendation
 
+from .cost_analysis_schema import (
+    CalculationStatus,
+    ConfidenceLevel,
+    CostAnalysisBasis,
+    CostInputSource,
+    CostInputSourceKind,
+    ExecutionTiming,
+    LimitationCode,
+    MaintenanceActionCode,
+    MaintenanceCostOption,
+    MaintenanceCostScenarioResult,
+    SensitivityDuration,
+    SensitivityMoney,
+)
 from .maintenance_schema import OperationalDecisionKind
 from .maintenance_domain import (
     ActionInProgress,
@@ -53,7 +67,13 @@ from .maintenance_schema import (
 
 __all__ = [
     "ActionInProgress",
+    "CalculationStatus",
+    "ConfidenceLevel",
+    "CostAnalysisBasis",
+    "CostInputSource",
+    "CostInputSourceKind",
     "EquipmentIdentity",
+    "ExecutionTiming",
     "InspectionChecklistItem",
     "InspectionMeasurement",
     "InspectionOutcome",
@@ -63,8 +83,12 @@ __all__ = [
     "IdempotencyRecord",
     "IdempotencyState",
     "InvalidTransition",
+    "LimitationCode",
     "MaintenanceAction",
+    "MaintenanceActionCode",
     "MaintenanceActionStatus",
+    "MaintenanceCostOption",
+    "MaintenanceCostScenarioResult",
     "MaintenanceEvent",
     "MaterializationStrategy",
     "OperationalDecisionKind",
@@ -75,6 +99,8 @@ __all__ = [
     "RecommendationDisposition",
     "RecommendationStatus",
     "RiskEventStatus",
+    "SensitivityDuration",
+    "SensitivityMoney",
     "WorkOrder",
     "WorkOrderAuthorization",
     "WorkOrderStatus",
