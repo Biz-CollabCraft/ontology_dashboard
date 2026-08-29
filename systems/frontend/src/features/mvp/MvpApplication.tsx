@@ -205,9 +205,21 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   const submitDecision = useCallback(async (decision: MvpDecision, note: string) => {
     if (!selectedEvent || !user) throw new Error("저장할 Event 또는 사용자 문맥이 없습니다.");
-    await submitMvpDecision({ eventId: selectedEvent.eventId, actor: user.display_name, decision, note });
+    const workspaceId = model?.context.workspaceId ?? selection.workspaceId;
+    if (!workspaceId) throw new Error("작업요청을 생성할 Workspace 문맥이 없습니다.");
+    await submitMvpDecision({
+      projectId,
+      workspaceId,
+      eventId: selectedEvent.eventId,
+      userId: user.user_id,
+      actor: user.display_name,
+      decision,
+      note,
+      snapshotBasis: detail?.event.eventId === selectedEvent.eventId ? detail.snapshotBasis : null,
+    });
     retryDetail();
-  }, [retryDetail, selectedEvent, user]);
+    refresh();
+  }, [detail, model?.context.workspaceId, projectId, refresh, retryDetail, selectedEvent, selection.workspaceId, user]);
 
   const submitNote = useCallback(async (body: string) => {
     if (!selectedEvent || !user) throw new Error("저장할 Event 또는 사용자 문맥이 없습니다.");

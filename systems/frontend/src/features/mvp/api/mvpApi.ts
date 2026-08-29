@@ -10,6 +10,7 @@ import {
   getProjectWorkspaces,
   getReport,
   recordDecision,
+  requestInspectionWorkOrder,
 } from "../../../api";
 import type { Evidence, Report } from "../../../types";
 import {
@@ -27,10 +28,28 @@ import type {
   MvpDecision,
   MvpEvent,
   MvpEventDetailModel,
+  MvpEvidenceSnapshotBasis,
   MvpMetrics,
   MvpRoleLens,
   MvpSensorWindowId,
 } from "./mvpContracts";
+
+function idempotencyPart(value: string | null | undefined): string {
+  return String(value ?? "none").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80);
+}
+
+function inspectionRequestIdempotencyKey(input: {
+  eventId: string;
+  userId: string;
+  snapshotBasis: MvpEvidenceSnapshotBasis;
+}): string {
+  return [
+    "mvp-inspection",
+    idempotencyPart(input.eventId),
+    idempotencyPart(input.userId),
+    idempotencyPart(input.snapshotBasis.artifactId ?? input.snapshotBasis.observedAt),
+  ].join(":").slice(0, 200);
+}
 
 async function getEventActivity(eventId: string): Promise<unknown> {
   const response = await fetch(`${API_BASE}/api/events/${encodeURIComponent(eventId)}/activity`, {
@@ -277,11 +296,41 @@ export async function loadMvpEventDetail(input: {
 }
 
 export async function submitMvpDecision(input: {
+  projectId: string;
+  workspaceId: string;
   eventId: string;
+  userId: string;
   actor: string;
   decision: MvpDecision;
   note: string;
+  snapshotBasis: MvpEvidenceSnapshotBasis | null;
 }): Promise<void> {
+  if (input.decision === "request_inspection" || input.decision === "review_shutdown") {
+    if (!input.snapshotBasis) {
+      throw new Error("현재 화면 기준 근거가 아직 로드되지 않아 작업요청을 생성할 수 없습니다.");
+    }
+    await requestInspectionWorkOrder({
+      projectId: input.projectId,
+      workspaceId: input.workspaceId,
+      eventId: input.eventId,
+      snapshotBasis: {
+        artifact_id: input.snapshotBasis.artifactId,
+        evidence_payload_reference: input.snapshotBasis.evidencePayloadReference,
+        asset_id: input.snapshotBasis.assetId,
+        event_id: input.snapshotBasis.eventId,
+        observed_at: input.snapshotBasis.observedAt,
+        model_version: input.snapshotBasis.modelVersion,
+        dataset_version: input.snapshotBasis.datasetVersion,
+        source_sha256: input.snapshotBasis.sourceSha256,
+      },
+      idempotencyKey: inspectionRequestIdempotencyKey({
+        eventId: input.eventId,
+        userId: input.userId,
+        snapshotBasis: input.snapshotBasis,
+      }),
+    });
+    return;
+  }
   await recordDecision(input.eventId, input.actor, input.decision, input.note);
 }
 

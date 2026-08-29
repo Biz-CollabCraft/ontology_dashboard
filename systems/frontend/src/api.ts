@@ -10,6 +10,7 @@ import type {
 } from "./features/planner/types";
 import type { AgentQueryInput, AgentRunPage, AgentRunResponse } from "./features/agent/types";
 import type {
+  EvidenceSnapshotBasisWire,
   MvpAgentReviewPacket,
   MvpAgentReviewSummaryResponse,
 } from "./features/mvp/api/mvpContracts";
@@ -897,6 +898,26 @@ export function addNote(eventId: string, actor: string, body: string) {
     method: "POST",
     body: JSON.stringify({ actor, body }),
   });
+}
+
+export function requestInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  eventId: string;
+  snapshotBasis: EvidenceSnapshotBasisWire;
+  idempotencyKey: string;
+}) {
+  return request<Record<string, unknown>>(
+    `/api/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(input.workspaceId)}/maintenance/inspection-work-orders`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": input.idempotencyKey },
+      body: JSON.stringify({
+        event_id: input.eventId,
+        snapshot_basis: input.snapshotBasis,
+      }),
+    },
+  );
 }
 
 export function followUp(
