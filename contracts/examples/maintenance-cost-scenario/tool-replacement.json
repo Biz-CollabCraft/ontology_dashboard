@@ -26,6 +26,7 @@
       "calculation_status": "calculated",
       "parts_cost": {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000},
       "labor_cost": {"low_minor": 25000, "base_minor": 30000, "high_minor": 40000},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
       "production_loss": {"low_minor": 50000, "base_minor": 60000, "high_minor": 80000},
       "expected_failure_loss": {"low_minor": 10000, "base_minor": 20000, "high_minor": 40000},
       "total_expected_cost": {"low_minor": 130000, "base_minor": 160000, "high_minor": 220000},
@@ -41,6 +42,7 @@
       "calculation_status": "calculated",
       "parts_cost": {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000},
       "labor_cost": {"low_minor": 20000, "base_minor": 25000, "high_minor": 35000},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
       "production_loss": {"low_minor": 20000, "base_minor": 30000, "high_minor": 50000},
       "expected_failure_loss": {"low_minor": 20000, "base_minor": 40000, "high_minor": 80000},
       "total_expected_cost": {"low_minor": 105000, "base_minor": 145000, "high_minor": 225000},
@@ -56,6 +58,7 @@
       "calculation_status": "calculated",
       "parts_cost": {"low_minor": 5000, "base_minor": 10000, "high_minor": 15000},
       "labor_cost": {"low_minor": 10000, "base_minor": 15000, "high_minor": 20000},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
       "production_loss": {"low_minor": 10000, "base_minor": 20000, "high_minor": 30000},
       "expected_failure_loss": {"low_minor": 70000, "base_minor": 130000, "high_minor": 220000},
       "total_expected_cost": {"low_minor": 95000, "base_minor": 175000, "high_minor": 285000},
@@ -71,6 +74,7 @@
       "calculation_status": "calculated",
       "parts_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
       "labor_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
       "production_loss": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
       "expected_failure_loss": {"low_minor": 100000, "base_minor": 250000, "high_minor": 500000},
       "total_expected_cost": {"low_minor": 100000, "base_minor": 250000, "high_minor": 500000},
@@ -91,10 +95,22 @@
       "confidence": "medium"
     },
     {
+      "input_name": "external_service_policy",
+      "source_kind": "policy",
+      "source_reference": "internal-maintenance-policy-v1",
+      "confidence": "high"
+    },
+    {
       "input_name": "production_loss_policy",
       "source_kind": "policy",
       "source_reference": "production-loss-policy-v1",
       "confidence": "medium"
+    },
+    {
+      "input_name": "failure_loss_sensitivity",
+      "source_kind": "assumption",
+      "source_reference": "maintenance-cost-policy-v1#failure-loss-sensitivity",
+      "confidence": "low"
     }
   ],
   "missing_inputs": [],

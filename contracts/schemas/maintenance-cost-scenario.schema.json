@@ -43,6 +43,7 @@
           "enum": ["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"]
         },
         "execution_timing": {
+          "description": "Comparison timing. reinspect_after and no_action_baseline are workflow/comparison scenarios, not MaintenanceActions.",
           "enum": [
             "immediate",
             "planned_window",
@@ -53,6 +54,7 @@
         "calculation_status": {"enum": ["calculated", "insufficient"]},
         "parts_cost": {"$ref": "#/$defs/nullableMoneyRange"},
         "labor_cost": {"$ref": "#/$defs/nullableMoneyRange"},
+        "external_service_cost": {"$ref": "#/$defs/nullableMoneyRange"},
         "production_loss": {"$ref": "#/$defs/nullableMoneyRange"},
         "expected_failure_loss": {"$ref": "#/$defs/nullableMoneyRange"},
         "total_expected_cost": {"$ref": "#/$defs/nullableMoneyRange"},
@@ -77,6 +79,7 @@
         "calculation_status",
         "parts_cost",
         "labor_cost",
+        "external_service_cost",
         "production_loss",
         "expected_failure_loss",
         "total_expected_cost",
@@ -94,6 +97,7 @@
             "properties": {
               "parts_cost": {"$ref": "#/$defs/moneyRange"},
               "labor_cost": {"$ref": "#/$defs/moneyRange"},
+              "external_service_cost": {"$ref": "#/$defs/moneyRange"},
               "production_loss": {"$ref": "#/$defs/moneyRange"},
               "expected_failure_loss": {"$ref": "#/$defs/moneyRange"},
               "total_expected_cost": {"$ref": "#/$defs/moneyRange"},
@@ -171,6 +175,7 @@
     },
     "input_sources": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,

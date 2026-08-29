@@ -52,6 +52,14 @@ def test_contract_does_not_reuse_synthetic_preventive_what_if_version() -> None:
         MaintenanceCostScenarioResult.model_validate(payload)
 
 
+def test_contract_requires_explicit_nullable_cost_fields() -> None:
+    payload = load_json(EXAMPLE_PATH)
+    del payload["options"][0]["external_service_cost"]
+
+    with pytest.raises(ValidationError, match="external_service_cost"):
+        MaintenanceCostScenarioResult.model_validate(payload)
+
+
 def test_contract_rejects_missing_timing_scenario() -> None:
     payload = load_json(EXAMPLE_PATH)
     payload["options"].pop()
@@ -84,6 +92,7 @@ def test_insufficient_option_never_invents_a_total() -> None:
                 "calculation_status": "insufficient",
                 "parts_cost": None,
                 "labor_cost": None,
+                "external_service_cost": None,
                 "production_loss": None,
                 "expected_failure_loss": None,
                 "total_expected_cost": None,
@@ -98,6 +107,45 @@ def test_insufficient_option_never_invents_a_total() -> None:
     result = MaintenanceCostScenarioResult.model_validate(payload)
     assert result.lowest_calculated_cost_option_id is None
     assert all(option.total_expected_cost is None for option in result.options)
+
+    schema_errors = list(
+        Draft202012Validator(load_json(SCHEMA_PATH)).iter_errors(payload)
+    )
+    assert schema_errors == []
+
+
+def test_json_schema_rejects_total_for_insufficient_option() -> None:
+    payload = load_json(EXAMPLE_PATH)
+    option = payload["options"][0]
+    option["calculation_status"] = "insufficient"
+    option["confidence"] = "insufficient"
+    option["missing_inputs"] = ["failure_loss"]
+
+    errors = list(Draft202012Validator(load_json(SCHEMA_PATH)).iter_errors(payload))
+    assert any(error.json_path.endswith("total_expected_cost") for error in errors)
+
+
+def test_result_missing_inputs_must_aggregate_option_gaps() -> None:
+    payload = load_json(EXAMPLE_PATH)
+    for option in payload["options"]:
+        option.update(
+            {
+                "calculation_status": "insufficient",
+                "parts_cost": None,
+                "labor_cost": None,
+                "external_service_cost": None,
+                "production_loss": None,
+                "expected_failure_loss": None,
+                "total_expected_cost": None,
+                "expected_downtime": None,
+                "confidence": "insufficient",
+                "missing_inputs": ["parts_cost"],
+            }
+        )
+    payload["lowest_calculated_cost_option_id"] = None
+
+    with pytest.raises(ValidationError, match="aggregate option missing_inputs"):
+        MaintenanceCostScenarioResult.model_validate(payload)
 
 
 def test_contract_requires_decision_support_boundaries() -> None:

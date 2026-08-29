@@ -19,6 +19,8 @@ class MaintenanceActionCode(StrEnum):
 
 
 class ExecutionTiming(StrEnum):
+    """Comparison timing; reinspect/no-action values are not MaintenanceActions."""
+
     IMMEDIATE = "immediate"
     PLANNED_WINDOW = "planned_window"
     REINSPECT_AFTER = "reinspect_after"
@@ -99,25 +101,29 @@ class CostInputSource(FrozenModel):
 
 
 class MaintenanceCostOption(FrozenModel):
+    """A timing comparison for an authoritative, externally owned Action candidate."""
+
     option_id: str = Field(min_length=1, max_length=240)
     action_candidate_id: str = Field(min_length=1, max_length=240)
     action_code: MaintenanceActionCode
     execution_timing: ExecutionTiming
     calculation_status: CalculationStatus
-    parts_cost: SensitivityMoney | None = None
-    labor_cost: SensitivityMoney | None = None
-    production_loss: SensitivityMoney | None = None
-    expected_failure_loss: SensitivityMoney | None = None
-    total_expected_cost: SensitivityMoney | None = None
-    expected_downtime: SensitivityDuration | None = None
+    parts_cost: SensitivityMoney | None
+    labor_cost: SensitivityMoney | None
+    external_service_cost: SensitivityMoney | None
+    production_loss: SensitivityMoney | None
+    expected_failure_loss: SensitivityMoney | None
+    total_expected_cost: SensitivityMoney | None
+    expected_downtime: SensitivityDuration | None
     confidence: ConfidenceLevel
-    missing_inputs: tuple[str, ...] = ()
+    missing_inputs: tuple[str, ...]
 
     @model_validator(mode="after")
     def require_status_consistency(self) -> MaintenanceCostOption:
         components = (
             self.parts_cost,
             self.labor_cost,
+            self.external_service_cost,
             self.production_loss,
             self.expected_failure_loss,
             self.expected_downtime,
@@ -140,6 +146,7 @@ class MaintenanceCostOption(FrozenModel):
 
         assert self.parts_cost is not None
         assert self.labor_cost is not None
+        assert self.external_service_cost is not None
         assert self.production_loss is not None
         assert self.expected_failure_loss is not None
         assert self.total_expected_cost is not None
@@ -149,6 +156,7 @@ class MaintenanceCostOption(FrozenModel):
                 for component in (
                     self.parts_cost,
                     self.labor_cost,
+                    self.external_service_cost,
                     self.production_loss,
                     self.expected_failure_loss,
                 )
@@ -172,11 +180,11 @@ class MaintenanceCostScenarioResult(FrozenModel):
     currency_minor_unit: Literal[0, 2, 3]
     options: tuple[MaintenanceCostOption, ...] = Field(min_length=1)
     lowest_calculated_cost_option_id: str | None = Field(
-        default=None, min_length=1, max_length=240
+        min_length=1, max_length=240
     )
-    assumptions: tuple[str, ...] = ()
-    input_sources: tuple[CostInputSource, ...] = ()
-    missing_inputs: tuple[str, ...] = ()
+    assumptions: tuple[str, ...]
+    input_sources: tuple[CostInputSource, ...] = Field(min_length=1)
+    missing_inputs: tuple[str, ...]
     price_version: str = Field(min_length=1, max_length=160)
     calculation_policy_version: str = Field(min_length=1, max_length=160)
     limitations: tuple[LimitationCode, ...]
@@ -189,6 +197,10 @@ class MaintenanceCostScenarioResult(FrozenModel):
         option_ids = [option.option_id for option in self.options]
         if len(option_ids) != len(set(option_ids)):
             raise ValueError("option_id values must be unique")
+
+        input_names = [source.input_name for source in self.input_sources]
+        if len(input_names) != len(set(input_names)):
+            raise ValueError("input source names must be unique")
 
         expected_timings = set(ExecutionTiming)
         groups: dict[tuple[str, MaintenanceActionCode], set[ExecutionTiming]] = {}
@@ -205,11 +217,17 @@ class MaintenanceCostScenarioResult(FrozenModel):
             for option in self.options
             if option.calculation_status is CalculationStatus.CALCULATED
         ]
+        option_missing_inputs = {
+            missing_input
+            for option in self.options
+            for missing_input in option.missing_inputs
+        }
+        if set(self.missing_inputs) != option_missing_inputs:
+            raise ValueError("result missing_inputs must aggregate option missing_inputs")
+
         if not calculated:
             if self.lowest_calculated_cost_option_id is not None:
                 raise ValueError("no calculated option can be selected as lowest")
-            if not self.missing_inputs:
-                raise ValueError("fully insufficient result must identify missing_inputs")
         else:
             expected_lowest = min(
                 calculated,
@@ -224,6 +242,9 @@ class MaintenanceCostScenarioResult(FrozenModel):
                 )
 
         required_limitations = set(LimitationCode)
-        if set(self.limitations) != required_limitations:
+        if (
+            set(self.limitations) != required_limitations
+            or len(self.limitations) != len(required_limitations)
+        ):
             raise ValueError("all decision-boundary limitations are required")
         return self
