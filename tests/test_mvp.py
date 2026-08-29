@@ -12,11 +12,12 @@ from app.diagnosis.evidence import FixtureContextProvider
 from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.mvp.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
 from app.identity import CSRF_COOKIE, IdentityService
-from app.infra.llm import VertexAIProvider, configured_provider
+from app.infra.llm import OpenAICompatibleProvider, VertexAIProvider, configured_provider
 from app.main import app
 from app.dependencies import build_manufacturing_service, get_identity_service, get_service
 from app.planner import LayoutPlanner
 from app.mvp.agent_review_summary import compose_deterministic_agent_review_summary
+from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.mvp.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
 from identity_test_support import build_identity_service
 from ontology_dashboard_manufacturing_ml import HeuristicPredictor, build_evidence_package, load_fixture
@@ -206,6 +207,138 @@ def test_vertex_provider_is_selected_from_environment(monkeypatch: pytest.Monkey
     provider = configured_provider()
     assert isinstance(provider, VertexAIProvider)
     assert provider.project == "onjung-project"
+
+
+def test_openai_provider_sends_json_schema_response_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    posted: dict = {}
+
+    class Response:
+        status_code = 200
+        text = "{\"choices\": [{\"message\": {\"content\": \"{\\\"ok\\\": true}\"}}]}"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": "{\"ok\": true}"}}]}
+
+    def fake_post(url: str, **kwargs) -> Response:
+        posted["url"] = url
+        posted.update(kwargs)
+        return Response()
+
+    schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["ok"],
+        "additionalProperties": False,
+        "properties": {
+            "ok": {"const": True},
+            "label": {"type": "string", "minLength": 1},
+        },
+    }
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o-mini")
+    monkeypatch.setattr("app.infra.llm.provider.httpx.post", fake_post)
+
+    provider = OpenAICompatibleProvider()
+    result = provider.generate_json(
+        "Return JSON.",
+        {"input": "value"},
+        response_schema=schema,
+        response_schema_name="test_schema",
+    )
+
+    assert result == {"ok": True}
+    assert posted["json"]["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "test_schema",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "required": ["ok"],
+                "additionalProperties": False,
+                "properties": {
+                    "ok": {"enum": [True]},
+                    "label": {"type": "string"},
+                },
+            },
+        },
+    }
+
+
+def test_openai_provider_retries_json_object_when_json_schema_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[dict] = []
+
+    class Response:
+        def __init__(self, status_code: int, content: str) -> None:
+            self.status_code = status_code
+            self.text = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": self.text}}]}
+
+    def fake_post(url: str, **kwargs) -> Response:
+        requests.append(json.loads(json.dumps(kwargs["json"])))
+        if len(requests) == 1:
+            return Response(400, "{\"error\":\"schema rejected\"}")
+        return Response(200, "{\"ok\": true}")
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o-mini")
+    monkeypatch.setattr("app.infra.llm.provider.httpx.post", fake_post)
+
+    provider = OpenAICompatibleProvider()
+    result = provider.generate_json(
+        "Return JSON.",
+        {"input": "value"},
+        response_schema={
+            "type": "object",
+            "required": ["ok"],
+            "additionalProperties": False,
+            "properties": {"ok": {"type": "boolean"}},
+        },
+        response_schema_name="test_schema",
+    )
+
+    assert result == {"ok": True}
+    assert requests[0]["response_format"]["type"] == "json_schema"
+    assert requests[1]["response_format"] == {"type": "json_object"}
+
+
+def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
+    service: FactorySignalService,
+) -> None:
+    captured: dict = {}
+
+    class CapturingLLMProvider:
+        name = "capturing-llm"
+
+        def generate_json(self, system_prompt: str, payload: dict, **kwargs) -> dict:
+            captured["system_prompt"] = system_prompt
+            captured["payload"] = payload
+            captured["kwargs"] = kwargs
+            return {**payload["baseline_summary"], "mode": "llm", "title": "AI 검토 요약 후보"}
+
+    packet = service.agent_review_packet("CNC-S04-L04-01")
+    provider = AgentReviewSummaryProvider(CapturingLLMProvider())
+
+    summary = provider.generate(packet)
+
+    assert summary["mode"] == "llm"
+    assert "baseline_summary" in captured["payload"]
+    assert captured["payload"]["allowed_output_fields"] == list(
+        captured["payload"]["baseline_summary"].keys()
+    )
+    assert captured["kwargs"]["response_schema_name"] == "agent_review_summary"
+    assert captured["kwargs"]["response_schema"]["additionalProperties"] is False
+    assert "closed_loop_boundary" not in captured["payload"]["allowed_output_fields"]
 
 
 def test_manager_and_engineer_layout_priorities_differ(service: FactorySignalService) -> None:

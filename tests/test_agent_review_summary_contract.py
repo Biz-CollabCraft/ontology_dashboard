@@ -41,6 +41,20 @@ def _valid_summary() -> dict:
         "mode": "llm",
         "title": "AI 검토 요약",
         "summary": "공구/마모 계통 중심으로 SOP 근거, 위치 reference, 관측값을 대조해야 합니다.",
+        "role_summaries": [
+            {
+                "role": "field_operator",
+                "label": "현장 담당자",
+                "quote": "공구/마모 계통을 터렛 공구 홀더 위치에서 먼저 확인하세요.",
+                "source_refs": [PACKET["source_refs"][0]],
+            },
+            {
+                "role": "process_manager",
+                "label": "공정 관리자",
+                "quote": "생산 영향은 패킷 근거와 점검 승인 상태를 함께 봐야 합니다.",
+                "source_refs": [PACKET["source_refs"][0]],
+            },
+        ],
         "history_summary": PACKET["review_draft"]["history_summary"],
         "inspection_focus": [
             {
@@ -57,6 +71,15 @@ def _valid_summary() -> dict:
             for target in PACKET["inspection_targets"]
         ],
         "evidence_gaps": PACKET["evidence_gaps"],
+        "data_footnotes": [
+            {
+                "code": gap["field"],
+                "note": f"{gap['field']} 데이터가 없어 해당 판단은 보류됩니다.",
+                "owner_domain": gap["owner_domain"],
+                "source_refs": [PACKET["source_refs"][0]],
+            }
+            for gap in PACKET["evidence_gaps"]
+        ],
         "source_refs": [PACKET["source_refs"][0]],
         "boundary_note": PACKET["review_draft"]["boundary_note"],
         "confidence_label": "grounded",

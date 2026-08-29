@@ -750,6 +750,13 @@
 .mvp-agent-review-draft { display: grid; gap: 5px; border-top: 1px solid rgba(181,196,214,.12); padding-top: 7px; }
 .mvp-agent-review-draft strong { color: var(--mvp-text); font-size: 10px; }
 .mvp-agent-review-draft p { margin: 0; color: var(--mvp-muted); }
+.mvp-agent-role-quotes { display: grid; gap: 6px; }
+.mvp-agent-role-quotes figure { display: grid; gap: 3px; margin: 0; padding: 7px 8px; border: 1px solid rgba(181,196,214,.14); border-radius: 7px; background: rgba(255,255,255,.018); }
+.mvp-agent-role-quotes figcaption { color: #cfe1f7; font-size: 9px; font-weight: 900; }
+.mvp-agent-role-quotes blockquote { margin: 0; color: var(--mvp-muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.mvp-agent-footnotes { display: grid; gap: 3px; margin: 0; padding-left: 0; list-style: none; border-top: 1px solid rgba(181,196,214,.1); padding-top: 6px; }
+.mvp-agent-footnotes li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 4px; align-items: start; color: var(--mvp-dim); font-size: 8px; line-height: 1.35; }
+.mvp-agent-footnotes sup { color: #9cc5fa; font-size: 8px; font-weight: 900; line-height: 1; }
 .mvp-action-note { margin: 0; color: var(--mvp-dim); font-size: 10px; line-height: 1.5; }
 .mvp-event-inbox { display: grid; grid-template-columns: repeat(2, minmax(300px, 1fr)); gap: 7px; }
 .mvp-event-inbox > button { min-width: 0; display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(230px, 1fr) minmax(170px, .8fr) 18px; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--mvp-border); border-radius: 7px; background: rgba(255,255,255,.018); text-align: left; cursor: pointer; }

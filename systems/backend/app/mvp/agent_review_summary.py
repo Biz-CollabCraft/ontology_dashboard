@@ -58,6 +58,11 @@ FORBIDDEN_PROSE_CLAIMS = (
     "auto approval",
 )
 
+ROLE_SUMMARY_DEFINITIONS = (
+    ("field_operator", "현장 담당자"),
+    ("process_manager", "공정 관리자"),
+)
+
 
 def compose_deterministic_agent_review_summary(packet: dict[str, Any]) -> dict[str, Any]:
     """Compose a read-only fallback summary from an Agent Review Packet."""
@@ -79,6 +84,7 @@ def compose_deterministic_agent_review_summary(packet: dict[str, Any]) -> dict[s
         "mode": "deterministic_fallback",
         "title": title,
         "summary": summary,
+        "role_summaries": _role_summaries(packet=packet, source_refs=source_refs),
         "history_summary": [str(item) for item in draft.get("history_summary") or []],
         "inspection_focus": [
             _inspection_focus(target=target, fallback_source_refs=source_refs)
@@ -92,6 +98,7 @@ def compose_deterministic_agent_review_summary(packet: dict[str, Any]) -> dict[s
             }
             for gap in evidence_gaps
         ],
+        "data_footnotes": _data_footnotes(packet=packet, source_refs=source_refs),
         "source_refs": source_refs,
         "boundary_note": str(
             draft.get("boundary_note")
@@ -178,12 +185,12 @@ def validate_agent_review_summary(
 
 
 def _summary_title(packet: dict[str, Any]) -> str:
-    asset_id = str(packet.get("asset_id") or "설비")
+    asset_label = _asset_label(packet)
     risk = packet.get("risk_summary") or {}
     status = risk.get("status_grade")
     if status:
-        return f"AI 검토 요약 · {asset_id} · {status}"
-    return f"AI 검토 요약 · {asset_id} · 데이터 품질 보류"
+        return f"AI 검토 요약 · {asset_label} · {status}"
+    return f"AI 검토 요약 · {asset_label} · 데이터 품질 보류"
 
 
 def _summary_text(
@@ -201,10 +208,10 @@ def _summary_text(
         probability_text = "미제공"
 
     if status:
-        base = f"{packet.get('asset_id', '')}는 현재 {status} 상태이며 예측 위험도는 {probability_text}입니다."
+        base = f"{_asset_label(packet)}는 현재 {status} 상태이며 예측 위험도는 {probability_text}입니다."
     else:
         base = (
-            f"{packet.get('asset_id', '')}는 데이터 품질 보류 상태라 위험 등급과 "
+            f"{_asset_label(packet)}는 데이터 품질 보류 상태라 위험 등급과 "
             "예측 위험도를 확정하지 않습니다."
         )
 
@@ -219,6 +226,152 @@ def _summary_text(
         return f"{base} 근거 공백이 있어 확정 판단보다 데이터 보강과 이력 조회가 우선입니다."
 
     return str(draft.get("summary") or base)
+
+
+def _role_summaries(
+    *,
+    packet: dict[str, Any],
+    source_refs: list[str],
+) -> list[dict[str, Any]]:
+    risk = packet.get("risk_summary") or {}
+    targets = packet.get("inspection_targets") or []
+    operation_context = packet.get("operation_context_summary") or {}
+    asset_label = _asset_label(packet)
+    status = str(risk.get("status_grade") or "데이터 품질 보류")
+    production_impact = _production_impact_label(operation_context.get("production_impact"))
+    downtime = operation_context.get("estimated_downtime_minutes")
+    lost_units = operation_context.get("estimated_lost_units")
+    lost_units_text = f"{int(lost_units)}개" if isinstance(lost_units, (int, float)) else "추정 물량"
+    downtime_text = f"{int(downtime)}분" if isinstance(downtime, (int, float)) else "예상 정지"
+    component_text = _component_text(targets)
+    location_text = _location_text(targets)
+    factor_text = _factor_text(targets)
+    primary_refs = source_refs[:3] or _packet_source_refs(packet)[:1]
+
+    quotes = {
+        "field_operator": (
+            f"{asset_label}은 {status} 알림이며 {component_text}{_object_particle(component_text)} "
+            f"{location_text}에서 먼저 확인할 대상으로 잡습니다. "
+            f"근거 지표는 {factor_text}이고, 현장 확인 결과는 승인 판단 전 조회 이력에 붙일 수 있습니다."
+        ),
+        "process_manager": (
+            f"현재 생산 영향은 {production_impact}입니다. {downtime_text} 기준 {lost_units_text} 손실 가능성이 있어 "
+            "점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+        ),
+    }
+    return [
+        {
+            "role": role,
+            "label": label,
+            "quote": quotes[role],
+            "source_refs": primary_refs,
+        }
+        for role, label in ROLE_SUMMARY_DEFINITIONS
+    ]
+
+
+def _asset_label(packet: dict[str, Any]) -> str:
+    return str(packet.get("asset_label") or packet.get("asset_id") or "설비")
+
+
+def _data_footnotes(
+    *,
+    packet: dict[str, Any],
+    source_refs: list[str],
+) -> list[dict[str, Any]]:
+    refs = source_refs[:1]
+    footnotes = [
+        {
+            "code": str(gap.get("field") or ""),
+            "note": _gap_note(gap),
+            "owner_domain": str(gap.get("owner_domain") or ""),
+            "source_refs": refs,
+        }
+        for gap in packet.get("evidence_gaps") or []
+    ]
+    operation_context = packet.get("operation_context_summary") or {}
+    for index, limitation in enumerate(operation_context.get("limitations") or []):
+        text = str(limitation)
+        if not text:
+            continue
+        footnotes.append(
+            {
+                "code": f"operation_context.limitations.{index + 1}",
+                "note": _limitation_note(text),
+                "owner_domain": "operations",
+                "source_refs": refs,
+            }
+        )
+    return footnotes[:7]
+
+
+def _production_impact_label(value: Any) -> str:
+    labels = {
+        "none": "없음",
+        "low": "낮은 수준",
+        "medium": "중간 수준",
+        "high": "높은 수준",
+    }
+    return labels.get(str(value), "미제공")
+
+
+def _component_text(targets: list[dict[str, Any]]) -> str:
+    labels = [
+        str(target.get("component_label") or target.get("component_id") or "")
+        for target in targets[:2]
+    ]
+    labels = [label for label in labels if label]
+    return ", ".join(labels) if labels else "의심 계통"
+
+
+def _object_particle(value: str) -> str:
+    if not value:
+        return "을"
+    code = ord(value[-1])
+    if not (0xAC00 <= code <= 0xD7A3):
+        return "을"
+    return "을" if (code - 0xAC00) % 28 else "를"
+
+
+def _location_text(targets: list[dict[str, Any]]) -> str:
+    locations = [
+        str(target.get("location_label") or "")
+        for target in targets[:2]
+        if str(target.get("location_label") or "")
+    ]
+    return ", ".join(locations) if locations else "연결된 점검 위치"
+
+
+def _factor_text(targets: list[dict[str, Any]]) -> str:
+    refs = []
+    for target in targets:
+        refs.extend(str(ref).split(".", 2)[-1] for ref in target.get("basis_refs") or [])
+    refs = [ref for ref in refs if ref]
+    return ", ".join(list(dict.fromkeys(refs))[:3]) if refs else "패킷 근거"
+
+
+def _gap_note(gap: dict[str, Any]) -> str:
+    field = str(gap.get("field") or "unknown")
+    labels = {
+        "risk_series": "위험도 시계열이 부족해 악화 추세를 확정하기 어렵습니다.",
+        "maintenance_context.similar_events_30d": "최근 30일 유사 이벤트 이력이 없어 재발 판단은 보류됩니다.",
+        "maintenance_context.open_work_order_exists": "열린 작업요청 여부가 없어 중복 요청 여부를 확정하기 어렵습니다.",
+        "operation_context.load_level": "부하 수준이 없어 생산 맥락의 압박도를 확정하기 어렵습니다.",
+        "operation_context.runtime_hours_7d": "최근 7일 가동 시간이 없어 누적 운전 맥락을 확정하기 어렵습니다.",
+        "operation_context.production_impact": "생산 영향도가 없어 공정 우선순위 판단이 제한됩니다.",
+        "review_priority": "우선순위 입력 일부가 없어 자동 산정 결과를 확정하지 않습니다.",
+    }
+    return labels.get(field, f"{field} 데이터가 없어 해당 판단은 보류됩니다.")
+
+
+def _limitation_note(value: str) -> str:
+    if "MES" in value or "loss" in value.lower():
+        return "실제 MES 실적이 연결되기 전까지 손실 물량은 계획 기준 추정입니다."
+    if "납기" in value:
+        return "납기 영향은 별도 수주/출하 일정이 연결될 때 확정할 수 있습니다."
+    if "Maintenance" in value or "maintenance" in value:
+        return "정비 후 효과는 조치 완료 뒤 재관측 데이터가 쌓여야 판단할 수 있습니다."
+    return value
 
 
 def _inspection_focus(
@@ -404,6 +557,12 @@ def _generated_natural_language_values(summary: dict[str, Any]) -> list[str]:
         value = summary.get(key)
         if isinstance(value, str):
             values.append(value)
+    for item in summary.get("role_summaries") or []:
+        if isinstance(item, dict) and isinstance(item.get("quote"), str):
+            values.append(str(item["quote"]))
+    for item in summary.get("data_footnotes") or []:
+        if isinstance(item, dict) and isinstance(item.get("note"), str):
+            values.append(str(item["note"]))
     return values
 
 
@@ -509,15 +668,19 @@ def _summary_schema_errors(summary: dict[str, Any]) -> list[str]:
 
 
 @lru_cache(maxsize=1)
-def _summary_schema_validator() -> Draft202012Validator:
+def summary_schema() -> dict[str, Any]:
     schema_path = (
         Path(__file__).resolve().parents[4]
         / "contracts"
         / "schemas"
         / "agent-review-summary.schema.json"
     )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    return Draft202012Validator(schema)
+    return json.loads(schema_path.read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=1)
+def _summary_schema_validator() -> Draft202012Validator:
+    return Draft202012Validator(summary_schema())
 
 
 def _collect_source_refs(value: Any) -> set[str]:
