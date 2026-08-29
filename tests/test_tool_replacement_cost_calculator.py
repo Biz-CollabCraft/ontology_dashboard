@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+from pydantic import ValidationError
+
 from app.maintenance import (
     CalculationStatus,
     ConfidenceLevel,
@@ -165,6 +168,14 @@ def test_calculator_is_deterministic_and_sums_derived_components() -> None:
     assert immediate.labor_cost == money(25000, 30000, 42000)
     assert immediate.production_loss == money(40000, 60000, 105000)
     assert immediate.total_expected_cost == money(120000, 160000, 247000)
+
+
+def test_calculator_input_rejects_mismatched_mvp_identity() -> None:
+    payload = analysis_input().model_dump()
+    payload["equipment_id"] = "CNC-OTHER"
+
+    with pytest.raises(ValidationError, match="equipment_id = asset_id"):
+        ToolReplacementCostAnalysisInput.model_validate(payload)
 
 
 def test_calculator_selects_lowest_base_cost_without_creating_decision_fields() -> None:
