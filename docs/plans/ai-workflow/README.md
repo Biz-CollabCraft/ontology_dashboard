@@ -4,9 +4,11 @@ AI, LLM, agent review, SOP grounding, and evaluation-related implementation plan
 
 ## Current Canonical Plan
 
+- `2026-08-29-001-ai-context-orchestration-adapter-plan.md`: post-PR #130 AI context orchestration plan covering adapter-based domain context, polling watcher materialization, ontology/SOP exploration, KG Level 0 traces, and deferred RAG/LangGraph gates.
+- `2026-08-29-002-product-result-evidence-materialization-plan.md`: prerequisite product-evidence boundary plan covering Generator output validation, Product Result/Evidence materialization, lineage, checksum, and ViewModel consumption boundaries.
 - `2026-08-27-001-pr130-sop-sensor-judgment-proposal.md`: PR #130 based Agent Review Packet, SOP judgment, scenario-based agent rationale, LLM summary, and minimum eval plan.
 
-This plan absorbs the earlier Asset Detail UI agent-flow draft and SOP Grounding consumption proposal. Use it as the current source of truth for read-only agent review, SOP maturity gate, field inspection reference, and LLM summary sequencing.
+Use the 2026-08-29 AI context plan as the current source of truth for the next AI workflow architecture slice. Use the Product Result/Evidence materialization plan as its lower trusted-evidence prerequisite, not as an AI-only pipeline. Use the 2026-08-27 PR #130 plan as the baseline source for read-only agent review, SOP maturity gate, field inspection reference, and LLM summary sequencing.
 
 ## Supporting Background Plans
 
