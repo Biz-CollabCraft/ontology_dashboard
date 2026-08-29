@@ -191,17 +191,24 @@ def postgresql_database():
             connection.execute(
                 """
                 INSERT INTO organizations(id,slug,name) VALUES
-                    ('org-test','org-test','Org Test');
+                    ('org-test','org-test','Org Test'),
+                    ('org-ontology-demo','org-ontology-demo','Ontology Demo');
                 INSERT INTO projects(
                     id,organization_id,slug,display_name,domain_pack_code
                 ) VALUES
                     ('project-test','org-test','project-test','Project Test','predictive-maintenance'),
-                    ('project-other','org-test','project-other','Project Other','predictive-maintenance');
+                    ('project-other','org-test','project-other','Project Other','predictive-maintenance'),
+                    ('manufacturing-demo-project','org-ontology-demo',
+                     'manufacturing-demo-project','Manufacturing Demo',
+                     'predictive-maintenance');
                 INSERT INTO workspaces(
                     id,organization_id,project_id,slug,display_name,domain_pack
                 ) VALUES
                     ('workspace-test','org-test','project-test','workspace-test','Workspace Test','predictive-maintenance'),
-                    ('workspace-other','org-test','project-other','workspace-other','Workspace Other','predictive-maintenance');
+                    ('workspace-other','org-test','project-other','workspace-other','Workspace Other','predictive-maintenance'),
+                    ('manufacturing-demo','org-ontology-demo',
+                     'manufacturing-demo-project','manufacturing-demo',
+                     'Manufacturing Demo','predictive-maintenance');
                 INSERT INTO users(id,organization_id,email,display_name,status) VALUES
                     ('runtime-user','org-test','runtime@example.com','Runtime User','active'),
                     ('runtime-user-other','org-test','runtime-other@example.com','Runtime Other','active');
