@@ -303,6 +303,7 @@ class ManufacturingPredictiveMaintenanceService:
                 "provider": getattr(provider, "name", "unknown"),
                 "fallback": True,
                 "reason": type(exc).__name__,
+                "message": str(exc),
                 "validation_errors": errors,
             }
 

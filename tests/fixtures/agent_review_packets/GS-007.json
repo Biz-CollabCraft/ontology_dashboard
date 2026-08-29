@@ -1,5 +1,6 @@
 {
   "asset_id": "CNC-S04-L05-01",
+  "asset_label": "4구역 · 5셀 · CNC 가공기 1",
   "closed_loop_boundary": {
     "available_action_ids": [],
     "forbidden_actions": [
@@ -123,7 +124,23 @@
     "returned_count": 0,
     "top_k": 5
   },
+  "operation_context_summary": {
+    "basis": "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준",
+    "estimated_downtime_minutes": 40,
+    "estimated_lost_units": null,
+    "limitations": [
+      "This context is not a MES, ERP, APS, or customer-order record.",
+      "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+      "AI4I provides Product Type L/M/H but no real SKU or product name.",
+      "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+      "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+    ],
+    "product_variant": "M",
+    "production_impact": "low",
+    "source_ref": "operation-context://production-planning-context-v1"
+  },
   "source_refs": [
-    "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00"
+    "RESULT#CNC-S04-L05-01#2026-08-01T00:00:00+09:00",
+    "operation-context://production-planning-context-v1"
   ]
 }

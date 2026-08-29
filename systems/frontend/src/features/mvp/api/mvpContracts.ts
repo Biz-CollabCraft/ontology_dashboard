@@ -379,6 +379,7 @@ export interface MvpAgentReviewPacket {
   schema_version: "agent-review-packet-v1.0";
   project_id: string;
   asset_id: string;
+  asset_label: string;
   generated_at: string;
   risk_summary: {
     status_grade: "normal" | "attention" | "warning" | "critical" | null;
@@ -439,6 +440,27 @@ export interface MvpAgentReviewPacket {
     disclaimer: string;
     source_ref: string;
   }>;
+  inspection_targets: Array<{
+    target_id: string;
+    component_id: string;
+    component_label: string;
+    association: string;
+    location_label: string | null;
+    inspection_method: string | null;
+    location_source_ref: string | null;
+    basis_refs: string[];
+    source_ref: string;
+    unavailable_reason: string | null;
+  }>;
+  operation_context_summary?: {
+    production_impact: "none" | "low" | "medium" | "high" | null;
+    estimated_downtime_minutes: number | null;
+    estimated_lost_units: number | null;
+    product_variant: string | null;
+    basis: string;
+    limitations: string[];
+    source_ref: string | null;
+  } | null;
   history_review_items: string[];
   evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
   source_refs: string[];
@@ -459,6 +481,12 @@ export interface MvpAgentReviewSummary {
   mode: "llm" | "deterministic_fallback";
   title: string;
   summary: string;
+  role_summaries: Array<{
+    role: "field_operator" | "process_manager";
+    label: string;
+    quote: string;
+    source_refs: string[];
+  }>;
   history_summary: string[];
   inspection_focus: Array<{
     component_id: string;
@@ -468,6 +496,7 @@ export interface MvpAgentReviewSummary {
     source_refs: string[];
   }>;
   evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
+  data_footnotes: Array<{ code: string; note: string; owner_domain: string; source_refs: string[] }>;
   source_refs: string[];
   boundary_note: string;
   confidence_label: "grounded" | "partial" | "fallback" | "data_quality_hold";

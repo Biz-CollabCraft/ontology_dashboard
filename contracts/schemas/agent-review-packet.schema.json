@@ -8,6 +8,7 @@
     "schema_version",
     "project_id",
     "asset_id",
+    "asset_label",
     "generated_at",
     "risk_summary",
     "review_priority",
@@ -26,6 +27,7 @@
     "schema_version": {"const": "agent-review-packet-v1.0"},
     "project_id": {"type": "string"},
     "asset_id": {"type": "string"},
+    "asset_label": {"type": "string"},
     "generated_at": {"type": "string"},
     "risk_summary": {
       "type": "object",
@@ -130,6 +132,21 @@
           "disclaimer": {"type": "string"},
           "source_ref": {"type": "string"}
         }
+      }
+    },
+    "operation_context_summary": {
+      "type": ["object", "null"],
+      "description": "Optional read-only operating context supplied by a domain adapter. This supports role-specific summaries but does not create production, MES, or Closed-loop facts.",
+      "required": ["production_impact", "estimated_downtime_minutes", "estimated_lost_units", "product_variant", "basis", "limitations", "source_ref"],
+      "additionalProperties": false,
+      "properties": {
+        "production_impact": {"type": ["string", "null"], "enum": ["none", "low", "medium", "high", null]},
+        "estimated_downtime_minutes": {"type": ["number", "null"]},
+        "estimated_lost_units": {"type": ["number", "null"]},
+        "product_variant": {"type": ["string", "null"]},
+        "basis": {"type": "string"},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "source_ref": {"type": ["string", "null"]}
       }
     },
     "inspection_targets": {

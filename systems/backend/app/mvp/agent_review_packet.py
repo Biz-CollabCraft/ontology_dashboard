@@ -39,6 +39,12 @@ def compose_agent_review_packet(
     evidence_ref = str((view_model.get("evidence") or {}).get("evidence_payload_reference") or "")
     if evidence_ref:
         source_refs.append(evidence_ref)
+    operation_context_summary = _operation_context_summary(
+        view_model.get("operation_context") or {}
+    )
+    operation_context_source_ref = operation_context_summary.get("source_ref")
+    if operation_context_source_ref:
+        source_refs.append(str(operation_context_source_ref))
 
     for target in view_model.get("inspection_targets") or []:
         inspection_targets.append(_agent_inspection_target(target))
@@ -104,6 +110,11 @@ def compose_agent_review_packet(
         "schema_version": "agent-review-packet-v1.0",
         "project_id": project_id,
         "asset_id": str((view_model.get("asset") or {}).get("asset_id") or ""),
+        "asset_label": str(
+            (view_model.get("asset") or {}).get("display_name")
+            or (view_model.get("asset") or {}).get("asset_id")
+            or ""
+        ),
         "generated_at": str((view_model.get("asset") or {}).get("observed_at") or ""),
         "risk_summary": {
             "status_grade": (view_model.get("risk") or {}).get("status_grade"),
@@ -123,6 +134,7 @@ def compose_agent_review_packet(
         },
         "inspection_targets": inspection_targets,
         "sop_guidance": sop_guidance,
+        "operation_context_summary": operation_context_summary,
         "history_review_items": list(dict.fromkeys(history_review_items)),
         "evidence_gaps": (view_model.get("evidence") or {}).get("gaps") or [],
         "source_refs": list(dict.fromkeys(source_refs)),
@@ -136,6 +148,38 @@ def compose_agent_review_packet(
         },
         "limitations": list(dict.fromkeys(limitations)),
     }
+
+
+def _operation_context_summary(context: dict[str, Any]) -> dict[str, Any] | None:
+    if not context:
+        return None
+
+    event_impact = context.get("event_impact") or {}
+    event_basis = event_impact.get("basis") or {}
+    production_plan = context.get("production_plan") or {}
+    capacity_model = context.get("capacity_model") or {}
+    context_id = str(context.get("context_id") or "")
+
+    return {
+        "production_impact": context.get("production_impact"),
+        "estimated_downtime_minutes": _number_or_none(
+            event_basis.get("estimated_downtime_minutes")
+        ),
+        "estimated_lost_units": _number_or_none(event_impact.get("estimated_lost_units")),
+        "product_variant": event_impact.get("product_variant")
+        or production_plan.get("product_variant"),
+        "basis": str(capacity_model.get("basis") or ""),
+        "limitations": [str(item) for item in context.get("limitations") or []],
+        "source_ref": f"operation-context://{context_id}" if context_id else None,
+    }
+
+
+def _number_or_none(value: Any) -> float | int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    return None
 
 
 def _agent_inspection_target(target: dict[str, Any]) -> dict[str, Any]:

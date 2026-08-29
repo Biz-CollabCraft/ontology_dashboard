@@ -1580,7 +1580,7 @@ function AssetPreviewPanel({
     }
   };
   useEffect(() => {
-    if (role !== "field_operator" || activeTab !== "action" || !asset || !agentPacketKey) return;
+    if (role !== "field_operator" || activeTab !== "status" || !asset || !agentPacketKey) return;
     if (agentPacketLoading || agentPacketRequestKey === agentPacketKey) return;
     void loadAgentPacket();
   }, [activeTab, agentPacketKey, agentPacketLoading, agentPacketRequestKey, asset, role]);
@@ -1598,6 +1598,8 @@ function AssetPreviewPanel({
     ? agentSummary?.history_summary ?? agentPacket.review_draft.history_summary
     : [];
   const agentFocusItems = agentSummary?.inspection_focus ?? [];
+  const agentRoleSummaries = agentSummary?.role_summaries ?? [];
+  const agentDataFootnotes = agentSummary?.data_footnotes ?? [];
   if (factorySlotPreview && !asset) {
     const { slot, cell } = factorySlotPreview;
     return (
@@ -1760,6 +1762,73 @@ function AssetPreviewPanel({
 
           {role === "field_operator" && activeTab === "status" ? (
             <>
+              <section className="mvp-agent-review-packet" aria-label="AI 검토 요약">
+                <header><Bot size={14} /><strong>AI 검토 요약</strong><span>검토 전용</span></header>
+                {agentPacketLoading ? <p>AI 요약을 불러오는 중입니다.</p> : null}
+                {!agentPacketLoading ? (
+                  <>
+                    {agentPacketError ? <p>{agentPacketError}</p> : null}
+                    {agentPacket ? (
+                      <>
+                        <dl>
+                          <div><dt>설비</dt><dd>{agentPacket.asset_label || agentSummary?.asset_id || agentPacket.asset_id}</dd></div>
+                          <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
+                          <div><dt>근거 묶음</dt><dd>{agentPacket.inspection_targets.length ? `${agentPacket.inspection_targets.length}개 점검 계통` : "패킷 검토"}</dd></div>
+                          <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
+                          <div><dt>운영 맥락</dt><dd>{agentPacket.operation_context_summary?.production_impact ?? "조회 전"}</dd></div>
+                          <div><dt>요약 방식</dt><dd>{agentSummary?.mode === "llm" ? "LLM 검증 통과" : "규칙 기반 fallback"}</dd></div>
+                        </dl>
+                        {agentSummary?.mode === "deterministic_fallback" ? (
+                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 패킷 기준으로 요약했습니다.</small>
+                        ) : null}
+                        <small>이력 조회 요약</small>
+                        {agentHistoryItems.length ? (
+                          <ul>
+                            {agentHistoryItems.slice(0, 3).map((item) => (
+                              <li key={`${agentPacket.asset_id}-history-${item}`}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : <p>조회된 이력 요약이 없습니다.</p>}
+                        <div className="mvp-agent-review-draft">
+                          <strong>{agentSummary?.title ?? agentPacket.review_draft.title}</strong>
+                          <p>{agentSummary?.summary ?? agentPacket.review_draft.summary}</p>
+                          {agentRoleSummaries.length ? (
+                            <div className="mvp-agent-role-quotes" aria-label="역할별 AI 요약">
+                              {agentRoleSummaries.map((item) => (
+                                <figure key={`${agentPacket.asset_id}-role-${item.role}`}>
+                                  <figcaption>{item.label}</figcaption>
+                                  <blockquote>{item.quote}</blockquote>
+                                </figure>
+                              ))}
+                            </div>
+                          ) : null}
+                          {agentFocusItems.length ? (
+                            <ul>
+                              {agentFocusItems.slice(0, 4).map((item) => (
+                                <li key={`${agentPacket.asset_id}-focus-${item.component_id}`}>
+                                  {item.component_label}{item.location_label ? ` · ${item.location_label}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          <small>{agentSummary?.boundary_note ?? agentPacket.review_draft.boundary_note}</small>
+                        </div>
+                        {agentDataFootnotes.length ? (
+                          <ol className="mvp-agent-footnotes" aria-label="부족 데이터 각주">
+                            {agentDataFootnotes.map((item, index) => (
+                              <li key={`${agentPacket.asset_id}-footnote-${item.code}-${index}`}>
+                                <sup>{index + 1}</sup>{item.note}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : null}
+                        <small>{agentPacket.closed_loop_boundary.note}</small>
+                      </>
+                    ) : agentPacketError ? null : <p>AI 요약을 불러오는 중입니다.</p>}
+                  </>
+                ) : null}
+              </section>
+
               <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검 근거">
                 <header><Wrench size={14} /><strong>점검 근거</strong><span>SOP 참고 안내</span></header>
                 <div className="equipment-sketch" aria-label="설비 참고도">
@@ -1862,53 +1931,6 @@ function AssetPreviewPanel({
                 <label><span>담당자</span><input disabled placeholder={assignee} /></label>
                 <label><span>완료 메모</span><textarea disabled value="정비 완료 API 연결 후 입력" readOnly /></label>
               </div>
-              <section className="mvp-agent-review-packet" aria-label="AI 검토 요약">
-                <header><Bot size={14} /><strong>AI 검토 요약</strong><span>검토 전용</span></header>
-                {agentPacketLoading ? <p>AI 요약을 불러오는 중입니다.</p> : null}
-                {!agentPacketLoading ? (
-                  <>
-                    {agentPacketError ? <p>{agentPacketError}</p> : null}
-                    {agentPacket ? (
-                      <>
-                        <dl>
-                          <div><dt>설비</dt><dd>{agentSummary?.asset_id ?? agentPacket.asset_id}</dd></div>
-                          <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
-                          <div><dt>근거</dt><dd>{agentPacket.sop_guidance.length ? `${agentPacket.sop_guidance.length}개 SOP 연결` : "SOP 근거 없음"}</dd></div>
-                          <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
-                          <div><dt>SOP 출처</dt><dd>{agentPacket.sop_retrieval.provider}</dd></div>
-                          <div><dt>요약 방식</dt><dd>{agentSummary?.mode === "llm" ? "LLM 검증 통과" : "규칙 기반 fallback"}</dd></div>
-                        </dl>
-                        {agentSummary?.mode === "deterministic_fallback" ? (
-                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 패킷 기준으로 요약했습니다.</small>
-                        ) : null}
-                        <small>이력 조회 요약</small>
-                        {agentHistoryItems.length ? (
-                          <ul>
-                            {agentHistoryItems.slice(0, 3).map((item) => (
-                              <li key={`${agentPacket.asset_id}-history-${item}`}>{item}</li>
-                            ))}
-                          </ul>
-                        ) : <p>조회된 이력 요약이 없습니다.</p>}
-                        <div className="mvp-agent-review-draft">
-                          <strong>{agentSummary?.title ?? agentPacket.review_draft.title}</strong>
-                          <p>{agentSummary?.summary ?? agentPacket.review_draft.summary}</p>
-                          {agentFocusItems.length ? (
-                            <ul>
-                              {agentFocusItems.slice(0, 4).map((item) => (
-                                <li key={`${agentPacket.asset_id}-focus-${item.component_id}`}>
-                                  {item.component_label}{item.location_label ? ` · ${item.location_label}` : ""}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                          <small>{agentSummary?.boundary_note ?? agentPacket.review_draft.boundary_note}</small>
-                        </div>
-                        <small>{agentPacket.closed_loop_boundary.note}</small>
-                      </>
-                    ) : agentPacketError ? null : <p>AI 요약을 불러오는 중입니다.</p>}
-                  </>
-                ) : null}
-              </section>
               <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} />
               <p className="mvp-action-note">
                 점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
