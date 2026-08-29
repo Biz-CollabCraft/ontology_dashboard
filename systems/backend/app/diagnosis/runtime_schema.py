@@ -197,6 +197,7 @@ class PredictionResultBatchModelSetItem(StrictModel):
     model_version: str = Field(min_length=1, max_length=240)
     required: bool = True
     model_artifact_manifest_sha256: str = Field(pattern=SHA256_PATTERN)
+    selected_threshold: float | None = Field(default=None, ge=0, le=1)
 
     @field_validator("model_artifact_manifest_sha256")
     @classmethod

@@ -309,11 +309,13 @@ class PipelineService:
             h_req_sha = _compute_canonical_dict_sha256(art.history_requirement or {})
             l_schema_ver = (art.label_schema or {}).get("label_schema_version", getattr(art, "label_schema_version", "1.0.0") if hasattr(art, "label_schema_version") else "1.0.0")
             l_schema_sha = _compute_canonical_dict_sha256(art.label_schema or {"model_id": model_id, "manifest_checksum": manifest_sha})
+            selected_threshold = (art.manifest.get("training_config") or {}).get("selected_threshold")
 
             snapshot[model_id] = {
                 "model_id": model_id,
                 "model_version": art.model_version,
                 "manifest_sha256": manifest_sha,
+                "selected_threshold": selected_threshold,
                 "feature_schema_version": f_schema_ver,
                 "feature_schema_sha256": f_schema_sha,
                 "history_requirement_version": h_req_ver,
@@ -409,6 +411,7 @@ class PipelineService:
                 model_version=current_snapshot[self.prediction_service.resolve_model_id(bm)]["model_version"],
                 required=active_model_set.models[bm].required if bm in active_model_set.models else True,
                 model_artifact_manifest_sha256=current_snapshot[self.prediction_service.resolve_model_id(bm)]["manifest_sha256"],
+                selected_threshold=current_snapshot[self.prediction_service.resolve_model_id(bm)].get("selected_threshold"),
             )
             for bm in active_model_names
         ]

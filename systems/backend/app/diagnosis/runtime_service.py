@@ -26,6 +26,7 @@ from .evidence_projection import (
     event_evidence_projection_to_legacy_evidence,
     product_result_artifact_to_event_evidence_projection,
 )
+from .recommendation_policy import resolve_status_criticality_action
 from .runtime_schema import (
     DashboardDataSource,
     DashboardEquipment,
@@ -408,26 +409,62 @@ class PredictiveMaintenanceRuntimeService:
         return json.loads(path.read_text(encoding="utf-8"))
 
     @classmethod
-    def _status_for_generator_score(cls, score: float) -> str:
-        rules = cls._threshold_policy()["severity_rules"]
-        if score >= float(rules["critical"]):
-            return "critical"
-        if score >= float(rules["warning"]):
-            return "warning"
-        if score >= float(rules["attention"]):
-            return "attention"
-        return "normal"
+    def _generator_model_snapshot(cls, batch: PredictionResultBatch, item: Any) -> Any | None:
+        for model in batch.model_set.models:
+            if model.model_id == item.model_id and model.model_version == item.model_version:
+                return model
+        return None
 
     @classmethod
-    def _promotion_action(cls, status: str) -> dict[str, str]:
-        action = str(cls._threshold_policy()["decision_mapping"][status])
+    def _generator_policy_decision(
+        cls,
+        *,
+        score: float,
+        selected_threshold: float | None,
+        criticality: str | None,
+    ) -> dict[str, float | str | None]:
+        policy = cls._threshold_policy()
+        fallback_threshold = float(policy["decision_threshold"])
+        threshold = float(selected_threshold if selected_threshold is not None else fallback_threshold)
+        adjustments = policy.get("criticality_adjustments", {})
+        adjustment = float(adjustments.get(str(criticality), 0.0)) if criticality else 0.0
+        rules = policy["severity_rules"]
+        attention = min(float(rules["attention"]) + adjustment, threshold)
+        warning = float(rules["warning"]) + adjustment
+        critical = float(rules["critical"])
+        if score >= critical:
+            status = "critical"
+        elif score >= warning:
+            status = "warning"
+        elif score >= attention:
+            status = "attention"
+        else:
+            status = "normal"
+        return {
+            "status": status,
+            "selected_threshold": threshold,
+            "attention_threshold": attention,
+            "warning_threshold": warning,
+            "critical_threshold": critical,
+            "criticality_adjustment": adjustment,
+        }
+
+    @classmethod
+    def _promotion_action(cls, status: str, criticality: str | None) -> dict[str, str]:
+        resolved = resolve_status_criticality_action(status, criticality)
+        if resolved is not None:
+            action_key, label, kind = resolved
+        else:
+            action_key = str(cls._threshold_policy()["decision_mapping"][status])
+            label = action_key
+            kind = "backend_threshold_policy"
         priority = {
             "critical": "urgent",
             "warning": "high",
             "attention": "medium",
             "normal": "normal",
         }[status]
-        return {"action": action, "priority": priority}
+        return {"action": action_key, "label": label, "kind": kind, "priority": priority}
 
     @staticmethod
     def _confidence_for_generator_score(score: float, threshold: float) -> float:
@@ -452,17 +489,33 @@ class PredictiveMaintenanceRuntimeService:
         project_id: str,
         workspace_id: str,
         dataset_version_id: str,
-        asset_type: str,
+        asset: dict[str, Any],
         batch: PredictionResultBatch,
         item: Any,
     ) -> dict[str, Any]:
         score = float(item.score)
-        threshold = float(cls._threshold_policy()["decision_threshold"])
-        status = cls._status_for_generator_score(score)
-        predicted_type = "failure_risk" if score >= threshold else "no_significant_risk"
+        model_snapshot = cls._generator_model_snapshot(batch, item)
+        selected_threshold = (
+            float(model_snapshot.selected_threshold)
+            if model_snapshot is not None and model_snapshot.selected_threshold is not None
+            else None
+        )
+        criticality = (
+            str(asset.get("criticality"))
+            if asset.get("criticality") in {"low", "medium", "high"}
+            else None
+        )
+        policy_decision = cls._generator_policy_decision(
+            score=score,
+            selected_threshold=selected_threshold,
+            criticality=criticality,
+        )
+        threshold = float(policy_decision["selected_threshold"])
+        status = str(policy_decision["status"])
+        predicted_type = "failure_risk" if score >= threshold else "none"
         prediction_id = f"GEN-{uuid.uuid5(uuid.NAMESPACE_URL, f'{batch.batch_id}:{item.event_id}')}"
         artifact_id = f"RESULT#{prediction_id}"
-        action = cls._promotion_action(status)
+        action = cls._promotion_action(status, criticality)
         confidence = cls._confidence_for_generator_score(score, threshold)
         source_reference = (
             f"prediction-result-batch:{batch.batch_id}:event:{item.event_id}:"
@@ -479,14 +532,22 @@ class PredictiveMaintenanceRuntimeService:
             },
             {
                 "rank": 2,
-                "feature": "backend_decision_threshold",
+                "feature": "model_selected_threshold",
                 "feature_value": threshold,
                 "signed_contribution": 0.0,
                 "direction": "risk_down",
-                "explanation_method": "backend_threshold_policy",
+                "explanation_method": "model_artifact_training_config",
             },
             {
                 "rank": 3,
+                "feature": "asset_criticality_adjustment",
+                "feature_value": policy_decision["criticality_adjustment"],
+                "signed_contribution": policy_decision["criticality_adjustment"],
+                "direction": "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
+                "explanation_method": "backend_threshold_policy",
+            },
+            {
+                "rank": 4,
                 "feature": "generator_model_artifact_manifest",
                 "feature_value": 1.0,
                 "signed_contribution": 0.0,
@@ -517,13 +578,22 @@ class PredictiveMaintenanceRuntimeService:
                     abs(score - threshold),
                 ),
                 (
-                    "backend_decision_threshold",
-                    "Backend decision threshold",
+                    "model_selected_threshold",
+                    "Model selected threshold",
                     threshold,
                     "probability",
-                    "policy value",
+                    "model artifact value",
                     "risk_down",
                     0.0,
+                ),
+                (
+                    "asset_criticality_adjustment",
+                    "Asset criticality adjustment",
+                    policy_decision["criticality_adjustment"],
+                    "probability",
+                    "policy value",
+                    "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
+                    abs(float(policy_decision["criticality_adjustment"])),
                 ),
                 (
                     "generator_model_artifact_manifest",
@@ -556,12 +626,72 @@ class PredictiveMaintenanceRuntimeService:
                 "description": "Generator model artifact lineage checksum used for this prediction.",
             },
             {
-                "field_id": "backend_policy.decision_threshold",
+                "field_id": "model_artifact.selected_threshold",
+                "source_path": f"model_set.models[model_id={item.model_id},model_version={item.model_version}].selected_threshold",
+                "label": "Model selected threshold",
+                "description": "Model Artifact training_config.selected_threshold captured in the Generator batch snapshot.",
+            },
+            {
+                "field_id": "asset.criticality",
+                "source_path": f"pm_assets[asset_id={item.asset_id}].criticality",
+                "label": "Asset criticality",
+                "description": "Asset criticality used for Backend severity-boundary adjustment when available.",
+            },
+            {
+                "field_id": "backend_policy.severity_rules",
                 "source_path": "systems/backend/app/diagnosis/threshold_policy.json",
-                "label": "Backend decision threshold",
-                "description": "Backend-owned threshold policy applied during Product Result promotion.",
+                "label": "Backend severity policy",
+                "description": "Backend-owned severity and criticality adjustment policy applied during Product Result promotion.",
             },
         ]
+        evidence_gaps = [
+            {
+                "gap_id": "generator-batch-sensor-window-unavailable",
+                "field": "evidence_payload.sensor_evidence",
+                "reason": "missing_source",
+                "required_source": "observation window and feature attribution payload",
+                "owner_domain": "diagnosis",
+                "display_policy": "show_limitation",
+            },
+            {
+                "gap_id": "generator-batch-component-hypotheses-unavailable",
+                "field": "evidence_payload.component_hypotheses",
+                "reason": "insufficient_context",
+                "required_source": "component attribution or inspection-target mapping",
+                "owner_domain": "diagnosis",
+                "display_policy": "show_limitation",
+            },
+            {
+                "gap_id": "generator-batch-maintenance-context-unavailable",
+                "field": "evidence_payload.maintenance_context",
+                "reason": "missing_source",
+                "required_source": "maintenance context provider",
+                "owner_domain": "maintenance",
+                "display_policy": "show_limitation",
+            },
+        ]
+        if selected_threshold is None:
+            evidence_gaps.append(
+                {
+                    "gap_id": "generator-batch-selected-threshold-unavailable",
+                    "field": "model_artifact.selected_threshold",
+                    "reason": "missing_source",
+                    "required_source": "Model Artifact training_config.selected_threshold in model_set snapshot",
+                    "owner_domain": "generator",
+                    "display_policy": "show_limitation",
+                }
+            )
+        if criticality is None:
+            evidence_gaps.append(
+                {
+                    "gap_id": "generator-batch-asset-criticality-unavailable",
+                    "field": "asset.criticality",
+                    "reason": "missing_source",
+                    "required_source": "asset criticality from Backend asset context",
+                    "owner_domain": "operations",
+                    "display_policy": "show_limitation",
+                }
+            )
         evidence_payload = {
             "sensor_evidence": {"window_rows": 0, "sensors": {}},
             "component_hypotheses": [],
@@ -572,46 +702,26 @@ class PredictiveMaintenanceRuntimeService:
             "recommended_actions": [
                 {
                     "action_id": action["action"],
-                    "label": action["action"],
-                    "kind": "backend_policy_recommendation",
+                    "label": action["label"],
+                    "kind": action["kind"],
                     "requires_human_approval": True,
-                    "basis": ["prediction_batch.score", "backend_policy.decision_threshold"],
+                    "basis": [
+                        "prediction_batch.score",
+                        "model_artifact.selected_threshold",
+                        "asset.criticality",
+                        "backend_policy.severity_rules",
+                    ],
                 }
             ],
             "source_fields": source_fields,
-            "evidence_gaps": [
-                {
-                    "gap_id": "generator-batch-sensor-window-unavailable",
-                    "field": "evidence_payload.sensor_evidence",
-                    "reason": "missing_source",
-                    "required_source": "observation window and feature attribution payload",
-                    "owner_domain": "diagnosis",
-                    "display_policy": "show_limitation",
-                },
-                {
-                    "gap_id": "generator-batch-component-hypotheses-unavailable",
-                    "field": "evidence_payload.component_hypotheses",
-                    "reason": "insufficient_context",
-                    "required_source": "component attribution or inspection-target mapping",
-                    "owner_domain": "diagnosis",
-                    "display_policy": "show_limitation",
-                },
-                {
-                    "gap_id": "generator-batch-maintenance-context-unavailable",
-                    "field": "evidence_payload.maintenance_context",
-                    "reason": "missing_source",
-                    "required_source": "maintenance context provider",
-                    "owner_domain": "maintenance",
-                    "display_policy": "show_limitation",
-                },
-            ],
+            "evidence_gaps": evidence_gaps,
         }
         artifact = {
             "artifact_id": artifact_id,
             "artifact_type": "predictive_maintenance_result",
             "schema_version": V3_1_RESULT_SCHEMA,
             "asset_id": item.asset_id,
-            "asset_type": asset_type,
+            "asset_type": str(asset["asset_type"]),
             "observed_at": item.observed_at.isoformat(),
             "generated_at": batch.emitted_at.isoformat(),
             "threshold": threshold,
@@ -653,6 +763,7 @@ class PredictiveMaintenanceRuntimeService:
                     "model_id": item.model_id,
                     "model_version": item.model_version,
                     "model_artifact_manifest_sha256": item.model_artifact_manifest_sha256,
+                    "selected_threshold": selected_threshold,
                     "feature_schema_version": item.feature_schema_version,
                     "history_requirement_version": item.history_requirement_version,
                     "label_schema_version": item.label_schema_version,
@@ -716,7 +827,7 @@ class PredictiveMaintenanceRuntimeService:
                 project_id=project_id,
                 workspace_id=workspace_id,
                 dataset_version_id=str(context["dataset_version_id"]),
-                asset_type=str(asset["asset_type"]),
+                asset=asset,
                 batch=batch,
                 item=item,
             )

@@ -97,6 +97,7 @@ def build_sample_prediction_batch(
                 model_version=model_version,
                 required=True,
                 model_artifact_manifest_sha256=MODEL_ARTIFACT_SHA256,
+                selected_threshold=0.55,
             )
         ],
     )

@@ -37,8 +37,14 @@ class FakeIdentity:
 
 
 class FakeInboxRepository:
-    def __init__(self, *, assets: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        assets: set[str] | None = None,
+        asset_metadata: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         self.assets = assets or {"CNC-001"}
+        self.asset_metadata = asset_metadata or {}
         self.batches: dict[str, str] = {}
         self.items: dict[str, str] = {}
         self.saved: list[dict[str, Any]] = []
@@ -128,6 +134,7 @@ class FakeInboxRepository:
                 "asset_type": "cnc",
                 "site_id": "site-1",
                 "cell_id": "cell-1",
+                **self.asset_metadata.get(asset_id, {}),
             }
             for asset_id in self.assets
         }
@@ -281,10 +288,71 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
         "prediction_batch.score",
         "prediction_batch.payload_sha256",
         "prediction_batch.model_artifact_manifest_sha256",
-        "backend_policy.decision_threshold",
+        "model_artifact.selected_threshold",
+        "asset.criticality",
+        "backend_policy.severity_rules",
     ]
     assert summary.recommended_actions[0].requires_human_approval is True
     assert summary.evidence_gaps[0].display_policy == "show_limitation"
+
+
+def test_prediction_batch_promotion_uses_model_selected_threshold_for_positive_score() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    payload["results"][0]["score"] = 0.22
+    payload["model_set"]["models"][0]["selected_threshold"] = 0.2
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+    assert receive(service, payload).validation_status == "accepted"
+
+    receipt = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert receipt.promotion_status == "promoted"
+    artifact = repository.promotions[0]["artifact"]
+    assert artifact["threshold"] == 0.2
+    assert artifact["status_grade"] == "attention"
+    assert artifact["predicted_failure_type"] == "failure_risk"
+    assert artifact["recommended_action"]["action"] == "request_inspection"
+    assert artifact["provenance"]["model_artifact"]["selected_threshold"] == 0.2
+
+
+def test_prediction_batch_promotion_applies_high_criticality_warning_adjustment() -> None:
+    repository = FakeInboxRepository(
+        asset_metadata={"CNC-001": {"criticality": "high"}},
+    )
+    service = make_service(repository)
+    payload = load_payload()
+    payload["results"][0]["score"] = 0.53
+    payload["model_set"]["models"][0]["selected_threshold"] = 0.8
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+    assert receive(service, payload).validation_status == "accepted"
+
+    receipt = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert receipt.promotion_status == "promoted"
+    artifact = repository.promotions[0]["artifact"]
+    assert artifact["status_grade"] == "warning"
+    assert artifact["predicted_failure_type"] == "none"
+    assert artifact["recommended_action"]["action"] == "request_inspection"
+    assert artifact["evidence_payload"]["recommended_actions"][0]["kind"] == (
+        "request_inspection"
+    )
+    gap_ids = {gap["gap_id"] for gap in artifact["evidence_payload"]["evidence_gaps"]}
+    assert "generator-batch-asset-criticality-unavailable" not in gap_ids
 
 
 def test_prediction_batch_promotion_is_idempotent() -> None:
