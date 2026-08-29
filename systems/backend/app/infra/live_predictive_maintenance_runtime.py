@@ -856,6 +856,7 @@ def _read_overlay_event_rows(
     stream_root: str | Path,
     event: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    validate_overlay_available_event(event)
     path = _overlay_branch_path(stream_root, event)
     if not path.exists():
         raise ValueError(f"Runtime Overlay branch storage is missing: {path}")
@@ -915,6 +916,7 @@ def _read_overlay_history_rows(
 ) -> list[dict[str, Any]]:
     """Read the cumulative post-maintenance history visible at this event."""
 
+    validate_overlay_available_event(event)
     path = _overlay_branch_path(stream_root, event)
     if not path.exists():
         raise ValueError(f"Runtime Overlay branch storage is missing: {path}")
