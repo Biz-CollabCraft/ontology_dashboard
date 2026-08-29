@@ -6,6 +6,8 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from app.dependencies import build_manufacturing_service
+from app.mvp.agent_review_packet import compose_agent_review_packet
+from app.mvp.context_providers import AgentReviewContext
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,3 +127,51 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         assert current["evidence_gaps"] == gold["evidence_gaps"]
         assert current["source_refs"] == gold["source_refs"]
         assert current["closed_loop_boundary"] == gold["closed_loop_boundary"]
+
+
+def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-review-context.db", root=ROOT)
+    fixture = service._fixture_for_asset("CNC-S04-L02-03", "manufacturing-demo-project")
+    artifact = service._product_result_artifact(fixture)
+    view_model = service.asset_detail_view_model(
+        "CNC-S04-L02-03",
+        "manufacturing-demo-project",
+    )
+    sop_retrieval = service._retrieve_inspection_sops(fixture, artifact)
+    context = AgentReviewContext(
+        operation_context_summary={
+            "production_impact": "high",
+            "estimated_downtime_minutes": 240,
+            "estimated_lost_units": 51,
+            "product_variant": "L",
+            "basis": "adapter supplied context",
+            "limitations": [],
+            "source_ref": "adapter://operation-context/test",
+        },
+        evidence_gaps=[
+            {
+                "field": "adapter_context.inventory",
+                "reason": "adapter_context_missing_or_unresolved",
+                "owner_domain": "inventory",
+            }
+        ],
+        source_refs=["adapter://operation-context/test"],
+    )
+
+    packet = compose_agent_review_packet(
+        project_id="manufacturing-demo-project",
+        view_model=view_model,
+        sop_retrieval=sop_retrieval,
+        context=context,
+    )
+
+    assert packet["operation_context_summary"]["source_ref"] == (
+        "adapter://operation-context/test"
+    )
+    assert "adapter://operation-context/test" in packet["source_refs"]
+    assert {
+        "field": "adapter_context.inventory",
+        "reason": "adapter_context_missing_or_unresolved",
+        "owner_domain": "inventory",
+    } in packet["evidence_gaps"]
+    assert "role_summaries" not in packet

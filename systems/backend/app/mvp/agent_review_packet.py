@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.mvp.context_providers import (
+    AgentReviewContext,
+    compose_default_agent_review_context,
+)
+
 
 FORBIDDEN_AGENT_ACTIONS = [
     "create_work_order",
@@ -21,7 +26,9 @@ def compose_agent_review_packet(
     project_id: str,
     view_model: dict[str, Any],
     sop_retrieval: dict[str, Any],
+    context: AgentReviewContext | None = None,
 ) -> dict[str, Any]:
+    agent_context = context or compose_default_agent_review_context(view_model=view_model)
     retrieval_results = sop_retrieval.get("results") or []
     procedures_by_id = {
         str((item.get("procedure") or {}).get("sop_id") or ""): item
@@ -39,12 +46,7 @@ def compose_agent_review_packet(
     evidence_ref = str((view_model.get("evidence") or {}).get("evidence_payload_reference") or "")
     if evidence_ref:
         source_refs.append(evidence_ref)
-    operation_context_summary = _operation_context_summary(
-        view_model.get("operation_context") or {}
-    )
-    operation_context_source_ref = operation_context_summary.get("source_ref")
-    if operation_context_source_ref:
-        source_refs.append(str(operation_context_source_ref))
+    source_refs.extend(agent_context.source_refs)
 
     for target in view_model.get("inspection_targets") or []:
         inspection_targets.append(_agent_inspection_target(target))
@@ -95,6 +97,10 @@ def compose_agent_review_packet(
 
     closed_loop = view_model.get("closed_loop") or {}
     available_actions = closed_loop.get("available_actions") or []
+    evidence_gaps = _packet_evidence_gaps(
+        view_model=view_model,
+        context=agent_context,
+    )
     review_draft = _compose_review_draft(
         asset=view_model.get("asset") or {},
         risk=view_model.get("risk") or {},
@@ -104,7 +110,7 @@ def compose_agent_review_packet(
         equipment_history=view_model.get("equipment_history") or [],
         maintenance_context=view_model.get("maintenance_context") or {},
         closed_loop=closed_loop,
-        evidence_gaps=(view_model.get("evidence") or {}).get("gaps") or [],
+        evidence_gaps=evidence_gaps,
     )
     return {
         "schema_version": "agent-review-packet-v1.0",
@@ -134,9 +140,9 @@ def compose_agent_review_packet(
         },
         "inspection_targets": inspection_targets,
         "sop_guidance": sop_guidance,
-        "operation_context_summary": operation_context_summary,
+        "operation_context_summary": agent_context.operation_context_summary,
         "history_review_items": list(dict.fromkeys(history_review_items)),
-        "evidence_gaps": (view_model.get("evidence") or {}).get("gaps") or [],
+        "evidence_gaps": evidence_gaps,
         "source_refs": list(dict.fromkeys(source_refs)),
         "closed_loop_boundary": {
             "mutation_allowed": False,
@@ -150,36 +156,31 @@ def compose_agent_review_packet(
     }
 
 
-def _operation_context_summary(context: dict[str, Any]) -> dict[str, Any] | None:
-    if not context:
-        return None
-
-    event_impact = context.get("event_impact") or {}
-    event_basis = event_impact.get("basis") or {}
-    production_plan = context.get("production_plan") or {}
-    capacity_model = context.get("capacity_model") or {}
-    context_id = str(context.get("context_id") or "")
-
-    return {
-        "production_impact": context.get("production_impact"),
-        "estimated_downtime_minutes": _number_or_none(
-            event_basis.get("estimated_downtime_minutes")
-        ),
-        "estimated_lost_units": _number_or_none(event_impact.get("estimated_lost_units")),
-        "product_variant": event_impact.get("product_variant")
-        or production_plan.get("product_variant"),
-        "basis": str(capacity_model.get("basis") or ""),
-        "limitations": [str(item) for item in context.get("limitations") or []],
-        "source_ref": f"operation-context://{context_id}" if context_id else None,
-    }
-
-
-def _number_or_none(value: Any) -> float | int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return value
-    return None
+def _packet_evidence_gaps(
+    *,
+    view_model: dict[str, Any],
+    context: AgentReviewContext,
+) -> list[dict[str, str]]:
+    gaps = [
+        {
+            "field": str(gap.get("field") or ""),
+            "reason": str(gap.get("reason") or ""),
+            "owner_domain": str(gap.get("owner_domain") or ""),
+        }
+        for gap in (view_model.get("evidence") or {}).get("gaps") or []
+    ]
+    gaps.extend(context.evidence_gaps)
+    return [
+        dict(zip(("field", "reason", "owner_domain"), key))
+        for key in dict.fromkeys(
+            (
+                str(gap.get("field") or ""),
+                str(gap.get("reason") or ""),
+                str(gap.get("owner_domain") or ""),
+            )
+            for gap in gaps
+        )
+    ]
 
 
 def _agent_inspection_target(target: dict[str, Any]) -> dict[str, Any]:
