@@ -83,6 +83,10 @@ def canonical_projection(
     asset_id: str = "CNC-001",
     asset_type: str = "cnc",
     artifact_id: str = "RESULT-001",
+    observed_at: str = "2026-08-01T00:00:00+09:00",
+    model_version: str = "fixture-heuristic-v1",
+    dataset_version: str = "fixture-compatibility",
+    source_sha256: str | None = None,
     decision: str | None = "review_shutdown",
 ) -> dict:
     actions = [] if decision is None else [{"action_id": decision, "basis": ["factor.1"]}]
@@ -101,10 +105,32 @@ def canonical_projection(
             "artifact_schema_version": "result-artifact-v1.0",
             "asset_id": asset_id,
             "asset_type": asset_type,
+            "observed_at": observed_at,
+            "evidence_payload_reference": artifact_id,
+            "source_sha256": source_sha256,
         },
         "assessment": {"operational_decision_kind": decision},
         "report_projection": {"recommended_actions": actions},
-        "provenance": {"lineage": {"policy_version": "recommendation-policy-v1"}},
+        "provenance": {
+            "model_version": model_version,
+            "dataset_version": dataset_version,
+            "lineage": {"policy_version": "recommendation-policy-v1"},
+        },
+    }
+
+
+def snapshot_basis(projection: dict) -> dict:
+    artifact = projection["artifact_reference"]
+    provenance = projection["provenance"]
+    return {
+        "artifact_id": artifact.get("artifact_id"),
+        "evidence_payload_reference": artifact.get("evidence_payload_reference"),
+        "asset_id": artifact.get("asset_id"),
+        "event_id": projection.get("event_id"),
+        "observed_at": artifact.get("observed_at"),
+        "model_version": provenance.get("model_version"),
+        "dataset_version": provenance.get("dataset_version"),
+        "source_sha256": artifact.get("source_sha256"),
     }
 
 
@@ -679,19 +705,52 @@ def test_inspection_request_fails_closed_for_unknown_or_mismatched_projection(tm
         )
 
 
-def test_inspection_request_uses_current_server_projection_without_client_snapshot_guard(tmp_path) -> None:
+def test_inspection_request_rejects_stale_client_snapshot_basis(tmp_path) -> None:
     query = ProjectionQuery(
         canonical_projection(artifact_id="RESULT-OLD")
     )
     loop = service(tmp_path, query=query)
-    user_seen_projection = query.projection
+    user_seen_basis = snapshot_basis(query.projection)
 
     query.projection = canonical_projection(artifact_id="RESULT-NEW")
+    with pytest.raises(ValueError, match="snapshot_basis mismatch: artifact_id"):
+        loop.request_inspection(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            payload=InspectionWorkOrderCreateRequest(
+                event_id="EVT-RESULT-001",
+                snapshot_basis=user_seen_basis,
+            ),
+            actor_id="manager-1",
+            actor_display_name="Manager One",
+            idempotency_key="inspection-request-001",
+        )
+
+    assert loop.repository.operational_side_effect_counts()["work_orders"] == 0
+    assert query.calls == [
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "event_id": "EVT-RESULT-001",
+        }
+    ]
+
+
+def test_inspection_request_accepts_matching_client_snapshot_basis(tmp_path) -> None:
+    projection = canonical_projection()
+    query = ProjectionQuery(projection)
+    loop = service(tmp_path, query=query)
+
     requested = loop.request_inspection(
         organization_id="org-1",
         project_id="project-1",
         workspace_id="workspace-1",
-        payload=inspection_request(),
+        payload=InspectionWorkOrderCreateRequest(
+            event_id="EVT-RESULT-001",
+            snapshot_basis=snapshot_basis(projection),
+        ),
         actor_id="manager-1",
         actor_display_name="Manager One",
         idempotency_key="inspection-request-001",
@@ -702,19 +761,7 @@ def test_inspection_request_uses_current_server_projection_without_client_snapsh
         work_order_id=requested["work_order_id"],
     )
     assert work_order is not None
-    assert (
-        user_seen_projection["artifact_reference"]["artifact_id"]
-        == "RESULT-OLD"
-    )
-    assert work_order.authorization.source_product_result_id == "RESULT-NEW"
-    assert query.calls == [
-        {
-            "organization_id": "org-1",
-            "project_id": "project-1",
-            "workspace_id": "workspace-1",
-            "event_id": "EVT-RESULT-001",
-        }
-    ]
+    assert work_order.authorization.source_product_result_id == "RESULT-001"
 
 
 def test_inspection_request_rejects_non_authorizing_canonical_decision(tmp_path) -> None:

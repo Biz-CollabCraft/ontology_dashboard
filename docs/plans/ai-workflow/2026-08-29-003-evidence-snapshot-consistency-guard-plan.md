@@ -159,6 +159,7 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
 
 ### U2. RecommendationInput projection 추가
 
+- **Status:** Not implemented. U1 exposed the common basis, and U3a introduced a command-side stale-view guard for inspection work-order requests before a dedicated RecommendationInput projection exists.
 - **Goal:** Closed-loop가 ViewModel이 아니라 EvidenceSnapshot에서 별도 입력을 만들게 한다.
 - **Files:**
   - `systems/backend/app/maintenance/service.py`
@@ -171,16 +172,16 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
 
 ### U3. Closed-loop snapshot guard
 
+- **Status:** Partially implemented for `InspectionWorkOrderCreateRequest`. The request may carry optional `snapshot_basis`; if supplied, non-empty fields must match the server-resolved Event Evidence Projection before an inspection work order is created.
 - **Goal:** Closed-loop mutation 직전에 basis mismatch를 막는다.
 - **Files:**
+  - `systems/backend/app/maintenance/api_schema.py`
   - `systems/backend/app/maintenance/service.py`
-  - `systems/backend/app/infra/db/maintenance_repository.py`
-  - `tests/test_mvp.py`
-  - `tests/test_maintenance_loop.py`
+  - `tests/test_maintenance_loop_application.py`
 - **Verification:**
-  - matching basis는 기존 승인/상태 전이 후보 경로를 유지한다.
-  - stale basis는 `stale_snapshot` 또는 `snapshot_mismatch`로 reject한다.
-  - reject 시 WorkOrder/MaintenanceAction/MaintenanceEvent 상태가 변하지 않는다.
+  - `test_inspection_request_accepts_matching_client_snapshot_basis` keeps the existing request path open when basis matches.
+  - `test_inspection_request_rejects_stale_client_snapshot_basis` rejects stale basis with `snapshot_basis mismatch`.
+  - reject 시 WorkOrder side effect count가 증가하지 않는다.
 
 ### U4. 1회 재조회/재생성 retry
 
