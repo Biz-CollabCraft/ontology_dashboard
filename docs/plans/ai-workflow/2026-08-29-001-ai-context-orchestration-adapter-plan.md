@@ -87,6 +87,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U1. Context Provider Contract
 
+- **Status:** Implemented on the PR 140 child branch. `AgentReviewContext` now carries read-only operation context, evidence gaps, source refs, and limitations into Agent Review Packet composition.
 - **Goal:** Define the stable abstraction that lets new domain adapters contribute context to the Agent Review Packet.
 - **Files:**
   - `contracts/schemas/agent-review-packet.schema.json`
@@ -103,14 +104,15 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U2. Domain Adapter Registry
 
+- **Status:** Implemented as U2a. The registry/composition-root wiring exists for ordered, replaceable context providers. SOP/location traversal remains in the existing packet inputs until U4 expands the adapter contract beyond `view_model` context.
 - **Goal:** Make domain additions explicit and replaceable rather than hard-coded inside one packet composer.
 - **Files:**
   - `systems/backend/app/mvp/context_providers.py`
   - `systems/backend/app/dependencies.py`
   - `tests/test_mvp.py`
-- **Approach:** Register adapters from the composition root. Start with existing operation/SOP/location behavior as in-process adapters. Avoid plugin-like dynamic loading until there are external deploy-time adapters.
+- **Approach:** Register adapters from the composition root. Start with operation context as an in-process adapter and keep SOP/location behavior as explicit packet inputs until the exploration adapter contract is introduced. Avoid plugin-like dynamic loading until there are external deploy-time adapters.
 - **Test Scenarios:**
-  - Default registry returns operation and SOP context for manufacturing demo.
+  - Default registry returns operation context for manufacturing demo.
   - Unknown adapter codes fail closed during service construction or packet generation.
   - Adapter exceptions are captured as evidence gaps rather than uncaught UI failures where reasonable.
 - **Verification:** `agent_review_packet` behavior is unchanged for GS-002/GS-004/GS-007 except explicitly added context sections.

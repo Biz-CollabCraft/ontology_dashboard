@@ -18,6 +18,7 @@ from app.diagnosis.domain import (
 )
 from app.equipment.ports import EquipmentApplicationPort
 from app.mvp.agent_review_packet import compose_agent_review_packet
+from app.mvp.context_providers import AgentReviewContextRegistry
 from app.mvp.agent_review_summary import (
     validate_agent_review_summary_contract,
     validated_agent_review_summary,
@@ -59,6 +60,7 @@ class ManufacturingPredictiveMaintenanceService:
         layout_planner: LayoutPlannerPort,
         context_provider_factory: ContextProviderFactory,
         agent_review_summary_provider: AgentReviewSummaryProvider | None = None,
+        agent_review_context_registry: AgentReviewContextRegistry | None = None,
     ) -> None:
         self.root = Path(root)
         fixture_root = self.root / "data" / "fixtures"
@@ -100,6 +102,7 @@ class ManufacturingPredictiveMaintenanceService:
         self.layout_planner = layout_planner
         self.context_provider_factory = context_provider_factory
         self.agent_review_summary_provider = agent_review_summary_provider
+        self.agent_review_context_registry = agent_review_context_registry
         self.intent_router = IntentRouter()
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
@@ -240,15 +243,23 @@ class ManufacturingPredictiveMaintenanceService:
     ) -> dict[str, Any]:
         fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
         artifact = self._product_result_artifact(fixture)
+        view_model = self.asset_detail_view_model(
+            asset_id,
+            project_id,
+            dataset_version_id=dataset_version_id,
+            history_window=history_window,
+        )
         return compose_agent_review_packet(
             project_id=project_id,
-            view_model=self.asset_detail_view_model(
-                asset_id,
-                project_id,
-                dataset_version_id=dataset_version_id,
-                history_window=history_window,
-            ),
+            view_model=view_model,
             sop_retrieval=self._retrieve_inspection_sops(fixture, artifact),
+            context=(
+                self.agent_review_context_registry.context_for_packet(
+                    view_model=view_model,
+                )
+                if self.agent_review_context_registry
+                else None
+            ),
         )
 
     def agent_review_summary(

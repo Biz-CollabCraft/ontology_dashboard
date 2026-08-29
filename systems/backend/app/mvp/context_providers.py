@@ -16,15 +16,98 @@ class AgentReviewContext:
     limitations: list[str] = field(default_factory=list)
 
 
+def merge_agent_review_contexts(contexts: list[AgentReviewContext]) -> AgentReviewContext:
+    """Merge adapter outputs without allowing later adapters to erase earlier context."""
+
+    operation_context_summary = next(
+        (
+            context.operation_context_summary
+            for context in contexts
+            if context.operation_context_summary
+        ),
+        None,
+    )
+    evidence_gaps = _dedupe_gap_dicts(
+        gap for context in contexts for gap in context.evidence_gaps
+    )
+    source_refs = list(
+        dict.fromkeys(ref for context in contexts for ref in context.source_refs if ref)
+    )
+    limitations = list(
+        dict.fromkeys(
+            limitation
+            for context in contexts
+            for limitation in context.limitations
+            if limitation
+        )
+    )
+    return AgentReviewContext(
+        operation_context_summary=operation_context_summary,
+        evidence_gaps=evidence_gaps,
+        source_refs=source_refs,
+        limitations=limitations,
+    )
+
+
 class AgentReviewContextProvider(Protocol):
     """Port implemented by domain adapters that contribute AI review context."""
+
+    adapter_id: str
 
     def context_for_packet(self, *, view_model: dict[str, Any]) -> AgentReviewContext:
         """Return source-ref grounded context without mutating domain state."""
 
 
+class AgentReviewContextRegistry:
+    """Ordered registry of domain adapters used by Agent Review Packet composition."""
+
+    def __init__(
+        self,
+        providers: list[AgentReviewContextProvider],
+        *,
+        enabled_adapter_ids: list[str] | None = None,
+    ) -> None:
+        self._providers_by_id = {
+            provider.adapter_id: provider
+            for provider in providers
+        }
+        self._enabled_adapter_ids = list(
+            enabled_adapter_ids or self._providers_by_id.keys()
+        )
+
+    def context_for_packet(self, *, view_model: dict[str, Any]) -> AgentReviewContext:
+        contexts: list[AgentReviewContext] = []
+        for adapter_id in self._enabled_adapter_ids:
+            provider = self._providers_by_id.get(adapter_id)
+            if provider is None:
+                contexts.append(
+                    _adapter_gap(
+                        adapter_id=adapter_id,
+                        reason="adapter_not_registered",
+                    )
+                )
+                continue
+            try:
+                contexts.append(provider.context_for_packet(view_model=view_model))
+            except Exception as exc:
+                contexts.append(
+                    _adapter_gap(
+                        adapter_id=adapter_id,
+                        reason="adapter_context_unavailable",
+                        detail=str(exc),
+                    )
+                )
+        return merge_agent_review_contexts(contexts)
+
+    @property
+    def enabled_adapter_ids(self) -> list[str]:
+        return list(self._enabled_adapter_ids)
+
+
 class OperationContextProvider:
     """Build the current operating context section from AssetDetailViewModel data."""
+
+    adapter_id = "operation-context"
 
     def context_for_packet(self, *, view_model: dict[str, Any]) -> AgentReviewContext:
         operation_context = view_model.get("operation_context") or {}
@@ -43,10 +126,16 @@ class OperationContextProvider:
         )
 
 
+def default_agent_review_context_registry() -> AgentReviewContextRegistry:
+    """Return the default ordered domain adapter set for manufacturing MVP."""
+
+    return AgentReviewContextRegistry([OperationContextProvider()])
+
+
 def compose_default_agent_review_context(*, view_model: dict[str, Any]) -> AgentReviewContext:
     """Return the built-in context set used by the MVP packet composer."""
 
-    return OperationContextProvider().context_for_packet(view_model=view_model)
+    return default_agent_review_context_registry().context_for_packet(view_model=view_model)
 
 
 def operation_context_summary(context: dict[str, Any]) -> dict[str, Any] | None:
@@ -79,3 +168,34 @@ def _number_or_none(value: Any) -> float | int | None:
     if isinstance(value, (int, float)):
         return value
     return None
+
+
+def _adapter_gap(
+    *,
+    adapter_id: str,
+    reason: str,
+    detail: str = "",
+) -> AgentReviewContext:
+    return AgentReviewContext(
+        evidence_gaps=[
+            {
+                "field": f"adapter_context.{adapter_id}",
+                "reason": reason if not detail else f"{reason}: {detail}",
+                "owner_domain": adapter_id,
+            }
+        ]
+    )
+
+
+def _dedupe_gap_dicts(gaps: Any) -> list[dict[str, str]]:
+    return [
+        dict(zip(("field", "reason", "owner_domain"), key))
+        for key in dict.fromkeys(
+            (
+                str(gap.get("field") or ""),
+                str(gap.get("reason") or ""),
+                str(gap.get("owner_domain") or ""),
+            )
+            for gap in gaps
+        )
+    ]

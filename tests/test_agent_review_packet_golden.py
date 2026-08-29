@@ -7,7 +7,7 @@ from jsonschema import Draft202012Validator
 
 from app.dependencies import build_manufacturing_service
 from app.mvp.agent_review_packet import compose_agent_review_packet
-from app.mvp.context_providers import AgentReviewContext
+from app.mvp.context_providers import AgentReviewContext, AgentReviewContextRegistry
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -175,3 +175,83 @@ def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) ->
         "owner_domain": "inventory",
     } in packet["evidence_gaps"]
     assert "role_summaries" not in packet
+
+
+def test_agent_review_context_registry_merges_registered_domain_adapters() -> None:
+    class InventoryContextProvider:
+        adapter_id = "inventory"
+
+        def context_for_packet(self, *, view_model: dict) -> AgentReviewContext:
+            assert view_model["asset"]["asset_id"] == "CNC-S04-L02-03"
+            return AgentReviewContext(
+                evidence_gaps=[
+                    {
+                        "field": "adapter_context.inventory.parts_on_hand",
+                        "reason": "adapter_context_missing_or_unresolved",
+                        "owner_domain": "inventory",
+                    }
+                ],
+                source_refs=["inventory://demo/parts/CNC-S04-L02-03"],
+                limitations=["Inventory adapter is read-only."],
+            )
+
+    registry = AgentReviewContextRegistry(
+        [InventoryContextProvider()],
+        enabled_adapter_ids=["inventory"],
+    )
+    context = registry.context_for_packet(
+        view_model={"asset": {"asset_id": "CNC-S04-L02-03"}}
+    )
+
+    assert context.evidence_gaps == [
+        {
+            "field": "adapter_context.inventory.parts_on_hand",
+            "reason": "adapter_context_missing_or_unresolved",
+            "owner_domain": "inventory",
+        }
+    ]
+    assert context.source_refs == ["inventory://demo/parts/CNC-S04-L02-03"]
+    assert context.limitations == ["Inventory adapter is read-only."]
+
+
+def test_agent_review_context_registry_fails_closed_for_unknown_adapter() -> None:
+    registry = AgentReviewContextRegistry([], enabled_adapter_ids=["mes"])
+
+    context = registry.context_for_packet(
+        view_model={"asset": {"asset_id": "CNC-S04-L02-03"}}
+    )
+
+    assert context.evidence_gaps == [
+        {
+            "field": "adapter_context.mes",
+            "reason": "adapter_not_registered",
+            "owner_domain": "mes",
+        }
+    ]
+
+
+def test_agent_review_context_registry_captures_adapter_exceptions_as_gaps() -> None:
+    class FailingContextProvider:
+        adapter_id = "maintenance-history"
+
+        def context_for_packet(self, *, view_model: dict) -> AgentReviewContext:
+            raise RuntimeError("history repository unavailable")
+
+    registry = AgentReviewContextRegistry(
+        [FailingContextProvider()],
+        enabled_adapter_ids=["maintenance-history"],
+    )
+
+    context = registry.context_for_packet(
+        view_model={"asset": {"asset_id": "CNC-S04-L02-03"}}
+    )
+
+    assert context.evidence_gaps == [
+        {
+            "field": "adapter_context.maintenance-history",
+            "reason": (
+                "adapter_context_unavailable: history repository unavailable"
+            ),
+            "owner_domain": "maintenance-history",
+        }
+    ]
