@@ -82,6 +82,7 @@ def canonical_projection(
     event_id: str = "EVT-RESULT-001",
     asset_id: str = "CNC-001",
     asset_type: str = "cnc",
+    artifact_id: str = "RESULT-001",
     decision: str | None = "review_shutdown",
 ) -> dict:
     actions = [] if decision is None else [{"action_id": decision, "basis": ["factor.1"]}]
@@ -96,7 +97,7 @@ def canonical_projection(
         },
         "artifact_reference": {
             "event_id": event_id,
-            "artifact_id": "RESULT-001",
+            "artifact_id": artifact_id,
             "artifact_schema_version": "result-artifact-v1.0",
             "asset_id": asset_id,
             "asset_type": asset_type,
@@ -676,6 +677,44 @@ def test_inspection_request_fails_closed_for_unknown_or_mismatched_projection(tm
             actor_display_name="Manager One",
             idempotency_key="inspection-request-001",
         )
+
+
+def test_inspection_request_uses_current_server_projection_without_client_snapshot_guard(tmp_path) -> None:
+    query = ProjectionQuery(
+        canonical_projection(artifact_id="RESULT-OLD")
+    )
+    loop = service(tmp_path, query=query)
+    user_seen_projection = query.projection
+
+    query.projection = canonical_projection(artifact_id="RESULT-NEW")
+    requested = loop.request_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        payload=inspection_request(),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="inspection-request-001",
+    )
+
+    work_order = loop.repository.get_work_order(
+        workspace_id="workspace-1",
+        work_order_id=requested["work_order_id"],
+    )
+    assert work_order is not None
+    assert (
+        user_seen_projection["artifact_reference"]["artifact_id"]
+        == "RESULT-OLD"
+    )
+    assert work_order.authorization.source_product_result_id == "RESULT-NEW"
+    assert query.calls == [
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "event_id": "EVT-RESULT-001",
+        }
+    ]
 
 
 def test_inspection_request_rejects_non_authorizing_canonical_decision(tmp_path) -> None:
