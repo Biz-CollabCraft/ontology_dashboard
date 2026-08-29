@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
+from app.diagnosis.evidence_projection import evidence_snapshot_basis_from_artifact
+
 
 DEFAULT_HISTORY_WINDOW = "24h"
 HISTORY_WINDOW_HOURS = {
@@ -198,6 +200,7 @@ def compose_asset_detail_view_model(
     inspection_locations: dict[str, dict[str, Any]] | None = None,
     data_status: dict[str, Any] | None = None,
     history_window: str = DEFAULT_HISTORY_WINDOW,
+    event_id: str | None = None,
 ) -> dict[str, Any]:
     """Compose the candidate AssetDetailViewModel from canonical contracts.
 
@@ -286,6 +289,10 @@ def compose_asset_detail_view_model(
     )
 
     return {
+        "snapshot_basis": evidence_snapshot_basis_from_artifact(
+            result_artifact,
+            event_id=event_id,
+        ),
         "asset": asset_summary,
         "risk": risk,
         "risk_series": risk_series,

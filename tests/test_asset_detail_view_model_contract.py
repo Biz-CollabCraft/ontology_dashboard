@@ -124,6 +124,24 @@ def test_schema_allows_unknown_freshness_without_synthesizing_false() -> None:
     assert properties["data_status"]["properties"]["is_stale"]["type"] == ["boolean", "null"]
 
 
+def test_schema_requires_shared_evidence_snapshot_basis() -> None:
+    payload = fixture("current_evidence_only")
+    properties = schema()["properties"]
+
+    assert "snapshot_basis" in schema()["required"]
+    assert payload["snapshot_basis"] == {
+        "artifact_id": payload["evidence"]["artifact_id"],
+        "evidence_payload_reference": payload["evidence"]["evidence_payload_reference"],
+        "asset_id": payload["asset"]["asset_id"],
+        "event_id": None,
+        "observed_at": payload["asset"]["observed_at"],
+        "model_version": payload["evidence"]["model_version"],
+        "dataset_version": payload["evidence"]["dataset_version"],
+        "source_sha256": None,
+    }
+    assert properties["snapshot_basis"]["$ref"] == "#/$defs/evidenceSnapshotBasis"
+
+
 def test_schema_keeps_feature_history_provenance_at_envelope_only() -> None:
     """Feature points carry time/value/quality only; shared provenance is not repeated."""
     properties = schema()["properties"]

@@ -67,8 +67,10 @@ Generator raw 산출
    - UI ViewModel, Report, Closed-loop Recommendation Input, Agent Review Packet은 부모-자식 관계가
      아니라 같은 Product Result/Evidence에서 파생되는 sibling projection이다.
    - 현재 Closed-loop는 서버에서 Evidence Projection을 조회해 caller-supplied lineage를 신뢰하지 않는다.
-   - 다만 caller가 본 `artifact_reference`와 mutation 시점에 조회한 Evidence Projection의 동일성을
-     비교하는 full `snapshot_basis` 계약은 별도 계획에서 검증/도입한다.
+   - `AssetDetailViewModel`과 `AgentReviewPacket`은 같은 Product Result/Evidence 기준을 비교할 수
+     있도록 `snapshot_basis`를 노출한다.
+   - 다만 caller가 본 `snapshot_basis`와 Closed-loop mutation 시점에 조회한 Evidence Projection의
+     동일성을 비교하는 guard는 별도 구현 단위로 남긴다.
 
 5. **Transactional outbox는 후속 처리 요구가 있을 때만 적용**
    - Product Result / Evidence 저장 원자성이 필요한 경우 Backend repository transaction으로 묶는다.
@@ -137,7 +139,7 @@ Generator raw 산출
 
 - 이 ADR은 제안 상태다. 구현 완료, 테스트, 배포, 운영 검증을 의미하지 않는다.
 - Product Result / Evidence 저장 원자성은 후속 repository 구현과 rollback 테스트가 필요하다.
-- ViewModel은 여러 read source를 조합하므로 완전한 동일 시점 snapshot 보장은 별도 `as_of` 또는
-  `snapshot_basis` 정책이 필요하다.
+- ViewModel은 여러 read source를 조합하므로 완전한 동일 시점 snapshot 보장은 후속 `as_of` 또는
+  Closed-loop `snapshot_basis` guard 정책이 필요하다.
 - Outbox 기반 후속 projection은 실제 consumer가 생긴 뒤 별도 PR에서 다룬다.
 - 외부 JD 레퍼런스는 역할 요구를 해석하기 위한 참고이며, 프로젝트 구현 완료 증거가 아니다.

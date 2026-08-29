@@ -201,6 +201,16 @@ describe("MVP adapter contract", () => {
     } as never);
     const detail = composeEventDetail({ event: adapted, evidence: null, report: null, activity: null });
     const enriched = applyAssetDetailViewModel(detail, {
+      snapshot_basis: {
+        artifact_id: "RESULT#CNC-001",
+        evidence_payload_reference: "RESULT#CNC-001",
+        asset_id: "CNC-001",
+        event_id: "EVT-CNC-001",
+        observed_at: "2026-08-06T03:00:00Z",
+        model_version: "model-1",
+        dataset_version: "dsv-canonical-v3-1",
+        source_sha256: null,
+      },
       asset: {
         asset_id: "CNC-001",
         asset_type: "cnc",
@@ -367,6 +377,16 @@ describe("MVP adapter contract", () => {
       },
     });
 
+    expect(enriched.snapshotBasis).toEqual({
+      artifactId: "RESULT#CNC-001",
+      evidencePayloadReference: "RESULT#CNC-001",
+      assetId: "CNC-001",
+      eventId: "EVT-CNC-001",
+      observedAt: "2026-08-06T03:00:00Z",
+      modelVersion: "model-1",
+      datasetVersion: "dsv-canonical-v3-1",
+      sourceSha256: null,
+    });
     expect(enriched.sensors[0]).toEqual(expect.objectContaining({
       observedAt: "2026-08-06T03:00:00Z",
       historySourceRef: "observation-series://CNC-001/tool_wear_min",

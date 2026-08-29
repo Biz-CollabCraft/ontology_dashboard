@@ -231,6 +231,7 @@ class ManufacturingPredictiveMaintenanceService:
                 "warnings": [],
             },
             history_window=history_window,
+            event_id=fixture.get("event_id"),
         )
 
     def agent_review_packet(

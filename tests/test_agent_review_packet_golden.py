@@ -117,6 +117,7 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         gold = _load_gold(scenario)
         assert current["schema_version"] == gold["schema_version"]
         assert current["asset_id"] == gold["asset_id"]
+        assert current["snapshot_basis"] == gold["snapshot_basis"]
         assert current["risk_summary"] == gold["risk_summary"]
         assert current["review_priority"] == gold["review_priority"]
         assert current["review_draft"] == gold["review_draft"]
@@ -127,6 +128,22 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         assert current["evidence_gaps"] == gold["evidence_gaps"]
         assert current["source_refs"] == gold["source_refs"]
         assert current["closed_loop_boundary"] == gold["closed_loop_boundary"]
+
+
+def test_agent_review_packet_uses_same_snapshot_basis_as_view_model(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-review-snapshot.db", root=ROOT)
+
+    view_model = service.asset_detail_view_model(
+        "CNC-S04-L02-03",
+        "manufacturing-demo-project",
+    )
+    packet = service.agent_review_packet(
+        "CNC-S04-L02-03",
+        "manufacturing-demo-project",
+    )
+
+    assert packet["snapshot_basis"] == view_model["snapshot_basis"]
+    assert packet["snapshot_basis"]["event_id"] == "EVT-GS-004"
 
 
 def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) -> None:

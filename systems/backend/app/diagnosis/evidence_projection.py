@@ -29,6 +29,34 @@ DECISION_BY_ACTION = {
 }
 
 
+def evidence_snapshot_basis_from_artifact(
+    artifact: dict[str, Any],
+    *,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """Return the shared basis that sibling read projections can compare."""
+
+    provenance = artifact.get("provenance") or {}
+    lineage = artifact.get("lineage") or {}
+    evidence_reference = provenance.get("evidence_payload_reference")
+    if isinstance(evidence_reference, dict):
+        evidence_reference = evidence_reference.get("reference")
+    return {
+        "artifact_id": artifact.get("artifact_id"),
+        "evidence_payload_reference": str(evidence_reference or ""),
+        "asset_id": artifact.get("asset_id"),
+        "event_id": event_id or artifact.get("event_id"),
+        "observed_at": artifact.get("observed_at"),
+        "model_version": provenance.get("model_version"),
+        "dataset_version": provenance.get("dataset_version"),
+        "source_sha256": (
+            artifact.get("source_sha256")
+            or provenance.get("source_sha256")
+            or lineage.get("source_sha256")
+        ),
+    }
+
+
 def product_result_artifact_to_event_evidence_projection(artifact: dict[str, Any]) -> dict[str, Any]:
     """Derive canonical Event Evidence projection from a producer-enriched artifact."""
 

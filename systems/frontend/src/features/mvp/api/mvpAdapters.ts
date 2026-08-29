@@ -10,6 +10,7 @@ import type {
   MvpEvent,
   MvpEventDetailModel,
   MvpEvidenceGap,
+  MvpEvidenceSnapshotBasis,
   MvpFactor,
   MvpInspectionTarget,
   MvpLineRisk,
@@ -29,6 +30,21 @@ const STATUS_PRIORITY: Record<MvpRiskStatus, number> = {
   data_quality_hold: 2,
   normal: 1,
 };
+
+function snapshotBasisFromAssetDetailViewModel(
+  viewModel: AssetDetailViewModel,
+): MvpEvidenceSnapshotBasis {
+  return {
+    artifactId: viewModel.snapshot_basis.artifact_id,
+    evidencePayloadReference: viewModel.snapshot_basis.evidence_payload_reference,
+    assetId: viewModel.snapshot_basis.asset_id,
+    eventId: viewModel.snapshot_basis.event_id,
+    observedAt: viewModel.snapshot_basis.observed_at,
+    modelVersion: viewModel.snapshot_basis.model_version,
+    datasetVersion: viewModel.snapshot_basis.dataset_version,
+    sourceSha256: viewModel.snapshot_basis.source_sha256,
+  };
+}
 
 export function normalizeRiskStatus(value: unknown): MvpRiskStatus {
   const status = String(value ?? "").toLowerCase();
@@ -678,6 +694,7 @@ export function composeEventDetail(input: {
   report.promptVersion = input.evidence?.lineage.prompt_version ?? report.promptVersion;
   provenance.promptVersion = report.promptVersion;
   return {
+    snapshotBasis: null,
     event: input.event,
     sensors: evidenceSensors(input.evidence),
     topFactors: evidenceFactors(input.evidence),
@@ -719,6 +736,7 @@ export function applyAssetDetailViewModel(
   ];
   return {
     ...detail,
+    snapshotBasis: snapshotBasisFromAssetDetailViewModel(viewModel),
     sensors: sensorsFromAssetDetailViewModel(viewModel),
     topFactors: factorsFromAssetDetailViewModel(viewModel),
     riskSeries: riskSeriesFromAssetDetailViewModel(viewModel),

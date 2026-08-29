@@ -142,15 +142,20 @@ snapshot이 바뀌었다면 같은 승인 요청의 replay로 처리하지 않�
 
 ### U1. Snapshot basis 타입 추가
 
+- **Status:** Implemented. `AssetDetailViewModel` and `AgentReviewPacket` now expose the same `snapshot_basis` object derived from Product Result/Evidence, and golden tests assert equality for the current MVP service path.
 - **Goal:** Product Result/Evidence에서 공통 basis를 추출하는 작은 타입을 만든다.
 - **Files:**
-  - `systems/backend/app/diagnosis/evidence.py`
+  - `systems/backend/app/diagnosis/evidence_projection.py`
   - `systems/backend/app/mvp/asset_detail_view_model.py`
+  - `systems/backend/app/mvp/agent_review_packet.py`
   - `contracts/schemas/asset-detail-view-model.schema.json`
+  - `contracts/schemas/agent-review-packet.schema.json`
   - `tests/test_asset_detail_view_model_contract.py`
+  - `tests/test_agent_review_packet_golden.py`
 - **Verification:**
-  - GS-002/GS-004/GS-007 ViewModel이 `snapshot_basis`를 포함한다.
-  - `artifact_reference`, `model_version`, `dataset_version`, `source_sha256` 결측은 gap/warning으로 남긴다.
+  - GS-002/GS-004/GS-007 Agent Review Packet이 `snapshot_basis`를 포함한다.
+  - `test_agent_review_packet_uses_same_snapshot_basis_as_view_model`이 ViewModel과 Agent Review Packet의 basis 동등성을 검증한다.
+  - 현재 fixture 경로에서 `source_sha256`은 아직 null이며, U2/U3에서 mutation guard 입력으로 쓰기 전 결측 정책을 다시 확정한다.
 
 ### U2. RecommendationInput projection 추가
 

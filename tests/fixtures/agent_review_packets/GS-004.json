@@ -1,4 +1,14 @@
 {
+  "snapshot_basis": {
+    "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+    "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+    "asset_id": "CNC-S04-L02-03",
+    "event_id": "EVT-GS-004",
+    "observed_at": "2026-08-01T00:00:00+09:00",
+    "model_version": "fixture-heuristic-v1",
+    "dataset_version": "fixture-compatibility",
+    "source_sha256": null
+  },
   "asset_id": "CNC-S04-L02-03",
   "asset_label": "4구역 · 2셀 · CNC 가공기 3",
   "closed_loop_boundary": {

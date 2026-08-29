@@ -27,6 +27,28 @@ export interface MvpProvenance {
   sourceRefs: string[];
 }
 
+export interface MvpEvidenceSnapshotBasis {
+  artifactId: string | null;
+  evidencePayloadReference: string;
+  assetId: string | null;
+  eventId: string | null;
+  observedAt: string | null;
+  modelVersion: string | null;
+  datasetVersion: string | null;
+  sourceSha256: string | null;
+}
+
+export interface EvidenceSnapshotBasisWire {
+  artifact_id: string | null;
+  evidence_payload_reference: string;
+  asset_id: string | null;
+  event_id: string | null;
+  observed_at: string | null;
+  model_version: string | null;
+  dataset_version: string | null;
+  source_sha256: string | null;
+}
+
 export interface MvpFactor {
   id: string;
   feature: string;
@@ -381,6 +403,7 @@ export interface MvpAgentReviewPacket {
   asset_id: string;
   asset_label: string;
   generated_at: string;
+  snapshot_basis: EvidenceSnapshotBasisWire;
   risk_summary: {
     status_grade: "normal" | "attention" | "warning" | "critical" | null;
     failure_probability: number | null;
@@ -515,6 +538,7 @@ export interface MvpAgentReviewSummaryResponse {
 }
 
 export interface MvpEventDetailModel {
+  snapshotBasis: MvpEvidenceSnapshotBasis | null;
   event: MvpEvent;
   sensors: MvpSensorValue[];
   topFactors: MvpFactor[];
@@ -553,6 +577,7 @@ export interface MvpEventDetailModel {
 }
 
 export interface AssetDetailViewModel {
+  snapshot_basis: EvidenceSnapshotBasisWire;
   asset: {
     asset_id: string;
     asset_type: "compressor" | "cnc";

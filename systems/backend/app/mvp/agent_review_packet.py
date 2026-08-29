@@ -122,6 +122,7 @@ def compose_agent_review_packet(
             or ""
         ),
         "generated_at": str((view_model.get("asset") or {}).get("observed_at") or ""),
+        "snapshot_basis": view_model.get("snapshot_basis") or {},
         "risk_summary": {
             "status_grade": (view_model.get("risk") or {}).get("status_grade"),
             "failure_probability": (view_model.get("risk") or {}).get("current"),
