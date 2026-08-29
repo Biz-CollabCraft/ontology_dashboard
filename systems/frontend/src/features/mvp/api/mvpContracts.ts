@@ -346,9 +346,9 @@ export interface MvpInspectionGuidance {
   referenceLocationLabel: string;
   suggestedCheckMethod: string;
   checklistDraft: string[];
-  replacementReviewGuidance: {
-    reviewLabel: string;
-    reviewTriggers: string[];
+  maintenanceReviewPrerequisites: {
+    label: string;
+    reviewConditions: string[];
     requiredMeasurements: string[];
     humanReviewQuestions: string[];
     decisionBoundary: string;
@@ -499,9 +499,9 @@ export interface AssetDetailViewModel {
       reference_location_label: string;
       suggested_check_method: string;
       checklist_draft: string[];
-      replacement_review_guidance: {
-        review_label: string;
-        review_triggers: string[];
+      maintenance_review_prerequisites: {
+        label: string;
+        review_conditions: string[];
         required_measurements: string[];
         human_review_questions: string[];
         decision_boundary: string;
