@@ -44,6 +44,14 @@ def test_tool_replacement_example_passes_typed_and_json_schema_contracts() -> No
     assert errors == []
 
 
+def test_cost_result_rejects_mismatched_mvp_identity() -> None:
+    payload = load_json(EXAMPLE_PATH)
+    payload["equipment_id"] = "CNC-OTHER"
+
+    with pytest.raises(ValidationError, match="equipment_id = asset_id"):
+        MaintenanceCostScenarioResult.model_validate(payload)
+
+
 def test_contract_does_not_reuse_synthetic_preventive_what_if_version() -> None:
     payload = load_json(EXAMPLE_PATH)
     payload["schema_version"] = "what-if-result-v1.0"

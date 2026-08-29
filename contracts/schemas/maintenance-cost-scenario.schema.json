@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ontology-dashboard.local/schemas/maintenance-cost-scenario.schema.json",
+  "$comment": "MVP semantic invariant: equipment_id MUST equal asset_id. JSON Schema validates the transport shape; the Backend typed validator and persistence CHECK enforce this cross-field identity invariant.",
   "$defs": {
     "nonEmptyId": {
       "type": "string",
@@ -125,6 +126,7 @@
   },
   "type": "object",
   "title": "MaintenanceCostScenarioResult",
+  "description": "Read-only maintenance cost comparison result. asset_id preserves the Diagnosis/Product Result identity and equipment_id preserves the Maintenance operational identity. The MVP derives equipment_id from asset_id and requires both values to be equal.",
   "additionalProperties": false,
   "properties": {
     "schema_version": {"const": "maintenance-cost-scenario-v1.0"},
@@ -132,8 +134,14 @@
     "organization_id": {"type": "string", "minLength": 1, "maxLength": 160},
     "project_id": {"type": "string", "minLength": 1, "maxLength": 160},
     "workspace_id": {"type": "string", "minLength": 1, "maxLength": 160},
-    "asset_id": {"$ref": "#/$defs/nonEmptyId"},
-    "equipment_id": {"$ref": "#/$defs/nonEmptyId"},
+    "asset_id": {
+      "$ref": "#/$defs/nonEmptyId",
+      "description": "Canonical Diagnosis/Product Result asset identity sourced from asset_master.asset_id / pm_assets.asset_id."
+    },
+    "equipment_id": {
+      "$ref": "#/$defs/nonEmptyId",
+      "description": "Maintenance operational identity. In the MVP this value is derived from asset_id and MUST equal asset_id; callers must not independently choose it."
+    },
     "calculated_at": {"type": "string", "format": "date-time"},
     "based_on": {
       "type": "object",
