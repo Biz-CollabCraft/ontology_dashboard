@@ -33,9 +33,11 @@ Current implementation baseline:
 
 - `contracts/schemas/agent-review-packet.schema.json` defines the read-only packet.
 - `contracts/schemas/agent-review-summary.schema.json` defines the LLM/deterministic output.
-- `systems/backend/app/mvp/agent_review_packet.py` composes packet context from ViewModel and SOP retrieval.
+- `systems/backend/app/mvp/domain_context_adapters.py` owns the current manufacturing fixture adapter for operation context, SOP guidance, inspection locations, and SOP retrieval.
+- `systems/backend/app/mvp/agent_review_packet.py` composes packet context from ViewModel and adapter-supplied SOP retrieval.
 - `systems/backend/app/mvp/agent_review_summary.py` composes deterministic fallback and validates summary output.
 - `systems/backend/app/mvp/agent_review_summary_provider.py` wraps the LLM provider.
+- `systems/backend/app/mvp/agent_review_summary_workflow.py` exposes the current lightweight workflow result for watcher execution.
 - `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx` consumes the summary inline.
 - `tests/fixtures/agent_review_packets/` and summary tests provide the first gold traces.
 
@@ -186,12 +188,13 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U7. LangGraph Decision Gate
 
-- **Goal:** Avoid adopting LangGraph before orchestration complexity actually exists.
+- **Goal:** Prepare for LangGraph without adding it before orchestration complexity is verified in code.
 - **Files:**
+  - `systems/backend/app/mvp/agent_review_summary_workflow.py`
   - `systems/backend/app/mvp/agent_review_summary_provider.py`
-  - `systems/backend/app/mvp/context_providers.py`
+  - `systems/backend/app/mvp/domain_context_adapters.py`
   - `tests/test_mvp.py`
-- **Approach:** Keep current provider as a direct service call while the flow is packet -> LLM -> validator. Revisit LangGraph when the flow requires multiple stateful steps.
+- **Approach:** Keep `AgentReviewSummaryWorkflow` as the public workflow boundary. The current implementation is a simple in-process orchestrator. If LangGraph is introduced, add it behind this boundary rather than changing watcher, UI, or Report consumers.
 - **Decision Gate:**
   - The agent must call three or more independent domain tools.
   - The flow needs durable pause/resume for human review.
@@ -199,6 +202,65 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Tool trajectory evaluation becomes part of release gates.
   - The service method starts carrying graph-like branching state.
 - **Verification:** LangGraph remains a documented option, not a dependency hidden in MVP code.
+
+#### LangGraph Implementation Plan
+
+The recommended implementation is not to replace the whole AI path at once. The first LangGraph slice should be a parallel implementation behind the existing workflow boundary:
+
+```text
+AgentReviewSummaryWorkflow
+  -> SimpleAgentReviewSummaryWorkflow      # current default
+  -> LangGraphAgentReviewSummaryWorkflow   # optional engine behind a flag
+```
+
+Initial flag:
+
+```text
+AI_WORKFLOW_ENGINE=simple    # default
+AI_WORKFLOW_ENGINE=langgraph # optional validation path
+```
+
+The LangGraph state should contain only read-side data:
+
+```text
+project_id
+asset_id
+dataset_version_id
+history_window
+snapshot_basis
+domain_context
+agent_review_packet
+summary_candidate
+validated_summary
+materialization_trace
+validation_errors
+fallback_reason
+```
+
+It must not contain executable Closed-loop commands, mutable WorkOrder state, or approval action tools. Closed-loop data may appear only through `closed_loop_boundary` as read-only context.
+
+Minimum graph nodes:
+
+```text
+snapshot_scan
+packet_build
+context_enrichment
+llm_generate
+validate_summary
+persist_summary
+consumer_ready
+```
+
+Node-level retry policy:
+
+- `snapshot_scan`: retry for transient DB/read failures; fail fast on missing project/asset.
+- `context_enrichment`: adapter failure becomes a typed evidence gap where possible; no mutation retry.
+- `llm_generate`: retry with bounded backoff; fallback to deterministic summary after retry exhaustion.
+- `validate_summary`: no blind retry for invalid prose; route to deterministic fallback.
+- `persist_summary`: retry idempotently with `summary_key`; duplicate key means reuse.
+- `consumer_ready`: no domain mutation; report stored materialization status only.
+
+Adoption should happen only after the adapter surface has at least two real sources or one source with independent failure modes, for example SOP document retrieval plus maintenance history or inventory context. Until then the current `SimpleAgentReviewSummaryWorkflow` is the production path.
 
 ## Data and Contract Shape
 
