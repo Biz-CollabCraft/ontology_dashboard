@@ -193,12 +193,15 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U7. LangGraph Decision Gate
 
+- **Status:** Implemented as a lightweight evaluation gate. LangGraph runtime remains deferred behind the workflow boundary.
 - **Goal:** Prepare for LangGraph without adding it before orchestration complexity is verified in code.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary_workflow.py`
   - `systems/backend/app/mvp/agent_review_summary_provider.py`
   - `systems/backend/app/mvp/domain_context_adapters.py`
   - `tests/test_mvp.py`
+  - `tests/eval/langgraph_decision_gate.json`
+  - `tests/eval/test_agent_context_retrieval_eval.py`
 - **Approach:** Keep `AgentReviewSummaryWorkflow` as the public workflow boundary. The current implementation is a simple in-process orchestrator. If LangGraph is introduced, add it behind this boundary rather than changing watcher, UI, or Report consumers.
 - **Decision Gate:**
   - The agent must call three or more independent domain tools.
@@ -206,7 +209,7 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Retry strategy differs per step and must be observable.
   - Tool trajectory evaluation becomes part of release gates.
   - The service method starts carrying graph-like branching state.
-- **Verification:** LangGraph remains a documented option, not a dependency hidden in MVP code.
+- **Verification:** `langgraph_decision_gate.json` keeps `simple` as the current engine, records `AI_WORKFLOW_ENGINE=langgraph` as a future experiment behind `AgentReviewSummaryWorkflow`, and forbids executable Closed-loop commands, mutable WorkOrder state, and approval tools in graph state.
 
 #### LangGraph Implementation Plan
 

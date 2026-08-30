@@ -5,11 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from app.dependencies import build_manufacturing_service
+from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
 
 ROOT = Path(__file__).resolve().parents[2]
 QUESTION_PATH = ROOT / "tests" / "eval" / "agent_context_questions.jsonl"
 RAG_GATE_PATH = ROOT / "tests" / "eval" / "rag_decision_gate.json"
+LANGGRAPH_GATE_PATH = ROOT / "tests" / "eval" / "langgraph_decision_gate.json"
 
 
 def _load_questions() -> list[dict[str, Any]]:
@@ -22,6 +24,10 @@ def _load_questions() -> list[dict[str, Any]]:
 
 def _load_rag_gate() -> dict[str, Any]:
     return json.loads(RAG_GATE_PATH.read_text(encoding="utf-8"))
+
+
+def _load_langgraph_gate() -> dict[str, Any]:
+    return json.loads(LANGGRAPH_GATE_PATH.read_text(encoding="utf-8"))
 
 
 def test_agent_context_question_set_controls_eval_variables() -> None:
@@ -93,6 +99,31 @@ def test_rag_decision_gate_defers_runtime_rag_for_structured_sop(tmp_path: Path)
         "paragraph_level_citations_are_required_for_user_facing_guidance",
         "structured_metadata_cannot_answer_agent_context_eval_questions",
     }
+
+
+def test_langgraph_decision_gate_keeps_simple_workflow_default(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-context-langgraph-gate.db", root=ROOT)
+    gate = _load_langgraph_gate()
+    workflow_result = AgentReviewSummaryWorkflow(service).run(limit=1, max_attempts=1)
+
+    assert gate["current_decision"] == "keep_simple_workflow_default"
+    assert gate["current_engine"] == "simple"
+    assert workflow_result["workflow"]["engine"] == gate["current_engine"]
+    assert gate["first_experiment_shape"]["public_boundary"] == "AgentReviewSummaryWorkflow"
+    assert gate["first_experiment_shape"]["default"] == "simple"
+    assert gate["first_experiment_shape"]["experimental"] == "langgraph"
+    assert "AI_WORKFLOW_ENGINE" == gate["first_experiment_shape"]["flag"]
+
+
+def test_langgraph_gate_keeps_closed_loop_state_out_of_graph_contract() -> None:
+    gate = _load_langgraph_gate()
+
+    assert len(gate["minimum_trigger_conditions"]) >= 3
+    assert "domain_context" in gate["first_experiment_shape"]["allowed_state"]
+    assert "agent_review_packet" in gate["first_experiment_shape"]["allowed_state"]
+    assert "executable_closed_loop_command" in gate["first_experiment_shape"]["forbidden_state"]
+    assert "mutable_work_order_state" in gate["first_experiment_shape"]["forbidden_state"]
+    assert "approval_action_tool" in gate["first_experiment_shape"]["forbidden_state"]
 
 
 def _answer_from_packet(packet: dict[str, Any]) -> dict[str, Any]:

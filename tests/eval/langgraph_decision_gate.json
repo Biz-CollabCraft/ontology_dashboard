@@ -1,0 +1,38 @@
+{
+  "gate_id": "agent-summary-langgraph-decision-gate-v1",
+  "current_decision": "keep_simple_workflow_default",
+  "current_engine": "simple",
+  "candidate_engine": "langgraph",
+  "minimum_trigger_conditions": [
+    "three_or_more_independent_domain_tools",
+    "durable_human_pause_resume_required",
+    "step_specific_retry_policy_must_be_observed",
+    "tool_trajectory_eval_becomes_release_gate",
+    "service_method_carries_branching_graph_state"
+  ],
+  "first_experiment_shape": {
+    "flag": "AI_WORKFLOW_ENGINE",
+    "default": "simple",
+    "experimental": "langgraph",
+    "public_boundary": "AgentReviewSummaryWorkflow",
+    "allowed_state": [
+      "project_id",
+      "asset_id",
+      "dataset_version_id",
+      "history_window",
+      "snapshot_basis",
+      "domain_context",
+      "agent_review_packet",
+      "summary_candidate",
+      "validated_summary",
+      "materialization_trace",
+      "validation_errors",
+      "fallback_reason"
+    ],
+    "forbidden_state": [
+      "executable_closed_loop_command",
+      "mutable_work_order_state",
+      "approval_action_tool"
+    ]
+  }
+}
