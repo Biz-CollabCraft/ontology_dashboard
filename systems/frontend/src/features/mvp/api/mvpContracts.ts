@@ -494,6 +494,27 @@ export interface MvpAgentReviewPacket {
       location_label: string | null;
       location_source_ref: string | null;
       sop_ids: string[];
+      spare_parts: Array<{
+        part_id: string;
+        part_label: string;
+        replacement_scope: string;
+        availability: "available_from_fixture" | "unavailable_from_fixture" | "unknown";
+        lead_time_days: number | null;
+        replacement_window_minutes: number | null;
+        assumption_level: string;
+        source_ref: string;
+      }>;
+      similar_events: Array<{
+        similar_event_id: string;
+        asset_label: string;
+        observed_at: string;
+        matched_factor_keys: string[];
+        action_taken: string;
+        outcome: string;
+        post_action_observation_window_hours: number | null;
+        assumption_level: string;
+        source_ref: string;
+      }>;
       source_refs: string[];
     }>;
     source_refs: string[];

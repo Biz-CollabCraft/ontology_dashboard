@@ -180,6 +180,42 @@ def _agent_ontology_context(context: dict[str, Any] | None) -> dict[str, Any]:
                 "location_label": item.get("location_label"),
                 "location_source_ref": item.get("location_source_ref"),
                 "sop_ids": [str(ref) for ref in item.get("sop_ids") or []],
+                "spare_parts": [
+                    {
+                        "part_id": str(part.get("part_id") or ""),
+                        "part_label": str(part.get("part_label") or ""),
+                        "replacement_scope": str(part.get("replacement_scope") or ""),
+                        "availability": str(part.get("availability") or ""),
+                        "lead_time_days": part.get("lead_time_days"),
+                        "replacement_window_minutes": part.get(
+                            "replacement_window_minutes"
+                        ),
+                        "assumption_level": str(part.get("assumption_level") or ""),
+                        "source_ref": str(part.get("source_ref") or ""),
+                    }
+                    for part in item.get("spare_parts") or []
+                    if isinstance(part, dict)
+                ],
+                "similar_events": [
+                    {
+                        "similar_event_id": str(event.get("similar_event_id") or ""),
+                        "asset_label": str(event.get("asset_label") or ""),
+                        "observed_at": str(event.get("observed_at") or ""),
+                        "matched_factor_keys": [
+                            str(factor)
+                            for factor in event.get("matched_factor_keys") or []
+                        ],
+                        "action_taken": str(event.get("action_taken") or ""),
+                        "outcome": str(event.get("outcome") or ""),
+                        "post_action_observation_window_hours": event.get(
+                            "post_action_observation_window_hours"
+                        ),
+                        "assumption_level": str(event.get("assumption_level") or ""),
+                        "source_ref": str(event.get("source_ref") or ""),
+                    }
+                    for event in item.get("similar_events") or []
+                    if isinstance(event, dict)
+                ],
                 "source_refs": [str(ref) for ref in item.get("source_refs") or []],
             }
             for item in context.get("traversals") or []

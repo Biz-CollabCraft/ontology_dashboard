@@ -164,7 +164,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["component_id", "component_label", "factor_refs", "location_label", "location_source_ref", "sop_ids", "source_refs"],
+            "required": ["component_id", "component_label", "factor_refs", "location_label", "location_source_ref", "sop_ids", "spare_parts", "similar_events", "source_refs"],
             "additionalProperties": false,
             "properties": {
               "component_id": {"type": "string"},
@@ -173,6 +173,43 @@
               "location_label": {"type": ["string", "null"]},
               "location_source_ref": {"type": ["string", "null"]},
               "sop_ids": {"type": "array", "items": {"type": "string"}},
+              "spare_parts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["part_id", "part_label", "replacement_scope", "availability", "lead_time_days", "replacement_window_minutes", "assumption_level", "source_ref"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "part_id": {"type": "string"},
+                    "part_label": {"type": "string"},
+                    "replacement_scope": {"type": "string"},
+                    "availability": {"type": "string", "enum": ["available_from_fixture", "unavailable_from_fixture", "unknown"]},
+                    "lead_time_days": {"type": ["number", "null"]},
+                    "replacement_window_minutes": {"type": ["number", "null"]},
+                    "assumption_level": {"type": "string"},
+                    "source_ref": {"type": "string"}
+                  }
+                }
+              },
+              "similar_events": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["similar_event_id", "asset_label", "observed_at", "matched_factor_keys", "action_taken", "outcome", "post_action_observation_window_hours", "assumption_level", "source_ref"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "similar_event_id": {"type": "string"},
+                    "asset_label": {"type": "string"},
+                    "observed_at": {"type": "string"},
+                    "matched_factor_keys": {"type": "array", "items": {"type": "string"}},
+                    "action_taken": {"type": "string"},
+                    "outcome": {"type": "string"},
+                    "post_action_observation_window_hours": {"type": ["number", "null"]},
+                    "assumption_level": {"type": "string"},
+                    "source_ref": {"type": "string"}
+                  }
+                }
+              },
               "source_refs": {"type": "array", "items": {"type": "string"}}
             }
           }

@@ -82,7 +82,11 @@
     "source_refs": [
       "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
       "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
-      "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+      "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
+      "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18",
+      "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+      "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+      "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
     ],
     "traversals": [
       {
@@ -93,12 +97,41 @@
         ],
         "location_label": "공구 매거진 및 스핀들 공구 체결부",
         "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
+        "similar_events": [
+          {
+            "action_taken": "공구 홀더 체결 상태 점검 후 마모 공구 교체",
+            "asset_label": "4구역 · 4셀 · CNC 가공기 2",
+            "assumption_level": "demo_history_assumption",
+            "matched_factor_keys": [
+              "tool_wear_min"
+            ],
+            "observed_at": "2026-07-18T09:20:00+09:00",
+            "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
+            "post_action_observation_window_hours": 24,
+            "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
+            "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+          }
+        ],
         "sop_ids": [
           "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
         ],
         "source_refs": [
           "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
-          "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+          "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+          "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
+          "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
+        ],
+        "spare_parts": [
+          {
+            "assumption_level": "demo_planning_assumption",
+            "availability": "available_from_fixture",
+            "lead_time_days": 1,
+            "part_id": "SP-CNC-TOOL-HOLDER-SET",
+            "part_label": "공구 홀더 세트",
+            "replacement_scope": "공구 홀더 및 체결부 교체 검토",
+            "replacement_window_minutes": 60,
+            "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET"
+          }
         ]
       },
       {
@@ -110,9 +143,39 @@
         ],
         "location_label": "주축 모터, 커플링, 동력 전달 하우징",
         "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+        "similar_events": [
+          {
+            "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+            "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+            "assumption_level": "demo_history_assumption",
+            "matched_factor_keys": [
+              "overstrain_index",
+              "torque_nm"
+            ],
+            "observed_at": "2026-07-22T14:10:00+09:00",
+            "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+            "post_action_observation_window_hours": 48,
+            "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+            "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+          }
+        ],
         "sop_ids": [],
         "source_refs": [
-          "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+          "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+          "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+          "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
+        ],
+        "spare_parts": [
+          {
+            "assumption_level": "demo_planning_assumption",
+            "availability": "available_from_fixture",
+            "lead_time_days": 2,
+            "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+            "part_label": "주축 구동 커플링 키트",
+            "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+            "replacement_window_minutes": 180,
+            "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT"
+          }
         ]
       }
     ]
@@ -337,6 +400,10 @@
     "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
     "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
     "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
-    "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+    "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+    "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
+    "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18",
+    "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
+    "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22"
   ]
 }

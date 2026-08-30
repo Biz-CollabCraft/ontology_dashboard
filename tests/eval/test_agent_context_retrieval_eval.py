@@ -42,6 +42,8 @@ def test_agent_context_question_set_controls_eval_variables() -> None:
             "factor_refs",
             "location_label",
             "sop_ids",
+            "spare_part_ids",
+            "similar_event_ids",
             "boundary",
         }
 
@@ -129,6 +131,7 @@ def test_langgraph_gate_keeps_closed_loop_state_out_of_graph_contract() -> None:
 def _answer_from_packet(packet: dict[str, Any]) -> dict[str, Any]:
     target = (packet.get("inspection_targets") or [{}])[0]
     guidance = (packet.get("sop_guidance") or [{}])[0]
+    traversal = _matching_ontology_traversal(packet, target.get("component_id"))
     return {
         "component_id": target.get("component_id"),
         "factor_refs": [
@@ -136,6 +139,16 @@ def _answer_from_packet(packet: dict[str, Any]) -> dict[str, Any]:
         ],
         "location_label": target.get("location_label"),
         "sop_ids": [guidance["sop_id"]] if guidance.get("sop_id") else [],
+        "spare_part_ids": [
+            part["part_id"]
+            for part in traversal.get("spare_parts") or []
+            if part.get("part_id")
+        ],
+        "similar_event_ids": [
+            event["similar_event_id"]
+            for event in traversal.get("similar_events") or []
+            if event.get("similar_event_id")
+        ],
         "boundary": _boundary(packet),
     }
 
@@ -148,6 +161,16 @@ def _answer_from_ontology_context(packet: dict[str, Any]) -> dict[str, Any]:
         "factor_refs": first.get("factor_refs") or [],
         "location_label": first.get("location_label"),
         "sop_ids": first.get("sop_ids") or [],
+        "spare_part_ids": [
+            part["part_id"]
+            for part in first.get("spare_parts") or []
+            if part.get("part_id")
+        ],
+        "similar_event_ids": [
+            event["similar_event_id"]
+            for event in first.get("similar_events") or []
+            if event.get("similar_event_id")
+        ],
         "boundary": _boundary(packet),
     }
 
@@ -158,8 +181,20 @@ def _matches_expected(answer: dict[str, Any], expected: dict[str, Any]) -> bool:
         and answer["factor_refs"] == expected["factor_refs"]
         and answer["location_label"] == expected["location_label"]
         and answer["sop_ids"] == expected["sop_ids"]
+        and answer["spare_part_ids"] == expected["spare_part_ids"]
+        and answer["similar_event_ids"] == expected["similar_event_ids"]
         and answer["boundary"] == expected["boundary"]
     )
+
+
+def _matching_ontology_traversal(
+    packet: dict[str, Any],
+    component_id: Any,
+) -> dict[str, Any]:
+    for traversal in (packet.get("ontology_context") or {}).get("traversals") or []:
+        if traversal.get("component_id") == component_id:
+            return traversal
+    return {}
 
 
 def _boundary(packet: dict[str, Any]) -> str:

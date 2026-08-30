@@ -886,6 +886,66 @@ def test_domain_adapter_cnc_sop_guidance_does_not_match_compressor_assets() -> N
     assert adapter.inspection_guidance(fixture=fixture, artifact=artifact) == {}
 
 
+def test_domain_adapter_spare_parts_cover_cnc_inspection_components() -> None:
+    adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
+    cnc_location_contract = next(
+        contract
+        for contract in adapter.inspection_location_references
+        if "cnc" in contract["asset_types"]
+    )
+    cnc_components = {location["component_id"] for location in cnc_location_contract["locations"]}
+    spare_components = {
+        part["component_id"]
+        for context in adapter.spare_part_contexts
+        if "cnc" in context["asset_types"]
+        for part in context["parts"]
+    }
+
+    assert cnc_components.issubset(spare_components)
+
+
+def test_domain_adapter_compressor_context_supplies_readonly_extension_hops() -> None:
+    adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
+    fixture = {
+        "equipment": {
+            "asset_type": "compressor",
+            "spare_part_available": True,
+        }
+    }
+    artifact = {
+        "asset_type": "compressor",
+        "evidence_payload": {
+            "component_hypotheses": [
+                {
+                    "component_id": "vibration_path",
+                    "component_label": "진동 계통",
+                    "basis": [
+                        "factor.1.relative_vibration_z",
+                        "factor.2.vibration_raw",
+                    ],
+                    "source_ref": "RESULT#METROPT-AIR-UNIT#component_hypotheses[0]",
+                }
+            ]
+        },
+    }
+
+    context = adapter.ontology_context(fixture=fixture, artifact=artifact)
+    traversal = context["traversals"][0]
+
+    assert context["mutation_allowed"] is False
+    assert traversal["component_id"] == "vibration_path"
+    assert traversal["location_label"] == "베어링 하우징, 방진 마운트, 축정렬 기준점"
+    assert [part["part_id"] for part in traversal["spare_parts"]] == [
+        "SP-CMP-BEARING-ISOLATOR-KIT"
+    ]
+    assert traversal["spare_parts"][0]["availability"] == "available_from_fixture"
+    assert [event["similar_event_id"] for event in traversal["similar_events"]] == [
+        "SIM-EVT-CMP-VIBRATION-2026-07-19"
+    ]
+    assert traversal["similar_events"][0]["assumption_level"] == "demo_history_assumption"
+    assert "auto_approve" not in json.dumps(context)
+
+
 @pytest.mark.parametrize(
     ("source_kind", "maturity", "expected_guidance"),
     [

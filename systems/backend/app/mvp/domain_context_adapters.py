@@ -81,6 +81,14 @@ class ManufacturingFixtureReviewContextAdapter:
             json.loads(path.read_text(encoding="utf-8"))
             for path in sorted((fixture_root / "inspection_location").glob("*.json"))
         ]
+        self.spare_part_contexts = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((fixture_root / "spare_part").glob("*.json"))
+        ]
+        self.similar_event_contexts = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((fixture_root / "similar_event").glob("*.json"))
+        ]
 
     def operation_context(
         self,
@@ -238,14 +246,29 @@ class ManufacturingFixtureReviewContextAdapter:
                 continue
             location = locations.get(component_id) or {}
             matched_sop_ids = _matched_sop_ids(component_id, sop_results_by_id)
+            factor_refs = factor_refs_by_component.get(component_id, [])
+            factor_keys = _factor_keys(factor_refs)
+            spare_parts = self._matched_spare_parts(
+                fixture=fixture,
+                artifact=artifact,
+                component_id=component_id,
+            )
+            similar_events = self._matched_similar_events(
+                fixture=fixture,
+                artifact=artifact,
+                component_id=component_id,
+                factor_keys=factor_keys,
+            )
             traversals.append(
                 {
                     "component_id": component_id,
                     "component_label": str(hypothesis.get("component_label") or ""),
-                    "factor_refs": factor_refs_by_component.get(component_id, []),
+                    "factor_refs": factor_refs,
                     "location_label": location.get("location_label"),
                     "location_source_ref": location.get("source_ref"),
                     "sop_ids": matched_sop_ids,
+                    "spare_parts": spare_parts,
+                    "similar_events": similar_events,
                     "source_refs": [
                         ref
                         for ref in [
@@ -255,6 +278,8 @@ class ManufacturingFixtureReviewContextAdapter:
                                 str(sop_results_by_id[sop_id].get("source_ref") or "")
                                 for sop_id in matched_sop_ids
                             ],
+                            *[str(item.get("source_ref") or "") for item in spare_parts],
+                            *[str(item.get("source_ref") or "") for item in similar_events],
                         ]
                         if ref
                     ],
@@ -285,6 +310,82 @@ class ManufacturingFixtureReviewContextAdapter:
             for item in self.sop_retrieval(fixture=fixture, artifact=artifact)["results"]
         ]
 
+    def _matched_spare_parts(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+        component_id: str,
+    ) -> list[dict[str, Any]]:
+        asset_type = str(artifact.get("asset_type") or fixture.get("asset_type") or "")
+        equipment = fixture.get("equipment") or {}
+        part_available = equipment.get("spare_part_available")
+        matches: list[dict[str, Any]] = []
+        for context in self.spare_part_contexts:
+            asset_types = {str(item) for item in context.get("asset_types") or []}
+            if asset_type and asset_type not in asset_types:
+                continue
+            for part in context.get("parts") or []:
+                if str(part.get("component_id") or "") != component_id:
+                    continue
+                matches.append(
+                    {
+                        "part_id": str(part.get("part_id") or ""),
+                        "part_label": str(part.get("part_label") or ""),
+                        "replacement_scope": str(part.get("replacement_scope") or ""),
+                        "availability": _spare_part_availability(part_available),
+                        "lead_time_days": part.get("lead_time_days"),
+                        "replacement_window_minutes": part.get(
+                            "replacement_window_minutes"
+                        ),
+                        "assumption_level": str(context.get("assumption_level") or ""),
+                        "source_ref": f"{context['source_uri']}#{part.get('part_id')}",
+                    }
+                )
+        return matches
+
+    def _matched_similar_events(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+        component_id: str,
+        factor_keys: list[str],
+    ) -> list[dict[str, Any]]:
+        asset_type = str(artifact.get("asset_type") or fixture.get("asset_type") or "")
+        factor_key_set = set(factor_keys)
+        matches: list[dict[str, Any]] = []
+        for context in self.similar_event_contexts:
+            asset_types = {str(item) for item in context.get("asset_types") or []}
+            if asset_type and asset_type not in asset_types:
+                continue
+            for event in context.get("events") or []:
+                event_factor_keys = {str(item) for item in event.get("factor_keys") or []}
+                if str(event.get("component_id") or "") != component_id:
+                    continue
+                if factor_key_set and not factor_key_set.intersection(event_factor_keys):
+                    continue
+                matches.append(
+                    {
+                        "similar_event_id": str(event.get("similar_event_id") or ""),
+                        "asset_label": str(event.get("asset_label") or ""),
+                        "observed_at": str(event.get("observed_at") or ""),
+                        "matched_factor_keys": sorted(
+                            factor_key_set.intersection(event_factor_keys)
+                        ),
+                        "action_taken": str(event.get("action_taken") or ""),
+                        "outcome": str(event.get("outcome") or ""),
+                        "post_action_observation_window_hours": event.get(
+                            "post_action_observation_window_hours"
+                        ),
+                        "assumption_level": str(context.get("assumption_level") or ""),
+                        "source_ref": (
+                            f"{context['source_uri']}#{event.get('similar_event_id')}"
+                        ),
+                    }
+                )
+        return matches
+
 
 def _component_ids(artifact: dict[str, Any]) -> set[str]:
     component_hypotheses = (
@@ -314,6 +415,23 @@ def _factor_refs_by_component(artifact: dict[str, Any]) -> dict[str, list[str]]:
             if str(item).startswith("factor.")
         ]
     return refs
+
+
+def _factor_keys(factor_refs: list[str]) -> list[str]:
+    keys = []
+    for ref in factor_refs:
+        parts = ref.split(".", 2)
+        if len(parts) == 3 and ref.startswith("factor."):
+            keys.append(parts[2])
+    return keys
+
+
+def _spare_part_availability(value: Any) -> str:
+    if value is True:
+        return "available_from_fixture"
+    if value is False:
+        return "unavailable_from_fixture"
+    return "unknown"
 
 
 def _sop_results_by_id(sop_retrieval: dict[str, Any]) -> dict[str, dict[str, Any]]:

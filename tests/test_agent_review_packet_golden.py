@@ -102,9 +102,54 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
                 "demo-cnc-inspection-location-reference-v1.json#drive_power"
             ),
             "sop_ids": [],
+            "spare_parts": [
+                {
+                    "part_id": "SP-CNC-DRIVE-COUPLING-KIT",
+                    "part_label": "주축 구동 커플링 키트",
+                    "replacement_scope": "커플링 및 동력 전달부 교체 검토",
+                    "availability": "unavailable_from_fixture",
+                    "lead_time_days": 2,
+                    "replacement_window_minutes": 180,
+                    "assumption_level": "demo_planning_assumption",
+                    "source_ref": (
+                        "data/fixtures/spare_part/"
+                        "demo-cnc-spare-part-context-v1.json#"
+                        "SP-CNC-DRIVE-COUPLING-KIT"
+                    ),
+                }
+            ],
+            "similar_events": [
+                {
+                    "similar_event_id": "SIM-EVT-CNC-DRIVE-2026-07-22",
+                    "asset_label": "4구역 · 2셀 · CNC 가공기 1",
+                    "observed_at": "2026-07-22T14:10:00+09:00",
+                    "matched_factor_keys": [
+                        "mechanical_power_w",
+                        "overstrain_index",
+                        "torque_nm",
+                    ],
+                    "action_taken": "동력 전달부 체결 상태 확인 후 커플링 편심 재조정",
+                    "outcome": "토크와 과부하 누적 지표가 다음 관측 구간에서 완화됨",
+                    "post_action_observation_window_hours": 48,
+                    "assumption_level": "demo_history_assumption",
+                    "source_ref": (
+                        "data/fixtures/similar_event/"
+                        "demo-cnc-similar-event-context-v1.json#"
+                        "SIM-EVT-CNC-DRIVE-2026-07-22"
+                    ),
+                }
+            ],
             "source_refs": [
-                "data/fixtures/inspection_location/"
-                "demo-cnc-inspection-location-reference-v1.json#drive_power"
+                (
+                    "data/fixtures/inspection_location/"
+                    "demo-cnc-inspection-location-reference-v1.json#drive_power"
+                ),
+                "data/fixtures/spare_part/"
+                "demo-cnc-spare-part-context-v1.json#"
+                "SP-CNC-DRIVE-COUPLING-KIT",
+                "data/fixtures/similar_event/"
+                "demo-cnc-similar-event-context-v1.json#"
+                "SIM-EVT-CNC-DRIVE-2026-07-22",
             ],
         }
     ]
@@ -150,6 +195,7 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         assert current["inspection_targets"] == gold["inspection_targets"]
         assert current["sop_retrieval"] == gold["sop_retrieval"]
         assert current["sop_guidance"] == gold["sop_guidance"]
+        assert current["ontology_context"] == gold["ontology_context"]
         assert current["history_review_items"] == gold["history_review_items"]
         assert current["evidence_gaps"] == gold["evidence_gaps"]
         assert current["source_refs"] == gold["source_refs"]

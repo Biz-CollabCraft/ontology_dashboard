@@ -12,13 +12,13 @@
     {
       "case_id": "kg-level0-gs004-factor-to-location",
       "scenario_id": "GS-004",
-      "assertion": "packet answer and ontology_context traversal both map three factor refs to drive_power and the field location",
+      "assertion": "packet answer and ontology_context traversal both map three factor refs to drive_power, the field location, one demo spare-part candidate, and one demo similar event",
       "status": "passed"
     },
     {
       "case_id": "kg-level0-gs002-factor-to-sop",
       "scenario_id": "GS-002",
-      "assertion": "packet answer and ontology_context traversal both map tooling risk to location and demo SOP",
+      "assertion": "packet answer and ontology_context traversal both map tooling risk to location, demo SOP, one demo spare-part candidate, and one demo similar event",
       "status": "passed"
     },
     {
@@ -35,9 +35,49 @@
     "same_pass_fail_rubric": true,
     "same_runtime_service": true
   },
+  "relationship_facets": [
+    "factor_refs",
+    "component_id",
+    "location_label",
+    "sop_ids",
+    "spare_part_ids",
+    "similar_event_ids",
+    "read_only_boundary"
+  ],
+  "external_reference_basis": {
+    "classification": "standard_aligned_demo_adapter_fixture",
+    "references": [
+      {
+        "name": "ISO 14224",
+        "relevance": "Reliability and maintenance data categories include equipment, failure, maintenance action, resources used, and downtime context."
+      },
+      {
+        "name": "MIMOSA OSA-EAI",
+        "relevance": "Asset registry, condition, maintenance, reliability, logistics, and parts-supplier information are exchanged across enterprise systems."
+      },
+      {
+        "name": "ISA-95 / IEC 62264",
+        "relevance": "Enterprise-control integration provides the boundary for combining production impact, maintenance, and logistics context."
+      }
+    ],
+    "wording": {
+      "allowed": [
+        "standard-aligned demo adapter fixture",
+        "demo adapter assumption aligned with maintenance/resource/logistics context",
+        "표준 정비 데이터 범주와 정렬된 데모 어댑터 근거"
+      ],
+      "forbidden": [
+        "industry-standard spare-part master",
+        "standards-compliant asset catalog",
+        "all CNC/compressor parts are covered",
+        "업계 표준 부품 마스터를 구현했다"
+      ]
+    }
+  },
   "limits": [
     "This is not a production graph database benchmark.",
     "This does not compare Cypher/SPARQL query planning against SQL.",
+    "Spare-part and similar-event facts are demo adapter assumptions, not validated Product Evidence facts.",
     "This only proves that the current packet projection and ontology_context traversal satisfy the same Level 0 answer facets."
   ]
 }

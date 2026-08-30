@@ -172,9 +172,15 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Test Scenarios:**
   - Single-hop: asset -> component -> field location.
   - Two-hop: factor -> component -> SOP procedure.
+  - Extension hop: component -> demo spare-part candidate -> availability status.
+  - Extension hop: current event factors -> similar historical event -> prior action/outcome.
   - Boundary: SOP exists but maturity gate blocks user guidance.
-  - Missing context: no similar-event history returns a gap, not a fabricated count.
-- **Verification:** `tests/eval/test_agent_context_retrieval_eval.py` was executed on 2026-08-30 and passed 6/6 checks. The result artifact records that packet answers and `ontology_context` traversal satisfy the same answer facets for GS-002, GS-004, and GS-007. This is intentionally not a Cypher/SPARQL-vs-SQL performance benchmark; production KG remains a later decision.
+  - Missing context: validated Product Evidence gaps remain gaps even when a demo adapter supplies auxiliary history context.
+- **Verification:** `tests/eval/test_agent_context_retrieval_eval.py` was executed on 2026-08-30 and passed 6/6 checks. The result artifact records that packet answers and `ontology_context` traversal satisfy the same answer facets for GS-002, GS-004, and GS-007, now including `spare_part_ids` and `similar_event_ids`. This is intentionally not a Cypher/SPARQL-vs-SQL performance benchmark; production KG remains a later decision.
+- **Current Data Boundary:** `spare_parts` and `similar_events` are fixture-backed demo adapter context with `assumption_level`, not validated Product Evidence. They can support read-only AI explanation and KG/RDB comparison design, but must not be used as Closed-loop approval or mutation facts until real CMMS/ERP/event-history adapters own the source contract.
+- **Demo Coverage Boundary:** The CNC demo spare-part fixture covers the same component IDs as the CNC inspection-location fixture (`tooling`, `drive_power`, `thermal_path`, `rotating_assembly`). A separate compressor fixture covers representative compressor components (`vibration_path`, `air_supply`, `electrical_supply`, `rotating_assembly`) through a direct adapter contract test. The current `MPT-001` MVP fixture still uses the compatibility input-event shape, so compressor service-level packet coverage is deferred until the compressor input-event contract is split from the CNC sensor envelope.
+- **External Reference Basis:** The fixture is standard-aligned, not standards-complete. ISO 14224 frames reliability and maintenance data around equipment, failure, maintenance action, resources used, and downtime categories. MIMOSA OSA-EAI frames exchange of asset registry, condition, maintenance, and reliability information across enterprise systems, including logistics and parts-supplier contexts. ISA-95/IEC 62264 frames enterprise-control integration and the production/logistics boundary. These references support why spare-part candidates and similar-event history are valid read-only decision context, but they do not prove that the current demo fixture is an ISO/MIMOSA/ISA compliant data model.
+- **Approved Wording:** Use "standard-aligned demo adapter fixture" or "demo adapter assumption aligned with maintenance/resource/logistics context." Do not use "industry-standard spare-part master," "standards-compliant asset catalog," or "all CNC/compressor parts are covered." For Korean product/docs wording, prefer "표준 정비 데이터 범주와 정렬된 데모 어댑터 근거" and avoid "업계 표준 부품 마스터를 구현했다."
 
 ### U6. RAG Decision Gate
 
