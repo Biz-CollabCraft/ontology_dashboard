@@ -16,6 +16,13 @@ from systems.generator.app.extraction.mapping_validator import (
 from systems.generator.app.main import app
 
 
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    ExtractionManager.set_instance(None)
+    yield
+    ExtractionManager.set_instance(None)
+
+
 @pytest.fixture
 def client():
     return TestClient(app)
@@ -63,8 +70,10 @@ def test_post_extraction_single_source(client, tmp_path, monkeypatch, sample_map
     monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
     monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
     monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
+    monkeypatch.setattr(PATHS, "observations_root", tmp_path / "data" / "observations")
     monkeypatch.setattr(PATHS, "extraction_mapping_sha256", sample_mapping["mapping_sha256"])
 
+    ExtractionManager.set_instance(None)
     manager = ExtractionManager.get_instance()
     monkeypatch.setattr(manager, "_resolve_mapping_data", lambda *args, **kwargs: sample_mapping)
 
@@ -103,8 +112,10 @@ def test_post_extraction_all_sources(client, tmp_path, monkeypatch, sample_mappi
     monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
     monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
     monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
+    monkeypatch.setattr(PATHS, "observations_root", tmp_path / "data" / "observations")
     monkeypatch.setattr(PATHS, "extraction_mapping_sha256", sample_mapping["mapping_sha256"])
 
+    ExtractionManager.set_instance(None)
     manager = ExtractionManager.get_instance()
     monkeypatch.setattr(manager, "_resolve_mapping_data", lambda *args, **kwargs: sample_mapping)
 

@@ -99,6 +99,11 @@ class ExtractionRuntimeHandoffService:
             rel = path.relative_to(PROJECT_ROOT)
             return str(rel.as_posix())
         except ValueError:
+            pass
+        try:
+            rel = path.relative_to(PATHS.data_dir)
+            return f"data/{str(rel.as_posix())}"
+        except ValueError:
             return str(path.as_posix())
 
     def create_or_get_handoff(

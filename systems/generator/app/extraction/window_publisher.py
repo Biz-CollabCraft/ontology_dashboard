@@ -71,7 +71,7 @@ class ExtractionWindowPublisher:
     ) -> None:
         from systems.generator.generator_config import PATHS
 
-        self.data_root = Path(data_root or (PROJECT_ROOT / "data" / "observations")).resolve()
+        self.data_root = Path(data_root or PATHS.observations_root or (PATHS.data_dir / "observations")).resolve()
         self.publications_root = Path(
             publications_root or (PATHS.data_preprocessed / "extraction_state" / "gen_data" / "publications")
         ).resolve()

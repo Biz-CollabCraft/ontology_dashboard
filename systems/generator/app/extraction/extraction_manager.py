@@ -230,7 +230,8 @@ class ExtractionManager:
 
         # Try loading from mapping repository
         try:
-            mapping_data = self.mapping_repo.load_mapping(m_id, m_ver)
+            res = self.mapping_repo.load_mapping(m_id, m_ver)
+            mapping_data = res[0] if isinstance(res, tuple) else res
         except Exception:
             mapping_data = None
 
