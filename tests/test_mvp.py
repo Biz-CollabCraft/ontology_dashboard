@@ -346,6 +346,42 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
     assert "closed_loop_boundary" not in captured["payload"]["allowed_output_fields"]
 
 
+def test_agent_review_summary_provider_preserves_grounding_when_llm_omits_refs(
+    service: FactorySignalService,
+) -> None:
+    class RefOmittingLLMProvider:
+        name = "ref-omitting-llm"
+
+        def generate_json(self, system_prompt: str, payload: dict, **kwargs) -> dict:
+            baseline = payload["baseline_summary"]
+            return {
+                **baseline,
+                "title": "LLM 문장 개선",
+                "summary": "LLM이 요약 문장만 다듬었습니다.",
+                "role_summaries": [
+                    {
+                        "role": item["role"],
+                        "label": item["label"],
+                        "quote": f"{item['label']}용 LLM 문장",
+                    }
+                    for item in baseline["role_summaries"]
+                ],
+            }
+
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    provider = AgentReviewSummaryProvider(RefOmittingLLMProvider())
+
+    summary = provider.generate(packet)
+
+    assert summary["mode"] == "llm"
+    assert summary["title"] == "LLM 문장 개선"
+    assert summary["role_summaries"][0]["quote"] == "현장 담당자용 LLM 문장"
+    assert summary["role_summaries"][0]["source_refs"]
+    assert summary["source_refs"] == compose_deterministic_agent_review_summary(packet)[
+        "source_refs"
+    ]
+
+
 def test_manager_and_engineer_layout_priorities_differ(service: FactorySignalService) -> None:
     manager, _ = service.layout("EVT-GS-002", LayoutRequest(role="manager", use_llm=False))
     engineer, _ = service.layout("EVT-GS-002", LayoutRequest(role="engineer", use_llm=False))

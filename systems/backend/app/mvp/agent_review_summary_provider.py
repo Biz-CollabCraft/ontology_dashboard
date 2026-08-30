@@ -57,5 +57,36 @@ class AgentReviewSummaryProvider:
             response_schema=summary_schema(),
             response_schema_name="agent_review_summary",
         )
-        payload["mode"] = "llm"
-        return payload
+        return _merge_llm_editable_fields(
+            baseline_summary=baseline_summary,
+            candidate=payload,
+        )
+
+
+def _merge_llm_editable_fields(
+    *,
+    baseline_summary: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply LLM prose edits while preserving grounded summary structure."""
+
+    summary = dict(baseline_summary)
+    summary["mode"] = "llm"
+    for field in ("title", "summary"):
+        value = candidate.get(field)
+        if isinstance(value, str) and value.strip():
+            summary[field] = value
+
+    candidate_quotes = {
+        str(item.get("role")): item.get("quote")
+        for item in candidate.get("role_summaries") or []
+        if isinstance(item, dict)
+    }
+    summary["role_summaries"] = [
+        {
+            **item,
+            "quote": candidate_quotes.get(item["role"]) or item["quote"],
+        }
+        for item in baseline_summary.get("role_summaries") or []
+    ]
+    return summary
