@@ -51,6 +51,7 @@ Current implementation baseline:
 - R6. SOP RAG and GraphRAG must be treated as expansion paths because the current SOP source is a controlled, structured fixture.
 - R7. KG/RDB comparison must control query intent, data scope, and expected answer shape; raw query syntax cannot be the controlled variable because graph and relational stores express traversal differently.
 - R8. LLM validation must keep groundedness, boundary compliance, source refs, and role summary shape as release gates.
+- R9. Dashboard operators need a side-tab runtime log panel that shows summary generation runs, watcher/manual trigger source, attempt status, and failure reasons without exposing mutation controls.
 
 ## Key Technical Decisions
 
@@ -62,6 +63,7 @@ Current implementation baseline:
 - KTD-6. **RAG is not needed for structured demo SOP.** Current SOP is already structured, versioned, and maturity-gated. RAG becomes valuable when site SOPs arrive as unstructured PDFs, mixed versions, or cross-document procedure sets.
 - KTD-7. **Role language is product contract.** Asset IDs, factor keys, and missing-data labels must be mapped into field/operator language before or during summary generation. Technical IDs can remain in `source_refs`.
 - KTD-8. **SOP updates are review candidates, not automatic writes.** SOP is a versioned knowledge artifact that can be revised from inspection results, maintenance outcomes, similar-event history, and post-maintenance observations. AI may summarize drift and draft a revision candidate, but it must not overwrite approved SOP content or silently change Closed-loop decision rules.
+- KTD-9. **Runtime logs are an operator surface, not a control surface.** The dashboard operator view may show Agent Review Summary run status, trigger source, retry attempts, completion time, and error messages. It must not expose approval, WorkOrder mutation, replay, or SOP-publish actions from the AI log panel.
 
 ## Architecture
 
@@ -80,7 +82,9 @@ flowchart TB
   PKT --> SUM["Agent Review Summary Provider"]
   SUM --> VAL["Summary Validator"]
   VAL --> UI["Role Workflow UI"]
-  VAL -.optional.-> MAT["Summary Materialization Store"]
+  VAL --> MAT["Summary Materialization Store"]
+  MAT --> RUN["Workflow Run Store"]
+  RUN --> LOG["Dashboard Operator Log Side Tab"]
   W["Polling Watcher"] -.optional.-> SUM
 ```
 
@@ -255,6 +259,34 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Data-quality hold case: only data-quality context; no SOP, location, spare-part, similar-event, or Closed-loop mutation tools.
 - **Verification:** The trajectory gold set checks expected and forbidden tools per scenario. The pipeline tests verify read-only execution, source-ref subset boundaries, distinct situation-specific tool plans, data-quality fanout suppression, retry success after transient failure, partial completion when an optional context tool exhausts retry, hard failure when a required tool has a non-retryable error, and parity between the simple and experimental LangGraph path.
 
+### U9. Dashboard Operator Runtime Log Side Tab
+
+- **Status:** Planned. This is a UI/observability slice, not an automation or mutation slice.
+- **Goal:** Let a dashboard operator understand whether AI summaries are current, reused, manually regenerated, watcher-generated, partially completed, or failed.
+- **Files:**
+  - `systems/backend/app/mvp/router.py`
+  - `systems/backend/app/mvp/service.py`
+  - `systems/backend/app/infra/db/mvp_audit_repository.py`
+  - `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx`
+  - `systems/frontend/src/features/mvp/mvp.css`
+  - `tests/test_mvp.py`
+  - `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
+- **Approach:** Add an operator-facing side tab such as `요약 이력` or `AI 실행 로그` next to the existing status/action surfaces. The tab reads stored `agent_review_workflow_runs` metadata and related summary materialization status. It should show one row per run with trigger, status, attempt count when available, started/completed time, summary key or shortened run id, and failure/fallback reason. It must be read-only.
+- **UI Behavior:**
+  - `watcher · 완료`: summary was prepared before side-view interaction.
+  - `수동 갱신 · 완료`: operator clicked the explicit regeneration control.
+  - `부분 완료`: fallback summary was stored after LLM/provider/validation failure.
+  - `실패`: no consumer-ready summary was produced; show error type/message only in details.
+  - `상세 보기`: opens a small detail panel with trace, attempt log, checksums, and source refs.
+  - No `승인`, `작업요청 생성`, `되돌리기`, `재시도 실행`, or Closed-loop mutation buttons in this tab.
+- **Test Scenarios:**
+  - Cached side-view open does not create a new run.
+  - Manual regeneration creates a `ui_manual_regeneration` run and the log tab shows it.
+  - Watcher materialization creates `polling_watcher` runs and the log tab shows trigger source.
+  - Failed or fallback runs render status and reason without exposing mutation controls.
+  - Operator log rows link back to existing summary/run ids without raw prompt or hidden domain DB reads.
+- **Verification:** Backend tests should prove read-only listing and project scope. Frontend/e2e tests should prove the side tab renders watcher/manual rows and that no Closed-loop action labels appear inside the AI execution log.
+
 #### LangGraph Implementation Plan
 
 The recommended implementation is not to replace the whole AI path at once. The first LangGraph slice should be a parallel implementation behind the existing workflow boundary:
@@ -401,6 +433,17 @@ Recommended sequence:
 2. Explicit materialization happens through watcher runs or a user-visible manual regeneration control.
 3. Each materialization trigger records workflow runtime status and links the summary to the generating run.
 4. Add event/outbox only if other services must react durably to summary lifecycle events.
+
+## Next Execution Order
+
+The next implementation order is:
+
+1. **Watcher operating mode.** Stabilize polling interval, target scope, limit behavior, stale detection, retry count, fallback/failure status, and local start/stop expectations. This turns the current runnable watcher into a predictable local/runtime service contract.
+2. **Adapter responsibility split.** Refactor the current manufacturing fixture adapter into clearer domain adapter seams such as operation context, standard procedure metadata, maintenance/similar-event history, inspection-location reference, spare-part candidate context, and ontology traversal. Keep the packet schema stable while making replacement points explicit.
+3. **LangGraph experiment behind the existing boundary.** Keep `AgentReviewSummaryWorkflow` as the public boundary and `simple` as production default. Add or extend the optional LangGraph path only when it executes the same read-only tool trajectory contract and preserves existing retry/boundary traces.
+4. **Final demo scenario.** Lock the field-operator and process-manager walkthrough: watcher prepares a summary, side-view reuses it, manual regeneration creates a visible run, the operator log side tab shows run history, and Closed-loop mutation remains outside the AI panel.
+
+The dashboard operator runtime log side tab from U9 should be implemented as part of the watcher operating-mode and final-demo slices. It is valuable because it makes the runtime visible, but it should not reorder the core architecture work or become a control panel.
 
 ## RDB vs KG Test Framing
 
