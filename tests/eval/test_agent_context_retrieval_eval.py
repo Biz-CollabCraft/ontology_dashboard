@@ -10,6 +10,7 @@ from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
 ROOT = Path(__file__).resolve().parents[2]
 QUESTION_PATH = ROOT / "tests" / "eval" / "agent_context_questions.jsonl"
+QUESTION_BACKLOG_PATH = ROOT / "tests" / "eval" / "agent_context_question_backlog.jsonl"
 RAG_GATE_PATH = ROOT / "tests" / "eval" / "rag_decision_gate.json"
 LANGGRAPH_GATE_PATH = ROOT / "tests" / "eval" / "langgraph_decision_gate.json"
 
@@ -18,6 +19,14 @@ def _load_questions() -> list[dict[str, Any]]:
     return [
         json.loads(line)
         for line in QUESTION_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _load_question_backlog() -> list[dict[str, Any]]:
+    return [
+        json.loads(line)
+        for line in QUESTION_BACKLOG_PATH.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
 
@@ -46,6 +55,65 @@ def test_agent_context_question_set_controls_eval_variables() -> None:
             "similar_event_ids",
             "boundary",
         }
+
+
+def test_agent_context_question_backlog_separates_current_coverage_from_kg_pressure() -> None:
+    backlog = _load_question_backlog()
+
+    assert len(backlog) >= 10
+    assert len({question["case_id"] for question in backlog}) == len(backlog)
+    answerability = {question["answerability"] for question in backlog}
+    assert {
+        "covered_by_current_packet",
+        "requires_new_adapter_contract",
+        "requires_structured_sop_extension",
+        "defer_until_rag_or_document_store",
+        "defer_until_multi_asset_graph_source",
+    }.issubset(answerability)
+    assert sum(
+        1 for question in backlog if question["answerability"] == "covered_by_current_packet"
+    ) >= 3
+    assert sum(
+        1
+        for question in backlog
+        if question["answerability"]
+        in {
+            "requires_new_adapter_contract",
+            "requires_structured_sop_extension",
+            "defer_until_rag_or_document_store",
+            "defer_until_multi_asset_graph_source",
+        }
+    ) >= 6
+
+    for question in backlog:
+        assert set(question) == {
+            "case_id",
+            "question",
+            "answerability",
+            "primary_sources",
+            "relationship_path",
+            "kg_signal",
+        }
+        assert question["question"]
+        assert len(question["relationship_path"]) >= 3
+        assert question["primary_sources"]
+        assert question["kg_signal"]
+
+
+def test_agent_context_question_backlog_names_next_domain_sources() -> None:
+    sources = {
+        source
+        for question in _load_question_backlog()
+        for source in question["primary_sources"]
+    }
+
+    assert {
+        "cmms",
+        "erp_inventory",
+        "mes",
+        "sop_repository",
+        "asset_registry",
+    }.issubset(sources)
 
 
 def test_kg_level0_packet_and_ontology_context_answer_same_facets(tmp_path: Path) -> None:

@@ -165,6 +165,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Goal:** Leave an evidence trail for whether KG is justified, without adding graph infrastructure prematurely.
 - **Files:**
   - `tests/eval/agent_context_questions.jsonl`
+  - `tests/eval/agent_context_question_backlog.jsonl`
   - `tests/eval/test_agent_context_retrieval_eval.py`
   - `tests/eval/results/agent_context_retrieval_eval_2026-08-30.json`
   - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
@@ -181,6 +182,8 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Demo Coverage Boundary:** The CNC demo spare-part fixture covers the same component IDs as the CNC inspection-location fixture (`tooling`, `drive_power`, `thermal_path`, `rotating_assembly`). A separate compressor fixture covers representative compressor components (`vibration_path`, `air_supply`, `electrical_supply`, `rotating_assembly`) through a direct adapter contract test. The current `MPT-001` MVP fixture still uses the compatibility input-event shape, so compressor service-level packet coverage is deferred until the compressor input-event contract is split from the CNC sensor envelope.
 - **External Reference Basis:** The fixture is standard-aligned, not standards-complete. ISO 14224 frames reliability and maintenance data around equipment, failure, maintenance action, resources used, and downtime categories. MIMOSA OSA-EAI frames exchange of asset registry, condition, maintenance, and reliability information across enterprise systems, including logistics and parts-supplier contexts. ISA-95/IEC 62264 frames enterprise-control integration and the production/logistics boundary. These references support why spare-part candidates and similar-event history are valid read-only decision context, but they do not prove that the current demo fixture is an ISO/MIMOSA/ISA compliant data model.
 - **Approved Wording:** Use "standard-aligned demo adapter fixture" or "demo adapter assumption aligned with maintenance/resource/logistics context." Do not use "industry-standard spare-part master," "standards-compliant asset catalog," or "all CNC/compressor parts are covered." For Korean product/docs wording, prefer "표준 정비 데이터 범주와 정렬된 데모 어댑터 근거" and avoid "업계 표준 부품 마스터를 구현했다."
+- **Question Backlog:** `agent_context_question_backlog.jsonl` separates current coverage from future KG pressure. Current Level 0 covers component/location/spare/similar-event explanation and read-only boundaries. Level 1 candidates require new source contracts for CMMS work-order history, ERP/WMS inventory lots and supplier lead time, MES/APS schedule impact, structured SOP steps/tools/safety constraints, and multi-asset topology.
+- **RDB/KG Comparison Order:** Do not run a speed benchmark yet. With the current fixture size, RDB-style packet projection should trivially win and would not be useful evidence. First expand the question set and source contracts, then compare the same questions under the same answer schema across packet/RDB projection and graph traversal.
 
 ### U6. RAG Decision Gate
 
