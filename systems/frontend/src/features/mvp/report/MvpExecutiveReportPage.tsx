@@ -22,12 +22,13 @@ import { displayAssetName, displayEventAssetName, displayEventLabel, fieldFactor
 function reportAgentSummaryStatusLabel(payload: MvpAgentReviewSummaryResponse | null): string {
   if (payload?.trace.materialization?.reused) return "저장본 재사용";
   const status = payload?.trace.materialization?.status;
+  if (status === "pending") return "생성 대기";
   if (status === "ready") return "검증 완료";
   if (status === "fallback") return "검증 fallback";
   if (status === "failed") return "생성 실패";
   if (status === "stale") return "갱신 필요";
-  if (payload?.summary.mode === "llm") return "LLM 검증 완료";
-  if (payload?.summary.mode === "deterministic_fallback") return "규칙 기반 요약";
+  if (payload?.summary?.mode === "llm") return "LLM 검증 완료";
+  if (payload?.summary?.mode === "deterministic_fallback") return "규칙 기반 요약";
   return "조회 대기";
 }
 
@@ -90,6 +91,7 @@ export function MvpExecutiveReportPage({
   const unresolved = model.events.filter((event) => event.recommendedDecision !== "continue_monitoring").slice(0, 6);
   const dataQualityEvents = model.events.filter((event) => event.status === "data_quality_hold");
   const latestDecision = detail.activity.find((activity) => activity.kind === "decision");
+  const storedAgentSummary = agentSummary?.summary ?? null;
 
   return (
     <div className="mvp-page mvp-report-page" data-testid="mvp-executive-report">
@@ -124,31 +126,34 @@ export function MvpExecutiveReportPage({
           <header><Bot size={17} /><span>AI 저장 요약</span><strong>{reportAgentSummaryStatusLabel(agentSummary)}</strong></header>
           {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
           {!agentSummaryLoading && agentSummaryError ? <p>{agentSummaryError}</p> : null}
-          {!agentSummaryLoading && agentSummary ? (
+          {!agentSummaryLoading && storedAgentSummary ? (
             <>
               <div>
-                <strong>{agentSummary.summary.title}</strong>
-                <p>{agentSummary.summary.summary}</p>
+                <strong>{storedAgentSummary.title}</strong>
+                <p>{storedAgentSummary.summary}</p>
               </div>
-              {agentSummary.summary.role_summaries.length ? (
+              {storedAgentSummary.role_summaries.length ? (
                 <div className="mvp-report-agent-quotes">
-                  {agentSummary.summary.role_summaries.map((item) => (
-                    <figure key={`${agentSummary.summary.asset_id}-${item.role}`}>
+                  {storedAgentSummary.role_summaries.map((item) => (
+                    <figure key={`${storedAgentSummary.asset_id}-${item.role}`}>
                       <figcaption>{item.label}</figcaption>
                       <blockquote>{item.quote}</blockquote>
                     </figure>
                   ))}
                 </div>
               ) : null}
-              {agentSummary.summary.data_footnotes.length ? (
+              {storedAgentSummary.data_footnotes.length ? (
                 <ol>
-                  {agentSummary.summary.data_footnotes.map((item, index) => (
+                  {storedAgentSummary.data_footnotes.map((item, index) => (
                     <li key={`${item.code}-${index}`}><sup>{index + 1}</sup>{item.note}</li>
                   ))}
                 </ol>
               ) : null}
-              <small>{agentSummary.summary.boundary_note}</small>
+              <small>{storedAgentSummary.boundary_note}</small>
             </>
+          ) : null}
+          {!agentSummaryLoading && agentSummary && !storedAgentSummary ? (
+            <p>저장된 AI 요약이 아직 없습니다. watcher 또는 생성 API가 요약을 만든 뒤 보고서가 같은 저장본을 사용합니다.</p>
           ) : null}
         </section>
 

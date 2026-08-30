@@ -82,6 +82,41 @@ class AgentReviewSummaryMaterializer:
             "materialization": _materialization_trace(record, reused=False),
         }
 
+    def lookup(
+        self,
+        *,
+        packet: dict[str, Any],
+        project_id: str,
+        history_window: str,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """Return a stored summary only; never generate an LLM/fallback candidate."""
+
+        key_payload = summary_key_payload(
+            packet=packet,
+            project_id=project_id,
+            history_window=history_window,
+            provider=self.provider,
+        )
+        materialization_key = summary_key(key_payload)
+        cached = self.repository.get_agent_review_summary(materialization_key)
+        if cached is not None:
+            return cached["summary"], {
+                **cached["trace"],
+                "context_sha256": key_payload["context_sha256"],
+                "materialization": _materialization_trace(cached, reused=True),
+            }
+        return None, {
+            "provider": getattr(self.provider, "name", "none") if self.provider else "none",
+            "fallback": False,
+            "reason": "summary_not_materialized",
+            "validation_errors": [],
+            "context_sha256": key_payload["context_sha256"],
+            "materialization": _pending_materialization_trace(
+                summary_key=materialization_key,
+                key_payload=key_payload,
+            ),
+        }
+
     def _generate_summary(self, packet: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         provider = self.provider
         if provider is None:
@@ -200,4 +235,25 @@ def _materialization_trace(record: dict[str, Any], *, reused: bool) -> dict[str,
         "created_at": record["created_at"],
         "updated_at": record["updated_at"],
         "fallback_reason": record.get("fallback_reason"),
+    }
+
+
+def _pending_materialization_trace(
+    *,
+    summary_key: str,
+    key_payload: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "summary_id": None,
+        "summary_key": summary_key,
+        "status": "pending",
+        "reused": False,
+        "source_sha256": key_payload["source_sha256"],
+        "context_sha256": key_payload["context_sha256"],
+        "prompt_version": key_payload["prompt_version"],
+        "model_version": key_payload["model_version"],
+        "generated_at": None,
+        "created_at": None,
+        "updated_at": None,
+        "fallback_reason": None,
     }

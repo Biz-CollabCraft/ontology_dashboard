@@ -56,7 +56,7 @@ Current implementation baseline:
 
 - KTD-1. **Adapter pipeline first, orchestration framework later.** Introduce a `ContextProvider` style contract before LangGraph. The current adapter already exposes multiple context facets: operation context, inspection location, SOP retrieval, spare-part context, and similar-event context. LangGraph becomes useful when those facets turn into independently authorized runtime tools with separate failure/retry boundaries, ordered tool calls, human pauses, or long-running state that is awkward in a service method.
 - KTD-2. **Polling watcher starts as materialization, not promotion.** The first watcher should detect new Product Result artifacts and precompute `AgentReviewSummary` rows or files. It should not promote Closed-loop state or trigger approval logic.
-- KTD-3. **Event/outbox promotion is deferred.** Outbox is warranted when state transitions must be durable, idempotent, retried, and audited across service boundaries. The current AI summary path is read-only and can tolerate request-time recompute or watcher retry.
+- KTD-3. **Event/outbox promotion is deferred.** Outbox is warranted when state transitions must be durable, idempotent, retried, and audited across service boundaries. The current AI summary path is read-only and separates stored-summary reads from generation: `GET /agent-review-summary` returns a stored summary or `pending`, while `POST /agent-review-summary` and watcher execution perform materialization.
 - KTD-4. **Ontology remains the backbone.** Ontology should normalize relationships among asset, component, location, failure mode, factor, SOP procedure, and operating context. The LLM should consume these normalized relationships through packet fields, not discover them ad hoc.
 - KTD-5. **KG Level 0 is a test footprint.** Do not add a production graph store yet. Add tests or evaluation traces that prove ontology traversal can answer multi-relationship questions better than flat packet fields when such questions appear.
 - KTD-6. **RAG is not needed for structured demo SOP.** Current SOP is already structured, versioned, and maturity-gated. RAG becomes valuable when site SOPs arrive as unstructured PDFs, mixed versions, or cross-document procedure sets.
@@ -123,7 +123,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U3. Polling Watcher Materialization
 
-- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, the watcher emits stage status, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
+- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, the watcher emits stage status, `GET /agent-review-summary` is stored-summary lookup only, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
 - **Goal:** Decide whether AI summaries should be prepared before the user opens the UI.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary.py`
@@ -138,7 +138,8 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Same artifact checksum is not summarized twice.
   - Provider failure records fallback status and validation errors.
   - New artifact checksum triggers a new summary materialization.
-  - Materialized summary is read by UI when fresh; request-time generation remains fallback.
+  - Materialized summary is read by UI when fresh; cache miss returns `pending` without LLM or fallback generation.
+  - `POST /agent-review-summary` and watcher execution remain explicit materialization triggers.
   - Transient materialization service failure retries within the workflow boundary and reports attempt history.
   - Terminal materialization failure blocks `consumer_ready` without creating Closed-loop actions.
 - **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.

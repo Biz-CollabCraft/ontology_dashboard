@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 const PROJECT = "manufacturing-demo-project";
 const MVP_PATH = `/app/projects/${PROJECT}/mvp`;
+const API_URL = process.env.PLAYWRIGHT_API_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_API_PORT ?? "8200"}`;
 const CLASSIC_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=classic`;
 const WORKFLOW_FIELD_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L02-03&event_id=EVT-GS-004`;
 const WORKFLOW_PROCESS_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=workflow&role=process_manager&workspace_id=manufacturing-demo&asset_id=CNC-S04-L02-03&event_id=EVT-GS-004`;
@@ -17,6 +18,31 @@ async function login(page: Page, returnTo = MVP_PATH, account: keyof typeof ACCO
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}`));
+}
+
+async function materializeAgentSummary(page: Page, assetId: string) {
+  await page.evaluate(
+    async ({ apiUrl, assetId, project }) => {
+      const csrfToken = document.cookie
+        .split(";")
+        .map((item) => item.trim())
+        .find((item) => item.startsWith("ontology_csrf="))
+        ?.slice("ontology_csrf=".length);
+      const response = await fetch(
+        `${apiUrl}/api/objects/${encodeURIComponent(assetId)}/agent-review-summary?project_id=${encodeURIComponent(project)}&history_window=24h`,
+        {
+          method: "POST",
+          headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {},
+          credentials: "include",
+        },
+      );
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`agent summary materialization failed: ${response.status} ${body}`);
+      }
+    },
+    { apiUrl: API_URL, assetId, project: PROJECT },
+  );
 }
 
 test("login exposes only the two mentoring MVP roles", async ({ page }) => {
@@ -67,6 +93,7 @@ test("keeps workflow role dashboards ordered around each role's first task", asy
 
 test("shows the SOP grounded AI review summary without mutating work state", async ({ page }) => {
   await login(page, `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`, "engineer");
+  await materializeAgentSummary(page, "CNC-S04-L04-01");
   await expect(page.getByTestId("mvp-overview")).toBeVisible();
   await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
   const preview = page.getByRole("dialog", { name: "선택 설비 상세" });

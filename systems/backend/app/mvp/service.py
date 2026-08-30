@@ -294,6 +294,31 @@ class ManufacturingPredictiveMaintenanceService:
             history_window=history_window,
         )
 
+    def cached_agent_review_summary(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        dataset_version_id: str | None = None,
+        history_window: str = "24h",
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """Return a stored read-only review summary without triggering generation."""
+
+        packet = self.agent_review_packet(
+            asset_id,
+            project_id,
+            dataset_version_id=dataset_version_id,
+            history_window=history_window,
+        )
+        return AgentReviewSummaryMaterializer(
+            self.repository,
+            self.agent_review_summary_provider,
+        ).lookup(
+            packet=packet,
+            project_id=project_id,
+            history_window=history_window,
+        )
+
     def materialize_agent_review_summaries(
         self,
         project_id: str = "manufacturing-demo-project",

@@ -248,6 +248,7 @@ function displayPartLabel(value: boolean | null): string {
 function agentSummaryStatusLabel(trace: MvpAgentReviewSummaryResponse["trace"] | null, summary: MvpAgentReviewSummary | null): string {
   if (trace?.materialization?.reused) return "저장본 재사용";
   const status = trace?.materialization?.status;
+  if (status === "pending") return "생성 대기";
   if (status === "ready") return "검증 완료";
   if (status === "fallback") return "검증 fallback";
   if (status === "failed") return "생성 실패";
@@ -1834,7 +1835,11 @@ function AssetPreviewPanel({
                         ) : null}
                         <small>AI 요약은 검토 전용이며 Closed-loop 상태를 변경하지 않습니다.</small>
                       </>
-                    ) : agentSummaryError ? null : <p>저장된 AI 요약을 조회하는 중입니다.</p>}
+                    ) : agentSummaryError ? null : (
+                      <p>
+                        저장된 AI 요약이 아직 없습니다. watcher 또는 생성 API가 같은 snapshot 기준 요약을 만들면 이 화면은 저장본만 재사용합니다.
+                      </p>
+                    )}
                   </>
                 ) : null}
               </section>

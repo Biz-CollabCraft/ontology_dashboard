@@ -7,6 +7,7 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 
 from app.equipment.equipment_router import register_equipment_routes
 
@@ -137,13 +138,17 @@ def get_agent_review_summary(
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     _authorize_agent_review_summary(principal=principal, project_id=project_id)
-    summary, trace = service.agent_review_summary(
+    summary, trace = service.cached_agent_review_summary(
         asset_id,
         project_id,
         dataset_version_id=dataset_version_id,
         history_window=history_window,
     )
-    return {"summary": summary, "trace": trace}
+    status_code = 200 if summary is not None else 202
+    return JSONResponse(
+        status_code=status_code,
+        content={"summary": summary, "trace": trace},
+    )
 
 
 @router.post("/objects/{asset_id}/agent-review-summary")

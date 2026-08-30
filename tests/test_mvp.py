@@ -570,7 +570,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
         "history_review_items"
     ]
     service.agent_review_summary_provider = None
-    summary_response = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    summary_response = client.post("/api/objects/CNC-S04-L04-01/agent-review-summary")
     assert summary_response.status_code == 200
     summary_payload = summary_response.json()
     summary = summary_payload["summary"]
@@ -663,7 +663,7 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     provider = FakeAgentReviewSummaryProvider(payload_factory)
     service.agent_review_summary_provider = provider
 
-    first = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    first = client.post("/api/objects/CNC-S04-L04-01/agent-review-summary")
     second = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
 
     assert first.status_code == 200
@@ -678,6 +678,32 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     assert first_payload["trace"]["materialization"]["reused"] is False
     assert second_payload["trace"]["materialization"]["reused"] is True
     assert second_payload["trace"]["materialization"]["status"] == "ready"
+
+
+def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
+    client: TestClient,
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    response = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["summary"] is None
+    assert provider.calls == 0
+    assert payload["trace"]["reason"] == "summary_not_materialized"
+    assert payload["trace"]["materialization"]["status"] == "pending"
+    assert payload["trace"]["materialization"]["reused"] is False
+    assert payload["trace"]["materialization"]["summary_key"].startswith(
+        "agent-review-summary:"
+    )
 
 
 def test_agent_review_summary_materialization_key_changes_with_history_window(
@@ -914,7 +940,7 @@ def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
     action_ids = set(packet["closed_loop_boundary"]["available_action_ids"])
     activity_before = client.get("/api/events/EVT-GS-004/activity").json()
 
-    response = client.get("/api/objects/CNC-S04-L02-03/agent-review-summary")
+    response = client.post("/api/objects/CNC-S04-L02-03/agent-review-summary")
 
     assert response.status_code == 200
     payload = response.json()

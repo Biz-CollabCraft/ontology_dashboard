@@ -596,7 +596,7 @@ export interface MvpAgentReviewSummary {
 }
 
 export interface MvpAgentReviewSummaryResponse {
-  summary: MvpAgentReviewSummary;
+  summary: MvpAgentReviewSummary | null;
   trace: {
     provider: string;
     fallback: boolean;
@@ -604,17 +604,17 @@ export interface MvpAgentReviewSummaryResponse {
     validation_errors: string[];
     fallback_validation_errors?: string[];
     materialization?: {
-      summary_id: string;
+      summary_id: string | null;
       summary_key: string;
-      status: "ready" | "fallback" | "failed" | "stale";
+      status: "ready" | "fallback" | "failed" | "stale" | "pending";
       reused: boolean;
       source_sha256: string;
       context_sha256: string | null;
       prompt_version: string;
       model_version: string;
-      generated_at: string;
-      created_at: string;
-      updated_at: string;
+      generated_at: string | null;
+      created_at: string | null;
+      updated_at: string | null;
       fallback_reason?: string | null;
     };
   };
