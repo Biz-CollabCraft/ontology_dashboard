@@ -18,6 +18,7 @@ QUESTION_BACKLOG_PATH = ROOT / "tests" / "eval" / "agent_context_question_backlo
 RDB_BASELINE_PATH = ROOT / "tests" / "eval" / "agent_context_rdb_baseline.json"
 RAG_GATE_PATH = ROOT / "tests" / "eval" / "rag_decision_gate.json"
 LANGGRAPH_GATE_PATH = ROOT / "tests" / "eval" / "langgraph_decision_gate.json"
+WORKFLOW_GATE_PATH = ROOT / "tests" / "eval" / "agent_workflow_eval_gate.json"
 
 
 def _load_questions() -> list[dict[str, Any]]:
@@ -46,6 +47,10 @@ def _load_rag_gate() -> dict[str, Any]:
 
 def _load_langgraph_gate() -> dict[str, Any]:
     return json.loads(LANGGRAPH_GATE_PATH.read_text(encoding="utf-8"))
+
+
+def _load_workflow_gate() -> dict[str, Any]:
+    return json.loads(WORKFLOW_GATE_PATH.read_text(encoding="utf-8"))
 
 
 def test_agent_context_question_set_controls_eval_variables() -> None:
@@ -259,6 +264,10 @@ def test_langgraph_decision_gate_keeps_simple_workflow_default(tmp_path: Path) -
     assert gate["first_experiment_shape"]["default"] == "simple"
     assert gate["first_experiment_shape"]["experimental"] == "langgraph"
     assert "AI_WORKFLOW_ENGINE" == gate["first_experiment_shape"]["flag"]
+    assert len(gate["current_context_facets"]) >= 3
+    assert "three_or_more_independent_runtime_domain_tools" in (
+        gate["minimum_trigger_conditions"]
+    )
 
 
 def test_langgraph_gate_keeps_closed_loop_state_out_of_graph_contract() -> None:
@@ -270,6 +279,73 @@ def test_langgraph_gate_keeps_closed_loop_state_out_of_graph_contract() -> None:
     assert "executable_closed_loop_command" in gate["first_experiment_shape"]["forbidden_state"]
     assert "mutable_work_order_state" in gate["first_experiment_shape"]["forbidden_state"]
     assert "approval_action_tool" in gate["first_experiment_shape"]["forbidden_state"]
+    assert gate["independent_runtime_tool_definition"][
+        "requires_tool_trajectory_eval"
+    ] is True
+
+
+def test_workflow_eval_gate_covers_minimum_release_axes(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-workflow-eval-gate.db", root=ROOT)
+    gate = _load_workflow_gate()
+    workflow_result = AgentReviewSummaryWorkflow(service).run(limit=1, max_attempts=1)
+
+    assert gate["current_decision"] == (
+        "keep_simple_workflow_with_materialized_summary_contract"
+    )
+    assert gate["current_engine"] == "simple"
+    assert workflow_result["workflow"]["engine"] == gate["current_engine"]
+    assert set(gate["evaluation_scope"]) == {
+        "output_contract",
+        "groundedness",
+        "workflow_stages",
+        "summary_reuse",
+        "fallback_retry",
+        "closed_loop_boundary",
+    }
+    assert set(gate["minimum_release_gates"]) == set(gate["evaluation_scope"])
+    assert {
+        "workflow_engine_reported",
+        "attempt_count_reported",
+        "terminal_status_reported",
+        "retry_policy_reported",
+    }.issubset(set(gate["minimum_release_gates"]["workflow_stages"]))
+    assert workflow_result["workflow"]["terminal_status"] == "completed"
+    assert workflow_result["workflow"]["attempt_count"] >= 1
+    assert workflow_result["workflow"]["max_attempts"] == 1
+    assert "summary_materialization" in workflow_result["workflow"]["retry_policy"]
+
+
+def test_workflow_eval_gate_defers_langgraph_until_tool_trajectory_pressure() -> None:
+    gate = _load_workflow_gate()
+
+    assert gate["candidate_engine"] == "langgraph"
+    assert "three_or_more_independent_runtime_domain_tools_require_ordered_calls" in (
+        gate["adopt_langgraph_when_any"]
+    )
+    assert "tool_trajectory_accuracy_becomes_release_gate" in gate["adopt_langgraph_when_any"]
+    assert "workflow_eval_gate_passes_without_tool_trajectory_checks" in (
+        gate["defer_langgraph_when_all"]
+    )
+    assert "context_facets_are_multiple_but_resolved_by_one_single_process_adapter" in (
+        gate["defer_langgraph_when_all"]
+    )
+    assert len(gate["current_context_facets"]) >= 3
+    assert gate["independent_runtime_tool_definition"][
+        "requires_separate_retry_policy"
+    ] is True
+    assert "direct_llm_domain_database_reads" in gate["forbidden_runtime_shortcuts"]
+    assert "raw_sql_or_cypher_generated_by_llm" in gate["forbidden_runtime_shortcuts"]
+    assert "closed_loop_mutation_from_ai_summary" in gate["forbidden_runtime_shortcuts"]
+    assert "approval_action_tool_in_ai_workflow" in gate["forbidden_runtime_shortcuts"]
+    assert "uncited_summary_fact" in gate["forbidden_runtime_shortcuts"]
+
+    alignment = gate["reference_alignment"]
+    assert set(alignment) == {
+        "openai_evals",
+        "langsmith_agent_evals",
+        "azure_agent_and_rag_evals",
+        "ragas_rag_metrics",
+    }
 
 
 def _answer_from_packet(packet: dict[str, Any]) -> dict[str, Any]:

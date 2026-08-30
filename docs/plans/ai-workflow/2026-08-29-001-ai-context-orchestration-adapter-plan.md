@@ -54,13 +54,14 @@ Current implementation baseline:
 
 ## Key Technical Decisions
 
-- KTD-1. **Adapter pipeline first, orchestration framework later.** Introduce a `ContextProvider` style contract before LangGraph. LangGraph becomes useful when context gathering has multiple tool calls, retry branches, human pauses, or long-running state that is awkward in a service method.
+- KTD-1. **Adapter pipeline first, orchestration framework later.** Introduce a `ContextProvider` style contract before LangGraph. The current adapter already exposes multiple context facets: operation context, inspection location, SOP retrieval, spare-part context, and similar-event context. LangGraph becomes useful when those facets turn into independently authorized runtime tools with separate failure/retry boundaries, ordered tool calls, human pauses, or long-running state that is awkward in a service method.
 - KTD-2. **Polling watcher starts as materialization, not promotion.** The first watcher should detect new Product Result artifacts and precompute `AgentReviewSummary` rows or files. It should not promote Closed-loop state or trigger approval logic.
 - KTD-3. **Event/outbox promotion is deferred.** Outbox is warranted when state transitions must be durable, idempotent, retried, and audited across service boundaries. The current AI summary path is read-only and can tolerate request-time recompute or watcher retry.
 - KTD-4. **Ontology remains the backbone.** Ontology should normalize relationships among asset, component, location, failure mode, factor, SOP procedure, and operating context. The LLM should consume these normalized relationships through packet fields, not discover them ad hoc.
 - KTD-5. **KG Level 0 is a test footprint.** Do not add a production graph store yet. Add tests or evaluation traces that prove ontology traversal can answer multi-relationship questions better than flat packet fields when such questions appear.
 - KTD-6. **RAG is not needed for structured demo SOP.** Current SOP is already structured, versioned, and maturity-gated. RAG becomes valuable when site SOPs arrive as unstructured PDFs, mixed versions, or cross-document procedure sets.
 - KTD-7. **Role language is product contract.** Asset IDs, factor keys, and missing-data labels must be mapped into field/operator language before or during summary generation. Technical IDs can remain in `source_refs`.
+- KTD-8. **SOP updates are review candidates, not automatic writes.** SOP is a versioned knowledge artifact that can be revised from inspection results, maintenance outcomes, similar-event history, and post-maintenance observations. AI may summarize drift and draft a revision candidate, but it must not overwrite approved SOP content or silently change Closed-loop decision rules.
 
 ## Architecture
 
@@ -178,12 +179,19 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Boundary: SOP exists but maturity gate blocks user guidance.
   - Missing context: validated Product Evidence gaps remain gaps even when a demo adapter supplies auxiliary history context.
 - **Verification:** `tests/eval/test_agent_context_retrieval_eval.py` was executed on 2026-08-30 and passed 6/6 checks. The result artifact records that packet answers and `ontology_context` traversal satisfy the same answer facets for GS-002, GS-004, and GS-007, now including `spare_part_ids` and `similar_event_ids`. This is intentionally not a Cypher/SPARQL-vs-SQL performance benchmark; production KG remains a later decision.
-- **Current Data Boundary:** `spare_parts` and `similar_events` are fixture-backed demo adapter context with `assumption_level`, not validated Product Evidence. They can support read-only AI explanation and KG/RDB comparison design, but must not be used as Closed-loop approval or mutation facts until real CMMS/ERP/event-history adapters own the source contract.
+- **Current Data Boundary:** `spare_parts`, `similar_events`, `inspection_locations`, `operation_context`, and structured SOP retrieval are fixture-backed demo adapter context with `assumption_level`, not validated Product Evidence or operational source-of-truth records. They can support read-only AI explanation and KG/RDB comparison design, but must not be used as Closed-loop approval or mutation facts until an explicit current-domain promotion contract exists.
 - **Demo Coverage Boundary:** The CNC demo spare-part fixture covers the same component IDs as the CNC inspection-location fixture (`tooling`, `drive_power`, `thermal_path`, `rotating_assembly`). A separate compressor fixture covers representative compressor components (`vibration_path`, `air_supply`, `electrical_supply`, `rotating_assembly`) through a direct adapter contract test. The current `MPT-001` MVP fixture still uses the compatibility input-event shape, so compressor service-level packet coverage is deferred until the compressor input-event contract is split from the CNC sensor envelope.
 - **External Reference Basis:** The fixture is standard-aligned, not standards-complete. ISO 14224 frames reliability and maintenance data around equipment, failure, maintenance action, resources used, and downtime categories. MIMOSA OSA-EAI frames exchange of asset registry, condition, maintenance, and reliability information across enterprise systems, including logistics and parts-supplier contexts. ISA-95/IEC 62264 frames enterprise-control integration and the production/logistics boundary. These references support why spare-part candidates and similar-event history are valid read-only decision context, but they do not prove that the current demo fixture is an ISO/MIMOSA/ISA compliant data model.
 - **Approved Wording:** Use "standard-aligned demo adapter fixture" or "demo adapter assumption aligned with maintenance/resource/logistics context." Do not use "industry-standard spare-part master," "standards-compliant asset catalog," or "all CNC/compressor parts are covered." For Korean product/docs wording, prefer "표준 정비 데이터 범주와 정렬된 데모 어댑터 근거" and avoid "업계 표준 부품 마스터를 구현했다."
 - **Question Backlog:** `agent_context_question_backlog.jsonl` separates current coverage from future KG pressure. Current Level 0 covers component/location/spare/similar-event explanation and read-only boundaries. Level 1 candidates require new source contracts for CMMS work-order history, ERP/WMS inventory lots and supplier lead time, MES/APS schedule impact, structured SOP steps/tools/safety constraints, and multi-asset topology.
 - **RDB/KG Comparison Order:** Do not run a speed benchmark yet. With the current fixture size, RDB-style packet projection should trivially win and would not be useful evidence. First expand the question set and source contracts, then compare the same questions under the same answer schema across packet/RDB projection and graph traversal.
+- **Domain Loading Decision:** Do not add loading/ingestion logic for the newly expanded demo domains yet. The current source path is intentionally `fixture JSON -> DomainReviewContextAdapter -> AgentReviewPacket -> AI summary/KG eval`. Adding RDB ingestion before source contracts exist would make the fixture look more authoritative than it is and would blur the Product Evidence/Closed-loop trust boundary.
+- **RDB Migration Timing:** Do not move the spare-part, similar-event, inspection-location, operation-context, or structured SOP demo fixtures into RDB yet. JSON fixture plus adapter is the right current shape because the goal is AI/KG workflow evidence, not operational storage. Move them into an RDB read model when at least one of these becomes true: UI, AI summary, Report, and Closed-loop need to share the same auxiliary context; snapshot consistency must prove that UI and Closed-loop consumed the same context version; watcher diff triggers need `source_updated_at`, `snapshot_hash`, or `materialized_at`; local/live demo needs stored summaries that survive side-view reopens; or a real RDB-vs-KG query comparison requires a relational baseline table. Until then, keep RDB as the current production-style packet baseline and keep demo fixtures as adapter-owned source context.
+- **Current-Domain Update Paths:** Limit near-term update logic to domains already present in this repository: Product Result/Evidence snapshots, Agent Review Summary materialization, Closed-loop recommendations/decisions/work orders/inspection results/maintenance actions/equipment state, structured SOP fixture metadata, inspection-location references, operation-context fixtures, spare-part candidate fixtures, and similar-event fixtures. Do not introduce external CMMS/ERP/MES/SOP repository ingestion as part of this slice.
+- **Current-Domain Promotion Criteria:** A current domain can move from fixture-only context to a DB read model only when it has an update trigger already represented in local data. Valid local triggers are: a new Product Result/Evidence snapshot, a changed packet `snapshot_hash`, a Closed-loop inspection result, a completed maintenance event, an equipment-state patch, a similar-event fixture addition, an operation-context fixture version change, a spare-part fixture version change, or an SOP fixture version/hash change.
+- **Current-Domain Update Candidates:** The near-term DB-backed update candidates are: persisted AI summary refresh/reuse on packet hash changes; similar-event history appended from completed inspection/maintenance outcomes; SOP revision candidates derived from local inspection results, maintenance events, equipment-state patches, and similar events; spare-part candidate context versioning from fixture updates; operation-context snapshot versioning from fixture updates; and inspection-location reference versioning from fixture updates. These are update candidates for read models or review candidates, not proof of live enterprise integrations.
+- **SOP Update Trigger Path:** SOP update pressure should come from local operational evidence, not from a user-facing summary alone. Candidate inputs are Closed-loop inspection results, completed maintenance events, equipment-state patches, similar-event outcomes, repeated missing measurements, and post-maintenance observations already represented by Product Result/Evidence or local fixtures. A future `SOP Review Aggregator` can group these by `sop_id`, component, failure mode, factor key, and time window, then produce a `SOP Revision Candidate` with source refs, observed drift, suggested checklist/threshold changes, confidence, and explicit limitations. The approved SOP version remains a human-owned publish step.
+- **SOP Mutation Boundary:** AI workflow may create a read-only SOP revision candidate or review packet. It must not update SOP `maturity`, `effective_from`, `document_hash`, sensor thresholds, checklist text, or Closed-loop approval criteria directly. Existing inspection results must not be retroactively reclassified under a newer SOP version unless a separate migration/audit workflow is explicitly run.
 - **RDB Baseline:** `agent_context_rdb_baseline.json` records the current default as `keep_rdb_packet_projection`. It names where RDB/ViewModel projection is sufficient today and where pressure starts: inventory lot/supplier lead time, Closed-loop work-order dedup history, SOP step/tool/safety relationships, and cross-asset topology. The baseline explicitly forbids claiming KG speed or production necessity from the current MVP fixture.
 - **KG Level 1 Experiment:** `systems/backend/app/mvp/agent_context_graph.py` builds an in-memory graph from the existing read-only packet. It does not add a graph database or runtime dependency. The experiment verifies graph-shaped paths for `PredictionSnapshot -> Factor -> Component -> InspectionLocation/SOP/SparePart/SimilarEvent -> Outcome`, using the same expected answer facets as the packet baseline.
 
@@ -213,16 +221,17 @@ The important boundary is that adapters gather domain facts, while the packet de
   - `systems/backend/app/mvp/agent_review_summary_provider.py`
   - `systems/backend/app/mvp/domain_context_adapters.py`
   - `tests/test_mvp.py`
+  - `tests/eval/agent_workflow_eval_gate.json`
   - `tests/eval/langgraph_decision_gate.json`
   - `tests/eval/test_agent_context_retrieval_eval.py`
 - **Approach:** Keep `AgentReviewSummaryWorkflow` as the public workflow boundary. The current implementation is a simple in-process orchestrator. If LangGraph is introduced, add it behind this boundary rather than changing watcher, UI, or Report consumers.
 - **Decision Gate:**
-  - The agent must call three or more independent domain tools.
+  - The agent must call three or more independent runtime domain tools. Current fixture-backed context facets do not count as independent tools because they are resolved inside one local adapter without separate auth, network failure, retry, or trajectory-eval boundaries.
   - The flow needs durable pause/resume for human review.
   - Retry strategy differs per step and must be observable.
   - Tool trajectory evaluation becomes part of release gates.
   - The service method starts carrying graph-like branching state.
-- **Verification:** `langgraph_decision_gate.json` keeps `simple` as the current engine, records `AI_WORKFLOW_ENGINE=langgraph` as a future experiment behind `AgentReviewSummaryWorkflow`, and forbids executable Closed-loop commands, mutable WorkOrder state, and approval tools in graph state.
+- **Verification:** `langgraph_decision_gate.json` keeps `simple` as the current engine, records `AI_WORKFLOW_ENGINE=langgraph` as a future experiment behind `AgentReviewSummaryWorkflow`, and forbids executable Closed-loop commands, mutable WorkOrder state, and approval tools in graph state. `agent_workflow_eval_gate.json` adds the release-facing workflow eval contract: output contract, groundedness, workflow stages, summary reuse, fallback/retry, and Closed-loop boundary must pass before changing the orchestration engine.
 
 #### LangGraph Implementation Plan
 
@@ -292,6 +301,7 @@ AgentReviewPacket
   asset_id
   asset_label
   risk_summary
+  model_expression_context
   inspection_targets
   sop_guidance
   operation_context_summary
@@ -313,6 +323,49 @@ AgentReviewSummary
 ```
 
 New domains should add adapter output into packet sections, not new prompt-only context. If a field is not mature enough for user display, it should remain in source refs, trace, or footnotes.
+
+### Model and Closed-loop Absorption Check
+
+The packet must preserve all displayable expressions that Backend can trust after Product Result materialization. It should not reduce the model artifact to only `score`, `threshold`, and status when richer model-side explanation is available.
+
+Current state:
+
+- Fixture-built Product Result artifacts already preserve `top_factors`, `ranked_factor_evidence`, observation/history windows, sensor evidence, component hypotheses, recommended actions, source fields, evidence gaps, and provenance.
+- Generator batch promotion currently preserves score, selected threshold, model/schema checksums, lineage, asset criticality, and Backend policy output, but it synthesizes generic factors such as `generator_failure_score`, `model_selected_threshold`, `asset_criticality_adjustment`, and `generator_model_artifact_manifest`.
+- Therefore the live Generator path is a safe minimum promotion path, not yet a full expression-preserving path.
+
+Required next contract work:
+
+- Add optional Generator batch expression fields, for example `explanation.top_factors[]`, `feature_values` or `feature_snapshot_ref`, `sensor_window_ref`, `display_labels`, `confidence_label`, `explanation_method`, and checksum-backed `source_refs`.
+- Backend materialization may absorb these only after source/checksum validation. The Backend still owns `status_grade`, policy mapping, and `recommended_action`.
+- Expressions that are present but not promotable should be recorded as `unpromoted_expression_refs` or a similar diagnostic field, not silently lost and not shown as trusted facts.
+- Agent Review Packet should expose trusted model expressions through `model_expression_context`, while keeping untrusted raw Generator payloads out of the LLM prompt.
+
+Closed-loop history should be handled the same way: use existing work-order, inspection-result, maintenance-action, maintenance-event, equipment-state, and activity tables as source records, then project a read-only `maintenance_history_summary` for AI. Do not let AI create or mutate those records.
+
+### Role Summary Completeness Rule
+
+Role-specific AI summaries must not omit high-signal facts already present in the trusted packet. If a role has a relevant field, the first or second sentence should use it directly.
+
+Minimum role mapping:
+
+- `field_operator`: inspection target, field-facing component name, current symptom/factor names, existing work request state, and preparation-only part candidates.
+- `process_manager`: production impact, queue/order impact, approval priority, work request state, and whether the same evidence should feed procedure update candidates.
+
+Example when `operation_context_summary.estimated_impact_count=51`, model expressions, and Closed-loop history are available:
+
+```text
+공정 관리자용:
+4구역 · 2셀 · CNC 가공기 3 위험 감지 건은 점검이 지연될 경우 약 51건의 생산 영향이 예상됩니다. 모델은 구동 토크, 과부하 누적 지표, 모터 출력 변화를 근거로 동력 전달 계통 위험을 높게 봤고, 작업 처리 흐름에는 점검 요청이 이미 접수되어 있습니다. 최근 유사 이력은 8월 12일 1건이라 반복 고장으로 단정하진 않지만, 현재 요청을 우선 승인 검토하고 점검 결과를 다음 표준 점검 절차 갱신 후보에 연결할 수 있습니다.
+
+- 모델 근거: 구동 토크, 과부하 누적 지표, 모터 출력
+- 생산 맥락: 점검 지연 시 약 51건 영향
+- 작업 처리 흐름: 점검 요청 접수됨
+- 유사 이력: 8월 12일 1건
+- 조치 경계: AI는 승인이나 작업 생성을 수행하지 않음
+```
+
+If production impact is missing from the packet, the process-manager summary may mention the absence only in bullets, not by repeatedly weakening the main prose.
 
 ## Polling Watcher Trade-Off
 
@@ -349,6 +402,16 @@ Minimum release gates:
 - Role shape: exactly `field_operator` and `process_manager` summaries for MVP workflow.
 - Data gap handling: missing data appears as `evidence_gaps` or `data_footnotes`.
 - Source refs: every nested summary source ref must exist in packet `source_refs`.
+- Workflow observability: `engine`, `attempt_count`, retry policy, and terminal status are emitted for watcher/materialization runs.
+- Summary reuse: opening the side view must be able to reuse a stored summary for the same packet snapshot instead of forcing a new LLM call.
+- Snapshot consistency: UI summary and Closed-loop recommendation input must be derived from the same trusted packet snapshot when both consumers are active.
+
+External eval alignment:
+
+- OpenAI contextual eval framing maps to this service as workflow-specific definition of "good": role-specific, grounded, bounded, and reusable summaries.
+- LangSmith agent-eval framing maps final-response checks to the current simple workflow and defers trajectory checks until real tool calls exist.
+- Azure agent/RAG evaluators map to task completion, tool-call correctness, groundedness, retrieval relevance, and response completeness; only the groundedness and completion-adjacent checks are current MVP gates.
+- RAGAS-style context precision/recall remains deferred until SOP content becomes runtime retrieval context rather than structured adapter metadata.
 
 Useful but deferred metrics:
 
@@ -375,6 +438,54 @@ Outside this feature identity:
 - Treating SOP fixture guidance as approved site SOP.
 - Allowing LLM direct access to arbitrary domain databases.
 - Replacing Product Result/Evidence computation with LLM reasoning.
+
+## Field Language Contract
+
+Internal IDs and workflow terms can remain in `source_refs`, audit payloads, and developer diagnostics, but user-facing AI summaries and decision-change rows should map them into field language.
+
+| Internal term | Field-facing term | Display guidance |
+| --- | --- | --- |
+| `event_id`, `EVT-*` | 위험 감지 건 | Prefer equipment display name plus risk state; keep the raw event ID in detail metadata. |
+| `asset_id`, `equipment_id`, `CNC-*` | 설비 | Prefer `equipment.display_name`, for example `4구역 · 2셀 · CNC 가공기 3`. |
+| `SOP` | 표준 점검 절차 / 정비 매뉴얼 | Use `표준 점검 절차` for inspection guidance and `정비 매뉴얼` when referring to the broader document artifact. |
+| `sop_retrieval` | 관련 표준 점검 절차 조회 | Explain which manual matched the asset, symptom, component, and risk state. |
+| `sop_guidance` | 표준 절차 기반 확인 항목 | Use for checklist, inspection method, and replacement-timing review copy. |
+| `sensor_judgment.criteria` | 센서 판정 기준 | Use when explaining threshold/checklist review, not as an automatic approval rule. |
+| `inspection_location` | 현장 확인 위치 | Tell the operator where to inspect, not which internal contract supplied it. |
+| `Closed-loop` | 작업 처리 흐름 | Use for approval, work request, maintenance action, completion, and replay ownership. |
+| `recommendation` | 조치 후보 | Keep separate from approval or command execution. |
+| `decision` | 관리자 판단 | Use for accept/reject/defer review decisions. |
+| `work_order` | 작업 요청 | Use for requested/approved/in-progress/completed work. |
+| `maintenance_action` | 정비 작업 | Use only after approval creates a planned/in-progress/completed action. |
+| `maintenance_event` | 정비 완료 이력 | Use after completion is recorded. |
+| `equipment_state` | 정비 후 설비 상태 | Use for state values updated by approved maintenance completion. |
+| `snapshot_hash` | 근거 버전 | Use in detail metadata, one-line change logs, or rollback rows, not prose-heavy main copy. |
+| `source_ref` | 근거 출처 | Use in expandable evidence detail, not headline copy. |
+| `materialization` | AI 요약 저장/재사용 | Use when explaining why the side view did not call the LLM again. |
+| `similar_event` | 유사 이력 | Use for past similar symptom/action/outcome context. |
+| `spare_part_candidate` | 참고 부품 후보 | Do not imply inventory availability or purchase lead time. |
+| `operation_context` | 생산 맥락 | Use for shift, line load, planned loss, or production-impact wording. |
+
+Decision-change rows should be terse operational logs, not paragraphs. Keep each row to one field-facing change phrase plus only the actions `상세 보기` and, when rollback is supported for that row, `되돌리기`.
+
+```text
+- 표준 점검 절차 기준 버전 갱신, AI 요약 재생성  [상세 보기] [되돌리기]
+- 유사 이력 1건 추가, 위험 판단 변경 없음  [상세 보기]
+- 현장 확인 위치 설명 갱신, 작업 요청 영향 없음  [상세 보기] [되돌리기]
+- 생산 맥락 기준 시간창 갱신, 관리자 요약 재계산  [상세 보기] [되돌리기]
+- 정비 매뉴얼 개정 후보 생성, 승인 전 미적용  [상세 보기]
+```
+
+Summary copy should carry the useful operational answer. Limitations and non-authoritative claims should move below the summary as short bullets, not as repeated sentence endings inside the main copy:
+
+```text
+4구역 · 2셀 · CNC 가공기 3은 동력 전달 계통 확인이 우선입니다.
+모터 출력, 과부하 누적, 구동 토크가 함께 높아졌고, 같은 계통의 유사 이력이 추가로 확인됐습니다.
+
+- 참고 부품 후보는 점검 준비용입니다.
+- 실제 재고나 입고 가능 여부는 이 화면에서 판단하지 않습니다.
+- 작업 요청과 관리자 판단은 작업 처리 흐름에서 별도로 기록됩니다.
+```
 
 ## Sequencing
 

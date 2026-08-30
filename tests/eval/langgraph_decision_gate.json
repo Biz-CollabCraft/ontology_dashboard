@@ -4,12 +4,25 @@
   "current_engine": "simple",
   "candidate_engine": "langgraph",
   "minimum_trigger_conditions": [
-    "three_or_more_independent_domain_tools",
+    "three_or_more_independent_runtime_domain_tools",
     "durable_human_pause_resume_required",
     "step_specific_retry_policy_must_be_observed",
     "tool_trajectory_eval_becomes_release_gate",
     "service_method_carries_branching_graph_state"
   ],
+  "current_context_facets": [
+    "operation_context",
+    "inspection_location",
+    "sop_retrieval",
+    "spare_part_context",
+    "similar_event_context"
+  ],
+  "independent_runtime_tool_definition": {
+    "meaning": "a domain source called as a separately authorized and observable runtime tool or service, not a method on the same fixture adapter",
+    "requires_separate_failure_boundary": true,
+    "requires_separate_retry_policy": true,
+    "requires_tool_trajectory_eval": true
+  },
   "first_experiment_shape": {
     "flag": "AI_WORKFLOW_ENGINE",
     "default": "simple",
