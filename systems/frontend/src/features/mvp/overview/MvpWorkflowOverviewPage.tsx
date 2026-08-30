@@ -14,10 +14,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getMvpAgentReviewPacket, getMvpAgentReviewSummary } from "../../../api";
+import { getMvpAgentReviewSummary } from "../../../api";
 import type {
-  MvpAgentReviewPacket,
   MvpAgentReviewSummary,
+  MvpAgentReviewSummaryResponse,
   MvpAsset,
   MvpBootstrapModel,
   MvpClosedLoopSummary,
@@ -1522,11 +1522,11 @@ function AssetPreviewPanel({
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
-  const [agentPacket, setAgentPacket] = useState<MvpAgentReviewPacket | null>(null);
   const [agentSummary, setAgentSummary] = useState<MvpAgentReviewSummary | null>(null);
-  const [agentPacketLoading, setAgentPacketLoading] = useState(false);
-  const [agentPacketError, setAgentPacketError] = useState("");
-  const [agentPacketRequestKey, setAgentPacketRequestKey] = useState("");
+  const [agentSummaryTrace, setAgentSummaryTrace] = useState<MvpAgentReviewSummaryResponse["trace"] | null>(null);
+  const [agentSummaryLoading, setAgentSummaryLoading] = useState(false);
+  const [agentSummaryError, setAgentSummaryError] = useState("");
+  const [agentSummaryRequestKey, setAgentSummaryRequestKey] = useState("");
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
@@ -1548,42 +1548,33 @@ function AssetPreviewPanel({
     setReportOutputOpen(false);
     window.setTimeout(() => window.print(), 100);
   };
-  const agentPacketKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
-  const loadAgentPacket = async () => {
+  const agentSummaryKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
+  const loadAgentSummary = async () => {
     if (!asset) return;
-    setAgentPacketLoading(true);
-    setAgentPacketError("");
-    setAgentPacket(null);
+    setAgentSummaryLoading(true);
+    setAgentSummaryError("");
     setAgentSummary(null);
-    setAgentPacketRequestKey(agentPacketKey);
+    setAgentSummaryTrace(null);
+    setAgentSummaryRequestKey(agentSummaryKey);
     try {
-      const packet = await getMvpAgentReviewPacket({
+      const summaryResponse = await getMvpAgentReviewSummary({
         assetId: asset.assetId,
         datasetVersionId: candidate?.event.datasetVersionId ?? null,
         historyWindow: sensorWindow,
       });
-      setAgentPacket(packet);
-      try {
-        const summaryResponse = await getMvpAgentReviewSummary({
-          assetId: asset.assetId,
-          datasetVersionId: candidate?.event.datasetVersionId ?? null,
-          historyWindow: sensorWindow,
-        });
-        setAgentSummary(summaryResponse.summary);
-      } catch {
-        setAgentPacketError("AI 요약 API 응답을 검증하지 못해 패킷 기준 요약을 표시합니다.");
-      }
+      setAgentSummary(summaryResponse.summary);
+      setAgentSummaryTrace(summaryResponse.trace);
     } catch (reason: unknown) {
-      setAgentPacketError(reason instanceof Error ? reason.message : "AI 검토 요약을 불러오지 못했습니다.");
+      setAgentSummaryError(reason instanceof Error ? reason.message : "AI 검토 요약을 불러오지 못했습니다.");
     } finally {
-      setAgentPacketLoading(false);
+      setAgentSummaryLoading(false);
     }
   };
   useEffect(() => {
-    if (role !== "field_operator" || activeTab !== "status" || !asset || !agentPacketKey) return;
-    if (agentPacketLoading || agentPacketRequestKey === agentPacketKey) return;
-    void loadAgentPacket();
-  }, [activeTab, agentPacketKey, agentPacketLoading, agentPacketRequestKey, asset, role]);
+    if (role !== "field_operator" || activeTab !== "status" || !asset || !agentSummaryKey) return;
+    if (agentSummaryLoading || agentSummaryRequestKey === agentSummaryKey) return;
+    void loadAgentSummary();
+  }, [activeTab, agentSummaryKey, agentSummaryLoading, agentSummaryRequestKey, asset, role]);
   useEffect(() => {
     if (!printReportTab) return;
     document.body.classList.add("mvp-workflow-print-mode");
@@ -1594,9 +1585,7 @@ function AssetPreviewPanel({
       window.removeEventListener("afterprint", clearPrintMode);
     };
   }, [printReportTab]);
-  const agentHistoryItems = agentPacket
-    ? agentSummary?.history_summary ?? agentPacket.review_draft.history_summary
-    : [];
+  const agentHistoryItems = agentSummary?.history_summary ?? [];
   const agentFocusItems = agentSummary?.inspection_focus ?? [];
   const agentRoleSummaries = agentSummary?.role_summaries ?? [];
   const agentDataFootnotes = agentSummary?.data_footnotes ?? [];
@@ -1763,39 +1752,42 @@ function AssetPreviewPanel({
           {role === "field_operator" && activeTab === "status" ? (
             <>
               <section className="mvp-agent-review-packet" aria-label="AI 검토 요약">
-                <header><Bot size={14} /><strong>AI 검토 요약</strong><span>검토 전용</span></header>
-                {agentPacketLoading ? <p>AI 요약을 불러오는 중입니다.</p> : null}
-                {!agentPacketLoading ? (
+                <header><Bot size={14} /><strong>AI 검토 요약</strong><span>저장 요약</span></header>
+                {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
+                {!agentSummaryLoading ? (
                   <>
-                    {agentPacketError ? <p>{agentPacketError}</p> : null}
-                    {agentPacket ? (
+                    {agentSummaryError ? <p>{agentSummaryError}</p> : null}
+                    {agentSummary ? (
                       <>
                         <dl>
-                          <div><dt>설비</dt><dd>{agentPacket.asset_label || agentSummary?.asset_id || agentPacket.asset_id}</dd></div>
-                          <div><dt>위험도</dt><dd>{agentPacket.risk_summary.status_grade ?? "미제공"}</dd></div>
-                          <div><dt>근거 묶음</dt><dd>{agentPacket.inspection_targets.length ? `${agentPacket.inspection_targets.length}개 점검 계통` : "패킷 검토"}</dd></div>
-                          <div><dt>상태 변경</dt><dd>{agentPacket.closed_loop_boundary.mutation_allowed ? "허용" : "불가"}</dd></div>
-                          <div><dt>운영 맥락</dt><dd>{agentPacket.operation_context_summary?.production_impact ?? "조회 전"}</dd></div>
-                          <div><dt>요약 방식</dt><dd>{agentSummary?.mode === "llm" ? "LLM 검증 통과" : "규칙 기반 fallback"}</dd></div>
+                          <div><dt>설비</dt><dd>{assetDisplayName}</dd></div>
+                          <div><dt>위험도</dt><dd>{asset.status}</dd></div>
+                          <div><dt>근거 묶음</dt><dd>{agentFocusItems.length ? `${agentFocusItems.length}개 점검 계통` : "저장 요약"}</dd></div>
+                          <div><dt>상태 변경</dt><dd>불가</dd></div>
+                          <div><dt>생성 상태</dt><dd>{agentSummaryTrace?.materialization?.status ?? "ready"}</dd></div>
+                          <div><dt>요약 방식</dt><dd>{agentSummary.mode === "llm" ? "LLM 검증 통과" : "규칙 기반 fallback"}</dd></div>
                         </dl>
-                        {agentSummary?.mode === "deterministic_fallback" ? (
-                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 패킷 기준으로 요약했습니다.</small>
+                        {agentSummaryTrace?.materialization?.reused ? (
+                          <small>동일 snapshot 기준으로 저장된 요약을 재사용했습니다.</small>
+                        ) : null}
+                        {agentSummary.mode === "deterministic_fallback" ? (
+                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 fallback 요약을 저장했습니다.</small>
                         ) : null}
                         <small>이력 조회 요약</small>
                         {agentHistoryItems.length ? (
                           <ul>
                             {agentHistoryItems.slice(0, 3).map((item) => (
-                              <li key={`${agentPacket.asset_id}-history-${item}`}>{item}</li>
+                              <li key={`${agentSummary.asset_id}-history-${item}`}>{item}</li>
                             ))}
                           </ul>
                         ) : <p>조회된 이력 요약이 없습니다.</p>}
                         <div className="mvp-agent-review-draft">
-                          <strong>{agentSummary?.title ?? agentPacket.review_draft.title}</strong>
-                          <p>{agentSummary?.summary ?? agentPacket.review_draft.summary}</p>
+                          <strong>{agentSummary.title}</strong>
+                          <p>{agentSummary.summary}</p>
                           {agentRoleSummaries.length ? (
                             <div className="mvp-agent-role-quotes" aria-label="역할별 AI 요약">
                               {agentRoleSummaries.map((item) => (
-                                <figure key={`${agentPacket.asset_id}-role-${item.role}`}>
+                                <figure key={`${agentSummary.asset_id}-role-${item.role}`}>
                                   <figcaption>{item.label}</figcaption>
                                   <blockquote>{item.quote}</blockquote>
                                 </figure>
@@ -1805,26 +1797,26 @@ function AssetPreviewPanel({
                           {agentFocusItems.length ? (
                             <ul>
                               {agentFocusItems.slice(0, 4).map((item) => (
-                                <li key={`${agentPacket.asset_id}-focus-${item.component_id}`}>
+                                <li key={`${agentSummary.asset_id}-focus-${item.component_id}`}>
                                   {item.component_label}{item.location_label ? ` · ${item.location_label}` : ""}
                                 </li>
                               ))}
                             </ul>
                           ) : null}
-                          <small>{agentSummary?.boundary_note ?? agentPacket.review_draft.boundary_note}</small>
+                          <small>{agentSummary.boundary_note}</small>
                         </div>
                         {agentDataFootnotes.length ? (
                           <ol className="mvp-agent-footnotes" aria-label="부족 데이터 각주">
                             {agentDataFootnotes.map((item, index) => (
-                              <li key={`${agentPacket.asset_id}-footnote-${item.code}-${index}`}>
+                              <li key={`${agentSummary.asset_id}-footnote-${item.code}-${index}`}>
                                 <sup>{index + 1}</sup>{item.note}
                               </li>
                             ))}
                           </ol>
                         ) : null}
-                        <small>{agentPacket.closed_loop_boundary.note}</small>
+                        <small>AI 요약은 검토 전용이며 Closed-loop 상태를 변경하지 않습니다.</small>
                       </>
-                    ) : agentPacketError ? null : <p>AI 요약을 불러오는 중입니다.</p>}
+                    ) : agentSummaryError ? null : <p>저장된 AI 요약을 조회하는 중입니다.</p>}
                   </>
                 ) : null}
               </section>

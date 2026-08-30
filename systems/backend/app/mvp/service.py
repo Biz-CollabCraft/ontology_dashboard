@@ -19,10 +19,7 @@ from app.diagnosis.domain import (
 from app.equipment.ports import EquipmentApplicationPort
 from app.mvp.agent_review_packet import compose_agent_review_packet
 from app.mvp.context_providers import AgentReviewContextRegistry
-from app.mvp.agent_review_summary import (
-    validate_agent_review_summary_contract,
-    validated_agent_review_summary,
-)
+from app.mvp.agent_review_summary_materialization import AgentReviewSummaryMaterializer
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.mvp.asset_detail_view_model import compose_asset_detail_view_model
 from app.mvp.sop_retrieval import retrieve_inspection_sops
@@ -271,7 +268,7 @@ class ManufacturingPredictiveMaintenanceService:
         dataset_version_id: str | None = None,
         history_window: str = "24h",
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Return a validated read-only review summary with deterministic fallback."""
+        """Return a materialized read-only review summary for this evidence snapshot."""
 
         packet = self.agent_review_packet(
             asset_id,
@@ -279,45 +276,69 @@ class ManufacturingPredictiveMaintenanceService:
             dataset_version_id=dataset_version_id,
             history_window=history_window,
         )
-        provider = self.agent_review_summary_provider
-        if provider is None:
-            summary, errors = validated_agent_review_summary(packet=packet)
-            return summary, {
-                "provider": "none",
-                "fallback": True,
-                "reason": "agent_review_summary_provider_disabled",
-                "validation_errors": errors,
-            }
+        return AgentReviewSummaryMaterializer(
+            self.repository,
+            self.agent_review_summary_provider,
+        ).materialize(
+            packet=packet,
+            project_id=project_id,
+            history_window=history_window,
+        )
 
-        try:
-            candidate = provider.generate(packet)
-            candidate_errors = validate_agent_review_summary_contract(candidate, packet=packet)
-            if candidate.get("mode") != "llm":
-                candidate_errors.append("mode_invalid_for_candidate")
-            if not candidate_errors:
-                return candidate, {
-                    "provider": provider.name,
-                    "fallback": False,
-                    "reason": None,
-                    "validation_errors": [],
+    def materialize_agent_review_summaries(
+        self,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        history_window: str = "24h",
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Materialize missing Agent Review Summaries for project fixtures."""
+
+        items: list[dict[str, Any]] = []
+        fixtures = [
+            fixture
+            for fixture in self.project_fixtures.values()
+            if self._fixture_project_id(fixture) == project_id
+        ]
+        fixtures = sorted(
+            fixtures,
+            key=lambda fixture: str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+        )
+        if limit is not None:
+            fixtures = fixtures[: max(0, limit)]
+
+        for fixture in fixtures:
+            asset_id = str((fixture.get("equipment") or {}).get("equipment_id") or "")
+            if not asset_id:
+                continue
+            summary, trace = self.agent_review_summary(
+                asset_id,
+                project_id,
+                dataset_version_id=fixture.get("dataset_version"),
+                history_window=history_window,
+            )
+            materialization = trace.get("materialization") or {}
+            items.append(
+                {
+                    "asset_id": asset_id,
+                    "event_id": fixture.get("event_id"),
+                    "summary_id": materialization.get("summary_id"),
+                    "summary_key": materialization.get("summary_key"),
+                    "status": materialization.get("status"),
+                    "reused": materialization.get("reused"),
+                    "mode": summary.get("mode"),
+                    "fallback_reason": materialization.get("fallback_reason"),
                 }
-            summary, errors = validated_agent_review_summary(packet=packet)
-            return summary, {
-                "provider": provider.name,
-                "fallback": True,
-                "reason": "summary_validation_failed",
-                "validation_errors": candidate_errors,
-                "fallback_validation_errors": errors,
-            }
-        except Exception as exc:
-            summary, errors = validated_agent_review_summary(packet=packet)
-            return summary, {
-                "provider": getattr(provider, "name", "unknown"),
-                "fallback": True,
-                "reason": type(exc).__name__,
-                "message": str(exc),
-                "validation_errors": errors,
-            }
+            )
+
+        return {
+            "project_id": project_id,
+            "history_window": history_window,
+            "materialized_count": len(items),
+            "created_count": sum(1 for item in items if not item.get("reused")),
+            "reused_count": sum(1 for item in items if item.get("reused")),
+            "items": items,
+        }
 
     def patch_equipment_state(
         self,

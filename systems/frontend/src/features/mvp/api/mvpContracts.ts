@@ -534,6 +534,19 @@ export interface MvpAgentReviewSummaryResponse {
     reason: string | null;
     validation_errors: string[];
     fallback_validation_errors?: string[];
+    materialization?: {
+      summary_id: string;
+      summary_key: string;
+      status: "ready" | "fallback" | "failed" | "stale";
+      reused: boolean;
+      source_sha256: string;
+      prompt_version: string;
+      model_version: string;
+      generated_at: string;
+      created_at: string;
+      updated_at: string;
+      fallback_reason?: string | null;
+    };
   };
 }
 

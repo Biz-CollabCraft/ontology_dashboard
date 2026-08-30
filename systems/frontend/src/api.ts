@@ -646,7 +646,6 @@ export function getMvpAgentReviewSummary(input: {
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
   return request<MvpAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
-    { method: "POST" },
   );
 }
 

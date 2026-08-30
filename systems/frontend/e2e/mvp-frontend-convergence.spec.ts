@@ -72,7 +72,7 @@ test("shows the SOP grounded AI review summary without mutating work state", asy
   const preview = page.getByRole("dialog", { name: "선택 설비 상세" });
   await expect(preview).toBeVisible();
   const agentReview = preview.getByRole("region", { name: "AI 검토 요약" });
-  await expect(agentReview).toContainText("검토 전용");
+  await expect(agentReview).toContainText("저장 요약");
   await expect(agentReview).toContainText("상태 변경");
   await expect(agentReview).toContainText("불가");
   await expect(agentReview).toContainText("이력 조회 요약");

@@ -59,7 +59,47 @@ class AuditRepository:
                     payload_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS agent_review_summaries (
+                    summary_id TEXT PRIMARY KEY,
+                    summary_key TEXT NOT NULL UNIQUE,
+                    organization_id TEXT NOT NULL DEFAULT 'org-ontology-demo',
+                    project_id TEXT NOT NULL,
+                    workspace_id TEXT NOT NULL DEFAULT 'manufacturing-demo',
+                    asset_id TEXT NOT NULL,
+                    event_id TEXT,
+                    dataset_version_id TEXT,
+                    history_window TEXT NOT NULL,
+                    packet_schema_version TEXT NOT NULL,
+                    summary_schema_version TEXT NOT NULL,
+                    prompt_version TEXT NOT NULL,
+                    model_version TEXT NOT NULL,
+                    source_sha256 TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    fallback_reason TEXT,
+                    snapshot_basis_json TEXT NOT NULL,
+                    summary_json TEXT NOT NULL,
+                    trace_json TEXT NOT NULL,
+                    generated_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_review_summaries_lookup
+                    ON agent_review_summaries (
+                        organization_id, project_id, workspace_id, asset_id, event_id, dataset_version_id, updated_at
+                    );
                 """
+            )
+            self._ensure_column(
+                connection,
+                "agent_review_summaries",
+                "organization_id",
+                "TEXT NOT NULL DEFAULT 'org-ontology-demo'",
+            )
+            self._ensure_column(
+                connection,
+                "agent_review_summaries",
+                "workspace_id",
+                "TEXT NOT NULL DEFAULT 'manufacturing-demo'",
             )
 
     @staticmethod
@@ -148,6 +188,70 @@ class AuditRepository:
             )
         return {**record, "payload": payload}
 
+    def get_agent_review_summary(self, summary_key: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM agent_review_summaries WHERE summary_key=?",
+                (summary_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._summary_record_from_row(dict(row))
+
+    def save_agent_review_summary(self, **record: Any) -> dict[str, Any]:
+        now = self._now()
+        payload = {
+            "summary_id": str(record.get("summary_id") or uuid.uuid4()),
+            "summary_key": str(record["summary_key"]),
+            "organization_id": str(record.get("organization_id") or "org-ontology-demo"),
+            "project_id": str(record["project_id"]),
+            "workspace_id": str(record.get("workspace_id") or "manufacturing-demo"),
+            "asset_id": str(record["asset_id"]),
+            "event_id": record.get("event_id"),
+            "dataset_version_id": record.get("dataset_version_id"),
+            "history_window": str(record["history_window"]),
+            "packet_schema_version": str(record["packet_schema_version"]),
+            "summary_schema_version": str(record["summary_schema_version"]),
+            "prompt_version": str(record["prompt_version"]),
+            "model_version": str(record["model_version"]),
+            "source_sha256": str(record["source_sha256"]),
+            "status": str(record["status"]),
+            "fallback_reason": record.get("fallback_reason"),
+            "snapshot_basis_json": json.dumps(
+                record["snapshot_basis"], ensure_ascii=False, sort_keys=True
+            ),
+            "summary_json": json.dumps(
+                record["summary"], ensure_ascii=False, sort_keys=True
+            ),
+            "trace_json": json.dumps(record["trace"], ensure_ascii=False, sort_keys=True),
+            "generated_at": str(record["generated_at"]),
+            "created_at": str(record.get("created_at") or now),
+            "updated_at": now,
+        }
+        columns = ",".join(payload.keys())
+        placeholders = ",".join("?" for _ in payload)
+        updates = ",".join(
+            f"{column}=excluded.{column}"
+            for column in payload
+            if column not in {"summary_id", "summary_key", "created_at"}
+        )
+        with self._connect() as connection:
+            connection.execute(
+                f"""
+                INSERT INTO agent_review_summaries ({columns})
+                VALUES ({placeholders})
+                ON CONFLICT(summary_key) DO UPDATE SET {updates}
+                """,
+                tuple(payload.values()),
+            )
+            row = connection.execute(
+                "SELECT * FROM agent_review_summaries WHERE summary_key=?",
+                (payload["summary_key"],),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("agent_review_summary_persist_failed")
+        return self._summary_record_from_row(dict(row))
+
     def event_activity(self, event_id: str) -> dict[str, list[dict[str, Any]]]:
         with self._connect() as connection:
             decisions = [dict(row) for row in connection.execute("SELECT * FROM decisions WHERE event_id=? ORDER BY created_at", (event_id,))]
@@ -157,9 +261,40 @@ class AuditRepository:
 
     def reset(self) -> None:
         with self._connect() as connection:
-            connection.executescript("DELETE FROM decisions; DELETE FROM notes; DELETE FROM conversations; DELETE FROM audit_log;")
+            connection.executescript(
+                "DELETE FROM decisions; DELETE FROM notes; DELETE FROM conversations; "
+                "DELETE FROM audit_log; DELETE FROM agent_review_summaries;"
+            )
             ontology_table = connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ontology_action_invocations'"
             ).fetchone()
             if ontology_table is not None:
                 connection.execute("DELETE FROM ontology_action_invocations")
+
+    @staticmethod
+    def _summary_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
+        def decode(value: Any) -> Any:
+            if isinstance(value, (dict, list)):
+                return value
+            return json.loads(str(value))
+
+        return {
+            **row,
+            "snapshot_basis": decode(row["snapshot_basis_json"]),
+            "summary": decode(row["summary_json"]),
+            "trace": decode(row["trace_json"]),
+        }
+
+    @staticmethod
+    def _ensure_column(
+        connection: sqlite3.Connection,
+        table: str,
+        column: str,
+        declaration: str,
+    ) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute(f"PRAGMA table_info({table})")
+        }
+        if column not in columns:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")

@@ -33,6 +33,8 @@ Hard contract:
   read-only Korean prose grounded in baseline_summary and agent_review_packet.
 """.strip()
 
+AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.0"
+
 
 class AgentReviewSummaryProvider:
     """Generate a candidate summary through the shared LLM provider port."""

@@ -47,8 +47,10 @@ class FakeAgentReviewSummaryProvider:
 
     def __init__(self, payload_factory):
         self.payload_factory = payload_factory
+        self.calls = 0
 
     def generate(self, packet: dict) -> dict:
+        self.calls += 1
         return self.payload_factory(packet)
 
 
@@ -529,16 +531,21 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
         "history_review_items"
     ]
     service.agent_review_summary_provider = None
-    summary_response = client.post("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    summary_response = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
     assert summary_response.status_code == 200
     summary_payload = summary_response.json()
     summary = summary_payload["summary"]
-    assert summary_payload["trace"] == {
+    assert {
+        key: summary_payload["trace"][key]
+        for key in ("provider", "fallback", "reason", "validation_errors")
+    } == {
         "provider": "none",
         "fallback": True,
         "reason": "agent_review_summary_provider_disabled",
         "validation_errors": [],
     }
+    assert summary_payload["trace"]["materialization"]["status"] == "fallback"
+    assert summary_payload["trace"]["materialization"]["reused"] is False
     assert list(Draft202012Validator(AGENT_REVIEW_SUMMARY_SCHEMA).iter_errors(summary)) == []
     assert summary["schema_version"] == "agent-review-summary-v1.0"
     assert summary["mode"] == "deterministic_fallback"
@@ -596,12 +603,92 @@ def test_agent_review_summary_service_accepts_valid_provider_candidate(
 
     assert summary["mode"] == "llm"
     assert summary["title"] == "AI 요약 후보"
-    assert trace == {
+    assert {key: trace[key] for key in ("provider", "fallback", "reason", "validation_errors")} == {
         "provider": "fake-agent-review-summary",
         "fallback": False,
         "reason": None,
         "validation_errors": [],
     }
+    assert trace["materialization"]["status"] == "ready"
+    assert trace["materialization"]["reused"] is False
+
+
+def test_agent_review_summary_reuses_materialized_snapshot(
+    client: TestClient,
+    service: FactorySignalService,
+) -> None:
+    def payload_factory(packet: dict) -> dict:
+        summary = compose_deterministic_agent_review_summary(packet)
+        return {**summary, "mode": "llm", "title": "저장된 AI 요약"}
+
+    provider = FakeAgentReviewSummaryProvider(payload_factory)
+    service.agent_review_summary_provider = provider
+
+    first = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    second = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert provider.calls == 1
+    first_payload = first.json()
+    second_payload = second.json()
+    assert first_payload["summary"] == second_payload["summary"]
+    assert first_payload["trace"]["materialization"]["summary_key"] == second_payload[
+        "trace"
+    ]["materialization"]["summary_key"]
+    assert first_payload["trace"]["materialization"]["reused"] is False
+    assert second_payload["trace"]["materialization"]["reused"] is True
+    assert second_payload["trace"]["materialization"]["status"] == "ready"
+
+
+def test_agent_review_summary_materialization_key_changes_with_history_window(
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first, first_trace = service.agent_review_summary("CNC-S04-L04-01")
+    second, second_trace = service.agent_review_summary(
+        "CNC-S04-L04-01",
+        history_window="7d",
+    )
+
+    assert first["asset_id"] == "CNC-S04-L04-01"
+    assert second["asset_id"] == "CNC-S04-L04-01"
+    assert provider.calls == 2
+    assert first_trace["materialization"]["status"] == "ready"
+    assert second_trace["materialization"]["status"] == "ready"
+    assert first_trace["materialization"]["summary_key"] != second_trace[
+        "materialization"
+    ]["summary_key"]
+
+
+def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first = service.materialize_agent_review_summaries(limit=2)
+    second = service.materialize_agent_review_summaries(limit=2)
+
+    assert first["materialized_count"] == 2
+    assert first["created_count"] == 2
+    assert first["reused_count"] == 0
+    assert second["materialized_count"] == 2
+    assert second["created_count"] == 0
+    assert second["reused_count"] == 2
+    assert provider.calls == 2
 
 
 def test_agent_review_summary_service_falls_back_when_provider_candidate_is_invalid(
