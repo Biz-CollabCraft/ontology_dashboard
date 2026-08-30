@@ -46,12 +46,14 @@ def run_once(
 ) -> dict:
     configure_imports(root)
     from app.dependencies import build_manufacturing_service
+    from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
     service = build_manufacturing_service(database, root=root)
-    result = service.materialize_agent_review_summaries(
+    result = AgentReviewSummaryWorkflow(service).run(
         project_id,
         history_window=history_window,
         limit=limit,
+        trigger="polling_watcher",
     )
     return {
         "checked_at": datetime.now(timezone.utc).isoformat(),

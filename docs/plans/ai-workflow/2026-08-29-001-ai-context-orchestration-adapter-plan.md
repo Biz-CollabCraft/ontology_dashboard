@@ -104,35 +104,39 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U2. Domain Adapter Registry
 
-- **Status:** Implemented as U2a. The registry/composition-root wiring exists for ordered, replaceable context providers. SOP/location traversal remains in the existing packet inputs until U4 expands the adapter contract beyond `view_model` context.
+- **Status:** Implemented. `DomainReviewContextAdapter` and `ManufacturingFixtureReviewContextAdapter` now own operation context, SOP guidance, inspection location references, and SOP retrieval before `AssetDetailViewModel` and `AgentReviewPacket` consume them.
 - **Goal:** Make domain additions explicit and replaceable rather than hard-coded inside one packet composer.
 - **Files:**
+  - `systems/backend/app/mvp/domain_context_adapters.py`
   - `systems/backend/app/mvp/context_providers.py`
   - `systems/backend/app/dependencies.py`
   - `tests/test_mvp.py`
-- **Approach:** Register adapters from the composition root. Start with operation context as an in-process adapter and keep SOP/location behavior as explicit packet inputs until the exploration adapter contract is introduced. Avoid plugin-like dynamic loading until there are external deploy-time adapters.
+- **Approach:** Register adapters from the composition root. The current manufacturing adapter is fixture-backed, read-only, and replaceable; external domains should implement the same adapter surface before adding dynamic plugin loading.
 - **Test Scenarios:**
   - Default registry returns operation context for manufacturing demo.
   - Unknown adapter codes fail closed during service construction or packet generation.
   - Adapter exceptions are captured as evidence gaps rather than uncaught UI failures where reasonable.
-- **Verification:** `agent_review_packet` behavior is unchanged for GS-002/GS-004/GS-007 except explicitly added context sections.
+- **Verification:** `agent_review_packet` behavior remains compatible for GS-002/GS-004/GS-007, and a stub adapter test proves ViewModel and packet consumers read adapter-provided operation/SOP/location context.
 
 ### U3. Polling Watcher Materialization
 
+- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, the watcher emits stage status, and `run_local_live.sh` can start the watcher with bounded polling.
 - **Goal:** Decide whether AI summaries should be prepared before the user opens the UI.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary.py`
+  - `systems/backend/app/mvp/agent_review_summary_workflow.py`
   - `systems/backend/app/mvp/service.py`
   - `systems/backend/app/infra/db/migrations.py`
+  - `scripts/watch_agent_review_summaries.py`
   - `tests/test_mvp.py`
   - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
-- **Approach:** Start with a Level 0 watcher contract: discover new or changed Product Result artifacts, compute packet checksum, compute summary, validate it, and store status. Do not mutate Closed-loop. Do not introduce event/outbox promotion in this unit.
+- **Approach:** Start with a Level 0 watcher contract: discover new or changed Product Result artifacts, compute packet checksum, compute summary, validate it, store status, and emit read-only workflow stages. Do not mutate Closed-loop. Do not introduce event/outbox promotion in this unit.
 - **Test Scenarios:**
   - Same artifact checksum is not summarized twice.
   - Provider failure records fallback status and validation errors.
   - New artifact checksum triggers a new summary materialization.
   - Materialized summary is read by UI when fresh; request-time generation remains fallback.
-- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries.
+- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
 
 ### U4. SOP / Ontology Exploration Adapter
 

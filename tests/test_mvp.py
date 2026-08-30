@@ -16,6 +16,7 @@ from app.infra.llm import OpenAICompatibleProvider, VertexAIProvider, configured
 from app.main import app
 from app.dependencies import build_manufacturing_service, get_identity_service, get_service
 from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
+from app.mvp.agent_review_summary_workflow import AGENT_REVIEW_SUMMARY_FLOW_VERSION, AgentReviewSummaryWorkflow
 from app.planner import LayoutPlanner
 from app.mvp.agent_review_summary import compose_deterministic_agent_review_summary
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
@@ -690,6 +691,46 @@ def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
     assert second["created_count"] == 0
     assert second["reused_count"] == 2
     assert provider.calls == 2
+
+
+def test_agent_review_summary_workflow_reports_read_only_stage_status(
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first = AgentReviewSummaryWorkflow(service).run(limit=1)
+    second = AgentReviewSummaryWorkflow(service).run(limit=1)
+
+    assert first["flow_version"] == AGENT_REVIEW_SUMMARY_FLOW_VERSION
+    assert first["trigger"] == "polling_watcher"
+    assert first["read_only"] is True
+    assert first["mutation_allowed"] is False
+    assert first["stages"] == [
+        {"stage": "snapshot_scan", "status": "completed", "item_count": 1},
+        {"stage": "packet_build", "status": "completed", "item_count": 1},
+        {
+            "stage": "summary_materialization",
+            "status": "completed",
+            "created_count": 1,
+            "reused_count": 0,
+            "failed_count": 0,
+        },
+        {
+            "stage": "consumer_ready",
+            "status": "completed",
+            "consumer_contract": "agent-review-summary-v1.0",
+            "consumers": ["role_workflow_ui", "executive_brief_report"],
+        },
+    ]
+    assert second["created_count"] == 0
+    assert second["reused_count"] == 1
+    assert provider.calls == 1
 
 
 def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
