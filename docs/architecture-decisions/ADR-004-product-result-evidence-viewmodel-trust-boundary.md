@@ -36,7 +36,7 @@ Generator raw 산출
       -> Evidence Projection / Evidence Package -> Report
       -> AssetDetailViewModel -> UI
       -> Closed-loop Recommendation Input
-      -> Agent Review Packet -> Agent Review Summary
+      -> Agent Review Packet -> Agent Review Summary Materialization -> UI / Report
 ```
 
 세부 결정은 다음과 같다.
@@ -79,6 +79,21 @@ Generator raw 산출
    - exactly-once delivery는 주장하지 않는다. outbox는 at-least-once를 전제로 consumer idempotency가
      필요하다.
 
+6. **Agent Review Summary는 UI 클릭이 아니라 watcher diff로 materialize**
+   - UI 사이드뷰 열림, 탭 전환, refresh 같은 presentation event는 LLM 호출 트리거가 아니다.
+   - Backend watcher는 Product Result/Evidence snapshot의 lineage, `source_sha256`, prompt/schema/model
+     version diff를 감지해 `Agent Review Packet`을 재구성하고, 필요한 경우에만 `Agent Review Summary`를
+     생성한다.
+   - Summary는 `summary_key = asset_id + event_id + dataset_version_id + snapshot_basis/source_sha256
+     + prompt_version + summary_schema_version + model_version` 같은 멱등 키로 저장한다.
+   - 같은 `summary_key`가 이미 있으면 UI와 Report는 저장된 Summary를 재사용한다. snapshot 또는
+     prompt/schema/model version이 달라진 경우에만 새 Summary 후보를 만든다.
+   - LLM 후보는 저장 전에 validation을 통과해야 하며, 실패하거나 provider가 없으면 deterministic
+     fallback Summary를 같은 저장 계약으로 남긴다.
+   - Closed-loop는 Summary 문장을 추천/승인/상태 전이 입력으로 사용하지 않는다. 필요한 경우
+     `summary_id`는 사용자가 본 설명의 감사 참조로만 연결하고, 실제 mutation guard는 동일
+     `snapshot_basis` 비교로 수행한다.
+
 ---
 
 ## 3. 명명 계약 (Naming Contract)
@@ -96,6 +111,7 @@ Generator raw 산출
 | `Recommendation Input` | Closed-loop 정책/상태 전이 후보가 소비하는 decision용 projection. ViewModel 표시값이 아니라 Product Result/Evidence lineage에서 파생한다. | Closed-loop service | UI state, Agent Review Summary |
 | `Agent Review Packet` | AI 요약이 읽는 read-only 패킷. Product Result/Evidence/ViewModel/SOP/context를 조합하지만 mutation 권한은 없다. | AI summary provider, eval fixtures | agent decision, approval request |
 | `Agent Review Summary` | Agent Review Packet을 근거로 만든 역할별 설명 문장. 사용자 판단 보조용이며 Closed-loop 명령이 아니다. | UI, summary API | recommendation decision, approval |
+| `Agent Review Summary Materialization` | watcher가 snapshot diff를 감지해 생성/검증/저장한 Summary 산출물. 같은 근거와 버전에서는 재사용된다. | Backend watcher, summary repository, UI/Report read API | UI click-triggered LLM call |
 
 ### 적용 규칙
 
@@ -105,6 +121,8 @@ Generator raw 산출
 4. `Recommendation Input`은 ViewModel의 하위 산출물이 아니라 Product Result/Evidence의 형제 projection이다.
 5. `Agent Review`는 read-only human-review support다. Closed-loop의 승인, 상태 전이, 작업 지시를 대신하지 않는다.
 6. `Materialization`은 저장/조회 가능한 산출물 생성에만 사용한다. 현재 composer-only 경로에는 붙이지 않는다.
+7. `Agent Review Summary Materialization`은 Product Result/Evidence snapshot 변화 또는 prompt/schema/model
+   version 변화에 의해 갱신된다. UI 탭 진입이나 사이드뷰 클릭은 조회 이벤트일 뿐 생성 이벤트가 아니다.
 
 ---
 
@@ -117,6 +135,7 @@ Generator raw 산출
 | MLOps / LLMOps | `model_version`, `dataset_version`, `source_sha256`, evidence reference로 판단 lineage 추적 | 모델 학습/배포 플랫폼 재구축 제외 |
 | Operational Monitoring | `validation_status`, `rejection_reason`, `data_status`, `evidence.gaps`로 상태 표시 | full observability stack 제외 |
 | Stakeholder Communication | 확률/feature를 위험도, 확인 이유, 권장 조치, 근거 부족으로 화면 언어화 | 내부 DB/outbox 용어의 사용자 노출 최소화 |
+| AI Workflow | watcher가 evidence diff 기반으로 요약 산출물을 생성/검증/저장하고 UI/Report는 저장본을 소비 | UI event 기반 반복 LLM 호출 제외 |
 
 ---
 
@@ -126,6 +145,8 @@ Generator raw 산출
 - Backend Diagnosis가 product-facing 판단과 Evidence lineage의 소유자로 남는다.
 - UI는 raw Generator 산출물 대신 `AssetDetailViewModel`을 소비하므로 화면 문구와 근거 표시를 더
   일관되게 유지할 수 있다.
+- Agent Review Summary는 같은 snapshot에서 재사용되므로 사용자 클릭마다 LLM을 반복 호출하지 않고,
+  비용, 응답 변동성, 감사 추적 리스크를 줄인다.
 - Closed-loop mutation은 raw score가 아니라 Product Result / Evidence / RecommendationDecision
   기반으로 진입한다.
 - Closed-loop는 ViewModel 표시값을 mutation 입력으로 쓰지 않지만, 사용자가 본 snapshot과 mutation
@@ -141,5 +162,8 @@ Generator raw 산출
 - Product Result / Evidence 저장 원자성은 후속 repository 구현과 rollback 테스트가 필요하다.
 - ViewModel은 여러 read source를 조합하므로 완전한 동일 시점 snapshot 보장은 후속 `as_of` 또는
   Closed-loop `snapshot_basis` guard 정책이 필요하다.
+- Agent Review Summary materialization은 이 ADR의 결정 방향이며, 현재 구현 완료를 의미하지 않는다.
+  후속 구현에서는 summary repository, watcher retry, stale/error status, validation/fallback 저장 계약,
+  UI의 summary status 표시를 별도 테스트로 검증해야 한다.
 - Outbox 기반 후속 projection은 실제 consumer가 생긴 뒤 별도 PR에서 다룬다.
 - 외부 JD 레퍼런스는 역할 요구를 해석하기 위한 참고이며, 프로젝트 구현 완료 증거가 아니다.

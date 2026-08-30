@@ -435,6 +435,8 @@ Static Executive Brief Backend
               ↓
 LLM Provider Runtime / Orchestration
               ↓
+Watcher-driven Summary Materialization
+              ↓
 Product API / Frontend / Visualization
               ↓
 CI / E2E / Deployment / Release
@@ -455,7 +457,9 @@ CI / E2E / Deployment / Release
 - schema validation
 - report generation orchestration
 - generation status
-- optional cache / persistence
+- watcher-driven summary materialization
+- summary key / cache / persistence
+- snapshot diff based regeneration
 - LLM failure → deterministic report fallback wiring
 - Report API와 Frontend 연결
 
@@ -468,6 +472,7 @@ GET  /api/reports/{event_id}/context
 POST /api/reports/{event_id}/generate
 GET  /api/reports/{report_id}
 POST /api/reports/{report_id}/regenerate
+GET  /api/agent-review-summaries/{summary_id}
 ```
 
 위 API는 새로운 Domain Truth를 만들기 위한 것이 아니라 기존 Domain 결과를 제품 단위로 조합하는 application layer다.
@@ -521,7 +526,8 @@ Executive Brief UI
 
 ### LLM Runtime에서의 역할
 
-동적 보고서의 **내용/grounding feature owner는 호범**이지만, 실제 LLM Runtime과 제품 연결은 우수가 맡는다.
+동적 보고서와 Agent Review Summary의 **내용/grounding feature owner는 호범**이지만, 실제 LLM Runtime,
+watcher orchestration, 저장된 Summary API와 제품 연결은 우수가 맡는다.
 
 ```text
 호범
@@ -533,11 +539,15 @@ LLM Provider Adapter
 → Structured Output Parse
 → Validation Pipeline 연결
 → Static Fallback
-→ Report API
-→ Executive Brief UI
+→ Summary Materialization
+→ Report / Agent Review Summary API
+→ Executive Brief / Workflow UI
 ```
 
 따라서 우수도 LLM과 Backend를 직접 구현하지만, Evidence 의미나 narrative truth rule을 임의로 변경하지 않는다.
+UI 사이드뷰 열림, 탭 전환, 새로고침 같은 presentation event는 LLM 생성 트리거가 아니다. Product
+Result/Evidence snapshot, source checksum, prompt/schema/model version이 달라졌을 때 watcher가
+Summary를 재생성하고, UI와 Report는 저장된 Summary를 조회한다.
 
 ### CI / Acceptance / Release 담당 작업
 
@@ -560,6 +570,7 @@ LLM Provider Adapter
 - 새 Backend 결과가 Product UI와 Report에 실제로 연결되는지 검증
 - Domain 사이 ID / timestamp / status 불일치 해결
 - LLM Runtime 오류와 fallback UX 검증
+- watcher 기반 Summary materialization, stale/error/fallback 상태 검증
 - 배포 환경 secret / proxy / CORS / DB 연결 검증
 - 전체 시나리오 Playwright/E2E 유지
 - 최종 발표 환경과 demo flow 책임
@@ -570,6 +581,7 @@ LLM Provider Adapter
 - Product Result/Evidence Truth 임의 생성
 - 광우 Action/Ontology semantics 임의 변경
 - LLM이 새로운 사실을 만들어 Domain Truth를 대체하게 하는 구현
+- UI 클릭 또는 탭 전환을 LLM 반복 호출 트리거로 사용하는 구현
 
 ### 최종 완료 조건
 
@@ -785,11 +797,12 @@ Backend producer가 Product Result / Evidence를 실제로 만들고, Closed-loo
 
 ---
 
-## Step 9. Evidence-grounded Dynamic Report + LLM Runtime
+## Step 9. Evidence-grounded Dynamic Report + Agent Summary Materialization
 
 ### 목표
 
-정적 보고서를 Truth source로 두고, Evidence에 근거한 자연어 Executive Narrative를 생성한다.
+정적 보고서와 Agent Review Packet을 Truth source로 두고, Evidence에 근거한 자연어 Executive
+Narrative와 역할별 Agent Review Summary를 저장 가능한 산출물로 생성한다.
 
 ### 진입 조건
 
@@ -800,17 +813,30 @@ Step 8의 Structured Executive Brief가 먼저 안정화되어야 한다.
 | **성민** | 모델 결과/metrics/limitation 문장이 원래 Artifact 의미를 왜곡하지 않는지 검증 | model narrative validation cases |
 | **호범** | **Dynamic Report feature owner**: grounding selection, prompt content, output schema, narrative rule, evidence citation, hallucination guard, limitation/fallback rule, 품질 테스트 | Grounding/Prompt/Output/Validation Contract |
 | **광우** | Decision/Action/Activity 관련 문장이 실제 workflow state와 일치하는지 검증 | operational narrative validation cases |
-| **우수** | LLM provider adapter, runtime invocation, structured output parse, timeout/retry, validation pipeline 연결, static fallback, Report API, Executive Brief UI 연결 | deployed LLM report runtime |
+| **우수** | LLM provider adapter, runtime invocation, watcher orchestration, summary key/idempotent persistence, structured output parse, timeout/retry, validation pipeline 연결, static fallback, Report/Agent Summary API, Executive Brief/Workflow UI 연결 | deployed materialized LLM summary runtime |
 
 ### 역할 경계
 
 ```text
 호범
-= 동적 보고서의 내용과 Grounding 책임
+= 동적 보고서/Agent Summary의 내용과 Grounding 책임
 
 우수
-= 동적 보고서를 실제 LLM 서비스로 실행하고 제품에 연결하는 Runtime 책임
+= 동적 보고서/Agent Summary를 실제 LLM 서비스로 실행하고 저장 산출물로 제품에 연결하는 Runtime 책임
 ```
+
+### 생성 트리거
+
+```text
+Product Result / Evidence Snapshot 변경
+→ watcher가 snapshot/source checksum/prompt/schema/model version diff 확인
+→ summary_key가 없거나 stale이면 LLM 후보 생성
+→ validation 통과 또는 deterministic fallback 확정
+→ Agent Review Summary / Dynamic Report Summary 저장
+→ UI / Report는 저장본 조회
+```
+
+UI 사이드뷰 클릭, 탭 전환, 화면 새로고침은 조회 이벤트이며 LLM 생성 이벤트가 아니다.
 
 ### 완료 조건
 
@@ -820,6 +846,8 @@ Step 8의 Structured Executive Brief가 먼저 안정화되어야 한다.
 - 정적 보고서와 의미 불일치 없음
 - LLM 실패 시 static fallback
 - 생성 결과 source trace 가능
+- 같은 snapshot과 prompt/schema/model version에서는 저장된 Summary 재사용
+- snapshot diff가 없는데 UI 조작만으로 LLM이 재호출되지 않음
 
 ---
 
@@ -1023,9 +1051,13 @@ Prompt Content Contract
 Output Schema
 Narrative Validation
 Fallback Conditions
+Summary Key Inputs
+Snapshot Diff Trigger
 ```
 
-우수는 이 계약을 사용해 실제 LLM provider runtime과 Product API를 구현한다.
+우수는 이 계약을 사용해 실제 LLM provider runtime, watcher 기반 Summary materialization,
+Product API를 구현한다. Summary는 UI 이벤트마다 새로 만들지 않고, Product Result/Evidence
+snapshot과 prompt/schema/model version이 달라질 때만 새 산출물로 저장한다.
 
 ---
 
@@ -1116,11 +1148,14 @@ Product layer는 Domain Truth를 새로 만들어내지 않는다.
 ```text
 Structured Data / Evidence = Truth
 LLM = Expression Layer
+Materialized Summary = 검증된 표현 산출물
 ```
 
 동적 보고서의 Grounding/내용 규칙은 호범이 책임지고, 실제 LLM Runtime/Product 연결은 우수가 책임진다.
 
 LLM 실패 여부와 관계없이 Static Executive Brief는 항상 제공되어야 한다.
+Agent Review Summary와 Dynamic Report Summary는 Closed-loop 명령이 아니다. Closed-loop는 Summary
+문장이 아니라 Product Result/Evidence snapshot basis와 Recommendation/Action 계약을 기준으로 동작한다.
 
 ---
 

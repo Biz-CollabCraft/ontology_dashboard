@@ -216,7 +216,7 @@ Closed-loop 담당자 handoff:
 | `EVT-GS-007` | `CNC-S04-L05-01` | 4구역 · 5셀 · CNC 가공기 1 | 데이터 품질 보류 |
 | `EVT-GS-008` | `CNC-S04-L04-02` | 4구역 · 4셀 · CNC 가공기 2 | LLM offline fallback |
 
-## Decision 5. Sensor Observation Flow
+## Decision 6. Sensor Observation Flow
 
 결정:
 
@@ -238,7 +238,7 @@ Closed-loop 담당자 handoff:
 - 정상 범위 문구는 `최근 24시간 관측 분포`로 바꾸고, 이탈 표시는 `최근 분포 대비 이탈`로 표현한다.
 - 값이 없는 파생 지표는 `ViewModel 연결 후 표시` 빈 상태로 둔다.
 
-## Decision 6. Production Impact Wording
+## Decision 7. Production Impact Wording
 
 결정:
 
@@ -258,7 +258,7 @@ Closed-loop 담당자 handoff:
 - 데이터 품질 보류: `EVT-GS-007 / CNC-S04-L05-01`
 - 부품 제약: GS-004는 `spare_part_available: false`이므로 `부품 미확보`
 
-## Decision 7. Frontend Synthesis Boundary
+## Decision 8. Frontend Synthesis Boundary
 
 결정:
 
@@ -288,6 +288,30 @@ derived sensor values
 - missing context는 `상태 미연결`, `데이터 품질 확인 필요`, `생산 영향 미산정`으로 표시한다.
 - `features[].current`와 `features[].history.points`는 UI 표현에서만 이어 보이게 하고 payload는 변경하지 않는다.
 - factory map의 빈 슬롯은 `normal`이 아니라 neutral slot 상태로 둔다.
+
+## Decision 9. Agent Review Summary Read Surface
+
+결정:
+
+- Overview 사이드뷰와 Report는 `Agent Review Summary` 저장본을 조회하는 read surface로 둔다.
+- 사이드뷰 클릭, 탭 전환, 화면 새로고침은 LLM 생성 트리거가 아니다.
+- 같은 Product Result/Evidence snapshot과 같은 prompt/schema/model version에서는 같은 Summary를 재사용한다.
+- 새 Summary 생성은 backend watcher가 evidence snapshot diff 또는 version diff를 감지했을 때 수행한다.
+- UI는 Summary 상태를 `ready`, `generating`, `fallback`, `failed`, `stale`처럼 표시할 수 있지만,
+  Summary 문장을 Closed-loop 추천, 승인, 상태 전이의 근거로 사용하지 않는다.
+
+근거:
+
+- 사용자가 사이드뷰를 열 때마다 LLM을 호출하면 같은 근거에 대해 문장, 비용, 지연, audit trail이 흔들린다.
+- AI 요약은 Product Result/Evidence를 사람이 빠르게 읽기 위한 표현 산출물이지 새로운 사실 source가 아니다.
+- Closed-loop는 Summary 문장이 아니라 Product Result/Evidence `snapshot_basis`와 Recommendation/Action 계약을 기준으로 동작해야 한다.
+
+구현 방향:
+
+- UI는 `summary_id`, `summary_key`, `status`, `generated_at`, `snapshot_basis`, `fallback_reason`을 읽어 표시한다.
+- 저장본이 없고 watcher가 생성 중이면 skeleton/loading 대신 `generating` 상태를 표시한다.
+- validation 실패 또는 provider 부재 시 deterministic fallback Summary를 같은 표시 계약으로 소비한다.
+- Summary와 화면 ViewModel이 같은 snapshot을 소비했는지 `snapshot_basis` 또는 source checksum으로 표시/검증한다.
 
 ## Verification Evidence
 
