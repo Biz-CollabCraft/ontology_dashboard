@@ -463,6 +463,118 @@
             },
             "additionalProperties": false
           },
+          "explanation": {
+            "type": ["object", "null"],
+            "description": "Optional displayable model expression emitted by Generator. Backend may absorb it only after checksum/source validation; Backend still owns Product Result status and action policy.",
+            "required": [
+              "top_factors",
+              "display_labels"
+            ],
+            "properties": {
+              "top_factors": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "feature",
+                    "signed_contribution",
+                    "direction",
+                    "explanation_method"
+                  ],
+                  "properties": {
+                    "feature": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "display_name": {
+                      "type": ["string", "null"]
+                    },
+                    "feature_value": {
+                      "type": ["number", "string", "boolean", "null"]
+                    },
+                    "signed_contribution": {
+                      "type": "number"
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": ["risk_up", "risk_down"]
+                    },
+                    "explanation_method": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "evidence_field_id": {
+                      "type": ["string", "null"]
+                    },
+                    "source_ref": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": ["uri", "sha256"],
+                          "properties": {
+                            "uri": {"type": "string", "minLength": 1},
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {"type": "null"}
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "confidence_label": {
+                "type": ["string", "null"]
+              },
+              "explanation_method": {
+                "type": ["string", "null"]
+              },
+              "feature_snapshot_ref": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": ["uri", "sha256"],
+                    "properties": {
+                      "uri": {"type": "string", "minLength": 1},
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {"type": "null"}
+                ]
+              },
+              "sensor_window_ref": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": ["uri", "sha256"],
+                    "properties": {
+                      "uri": {"type": "string", "minLength": 1},
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {"type": "null"}
+                ]
+              },
+              "display_labels": {
+                "type": "object",
+                "additionalProperties": {"type": "string"}
+              }
+            },
+            "additionalProperties": false
+          },
           "failure_reason": {
             "type": [
               "string",
@@ -542,6 +654,9 @@
                   "type": "string",
                   "minLength": 1
                 },
+                "explanation": {
+                  "type": "null"
+                },
                 "model_artifact_manifest_sha256": {
                   "type": "string",
                   "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
@@ -592,6 +707,9 @@
                 "failure_reason": {
                   "type": "string",
                   "minLength": 1
+                },
+                "explanation": {
+                  "type": "null"
                 },
                 "model_artifact_manifest_sha256": {
                   "type": "null"

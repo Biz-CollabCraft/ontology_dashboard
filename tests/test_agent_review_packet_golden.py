@@ -83,6 +83,23 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
         "overstrain_index",
         "torque_nm",
     ]
+    model_context = packet["model_expression_context"]
+    assert model_context["model_version"] == "fixture-heuristic-v1"
+    assert [factor["feature"] for factor in model_context["top_factors"][:3]] == [
+        "mechanical_power_w",
+        "overstrain_index",
+        "torque_nm",
+    ]
+    assert model_context["top_factors"][0]["display_name"] == "기계 동력"
+    assert model_context["top_factors"][0]["source_ref"] in packet["source_refs"]
+    history = packet["maintenance_history_summary"]
+    assert history["mutation_allowed"] is False
+    assert history["work_orders"][0]["record_id"] == "WO-INS-GS-004-001"
+    assert history["work_orders"][0]["status"] == "requested"
+    assert history["activities"][0]["activity_type"] == "work_order.requested"
+    assert history["similar_events"][0]["similar_event_id"] == (
+        "SIM-EVT-CNC-DRIVE-2026-07-22"
+    )
     assert packet["ontology_context"]["provider"] == (
         "manufacturing_fixture_ontology_context"
     )

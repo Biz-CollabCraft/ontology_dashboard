@@ -236,27 +236,35 @@ def _role_summaries(
     risk = packet.get("risk_summary") or {}
     targets = packet.get("inspection_targets") or []
     operation_context = packet.get("operation_context_summary") or {}
+    history_context = packet.get("maintenance_history_summary") or {}
+    model_context = packet.get("model_expression_context") or {}
+    ontology_context = packet.get("ontology_context") or {}
     asset_label = _asset_label(packet)
     status = str(risk.get("status_grade") or "데이터 품질 보류")
     production_impact = _production_impact_label(operation_context.get("production_impact"))
     downtime = operation_context.get("estimated_downtime_minutes")
     lost_units = operation_context.get("estimated_lost_units")
-    lost_units_text = f"{int(lost_units)}개" if isinstance(lost_units, (int, float)) else "추정 물량"
+    lost_units_text = f"약 {int(lost_units)}건" if isinstance(lost_units, (int, float)) else "추정 물량"
     downtime_text = f"{int(downtime)}분" if isinstance(downtime, (int, float)) else "예상 정지"
     component_text = _component_text(targets)
     location_text = _location_text(targets)
-    factor_text = _factor_text(targets)
+    factor_text = _model_factor_text(model_context) or _factor_text(targets)
+    work_request_text = _work_request_text(history_context)
+    similar_event_text = _similar_event_text(history_context)
+    part_text = _part_candidate_text(ontology_context)
     primary_refs = source_refs[:3] or _packet_source_refs(packet)[:1]
 
     quotes = {
         "field_operator": (
             f"{asset_label}은 {status} 알림이며 {component_text}{_object_particle(component_text)} "
             f"{location_text}에서 먼저 확인할 대상으로 잡습니다. "
-            f"근거 지표는 {factor_text}이고, 현장 확인 결과는 승인 판단 전 조회 이력에 붙일 수 있습니다."
+            f"근거 지표는 {factor_text}이고, {work_request_text} {part_text}"
         ),
         "process_manager": (
-            f"현재 생산 영향은 {production_impact}입니다. {downtime_text} 기준 {lost_units_text} 손실 가능성이 있어 "
-            "점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
+            f"{asset_label} 위험 감지 건은 현재 생산 영향이 {production_impact}이며, "
+            f"{downtime_text} 기준 {lost_units_text} 손실 가능성이 있습니다. "
+            f"모델 근거는 {factor_text}이고 {work_request_text} "
+            f"{similar_event_text} 점검 승인 여부와 셀 작업 순서 조정을 함께 봐야 합니다."
         ),
     }
     return [
@@ -348,6 +356,80 @@ def _factor_text(targets: list[dict[str, Any]]) -> str:
         refs.extend(str(ref).split(".", 2)[-1] for ref in target.get("basis_refs") or [])
     refs = [ref for ref in refs if ref]
     return ", ".join(list(dict.fromkeys(refs))[:3]) if refs else "패킷 근거"
+
+
+def _model_factor_text(model_context: dict[str, Any]) -> str:
+    factors = [
+        str(item.get("display_name") or item.get("feature") or "")
+        for item in model_context.get("top_factors") or []
+        if isinstance(item, dict)
+    ]
+    factors = [item for item in factors if item]
+    return ", ".join(list(dict.fromkeys(factors))[:3])
+
+
+def _work_request_text(history_context: dict[str, Any]) -> str:
+    work_orders = history_context.get("work_orders") or []
+    open_orders = [
+        item
+        for item in work_orders
+        if str(item.get("status") or "") not in {"completed", "cancelled"}
+    ]
+    if open_orders:
+        status = str(open_orders[0].get("status") or "상태 미제공")
+        return f"작업 처리 흐름에는 점검 요청이 {_work_order_status_label(status)} 상태로 접수되어 있습니다."
+    if history_context.get("open_work_order_exists") is False:
+        return "작업 처리 흐름에는 열린 점검 요청이 없습니다."
+    return "작업 처리 흐름은 아직 연결된 요청 상태가 없습니다."
+
+
+def _work_order_status_label(status: str) -> str:
+    labels = {
+        "requested": "요청됨",
+        "approved": "승인됨",
+        "in_progress": "진행 중",
+        "completed": "완료됨",
+        "cancelled": "취소됨",
+        "blocked": "보류됨",
+    }
+    return labels.get(status, status or "상태 미제공")
+
+
+def _similar_event_text(history_context: dict[str, Any]) -> str:
+    similar_events = history_context.get("similar_events") or []
+    if similar_events:
+        observed_at = str(similar_events[0].get("observed_at") or "")
+        date_label = _month_day_label(observed_at)
+        if date_label:
+            return f"최근 유사 이력은 {date_label} 1건으로 확인됩니다."
+        return "최근 유사 이력 1건이 확인됩니다."
+    similar_count = history_context.get("similar_events_30d")
+    if isinstance(similar_count, int) and not isinstance(similar_count, bool):
+        return f"최근 30일 유사 이력은 {similar_count}건입니다."
+    return "유사 이력은 아직 요약 가능한 기록이 없습니다."
+
+
+def _part_candidate_text(ontology_context: dict[str, Any]) -> str:
+    parts = []
+    for traversal in ontology_context.get("traversals") or []:
+        if not isinstance(traversal, dict):
+            continue
+        for part in traversal.get("spare_parts") or []:
+            if not isinstance(part, dict):
+                continue
+            label = str(part.get("part_label") or "")
+            if label:
+                parts.append(label)
+    if parts:
+        return f"참고 부품 후보는 {', '.join(list(dict.fromkeys(parts))[:2])}입니다."
+    return "참고 부품 후보는 이 패킷에 없습니다."
+
+
+def _month_day_label(value: str) -> str:
+    match = re.search(r"(\d{4})-(\d{2})-(\d{2})", value)
+    if not match:
+        return ""
+    return f"{int(match.group(2))}월 {int(match.group(3))}일"
 
 
 def _gap_note(gap: dict[str, Any]) -> str:

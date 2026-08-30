@@ -11,6 +11,7 @@ class AgentReviewContext:
     """Adapter-supplied context that can be safely merged into a review packet."""
 
     operation_context_summary: dict[str, Any] | None = None
+    maintenance_history_summary: dict[str, Any] | None = None
     evidence_gaps: list[dict[str, str]] = field(default_factory=list)
     source_refs: list[str] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
@@ -24,6 +25,14 @@ def merge_agent_review_contexts(contexts: list[AgentReviewContext]) -> AgentRevi
             context.operation_context_summary
             for context in contexts
             if context.operation_context_summary
+        ),
+        None,
+    )
+    maintenance_history_summary = next(
+        (
+            context.maintenance_history_summary
+            for context in contexts
+            if context.maintenance_history_summary
         ),
         None,
     )
@@ -43,6 +52,7 @@ def merge_agent_review_contexts(contexts: list[AgentReviewContext]) -> AgentRevi
     )
     return AgentReviewContext(
         operation_context_summary=operation_context_summary,
+        maintenance_history_summary=maintenance_history_summary,
         evidence_gaps=evidence_gaps,
         source_refs=source_refs,
         limitations=limitations,

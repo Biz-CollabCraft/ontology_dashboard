@@ -14,10 +14,12 @@
     "risk_summary",
     "review_priority",
     "review_draft",
+    "model_expression_context",
     "sop_retrieval",
     "inspection_targets",
     "sop_guidance",
     "ontology_context",
+    "maintenance_history_summary",
     "history_review_items",
     "evidence_gaps",
     "source_refs",
@@ -66,6 +68,39 @@
         "history_summary": {"type": "array", "items": {"type": "string"}},
         "evidence_gap_count": {"type": "integer", "minimum": 0},
         "boundary_note": {"type": "string"}
+      }
+    },
+    "model_expression_context": {
+      "type": "object",
+      "description": "Trusted model/result expressions promoted by Backend for AI wording. Raw Generator payload fields are not exposed here unless materialization validated and absorbed them.",
+      "required": ["source_type", "model_version", "dataset_version", "failure_probability", "threshold", "confidence_label", "top_factors", "source_refs"],
+      "additionalProperties": false,
+      "properties": {
+        "source_type": {"type": "string"},
+        "model_version": {"type": "string"},
+        "dataset_version": {"type": "string"},
+        "failure_probability": {"type": ["number", "null"]},
+        "threshold": {"type": ["number", "null"]},
+        "confidence_label": {"type": "string"},
+        "top_factors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["feature", "display_name", "value", "unit", "direction", "contribution", "explanation_method", "source_ref"],
+            "additionalProperties": false,
+            "properties": {
+              "feature": {"type": "string"},
+              "display_name": {"type": "string"},
+              "value": {"type": ["number", "string", "boolean", "null"]},
+              "unit": {"type": "string"},
+              "direction": {"type": "string"},
+              "contribution": {"type": ["number", "null"]},
+              "explanation_method": {"type": "string"},
+              "source_ref": {"type": "string"}
+            }
+          }
+        },
+        "source_refs": {"type": "array", "items": {"type": "string"}}
       }
     },
     "sop_retrieval": {
@@ -217,6 +252,54 @@
         "source_refs": {"type": "array", "items": {"type": "string"}}
       }
     },
+    "maintenance_history_summary": {
+      "type": "object",
+      "description": "Read-only Closed-loop and maintenance-history projection for AI context. It may describe existing records but must not create approvals, work orders, maintenance actions, events, or replay commands.",
+      "required": ["provider", "mutation_allowed", "last_maintenance_days_ago", "similar_events_30d", "open_work_order_exists", "work_orders", "inspection_results", "maintenance_actions", "maintenance_events", "activities", "similar_events", "recent_equipment_history", "source_refs"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {"type": "string"},
+        "mutation_allowed": {"const": false},
+        "last_maintenance_days_ago": {"type": ["integer", "null"]},
+        "similar_events_30d": {"type": ["integer", "null"]},
+        "open_work_order_exists": {"type": ["boolean", "null"]},
+        "work_orders": {"type": "array", "items": {"$ref": "#/$defs/maintenanceHistoryRecord"}},
+        "inspection_results": {"type": "array", "items": {"$ref": "#/$defs/maintenanceHistoryRecord"}},
+        "maintenance_actions": {"type": "array", "items": {"$ref": "#/$defs/maintenanceHistoryRecord"}},
+        "maintenance_events": {"type": "array", "items": {"$ref": "#/$defs/maintenanceHistoryRecord"}},
+        "activities": {"type": "array", "items": {"$ref": "#/$defs/maintenanceHistoryRecord"}},
+        "similar_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["similar_event_id", "asset_label", "observed_at", "action_taken", "outcome", "source_ref"],
+            "additionalProperties": false,
+            "properties": {
+              "similar_event_id": {"type": "string"},
+              "asset_label": {"type": "string"},
+              "observed_at": {"type": "string"},
+              "action_taken": {"type": "string"},
+              "outcome": {"type": "string"},
+              "source_ref": {"type": "string"}
+            }
+          }
+        },
+        "recent_equipment_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["description", "occurred_at", "source_ref"],
+            "additionalProperties": false,
+            "properties": {
+              "description": {"type": "string"},
+              "occurred_at": {"type": "string"},
+              "source_ref": {"type": "string"}
+            }
+          }
+        },
+        "source_refs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "inspection_targets": {
       "type": "array",
       "description": "Read-only inspection target summaries from AssetDetailViewModel component hypotheses. These help an agent explain why multiple risk factors can map to one field inspection target without creating actions or approvals.",
@@ -333,6 +416,20 @@
             "forbidden_claims": {"type": "array", "items": {"type": "string"}}
           }
         }
+      }
+    },
+    "maintenanceHistoryRecord": {
+      "type": "object",
+      "required": ["record_id", "record_type", "status", "activity_type", "recorded_at", "summary", "source_ref"],
+      "additionalProperties": false,
+      "properties": {
+        "record_id": {"type": "string"},
+        "record_type": {"type": "string"},
+        "status": {"type": "string"},
+        "activity_type": {"type": "string"},
+        "recorded_at": {"type": "string"},
+        "summary": {"type": "string"},
+        "source_ref": {"type": "string"}
       }
     }
   }

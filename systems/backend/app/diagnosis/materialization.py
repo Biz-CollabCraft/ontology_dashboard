@@ -29,6 +29,69 @@ PREDICTION_TASK = "binary_failure_within_horizon"
 GENERATED_BY = "systems.backend.diagnosis.generator_batch_promotion"
 
 
+def _top_factors_from_generator_explanation(
+    item: PredictionResultBatchItem,
+) -> list[dict[str, Any]] | None:
+    explanation = item.explanation
+    if explanation is None or not explanation.top_factors:
+        return None
+    factors = []
+    for rank, factor in enumerate(explanation.top_factors[:5], start=1):
+        field_id = (
+            factor.evidence_field_id
+            or f"generator_explanation.{rank}.{factor.feature}"
+        )
+        source_ref = None
+        if factor.source_ref is not None:
+            source_ref = factor.source_ref.model_dump(mode="json")
+        factors.append(
+            {
+                "rank": rank,
+                "feature": factor.feature,
+                "feature_value": factor.feature_value,
+                "signed_contribution": factor.signed_contribution,
+                "direction": factor.direction,
+                "explanation_method": factor.explanation_method,
+                "display_name": factor.display_name or factor.feature,
+                "evidence_field_id": field_id,
+                **({"source_ref": source_ref} if source_ref is not None else {}),
+            }
+        )
+    return factors
+
+
+def _ranked_factor_evidence_from_top_factors(
+    top_factors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    total = (
+        sum(abs(float(factor.get("signed_contribution") or 0.0)) for factor in top_factors)
+        or 1.0
+    )
+    rows = []
+    for rank, factor in enumerate(top_factors[:5], start=1):
+        field_id = str(
+            factor.get("evidence_field_id")
+            or f"generator_explanation.{rank}.{factor.get('feature') or 'unknown'}"
+        )
+        signed = float(factor.get("signed_contribution") or 0.0)
+        rows.append(
+            {
+                "evidence_field_id": field_id,
+                "feature": str(factor.get("feature") or ""),
+                "display_name": str(
+                    factor.get("display_name") or factor.get("feature") or ""
+                ),
+                "value": factor.get("feature_value"),
+                "unit": "",
+                "normal_range": "model explanation value",
+                "direction": str(factor.get("direction") or "risk_up"),
+                "contribution": round(abs(signed) / total, 6),
+                "source_type": "generator_prediction_explanation",
+            }
+        )
+    return rows
+
+
 class ProductResultMaterializationCommand(StrictModel):
     """Inputs required to materialize one accepted Generator prediction item."""
 
@@ -214,91 +277,95 @@ class ProductResultMaterializationService:
             f"prediction-result-batch:{batch.batch_id}:event:{item.event_id}:"
             f"sha256:{item.payload_sha256}"
         )
-        top_factors = [
-            {
-                "rank": 1,
-                "feature": "generator_failure_score",
-                "feature_value": score,
-                "signed_contribution": round(score - threshold, 6),
-                "direction": "risk_up" if score >= threshold else "risk_down",
-                "explanation_method": "generator_prediction_score",
-            },
-            {
-                "rank": 2,
-                "feature": "model_selected_threshold",
-                "feature_value": threshold,
-                "signed_contribution": 0.0,
-                "direction": "risk_down",
-                "explanation_method": "model_artifact_training_config",
-            },
-            {
-                "rank": 3,
-                "feature": "asset_criticality_adjustment",
-                "feature_value": policy_decision["criticality_adjustment"],
-                "signed_contribution": policy_decision["criticality_adjustment"],
-                "direction": "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
-                "explanation_method": "backend_threshold_policy",
-            },
-            {
-                "rank": 4,
-                "feature": "generator_model_artifact_manifest",
-                "feature_value": 1.0,
-                "signed_contribution": 0.0,
-                "direction": "risk_up",
-                "explanation_method": "lineage_presence_check",
-            },
-        ]
-        ranked_factor_evidence = [
-            {
-                "evidence_field_id": f"prediction_batch.{name}",
-                "feature": name,
-                "display_name": label,
-                "value": value,
-                "unit": unit,
-                "normal_range": normal_range,
-                "direction": direction,
-                "contribution": contribution,
-                "source_type": "generator_prediction_result_batch",
-            }
-            for name, label, value, unit, normal_range, direction, contribution in (
-                (
-                    "generator_failure_score",
-                    "Generator failure score",
-                    score,
-                    "probability",
-                    f"< {threshold}",
-                    "risk_up" if score >= threshold else "risk_down",
-                    abs(score - threshold),
-                ),
-                (
-                    "model_selected_threshold",
-                    "Model selected threshold",
-                    threshold,
-                    "probability",
-                    "model artifact value",
-                    "risk_down",
-                    0.0,
-                ),
-                (
-                    "asset_criticality_adjustment",
-                    "Asset criticality adjustment",
-                    policy_decision["criticality_adjustment"],
-                    "probability",
-                    "policy value",
-                    "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
-                    abs(float(policy_decision["criticality_adjustment"])),
-                ),
-                (
-                    "generator_model_artifact_manifest",
-                    "Generator model artifact manifest",
-                    1.0,
-                    "present",
-                    "required",
-                    "risk_up",
-                    0.0,
-                ),
-            )
-        ]
+        top_factors = _top_factors_from_generator_explanation(item)
+        if top_factors is None:
+            top_factors = [
+                {
+                    "rank": 1,
+                    "feature": "generator_failure_score",
+                    "feature_value": score,
+                    "signed_contribution": round(score - threshold, 6),
+                    "direction": "risk_up" if score >= threshold else "risk_down",
+                    "explanation_method": "generator_prediction_score",
+                },
+                {
+                    "rank": 2,
+                    "feature": "model_selected_threshold",
+                    "feature_value": threshold,
+                    "signed_contribution": 0.0,
+                    "direction": "risk_down",
+                    "explanation_method": "model_artifact_training_config",
+                },
+                {
+                    "rank": 3,
+                    "feature": "asset_criticality_adjustment",
+                    "feature_value": policy_decision["criticality_adjustment"],
+                    "signed_contribution": policy_decision["criticality_adjustment"],
+                    "direction": "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
+                    "explanation_method": "backend_threshold_policy",
+                },
+                {
+                    "rank": 4,
+                    "feature": "generator_model_artifact_manifest",
+                    "feature_value": 1.0,
+                    "signed_contribution": 0.0,
+                    "direction": "risk_up",
+                    "explanation_method": "lineage_presence_check",
+                },
+            ]
+        ranked_factor_evidence = _ranked_factor_evidence_from_top_factors(top_factors)
+        if not ranked_factor_evidence:
+            ranked_factor_evidence = [
+                {
+                    "evidence_field_id": f"prediction_batch.{name}",
+                    "feature": name,
+                    "display_name": label,
+                    "value": value,
+                    "unit": unit,
+                    "normal_range": normal_range,
+                    "direction": direction,
+                    "contribution": contribution,
+                    "source_type": "generator_prediction_result_batch",
+                }
+                for name, label, value, unit, normal_range, direction, contribution in (
+                    (
+                        "generator_failure_score",
+                        "Generator failure score",
+                        score,
+                        "probability",
+                        f"< {threshold}",
+                        "risk_up" if score >= threshold else "risk_down",
+                        abs(score - threshold),
+                    ),
+                    (
+                        "model_selected_threshold",
+                        "Model selected threshold",
+                        threshold,
+                        "probability",
+                        "model artifact value",
+                        "risk_down",
+                        0.0,
+                    ),
+                    (
+                        "asset_criticality_adjustment",
+                        "Asset criticality adjustment",
+                        policy_decision["criticality_adjustment"],
+                        "probability",
+                        "policy value",
+                        "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
+                        abs(float(policy_decision["criticality_adjustment"])),
+                    ),
+                    (
+                        "generator_model_artifact_manifest",
+                        "Generator model artifact manifest",
+                        1.0,
+                        "present",
+                        "required",
+                        "risk_up",
+                        0.0,
+                    ),
+                )
+            ]
         source_fields = [
             {
                 "field_id": "prediction_batch.score",
@@ -329,14 +396,31 @@ class ProductResultMaterializationService:
                 "source_path": f"pm_assets[asset_id={item.asset_id}].criticality",
                 "label": "Asset criticality",
                 "description": "Asset criticality used for Backend severity-boundary adjustment when available.",
-            },
+            }
+        ]
+        if item.explanation is not None and item.explanation.top_factors:
+            source_fields.extend(
+                [
+                    {
+                        "field_id": str(
+                            factor.get("evidence_field_id")
+                            or f"generator_explanation.{factor['rank']}.{factor['feature']}"
+                        ),
+                        "source_path": f"results[event_id={item.event_id}].explanation.top_factors[{factor['rank'] - 1}]",
+                        "label": str(factor.get("display_name") or factor["feature"]),
+                        "description": "Generator model explanation absorbed into Backend Product Result after batch validation.",
+                    }
+                    for factor in top_factors
+                ]
+            )
+        source_fields.append(
             {
                 "field_id": "backend_policy.severity_rules",
                 "source_path": "systems/backend/app/diagnosis/threshold_policy.json",
                 "label": "Backend severity policy",
                 "description": "Backend-owned severity and criticality adjustment policy applied during Product Result promotion.",
-            },
-        ]
+            }
+        )
         evidence_gaps = [
             {
                 "gap_id": "generator-batch-sensor-window-unavailable",

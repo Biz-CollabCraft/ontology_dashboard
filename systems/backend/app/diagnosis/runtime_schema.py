@@ -158,6 +158,29 @@ class PredictionResultBatchLineage(StrictModel):
     state_version: int | None = Field(default=None, ge=1)
 
 
+class PredictionResultTopFactorExpression(StrictModel):
+    feature: str = Field(min_length=1, max_length=240)
+    display_name: str | None = Field(default=None, max_length=240)
+    feature_value: float | int | str | bool | None = None
+    signed_contribution: float
+    direction: Literal["risk_up", "risk_down"]
+    explanation_method: str = Field(min_length=1, max_length=240)
+    evidence_field_id: str | None = Field(default=None, max_length=240)
+    source_ref: PredictionResultBatchSourceRef | None = None
+
+
+class PredictionResultExplanation(StrictModel):
+    top_factors: list[PredictionResultTopFactorExpression] = Field(
+        default_factory=list,
+        max_length=5,
+    )
+    confidence_label: str | None = Field(default=None, max_length=80)
+    explanation_method: str | None = Field(default=None, max_length=240)
+    feature_snapshot_ref: PredictionResultBatchSourceRef | None = None
+    sensor_window_ref: PredictionResultBatchSourceRef | None = None
+    display_labels: dict[str, str] = Field(default_factory=dict)
+
+
 class PredictionResultBatchSourceContext(StrictModel):
     dataset_id: str = Field(min_length=1, max_length=240)
     dataset_version: str = Field(min_length=1, max_length=240)
@@ -266,6 +289,7 @@ class PredictionResultBatchItem(StrictModel):
     history_requirement_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
     label_schema_sha256: str | None = Field(default=None, pattern=SHA256_PATTERN)
     lineage: PredictionResultBatchLineage
+    explanation: PredictionResultExplanation | None = None
     failure_reason: str | None = Field(default=None, max_length=1000)
 
     @field_validator(
@@ -309,6 +333,8 @@ class PredictionResultBatchItem(StrictModel):
             if not self.label_schema_sha256:
                 raise ValueError("predicted batch items require label_schema_sha256")
         else:
+            if self.explanation is not None:
+                raise ValueError("non-predicted batch items must not carry explanation")
             if self.score is not None:
                 raise ValueError("non-predicted batch items must not carry score")
             if not self.failure_reason:

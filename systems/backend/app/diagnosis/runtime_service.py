@@ -70,6 +70,18 @@ from .ports import ALLOWED_DERIVED_MEASURES, DiagnosisRuntimeRepositoryPort
 AppLocale = Literal["ko-KR", "en-US"]
 
 
+def _drop_none_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _drop_none_values(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [_drop_none_values(item) for item in value]
+    return value
+
+
 V3_1_SOURCE_VERSION = "canonical-ai4i-physics-v3.1"
 V3_1_MODEL_VERSION = "independent-logreg-v3.1"
 V3_1_RESULT_SCHEMA = "result-artifact-v1.0"
@@ -243,6 +255,10 @@ class PredictiveMaintenanceRuntimeService:
     def _prediction_item_sha256(cls, item: dict[str, Any]) -> str:
         seed = dict(item)
         seed.pop("payload_sha256", None)
+        if seed.get("explanation") is None:
+            seed.pop("explanation", None)
+        elif isinstance(seed.get("explanation"), dict):
+            seed["explanation"] = _drop_none_values(seed["explanation"])
         return cls._canonical_json_sha256(seed)
 
     @classmethod

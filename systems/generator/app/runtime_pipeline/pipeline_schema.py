@@ -10,6 +10,22 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 SHA256_PATTERN = r"^[a-f0-9]{64}$"
 
 
+def _normalize_prediction_result_checksum_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat().replace("+00:00", "Z")
+    if isinstance(value, str):
+        return value.replace("+00:00", "Z") if value.endswith("+00:00") else value
+    if isinstance(value, dict):
+        return {
+            key: _normalize_prediction_result_checksum_value(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [_normalize_prediction_result_checksum_value(item) for item in value]
+    return value
+
+
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -767,6 +783,30 @@ class PredictionResultProducer(BaseModel):
     outbox_id: Optional[str] = None
 
 
+class PredictionResultTopFactorExpression(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    feature: str = Field(..., min_length=1)
+    display_name: Optional[str] = None
+    feature_value: Optional[float | int | str | bool] = None
+    signed_contribution: float
+    direction: Literal["risk_up", "risk_down"]
+    explanation_method: str = Field(..., min_length=1)
+    evidence_field_id: Optional[str] = None
+    source_ref: Optional[PredictionResultSourceRef] = None
+
+
+class PredictionResultExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    top_factors: list[PredictionResultTopFactorExpression] = Field(default_factory=list, max_length=5)
+    confidence_label: Optional[str] = None
+    explanation_method: Optional[str] = None
+    feature_snapshot_ref: Optional[PredictionResultSourceRef] = None
+    sensor_window_ref: Optional[PredictionResultSourceRef] = None
+    display_labels: dict[str, str] = Field(default_factory=dict)
+
+
 class PredictionResultItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -796,6 +836,7 @@ class PredictionResultItem(BaseModel):
     history_requirement_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
     label_schema_sha256: Optional[str] = Field(None, pattern=SHA256_PATTERN)
     lineage: PredictionResultLineage
+    explanation: Optional[PredictionResultExplanation] = None
     failure_reason: Optional[str] = None
 
     @field_validator(
@@ -836,6 +877,8 @@ class PredictionResultItem(BaseModel):
             if not self.feature_schema_version or not self.history_requirement_version or not self.label_schema_version:
                 raise ValueError("Feature, history, and label schema versions are required when output_status is 'predicted'")
         elif self.output_status in ("warming_up", "history_insufficient", "failed_feature_execution", "failed_model_inference"):
+            if self.explanation is not None:
+                raise ValueError(f"explanation must be None when output_status is '{self.output_status}'")
             if self.score is not None:
                 raise ValueError(f"Score must be None when output_status is '{self.output_status}', got {self.score}")
             if not self.failure_reason or not str(self.failure_reason).strip():
@@ -854,6 +897,8 @@ class PredictionResultItem(BaseModel):
                 )
 
         elif self.output_status in ("failed_model_artifact", "failed_source_unavailable"):
+            if self.explanation is not None:
+                raise ValueError(f"explanation must be None when output_status is '{self.output_status}'")
             if self.score is not None:
                 raise ValueError(f"Score must be None when output_status is '{self.output_status}', got {self.score}")
             if not self.failure_reason or not str(self.failure_reason).strip():
@@ -900,16 +945,9 @@ def compute_prediction_result_item_sha256(item_dict: dict[str, Any]) -> str:
     import json
     d = dict(item_dict)
     d.pop("payload_sha256", None)
-    # Convert datetime objects if any to ISO string with Z
-    for k, v in list(d.items()):
-        if isinstance(v, datetime):
-            d[k] = v.isoformat().replace("+00:00", "Z")
-        elif isinstance(v, dict):
-            sub_d = dict(v)
-            for sub_k, sub_v in list(sub_d.items()):
-                if isinstance(sub_v, datetime):
-                    sub_d[sub_k] = sub_v.isoformat().replace("+00:00", "Z")
-            d[k] = sub_d
+    if d.get("explanation") is None:
+        d.pop("explanation", None)
+    d = _normalize_prediction_result_checksum_value(d)
     canonical_json = json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 

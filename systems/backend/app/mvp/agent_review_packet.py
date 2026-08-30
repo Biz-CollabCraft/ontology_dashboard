@@ -99,6 +99,17 @@ def compose_agent_review_packet(
         source_refs.extend(str(ref) for ref in ontology_context.get("source_refs") or [])
 
     closed_loop = view_model.get("closed_loop") or {}
+    model_expression_context = _model_expression_context(view_model)
+    maintenance_history_summary = (
+        agent_context.maintenance_history_summary
+        or _maintenance_history_summary(
+            view_model=view_model,
+            closed_loop=closed_loop,
+            ontology_context=ontology_context,
+        )
+    )
+    source_refs.extend(model_expression_context.get("source_refs") or [])
+    source_refs.extend(maintenance_history_summary.get("source_refs") or [])
     available_actions = closed_loop.get("available_actions") or []
     evidence_gaps = _packet_evidence_gaps(
         view_model=view_model,
@@ -135,6 +146,7 @@ def compose_agent_review_packet(
         },
         "review_priority": view_model.get("review_priority"),
         "review_draft": review_draft,
+        "model_expression_context": model_expression_context,
         "sop_retrieval": {
             "provider": str(sop_retrieval.get("provider") or ""),
             "query": sop_retrieval.get("query") or {},
@@ -146,6 +158,7 @@ def compose_agent_review_packet(
         "sop_guidance": sop_guidance,
         "operation_context_summary": agent_context.operation_context_summary,
         "ontology_context": _agent_ontology_context(ontology_context),
+        "maintenance_history_summary": maintenance_history_summary,
         "history_review_items": list(dict.fromkeys(history_review_items)),
         "evidence_gaps": evidence_gaps,
         "source_refs": list(dict.fromkeys(source_refs)),
@@ -159,6 +172,189 @@ def compose_agent_review_packet(
         },
         "limitations": list(dict.fromkeys(limitations)),
     }
+
+
+def _model_expression_context(view_model: dict[str, Any]) -> dict[str, Any]:
+    risk = view_model.get("risk") or {}
+    evidence = view_model.get("evidence") or {}
+    snapshot_basis = view_model.get("snapshot_basis") or {}
+    source_ref = str(evidence.get("evidence_payload_reference") or "")
+    factors = []
+    for feature in view_model.get("features") or []:
+        if not isinstance(feature, dict):
+            continue
+        contribution = feature.get("top_factor") or {}
+        if not contribution:
+            continue
+        current = feature.get("current")
+        current_value = current.get("value") if isinstance(current, dict) else current
+        source_field_id = str(contribution.get("evidence_field_id") or "")
+        factor_source_ref = (
+            f"{source_ref}#{source_field_id}"
+            if source_ref and source_field_id
+            else source_ref
+        )
+        factors.append(
+            {
+                "feature": str(feature.get("key") or ""),
+                "display_name": str(feature.get("label") or feature.get("key") or ""),
+                "value": current_value,
+                "unit": str(feature.get("unit") or ""),
+                "direction": str(contribution.get("direction") or ""),
+                "contribution": contribution.get("contribution"),
+                "explanation_method": str(
+                    contribution.get("explanation_method") or ""
+                ),
+                "source_ref": factor_source_ref,
+            }
+        )
+    return {
+        "source_type": str(evidence.get("source_kind") or "product_result_artifact"),
+        "model_version": str(evidence.get("model_version") or snapshot_basis.get("model_version") or ""),
+        "dataset_version": str(evidence.get("dataset_version") or snapshot_basis.get("dataset_version") or ""),
+        "failure_probability": risk.get("current"),
+        "threshold": risk.get("threshold"),
+        "confidence_label": str(risk.get("confidence_label") or ""),
+        "top_factors": sorted(
+            factors,
+            key=lambda item: abs(float(item.get("contribution") or 0.0)),
+            reverse=True,
+        )[:5],
+        "source_refs": list(
+            dict.fromkeys(
+                ref
+                for ref in [
+                    source_ref,
+                    *[str(item.get("source_ref") or "") for item in factors],
+                ]
+                if ref
+            )
+        ),
+    }
+
+
+def _maintenance_history_summary(
+    *,
+    view_model: dict[str, Any],
+    closed_loop: dict[str, Any],
+    ontology_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    equipment_history = view_model.get("equipment_history") or []
+    maintenance_context = view_model.get("maintenance_context") or {}
+    work_orders = [
+        _closed_loop_record(item, source_prefix="closed-loop://work-order")
+        for item in closed_loop.get("work_orders") or []
+        if isinstance(item, dict)
+    ]
+    inspection_results = [
+        _closed_loop_record(item, source_prefix="closed-loop://inspection-result")
+        for item in closed_loop.get("inspection_results") or []
+        if isinstance(item, dict)
+    ]
+    maintenance_actions = [
+        _closed_loop_record(item, source_prefix="closed-loop://maintenance-action")
+        for item in closed_loop.get("maintenance_actions") or []
+        if isinstance(item, dict)
+    ]
+    maintenance_events = [
+        _closed_loop_record(item, source_prefix="closed-loop://maintenance-event")
+        for item in closed_loop.get("maintenance_events") or []
+        if isinstance(item, dict)
+    ]
+    activities = [
+        _closed_loop_record(item, source_prefix="closed-loop://activity")
+        for item in closed_loop.get("activities") or []
+        if isinstance(item, dict)
+    ]
+    similar_events = _similar_events_from_ontology(ontology_context)
+    recent_equipment_history = [
+        {
+            "description": str(item.get("description") or ""),
+            "occurred_at": str(item.get("occurred_at") or ""),
+            "source_ref": f"equipment-history://{index + 1}",
+        }
+        for index, item in enumerate(equipment_history[:3])
+        if isinstance(item, dict)
+    ]
+    source_refs = list(
+        dict.fromkeys(
+            ref
+            for record in [
+                *work_orders,
+                *inspection_results,
+                *maintenance_actions,
+                *maintenance_events,
+                *activities,
+                *similar_events,
+                *recent_equipment_history,
+            ]
+            for ref in [str(record.get("source_ref") or "")]
+            if ref
+        )
+    )
+    return {
+        "provider": "asset_detail_view_model_closed_loop_projection",
+        "mutation_allowed": False,
+        "last_maintenance_days_ago": maintenance_context.get("last_maintenance_days_ago"),
+        "similar_events_30d": maintenance_context.get("similar_events_30d"),
+        "open_work_order_exists": maintenance_context.get("open_work_order_exists"),
+        "work_orders": work_orders,
+        "inspection_results": inspection_results,
+        "maintenance_actions": maintenance_actions,
+        "maintenance_events": maintenance_events,
+        "activities": activities[:5],
+        "similar_events": similar_events[:5],
+        "recent_equipment_history": recent_equipment_history,
+        "source_refs": source_refs,
+    }
+
+
+def _closed_loop_record(item: dict[str, Any], *, source_prefix: str) -> dict[str, Any]:
+    record_id = str(
+        item.get("work_order_id")
+        or item.get("inspection_result_id")
+        or item.get("maintenance_action_id")
+        or item.get("maintenance_event_id")
+        or item.get("activity_id")
+        or item.get("id")
+        or ""
+    )
+    return {
+        "record_id": record_id,
+        "record_type": source_prefix.removeprefix("closed-loop://"),
+        "status": str(item.get("status") or item.get("outcome") or ""),
+        "activity_type": str(item.get("activity_type") or ""),
+        "recorded_at": str(
+            item.get("recorded_at")
+            or item.get("completed_at")
+            or item.get("created_at")
+            or item.get("updated_at")
+            or ""
+        ),
+        "summary": str(item.get("label") or item.get("note") or item.get("outcome") or ""),
+        "source_ref": f"{source_prefix}/{record_id}" if record_id else source_prefix,
+    }
+
+
+def _similar_events_from_ontology(context: dict[str, Any] | None) -> list[dict[str, Any]]:
+    events = []
+    for traversal in (context or {}).get("traversals") or []:
+        if not isinstance(traversal, dict):
+            continue
+        for event in traversal.get("similar_events") or []:
+            if not isinstance(event, dict):
+                continue
+            events.append(
+                {
+                    "similar_event_id": str(event.get("similar_event_id") or ""),
+                    "asset_label": str(event.get("asset_label") or ""),
+                    "observed_at": str(event.get("observed_at") or ""),
+                    "action_taken": str(event.get("action_taken") or ""),
+                    "outcome": str(event.get("outcome") or ""),
+                    "source_ref": str(event.get("source_ref") or ""),
+                }
+            )
+    return list({event["similar_event_id"]: event for event in events}.values())
 
 
 def _agent_ontology_context(context: dict[str, Any] | None) -> dict[str, Any]:

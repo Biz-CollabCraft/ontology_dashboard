@@ -301,6 +301,74 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
     assert summary.evidence_gaps[0].display_policy == "show_limitation"
 
 
+def test_prediction_batch_promotion_absorbs_optional_generator_explanation() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    payload["results"][0]["explanation"] = {
+        "top_factors": [
+            {
+                "feature": "torque_nm_6h_mean",
+                "display_name": "구동 토크 6시간 평균",
+                "feature_value": 74.2,
+                "signed_contribution": 0.42,
+                "direction": "risk_up",
+                "explanation_method": "linear_logit_contribution",
+                "source_ref": {
+                    "uri": "s3://generator/features/evt-001.json",
+                    "sha256": "e" * 64,
+                },
+            },
+            {
+                "feature": "motor_power_6h_change",
+                "display_name": "모터 출력 6시간 변화",
+                "feature_value": 1.8,
+                "signed_contribution": 0.25,
+                "direction": "risk_up",
+                "explanation_method": "linear_logit_contribution",
+            },
+        ],
+        "confidence_label": "medium",
+        "explanation_method": "linear_logit_contribution",
+        "feature_snapshot_ref": {
+            "uri": "s3://generator/features/evt-001.json",
+            "sha256": "f" * 64,
+        },
+        "sensor_window_ref": {
+            "uri": "s3://generator/windows/evt-001.json",
+            "sha256": "e" * 64,
+        },
+        "display_labels": {"torque_nm_6h_mean": "구동 토크 6시간 평균"},
+    }
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+
+    assert receive(service, payload).validation_status == "accepted"
+    receipt = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert receipt.promotion_status == "promoted"
+    artifact = repository.promotions[0]["artifact"]
+    assert [factor["feature"] for factor in artifact["top_factors"][:2]] == [
+        "torque_nm_6h_mean",
+        "motor_power_6h_change",
+    ]
+    assert artifact["ranked_factor_evidence"][0]["display_name"] == (
+        "구동 토크 6시간 평균"
+    )
+    source_field_ids = {
+        field["field_id"]
+        for field in artifact["evidence_payload"]["source_fields"]
+    }
+    assert "generator_explanation.1.torque_nm_6h_mean" in source_field_ids
+    assert artifact["recommended_action"]["action"] == "request_inspection"
+
+
 def test_product_result_materialization_exposes_shared_evidence_projection() -> None:
     repository = FakeInboxRepository()
     service = make_service(repository)

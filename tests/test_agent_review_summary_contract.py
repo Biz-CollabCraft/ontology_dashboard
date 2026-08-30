@@ -111,8 +111,16 @@ def test_deterministic_agent_review_summary_explains_factor_bundle_focus() -> No
     packet = json.loads((GOLD_ROOT / "GS-004.json").read_text(encoding="utf-8"))
 
     summary = compose_deterministic_agent_review_summary(packet)
+    process_quote = next(
+        item["quote"]
+        for item in summary["role_summaries"]
+        if item["role"] == "process_manager"
+    )
 
     assert summary["confidence_label"] == "partial"
+    assert "약 51건" in process_quote
+    assert "요청됨 상태" in process_quote
+    assert "requested" not in process_quote
     assert len(summary["inspection_focus"]) == 1
     focus = summary["inspection_focus"][0]
     assert focus["component_id"] == "drive_power"
