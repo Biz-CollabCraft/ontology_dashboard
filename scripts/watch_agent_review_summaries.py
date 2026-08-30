@@ -44,6 +44,10 @@ def run_once(
     history_window: str,
     limit: int | None,
     max_attempts: int,
+    watch: bool,
+    interval_seconds: float,
+    max_iterations: int | None,
+    stale_policy: str,
 ) -> dict:
     configure_imports(root)
     from app.dependencies import build_manufacturing_service
@@ -56,6 +60,18 @@ def run_once(
         limit=limit,
         trigger="polling_watcher",
         max_attempts=max_attempts,
+        operating_mode={
+            "mode": "watch" if watch else "once",
+            "target_scope": "project",
+            "poll_interval_seconds": interval_seconds if watch else None,
+            "max_iterations": max_iterations,
+            "stale_detection": stale_policy,
+            "summary_duplicate_policy": "reuse_existing_summary",
+            "run_record_policy": "record_each_explicit_trigger",
+            "stop_behavior": (
+                "bounded_iterations_or_signal" if watch else "return_after_run"
+            ),
+        },
     )
     return {
         "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -83,7 +99,24 @@ def main() -> None:
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-iterations", type=int)
+    parser.add_argument(
+        "--stale-policy",
+        choices=("summary_key",),
+        default="summary_key",
+        help=(
+            "How the watcher decides whether a summary is fresh. summary_key "
+            "uses source/context/model/prompt/schema checksums."
+        ),
+    )
     args = parser.parse_args()
+    if args.limit is not None and args.limit < 1:
+        parser.error("--limit must be positive when provided")
+    if args.max_attempts < 1:
+        parser.error("--max-attempts must be positive")
+    if args.interval_seconds <= 0:
+        parser.error("--interval-seconds must be positive")
+    if args.max_iterations is not None and args.max_iterations < 1:
+        parser.error("--max-iterations must be positive when provided")
 
     root = project_root()
     database = resolve_database(root, args.database)
@@ -97,6 +130,10 @@ def main() -> None:
             history_window=args.history_window,
             limit=args.limit,
             max_attempts=args.max_attempts,
+            watch=args.watch,
+            interval_seconds=args.interval_seconds,
+            max_iterations=args.max_iterations,
+            stale_policy=args.stale_policy,
         )
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         if not args.watch:

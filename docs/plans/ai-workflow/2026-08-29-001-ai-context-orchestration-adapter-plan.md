@@ -111,7 +111,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U2. Domain Adapter Registry
 
-- **Status:** Implemented. `DomainReviewContextAdapter` and `ManufacturingFixtureReviewContextAdapter` now own operation context, SOP guidance, inspection location references, and SOP retrieval before `AssetDetailViewModel` and `AgentReviewPacket` consume them.
+- **Status:** Implemented. `DomainReviewContextAdapter` and `ManufacturingFixtureReviewContextAdapter` now own operation context, SOP guidance, inspection location references, SOP retrieval, spare-part candidates, similar-event context, and ontology traversal before `AssetDetailViewModel` and `AgentReviewPacket` consume them. The fixture implementation is internally split into operation, SOP, location, and ontology context adapters while preserving the public packet contract.
 - **Goal:** Make domain additions explicit and replaceable rather than hard-coded inside one packet composer.
 - **Files:**
   - `systems/backend/app/mvp/domain_context_adapters.py`
@@ -123,11 +123,11 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Default registry returns operation context for manufacturing demo.
   - Unknown adapter codes fail closed during service construction or packet generation.
   - Adapter exceptions are captured as evidence gaps rather than uncaught UI failures where reasonable.
-- **Verification:** `agent_review_packet` behavior remains compatible for GS-002/GS-004/GS-007, and a stub adapter test proves ViewModel and packet consumers read adapter-provided operation/SOP/location context.
+- **Verification:** `agent_review_packet` behavior remains compatible for GS-002/GS-004/GS-007, a stub adapter test proves ViewModel and packet consumers read adapter-provided operation/SOP/location context, and a responsibility-split test confirms the fixture adapter delegates to separate read-only context roles.
 
 ### U3. Polling Watcher Materialization
 
-- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, each materialization attempt records an `agent_review_workflow_runs` row, summaries store the generating `workflow_run_id`, the watcher emits stage status, `GET /agent-review-summary` is stored-summary lookup only, UI manual regeneration calls the explicit `POST` trigger, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
+- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, each materialization attempt records an `agent_review_workflow_runs` row, summaries store the generating `workflow_run_id`, the watcher emits stage status and an explicit `operating_mode`, `GET /agent-review-summary` is stored-summary lookup only, UI manual regeneration calls the explicit `POST` trigger, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, optional max iterations, stale-policy reporting, and optional Postgres shutdown for one-shot live checks.
 - **Goal:** Decide whether AI summaries should be prepared before the user opens the UI.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary.py`
@@ -148,7 +148,8 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Summary rows point back to the workflow run that generated them; cached `GET` reads expose that run reference and stored run metadata without starting a new run.
   - Transient materialization service failure retries within the workflow boundary and reports attempt history.
   - Terminal materialization failure blocks `consumer_ready` without creating Closed-loop actions.
-- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Tests verify explicit materialization creates a workflow run, cached `GET` does not start a run, summary rows retain the generating `workflow_run_id`, cached reads expose the stored run metadata, and watcher items report workflow status. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
+  - CLI and workflow output report mode, target scope, stale detection, duplicate summary policy, run-record policy, max attempts, interval, and max iterations.
+- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Tests verify explicit materialization creates a workflow run, cached `GET` does not start a run, summary rows retain the generating `workflow_run_id`, cached reads expose the stored run metadata, watcher items report workflow status, and CLI output carries the operating-mode contract. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
 
 ### U4. SOP / Ontology Exploration Adapter
 

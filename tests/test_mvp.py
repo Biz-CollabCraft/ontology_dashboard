@@ -851,6 +851,10 @@ def test_agent_review_summary_workflow_reports_read_only_stage_status(
     assert first["trigger"] == "polling_watcher"
     assert first["read_only"] is True
     assert first["mutation_allowed"] is False
+    assert first["operating_mode"]["mode"] == "watch"
+    assert first["operating_mode"]["stale_detection"] == "summary_key"
+    assert first["operating_mode"]["summary_duplicate_policy"] == "reuse_existing_summary"
+    assert first["operating_mode"]["run_record_policy"] == "record_each_explicit_trigger"
     assert first["workflow"]["engine"] == "simple"
     assert first["workflow"]["max_attempts"] == 2
     assert first["workflow"]["attempt_count"] == 1
@@ -1114,6 +1118,19 @@ def test_domain_adapter_compressor_context_supplies_readonly_extension_hops() ->
     ]
     assert traversal["similar_events"][0]["assumption_level"] == "demo_history_assumption"
     assert "auto_approve" not in json.dumps(context)
+
+
+def test_domain_adapter_exposes_separate_readonly_context_roles() -> None:
+    adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
+
+    assert adapter.operation_adapter is not adapter.sop_adapter
+    assert adapter.sop_adapter is not adapter.location_adapter
+    assert adapter.location_adapter is not adapter.ontology_adapter
+    assert adapter.operation_contexts is adapter.operation_adapter.contexts
+    assert adapter.inspection_sops is adapter.sop_adapter.procedures
+    assert adapter.inspection_location_references is adapter.location_adapter.references
+    assert adapter.ontology_adapter.spare_part_contexts is adapter.spare_part_contexts
+    assert adapter.ontology_adapter.similar_event_contexts is adapter.similar_event_contexts
 
 
 @pytest.mark.parametrize(

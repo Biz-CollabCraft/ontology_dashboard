@@ -51,6 +51,8 @@ ENABLE_AGENT_SUMMARY_WATCHER="${ENABLE_AGENT_SUMMARY_WATCHER:-0}"
 AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS="${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS:-60}"
 AGENT_SUMMARY_WATCHER_LIMIT="${AGENT_SUMMARY_WATCHER_LIMIT:-10}"
 AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS="${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS:-2}"
+AGENT_SUMMARY_WATCHER_MAX_ITERATIONS="${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS:-}"
+AGENT_SUMMARY_WATCHER_STALE_POLICY="${AGENT_SUMMARY_WATCHER_STALE_POLICY:-summary_key}"
 
 API_LOG="${API_LOG:-/tmp/ontology-dashboard-live-api.log}"
 WEB_LOG="${WEB_LOG:-/tmp/ontology-dashboard-live-web.log}"
@@ -242,14 +244,24 @@ for _ in $(seq 1 90); do
     fi
     if [[ "${ENABLE_AGENT_SUMMARY_WATCHER}" == "1" && -n "${ONTOLOGY_DASHBOARD_DATABASE_URL}" ]]; then
       : > "${AGENT_SUMMARY_WATCHER_LOG}"
-      PYTHONUNBUFFERED=1 "${VENV_DIR}/bin/python" scripts/watch_agent_review_summaries.py \
+      WATCHER_ARGS=(
+        scripts/watch_agent_review_summaries.py
         --database "${ONTOLOGY_DASHBOARD_DATABASE_URL}" \
         --watch \
         --limit "${AGENT_SUMMARY_WATCHER_LIMIT}" \
         --max-attempts "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}" \
-        --interval-seconds "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" > "${AGENT_SUMMARY_WATCHER_LOG}" 2>&1 &
+        --interval-seconds "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" \
+        --stale-policy "${AGENT_SUMMARY_WATCHER_STALE_POLICY}"
+      )
+      if [[ -n "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}" ]]; then
+        WATCHER_ARGS+=(--max-iterations "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}")
+      fi
+      PYTHONUNBUFFERED=1 "${VENV_DIR}/bin/python" "${WATCHER_ARGS[@]}" > "${AGENT_SUMMARY_WATCHER_LOG}" 2>&1 &
       WATCHER_PID=$!
-      printf '  Agent Summary Watcher: pid %s, interval %ss, limit %s, max attempts %s\n' "${WATCHER_PID}" "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" "${AGENT_SUMMARY_WATCHER_LIMIT}" "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}"
+      printf '  Agent Summary Watcher: pid %s, interval %ss, limit %s, max attempts %s, stale policy %s\n' "${WATCHER_PID}" "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" "${AGENT_SUMMARY_WATCHER_LIMIT}" "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}" "${AGENT_SUMMARY_WATCHER_STALE_POLICY}"
+      if [[ -n "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}" ]]; then
+        printf '  Agent Summary Watcher max iterations: %s\n' "${AGENT_SUMMARY_WATCHER_MAX_ITERATIONS}"
+      fi
       printf '  Logs: %s %s %s\n' "${API_LOG}" "${WEB_LOG}" "${AGENT_SUMMARY_WATCHER_LOG}"
     else
       printf '  Logs: %s %s\n' "${API_LOG}" "${WEB_LOG}"

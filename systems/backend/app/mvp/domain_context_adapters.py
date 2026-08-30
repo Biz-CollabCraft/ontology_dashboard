@@ -62,33 +62,9 @@ class DomainReviewContextAdapter(Protocol):
         """Return read-only factor/component/location/SOP relationship context."""
 
 
-class ManufacturingFixtureReviewContextAdapter:
-    """Fixture-backed manufacturing domain adapter used by the MVP demo."""
-
-    adapter_id = "manufacturing-fixture-review-context"
-
-    def __init__(self, root: str | Path) -> None:
-        fixture_root = Path(root) / "data" / "fixtures"
-        self.operation_contexts = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted((fixture_root / "operation_context").glob("*.json"))
-        ]
-        self.inspection_sops = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted((fixture_root / "inspection_sop").glob("*.json"))
-        ]
-        self.inspection_location_references = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted((fixture_root / "inspection_location").glob("*.json"))
-        ]
-        self.spare_part_contexts = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted((fixture_root / "spare_part").glob("*.json"))
-        ]
-        self.similar_event_contexts = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted((fixture_root / "similar_event").glob("*.json"))
-        ]
+class _FixtureOperationContextAdapter:
+    def __init__(self, contexts: list[dict[str, Any]]) -> None:
+        self.contexts = contexts
 
     def operation_context(
         self,
@@ -105,7 +81,7 @@ class ManufacturingFixtureReviewContextAdapter:
         if observed_at is None:
             return None
 
-        for context in self.operation_contexts:
+        for context in self.contexts:
             scope = context.get("scope") or {}
             if str(scope.get("project_id") or "") != project_id:
                 continue
@@ -157,16 +133,32 @@ class ManufacturingFixtureReviewContextAdapter:
             }
         return None
 
+
+class _FixtureSopContextAdapter:
+    def __init__(self, procedures: list[dict[str, Any]]) -> None:
+        self.procedures = procedures
+
+    def sop_retrieval(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        return retrieve_inspection_sops(
+            fixture=fixture,
+            artifact=artifact,
+            procedures=self.procedures,
+        )
+
     def inspection_guidance(
         self,
         *,
         fixture: dict[str, Any],
         artifact: dict[str, Any],
     ) -> dict[str, dict[str, Any]]:
-        matching_sops = self._matching_inspection_sops(fixture=fixture, artifact=artifact)
         component_ids = _component_ids(artifact)
         guidance_by_component: dict[str, dict[str, Any]] = {}
-        for sop in matching_sops:
+        for sop in self._matching_inspection_sops(fixture=fixture, artifact=artifact):
             for component_id in component_ids.intersection({str(item) for item in sop.get("component_ids") or []}):
                 guidance = sop.get("guidance") or {}
                 guidance_by_component[component_id] = {
@@ -185,6 +177,22 @@ class ManufacturingFixtureReviewContextAdapter:
                 }
         return guidance_by_component
 
+    def _matching_inspection_sops(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        return [
+            item["procedure"]
+            for item in self.sop_retrieval(fixture=fixture, artifact=artifact)["results"]
+        ]
+
+
+class _FixtureInspectionLocationAdapter:
+    def __init__(self, references: list[dict[str, Any]]) -> None:
+        self.references = references
+
     def inspection_locations(
         self,
         *,
@@ -194,7 +202,7 @@ class ManufacturingFixtureReviewContextAdapter:
         component_ids = _component_ids(artifact)
         asset_type = str(artifact.get("asset_type") or fixture.get("asset_type") or "")
         references: dict[str, dict[str, Any]] = {}
-        for contract in self.inspection_location_references:
+        for contract in self.references:
             if asset_type and asset_type not in {str(item) for item in contract.get("asset_types") or []}:
                 continue
             for location in contract.get("locations") or []:
@@ -210,17 +218,20 @@ class ManufacturingFixtureReviewContextAdapter:
                 }
         return references
 
-    def sop_retrieval(
+
+class _FixtureOntologyContextAdapter:
+    def __init__(
         self,
         *,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> dict[str, Any]:
-        return retrieve_inspection_sops(
-            fixture=fixture,
-            artifact=artifact,
-            procedures=self.inspection_sops,
-        )
+        location_adapter: _FixtureInspectionLocationAdapter,
+        sop_adapter: _FixtureSopContextAdapter,
+        spare_part_contexts: list[dict[str, Any]],
+        similar_event_contexts: list[dict[str, Any]],
+    ) -> None:
+        self.location_adapter = location_adapter
+        self.sop_adapter = sop_adapter
+        self.spare_part_contexts = spare_part_contexts
+        self.similar_event_contexts = similar_event_contexts
 
     def ontology_context(
         self,
@@ -230,8 +241,11 @@ class ManufacturingFixtureReviewContextAdapter:
     ) -> dict[str, Any]:
         """Compose a fixture-backed ontology traversal trace for agent packets."""
 
-        locations = self.inspection_locations(fixture=fixture, artifact=artifact)
-        sop = self.sop_retrieval(fixture=fixture, artifact=artifact)
+        locations = self.location_adapter.inspection_locations(
+            fixture=fixture,
+            artifact=artifact,
+        )
+        sop = self.sop_adapter.sop_retrieval(fixture=fixture, artifact=artifact)
         sop_results_by_id = _sop_results_by_id(sop)
         factor_refs_by_component = _factor_refs_by_component(artifact)
         component_hypotheses = (
@@ -298,17 +312,6 @@ class ManufacturingFixtureReviewContextAdapter:
                 )
             ),
         }
-
-    def _matching_inspection_sops(
-        self,
-        *,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        return [
-            item["procedure"]
-            for item in self.sop_retrieval(fixture=fixture, artifact=artifact)["results"]
-        ]
 
     def _matched_spare_parts(
         self,
@@ -386,6 +389,93 @@ class ManufacturingFixtureReviewContextAdapter:
                 )
         return matches
 
+
+class ManufacturingFixtureReviewContextAdapter:
+    """Fixture-backed manufacturing domain adapter used by the MVP demo."""
+
+    adapter_id = "manufacturing-fixture-review-context"
+
+    def __init__(self, root: str | Path) -> None:
+        fixture_root = Path(root) / "data" / "fixtures"
+        self.operation_contexts = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((fixture_root / "operation_context").glob("*.json"))
+        ]
+        self.inspection_sops = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((fixture_root / "inspection_sop").glob("*.json"))
+        ]
+        self.inspection_location_references = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((fixture_root / "inspection_location").glob("*.json"))
+        ]
+        self.spare_part_contexts = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((fixture_root / "spare_part").glob("*.json"))
+        ]
+        self.similar_event_contexts = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted((fixture_root / "similar_event").glob("*.json"))
+        ]
+        self.operation_adapter = _FixtureOperationContextAdapter(self.operation_contexts)
+        self.sop_adapter = _FixtureSopContextAdapter(self.inspection_sops)
+        self.location_adapter = _FixtureInspectionLocationAdapter(
+            self.inspection_location_references
+        )
+        self.ontology_adapter = _FixtureOntologyContextAdapter(
+            location_adapter=self.location_adapter,
+            sop_adapter=self.sop_adapter,
+            spare_part_contexts=self.spare_part_contexts,
+            similar_event_contexts=self.similar_event_contexts,
+        )
+
+    def operation_context(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+        project_id: str,
+    ) -> dict[str, Any] | None:
+        return self.operation_adapter.operation_context(
+            fixture=fixture,
+            artifact=artifact,
+            project_id=project_id,
+        )
+
+    def inspection_guidance(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        return self.sop_adapter.inspection_guidance(fixture=fixture, artifact=artifact)
+
+    def inspection_locations(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        return self.location_adapter.inspection_locations(
+            fixture=fixture,
+            artifact=artifact,
+        )
+
+    def sop_retrieval(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self.sop_adapter.sop_retrieval(fixture=fixture, artifact=artifact)
+
+    def ontology_context(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self.ontology_adapter.ontology_context(fixture=fixture, artifact=artifact)
 
 def _component_ids(artifact: dict[str, Any]) -> set[str]:
     component_hypotheses = (
