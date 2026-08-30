@@ -146,8 +146,9 @@ bash scripts/run_local_live.sh
 ```
 
 V3.1 예지보전 데모 패키지가
-`~/Downloads/predictive_maintenance_canonical_v3.1`에 있으면 자동으로 감지해
-PostgreSQL에 적재하고 Product Result를 물질화합니다. 다른 위치를 쓰려면
+`data/raw/predictive_maintenance_canonical_v3.1`에 있으면 자동으로 감지해
+PostgreSQL에 적재하고 Product Result를 물질화합니다. 이 로컬 데이터 패키지는
+Git에 커밋하지 않습니다. 다른 위치를 쓰려면
 `PM_DEMO_PACKAGE_ROOT=/path/to/predictive_maintenance_canonical_v3.1`를 지정하세요.
 
 Architecture 검증:

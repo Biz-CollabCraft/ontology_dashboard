@@ -76,6 +76,8 @@ resolve_pm_demo_package_root() {
 
   local candidate
   for candidate in \
+    "${ROOT_DIR}/data/raw/predictive_maintenance_canonical_v3.1" \
+    "${ROOT_DIR}/data/raw/predictive_maintenance_canonical_v3_1" \
     "${HOME}/Downloads/predictive_maintenance_canonical_v3.1" \
     "${ROOT_DIR}/../gen-data" \
     "${ROOT_DIR}/../gen-data/predictive_maintenance_canonical_v3_1"
