@@ -419,6 +419,49 @@ Generator batch를 받는 즉시 Product Result를 만들면 raw handoff와 prod
 
 이 계획은 Backend materialization 경계 계획이다. 화면의 loading/empty/error/stale/permission/fallback 상태 설계, polling/refetch 전략, 사용자 문구는 별도 UI 작업으로 남는다.
 
+### 6.7 PR #142/#143과의 병렬 작업 경계
+
+현재 열린 PR #142와 PR #143은 Maintenance/Closed-loop 쪽의 비용 지원 흐름을 다룬다.
+
+- PR #142: `maintenance-cost-scenario-v1.0` 계약, Maintenance 비용 시나리오 schema/model/test
+- PR #143: `TOOL_REPLACEMENT` 결정론적 비용 계산기
+
+이 materialization 계획은 Diagnosis/Product Result/Evidence 승격 경계를 다루므로 직접 파일 충돌 가능성은 낮다. 다만 세 PR은 모두 “Closed-loop가 어떤 근거를 신뢰하고 소비하는가”라는 상위 제품 경계에서 맞닿는다.
+
+따라서 이 계획의 구현 PR은 다음 파일/책임을 건드리지 않는다.
+
+- `contracts/schemas/maintenance-cost-scenario.schema.json`
+- `systems/backend/app/maintenance/cost_analysis_schema.py`
+- `systems/backend/app/maintenance/cost_calculator.py`
+- 비용 option 선택, `TOOL_REPLACEMENT` cost input mapping, Operations manual Recommendation lineage
+
+반대로 이 계획이 소유하는 범위는 다음으로 제한한다.
+
+- Diagnosis Product Result Artifact 생성/검증 경계
+- Event Evidence Projection 생성/검증 경계
+- receive-only와 promotion/materialized 상태 용어
+- Product Result/Evidence가 ViewModel, Report, Agent Review, Closed-loop guard에서 같은 lineage로 소비될 수 있도록 하는 하단 신뢰 경계
+
+PR #142/#143이 머지되면, 비용 계산 입력은 이 materialization 결과를 직접 mutation source로 쓰지 않고 별도 `maintenance-cost-scenario` input adapter에서 읽는다. 즉 Product Result/Evidence는 “근거 source”이고, 비용 계산 결과는 “read-only decision support”이며, 둘 다 WorkOrder/Action을 자동 생성하지 않는다.
+
+#### Closed-loop 담당자 작업요청 코멘트
+
+```md
+PR #142/#143과 현재 Product Result/Evidence materialization 작업의 경계를 맞추기 위한 확인 요청입니다.
+
+제가 진행할 materialization 작업은 `systems/backend/app/diagnosis` 중심으로 Generator/Runtime 결과를 Product Result Artifact + Event Evidence Projection으로 승격하는 하단 신뢰 경계를 만드는 범위로 제한하겠습니다.
+
+PR #142/#143의 Maintenance 비용 시나리오/TOOL_REPLACEMENT 계산기 파일은 건드리지 않겠습니다.
+
+확인 부탁드릴 경계는 세 가지입니다.
+
+1. Cost Scenario/Calculator는 Product Result/Evidence를 직접 mutation source로 보지 않고, 별도 input adapter를 통해 read-only 근거로만 소비한다.
+2. `asset_id == equipment_id` invariant는 Cost Scenario 쪽 계약을 존중하고, materialization에서는 Diagnosis 정본 asset lineage를 훼손하지 않는다.
+3. WorkOrder/Action 생성은 계속 Closed-loop command 경계가 소유하며, Product Result materialized event나 Evidence Projection만으로 자동 생성하지 않는다.
+
+이 기준이면 PR #142/#143과 병렬 진행해도 파일 충돌은 작고, 머지 후에는 Cost input adapter를 붙이는 후속 PR로 연결할 수 있을 것 같습니다.
+```
+
 ## 7. 검증 계획
 
 ### Unit / Contract

@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT_DIR}"
+
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+VENV_DIR="${VENV_DIR:-.venv}"
+APP_BIND_HOST="${APP_HOST:-127.0.0.1}"
+APP_CHECK_HOST="${APP_CHECK_HOST:-127.0.0.1}"
+API_PORT_START="${API_PORT:-8100}"
+WEB_PORT_START="${WEB_PORT:-3100}"
+POSTGRES_PORT_START="${POSTGRES_PORT:-5432}"
+PORT_RETRY_LIMIT="${PORT_RETRY_LIMIT:-20}"
+AUTO_START_DOCKER="${AUTO_START_DOCKER:-1}"
+DOCKER_START_TIMEOUT_SECONDS="${DOCKER_START_TIMEOUT_SECONDS:-90}"
+SKIP_POSTGRES="${SKIP_POSTGRES:-0}"
+SKIP_DEMO_BOOTSTRAP="${SKIP_DEMO_BOOTSTRAP:-0}"
+PM_DEMO_PACKAGE_ROOT="${PM_DEMO_PACKAGE_ROOT:-}"
+
+API_LOG="${API_LOG:-/tmp/ontology-dashboard-live-api.log}"
+WEB_LOG="${WEB_LOG:-/tmp/ontology-dashboard-live-web.log}"
+
+command -v "${PYTHON_BIN}" >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
+command -v node >/dev/null 2>&1 || { echo "Node.js is required"; exit 1; }
+command -v npm >/dev/null 2>&1 || { echo "npm is required"; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "curl is required"; exit 1; }
+
+is_port_open() {
+  local host="$1"
+  local port="$2"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1 && return 0
+  fi
+  nc -z "${host}" "${port}" >/dev/null 2>&1
+}
+
+next_free_port() {
+  local host="$1"
+  local start="$2"
+  local limit="$3"
+  local port
+  for ((port = start; port < start + limit; port++)); do
+    if ! is_port_open "${host}" "${port}"; then
+      printf '%s\n' "${port}"
+      return 0
+    fi
+  done
+  echo "No free port found from ${start} to $((start + limit - 1))" >&2
+  return 1
+}
+
+wait_for_docker() {
+  local timeout="$1"
+  for _ in $(seq 1 "${timeout}"); do
+    if docker info >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+ensure_docker() {
+  command -v docker >/dev/null 2>&1 || { echo "Docker CLI is required"; exit 1; }
+  if docker info >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ "${AUTO_START_DOCKER}" == "1" && "$(uname -s)" == "Darwin" && "$(command -v open || true)" != "" ]]; then
+    echo "Docker daemon is not running; trying to open Docker or OrbStack..."
+    open -ga Docker >/dev/null 2>&1 || open -ga OrbStack >/dev/null 2>&1 || true
+    if wait_for_docker "${DOCKER_START_TIMEOUT_SECONDS}"; then
+      return 0
+    fi
+  fi
+
+  echo "Docker daemon is not running. Start Docker Desktop or OrbStack, then retry." >&2
+  exit 1
+}
+
+if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+  "${PYTHON_BIN}" -m venv "${VENV_DIR}"
+fi
+
+"${VENV_DIR}/bin/python" -m pip install --upgrade pip
+"${VENV_DIR}/bin/pip" install -e ml -e 'systems/backend[postgres]'
+
+if [[ ! -d systems/frontend/node_modules ]]; then
+  npm --prefix systems/frontend install --no-audit --no-fund
+fi
+
+API_PORT="$(next_free_port "${APP_CHECK_HOST}" "${API_PORT_START}" "${PORT_RETRY_LIMIT}")"
+WEB_PORT="$(next_free_port "${APP_CHECK_HOST}" "${WEB_PORT_START}" "${PORT_RETRY_LIMIT}")"
+POSTGRES_PORT="$(next_free_port "${APP_CHECK_HOST}" "${POSTGRES_PORT_START}" "${PORT_RETRY_LIMIT}")"
+
+if [[ "${API_PORT}" != "${API_PORT_START}" ]]; then
+  echo "API port ${API_PORT_START} is busy; using ${API_PORT}"
+fi
+if [[ "${WEB_PORT}" != "${WEB_PORT_START}" ]]; then
+  echo "Web port ${WEB_PORT_START} is busy; using ${WEB_PORT}"
+fi
+
+export PYTHONPATH="${ROOT_DIR}:${ROOT_DIR}/systems/backend:${ROOT_DIR}/ml/src"
+export ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK="${ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK:-1}"
+export SEED_DEMO_ACCOUNTS="${SEED_DEMO_ACCOUNTS:-1}"
+export ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA="${ONTOLOGY_DASHBOARD_SEED_REFERENCE_DATA:-true}"
+
+if [[ "${SKIP_POSTGRES}" != "1" ]]; then
+  ensure_docker
+  if [[ "${POSTGRES_PORT}" != "${POSTGRES_PORT_START}" ]]; then
+    echo "Postgres port ${POSTGRES_PORT_START} is busy; using ${POSTGRES_PORT}"
+  fi
+  export POSTGRES_PORT
+  docker compose -f infra/docker-compose.yml --profile polyglot up -d postgres
+  POSTGRES_MAPPED_PORT="$(docker compose -f infra/docker-compose.yml --profile polyglot port postgres 5432 2>/dev/null | awk -F: 'END {print $NF}')"
+  if [[ -n "${POSTGRES_MAPPED_PORT}" ]]; then
+    POSTGRES_PORT="${POSTGRES_MAPPED_PORT}"
+  fi
+  export ONTOLOGY_DASHBOARD_DATABASE_URL="${ONTOLOGY_DASHBOARD_DATABASE_URL:-postgresql://ontology:ontology-local-only@127.0.0.1:${POSTGRES_PORT}/ontology_dashboard}"
+else
+  export ONTOLOGY_DASHBOARD_DATABASE_URL="${ONTOLOGY_DASHBOARD_DATABASE_URL:-}"
+fi
+
+if [[ -n "${ONTOLOGY_DASHBOARD_DATABASE_URL}" && "${SKIP_DEMO_BOOTSTRAP}" != "1" ]]; then
+  if [[ -n "${PM_DEMO_PACKAGE_ROOT}" && -d "${PM_DEMO_PACKAGE_ROOT}" ]]; then
+    "${VENV_DIR}/bin/python" scripts/bootstrap_predictive_maintenance_v3_1_demo.py \
+      --package-root "${PM_DEMO_PACKAGE_ROOT}" \
+      --database-url "${ONTOLOGY_DASHBOARD_DATABASE_URL}" \
+      --skip-graph
+  else
+    echo "Skipping V3.1 demo bootstrap; set PM_DEMO_PACKAGE_ROOT to seed Product Result artifacts."
+  fi
+fi
+
+export VITE_API_BASE_URL="http://${APP_CHECK_HOST}:${API_PORT}"
+
+: > "${API_LOG}"
+: > "${WEB_LOG}"
+
+"${VENV_DIR}/bin/python" -m uvicorn app.main:app \
+  --host "${APP_BIND_HOST}" --port "${API_PORT}" > "${API_LOG}" 2>&1 &
+API_PID=$!
+
+(
+  cd systems/frontend
+  npx vite --host "${APP_BIND_HOST}" --port "${WEB_PORT}" --strictPort
+) > "${WEB_LOG}" 2>&1 &
+WEB_PID=$!
+
+cleanup() {
+  kill "${API_PID}" "${WEB_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+for _ in $(seq 1 90); do
+  if curl -fsS "http://${APP_CHECK_HOST}:${API_PORT}/health" >/dev/null 2>&1 \
+    && curl -fsS "http://${APP_CHECK_HOST}:${WEB_PORT}/" >/dev/null 2>&1; then
+    echo
+    printf 'Ontology Dashboard live local runtime is running\n'
+    printf '  Web: http://%s:%s/login\n' "${APP_CHECK_HOST}" "${WEB_PORT}"
+    printf '  API: http://%s:%s/docs\n' "${APP_CHECK_HOST}" "${API_PORT}"
+    if [[ -n "${ONTOLOGY_DASHBOARD_DATABASE_URL}" ]]; then
+      printf '  DB: PostgreSQL on host port %s\n' "${POSTGRES_PORT}"
+    fi
+    printf '  Logs: %s %s\n' "${API_LOG}" "${WEB_LOG}"
+    echo 'Press Ctrl+C to stop API and Web. Docker Postgres keeps running.'
+    if command -v open >/dev/null 2>&1 && [[ "${OPEN_BROWSER:-1}" == "1" ]]; then
+      open "http://${APP_CHECK_HOST}:${WEB_PORT}/login" >/dev/null 2>&1 || true
+    fi
+    wait
+  fi
+  sleep 1
+done
+
+echo "Services did not become healthy within 90 seconds" >&2
+echo "API log: ${API_LOG}" >&2
+echo "Web log: ${WEB_LOG}" >&2
+exit 1

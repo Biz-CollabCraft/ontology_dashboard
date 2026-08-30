@@ -139,6 +139,12 @@ Python 3.11+와 프로젝트 Frontend가 요구하는 Node.js 환경을 사용�
 bash scripts/run_local.sh
 ```
 
+PostgreSQL 기반 live runtime과 Closed-loop 작업요청까지 확인:
+
+```bash
+bash scripts/run_local_live.sh
+```
+
 Architecture 검증:
 
 ```bash

@@ -16,6 +16,11 @@ from jsonschema import Draft202012Validator, FormatChecker
 from app.dependencies import current_principal, get_identity_service, require_csrf
 from app.diagnosis.runtime_router import internal_router, router
 from app.diagnosis.runtime_service import PredictiveMaintenanceRuntimeService
+from app.diagnosis.materialization import (
+    ProductResultMaterializationCommand,
+    ProductResultMaterializationService,
+)
+from app.diagnosis.runtime_schema import PredictionResultBatch
 from app.identity import AuthError, Principal
 from app.identity.identity_router import identity_http_status
 
@@ -294,6 +299,45 @@ def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
     ]
     assert summary.recommended_actions[0].requires_human_approval is True
     assert summary.evidence_gaps[0].display_policy == "show_limitation"
+
+
+def test_product_result_materialization_exposes_shared_evidence_projection() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    assert receive(service, payload).validation_status == "accepted"
+    context = repository.prediction_batch_promotion_context(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+    assert context is not None
+    batch = PredictionResultBatch.model_validate(context["raw_payload"])
+    item = batch.results[0]
+
+    materialized = ProductResultMaterializationService().materialize(
+        ProductResultMaterializationCommand(
+            organization_id="org-ontology-demo",
+            project_id="manufacturing-demo-project",
+            workspace_id="manufacturing-demo",
+            dataset_version_id=str(context["dataset_version_id"]),
+            asset=context["assets"][item.asset_id],
+            batch=batch,
+            item=item,
+        )
+    )
+
+    assert materialized.materialized is True
+    assert materialized.replayed is False
+    assert materialized.artifact_id == materialized.artifact["artifact_id"]
+    assert materialized.prediction_result_id == materialized.prediction_result.prediction_id
+    assert materialized.evidence_projection["artifact_reference"]["artifact_id"] == (
+        materialized.artifact_id
+    )
+    assert materialized.evidence_projection["artifact_reference"][
+        "evidence_payload_reference"
+    ] == materialized.artifact["provenance"]["evidence_payload_reference"]
 
 
 def test_prediction_batch_promotion_uses_model_selected_threshold_for_positive_score() -> None:
