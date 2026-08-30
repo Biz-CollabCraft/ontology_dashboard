@@ -161,10 +161,12 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U5. KG Level 0 Comparison Trace
 
+- **Status:** Implemented and executed as a Level 0 contract trace, not as a production KG store benchmark.
 - **Goal:** Leave an evidence trail for whether KG is justified, without adding graph infrastructure prematurely.
 - **Files:**
   - `tests/eval/agent_context_questions.jsonl`
   - `tests/eval/test_agent_context_retrieval_eval.py`
+  - `tests/eval/results/agent_context_retrieval_eval_2026-08-30.json`
   - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
 - **Approach:** Define functional questions and expected answer facets. Compare the current normalized packet/RDB-style lookup against an ontology traversal adapter. Control variables by keeping the same question set, same fixture scope, same answer schema, and same pass/fail rubric.
 - **Test Scenarios:**
@@ -172,7 +174,7 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Two-hop: factor -> component -> SOP procedure.
   - Boundary: SOP exists but maturity gate blocks user guidance.
   - Missing context: no similar-event history returns a gap, not a fabricated count.
-- **Verification:** The trace shows whether graph-style traversal improves correctness, explainability, or implementation simplicity enough to justify a real KG store later.
+- **Verification:** `tests/eval/test_agent_context_retrieval_eval.py` was executed on 2026-08-30 and passed 6/6 checks. The result artifact records that packet answers and `ontology_context` traversal satisfy the same answer facets for GS-002, GS-004, and GS-007. This is intentionally not a Cypher/SPARQL-vs-SQL performance benchmark; production KG remains a later decision.
 
 ### U6. RAG Decision Gate
 
