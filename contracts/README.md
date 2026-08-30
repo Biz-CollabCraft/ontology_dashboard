@@ -61,6 +61,7 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Prediction Result Batch Schema | **Current** | `contracts/schemas/prediction-result-batch.schema.json` (`prediction-result-batch-v1` 외부 Backend Inbox 전달 정본 배열 계약) |
 | Internal Generator Runtime Prediction Stage Schema | **Internal** | `contracts/schemas/generator-runtime-prediction-stage.schema.json` (Generator 내부 staging 및 checkpoint 재개 전용 계약) |
 | Generator Runtime Prediction Golden Vector | **Current** | `contracts/test-vectors/generator-runtime-prediction-v1/` (다중 설비 런타임 예측 수치 및 결과 묶음 배치 검증) |
+| Generator Pipeline E2E Golden Vector | **Current** | `contracts/test-vectors/generator-pipeline-e2e-v1/` (Protocol -> Extraction -> Dataset -> Handoff -> Runtime Prediction -> Batch 전체 파이프라인 무결성 및 13개 결정적 식별자 불변성 검증) |
 
 
 ### Prediction 관련 내부/외부 계약 경계 원칙

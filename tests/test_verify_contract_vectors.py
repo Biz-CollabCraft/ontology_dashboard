@@ -901,3 +901,49 @@ def test_runtime_prediction_vector_verification_passes():
     result = verifier.verify_all()
     assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
     assert "generator-runtime-prediction-v1" in result.verified_vectors
+
+
+def test_pipeline_e2e_vector_verification_passes():
+    """Verify that real repository generator-pipeline-e2e-v1 vector verifies cleanly."""
+    verifier = ContractVectorVerifier()
+    result = verifier.verify_all()
+    assert result.passed, f"Errors: {[e.format() for e in result.errors]}"
+    assert "generator-pipeline-e2e-v1" in result.verified_vectors
+
+
+def test_pipeline_e2e_vector_deterministic_identity_mismatch_fails(tmp_path: Path):
+    """Tampering with deterministic identities in generator-pipeline-e2e-v1 must fail verification."""
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    det_path = (
+        contracts_dir
+        / "test-vectors"
+        / "generator-pipeline-e2e-v1"
+        / "expected"
+        / "deterministic-identities.json"
+    )
+    det = json.loads(det_path.read_text(encoding="utf-8"))
+    det["dataset_id"] = "tampered-dataset-id"
+    det_path.write_text(json.dumps(det), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("dataset_id mismatch with deterministic identities" in e.message for e in result.errors)
+
+
+def test_pipeline_e2e_vector_corrupted_manifest_sha_fails(tmp_path: Path):
+    """Tampering with file checksum in dataset_manifest.json must fail verification."""
+    contracts_dir, verifier = _setup_isolated_contracts(tmp_path)
+    man_path = (
+        contracts_dir
+        / "test-vectors"
+        / "generator-pipeline-e2e-v1"
+        / "expected"
+        / "dataset_manifest.json"
+    )
+    man = json.loads(man_path.read_text(encoding="utf-8"))
+    man["files"][0]["sha256"] = "0" * 64
+    man_path.write_text(json.dumps(man), encoding="utf-8")
+
+    result = verifier.verify_all()
+    assert not result.passed
+    assert any("SHA-256 mismatch" in e.message for e in result.errors)

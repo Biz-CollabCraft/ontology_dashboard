@@ -1,0 +1,54 @@
+name: generator-e2e-integration
+
+on:
+  pull_request:
+    paths:
+      - "contracts/schemas/**"
+      - "contracts/test-vectors/generator-pipeline-e2e-v1/**"
+      - "systems/generator/**"
+      - "systems/backend/app/diagnosis/**"
+      - "tests/test_generator_extraction_e2e.py"
+      - ".github/workflows/generator-e2e-integration.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "contracts/schemas/**"
+      - "contracts/test-vectors/generator-pipeline-e2e-v1/**"
+      - "systems/generator/**"
+      - "systems/backend/app/diagnosis/**"
+      - "tests/test_generator_extraction_e2e.py"
+      - ".github/workflows/generator-e2e-integration.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: generator-e2e-integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generator-e2e-integration:
+    name: generator-e2e-integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v4
+
+      - name: Build Generator runtime image
+        run: docker build --file systems/generator/Dockerfile --tag ontology-generator:e2e-check .
+
+      - name: Run E2E Integration test inside container
+        run: >-
+          docker run --rm
+          --user 0:0
+          --entrypoint sh
+          --env DATA_DIR=/data/source
+          --env DATA_PREPROCESSED_DIR=/data/preprocessed
+          --env ONTOLOGY_DIR=/data/ontology
+          --env MODELS_STORE_DIR=/data/models
+          --env MODEL_ARTIFACT_URI=/artifacts
+          --volume "${{ github.workspace }}/tests:/app/tests:ro"
+          --volume "${{ github.workspace }}/contracts:/app/contracts:ro"
+          ontology-generator:e2e-check
+          -c "python -m pip install --no-cache-dir pytest && python -m pytest -v tests/test_generator_extraction_e2e.py"

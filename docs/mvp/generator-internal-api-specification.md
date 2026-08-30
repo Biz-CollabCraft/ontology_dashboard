@@ -21,10 +21,16 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 
 ### 허용 범위
 - `GET /health` (데몬 상태 확인)
+- `POST /extraction` (gen_data 증분 파싱 및 Canonical Observation Dataset 발행)
+- `GET /extraction/status` (Extraction Manager, Background Worker 및 Handoff 큐 상태 조회)
+- `GET /extraction/handoffs/{handoff_id}` & `POST /extraction/handoffs/{handoff_id}/retry` (Handoff 조회 및 재시도)
 - `POST /preprocessing` (Observation Dataset 분석 및 Preprocessing Plan 수립·발행, 동기 endpoint 실행)
-- `POST /internal/train` (기존 main 제어 API 호환성: 최초 학습 실행, 단일 프로세스 Lock 하에 실행)
-- `POST /internal/retrain` (기존 main 제어 API 호환성: 새 버전 재학습 실행, 단일 프로세스 Lock 하에 실행)
-- Target 제어 API: 후속 구조 개편 시 정의될 단계별 엔드포인트(`POST /extraction`, `POST /feature`, `POST /train`, `POST /train/{base_model}`, `POST /models/...`)
+- `POST /feature` (Observation/Failure Dataset 및 Plan 기반 Feature Dataset Bundle 발행)
+- `POST /train` & `POST /train/{base_model}` (Multi-Model 학습 및 Model Artifact 발행)
+- `GET /runtime-pipeline/status`, `GET /runtime-pipeline/runs/{run_id}`, `GET /runtime-pipeline/queue` (런타임 예측 파이프라인 상태 조회)
+- `POST /internal/runtime-pipeline/enqueue`, `POST /internal/runtime-pipeline/retry-failed/{job_id}` (런타임 작업 등록 및 재시도)
+- `POST /internal/train` & `POST /internal/retrain` (기존 main 제어 API 호환성 유지)
+- Target 제어 API (후속 고도화): `POST /models/{base_model}/activate/{model_version}`, `GET /models/{base_model}/active`
 
 > **Preprocessing 도메인 책임 경계**
 >

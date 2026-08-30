@@ -121,20 +121,14 @@ Queue, retry, RunState, Checkpoint와 외부 Prediction Result Batch까지 변�
 발행하는 실행 환경은 provenance용 `GENERATOR_RUNTIME_VERSION`도 반드시 설정해야 한다.
 
 
-### 2.2 Target API (후속 목표 설계)
+### 2.2 Target API (후속 목표 및 고도화 설계)
 
-후속 구조 개편(4대 파이프라인 책임 분리)을 통해 도입될 목표 API 목록입니다 (`/ingestion`, `/observations` 같은 파일 수신 엔드포인트는 도입하지 않으며 파일 handoff 방식을 유지함).
+향후 모델 수동 관리 및 고도화를 위해 고려 중인 Target API 목록입니다.
 
-| Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
+| Method | Path | Target 의미 및 고도화 단계 | 상태 |
 |---|---|---|---|
-| GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
-| POST | `/extraction` | gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108) | Target — 미병합 |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 완료 |
-| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Current — 구현 완료 |
-| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
-| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
-| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
-| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
+| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target (후속 고도화) |
+| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target (후속 고도화) |
 
 ### 2.3 파이프라인 흐름
 
@@ -277,3 +271,133 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 | 500 | `MODEL_LATEST_UPDATE_FAILED` | 포인터 파일 준비·작성·교체 I/O 실패 |
 | 500 | `MODEL_LATEST_VERIFY_FAILED` | 포인터 교체 후 read-back 불일치 |
 - **동기 실행**: `/train` 및 `/train/{base_model}` 엔드포인트는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.
+
+---
+
+## 6. 전체 확정 파이프라인 흐름 및 런타임 연계 (End-to-End Pipeline)
+
+Generator는 `gen_data` 센서 로그에서부터 Backend Inbox까지의 7단계 연속 흐름을 지원합니다.
+
+```text
+gen_data (sensor_stream.jsonl append)
+  │
+  ▼
+[Stage 1: Incremental Extraction] (ExtractionWorker & Manager)
+  │  - 정적 승인 Mapping (`gen-data-sensor-stream-canonical` v1) 적용
+  │  - 단일 작성자 Lock 및 체크포인트 영속화
+  ▼
+[Stage 2: Canonical Observation Dataset] (dataset_manifest.json + observations.jsonl)
+  │  - 불변 Window Dataset 발행
+  │  - ExtractionRuntimeHandoffService를 통한 멱등 Handoff 생성
+  ▼
+[Stage 3: Runtime Handoff & FIFO Queue] (PipelineQueue SQLite)
+  │  - RuntimeInputIdentity 생성 및 큐 등록
+  │  - 15대 핵심 식별자 및 RuntimeSourceContext 보존
+  ▼
+[Stage 4: Runtime Feature & Prediction] (PipelineWorker & PredictionService)
+  │  - 모델 Feature Schema 기반 변환 및 이력 요건(`minimum_history_rows`) 검증
+  │  - LightGBM / XGBoost 등 모델 추론 및 raw score 산출
+  ▼
+[Stage 5: Prediction Result Batch] (PredictionDeliveryService Outbox)
+  │  - 공식 `prediction-result-batch-v1` 스키마 직렬화 및 SHA-256 페이로드 서명
+  ▼
+[Stage 6: HTTP Dispatch] (PredictionDeliveryWorker)
+  │  - POST /internal/prediction-results 비동기 전송 및 지수 백오프 재시도
+  ▼
+[Stage 7: Backend Prediction Inbox] (PredictiveMaintenanceRuntimeService)
+     - 수신, 권한/Scope 검증, 중복 수신 시 `duplicate` 멱등 처리
+```
+
+---
+
+## 7. 시스템 간 책임 경계 (Responsibility Boundaries)
+
+각 도메인 시스템은 아래의 명확한 단일 책임을 유지하며, 상호 영역을 침범하지 않습니다.
+
+### 1. gen_data
+- 프로토콜 로그 생성 (PLC / CNC / Compressor 센서 스트림)
+- `sensor_stream.jsonl` 원본 파일 append 유지
+- 원본 로그 파일의 영구 소유권 보유
+
+### 2. Generator Extraction
+- 원본 로그 탐색 및 증분 파싱 (`SensorRecordParser`)
+- 승인된 정적 매핑(`generator-static-mapping-table`) 적용
+- 불변 `Canonical Observation Dataset` 발행 및 체크포인트 관리
+- `Runtime Handoff` 레코드 생성 및 Pipeline Queue 연동
+
+### 3. Generator Runtime
+- `RuntimeSourceContext` 보존 및 FIFO 큐 실행
+- Runtime Feature 계산 및 이력 조건 fail-closed 검증
+- Model Artifact 로드 및 다중 머신러닝 모델 inference
+- raw score 및 `Prediction Result Batch` (`prediction-result-batch-v1`) 생성
+- Backend Inbox로의 Outbox 영속화 및 HTTP 전송
+
+### 4. Backend
+- Prediction Result Batch 수신 및 인증/Scope 검증
+- Backend Prediction Inbox 멱등 저장
+- Threshold 정책 및 의사결정(decision policy) 적용
+- Product Result Artifact 및 Evidence 후속 승격 전담
+
+---
+
+## 8. 미구현 범위 분리 (Unimplemented / Target Scope)
+
+다음 항목들은 현재 완료 범위에 포함되지 않으며, 후속 고도화 이슈에서 별도로 관리합니다.
+
+- **LLM Mapping 자동 생성**: 현재는 승인된 정적 매핑 테이블(`generator-static-mapping-table`)만 지원합니다.
+- **비표준 Protocol 자동 추론**: 정의되지 않은 프로토콜 형식의 자동 감지는 지원하지 않으며 Fail-Closed 처리됩니다.
+- **결측치 자동 보정 (Imputation)**: 임의 결측치 대체 없이 `ffill` 및 엄격한 null 검증 정책을 유지합니다.
+- **사용자 Model Version 선택**: 런타임은 활성 Model Set 포인터(`latest.json`)를 단일 정본으로 소비합니다.
+- **Product Result / Evidence 신규 생성**: Generator는 raw score가 포함된 `Prediction Result Batch`만 발행하며, 최종 제품 리포트/Evidence는 Backend가 전담합니다.
+- **Dashboard 알림 UI**: 실시간 이상 알림 UI 구성은 프론트엔드/대시보드 도메인에서 처리합니다.
+- **Closed-loop 재지시 (PLC 제어)**: 설비 제어기 직접 피드백 루프는 본 파이프라인의 범위가 아닙니다.
+
+---
+
+## 9. 산출물 수명주기 및 보존 정책 (Artifact Lifecycle)
+
+파이프라인 운영 중 생성되는 각 산출물의 수명주기 및 관리 원칙은 다음과 같습니다.
+
+1. **`gen_data` 원본 파일**:
+   - Generator가 절대 삭제하거나 수정하지 않음 (Producer 소유권 보존).
+2. **`Extraction Fragment` (중간 청크)**:
+   - Window Dataset 발행 및 검증이 완료된 후 안전하게 자동 정리.
+3. **`Canonical Observation Dataset`**:
+   - 재현성과 학습 재구성을 위해 불변 Artifact(`dataset_manifest.json` + `observations.jsonl`)로 영구 보존.
+4. **`Runtime Handoff` 레코드**:
+   - 감사(Audit), 추적성 및 장애 재시도를 위해 영구 유지.
+5. **`Runtime Checkpoint`**:
+   - 파이프라인 작업 정상 완료 및 설정된 보존 기간에 따라 주기적 정리.
+6. **`Prediction Outbox`**:
+   - Backend 전달 완료(`delivered`) 후 보존 정책에 따라 보관 및 정리.
+7. **`Dead-letter` (실패 격리 레코드)**:
+   - 운영자의 원인 분석 및 수동 확인 전까지 자동 삭제 금지.
+
+---
+
+## 10. Docker 실행 가이드
+
+### 1. Docker 이미지 빌드
+```bash
+docker build --file systems/generator/Dockerfile --tag ontology-generator:latest .
+```
+
+### 2. 컨테이너 실행
+```bash
+docker run --rm -d \
+  --name ontology-generator \
+  -p 8000:8000 \
+  -v "$(pwd)/data:/data/source" \
+  -v "$(pwd)/data_preprocessed:/data/preprocessed" \
+  -v "$(pwd)/models_store:/data/models" \
+  -v "$(pwd)/artifacts:/artifacts" \
+  --env-file systems/generator/.env \
+  ontology-generator:latest
+```
+
+### 3. 상태 확인
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/extraction/status
+curl http://localhost:8000/runtime-pipeline/status
+```

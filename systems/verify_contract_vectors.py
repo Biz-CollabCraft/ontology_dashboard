@@ -799,6 +799,8 @@ class ContractVectorVerifier:
                 self._verify_protocol_extraction_vector(vname, vdir, result)
             elif vname.startswith("generator-extraction-runtime-handoff"):
                 self._verify_extraction_runtime_handoff_vector(vname, vdir, result)
+            elif vname.startswith("generator-pipeline-e2e"):
+                self._verify_pipeline_e2e_vector(vname, vdir, result)
 
 
             else:
@@ -2061,6 +2063,301 @@ class ContractVectorVerifier:
                     message=f"Handoff vector schema validation failed: {exc}",
                 )
             )
+
+    def _verify_pipeline_e2e_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        """Verify unified generator-pipeline-e2e contract vector from protocol to prediction result batch."""
+        in_dir = vector_dir / "input"
+        exp_dir = vector_dir / "expected"
+        if not in_dir.is_dir() or not exp_dir.is_dir():
+            result.errors.append(
+                VerificationError(
+                    context=vector_name,
+                    message="Missing input or expected directory",
+                )
+            )
+            return
+
+        # 1. Validate input/protocol-records.jsonl against generator-protocol-record.schema.json
+        rec_schema_p = self.schemas_dir / "generator-protocol-record.schema.json"
+        records_path = in_dir / "protocol-records.jsonl"
+        if records_path.is_file() and rec_schema_p.is_file():
+            try:
+                rec_schema = json.loads(rec_schema_p.read_text(encoding="utf-8"))
+                rec_val = jsonschema.Draft202012Validator(rec_schema, format_checker=jsonschema.FormatChecker())
+                with open(records_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        s = line.strip()
+                        if s:
+                            rec_val.validate(json.loads(s))
+                result.payload_count += 1
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/input/protocol-records.jsonl",
+                        message=f"Protocol record validation failed: {exc}",
+                    )
+                )
+
+        # 2. Validate input/static-mapping-table.json against generator-static-mapping-table.schema.json
+        map_schema_p = self.schemas_dir / "generator-static-mapping-table.schema.json"
+        mapping_path = in_dir / "static-mapping-table.json"
+        if mapping_path.is_file() and map_schema_p.is_file():
+            try:
+                map_schema = json.loads(map_schema_p.read_text(encoding="utf-8"))
+                map_val = jsonschema.Draft202012Validator(map_schema, format_checker=jsonschema.FormatChecker())
+                map_data = json.loads(mapping_path.read_text(encoding="utf-8"))
+                map_val.validate(map_data)
+                result.payload_count += 1
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/input/static-mapping-table.json",
+                        message=f"Static mapping table validation failed: {exc}",
+                    )
+                )
+
+        # 3. Validate expected/dataset_manifest.json against generator-dataset-input-manifest.schema.json
+        man_schema_p = self.schemas_dir / "generator-dataset-input-manifest.schema.json"
+        manifest_path = exp_dir / "dataset_manifest.json"
+        manifest_data = None
+        if manifest_path.is_file() and man_schema_p.is_file():
+            try:
+                man_schema = json.loads(man_schema_p.read_text(encoding="utf-8"))
+                man_val = jsonschema.Draft202012Validator(man_schema, format_checker=jsonschema.FormatChecker())
+                manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                man_val.validate(manifest_data)
+                result.manifest_count += 1
+
+                for file_entry in list(manifest_data.get("files", [])) + list(manifest_data.get("auxiliary_files", [])):
+                    rel_p = file_entry.get("path")
+                    target_f = exp_dir / rel_p
+                    if not target_f.is_file():
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/{rel_p}",
+                                message=f"Declared manifest file '{rel_p}' does not exist",
+                            )
+                        )
+                        continue
+                    actual_sha = compute_sha256(target_f)
+                    expected_sha = file_entry.get("sha256")
+                    if expected_sha and actual_sha != expected_sha:
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/{rel_p}",
+                                message=f"SHA-256 mismatch for '{rel_p}'",
+                                expected=expected_sha,
+                                actual=actual_sha,
+                            )
+                        )
+                    actual_sz = target_f.stat().st_size
+                    expected_sz = file_entry.get("size_bytes")
+                    if expected_sz is not None and actual_sz != expected_sz:
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/expected/{rel_p}",
+                                message=f"size_bytes mismatch for '{rel_p}'",
+                                expected=str(expected_sz),
+                                actual=str(actual_sz),
+                            )
+                        )
+                    result.payload_count += 1
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/dataset_manifest.json",
+                        message=f"Dataset manifest validation failed: {exc}",
+                    )
+                )
+
+        # 4. Validate expected/runtime-handoff.json against generator-extraction-runtime-handoff.schema.json
+        handoff_schema_p = self.schemas_dir / "generator-extraction-runtime-handoff.schema.json"
+        handoff_path = exp_dir / "runtime-handoff.json"
+        handoff_data = None
+        if handoff_path.is_file() and handoff_schema_p.is_file():
+            try:
+                ho_schema = json.loads(handoff_schema_p.read_text(encoding="utf-8"))
+                ho_val = jsonschema.Draft202012Validator(ho_schema, format_checker=jsonschema.FormatChecker())
+                handoff_data = json.loads(handoff_path.read_text(encoding="utf-8"))
+                ho_val.validate(handoff_data)
+                result.payload_count += 1
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/runtime-handoff.json",
+                        message=f"Runtime handoff schema validation failed: {exc}",
+                    )
+                )
+
+        # 5. Validate expected/prediction-result-batch.json against prediction-result-batch.schema.json
+        batch_schema_p = self.schemas_dir / "prediction-result-batch.schema.json"
+        batch_path = exp_dir / "prediction-result-batch.json"
+        batch_data = None
+        if batch_path.is_file() and batch_schema_p.is_file():
+            try:
+                b_schema = json.loads(batch_schema_p.read_text(encoding="utf-8"))
+                reg = self._build_schema_registry()
+                if reg is not None:
+                    b_val = jsonschema.Draft202012Validator(b_schema, registry=reg, format_checker=jsonschema.FormatChecker())
+                else:
+                    b_val = jsonschema.Draft202012Validator(b_schema, format_checker=jsonschema.FormatChecker())
+                batch_data = json.loads(batch_path.read_text(encoding="utf-8"))
+                b_val.validate(batch_data)
+                result.payload_count += 1
+            except Exception as exc:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/prediction-result-batch.json",
+                        message=f"Prediction result batch schema validation failed: {exc}",
+                    )
+                )
+
+        # 6. Verify Deterministic Identity Invariants across the entire chain
+        det_path = exp_dir / "deterministic-identities.json"
+        if not det_path.is_file():
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected",
+                    message="Missing expected/deterministic-identities.json",
+                )
+            )
+            return
+
+        try:
+            det_data = json.loads(det_path.read_text(encoding="utf-8"))
+            result.payload_count += 1
+            required_invariant_keys = {
+                "dataset_id",
+                "dataset_version",
+                "source_uri",
+                "source_checksum",
+                "source_kind",
+                "source_contract_version",
+                "source_schema_version",
+                "pipeline_contract_version",
+                "handoff_id",
+                "runtime_job_id",
+                "asset_id",
+                "model_id",
+                "model_version",
+            }
+            missing_inv = required_invariant_keys - set(det_data.keys())
+            if missing_inv:
+                result.errors.append(
+                    VerificationError(
+                        context=f"{vector_name}/expected/deterministic-identities.json",
+                        message=f"Missing required deterministic invariant keys: {sorted(missing_inv)}",
+                    )
+                )
+
+            # Compare with manifest
+            if manifest_data:
+                if manifest_data.get("dataset_id") != det_data.get("dataset_id"):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/dataset_manifest.json",
+                            message="dataset_id mismatch with deterministic identities",
+                            expected=det_data.get("dataset_id"),
+                            actual=manifest_data.get("dataset_id"),
+                        )
+                    )
+                if manifest_data.get("dataset_version") != det_data.get("dataset_version"):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/dataset_manifest.json",
+                            message="dataset_version mismatch with deterministic identities",
+                            expected=det_data.get("dataset_version"),
+                            actual=manifest_data.get("dataset_version"),
+                        )
+                    )
+
+            # Compare with handoff
+            if handoff_data:
+                if handoff_data.get("handoff_id") != det_data.get("handoff_id"):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/runtime-handoff.json",
+                            message="handoff_id mismatch with deterministic identities",
+                            expected=det_data.get("handoff_id"),
+                            actual=handoff_data.get("handoff_id"),
+                        )
+                    )
+                rt_src = handoff_data.get("runtime_input", {}).get("source", {})
+                for k in ("source_uri", "source_checksum", "source_kind", "source_contract_version", "source_schema_version", "pipeline_contract_version"):
+                    if rt_src.get(k) != det_data.get(k):
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/runtime-handoff.json:runtime_input.source.{k}",
+                                message=f"{k} mismatch with deterministic identities",
+                                expected=str(det_data.get(k)),
+                                actual=str(rt_src.get(k)),
+                            )
+                        )
+                deliv = handoff_data.get("delivery", {})
+                if deliv.get("runtime_job_id") != det_data.get("runtime_job_id"):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/runtime-handoff.json:delivery.runtime_job_id",
+                            message="runtime_job_id mismatch with deterministic identities",
+                            expected=det_data.get("runtime_job_id"),
+                            actual=deliv.get("runtime_job_id"),
+                        )
+                    )
+
+            # Compare with prediction batch
+            if batch_data:
+                b_src = batch_data.get("source_context", {})
+                for k in ("dataset_id", "dataset_version", "source_uri", "source_checksum", "source_kind", "source_contract_version", "source_schema_version", "pipeline_contract_version"):
+                    if b_src.get(k) != det_data.get(k):
+                        result.errors.append(
+                            VerificationError(
+                                context=f"{vector_name}/prediction-result-batch.json:source_context.{k}",
+                                message=f"{k} mismatch with deterministic identities",
+                                expected=str(det_data.get(k)),
+                                actual=str(b_src.get(k)),
+                            )
+                        )
+                first_res = batch_data.get("results", [{}])[0]
+                if first_res.get("asset_id") != det_data.get("asset_id"):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/prediction-result-batch.json:results[0].asset_id",
+                            message="asset_id mismatch with deterministic identities",
+                            expected=det_data.get("asset_id"),
+                            actual=first_res.get("asset_id"),
+                        )
+                    )
+                if first_res.get("model_id") != det_data.get("model_id"):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/prediction-result-batch.json:results[0].model_id",
+                            message="model_id mismatch with deterministic identities",
+                            expected=det_data.get("model_id"),
+                            actual=first_res.get("model_id"),
+                        )
+                    )
+                if first_res.get("model_version") != det_data.get("model_version"):
+                    result.errors.append(
+                        VerificationError(
+                            context=f"{vector_name}/prediction-result-batch.json:results[0].model_version",
+                            message="model_version mismatch with deterministic identities",
+                            expected=det_data.get("model_version"),
+                            actual=first_res.get("model_version"),
+                        )
+                    )
+        except Exception as exc:
+            result.errors.append(
+                VerificationError(
+                    context=f"{vector_name}/expected/deterministic-identities.json",
+                    message=f"Deterministic identity validation failed: {exc}",
+                )
+            )
+
 
 
 def main() -> int:

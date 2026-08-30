@@ -64,14 +64,14 @@ systems/generator/
 │  │  ├─ parsers/
 │  │  │  └─ sensor_record_parser.py
 │  │  └─ extraction_schema.py
-│  ├─ preprocessing/          # [2단계 Target] 데이터셋 분석, 불변 Plan 수립 도메인 (기존 extraction 이전)
+│  ├─ preprocessing/          # [2단계 Current] 데이터셋 분석, 불변 Plan 수립 도메인 (기존 extraction 이전)
 │  │  ├─ preprocessing_router.py
 │  │  ├─ preprocessing_service.py
 │  │  ├─ preprocessing_planner.py
 │  │  ├─ preprocessing_profiler.py
 │  │  ├─ preprocessing_repository.py
 │  │  └─ preprocessing_schema.py
-│  ├─ feature/                # [3단계 Target] Feature/Label/Series 빌드 및 번들 발행 도메인
+│  ├─ feature/                # [3단계 Current] Feature/Label/Series 빌드 및 번들 발행 도메인
 │  │  ├─ feature_router.py
 │  │  ├─ feature_service.py
 │  │  ├─ feature_repository.py
