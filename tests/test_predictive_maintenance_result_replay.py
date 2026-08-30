@@ -371,8 +371,8 @@ def test_v3_result_artifact_mapping_observation_query_and_replay_controls(
     assert page.context.governance.tool_wear_continuity == {
         "pass": True,
         "running_reset_count": 0,
-        "tool_replacement_event_count": 1_075,
-        "aligned_reset_transition_count": 1_075,
+        "tool_replacement_event_count": 731,
+        "aligned_reset_transition_count": 731,
         "reset_without_matching_maintenance_count": 0,
         "replacement_without_reset_count": 0,
     }
@@ -972,13 +972,13 @@ def test_real_v3_1_result_artifact_and_replay_row_parity(
     assert ingestion.row_counts == {
         "asset_master": 100,
         "asset_relation": 80,
-        "cnc_production_cycle": 244_929,
-        "cnc_sensor_observation": 495_360,
-        "compressor_sensor_observation": 123_840,
-        "maintenance_event": 1_151,
+        "cnc_production_cycle": 170_875,
+        "cnc_sensor_observation": 345_600,
+        "compressor_sensor_observation": 86_400,
+        "maintenance_event": 790,
         "prediction_factor": 300,
         "prediction_snapshot": 100,
-        "prediction_timeline": 99_150,
+        "prediction_timeline": 68_208,
         "result_artifact": 100,
     }
 
@@ -1024,7 +1024,7 @@ def test_real_v3_1_result_artifact_and_replay_row_parity(
         offset=0,
         limit=1,
     )
-    assert timeline["total"] == 99_150
+    assert timeline["total"] == 68_208
     assert timeline["model_retrained"] is False
 
     with psycopg.connect(postgresql_database, row_factory=dict_row) as connection:
@@ -1049,7 +1049,7 @@ def test_real_v3_1_result_artifact_and_replay_row_parity(
         "artifacts": 100,
         "snapshots": 100,
         "factors": 300,
-        "timeline": 99_150,
+        "timeline": 68_208,
         "linked_prediction_results": 100,
     }
 

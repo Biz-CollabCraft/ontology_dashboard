@@ -303,12 +303,36 @@ def run_package_validator(package_root: Path) -> Check:
     )
 
 
+def release_checks(
+    project_root: Path,
+    package_root: Path,
+    project3_root: Path | None,
+    *,
+    package_only: bool,
+) -> list[Check]:
+    checks = [*safe_package_checks(package_root)]
+    if package_only:
+        return checks
+    checks.extend(project_checks(project_root))
+    checks.extend(project3_checks(project3_root))
+    return checks
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument("--package-root", required=True)
     parser.add_argument("--project3-root")
     parser.add_argument("--run-package-validator", action="store_true")
+    parser.add_argument(
+        "--package-only",
+        action="store_true",
+        help=(
+            "Verify only the portable data package. Local bootstrap uses this "
+            "so missing project prompt docs or Project 3 access do not block "
+            "database seeding."
+        ),
+    )
     parser.add_argument("--strict", action="store_true", help="Treat blocked checks as release failures")
     parser.add_argument("--output")
     args = parser.parse_args()
@@ -319,11 +343,12 @@ def main() -> int:
         Path(args.project3_root).expanduser().resolve() if args.project3_root else None
     )
 
-    checks = [
-        *safe_package_checks(package_root),
-        *project_checks(project_root),
-        *project3_checks(project3_root),
-    ]
+    checks = release_checks(
+        project_root,
+        package_root,
+        project3_root,
+        package_only=args.package_only,
+    )
     if args.run_package_validator:
         checks.append(run_package_validator(package_root))
 

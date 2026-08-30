@@ -57,6 +57,37 @@ next_free_port() {
   return 1
 }
 
+has_v3_1_demo_package() {
+  local package_root="$1"
+  [[ -f "${package_root}/dist/predictive_maintenance_canonical_v3.1.zip" ]] \
+    && [[ -f "${package_root}/dist/predictive_maintenance_canonical_v3.1.zip.sha256" ]] \
+    && [[ -f "${package_root}/canonical/dataset/dataset_manifest.json" ]]
+}
+
+resolve_pm_demo_package_root() {
+  if [[ -n "${PM_DEMO_PACKAGE_ROOT}" ]]; then
+    if has_v3_1_demo_package "${PM_DEMO_PACKAGE_ROOT}"; then
+      printf '%s\n' "${PM_DEMO_PACKAGE_ROOT}"
+      return 0
+    fi
+    echo "PM_DEMO_PACKAGE_ROOT is set but is not a complete V3.1 demo package: ${PM_DEMO_PACKAGE_ROOT}" >&2
+    return 1
+  fi
+
+  local candidate
+  for candidate in \
+    "${HOME}/Downloads/predictive_maintenance_canonical_v3.1" \
+    "${ROOT_DIR}/../gen-data" \
+    "${ROOT_DIR}/../gen-data/predictive_maintenance_canonical_v3_1"
+  do
+    if has_v3_1_demo_package "${candidate}"; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 wait_for_docker() {
   local timeout="$1"
   for _ in $(seq 1 "${timeout}"); do
@@ -130,13 +161,15 @@ else
 fi
 
 if [[ -n "${ONTOLOGY_DASHBOARD_DATABASE_URL}" && "${SKIP_DEMO_BOOTSTRAP}" != "1" ]]; then
-  if [[ -n "${PM_DEMO_PACKAGE_ROOT}" && -d "${PM_DEMO_PACKAGE_ROOT}" ]]; then
+  if RESOLVED_PM_DEMO_PACKAGE_ROOT="$(resolve_pm_demo_package_root)"; then
+    echo "Using V3.1 demo package: ${RESOLVED_PM_DEMO_PACKAGE_ROOT}"
     "${VENV_DIR}/bin/python" scripts/bootstrap_predictive_maintenance_v3_1_demo.py \
-      --package-root "${PM_DEMO_PACKAGE_ROOT}" \
+      --package-root "${RESOLVED_PM_DEMO_PACKAGE_ROOT}" \
       --database-url "${ONTOLOGY_DASHBOARD_DATABASE_URL}" \
       --skip-graph
   else
-    echo "Skipping V3.1 demo bootstrap; set PM_DEMO_PACKAGE_ROOT to seed Product Result artifacts."
+    echo "Skipping V3.1 demo bootstrap; no complete package found."
+    echo "Set PM_DEMO_PACKAGE_ROOT to a directory containing dist/predictive_maintenance_canonical_v3.1.zip and canonical/dataset/dataset_manifest.json."
   fi
 fi
 

@@ -230,22 +230,22 @@ V3_1_MODEL_VERSION = "independent-logreg-v3.1"
 V3_1_EXPECTED_PACKAGE_COUNTS = {
     "assets": 100,
     "relations": 80,
-    "compressor_observations": 123_840,
-    "cnc_observations": 495_360,
-    "production_cycles": 244_929,
-    "maintenance_events": 1_151,
-    "prediction_timeline_rows": 99_150,
+    "compressor_observations": 86_400,
+    "cnc_observations": 345_600,
+    "production_cycles": 170_875,
+    "maintenance_events": 790,
+    "prediction_timeline_rows": 68_208,
     "result_artifact_rows": 100,
 }
 V3_1_EXPECTED_SOURCE_COUNTS = {
     "assets": 100,
     "relations": 80,
-    "compressor_observations": 123_840,
-    "cnc_observations": 495_360,
-    "production_cycles": 244_929,
-    "maintenance_events": 1_151,
+    "compressor_observations": 86_400,
+    "cnc_observations": 345_600,
+    "production_cycles": 170_875,
+    "maintenance_events": 790,
 }
-V3_1_EXPECTED_TOOL_REPLACEMENT_COUNT = 1_075
+V3_1_EXPECTED_TOOL_REPLACEMENT_COUNT = 731
 V3_1_RELEASE_PASS_FIELDS = (
     "canonical_source_separation",
     "canonical_checksum_integrity",
