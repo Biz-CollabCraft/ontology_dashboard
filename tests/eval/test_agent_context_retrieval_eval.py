@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from app.dependencies import build_manufacturing_service
+from app.mvp.agent_context_graph import (
+    answer_agent_context_graph,
+    build_agent_context_graph,
+)
 from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
 
@@ -164,6 +168,55 @@ def test_kg_level0_trace_remains_read_only(tmp_path: Path) -> None:
         rendered = json.dumps(packet["ontology_context"], ensure_ascii=False)
         assert "approve_work_order" not in rendered
         assert "auto_approve" not in rendered
+
+
+def test_kg_level1_in_memory_graph_answers_current_facets(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-context-kg-level1.db", root=ROOT)
+
+    for question in _load_questions():
+        packet = service.agent_review_packet(question["asset_id"])
+        expected = question["expected"]
+        graph_answer = answer_agent_context_graph(packet)
+
+        assert _matches_expected(graph_answer, expected), question["case_id"]
+        assert graph_answer["node_count"] >= 1
+        assert graph_answer["edge_count"] >= 0
+        if graph_answer["similar_event_ids"]:
+            assert graph_answer["similar_event_outcomes"]
+
+
+def test_kg_level1_in_memory_graph_records_relationship_fanout(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-context-kg-level1-fanout.db", root=ROOT)
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    graph = build_agent_context_graph(packet)
+    node_types = {node.node_type for node in graph.nodes.values()}
+    relations = {edge.relation for edge in graph.edges}
+
+    assert {
+        "PredictionSnapshot",
+        "Asset",
+        "Factor",
+        "Component",
+        "InspectionLocation",
+        "SparePart",
+        "SimilarEvent",
+        "Outcome",
+    }.issubset(node_types)
+    assert {
+        "has_factor",
+        "maps_to_component",
+        "checked_at",
+        "has_spare_part_candidate",
+        "has_similar_event",
+        "resulted_in",
+    }.issubset(relations)
+    assert "approve_work_order" not in json.dumps(
+        {
+            "nodes": [node.__dict__ for node in graph.nodes.values()],
+            "edges": [edge.__dict__ for edge in graph.edges],
+        },
+        ensure_ascii=False,
+    )
 
 
 def test_rag_decision_gate_defers_runtime_rag_for_structured_sop(tmp_path: Path) -> None:

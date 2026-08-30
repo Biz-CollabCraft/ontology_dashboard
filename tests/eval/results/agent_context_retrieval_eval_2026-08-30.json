@@ -35,6 +35,22 @@
     "same_pass_fail_rubric": true,
     "same_runtime_service": true
   },
+  "kg_level1_experiment": {
+    "status": "implemented_as_in_memory_graph",
+    "module": "systems/backend/app/mvp/agent_context_graph.py",
+    "graph_store": "none",
+    "dependency_added": false,
+    "purpose": "Verify graph-shaped traversal over the existing read-only packet before adopting a production graph database.",
+    "covered_relations": [
+      "PredictionSnapshot -> Factor",
+      "Factor -> Component",
+      "Component -> InspectionLocation",
+      "Component -> SOP",
+      "Component -> SparePart",
+      "Component -> SimilarEvent",
+      "SimilarEvent -> Outcome"
+    ]
+  },
   "relationship_facets": [
     "factor_refs",
     "component_id",
