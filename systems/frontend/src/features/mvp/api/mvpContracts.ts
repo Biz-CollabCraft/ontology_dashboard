@@ -484,6 +484,20 @@ export interface MvpAgentReviewPacket {
     limitations: string[];
     source_ref: string | null;
   } | null;
+  ontology_context: {
+    provider: string;
+    mutation_allowed: false;
+    traversals: Array<{
+      component_id: string;
+      component_label: string;
+      factor_refs: string[];
+      location_label: string | null;
+      location_source_ref: string | null;
+      sop_ids: string[];
+      source_refs: string[];
+    }>;
+    source_refs: string[];
+  };
   history_review_items: string[];
   evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
   source_refs: string[];

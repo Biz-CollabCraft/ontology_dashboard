@@ -19,6 +19,18 @@ import {
 } from "../components/MvpUi";
 import { displayAssetName, displayEventAssetName, displayEventLabel, fieldFactorItem, fieldFailureLabel } from "../displayLabels";
 
+function reportAgentSummaryStatusLabel(payload: MvpAgentReviewSummaryResponse | null): string {
+  if (payload?.trace.materialization?.reused) return "저장본 재사용";
+  const status = payload?.trace.materialization?.status;
+  if (status === "ready") return "검증 완료";
+  if (status === "fallback") return "검증 fallback";
+  if (status === "failed") return "생성 실패";
+  if (status === "stale") return "갱신 필요";
+  if (payload?.summary.mode === "llm") return "LLM 검증 완료";
+  if (payload?.summary.mode === "deterministic_fallback") return "규칙 기반 요약";
+  return "조회 대기";
+}
+
 export function MvpExecutiveReportPage({
   model,
   selectedEvent,
@@ -109,7 +121,7 @@ export function MvpExecutiveReportPage({
         </section>
 
         <section className="mvp-report-agent-summary">
-          <header><Bot size={17} /><span>AI 저장 요약</span><strong>{agentSummary?.trace.materialization?.reused ? "동일 근거 snapshot 재사용" : "저장 요약 조회"}</strong></header>
+          <header><Bot size={17} /><span>AI 저장 요약</span><strong>{reportAgentSummaryStatusLabel(agentSummary)}</strong></header>
           {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
           {!agentSummaryLoading && agentSummaryError ? <p>{agentSummaryError}</p> : null}
           {!agentSummaryLoading && agentSummary ? (

@@ -245,6 +245,24 @@ function displayPartLabel(value: boolean | null): string {
   return partLabel(value);
 }
 
+function agentSummaryStatusLabel(trace: MvpAgentReviewSummaryResponse["trace"] | null, summary: MvpAgentReviewSummary | null): string {
+  if (trace?.materialization?.reused) return "저장본 재사용";
+  const status = trace?.materialization?.status;
+  if (status === "ready") return "검증 완료";
+  if (status === "fallback") return "검증 fallback";
+  if (status === "failed") return "생성 실패";
+  if (status === "stale") return "갱신 필요";
+  if (summary?.mode === "llm") return "LLM 검증 완료";
+  if (summary?.mode === "deterministic_fallback") return "규칙 기반 요약";
+  return "조회 대기";
+}
+
+function agentSummaryModeLabel(summary: MvpAgentReviewSummary | null): string {
+  if (summary?.mode === "llm") return "LLM 요약";
+  if (summary?.mode === "deterministic_fallback") return "규칙 기반 fallback";
+  return "미생성";
+}
+
 function displayFactorySite(site: string): string {
   return FACTORY_SITE_LABELS[site] ?? site;
 }
@@ -1764,8 +1782,8 @@ function AssetPreviewPanel({
                           <div><dt>위험도</dt><dd>{asset.status}</dd></div>
                           <div><dt>근거 묶음</dt><dd>{agentFocusItems.length ? `${agentFocusItems.length}개 점검 계통` : "저장 요약"}</dd></div>
                           <div><dt>상태 변경</dt><dd>불가</dd></div>
-                          <div><dt>생성 상태</dt><dd>{agentSummaryTrace?.materialization?.status ?? "ready"}</dd></div>
-                          <div><dt>요약 방식</dt><dd>{agentSummary.mode === "llm" ? "LLM 검증 통과" : "규칙 기반 fallback"}</dd></div>
+                          <div><dt>요약 상태</dt><dd>{agentSummaryStatusLabel(agentSummaryTrace, agentSummary)}</dd></div>
+                          <div><dt>요약 방식</dt><dd>{agentSummaryModeLabel(agentSummary)}</dd></div>
                         </dl>
                         {agentSummaryTrace?.materialization?.reused ? (
                           <small>동일 snapshot 기준으로 저장된 요약을 재사용했습니다.</small>
