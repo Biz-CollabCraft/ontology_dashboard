@@ -6,6 +6,14 @@ from typing import Any, Protocol
 
 
 AGENT_REVIEW_SUMMARY_FLOW_VERSION = "agent-review-summary-flow-v1.0"
+AGENT_REVIEW_SUMMARY_WORKFLOW_ENGINE = "simple"
+DEFAULT_WORKFLOW_MAX_ATTEMPTS = 2
+WORKFLOW_RETRY_POLICY = {
+    "snapshot_scan": "retry transient service failures; fail fast on invalid project or asset scope",
+    "packet_build": "service-owned validation; retry only if the whole run is retried",
+    "summary_materialization": "provider failures become fallback summaries; service exceptions may retry",
+    "consumer_ready": "no retry; reports stored materialization status only",
+}
 
 
 class AgentReviewSummaryWorkflowService(Protocol):
@@ -34,12 +42,43 @@ class AgentReviewSummaryWorkflow:
         history_window: str = "24h",
         limit: int | None = None,
         trigger: str = "polling_watcher",
+        max_attempts: int = DEFAULT_WORKFLOW_MAX_ATTEMPTS,
     ) -> dict[str, Any]:
-        materialization = self.service.materialize_agent_review_summaries(
-            project_id,
-            history_window=history_window,
-            limit=limit,
-        )
+        attempt_limit = max(1, int(max_attempts))
+        attempts: list[dict[str, Any]] = []
+        materialization: dict[str, Any] | None = None
+        for attempt in range(1, attempt_limit + 1):
+            try:
+                materialization = self.service.materialize_agent_review_summaries(
+                    project_id,
+                    history_window=history_window,
+                    limit=limit,
+                )
+                attempts.append({"attempt": attempt, "status": "succeeded"})
+                break
+            except Exception as exc:
+                attempts.append(
+                    {
+                        "attempt": attempt,
+                        "status": "failed",
+                        "error_type": type(exc).__name__,
+                        "message": str(exc),
+                    }
+                )
+                if attempt >= attempt_limit:
+                    return _failed_workflow_result(
+                        trigger=trigger,
+                        attempts=attempts,
+                        max_attempts=attempt_limit,
+                    )
+
+        if materialization is None:
+            return _failed_workflow_result(
+                trigger=trigger,
+                attempts=attempts,
+                max_attempts=attempt_limit,
+            )
+
         materialized_count = int(materialization.get("materialized_count") or 0)
         created_count = int(materialization.get("created_count") or 0)
         reused_count = int(materialization.get("reused_count") or 0)
@@ -53,6 +92,14 @@ class AgentReviewSummaryWorkflow:
             "trigger": trigger,
             "read_only": True,
             "mutation_allowed": False,
+            "workflow": {
+                "engine": AGENT_REVIEW_SUMMARY_WORKFLOW_ENGINE,
+                "max_attempts": attempt_limit,
+                "attempt_count": len(attempts),
+                "terminal_status": "completed" if failed_count == 0 else "partial",
+                "retry_policy": WORKFLOW_RETRY_POLICY,
+                "attempts": attempts,
+            },
             "stages": [
                 {
                     "stage": "snapshot_scan",
@@ -80,3 +127,54 @@ class AgentReviewSummaryWorkflow:
             ],
             **materialization,
         }
+
+
+def _failed_workflow_result(
+    *,
+    trigger: str,
+    attempts: list[dict[str, Any]],
+    max_attempts: int,
+) -> dict[str, Any]:
+    return {
+        "flow_version": AGENT_REVIEW_SUMMARY_FLOW_VERSION,
+        "trigger": trigger,
+        "read_only": True,
+        "mutation_allowed": False,
+        "workflow": {
+            "engine": AGENT_REVIEW_SUMMARY_WORKFLOW_ENGINE,
+            "max_attempts": max_attempts,
+            "attempt_count": len(attempts),
+            "terminal_status": "failed",
+            "retry_policy": WORKFLOW_RETRY_POLICY,
+            "attempts": attempts,
+        },
+        "materialized_count": 0,
+        "created_count": 0,
+        "reused_count": 0,
+        "items": [],
+        "stages": [
+            {
+                "stage": "snapshot_scan",
+                "status": "failed",
+                "item_count": 0,
+            },
+            {
+                "stage": "packet_build",
+                "status": "skipped",
+                "item_count": 0,
+            },
+            {
+                "stage": "summary_materialization",
+                "status": "skipped",
+                "created_count": 0,
+                "reused_count": 0,
+                "failed_count": 0,
+            },
+            {
+                "stage": "consumer_ready",
+                "status": "blocked",
+                "consumer_contract": "agent-review-summary-v1.0",
+                "consumers": ["role_workflow_ui", "executive_brief_report"],
+            },
+        ],
+    }

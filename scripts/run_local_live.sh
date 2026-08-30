@@ -44,11 +44,13 @@ PORT_RETRY_LIMIT="${PORT_RETRY_LIMIT:-20}"
 AUTO_START_DOCKER="${AUTO_START_DOCKER:-1}"
 DOCKER_START_TIMEOUT_SECONDS="${DOCKER_START_TIMEOUT_SECONDS:-90}"
 SKIP_POSTGRES="${SKIP_POSTGRES:-0}"
+STOP_POSTGRES_ON_EXIT="${STOP_POSTGRES_ON_EXIT:-0}"
 SKIP_DEMO_BOOTSTRAP="${SKIP_DEMO_BOOTSTRAP:-0}"
 PM_DEMO_PACKAGE_ROOT="${PM_DEMO_PACKAGE_ROOT:-}"
 ENABLE_AGENT_SUMMARY_WATCHER="${ENABLE_AGENT_SUMMARY_WATCHER:-0}"
 AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS="${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS:-60}"
 AGENT_SUMMARY_WATCHER_LIMIT="${AGENT_SUMMARY_WATCHER_LIMIT:-10}"
+AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS="${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS:-2}"
 
 API_LOG="${API_LOG:-/tmp/ontology-dashboard-live-api.log}"
 WEB_LOG="${WEB_LOG:-/tmp/ontology-dashboard-live-web.log}"
@@ -222,6 +224,9 @@ cleanup() {
     kill "${WATCHER_PID}" 2>/dev/null || true
   fi
   kill "${API_PID}" "${WEB_PID}" 2>/dev/null || true
+  if [[ "${SKIP_POSTGRES}" != "1" && "${STOP_POSTGRES_ON_EXIT}" == "1" ]]; then
+    docker compose -f infra/docker-compose.yml --profile polyglot stop postgres >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -241,14 +246,19 @@ for _ in $(seq 1 90); do
         --database "${ONTOLOGY_DASHBOARD_DATABASE_URL}" \
         --watch \
         --limit "${AGENT_SUMMARY_WATCHER_LIMIT}" \
+        --max-attempts "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}" \
         --interval-seconds "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" > "${AGENT_SUMMARY_WATCHER_LOG}" 2>&1 &
       WATCHER_PID=$!
-      printf '  Agent Summary Watcher: pid %s, interval %ss, limit %s\n' "${WATCHER_PID}" "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" "${AGENT_SUMMARY_WATCHER_LIMIT}"
+      printf '  Agent Summary Watcher: pid %s, interval %ss, limit %s, max attempts %s\n' "${WATCHER_PID}" "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" "${AGENT_SUMMARY_WATCHER_LIMIT}" "${AGENT_SUMMARY_WATCHER_MAX_ATTEMPTS}"
       printf '  Logs: %s %s %s\n' "${API_LOG}" "${WEB_LOG}" "${AGENT_SUMMARY_WATCHER_LOG}"
     else
       printf '  Logs: %s %s\n' "${API_LOG}" "${WEB_LOG}"
     fi
-    echo 'Press Ctrl+C to stop API and Web. Docker Postgres keeps running.'
+    if [[ "${SKIP_POSTGRES}" != "1" && "${STOP_POSTGRES_ON_EXIT}" == "1" ]]; then
+      echo 'Press Ctrl+C to stop API, Web, watcher, and Docker Postgres.'
+    else
+      echo 'Press Ctrl+C to stop API, Web, and watcher. Docker Postgres keeps running.'
+    fi
     if command -v open >/dev/null 2>&1 && [[ "${OPEN_BROWSER:-1}" == "1" ]]; then
       open "http://${APP_CHECK_HOST}:${WEB_PORT}/login" >/dev/null 2>&1 || true
     fi

@@ -37,7 +37,7 @@ Current implementation baseline:
 - `systems/backend/app/mvp/agent_review_packet.py` composes packet context from ViewModel and adapter-supplied SOP retrieval.
 - `systems/backend/app/mvp/agent_review_summary.py` composes deterministic fallback and validates summary output.
 - `systems/backend/app/mvp/agent_review_summary_provider.py` wraps the LLM provider.
-- `systems/backend/app/mvp/agent_review_summary_workflow.py` exposes the current lightweight workflow result for watcher execution.
+- `systems/backend/app/mvp/agent_review_summary_workflow.py` exposes the current lightweight workflow result for watcher execution, including engine identity, bounded retry attempts, terminal status, and read-only consumer readiness.
 - `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx` consumes the summary inline.
 - `tests/fixtures/agent_review_packets/` and summary tests provide the first gold traces.
 
@@ -122,7 +122,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U3. Polling Watcher Materialization
 
-- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, the watcher emits stage status, and `run_local_live.sh` can start the watcher with bounded polling.
+- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, the watcher emits stage status, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
 - **Goal:** Decide whether AI summaries should be prepared before the user opens the UI.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary.py`
@@ -132,12 +132,14 @@ The important boundary is that adapters gather domain facts, while the packet de
   - `scripts/watch_agent_review_summaries.py`
   - `tests/test_mvp.py`
   - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
-- **Approach:** Start with a Level 0 watcher contract: discover new or changed Product Result artifacts, compute packet checksum, compute summary, validate it, store status, and emit read-only workflow stages. Do not mutate Closed-loop. Do not introduce event/outbox promotion in this unit.
+- **Approach:** Start with a Level 0 watcher contract: discover new or changed Product Result artifacts, compute packet checksum, compute summary, validate it, store status, and emit read-only workflow stages. The simple workflow boundary now reports `engine`, `max_attempts`, `attempt_count`, `terminal_status`, retry policy, and per-attempt errors. Do not mutate Closed-loop. Do not introduce event/outbox promotion in this unit.
 - **Test Scenarios:**
   - Same artifact checksum is not summarized twice.
   - Provider failure records fallback status and validation errors.
   - New artifact checksum triggers a new summary materialization.
   - Materialized summary is read by UI when fresh; request-time generation remains fallback.
+  - Transient materialization service failure retries within the workflow boundary and reports attempt history.
+  - Terminal materialization failure blocks `consumer_ready` without creating Closed-loop actions.
 - **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
 
 ### U4. SOP / Ontology Exploration Adapter

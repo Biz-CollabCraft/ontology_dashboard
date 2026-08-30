@@ -43,6 +43,7 @@ def run_once(
     project_id: str,
     history_window: str,
     limit: int | None,
+    max_attempts: int,
 ) -> dict:
     configure_imports(root)
     from app.dependencies import build_manufacturing_service
@@ -54,6 +55,7 @@ def run_once(
         history_window=history_window,
         limit=limit,
         trigger="polling_watcher",
+        max_attempts=max_attempts,
     )
     return {
         "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -77,6 +79,7 @@ def main() -> None:
         default="24h",
     )
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--max-attempts", type=int, default=2)
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--interval-seconds", type=float, default=60.0)
     parser.add_argument("--max-iterations", type=int)
@@ -93,6 +96,7 @@ def main() -> None:
             project_id=args.project_id,
             history_window=args.history_window,
             limit=args.limit,
+            max_attempts=args.max_attempts,
         )
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         if not args.watch:

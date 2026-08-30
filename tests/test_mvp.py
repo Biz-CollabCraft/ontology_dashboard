@@ -711,6 +711,12 @@ def test_agent_review_summary_workflow_reports_read_only_stage_status(
     assert first["trigger"] == "polling_watcher"
     assert first["read_only"] is True
     assert first["mutation_allowed"] is False
+    assert first["workflow"]["engine"] == "simple"
+    assert first["workflow"]["max_attempts"] == 2
+    assert first["workflow"]["attempt_count"] == 1
+    assert first["workflow"]["terminal_status"] == "completed"
+    assert first["workflow"]["attempts"] == [{"attempt": 1, "status": "succeeded"}]
+    assert "summary_materialization" in first["workflow"]["retry_policy"]
     assert first["stages"] == [
         {"stage": "snapshot_scan", "status": "completed", "item_count": 1},
         {"stage": "packet_build", "status": "completed", "item_count": 1},
@@ -731,6 +737,82 @@ def test_agent_review_summary_workflow_reports_read_only_stage_status(
     assert second["created_count"] == 0
     assert second["reused_count"] == 1
     assert provider.calls == 1
+
+
+def test_agent_review_summary_workflow_retries_transient_service_failure() -> None:
+    class FlakyMaterializationService:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def materialize_agent_review_summaries(
+            self,
+            project_id: str = "manufacturing-demo-project",
+            *,
+            history_window: str = "24h",
+            limit: int | None = None,
+        ) -> dict:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("database temporarily unavailable")
+            return {
+                "materialized_count": 1,
+                "created_count": 1,
+                "reused_count": 0,
+                "items": [{"status": "ready"}],
+            }
+
+    service = FlakyMaterializationService()
+    result = AgentReviewSummaryWorkflow(service).run(limit=1, max_attempts=2)
+
+    assert service.calls == 2
+    assert result["workflow"]["terminal_status"] == "completed"
+    assert result["workflow"]["attempt_count"] == 2
+    assert result["workflow"]["attempts"][0]["status"] == "failed"
+    assert result["workflow"]["attempts"][0]["error_type"] == "RuntimeError"
+    assert result["workflow"]["attempts"][1] == {"attempt": 2, "status": "succeeded"}
+    assert result["stages"][0]["status"] == "completed"
+    assert result["read_only"] is True
+    assert result["mutation_allowed"] is False
+
+
+def test_agent_review_summary_workflow_reports_terminal_failure_without_mutation() -> None:
+    class BrokenMaterializationService:
+        def materialize_agent_review_summaries(
+            self,
+            project_id: str = "manufacturing-demo-project",
+            *,
+            history_window: str = "24h",
+            limit: int | None = None,
+        ) -> dict:
+            raise TimeoutError("summary store unavailable")
+
+    result = AgentReviewSummaryWorkflow(BrokenMaterializationService()).run(
+        limit=1,
+        max_attempts=2,
+    )
+
+    assert result["workflow"]["terminal_status"] == "failed"
+    assert result["workflow"]["attempt_count"] == 2
+    assert result["workflow"]["attempts"][0]["error_type"] == "TimeoutError"
+    assert result["stages"] == [
+        {"stage": "snapshot_scan", "status": "failed", "item_count": 0},
+        {"stage": "packet_build", "status": "skipped", "item_count": 0},
+        {
+            "stage": "summary_materialization",
+            "status": "skipped",
+            "created_count": 0,
+            "reused_count": 0,
+            "failed_count": 0,
+        },
+        {
+            "stage": "consumer_ready",
+            "status": "blocked",
+            "consumer_contract": "agent-review-summary-v1.0",
+            "consumers": ["role_workflow_ui", "executive_brief_report"],
+        },
+    ]
+    assert result["read_only"] is True
+    assert result["mutation_allowed"] is False
 
 
 def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
