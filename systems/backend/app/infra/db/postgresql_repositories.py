@@ -268,6 +268,7 @@ class PostgreSQLAuditRepository(AuditRepository):
                 "conversations",
                 "audit_log",
                 "agent_review_summaries",
+                "agent_review_workflow_runs",
                 "ontology_action_invocations",
             ):
                 connection.execute(f"DELETE FROM {table}")

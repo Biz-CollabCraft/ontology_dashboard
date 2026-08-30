@@ -36,6 +36,7 @@ class AgentReviewSummaryMaterializer:
         packet: dict[str, Any],
         project_id: str,
         history_window: str,
+        workflow_run_id: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         key_payload = summary_key_payload(
             packet=packet,
@@ -56,6 +57,7 @@ class AgentReviewSummaryMaterializer:
         status = "fallback" if trace["fallback"] else "ready"
         record = self.repository.save_agent_review_summary(
             summary_key=materialization_key,
+            workflow_run_id=workflow_run_id,
             organization_id="org-ontology-demo",
             project_id=project_id,
             workspace_id="manufacturing-demo",
@@ -225,6 +227,7 @@ def _materialization_trace(record: dict[str, Any], *, reused: bool) -> dict[str,
     return {
         "summary_id": record["summary_id"],
         "summary_key": record["summary_key"],
+        "workflow_run_id": record.get("workflow_run_id"),
         "status": record["status"],
         "reused": reused,
         "source_sha256": record["source_sha256"],
@@ -246,6 +249,7 @@ def _pending_materialization_trace(
     return {
         "summary_id": None,
         "summary_key": summary_key,
+        "workflow_run_id": None,
         "status": "pending",
         "reused": False,
         "source_sha256": key_payload["source_sha256"],

@@ -62,6 +62,7 @@ class AuditRepository:
                 CREATE TABLE IF NOT EXISTS agent_review_summaries (
                     summary_id TEXT PRIMARY KEY,
                     summary_key TEXT NOT NULL UNIQUE,
+                    workflow_run_id TEXT,
                     organization_id TEXT NOT NULL DEFAULT 'org-ontology-demo',
                     project_id TEXT NOT NULL,
                     workspace_id TEXT NOT NULL DEFAULT 'manufacturing-demo',
@@ -87,7 +88,42 @@ class AuditRepository:
                     ON agent_review_summaries (
                         organization_id, project_id, workspace_id, asset_id, event_id, dataset_version_id, updated_at
                     );
-                """
+                CREATE TABLE IF NOT EXISTS agent_review_workflow_runs (
+                    workflow_run_id TEXT PRIMARY KEY,
+                    trigger TEXT NOT NULL,
+                    engine TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    organization_id TEXT NOT NULL DEFAULT 'org-ontology-demo',
+                    project_id TEXT NOT NULL,
+                    workspace_id TEXT NOT NULL DEFAULT 'manufacturing-demo',
+                    asset_id TEXT NOT NULL,
+                    event_id TEXT,
+                    dataset_version_id TEXT,
+                    history_window TEXT NOT NULL,
+                    summary_key TEXT NOT NULL,
+                    source_sha256 TEXT NOT NULL,
+                    context_sha256 TEXT NOT NULL,
+                    packet_schema_version TEXT NOT NULL,
+                    prompt_version TEXT NOT NULL,
+                    model_version TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    updated_at TEXT NOT NULL,
+                    error_type TEXT,
+                    error_message TEXT,
+                    trace_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_agent_review_workflow_runs_lookup
+                    ON agent_review_workflow_runs (
+                        organization_id, project_id, workspace_id, asset_id, event_id, dataset_version_id, updated_at
+                    );
+            """
+            )
+            self._ensure_column(
+                connection,
+                "agent_review_summaries",
+                "workflow_run_id",
+                "TEXT",
             )
             self._ensure_column(
                 connection,
@@ -198,11 +234,99 @@ class AuditRepository:
             return None
         return self._summary_record_from_row(dict(row))
 
+    def create_agent_review_workflow_run(self, **record: Any) -> dict[str, Any]:
+        now = self._now()
+        payload = {
+            "workflow_run_id": str(record.get("workflow_run_id") or uuid.uuid4()),
+            "trigger": str(record["trigger"]),
+            "engine": str(record.get("engine") or "simple"),
+            "status": str(record.get("status") or "running"),
+            "organization_id": str(record.get("organization_id") or "org-ontology-demo"),
+            "project_id": str(record["project_id"]),
+            "workspace_id": str(record.get("workspace_id") or "manufacturing-demo"),
+            "asset_id": str(record["asset_id"]),
+            "event_id": record.get("event_id"),
+            "dataset_version_id": record.get("dataset_version_id"),
+            "history_window": str(record["history_window"]),
+            "summary_key": str(record["summary_key"]),
+            "source_sha256": str(record["source_sha256"]),
+            "context_sha256": str(record["context_sha256"]),
+            "packet_schema_version": str(record["packet_schema_version"]),
+            "prompt_version": str(record["prompt_version"]),
+            "model_version": str(record["model_version"]),
+            "started_at": str(record.get("started_at") or now),
+            "completed_at": record.get("completed_at"),
+            "updated_at": now,
+            "error_type": record.get("error_type"),
+            "error_message": record.get("error_message"),
+            "trace_json": json.dumps(record.get("trace") or {}, ensure_ascii=False, sort_keys=True),
+        }
+        columns = ",".join(payload.keys())
+        placeholders = ",".join("?" for _ in payload)
+        with self._connect() as connection:
+            connection.execute(
+                f"""
+                INSERT INTO agent_review_workflow_runs ({columns})
+                VALUES ({placeholders})
+                """,
+                tuple(payload.values()),
+            )
+            row = connection.execute(
+                "SELECT * FROM agent_review_workflow_runs WHERE workflow_run_id=?",
+                (payload["workflow_run_id"],),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("agent_review_workflow_run_create_failed")
+        return self._workflow_run_record_from_row(dict(row))
+
+    def finish_agent_review_workflow_run(
+        self,
+        workflow_run_id: str,
+        **updates: Any,
+    ) -> dict[str, Any]:
+        now = self._now()
+        payload = {
+            "status": str(updates["status"]),
+            "completed_at": updates.get("completed_at") or now,
+            "updated_at": now,
+            "error_type": updates.get("error_type"),
+            "error_message": updates.get("error_message"),
+            "trace_json": json.dumps(updates.get("trace") or {}, ensure_ascii=False, sort_keys=True),
+            "workflow_run_id": workflow_run_id,
+        }
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE agent_review_workflow_runs
+                SET status=?, completed_at=?, updated_at=?, error_type=?, error_message=?, trace_json=?
+                WHERE workflow_run_id=?
+                """,
+                tuple(payload.values()),
+            )
+            row = connection.execute(
+                "SELECT * FROM agent_review_workflow_runs WHERE workflow_run_id=?",
+                (workflow_run_id,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("agent_review_workflow_run_update_failed")
+        return self._workflow_run_record_from_row(dict(row))
+
+    def get_agent_review_workflow_run(self, workflow_run_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM agent_review_workflow_runs WHERE workflow_run_id=?",
+                (workflow_run_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._workflow_run_record_from_row(dict(row))
+
     def save_agent_review_summary(self, **record: Any) -> dict[str, Any]:
         now = self._now()
         payload = {
             "summary_id": str(record.get("summary_id") or uuid.uuid4()),
             "summary_key": str(record["summary_key"]),
+            "workflow_run_id": record.get("workflow_run_id"),
             "organization_id": str(record.get("organization_id") or "org-ontology-demo"),
             "project_id": str(record["project_id"]),
             "workspace_id": str(record.get("workspace_id") or "manufacturing-demo"),
@@ -263,7 +387,8 @@ class AuditRepository:
         with self._connect() as connection:
             connection.executescript(
                 "DELETE FROM decisions; DELETE FROM notes; DELETE FROM conversations; "
-                "DELETE FROM audit_log; DELETE FROM agent_review_summaries;"
+                "DELETE FROM audit_log; DELETE FROM agent_review_summaries; "
+                "DELETE FROM agent_review_workflow_runs;"
             )
             ontology_table = connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ontology_action_invocations'"
@@ -283,6 +408,14 @@ class AuditRepository:
             "snapshot_basis": decode(row["snapshot_basis_json"]),
             "summary": decode(row["summary_json"]),
             "trace": decode(row["trace_json"]),
+        }
+
+    @staticmethod
+    def _workflow_run_record_from_row(row: dict[str, Any]) -> dict[str, Any]:
+        trace = row.get("trace_json")
+        return {
+            **row,
+            "trace": json.loads(str(trace)) if trace else {},
         }
 
     @staticmethod

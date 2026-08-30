@@ -650,6 +650,16 @@ def test_agent_review_summary_service_accepts_valid_provider_candidate(
     }
     assert trace["materialization"]["status"] == "ready"
     assert trace["materialization"]["reused"] is False
+    assert trace["workflow_run"]["trigger"] == "manual_materialization"
+    assert trace["workflow_run"]["status"] == "completed"
+    assert trace["materialization"]["workflow_run_id"] == trace["workflow_run"][
+        "workflow_run_id"
+    ]
+    stored_run = service.repository.get_agent_review_workflow_run(
+        trace["workflow_run"]["workflow_run_id"]
+    )
+    assert stored_run is not None
+    assert stored_run["summary_key"] == trace["materialization"]["summary_key"]
 
 
 def test_agent_review_summary_reuses_materialized_snapshot(
@@ -678,6 +688,11 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     assert first_payload["trace"]["materialization"]["reused"] is False
     assert second_payload["trace"]["materialization"]["reused"] is True
     assert second_payload["trace"]["materialization"]["status"] == "ready"
+    assert first_payload["trace"]["workflow_run"]["status"] == "completed"
+    assert second_payload["trace"].get("workflow_run") is None
+    assert second_payload["trace"]["materialization"]["workflow_run_id"] == first_payload[
+        "trace"
+    ]["workflow_run"]["workflow_run_id"]
 
 
 def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
@@ -701,6 +716,8 @@ def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
     assert payload["trace"]["reason"] == "summary_not_materialized"
     assert payload["trace"]["materialization"]["status"] == "pending"
     assert payload["trace"]["materialization"]["reused"] is False
+    assert payload["trace"].get("workflow_run") is None
+    assert payload["trace"]["materialization"]["workflow_run_id"] is None
     assert payload["trace"]["materialization"]["summary_key"].startswith(
         "agent-review-summary:"
     )
@@ -802,6 +819,10 @@ def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
     assert second["materialized_count"] == 2
     assert second["created_count"] == 0
     assert second["reused_count"] == 2
+    assert all(item["workflow_run_id"] for item in first["items"])
+    assert {item["workflow_status"] for item in first["items"]} == {"completed"}
+    assert all(item["workflow_run_id"] for item in second["items"])
+    assert {item["workflow_status"] for item in second["items"]} == {"completed"}
     assert provider.calls == 2
 
 

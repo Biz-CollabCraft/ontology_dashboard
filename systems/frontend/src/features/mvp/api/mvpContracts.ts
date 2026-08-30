@@ -606,6 +606,7 @@ export interface MvpAgentReviewSummaryResponse {
     materialization?: {
       summary_id: string | null;
       summary_key: string;
+      workflow_run_id: string | null;
       status: "ready" | "fallback" | "failed" | "stale" | "pending";
       reused: boolean;
       source_sha256: string;
@@ -616,6 +617,20 @@ export interface MvpAgentReviewSummaryResponse {
       created_at: string | null;
       updated_at: string | null;
       fallback_reason?: string | null;
+    };
+    workflow_run?: {
+      workflow_run_id: string;
+      trigger: string;
+      engine: string;
+      status: "running" | "completed" | "partial" | "failed";
+      started_at: string;
+      completed_at: string | null;
+      updated_at: string;
+      summary_key: string;
+      source_sha256: string;
+      context_sha256: string;
+      error_type: string | null;
+      error_message: string | null;
     };
   };
 }

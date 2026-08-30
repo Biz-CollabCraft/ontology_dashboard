@@ -123,7 +123,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U3. Polling Watcher Materialization
 
-- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, the watcher emits stage status, `GET /agent-review-summary` is stored-summary lookup only, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
+- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, each materialization attempt records an `agent_review_workflow_runs` row, summaries store the generating `workflow_run_id`, the watcher emits stage status, `GET /agent-review-summary` is stored-summary lookup only, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
 - **Goal:** Decide whether AI summaries should be prepared before the user opens the UI.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary.py`
@@ -140,9 +140,11 @@ The important boundary is that adapters gather domain facts, while the packet de
   - New artifact checksum triggers a new summary materialization.
   - Materialized summary is read by UI when fresh; cache miss returns `pending` without LLM or fallback generation.
   - `POST /agent-review-summary` and watcher execution remain explicit materialization triggers.
+  - Each explicit materialization trigger records a workflow run with trigger, engine, status, source/context checksum, and summary key.
+  - Summary rows point back to the workflow run that generated them; cached `GET` reads expose that run reference without starting a new run.
   - Transient materialization service failure retries within the workflow boundary and reports attempt history.
   - Terminal materialization failure blocks `consumer_ready` without creating Closed-loop actions.
-- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
+- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Tests verify explicit materialization creates a workflow run, cached `GET` does not start a run, summary rows retain the generating `workflow_run_id`, and watcher items report workflow status. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
 
 ### U4. SOP / Ontology Exploration Adapter
 
