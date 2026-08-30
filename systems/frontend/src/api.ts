@@ -649,6 +649,25 @@ export function getMvpAgentReviewSummary(input: {
   );
 }
 
+export function createMvpAgentReviewSummary(input: {
+  assetId: string;
+  projectId?: string;
+  datasetVersionId?: string | null;
+  historyWindow?: string;
+  trigger?: "manual_materialization" | "ui_manual_regeneration";
+}): Promise<MvpAgentReviewSummaryResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId ?? "manufacturing-demo-project",
+    history_window: input.historyWindow ?? "24h",
+    trigger: input.trigger ?? "ui_manual_regeneration",
+  });
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  return request<MvpAgentReviewSummaryResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { method: "POST" },
+  );
+}
+
 export function getGovernanceOverview(
   projectId: string,
   workspaceId: string,

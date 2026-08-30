@@ -673,7 +673,9 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     provider = FakeAgentReviewSummaryProvider(payload_factory)
     service.agent_review_summary_provider = provider
 
-    first = client.post("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    first = client.post(
+        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=ui_manual_regeneration"
+    )
     second = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
 
     assert first.status_code == 200
@@ -688,9 +690,14 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     assert first_payload["trace"]["materialization"]["reused"] is False
     assert second_payload["trace"]["materialization"]["reused"] is True
     assert second_payload["trace"]["materialization"]["status"] == "ready"
+    assert first_payload["trace"]["workflow_run"]["trigger"] == "ui_manual_regeneration"
     assert first_payload["trace"]["workflow_run"]["status"] == "completed"
-    assert second_payload["trace"].get("workflow_run") is None
+    assert second_payload["trace"]["workflow_run"]["status"] == "completed"
+    assert second_payload["trace"]["workflow_run"]["trigger"] == "ui_manual_regeneration"
     assert second_payload["trace"]["materialization"]["workflow_run_id"] == first_payload[
+        "trace"
+    ]["workflow_run"]["workflow_run_id"]
+    assert second_payload["trace"]["workflow_run"]["workflow_run_id"] == first_payload[
         "trace"
     ]["workflow_run"]["workflow_run_id"]
 
@@ -985,6 +992,23 @@ def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
     assert "자동 승인" in payload["summary"]["boundary_note"]
     assert not action_ids.intersection(serialized)
     assert payload["trace"]["materialization"]["status"] == "ready"
+
+
+def test_agent_review_summary_absorbs_adapter_context_into_role_quotes(
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+
+    summary = compose_deterministic_agent_review_summary(packet)
+    role_quotes = {item["role"]: item["quote"] for item in summary["role_summaries"]}
+
+    assert "주축 구동 커플링 키트" in role_quotes["field_operator"]
+    assert "7월 22일" in role_quotes["process_manager"]
+    assert "약 51건" in role_quotes["process_manager"]
+    assert "기계 동력" in role_quotes["process_manager"]
+    assert "점검 요청" in role_quotes["process_manager"]
+    assert set(summary["source_refs"]).issubset(set(packet["source_refs"]))
+    assert "자동 승인" in summary["boundary_note"]
 
 
 def test_agent_review_summary_service_falls_back_when_provider_candidate_is_invalid(

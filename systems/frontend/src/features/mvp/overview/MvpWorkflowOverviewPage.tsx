@@ -14,7 +14,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getMvpAgentReviewSummary } from "../../../api";
+import { createMvpAgentReviewSummary, getMvpAgentReviewSummary } from "../../../api";
 import type {
   MvpAgentReviewSummary,
   MvpAgentReviewSummaryResponse,
@@ -262,6 +262,30 @@ function agentSummaryModeLabel(summary: MvpAgentReviewSummary | null): string {
   if (summary?.mode === "llm") return "LLM 요약";
   if (summary?.mode === "deterministic_fallback") return "규칙 기반 fallback";
   return "미생성";
+}
+
+function agentSummaryWorkflowRunLabel(trace: MvpAgentReviewSummaryResponse["trace"] | null): string {
+  const run = trace?.workflow_run;
+  if (!run) return trace?.materialization?.workflow_run_id ? "저장 run" : "미연결";
+  const triggerLabel = run.trigger === "polling_watcher"
+    ? "watcher"
+    : run.trigger === "ui_manual_regeneration"
+      ? "수동 갱신"
+      : "수동 생성";
+  const statusLabel = run.status === "completed"
+    ? "완료"
+    : run.status === "partial"
+      ? "부분 완료"
+      : run.status === "failed"
+        ? "실패"
+        : "진행 중";
+  return `${triggerLabel} · ${statusLabel}`;
+}
+
+function agentSummaryWorkflowRunTime(trace: MvpAgentReviewSummaryResponse["trace"] | null): string | null {
+  const completedAt = trace?.workflow_run?.completed_at;
+  if (!completedAt) return null;
+  return formatTimestamp(completedAt);
 }
 
 function displayFactorySite(site: string): string {
@@ -1544,6 +1568,7 @@ function AssetPreviewPanel({
   const [agentSummary, setAgentSummary] = useState<MvpAgentReviewSummary | null>(null);
   const [agentSummaryTrace, setAgentSummaryTrace] = useState<MvpAgentReviewSummaryResponse["trace"] | null>(null);
   const [agentSummaryLoading, setAgentSummaryLoading] = useState(false);
+  const [agentSummaryMaterializing, setAgentSummaryMaterializing] = useState(false);
   const [agentSummaryError, setAgentSummaryError] = useState("");
   const [agentSummaryRequestKey, setAgentSummaryRequestKey] = useState("");
   const featureSnapshots = sensorSeries(detail, asset);
@@ -1568,25 +1593,33 @@ function AssetPreviewPanel({
     window.setTimeout(() => window.print(), 100);
   };
   const agentSummaryKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
-  const loadAgentSummary = async () => {
+  const loadAgentSummary = async (materialize = false) => {
     if (!asset) return;
-    setAgentSummaryLoading(true);
+    if (materialize) setAgentSummaryMaterializing(true);
+    else setAgentSummaryLoading(true);
     setAgentSummaryError("");
     setAgentSummary(null);
     setAgentSummaryTrace(null);
     setAgentSummaryRequestKey(agentSummaryKey);
     try {
-      const summaryResponse = await getMvpAgentReviewSummary({
+      const request = {
         assetId: asset.assetId,
         datasetVersionId: candidate?.event.datasetVersionId ?? null,
         historyWindow: sensorWindow,
-      });
+      };
+      const summaryResponse = materialize
+        ? await createMvpAgentReviewSummary({ ...request, trigger: "ui_manual_regeneration" })
+        : await getMvpAgentReviewSummary(request);
       setAgentSummary(summaryResponse.summary);
       setAgentSummaryTrace(summaryResponse.trace);
     } catch (reason: unknown) {
-      setAgentSummaryError(reason instanceof Error ? reason.message : "AI 검토 요약을 불러오지 못했습니다.");
+      const fallbackMessage = materialize
+        ? "AI 검토 요약을 생성하지 못했습니다."
+        : "AI 검토 요약을 불러오지 못했습니다.";
+      setAgentSummaryError(reason instanceof Error ? reason.message : fallbackMessage);
     } finally {
-      setAgentSummaryLoading(false);
+      if (materialize) setAgentSummaryMaterializing(false);
+      else setAgentSummaryLoading(false);
     }
   };
   useEffect(() => {
@@ -1771,8 +1804,24 @@ function AssetPreviewPanel({
           {role === "field_operator" && activeTab === "status" ? (
             <>
               <section className="mvp-agent-review-packet" aria-label="AI 검토 요약">
-                <header><Bot size={14} /><strong>AI 검토 요약</strong><span>저장 요약</span></header>
+                <header>
+                  <Bot size={14} />
+                  <strong>AI 검토 요약</strong>
+                  <span>저장 요약</span>
+                  <button
+                    type="button"
+                    className="mvp-agent-review-refresh"
+                    onClick={() => void loadAgentSummary(true)}
+                    disabled={agentSummaryLoading || agentSummaryMaterializing}
+                    aria-label="AI 요약 재생성"
+                    title="AI 요약 재생성"
+                  >
+                    <RefreshCw className={agentSummaryMaterializing ? "mvp-action-spinner" : ""} size={13} />
+                    <span>{agentSummaryMaterializing ? "생성 중" : "요약 재생성"}</span>
+                  </button>
+                </header>
                 {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
+                {agentSummaryMaterializing ? <p>현재 snapshot 기준 AI 요약을 다시 생성하는 중입니다.</p> : null}
                 {!agentSummaryLoading ? (
                   <>
                     {agentSummaryError ? <p>{agentSummaryError}</p> : null}
@@ -1785,7 +1834,10 @@ function AssetPreviewPanel({
                           <div><dt>상태 변경</dt><dd>불가</dd></div>
                           <div><dt>요약 상태</dt><dd>{agentSummaryStatusLabel(agentSummaryTrace, agentSummary)}</dd></div>
                           <div><dt>요약 방식</dt><dd>{agentSummaryModeLabel(agentSummary)}</dd></div>
-                          <div><dt>생성 실행</dt><dd>{agentSummaryTrace?.materialization?.workflow_run_id ? "연결됨" : "미연결"}</dd></div>
+                          <div><dt>생성 실행</dt><dd>{agentSummaryWorkflowRunLabel(agentSummaryTrace)}</dd></div>
+                          {agentSummaryWorkflowRunTime(agentSummaryTrace) ? (
+                            <div><dt>완료 시각</dt><dd>{agentSummaryWorkflowRunTime(agentSummaryTrace)}</dd></div>
+                          ) : null}
                         </dl>
                         {agentSummaryTrace?.materialization?.reused ? (
                           <small>동일 snapshot 기준으로 저장된 요약을 재사용했습니다.</small>

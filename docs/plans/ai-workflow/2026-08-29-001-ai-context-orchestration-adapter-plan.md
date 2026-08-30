@@ -56,7 +56,7 @@ Current implementation baseline:
 
 - KTD-1. **Adapter pipeline first, orchestration framework later.** Introduce a `ContextProvider` style contract before LangGraph. The current adapter already exposes multiple context facets: operation context, inspection location, SOP retrieval, spare-part context, and similar-event context. LangGraph becomes useful when those facets turn into independently authorized runtime tools with separate failure/retry boundaries, ordered tool calls, human pauses, or long-running state that is awkward in a service method.
 - KTD-2. **Polling watcher starts as materialization, not promotion.** The first watcher should detect new Product Result artifacts and precompute `AgentReviewSummary` rows or files. It should not promote Closed-loop state or trigger approval logic.
-- KTD-3. **Event/outbox promotion is deferred.** Outbox is warranted when state transitions must be durable, idempotent, retried, and audited across service boundaries. The current AI summary path is read-only and separates stored-summary reads from generation: `GET /agent-review-summary` returns a stored summary or `pending`, while `POST /agent-review-summary` and watcher execution perform materialization.
+- KTD-3. **Event/outbox promotion is deferred.** Outbox is warranted when state transitions must be durable, idempotent, retried, and audited across service boundaries. The current AI summary path is read-only and separates stored-summary reads from generation: `GET /agent-review-summary` returns a stored summary or `pending`, while `POST /agent-review-summary` and watcher execution perform materialization. Cached reads may expose the stored `workflow_run_id` metadata for observability, but they must not start a new run.
 - KTD-4. **Ontology remains the backbone.** Ontology should normalize relationships among asset, component, location, failure mode, factor, SOP procedure, and operating context. The LLM should consume these normalized relationships through packet fields, not discover them ad hoc.
 - KTD-5. **KG Level 0 is a test footprint.** Do not add a production graph store yet. Add tests or evaluation traces that prove ontology traversal can answer multi-relationship questions better than flat packet fields when such questions appear.
 - KTD-6. **RAG is not needed for structured demo SOP.** Current SOP is already structured, versioned, and maturity-gated. RAG becomes valuable when site SOPs arrive as unstructured PDFs, mixed versions, or cross-document procedure sets.
@@ -123,7 +123,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U3. Polling Watcher Materialization
 
-- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, each materialization attempt records an `agent_review_workflow_runs` row, summaries store the generating `workflow_run_id`, the watcher emits stage status, `GET /agent-review-summary` is stored-summary lookup only, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
+- **Status:** Implemented. `AgentReviewSummaryWorkflow` wraps the materialization service, each materialization attempt records an `agent_review_workflow_runs` row, summaries store the generating `workflow_run_id`, the watcher emits stage status, `GET /agent-review-summary` is stored-summary lookup only, UI manual regeneration calls the explicit `POST` trigger, and `run_local_live.sh` can start the watcher with bounded polling, bounded retry attempts, and optional Postgres shutdown for one-shot live checks.
 - **Goal:** Decide whether AI summaries should be prepared before the user opens the UI.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary.py`
@@ -139,12 +139,12 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Provider failure records fallback status and validation errors.
   - New artifact checksum triggers a new summary materialization.
   - Materialized summary is read by UI when fresh; cache miss returns `pending` without LLM or fallback generation.
-  - `POST /agent-review-summary` and watcher execution remain explicit materialization triggers.
+  - `POST /agent-review-summary` and watcher execution remain explicit materialization triggers; side-view open/tab changes stay cache-only.
   - Each explicit materialization trigger records a workflow run with trigger, engine, status, source/context checksum, and summary key.
-  - Summary rows point back to the workflow run that generated them; cached `GET` reads expose that run reference without starting a new run.
+  - Summary rows point back to the workflow run that generated them; cached `GET` reads expose that run reference and stored run metadata without starting a new run.
   - Transient materialization service failure retries within the workflow boundary and reports attempt history.
   - Terminal materialization failure blocks `consumer_ready` without creating Closed-loop actions.
-- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Tests verify explicit materialization creates a workflow run, cached `GET` does not start a run, summary rows retain the generating `workflow_run_id`, and watcher items report workflow status. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
+- **Verification:** Watcher can be run repeatedly without changing domain state and without duplicate summaries. Tests verify explicit materialization creates a workflow run, cached `GET` does not start a run, summary rows retain the generating `workflow_run_id`, cached reads expose the stored run metadata, and watcher items report workflow status. Live smoke verified `gpt-4o-mini` summaries were reused from stored materialization rows.
 
 ### U4. SOP / Ontology Exploration Adapter
 
@@ -234,7 +234,7 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Retry strategy differs per step and must be observable.
   - Tool trajectory evaluation becomes part of release gates.
   - The service method starts carrying graph-like branching state.
-- **Verification:** `langgraph_decision_gate.json` keeps `simple` as the production engine, records `AI_WORKFLOW_ENGINE=langgraph` as an experiment behind `AgentReviewSummaryWorkflow`, and forbids executable Closed-loop commands, mutable WorkOrder state, and approval tools in graph state. `agent_workflow_eval_gate.json` adds the release-facing workflow eval contract: output contract, groundedness, workflow stages, summary reuse, fallback/retry, and Closed-loop boundary must pass before changing the orchestration engine.
+- **Verification:** `langgraph_decision_gate.json` keeps `simple` as the production engine, records `AI_WORKFLOW_ENGINE=langgraph` as an experiment behind `AgentReviewSummaryWorkflow`, and forbids executable Closed-loop commands, mutable WorkOrder state, and approval tools in graph state. `agent_workflow_eval_gate.json` adds the release-facing workflow eval contract: output contract, groundedness, workflow stages, summary reuse, fallback/retry, and Closed-loop boundary must pass before changing the orchestration engine. Tool trajectory remains the first measurable reason to replace the simple engine: different gold scenarios should select different read-only domain tools.
 
 ### U8. Read-Only Tool Trajectory Experiment
 
@@ -397,9 +397,9 @@ The cost is additional state: checksum, freshness, retry policy, duplicate suppr
 
 Recommended sequence:
 
-1. Request-time generation remains the canonical behavior.
-2. Add materialization table or file only after the summary contract stabilizes.
-3. Add polling watcher that writes validated summaries and status.
+1. Stored-summary read is the canonical UI/Report behavior.
+2. Explicit materialization happens through watcher runs or a user-visible manual regeneration control.
+3. Each materialization trigger records workflow runtime status and links the summary to the generating run.
 4. Add event/outbox only if other services must react durably to summary lifecycle events.
 
 ## RDB vs KG Test Framing
@@ -426,6 +426,8 @@ Minimum release gates:
 - Source refs: every nested summary source ref must exist in packet `source_refs`.
 - Workflow observability: `engine`, `attempt_count`, retry policy, and terminal status are emitted for watcher/materialization runs.
 - Summary reuse: opening the side view must be able to reuse a stored summary for the same packet snapshot instead of forcing a new LLM call.
+- Runtime trigger boundary: UI side-view reads are cache-only; watcher and manual regeneration are the only generation triggers.
+- Domain context absorption: role summaries must actually use available operation impact, maintenance history, spare-part candidate, similar-event date, field location, and standard procedure context when those fields are present.
 - Snapshot consistency: UI summary and Closed-loop recommendation input must be derived from the same trusted packet snapshot when both consumers are active.
 
 External eval alignment:

@@ -157,6 +157,9 @@ def create_agent_review_summary(
     project_id: str = Query(default="manufacturing-demo-project"),
     dataset_version_id: str | None = Query(default=None, max_length=160),
     history_window: Literal["24h", "7d", "30d"] = Query(default="24h"),
+    trigger: Literal["manual_materialization", "ui_manual_regeneration"] = Query(
+        default="manual_materialization"
+    ),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
@@ -166,6 +169,7 @@ def create_agent_review_summary(
         project_id,
         dataset_version_id=dataset_version_id,
         history_window=history_window,
+        trigger=trigger,
     )
     return {"summary": summary, "trace": trace}
 

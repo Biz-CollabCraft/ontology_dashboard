@@ -108,6 +108,9 @@ test("shows the SOP grounded AI review summary without mutating work state", asy
   await expect(agentReview).toContainText("공정 관리자");
   await expect(agentReview).toContainText("이 초안은 담당자 검토를 돕기 위한 read-only 문서");
   await expect(agentReview).toContainText("자동 승인을 수행하지 않습니다");
+  await agentReview.getByRole("button", { name: "AI 요약 재생성" }).click();
+  await expect(agentReview).toContainText("수동 갱신");
+  await expect(agentReview).toContainText("완료");
   await preview.getByRole("tab", { name: "처리", exact: true }).click();
   await expect(preview.getByText("점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.")).toBeVisible();
 });

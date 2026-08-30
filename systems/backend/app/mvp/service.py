@@ -372,7 +372,7 @@ class ManufacturingPredictiveMaintenanceService:
             dataset_version_id=dataset_version_id,
             history_window=history_window,
         )
-        return AgentReviewSummaryMaterializer(
+        summary, trace = AgentReviewSummaryMaterializer(
             self.repository,
             self.agent_review_summary_provider,
         ).lookup(
@@ -380,6 +380,12 @@ class ManufacturingPredictiveMaintenanceService:
             project_id=project_id,
             history_window=history_window,
         )
+        workflow_run_id = (trace.get("materialization") or {}).get("workflow_run_id")
+        if isinstance(workflow_run_id, str) and workflow_run_id:
+            run = self.repository.get_agent_review_workflow_run(workflow_run_id)
+            if run is not None:
+                trace = {**trace, "workflow_run": _workflow_run_trace(run)}
+        return summary, trace
 
     def materialize_agent_review_summaries(
         self,

@@ -744,6 +744,10 @@
 .mvp-agent-review-packet header { display: flex; align-items: center; gap: 6px; color: var(--mvp-muted); }
 .mvp-agent-review-packet header strong { color: var(--mvp-text); font-size: 11px; }
 .mvp-agent-review-packet header span { margin-left: auto; color: var(--mvp-dim); font-size: 8px; font-weight: 900; text-transform: uppercase; }
+.mvp-agent-review-refresh { display: inline-flex; min-height: 26px; align-items: center; gap: 4px; border: 1px solid rgba(181,196,214,.16); border-radius: 5px; padding: 0 7px; color: var(--mvp-muted); background: rgba(255,255,255,.025); font-size: 9px; font-weight: 900; cursor: pointer; }
+.mvp-agent-review-refresh:hover:not(:disabled) { border-color: rgba(76,144,240,.42); background: var(--mvp-accent-soft); color: var(--mvp-text); }
+.mvp-agent-review-refresh:disabled { opacity: .55; cursor: wait; }
+.mvp-agent-review-refresh span { margin-left: 0; font-size: 9px; text-transform: none; white-space: nowrap; }
 .mvp-agent-review-packet dl { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 0; }
 .mvp-agent-review-packet ul { display: grid; gap: 3px; margin: 0; padding-left: 14px; }
 .mvp-agent-review-packet p,
