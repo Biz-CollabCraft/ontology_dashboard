@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator
 from app.dependencies import build_manufacturing_service
 from app.mvp.agent_review_packet import compose_agent_review_packet
 from app.mvp.context_providers import AgentReviewContext, AgentReviewContextRegistry
+from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,7 +155,10 @@ def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) ->
         "CNC-S04-L02-03",
         "manufacturing-demo-project",
     )
-    sop_retrieval = service._retrieve_inspection_sops(fixture, artifact)
+    sop_retrieval = ManufacturingFixtureReviewContextAdapter(ROOT).sop_retrieval(
+        fixture=fixture,
+        artifact=artifact,
+    )
     context = AgentReviewContext(
         operation_context_summary={
             "production_impact": "high",

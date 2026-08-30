@@ -15,6 +15,7 @@ from app.identity import CSRF_COOKIE, IdentityService
 from app.infra.llm import OpenAICompatibleProvider, VertexAIProvider, configured_provider
 from app.main import app
 from app.dependencies import build_manufacturing_service, get_identity_service, get_service
+from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.planner import LayoutPlanner
 from app.mvp.agent_review_summary import compose_deterministic_agent_review_summary
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
@@ -735,7 +736,8 @@ def test_agent_review_summary_service_falls_back_when_provider_candidate_is_inva
     assert any(error.startswith("forbidden_claims:") for error in trace["validation_errors"])
 
 
-def test_cnc_sop_guidance_does_not_match_compressor_assets(service: FactorySignalService) -> None:
+def test_domain_adapter_cnc_sop_guidance_does_not_match_compressor_assets() -> None:
+    adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
     fixture = {
         "equipment": {
             "asset_type": "compressor",
@@ -758,7 +760,7 @@ def test_cnc_sop_guidance_does_not_match_compressor_assets(service: FactorySigna
         },
     }
 
-    assert service._inspection_guidance_for_fixture(fixture, artifact) == {}
+    assert adapter.inspection_guidance(fixture=fixture, artifact=artifact) == {}
 
 
 @pytest.mark.parametrize(
@@ -773,11 +775,11 @@ def test_cnc_sop_guidance_does_not_match_compressor_assets(service: FactorySigna
     ],
 )
 def test_inspection_sop_guidance_requires_displayable_maturity(
-    service: FactorySignalService,
     source_kind: str,
     maturity: str,
     expected_guidance: bool,
 ) -> None:
+    adapter = ManufacturingFixtureReviewContextAdapter(ROOT)
     fixture = {
         "equipment": {
             "asset_type": "cnc",
@@ -800,15 +802,119 @@ def test_inspection_sop_guidance_requires_displayable_maturity(
         },
     }
     sop = {
-        **service.inspection_sops[0],
+        **adapter.inspection_sops[0],
         "source_kind": source_kind,
         "maturity": maturity,
     }
-    service.inspection_sops = [sop]
+    adapter.inspection_sops = [sop]
 
-    guidance = service._inspection_guidance_for_fixture(fixture, artifact)
+    guidance = adapter.inspection_guidance(fixture=fixture, artifact=artifact)
 
     assert ("rotating_assembly" in guidance) is expected_guidance
+
+
+def test_agent_review_packet_consumes_domain_adapter_outputs(
+    service: FactorySignalService,
+) -> None:
+    class StubDomainReviewContextAdapter:
+        adapter_id = "stub-domain-review-context"
+
+        def _component_id(self, artifact: dict) -> str:
+            return artifact["evidence_payload"]["component_hypotheses"][0]["component_id"]
+
+        def operation_context(
+            self,
+            *,
+            fixture: dict,
+            artifact: dict,
+            project_id: str,
+        ) -> dict:
+            return {
+                "load_level": "high",
+                "runtime_hours_7d": 132,
+                "production_impact": "high",
+                "context_id": "stub-context",
+                "source_type": "stub-domain-adapter",
+                "production_plan": {"product_variant": "adapter-variant"},
+                "capacity_model": {
+                    "basis": "stub adapter capacity basis",
+                    "asset_units_per_hour": 12,
+                },
+                "event_impact": {
+                    "event_id": fixture["event_id"],
+                    "estimated_lost_units": 77,
+                    "basis": {"estimated_downtime_minutes": 180},
+                },
+                "limitations": ["stub adapter limitation"],
+            }
+
+        def inspection_guidance(self, *, fixture: dict, artifact: dict) -> dict:
+            component_id = self._component_id(artifact)
+            return {
+                component_id: {
+                    "source_type": "site_sop",
+                    "sop_id": "stub-sop",
+                    "title": "Stub SOP",
+                    "version": "v1",
+                    "reference_location_label": "stub 현장 위치",
+                    "suggested_check_method": "stub 점검 방법",
+                    "checklist_draft": ["stub checklist"],
+                    "replacement_review_guidance": {},
+                    "safety_level": "permit_required",
+                    "requires_human_approval": True,
+                    "source_ref": "stub-sop://procedure#stub-sop",
+                    "disclaimer": "stub read-only guidance",
+                }
+            }
+
+        def inspection_locations(self, *, fixture: dict, artifact: dict) -> dict:
+            component_id = self._component_id(artifact)
+            return {
+                component_id: {
+                    "contract_id": "stub-location-contract",
+                    "maturity": "approved",
+                    "location_label": "stub 위치 계약",
+                    "inspection_method": "stub 위치 점검",
+                    "source_ref": f"stub-location://contract#{component_id}",
+                }
+            }
+
+        def sop_retrieval(self, *, fixture: dict, artifact: dict) -> dict:
+            component_id = self._component_id(artifact)
+            return {
+                "provider": "stub_sop_adapter",
+                "query": {"adapter_id": self.adapter_id},
+                "top_k": 1,
+                "returned_count": 1,
+                "mutation_allowed": False,
+                "results": [
+                    {
+                        "procedure": {
+                            "sop_id": "stub-sop",
+                            "source_kind": "site_sop",
+                            "maturity": "approved",
+                            "sensor_judgment": {"component_id": component_id},
+                        },
+                        "retrieval_score": 99,
+                        "matched_fields": ["adapter_id"],
+                        "source_ref": "stub-sop://procedure#stub-sop",
+                    }
+                ],
+            }
+
+    service.domain_review_context_adapter = StubDomainReviewContextAdapter()
+
+    view_model = service.asset_detail_view_model("CNC-S04-L02-03")
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+
+    assert view_model["operation_context"]["source_type"] == "stub-domain-adapter"
+    assert view_model["inspection_targets"][0]["location_label"] == "stub 위치 계약"
+    assert packet["sop_retrieval"]["provider"] == "stub_sop_adapter"
+    assert packet["operation_context_summary"]["estimated_lost_units"] == 77
+    assert packet["operation_context_summary"]["source_ref"] == "operation-context://stub-context"
+    assert packet["sop_guidance"][0]["sop_id"] == "stub-sop"
+    assert packet["sop_guidance"][0]["location_label"] == "stub 위치 계약"
+    assert "stub-sop://procedure#stub-sop" in packet["source_refs"]
 
 
 def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import uuid
 from datetime import datetime, timezone
@@ -22,7 +21,10 @@ from app.mvp.context_providers import AgentReviewContextRegistry
 from app.mvp.agent_review_summary_materialization import AgentReviewSummaryMaterializer
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.mvp.asset_detail_view_model import compose_asset_detail_view_model
-from app.mvp.sop_retrieval import retrieve_inspection_sops
+from app.mvp.domain_context_adapters import (
+    DomainReviewContextAdapter,
+    ManufacturingFixtureReviewContextAdapter,
+)
 
 from .context import ContextProviderFactory
 from .contracts import (
@@ -58,6 +60,7 @@ class ManufacturingPredictiveMaintenanceService:
         context_provider_factory: ContextProviderFactory,
         agent_review_summary_provider: AgentReviewSummaryProvider | None = None,
         agent_review_context_registry: AgentReviewContextRegistry | None = None,
+        domain_review_context_adapter: DomainReviewContextAdapter | None = None,
     ) -> None:
         self.root = Path(root)
         fixture_root = self.root / "data" / "fixtures"
@@ -70,21 +73,6 @@ class ManufacturingPredictiveMaintenanceService:
             payload["event_id"]: payload
             for payload in (load_fixture(path) for path in fixture_paths)
         }
-        operation_context_paths = sorted((fixture_root / "operation_context").glob("*.json"))
-        self.operation_contexts = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in operation_context_paths
-        ]
-        inspection_sop_paths = sorted((fixture_root / "inspection_sop").glob("*.json"))
-        self.inspection_sops = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in inspection_sop_paths
-        ]
-        inspection_location_paths = sorted((fixture_root / "inspection_location").glob("*.json"))
-        self.inspection_location_references = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in inspection_location_paths
-        ]
         # Historical Gold regression and manufacturing Ontology projection must
         # remain exactly GS-001..GS-008. Showcase Project fixtures are available
         # through project_fixtures and project-scoped APIs, never this alias.
@@ -100,6 +88,10 @@ class ManufacturingPredictiveMaintenanceService:
         self.context_provider_factory = context_provider_factory
         self.agent_review_summary_provider = agent_review_summary_provider
         self.agent_review_context_registry = agent_review_context_registry
+        self.domain_review_context_adapter = (
+            domain_review_context_adapter
+            or ManufacturingFixtureReviewContextAdapter(self.root)
+        )
         self.intent_router = IntentRouter()
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
@@ -218,10 +210,20 @@ class ManufacturingPredictiveMaintenanceService:
             feature_series=self._feature_series_for_fixture(fixture, artifact),
             runtime_prediction_history=self._runtime_history_for_fixture(fixture, artifact),
             equipment_history=self._equipment_history_for_fixture(fixture),
-            operation_context=self._operation_context_for_fixture(fixture, artifact) or fixture.get("operation_context"),
+            operation_context=self.domain_review_context_adapter.operation_context(
+                fixture=fixture,
+                artifact=artifact,
+                project_id=self._fixture_project_id(fixture),
+            ) or fixture.get("operation_context"),
             closed_loop=fixture.get("closed_loop"),
-            inspection_guidance=self._inspection_guidance_for_fixture(fixture, artifact),
-            inspection_locations=self._inspection_location_references_for_fixture(fixture, artifact),
+            inspection_guidance=self.domain_review_context_adapter.inspection_guidance(
+                fixture=fixture,
+                artifact=artifact,
+            ),
+            inspection_locations=self.domain_review_context_adapter.inspection_locations(
+                fixture=fixture,
+                artifact=artifact,
+            ),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
@@ -250,7 +252,10 @@ class ManufacturingPredictiveMaintenanceService:
         return compose_agent_review_packet(
             project_id=project_id,
             view_model=view_model,
-            sop_retrieval=self._retrieve_inspection_sops(fixture, artifact),
+            sop_retrieval=self.domain_review_context_adapter.sop_retrieval(
+                fixture=fixture,
+                artifact=artifact,
+            ),
             context=(
                 self.agent_review_context_registry.context_for_packet(
                     view_model=view_model,
@@ -514,158 +519,6 @@ class ManufacturingPredictiveMaintenanceService:
             }
         ]
 
-    def _operation_context_for_fixture(
-        self,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        equipment = fixture.get("equipment") or {}
-        project_id = self._fixture_project_id(fixture)
-        dataset_version = str(fixture.get("dataset_version") or "")
-        observed_at = _parse_iso_datetime(
-            str((fixture.get("observation") or {}).get("timestamp") or artifact.get("observed_at") or "")
-        )
-        if observed_at is None:
-            return None
-
-        for context in self.operation_contexts:
-            scope = context.get("scope") or {}
-            if str(scope.get("project_id") or "") != project_id:
-                continue
-            if dataset_version and str(scope.get("dataset_version") or "") != dataset_version:
-                continue
-            temporal_scope = context.get("temporal_scope") or {}
-            valid_from = _parse_iso_datetime(str(temporal_scope.get("valid_from") or ""))
-            valid_to = _parse_iso_datetime(str(temporal_scope.get("valid_to") or ""))
-            if valid_from is None or valid_to is None or not (valid_from <= observed_at < valid_to):
-                continue
-            fixture_context = fixture.get("operation_context") or {}
-            event_impact = fixture_context.get("event_impact") or _event_impact_for_fixture(context, fixture, equipment)
-            capacity = context.get("capacity_model") or {}
-            planning_window = capacity.get("planning_window") or {}
-            oee_basis = capacity.get("oee_basis") or {}
-            cycle_time_basis = capacity.get("cycle_time_basis") or {}
-            asset_count_basis = capacity.get("asset_count_basis") or {}
-            production_impact = fixture_context.get("production_impact")
-            if production_impact not in {"none", "low", "medium", "high"}:
-                production_impact = _production_impact(
-                    (event_impact or {}).get("basis", {}).get("estimated_downtime_minutes")
-                    if event_impact
-                    else equipment.get("estimated_downtime_minutes")
-                )
-            return {
-                "load_level": fixture_context.get("load_level"),
-                "runtime_hours_7d": fixture_context.get("runtime_hours_7d"),
-                "production_impact": production_impact,
-                "context_id": context["context_id"],
-                "source_type": context["source_type"],
-                "temporal_scope": temporal_scope,
-                "production_plan": context["production_plan"],
-                "capacity_model": {
-                    "active_asset_count": asset_count_basis.get("active_asset_count"),
-                    "planned_operating_hours": planning_window.get("planned_operating_hours"),
-                    "oee": oee_basis.get("oee"),
-                    "standard_cycle_minutes_per_unit": cycle_time_basis.get("standard_cycle_minutes_per_unit"),
-                    "asset_units_per_hour": capacity.get("asset_units_per_hour"),
-                    "daily_capacity_units": capacity.get("daily_capacity_units"),
-                    "basis": (
-                        f"{asset_count_basis.get('active_asset_count')} assets, "
-                        f"{planning_window.get('planned_operating_hours')}h/day, "
-                        f"OEE {oee_basis.get('oee')}, "
-                        f"cycle {cycle_time_basis.get('standard_cycle_minutes_per_unit')}min 기준"
-                    ),
-                },
-                "event_impact": event_impact,
-                "limitations": context.get("limitations") or [],
-            }
-        return None
-
-    def _inspection_guidance_for_fixture(
-        self,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> dict[str, dict[str, Any]]:
-        matching_sops = self._matching_inspection_sops(fixture, artifact)
-        component_hypotheses = (
-            (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
-        )
-        component_ids = {
-            str(item.get("component_id"))
-            for item in component_hypotheses
-            if isinstance(item, dict) and item.get("component_id")
-        }
-        guidance_by_component: dict[str, dict[str, Any]] = {}
-        for sop in matching_sops:
-            for component_id in component_ids.intersection({str(item) for item in sop.get("component_ids") or []}):
-                guidance = sop.get("guidance") or {}
-                guidance_by_component[component_id] = {
-                    "source_type": sop["source_kind"],
-                    "sop_id": sop["sop_id"],
-                    "title": sop["title"],
-                    "version": sop["version"],
-                    "reference_location_label": guidance.get("reference_location_label"),
-                    "suggested_check_method": guidance.get("suggested_check_method"),
-                    "checklist_draft": guidance.get("checklist_draft") or [],
-                    "replacement_review_guidance": guidance.get("replacement_review_guidance") or {},
-                    "safety_level": sop["safety_level"],
-                    "requires_human_approval": sop["requires_human_approval"],
-                    "source_ref": f"{sop['source_uri']}#{sop['sop_id']}",
-                    "disclaimer": guidance.get("disclaimer"),
-                }
-        return guidance_by_component
-
-    def _inspection_location_references_for_fixture(
-        self,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> dict[str, dict[str, Any]]:
-        component_hypotheses = (
-            (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
-        )
-        component_ids = {
-            str(item.get("component_id"))
-            for item in component_hypotheses
-            if isinstance(item, dict) and item.get("component_id")
-        }
-        asset_type = str(artifact.get("asset_type") or fixture.get("asset_type") or "")
-        references: dict[str, dict[str, Any]] = {}
-        for contract in self.inspection_location_references:
-            if asset_type and asset_type not in {str(item) for item in contract.get("asset_types") or []}:
-                continue
-            for location in contract.get("locations") or []:
-                component_id = str(location.get("component_id") or "")
-                if component_id not in component_ids:
-                    continue
-                references[component_id] = {
-                    "contract_id": contract.get("contract_id"),
-                    "maturity": contract.get("maturity"),
-                    "location_label": location.get("location_label"),
-                    "inspection_method": location.get("inspection_method"),
-                    "source_ref": f"{contract['source_uri']}#{component_id}",
-                }
-        return references
-
-    def _matching_inspection_sops(
-        self,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        return [
-            item["procedure"]
-            for item in self._retrieve_inspection_sops(fixture, artifact)["results"]
-        ]
-
-    def _retrieve_inspection_sops(
-        self,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> dict[str, Any]:
-        return retrieve_inspection_sops(
-            fixture=fixture,
-            artifact=artifact,
-            procedures=self.inspection_sops,
-        )
-
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
         evidence = self._projected_legacy_evidence(fixture)
@@ -834,44 +687,6 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
     return "none"
 
 
-def _matches_any(value: str, candidates: list[Any]) -> bool:
-    return value in {str(candidate) for candidate in candidates}
-
-
-def _is_displayable_inspection_sop(sop: dict[str, Any]) -> bool:
-    source_kind = str(sop.get("source_kind") or "")
-    maturity = str(sop.get("maturity") or "")
-    return (
-        (source_kind == "demo_sop_fixture" and maturity == "fixture")
-        or (source_kind == "site_sop" and maturity == "approved")
-    )
-
-
 # Temporary compatibility alias for integrations that still import the historical
 # service name. New code should use ManufacturingPredictiveMaintenanceService.
 FactorySignalService = ManufacturingPredictiveMaintenanceService
-
-
-def _parse_iso_datetime(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-def _event_impact_for_fixture(
-    context: dict[str, Any],
-    fixture: dict[str, Any],
-    equipment: dict[str, Any],
-) -> dict[str, Any] | None:
-    event_id = str(fixture.get("event_id") or "")
-    equipment_id = str(equipment.get("equipment_id") or "")
-    for impact in context.get("event_impacts") or []:
-        if str(impact.get("event_id") or "") == event_id:
-            return {**impact, "equipment_id": equipment_id or str(impact.get("equipment_id") or "")}
-    for impact in context.get("event_impacts") or []:
-        if str(impact.get("equipment_id") or "") == equipment_id:
-            return {**impact, "equipment_id": equipment_id}
-    return None
