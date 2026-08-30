@@ -214,7 +214,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U7. LangGraph Decision Gate
 
-- **Status:** Implemented as a lightweight evaluation gate. LangGraph runtime remains deferred behind the workflow boundary.
+- **Status:** Implemented as a lightweight evaluation gate. Production LangGraph runtime remains deferred behind the workflow boundary.
 - **Goal:** Prepare for LangGraph without adding it before orchestration complexity is verified in code.
 - **Files:**
   - `systems/backend/app/mvp/agent_review_summary_workflow.py`
@@ -231,7 +231,25 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Retry strategy differs per step and must be observable.
   - Tool trajectory evaluation becomes part of release gates.
   - The service method starts carrying graph-like branching state.
-- **Verification:** `langgraph_decision_gate.json` keeps `simple` as the current engine, records `AI_WORKFLOW_ENGINE=langgraph` as a future experiment behind `AgentReviewSummaryWorkflow`, and forbids executable Closed-loop commands, mutable WorkOrder state, and approval tools in graph state. `agent_workflow_eval_gate.json` adds the release-facing workflow eval contract: output contract, groundedness, workflow stages, summary reuse, fallback/retry, and Closed-loop boundary must pass before changing the orchestration engine.
+- **Verification:** `langgraph_decision_gate.json` keeps `simple` as the production engine, records `AI_WORKFLOW_ENGINE=langgraph` as an experiment behind `AgentReviewSummaryWorkflow`, and forbids executable Closed-loop commands, mutable WorkOrder state, and approval tools in graph state. `agent_workflow_eval_gate.json` adds the release-facing workflow eval contract: output contract, groundedness, workflow stages, summary reuse, fallback/retry, and Closed-loop boundary must pass before changing the orchestration engine.
+
+### U8. Read-Only Tool Trajectory Experiment
+
+- **Status:** Implemented as an eval-only experiment. It is not wired into the production watcher or UI path.
+- **Goal:** Create code-level evidence for when LangGraph/tool orchestration is useful: not because the summary always needs every domain, but because different situations route to different read-only context tools.
+- **Files:**
+  - `systems/backend/app/mvp/agent_context_tool_pipeline.py`
+  - `tests/eval/agent_tool_trajectory_gold.jsonl`
+  - `tests/eval/test_agent_tool_pipeline_eval.py`
+  - `tests/eval/langgraph_decision_gate.json`
+  - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
+- **Approach:** Add a `SituationQuestionRouter` that reads the trusted Agent Review Packet and chooses only the tools needed for the current situation. Each selected tool returns a bounded slice from the packet: model evidence, maintenance history, operation context, inspection location, structured procedure guidance, ontology neighbors, spare-part candidates, similar-event history, or data-quality hold context. The pipeline records `called_tools`, per-call hashes, source references, read-only flags, and forbidden Closed-loop tool names.
+- **LangGraph Shape:** `run_langgraph_tool_pipeline` executes the same selection, tool execution, and boundary validation steps through LangGraph when the dependency is available. If the dependency is missing, the function falls back to the simple engine and reports `requested_engine=langgraph` plus a fallback reason. This keeps the production path stable while preserving a runnable experiment on environments that have LangGraph.
+- **Trajectory Expectations:**
+  - Critical CNC drive-power case: model evidence, maintenance history, production impact, field location, ontology neighbors, spare-part candidate, and similar-event history.
+  - Warning tooling case: model evidence, maintenance history, field location, structured procedure guidance, ontology neighbors, spare-part candidate, and similar-event history.
+  - Data-quality hold case: only data-quality context; no SOP, location, spare-part, similar-event, or Closed-loop mutation tools.
+- **Verification:** The trajectory gold set checks expected and forbidden tools per scenario. The pipeline tests verify read-only execution, source-ref subset boundaries, distinct situation-specific tool plans, data-quality fanout suppression, and parity between the simple and experimental LangGraph path.
 
 #### LangGraph Implementation Plan
 
@@ -409,14 +427,14 @@ Minimum release gates:
 External eval alignment:
 
 - OpenAI contextual eval framing maps to this service as workflow-specific definition of "good": role-specific, grounded, bounded, and reusable summaries.
-- LangSmith agent-eval framing maps final-response checks to the current simple workflow and defers trajectory checks until real tool calls exist.
+- LangSmith agent-eval framing maps final-response checks to the current simple workflow. Tool trajectory checks now exist as an eval-only experiment and become release gates only if the production workflow adopts independent runtime tools.
 - Azure agent/RAG evaluators map to task completion, tool-call correctness, groundedness, retrieval relevance, and response completeness; only the groundedness and completion-adjacent checks are current MVP gates.
 - RAGAS-style context precision/recall remains deferred until SOP content becomes runtime retrieval context rather than structured adapter metadata.
 
 Useful but deferred metrics:
 
 - Retrieval context precision/recall for SOP RAG.
-- Tool trajectory accuracy for LangGraph-style agents.
+- Tool trajectory accuracy for LangGraph-style agents beyond the current eval-only experiment.
 - Human edit distance and accept-with-edit ratio.
 - Summary freshness and stale materialization rate.
 - Cost and latency per materialized summary.
@@ -427,7 +445,7 @@ Deferred:
 
 - Production GraphRAG store.
 - Vector DB or LlamaIndex runtime retrieval.
-- LangGraph orchestration runtime.
+- LangGraph orchestration runtime as the production watcher engine.
 - Event/outbox promotion for summary lifecycle.
 - Auto approval of low-importance notifications.
 - Closed-loop state mutation from AI summaries.
