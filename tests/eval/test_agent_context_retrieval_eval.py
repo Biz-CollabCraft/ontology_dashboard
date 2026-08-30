@@ -11,6 +11,7 @@ from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 ROOT = Path(__file__).resolve().parents[2]
 QUESTION_PATH = ROOT / "tests" / "eval" / "agent_context_questions.jsonl"
 QUESTION_BACKLOG_PATH = ROOT / "tests" / "eval" / "agent_context_question_backlog.jsonl"
+RDB_BASELINE_PATH = ROOT / "tests" / "eval" / "agent_context_rdb_baseline.json"
 RAG_GATE_PATH = ROOT / "tests" / "eval" / "rag_decision_gate.json"
 LANGGRAPH_GATE_PATH = ROOT / "tests" / "eval" / "langgraph_decision_gate.json"
 
@@ -29,6 +30,10 @@ def _load_question_backlog() -> list[dict[str, Any]]:
         for line in QUESTION_BACKLOG_PATH.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def _load_rdb_baseline() -> dict[str, Any]:
+    return json.loads(RDB_BASELINE_PATH.read_text(encoding="utf-8"))
 
 
 def _load_rag_gate() -> dict[str, Any]:
@@ -114,6 +119,24 @@ def test_agent_context_question_backlog_names_next_domain_sources() -> None:
         "sop_repository",
         "asset_registry",
     }.issubset(sources)
+
+
+def test_agent_context_rdb_baseline_documents_current_default_and_pressure_points() -> None:
+    baseline = _load_rdb_baseline()
+    backlog = _load_question_backlog()
+
+    assert baseline["baseline_id"] == "agent-context-rdb-baseline-v1"
+    assert baseline["decision"]["current_default"] == "keep_rdb_packet_projection"
+    assert baseline["decision"]["kg_next_step"] == (
+        "run_in_memory_level1_traversal_experiment"
+    )
+    assert "KG is faster" in baseline["decision"]["do_not_claim"]
+    assert len(baseline["current_strengths"]) >= 3
+    assert len(baseline["pressure_points"]) >= 4
+    assert baseline["controlled_variables"]["same_user_questions"].endswith(
+        "agent_context_question_backlog.jsonl"
+    )
+    assert len(backlog) >= len(baseline["pressure_points"])
 
 
 def test_kg_level0_packet_and_ontology_context_answer_same_facets(tmp_path: Path) -> None:
