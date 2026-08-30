@@ -198,6 +198,7 @@ def _migrate_postgresql(database_url: str) -> list[str]:
                 )
                 """
             )
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext('ontology_dashboard_schema_migrations'))")
             cursor.execute("SELECT version FROM schema_migrations")
             existing = {row[0] for row in cursor.fetchall()}
             for file_path in _migration_files("postgresql"):

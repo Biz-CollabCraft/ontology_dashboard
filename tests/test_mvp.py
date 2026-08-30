@@ -691,6 +691,32 @@ def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
     assert provider.calls == 2
 
 
+def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
+    client: TestClient,
+    service: FactorySignalService,
+) -> None:
+    def payload_factory(packet: dict) -> dict:
+        summary = compose_deterministic_agent_review_summary(packet)
+        return {**summary, "mode": "llm", "title": "검토 전용 AI 요약"}
+
+    service.agent_review_summary_provider = FakeAgentReviewSummaryProvider(payload_factory)
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    action_ids = set(packet["closed_loop_boundary"]["available_action_ids"])
+    activity_before = client.get("/api/events/EVT-GS-004/activity").json()
+
+    response = client.get("/api/objects/CNC-S04-L02-03/agent-review-summary")
+
+    assert response.status_code == 200
+    payload = response.json()
+    serialized = json.dumps(payload["summary"], ensure_ascii=False)
+    assert client.get("/api/events/EVT-GS-004/activity").json() == activity_before
+    assert "read-only" in payload["summary"]["boundary_note"]
+    assert "작업요청 생성" in payload["summary"]["boundary_note"]
+    assert "자동 승인" in payload["summary"]["boundary_note"]
+    assert not action_ids.intersection(serialized)
+    assert payload["trace"]["materialization"]["status"] == "ready"
+
+
 def test_agent_review_summary_service_falls_back_when_provider_candidate_is_invalid(
     service: FactorySignalService,
 ) -> None:

@@ -4,11 +4,33 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+EXTERNAL_ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK="${ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK-}"
+EXTERNAL_LLM_MODEL="${LLM_MODEL-}"
+EXTERNAL_LLM_PROVIDER="${LLM_PROVIDER-}"
+EXTERNAL_OPENAI_API_KEY="${OPENAI_API_KEY-}"
+EXTERNAL_LLM_API_KEY="${LLM_API_KEY-}"
+
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
   source .env
   set +a
+fi
+
+if [[ -n "${EXTERNAL_ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK}" ]]; then
+  export ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK="${EXTERNAL_ONTOLOGY_DASHBOARD_ALLOW_HEURISTIC_MODEL_FALLBACK}"
+fi
+if [[ -n "${EXTERNAL_LLM_MODEL}" ]]; then
+  export LLM_MODEL="${EXTERNAL_LLM_MODEL}"
+fi
+if [[ -n "${EXTERNAL_LLM_PROVIDER}" ]]; then
+  export LLM_PROVIDER="${EXTERNAL_LLM_PROVIDER}"
+fi
+if [[ -n "${EXTERNAL_OPENAI_API_KEY}" ]]; then
+  export OPENAI_API_KEY="${EXTERNAL_OPENAI_API_KEY}"
+fi
+if [[ -n "${EXTERNAL_LLM_API_KEY}" ]]; then
+  export LLM_API_KEY="${EXTERNAL_LLM_API_KEY}"
 fi
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -24,9 +46,13 @@ DOCKER_START_TIMEOUT_SECONDS="${DOCKER_START_TIMEOUT_SECONDS:-90}"
 SKIP_POSTGRES="${SKIP_POSTGRES:-0}"
 SKIP_DEMO_BOOTSTRAP="${SKIP_DEMO_BOOTSTRAP:-0}"
 PM_DEMO_PACKAGE_ROOT="${PM_DEMO_PACKAGE_ROOT:-}"
+ENABLE_AGENT_SUMMARY_WATCHER="${ENABLE_AGENT_SUMMARY_WATCHER:-0}"
+AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS="${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS:-60}"
+AGENT_SUMMARY_WATCHER_LIMIT="${AGENT_SUMMARY_WATCHER_LIMIT:-10}"
 
 API_LOG="${API_LOG:-/tmp/ontology-dashboard-live-api.log}"
 WEB_LOG="${WEB_LOG:-/tmp/ontology-dashboard-live-web.log}"
+AGENT_SUMMARY_WATCHER_LOG="${AGENT_SUMMARY_WATCHER_LOG:-/tmp/ontology-dashboard-agent-summary-watcher.log}"
 
 command -v "${PYTHON_BIN}" >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "Node.js is required"; exit 1; }
@@ -189,8 +215,12 @@ API_PID=$!
   npx vite --host "${APP_BIND_HOST}" --port "${WEB_PORT}" --strictPort
 ) > "${WEB_LOG}" 2>&1 &
 WEB_PID=$!
+WATCHER_PID=""
 
 cleanup() {
+  if [[ -n "${WATCHER_PID}" ]]; then
+    kill "${WATCHER_PID}" 2>/dev/null || true
+  fi
   kill "${API_PID}" "${WEB_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -205,7 +235,19 @@ for _ in $(seq 1 90); do
     if [[ -n "${ONTOLOGY_DASHBOARD_DATABASE_URL}" ]]; then
       printf '  DB: PostgreSQL on host port %s\n' "${POSTGRES_PORT}"
     fi
-    printf '  Logs: %s %s\n' "${API_LOG}" "${WEB_LOG}"
+    if [[ "${ENABLE_AGENT_SUMMARY_WATCHER}" == "1" && -n "${ONTOLOGY_DASHBOARD_DATABASE_URL}" ]]; then
+      : > "${AGENT_SUMMARY_WATCHER_LOG}"
+      PYTHONUNBUFFERED=1 "${VENV_DIR}/bin/python" scripts/watch_agent_review_summaries.py \
+        --database "${ONTOLOGY_DASHBOARD_DATABASE_URL}" \
+        --watch \
+        --limit "${AGENT_SUMMARY_WATCHER_LIMIT}" \
+        --interval-seconds "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" > "${AGENT_SUMMARY_WATCHER_LOG}" 2>&1 &
+      WATCHER_PID=$!
+      printf '  Agent Summary Watcher: pid %s, interval %ss, limit %s\n' "${WATCHER_PID}" "${AGENT_SUMMARY_WATCHER_INTERVAL_SECONDS}" "${AGENT_SUMMARY_WATCHER_LIMIT}"
+      printf '  Logs: %s %s %s\n' "${API_LOG}" "${WEB_LOG}" "${AGENT_SUMMARY_WATCHER_LOG}"
+    else
+      printf '  Logs: %s %s\n' "${API_LOG}" "${WEB_LOG}"
+    fi
     echo 'Press Ctrl+C to stop API and Web. Docker Postgres keeps running.'
     if command -v open >/dev/null 2>&1 && [[ "${OPEN_BROWSER:-1}" == "1" ]]; then
       open "http://${APP_CHECK_HOST}:${WEB_PORT}/login" >/dev/null 2>&1 || true
