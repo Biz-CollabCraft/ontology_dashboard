@@ -9,6 +9,7 @@ from app.dependencies import build_manufacturing_service
 
 ROOT = Path(__file__).resolve().parents[2]
 QUESTION_PATH = ROOT / "tests" / "eval" / "agent_context_questions.jsonl"
+RAG_GATE_PATH = ROOT / "tests" / "eval" / "rag_decision_gate.json"
 
 
 def _load_questions() -> list[dict[str, Any]]:
@@ -17,6 +18,10 @@ def _load_questions() -> list[dict[str, Any]]:
         for line in QUESTION_PATH.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def _load_rag_gate() -> dict[str, Any]:
+    return json.loads(RAG_GATE_PATH.read_text(encoding="utf-8"))
 
 
 def test_agent_context_question_set_controls_eval_variables() -> None:
@@ -60,6 +65,34 @@ def test_kg_level0_trace_remains_read_only(tmp_path: Path) -> None:
         rendered = json.dumps(packet["ontology_context"], ensure_ascii=False)
         assert "approve_work_order" not in rendered
         assert "auto_approve" not in rendered
+
+
+def test_rag_decision_gate_defers_runtime_rag_for_structured_sop(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-context-rag-gate.db", root=ROOT)
+    gate = _load_rag_gate()
+
+    assert gate["current_decision"] == "defer_runtime_rag"
+    assert gate["current_sop_source"] == {
+        "format": "structured_fixture_metadata",
+        "retriever": "local_sop_metadata_retriever",
+        "paragraph_level_citations_required": False,
+        "multiple_overlapping_versions": False,
+        "unstructured_documents_present": False,
+    }
+    assert "llamaindex_runtime_retrieval" in gate["deferred_runtime_components"]
+
+    for question in _load_questions():
+        packet = service.agent_review_packet(question["asset_id"])
+        assert packet["sop_retrieval"]["provider"] == "local_sop_metadata_retriever"
+        assert "vector" not in packet["sop_retrieval"]["provider"]
+        assert packet["sop_retrieval"]["mutation_allowed"] is False
+
+    assert set(gate["adopt_rag_when_any"]) == {
+        "site_sops_arrive_as_pdf_or_free_form_documents",
+        "multiple_sop_versions_overlap_for_same_component_or_failure_mode",
+        "paragraph_level_citations_are_required_for_user_facing_guidance",
+        "structured_metadata_cannot_answer_agent_context_eval_questions",
+    }
 
 
 def _answer_from_packet(packet: dict[str, Any]) -> dict[str, Any]:

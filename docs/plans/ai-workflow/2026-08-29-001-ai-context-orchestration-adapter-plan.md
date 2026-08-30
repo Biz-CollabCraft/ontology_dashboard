@@ -176,17 +176,20 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U6. RAG Decision Gate
 
+- **Status:** Implemented as a lightweight evaluation gate. Runtime RAG remains deferred.
 - **Goal:** Capture when RAG becomes worth implementing.
 - **Files:**
   - `docs/plans/ai-workflow/2026-08-29-001-ai-context-orchestration-adapter-plan.md`
   - `tests/eval/agent_context_questions.jsonl`
+  - `tests/eval/rag_decision_gate.json`
+  - `tests/eval/test_agent_context_retrieval_eval.py`
 - **Approach:** Keep RAG out of the runtime until there is unstructured SOP content or multi-document retrieval pressure. For now, represent RAG as an adapter-compatible future source.
 - **Decision Gate:**
   - Site SOPs arrive as PDFs or free-form docs.
   - Multiple SOP versions overlap for the same component/failure mode.
   - Users need paragraph-level citations from procedures.
   - Structured metadata cannot answer expected SOP questions without manual expansion.
-- **Verification:** The plan has explicit evidence needed before adding vector DB, LlamaIndex, GraphRAG, or LangGraph-based retrieval orchestration.
+- **Verification:** `rag_decision_gate.json` asserts that the current structured fixture SOP path uses `local_sop_metadata_retriever`, defers vector DB, LlamaIndex runtime retrieval, and GraphRAG runtime storage, and names the pre-adoption evidence required before those dependencies can enter runtime.
 
 ### U7. LangGraph Decision Gate
 
