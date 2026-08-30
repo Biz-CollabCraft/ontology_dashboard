@@ -17,6 +17,7 @@ from app.main import app
 from app.dependencies import build_manufacturing_service, get_identity_service, get_service
 from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.mvp.agent_review_summary_workflow import AGENT_REVIEW_SUMMARY_FLOW_VERSION, AgentReviewSummaryWorkflow
+from app.mvp.agent_review_summary_materialization import summary_key, summary_key_payload
 from app.planner import LayoutPlanner
 from app.mvp.agent_review_summary import compose_deterministic_agent_review_summary
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
@@ -670,6 +671,55 @@ def test_agent_review_summary_materialization_key_changes_with_history_window(
     ]["summary_key"]
 
 
+def test_agent_review_summary_materialization_key_changes_with_context_diff(
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    changed_model_context = json.loads(json.dumps(packet))
+    changed_model_context["model_expression_context"]["top_factors"][0][
+        "display_name"
+    ] = "구동 토크 변경"
+    changed_history_context = json.loads(json.dumps(packet))
+    changed_history_context["maintenance_history_summary"]["work_orders"][0][
+        "status"
+    ] = "approved"
+
+    base_payload = summary_key_payload(
+        packet=packet,
+        project_id="manufacturing-demo-project",
+        history_window="24h",
+        provider=None,
+    )
+    model_payload = summary_key_payload(
+        packet=changed_model_context,
+        project_id="manufacturing-demo-project",
+        history_window="24h",
+        provider=None,
+    )
+    history_payload = summary_key_payload(
+        packet=changed_history_context,
+        project_id="manufacturing-demo-project",
+        history_window="24h",
+        provider=None,
+    )
+
+    assert packet["snapshot_basis"] == changed_model_context["snapshot_basis"]
+    assert packet["snapshot_basis"] == changed_history_context["snapshot_basis"]
+    assert base_payload["source_sha256"] == model_payload["source_sha256"]
+    assert base_payload["source_sha256"] == history_payload["source_sha256"]
+    assert len(
+        {
+            base_payload["context_sha256"],
+            model_payload["context_sha256"],
+            history_payload["context_sha256"],
+        }
+    ) == 3
+    base_key = summary_key(base_payload)
+    model_key = summary_key(model_payload)
+    history_key = summary_key(history_payload)
+    assert len({base_key, model_key, history_key}) == 3
+
+
 def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
     service: FactorySignalService,
 ) -> None:
@@ -833,7 +883,20 @@ def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
     assert response.status_code == 200
     payload = response.json()
     serialized = json.dumps(payload["summary"], ensure_ascii=False)
+    expected_key_payload = summary_key_payload(
+        packet=packet,
+        project_id="manufacturing-demo-project",
+        history_window="24h",
+        provider=service.agent_review_summary_provider,
+    )
     assert client.get("/api/events/EVT-GS-004/activity").json() == activity_before
+    assert payload["trace"]["materialization"]["source_sha256"] == expected_key_payload[
+        "source_sha256"
+    ]
+    assert payload["trace"]["materialization"]["context_sha256"] == expected_key_payload[
+        "context_sha256"
+    ]
+    assert set(payload["summary"]["source_refs"]).issubset(set(packet["source_refs"]))
     assert "read-only" in payload["summary"]["boundary_note"]
     assert "작업요청 생성" in payload["summary"]["boundary_note"]
     assert "자동 승인" in payload["summary"]["boundary_note"]

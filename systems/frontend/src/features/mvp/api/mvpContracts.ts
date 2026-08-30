@@ -484,6 +484,40 @@ export interface MvpAgentReviewPacket {
     limitations: string[];
     source_ref: string | null;
   } | null;
+  model_expression_context: {
+    source_type: string;
+    model_version: string | null;
+    dataset_version: string | null;
+    failure_probability: number | null;
+    threshold: number | null;
+    confidence_label: string | null;
+    top_factors: Array<{
+      rank: number;
+      feature: string;
+      display_name: string;
+      value: number | string | boolean | null;
+      unit: string;
+      contribution: number | null;
+      direction: "positive" | "negative" | "risk_up" | "risk_down" | string;
+      explanation_method: string;
+      source_ref: string;
+    }>;
+    source_refs: string[];
+  };
+  maintenance_history_summary: {
+    provider: string;
+    mutation_allowed: false;
+    open_work_order_exists: boolean | null;
+    similar_events_30d: number | null;
+    work_orders: Array<Record<string, unknown>>;
+    inspection_results: Array<Record<string, unknown>>;
+    maintenance_actions: Array<Record<string, unknown>>;
+    maintenance_events: Array<Record<string, unknown>>;
+    activities: Array<Record<string, unknown>>;
+    equipment_history: Array<Record<string, unknown>>;
+    similar_events: Array<Record<string, unknown>>;
+    source_refs: string[];
+  };
   ontology_context: {
     provider: string;
     mutation_allowed: false;
@@ -575,6 +609,7 @@ export interface MvpAgentReviewSummaryResponse {
       status: "ready" | "fallback" | "failed" | "stale";
       reused: boolean;
       source_sha256: string;
+      context_sha256: string | null;
       prompt_version: string;
       model_version: string;
       generated_at: string;

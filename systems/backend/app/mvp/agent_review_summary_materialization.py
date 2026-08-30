@@ -52,6 +52,7 @@ class AgentReviewSummaryMaterializer:
             }
 
         summary, trace = self._generate_summary(packet)
+        trace = {**trace, "context_sha256": key_payload["context_sha256"]}
         status = "fallback" if trace["fallback"] else "ready"
         record = self.repository.save_agent_review_summary(
             summary_key=materialization_key,
@@ -146,6 +147,7 @@ def summary_key_payload(
         "prompt_version": AGENT_REVIEW_SUMMARY_PROMPT_VERSION,
         "model_version": _provider_model_version(provider),
         "source_sha256": source_sha256,
+        "context_sha256": _summary_context_sha256(packet),
     }
 
 
@@ -167,6 +169,23 @@ def _sha256_json(value: Any) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _summary_context_sha256(packet: dict[str, Any]) -> str:
+    return _sha256_json(
+        {
+            "risk_summary": packet.get("risk_summary") or {},
+            "review_priority": packet.get("review_priority"),
+            "model_expression_context": packet.get("model_expression_context") or {},
+            "operation_context_summary": packet.get("operation_context_summary") or {},
+            "maintenance_history_summary": packet.get("maintenance_history_summary") or {},
+            "sop_guidance": packet.get("sop_guidance") or [],
+            "inspection_targets": packet.get("inspection_targets") or [],
+            "ontology_context": packet.get("ontology_context") or {},
+            "evidence_gaps": packet.get("evidence_gaps") or [],
+            "limitations": packet.get("limitations") or [],
+        }
+    )
+
+
 def _materialization_trace(record: dict[str, Any], *, reused: bool) -> dict[str, Any]:
     return {
         "summary_id": record["summary_id"],
@@ -174,6 +193,7 @@ def _materialization_trace(record: dict[str, Any], *, reused: bool) -> dict[str,
         "status": record["status"],
         "reused": reused,
         "source_sha256": record["source_sha256"],
+        "context_sha256": (record.get("trace") or {}).get("context_sha256"),
         "prompt_version": record["prompt_version"],
         "model_version": record["model_version"],
         "generated_at": record["generated_at"],

@@ -264,6 +264,26 @@ def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) ->
                 "owner_domain": "inventory",
             }
         ],
+        maintenance_history_summary={
+            "provider": "stub-maintenance-history-adapter",
+            "mutation_allowed": False,
+            "open_work_order_exists": True,
+            "similar_events_30d": 2,
+            "work_orders": [
+                {
+                    "id": "WO-STUB-001",
+                    "status": "requested",
+                    "source_ref": "stub-maintenance://work-orders/WO-STUB-001",
+                }
+            ],
+            "inspection_results": [],
+            "maintenance_actions": [],
+            "maintenance_events": [],
+            "activities": [],
+            "equipment_history": [],
+            "similar_events": [],
+            "source_refs": ["stub-maintenance://work-orders/WO-STUB-001"],
+        },
         source_refs=["adapter://operation-context/test"],
     )
 
@@ -283,6 +303,11 @@ def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) ->
         "reason": "adapter_context_missing_or_unresolved",
         "owner_domain": "inventory",
     } in packet["evidence_gaps"]
+    assert packet["maintenance_history_summary"]["provider"] == (
+        "stub-maintenance-history-adapter"
+    )
+    assert packet["maintenance_history_summary"]["mutation_allowed"] is False
+    assert "stub-maintenance://work-orders/WO-STUB-001" in packet["source_refs"]
     assert "role_summaries" not in packet
 
 
