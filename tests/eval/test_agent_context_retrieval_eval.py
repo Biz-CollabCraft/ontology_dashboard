@@ -261,6 +261,7 @@ def test_langgraph_decision_gate_keeps_simple_workflow_default(tmp_path: Path) -
     assert gate["current_engine"] == "simple"
     assert gate["experimental_status"] == {
         "tool_trajectory_eval": "implemented_eval_only",
+        "per_tool_retry_trace": "implemented_eval_only",
         "langgraph_runtime": "implemented_experiment_only",
         "production_default": "simple",
     }

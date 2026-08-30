@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 
 TOOL_PIPELINE_VERSION = "agent-context-tool-pipeline-v0.1"
@@ -18,6 +18,58 @@ FORBIDDEN_TOOL_NAMES = {
     "closed_loop.create_maintenance_event",
     "closed_loop.request_replay",
     "closed_loop.auto_approve",
+}
+DEFAULT_TOOL_RETRY_POLICY = {
+    "max_attempts": 1,
+    "retryable_errors": [],
+    "fallback_behavior": "fail_pipeline",
+}
+TOOL_RETRY_POLICIES = {
+    "model_evidence.lookup": {
+        "max_attempts": 1,
+        "retryable_errors": [],
+        "fallback_behavior": "fail_pipeline",
+    },
+    "maintenance_history.lookup": {
+        "max_attempts": 2,
+        "retryable_errors": ["TimeoutError", "ConnectionError"],
+        "fallback_behavior": "continue_with_gap",
+    },
+    "operation_context.lookup": {
+        "max_attempts": 2,
+        "retryable_errors": ["TimeoutError", "ConnectionError"],
+        "fallback_behavior": "continue_with_gap",
+    },
+    "inspection_location.lookup": {
+        "max_attempts": 1,
+        "retryable_errors": [],
+        "fallback_behavior": "fail_pipeline",
+    },
+    "sop_guidance.lookup": {
+        "max_attempts": 2,
+        "retryable_errors": ["TimeoutError", "ConnectionError"],
+        "fallback_behavior": "continue_with_gap",
+    },
+    "ontology_neighbors.lookup": {
+        "max_attempts": 2,
+        "retryable_errors": ["TimeoutError", "ConnectionError"],
+        "fallback_behavior": "continue_with_gap",
+    },
+    "spare_part.lookup": {
+        "max_attempts": 2,
+        "retryable_errors": ["TimeoutError", "ConnectionError"],
+        "fallback_behavior": "continue_with_gap",
+    },
+    "similar_event.lookup": {
+        "max_attempts": 2,
+        "retryable_errors": ["TimeoutError", "ConnectionError"],
+        "fallback_behavior": "continue_with_gap",
+    },
+    "data_quality.lookup": {
+        "max_attempts": 1,
+        "retryable_errors": [],
+        "fallback_behavior": "fail_pipeline",
+    },
 }
 
 
@@ -104,19 +156,31 @@ class SituationQuestionRouter:
         return questions
 
 
-def run_read_only_tool_pipeline(packet: dict[str, Any]) -> dict[str, Any]:
+def run_read_only_tool_pipeline(
+    packet: dict[str, Any],
+    *,
+    executor: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Run deterministic read-only domain tools and return an auditable trajectory."""
 
-    return _run_selected_tools(packet, SituationQuestionRouter().route(packet))
+    return _run_selected_tools(
+        packet,
+        SituationQuestionRouter().route(packet),
+        executor=executor,
+    )
 
 
-def run_langgraph_tool_pipeline(packet: dict[str, Any]) -> dict[str, Any]:
+def run_langgraph_tool_pipeline(
+    packet: dict[str, Any],
+    *,
+    executor: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Run the same experiment through LangGraph when the dependency is available."""
 
     try:
         from langgraph.graph import END, StateGraph
     except Exception as exc:  # pragma: no cover - dependency varies by environment.
-        result = run_read_only_tool_pipeline(packet)
+        result = run_read_only_tool_pipeline(packet, executor=executor)
         result["engine"] = "simple"
         result["requested_engine"] = "langgraph"
         result["langgraph_available"] = False
@@ -135,6 +199,7 @@ def run_langgraph_tool_pipeline(packet: dict[str, Any]) -> dict[str, Any]:
             state["selected_questions"],
             engine="langgraph",
             pipeline_version=LANGGRAPH_TOOL_PIPELINE_VERSION,
+            executor=executor,
         )
         return state
 
@@ -166,6 +231,8 @@ def validate_tool_trajectory(result: dict[str, Any]) -> list[str]:
         errors.append("forbidden closed-loop tools were called: " + ", ".join(sorted(forbidden)))
     packet_refs = set(result.get("source_ref_scope") or [])
     for call in result.get("tool_calls") or []:
+        if call.get("status") == "failed":
+            errors.append(f"{call.get('tool_name')} failed without an allowed gap fallback")
         source_refs = set(call.get("source_refs") or [])
         if not source_refs.issubset(packet_refs):
             errors.append(f"{call.get('tool_name')} returned source refs outside packet scope")
@@ -178,13 +245,22 @@ def _run_selected_tools(
     *,
     engine: str = "simple",
     pipeline_version: str = TOOL_PIPELINE_VERSION,
+    executor: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     packet_hash = _hash(packet)
     packet_refs = _packet_source_refs(packet)
+    tool_executor = executor or execute_packet_context_tool
     tool_calls = [
-        _execute_tool(question, packet=packet, packet_hash=packet_hash)
+        _execute_tool(
+            question,
+            packet=packet,
+            packet_hash=packet_hash,
+            executor=tool_executor,
+        )
         for question in questions
     ]
+    failed_count = sum(1 for call in tool_calls if call["status"] == "failed")
+    gap_count = sum(1 for call in tool_calls if call["status"] == "gap")
     result = {
         "pipeline_version": pipeline_version,
         "engine": engine,
@@ -199,7 +275,7 @@ def _run_selected_tools(
         "mutation_allowed": False,
         "closed_loop_mutation_attempted": False,
         "forbidden_tools": sorted(FORBIDDEN_TOOL_NAMES),
-        "terminal_status": "completed",
+        "terminal_status": _terminal_status(failed_count=failed_count, gap_count=gap_count),
     }
     result["validation_errors"] = validate_tool_trajectory(result)
     if result["validation_errors"]:
@@ -212,14 +288,63 @@ def _execute_tool(
     *,
     packet: dict[str, Any],
     packet_hash: str,
+    executor: Callable[[str, dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
-    output = _tool_output(question.tool_name, packet)
+    retry_policy = _tool_retry_policy(question.tool_name)
+    max_attempts = max(1, int(retry_policy.get("max_attempts") or 1))
+    attempts: list[dict[str, Any]] = []
+    output: dict[str, Any] = {}
+    last_error: BaseException | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            output = executor(question.tool_name, packet)
+            attempts.append({"attempt": attempt, "status": "succeeded"})
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            error_type = type(exc).__name__
+            retryable = _is_retryable_error(error_type, retry_policy)
+            attempts.append(
+                {
+                    "attempt": attempt,
+                    "status": "failed",
+                    "error_type": error_type,
+                    "message": str(exc),
+                    "retryable": retryable,
+                }
+            )
+            if not retryable or attempt >= max_attempts:
+                break
+    if last_error is not None:
+        fallback_behavior = str(retry_policy.get("fallback_behavior") or "fail_pipeline")
+        status = "gap" if fallback_behavior == "continue_with_gap" else "failed"
+        return {
+            "question_id": question.question_id,
+            "tool_name": question.tool_name,
+            "status": status,
+            "read_only": True,
+            "mutation_allowed": False,
+            "retry_policy": retry_policy,
+            "attempt_count": len(attempts),
+            "attempts": attempts,
+            "input_snapshot_hash": packet_hash,
+            "output_hash": _hash(output),
+            "source_refs": [],
+            "output": output,
+            "fallback_behavior": fallback_behavior,
+            "error_type": type(last_error).__name__,
+            "error_message": str(last_error),
+        }
     return {
         "question_id": question.question_id,
         "tool_name": question.tool_name,
         "status": "succeeded",
         "read_only": True,
         "mutation_allowed": False,
+        "retry_policy": retry_policy,
+        "attempt_count": len(attempts),
+        "attempts": attempts,
         "input_snapshot_hash": packet_hash,
         "output_hash": _hash(output),
         "source_refs": sorted(_collect_source_refs(output).intersection(_packet_source_refs(packet))),
@@ -227,7 +352,30 @@ def _execute_tool(
     }
 
 
-def _tool_output(tool_name: str, packet: dict[str, Any]) -> dict[str, Any]:
+def _tool_retry_policy(tool_name: str) -> dict[str, Any]:
+    policy = TOOL_RETRY_POLICIES.get(tool_name) or DEFAULT_TOOL_RETRY_POLICY
+    return {
+        "max_attempts": int(policy["max_attempts"]),
+        "retryable_errors": list(policy["retryable_errors"]),
+        "fallback_behavior": str(policy["fallback_behavior"]),
+    }
+
+
+def _is_retryable_error(error_type: str, retry_policy: dict[str, Any]) -> bool:
+    return error_type in set(retry_policy.get("retryable_errors") or [])
+
+
+def _terminal_status(*, failed_count: int, gap_count: int) -> str:
+    if failed_count:
+        return "failed"
+    if gap_count:
+        return "partial"
+    return "completed"
+
+
+def execute_packet_context_tool(tool_name: str, packet: dict[str, Any]) -> dict[str, Any]:
+    """Return the packet slice for a read-only context tool."""
+
     if tool_name == "model_evidence.lookup":
         return packet.get("model_expression_context") or {}
     if tool_name == "maintenance_history.lookup":

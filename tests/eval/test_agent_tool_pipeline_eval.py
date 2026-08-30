@@ -7,6 +7,7 @@ from typing import Any
 from app.dependencies import build_manufacturing_service
 from app.mvp.agent_context_tool_pipeline import (
     FORBIDDEN_TOOL_NAMES,
+    execute_packet_context_tool,
     run_langgraph_tool_pipeline,
     run_read_only_tool_pipeline,
     validate_tool_trajectory,
@@ -50,6 +51,10 @@ def test_read_only_tool_pipeline_matches_expected_trajectory(tmp_path: Path) -> 
         assert result["closed_loop_mutation_attempted"] is False
         assert result["called_tools"] == case["expected_tools"], case["case_id"]
         assert not set(result["called_tools"]).intersection(case["forbidden_tools"])
+        for call in result["tool_calls"]:
+            assert call["retry_policy"]["max_attempts"] >= 1
+            assert call["attempt_count"] == 1
+            assert call["attempts"] == [{"attempt": 1, "status": "succeeded"}]
         assert result["validation_errors"] == []
 
 
@@ -82,6 +87,71 @@ def test_tool_pipeline_data_quality_hold_avoids_context_fanout(tmp_path: Path) -
     assert result["validation_errors"] == []
 
 
+def test_tool_pipeline_retries_retryable_tool_failure(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-tool-retry.db", root=ROOT)
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    failures_left = {"operation_context.lookup": 1}
+
+    def flaky_executor(tool_name: str, packet: dict[str, Any]) -> dict[str, Any]:
+        if failures_left.get(tool_name, 0) > 0:
+            failures_left[tool_name] -= 1
+            raise TimeoutError("temporary operation adapter timeout")
+        return execute_packet_context_tool(tool_name, packet)
+
+    result = run_read_only_tool_pipeline(packet, executor=flaky_executor)
+    operation_call = _call_by_tool(result, "operation_context.lookup")
+
+    assert result["terminal_status"] == "completed"
+    assert operation_call["status"] == "succeeded"
+    assert operation_call["attempt_count"] == 2
+    assert operation_call["attempts"][0]["status"] == "failed"
+    assert operation_call["attempts"][0]["retryable"] is True
+    assert operation_call["attempts"][1] == {"attempt": 2, "status": "succeeded"}
+    assert result["validation_errors"] == []
+
+
+def test_tool_pipeline_continues_with_gap_for_retry_exhaustion(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-tool-gap.db", root=ROOT)
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+
+    def failing_executor(tool_name: str, packet: dict[str, Any]) -> dict[str, Any]:
+        if tool_name == "similar_event.lookup":
+            raise TimeoutError("similar-event adapter timeout")
+        return execute_packet_context_tool(tool_name, packet)
+
+    result = run_read_only_tool_pipeline(packet, executor=failing_executor)
+    similar_call = _call_by_tool(result, "similar_event.lookup")
+
+    assert result["terminal_status"] == "partial"
+    assert similar_call["status"] == "gap"
+    assert similar_call["attempt_count"] == 2
+    assert similar_call["fallback_behavior"] == "continue_with_gap"
+    assert all(attempt["retryable"] is True for attempt in similar_call["attempts"])
+    assert result["validation_errors"] == []
+
+
+def test_tool_pipeline_fails_when_required_tool_has_non_retryable_error(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-tool-required-failure.db", root=ROOT)
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+
+    def failing_executor(tool_name: str, packet: dict[str, Any]) -> dict[str, Any]:
+        if tool_name == "model_evidence.lookup":
+            raise ValueError("invalid model evidence payload")
+        return execute_packet_context_tool(tool_name, packet)
+
+    result = run_read_only_tool_pipeline(packet, executor=failing_executor)
+    model_call = _call_by_tool(result, "model_evidence.lookup")
+
+    assert result["terminal_status"] == "failed"
+    assert model_call["status"] == "failed"
+    assert model_call["attempt_count"] == 1
+    assert model_call["fallback_behavior"] == "fail_pipeline"
+    assert model_call["attempts"][0]["retryable"] is False
+    assert "model_evidence.lookup failed without an allowed gap fallback" in (
+        result["validation_errors"]
+    )
+
+
 def test_experimental_langgraph_pipeline_preserves_tool_trajectory(tmp_path: Path) -> None:
     service = build_manufacturing_service(tmp_path / "agent-tool-langgraph.db", root=ROOT)
     packet = service.agent_review_packet("CNC-S04-L02-03")
@@ -100,3 +170,30 @@ def test_experimental_langgraph_pipeline_preserves_tool_trajectory(tmp_path: Pat
     assert langgraph["mutation_allowed"] is False
     assert langgraph["closed_loop_mutation_attempted"] is False
     assert langgraph["validation_errors"] == []
+
+
+def test_experimental_langgraph_pipeline_preserves_retry_trace(tmp_path: Path) -> None:
+    service = build_manufacturing_service(tmp_path / "agent-tool-langgraph-retry.db", root=ROOT)
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    failures_left = {"operation_context.lookup": 1}
+
+    def flaky_executor(tool_name: str, packet: dict[str, Any]) -> dict[str, Any]:
+        if failures_left.get(tool_name, 0) > 0:
+            failures_left[tool_name] -= 1
+            raise TimeoutError("temporary operation adapter timeout")
+        return execute_packet_context_tool(tool_name, packet)
+
+    result = run_langgraph_tool_pipeline(packet, executor=flaky_executor)
+    operation_call = _call_by_tool(result, "operation_context.lookup")
+
+    assert result["terminal_status"] == "completed"
+    assert operation_call["attempt_count"] == 2
+    assert operation_call["attempts"][0]["retryable"] is True
+    assert operation_call["attempts"][1]["status"] == "succeeded"
+
+
+def _call_by_tool(result: dict[str, Any], tool_name: str) -> dict[str, Any]:
+    for call in result["tool_calls"]:
+        if call["tool_name"] == tool_name:
+            return call
+    raise AssertionError(f"missing tool call: {tool_name}")
