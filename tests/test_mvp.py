@@ -730,6 +730,48 @@ def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
     )
 
 
+def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
+    client: TestClient,
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first = client.post(
+        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=manual_materialization"
+    )
+    second = client.post(
+        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=ui_manual_regeneration"
+    )
+    other = client.post(
+        "/api/objects/CNC-S04-L02-03/agent-review-summary?trigger=manual_materialization"
+    )
+    response = client.get(
+        "/api/projects/manufacturing-demo-project/agent-review-workflow-runs"
+        "?asset_id=CNC-S04-L04-01&limit=10"
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert other.status_code == 200
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["project_id"] == "manufacturing-demo-project"
+    assert payload["workspace_id"] == "manufacturing-demo"
+    assert [item["trigger"] for item in payload["items"]] == [
+        "ui_manual_regeneration",
+        "manual_materialization",
+    ]
+    assert all(item["status"] == "completed" for item in payload["items"])
+    assert all(item["error_message"] is None for item in payload["items"])
+    assert provider.calls == 2
+
+
 def test_agent_review_summary_materialization_key_changes_with_history_window(
     service: FactorySignalService,
 ) -> None:

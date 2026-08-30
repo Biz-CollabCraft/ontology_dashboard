@@ -387,6 +387,30 @@ class ManufacturingPredictiveMaintenanceService:
                 trace = {**trace, "workflow_run": _workflow_run_trace(run)}
         return summary, trace
 
+    def agent_review_workflow_runs(
+        self,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        asset_id: str | None = None,
+        event_id: str | None = None,
+        dataset_version_id: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        runs = self.repository.list_agent_review_workflow_runs(
+            organization_id="org-ontology-demo",
+            project_id=project_id,
+            workspace_id="manufacturing-demo",
+            asset_id=asset_id,
+            event_id=event_id,
+            dataset_version_id=dataset_version_id,
+            limit=limit,
+        )
+        return {
+            "project_id": project_id,
+            "workspace_id": "manufacturing-demo",
+            "items": [_workflow_run_trace(run) for run in runs],
+        }
+
     def materialize_agent_review_summaries(
         self,
         project_id: str = "manufacturing-demo-project",

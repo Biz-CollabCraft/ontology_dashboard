@@ -13,6 +13,7 @@ import type {
   EvidenceSnapshotBasisWire,
   MvpAgentReviewPacket,
   MvpAgentReviewSummaryResponse,
+  MvpAgentReviewWorkflowRunsResponse,
 } from "./features/mvp/api/mvpContracts";
 import type {
   AdminWorkflowApprovals,
@@ -665,6 +666,25 @@ export function createMvpAgentReviewSummary(input: {
   return request<MvpAgentReviewSummaryResponse>(
     `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
     { method: "POST" },
+  );
+}
+
+export function getMvpAgentReviewWorkflowRuns(input: {
+  projectId?: string;
+  assetId?: string | null;
+  eventId?: string | null;
+  datasetVersionId?: string | null;
+  limit?: number;
+}): Promise<MvpAgentReviewWorkflowRunsResponse> {
+  const projectId = input.projectId ?? "manufacturing-demo-project";
+  const params = new URLSearchParams({
+    limit: String(input.limit ?? 20),
+  });
+  if (input.assetId) params.set("asset_id", input.assetId);
+  if (input.eventId) params.set("event_id", input.eventId);
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  return request<MvpAgentReviewWorkflowRunsResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/agent-review-workflow-runs?${params.toString()}`,
   );
 }
 

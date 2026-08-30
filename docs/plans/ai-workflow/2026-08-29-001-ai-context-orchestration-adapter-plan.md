@@ -262,7 +262,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 
 ### U9. Dashboard Operator Runtime Log Side Tab
 
-- **Status:** Planned. This is a UI/observability slice, not an automation or mutation slice.
+- **Status:** Implemented as a read-only MVP side tab. This is a UI/observability slice, not an automation or mutation slice.
 - **Goal:** Let a dashboard operator understand whether AI summaries are current, reused, manually regenerated, watcher-generated, partially completed, or failed.
 - **Files:**
   - `systems/backend/app/mvp/router.py`
@@ -272,13 +272,13 @@ The important boundary is that adapters gather domain facts, while the packet de
   - `systems/frontend/src/features/mvp/mvp.css`
   - `tests/test_mvp.py`
   - `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
-- **Approach:** Add an operator-facing side tab such as `요약 이력` or `AI 실행 로그` next to the existing status/action surfaces. The tab reads stored `agent_review_workflow_runs` metadata and related summary materialization status. It should show one row per run with trigger, status, attempt count when available, started/completed time, summary key or shortened run id, and failure/fallback reason. It must be read-only.
+- **Approach:** Add an operator-facing `운영 로그` side tab next to the existing status/action surfaces. The tab reads stored `agent_review_workflow_runs` metadata through a project-scoped read API and shows one row per run with trigger, status, updated time, engine, and failure message when present. It is read-only.
 - **UI Behavior:**
   - `watcher · 완료`: summary was prepared before side-view interaction.
   - `수동 갱신 · 완료`: operator clicked the explicit regeneration control.
   - `부분 완료`: fallback summary was stored after LLM/provider/validation failure.
   - `실패`: no consumer-ready summary was produced; show error type/message only in details.
-  - `상세 보기`: opens a small detail panel with trace, attempt log, checksums, and source refs.
+  - `상세 보기`: present as a disabled placeholder until trace detail disclosure is implemented.
   - No `승인`, `작업요청 생성`, `되돌리기`, `재시도 실행`, or Closed-loop mutation buttons in this tab.
 - **Test Scenarios:**
   - Cached side-view open does not create a new run.
@@ -286,7 +286,7 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Watcher materialization creates `polling_watcher` runs and the log tab shows trigger source.
   - Failed or fallback runs render status and reason without exposing mutation controls.
   - Operator log rows link back to existing summary/run ids without raw prompt or hidden domain DB reads.
-- **Verification:** Backend tests should prove read-only listing and project scope. Frontend/e2e tests should prove the side tab renders watcher/manual rows and that no Closed-loop action labels appear inside the AI execution log.
+- **Verification:** Backend tests prove the read-only workflow-run listing returns same-asset runs without triggering a new summary. Frontend type checking passed. Existing packet/eval tests passed. Browser e2e for the new tab remains the next verification slice.
 
 #### LangGraph Implementation Plan
 

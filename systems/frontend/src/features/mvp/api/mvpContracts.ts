@@ -635,6 +635,27 @@ export interface MvpAgentReviewSummaryResponse {
   };
 }
 
+export interface MvpAgentReviewWorkflowRun {
+  workflow_run_id: string;
+  trigger: string;
+  engine: string;
+  status: "running" | "completed" | "partial" | "failed";
+  started_at: string;
+  completed_at: string | null;
+  updated_at: string;
+  summary_key: string;
+  source_sha256: string;
+  context_sha256: string;
+  error_type: string | null;
+  error_message: string | null;
+}
+
+export interface MvpAgentReviewWorkflowRunsResponse {
+  project_id: string;
+  workspace_id: string;
+  items: MvpAgentReviewWorkflowRun[];
+}
+
 export interface MvpEventDetailModel {
   snapshotBasis: MvpEvidenceSnapshotBasis | null;
   event: MvpEvent;

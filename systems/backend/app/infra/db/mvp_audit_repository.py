@@ -321,6 +321,36 @@ class AuditRepository:
             return None
         return self._workflow_run_record_from_row(dict(row))
 
+    def list_agent_review_workflow_runs(self, **filters: Any) -> list[dict[str, Any]]:
+        clauses = [
+            "organization_id=?",
+            "project_id=?",
+            "workspace_id=?",
+        ]
+        values: list[Any] = [
+            str(filters.get("organization_id") or "org-ontology-demo"),
+            str(filters["project_id"]),
+            str(filters.get("workspace_id") or "manufacturing-demo"),
+        ]
+        for column in ("asset_id", "event_id", "dataset_version_id"):
+            value = filters.get(column)
+            if value:
+                clauses.append(f"{column}=?")
+                values.append(str(value))
+        limit = max(1, min(int(filters.get("limit") or 20), 100))
+        values.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM agent_review_workflow_runs
+                WHERE {" AND ".join(clauses)}
+                ORDER BY updated_at DESC, started_at DESC
+                LIMIT ?
+                """,
+                tuple(values),
+            ).fetchall()
+        return [self._workflow_run_record_from_row(dict(row)) for row in rows]
+
     def save_agent_review_summary(self, **record: Any) -> dict[str, Any]:
         now = self._now()
         payload = {

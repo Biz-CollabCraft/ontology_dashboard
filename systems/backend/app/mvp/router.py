@@ -174,6 +174,26 @@ def create_agent_review_summary(
     return {"summary": summary, "trace": trace}
 
 
+@router.get("/projects/{project_id}/agent-review-workflow-runs")
+def list_agent_review_workflow_runs(
+    project_id: str,
+    asset_id: str | None = Query(default=None, max_length=160),
+    event_id: str | None = Query(default=None, max_length=160),
+    dataset_version_id: str | None = Query(default=None, max_length=160),
+    limit: int = Query(default=20, ge=1, le=100),
+    principal: Principal = Depends(require_permission("events.read")),
+    service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+):
+    _authorize_agent_review_summary(principal=principal, project_id=project_id)
+    return service.agent_review_workflow_runs(
+        project_id,
+        asset_id=asset_id,
+        event_id=event_id,
+        dataset_version_id=dataset_version_id,
+        limit=limit,
+    )
+
+
 @router.get("/events/{event_id}/evidence")
 def get_evidence(
     event_id: str,
