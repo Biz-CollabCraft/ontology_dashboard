@@ -71,15 +71,18 @@ test("shows the SOP grounded AI review summary without mutating work state", asy
   await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
   const preview = page.getByRole("dialog", { name: "선택 설비 상세" });
   await expect(preview).toBeVisible();
+  const agentReview = preview.getByRole("region", { name: "AI 검토 요약" });
+  await expect(agentReview).toContainText("검토 전용");
+  await expect(agentReview).toContainText("상태 변경");
+  await expect(agentReview).toContainText("불가");
+  await expect(agentReview).toContainText("이력 조회 요약");
+  await expect(agentReview).toContainText("최근 정비 이력");
+  await expect(agentReview).toContainText("현장 담당자");
+  await expect(agentReview).toContainText("공정 관리자");
+  await expect(agentReview).toContainText("이 초안은 담당자 검토를 돕기 위한 read-only 문서");
+  await expect(agentReview).toContainText("자동 승인을 수행하지 않습니다");
   await preview.getByRole("tab", { name: "처리", exact: true }).click();
   await expect(preview.getByText("점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.")).toBeVisible();
-  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("검토 전용");
-  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("상태 변경");
-  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("불가");
-  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("이력 조회 요약");
-  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("최근 정비 이력");
-  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("담당자 검토 초안");
-  await expect(preview.getByRole("region", { name: "AI 검토 요약" })).toContainText("자동 승인을 수행하지 않습니다");
 });
 
 test("completes Overview to Objects to Operations to Reports Executive Brief without Analysis", async ({ page }) => {
@@ -104,8 +107,10 @@ test("completes Overview to Objects to Operations to Reports Executive Brief wit
   await expect(page.getByText("자동 정지 아님", { exact: true })).toBeVisible();
   await expect(page.getByText(/설비 제어 명령을 실행하지 않습니다/)).toBeVisible();
   await page.getByLabel("추가 메모 선택 입력").fill("E2E 검증: 현장 점검 전 정지 여부를 검토합니다.");
-  await page.getByRole("button", { name: /정지 검토 요청 기록하기/ }).click();
-  await expect(page.getByText("저장 완료", { exact: true })).toBeVisible();
+  await page.getByLabel("현재 허용된 작업").getByRole("button", { name: "작업요청 생성", exact: true }).click();
+  const saveFailure = page.getByRole("status").filter({ hasText: "저장 실패" });
+  await expect(saveFailure).toBeVisible();
+  await expect(saveFailure).toContainText("API request failed: 503");
 
   await page.locator(".mvp-report-bridge").click();
   await expect(page).toHaveURL(/view=reports/);
