@@ -256,6 +256,10 @@ class ManufacturingPredictiveMaintenanceService:
                 fixture=fixture,
                 artifact=artifact,
             ),
+            ontology_context=self.domain_review_context_adapter.ontology_context(
+                fixture=fixture,
+                artifact=artifact,
+            ),
             context=(
                 self.agent_review_context_registry.context_for_packet(
                     view_model=view_model,

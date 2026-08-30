@@ -1,14 +1,4 @@
 {
-  "snapshot_basis": {
-    "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
-    "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
-    "asset_id": "CNC-S04-L02-03",
-    "event_id": "EVT-GS-004",
-    "observed_at": "2026-08-01T00:00:00+09:00",
-    "model_version": "fixture-heuristic-v1",
-    "dataset_version": "fixture-compatibility",
-    "source_sha256": null
-  },
   "asset_id": "CNC-S04-L02-03",
   "asset_label": "4구역 · 2셀 · CNC 가공기 3",
   "closed_loop_boundary": {
@@ -69,6 +59,45 @@
     "Agent Review Packet is read-only and does not mutate Recommendation, WorkOrder, MaintenanceAction, MaintenanceEvent, or Replay state.",
     "SOP grounding supports inspection and replacement timing review drafts; it is not Product Evidence or a repair instruction."
   ],
+  "ontology_context": {
+    "mutation_allowed": false,
+    "provider": "manufacturing_fixture_ontology_context",
+    "source_refs": [
+      "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+    ],
+    "traversals": [
+      {
+        "component_id": "drive_power",
+        "component_label": "동력 전달 계통",
+        "factor_refs": [
+          "factor.1.mechanical_power_w",
+          "factor.2.overstrain_index",
+          "factor.3.torque_nm"
+        ],
+        "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+        "location_source_ref": "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
+        "sop_ids": [],
+        "source_refs": [
+          "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power"
+        ]
+      }
+    ]
+  },
+  "operation_context_summary": {
+    "basis": "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준",
+    "estimated_downtime_minutes": 240,
+    "estimated_lost_units": 51,
+    "limitations": [
+      "This context is not a MES, ERP, APS, or customer-order record.",
+      "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
+      "AI4I provides Product Type L/M/H but no real SKU or product name.",
+      "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
+      "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
+    ],
+    "product_variant": "L",
+    "production_impact": "high",
+    "source_ref": "operation-context://production-planning-context-v1"
+  },
   "project_id": "manufacturing-demo-project",
   "review_draft": {
     "boundary_note": "이 초안은 담당자 검토를 돕기 위한 read-only 문서이며 작업요청 생성, 정비 승인, 자동 승인을 수행하지 않습니다.",
@@ -105,6 +134,16 @@
     "status_grade": "critical"
   },
   "schema_version": "agent-review-packet-v1.0",
+  "snapshot_basis": {
+    "artifact_id": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+    "asset_id": "CNC-S04-L02-03",
+    "dataset_version": "fixture-compatibility",
+    "event_id": "EVT-GS-004",
+    "evidence_payload_reference": "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",
+    "model_version": "fixture-heuristic-v1",
+    "observed_at": "2026-08-01T00:00:00+09:00",
+    "source_sha256": null
+  },
   "sop_guidance": [],
   "sop_retrieval": {
     "mutation_allowed": false,
@@ -126,21 +165,6 @@
     },
     "returned_count": 0,
     "top_k": 5
-  },
-  "operation_context_summary": {
-    "basis": "80 assets, 16h/day, OEE 0.846, cycle 4.0min 기준",
-    "estimated_downtime_minutes": 240,
-    "estimated_lost_units": 51,
-    "limitations": [
-      "This context is not a MES, ERP, APS, or customer-order record.",
-      "The calculated plan must not change failure_probability, status_grade, top_factors, or recommended_action.",
-      "AI4I provides Product Type L/M/H but no real SKU or product name.",
-      "Data-quality-hold events surface production impact as unavailable until the sensor issue is resolved.",
-      "Estimated lost units are planning impact estimates, not confirmed downtime or realized production loss."
-    ],
-    "product_variant": "L",
-    "production_impact": "high",
-    "source_ref": "operation-context://production-planning-context-v1"
   },
   "source_refs": [
     "RESULT#CNC-S04-L02-03#2026-08-01T00:00:00+09:00",

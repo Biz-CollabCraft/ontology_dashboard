@@ -83,6 +83,31 @@ def test_gs004_gold_preserves_three_factor_refs_for_one_inspection_target() -> N
         "overstrain_index",
         "torque_nm",
     ]
+    assert packet["ontology_context"]["provider"] == (
+        "manufacturing_fixture_ontology_context"
+    )
+    assert packet["ontology_context"]["mutation_allowed"] is False
+    assert packet["ontology_context"]["traversals"] == [
+        {
+            "component_id": "drive_power",
+            "component_label": "동력 전달 계통",
+            "factor_refs": [
+                "factor.1.mechanical_power_w",
+                "factor.2.overstrain_index",
+                "factor.3.torque_nm",
+            ],
+            "location_label": "주축 모터, 커플링, 동력 전달 하우징",
+            "location_source_ref": (
+                "data/fixtures/inspection_location/"
+                "demo-cnc-inspection-location-reference-v1.json#drive_power"
+            ),
+            "sop_ids": [],
+            "source_refs": [
+                "data/fixtures/inspection_location/"
+                "demo-cnc-inspection-location-reference-v1.json#drive_power"
+            ],
+        }
+    ]
 
 
 def test_gs007_gold_fails_closed_for_data_quality_hold() -> None:

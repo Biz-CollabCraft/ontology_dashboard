@@ -53,6 +53,14 @@ class DomainReviewContextAdapter(Protocol):
     ) -> dict[str, Any]:
         """Return read-only SOP retrieval candidates for agent review."""
 
+    def ontology_context(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return read-only factor/component/location/SOP relationship context."""
+
 
 class ManufacturingFixtureReviewContextAdapter:
     """Fixture-backed manufacturing domain adapter used by the MVP demo."""
@@ -206,6 +214,66 @@ class ManufacturingFixtureReviewContextAdapter:
             procedures=self.inspection_sops,
         )
 
+    def ontology_context(
+        self,
+        *,
+        fixture: dict[str, Any],
+        artifact: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Compose a fixture-backed ontology traversal trace for agent packets."""
+
+        locations = self.inspection_locations(fixture=fixture, artifact=artifact)
+        sop = self.sop_retrieval(fixture=fixture, artifact=artifact)
+        sop_results_by_id = _sop_results_by_id(sop)
+        factor_refs_by_component = _factor_refs_by_component(artifact)
+        component_hypotheses = (
+            (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
+        )
+        traversals = []
+        for hypothesis in component_hypotheses:
+            if not isinstance(hypothesis, dict):
+                continue
+            component_id = str(hypothesis.get("component_id") or "")
+            if not component_id:
+                continue
+            location = locations.get(component_id) or {}
+            matched_sop_ids = _matched_sop_ids(component_id, sop_results_by_id)
+            traversals.append(
+                {
+                    "component_id": component_id,
+                    "component_label": str(hypothesis.get("component_label") or ""),
+                    "factor_refs": factor_refs_by_component.get(component_id, []),
+                    "location_label": location.get("location_label"),
+                    "location_source_ref": location.get("source_ref"),
+                    "sop_ids": matched_sop_ids,
+                    "source_refs": [
+                        ref
+                        for ref in [
+                            str(hypothesis.get("source_ref") or ""),
+                            str(location.get("source_ref") or ""),
+                            *[
+                                str(sop_results_by_id[sop_id].get("source_ref") or "")
+                                for sop_id in matched_sop_ids
+                            ],
+                        ]
+                        if ref
+                    ],
+                }
+            )
+        return {
+            "provider": "manufacturing_fixture_ontology_context",
+            "mutation_allowed": False,
+            "traversals": traversals,
+            "source_refs": list(
+                dict.fromkeys(
+                    ref
+                    for traversal in traversals
+                    for ref in traversal.get("source_refs", [])
+                    if ref
+                )
+            ),
+        }
+
     def _matching_inspection_sops(
         self,
         *,
@@ -227,6 +295,45 @@ def _component_ids(artifact: dict[str, Any]) -> set[str]:
         for item in component_hypotheses
         if isinstance(item, dict) and item.get("component_id")
     }
+
+
+def _factor_refs_by_component(artifact: dict[str, Any]) -> dict[str, list[str]]:
+    component_hypotheses = (
+        (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
+    )
+    refs: dict[str, list[str]] = {}
+    for hypothesis in component_hypotheses:
+        if not isinstance(hypothesis, dict):
+            continue
+        component_id = str(hypothesis.get("component_id") or "")
+        if not component_id:
+            continue
+        refs[component_id] = [
+            str(item)
+            for item in hypothesis.get("basis") or []
+            if str(item).startswith("factor.")
+        ]
+    return refs
+
+
+def _sop_results_by_id(sop_retrieval: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str((item.get("procedure") or {}).get("sop_id") or ""): item
+        for item in sop_retrieval.get("results") or []
+        if str((item.get("procedure") or {}).get("sop_id") or "")
+    }
+
+
+def _matched_sop_ids(
+    component_id: str,
+    sop_results_by_id: dict[str, dict[str, Any]],
+) -> list[str]:
+    return sorted(
+        sop_id
+        for sop_id, result in sop_results_by_id.items()
+        if component_id
+        in {str(item) for item in (result.get("procedure") or {}).get("component_ids") or []}
+    )
 
 
 def _production_impact(estimated_downtime_minutes: Any) -> str | None:

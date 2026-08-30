@@ -17,6 +17,7 @@
     "sop_retrieval",
     "inspection_targets",
     "sop_guidance",
+    "ontology_context",
     "history_review_items",
     "evidence_gaps",
     "source_refs",
@@ -149,6 +150,34 @@
         "basis": {"type": "string"},
         "limitations": {"type": "array", "items": {"type": "string"}},
         "source_ref": {"type": ["string", "null"]}
+      }
+    },
+    "ontology_context": {
+      "type": "object",
+      "description": "Read-only ontology traversal context supplied by a domain adapter. It explains how factors, components, inspection locations, and SOP candidates relate without granting query or mutation authority to the LLM.",
+      "required": ["provider", "mutation_allowed", "traversals", "source_refs"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {"type": "string"},
+        "mutation_allowed": {"const": false},
+        "traversals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["component_id", "component_label", "factor_refs", "location_label", "location_source_ref", "sop_ids", "source_refs"],
+            "additionalProperties": false,
+            "properties": {
+              "component_id": {"type": "string"},
+              "component_label": {"type": "string"},
+              "factor_refs": {"type": "array", "items": {"type": "string"}},
+              "location_label": {"type": ["string", "null"]},
+              "location_source_ref": {"type": ["string", "null"]},
+              "sop_ids": {"type": "array", "items": {"type": "string"}},
+              "source_refs": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "source_refs": {"type": "array", "items": {"type": "string"}}
       }
     },
     "inspection_targets": {

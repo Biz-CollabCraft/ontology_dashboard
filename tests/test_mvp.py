@@ -1025,6 +1025,31 @@ def test_agent_review_packet_consumes_domain_adapter_outputs(
                 ],
             }
 
+        def ontology_context(self, *, fixture: dict, artifact: dict) -> dict:
+            component_id = self._component_id(artifact)
+            return {
+                "provider": "stub_ontology_adapter",
+                "mutation_allowed": False,
+                "traversals": [
+                    {
+                        "component_id": component_id,
+                        "component_label": "stub 부품",
+                        "factor_refs": ["factor.1.stub"],
+                        "location_label": "stub 위치 계약",
+                        "location_source_ref": f"stub-location://contract#{component_id}",
+                        "sop_ids": ["stub-sop"],
+                        "source_refs": [
+                            f"stub-location://contract#{component_id}",
+                            "stub-sop://procedure#stub-sop",
+                        ],
+                    }
+                ],
+                "source_refs": [
+                    f"stub-location://contract#{component_id}",
+                    "stub-sop://procedure#stub-sop",
+                ],
+            }
+
     service.domain_review_context_adapter = StubDomainReviewContextAdapter()
 
     view_model = service.asset_detail_view_model("CNC-S04-L02-03")
@@ -1037,6 +1062,9 @@ def test_agent_review_packet_consumes_domain_adapter_outputs(
     assert packet["operation_context_summary"]["source_ref"] == "operation-context://stub-context"
     assert packet["sop_guidance"][0]["sop_id"] == "stub-sop"
     assert packet["sop_guidance"][0]["location_label"] == "stub 위치 계약"
+    assert packet["ontology_context"]["provider"] == "stub_ontology_adapter"
+    assert packet["ontology_context"]["mutation_allowed"] is False
+    assert packet["ontology_context"]["traversals"][0]["sop_ids"] == ["stub-sop"]
     assert "stub-sop://procedure#stub-sop" in packet["source_refs"]
 
 

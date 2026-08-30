@@ -26,6 +26,7 @@ def compose_agent_review_packet(
     project_id: str,
     view_model: dict[str, Any],
     sop_retrieval: dict[str, Any],
+    ontology_context: dict[str, Any] | None = None,
     context: AgentReviewContext | None = None,
 ) -> dict[str, Any]:
     agent_context = context or compose_default_agent_review_context(view_model=view_model)
@@ -94,6 +95,8 @@ def compose_agent_review_packet(
                 "source_ref": str(guidance.get("source_ref") or ""),
             }
         )
+    if ontology_context:
+        source_refs.extend(str(ref) for ref in ontology_context.get("source_refs") or [])
 
     closed_loop = view_model.get("closed_loop") or {}
     available_actions = closed_loop.get("available_actions") or []
@@ -142,6 +145,7 @@ def compose_agent_review_packet(
         "inspection_targets": inspection_targets,
         "sop_guidance": sop_guidance,
         "operation_context_summary": agent_context.operation_context_summary,
+        "ontology_context": _agent_ontology_context(ontology_context),
         "history_review_items": list(dict.fromkeys(history_review_items)),
         "evidence_gaps": evidence_gaps,
         "source_refs": list(dict.fromkeys(source_refs)),
@@ -154,6 +158,34 @@ def compose_agent_review_packet(
             "note": "This packet may reference available actions for context, but it cannot execute or approve them.",
         },
         "limitations": list(dict.fromkeys(limitations)),
+    }
+
+
+def _agent_ontology_context(context: dict[str, Any] | None) -> dict[str, Any]:
+    if not context:
+        return {
+            "provider": "none",
+            "mutation_allowed": False,
+            "traversals": [],
+            "source_refs": [],
+        }
+    return {
+        "provider": str(context.get("provider") or ""),
+        "mutation_allowed": False,
+        "traversals": [
+            {
+                "component_id": str(item.get("component_id") or ""),
+                "component_label": str(item.get("component_label") or ""),
+                "factor_refs": [str(ref) for ref in item.get("factor_refs") or []],
+                "location_label": item.get("location_label"),
+                "location_source_ref": item.get("location_source_ref"),
+                "sop_ids": [str(ref) for ref in item.get("sop_ids") or []],
+                "source_refs": [str(ref) for ref in item.get("source_refs") or []],
+            }
+            for item in context.get("traversals") or []
+            if isinstance(item, dict)
+        ],
+        "source_refs": [str(ref) for ref in context.get("source_refs") or []],
     }
 
 
