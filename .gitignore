@@ -403,3 +403,7 @@ data/*.csv
 # Gemini CLI / GitHub Actions local artifacts
 .gemini/
 gha-creds-*.json
+
+# Local demo datasets and frontend test artifacts
+data/raw/predictive_maintenance_canonical_v3.1/
+systems/frontend/test-results/
