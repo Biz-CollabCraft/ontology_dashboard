@@ -817,6 +817,78 @@ def test_fragment_atomic_rename_os_error_handling_when_no_destination(tmp_path, 
         assert len(temp_dirs) == 0
 
 
+@pytest.mark.parametrize("failed_directory", ["fragments", "temporary"])
+def test_fragment_directory_creation_os_error_is_retryable(
+    tmp_path, monkeypatch, failed_directory
+):
+    """Directory creation failures remain retryable fragment storage errors."""
+    frag_repo = GenDataFragmentRepository(base_runs_dir=tmp_path / "runs")
+    original_mkdir = Path.mkdir
+
+    def selective_mkdir(self_path: Path, *args, **kwargs):
+        is_fragments_root = self_path.name == "fragments"
+        is_temporary = self_path.name.startswith(".tmp_")
+        if (failed_directory == "fragments" and is_fragments_root) or (
+            failed_directory == "temporary" and is_temporary
+        ):
+            raise OSError(f"simulated {failed_directory} directory creation failure")
+        return original_mkdir(self_path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", selective_mkdir)
+
+    with pytest.raises(ExtractionFragmentWriteFailedError) as exc_info:
+        frag_repo.save_fragment_atomic(
+            run_id="run-dir-failure",
+            batch_id="b" * 64,
+            source_identity="d" * 64,
+            source_uri="sensor/stream.jsonl",
+            source_start_offset=0,
+            source_end_offset=50,
+            source_start_line=1,
+            source_end_line=1,
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+            observations=[],
+            rejected_records=[],
+        )
+
+    assert exc_info.value.code == "EXTRACTION_FRAGMENT_WRITE_FAILED"
+    assert exc_info.value.retryable is True
+
+
+def test_existing_fragment_read_os_error_is_retryable(tmp_path, monkeypatch):
+    """Transient reads of an existing fragment are retryable instead of corrupt conflicts."""
+    frag_repo = GenDataFragmentRepository(base_runs_dir=tmp_path / "runs")
+    fragment_dir = tmp_path / "runs" / "run-1" / "fragments" / ("b" * 64)
+    fragment_dir.mkdir(parents=True)
+    manifest_file = fragment_dir / "fragment_manifest.json"
+    manifest_file.write_text("{}", encoding="utf-8")
+
+    original_read_bytes = Path.read_bytes
+
+    def selective_read_bytes(self_path: Path):
+        if self_path == manifest_file:
+            raise OSError("simulated transient fragment read failure")
+        return original_read_bytes(self_path)
+
+    monkeypatch.setattr(Path, "read_bytes", selective_read_bytes)
+
+    with pytest.raises(ExtractionFragmentWriteFailedError) as exc_info:
+        frag_repo.find_fragment_by_batch_id(
+            batch_id="b" * 64,
+            source_identity="d" * 64,
+            source_start_offset=0,
+            source_end_offset=50,
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+        )
+
+    assert exc_info.value.code == "EXTRACTION_FRAGMENT_WRITE_FAILED"
+    assert exc_info.value.retryable is True
+
+
 def test_existing_state_preserved_on_fragment_write_failure(tmp_path, monkeypatch):
     """When a fragment write fails with OSError, existing checkpoint and existing fragments remain completely unchanged."""
     chk_repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")

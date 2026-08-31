@@ -135,7 +135,12 @@ class GenDataFragmentRepository:
             if not frag_dir.is_dir():
                 continue
 
-            manifest_bytes = manifest_file.read_bytes()
+            try:
+                manifest_bytes = manifest_file.read_bytes()
+            except OSError as exc:
+                raise ExtractionFragmentWriteFailedError(
+                    f"Failed to read existing extraction fragment '{batch_id}': {exc}"
+                ) from exc
             manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
 
             # Verify manifest and files
@@ -190,7 +195,12 @@ class GenDataFragmentRepository:
         Returns (final_batch_dir, manifest, manifest_sha256).
         """
         fragments_root = self.base_runs_dir / run_id / "fragments"
-        fragments_root.mkdir(parents=True, exist_ok=True)
+        try:
+            fragments_root.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ExtractionFragmentWriteFailedError(
+                f"Failed to create fragment storage directory '{fragments_root}': {exc}"
+            ) from exc
         final_batch_dir = fragments_root / batch_id
 
         # 1. Idempotency check: if final_batch_dir exists, verify exact match
@@ -219,6 +229,10 @@ class GenDataFragmentRepository:
                         )
                 except ExtractionFragmentConflictError:
                     raise
+                except OSError as exc:
+                    raise ExtractionFragmentWriteFailedError(
+                        f"Failed to read existing extraction fragment '{batch_id}': {exc}"
+                    ) from exc
                 except Exception as exc:
                     raise ExtractionFragmentConflictError(
                         f"Fragment directory '{final_batch_dir}' exists but is corrupt: {exc}"
@@ -229,9 +243,8 @@ class GenDataFragmentRepository:
                 )
 
         temp_dir = fragments_root / f".tmp_{uuid4().hex}_{batch_id}"
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
         try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
             now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
             # 2. Write observations.jsonl
@@ -358,6 +371,8 @@ class GenDataFragmentRepository:
                             ):
                                 logger.info(f"[FragmentRepo] Atomic rename encountered identical existing fragment '{batch_id}'; reusing.")
                                 return final_batch_dir, existing_manifest, m_sha
+                        except ExtractionFragmentWriteFailedError:
+                            raise
                         except Exception as exc:
                             raise ExtractionFragmentConflictError(
                                 f"Fragment directory '{final_batch_dir}' exists but is corrupt: {exc}"
@@ -405,7 +420,12 @@ class GenDataFragmentRepository:
         if not manifest_file.is_file():
             raise ExtractionFragmentVerifyFailedError(f"Fragment manifest missing at '{manifest_file}'")
 
-        manifest_bytes = manifest_file.read_bytes()
+        try:
+            manifest_bytes = manifest_file.read_bytes()
+        except OSError as exc:
+            raise ExtractionFragmentWriteFailedError(
+                f"Failed to read fragment manifest '{manifest_file}': {exc}"
+            ) from exc
         actual_manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
 
         if expected_manifest_sha256 and actual_manifest_sha != expected_manifest_sha256:
@@ -424,7 +444,12 @@ class GenDataFragmentRepository:
             file_path = path / fd.path
             if not file_path.is_file():
                 raise ExtractionFragmentVerifyFailedError(f"Fragment file '{fd.path}' missing at '{file_path}'")
-            file_bytes = file_path.read_bytes()
+            try:
+                file_bytes = file_path.read_bytes()
+            except OSError as exc:
+                raise ExtractionFragmentWriteFailedError(
+                    f"Failed to read fragment file '{file_path}': {exc}"
+                ) from exc
             if len(file_bytes) != fd.size_bytes:
                 raise ExtractionFragmentVerifyFailedError(
                     f"Fragment file '{fd.path}' size mismatch: expected {fd.size_bytes}, got {len(file_bytes)}"
