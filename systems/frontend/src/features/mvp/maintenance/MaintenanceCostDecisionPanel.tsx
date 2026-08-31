@@ -106,6 +106,19 @@ export function latestEligibleInspection(
     .sort((left, right) => right.recorded_at.localeCompare(left.recorded_at))[0] ?? null;
 }
 
+export function latestCostAnalysisForInspection(
+  analyses: MaintenanceCostAnalysisReadModel[],
+  inspection: MaintenanceInspectionResultReadModel | null,
+): MaintenanceCostAnalysisReadModel | null {
+  if (!inspection) return null;
+  return analyses
+    .filter((analysis) => (
+      analysis.based_on.inspection_work_order_id === inspection.work_order_id
+      && analysis.based_on.inspection_result_id === inspection.inspection_result_id
+    ))
+    .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at))[0] ?? null;
+}
+
 export function buildCostRequest(
   form: ScenarioForm,
   guidance: Pick<MvpInspectionGuidance, "sopId" | "version">,
@@ -212,7 +225,10 @@ export function MaintenanceCostDecisionPanel({
   const inspection = useMemo(() => latestEligibleInspection(lineage), [lineage]);
   const analyses = useMemo(() => [...(lineage?.cost_analyses ?? [])]
     .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at)), [lineage]);
-  const current: MaintenanceCostAnalysisReadModel | null = analyses[0] ?? null;
+  const current = useMemo(
+    () => latestCostAnalysisForInspection(analyses, inspection),
+    [analyses, inspection],
+  );
   const selectedRecommendationsByAction = useMemo(() => new Map(
     (lineage?.recommendations ?? [])
       .filter((item) => (

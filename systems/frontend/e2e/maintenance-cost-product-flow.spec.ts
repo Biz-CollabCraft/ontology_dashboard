@@ -167,3 +167,78 @@ test("runs cost analysis only on request and keeps option selection proposed", a
   await blockedOption.evaluate((button: HTMLButtonElement) => button.click());
   expect(selectionRequests).toBe(1);
 });
+
+test("does not expose a previous inspection's cost analysis for a newer inspection", async ({ page }) => {
+  await page.route("**/api/projects/*/workspaces/*/maintenance/events/*/lineage", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        event_id: EVENT,
+        work_orders: [
+          { work_order_id: "INSPECTION-WO-A", work_type: "inspection", status: "completed" },
+          { work_order_id: "INSPECTION-WO-B", work_type: "inspection", status: "completed" },
+        ],
+        inspection_results: [
+          {
+            inspection_result_id: "INSPECTION-RESULT-A",
+            work_order_id: "INSPECTION-WO-A",
+            event_id: EVENT,
+            asset_id: "CNC-S04-L02-03",
+            equipment_id: "CNC-S04-L02-03",
+            outcome: "maintenance_recommended",
+            recorded_at: "2026-08-31T02:00:00Z",
+          },
+          {
+            inspection_result_id: "INSPECTION-RESULT-B",
+            work_order_id: "INSPECTION-WO-B",
+            event_id: EVENT,
+            asset_id: "CNC-S04-L02-03",
+            equipment_id: "CNC-S04-L02-03",
+            outcome: "maintenance_recommended",
+            recorded_at: "2026-08-31T03:00:00Z",
+          },
+        ],
+        cost_analyses: [{
+          schema_version: "maintenance-cost-scenario-v1.0",
+          analysis_id: "COST-ANALYSIS-A",
+          organization_id: "org-demo",
+          project_id: PROJECT,
+          workspace_id: WORKSPACE,
+          asset_id: "CNC-S04-L02-03",
+          equipment_id: "CNC-S04-L02-03",
+          calculated_at: "2026-08-31T02:30:00Z",
+          based_on: {
+            product_result_id: "RESULT-E2E",
+            evidence_id: "EVIDENCE-E2E",
+            inspection_work_order_id: "INSPECTION-WO-A",
+            inspection_result_id: "INSPECTION-RESULT-A",
+            sop_id: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+            sop_version: "demo-2026-08-28",
+          },
+          currency: "KRW",
+          currency_minor_unit: 0,
+          options: [],
+          lowest_calculated_cost_option_id: null,
+          assumptions: [],
+          input_sources: [],
+          missing_inputs: [],
+          price_version: "user-input-2026-08-31",
+          calculation_policy_version: "maintenance-cost-policy-v1",
+          limitations: [],
+        }],
+        recommendations: [],
+      }),
+    });
+  });
+
+  await login(page);
+  await page.locator(".mvp-factory-asset-node.is-selected").click();
+  await page.getByRole("tab", { name: "처리", exact: true }).click();
+  const panel = page.getByRole("region", { name: "정비 비용 분석" });
+
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole("button", { name: "비용 분석 입력", exact: true })).toBeVisible();
+  await expect(panel.getByText("최근 분석", { exact: true })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "이 시점 선택", exact: true })).toHaveCount(0);
+});
