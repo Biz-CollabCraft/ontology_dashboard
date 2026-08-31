@@ -480,8 +480,12 @@ export interface MaintenanceEventLineageReadModel {
   recommendations: Array<{
     recommendation_id: string;
     status: string;
+    source_inspection_work_order_id?: string | null;
+    source_inspection_reference?: string | null;
     source_cost_analysis_id?: string | null;
     source_cost_option_id?: string | null;
+    source_action_candidate_id?: string | null;
+    action_code?: string | null;
   }>;
 }
 

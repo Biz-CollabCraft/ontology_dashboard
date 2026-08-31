@@ -93,8 +93,12 @@ test("runs cost analysis only on request and keeps option selection proposed", a
         recommendations: recommendationCreated ? [{
           recommendation_id: "REC-COST-E2E",
           status: "proposed",
+          source_inspection_work_order_id: "INSPECTION-WO-E2E",
+          source_inspection_reference: "INSPECTION-RESULT-E2E",
           source_cost_analysis_id: analysis.analysis_id,
           source_cost_option_id: "OPTION-IMMEDIATE",
+          source_action_candidate_id: "ACTION-CANDIDATE-E2E",
+          action_code: "TOOL_REPLACEMENT",
         }] : [],
       }),
     });
@@ -157,4 +161,9 @@ test("runs cost analysis only on request and keeps option selection proposed", a
   await expect.poll(() => selectionRequests).toBe(1);
   await expect(panel.getByText(/제안 상태로 생성되었습니다/)).toBeVisible();
   await expect(panel.getByText(/별도 승인 전에는 WorkOrder가 생성되지 않습니다/)).toBeVisible();
+  await expect(panel.getByRole("button", { name: "제안 생성됨", exact: true })).toBeDisabled();
+  const blockedOption = panel.getByRole("button", { name: "이미 정비안 선택됨", exact: true });
+  await expect(blockedOption).toBeDisabled();
+  await blockedOption.evaluate((button: HTMLButtonElement) => button.click());
+  expect(selectionRequests).toBe(1);
 });

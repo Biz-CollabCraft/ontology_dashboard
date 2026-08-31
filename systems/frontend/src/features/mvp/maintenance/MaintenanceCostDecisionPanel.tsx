@@ -213,11 +213,16 @@ export function MaintenanceCostDecisionPanel({
   const analyses = useMemo(() => [...(lineage?.cost_analyses ?? [])]
     .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at)), [lineage]);
   const current: MaintenanceCostAnalysisReadModel | null = analyses[0] ?? null;
-  const selectedOptionIds = useMemo(() => new Set(
+  const selectedRecommendationsByAction = useMemo(() => new Map(
     (lineage?.recommendations ?? [])
-      .map((item) => item.source_cost_option_id)
-      .filter((item): item is string => Boolean(item)),
-  ), [lineage]);
+      .filter((item) => (
+        inspection
+        && item.source_inspection_work_order_id === inspection.work_order_id
+        && item.source_inspection_reference === inspection.inspection_result_id
+        && Boolean(item.action_code)
+      ))
+      .map((item) => [item.action_code as string, item]),
+  ), [inspection, lineage]);
 
   const update = (timing: MaintenanceExecutionTiming, field: CostField, value: string) => {
     setForm((currentForm) => ({
@@ -362,7 +367,9 @@ export function MaintenanceCostDecisionPanel({
               const executable = option.calculation_status === "calculated"
                 && (option.execution_timing === "immediate" || option.execution_timing === "planned_window");
               const isLowest = option.option_id === current.lowest_calculated_cost_option_id;
-              const alreadySelected = selectedOptionIds.has(option.option_id);
+              const selectedRecommendation = selectedRecommendationsByAction.get(option.action_code);
+              const alreadySelected = selectedRecommendation?.source_cost_option_id === option.option_id;
+              const actionAlreadySelected = Boolean(selectedRecommendation);
               return (
                 <article key={option.option_id}>
                   <div>
@@ -374,10 +381,14 @@ export function MaintenanceCostDecisionPanel({
                   <button
                     type="button"
                     className="mvp-button ghost"
-                    disabled={!executable || alreadySelected || submitting}
+                    disabled={!executable || actionAlreadySelected || submitting}
                     onClick={() => void selectOption(current.analysis_id, option.option_id)}
                   >
-                    {alreadySelected ? "제안 생성됨" : "이 시점 선택"}
+                    {alreadySelected
+                      ? "제안 생성됨"
+                      : executable && actionAlreadySelected
+                        ? "이미 정비안 선택됨"
+                        : "이 시점 선택"}
                   </button>
                 </article>
               );
