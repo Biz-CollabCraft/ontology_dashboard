@@ -82,7 +82,6 @@ export function MvpSystemAdminPage({
     try {
       const response = await getMvpAgentReviewWorkflowRuns({
         projectId: model.context.projectId,
-        datasetVersionId: model.context.datasetVersionId,
         limit: 100,
       });
       setRuns(response.items);
@@ -91,7 +90,7 @@ export function MvpSystemAdminPage({
     } finally {
       setLoading(false);
     }
-  }, [model.context.datasetVersionId, model.context.projectId]);
+  }, [model.context.projectId]);
 
   useEffect(() => {
     void loadRuns();
