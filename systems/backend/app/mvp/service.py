@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -48,6 +48,7 @@ from app.planner.contracts import IntentRouter, deterministic_answer
 from .ports import AuditRepositoryPort, LayoutPlannerPort, ReportAgentPort
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
+AGENT_REVIEW_RUNNING_LEASE_SECONDS = 120
 _AGENT_REVIEW_SUMMARY_LOCKS: dict[str, Lock] = {}
 _AGENT_REVIEW_SUMMARY_LOCKS_GUARD = Lock()
 
@@ -327,41 +328,20 @@ class ManufacturingPredictiveMaintenanceService:
                     return cached_summary, cached_trace
 
             try:
-                run = self.repository.create_agent_review_workflow_run(
+                run = self._start_agent_review_workflow_run(
                     trigger=trigger,
                     engine=engine,
-                    status="running",
                     organization_id=organization_id,
                     project_id=project_id,
                     workspace_id=workspace_id,
-                    asset_id=packet.get("asset_id"),
-                    event_id=key_payload["event_id"],
-                    dataset_version_id=key_payload["dataset_version"],
+                    packet=packet,
+                    key_payload=key_payload,
+                    materialization_key=materialization_key,
+                    materializer=materializer,
                     history_window=history_window,
-                    summary_key=materialization_key,
-                    source_sha256=key_payload["source_sha256"],
-                    context_sha256=key_payload["context_sha256"],
-                    packet_schema_version=key_payload["packet_schema_version"],
-                    prompt_version=key_payload["prompt_version"],
-                    model_version=key_payload["model_version"],
-                    trace={"stage": "started"},
                 )
-            except Exception as exc:
-                if _is_agent_review_running_conflict(exc):
-                    waited = _wait_for_agent_review_summary(
-                        materializer,
-                        packet=packet,
-                        organization_id=organization_id,
-                        project_id=project_id,
-                        workspace_id=workspace_id,
-                        history_window=history_window,
-                    )
-                    if waited is not None:
-                        return waited
-                    raise RuntimeError(
-                        f"agent_review_summary_materialization_in_progress:{materialization_key}"
-                    ) from exc
-                raise
+            except _AgentReviewSummaryMaterializedWhileWaiting as cached:
+                return cached.result
             try:
                 summary, trace = materializer.materialize(
                     packet=packet,
@@ -842,6 +822,77 @@ class ManufacturingPredictiveMaintenanceService:
             payload=payload,
         )
 
+    def _start_agent_review_workflow_run(
+        self,
+        *,
+        trigger: str,
+        engine: str,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        packet: dict[str, Any],
+        key_payload: dict[str, Any],
+        materialization_key: str,
+        materializer: AgentReviewSummaryMaterializer,
+        history_window: str,
+    ) -> dict[str, Any]:
+        record = {
+            "trigger": trigger,
+            "engine": engine,
+            "status": "running",
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "asset_id": packet.get("asset_id"),
+            "event_id": key_payload["event_id"],
+            "dataset_version_id": key_payload["dataset_version"],
+            "history_window": history_window,
+            "summary_key": materialization_key,
+            "source_sha256": key_payload["source_sha256"],
+            "context_sha256": key_payload["context_sha256"],
+            "packet_schema_version": key_payload["packet_schema_version"],
+            "prompt_version": key_payload["prompt_version"],
+            "model_version": key_payload["model_version"],
+            "trace": {"stage": "started"},
+        }
+        try:
+            return self.repository.create_agent_review_workflow_run(**record)
+        except Exception as exc:
+            if not _is_agent_review_running_conflict(exc):
+                raise
+            waited = _wait_for_agent_review_summary(
+                materializer,
+                packet=packet,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                history_window=history_window,
+            )
+            if waited is not None:
+                raise _AgentReviewSummaryMaterializedWhileWaiting(waited) from exc
+            started_before = datetime.now(timezone.utc) - timedelta(
+                seconds=AGENT_REVIEW_RUNNING_LEASE_SECONDS
+            )
+            expired = self.repository.expire_stale_agent_review_workflow_run(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                summary_key=materialization_key,
+                started_before=started_before.isoformat(),
+            )
+            if expired is not None:
+                try:
+                    return self.repository.create_agent_review_workflow_run(**record)
+                except Exception as retry_exc:
+                    if not _is_agent_review_running_conflict(retry_exc):
+                        raise
+                    raise RuntimeError(
+                        f"agent_review_summary_materialization_in_progress:{materialization_key}"
+                    ) from retry_exc
+            raise RuntimeError(
+                f"agent_review_summary_materialization_in_progress:{materialization_key}"
+            ) from exc
+
 
 def _workflow_run_status(trace: dict[str, Any]) -> str:
     materialization = trace.get("materialization") or {}
@@ -853,6 +904,12 @@ def _workflow_run_status(trace: dict[str, Any]) -> str:
     if status == "failed":
         return "failed"
     return "completed"
+
+
+class _AgentReviewSummaryMaterializedWhileWaiting(Exception):
+    def __init__(self, result: tuple[dict[str, Any], dict[str, Any]]) -> None:
+        super().__init__("agent_review_summary_materialized_while_waiting")
+        self.result = result
 
 
 def _agent_review_summary_lock(summary_key_value: str) -> Lock:

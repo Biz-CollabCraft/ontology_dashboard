@@ -4,6 +4,7 @@ import json
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 
@@ -30,7 +31,10 @@ from app.mvp.agent_review_summary_materialization import summary_key, summary_ke
 from app.planner import LayoutPlanner
 from app.mvp.agent_review_summary import compose_deterministic_agent_review_summary
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
-from app.mvp.service import ManufacturingPredictiveMaintenanceService as FactorySignalService
+from app.mvp.service import (
+    AGENT_REVIEW_RUNNING_LEASE_SECONDS,
+    ManufacturingPredictiveMaintenanceService as FactorySignalService,
+)
 from identity_test_support import build_identity_service
 from ontology_dashboard_manufacturing_ml import HeuristicPredictor, build_evidence_package, load_fixture
 from ontology_dashboard_manufacturing_ml.contracts import FAILURE_MODE_COLUMNS, TARGET_COLUMN, assert_no_leakage, audit_fixture
@@ -897,6 +901,103 @@ def test_agent_review_workflow_run_running_guard_is_repository_atomic(
     second = service.repository.create_agent_review_workflow_run(**record)
 
     assert second["workflow_run_id"] != first["workflow_run_id"]
+
+
+def test_agent_review_summary_recovers_stale_running_reservation(
+    service: FactorySignalService,
+) -> None:
+    service.agent_review_summary_provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+            "title": "회수된 예약 요약",
+        }
+    )
+    packet = service.agent_review_packet("CNC-S04-L04-01")
+    key_payload = summary_key_payload(
+        packet=packet,
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        history_window="24h",
+        provider=service.agent_review_summary_provider,
+    )
+    materialization_key = summary_key(key_payload)
+    old_started_at = (
+        datetime.now(timezone.utc) - timedelta(seconds=AGENT_REVIEW_RUNNING_LEASE_SECONDS + 30)
+    ).isoformat()
+    stale = service.repository.create_agent_review_workflow_run(
+        trigger="polling_watcher",
+        engine="simple",
+        status="running",
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        asset_id=packet["asset_id"],
+        event_id=key_payload["event_id"],
+        dataset_version_id=key_payload["dataset_version"],
+        history_window="24h",
+        summary_key=materialization_key,
+        source_sha256=key_payload["source_sha256"],
+        context_sha256=key_payload["context_sha256"],
+        packet_schema_version=key_payload["packet_schema_version"],
+        prompt_version=key_payload["prompt_version"],
+        model_version=key_payload["model_version"],
+        started_at=old_started_at,
+        trace={"stage": "started"},
+    )
+
+    summary, trace = service.agent_review_summary("CNC-S04-L04-01")
+    expired = service.repository.get_agent_review_workflow_run(stale["workflow_run_id"])
+    runs = service.agent_review_workflow_runs(asset_id="CNC-S04-L04-01", limit=10)["items"]
+
+    assert summary["asset_id"] == "CNC-S04-L04-01"
+    assert trace["workflow_run"]["status"] == "completed"
+    assert expired is not None
+    assert expired["status"] == "failed"
+    assert expired["error_type"] == "stale_running_lease_expired"
+    assert {run["status"] for run in runs} == {"completed", "failed"}
+
+
+def test_agent_review_summary_preserves_active_running_reservation(
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L04-01")
+    key_payload = summary_key_payload(
+        packet=packet,
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        history_window="24h",
+        provider=service.agent_review_summary_provider,
+    )
+    materialization_key = summary_key(key_payload)
+    active = service.repository.create_agent_review_workflow_run(
+        trigger="polling_watcher",
+        engine="simple",
+        status="running",
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        asset_id=packet["asset_id"],
+        event_id=key_payload["event_id"],
+        dataset_version_id=key_payload["dataset_version"],
+        history_window="24h",
+        summary_key=materialization_key,
+        source_sha256=key_payload["source_sha256"],
+        context_sha256=key_payload["context_sha256"],
+        packet_schema_version=key_payload["packet_schema_version"],
+        prompt_version=key_payload["prompt_version"],
+        model_version=key_payload["model_version"],
+        trace={"stage": "started"},
+    )
+
+    with pytest.raises(RuntimeError, match="agent_review_summary_materialization_in_progress"):
+        service.agent_review_summary("CNC-S04-L04-01")
+
+    preserved = service.repository.get_agent_review_workflow_run(active["workflow_run_id"])
+    assert preserved is not None
+    assert preserved["status"] == "running"
 
 
 def test_agent_review_summary_get_does_not_trigger_lazy_materialization(

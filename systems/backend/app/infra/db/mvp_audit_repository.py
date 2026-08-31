@@ -284,6 +284,65 @@ class AuditRepository:
             raise RuntimeError("agent_review_workflow_run_create_failed")
         return self._workflow_run_record_from_row(dict(row))
 
+    def expire_stale_agent_review_workflow_run(self, **filters: Any) -> dict[str, Any] | None:
+        now = self._now()
+        trace = {
+            "stage": "expired",
+            "reason": "stale_running_lease",
+            "expired_before": str(filters["started_before"]),
+        }
+        values = (
+            "failed",
+            now,
+            now,
+            "stale_running_lease_expired",
+            "running materialization lease expired before completion",
+            json.dumps(trace, ensure_ascii=False, sort_keys=True),
+            str(filters.get("organization_id") or "org-ontology-demo"),
+            str(filters["project_id"]),
+            str(filters.get("workspace_id") or "manufacturing-demo"),
+            str(filters["summary_key"]),
+            str(filters["started_before"]),
+        )
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM agent_review_workflow_runs
+                WHERE organization_id=?
+                  AND project_id=?
+                  AND workspace_id=?
+                  AND summary_key=?
+                  AND status='running'
+                  AND started_at<=?
+                ORDER BY started_at ASC
+                LIMIT 1
+                """,
+                values[6:],
+            ).fetchone()
+            if row is None:
+                return None
+            workflow_run_id = str(row["workflow_run_id"])
+            connection.execute(
+                """
+                UPDATE agent_review_workflow_runs
+                SET status=?, completed_at=?, updated_at=?, error_type=?, error_message=?, trace_json=?
+                WHERE organization_id=?
+                  AND project_id=?
+                  AND workspace_id=?
+                  AND summary_key=?
+                  AND status='running'
+                  AND started_at<=?
+                """,
+                values,
+            )
+            updated = connection.execute(
+                "SELECT * FROM agent_review_workflow_runs WHERE workflow_run_id=?",
+                (workflow_run_id,),
+            ).fetchone()
+        if updated is None:
+            return None
+        return self._workflow_run_record_from_row(dict(updated))
+
     def finish_agent_review_workflow_run(
         self,
         workflow_run_id: str,
