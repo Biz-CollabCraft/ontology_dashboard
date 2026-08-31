@@ -1191,6 +1191,7 @@ class MaintenanceLoopService:
             "inspection_results",
             "maintenance_actions",
             "maintenance_events",
+            "cost_analyses",
             "activities",
         ):
             for record in lineage[collection]:

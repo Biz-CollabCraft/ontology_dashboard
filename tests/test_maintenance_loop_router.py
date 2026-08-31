@@ -91,7 +91,11 @@ class Service:
 
     def event_lineage(self, **values):
         self.calls.append(("lineage", values))
-        return {"event_id": values["event_id"], "activities": []}
+        return {
+            "event_id": values["event_id"],
+            "cost_analyses": [],
+            "activities": [],
+        }
 
 
 def principal(role: str) -> Principal:
