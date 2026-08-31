@@ -18,6 +18,30 @@ logger = logging.getLogger(__name__)
 PREFIX_VERIFICATION_MAX_BYTES = 65536
 
 
+def compute_gen_data_source_lock_identity(
+    *,
+    source_uri: str,
+    site_id: str,
+    cell_id: str,
+    source_format: str = "gen_data_sensor_stream",
+) -> str:
+    """Compute deterministic SHA-256 lock identity for a logical source scope.
+
+    Lock identity binds only logical coordinate fields without content dependency:
+    - logical source_uri
+    - site_id and cell_id
+    - source_format
+    """
+    payload = {
+        "cell_id": cell_id,
+        "site_id": site_id,
+        "source_format": source_format,
+        "source_uri": source_uri,
+    }
+    canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
 def compute_gen_data_source_identity(
     *,
     source_uri: str,

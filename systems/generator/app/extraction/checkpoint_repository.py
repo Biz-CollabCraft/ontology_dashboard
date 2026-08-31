@@ -203,6 +203,8 @@ from pydantic import BaseModel, Field
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionCheckpointInvalidError,
     ExtractionCheckpointMappingMigrationRequiredError,
+    ExtractionCheckpointReadFailedError,
+    ExtractionCheckpointScopeConflictError,
     ExtractionCheckpointVerifyFailedError,
     ExtractionCheckpointWriteFailedError,
     ExtractionRequestInvalidError,
@@ -318,6 +320,12 @@ class GenDataExtractionCheckpointRepository:
 
         try:
             raw_bytes = chk_path.read_bytes()
+        except OSError as exc:
+            raise ExtractionCheckpointReadFailedError(
+                f"Failed to read checkpoint for source '{source_identity}': {exc}"
+            ) from exc
+
+        try:
             raw_data = json.loads(raw_bytes.decode("utf-8"))
 
             # Check legacy checkpoint missing mapping identity before full schema validation
@@ -331,13 +339,96 @@ class GenDataExtractionCheckpointRepository:
                 )
 
             self.validate_checkpoint_dict(raw_data)
-            return GenDataExtractionCheckpoint.model_validate(raw_data)
+            checkpoint = GenDataExtractionCheckpoint.model_validate(raw_data)
+            if checkpoint.source_identity != source_identity:
+                raise ExtractionCheckpointInvalidError(
+                    f"Checkpoint filename identity '{source_identity}' does not match payload source_identity '{checkpoint.source_identity}'.",
+                    details=[{
+                        "checkpoint_file_identity": source_identity,
+                        "payload_source_identity": checkpoint.source_identity,
+                    }],
+                )
+            return checkpoint
         except Exception as exc:
-            if isinstance(exc, (ExtractionCheckpointInvalidError, ExtractionCheckpointMappingMigrationRequiredError)):
+            if isinstance(exc, (
+                ExtractionCheckpointInvalidError,
+                ExtractionCheckpointMappingMigrationRequiredError,
+                ExtractionCheckpointReadFailedError,
+                ExtractionCheckpointScopeConflictError,
+            )):
                 raise
             raise ExtractionCheckpointInvalidError(
                 f"Failed to read checkpoint for source '{source_identity}': {exc}"
             ) from exc
+
+    def find_checkpoint_by_source(
+        self,
+        source: Any,
+    ) -> Optional[GenDataExtractionCheckpoint]:
+        """Find checkpoint matching source_uri and scope (used when source_identity cannot be derived)."""
+        if not self.checkpoints_root.is_dir():
+            return None
+
+        source_uri = getattr(source, "source_uri", None)
+        site_id = getattr(source, "site_id", None)
+        cell_id = getattr(source, "cell_id", None)
+
+        if not source_uri or not site_id or not cell_id:
+            return None
+
+        matching_checkpoints: list[GenDataExtractionCheckpoint] = []
+
+        for chk_file in sorted(self.checkpoints_root.glob("*.json")):
+            if chk_file.name.startswith(".tmp_"):
+                continue
+
+            try:
+                raw_bytes = chk_file.read_bytes()
+            except OSError as exc:
+                raise ExtractionCheckpointReadFailedError(
+                    f"Failed to read checkpoint file '{chk_file.name}' from storage: {exc}"
+                ) from exc
+
+            try:
+                raw_data = json.loads(raw_bytes.decode("utf-8"))
+            except Exception as exc:
+                raise ExtractionCheckpointInvalidError(
+                    f"Checkpoint file '{chk_file.name}' contains invalid JSON: {exc}"
+                ) from exc
+
+            if not isinstance(raw_data, dict):
+                raise ExtractionCheckpointInvalidError(
+                    f"Checkpoint file '{chk_file.name}' must contain a JSON object."
+                )
+
+            file_source_uri = raw_data.get("source_uri")
+            file_site_id = raw_data.get("site_id")
+            file_cell_id = raw_data.get("cell_id")
+
+            # Exact scope matching (no None wildcard allowed)
+            if (
+                file_source_uri == source_uri
+                and file_site_id == site_id
+                and file_cell_id == cell_id
+            ):
+                chk = self.load_checkpoint(chk_file.stem)
+                if chk is not None:
+                    matching_checkpoints.append(chk)
+
+        if len(matching_checkpoints) == 0:
+            return None
+        if len(matching_checkpoints) == 1:
+            return matching_checkpoints[0]
+
+        matched_ids = [c.source_identity for c in matching_checkpoints]
+        raise ExtractionCheckpointScopeConflictError(
+            f"Multiple checkpoints found matching scope ({source_uri}, {site_id}, {cell_id}): {matched_ids}",
+            details=[{
+                "scope": {"source_uri": source_uri, "site_id": site_id, "cell_id": cell_id},
+                "matching_identities": matched_ids,
+            }],
+        )
+
 
     def save_checkpoint_atomic(
         self,

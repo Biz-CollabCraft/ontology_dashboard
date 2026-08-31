@@ -999,3 +999,37 @@ class ExtractionCheckpointMappingMigrationRequiredError(ExtractionError):
             details=details,
             retryable=False,
         )
+
+
+class ExtractionCheckpointReadFailedError(ExtractionError):
+    """Raised when reading a checkpoint file fails due to transient IO or filesystem errors."""
+
+    def __init__(
+        self,
+        message: str = "Failed to read checkpoint from storage.",
+        details: Optional[list[dict[str, Any]]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_CHECKPOINT_READ_FAILED",
+            status_code=500,
+            details=details,
+            retryable=True,
+        )
+
+
+class ExtractionCheckpointScopeConflictError(ExtractionError):
+    """Raised when multiple conflicting checkpoint files exist for the same source scope."""
+
+    def __init__(
+        self,
+        message: str = "Multiple checkpoints found matching source scope.",
+        details: Optional[list[dict[str, Any]]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_CHECKPOINT_SCOPE_CONFLICT",
+            status_code=409,
+            details=details,
+            retryable=False,
+        )
