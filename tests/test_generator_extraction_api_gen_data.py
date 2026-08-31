@@ -182,3 +182,59 @@ def test_post_extraction_validation_errors(client):
         json={"source_mode": "gen_data_sensor_stream", "unknown_field": "foo"},
     )
     assert resp.status_code == 422
+
+
+def test_post_extraction_mapping_mismatch_returns_409(client, tmp_path, monkeypatch, sample_mapping):
+    """POST /extraction on a previously processed source with a different mapping returns 409 Conflict."""
+    sensor_root = tmp_path / "gen_data" / "sensor"
+    stream_file = sensor_root / "facS01" / "lineL01" / "sensor_stream.jsonl"
+    stream_file.parent.mkdir(parents=True, exist_ok=True)
+
+    records = [
+        {"asset_id": "CNC-01", "site_id": "S01", "cell_id": "L01", "observed_at": "2026-08-28T13:10:00Z", "torque_nm": 40.0},
+    ]
+    stream_file.write_bytes(b"".join(json.dumps(r).encode("utf-8") + b"\n" for r in records))
+
+    monkeypatch.setattr(PATHS, "data_dir", tmp_path / "data")
+    monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
+    monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
+    monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
+    monkeypatch.setattr(PATHS, "observations_root", tmp_path / "data" / "observations")
+    monkeypatch.setattr(PATHS, "extraction_mapping_sha256", sample_mapping["mapping_sha256"])
+
+    ExtractionManager.set_instance(None)
+    manager = ExtractionManager.get_instance()
+    monkeypatch.setattr(manager, "_resolve_mapping_data", lambda *args, **kwargs: sample_mapping)
+
+    # 1. First execution with approved mapping succeeds
+    resp1 = client.post(
+        "/extraction",
+        json={
+            "source_mode": "gen_data_sensor_stream",
+            "source_uri": "sensor/facS01/lineL01/sensor_stream.jsonl",
+            "mapping_id": sample_mapping["mapping_id"],
+            "mapping_version": sample_mapping["mapping_version"],
+            "mapping_sha256": sample_mapping["mapping_sha256"],
+        },
+    )
+    assert resp1.status_code == 200
+
+    # 2. Second execution with different mapping version returns 409
+    mapping_v2 = dict(sample_mapping)
+    mapping_v2["mapping_version"] = "v2.0"
+    mapping_v2["mapping_sha256"] = compute_mapping_canonical_sha256(mapping_v2)
+    monkeypatch.setattr(manager, "_resolve_mapping_data", lambda *args, **kwargs: mapping_v2)
+
+    resp2 = client.post(
+        "/extraction",
+        json={
+            "source_mode": "gen_data_sensor_stream",
+            "source_uri": "sensor/facS01/lineL01/sensor_stream.jsonl",
+            "mapping_id": mapping_v2["mapping_id"],
+            "mapping_version": mapping_v2["mapping_version"],
+            "mapping_sha256": mapping_v2["mapping_sha256"],
+        },
+    )
+    assert resp2.status_code == 409
+    body = resp2.json()
+    assert body["error"]["code"] == "EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED"

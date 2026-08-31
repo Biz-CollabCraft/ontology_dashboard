@@ -199,6 +199,7 @@ import jsonschema
 from pydantic import BaseModel, Field
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionCheckpointInvalidError,
+    ExtractionCheckpointMappingMigrationRequiredError,
     ExtractionCheckpointVerifyFailedError,
     ExtractionCheckpointWriteFailedError,
     ExtractionRequestInvalidError,
@@ -237,6 +238,10 @@ class GenDataExtractionCheckpoint(BaseModel):
     source_format: Literal["gen_data_sensor_stream"] = "gen_data_sensor_stream"
     site_id: str
     cell_id: str
+
+    mapping_id: str
+    mapping_version: str
+    mapping_sha256: str
 
     last_committed_offset: int
     last_committed_line: int
@@ -311,10 +316,21 @@ class GenDataExtractionCheckpointRepository:
         try:
             raw_bytes = chk_path.read_bytes()
             raw_data = json.loads(raw_bytes.decode("utf-8"))
+
+            # Check legacy checkpoint missing mapping identity before full schema validation
+            if (
+                not raw_data.get("mapping_id")
+                or not raw_data.get("mapping_version")
+                or not raw_data.get("mapping_sha256")
+            ):
+                raise ExtractionCheckpointMappingMigrationRequiredError(
+                    f"Checkpoint for source '{source_identity}' is missing mapping identity and requires migration."
+                )
+
             self.validate_checkpoint_dict(raw_data)
             return GenDataExtractionCheckpoint.model_validate(raw_data)
         except Exception as exc:
-            if isinstance(exc, ExtractionCheckpointInvalidError):
+            if isinstance(exc, (ExtractionCheckpointInvalidError, ExtractionCheckpointMappingMigrationRequiredError)):
                 raise
             raise ExtractionCheckpointInvalidError(
                 f"Failed to read checkpoint for source '{source_identity}': {exc}"

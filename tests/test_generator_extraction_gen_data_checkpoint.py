@@ -13,7 +13,9 @@ from systems.generator.app.extraction.checkpoint_repository import (
 )
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionCheckpointInvalidError,
+    ExtractionCheckpointMappingMigrationRequiredError,
     ExtractionFragmentConflictError,
+    ExtractionMappingRebuildNotImplementedError,
     ExtractionSourceLockedError,
     ExtractionSourcePrefixMismatchError,
     ExtractionSourceTruncatedError,
@@ -27,10 +29,23 @@ from systems.generator.app.extraction.gen_data_identity import (
     compute_source_prefix_info,
     verify_source_prefix,
 )
+from systems.generator.app.extraction.gen_data_incremental_service import (
+    GenDataIncrementalExtractionService,
+)
 from systems.generator.app.extraction.gen_data_lock import GenDataSourceLock
 from systems.generator.app.extraction.gen_data_mapping import (
     CanonicalObservationCandidate,
+    GenDataStaticMappingConverter,
     RejectedMappingRecord,
+)
+from systems.generator.app.extraction.gen_data_source import (
+    GenDataSensorStreamSource,
+)
+from systems.generator.app.extraction.mapping_validator import (
+    compute_mapping_canonical_sha256,
+)
+from systems.generator.app.extraction.parsers.gen_data_sensor_stream_parser import (
+    GenDataSensorStreamParser,
 )
 
 
@@ -185,6 +200,9 @@ def test_checkpoint_repository_save_and_load(tmp_path):
         source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
         site_id="S01",
         cell_id="L01",
+        mapping_id="map-1",
+        mapping_version="v1.0",
+        mapping_sha256="c" * 64,
         last_committed_offset=1024,
         last_committed_line=10,
         last_observed_at="2026-08-28T13:00:00Z",
@@ -203,6 +221,9 @@ def test_checkpoint_repository_save_and_load(tmp_path):
     loaded = chk_repo.load_checkpoint(valid_src_id)
     assert loaded is not None
     assert loaded.source_identity == valid_src_id
+    assert loaded.mapping_id == "map-1"
+    assert loaded.mapping_version == "v1.0"
+    assert loaded.mapping_sha256 == "c" * 64
     assert loaded.last_committed_offset == 1024
     assert loaded.status == "idle"
 
@@ -334,3 +355,233 @@ def test_source_lock_mutual_exclusion(tmp_path):
     # After lock1 released, lock2 succeeds
     with lock2:
         pass
+
+
+# =============================================================================
+# 6. Mapping Identity Checkpoint and Rebuild Disallowance Tests (PR #134)
+# =============================================================================
+
+
+@pytest.fixture
+def base_mapping_fixture() -> dict:
+    raw = {
+        "$schema": "https://ontology-dashboard.local/schemas/generator-static-mapping-table.schema.json",
+        "mapping_id": "gen-data-sensor-stream-canonical",
+        "mapping_version": "v1.0",
+        "status": "approved",
+        "source_format": "gen_data_sensor_stream",
+        "source_schema_version": "gen-data-sensor-stream-v1",
+        "source_schema_fingerprint": "0" * 64,
+        "fingerprint_algorithm_version": "v1",
+        "field_mappings": [
+            {
+                "source_field": "torque_nm",
+                "target_field": "torque_nm",
+                "source_type": "number",
+                "target_type": "float",
+                "required": False,
+                "transform": "to_float",
+            },
+            {
+                "source_field": "rotational_speed_rpm",
+                "target_field": "rotational_speed_rpm",
+                "source_type": "number",
+                "target_type": "float",
+                "required": False,
+                "transform": "to_float",
+            },
+        ],
+    }
+    raw["mapping_sha256"] = compute_mapping_canonical_sha256(raw)
+    return raw
+
+
+def _create_stream_source(tmp_path: Path, records: list[dict]) -> tuple[Path, GenDataSensorStreamSource]:
+    stream_file = tmp_path / "sensor_stream.jsonl"
+    lines = [json.dumps(r, ensure_ascii=False) for r in records]
+    stream_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    source = GenDataSensorStreamSource(
+        site_id="S01",
+        cell_id="L01",
+        facility_dir_name="facS01",
+        line_dir_name="lineL01",
+        source_path=stream_file,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    return stream_file, source
+
+
+def _create_service(tmp_path: Path) -> GenDataIncrementalExtractionService:
+    chk_repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")
+    frag_repo = GenDataFragmentRepository(base_runs_dir=tmp_path / "extraction_runs")
+    return GenDataIncrementalExtractionService(
+        checkpoint_repo=chk_repo,
+        fragment_repo=frag_repo,
+        lock_dir=tmp_path / "locks",
+    )
+
+
+def test_checkpoint_same_mapping_returns_no_data_at_eof(tmp_path, base_mapping_fixture):
+    """Mapping v1 processes source to EOF, subsequent call with same Mapping v1 returns no_data."""
+    records = [
+        {"ts": "2026-08-28T13:00:00Z", "asset_id": "CNC-01", "torque_nm": 45.0, "rotational_speed_rpm": 1500.0},
+        {"ts": "2026-08-28T13:01:00Z", "asset_id": "CNC-01", "torque_nm": 46.0, "rotational_speed_rpm": 1510.0},
+    ]
+    stream_file, source = _create_stream_source(tmp_path, records)
+    service = _create_service(tmp_path)
+
+    # 1. First run consumes all records to EOF
+    res1 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-001",
+    )
+    assert res1.status == "fragment_committed"
+    assert res1.records_read == 2
+
+    # 2. Second run with same Mapping v1 returns no_data
+    res2 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-002",
+    )
+    assert res2.status == "no_data"
+    assert res2.records_read == 0
+    assert res2.committed_offset == res1.committed_offset
+
+
+def test_checkpoint_different_mapping_raises_409_rebuild_not_implemented_at_eof(tmp_path, base_mapping_fixture):
+    """Mapping v1 processes to EOF, subsequent call on same source with Mapping v2 raises 409 Conflict instead of no_data."""
+    records = [
+        {"ts": "2026-08-28T13:00:00Z", "asset_id": "CNC-01", "torque_nm": 45.0, "rotational_speed_rpm": 1500.0},
+    ]
+    stream_file, source = _create_stream_source(tmp_path, records)
+    service = _create_service(tmp_path)
+
+    # First run with mapping v1
+    res1 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-001",
+    )
+    assert res1.status == "fragment_committed"
+
+    # Create mapping v2
+    mapping_v2 = dict(base_mapping_fixture)
+    mapping_v2["mapping_version"] = "v2.0"
+    mapping_v2["mapping_sha256"] = compute_mapping_canonical_sha256(mapping_v2)
+
+    # Second run with mapping v2 must raise 409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED
+    with pytest.raises(ExtractionMappingRebuildNotImplementedError) as exc_info:
+        service.process_available_records(
+            source=source,
+            mapping_data=mapping_v2,
+            run_id="run-002",
+        )
+
+    exc = exc_info.value
+    assert exc.status_code == 409
+    assert exc.code == "EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED"
+    assert exc.context.get("checkpoint_mapping_version") == "v1.0"
+    assert exc.context.get("requested_mapping_version") == "v2.0"
+    assert exc.context.get("source_identity") == res1.source_identity
+
+
+def test_checkpoint_different_mapping_with_intermediate_offset_raises_409(tmp_path, base_mapping_fixture):
+    """Mapping v1 checkpoint is at intermediate offset, requesting Mapping v2 raises 409 immediately without processing remainder."""
+    records = [
+        {"ts": "2026-08-28T13:00:00Z", "asset_id": "CNC-01", "torque_nm": 45.0, "rotational_speed_rpm": 1500.0},
+        {"ts": "2026-08-28T13:01:00Z", "asset_id": "CNC-01", "torque_nm": 46.0, "rotational_speed_rpm": 1510.0},
+    ]
+    stream_file, source = _create_stream_source(tmp_path, records)
+    service = _create_service(tmp_path)
+
+    # First run processes only 1 record (intermediate offset)
+    res1 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-001",
+        max_records=1,
+    )
+    assert res1.status == "fragment_committed"
+    assert res1.records_read == 1
+
+    # Request with mapping v2
+    mapping_v2 = dict(base_mapping_fixture)
+    mapping_v2["mapping_version"] = "v2.0"
+    mapping_v2["mapping_sha256"] = compute_mapping_canonical_sha256(mapping_v2)
+
+    with pytest.raises(ExtractionMappingRebuildNotImplementedError) as exc_info:
+        service.process_available_records(
+            source=source,
+            mapping_data=mapping_v2,
+            run_id="run-002",
+        )
+    assert exc_info.value.status_code == 409
+
+
+def test_checkpoint_missing_mapping_identity_raises_migration_required(tmp_path):
+    """Loading legacy checkpoint lacking mapping identity raises EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED."""
+    chk_dir = tmp_path / "checkpoints"
+    chk_dir.mkdir(parents=True, exist_ok=True)
+    src_id = "f" * 64
+    legacy_payload = {
+        "checkpoint_schema_version": "generator-gen-data-extraction-checkpoint-v1",
+        "source_identity": src_id,
+        "source_uri": "sensor/facS01/lineL01/sensor_stream.jsonl",
+        "source_format": "gen_data_sensor_stream",
+        "site_id": "S01",
+        "cell_id": "L01",
+        "last_committed_offset": 100,
+        "last_committed_line": 5,
+        "verified_prefix_length": 0,
+        "verified_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "committed_batch_ids": [],
+        "pending_batch": None,
+        "status": "idle",
+        "created_at": "2026-08-28T13:00:00Z",
+        "updated_at": "2026-08-28T13:00:00Z",
+    }
+    (chk_dir / f"{src_id}.json").write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+    chk_repo = GenDataExtractionCheckpointRepository(checkpoints_root=chk_dir)
+    with pytest.raises(ExtractionCheckpointMappingMigrationRequiredError):
+        chk_repo.load_checkpoint(src_id)
+
+
+def test_checkpoint_and_dataset_state_preserved_on_mapping_mismatch_failure(tmp_path, base_mapping_fixture):
+    """Rejection with 409 leaves existing checkpoint, offsets, and fragment artifacts completely unmodified."""
+    records = [
+        {"ts": "2026-08-28T13:00:00Z", "asset_id": "CNC-01", "torque_nm": 45.0, "rotational_speed_rpm": 1500.0},
+    ]
+    stream_file, source = _create_stream_source(tmp_path, records)
+    service = _create_service(tmp_path)
+
+    res1 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-001",
+    )
+    assert res1.status == "fragment_committed"
+
+    chk_before = service.checkpoint_repo.load_checkpoint(res1.source_identity)
+    assert chk_before is not None
+
+    mapping_v2 = dict(base_mapping_fixture)
+    mapping_v2["mapping_version"] = "v2.0"
+    mapping_v2["mapping_sha256"] = compute_mapping_canonical_sha256(mapping_v2)
+
+    with pytest.raises(ExtractionMappingRebuildNotImplementedError):
+        service.process_available_records(
+            source=source,
+            mapping_data=mapping_v2,
+            run_id="run-002",
+        )
+
+    # State verification: checkpoint is identical
+    chk_after = service.checkpoint_repo.load_checkpoint(res1.source_identity)
+    assert chk_after is not None
+    assert chk_after.last_committed_offset == chk_before.last_committed_offset
+    assert chk_after.last_committed_line == chk_before.last_committed_line
+    assert chk_after.mapping_version == "v1.0"
+    assert chk_after.status == "idle"

@@ -960,3 +960,42 @@ class ExtractionHandoffStatePersistFailedError(ExtractionError):
             details=details,
             retryable=True,
         )
+
+
+class ExtractionMappingRebuildNotImplementedError(ExtractionError):
+    """Raised when source was previously processed with a different mapping and mapping replay is requested."""
+
+    def __init__(
+        self,
+        message: str = "The source was previously processed with a different mapping. Mapping-version replay is not supported in the current release.",
+        context: Optional[dict[str, Any]] = None,
+        details: Optional[list[dict[str, Any]]] = None,
+    ) -> None:
+        merged_details = list(details or [])
+        if context:
+            merged_details.append(context)
+        super().__init__(
+            message=message,
+            code="EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED",
+            status_code=409,
+            details=merged_details,
+            retryable=False,
+        )
+        self.context = context or {}
+
+
+class ExtractionCheckpointMappingMigrationRequiredError(ExtractionError):
+    """Raised when loading a legacy checkpoint that lacks mapping identity fields."""
+
+    def __init__(
+        self,
+        message: str = "Legacy checkpoint lacks mapping identity fields and requires migration.",
+        details: Optional[list[dict[str, Any]]] = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED",
+            status_code=422,
+            details=details,
+            retryable=False,
+        )

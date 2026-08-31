@@ -16,6 +16,7 @@ from systems.generator.app.extraction.checkpoint_repository import (
 )
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionError,
+    ExtractionMappingRebuildNotImplementedError,
     ExtractionSourceNotFoundError,
     ExtractionSourceTruncatedError,
 )
@@ -125,7 +126,15 @@ class GenDataIncrementalExtractionService:
                 status="no_data",
             )
 
-        # 1. Peek first line for source identity computation
+        # 1. Validate requested mapping table contract first
+        self.converter.mapping_validator.validate_mapping(
+            mapping_data, expected_source_format="gen_data_sensor_stream"
+        )
+        req_mapping_id = str(mapping_data.get("mapping_id", "")).strip()
+        req_mapping_version = str(mapping_data.get("mapping_version", "")).strip()
+        req_mapping_sha256 = str(mapping_data.get("mapping_sha256", "")).strip().lower()
+
+        # 2. Peek first line for source identity computation
         first_peek = self.parser.read_completed_records(source_path, start_offset=0, max_records=1)
         if len(first_peek.records) == 0 and len(first_peek.rejected_records) == 0:
             # File has bytes but no completed newline yet
@@ -149,7 +158,7 @@ class GenDataIncrementalExtractionService:
             first_record_sha256=first_rec.raw_sha256,
         )
 
-        # 2. Acquire exclusive OS file lock
+        # 3. Acquire exclusive OS file lock
         lock = GenDataSourceLock(self.lock_dir, source_identity=source_identity)
         with lock:
             if self.failure_injector:
@@ -158,10 +167,32 @@ class GenDataIncrementalExtractionService:
             # Clean up older temporary checkpoint files
             self.checkpoint_repo.cleanup_orphan_tmp_files()
 
-            # 3. Load or initialize checkpoint
+            # 4. Load or initialize checkpoint
             chk = self.checkpoint_repo.load_checkpoint(source_identity)
             if chk is not None:
                 self.checkpoint_repo.validate_checkpoint_source(chk, source)
+
+                # Check mapping identity match against checkpoint
+                if (
+                    chk.mapping_id != req_mapping_id
+                    or chk.mapping_version != req_mapping_version
+                    or chk.mapping_sha256 != req_mapping_sha256
+                ):
+                    logger.warning(
+                        f"[IncrementalService] Mapping mismatch for source '{source_identity}': "
+                        f"checkpoint=({chk.mapping_id}, {chk.mapping_version}, {chk.mapping_sha256[:8]}...) vs "
+                        f"requested=({req_mapping_id}, {req_mapping_version}, {req_mapping_sha256[:8]}...)"
+                    )
+                    raise ExtractionMappingRebuildNotImplementedError(
+                        "The source was previously processed with a different mapping. Mapping-version replay is not supported in the current release.",
+                        context={
+                            "source_identity": source_identity,
+                            "checkpoint_mapping_id": chk.mapping_id,
+                            "checkpoint_mapping_version": chk.mapping_version,
+                            "requested_mapping_id": req_mapping_id,
+                            "requested_mapping_version": req_mapping_version,
+                        },
+                    )
 
                 # Verify file bounds and prefix integrity
                 if chk.verified_prefix_length > 0:
@@ -172,7 +203,7 @@ class GenDataIncrementalExtractionService:
                         last_committed_offset=chk.last_committed_offset,
                     )
 
-                # 4. Crash Recovery: Check if recovering from fragment_staged
+                # Crash Recovery: Check if recovering from fragment_staged
                 if chk.status == "fragment_staged" and chk.pending_batch is not None:
                     pb = chk.pending_batch
                     frag_dir = self.fragment_repo.base_runs_dir / pb.run_id / "fragments" / pb.batch_id
@@ -200,6 +231,9 @@ class GenDataIncrementalExtractionService:
                     source_uri=source.source_uri,
                     site_id=source.site_id,
                     cell_id=source.cell_id,
+                    mapping_id=req_mapping_id,
+                    mapping_version=req_mapping_version,
+                    mapping_sha256=req_mapping_sha256,
                     last_committed_offset=0,
                     last_committed_line=0,
                     verified_prefix_length=0,
@@ -209,7 +243,7 @@ class GenDataIncrementalExtractionService:
                     updated_at=now_str,
                 )
 
-            # Check if there is new data beyond committed offset
+            # Check if there is new data beyond committed offset (ONLY after mapping check!)
             file_size = source_path.stat().st_size
             if start_offset >= file_size:
                 return IncrementalExtractionResult(

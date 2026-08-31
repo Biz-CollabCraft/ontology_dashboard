@@ -11,6 +11,9 @@
     "source_format",
     "site_id",
     "cell_id",
+    "mapping_id",
+    "mapping_version",
+    "mapping_sha256",
     "last_committed_offset",
     "last_committed_line",
     "verified_prefix_length",
@@ -51,6 +54,18 @@
     "cell_id": {
       "type": "string",
       "minLength": 1
+    },
+    "mapping_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mapping_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mapping_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
     },
     "last_committed_offset": {
       "type": "integer",

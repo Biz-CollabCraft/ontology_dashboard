@@ -263,6 +263,7 @@ class ExtractionManager:
         run_id: Optional[str] = None,
         max_records: Optional[int] = None,
         mapping_data_override: Optional[dict[str, Any]] = None,
+        raise_on_error: bool = False,
     ) -> SourceProcessingResult:
         """Process a single gen_data source incrementally with single-writer concurrency guarantee."""
         source_key = source.source_uri
@@ -304,17 +305,21 @@ class ExtractionManager:
 
                 try:
                     # 1. Resolve mapping
-                    mapping_data = mapping_data_override or self._resolve_mapping_data(
-                        mapping_id, mapping_version, mapping_sha256
-                    )
+                    if mapping_data_override:
+                        mapping_data = mapping_data_override
+                    else:
+                        mapping_data = self._resolve_mapping_data(
+                            mapping_id=mapping_id,
+                            mapping_version=mapping_version,
+                            mapping_sha256=mapping_sha256,
+                        )
 
-                    # 2. Incremental Extraction
-                    read_limit = max_records or PATHS.extraction_max_records
+                    # 2. Incremental Parsing & Fragment Staging
                     inc_res = self.incremental_service.process_available_records(
                         source=source,
                         mapping_data=mapping_data,
                         run_id=effective_run_id,
-                        max_records=read_limit,
+                        max_records=max_records or PATHS.extraction_max_records,
                     )
 
                     state.source_identity = inc_res.source_identity
@@ -421,6 +426,9 @@ class ExtractionManager:
                             f"[ExtractionManager] Non-retryable error for source '{source_key}': {err_code} - {err_msg}. Status -> blocked."
                         )
 
+                    if raise_on_error:
+                        raise
+
                     return SourceProcessingResult(
                         source_uri=source.source_uri,
                         source_identity=state.source_identity,
@@ -464,6 +472,7 @@ class ExtractionManager:
             )
 
         target_sources: list[GenDataSensorStreamSource] = []
+        is_single_source_request = bool(request_body.source_uri)
         if request_body.source_uri:
             clean_uri = request_body.source_uri.strip().replace("\\", "/")
             matched = [s for s in discovered if s.source_uri == clean_uri]
@@ -488,6 +497,7 @@ class ExtractionManager:
                 flush_before=request_body.flush_before,
                 run_id=run_id,
                 max_records=request_body.max_records,
+                raise_on_error=is_single_source_request,
             )
             results.append(res)
             if res.status == "succeeded":

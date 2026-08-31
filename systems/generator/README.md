@@ -349,10 +349,22 @@ gen_data (sensor_stream.jsonl append)
 
 ---
 
-## 8. 미구현 범위 분리 (Unimplemented / Target Scope)
+## 8. Mapping 정책 및 미구현 범위 분리 (Mapping Policy & Unimplemented Scope)
 
-다음 항목들은 현재 완료 범위에 포함되지 않으며, 후속 고도화 이슈에서 별도로 관리합니다.
+### 8.1 Mapping 지원 및 미지원 범위
+- **Current (현재 구현 범위)**:
+  - 최초 승인 Mapping(`generator-static-mapping-table`)을 이용한 gen_data 추출.
+  - 동일 Mapping을 이용한 append-only 증분 처리 및 Checkpoint mapping identity 보존.
+  - Mapping 불일치 감지 및 409 `EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED` fail-closed 처리.
+  - Mapping identity 누락 구형 Checkpoint 로드 시 `EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED` 차단.
+- **Not Implemented (고도화 분리 범위)**:
+  - Mapping 변경에 따른 원본 Source replay (offset 0부터 replay).
+  - Source와 Mapping 조합별 Checkpoint 분리.
+  - 과거 Dataset 재구성 및 새 Mapping 기반 Dataset version 불변 발행.
+  - Mapping 버전 관리 UI, 복사 후 신규 버전 생성.
+  - `publish → rebuild → validate → activate` 상태 전환, 실패 재시도 및 rollback.
 
+### 8.2 기타 미구현 범위
 - **LLM Mapping 자동 생성**: 현재는 승인된 정적 매핑 테이블(`generator-static-mapping-table`)만 지원합니다.
 - **비표준 Protocol 자동 추론**: 정의되지 않은 프로토콜 형식의 자동 감지는 지원하지 않으며 Fail-Closed 처리됩니다.
 - **결측치 자동 보정 (Imputation)**: 임의 결측치 대체 없이 `ffill` 및 엄격한 null 검증 정책을 유지합니다.
