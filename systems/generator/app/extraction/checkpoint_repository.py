@@ -339,7 +339,16 @@ class GenDataExtractionCheckpointRepository:
                 )
 
             self.validate_checkpoint_dict(raw_data)
-            return GenDataExtractionCheckpoint.model_validate(raw_data)
+            checkpoint = GenDataExtractionCheckpoint.model_validate(raw_data)
+            if checkpoint.source_identity != source_identity:
+                raise ExtractionCheckpointInvalidError(
+                    f"Checkpoint filename identity '{source_identity}' does not match payload source_identity '{checkpoint.source_identity}'.",
+                    details=[{
+                        "checkpoint_file_identity": source_identity,
+                        "payload_source_identity": checkpoint.source_identity,
+                    }],
+                )
+            return checkpoint
         except Exception as exc:
             if isinstance(exc, (
                 ExtractionCheckpointInvalidError,
