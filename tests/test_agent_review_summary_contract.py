@@ -279,6 +279,50 @@ def test_agent_review_summary_validator_rejects_ungrounded_instruction_prose() -
     assert any(error.startswith("directive_prose_claims:") for error in errors)
 
 
+def test_agent_review_summary_validator_rejects_korean_free_text_claims() -> None:
+    cases = (
+        "베어링 교체가 필요합니다. 교체를 권고합니다.",
+        "정비 일정을 잡는 것이 좋겠습니다.",
+        "근본 원인은 베어링 마모로 확정되었습니다.",
+        "정비 시 약 240분의 다운타임이 절감됩니다.",
+        "마지막 정비는 37일 전이며 재발 주기는 12일입니다.",
+    )
+
+    for text in cases:
+        summary = {**_valid_summary(), "summary": text}
+        errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+        assert errors, text
+
+
+def test_agent_review_summary_validator_rejects_unknown_lost_units() -> None:
+    summary = {
+        **_valid_summary(),
+        "role_summaries": [
+            {
+                **_valid_summary()["role_summaries"][0],
+                "quote": "약 1,200개 생산 손실이 예상됩니다.",
+            }
+        ],
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=PACKET)
+
+    assert "prose_lost_units_mismatch:1,200개 생산 손실이 예상" in errors
+
+
+def test_agent_review_summary_validator_rejects_korean_priority_mismatch() -> None:
+    packet = json.loads((GOLD_ROOT / "GS-004.json").read_text(encoding="utf-8"))
+    summary = {
+        **compose_deterministic_agent_review_summary(packet),
+        "mode": "llm",
+        "summary": "이 건은 우선순위가 낮아 다음 주에 확인해도 됩니다.",
+    }
+
+    errors = validate_agent_review_summary_contract(summary, packet=packet)
+
+    assert "prose_priority_mismatch:low" in errors
+
+
 def test_validated_agent_review_summary_discards_ungrounded_hold_candidate() -> None:
     packet = json.loads((GOLD_ROOT / "GS-007.json").read_text(encoding="utf-8"))
     bad_candidate = compose_deterministic_agent_review_summary(packet)

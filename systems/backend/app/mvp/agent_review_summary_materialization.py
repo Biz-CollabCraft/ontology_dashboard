@@ -16,7 +16,7 @@ from app.mvp.agent_review_summary_provider import (
 )
 from app.mvp.ports import AuditRepositoryPort
 
-SUMMARY_MATERIALIZATION_VERSION = "agent-review-summary-materialization-v1.0"
+SUMMARY_MATERIALIZATION_VERSION = "agent-review-summary-materialization-v1.1"
 
 
 class AgentReviewSummaryMaterializer:
@@ -37,6 +37,7 @@ class AgentReviewSummaryMaterializer:
         project_id: str,
         history_window: str,
         workflow_run_id: str | None = None,
+        force: bool = False,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         key_payload = summary_key_payload(
             packet=packet,
@@ -46,7 +47,7 @@ class AgentReviewSummaryMaterializer:
         )
         materialization_key = summary_key(key_payload)
         cached = self.repository.get_agent_review_summary(materialization_key)
-        if cached is not None:
+        if cached is not None and not force:
             return cached["summary"], {
                 **cached["trace"],
                 "materialization": _materialization_trace(cached, reused=True),
@@ -210,6 +211,7 @@ def _summary_context_sha256(packet: dict[str, Any]) -> str:
     return _sha256_json(
         {
             "risk_summary": packet.get("risk_summary") or {},
+            "review_draft": packet.get("review_draft") or {},
             "review_priority": packet.get("review_priority"),
             "model_expression_context": packet.get("model_expression_context") or {},
             "operation_context_summary": packet.get("operation_context_summary") or {},

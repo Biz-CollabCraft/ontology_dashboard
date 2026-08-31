@@ -124,6 +124,7 @@ def compose_agent_review_packet(
         equipment_history=view_model.get("equipment_history") or [],
         maintenance_context=view_model.get("maintenance_context") or {},
         closed_loop=closed_loop,
+        ontology_context=ontology_context,
         evidence_gaps=evidence_gaps,
     )
     return {
@@ -473,6 +474,7 @@ def _compose_review_draft(
     equipment_history: list[dict[str, Any]],
     maintenance_context: dict[str, Any],
     closed_loop: dict[str, Any],
+    ontology_context: dict[str, Any] | None,
     evidence_gaps: list[dict[str, Any]],
 ) -> dict[str, Any]:
     asset_id = str(asset.get("asset_id") or "")
@@ -499,6 +501,7 @@ def _compose_review_draft(
         equipment_history=equipment_history,
         maintenance_context=maintenance_context,
         closed_loop=closed_loop,
+        similar_events=_similar_events_from_ontology(ontology_context),
     )
     if is_data_quality_hold:
         priority_level = "미확정"
@@ -576,6 +579,7 @@ def _compose_history_summary(
     equipment_history: list[dict[str, Any]],
     maintenance_context: dict[str, Any],
     closed_loop: dict[str, Any],
+    similar_events: list[dict[str, Any]],
 ) -> list[str]:
     summaries = []
     if equipment_history:
@@ -602,9 +606,16 @@ def _compose_history_summary(
     else:
         summaries.append("열린 작업요청: Closed-loop 이력 연결 전이라 확정하지 않음")
 
-    similar_events = maintenance_context.get("similar_events_30d")
-    if isinstance(similar_events, int) and not isinstance(similar_events, bool):
-        summaries.append(f"최근 30일 유사 이벤트: {similar_events}건")
+    similar_count = maintenance_context.get("similar_events_30d")
+    if isinstance(similar_count, int) and not isinstance(similar_count, bool):
+        summaries.append(f"최근 30일 유사 이벤트: {similar_count}건")
+    elif similar_events:
+        latest_similar = similar_events[0]
+        observed_at = str(latest_similar.get("observed_at") or "")
+        if observed_at:
+            summaries.append(f"최근 30일 유사 이벤트: {observed_at} · 1건")
+        else:
+            summaries.append("최근 30일 유사 이벤트: 1건")
     else:
         summaries.append("최근 30일 유사 이벤트: 전용 이력 계약 미연결")
     return summaries

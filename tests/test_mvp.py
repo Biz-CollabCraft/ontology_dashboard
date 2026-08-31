@@ -533,7 +533,7 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
     )
     assert packet["review_draft"]["history_summary"][0].startswith("최근 정비 이력: 최근 정비 이력")
     assert "2026-06-28T00:00:00+09:00" in packet["review_draft"]["history_summary"][0]
-    assert "최근 30일 유사 이벤트: 전용 이력 계약 미연결" in packet["review_draft"]["history_summary"]
+    assert "최근 30일 유사 이벤트: 2026-07-18T09:20:00+09:00 · 1건" in packet["review_draft"]["history_summary"]
     assert packet["review_draft"]["evidence_gap_count"] >= 1
     assert "자동 승인을 수행하지 않습니다" in packet["review_draft"]["boundary_note"]
     assert packet["sop_retrieval"] == {
@@ -700,6 +700,72 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     assert second_payload["trace"]["workflow_run"]["workflow_run_id"] == first_payload[
         "trace"
     ]["workflow_run"]["workflow_run_id"]
+
+
+def test_agent_review_summary_regeneration_bypasses_cached_fallback(
+    service: FactorySignalService,
+) -> None:
+    class TransientProvider(FakeAgentReviewSummaryProvider):
+        def generate(self, packet: dict) -> dict:
+            self.calls += 1
+            if self.calls == 1:
+                raise ConnectionError("temporary provider outage")
+            return self.payload_factory(packet)
+
+    provider = TransientProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+            "title": "복구된 AI 요약",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first_summary, first_trace = service.agent_review_summary(
+        "CNC-S04-L04-01",
+        trigger="ui_manual_regeneration",
+    )
+    second_summary, second_trace = service.agent_review_summary(
+        "CNC-S04-L04-01",
+        trigger="ui_manual_regeneration",
+    )
+
+    assert provider.calls == 2
+    assert first_summary["mode"] == "deterministic_fallback"
+    assert first_trace["materialization"]["status"] == "fallback"
+    assert first_trace["materialization"]["reused"] is False
+    assert second_summary["mode"] == "llm"
+    assert second_summary["title"] == "복구된 AI 요약"
+    assert second_trace["materialization"]["status"] == "ready"
+    assert second_trace["materialization"]["reused"] is False
+    assert second_trace["workflow_run"]["status"] == "completed"
+
+
+def test_agent_review_summary_cache_hit_does_not_create_runtime_run(
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first_summary, first_trace = service.agent_review_summary("CNC-S04-L04-01")
+    second_summary, second_trace = service.agent_review_summary("CNC-S04-L04-01")
+    runs = service.agent_review_workflow_runs(
+        asset_id="CNC-S04-L04-01",
+        limit=10,
+    )["items"]
+
+    assert first_summary == second_summary
+    assert first_trace["materialization"]["reused"] is False
+    assert second_trace["materialization"]["reused"] is True
+    assert second_trace.get("workflow_run") is None
+    assert provider.calls == 1
+    assert len(runs) == 1
+    assert runs[0]["workflow_run_id"] == first_trace["workflow_run"]["workflow_run_id"]
 
 
 def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
@@ -871,8 +937,8 @@ def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
     assert second["reused_count"] == 2
     assert all(item["workflow_run_id"] for item in first["items"])
     assert {item["workflow_status"] for item in first["items"]} == {"completed"}
-    assert all(item["workflow_run_id"] for item in second["items"])
-    assert {item["workflow_status"] for item in second["items"]} == {"completed"}
+    assert all(item["workflow_run_id"] is None for item in second["items"])
+    assert {item["workflow_status"] for item in second["items"]} == {None}
     assert provider.calls == 2
 
 

@@ -295,12 +295,22 @@ class ManufacturingPredictiveMaintenanceService:
             self.repository,
             self.agent_review_summary_provider,
         )
+        force = trigger == "ui_manual_regeneration"
         key_payload = summary_key_payload(
             packet=packet,
             project_id=project_id,
             history_window=history_window,
             provider=self.agent_review_summary_provider,
         )
+        if not force:
+            cached_summary, cached_trace = materializer.lookup(
+                packet=packet,
+                project_id=project_id,
+                history_window=history_window,
+            )
+            if cached_summary is not None:
+                return cached_summary, cached_trace
+
         run = self.repository.create_agent_review_workflow_run(
             trigger=trigger,
             engine=engine,
@@ -326,6 +336,7 @@ class ManufacturingPredictiveMaintenanceService:
                 project_id=project_id,
                 history_window=history_window,
                 workflow_run_id=run["workflow_run_id"],
+                force=force,
             )
             status = _workflow_run_status(trace)
             finished = self.repository.finish_agent_review_workflow_run(

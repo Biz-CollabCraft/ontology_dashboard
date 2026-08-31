@@ -53,6 +53,15 @@ FORBIDDEN_PROSE_CLAIMS = (
     "교체 완료",
     "정비 완료",
     "수리 완료",
+    "교체가 필요합니다",
+    "교체를 권고합니다",
+    "정비 일정을 잡는 것이 좋겠습니다",
+    "근본 원인은",
+    "로 확정되었습니다",
+    "다운타임이 절감됩니다",
+    "생산 손실이 예상됩니다",
+    "마지막 정비는",
+    "재발 주기는",
     "repair success",
     "execute approval",
     "auto approval",
@@ -291,7 +300,7 @@ def _data_footnotes(
     footnotes = [
         {
             "code": str(gap.get("field") or ""),
-            "note": _gap_note(gap),
+            "note": _gap_note(gap, packet=packet),
             "owner_domain": str(gap.get("owner_domain") or ""),
             "source_refs": refs,
         }
@@ -432,8 +441,11 @@ def _month_day_label(value: str) -> str:
     return f"{int(match.group(2))}월 {int(match.group(3))}일"
 
 
-def _gap_note(gap: dict[str, Any]) -> str:
+def _gap_note(gap: dict[str, Any], *, packet: dict[str, Any]) -> str:
     field = str(gap.get("field") or "unknown")
+    history_context = packet.get("maintenance_history_summary") or {}
+    if field == "maintenance_context.similar_events_30d" and history_context.get("similar_events"):
+        return "최근 30일 집계 필드는 없지만 유사 이벤트 조회 결과로 보완했습니다."
     labels = {
         "risk_series": "위험도 시계열이 부족해 악화 추세를 확정하기 어렵습니다.",
         "maintenance_context.similar_events_30d": "최근 30일 유사 이벤트 이력이 없어 재발 판단은 보류됩니다.",
@@ -589,6 +601,8 @@ def _validate_natural_language_grounding(
 
     probability_errors = _validate_prose_probabilities(prose_values, packet=packet)
     errors.extend(probability_errors)
+    loss_errors = _validate_prose_lost_units(prose_values, packet=packet)
+    errors.extend(loss_errors)
     priority_errors = _validate_prose_priorities(prose_values, packet=packet)
     errors.extend(priority_errors)
     return errors
@@ -720,17 +734,67 @@ def _validate_prose_priorities(
 ) -> list[str]:
     text = " ".join(values).casefold()
     labels = ("immediate", "high", "medium", "low")
-    mentioned = sorted(
+    mentioned = {
         label
         for label in labels
         if re.search(rf"(?<![a-z0-9_]){re.escape(label)}(?![a-z0-9_])", text)
+    }
+    korean_priority_labels = {
+        "immediate": ("즉시", "긴급"),
+        "high": ("높음", "높은"),
+        "medium": ("중간", "보통"),
+        "low": ("낮음", "낮은"),
+    }
+    priority_contexts = re.findall(
+        r"(?:우선순위|priority)[^.?!\n]{0,24}",
+        " ".join(values),
+        flags=re.IGNORECASE,
     )
+    for label, aliases in korean_priority_labels.items():
+        if any(alias in context for context in priority_contexts for alias in aliases):
+            mentioned.add(label)
+    if re.search(r"(?:다음\s*주|나중|후순위|천천히)[^.?!\n]{0,16}(?:확인|점검|검토)", " ".join(values)):
+        mentioned.add("low")
     if not mentioned:
         return []
     allowed = str((packet.get("review_priority") or {}).get("level") or "")
-    unknown = [label for label in mentioned if label != allowed]
+    unknown = sorted(label for label in mentioned if label != allowed)
     if unknown:
         return [f"prose_priority_mismatch:{','.join(unknown)}"]
+    return []
+
+
+def _validate_prose_lost_units(
+    values: list[str],
+    *,
+    packet: dict[str, Any],
+) -> list[str]:
+    text = " ".join(values)
+    matches = sorted(
+        {
+            match
+            for match in re.findall(
+                r"(?:약\s*)?[0-9,]+\s*(?:건|개)\s*(?:생산\s*)?손실(?:\s*가능성|\s*예상)?",
+                text,
+            )
+        }
+    )
+    if not matches:
+        return []
+    expected = (packet.get("operation_context_summary") or {}).get("estimated_lost_units")
+    allowed: set[int] = set()
+    if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+        allowed.add(int(expected))
+    unknown = []
+    for match in matches:
+        number_match = re.search(r"[0-9,]+", match)
+        if number_match is None:
+            continue
+        observed = int(number_match.group(0).replace(",", ""))
+        if observed not in allowed:
+            unknown.append(match)
+    if unknown:
+        return [f"prose_lost_units_mismatch:{','.join(unknown)}"]
     return []
 
 
