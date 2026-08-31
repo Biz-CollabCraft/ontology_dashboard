@@ -308,6 +308,15 @@ gen_data (sensor_stream.jsonl append)
      - 수신, 권한/Scope 검증, 중복 수신 시 `duplicate` 멱등 처리
 ```
 
+### 6.1 파이프라인 검증 범위 및 Model Artifact 정책
+
+- **현재 검증된 범위 (In-Process Integration)**:
+  - `gen_data` Extraction $\rightarrow$ Runtime Handoff $\rightarrow$ Runtime Prediction $\rightarrow$ Prediction Result Batch $\rightarrow$ Backend Router/Service 경계까지의 계약 및 멱등 처리 in-process 통합 검증이 완료되었습니다.
+  - E2E 검증(`tests/test_generator_extraction_e2e.py`)은 테스트 실행 중 생성되는 임시 Model Artifact를 사용합니다.
+- **후속 배포/운영 분리 범위**:
+  - 실제 배포 환경은 사전에 검증된 Model Artifact와 Active Model Set(`latest.json`)을 별도로 주입해야 합니다.
+  - 실제 SQLite/PostgreSQL Inbox persistence, Generator·Backend 다중 컨테이너 Docker Compose HTTP 통신, 실제 배포 환경 인증·네트워크 검증은 별도 후속 배포 작업으로 분리하여 관리합니다.
+
 ---
 
 ## 7. 시스템 간 책임 경계 (Responsibility Boundaries)

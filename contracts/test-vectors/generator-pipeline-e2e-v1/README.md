@@ -8,7 +8,7 @@
 - `source_uri`: data/observations/gen-data-S01-L01/window-20260828T130000Z-map-d545f01d/observations.jsonl
 - `source_checksum`: observations.jsonl의 SHA-256
 - `source_kind`: live_sensor
-- `source_contract_version`: generator-dataset-input-manifest-v1
+- `source_contract_version`: generator-dataset-input-v1
 - `source_schema_version`: canonical-observation-v1
 - `pipeline_contract_version`: generator-prediction-result-v1
 - `handoff_id`: Dataset과 RuntimeInput에 기반한 결정적 식별자

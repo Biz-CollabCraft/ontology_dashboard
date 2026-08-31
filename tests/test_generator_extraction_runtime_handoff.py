@@ -290,3 +290,167 @@ def test_api_get_and_retry_handoff(client, tmp_path, monkeypatch):
     resp_retry = client.post(f"/extraction/handoffs/{handoff.handoff_id}/retry")
     assert resp_retry.status_code == 200
     assert resp_retry.json()["status"] == "enqueued"
+
+
+def test_handoff_queue_item_legacy_or_corrupt_blocks(tmp_path, monkeypatch):
+    """Test 4 & 5: PipelineQueueItemInvalidError marks handoff blocked with EXTRACTION_HANDOFF_CORRUPT_QUEUE_ITEM."""
+    from systems.generator.app.extraction.extraction_exception import ExtractionHandoffQueueConflictError
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineQueueItemInvalidError
+
+    manifest_path = _create_test_dataset(tmp_path)
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    class CorruptQueue:
+        def get_item(self, job_id):
+            raise PipelineQueueItemInvalidError(f"Corrupt row for job {job_id}")
+
+    class MockPipelineManager:
+        def __init__(self):
+            self.queue = CorruptQueue()
+
+    handoff_repo = ExtractionHandoffRepository(root_dir=tmp_path / "handoffs")
+    svc = ExtractionRuntimeHandoffService(repository=handoff_repo, pipeline_manager=MockPipelineManager())
+    handoff = svc.create_or_get_handoff(manifest_path)
+
+    with pytest.raises(ExtractionHandoffQueueConflictError):
+        svc.process_handoff(handoff)
+
+    assert handoff.status == "blocked"
+    assert handoff.delivery.last_error_code == "EXTRACTION_HANDOFF_CORRUPT_QUEUE_ITEM"
+
+
+def test_handoff_queue_persist_error_sets_retry_wait(tmp_path, monkeypatch):
+    """Test 6: PipelineQueuePersistError marks handoff retry_wait with attempt_count incremented."""
+    from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineQueuePersistError
+
+    manifest_path = _create_test_dataset(tmp_path)
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    class FlakyQueue:
+        def get_item(self, job_id):
+            raise PipelineQueuePersistError("SQLite busy", code="PIPELINE_QUEUE_STORAGE_ERROR")
+
+    class MockPipelineManager:
+        def __init__(self):
+            self.queue = FlakyQueue()
+
+    handoff_repo = ExtractionHandoffRepository(root_dir=tmp_path / "handoffs")
+    svc = ExtractionRuntimeHandoffService(repository=handoff_repo, pipeline_manager=MockPipelineManager())
+    handoff = svc.create_or_get_handoff(manifest_path)
+
+    res = svc.process_handoff(handoff)
+    assert res.status == "retry_wait"
+    assert res.delivery.attempt_count == 1
+    assert res.delivery.last_error_code == "PIPELINE_QUEUE_STORAGE_ERROR"
+
+
+def test_handoff_unknown_queue_error_blocks(tmp_path, monkeypatch):
+    """Test 7: Unknown exception marks handoff blocked with EXTRACTION_HANDOFF_UNKNOWN_QUEUE_ERROR."""
+    from systems.generator.app.extraction.extraction_exception import ExtractionHandoffEnqueueFailedError
+
+    manifest_path = _create_test_dataset(tmp_path)
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    class ErrorQueue:
+        def get_item(self, job_id):
+            raise RuntimeError("Unexpected DB failure")
+
+    class MockPipelineManager:
+        def __init__(self):
+            self.queue = ErrorQueue()
+
+    handoff_repo = ExtractionHandoffRepository(root_dir=tmp_path / "handoffs")
+    svc = ExtractionRuntimeHandoffService(repository=handoff_repo, pipeline_manager=MockPipelineManager())
+    handoff = svc.create_or_get_handoff(manifest_path)
+
+    with pytest.raises(ExtractionHandoffEnqueueFailedError):
+        svc.process_handoff(handoff)
+
+    assert handoff.status == "blocked"
+    assert handoff.delivery.last_error_code == "EXTRACTION_HANDOFF_UNKNOWN_QUEUE_ERROR"
+
+
+def test_handoff_context_conflict_blocks(tmp_path, monkeypatch):
+    """Test 3: Queue item exists with same job ID but conflicting context -> blocked with EXTRACTION_HANDOFF_QUEUE_CONFLICT."""
+    from systems.generator.app.extraction.extraction_exception import ExtractionHandoffQueueConflictError
+    from systems.generator.app.extraction.extraction_handoff_repository import compute_runtime_job_id
+    from systems.generator.app.runtime_pipeline.pipeline_schema import (
+        PipelineQueueItem,
+        PredictionResultLineage,
+        RuntimeInputIdentity,
+        RuntimeSourceContext,
+    )
+
+    manifest_path = _create_test_dataset(tmp_path)
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    db_path = tmp_path / "queue.db"
+    queue = PipelineQueue(db_path=db_path)
+    pipe_mgr = PipelineManager(queue=queue)
+
+    handoff_repo = ExtractionHandoffRepository(root_dir=tmp_path / "handoffs")
+    svc = ExtractionRuntimeHandoffService(repository=handoff_repo, pipeline_manager=pipe_mgr)
+    handoff = svc.create_or_get_handoff(manifest_path)
+
+    r_job_id = compute_runtime_job_id(handoff.handoff_id)
+    # Pre-populate with conflicting dataset_version
+    conflicting_input = RuntimeInputIdentity(
+        dataset_id=handoff.runtime_input.dataset_id,
+        dataset_version="conflicting-version",
+        source=RuntimeSourceContext(
+            source_uri=handoff.runtime_input.source.source_uri,
+            source_checksum=handoff.runtime_input.source.source_checksum,
+            source_kind=handoff.runtime_input.source.source_kind,
+            source_contract_version=handoff.runtime_input.source.source_contract_version,
+            source_schema_version=handoff.runtime_input.source.source_schema_version,
+            pipeline_contract_version=handoff.runtime_input.source.pipeline_contract_version,
+            lineage=PredictionResultLineage(),
+        ),
+    )
+    queue.enqueue(job_id=r_job_id, runtime_input=conflicting_input, size_bytes=100)
+
+    with pytest.raises(ExtractionHandoffQueueConflictError):
+        svc.process_handoff(handoff)
+
+    assert handoff.status == "blocked"
+    assert handoff.delivery.last_error_code == "EXTRACTION_HANDOFF_QUEUE_CONFLICT"
+
+
+def test_handoff_duplicate_recovery_path_applies_error_classification(tmp_path, monkeypatch):
+    """Test 8: When enqueue raises duplicate error, recovery query correctly classifies corrupt/transient errors."""
+    from systems.generator.app.extraction.extraction_exception import ExtractionHandoffQueueConflictError
+    from systems.generator.app.runtime_pipeline.pipeline_exception import (
+        PipelineDuplicateInputError,
+        PipelineQueueItemInvalidError,
+    )
+
+    manifest_path = _create_test_dataset(tmp_path)
+    monkeypatch.setattr(PATHS, "runtime_prediction_enabled", True)
+
+    class DuplicateThenCorruptQueue:
+        def __init__(self):
+            self.call_count = 0
+
+        def get_item(self, job_id):
+            if self.call_count == 0:
+                self.call_count += 1
+                return None  # First check: not found
+            # Second check inside duplicate recovery: corrupt!
+            raise PipelineQueueItemInvalidError("Corrupted item on recovery")
+
+    class MockPipelineManager:
+        def __init__(self):
+            self.queue = DuplicateThenCorruptQueue()
+
+        def enqueue(self, job_id, runtime_input, size_bytes):
+            raise PipelineDuplicateInputError("Duplicate during race", code="PIPELINE_DUPLICATE_INPUT")
+
+    handoff_repo = ExtractionHandoffRepository(root_dir=tmp_path / "handoffs")
+    svc = ExtractionRuntimeHandoffService(repository=handoff_repo, pipeline_manager=MockPipelineManager())
+    handoff = svc.create_or_get_handoff(manifest_path)
+
+    with pytest.raises(ExtractionHandoffQueueConflictError):
+        svc.process_handoff(handoff)
+
+    assert handoff.status == "blocked"
+    assert handoff.delivery.last_error_code == "EXTRACTION_HANDOFF_CORRUPT_QUEUE_ITEM"

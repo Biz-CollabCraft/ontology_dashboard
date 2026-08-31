@@ -44,7 +44,7 @@ def compute_handoff_id(
     observations_uri: str,
     observations_sha256: str,
     source_kind: str = "live_sensor",
-    source_contract_version: str = "generator-dataset-input-manifest-v1",
+    source_contract_version: str = "generator-dataset-input-v1",
     source_schema_version: str = "canonical-observation-v1",
     pipeline_contract_version: str = "generator-prediction-result-v1",
 ) -> str:

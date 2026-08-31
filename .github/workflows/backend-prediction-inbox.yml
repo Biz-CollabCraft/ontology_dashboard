@@ -41,7 +41,7 @@ jobs:
       - name: Install Backend dependencies
         run: |
           python -m pip install --no-cache-dir --upgrade pip
-          python -m pip install --no-cache-dir -r systems/backend/requirements.txt pytest
+          python -m pip install --no-cache-dir -e "./systems/backend[dev]"
 
       - name: Run Backend Prediction Inbox tests
         env:

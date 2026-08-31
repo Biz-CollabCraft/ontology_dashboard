@@ -241,6 +241,107 @@ class ExtractionRuntimeHandoffService:
         logger.info(f"[ExtractionRuntimeHandoffService] Created handoff record {handoff_id} with status={initial_status}")
         return new_handoff
 
+    def _get_existing_queue_item(
+        self,
+        *,
+        handoff: ExtractionRuntimeHandoff,
+        runtime_job_id: str,
+    ) -> Optional[PipelineQueueItem]:
+        """Query existing queue item by job_id with strict error classification.
+
+        Rules:
+        - get_item() returns None -> Item does not exist -> return None
+        - PipelineQueueItemInvalidError -> Handoff blocked, EXTRACTION_HANDOFF_CORRUPT_QUEUE_ITEM, non-retryable
+        - PipelineQueuePersistError -> Handoff retry_wait, attempt_count += 1, storage error code, retryable
+        - Other exception -> Handoff blocked, EXTRACTION_HANDOFF_UNKNOWN_QUEUE_ERROR, enqueue aborted
+        """
+        try:
+            return self.pipeline_manager.queue.get_item(runtime_job_id)
+        except PipelineQueueItemInvalidError as exc:
+            logger.error(
+                f"[ExtractionRuntimeHandoffService] Corrupt/legacy queue item for job '{runtime_job_id}': {exc}"
+            )
+            handoff.status = "blocked"
+            handoff.delivery.last_error_code = "EXTRACTION_HANDOFF_CORRUPT_QUEUE_ITEM"
+            handoff.delivery.last_error_message = str(exc)
+            handoff.updated_at = now_utc_iso()
+            self.repository.save_handoff(handoff)
+            raise ExtractionHandoffQueueConflictError(
+                f"Corrupt or legacy queue item for job '{runtime_job_id}': {exc}"
+            ) from exc
+        except PipelineQueuePersistError as exc:
+            logger.warning(
+                f"[ExtractionRuntimeHandoffService] Transient error fetching queue item '{runtime_job_id}': {exc}"
+            )
+            handoff.status = "retry_wait"
+            handoff.delivery.attempt_count += 1
+            handoff.delivery.last_error_code = getattr(exc, "code", "PIPELINE_QUEUE_STORAGE_ERROR")
+            handoff.delivery.last_error_message = str(exc)
+            handoff.updated_at = now_utc_iso()
+            self.repository.save_handoff(handoff)
+            raise
+        except Exception as exc:
+            logger.exception(
+                f"[ExtractionRuntimeHandoffService] Unknown error fetching queue item '{runtime_job_id}': {exc}"
+            )
+            handoff.status = "blocked"
+            handoff.delivery.last_error_code = "EXTRACTION_HANDOFF_UNKNOWN_QUEUE_ERROR"
+            handoff.delivery.last_error_message = str(exc)
+            handoff.updated_at = now_utc_iso()
+            self.repository.save_handoff(handoff)
+            raise ExtractionHandoffEnqueueFailedError(
+                f"Unknown error fetching queue item '{runtime_job_id}': {exc}"
+            ) from exc
+
+    def _validate_queue_context_and_heal(
+        self,
+        *,
+        existing_job: PipelineQueueItem,
+        handoff: ExtractionRuntimeHandoff,
+        runtime_job_id: str,
+    ) -> ExtractionRuntimeHandoff:
+        """Validate all 9 context fields against existing queue item and self-heal handoff to enqueued if matched."""
+        src = handoff.runtime_input.source
+        handoff_lin = src.lineage.model_dump() if hasattr(src.lineage, "model_dump") else (src.lineage or {})
+        existing_lin = existing_job.lineage.model_dump() if hasattr(existing_job.lineage, "model_dump") else (existing_job.lineage or {})
+
+        matches = (
+            existing_job.source_uri == src.source_uri
+            and existing_job.source_checksum == src.source_checksum
+            and existing_job.source_kind == src.source_kind
+            and existing_job.source_contract_version == src.source_contract_version
+            and existing_job.source_schema_version == src.source_schema_version
+            and existing_job.pipeline_contract_version == src.pipeline_contract_version
+            and existing_job.dataset_id == handoff.runtime_input.dataset_id
+            and existing_job.dataset_version == handoff.runtime_input.dataset_version
+            and existing_lin == handoff_lin
+        )
+
+        if matches:
+            logger.info(
+                f"[ExtractionRuntimeHandoffService] Job '{runtime_job_id}' already present in runtime queue with matching context; healing handoff {handoff.handoff_id} to enqueued."
+            )
+            handoff.status = "enqueued"
+            handoff.delivery.runtime_job_id = runtime_job_id
+            handoff.delivery.queue_item_id = existing_job.job_id
+            handoff.delivery.last_error_code = None
+            handoff.delivery.last_error_message = None
+            handoff.updated_at = now_utc_iso()
+            self.repository.save_handoff(handoff)
+            return handoff
+        else:
+            logger.error(
+                f"[ExtractionRuntimeHandoffService] Queue conflict for job '{runtime_job_id}': existing item context does not match handoff {handoff.handoff_id}."
+            )
+            handoff.status = "blocked"
+            handoff.delivery.last_error_code = "EXTRACTION_HANDOFF_QUEUE_CONFLICT"
+            handoff.delivery.last_error_message = "Conflicting queue item context exists for runtime job ID"
+            handoff.updated_at = now_utc_iso()
+            self.repository.save_handoff(handoff)
+            raise ExtractionHandoffQueueConflictError(
+                f"Conflicting queue item context exists for runtime job ID '{runtime_job_id}'"
+            )
+
     def process_handoff(
         self,
         handoff: ExtractionRuntimeHandoff,
@@ -264,84 +365,16 @@ class ExtractionRuntimeHandoffService:
 
         # 1. Check if queue item already exists in Runtime Queue
         try:
-            existing_job = self.pipeline_manager.queue.get_item(runtime_job_id)
-        except PipelineQueueItemInvalidError as exc:
-            logger.error(
-                f"[ExtractionRuntimeHandoffService] Corrupt/legacy queue item for job '{runtime_job_id}': {exc}"
-            )
-            handoff.status = "blocked"
-            handoff.delivery.last_error_code = "EXTRACTION_HANDOFF_CORRUPT_QUEUE_ITEM"
-            handoff.delivery.last_error_message = str(exc)
-            handoff.updated_at = now_utc_iso()
-            self.repository.save_handoff(handoff)
-            raise ExtractionHandoffQueueConflictError(
-                f"Corrupt or legacy queue item for job '{runtime_job_id}': {exc}"
-            ) from exc
-        except PipelineQueuePersistError as exc:
-            logger.warning(
-                f"[ExtractionRuntimeHandoffService] Transient error fetching queue item '{runtime_job_id}': {exc}"
-            )
-            handoff.status = "retry_wait"
-            handoff.delivery.attempt_count += 1
-            handoff.delivery.last_error_code = getattr(exc, "code", "PIPELINE_QUEUE_STORAGE_ERROR")
-            handoff.delivery.last_error_message = str(exc)
-            handoff.updated_at = now_utc_iso()
-            self.repository.save_handoff(handoff)
+            existing_job = self._get_existing_queue_item(handoff=handoff, runtime_job_id=runtime_job_id)
+        except PipelineQueuePersistError:
             return handoff
-        except Exception as exc:
-            logger.exception(
-                f"[ExtractionRuntimeHandoffService] Unknown error fetching queue item '{runtime_job_id}': {exc}"
-            )
-            handoff.status = "blocked"
-            handoff.delivery.last_error_code = "EXTRACTION_HANDOFF_UNKNOWN_QUEUE_ERROR"
-            handoff.delivery.last_error_message = str(exc)
-            handoff.updated_at = now_utc_iso()
-            self.repository.save_handoff(handoff)
-            raise ExtractionHandoffEnqueueFailedError(
-                f"Unknown error fetching queue item '{runtime_job_id}': {exc}"
-            ) from exc
 
         if existing_job is not None:
-            src = handoff.runtime_input.source
-            handoff_lin = src.lineage.model_dump() if hasattr(src.lineage, "model_dump") else (src.lineage or {})
-            existing_lin = existing_job.lineage.model_dump() if hasattr(existing_job.lineage, "model_dump") else (existing_job.lineage or {})
-
-            matches = (
-                existing_job.source_uri == src.source_uri
-                and existing_job.source_checksum == src.source_checksum
-                and existing_job.source_kind == src.source_kind
-                and existing_job.source_contract_version == src.source_contract_version
-                and existing_job.source_schema_version == src.source_schema_version
-                and existing_job.pipeline_contract_version == src.pipeline_contract_version
-                and existing_job.dataset_id == handoff.runtime_input.dataset_id
-                and existing_job.dataset_version == handoff.runtime_input.dataset_version
-                and existing_lin == handoff_lin
+            return self._validate_queue_context_and_heal(
+                existing_job=existing_job,
+                handoff=handoff,
+                runtime_job_id=runtime_job_id,
             )
-
-            if matches:
-                logger.info(
-                    f"[ExtractionRuntimeHandoffService] Job '{runtime_job_id}' already present in runtime queue with matching context; healing handoff {handoff.handoff_id} to enqueued."
-                )
-                handoff.status = "enqueued"
-                handoff.delivery.runtime_job_id = runtime_job_id
-                handoff.delivery.queue_item_id = existing_job.job_id
-                handoff.delivery.last_error_code = None
-                handoff.delivery.last_error_message = None
-                handoff.updated_at = now_utc_iso()
-                self.repository.save_handoff(handoff)
-                return handoff
-            else:
-                logger.error(
-                    f"[ExtractionRuntimeHandoffService] Queue conflict for job '{runtime_job_id}': existing item context does not match handoff {handoff.handoff_id}."
-                )
-                handoff.status = "blocked"
-                handoff.delivery.last_error_code = "EXTRACTION_HANDOFF_QUEUE_CONFLICT"
-                handoff.delivery.last_error_message = "Conflicting queue item context exists for runtime job ID"
-                handoff.updated_at = now_utc_iso()
-                self.repository.save_handoff(handoff)
-                raise ExtractionHandoffQueueConflictError(
-                    f"Conflicting queue item context exists for runtime job ID '{runtime_job_id}'"
-                )
 
         # 2. Transition to enqueueing state before calling enqueue
         handoff.status = "enqueueing"
@@ -389,35 +422,15 @@ class ExtractionRuntimeHandoffService:
         except Exception as exc:
             if isinstance(exc, (PipelineSourceAlreadyRegisteredError, PipelineDuplicateInputError)):
                 try:
-                    existing_job = self.pipeline_manager.queue.get_item(runtime_job_id)
-                except Exception:
-                    existing_job = None
+                    existing_job = self._get_existing_queue_item(handoff=handoff, runtime_job_id=runtime_job_id)
+                except PipelineQueuePersistError:
+                    return handoff
                 if existing_job is not None:
-                    src = handoff.runtime_input.source
-                    handoff_lin = src.lineage.model_dump() if hasattr(src.lineage, "model_dump") else (src.lineage or {})
-                    existing_lin = existing_job.lineage.model_dump() if hasattr(existing_job.lineage, "model_dump") else (existing_job.lineage or {})
-                    if (
-                        existing_job.source_uri == src.source_uri
-                        and existing_job.source_checksum == src.source_checksum
-                        and existing_job.source_kind == src.source_kind
-                        and existing_job.source_contract_version == src.source_contract_version
-                        and existing_job.source_schema_version == src.source_schema_version
-                        and existing_job.pipeline_contract_version == src.pipeline_contract_version
-                        and existing_job.dataset_id == handoff.runtime_input.dataset_id
-                        and existing_job.dataset_version == handoff.runtime_input.dataset_version
-                        and existing_lin == handoff_lin
-                    ):
-                        logger.info(
-                            f"[ExtractionRuntimeHandoffService] Job '{runtime_job_id}' already registered in runtime queue with matching context; healing handoff {handoff.handoff_id} to enqueued."
-                        )
-                        handoff.status = "enqueued"
-                        handoff.delivery.runtime_job_id = runtime_job_id
-                        handoff.delivery.queue_item_id = existing_job.job_id
-                        handoff.delivery.last_error_code = None
-                        handoff.delivery.last_error_message = None
-                        handoff.updated_at = now_utc_iso()
-                        self.repository.save_handoff(handoff)
-                        return handoff
+                    return self._validate_queue_context_and_heal(
+                        existing_job=existing_job,
+                        handoff=handoff,
+                        runtime_job_id=runtime_job_id,
+                    )
 
             err_code = getattr(exc, "code", "EXTRACTION_HANDOFF_ENQUEUE_FAILED")
             err_msg = str(exc)
