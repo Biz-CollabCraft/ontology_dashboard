@@ -21,6 +21,7 @@
 - `runtime-overlay-observation.schema.json`: Generator가 발행하는 append-only 정비 후 CNC Overlay Observation 계약
 - `runtime-overlay-observations-available.schema.json`: 새 Overlay Observation delta batch를 Backend에 인계하는 이벤트 계약
 - `preventive-what-if.schema.json`: 합성 예방조치 Producer의 위험 상승·선행 지표·조치 전후 효과·한계 계약
+- `maintenance-cost-scenario.schema.json`: 완료된 점검과 Closed-loop Action 후보를 입력 계보로 삼는 읽기 전용 정비 비용 비교 결과 계약. Recommendation·승인·실행 명령과 분리한다.
 - `operation-context.schema.json`: 생산관리자 화면용 synthetic 생산계획·생산영향 fixture 계약. Product Result/Evidence 산출에는 사용하지 않는다.
 - `procedure-grounding.schema.json`: `procedure-grounding-v1.1` SOP 검색·절차 grounding fixture 계약. Product Evidence나 수리 지시가 아니라 점검 질문·체크리스트와 정비 판단 전 확인사항의 출처를 표시하며 비용·시점 추천을 만들지 않는다.
 
