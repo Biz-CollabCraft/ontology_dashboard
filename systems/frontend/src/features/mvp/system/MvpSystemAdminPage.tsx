@@ -39,8 +39,8 @@ function triggerLabel(value: string): string {
 }
 
 function runLine(run: MvpAgentReviewWorkflowRun): string {
-  const asset = run.trace.materialization?.asset_id;
-  const event = run.trace.materialization?.event_id;
+  const asset = run.asset_id ?? run.trace.materialization?.asset_id;
+  const event = run.event_id ?? run.trace.materialization?.event_id;
   const stage = run.trace.stage ?? "stage 미기록";
   return [
     formatTimestamp(run.updated_at),
@@ -49,6 +49,7 @@ function runLine(run: MvpAgentReviewWorkflowRun): string {
     run.engine,
     typeof asset === "string" ? asset : "asset 미기록",
     typeof event === "string" ? event : "event 미기록",
+    run.history_window ?? "window 미기록",
     stage,
   ].join("  |  ");
 }
@@ -196,6 +197,10 @@ export function MvpSystemAdminPage({
               <div><dt>상태</dt><dd>{STATUS_LABEL[selectedRun.status]}</dd></div>
               <div><dt>trigger</dt><dd>{triggerLabel(selectedRun.trigger)}</dd></div>
               <div><dt>engine</dt><dd>{selectedRun.engine}</dd></div>
+              <div><dt>asset</dt><dd>{selectedRun.asset_id ?? "미기록"}</dd></div>
+              <div><dt>event</dt><dd>{selectedRun.event_id ?? "미기록"}</dd></div>
+              <div><dt>dataset</dt><dd>{selectedRun.dataset_version_id ?? "미기록"}</dd></div>
+              <div><dt>window</dt><dd>{selectedRun.history_window ?? "미기록"}</dd></div>
               <div><dt>시작</dt><dd>{formatTimestamp(selectedRun.started_at)}</dd></div>
               <div><dt>완료</dt><dd>{selectedRun.completed_at ? formatTimestamp(selectedRun.completed_at) : "진행 중"}</dd></div>
               <div><dt>source hash</dt><dd>{selectedRun.source_sha256.slice(0, 12)}</dd></div>

@@ -834,9 +834,12 @@ def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
         "manual_materialization",
     ]
     assert all(item["status"] == "completed" for item in payload["items"])
+    assert all(item["asset_id"] == "CNC-S04-L04-01" for item in payload["items"])
+    assert all(item["event_id"] == "EVT-GS-002" for item in payload["items"])
+    assert all(item["history_window"] == "24h" for item in payload["items"])
     assert all(item["error_message"] is None for item in payload["items"])
     assert all(item["trace"]["stage"] == "finished" for item in payload["items"])
-    assert provider.calls == 2
+    assert provider.calls == 3
 
 
 def test_agent_review_summary_materialization_key_changes_with_history_window(

@@ -643,6 +643,10 @@ export interface MvpAgentReviewWorkflowRun {
   started_at: string;
   completed_at: string | null;
   updated_at: string;
+  asset_id: string | null;
+  event_id: string | null;
+  dataset_version_id: string | null;
+  history_window: string | null;
   summary_key: string;
   source_sha256: string;
   context_sha256: string;
