@@ -20,7 +20,7 @@ const VIEW_LABELS: Record<MvpView, { label: string; description: string }> = {
   objects: { label: "Assets", description: "설비 상태와 근거" },
   operations: { label: "작업요청", description: "처리할 작업" },
   reports: { label: "Reports", description: "보고서 출력" },
-  system: { label: "System Admin", description: "AI 런타임 로그" },
+  system: { label: "시스템 관리자", description: "AI 요약 처리 로그" },
 };
 
 const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: typeof LayoutDashboard }> = [
@@ -28,7 +28,7 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
   { id: "objects", label: "Assets", description: "설비 상태와 근거", icon: Boxes },
   { id: "operations", label: "작업요청", description: "처리할 작업", icon: ClipboardCheck },
   { id: "reports", label: "Reports", description: "보고서 출력", icon: FileText },
-  { id: "system", label: "System Admin", description: "AI 런타임 로그", icon: TerminalSquare },
+  { id: "system", label: "시스템 관리자", description: "AI 요약 처리 로그", icon: TerminalSquare },
 ];
 
 const ROLE_LABELS: Record<MvpRoleLens, { label: string; description: string; icon: typeof LayoutDashboard }> = {
@@ -43,8 +43,8 @@ const ROLE_SCREENS: Array<{ id: MvpRoleLens; label: string; description: string;
 
 const WORKFLOW_SYSTEM_ITEM = {
   id: "system" as const,
-  label: "System Admin",
-  description: "AI 런타임 로그",
+  label: "시스템 관리자",
+  description: "AI 요약 처리 로그",
   icon: TerminalSquare,
 };
 
@@ -80,7 +80,7 @@ export function MvpShell({
   const headingDetail = workflowMode && activeView === "overview"
     ? "하나의 업무판에서 상황, 설비 근거, 작업요청을 역할별로 바로 이어갑니다."
     : activeView === "system"
-    ? "watcher, 수동 생성, fallback, 검증 상태를 한 화면에서 조회하는 시스템 관리자 로그입니다."
+    ? "자동 감시 생성, 운영자 요청, 대체 요약, 검증 상태를 한 화면에서 조회하는 시스템 관리자 로그입니다."
     : activeView === "reports"
     ? "map-report UI prototype의 보고서 화면과 선택 Event 브리핑을 하나의 사이드탭에서 전환합니다."
     : activeView !== "overview"
