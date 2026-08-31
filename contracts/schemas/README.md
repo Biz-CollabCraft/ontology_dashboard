@@ -21,8 +21,9 @@
 - `runtime-overlay-observation.schema.json`: Generator가 발행하는 append-only 정비 후 CNC Overlay Observation 계약
 - `runtime-overlay-observations-available.schema.json`: 새 Overlay Observation delta batch를 Backend에 인계하는 이벤트 계약
 - `preventive-what-if.schema.json`: 합성 예방조치 Producer의 위험 상승·선행 지표·조치 전후 효과·한계 계약
+- `maintenance-cost-scenario.schema.json`: 완료된 점검과 Closed-loop Action 후보를 입력 계보로 삼는 읽기 전용 정비 비용 비교 결과 계약. Recommendation·승인·실행 명령과 분리한다.
 - `operation-context.schema.json`: 생산관리자 화면용 synthetic 생산계획·생산영향 fixture 계약. Product Result/Evidence 산출에는 사용하지 않는다.
-- `procedure-grounding.schema.json`: SOP 검색·절차 grounding fixture 계약. Product Evidence나 수리 지시가 아니라 점검 체크리스트와 이력 조회 초안의 출처를 표시한다. `sensor_judgment`는 Inspection Result를 보조하는 SOP 기준이며, MaintenanceEvent나 실제 고장 예방 claim을 만들지 않는다.
+- `procedure-grounding.schema.json`: `procedure-grounding-v1.1` SOP 검색·절차 grounding fixture 계약. Product Evidence나 수리 지시가 아니라 점검 질문·체크리스트와 정비 판단 전 확인사항의 출처를 표시하며 비용·시점 추천을 만들지 않는다.
 - `inspection-location-reference.schema.json`: Field Inspection Reference 소유의 component별 현장 위치·점검 방법 참고 계약. WorkOrder, MaintenanceAction, MaintenanceEvent, 승인 상태를 만들거나 바꾸지 않는다.
 - `agent-review-packet.schema.json`: Agent가 소비할 read-only 검토 패킷 계약. SOP 조회 query/result metadata, 점검·교체 검토 근거, Closed-loop 경계를 함께 제공하지만 WorkOrder, MaintenanceAction, Replay 상태를 변경하지 않는다.
 - `agent-review-summary.schema.json`: Agent Review Packet만 입력으로 사용한 LLM 또는 deterministic fallback 요약 출력 계약. source ref와 권한 경계를 검증하며 WorkOrder, MaintenanceAction, MaintenanceEvent, Replay, 자동 승인 필드를 허용하지 않는다.

@@ -79,8 +79,9 @@ def test_inspection_sop_fixtures_match_procedure_grounding_schema() -> None:
         assert list(validator.iter_errors(payload)) == []
         assert payload["source_kind"] == "demo_sop_fixture"
         assert payload["maturity"] == "fixture"
-        assert "교체 시기 검토 초안" in payload["guidance"]["allowed_ui_claims"]
+        assert "정비 판단 전 확인사항" in payload["guidance"]["allowed_ui_claims"]
         assert "교체 필요 확정" in payload["guidance"]["forbidden_ui_claims"]
+        assert "비용상 최적 대안" in payload["guidance"]["forbidden_ui_claims"]
         assert "자동 승인 완료" in payload["guidance"]["forbidden_ui_claims"]
         assert payload["sensor_judgment"]["inspection_result_mapping"] == {
             "records_operational_fact": True,

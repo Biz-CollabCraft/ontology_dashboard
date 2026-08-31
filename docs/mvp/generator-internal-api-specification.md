@@ -21,10 +21,16 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 
 ### 허용 범위
 - `GET /health` (데몬 상태 확인)
+- `POST /extraction` (gen_data 증분 파싱 및 Canonical Observation Dataset 발행)
+- `GET /extraction/status` (Extraction Manager, Background Worker 및 Handoff 큐 상태 조회)
+- `GET /extraction/handoffs/{handoff_id}` & `POST /extraction/handoffs/{handoff_id}/retry` (Handoff 조회 및 재시도)
 - `POST /preprocessing` (Observation Dataset 분석 및 Preprocessing Plan 수립·발행, 동기 endpoint 실행)
-- `POST /internal/train` (기존 main 제어 API 호환성: 최초 학습 실행, 단일 프로세스 Lock 하에 실행)
-- `POST /internal/retrain` (기존 main 제어 API 호환성: 새 버전 재학습 실행, 단일 프로세스 Lock 하에 실행)
-- Target 제어 API: 후속 구조 개편 시 정의될 단계별 엔드포인트(`POST /extraction`, `POST /feature`, `POST /train`, `POST /train/{base_model}`, `POST /models/...`)
+- `POST /feature` (Observation/Failure Dataset 및 Plan 기반 Feature Dataset Bundle 발행)
+- `POST /train` & `POST /train/{base_model}` (Multi-Model 학습 및 Model Artifact 발행)
+- `GET /runtime-pipeline/status`, `GET /runtime-pipeline/runs/{run_id}`, `GET /runtime-pipeline/queue` (런타임 예측 파이프라인 상태 조회)
+- `POST /internal/runtime-pipeline/enqueue`, `POST /internal/runtime-pipeline/retry-failed/{job_id}` (런타임 작업 등록 및 재시도)
+- `POST /internal/train` & `POST /internal/retrain` (기존 main 제어 API 호환성 유지)
+- Target 제어 API (후속 고도화): `POST /models/{base_model}/activate/{model_version}`, `GET /models/{base_model}/active`
 
 > **Preprocessing 도메인 책임 경계**
 >
@@ -59,6 +65,10 @@ Extraction이 사용하는 protocol field Mapping은 canonical Observation 변�
 | Method | Path | 현재 의미 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 프로세스 상태 확인 | Current (구현 완료) |
+| POST | `/extraction` | gen_data sensor_stream.jsonl 또는 프로토콜 로그에 승인된 정적 매핑을 적용하여 불변 Versioned Canonical Observation Dataset 발행 (단일/전체 Source 처리, 단일 작성자 Lock 및 멱등성 보장) | Current (구현 완료) |
+| GET | `/extraction/status` | Extraction Manager, Background Polling Worker 및 Runtime Handoff 큐 상태, Source별 체크포인트 offset 및 최근 오류 조회 | Current (구현 완료) |
+| GET | `/extraction/handoffs/{handoff_id}` | 특정 Extraction -> Runtime Prediction Handoff 기록 상세 조회 | Current (구현 완료) |
+| POST | `/extraction/handoffs/{handoff_id}/retry` | 실패 또는 대기 중인 Handoff 항목을 Runtime Prediction 큐에 명시적 재등록 | Current (구현 완료) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |

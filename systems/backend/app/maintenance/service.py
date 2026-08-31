@@ -12,6 +12,7 @@ from typing import Any
 from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 
 from .api_schema import (
+    CostOptionRecommendationCreateRequest,
     EvidenceSnapshotBasis,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
@@ -21,6 +22,17 @@ from .api_schema import (
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
+    ToolReplacementCostAnalysisCreateRequest,
+)
+from .cost_analysis_schema import (
+    CalculationStatus,
+    CostAnalysisBasis,
+    ExecutionTiming,
+    MaintenanceActionCode,
+)
+from .cost_calculator import (
+    ToolReplacementCostAnalysisInput,
+    calculate_tool_replacement_cost_scenarios,
 )
 from .integration import (
     MaintenanceCause,
@@ -34,6 +46,7 @@ from .maintenance_domain import (
     create_inspection_work_order,
     create_operations_manual_recommendation,
     create_work_order_for_recommendation,
+    derive_tool_replacement_action_candidate,
     plan_maintenance_action,
     transition_work_order,
 )
@@ -483,6 +496,9 @@ class MaintenanceLoopService:
         actor_display_name: str,
         idempotency_key: str,
         authored_at: datetime | None = None,
+        source_cost_analysis_id: str | None = None,
+        source_cost_option_id: str | None = None,
+        source_action_candidate_id: str | None = None,
     ) -> dict[str, Any]:
         inspection_result = self.repository.get_inspection_result(
             workspace_id=workspace_id,
@@ -528,6 +544,9 @@ class MaintenanceLoopService:
                 f"inspection_result:{inspection_result.inspection_result_id}",
                 *payload.basis,
             ),
+            source_cost_analysis_id=source_cost_analysis_id,
+            source_cost_option_id=source_cost_option_id,
+            source_action_candidate_id=source_action_candidate_id,
         )
         return self.repository.create_manual_recommendation(
             recommendation=recommendation,
@@ -539,9 +558,259 @@ class MaintenanceLoopService:
                     "inspection_result_id": inspection_result_id,
                     "payload": payload.model_dump(mode="json"),
                     "actor_id": actor_id,
+                    "source_cost_analysis_id": source_cost_analysis_id,
+                    "source_cost_option_id": source_cost_option_id,
+                    "source_action_candidate_id": source_action_candidate_id,
                 },
             ),
         )
+
+    def create_recommendation_from_cost_option(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        analysis_id: str,
+        option_id: str,
+        payload: CostOptionRecommendationCreateRequest,
+        actor_id: str,
+        actor_display_name: str,
+        idempotency_key: str,
+        authored_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Materialize a human-selected executable cost option as proposed.
+
+        Selecting an option creates only a proposed Operations recommendation.
+        Recommendation acceptance and Work Order creation remain separate
+        commands with their existing human-approval boundary.
+        """
+
+        result = self.repository.get_cost_analysis(
+            workspace_id=workspace_id,
+            analysis_id=analysis_id,
+        )
+        if result is None:
+            raise KeyError(analysis_id)
+        self._require_scope(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        selected = next(
+            (option for option in result.options if option.option_id == option_id),
+            None,
+        )
+        if selected is None:
+            raise ValueError("selected cost option does not belong to the analysis")
+        if selected.calculation_status is not CalculationStatus.CALCULATED:
+            raise ValueError("insufficient cost option cannot create a recommendation")
+        if selected.execution_timing not in {
+            ExecutionTiming.IMMEDIATE,
+            ExecutionTiming.PLANNED_WINDOW,
+        }:
+            raise ValueError(
+                "reinspect_after and no_action_baseline cannot create a maintenance recommendation"
+            )
+        if selected.action_code is not MaintenanceActionCode.TOOL_REPLACEMENT:
+            raise ValueError("only TOOL_REPLACEMENT recommendation is implemented")
+
+        return self.create_manual_recommendation(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            inspection_result_id=result.based_on.inspection_result_id,
+            payload=OperationsManualRecommendationCreateRequest(
+                action_code=selected.action_code.value,
+                basis=(
+                    f"cost_analysis:{analysis_id}",
+                    f"cost_option:{option_id}",
+                    f"execution_timing:{selected.execution_timing.value}",
+                    *payload.basis,
+                ),
+            ),
+            actor_id=actor_id,
+            actor_display_name=actor_display_name,
+            idempotency_key=idempotency_key,
+            authored_at=authored_at,
+            source_cost_analysis_id=analysis_id,
+            source_cost_option_id=option_id,
+            source_action_candidate_id=selected.action_candidate_id,
+        )
+
+    def calculate_tool_replacement_cost(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        inspection_result_id: str,
+        payload: ToolReplacementCostAnalysisCreateRequest,
+        actor_id: str,
+        idempotency_key: str,
+        calculated_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Calculate and append one decision-support snapshot.
+
+        Scope, equipment, Diagnosis lineage, and Action candidate identity are
+        resolved from canonical Maintenance records.  The caller supplies only
+        economic inputs and the SOP reference it consulted.
+        """
+
+        inspection_result = self.repository.get_inspection_result(
+            workspace_id=workspace_id,
+            inspection_result_id=inspection_result_id,
+        )
+        if inspection_result is None:
+            raise KeyError(inspection_result_id)
+        self._require_scope(
+            inspection_result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        if inspection_result.outcome is not InspectionOutcome.MAINTENANCE_RECOMMENDED:
+            raise ValueError(
+                "cost analysis requires maintenance_recommended inspection outcome"
+            )
+
+        inspection_work_order = self.repository.get_work_order(
+            workspace_id=workspace_id,
+            work_order_id=inspection_result.work_order_id,
+        )
+        if inspection_work_order is None:
+            raise KeyError(inspection_result.work_order_id)
+        self._require_scope(
+            inspection_work_order,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        if inspection_work_order.work_type is not WorkOrderType.INSPECTION:
+            raise ValueError("cost analysis requires an inspection work order")
+        if inspection_work_order.status is not WorkOrderStatus.COMPLETED:
+            raise ValueError("cost analysis requires a completed inspection work order")
+
+        authorization = inspection_work_order.authorization
+        source_product_result_id = authorization.source_product_result_id
+        source_evidence_id = authorization.source_evidence_id
+        if not source_product_result_id or not source_evidence_id:
+            raise ValueError(
+                "cost analysis requires Product Result/Evidence inspection lineage"
+            )
+
+        action_candidate = derive_tool_replacement_action_candidate(inspection_result)
+        action_candidate_id = action_candidate.action_candidate_id
+        analysis_id = self._stable_id(
+            "COST-ANALYSIS",
+            organization_id,
+            project_id,
+            workspace_id,
+            inspection_result_id,
+            action_candidate_id,
+            idempotency_key,
+        )
+        result = calculate_tool_replacement_cost_scenarios(
+            ToolReplacementCostAnalysisInput(
+                analysis_id=analysis_id,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                asset_id=inspection_result.asset_id,
+                equipment_id=inspection_result.asset_id,
+                calculated_at=calculated_at or datetime.now(timezone.utc),
+                based_on=CostAnalysisBasis(
+                    product_result_id=source_product_result_id,
+                    evidence_id=source_evidence_id,
+                    inspection_work_order_id=inspection_result.work_order_id,
+                    inspection_result_id=inspection_result.inspection_result_id,
+                    sop_id=payload.sop_id,
+                    sop_version=payload.sop_version,
+                ),
+                action_candidate_id=action_candidate_id,
+                action_code=MaintenanceActionCode.TOOL_REPLACEMENT,
+                currency=payload.currency,
+                currency_minor_unit=payload.currency_minor_unit,
+                scenarios=payload.scenarios,
+                assumptions=payload.assumptions,
+                input_sources=payload.input_sources,
+                price_version=payload.price_version,
+                calculation_policy_version=payload.calculation_policy_version,
+            )
+        )
+        return self.repository.create_cost_analysis(
+            result=result,
+            event_id=inspection_result.event_id,
+            actor_id=actor_id,
+            request_idempotency_key=idempotency_key,
+            request_fingerprint=self._fingerprint(
+                "maintenance.cost_analysis.calculate",
+                {
+                    "inspection_result_id": inspection_result_id,
+                    "payload": payload.model_dump(mode="json"),
+                    "actor_id": actor_id,
+                },
+            ),
+        )
+
+    def get_cost_analysis(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        analysis_id: str,
+    ) -> dict[str, Any]:
+        result = self.repository.get_cost_analysis(
+            workspace_id=workspace_id,
+            analysis_id=analysis_id,
+        )
+        if result is None:
+            raise KeyError(analysis_id)
+        self._require_scope(
+            result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        return result.model_dump(mode="json")
+
+    def list_cost_analyses(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        inspection_result_id: str,
+    ) -> dict[str, Any]:
+        inspection_result = self.repository.get_inspection_result(
+            workspace_id=workspace_id,
+            inspection_result_id=inspection_result_id,
+        )
+        if inspection_result is None:
+            raise KeyError(inspection_result_id)
+        self._require_scope(
+            inspection_result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        results = self.repository.list_cost_analyses(
+            workspace_id=workspace_id,
+            inspection_result_id=inspection_result_id,
+        )
+        for result in results:
+            self._require_scope(
+                result,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+            )
+        return {
+            "inspection_result_id": inspection_result_id,
+            "items": [result.model_dump(mode="json") for result in results],
+        }
 
     def decide_manual_recommendation(
         self,

@@ -1387,6 +1387,9 @@ class PredictiveMaintenanceRuntimeRepository:
             if asset_ids:
                 asset_rows = connection.execute(
                     """
+                    -- pm_assets does not yet own authoritative criticality.
+                    -- Until Equipment metadata is wired through this port, promotion
+                    -- materialization must expose asset.criticality as an evidence gap.
                     SELECT asset_id,asset_type,site_id,cell_id
                     FROM pm_assets
                     WHERE organization_id=%s AND project_id=%s AND workspace_id=%s

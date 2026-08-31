@@ -276,7 +276,7 @@
         "production_impact"
       ],
       "disclaimer": "데모 SOP fixture 기반 참고 안내이며 Product Evidence가 확정한 점검 위치 또는 수리 지시가 아닙니다.",
-      "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
+      "source_ref": "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     }
   ],
   "operation_context_summary": {
@@ -338,7 +338,7 @@
         ],
         "source_refs": [
           "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
-          "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+          "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
           "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
           "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
         ]
@@ -390,7 +390,7 @@
     ],
     "source_refs": [
       "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
-      "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+      "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
       "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
       "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18",
       "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
@@ -467,7 +467,7 @@
     "operation-context://production-planning-context-v1",
     "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[0]",
     "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
-    "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+    "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
     "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
     "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
     "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",

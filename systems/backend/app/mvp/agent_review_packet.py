@@ -61,7 +61,9 @@ def compose_agent_review_packet(
             continue
         retrieval_item = procedures_by_id.get(sop_id) or {}
         procedure = retrieval_item.get("procedure") or {}
-        replacement = guidance.get("replacement_review_guidance") or {}
+        replacement = guidance.get("replacement_review_guidance") or _replacement_guidance_from_prerequisites(
+            guidance.get("maintenance_review_prerequisites") or {}
+        )
         review_items = [
             _history_review_item_from_question(str(item))
             for item in replacement.get("human_review_questions") or []
@@ -690,10 +692,36 @@ def _agent_replacement_review_guidance(guidance: dict[str, Any]) -> dict[str, An
     }
 
 
+def _replacement_guidance_from_prerequisites(guidance: dict[str, Any]) -> dict[str, Any]:
+    label = str(guidance.get("label") or "교체 시기 검토 기준")
+    if label == "정비 판단 전 확인사항":
+        label = "교체 시기 검토 기준"
+    boundary = str(guidance.get("decision_boundary") or "")
+    if boundary:
+        boundary = "이 기준은 교체 시기 검토 초안이며, 교체 필요 확정·작업요청 생성·정비 승인·자동 승인을 수행하지 않습니다."
+    return {
+        "review_label": label,
+        "review_triggers": [
+            str(item) for item in guidance.get("review_conditions") or []
+        ],
+        "required_measurements": [
+            str(item) for item in guidance.get("required_measurements") or []
+        ],
+        "human_review_questions": [
+            str(item) for item in guidance.get("human_review_questions") or []
+        ],
+        "decision_boundary": boundary,
+    }
+
+
 def _history_review_item_from_question(value: str) -> str:
     text = value.strip().rstrip("?")
     if not text:
         return ""
+    if "설비 정지 가능 시간" in text and "부품 가용성" in text:
+        return "교체 전 생산 정지 가능 시간과 부품 가용성 확인 상태 조회"
+    if "추가 조치 판단" in text and ("반복적" in text or "악화 중" in text):
+        return "점검 결과가 교체 요청으로 이어질 만큼 반복적이거나 악화 중 여부 조회"
     for suffix in ("확인됐습니까", "확인되었습니까"):
         if text.endswith(suffix):
             return f"{_without_subject_particle(text.removesuffix(suffix))} 확인 상태 조회"

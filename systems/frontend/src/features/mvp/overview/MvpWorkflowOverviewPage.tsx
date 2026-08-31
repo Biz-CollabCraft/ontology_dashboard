@@ -459,16 +459,15 @@ function inspectionGuidanceSourceLabel(target: MvpInspectionTarget | null): stri
 }
 
 function replacementReviewTitle(target: MvpInspectionTarget): string {
-  return target.inspectionGuidance?.replacementReviewGuidance
-    ? "AI 근거 요약: 교체 시기 검토"
-    : "AI 근거 요약";
+  return target.inspectionGuidance?.maintenanceReviewPrerequisites?.label
+    ?? "AI 근거 요약: 교체 시기 검토";
 }
 
-function replacementReviewPreview(target: MvpInspectionTarget | null): string[] {
-  const guidance = target?.inspectionGuidance?.replacementReviewGuidance;
+function maintenanceReviewPrerequisitePreview(target: MvpInspectionTarget | null): string[] {
+  const guidance = target?.inspectionGuidance?.maintenanceReviewPrerequisites;
   if (!guidance) return [];
   return [
-    ...guidance.reviewTriggers.slice(0, 2).map(replacementReviewEvidenceLabel),
+    ...guidance.reviewConditions.slice(0, 2).map(replacementReviewEvidenceLabel),
     ...guidance.requiredMeasurements.slice(0, 1).map(replacementReviewEvidenceLabel),
   ];
 }
@@ -491,7 +490,7 @@ function replacementReviewEvidenceLabel(value: string): string {
 }
 
 function replacementReviewBoundaryLabel(target: MvpInspectionTarget): string {
-  const boundary = target.inspectionGuidance?.replacementReviewGuidance?.decisionBoundary;
+  const boundary = target.inspectionGuidance?.maintenanceReviewPrerequisites?.decisionBoundary;
   if (!boundary) return "";
   return "AI가 읽은 근거 요약이며, 교체 확정이나 작업요청 생성은 담당자 검토 후 진행합니다.";
 }
@@ -2045,12 +2044,12 @@ function AssetPreviewPanel({
                           {target.target?.inspectionGuidance ? (
                             <p>{target.target.inspectionGuidance.disclaimer}</p>
                           ) : null}
-                          {target.target?.inspectionGuidance?.replacementReviewGuidance ? (
+                          {target.target?.inspectionGuidance?.maintenanceReviewPrerequisites ? (
                             <div className="mvp-inspection-guidance-note">
                               <strong>{replacementReviewTitle(target.target)}</strong>
                               <ul>
-                                {replacementReviewPreview(target.target).map((item) => (
-                                  <li key={`${target.target?.targetId}-replacement-${item}`}>{item}</li>
+                                {maintenanceReviewPrerequisitePreview(target.target).map((item) => (
+                                  <li key={`${target.target?.targetId}-maintenance-review-${item}`}>{item}</li>
                                 ))}
                               </ul>
                               <small>{replacementReviewBoundaryLabel(target.target)}</small>

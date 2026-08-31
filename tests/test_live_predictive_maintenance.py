@@ -261,6 +261,38 @@ def test_overlay_available_outbox_is_deduplicated_by_event_id(tmp_path):
     assert read_overlay_available_events(tmp_path) == [event]
 
 
+def test_overlay_available_outbox_rejects_same_event_id_with_different_payload(
+    tmp_path,
+):
+    event = {
+        "contract_version": "runtime-overlay-observations-available-v1",
+        "event_type": "runtime_overlay.observations.available",
+        "event_id": "OVERLAY-AVAILABLE:MAINT-1:post:36",
+        "simulation_session_id": "SESSION-1",
+        "equipment_id": "CNC-1",
+        "maintenance_action_id": "ACTION-1",
+        "maintenance_event_id": "MAINT-1",
+        "overlay_branch_id": "MAINT-1:post",
+        "history_segment_id": "MAINT-1:post",
+        "source_kind": "maintenance_replay_overlay",
+        "state_version": 3,
+        "batch_rows": 36,
+        "generated_rows": 36,
+        "observed_from": "2026-08-18T05:30:00+00:00",
+        "observed_to": "2026-08-18T11:20:00+00:00",
+        "storage_reference": "",
+    }
+    event["storage_reference"] = expected_storage_reference(event)
+    conflicting = {**event, "generated_rows": 37}
+    _write(
+        tmp_path / "runtime_overlay/observations_available.jsonl",
+        [event, conflicting],
+    )
+
+    with pytest.raises(ValueError, match="event_id conflict"):
+        read_overlay_available_events(tmp_path)
+
+
 def test_live_worker_orchestrates_owner_domain_ports_in_order(tmp_path):
     calls: list[str] = []
     ticks = [(datetime(2026, 8, 18, 5, 30, tzinfo=timezone.utc), [{"asset_id": "CNC-1"}])]

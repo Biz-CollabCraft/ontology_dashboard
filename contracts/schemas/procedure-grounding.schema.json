@@ -28,7 +28,7 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"const": "procedure-grounding-v1.0"},
+    "schema_version": {"const": "procedure-grounding-v1.1"},
     "sop_id": {"type": "string"},
     "title": {"type": "string"},
     "version": {"type": "string"},
@@ -172,7 +172,7 @@
         "reference_location_label",
         "suggested_check_method",
         "checklist_draft",
-        "replacement_review_guidance",
+        "maintenance_review_prerequisites",
         "disclaimer",
         "allowed_ui_claims",
         "forbidden_ui_claims"
@@ -182,14 +182,14 @@
         "reference_location_label": {"type": "string"},
         "suggested_check_method": {"type": "string"},
         "checklist_draft": {"type": "array", "items": {"type": "string"}},
-        "replacement_review_guidance": {
+        "maintenance_review_prerequisites": {
           "type": "object",
-          "description": "SOP-based replacement timing review guidance for human/agent handoff drafts. This must not be treated as an automatic replacement decision or WorkOrder command.",
-          "required": ["review_label", "review_triggers", "required_measurements", "human_review_questions", "decision_boundary"],
+          "description": "SOP-based prerequisites that a human must verify before making a maintenance decision. This is not timing or cost guidance, a Recommendation, approval, or WorkOrder command.",
+          "required": ["label", "review_conditions", "required_measurements", "human_review_questions", "decision_boundary"],
           "additionalProperties": false,
           "properties": {
-            "review_label": {"type": "string"},
-            "review_triggers": {"type": "array", "items": {"type": "string"}},
+            "label": {"type": "string"},
+            "review_conditions": {"type": "array", "items": {"type": "string"}},
             "required_measurements": {"type": "array", "items": {"type": "string"}},
             "human_review_questions": {"type": "array", "items": {"type": "string"}},
             "decision_boundary": {"type": "string"}

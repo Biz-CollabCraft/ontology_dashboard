@@ -169,7 +169,10 @@ class _FixtureSopContextAdapter:
                     "reference_location_label": guidance.get("reference_location_label"),
                     "suggested_check_method": guidance.get("suggested_check_method"),
                     "checklist_draft": guidance.get("checklist_draft") or [],
-                    "replacement_review_guidance": guidance.get("replacement_review_guidance") or {},
+                    "maintenance_review_prerequisites": guidance.get(
+                        "maintenance_review_prerequisites"
+                    )
+                    or {},
                     "safety_level": sop["safety_level"],
                     "requires_human_approval": sop["requires_human_approval"],
                     "source_ref": f"{sop['source_uri']}#{sop['sop_id']}",
@@ -448,6 +451,7 @@ class ManufacturingFixtureReviewContextAdapter:
         fixture: dict[str, Any],
         artifact: dict[str, Any],
     ) -> dict[str, dict[str, Any]]:
+        self.sop_adapter.procedures = self.inspection_sops
         return self.sop_adapter.inspection_guidance(fixture=fixture, artifact=artifact)
 
     def inspection_locations(
@@ -467,6 +471,7 @@ class ManufacturingFixtureReviewContextAdapter:
         fixture: dict[str, Any],
         artifact: dict[str, Any],
     ) -> dict[str, Any]:
+        self.sop_adapter.procedures = self.inspection_sops
         return self.sop_adapter.sop_retrieval(fixture=fixture, artifact=artifact)
 
     def ontology_context(

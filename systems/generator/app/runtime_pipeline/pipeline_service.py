@@ -144,9 +144,13 @@ class PipelineService:
         """Convert filesystem path to logical relative URI without exposing local drives or absolute paths."""
         try:
             p = source_path.resolve()
-            for root in (PROJECT_ROOT, PATHS.data_incoming, PATHS.data_preprocessed):
+            for root in (PROJECT_ROOT, PATHS.data_incoming, PATHS.data_preprocessed, PATHS.data_dir, getattr(PATHS, "observations_root", None)):
+                if root is None:
+                    continue
                 try:
                     rel = p.relative_to(root.resolve())
+                    if root.resolve() == PATHS.data_dir.resolve():
+                        return f"data/{str(rel).replace('\\\\', '/')}"
                     return str(rel).replace("\\", "/")
                 except ValueError:
                     pass
@@ -364,7 +368,10 @@ class PipelineService:
             )
 
         contract_ver = item.pipeline_contract_version
-        logical_source_uri = self.get_logical_source_uri(source_path)
+        if item.source_uri and not (item.source_uri.startswith("/") or ":" in item.source_uri[:2]):
+            logical_source_uri = item.source_uri
+        else:
+            logical_source_uri = self.get_logical_source_uri(source_path)
 
         runtime_source_context = RuntimeSourceContext(
             source_uri=logical_source_uri,

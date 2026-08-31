@@ -519,12 +519,12 @@ function inspectionTargetsFromAssetDetailViewModel(viewModel: AssetDetailViewMod
       referenceLocationLabel: target.inspection_guidance.reference_location_label,
       suggestedCheckMethod: target.inspection_guidance.suggested_check_method,
       checklistDraft: target.inspection_guidance.checklist_draft,
-      replacementReviewGuidance: {
-        reviewLabel: target.inspection_guidance.replacement_review_guidance.review_label,
-        reviewTriggers: target.inspection_guidance.replacement_review_guidance.review_triggers,
-        requiredMeasurements: target.inspection_guidance.replacement_review_guidance.required_measurements,
-        humanReviewQuestions: target.inspection_guidance.replacement_review_guidance.human_review_questions,
-        decisionBoundary: target.inspection_guidance.replacement_review_guidance.decision_boundary,
+      maintenanceReviewPrerequisites: {
+        label: target.inspection_guidance.maintenance_review_prerequisites.label,
+        reviewConditions: target.inspection_guidance.maintenance_review_prerequisites.review_conditions,
+        requiredMeasurements: target.inspection_guidance.maintenance_review_prerequisites.required_measurements,
+        humanReviewQuestions: target.inspection_guidance.maintenance_review_prerequisites.human_review_questions,
+        decisionBoundary: target.inspection_guidance.maintenance_review_prerequisites.decision_boundary,
       },
       safetyLevel: target.inspection_guidance.safety_level,
       requiresHumanApproval: target.inspection_guidance.requires_human_approval,

@@ -47,9 +47,11 @@ class FakeInboxRepository:
         *,
         assets: set[str] | None = None,
         asset_metadata: dict[str, dict[str, Any]] | None = None,
+        fail_promotions_once: bool = False,
     ) -> None:
         self.assets = assets or {"CNC-001"}
         self.asset_metadata = asset_metadata or {}
+        self.fail_promotions_once = fail_promotions_once
         self.batches: dict[str, str] = {}
         self.items: dict[str, str] = {}
         self.saved: list[dict[str, Any]] = []
@@ -154,6 +156,9 @@ class FakeInboxRepository:
         }
 
     def save_prediction_batch_promotions(self, **kwargs: Any) -> dict[str, Any]:
+        if self.fail_promotions_once:
+            self.fail_promotions_once = False
+            raise RuntimeError("simulated promotion outage")
         receipts = []
         for promotion in kwargs["promotions"]:
             existing = next(
@@ -531,6 +536,33 @@ def test_prediction_inbox_rejects_payload_sha256_mismatch() -> None:
     assert "payload_sha256_mismatch" in (receipt.rejection_reason or "")
 
 
+def test_prediction_inbox_rejects_model_artifact_manifest_checksum_mismatch() -> None:
+    payload = load_payload()
+    payload["results"][0]["model_artifact_manifest_sha256"] = "e" * 64
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "rejected"
+    assert receipt.rejected_results == 1
+    assert "model_artifact_manifest_sha256_mismatch" in (
+        receipt.rejection_reason or ""
+    )
+
+
+def test_prediction_inbox_rejects_duplicate_model_set_identity() -> None:
+    payload = load_payload()
+    payload["model_set"]["models"].append(copy.deepcopy(payload["model_set"]["models"][0]))
+
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "rejected"
+    assert receipt.rejected_results == 1
+    assert "model_set_duplicate_identity" in (receipt.rejection_reason or "")
+
+
 def test_prediction_inbox_rejects_official_schema_violation_before_pydantic() -> None:
     payload = load_payload()
     payload["results"][0]["source_ref"]["sha256"] = "0" * 64
@@ -698,6 +730,42 @@ def test_internal_prediction_inbox_promotes_accepted_batch(monkeypatch) -> None:
     assert body["product_result_created"] is True
     assert body["promoted_results"] == 1
     assert body["artifact_ids"]
+
+
+def test_internal_prediction_inbox_duplicate_retries_unfinished_promotion(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    repository = FakeInboxRepository(fail_promotions_once=True)
+    service = make_service(repository)
+    app = FastAPI()
+    app.include_router(internal_router)
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+    payload = load_payload()
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        failed = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=payload,
+            headers={"Authorization": "Bearer receiver-secret"},
+        )
+        retried = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=payload,
+            headers={"Authorization": "Bearer receiver-secret"},
+        )
+
+    assert failed.status_code == 500
+    assert retried.status_code == 200, retried.text
+    body = retried.json()
+    assert body["validation_status"] == "duplicate"
+    assert body["promotion_status"] == "promoted"
+    assert body["product_result_created"] is True
+    assert body["promoted_results"] == 1
+    assert repository.promotions
 
 
 def test_prediction_inbox_internal_route_requires_configured_service_token(monkeypatch) -> None:
