@@ -45,20 +45,19 @@ jobs:
       - name: Checkout tested revision
         uses: actions/checkout@v4
 
-      - name: Build Generator runtime image
-        run: docker build --file systems/generator/Dockerfile --tag ontology-generator:runtime-check .
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Run Runtime Pipeline tests inside image
-        run: >-
-          docker run --rm
-          --user 0:0
-          --entrypoint sh
-          --env DATA_DIR=/data/source
-          --env DATA_PREPROCESSED_DIR=/data/preprocessed
-          --env ONTOLOGY_DIR=/data/ontology
-          --env MODELS_STORE_DIR=/data/models
-          --env MODEL_ARTIFACT_URI=/artifacts
-          --volume "${{ github.workspace }}/tests:/app/tests:ro"
-          --volume "${{ github.workspace }}/contracts:/app/contracts:ro"
-          ontology-generator:runtime-check
-          -c "python -m pip install --no-cache-dir pytest && python -m pytest -q tests/test_runtime_input_context.py tests/test_generator_runtime_pipeline.py tests/test_runtime_overlay_generator_enqueue.py"
+      - name: Install Generator and Backend dependencies
+        run: |
+          python -m pip install --no-cache-dir --upgrade pip
+          python -m pip install --no-cache-dir -r systems/generator/requirements.txt
+          python -m pip install --no-cache-dir -e "./systems/backend[dev]"
+
+      - name: Run Runtime Pipeline tests
+        env:
+          APP_ENV: test
+          PYTHONPATH: .
+        run: python -m pytest -v tests/test_runtime_input_context.py tests/test_generator_runtime_pipeline.py tests/test_runtime_overlay_generator_enqueue.py
