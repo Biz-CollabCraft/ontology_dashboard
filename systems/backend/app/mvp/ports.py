@@ -30,6 +30,20 @@ class AuditRepositoryPort(Protocol):
 
     def record_audit(self, **command: Any) -> dict[str, Any]: ...
 
+    def get_agent_review_summary(self, summary_key: str) -> dict[str, Any] | None: ...
+
+    def create_agent_review_workflow_run(self, **record: Any) -> dict[str, Any]: ...
+
+    def expire_stale_agent_review_workflow_run(self, **filters: Any) -> dict[str, Any] | None: ...
+
+    def finish_agent_review_workflow_run(self, workflow_run_id: str, **updates: Any) -> dict[str, Any]: ...
+
+    def get_agent_review_workflow_run(self, workflow_run_id: str) -> dict[str, Any] | None: ...
+
+    def list_agent_review_workflow_runs(self, **filters: Any) -> list[dict[str, Any]]: ...
+
+    def save_agent_review_summary(self, **record: Any) -> dict[str, Any]: ...
+
     def reset(self) -> None: ...
 
 
@@ -59,6 +73,17 @@ class ReportAgentPort(Protocol):
     def generate(self, *args: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]]: ...
 
 
+class AgentReviewLLMPort(Protocol):
+    name: str
+
+    def generate_json(
+        self,
+        system_prompt: str,
+        payload: dict[str, Any],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+
 class LayoutPlannerPort(Protocol):
     def plan(self, *args: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]]: ...
 
@@ -76,6 +101,7 @@ class FactorySignalApplicationPort(Protocol):
 
 
 __all__ = [
+    "AgentReviewLLMPort",
     "AuditRepositoryPort",
     "FactorySignalApplicationPort",
     "LayoutPlannerPort",

@@ -226,6 +226,8 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+pytest.importorskip("lightgbm")
+
 from systems.generator.generator_config import PATHS, GeneratorPaths
 from systems.generator.file_integrity import compute_file_sha256
 from systems.generator.model.publisher import ModelArtifactPublisher

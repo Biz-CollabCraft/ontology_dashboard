@@ -21,15 +21,30 @@ class StrictCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class EvidenceSnapshotBasis(StrictCommand):
+    artifact_id: str | None = Field(default=None, max_length=240)
+    evidence_payload_reference: str | None = Field(default=None, max_length=500)
+    asset_id: str | None = Field(default=None, max_length=240)
+    event_id: str | None = Field(default=None, max_length=240)
+    observed_at: str | None = Field(default=None, max_length=120)
+    model_version: str | None = Field(default=None, max_length=240)
+    dataset_version: str | None = Field(default=None, max_length=240)
+    source_sha256: str | None = Field(default=None, max_length=64)
+
+
 class InspectionWorkOrderCreateRequest(StrictCommand):
     """Request an inspection for an existing canonical Diagnosis event.
 
     Every authorization and equipment-lineage field is resolved server-side
     from the Diagnosis-owned Event Evidence Projection.  Accepting those
     fields from a caller would let the caller forge the authorization basis.
+    The optional snapshot_basis is only a stale-view guard: if supplied, its
+    non-empty fields must match the server-resolved projection before a work
+    order can be requested.
     """
 
     event_id: str = Field(min_length=1, max_length=240)
+    snapshot_basis: EvidenceSnapshotBasis | None = None
 
 
 class InspectionResultCreateRequest(StrictCommand):
@@ -127,6 +142,7 @@ class MaintenanceReplayRequest(StrictCommand):
 
 __all__ = [
     "CostOptionRecommendationCreateRequest",
+    "EvidenceSnapshotBasis",
     "InspectionResultCreateRequest",
     "InspectionWorkOrderCreateRequest",
     "MaintenanceActionCompleteRequest",

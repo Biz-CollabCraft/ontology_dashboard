@@ -109,6 +109,9 @@ export function MvpOperationsPage({
   const latestDecision = detail?.activity.find((activity) => activity.kind === "decision") ?? null;
   const selectedDecisionOption = DECISION_OPTIONS.find((option) => option.decision === decision) ?? DECISION_OPTIONS[0];
   const SelectedDecisionIcon = selectedDecisionOption.Icon;
+  const isInspectionRequestDecision = decision === "request_inspection" || decision === "review_shutdown";
+  const canSubmitDecision = canDecide && (!isInspectionRequestDecision || Boolean(detail?.snapshotBasis));
+  const decisionActionLabel = isInspectionRequestDecision ? "작업요청 생성" : `${DECISION_LABEL[decision]} 기록`;
   const recommendedOption = selectedEvent
     ? DECISION_OPTIONS.find((option) => option.decision === selectedEvent.recommendedDecision) ?? DECISION_OPTIONS[0]
     : DECISION_OPTIONS[0];
@@ -136,12 +139,21 @@ export function MvpOperationsPage({
   }, [selectedEvent?.eventId, selectedEvent?.recommendedDecision]);
 
   async function saveDecision() {
+    if (isInspectionRequestDecision && !detail?.snapshotBasis) {
+      setMessage({ kind: "error", text: "현재 화면 기준 근거가 아직 로드되지 않아 작업요청을 생성할 수 없습니다." });
+      return;
+    }
     setSavingDecision(true);
     setMessage(null);
     try {
       await onDecision(decision, decisionNote);
       setDecisionNote("");
-      setMessage({ kind: "success", text: `${DECISION_LABEL[decision]} 기록이 저장됐습니다.` });
+      setMessage({
+        kind: "success",
+        text: isInspectionRequestDecision
+          ? "현재 화면 근거 기준으로 점검 작업요청이 생성됐습니다."
+          : `${DECISION_LABEL[decision]} 기록이 저장됐습니다.`,
+      });
     } catch (reason) {
       setMessage({ kind: "error", text: reason instanceof Error ? reason.message : "운영 판단 저장에 실패했습니다." });
     } finally {
@@ -192,8 +204,8 @@ export function MvpOperationsPage({
                   </div>
                   <div>
                     {canDecide ? (
-                      <button type="button" className="mvp-button primary" onClick={saveDecision} disabled={savingDecision}>
-                        <Save size={14} />{savingDecision ? "기록 중" : `${DECISION_LABEL[decision]} 기록`}
+                      <button type="button" className="mvp-button primary" onClick={saveDecision} disabled={!canSubmitDecision || savingDecision}>
+                        <Save size={14} />{savingDecision ? "처리 중" : decisionActionLabel}
                       </button>
                     ) : (
                       <button type="button" className="mvp-button primary" onClick={() => onOpenAsset(selectedEvent)}><Eye size={14} />근거 확인</button>
@@ -208,7 +220,7 @@ export function MvpOperationsPage({
                 <section className="mvp-always-action" aria-label="현재 허용된 작업">
                   <header><span>Allowed Action</span><strong>{canDecide ? "판단 기록 가능" : "읽기 전용"}</strong></header>
                   <div className="mvp-action-row">
-                    <button type="button" className="mvp-button primary" onClick={saveDecision} disabled={!canDecide || savingDecision}><Save size={14} />{savingDecision ? "기록 중" : `${DECISION_LABEL[decision]} 기록`}</button>
+                    <button type="button" className="mvp-button primary" onClick={saveDecision} disabled={!canSubmitDecision || savingDecision}><Save size={14} />{savingDecision ? "처리 중" : decisionActionLabel}</button>
                     <button type="button" className="mvp-button secondary" onClick={() => onOpenAsset(selectedEvent)}><Wrench size={14} />Asset 근거</button>
                     <button type="button" className="mvp-button ghost" onClick={() => onOpenReport(selectedEvent)}><FileText size={14} />Report</button>
                   </div>
@@ -270,7 +282,7 @@ export function MvpOperationsPage({
                     </MvpPanel>
 
                     <MvpPanel title="기록하기" eyebrow="사람 판단">
-                      <div className="mvp-write-status"><ShieldCheck size={16} /><div><strong>{canDecide ? "결정 기록 가능" : "읽기 전용"}</strong><span>{canDecide ? "현재 역할로 이 업무의 결정을 남길 수 있습니다." : "현재 역할에는 결정 기록 권한이 없습니다."}</span></div></div>
+                      <div className="mvp-write-status"><ShieldCheck size={16} /><div><strong>{canSubmitDecision ? (isInspectionRequestDecision ? "작업요청 생성 가능" : "결정 기록 가능") : "읽기 전용"}</strong><span>{!canDecide ? "현재 역할에는 결정 기록 권한이 없습니다." : isInspectionRequestDecision && !detail.snapshotBasis ? "현재 화면 기준 근거를 불러온 뒤 작업요청을 생성할 수 있습니다." : isInspectionRequestDecision ? "현재 화면 근거 기준으로 점검 작업요청을 생성합니다." : "현재 역할로 이 업무의 결정을 남길 수 있습니다."}</span></div></div>
                       <div className={`mvp-selected-decision tone-${selectedDecisionOption.tone}`}>
                         <SelectedDecisionIcon size={18} />
                         <div><span>선택한 판단</span><strong>{selectedDecisionOption.title}</strong><small>{selectedDecisionOption.detail}</small></div>
@@ -282,7 +294,7 @@ export function MvpOperationsPage({
                       </div>
                       <label className="mvp-field"><span>추가 메모 선택 입력</span><textarea value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="필요할 때만 짧게 남기세요." disabled={!canDecide} /></label>
                       {decision === "review_shutdown" ? <div className="mvp-safety-note"><strong>자동 정지 아님</strong><span>권한 있는 담당자의 정지 검토를 요청할 뿐 설비 제어 명령을 실행하지 않습니다.</span></div> : null}
-                      <button type="button" className="mvp-button primary mvp-wide-action" onClick={saveDecision} disabled={!canDecide || savingDecision}><Save size={14} />{savingDecision ? "기록 중" : `${selectedDecisionOption.title} 기록하기`}</button>
+                      <button type="button" className="mvp-button primary mvp-wide-action" onClick={saveDecision} disabled={!canSubmitDecision || savingDecision}><Save size={14} />{savingDecision ? "처리 중" : isInspectionRequestDecision ? "점검 작업요청 생성" : `${selectedDecisionOption.title} 기록하기`}</button>
                     </MvpPanel>
                   </div>
 

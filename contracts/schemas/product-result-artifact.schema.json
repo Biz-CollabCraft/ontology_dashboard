@@ -238,7 +238,7 @@
               "field": {"type": "string"},
               "reason": {"enum": ["missing_source", "not_producer_owned", "not_in_week2_scope", "insufficient_context"]},
               "required_source": {"type": "string"},
-              "owner_domain": {"enum": ["diagnosis", "dashboard", "operations", "maintenance", "aggregate", "unknown"]},
+              "owner_domain": {"enum": ["diagnosis", "generator", "dashboard", "operations", "maintenance", "aggregate", "unknown"]},
               "display_policy": {"enum": ["show_as_unavailable", "hide_section", "show_limitation"]}
             }
           }

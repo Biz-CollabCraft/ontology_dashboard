@@ -167,6 +167,22 @@ def _migrate_sqlite(path: Path) -> list[str]:
                 )
                 for table in operational_tables:
                     ensure_scope_columns(connection, table=table)
+            if version == "0037_agent_review_summary_runtime":
+                summary_table = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                    ("agent_review_summaries",),
+                ).fetchone()
+                if summary_table:
+                    columns = {
+                        row[1]
+                        for row in connection.execute(
+                            "PRAGMA table_info(agent_review_summaries)"
+                        ).fetchall()
+                    }
+                    if "workflow_run_id" not in columns:
+                        connection.execute(
+                            "ALTER TABLE agent_review_summaries ADD COLUMN workflow_run_id TEXT"
+                        )
             connection.execute(
                 "INSERT INTO schema_migrations (version,applied_at) VALUES (?,?)",
                 (version, datetime.now(timezone.utc).isoformat()),
@@ -198,6 +214,7 @@ def _migrate_postgresql(database_url: str) -> list[str]:
                 )
                 """
             )
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext('ontology_dashboard_schema_migrations'))")
             cursor.execute("SELECT version FROM schema_migrations")
             existing = {row[0] for row in cursor.fetchall()}
             for file_path in _migration_files("postgresql"):

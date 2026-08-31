@@ -102,6 +102,9 @@ from app.infra.db.project_repository import SQLiteProjectContextResolver as Runt
 from app.infra.db.role_workflow_repository import RoleWorkflowRepository
 from app.infra.db.mvp_audit_repository import AuditRepository
 from app.mvp.role_workflow_service import RoleWorkflowService
+from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.mvp.context_providers import default_agent_review_context_registry
+from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.mvp.service import ManufacturingPredictiveMaintenanceService
 
 
@@ -167,6 +170,9 @@ def build_manufacturing_service(
         report_agent=ReportAgent(root, provider),
         layout_planner=LayoutPlanner(root, provider),
         context_provider_factory=_mvp_context_provider,
+        agent_review_summary_provider=AgentReviewSummaryProvider(provider),
+        agent_review_context_registry=default_agent_review_context_registry(),
+        domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
     )
 
 

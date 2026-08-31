@@ -10,6 +10,12 @@ import type {
 } from "./features/planner/types";
 import type { AgentQueryInput, AgentRunPage, AgentRunResponse } from "./features/agent/types";
 import type {
+  EvidenceSnapshotBasisWire,
+  MvpAgentReviewPacket,
+  MvpAgentReviewSummaryResponse,
+  MvpAgentReviewWorkflowRunsResponse,
+} from "./features/mvp/api/mvpContracts";
+import type {
   AdminWorkflowApprovals,
   AuditReconstruction,
   ExecutiveOverview,
@@ -612,6 +618,78 @@ export function getAgentRun(projectId: string, workspaceId: string, runId: strin
   return request<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}?${params.toString()}`);
 }
 
+export function getMvpAgentReviewPacket(input: {
+  assetId: string;
+  projectId?: string;
+  datasetVersionId?: string | null;
+  historyWindow?: string;
+}): Promise<MvpAgentReviewPacket> {
+  const params = new URLSearchParams({
+    project_id: input.projectId ?? "manufacturing-demo-project",
+    history_window: input.historyWindow ?? "24h",
+  });
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  return request<MvpAgentReviewPacket>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-packet?${params.toString()}`,
+  );
+}
+
+export function getMvpAgentReviewSummary(input: {
+  assetId: string;
+  projectId?: string;
+  datasetVersionId?: string | null;
+  historyWindow?: string;
+}): Promise<MvpAgentReviewSummaryResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId ?? "manufacturing-demo-project",
+    history_window: input.historyWindow ?? "24h",
+  });
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  return request<MvpAgentReviewSummaryResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+  );
+}
+
+export function createMvpAgentReviewSummary(input: {
+  assetId: string;
+  projectId?: string;
+  datasetVersionId?: string | null;
+  historyWindow?: string;
+  trigger?: "manual_materialization" | "ui_manual_regeneration";
+}): Promise<MvpAgentReviewSummaryResponse> {
+  const params = new URLSearchParams({
+    project_id: input.projectId ?? "manufacturing-demo-project",
+    history_window: input.historyWindow ?? "24h",
+    trigger: input.trigger ?? "ui_manual_regeneration",
+  });
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  return request<MvpAgentReviewSummaryResponse>(
+    `/api/objects/${encodeURIComponent(input.assetId)}/agent-review-summary?${params.toString()}`,
+    { method: "POST" },
+  );
+}
+
+export function getMvpAgentReviewWorkflowRuns(input: {
+  projectId?: string;
+  assetId?: string | null;
+  eventId?: string | null;
+  datasetVersionId?: string | null;
+  status?: "running" | "completed" | "partial" | "failed" | null;
+  limit?: number;
+}): Promise<MvpAgentReviewWorkflowRunsResponse> {
+  const projectId = input.projectId ?? "manufacturing-demo-project";
+  const params = new URLSearchParams({
+    limit: String(input.limit ?? 20),
+  });
+  if (input.assetId) params.set("asset_id", input.assetId);
+  if (input.eventId) params.set("event_id", input.eventId);
+  if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.status) params.set("status", input.status);
+  return request<MvpAgentReviewWorkflowRunsResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/agent-review-workflow-runs?${params.toString()}`,
+  );
+}
+
 export function getGovernanceOverview(
   projectId: string,
   workspaceId: string,
@@ -860,6 +938,26 @@ export function addNote(eventId: string, actor: string, body: string) {
     method: "POST",
     body: JSON.stringify({ actor, body }),
   });
+}
+
+export function requestInspectionWorkOrder(input: {
+  projectId: string;
+  workspaceId: string;
+  eventId: string;
+  snapshotBasis: EvidenceSnapshotBasisWire;
+  idempotencyKey: string;
+}) {
+  return request<Record<string, unknown>>(
+    `/api/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(input.workspaceId)}/maintenance/inspection-work-orders`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": input.idempotencyKey },
+      body: JSON.stringify({
+        event_id: input.eventId,
+        snapshot_basis: input.snapshotBasis,
+      }),
+    },
+  );
 }
 
 export function followUp(

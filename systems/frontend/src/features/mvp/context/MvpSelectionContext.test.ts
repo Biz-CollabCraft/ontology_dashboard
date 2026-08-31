@@ -43,6 +43,18 @@ describe("MVP URL selection contract", () => {
     expect(selection.reportTab).toBe("executive-brief");
   });
 
+  it("keeps the system admin side tab as a first-class view", () => {
+    const selection = parseMvpSelection({
+      projectId: "project-a",
+      search: "?view=system&workspace_id=workspace-a",
+      defaultRole: "process_manager",
+    });
+    expect(selection.view).toBe("system");
+
+    const query = selectionSearch(selection);
+    expect(new URLSearchParams(query).get("view")).toBe("system");
+  });
+
   it("preserves the overview dashboard variant as a presentation choice", () => {
     const selection = parseMvpSelection({
       projectId: "project-a",

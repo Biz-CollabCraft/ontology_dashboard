@@ -201,6 +201,16 @@ describe("MVP adapter contract", () => {
     } as never);
     const detail = composeEventDetail({ event: adapted, evidence: null, report: null, activity: null });
     const enriched = applyAssetDetailViewModel(detail, {
+      snapshot_basis: {
+        artifact_id: "RESULT#CNC-001",
+        evidence_payload_reference: "RESULT#CNC-001",
+        asset_id: "CNC-001",
+        event_id: "EVT-CNC-001",
+        observed_at: "2026-08-06T03:00:00Z",
+        model_version: "model-1",
+        dataset_version: "dsv-canonical-v3-1",
+        source_sha256: null,
+      },
       asset: {
         asset_id: "CNC-001",
         asset_type: "cnc",
@@ -277,6 +287,9 @@ describe("MVP adapter contract", () => {
         association: "inspection_candidate",
         location_label: null,
         inspection_method: null,
+        location_contract_id: null,
+        location_source_ref: null,
+        location_maturity: null,
         inspection_guidance: {
           source_type: "demo_sop_fixture",
           sop_id: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
@@ -299,7 +312,7 @@ describe("MVP adapter contract", () => {
         },
         basis_refs: ["factor.1.tool_wear_min", "sensor_evidence.sensors.tool_wear_min"],
         source_ref: "storage://result.json#component_hypotheses[0]",
-        unavailable_reason: "maintenance_inspection_location_contract_unavailable",
+        unavailable_reason: "field_inspection_location_reference_unavailable",
       }],
       operation_context: {
         load_level: null,
@@ -364,6 +377,16 @@ describe("MVP adapter contract", () => {
       },
     });
 
+    expect(enriched.snapshotBasis).toEqual({
+      artifactId: "RESULT#CNC-001",
+      evidencePayloadReference: "RESULT#CNC-001",
+      assetId: "CNC-001",
+      eventId: "EVT-CNC-001",
+      observedAt: "2026-08-06T03:00:00Z",
+      modelVersion: "model-1",
+      datasetVersion: "dsv-canonical-v3-1",
+      sourceSha256: null,
+    });
     expect(enriched.sensors[0]).toEqual(expect.objectContaining({
       observedAt: "2026-08-06T03:00:00Z",
       historySourceRef: "observation-series://CNC-001/tool_wear_min",
@@ -427,7 +450,7 @@ describe("MVP adapter contract", () => {
           decisionBoundary: "이 정보는 정비 판단 전 확인사항이며 정비 방법·시점 결정, 비용상 선호 대안, WorkOrder 생성 또는 정비 승인을 수행하지 않습니다.",
         },
       }),
-      unavailableReason: "maintenance_inspection_location_contract_unavailable",
+      unavailableReason: "field_inspection_location_reference_unavailable",
     }));
     expect(enriched.inspectionTargets[0].basisRefs).toEqual([
       "factor.1.tool_wear_min",

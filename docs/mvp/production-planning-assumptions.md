@@ -276,7 +276,7 @@ estimated_lost_units =
 
 ## Contract Review
 
-### AI-dev 관점
+### 아키텍처 리뷰 관점
 
 판정: `Partially Verified`, Architecture Fit: `Pass` for fixture separation.
 

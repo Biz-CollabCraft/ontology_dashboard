@@ -31,6 +31,42 @@ def test_project3_missing_is_blocked_not_passed() -> None:
     assert checks[0].status == "blocked"
 
 
+def test_package_only_release_checks_skip_project_scope(monkeypatch, tmp_path: Path) -> None:
+    package_check = module.Check("package.ok", "pass", "package evidence")
+    project_check = module.Check("project.missing", "fail", "missing prompt")
+    project3_check = module.Check("project3.missing", "blocked", "missing repo")
+    monkeypatch.setattr(module, "safe_package_checks", lambda _root: [package_check])
+    monkeypatch.setattr(module, "project_checks", lambda _root: [project_check])
+    monkeypatch.setattr(module, "project3_checks", lambda _root: [project3_check])
+
+    checks = module.release_checks(
+        tmp_path / "project",
+        tmp_path / "package",
+        None,
+        package_only=True,
+    )
+
+    assert checks == [package_check]
+
+
+def test_full_release_checks_include_project_scope(monkeypatch, tmp_path: Path) -> None:
+    package_check = module.Check("package.ok", "pass", "package evidence")
+    project_check = module.Check("project.missing", "fail", "missing prompt")
+    project3_check = module.Check("project3.missing", "blocked", "missing repo")
+    monkeypatch.setattr(module, "safe_package_checks", lambda _root: [package_check])
+    monkeypatch.setattr(module, "project_checks", lambda _root: [project_check])
+    monkeypatch.setattr(module, "project3_checks", lambda _root: [project3_check])
+
+    checks = module.release_checks(
+        tmp_path / "project",
+        tmp_path / "package",
+        None,
+        package_only=False,
+    )
+
+    assert checks == [package_check, project_check, project3_check]
+
+
 def test_package_checks_publish_safe_aggregate_contract(tmp_path: Path) -> None:
     root = tmp_path / "package"
     archive = root / "dist/predictive_maintenance_canonical_v3.1.zip"

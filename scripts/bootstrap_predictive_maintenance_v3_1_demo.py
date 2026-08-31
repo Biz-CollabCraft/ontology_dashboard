@@ -75,6 +75,7 @@ def validate_package(root: Path, package_root: Path) -> dict[str, Any]:
             "--package-root",
             str(package_root),
             "--run-package-validator",
+            "--package-only",
             "--output",
             str(output),
         ])

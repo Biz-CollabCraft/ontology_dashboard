@@ -13,6 +13,7 @@ from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 
 from .api_schema import (
     CostOptionRecommendationCreateRequest,
+    EvidenceSnapshotBasis,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
@@ -120,6 +121,52 @@ class MaintenanceLoopService:
             raise ValueError(f"Event Evidence Projection requires {field}")
         return value
 
+    @staticmethod
+    def _projection_snapshot_basis(projection: Mapping[str, Any]) -> dict[str, Any]:
+        artifact = projection.get("artifact_reference")
+        provenance = projection.get("provenance")
+        if not isinstance(artifact, Mapping) or not isinstance(provenance, Mapping):
+            raise ValueError("Event Evidence Projection is missing snapshot basis sections")
+        lineage = provenance.get("lineage") if isinstance(provenance.get("lineage"), Mapping) else {}
+        evidence_reference = artifact.get("evidence_payload_reference")
+        if isinstance(evidence_reference, Mapping):
+            evidence_reference = evidence_reference.get("reference")
+        return {
+            "artifact_id": artifact.get("artifact_id"),
+            "evidence_payload_reference": str(evidence_reference or ""),
+            "asset_id": artifact.get("asset_id"),
+            "event_id": projection.get("event_id") or artifact.get("event_id"),
+            "observed_at": artifact.get("observed_at"),
+            "model_version": provenance.get("model_version"),
+            "dataset_version": provenance.get("dataset_version"),
+            "source_sha256": (
+                artifact.get("source_sha256")
+                or provenance.get("source_sha256")
+                or lineage.get("source_sha256")
+            ),
+        }
+
+    @classmethod
+    def _require_snapshot_basis_match(
+        cls,
+        *,
+        expected: EvidenceSnapshotBasis | None,
+        projection: Mapping[str, Any],
+    ) -> None:
+        if expected is None:
+            return
+        current = cls._projection_snapshot_basis(projection)
+        mismatched = []
+        for field, expected_value in expected.model_dump(mode="json").items():
+            if expected_value in {None, ""}:
+                continue
+            if current.get(field) != expected_value:
+                mismatched.append(field)
+        if mismatched:
+            raise ValueError(
+                f"snapshot_basis mismatch: {', '.join(sorted(mismatched))}"
+            )
+
     @classmethod
     def _require_row_scope(
         cls,
@@ -166,6 +213,7 @@ class MaintenanceLoopService:
         project_id: str,
         workspace_id: str,
         event_id: str,
+        snapshot_basis: EvidenceSnapshotBasis | None = None,
     ) -> tuple[EquipmentIdentity, OperationalDecisionKind, dict[str, str]]:
         projection = self.event_evidence_query.event_evidence_projection(
             organization_id=organization_id,
@@ -236,6 +284,14 @@ class MaintenanceLoopService:
         lineage = provenance.get("lineage")
         if not isinstance(lineage, Mapping):
             raise ValueError("Event Evidence Projection provenance.lineage is required")
+        self._require_snapshot_basis_match(
+            expected=snapshot_basis,
+            projection={
+                **projection,
+                "artifact_reference": artifact,
+                "provenance": provenance,
+            },
+        )
         source = {
             "source_product_result_id": self._required_text(artifact, "artifact_id"),
             "source_evidence_id": self._required_text(projection, "evidence_id"),
@@ -274,6 +330,7 @@ class MaintenanceLoopService:
             project_id=project_id,
             workspace_id=workspace_id,
             event_id=payload.event_id,
+            snapshot_basis=payload.snapshot_basis,
         )
         work_order_id = self._stable_id(
             "INSPECTION-WO",

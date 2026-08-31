@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   RefreshCw,
+  TerminalSquare,
   Wrench,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const VIEW_LABELS: Record<MvpView, { label: string; description: string }> = {
   objects: { label: "Assets", description: "설비 상태와 근거" },
   operations: { label: "작업요청", description: "처리할 작업" },
   reports: { label: "Reports", description: "보고서 출력" },
+  system: { label: "시스템 관리자", description: "AI 요약 처리 로그" },
 };
 
 const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: typeof LayoutDashboard }> = [
@@ -26,6 +28,7 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
   { id: "objects", label: "Assets", description: "설비 상태와 근거", icon: Boxes },
   { id: "operations", label: "작업요청", description: "처리할 작업", icon: ClipboardCheck },
   { id: "reports", label: "Reports", description: "보고서 출력", icon: FileText },
+  { id: "system", label: "시스템 관리자", description: "AI 요약 처리 로그", icon: TerminalSquare },
 ];
 
 const ROLE_LABELS: Record<MvpRoleLens, { label: string; description: string; icon: typeof LayoutDashboard }> = {
@@ -38,6 +41,13 @@ const ROLE_SCREENS: Array<{ id: MvpRoleLens; label: string; description: string;
   { id: "process_manager", label: "생산 관리자", description: "공정 리스크 · 계획 영향 · 진행 현황", icon: Factory },
 ];
 
+const WORKFLOW_SYSTEM_ITEM = {
+  id: "system" as const,
+  label: "시스템 관리자",
+  description: "AI 요약 처리 로그",
+  icon: TerminalSquare,
+};
+
 export function MvpShell({
   context,
   activeView,
@@ -48,6 +58,7 @@ export function MvpShell({
   onRefresh,
   refreshing,
   refreshIntervalSeconds,
+  canReadSystemLogs,
   onLogout,
   children,
 }: {
@@ -60,15 +71,21 @@ export function MvpShell({
   onRefresh: () => void;
   refreshing: boolean;
   refreshIntervalSeconds: number;
+  canReadSystemLogs: boolean;
   onLogout: () => void | Promise<void>;
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const workflowMode = dashboard === "workflow";
+  const navItems = canReadSystemLogs
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => item.id !== "system");
   const roleMeta = ROLE_LABELS[role];
   const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
   const headingDetail = workflowMode && activeView === "overview"
     ? "하나의 업무판에서 상황, 설비 근거, 작업요청을 역할별로 바로 이어갑니다."
+    : activeView === "system"
+    ? "자동 감시 생성, 운영자 요청, 대체 요약, 검증 상태를 한 화면에서 조회하는 시스템 관리자 로그입니다."
     : activeView === "reports"
     ? "map-report UI prototype의 보고서 화면과 선택 Event 브리핑을 하나의 사이드탭에서 전환합니다."
     : activeView !== "overview"
@@ -129,7 +146,7 @@ export function MvpShell({
             <p>{workflowMode ? "역할별 화면 안에서 Overview, Assets, 작업요청 흐름을 한 번에 처리합니다." : "Analysis 없이 운영 판단부터 점검 보고까지 연결합니다."}</p>
           </div>
           <nav>
-            {(workflowMode ? ROLE_SCREENS : NAV_ITEMS).map((item) => {
+            {(workflowMode ? ROLE_SCREENS : navItems).map((item) => {
               const Icon = item.icon;
               const activeItem = workflowMode ? activeView === "overview" && role === item.id : activeView === item.id;
               return (
@@ -152,6 +169,20 @@ export function MvpShell({
                 </button>
               );
             })}
+            {workflowMode && canReadSystemLogs ? (
+              <button
+                type="button"
+                className={activeView === "system" ? "is-active" : ""}
+                aria-current={activeView === "system" ? "page" : undefined}
+                onClick={() => {
+                  onNavigate(WORKFLOW_SYSTEM_ITEM.id);
+                  setMobileOpen(false);
+                }}
+              >
+                <WORKFLOW_SYSTEM_ITEM.icon size={17} />
+                <div><strong>{WORKFLOW_SYSTEM_ITEM.label}</strong><span>{WORKFLOW_SYSTEM_ITEM.description}</span></div>
+              </button>
+            ) : null}
           </nav>
           <div className="mvp-nav-footnote"><strong>{workflowMode ? "업무 흐름" : "Analysis 제외"}</strong><span>{workflowMode ? "역할별 업무판은 하나의 화면에서 설비, 근거, 작업요청을 연결합니다." : "모델 탐색·Canvas·관리자 Surface는 이번 MVP 범위가 아닙니다."}</span></div>
         </aside>

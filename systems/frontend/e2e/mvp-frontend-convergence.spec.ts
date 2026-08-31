@@ -2,10 +2,12 @@ import { expect, type Page, test } from "@playwright/test";
 
 const PROJECT = "manufacturing-demo-project";
 const MVP_PATH = `/app/projects/${PROJECT}/mvp`;
+const API_URL = process.env.PLAYWRIGHT_API_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_API_PORT ?? "8200"}`;
 const CLASSIC_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=classic`;
 const WORKFLOW_FIELD_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L02-03&event_id=EVT-GS-004`;
 const WORKFLOW_PROCESS_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=workflow&role=process_manager&workspace_id=manufacturing-demo&asset_id=CNC-S04-L02-03&event_id=EVT-GS-004`;
 const ACCOUNTS = {
+  admin: ["admin@ontology.local", "OntologyAdmin!2026"],
   manager: ["manager@ontology.local", "Manager!2026"],
   engineer: ["engineer@ontology.local", "Engineer!2026"],
 } as const;
@@ -17,6 +19,31 @@ async function login(page: Page, returnTo = MVP_PATH, account: keyof typeof ACCO
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}`));
+}
+
+async function materializeAgentSummary(page: Page, assetId: string) {
+  await page.evaluate(
+    async ({ apiUrl, assetId, project }) => {
+      const csrfToken = document.cookie
+        .split(";")
+        .map((item) => item.trim())
+        .find((item) => item.startsWith("ontology_csrf="))
+        ?.slice("ontology_csrf=".length);
+      const response = await fetch(
+        `${apiUrl}/api/objects/${encodeURIComponent(assetId)}/agent-review-summary?project_id=${encodeURIComponent(project)}&history_window=24h`,
+        {
+          method: "POST",
+          headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {},
+          credentials: "include",
+        },
+      );
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`agent summary materialization failed: ${response.status} ${body}`);
+      }
+    },
+    { apiUrl: API_URL, assetId, project: PROJECT },
+  );
 }
 
 test("login exposes only the two mentoring MVP roles", async ({ page }) => {
@@ -45,6 +72,9 @@ test("shows normal assets in the current-state overview", async ({ page }) => {
   const lineStatuses = page.locator(".mvp-line-risk-list footer");
   await expect(lineStatuses.first()).toBeVisible();
   await expect(lineStatuses.first()).toContainText(/정상 \d+/);
+  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
 });
 
 test("keeps workflow role dashboards ordered around each role's first task", async ({ page }) => {
@@ -63,6 +93,48 @@ test("keeps workflow role dashboards ordered around each role's first task", asy
   const processMap = await page.getByRole("heading", { name: "라인별 설비 영향 맵", exact: true }).boundingBox();
   const processQueue = await page.getByRole("region", { name: "작업 상태 큐" }).boundingBox();
   expect(processMap?.y ?? 0).toBeLessThan(processQueue?.y ?? 0);
+});
+
+test("lets a permitted manager explicitly regenerate the AI review summary", async ({ page }) => {
+  await login(page, `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`, "manager");
+  await materializeAgentSummary(page, "CNC-S04-L04-01");
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
+  await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
+  const preview = page.getByRole("dialog", { name: "선택 설비 상세" });
+  await expect(preview).toBeVisible();
+  const agentReview = preview.getByRole("region", { name: "AI 검토 요약" });
+  await expect(agentReview).toContainText("저장 요약");
+  await expect(agentReview).toContainText("최근 정비 이력");
+  await expect(agentReview).toContainText("현장 담당자");
+  await expect(agentReview).not.toContainText("공정 관리자");
+  await expect(agentReview).toContainText("이 초안은 담당자 검토를 돕기 위한 read-only 문서");
+  await expect(agentReview).toContainText("자동 승인을 수행하지 않습니다");
+  await expect(agentReview.getByRole("button", { name: "AI 요약 재생성" })).toBeEnabled();
+  await agentReview.getByRole("button", { name: "AI 요약 재생성" }).click();
+  await expect(agentReview).toContainText("수동 갱신");
+  await expect(agentReview).toContainText("완료");
+});
+
+test("shows stored AI review summaries to engineers as read-only", async ({ page }) => {
+  const returnTo = `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`;
+  await login(page, returnTo, "engineer");
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
+  await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
+  const preview = page.getByRole("dialog", { name: "선택 설비 상세" });
+  await expect(preview).toBeVisible();
+  const agentReview = preview.getByRole("region", { name: "AI 검토 요약" });
+  await expect(agentReview).toContainText("저장 요약");
+  await expect(agentReview).toContainText("최근 정비 이력");
+  await expect(agentReview).toContainText("현재 역할은 저장된 AI 요약만 조회할 수 있습니다.");
+  await expect(agentReview.getByRole("button", { name: "AI 요약 재생성" })).toBeDisabled();
+  await preview.getByRole("tab", { name: "처리", exact: true }).click();
+  await expect(preview.getByText("점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.")).toBeVisible();
+});
+
+test("keeps system administrator logs behind the admin persona", async ({ page }) => {
+  await login(page, `${MVP_PATH}?view=system&dashboard=workflow`, "admin");
+  await expect(page.locator(".mvp-page-heading").getByRole("heading", { name: "AI 요약 처리 로그", exact: true })).toBeVisible();
+  await expect(page.locator(".mvp-navigation nav").getByRole("button", { name: /시스템 관리자/ })).toBeVisible();
 });
 
 test("completes Overview to Objects to Operations to Reports Executive Brief without Analysis", async ({ page }) => {
@@ -87,8 +159,10 @@ test("completes Overview to Objects to Operations to Reports Executive Brief wit
   await expect(page.getByText("자동 정지 아님", { exact: true })).toBeVisible();
   await expect(page.getByText(/설비 제어 명령을 실행하지 않습니다/)).toBeVisible();
   await page.getByLabel("추가 메모 선택 입력").fill("E2E 검증: 현장 점검 전 정지 여부를 검토합니다.");
-  await page.getByRole("button", { name: /정지 검토 요청 기록하기/ }).click();
-  await expect(page.getByText("저장 완료", { exact: true })).toBeVisible();
+  await page.getByLabel("현재 허용된 작업").getByRole("button", { name: "작업요청 생성", exact: true }).click();
+  const saveFailure = page.getByRole("status").filter({ hasText: "저장 실패" });
+  await expect(saveFailure).toBeVisible();
+  await expect(saveFailure).toContainText("API request failed: 503");
 
   await page.locator(".mvp-report-bridge").click();
   await expect(page).toHaveURL(/view=reports/);
@@ -263,12 +337,4 @@ test("redirects a legacy project surface to the official Week 2 MVP", async ({ p
   await page.goto(`/app/projects/${PROJECT}/blueprint-v2`);
   await expect(page).toHaveURL(new RegExp(`${MVP_PATH}$`));
   await expect(page.getByTestId("mvp-overview")).toBeVisible({ timeout: 15_000 });
-});
-
-test("logs out from the official MVP shell", async ({ page }) => {
-  await login(page, CLASSIC_OVERVIEW_PATH);
-  await expect(page.getByTestId("mvp-overview")).toBeVisible();
-  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
 });

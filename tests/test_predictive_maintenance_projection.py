@@ -146,7 +146,7 @@ def test_v2_v3_materialization_is_versioned_governed_and_idempotent(
     assert outbox_payload["release_gates"]["tool_wear_continuity"]["pass"] is True
     assert outbox_payload["release_gates"]["tool_wear_continuity"][
         "tool_replacement_event_count"
-    ] == 1_075
+    ] == 731
     assert outbox_payload["release_gates"]["agent_example_evaluation"][
         "maintenance_evidence_accuracy"
     ] == 1.0

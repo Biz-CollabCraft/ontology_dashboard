@@ -1,4 +1,4 @@
-export type MvpView = "overview" | "objects" | "operations" | "reports";
+export type MvpView = "overview" | "objects" | "operations" | "reports" | "system";
 export type MvpDashboardMode = "workflow" | "classic";
 export type MvpReportTab = "status-map" | "inspection-request" | "summary-report" | "executive-brief";
 export type MvpRoleLens = "process_manager" | "field_operator";
@@ -25,6 +25,28 @@ export interface MvpProvenance {
   schemaVersion: string | null;
   promptVersion: string | null;
   sourceRefs: string[];
+}
+
+export interface MvpEvidenceSnapshotBasis {
+  artifactId: string | null;
+  evidencePayloadReference: string;
+  assetId: string | null;
+  eventId: string | null;
+  observedAt: string | null;
+  modelVersion: string | null;
+  datasetVersion: string | null;
+  sourceSha256: string | null;
+}
+
+export interface EvidenceSnapshotBasisWire {
+  artifact_id: string | null;
+  evidence_payload_reference: string;
+  asset_id: string | null;
+  event_id: string | null;
+  observed_at: string | null;
+  model_version: string | null;
+  dataset_version: string | null;
+  source_sha256: string | null;
 }
 
 export interface MvpFactor {
@@ -366,13 +388,288 @@ export interface MvpInspectionTarget {
   association: string;
   locationLabel: string | null;
   inspectionMethod: string | null;
+  locationContractId: string | null;
+  locationSourceRef: string | null;
+  locationMaturity: "fixture" | "draft" | "approved" | "retired" | null;
   inspectionGuidance: MvpInspectionGuidance | null;
   basisRefs: string[];
   sourceRef: string;
   unavailableReason: string | null;
 }
 
+export interface MvpAgentReviewPacket {
+  schema_version: "agent-review-packet-v1.0";
+  project_id: string;
+  asset_id: string;
+  asset_label: string;
+  generated_at: string;
+  snapshot_basis: EvidenceSnapshotBasisWire;
+  risk_summary: {
+    status_grade: "normal" | "attention" | "warning" | "critical" | null;
+    failure_probability: number | null;
+    prediction_horizon_hours: number | null;
+  };
+  review_priority: {
+    level: "immediate" | "high" | "medium" | "low";
+    reasons: string[];
+    source_fields: string[];
+  } | null;
+  review_draft: {
+    title: string;
+    summary: string;
+    priority_label: string;
+    recommended_next_step: string;
+    checklist: string[];
+    history_summary: string[];
+    evidence_gap_count: number;
+    boundary_note: string;
+  };
+  sop_retrieval: {
+    provider: "local_sop_metadata_retriever";
+    query: {
+      asset_type: string;
+      failure_mode: string;
+      factor_keys: string[];
+      component_ids: string[];
+      risk_grade: string;
+      criticality: string;
+      production_impact: string;
+    };
+    top_k: number;
+    returned_count: number;
+    mutation_allowed: false;
+  };
+  sop_guidance: Array<{
+    target_id: string;
+    component_id: string;
+    component_label: string;
+    location_label: string | null;
+    inspection_method: string | null;
+    location_source_ref: string | null;
+    sop_id: string;
+    source_type: "demo_sop_fixture" | "site_sop";
+    maturity: "fixture" | "draft" | "approved" | "retired";
+    checklist_draft: string[];
+    replacement_review_guidance: {
+      review_label: string;
+      review_triggers: string[];
+      required_measurements: string[];
+      operator_review_items: string[];
+      decision_boundary: string;
+    };
+    sensor_judgment: Record<string, unknown> | null;
+    retrieval_score: number;
+    matched_fields: string[];
+    disclaimer: string;
+    source_ref: string;
+  }>;
+  inspection_targets: Array<{
+    target_id: string;
+    component_id: string;
+    component_label: string;
+    association: string;
+    location_label: string | null;
+    inspection_method: string | null;
+    location_source_ref: string | null;
+    basis_refs: string[];
+    source_ref: string;
+    unavailable_reason: string | null;
+  }>;
+  operation_context_summary?: {
+    production_impact: "none" | "low" | "medium" | "high" | null;
+    estimated_downtime_minutes: number | null;
+    estimated_lost_units: number | null;
+    product_variant: string | null;
+    basis: string;
+    limitations: string[];
+    source_ref: string | null;
+  } | null;
+  model_expression_context: {
+    source_type: string;
+    model_version: string | null;
+    dataset_version: string | null;
+    failure_probability: number | null;
+    threshold: number | null;
+    confidence_label: string | null;
+    top_factors: Array<{
+      rank: number;
+      feature: string;
+      display_name: string;
+      value: number | string | boolean | null;
+      unit: string;
+      contribution: number | null;
+      direction: "positive" | "negative" | "risk_up" | "risk_down" | string;
+      explanation_method: string;
+      source_ref: string;
+    }>;
+    source_refs: string[];
+  };
+  maintenance_history_summary: {
+    provider: string;
+    mutation_allowed: false;
+    open_work_order_exists: boolean | null;
+    similar_events_30d: number | null;
+    work_orders: Array<Record<string, unknown>>;
+    inspection_results: Array<Record<string, unknown>>;
+    maintenance_actions: Array<Record<string, unknown>>;
+    maintenance_events: Array<Record<string, unknown>>;
+    activities: Array<Record<string, unknown>>;
+    equipment_history: Array<Record<string, unknown>>;
+    similar_events: Array<Record<string, unknown>>;
+    source_refs: string[];
+  };
+  ontology_context: {
+    provider: string;
+    mutation_allowed: false;
+    traversals: Array<{
+      component_id: string;
+      component_label: string;
+      factor_refs: string[];
+      location_label: string | null;
+      location_source_ref: string | null;
+      sop_ids: string[];
+      spare_parts: Array<{
+        part_id: string;
+        part_label: string;
+        replacement_scope: string;
+        availability: "available_from_fixture" | "unavailable_from_fixture" | "unknown";
+        lead_time_days: number | null;
+        replacement_window_minutes: number | null;
+        assumption_level: string;
+        source_ref: string;
+      }>;
+      similar_events: Array<{
+        similar_event_id: string;
+        asset_label: string;
+        observed_at: string;
+        matched_factor_keys: string[];
+        action_taken: string;
+        outcome: string;
+        post_action_observation_window_hours: number | null;
+        assumption_level: string;
+        source_ref: string;
+      }>;
+      source_refs: string[];
+    }>;
+    source_refs: string[];
+  };
+  history_review_items: string[];
+  evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
+  source_refs: string[];
+  closed_loop_boundary: {
+    mutation_allowed: false;
+    available_action_ids: string[];
+    forbidden_actions: string[];
+    note: string;
+  };
+  limitations: string[];
+}
+
+export interface MvpAgentReviewSummary {
+  schema_version: "agent-review-summary-v1.0";
+  packet_schema_version: "agent-review-packet-v1.0";
+  asset_id: string;
+  generated_at: string;
+  mode: "llm" | "deterministic_fallback";
+  title: string;
+  summary: string;
+  role_summaries: Array<{
+    role: "field_operator" | "process_manager";
+    label: string;
+    quote: string;
+    source_refs: string[];
+  }>;
+  history_summary: string[];
+  inspection_focus: Array<{
+    component_id: string;
+    component_label: string;
+    location_label: string | null;
+    basis_refs: string[];
+    source_refs: string[];
+  }>;
+  evidence_gaps: Array<{ field: string; reason: string; owner_domain: string }>;
+  data_footnotes: Array<{ code: string; note: string; owner_domain: string; source_refs: string[] }>;
+  source_refs: string[];
+  boundary_note: string;
+  confidence_label: "grounded" | "partial" | "fallback" | "data_quality_hold";
+  limitations: string[];
+}
+
+export interface MvpAgentReviewSummaryResponse {
+  summary: MvpAgentReviewSummary | null;
+  trace: {
+    provider: string;
+    fallback: boolean;
+    reason: string | null;
+    validation_errors: string[];
+    fallback_validation_errors?: string[];
+    materialization?: {
+      summary_id: string | null;
+      summary_key: string;
+      workflow_run_id: string | null;
+      status: "ready" | "fallback" | "failed" | "stale" | "pending";
+      reused: boolean;
+      source_sha256: string;
+      context_sha256: string | null;
+      prompt_version: string;
+      model_version: string;
+      generated_at: string | null;
+      created_at: string | null;
+      updated_at: string | null;
+      fallback_reason?: string | null;
+    };
+    workflow_run?: {
+      workflow_run_id: string;
+      trigger: string;
+      engine: string;
+      status: "running" | "completed" | "partial" | "failed";
+      started_at: string;
+      completed_at: string | null;
+      updated_at: string;
+      summary_key: string;
+      source_sha256: string;
+      context_sha256: string;
+      error_type: string | null;
+      error_message: string | null;
+    };
+  };
+}
+
+export interface MvpAgentReviewWorkflowRun {
+  workflow_run_id: string;
+  trigger: string;
+  engine: string;
+  status: "running" | "completed" | "partial" | "failed";
+  started_at: string;
+  completed_at: string | null;
+  updated_at: string;
+  asset_id: string | null;
+  event_id: string | null;
+  dataset_version_id: string | null;
+  history_window: string | null;
+  summary_key: string;
+  source_sha256: string;
+  context_sha256: string;
+  error_type: string | null;
+  error_message: string | null;
+  trace: {
+    stage?: string;
+    materialization?: Record<string, unknown>;
+    provider?: string | null;
+    fallback?: boolean | null;
+    reason?: string | null;
+    validation_errors?: string[];
+  };
+}
+
+export interface MvpAgentReviewWorkflowRunsResponse {
+  project_id: string;
+  workspace_id: string;
+  items: MvpAgentReviewWorkflowRun[];
+}
+
 export interface MvpEventDetailModel {
+  snapshotBasis: MvpEvidenceSnapshotBasis | null;
   event: MvpEvent;
   sensors: MvpSensorValue[];
   topFactors: MvpFactor[];
@@ -411,6 +708,7 @@ export interface MvpEventDetailModel {
 }
 
 export interface AssetDetailViewModel {
+  snapshot_basis: EvidenceSnapshotBasisWire;
   asset: {
     asset_id: string;
     asset_type: "compressor" | "cnc";
@@ -491,6 +789,9 @@ export interface AssetDetailViewModel {
     association: string;
     location_label: string | null;
     inspection_method: string | null;
+    location_contract_id: string | null;
+    location_source_ref: string | null;
+    location_maturity: "fixture" | "draft" | "approved" | "retired" | null;
     inspection_guidance?: {
       source_type: "demo_sop_fixture" | "site_sop";
       sop_id: string;

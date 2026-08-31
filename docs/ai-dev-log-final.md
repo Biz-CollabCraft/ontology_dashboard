@@ -1,8 +1,17 @@
-# AI-dev Final Decision Log
+# AI Workflow Working Log
 
 작성일: 2026-08-25
 
-이 문서는 생산계획/운영 문맥, 설비 상세 ViewModel, 역할별 UI, 작업요청/정비 상태 흐름에 대해 현재까지 합의한 의사결정을 기록한다. 목적은 API, fixture, UI 작업자가 같은 계약 경계를 보고 구현하도록 하는 것이다.
+이 문서는 `ontology-dashboard` 작업 중 생산계획/운영 문맥, 설비 상세 ViewModel, 역할별 UI,
+작업요청/정비 상태 흐름, AI 요약 생성/소비 계약을 맞추기 위해 사용한 작업 로그다.
+최종 의사결정의 원본은 부모 프로젝트의 `/Users/hb/Documents/final/docs/project/DECISION_LOG.md`에 기록한다.
+
+관련 결정 문서:
+
+- Project decision log: `/Users/hb/Documents/final/docs/project/DECISION_LOG.md`
+- Architecture boundary: `docs/architecture-decisions/ADR-004-product-result-evidence-viewmodel-trust-boundary.md`
+- MVP UI boundary: `docs/mvp/asset-detail-overview-ui-decision-log.md`
+- Team responsibility plan: `docs/final_team_role_and_step_plan.md`
 
 ## 1. 현재 구현 상태
 
@@ -108,6 +117,7 @@ UI에서 우선 사용할 필드:
 
 - 생산관리자 맵은 셀 단위가 아니라 라인 단위로 표현한다.
 - 화면 명칭은 `라인별 설비 영향 맵`을 사용한다.
+
 - `cell_id` 또는 `cell`은 fallback label로만 사용한다.
 - `A셀 3대`, `B셀 1대`, `4구역 x 5셀`, `셀당 5대`, `100대 배치` 같은 물리 topology 확정 표현은 사용하지 않는다.
 - UI 워크트리에 이미 들어간 factory/cell map은 계약상 과한 가정이므로 라인 기준으로 정리한다.
@@ -121,7 +131,40 @@ cell = equipment.cell_id ?? equipment.line
 
 `cell_id`가 `line`보다 우선되면 운영 그룹이 흔들릴 수 있으므로 수정한다.
 
-## 6. 가동률/KPI 표현 결정
+## 6. Agent Review Summary 생성 트리거 결정
+
+AI 요약은 UI 사이드뷰 클릭, 탭 전환, 화면 새로고침 같은 presentation event마다 새로 생성하지 않는다.
+사용자가 같은 Product Result/Evidence snapshot을 다시 열면 같은 Summary를 재사용해야 한다.
+
+최종 방향:
+
+```text
+Product Result / Evidence Snapshot
+  ↓
+Agent Review Packet
+  ↓
+watcher가 snapshot/source checksum/prompt/schema/model version diff 확인
+  ↓
+Agent Review Summary 생성 또는 재사용
+  ↓
+DB 저장본을 UI / Report가 조회
+```
+
+결정 사항:
+
+- `Agent Review Summary`는 read-only 표현 산출물이며 Closed-loop 명령이 아니다.
+- LLM 호출 트리거는 UI 이벤트가 아니라 evidence snapshot diff다.
+- `summary_key`는 asset, event, dataset version, snapshot basis/source checksum, prompt version,
+  summary schema version, model version을 포함해야 한다.
+- 같은 `summary_key`가 있으면 DB 저장본을 반환한다.
+- diff가 있거나 validation/prompt/schema/model version이 바뀐 경우에만 watcher가 새 요약을 만든다.
+- LLM 후보는 validation을 통과해야 저장된다.
+- LLM provider가 없거나 validation에 실패하면 deterministic fallback Summary를 같은 저장 계약으로 남긴다.
+- UI는 summary 상태를 조회해 `ready`, `generating`, `fallback`, `failed`, `stale` 같은 상태를 표현한다.
+- Closed-loop는 Summary 문장이 아니라 Product Result/Evidence `snapshot_basis`와
+  Recommendation/Action 계약을 기준으로 동작한다.
+
+## 7. 가동률/KPI 표현 결정
 
 현재 fixture 기준으로는 가동률을 정당하게 산출할 수 없다.
 
@@ -151,7 +194,7 @@ cell = equipment.cell_id ?? equipment.line
 - 고장 확정 아님
 - 정비 후 관측 대기
 
-## 7. 예측 의미 결정
+## 8. 예측 의미 결정
 
 현재 모델/fixture의 예측 의미는 다음과 같이 표현한다.
 
@@ -162,7 +205,7 @@ cell = equipment.cell_id ?? equipment.line
 - GS fixture는 fleet base-rate dataset이 아니라 시나리오 fixture다.
 - 따라서 `24시간 이내 고장 발생률` 원그래프는 메인 KPI로 적합하지 않다.
 
-## 8. 피처/파생값 그래프 결정
+## 9. 피처/파생값 그래프 결정
 
 UI는 모든 피처 시계열을 실제 `historyPoints` 기반으로 표시한다.
 
@@ -183,7 +226,7 @@ UI는 모든 피처 시계열을 실제 `historyPoints` 기반으로 표시한�
 
 파생 지표가 없으면 `파생 지표 미연결` empty state를 표시한다.
 
-## 9. 작업요청/정비 상태 결정
+## 10. 작업요청/정비 상태 결정
 
 작업요청과 정비 완료는 분리한다.
 
@@ -216,7 +259,7 @@ candidate_recommended
 - 실제 WorkOrder API/DB 상태가 없으면 `candidate_recommended`로 둔다.
 - 절대 기본값을 `maintenance_completed`로 두지 않는다.
 
-## 10. 사이드뷰 UX 결정
+## 11. 사이드뷰 UX 결정
 
 현재 사이드뷰 탭은 `상태 / 처리` 두 개를 유지한다.
 
@@ -266,7 +309,7 @@ primary action 버튼 1개
 - 완료 메모
 - API 미연결 시 `작업요청 화면에서 처리` 안내
 
-## 11. 역할별 화면 결정
+## 12. 역할별 화면 결정
 
 역할별 메인 화면은 같은 내용을 반복하지 않는다.
 
@@ -289,7 +332,7 @@ primary action 버튼 1개
 - 의심 부품
 - 다음 액션
 
-## 12. UI 작업 시 현재 로컬 변경 기준
+## 13. UI 작업 시 현재 로컬 변경 기준
 
 UI 워크트리:
 
@@ -319,7 +362,7 @@ UI 워크트리:
 - 작업 상태 고정 바 추가
 - 금지 표현 제거
 
-## 13. 다음 작업 순서
+## 14. 다음 작업 순서
 
 1. UI 워크트리에서 `codex/operation-context-api`를 병합하거나 필요한 계약 변경을 반영한다.
 2. `mvpContracts.ts` / `mvpAdapters.ts`에 rich `operation_context`를 매핑한다.

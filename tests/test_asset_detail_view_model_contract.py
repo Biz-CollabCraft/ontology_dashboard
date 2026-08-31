@@ -83,6 +83,12 @@ def test_inspection_sop_fixtures_match_procedure_grounding_schema() -> None:
         assert "교체 필요 확정" in payload["guidance"]["forbidden_ui_claims"]
         assert "비용상 최적 대안" in payload["guidance"]["forbidden_ui_claims"]
         assert "자동 승인 완료" in payload["guidance"]["forbidden_ui_claims"]
+        assert payload["sensor_judgment"]["inspection_result_mapping"] == {
+            "records_operational_fact": True,
+            "does_not_create_maintenance_event": True,
+            "manual_recommendation_requires_manager_acceptance": True,
+        }
+        assert "실제 고장 예방 입증" in payload["sensor_judgment"]["claim_boundaries"]["forbidden_claims"]
 
 
 @pytest.mark.parametrize("scenario", sorted(SCENARIO_FILES))
@@ -117,6 +123,24 @@ def test_schema_allows_unknown_freshness_without_synthesizing_false() -> None:
     properties = schema()["properties"]
 
     assert properties["data_status"]["properties"]["is_stale"]["type"] == ["boolean", "null"]
+
+
+def test_schema_requires_shared_evidence_snapshot_basis() -> None:
+    payload = fixture("current_evidence_only")
+    properties = schema()["properties"]
+
+    assert "snapshot_basis" in schema()["required"]
+    assert payload["snapshot_basis"] == {
+        "artifact_id": payload["evidence"]["artifact_id"],
+        "evidence_payload_reference": payload["evidence"]["evidence_payload_reference"],
+        "asset_id": payload["asset"]["asset_id"],
+        "event_id": None,
+        "observed_at": payload["asset"]["observed_at"],
+        "model_version": payload["evidence"]["model_version"],
+        "dataset_version": payload["evidence"]["dataset_version"],
+        "source_sha256": None,
+    }
+    assert properties["snapshot_basis"]["$ref"] == "#/$defs/evidenceSnapshotBasis"
 
 
 def test_schema_keeps_feature_history_provenance_at_envelope_only() -> None:
@@ -156,6 +180,7 @@ def test_schema_accepts_nullable_criticality_and_extended_owner_domains() -> Non
     )
     assert set(gap_owner_domain) == {
         "diagnosis",
+        "generator",
         "dataset",
         "equipment",
         "project",

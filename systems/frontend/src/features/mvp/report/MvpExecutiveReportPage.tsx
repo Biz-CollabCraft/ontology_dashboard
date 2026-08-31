@@ -1,5 +1,12 @@
-import { ArrowLeft, Printer } from "lucide-react";
-import type { MvpBootstrapModel, MvpEvent, MvpEventDetailModel } from "../api/mvpContracts";
+import { ArrowLeft, Bot, Printer } from "lucide-react";
+import { useEffect, useState } from "react";
+import { getMvpAgentReviewSummary } from "../../../api";
+import type {
+  MvpAgentReviewSummaryResponse,
+  MvpBootstrapModel,
+  MvpEvent,
+  MvpEventDetailModel,
+} from "../api/mvpContracts";
 import {
   DECISION_LABEL,
   CONFIDENCE_LABEL,
@@ -11,6 +18,19 @@ import {
   formatTimestamp,
 } from "../components/MvpUi";
 import { displayAssetName, displayEventAssetName, displayEventLabel, fieldFactorItem, fieldFailureLabel } from "../displayLabels";
+
+function reportAgentSummaryStatusLabel(payload: MvpAgentReviewSummaryResponse | null): string {
+  if (payload?.trace.materialization?.reused) return "저장본 재사용";
+  const status = payload?.trace.materialization?.status;
+  if (status === "pending") return "생성 대기";
+  if (status === "ready") return "검증 완료";
+  if (status === "fallback") return "검증 fallback";
+  if (status === "failed") return "생성 실패";
+  if (status === "stale") return "갱신 필요";
+  if (payload?.summary?.mode === "llm") return "LLM 검증 완료";
+  if (payload?.summary?.mode === "deterministic_fallback") return "규칙 기반 요약";
+  return "조회 대기";
+}
 
 export function MvpExecutiveReportPage({
   model,
@@ -30,6 +50,35 @@ export function MvpExecutiveReportPage({
   onOpenOperations: (event: MvpEvent) => void;
   onRetryDetail: () => void;
 }) {
+  const [agentSummary, setAgentSummary] = useState<MvpAgentReviewSummaryResponse | null>(null);
+  const [agentSummaryLoading, setAgentSummaryLoading] = useState(false);
+  const [agentSummaryError, setAgentSummaryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedEvent) {
+      setAgentSummary(null);
+      setAgentSummaryError(null);
+      setAgentSummaryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAgentSummaryLoading(true);
+    setAgentSummaryError(null);
+    getMvpAgentReviewSummary({
+      assetId: selectedEvent.assetId,
+      projectId: model.context.projectId,
+      datasetVersionId: model.context.datasetVersionId,
+    })
+      .then((payload) => !cancelled && setAgentSummary(payload))
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setAgentSummary(null);
+        setAgentSummaryError(reason instanceof Error ? reason.message : "저장된 AI 요약을 불러오지 못했습니다.");
+      })
+      .finally(() => !cancelled && setAgentSummaryLoading(false));
+    return () => { cancelled = true; };
+  }, [model.context.datasetVersionId, model.context.projectId, selectedEvent?.assetId]);
+
   if (!selectedEvent) {
     return <div className="mvp-page" data-testid="mvp-executive-report"><MvpState kind="empty" title="보고 대상 이벤트를 선택하세요" detail="Overview 또는 Operations에서 이벤트를 선택하면 동일 수치와 대응 상태로 보고서를 구성합니다." /></div>;
   }
@@ -42,6 +91,7 @@ export function MvpExecutiveReportPage({
   const unresolved = model.events.filter((event) => event.recommendedDecision !== "continue_monitoring").slice(0, 6);
   const dataQualityEvents = model.events.filter((event) => event.status === "data_quality_hold");
   const latestDecision = detail.activity.find((activity) => activity.kind === "decision");
+  const storedAgentSummary = agentSummary?.summary ?? null;
 
   return (
     <div className="mvp-page mvp-report-page" data-testid="mvp-executive-report">
@@ -70,6 +120,41 @@ export function MvpExecutiveReportPage({
         <section className="mvp-report-executive-summary">
           <div><span>DECISION SUMMARY</span><h2>{displayEventAssetName(selectedEvent)}을 우선 대응 대상으로 관리합니다.</h2><p>{selectedEvent.status === "data_quality_hold" ? "데이터 품질 문제로 고장 판단을 보류하고 원천 데이터 확인 업무를 우선합니다." : `현재 위험도는 ${formatProbability(selectedEvent.failureProbability)}이며, 예상 생산 영향은 ${formatMinutes(selectedEvent.estimatedDowntimeMinutes)}입니다. 모델 확률은 실제 고장 확정이 아닙니다.`}</p></div>
           <aside><MvpStatusBadge status={selectedEvent.status} /><strong>{DECISION_LABEL[selectedEvent.recommendedDecision]}</strong><small>최근 사람 결정: {latestDecision?.decision ? DECISION_LABEL[latestDecision.decision] : "아직 기록 없음"}</small><small>판단 기록은 Operations에서 관리</small></aside>
+        </section>
+
+        <section className="mvp-report-agent-summary">
+          <header><Bot size={17} /><span>AI 저장 요약</span><strong>{reportAgentSummaryStatusLabel(agentSummary)}</strong></header>
+          {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
+          {!agentSummaryLoading && agentSummaryError ? <p>{agentSummaryError}</p> : null}
+          {!agentSummaryLoading && storedAgentSummary ? (
+            <>
+              <div>
+                <strong>{storedAgentSummary.title}</strong>
+                <p>{storedAgentSummary.summary}</p>
+              </div>
+              {storedAgentSummary.role_summaries.length ? (
+                <div className="mvp-report-agent-quotes">
+                  {storedAgentSummary.role_summaries.map((item) => (
+                    <figure key={`${storedAgentSummary.asset_id}-${item.role}`}>
+                      <figcaption>{item.label}</figcaption>
+                      <blockquote>{item.quote}</blockquote>
+                    </figure>
+                  ))}
+                </div>
+              ) : null}
+              {storedAgentSummary.data_footnotes.length ? (
+                <ol>
+                  {storedAgentSummary.data_footnotes.map((item, index) => (
+                    <li key={`${item.code}-${index}`}><sup>{index + 1}</sup>{item.note}</li>
+                  ))}
+                </ol>
+              ) : null}
+              <small>{storedAgentSummary.boundary_note}</small>
+            </>
+          ) : null}
+          {!agentSummaryLoading && agentSummary && !storedAgentSummary ? (
+            <p>저장된 AI 요약이 아직 없습니다. watcher 또는 생성 API가 요약을 만든 뒤 보고서가 같은 저장본을 사용합니다.</p>
+          ) : null}
         </section>
 
         <section className="mvp-report-kpis">

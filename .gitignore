@@ -197,6 +197,11 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+# Local canonical data packages. Keep large source datasets out of Git; use
+# data/raw/README.md for the reproducible placement contract.
+/data/raw/predictive_maintenance_canonical_v3.1/
+/data/raw/predictive_maintenance_canonical_v3_1/
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -404,3 +409,7 @@ data/*.csv
 # Gemini CLI / GitHub Actions local artifacts
 .gemini/
 gha-creds-*.json
+
+# Local demo datasets and frontend test artifacts
+data/raw/predictive_maintenance_canonical_v3.1/
+systems/frontend/test-results/

@@ -4,9 +4,10 @@
   "title": "Asset Detail ViewModel",
   "description": "MVP consumption contract for GET /objects/{asset_id}/detail-view, as documented in docs/mvp/api-specification.md. Does not replace the Event Report API; it composes the Asset Detail and Overview snapshot consumed by UI variants. This object name is deliberately not prefixed with `Mvp`.",
   "type": "object",
-  "required": ["asset", "risk", "risk_series", "features", "equipment_history", "maintenance_context", "operation_context", "review_priority", "evidence", "data_status"],
+  "required": ["snapshot_basis", "asset", "risk", "risk_series", "features", "equipment_history", "maintenance_context", "operation_context", "review_priority", "evidence", "data_status"],
   "additionalProperties": false,
   "properties": {
+    "snapshot_basis": {"$ref": "#/$defs/evidenceSnapshotBasis"},
     "asset": {
       "type": "object",
       "required": ["asset_id", "asset_type", "observed_at", "criticality", "criticality_basis", "criticality_source"],
@@ -174,10 +175,10 @@
     },
     "inspection_targets": {
       "type": "array",
-      "description": "Backend-owned inspection target hints sourced from Product Evidence component hypotheses. Concrete field location and method remain null until Maintenance/Inspection supplies them. Optional inspection_guidance is SOP grounding for UI questions/checklist drafts, not Product Evidence.",
+      "description": "Backend-owned inspection target hints sourced from Product Evidence component hypotheses. Concrete field location and method are read-only Field Inspection Reference metadata when available. Optional inspection_guidance is SOP grounding for UI checklist drafts, not Product Evidence.",
       "items": {
         "type": "object",
-        "required": ["target_id", "component_id", "component_label", "association", "location_label", "inspection_method", "basis_refs", "source_ref", "unavailable_reason"],
+        "required": ["target_id", "component_id", "component_label", "association", "location_label", "inspection_method", "location_contract_id", "location_source_ref", "location_maturity", "basis_refs", "source_ref", "unavailable_reason"],
         "additionalProperties": false,
         "properties": {
           "target_id": {"type": "string"},
@@ -186,6 +187,9 @@
           "association": {"type": "string"},
           "location_label": {"type": ["string", "null"]},
           "inspection_method": {"type": ["string", "null"]},
+          "location_contract_id": {"type": ["string", "null"]},
+          "location_source_ref": {"type": ["string", "null"]},
+          "location_maturity": {"type": ["string", "null"], "enum": ["fixture", "draft", "approved", "retired", null]},
           "basis_refs": {"type": "array", "items": {"type": "string"}},
           "source_ref": {"type": "string"},
           "inspection_guidance": {"$ref": "#/$defs/inspectionGuidance"},
@@ -224,7 +228,7 @@
             "properties": {
               "field": {"type": "string"},
               "reason": {"type": "string"},
-              "owner_domain": {"enum": ["diagnosis", "dataset", "equipment", "project", "operations", "maintenance", "report", "frontend", "unresolved"]}
+              "owner_domain": {"enum": ["diagnosis", "generator", "dataset", "equipment", "project", "operations", "maintenance", "report", "frontend", "unresolved"]}
             }
           }
         }
@@ -247,6 +251,22 @@
     }
   },
   "$defs": {
+    "evidenceSnapshotBasis": {
+      "type": "object",
+      "description": "Shared evidence basis for sibling read projections. UI, report, and read-only agent packets can compare this object before presenting or acting on derived text.",
+      "required": ["artifact_id", "evidence_payload_reference", "asset_id", "event_id", "observed_at", "model_version", "dataset_version", "source_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {"type": ["string", "null"]},
+        "evidence_payload_reference": {"type": "string"},
+        "asset_id": {"type": ["string", "null"]},
+        "event_id": {"type": ["string", "null"]},
+        "observed_at": {"type": ["string", "null"]},
+        "model_version": {"type": ["string", "null"]},
+        "dataset_version": {"type": ["string", "null"]},
+        "source_sha256": {"type": ["string", "null"]}
+      }
+    },
     "inspectionGuidance": {
       "type": "object",
       "description": "SOP-based reference guidance for UI and agent handoff drafts. This does not fill location_label/inspection_method and must not be treated as Product Evidence or a mutation command.",

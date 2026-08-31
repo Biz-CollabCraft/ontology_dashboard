@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  Bot,
   Clock3,
   ClipboardCheck,
   ClipboardList,
@@ -13,7 +14,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { createMvpAgentReviewSummary, getMvpAgentReviewSummary } from "../../../api";
 import type {
+  MvpAgentReviewSummary,
+  MvpAgentReviewSummaryResponse,
   MvpAsset,
   MvpBootstrapModel,
   MvpClosedLoopSummary,
@@ -241,6 +245,113 @@ function displayPartLabel(value: boolean | null): string {
   return partLabel(value);
 }
 
+function agentSummaryStatusLabel(trace: MvpAgentReviewSummaryResponse["trace"] | null, summary: MvpAgentReviewSummary | null): string {
+  if (trace?.materialization?.reused) return "저장본 재사용";
+  const status = trace?.materialization?.status;
+  if (status === "pending") return "생성 대기";
+  if (status === "ready") return "검증 완료";
+  if (status === "fallback") return "검증 fallback";
+  if (status === "failed") return "생성 실패";
+  if (status === "stale") return "갱신 필요";
+  if (summary?.mode === "llm") return "LLM 검증 완료";
+  if (summary?.mode === "deterministic_fallback") return "규칙 기반 요약";
+  return "조회 대기";
+}
+
+function agentSummaryModeLabel(summary: MvpAgentReviewSummary | null): string {
+  if (summary?.mode === "llm") return "LLM 요약";
+  if (summary?.mode === "deterministic_fallback") return "규칙 기반 fallback";
+  return "미생성";
+}
+
+function agentSummaryWorkflowRunLabel(trace: MvpAgentReviewSummaryResponse["trace"] | null): string {
+  const run = trace?.workflow_run;
+  if (!run) return trace?.materialization?.workflow_run_id ? "저장 run" : "미연결";
+  const triggerLabel = run.trigger === "polling_watcher"
+    ? "watcher"
+    : run.trigger === "ui_manual_regeneration"
+      ? "수동 갱신"
+      : "수동 생성";
+  const statusLabel = run.status === "completed"
+    ? "완료"
+    : run.status === "partial"
+      ? "부분 완료"
+      : run.status === "failed"
+        ? "실패"
+        : "진행 중";
+  return `${triggerLabel} · ${statusLabel}`;
+}
+
+function agentSummaryWorkflowRunTime(trace: MvpAgentReviewSummaryResponse["trace"] | null): string | null {
+  const completedAt = trace?.workflow_run?.completed_at;
+  if (!completedAt) return null;
+  return formatTimestamp(completedAt);
+}
+
+function formatAgentHistoryItem(value: string): string {
+  return value.replace(
+    /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g,
+    (match) => formatCompactHistoryTimestamp(match),
+  );
+}
+
+function formatCompactHistoryTimestamp(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  const source = value.match(/^\d{4}-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (source && source[3] === "00" && source[4] === "00") {
+    return `${source[1]}.${source[2]} 오전 9시`;
+  }
+  const date = new Date(timestamp);
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  const minute = part("minute");
+  const minuteLabel = minute === "00" ? "" : ` ${Number(minute)}분`;
+  return `${part("month")}.${part("day")} ${part("dayPeriod")} ${Number(part("hour"))}시${minuteLabel}`;
+}
+
+function extractPartCandidateFromQuote(quote: string | null | undefined): string | null {
+  if (!quote) return null;
+  const match = quote.match(/참고 부품 후보는\s+(.+?)입니다/);
+  return match?.[1] ?? null;
+}
+
+function closedLoopWorkOrderStatusLabel(status: string | null | undefined): string {
+  if (status === "requested") return "요청 접수";
+  if (status === "approved") return "승인됨";
+  if (status === "in_progress") return "점검 중";
+  if (status === "completed") return "완료";
+  if (status === "blocked") return "보류";
+  if (status === "failed") return "실패";
+  if (status === "cancelled") return "취소";
+  return "상태 확인 필요";
+}
+
+function agentQuoteStatusLabel(value: string): string {
+  if (value === "critical") return "위험";
+  if (value === "warning") return "경고";
+  return value;
+}
+
+const AGENT_QUOTE_KEYWORD_PATTERN = /(critical|warning|생산 영향이 [^,이며.]+|약 [0-9,]+건 손실 가능성|[0-9]+분 기준|공구\/마모 계통|동력 전달 계통|공구 매거진 및 스핀들 공구 체결부|주축 모터, 커플링, 동력 전달 하우징|기계 동력|공구 마모|과부하 지표|토크|점검 요청|요청됨 상태|참고 부품 후보는 [^.]+|최근 유사 이력은 [^.]+|셀 작업 순서 조정)/g;
+const AGENT_QUOTE_KEYWORD_EXACT_PATTERN = /^(critical|warning|생산 영향이 [^,이며.]+|약 [0-9,]+건 손실 가능성|[0-9]+분 기준|공구\/마모 계통|동력 전달 계통|공구 매거진 및 스핀들 공구 체결부|주축 모터, 커플링, 동력 전달 하우징|기계 동력|공구 마모|과부하 지표|토크|점검 요청|요청됨 상태|참고 부품 후보는 [^.]+|최근 유사 이력은 [^.]+|셀 작업 순서 조정)$/;
+
+function renderHighlightedAgentQuote(quote: string) {
+  return quote.split(AGENT_QUOTE_KEYWORD_PATTERN).map((part, index) => {
+    if (!part) return null;
+    return AGENT_QUOTE_KEYWORD_EXACT_PATTERN.test(part)
+      ? <strong key={`${part}-${index}`}>{agentQuoteStatusLabel(part)}</strong>
+      : <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
 function displayFactorySite(site: string): string {
   return FACTORY_SITE_LABELS[site] ?? site;
 }
@@ -319,20 +430,13 @@ function inspectionBasisSummary(target: MvpInspectionTarget): string {
   return uniqueLabels.length ? uniqueLabels.join(", ") : "Evidence 근거 요약 미제공";
 }
 
-function inspectionFactorChips(target: MvpInspectionTarget, factors: MvpAsset["topFactors"]): Array<{ rank: number; label: string }> {
-  const byFeature = new Map(factors.map((factor, index) => [factor.feature, {
-    rank: index + 1,
-    label: displaySensorLabel(factor.feature, factor.label),
-  }]));
-  const chips = target.basisRefs
-    .map((ref) => ref.match(/^factor\.(\d+)\.([A-Za-z0-9_]+)$/))
-    .filter((match): match is RegExpMatchArray => Boolean(match))
-    .map((match) => byFeature.get(match[2]) ?? {
-      rank: Number(match[1]),
-      label: displaySensorLabel(match[2]),
-    });
-  return [...new Map(chips.map((chip) => [`${chip.rank}:${chip.label}`, chip])).values()]
-    .sort((left, right) => left.rank - right.rank);
+function inspectionTopFactorBundleSummary(target: MvpInspectionTarget): string | null {
+  const factorLabels = target.basisRefs
+    .filter((ref) => ref.startsWith("factor."))
+    .map((ref) => inspectionBasisLabel(ref).replace(/ 이상 기여$/, ""));
+  const uniqueLabels = [...new Set(factorLabels)];
+  if (!uniqueLabels.length) return null;
+  return `위험 판단에 반영된 지표 ${uniqueLabels.length}개: ${uniqueLabels.join(", ")}`;
 }
 
 function inspectionLocationLabel(target: MvpInspectionTarget | null): string {
@@ -350,17 +454,45 @@ function inspectionMethodLabel(target: MvpInspectionTarget | null): string {
 function inspectionGuidanceSourceLabel(target: MvpInspectionTarget | null): string {
   if (!target?.inspectionGuidance) return "점검 위치 계약 미연결";
   return target.inspectionGuidance.sourceType === "demo_sop_fixture"
-    ? "데모 SOP 참고"
-    : "SOP 참고";
+    ? "데모 SOP"
+    : "SOP";
+}
+
+function replacementReviewTitle(target: MvpInspectionTarget): string {
+  return target.inspectionGuidance?.maintenanceReviewPrerequisites?.label
+    ?? "AI 근거 요약: 교체 시기 검토";
 }
 
 function maintenanceReviewPrerequisitePreview(target: MvpInspectionTarget | null): string[] {
   const guidance = target?.inspectionGuidance?.maintenanceReviewPrerequisites;
   if (!guidance) return [];
   return [
-    ...guidance.reviewConditions.slice(0, 2),
-    ...guidance.humanReviewQuestions.slice(0, 1),
+    ...guidance.reviewConditions.slice(0, 2).map(replacementReviewEvidenceLabel),
+    ...guidance.requiredMeasurements.slice(0, 1).map(replacementReviewEvidenceLabel),
   ];
+}
+
+function replacementReviewEvidenceLabel(value: string): string {
+  const normalized = value.toLowerCase();
+  if (value.includes("동일 부품 후보") || normalized.includes("same part")) {
+    return "동일 부품 후보가 반복해서 상위 위험 근거와 연결됩니다.";
+  }
+  if (value.includes("마모") || value.includes("진동") || value.includes("토크") || value.includes("온도")) {
+    return "마모, 진동, 토크, 온도 관측값이 최근 이력 대비 나빠지는지 확인합니다.";
+  }
+  if (value.includes("현재 센서") || value.includes("최근 이력") || normalized.includes("current sensor")) {
+    return "현재 센서값과 최근 이력을 비교해 실제 악화 흐름인지 확인합니다.";
+  }
+  if (value.includes("현장") || value.includes("체결") || value.includes("열화")) {
+    return "현장 점검 결과와 센서 근거가 같은 계통을 가리키는지 대조합니다.";
+  }
+  return value;
+}
+
+function replacementReviewBoundaryLabel(target: MvpInspectionTarget): string {
+  const boundary = target.inspectionGuidance?.maintenanceReviewPrerequisites?.decisionBoundary;
+  if (!boundary) return "";
+  return "AI가 읽은 근거 요약이며, 교체 확정이나 작업요청 생성은 담당자 검토 후 진행합니다.";
 }
 
 function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
@@ -907,6 +1039,7 @@ export function MvpWorkflowOverviewPage({
   detailLoading,
   detailError,
   sensorWindow,
+  canMaterializeAgentSummary,
   onSensorWindowChange,
   onPreviewAsset,
   onRefresh,
@@ -918,6 +1051,7 @@ export function MvpWorkflowOverviewPage({
   detailLoading: boolean;
   detailError: string | null;
   sensorWindow: MvpSensorWindowId;
+  canMaterializeAgentSummary: boolean;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onRefresh: () => void;
@@ -1244,7 +1378,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1489,6 +1623,7 @@ function AssetPreviewPanel({
   workActionHelper,
   workActionDisabled,
   assignee,
+  canMaterializeAgentSummary,
   onTabChange,
   onSensorWindowChange,
   onPreviewAsset,
@@ -1513,12 +1648,19 @@ function AssetPreviewPanel({
   workActionHelper: string;
   workActionDisabled: boolean;
   assignee: string;
+  canMaterializeAgentSummary: boolean;
   onTabChange: (tab: DrawerTab) => void;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
 }) {
   const [reportOutputOpen, setReportOutputOpen] = useState(false);
   const [printReportTab, setPrintReportTab] = useState<MvpReportTab | null>(null);
+  const [agentSummary, setAgentSummary] = useState<MvpAgentReviewSummary | null>(null);
+  const [agentSummaryTrace, setAgentSummaryTrace] = useState<MvpAgentReviewSummaryResponse["trace"] | null>(null);
+  const [agentSummaryLoading, setAgentSummaryLoading] = useState(false);
+  const [agentSummaryMaterializing, setAgentSummaryMaterializing] = useState(false);
+  const [agentSummaryError, setAgentSummaryError] = useState("");
+  const [agentSummaryRequestKey, setAgentSummaryRequestKey] = useState("");
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
@@ -1540,6 +1682,46 @@ function AssetPreviewPanel({
     setReportOutputOpen(false);
     window.setTimeout(() => window.print(), 100);
   };
+  const agentSummaryKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
+  const loadAgentSummary = async (materialize = false) => {
+    if (!asset) return;
+    if (materialize) setAgentSummaryMaterializing(true);
+    else setAgentSummaryLoading(true);
+    setAgentSummaryError("");
+    setAgentSummary(null);
+    setAgentSummaryTrace(null);
+    setAgentSummaryRequestKey(agentSummaryKey);
+    if (materialize && !canMaterializeAgentSummary) {
+      setAgentSummaryMaterializing(false);
+      setAgentSummaryError("AI 요약 재생성 권한이 없습니다. 저장된 요약은 계속 조회할 수 있습니다.");
+      return;
+    }
+    try {
+      const request = {
+        assetId: asset.assetId,
+        datasetVersionId: candidate?.event.datasetVersionId ?? null,
+        historyWindow: sensorWindow,
+      };
+      const summaryResponse = materialize
+        ? await createMvpAgentReviewSummary({ ...request, trigger: "ui_manual_regeneration" })
+        : await getMvpAgentReviewSummary(request);
+      setAgentSummary(summaryResponse.summary);
+      setAgentSummaryTrace(summaryResponse.trace);
+    } catch (reason: unknown) {
+      const fallbackMessage = materialize
+        ? "AI 검토 요약을 생성하지 못했습니다."
+        : "AI 검토 요약을 불러오지 못했습니다.";
+      setAgentSummaryError(reason instanceof Error ? reason.message : fallbackMessage);
+    } finally {
+      if (materialize) setAgentSummaryMaterializing(false);
+      if (!materialize) setAgentSummaryLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (role !== "field_operator" || activeTab !== "status" || !asset || !agentSummaryKey) return;
+    if (agentSummaryLoading || agentSummaryRequestKey === agentSummaryKey) return;
+    void loadAgentSummary();
+  }, [activeTab, agentSummaryKey, agentSummaryLoading, agentSummaryRequestKey, asset, role]);
   useEffect(() => {
     if (!printReportTab) return;
     document.body.classList.add("mvp-workflow-print-mode");
@@ -1550,6 +1732,29 @@ function AssetPreviewPanel({
       window.removeEventListener("afterprint", clearPrintMode);
     };
   }, [printReportTab]);
+  const agentHistoryItems = agentSummary?.history_summary ?? [];
+  const agentFocusItems = agentSummary?.inspection_focus ?? [];
+  const agentRoleSummaries = agentSummary?.role_summaries ?? [];
+  const currentRoleAgentSummaries = agentRoleSummaries.filter((item) => item.role === role);
+  const currentRoleQuote = currentRoleAgentSummaries[0]?.quote ?? "";
+  const latestAgentWorkOrder = latestClosedLoopWorkOrder(detail?.closedLoop);
+  const similarAgentHistory = agentHistoryItems.find((item) => item.includes("유사 이벤트"));
+  const agentPartCandidate = extractPartCandidateFromQuote(currentRoleQuote);
+  const agentEvidenceItems = [
+    detail?.operationContext?.eventImpact?.estimatedLostUnits !== null && detail?.operationContext?.eventImpact?.estimatedLostUnits !== undefined
+      ? { label: "운영 영향", value: `계획 손실 약 ${detail.operationContext.eventImpact.estimatedLostUnits.toLocaleString()}건` }
+      : detail?.operationContext
+        ? { label: "운영 영향", value: displayProductionImpact(detail.operationContext.productionImpact) }
+        : null,
+    latestAgentWorkOrder
+      ? { label: "작업 흐름", value: `${latestAgentWorkOrder.workOrderId} · ${closedLoopWorkOrderStatusLabel(latestAgentWorkOrder.status)}` }
+      : null,
+    agentPartCandidate ? { label: "부품 후보", value: agentPartCandidate } : null,
+    similarAgentHistory ? { label: "유사 이력", value: formatAgentHistoryItem(similarAgentHistory.replace(/^최근 30일 유사 이벤트:\s*/, "")) } : null,
+    agentFocusItems.length ? { label: "점검 위치", value: agentFocusItems.map((item) => item.component_label).join(", ") } : null,
+  ].filter((item): item is { label: string; value: string } => Boolean(item));
+  const agentDataFootnotes = agentSummary?.data_footnotes ?? [];
+  const visibleAgentDataFootnotes = agentDataFootnotes.slice(0, 4);
   if (factorySlotPreview && !asset) {
     const { slot, cell } = factorySlotPreview;
     return (
@@ -1586,7 +1791,7 @@ function AssetPreviewPanel({
                 </dl>
               </section>
             </>
-          ) : (
+          ) : activeTab === "action" ? (
             <section className="mvp-overview-action-panel" aria-label="정상 설비 처리">
               <header><ClipboardCheck size={14} /><strong>처리</strong><span>작업요청 없음</span></header>
               <div className="mvp-action-summary-card">
@@ -1611,7 +1816,7 @@ function AssetPreviewPanel({
                 위험 이벤트와 작업요청이 연결되지 않은 설비는 자동 조치하지 않습니다.
               </p>
             </section>
-          )}
+          ) : null}
         </div>
       </div>
     );
@@ -1712,6 +1917,104 @@ function AssetPreviewPanel({
 
           {role === "field_operator" && activeTab === "status" ? (
             <>
+              <section className="mvp-agent-review-packet" aria-label="AI 검토 요약">
+                <header>
+                  <Bot size={14} />
+                  <strong>AI 검토 요약</strong>
+                  <span>저장 요약</span>
+                  <button
+                    type="button"
+                    className="mvp-agent-review-refresh"
+                    onClick={() => void loadAgentSummary(true)}
+                    disabled={!canMaterializeAgentSummary || agentSummaryLoading || agentSummaryMaterializing}
+                    aria-label="AI 요약 재생성"
+                    title={canMaterializeAgentSummary ? "AI 요약 재생성" : "AI 요약 재생성 권한 없음"}
+                  >
+                    <RefreshCw className={agentSummaryMaterializing ? "mvp-action-spinner" : ""} size={13} />
+                    <span>{agentSummaryMaterializing ? "생성 중" : canMaterializeAgentSummary ? "요약 재생성" : "재생성 권한 없음"}</span>
+                  </button>
+                </header>
+                {!canMaterializeAgentSummary ? <p>현재 역할은 저장된 AI 요약만 조회할 수 있습니다.</p> : null}
+                {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
+                {agentSummaryMaterializing ? <p>현재 snapshot 기준 AI 요약을 다시 생성하는 중입니다.</p> : null}
+                {!agentSummaryLoading ? (
+                  <>
+                    {agentSummaryError ? <p>{agentSummaryError}</p> : null}
+                    {agentSummary ? (
+                      <>
+                        <div className="mvp-agent-review-meta" aria-label="AI 요약 상태">
+                          <span>{agentSummaryStatusLabel(agentSummaryTrace, agentSummary)}</span>
+                          <span>{agentSummaryModeLabel(agentSummary)}</span>
+                          <span>{agentSummaryWorkflowRunLabel(agentSummaryTrace)}</span>
+                          {agentFocusItems.length ? <span>{agentFocusItems.length}개 점검 계통</span> : null}
+                        </div>
+                        {agentEvidenceItems.length ? (
+                          <div className="mvp-agent-evidence-grid" aria-label="AI 근거 요약">
+                            {agentEvidenceItems.map((item) => (
+                              <span key={`${agentSummary.asset_id}-evidence-${item.label}`}>
+                                <b>{item.label}</b>
+                                <em>{item.value}</em>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="mvp-agent-review-draft">
+                          <strong>{agentSummary.title}</strong>
+                          <p>{agentSummary.summary}</p>
+                          {currentRoleAgentSummaries.length ? (
+                            <div className="mvp-agent-role-quotes" aria-label="현재 역할 AI 요약">
+                              {currentRoleAgentSummaries.map((item) => (
+                                <figure key={`${agentSummary.asset_id}-role-${item.role}`}>
+                                  <figcaption>{item.label}</figcaption>
+                                  <blockquote>{renderHighlightedAgentQuote(item.quote)}</blockquote>
+                                </figure>
+                              ))}
+                            </div>
+                          ) : null}
+                          {agentFocusItems.length ? (
+                            <ul>
+                              {agentFocusItems.slice(0, 4).map((item) => (
+                                <li key={`${agentSummary.asset_id}-focus-${item.component_id}`}>
+                                  {item.component_label}{item.location_label ? ` · ${item.location_label}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          <small>{agentSummary.boundary_note}</small>
+                        </div>
+                        {agentHistoryItems.length ? (
+                          <div className="mvp-agent-history-strip" aria-label="이력 조회 요약">
+                            {agentHistoryItems.slice(0, 3).map((item) => (
+                              <span key={`${agentSummary.asset_id}-history-${item}`}>{formatAgentHistoryItem(item)}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {visibleAgentDataFootnotes.length ? (
+                          <ol className="mvp-agent-footnotes" aria-label="부족 데이터 각주">
+                            {visibleAgentDataFootnotes.map((item, index) => (
+                              <li key={`${agentSummary.asset_id}-footnote-${item.code}-${index}`}>
+                                <sup>{index + 1}</sup>{item.note}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : null}
+                        {agentSummaryTrace?.materialization?.reused ? (
+                          <small>동일 snapshot 기준 저장본을 재사용했습니다.</small>
+                        ) : null}
+                        {agentSummary.mode === "deterministic_fallback" ? (
+                          <small>LLM 후보가 없거나 검증을 통과하지 못해 검증된 fallback 요약을 저장했습니다.</small>
+                        ) : null}
+                        <small>AI 요약은 검토 전용이며 Closed-loop 상태를 변경하지 않습니다.</small>
+                      </>
+                    ) : agentSummaryError ? null : (
+                      <p>
+                        저장된 AI 요약이 아직 없습니다. watcher 또는 생성 API가 같은 snapshot 기준 요약을 만들면 이 화면은 저장본만 재사용합니다.
+                      </p>
+                    )}
+                  </>
+                ) : null}
+              </section>
+
               <section className="mvp-overview-inspection-panel mvp-side-map-report" aria-label="점검 근거">
                 <header><Wrench size={14} /><strong>점검 근거</strong><span>SOP 참고 안내</span></header>
                 <div className="equipment-sketch" aria-label="설비 참고도">
@@ -1736,33 +2039,24 @@ function AssetPreviewPanel({
                         <div>
                           <strong>{target.target?.componentLabel ?? (target.factor ? fieldFactorItem(target.factor) : "점검 후보")}</strong>
                           <p>{target.target
-                            ? `현장 근거: ${inspectionBasisSummary(target.target)}`
+                            ? `확인 이유: ${inspectionBasisSummary(target.target)}`
                             : target.factor?.direction === "risk_up"
                               ? `${fieldFactorSymptom(target.factor)}이 점검 우선순위를 높인 근거입니다.`
                               : `${target.factor ? fieldFactorSymptom(target.factor) : "근거"}이 위험 판단을 낮춘 보조 근거입니다.`}</p>
+                          {target.target ? <p>{inspectionTopFactorBundleSummary(target.target)}</p> : null}
                           {target.target?.inspectionGuidance ? (
                             <p>{target.target.inspectionGuidance.disclaimer}</p>
                           ) : null}
                           {target.target?.inspectionGuidance?.maintenanceReviewPrerequisites ? (
                             <div className="mvp-inspection-guidance-note">
-                              <strong>{target.target.inspectionGuidance.maintenanceReviewPrerequisites.label}</strong>
+                              <strong>{replacementReviewTitle(target.target)}</strong>
                               <ul>
                                 {maintenanceReviewPrerequisitePreview(target.target).map((item) => (
                                   <li key={`${target.target?.targetId}-maintenance-review-${item}`}>{item}</li>
                                 ))}
                               </ul>
-                              <small>{target.target.inspectionGuidance.maintenanceReviewPrerequisites.decisionBoundary}</small>
+                              <small>{replacementReviewBoundaryLabel(target.target)}</small>
                             </div>
-                          ) : null}
-                          {target.target && inspectionFactorChips(target.target, factors).length ? (
-                            <ul className="top-factor-chips" aria-label="Top factor 근거">
-                              {inspectionFactorChips(target.target, factors).map((chip) => (
-                                <li key={`${target.target?.targetId}-${chip.rank}-${chip.label}`}>
-                                  <b>{chip.rank}</b>
-                                  <span>{chip.label}</span>
-                                </li>
-                              ))}
-                            </ul>
                           ) : null}
                         </div>
                         <span className="target-severity high">{target.factor ? factorValueLabel(target.factor) : "위치 미제공"}</span>

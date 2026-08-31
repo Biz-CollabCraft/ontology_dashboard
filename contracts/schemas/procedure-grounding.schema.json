@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ontology-dashboard.local/schemas/procedure-grounding.schema.json",
   "title": "Procedure Grounding",
-  "description": "SOP retrieval and procedure-grounding contract. SOP fixtures provide reference guidance for UI and agent handoff drafts; they are not Product Evidence, mutation commands, or repair instructions.",
+  "description": "SOP retrieval and procedure-grounding contract. SOP fixtures provide reference guidance and sensor-based inspection judgment criteria for UI and agent handoff drafts; they are not Product Evidence, mutation commands, repair instructions, or proof of prevented failure.",
   "type": "object",
   "required": [
     "schema_version",
@@ -23,6 +23,7 @@
     "source_uri",
     "document_hash",
     "standard_alignment",
+    "sensor_judgment",
     "guidance"
   ],
   "additionalProperties": false,
@@ -66,6 +67,102 @@
         "properties": {
           "standard": {"enum": ["ISO_17359", "ISO_14224", "ISA_95", "IEC_62264", "OPA"]},
           "alignment_scope": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "sensor_judgment": {
+      "type": "object",
+      "description": "SOP-owned sensor criteria that can support an Inspection Result outcome. These criteria do not prove an actual failure outcome and do not create MaintenanceEvent or WorkOrder side effects by themselves.",
+      "required": [
+        "judgment_scope",
+        "allowed_outcomes",
+        "criteria",
+        "inspection_result_mapping",
+        "claim_boundaries"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "judgment_scope": {"enum": ["inspection_result", "maintenance_need_screening"]},
+        "allowed_outcomes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "maintenance_recommended",
+              "monitor_only",
+              "data_quality_hold",
+              "escalate_to_authorized_shutdown_review"
+            ]
+          }
+        },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "criterion_id",
+              "factor_key",
+              "operator",
+              "threshold",
+              "outcome_if_met",
+              "evidence_role",
+              "human_check_required"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "criterion_id": {"type": "string"},
+              "factor_key": {"type": "string"},
+              "operator": {"enum": [">=", ">", "<=", "<", "between", "outside_range", "observed"]},
+              "threshold": {
+                "type": "object",
+                "required": ["kind", "unit"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {"enum": ["absolute", "product_type_map", "qualitative"]},
+                  "value": {"type": ["number", "null"]},
+                  "values": {
+                    "type": ["object", "null"],
+                    "additionalProperties": {"type": "number"}
+                  },
+                  "unit": {"type": "string"}
+                }
+              },
+              "outcome_if_met": {
+                "enum": [
+                  "maintenance_recommended",
+                  "monitor_only",
+                  "data_quality_hold",
+                  "escalate_to_authorized_shutdown_review"
+                ]
+              },
+              "evidence_role": {"enum": ["supporting_sensor", "primary_sensor", "corroborating_sensor"]},
+              "human_check_required": {"type": "boolean"},
+              "notes": {"type": "string"}
+            }
+          }
+        },
+        "inspection_result_mapping": {
+          "type": "object",
+          "required": [
+            "records_operational_fact",
+            "does_not_create_maintenance_event",
+            "manual_recommendation_requires_manager_acceptance"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "records_operational_fact": {"type": "boolean"},
+            "does_not_create_maintenance_event": {"type": "boolean"},
+            "manual_recommendation_requires_manager_acceptance": {"type": "boolean"}
+          }
+        },
+        "claim_boundaries": {
+          "type": "object",
+          "required": ["allowed_claims", "forbidden_claims"],
+          "additionalProperties": false,
+          "properties": {
+            "allowed_claims": {"type": "array", "items": {"type": "string"}},
+            "forbidden_claims": {"type": "array", "items": {"type": "string"}}
+          }
         }
       }
     },

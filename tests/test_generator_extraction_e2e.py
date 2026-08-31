@@ -22,6 +22,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+pytest.importorskip("lightgbm")
+
 # Ensure systems/backend is resolvable for backend imports
 _BACKEND_ROOT = str(Path(__file__).resolve().parents[1] / "systems" / "backend")
 if _BACKEND_ROOT not in sys.path:
@@ -85,6 +87,7 @@ class FakeBackendInboxRepository:
         self.batches: dict[str, str] = {}
         self.items: dict[str, str] = {}
         self.saved: list[dict[str, Any]] = []
+        self.promotions: list[dict[str, Any]] = []
 
     def clock_now(self) -> datetime:
         return datetime.now(timezone.utc)
@@ -150,6 +153,67 @@ class FakeBackendInboxRepository:
         }
         self.saved.append(row)
         return row
+
+    def prediction_batch_promotion_context(self, **kwargs: Any) -> dict[str, Any] | None:
+        batch_id = kwargs["batch_id"]
+        row = next(
+            (
+                item
+                for item in reversed(self.saved)
+                if item["batch_id"] == batch_id and item["validation_status"] == "accepted"
+            ),
+            None,
+        )
+        if row is None:
+            return None
+        return {
+            "dataset_version_id": "e2e-dataset-version",
+            "raw_payload": row["raw_payload"],
+            "assets": {
+                asset_id: {
+                    "asset_id": asset_id,
+                    "asset_type": "cnc",
+                    "site_id": "S01",
+                    "cell_id": "L01",
+                    "criticality": "medium",
+                }
+                for asset_id in self.assets
+            },
+        }
+
+    def save_prediction_batch_promotions(self, **kwargs: Any) -> dict[str, Any]:
+        receipts = []
+        for promotion in kwargs["promotions"]:
+            existing = next(
+                (
+                    item
+                    for item in self.promotions
+                    if item["artifact"]["artifact_id"] == promotion["artifact"]["artifact_id"]
+                ),
+                None,
+            )
+            if existing is None:
+                self.promotions.append(promotion)
+                receipts.append(
+                    {
+                        "event_id": promotion["event_id"],
+                        "promotion_status": "promoted",
+                        "product_result_id": promotion["prediction_result_id"],
+                        "artifact_id": promotion["artifact"]["artifact_id"],
+                        "reason": None,
+                    }
+                )
+            else:
+                receipts.append(
+                    {
+                        "event_id": promotion["event_id"],
+                        "promotion_status": "already_promoted",
+                        "product_result_id": existing["prediction_result_id"],
+                        "artifact_id": existing["artifact"]["artifact_id"],
+                        "reason": None,
+                    }
+                )
+        return {"item_receipts": receipts}
 
 
 @pytest.fixture

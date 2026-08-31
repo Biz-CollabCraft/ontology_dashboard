@@ -9,8 +9,10 @@ scope require explicit overrides.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -260,6 +262,56 @@ class PostgreSQLAuditRepository(AuditRepository):
     def _initialize(self) -> None:
         return None
 
+    def expire_stale_agent_review_workflow_run(self, **filters: Any) -> dict[str, Any] | None:
+        now = datetime.now(timezone.utc)
+        trace = {
+            "stage": "expired",
+            "reason": "stale_running_lease",
+            "expired_before": str(filters["started_before"]),
+        }
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                UPDATE agent_review_workflow_runs
+                SET status=?,
+                    completed_at=?,
+                    updated_at=?,
+                    error_type=?,
+                    error_message=?,
+                    trace_json=?
+                WHERE workflow_run_id = (
+                    SELECT workflow_run_id
+                    FROM agent_review_workflow_runs
+                    WHERE organization_id=?
+                      AND project_id=?
+                      AND workspace_id=?
+                      AND summary_key=?
+                      AND status='running'
+                      AND started_at<=?
+                    ORDER BY started_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING *
+                """,
+                (
+                    "failed",
+                    now,
+                    now,
+                    "stale_running_lease_expired",
+                    "running materialization lease expired before completion",
+                    json.dumps(trace, ensure_ascii=False, sort_keys=True),
+                    str(filters.get("organization_id") or "org-ontology-demo"),
+                    str(filters["project_id"]),
+                    str(filters.get("workspace_id") or "manufacturing-demo"),
+                    str(filters["summary_key"]),
+                    filters["started_before"],
+                ),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._workflow_run_record_from_row(dict(row))
+
     def reset(self) -> None:
         with self._connect() as connection:
             for table in (
@@ -267,6 +319,8 @@ class PostgreSQLAuditRepository(AuditRepository):
                 "notes",
                 "conversations",
                 "audit_log",
+                "agent_review_summaries",
+                "agent_review_workflow_runs",
                 "ontology_action_invocations",
             ):
                 connection.execute(f"DELETE FROM {table}")

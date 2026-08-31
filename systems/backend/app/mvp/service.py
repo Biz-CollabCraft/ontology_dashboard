@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
+import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from app.diagnosis.contracts import derive_features, load_fixture
@@ -17,7 +18,19 @@ from app.diagnosis.domain import (
     product_result_artifact_to_event_evidence_projection,
 )
 from app.equipment.ports import EquipmentApplicationPort
+from app.mvp.agent_review_packet import compose_agent_review_packet
+from app.mvp.context_providers import AgentReviewContextRegistry
+from app.mvp.agent_review_summary_materialization import (
+    AgentReviewSummaryMaterializer,
+    summary_key,
+    summary_key_payload,
+)
+from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
 from app.mvp.asset_detail_view_model import compose_asset_detail_view_model
+from app.mvp.domain_context_adapters import (
+    DomainReviewContextAdapter,
+    ManufacturingFixtureReviewContextAdapter,
+)
 
 from .context import ContextProviderFactory
 from .contracts import (
@@ -35,6 +48,9 @@ from app.planner.contracts import IntentRouter, deterministic_answer
 from .ports import AuditRepositoryPort, LayoutPlannerPort, ReportAgentPort
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
+AGENT_REVIEW_RUNNING_LEASE_SECONDS = 120
+_AGENT_REVIEW_SUMMARY_LOCKS: dict[str, Lock] = {}
+_AGENT_REVIEW_SUMMARY_LOCKS_GUARD = Lock()
 
 
 class EventNotFound(KeyError):
@@ -51,6 +67,9 @@ class ManufacturingPredictiveMaintenanceService:
         report_agent: ReportAgentPort,
         layout_planner: LayoutPlannerPort,
         context_provider_factory: ContextProviderFactory,
+        agent_review_summary_provider: AgentReviewSummaryProvider | None = None,
+        agent_review_context_registry: AgentReviewContextRegistry | None = None,
+        domain_review_context_adapter: DomainReviewContextAdapter | None = None,
     ) -> None:
         self.root = Path(root)
         fixture_root = self.root / "data" / "fixtures"
@@ -63,16 +82,6 @@ class ManufacturingPredictiveMaintenanceService:
             payload["event_id"]: payload
             for payload in (load_fixture(path) for path in fixture_paths)
         }
-        operation_context_paths = sorted((fixture_root / "operation_context").glob("*.json"))
-        self.operation_contexts = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in operation_context_paths
-        ]
-        inspection_sop_paths = sorted((fixture_root / "inspection_sop").glob("*.json"))
-        self.inspection_sops = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in inspection_sop_paths
-        ]
         # Historical Gold regression and manufacturing Ontology projection must
         # remain exactly GS-001..GS-008. Showcase Project fixtures are available
         # through project_fixtures and project-scoped APIs, never this alias.
@@ -86,6 +95,12 @@ class ManufacturingPredictiveMaintenanceService:
         self.report_agent = report_agent
         self.layout_planner = layout_planner
         self.context_provider_factory = context_provider_factory
+        self.agent_review_summary_provider = agent_review_summary_provider
+        self.agent_review_context_registry = agent_review_context_registry
+        self.domain_review_context_adapter = (
+            domain_review_context_adapter
+            or ManufacturingFixtureReviewContextAdapter(self.root)
+        )
         self.intent_router = IntentRouter()
 
     def _fixture(self, event_id: str) -> dict[str, Any]:
@@ -204,16 +219,297 @@ class ManufacturingPredictiveMaintenanceService:
             feature_series=self._feature_series_for_fixture(fixture, artifact),
             runtime_prediction_history=self._runtime_history_for_fixture(fixture, artifact),
             equipment_history=self._equipment_history_for_fixture(fixture),
-            operation_context=self._operation_context_for_fixture(fixture, artifact) or fixture.get("operation_context"),
+            operation_context=self.domain_review_context_adapter.operation_context(
+                fixture=fixture,
+                artifact=artifact,
+                project_id=self._fixture_project_id(fixture),
+            ) or fixture.get("operation_context"),
             closed_loop=fixture.get("closed_loop"),
-            inspection_guidance=self._inspection_guidance_for_fixture(fixture, artifact),
+            inspection_guidance=self.domain_review_context_adapter.inspection_guidance(
+                fixture=fixture,
+                artifact=artifact,
+            ),
+            inspection_locations=self.domain_review_context_adapter.inspection_locations(
+                fixture=fixture,
+                artifact=artifact,
+            ),
             data_status={
                 "source": "canonical",
                 "last_updated_at": artifact["observed_at"],
                 "warnings": [],
             },
             history_window=history_window,
+            event_id=fixture.get("event_id"),
         )
+
+    def agent_review_packet(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        dataset_version_id: str | None = None,
+        history_window: str = "24h",
+    ) -> dict[str, Any]:
+        fixture = self._fixture_for_asset(asset_id, project_id, dataset_version_id=dataset_version_id)
+        artifact = self._product_result_artifact(fixture)
+        view_model = self.asset_detail_view_model(
+            asset_id,
+            project_id,
+            dataset_version_id=dataset_version_id,
+            history_window=history_window,
+        )
+        return compose_agent_review_packet(
+            project_id=project_id,
+            view_model=view_model,
+            sop_retrieval=self.domain_review_context_adapter.sop_retrieval(
+                fixture=fixture,
+                artifact=artifact,
+            ),
+            ontology_context=self.domain_review_context_adapter.ontology_context(
+                fixture=fixture,
+                artifact=artifact,
+            ),
+            context=(
+                self.agent_review_context_registry.context_for_packet(
+                    view_model=view_model,
+                )
+                if self.agent_review_context_registry
+                else None
+            ),
+        )
+
+    def agent_review_summary(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        dataset_version_id: str | None = None,
+        history_window: str = "24h",
+        trigger: str = "manual_materialization",
+        engine: str = "simple",
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return a materialized read-only review summary for this evidence snapshot."""
+
+        packet = self.agent_review_packet(
+            asset_id,
+            project_id,
+            dataset_version_id=dataset_version_id,
+            history_window=history_window,
+        )
+        materializer = AgentReviewSummaryMaterializer(
+            self.repository,
+            self.agent_review_summary_provider,
+        )
+        force = trigger == "ui_manual_regeneration"
+        key_payload = summary_key_payload(
+            packet=packet,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+            provider=self.agent_review_summary_provider,
+        )
+        materialization_key = summary_key(key_payload)
+        with _agent_review_summary_lock(materialization_key):
+            if not force:
+                cached_summary, cached_trace = materializer.lookup(
+                    packet=packet,
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                )
+                cached_status = (cached_trace.get("materialization") or {}).get("status")
+                if cached_summary is not None and (
+                    cached_status != "fallback" or self.agent_review_summary_provider is None
+                ):
+                    return cached_summary, cached_trace
+
+            try:
+                run = self._start_agent_review_workflow_run(
+                    trigger=trigger,
+                    engine=engine,
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    packet=packet,
+                    key_payload=key_payload,
+                    materialization_key=materialization_key,
+                    materializer=materializer,
+                    history_window=history_window,
+                )
+            except _AgentReviewSummaryMaterializedWhileWaiting as cached:
+                return cached.result
+            try:
+                summary, trace = materializer.materialize(
+                    packet=packet,
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                    workflow_run_id=run["workflow_run_id"],
+                    force=force,
+                    refresh_fallback=self.agent_review_summary_provider is not None,
+                )
+                status = _workflow_run_status(trace)
+                finished = self.repository.finish_agent_review_workflow_run(
+                    run["workflow_run_id"],
+                    status=status,
+                    trace={
+                        "stage": "finished",
+                        "materialization": trace.get("materialization") or {},
+                        "provider": trace.get("provider"),
+                        "fallback": trace.get("fallback"),
+                        "reason": trace.get("reason"),
+                        "validation_errors": trace.get("validation_errors") or [],
+                    },
+                )
+                return summary, {
+                    **trace,
+                    "workflow_run": _workflow_run_trace(finished),
+                }
+            except Exception as exc:
+                finished = self.repository.finish_agent_review_workflow_run(
+                    run["workflow_run_id"],
+                    status="failed",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    trace={"stage": "failed", "error_type": type(exc).__name__},
+                )
+                raise RuntimeError(
+                    f"agent_review_summary_workflow_failed:{finished['workflow_run_id']}"
+                ) from exc
+
+    def cached_agent_review_summary(
+        self,
+        asset_id: str,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        dataset_version_id: str | None = None,
+        history_window: str = "24h",
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """Return a stored read-only review summary without triggering generation."""
+
+        packet = self.agent_review_packet(
+            asset_id,
+            project_id,
+            dataset_version_id=dataset_version_id,
+            history_window=history_window,
+        )
+        summary, trace = AgentReviewSummaryMaterializer(
+            self.repository,
+            self.agent_review_summary_provider,
+        ).lookup(
+            packet=packet,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+        )
+        workflow_run_id = (trace.get("materialization") or {}).get("workflow_run_id")
+        if isinstance(workflow_run_id, str) and workflow_run_id:
+            run = self.repository.get_agent_review_workflow_run(workflow_run_id)
+            if run is not None:
+                trace = {**trace, "workflow_run": _workflow_run_trace(run)}
+        return summary, trace
+
+    def agent_review_workflow_runs(
+        self,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        asset_id: str | None = None,
+        event_id: str | None = None,
+        dataset_version_id: str | None = None,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        runs = self.repository.list_agent_review_workflow_runs(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            asset_id=asset_id,
+            event_id=event_id,
+            dataset_version_id=dataset_version_id,
+            status=status,
+            limit=limit,
+        )
+        return {
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "items": [_workflow_run_trace(run) for run in runs],
+        }
+
+    def materialize_agent_review_summaries(
+        self,
+        project_id: str = "manufacturing-demo-project",
+        *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
+        history_window: str = "24h",
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Materialize missing Agent Review Summaries for project fixtures."""
+
+        items: list[dict[str, Any]] = []
+        fixtures = [
+            fixture
+            for fixture in self.project_fixtures.values()
+            if self._fixture_project_id(fixture) == project_id
+        ]
+        fixtures = sorted(
+            fixtures,
+            key=lambda fixture: str((fixture.get("equipment") or {}).get("equipment_id") or ""),
+        )
+        if limit is not None:
+            fixtures = fixtures[: max(0, limit)]
+
+        for fixture in fixtures:
+            asset_id = str((fixture.get("equipment") or {}).get("equipment_id") or "")
+            if not asset_id:
+                continue
+            summary, trace = self.agent_review_summary(
+                asset_id,
+                project_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                dataset_version_id=fixture.get("dataset_version"),
+                history_window=history_window,
+                trigger="polling_watcher",
+            )
+            materialization = trace.get("materialization") or {}
+            items.append(
+                {
+                    "asset_id": asset_id,
+                    "event_id": fixture.get("event_id"),
+                    "summary_id": materialization.get("summary_id"),
+                    "summary_key": materialization.get("summary_key"),
+                    "status": materialization.get("status"),
+                    "reused": materialization.get("reused"),
+                    "mode": summary.get("mode"),
+                    "fallback_reason": materialization.get("fallback_reason"),
+                    "workflow_run_id": (trace.get("workflow_run") or {}).get(
+                        "workflow_run_id"
+                    ),
+                    "workflow_status": (trace.get("workflow_run") or {}).get(
+                        "status"
+                    ),
+                }
+            )
+
+        return {
+            "project_id": project_id,
+            "history_window": history_window,
+            "materialized_count": len(items),
+            "created_count": sum(1 for item in items if not item.get("reused")),
+            "reused_count": sum(1 for item in items if item.get("reused")),
+            "items": items,
+        }
 
     def patch_equipment_state(
         self,
@@ -389,135 +685,6 @@ class ManufacturingPredictiveMaintenanceService:
             }
         ]
 
-    def _operation_context_for_fixture(
-        self,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        equipment = fixture.get("equipment") or {}
-        project_id = self._fixture_project_id(fixture)
-        dataset_version = str(fixture.get("dataset_version") or "")
-        observed_at = _parse_iso_datetime(
-            str((fixture.get("observation") or {}).get("timestamp") or artifact.get("observed_at") or "")
-        )
-        if observed_at is None:
-            return None
-
-        for context in self.operation_contexts:
-            scope = context.get("scope") or {}
-            if str(scope.get("project_id") or "") != project_id:
-                continue
-            if dataset_version and str(scope.get("dataset_version") or "") != dataset_version:
-                continue
-            temporal_scope = context.get("temporal_scope") or {}
-            valid_from = _parse_iso_datetime(str(temporal_scope.get("valid_from") or ""))
-            valid_to = _parse_iso_datetime(str(temporal_scope.get("valid_to") or ""))
-            if valid_from is None or valid_to is None or not (valid_from <= observed_at < valid_to):
-                continue
-            fixture_context = fixture.get("operation_context") or {}
-            event_impact = fixture_context.get("event_impact") or _event_impact_for_fixture(context, fixture, equipment)
-            capacity = context.get("capacity_model") or {}
-            planning_window = capacity.get("planning_window") or {}
-            oee_basis = capacity.get("oee_basis") or {}
-            cycle_time_basis = capacity.get("cycle_time_basis") or {}
-            asset_count_basis = capacity.get("asset_count_basis") or {}
-            production_impact = fixture_context.get("production_impact")
-            if production_impact not in {"none", "low", "medium", "high"}:
-                production_impact = _production_impact(
-                    (event_impact or {}).get("basis", {}).get("estimated_downtime_minutes")
-                    if event_impact
-                    else equipment.get("estimated_downtime_minutes")
-                )
-            return {
-                "load_level": fixture_context.get("load_level"),
-                "runtime_hours_7d": fixture_context.get("runtime_hours_7d"),
-                "production_impact": production_impact,
-                "context_id": context["context_id"],
-                "source_type": context["source_type"],
-                "temporal_scope": temporal_scope,
-                "production_plan": context["production_plan"],
-                "capacity_model": {
-                    "active_asset_count": asset_count_basis.get("active_asset_count"),
-                    "planned_operating_hours": planning_window.get("planned_operating_hours"),
-                    "oee": oee_basis.get("oee"),
-                    "standard_cycle_minutes_per_unit": cycle_time_basis.get("standard_cycle_minutes_per_unit"),
-                    "asset_units_per_hour": capacity.get("asset_units_per_hour"),
-                    "daily_capacity_units": capacity.get("daily_capacity_units"),
-                    "basis": (
-                        f"{asset_count_basis.get('active_asset_count')} assets, "
-                        f"{planning_window.get('planned_operating_hours')}h/day, "
-                        f"OEE {oee_basis.get('oee')}, "
-                        f"cycle {cycle_time_basis.get('standard_cycle_minutes_per_unit')}min 기준"
-                    ),
-                },
-                "event_impact": event_impact,
-                "limitations": context.get("limitations") or [],
-            }
-        return None
-
-    def _inspection_guidance_for_fixture(
-        self,
-        fixture: dict[str, Any],
-        artifact: dict[str, Any],
-    ) -> dict[str, dict[str, Any]]:
-        equipment = fixture.get("equipment") or {}
-        asset_type = str(equipment.get("asset_type") or artifact.get("asset_type") or "")
-        failure_type = str(artifact.get("predicted_failure_type") or fixture.get("expected", {}).get("predicted_failure_type") or "")
-        risk_grade = str(artifact.get("status_grade") or "")
-        criticality = str(equipment.get("criticality") or "")
-        operation_context = fixture.get("operation_context") or {}
-        production_impact = str(operation_context.get("production_impact") or "")
-        factor_keys = {
-            str(factor.get("feature"))
-            for factor in artifact.get("top_factors") or []
-            if factor.get("feature")
-        }
-        component_hypotheses = (
-            (artifact.get("evidence_payload") or {}).get("component_hypotheses") or []
-        )
-        component_ids = {
-            str(item.get("component_id"))
-            for item in component_hypotheses
-            if isinstance(item, dict) and item.get("component_id")
-        }
-        guidance_by_component: dict[str, dict[str, Any]] = {}
-        for sop in self.inspection_sops:
-            if not _is_displayable_inspection_sop(sop):
-                continue
-            if not _matches_any(asset_type, sop.get("asset_types") or []):
-                continue
-            if failure_type and not _matches_any(failure_type, sop.get("failure_modes") or []):
-                continue
-            if factor_keys and factor_keys.isdisjoint({str(item) for item in sop.get("factor_keys") or []}):
-                continue
-            applicability = sop.get("applicability") or {}
-            if risk_grade and not _matches_any(risk_grade, applicability.get("risk_grades") or []):
-                continue
-            if criticality and not _matches_any(criticality, applicability.get("criticality") or []):
-                continue
-            if production_impact and not _matches_any(production_impact, applicability.get("production_impact") or []):
-                continue
-            for component_id in component_ids.intersection({str(item) for item in sop.get("component_ids") or []}):
-                guidance = sop.get("guidance") or {}
-                guidance_by_component[component_id] = {
-                    "source_type": sop["source_kind"],
-                    "sop_id": sop["sop_id"],
-                    "title": sop["title"],
-                    "version": sop["version"],
-                    "reference_location_label": guidance.get("reference_location_label"),
-                    "suggested_check_method": guidance.get("suggested_check_method"),
-                    "checklist_draft": guidance.get("checklist_draft") or [],
-                    "maintenance_review_prerequisites": guidance.get(
-                        "maintenance_review_prerequisites"
-                    )
-                    or {},
-                    "safety_level": sop["safety_level"],
-                    "requires_human_approval": sop["requires_human_approval"],
-                    "source_ref": f"{sop['source_uri']}#{sop['sop_id']}",
-                    "disclaimer": guidance.get("disclaimer"),
-                }
-        return guidance_by_component
-
     def report(self, event_id: str, request: ReportRequest) -> tuple[GroundedReport, dict[str, Any]]:
         fixture = self._fixture(event_id)
         evidence = self._projected_legacy_evidence(fixture)
@@ -655,6 +822,159 @@ class ManufacturingPredictiveMaintenanceService:
             payload=payload,
         )
 
+    def _start_agent_review_workflow_run(
+        self,
+        *,
+        trigger: str,
+        engine: str,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        packet: dict[str, Any],
+        key_payload: dict[str, Any],
+        materialization_key: str,
+        materializer: AgentReviewSummaryMaterializer,
+        history_window: str,
+    ) -> dict[str, Any]:
+        record = {
+            "trigger": trigger,
+            "engine": engine,
+            "status": "running",
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+            "asset_id": packet.get("asset_id"),
+            "event_id": key_payload["event_id"],
+            "dataset_version_id": key_payload["dataset_version"],
+            "history_window": history_window,
+            "summary_key": materialization_key,
+            "source_sha256": key_payload["source_sha256"],
+            "context_sha256": key_payload["context_sha256"],
+            "packet_schema_version": key_payload["packet_schema_version"],
+            "prompt_version": key_payload["prompt_version"],
+            "model_version": key_payload["model_version"],
+            "trace": {"stage": "started"},
+        }
+        try:
+            return self.repository.create_agent_review_workflow_run(**record)
+        except Exception as exc:
+            if not _is_agent_review_running_conflict(exc):
+                raise
+            waited = _wait_for_agent_review_summary(
+                materializer,
+                packet=packet,
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                history_window=history_window,
+            )
+            if waited is not None:
+                raise _AgentReviewSummaryMaterializedWhileWaiting(waited) from exc
+            started_before = datetime.now(timezone.utc) - timedelta(
+                seconds=AGENT_REVIEW_RUNNING_LEASE_SECONDS
+            )
+            expired = self.repository.expire_stale_agent_review_workflow_run(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                summary_key=materialization_key,
+                started_before=started_before.isoformat(),
+            )
+            if expired is not None:
+                try:
+                    return self.repository.create_agent_review_workflow_run(**record)
+                except Exception as retry_exc:
+                    if not _is_agent_review_running_conflict(retry_exc):
+                        raise
+                    raise RuntimeError(
+                        f"agent_review_summary_materialization_in_progress:{materialization_key}"
+                    ) from retry_exc
+            raise RuntimeError(
+                f"agent_review_summary_materialization_in_progress:{materialization_key}"
+            ) from exc
+
+
+def _workflow_run_status(trace: dict[str, Any]) -> str:
+    materialization = trace.get("materialization") or {}
+    status = str(materialization.get("status") or "")
+    if status == "ready":
+        return "completed"
+    if status == "fallback":
+        return "partial"
+    if status == "failed":
+        return "failed"
+    return "completed"
+
+
+class _AgentReviewSummaryMaterializedWhileWaiting(Exception):
+    def __init__(self, result: tuple[dict[str, Any], dict[str, Any]]) -> None:
+        super().__init__("agent_review_summary_materialized_while_waiting")
+        self.result = result
+
+
+def _agent_review_summary_lock(summary_key_value: str) -> Lock:
+    with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+        lock = _AGENT_REVIEW_SUMMARY_LOCKS.get(summary_key_value)
+        if lock is None:
+            lock = Lock()
+            _AGENT_REVIEW_SUMMARY_LOCKS[summary_key_value] = lock
+        return lock
+
+
+def _is_agent_review_running_conflict(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}:{exc}"
+    return (
+        "uq_agent_review_workflow_runs_running_summary" in text
+        or "UNIQUE constraint failed: agent_review_workflow_runs.organization_id" in text
+    )
+
+
+def _wait_for_agent_review_summary(
+    materializer: AgentReviewSummaryMaterializer,
+    *,
+    packet: dict[str, Any],
+    organization_id: str,
+    project_id: str,
+    workspace_id: str,
+    history_window: str,
+    timeout_seconds: float = 3.0,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        summary, trace = materializer.lookup(
+            packet=packet,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+        )
+        if summary is not None:
+            return summary, trace
+        time.sleep(0.05)
+    return None
+
+
+def _workflow_run_trace(run: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "workflow_run_id": run["workflow_run_id"],
+        "trigger": run["trigger"],
+        "engine": run["engine"],
+        "status": run["status"],
+        "started_at": run["started_at"],
+        "completed_at": run.get("completed_at"),
+        "updated_at": run["updated_at"],
+        "asset_id": run.get("asset_id"),
+        "event_id": run.get("event_id"),
+        "dataset_version_id": run.get("dataset_version_id"),
+        "history_window": run.get("history_window"),
+        "summary_key": run["summary_key"],
+        "source_sha256": run["source_sha256"],
+        "context_sha256": run["context_sha256"],
+        "error_type": run.get("error_type"),
+        "error_message": run.get("error_message"),
+        "trace": run.get("trace") or {},
+    }
+
 
 def _timestamp_instant(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -686,44 +1006,6 @@ def _production_impact(estimated_downtime_minutes: Any) -> str | None:
     return "none"
 
 
-def _matches_any(value: str, candidates: list[Any]) -> bool:
-    return value in {str(candidate) for candidate in candidates}
-
-
-def _is_displayable_inspection_sop(sop: dict[str, Any]) -> bool:
-    source_kind = str(sop.get("source_kind") or "")
-    maturity = str(sop.get("maturity") or "")
-    return (
-        (source_kind == "demo_sop_fixture" and maturity == "fixture")
-        or (source_kind == "site_sop" and maturity == "approved")
-    )
-
-
 # Temporary compatibility alias for integrations that still import the historical
 # service name. New code should use ManufacturingPredictiveMaintenanceService.
 FactorySignalService = ManufacturingPredictiveMaintenanceService
-
-
-def _parse_iso_datetime(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-def _event_impact_for_fixture(
-    context: dict[str, Any],
-    fixture: dict[str, Any],
-    equipment: dict[str, Any],
-) -> dict[str, Any] | None:
-    event_id = str(fixture.get("event_id") or "")
-    equipment_id = str(equipment.get("equipment_id") or "")
-    for impact in context.get("event_impacts") or []:
-        if str(impact.get("event_id") or "") == event_id:
-            return {**impact, "equipment_id": equipment_id or str(impact.get("equipment_id") or "")}
-    for impact in context.get("event_impacts") or []:
-        if str(impact.get("equipment_id") or "") == equipment_id:
-            return {**impact, "equipment_id": equipment_id}
-    return None
