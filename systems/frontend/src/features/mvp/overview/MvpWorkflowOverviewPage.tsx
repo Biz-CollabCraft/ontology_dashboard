@@ -1681,7 +1681,6 @@ function AssetPreviewPanel({
   const agentSummaryKey = asset ? `${asset.assetId}:${candidate?.event.datasetVersionId ?? ""}:${sensorWindow}` : "";
   const loadAgentSummary = async (materialize = false) => {
     if (!asset) return;
-    let generatedMissingSummary = false;
     if (materialize) setAgentSummaryMaterializing(true);
     else setAgentSummaryLoading(true);
     setAgentSummaryError("");
@@ -1694,14 +1693,9 @@ function AssetPreviewPanel({
         datasetVersionId: candidate?.event.datasetVersionId ?? null,
         historyWindow: sensorWindow,
       };
-      let summaryResponse = materialize
+      const summaryResponse = materialize
         ? await createMvpAgentReviewSummary({ ...request, trigger: "ui_manual_regeneration" })
         : await getMvpAgentReviewSummary(request);
-      if (!materialize && !summaryResponse.summary) {
-        generatedMissingSummary = true;
-        setAgentSummaryMaterializing(true);
-        summaryResponse = await createMvpAgentReviewSummary({ ...request, trigger: "manual_materialization" });
-      }
       setAgentSummary(summaryResponse.summary);
       setAgentSummaryTrace(summaryResponse.trace);
     } catch (reason: unknown) {
@@ -1711,7 +1705,7 @@ function AssetPreviewPanel({
         : "AI 검토 요약을 불러오지 못했습니다.";
       setAgentSummaryError(reason instanceof Error ? reason.message : fallbackMessage);
     } finally {
-      if (materialize || generatedMissingSummary) setAgentSummaryMaterializing(false);
+      if (materialize) setAgentSummaryMaterializing(false);
       if (!materialize) setAgentSummaryLoading(false);
     }
   };

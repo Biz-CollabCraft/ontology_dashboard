@@ -71,6 +71,17 @@ class ReportAgentPort(Protocol):
     def generate(self, *args: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]]: ...
 
 
+class AgentReviewLLMPort(Protocol):
+    name: str
+
+    def generate_json(
+        self,
+        system_prompt: str,
+        payload: dict[str, Any],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+
 class LayoutPlannerPort(Protocol):
     def plan(self, *args: Any, **kwargs: Any) -> tuple[Any, dict[str, Any]]: ...
 
@@ -88,6 +99,7 @@ class FactorySignalApplicationPort(Protocol):
 
 
 __all__ = [
+    "AgentReviewLLMPort",
     "AuditRepositoryPort",
     "FactorySignalApplicationPort",
     "LayoutPlannerPort",

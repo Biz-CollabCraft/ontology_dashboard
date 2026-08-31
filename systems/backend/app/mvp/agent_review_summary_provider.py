@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.infra.llm import LLMProvider
 from app.mvp.agent_review_summary import (
     compose_deterministic_agent_review_summary,
     summary_schema,
 )
+from app.mvp.ports import AgentReviewLLMPort
 
 
 AGENT_REVIEW_SUMMARY_SYSTEM_PROMPT = """
@@ -39,7 +39,7 @@ AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.0"
 class AgentReviewSummaryProvider:
     """Generate a candidate summary through the shared LLM provider port."""
 
-    def __init__(self, provider: LLMProvider | None) -> None:
+    def __init__(self, provider: AgentReviewLLMPort | None) -> None:
         self.provider = provider
         self.name = getattr(provider, "name", "none")
 

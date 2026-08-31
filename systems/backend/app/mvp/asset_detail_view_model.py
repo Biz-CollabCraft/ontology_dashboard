@@ -5,9 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from typing import Protocol
 
-from app.diagnosis.evidence_projection import evidence_snapshot_basis_from_artifact
-
-
 DEFAULT_HISTORY_WINDOW = "24h"
 HISTORY_WINDOW_HOURS = {
     "24h": 24,
@@ -289,7 +286,7 @@ def compose_asset_detail_view_model(
     )
 
     return {
-        "snapshot_basis": evidence_snapshot_basis_from_artifact(
+        "snapshot_basis": _evidence_snapshot_basis_from_artifact(
             result_artifact,
             event_id=event_id,
         ),
@@ -834,6 +831,7 @@ def _owner_domain(value: Any, *, default: str = "report") -> str:
     normalized = str(value or default)
     if normalized in {
         "diagnosis",
+        "generator",
         "dataset",
         "equipment",
         "project",
@@ -857,6 +855,32 @@ def _evidence_payload_reference(provenance: dict[str, Any]) -> str:
     if isinstance(reference, dict):
         return str(reference.get("reference") or "")
     return str(reference or "")
+
+
+def _evidence_snapshot_basis_from_artifact(
+    artifact: dict[str, Any],
+    *,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    provenance = artifact.get("provenance") or {}
+    lineage = artifact.get("lineage") or {}
+    evidence_reference = provenance.get("evidence_payload_reference")
+    if isinstance(evidence_reference, dict):
+        evidence_reference = evidence_reference.get("reference")
+    return {
+        "artifact_id": artifact.get("artifact_id"),
+        "evidence_payload_reference": str(evidence_reference or ""),
+        "asset_id": artifact.get("asset_id"),
+        "event_id": event_id or artifact.get("event_id"),
+        "observed_at": artifact.get("observed_at"),
+        "model_version": provenance.get("model_version"),
+        "dataset_version": provenance.get("dataset_version"),
+        "source_sha256": (
+            artifact.get("source_sha256")
+            or provenance.get("source_sha256")
+            or lineage.get("source_sha256")
+        ),
+    }
 
 
 def _optional(source: dict[str, Any], *keys: str) -> dict[str, Any]:

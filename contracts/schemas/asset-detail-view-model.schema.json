@@ -228,7 +228,7 @@
             "properties": {
               "field": {"type": "string"},
               "reason": {"type": "string"},
-              "owner_domain": {"enum": ["diagnosis", "dataset", "equipment", "project", "operations", "maintenance", "report", "frontend", "unresolved"]}
+              "owner_domain": {"enum": ["diagnosis", "generator", "dataset", "equipment", "project", "operations", "maintenance", "report", "frontend", "unresolved"]}
             }
           }
         }
