@@ -136,10 +136,94 @@ class OperationContextProvider:
         )
 
 
+class MaintenanceHistoryContextProvider:
+    """Build read-only maintenance history from existing ViewModel records."""
+
+    adapter_id = "maintenance-history"
+
+    def context_for_packet(self, *, view_model: dict[str, Any]) -> AgentReviewContext:
+        closed_loop = view_model.get("closed_loop") or {}
+        equipment_history = view_model.get("equipment_history") or []
+        maintenance_context = view_model.get("maintenance_context") or {}
+        work_orders = [
+            _history_record(item, source_prefix="closed-loop://work-order")
+            for item in closed_loop.get("work_orders") or []
+            if isinstance(item, dict)
+        ]
+        inspection_results = [
+            _history_record(item, source_prefix="closed-loop://inspection-result")
+            for item in closed_loop.get("inspection_results") or []
+            if isinstance(item, dict)
+        ]
+        maintenance_actions = [
+            _history_record(item, source_prefix="closed-loop://maintenance-action")
+            for item in closed_loop.get("maintenance_actions") or []
+            if isinstance(item, dict)
+        ]
+        maintenance_events = [
+            _history_record(item, source_prefix="closed-loop://maintenance-event")
+            for item in closed_loop.get("maintenance_events") or []
+            if isinstance(item, dict)
+        ]
+        activities = [
+            _history_record(item, source_prefix="closed-loop://activity")
+            for item in closed_loop.get("activities") or []
+            if isinstance(item, dict)
+        ]
+        recent_equipment_history = [
+            {
+                "description": str(item.get("description") or ""),
+                "occurred_at": str(item.get("occurred_at") or ""),
+                "source_ref": f"equipment-history://{index + 1}",
+            }
+            for index, item in enumerate(equipment_history[:3])
+            if isinstance(item, dict)
+        ]
+        source_refs = list(
+            dict.fromkeys(
+                ref
+                for record in [
+                    *work_orders,
+                    *inspection_results,
+                    *maintenance_actions,
+                    *maintenance_events,
+                    *activities,
+                    *recent_equipment_history,
+                ]
+                for ref in [str(record.get("source_ref") or "")]
+                if ref
+            )
+        )
+        return AgentReviewContext(
+            maintenance_history_summary={
+                "provider": "closed_loop_maintenance_history_adapter",
+                "mutation_allowed": False,
+                "last_maintenance_days_ago": maintenance_context.get(
+                    "last_maintenance_days_ago"
+                ),
+                "similar_events_30d": maintenance_context.get("similar_events_30d"),
+                "open_work_order_exists": maintenance_context.get(
+                    "open_work_order_exists"
+                ),
+                "work_orders": work_orders,
+                "inspection_results": inspection_results,
+                "maintenance_actions": maintenance_actions,
+                "maintenance_events": maintenance_events,
+                "activities": activities[:5],
+                "similar_events": [],
+                "recent_equipment_history": recent_equipment_history,
+                "source_refs": source_refs,
+            },
+            source_refs=source_refs,
+        )
+
+
 def default_agent_review_context_registry() -> AgentReviewContextRegistry:
     """Return the default ordered domain adapter set for manufacturing MVP."""
 
-    return AgentReviewContextRegistry([OperationContextProvider()])
+    return AgentReviewContextRegistry(
+        [OperationContextProvider(), MaintenanceHistoryContextProvider()]
+    )
 
 
 def compose_default_agent_review_context(*, view_model: dict[str, Any]) -> AgentReviewContext:
@@ -195,6 +279,35 @@ def _adapter_gap(
             }
         ]
     )
+
+
+def _history_record(item: dict[str, Any], *, source_prefix: str) -> dict[str, Any]:
+    record_id = str(
+        item.get("work_order_id")
+        or item.get("inspection_result_id")
+        or item.get("maintenance_action_id")
+        or item.get("maintenance_event_id")
+        or item.get("activity_id")
+        or item.get("id")
+        or ""
+    )
+    return {
+        "record_id": record_id,
+        "record_type": source_prefix.removeprefix("closed-loop://"),
+        "status": str(item.get("status") or item.get("outcome") or ""),
+        "activity_type": str(item.get("activity_type") or ""),
+        "recorded_at": str(
+            item.get("recorded_at")
+            or item.get("completed_at")
+            or item.get("created_at")
+            or item.get("updated_at")
+            or ""
+        ),
+        "summary": str(
+            item.get("label") or item.get("note") or item.get("outcome") or ""
+        ),
+        "source_ref": f"{source_prefix}/{record_id}" if record_id else source_prefix,
+    }
 
 
 def _dedupe_gap_dicts(gaps: Any) -> list[dict[str, str]]:

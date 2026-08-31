@@ -7,7 +7,11 @@ from jsonschema import Draft202012Validator
 
 from app.dependencies import build_manufacturing_service
 from app.mvp.agent_review_packet import compose_agent_review_packet
-from app.mvp.context_providers import AgentReviewContext, AgentReviewContextRegistry
+from app.mvp.context_providers import (
+    AgentReviewContext,
+    AgentReviewContextRegistry,
+    default_agent_review_context_registry,
+)
 from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 
 
@@ -241,6 +245,58 @@ def test_agent_review_packet_uses_same_snapshot_basis_as_view_model(tmp_path: Pa
 
     assert packet["snapshot_basis"] == view_model["snapshot_basis"]
     assert packet["snapshot_basis"]["event_id"] == "EVT-GS-004"
+
+
+def test_default_context_registry_projects_maintenance_history_from_view_model(
+    tmp_path: Path,
+) -> None:
+    service = build_manufacturing_service(
+        tmp_path / "agent-review-maintenance-context.db",
+        root=ROOT,
+    )
+    view_model = service.asset_detail_view_model(
+        "CNC-S04-L02-03",
+        "manufacturing-demo-project",
+    )
+
+    context = default_agent_review_context_registry().context_for_packet(
+        view_model=view_model
+    )
+
+    history = context.maintenance_history_summary
+    assert history is not None
+    assert history["provider"] == "closed_loop_maintenance_history_adapter"
+    assert history["mutation_allowed"] is False
+    assert history["work_orders"][0]["record_id"] == "WO-INS-GS-004-001"
+    assert history["activities"][0]["activity_type"] == "work_order.requested"
+    assert "closed-loop://work-order/WO-INS-GS-004-001" in context.source_refs
+
+
+def test_service_packet_merges_maintenance_adapter_with_ontology_history(
+    tmp_path: Path,
+) -> None:
+    service = build_manufacturing_service(
+        tmp_path / "agent-review-maintenance-merge.db",
+        root=ROOT,
+    )
+
+    packet = service.agent_review_packet(
+        "CNC-S04-L02-03",
+        "manufacturing-demo-project",
+    )
+
+    history = packet["maintenance_history_summary"]
+    assert history["provider"] == "closed_loop_maintenance_history_adapter"
+    assert history["mutation_allowed"] is False
+    assert history["work_orders"][0]["record_id"] == "WO-INS-GS-004-001"
+    assert history["similar_events"][0]["similar_event_id"] == (
+        "SIM-EVT-CNC-DRIVE-2026-07-22"
+    )
+    assert "closed-loop://work-order/WO-INS-GS-004-001" in packet["source_refs"]
+    assert (
+        "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#"
+        "SIM-EVT-CNC-DRIVE-2026-07-22"
+    ) in packet["source_refs"]
 
 
 def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) -> None:
