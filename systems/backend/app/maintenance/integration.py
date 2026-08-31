@@ -38,6 +38,23 @@ class ToolReplacementStatePatch(FrozenEventModel):
     tool_wear_min: ToolWearReset = Field(default_factory=ToolWearReset)
 
 
+class CoolingSystemRestore(FrozenEventModel):
+    operation: Literal["restore"] = "restore"
+    value: Literal["nominal"] = "nominal"
+    unit: Literal["state"] = "state"
+
+
+class CoolingSystemRestoreStatePatch(FrozenEventModel):
+    cooling_system_state: CoolingSystemRestore = Field(
+        default_factory=CoolingSystemRestore
+    )
+
+
+MaintenanceStatePatch: TypeAlias = (
+    ToolReplacementStatePatch | CoolingSystemRestoreStatePatch
+)
+
+
 class MaintenanceIntegrationEvent(FrozenEventModel):
     contract_version: Literal["maintenance-replay-v1"] = "maintenance-replay-v1"
     event_type: str
@@ -59,7 +76,9 @@ class MaintenanceStartedEvent(MaintenanceIntegrationEvent):
     event_type: Literal["maintenance.started"] = "maintenance.started"
     work_order_id: str = Field(min_length=1, max_length=240)
     maintenance_started_at: datetime
-    action_code: Literal["TOOL_REPLACEMENT"] = "TOOL_REPLACEMENT"
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] = (
+        "TOOL_REPLACEMENT"
+    )
 
 
 class MaintenanceCompletedEvent(MaintenanceIntegrationEvent):
@@ -67,8 +86,10 @@ class MaintenanceCompletedEvent(MaintenanceIntegrationEvent):
     maintenance_event_id: str = Field(min_length=1, max_length=240)
     maintenance_started_at: datetime | None = None
     maintenance_completed_at: datetime
-    action_code: Literal["TOOL_REPLACEMENT"] = "TOOL_REPLACEMENT"
-    state_patch: ToolReplacementStatePatch = Field(default_factory=ToolReplacementStatePatch)
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] = (
+        "TOOL_REPLACEMENT"
+    )
+    state_patch: MaintenanceStatePatch = Field(default_factory=ToolReplacementStatePatch)
 
     @model_validator(mode="after")
     def require_time_order(self) -> MaintenanceCompletedEvent:
@@ -77,6 +98,7 @@ class MaintenanceCompletedEvent(MaintenanceIntegrationEvent):
             and self.maintenance_completed_at < self.maintenance_started_at
         ):
             raise ValueError("maintenance completion cannot precede its start")
+        _require_matching_state_patch(self.action_code, self.state_patch)
         return self
 
 
@@ -86,8 +108,8 @@ class MaintenanceReplayRequestedEvent(MaintenanceIntegrationEvent):
     maintenance_started_at: datetime | None = None
     maintenance_completed_at: datetime | None = None
     restart_at: datetime
-    action_code: Literal["TOOL_REPLACEMENT"] | None = None
-    state_patch: ToolReplacementStatePatch | None = None
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] | None = None
+    state_patch: MaintenanceStatePatch | None = None
 
     @model_validator(mode="after")
     def require_time_order(self) -> MaintenanceReplayRequestedEvent:
@@ -99,7 +121,26 @@ class MaintenanceReplayRequestedEvent(MaintenanceIntegrationEvent):
             and self.maintenance_completed_at < self.maintenance_started_at
         ):
             raise ValueError("maintenance completion cannot precede its start")
+        if (self.action_code is None) != (self.state_patch is None):
+            raise ValueError("replay action_code and state_patch must be provided together")
+        if self.action_code is not None and self.state_patch is not None:
+            _require_matching_state_patch(self.action_code, self.state_patch)
         return self
+
+
+def _require_matching_state_patch(
+    action_code: str, state_patch: MaintenanceStatePatch
+) -> None:
+    if action_code == "TOOL_REPLACEMENT" and not isinstance(
+        state_patch, ToolReplacementStatePatch
+    ):
+        raise ValueError("TOOL_REPLACEMENT requires tool_wear_min reset state_patch")
+    if action_code == "COOLING_SYSTEM_RESTORE" and not isinstance(
+        state_patch, CoolingSystemRestoreStatePatch
+    ):
+        raise ValueError(
+            "COOLING_SYSTEM_RESTORE requires cooling_system_state restore state_patch"
+        )
 
 
 MaintenanceEvent: TypeAlias = Annotated[

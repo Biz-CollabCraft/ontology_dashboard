@@ -14,6 +14,7 @@ from app.maintenance.api_schema import (
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
     MaintenanceActionStartRequest,
+    MaintenanceCostAnalysisCreateRequest,
     MaintenanceReplayRequest,
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
@@ -231,6 +232,20 @@ def cost_analysis_request(
         price_version="maintenance-price-2026-08",
         calculation_policy_version="maintenance-cost-policy-v1",
     )
+
+
+def cooling_cost_analysis_request() -> MaintenanceCostAnalysisCreateRequest:
+    payload = cost_analysis_request().model_dump(mode="json")
+    payload["action_code"] = "COOLING_SYSTEM_RESTORE"
+    payload["input_sources"] = [
+        {
+            "input_name": "cooling_system_restore_quote",
+            "source_kind": "quoted",
+            "source_reference": "quote/cooling-system-restore/2026-08",
+            "confidence": "medium",
+        }
+    ]
+    return MaintenanceCostAnalysisCreateRequest.model_validate(payload)
 
 
 def run_completed_inspection(
@@ -1110,6 +1125,258 @@ def test_cost_analysis_rejects_unrelated_maintenance_candidate_without_persistin
         workspace_id="workspace-1",
         inspection_result_id=inspection_result_id,
     ) == ()
+
+
+def test_cooling_action_candidate_and_cost_analysis_are_canonical_and_append_only(
+    tmp_path,
+) -> None:
+    loop = service(tmp_path)
+    work_order_id, inspection_result_id = run_completed_inspection(
+        loop,
+        result_payload=InspectionResultCreateRequest(
+            outcome="maintenance_recommended",
+            checklist=(
+                {
+                    "item_id": "cooling-path",
+                    "status": "fail",
+                    "note": "coolant flow is restricted",
+                },
+            ),
+            measurements=(
+                {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
+            ),
+            findings=("cooling path requires maintenance",),
+            note="cooling system restoration should be reviewed",
+        ),
+    )
+
+    candidates = loop.list_action_candidates(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    )
+    assert candidates == {
+        "inspection_result_id": inspection_result_id,
+        "items": [
+            {
+                "organization_id": "org-1",
+                "project_id": "project-1",
+                "workspace_id": "workspace-1",
+                "action_candidate_id": loop._stable_id(
+                    "ACTION-CANDIDATE",
+                    "org-1",
+                    "project-1",
+                    "workspace-1",
+                    inspection_result_id,
+                    "COOLING_SYSTEM_RESTORE",
+                ),
+                "inspection_result_id": inspection_result_id,
+                "event_id": "EVT-RESULT-001",
+                "asset_id": "CNC-001",
+                "equipment_id": "CNC-001",
+                "action_code": "COOLING_SYSTEM_RESTORE",
+                "basis_codes": [
+                    "inspection.checklist:cooling-path:fail",
+                    "inspection.measurement:coolant_temperature_c",
+                ],
+            }
+        ],
+    }
+
+    created = loop.calculate_maintenance_cost(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=cooling_cost_analysis_request(),
+        actor_id="manager-1",
+        idempotency_key="cooling-cost-analysis-001",
+        calculated_at=datetime(2026, 8, 31, 2, 0, tzinfo=timezone.utc),
+    )
+    result = created["cost_analysis"]
+    assert created["calculation_status"] == "calculated"
+    assert result["based_on"]["inspection_work_order_id"] == work_order_id
+    assert result["based_on"]["inspection_result_id"] == inspection_result_id
+    assert {option["action_code"] for option in result["options"]} == {
+        "COOLING_SYSTEM_RESTORE"
+    }
+    assert loop.list_cost_analyses(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    )["items"] == [result]
+
+    with sqlite3.connect(loop.repository.database) as connection:
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list(closed_loop_recommendations)"
+        ).fetchall()
+        assert any(
+            row[2] == "closed_loop_maintenance_cost_analyses" for row in foreign_keys
+        )
+
+
+def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_path) -> None:
+    diagnosis = ProjectionQuery()
+    loop = service(tmp_path, query=diagnosis)
+    _inspection_work_order_id, inspection_result_id = run_completed_inspection(
+        loop,
+        result_payload=InspectionResultCreateRequest(
+            outcome="maintenance_recommended",
+            checklist=(
+                {
+                    "item_id": "cooling-path",
+                    "status": "fail",
+                    "note": "coolant flow is restricted",
+                },
+            ),
+            measurements=(
+                {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
+            ),
+            findings=("cooling path requires maintenance",),
+            note="cooling system restoration should be reviewed",
+        ),
+    )
+    analysis = loop.calculate_maintenance_cost(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=cooling_cost_analysis_request(),
+        actor_id="manager-1",
+        idempotency_key="cooling-vertical-cost-001",
+    )["cost_analysis"]
+    selected = next(
+        option
+        for option in analysis["options"]
+        if option["execution_timing"] == "immediate"
+    )
+    recommendation = loop.create_recommendation_from_cost_option(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        analysis_id=analysis["analysis_id"],
+        option_id=selected["option_id"],
+        payload=CostOptionRecommendationCreateRequest(
+            basis=("manager selected cooling restoration",)
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="cooling-vertical-recommendation-001",
+    )["recommendation"]
+    assert recommendation["action_code"] == "COOLING_SYSTEM_RESTORE"
+    assert recommendation["status"] == "proposed"
+
+    decision = loop.decide_manual_recommendation(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        recommendation_id=recommendation["recommendation_id"],
+        payload=RecommendationDecisionCreateRequest(
+            disposition=RecommendationDisposition.ACCEPT,
+            note="approve cooling system restoration",
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="cooling-vertical-decision-001",
+    )
+    work_order_id = decision["work_order_id"]
+    assert work_order_id is not None
+
+    started_at = datetime(2026, 8, 31, 3, 0, tzinfo=timezone.utc)
+    completed_at = started_at + timedelta(minutes=25)
+    restart_at = completed_at + timedelta(minutes=5)
+    approved = loop.approve_maintenance_work_order(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        work_order_id=work_order_id,
+        payload=MaintenanceWorkOrderApproveRequest(
+            simulation_session_id="SIMULATION-SESSION-COOLING-001"
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="cooling-vertical-approve-001",
+        approved_at=started_at - timedelta(minutes=5),
+    )
+    action_id = approved["maintenance_action_id"]
+    loop.start_maintenance(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        maintenance_action_id=action_id,
+        payload=MaintenanceActionStartRequest(),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="cooling-vertical-start-001",
+        started_at=started_at,
+    )
+    completed = loop.complete_maintenance(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        maintenance_action_id=action_id,
+        payload=MaintenanceActionCompleteRequest(outcome="cooling path restored"),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="cooling-vertical-complete-001",
+        completed_at=completed_at,
+    )
+    loop.request_maintenance_replay(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        maintenance_event_id=completed["maintenance_event_id"],
+        payload=MaintenanceReplayRequest(restart_at=restart_at),
+        actor_id="technician-1",
+        actor_display_name="Technician One",
+        idempotency_key="cooling-vertical-replay-001",
+    )
+
+    lineage = loop.event_lineage(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+    assert lineage["maintenance_actions"][0]["action_code"] == (
+        "COOLING_SYSTEM_RESTORE"
+    )
+    assert lineage["maintenance_events"][0]["state_patch"] == {
+        "cooling_system_state": {
+            "operation": "restore",
+            "unit": "state",
+            "value": "nominal",
+        }
+    }
+    equipment_state = loop.repository.equipment_state(
+        workspace_id="workspace-1", equipment_id="CNC-001"
+    )
+    assert equipment_state is not None
+    assert equipment_state["state"] == {
+        "cooling_system_state": {"unit": "state", "value": "nominal"}
+    }
+    with loop.repository._connect() as connection:
+        outbox = connection.execute(
+            "SELECT event_type,payload_json FROM transactional_outbox "
+            "WHERE event_type LIKE 'maintenance.%' ORDER BY created_at"
+        ).fetchall()
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    payloads = {row["event_type"]: json.loads(row["payload_json"]) for row in outbox}
+    assert payloads["maintenance.started"]["action_code"] == (
+        "COOLING_SYSTEM_RESTORE"
+    )
+    assert payloads["maintenance.completed"]["state_patch"] == {
+        "cooling_system_state": {
+            "operation": "restore",
+            "unit": "state",
+            "value": "nominal",
+        }
+    }
+    assert payloads["maintenance.replay_requested"]["state_patch"] == (
+        payloads["maintenance.completed"]["state_patch"]
+    )
 
 
 def test_human_selected_cost_option_creates_only_proposed_recommendation(tmp_path) -> None:

@@ -1,14 +1,17 @@
 import { Calculator, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  calculateToolReplacementCost,
+  calculateMaintenanceCost,
   createRecommendationFromCostOption,
+  getMaintenanceActionCandidates,
   getMaintenanceEventLineage,
+  type MaintenanceActionCandidateReadModel,
+  type MaintenanceActionCode,
+  type MaintenanceCostAnalysisRequest,
   type MaintenanceCostAnalysisReadModel,
   type MaintenanceEventLineageReadModel,
   type MaintenanceExecutionTiming,
   type MaintenanceInspectionResultReadModel,
-  type ToolReplacementCostAnalysisRequest,
 } from "../../../api";
 import type { MvpInspectionGuidance } from "../api/mvpContracts";
 
@@ -20,10 +23,15 @@ const TIMINGS: MaintenanceExecutionTiming[] = [
 ];
 
 const TIMING_LABEL: Record<MaintenanceExecutionTiming, string> = {
-  immediate: "즉시 교체",
+  immediate: "즉시 정비",
   planned_window: "계획 정비 창",
   reinspect_after: "재점검 후",
   no_action_baseline: "미조치 기준",
+};
+
+const ACTION_LABEL: Record<MaintenanceActionCode, string> = {
+  TOOL_REPLACEMENT: "공구 교체",
+  COOLING_SYSTEM_RESTORE: "냉각 시스템 복구",
 };
 
 const COST_FIELDS = [
@@ -109,12 +117,17 @@ export function latestEligibleInspection(
 export function latestCostAnalysisForInspection(
   analyses: MaintenanceCostAnalysisReadModel[],
   inspection: MaintenanceInspectionResultReadModel | null,
+  actionCode?: MaintenanceActionCode | null,
 ): MaintenanceCostAnalysisReadModel | null {
   if (!inspection) return null;
   return analyses
     .filter((analysis) => (
       analysis.based_on.inspection_work_order_id === inspection.work_order_id
       && analysis.based_on.inspection_result_id === inspection.inspection_result_id
+      && (
+        !actionCode
+        || analysis.options.some((option) => option.action_code === actionCode)
+      )
     ))
     .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at))[0] ?? null;
 }
@@ -123,8 +136,10 @@ export function buildCostRequest(
   form: ScenarioForm,
   guidance: Pick<MvpInspectionGuidance, "sopId" | "version">,
   eventId: string,
-): ToolReplacementCostAnalysisRequest {
+  actionCode: MaintenanceActionCode = "TOOL_REPLACEMENT",
+): MaintenanceCostAnalysisRequest {
   return {
+    action_code: actionCode,
     sop_id: guidance.sopId,
     sop_version: guidance.version,
     currency: "KRW",
@@ -183,6 +198,8 @@ export function MaintenanceCostDecisionPanel({
   onChanged?: () => void;
 }) {
   const [lineage, setLineage] = useState<MaintenanceEventLineageReadModel | null>(null);
+  const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
+  const [selectedActionCode, setSelectedActionCode] = useState<MaintenanceActionCode | null>(null);
   const [form, setForm] = useState<ScenarioForm>(() => emptyForm());
   const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -197,12 +214,33 @@ export function MaintenanceCostDecisionPanel({
     setLoading(true);
     setError(null);
     try {
-      setLineage(await getMaintenanceEventLineage(
+      const nextLineage = await getMaintenanceEventLineage(
         projectId,
         workspaceId,
         eventId,
         signal,
-      ));
+      );
+      setLineage(nextLineage);
+      const nextInspection = latestEligibleInspection(nextLineage);
+      if (nextInspection) {
+        const candidates = await getMaintenanceActionCandidates(
+          projectId,
+          workspaceId,
+          nextInspection.inspection_result_id,
+          signal,
+        );
+        setActionCandidates(candidates.items);
+        setSelectedActionCode((currentAction) => (
+          currentAction && candidates.items.some(
+            (candidate) => candidate.action_code === currentAction
+          )
+            ? currentAction
+            : candidates.items[0]?.action_code ?? null
+        ));
+      } else {
+        setActionCandidates([]);
+        setSelectedActionCode(null);
+      }
     } catch (caught) {
       if (signal?.aborted) return;
       setError(caught instanceof Error ? caught.message : "비용 분석 이력을 불러오지 못했습니다.");
@@ -226,8 +264,8 @@ export function MaintenanceCostDecisionPanel({
   const analyses = useMemo(() => [...(lineage?.cost_analyses ?? [])]
     .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at)), [lineage]);
   const current = useMemo(
-    () => latestCostAnalysisForInspection(analyses, inspection),
-    [analyses, inspection],
+    () => latestCostAnalysisForInspection(analyses, inspection, selectedActionCode),
+    [analyses, inspection, selectedActionCode],
   );
   const selectedRecommendationsByAction = useMemo(() => new Map(
     (lineage?.recommendations ?? [])
@@ -248,7 +286,7 @@ export function MaintenanceCostDecisionPanel({
   };
 
   const calculate = async () => {
-    if (!inspection) return;
+    if (!inspection || !selectedActionCode) return;
     if (!sopId.trim() || !sopVersion.trim()) {
       setError("점검에 참고한 SOP ID와 버전을 입력해 주세요.");
       return;
@@ -257,7 +295,7 @@ export function MaintenanceCostDecisionPanel({
     setError(null);
     setSelectedMessage(null);
     try {
-      await calculateToolReplacementCost(
+      await calculateMaintenanceCost(
         projectId,
         workspaceId,
         inspection.inspection_result_id,
@@ -265,6 +303,7 @@ export function MaintenanceCostDecisionPanel({
           form,
           { sopId: sopId.trim(), version: sopVersion.trim() },
           eventId,
+          selectedActionCode,
         ),
         requestKey("cost-analysis"),
       );
@@ -308,6 +347,8 @@ export function MaintenanceCostDecisionPanel({
 
   const blocker = !inspection
     ? "완료된 점검 결과에서 정비 필요가 확인된 뒤 사용할 수 있습니다."
+    : actionCandidates.length === 0
+      ? "점검 결과에서 실행 가능한 정비 Action 후보가 확인되지 않았습니다."
     : null;
 
   return (
@@ -319,10 +360,31 @@ export function MaintenanceCostDecisionPanel({
           <RefreshCw size={13} />
         </button>
       </header>
-      <p>점검 결과의 TOOL_REPLACEMENT 후보에 대해 비용만 비교합니다. 버튼을 누르기 전에는 분석하지 않습니다.</p>
+      <p>점검 결과에서 확인된 정비 Action 후보의 비용만 비교합니다. 버튼을 누르기 전에는 분석하지 않습니다.</p>
       {loading ? <small>점검·비용 lineage를 불러오는 중입니다.</small> : null}
       {blocker ? <small className="mvp-cost-warning">{blocker}</small> : null}
       {error ? <small className="mvp-cost-error">{error}</small> : null}
+
+      {actionCandidates.length ? (
+        <div className="mvp-cost-action-candidates" aria-label="정비 Action 후보">
+          <strong>정비 Action 후보</strong>
+          {actionCandidates.map((candidate) => (
+            <button
+              key={candidate.action_candidate_id}
+              type="button"
+              className={selectedActionCode === candidate.action_code ? "mvp-button" : "mvp-button ghost"}
+              onClick={() => {
+                setSelectedActionCode(candidate.action_code);
+                setFormOpen(false);
+                setSelectedMessage(null);
+              }}
+              disabled={submitting}
+            >
+              {ACTION_LABEL[candidate.action_code]}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {!formOpen ? (
         <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => setFormOpen(true)}>
@@ -370,7 +432,7 @@ export function MaintenanceCostDecisionPanel({
       {current ? (
         <div className="mvp-cost-result">
           <header>
-            <strong>최근 분석</strong>
+            <strong>최근 분석 · {selectedActionCode ? ACTION_LABEL[selectedActionCode] : "정비 Action"}</strong>
             <span>{current.missing_inputs.length ? "입력 부족" : "계산 완료"}</span>
           </header>
           <small>{new Date(current.calculated_at).toLocaleString()} · {current.price_version}</small>
@@ -389,7 +451,7 @@ export function MaintenanceCostDecisionPanel({
               return (
                 <article key={option.option_id}>
                   <div>
-                    <strong>{TIMING_LABEL[option.execution_timing]}</strong>
+                    <strong>{ACTION_LABEL[option.action_code]} · {TIMING_LABEL[option.execution_timing]}</strong>
                     {isLowest ? <b>계산상 최저비용</b> : null}
                   </div>
                   <span>{formatWon(option.total_expected_cost?.base_minor)}</span>

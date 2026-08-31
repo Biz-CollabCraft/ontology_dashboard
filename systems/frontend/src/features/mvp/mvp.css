@@ -824,6 +824,8 @@
 .mvp-cost-warning { color: #f5c273; }
 .mvp-cost-error { color: #ff8d8d; }
 .mvp-cost-success { color: #83d9a5; }
+.mvp-cost-action-candidates { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.mvp-cost-action-candidates > strong { width: 100%; color: var(--mvp-muted); font-size: 10px; }
 .mvp-cost-inputs { display: grid; gap: 9px; }
 .mvp-cost-sop-reference { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 7px; }
 .mvp-cost-inputs fieldset { min-width: 0; margin: 0; padding: 9px; border: 1px solid rgba(181, 196, 214, .13); border-radius: 6px; }

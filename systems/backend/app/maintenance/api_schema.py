@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .cost_analysis_schema import CostInputSource, ExecutionTiming
-from .cost_calculator import ToolReplacementScenarioInput
+from .cost_calculator import MaintenanceScenarioInput, ToolReplacementScenarioInput
 from .maintenance_schema import (
     InspectionChecklistItem,
     InspectionMeasurement,
@@ -56,7 +56,9 @@ class InspectionResultCreateRequest(StrictCommand):
 
 
 class OperationsManualRecommendationCreateRequest(StrictCommand):
-    action_code: Literal["TOOL_REPLACEMENT"] = "TOOL_REPLACEMENT"
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] = (
+        "TOOL_REPLACEMENT"
+    )
     basis: tuple[str, ...] = Field(min_length=1)
 
 
@@ -70,13 +72,16 @@ class CostOptionRecommendationCreateRequest(StrictCommand):
     basis: tuple[str, ...] = Field(min_length=1)
 
 
-class ToolReplacementCostAnalysisCreateRequest(StrictCommand):
+class MaintenanceCostAnalysisCreateRequest(StrictCommand):
     """Economic inputs plus consulted-SOP audit context.
 
     The SOP reference is not an authorization input.  Canonical Maintenance,
     Diagnosis, equipment, and Action candidate lineage is resolved server-side.
     """
 
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] = (
+        "TOOL_REPLACEMENT"
+    )
     sop_id: str = Field(
         min_length=1,
         max_length=240,
@@ -89,7 +94,7 @@ class ToolReplacementCostAnalysisCreateRequest(StrictCommand):
     )
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     currency_minor_unit: Literal[0, 2, 3]
-    scenarios: tuple[ToolReplacementScenarioInput, ...] = Field(
+    scenarios: tuple[MaintenanceScenarioInput, ...] = Field(
         min_length=4,
         max_length=4,
     )
@@ -101,13 +106,23 @@ class ToolReplacementCostAnalysisCreateRequest(StrictCommand):
     @model_validator(mode="after")
     def require_complete_timing_set(
         self,
-    ) -> ToolReplacementCostAnalysisCreateRequest:
+    ) -> MaintenanceCostAnalysisCreateRequest:
         timings = [scenario.execution_timing for scenario in self.scenarios]
         if len(set(timings)) != len(timings) or set(timings) != set(ExecutionTiming):
             raise ValueError(
-                "TOOL_REPLACEMENT cost request requires all four timing scenarios"
+                "Maintenance cost request requires all four timing scenarios"
             )
         return self
+
+
+class ToolReplacementCostAnalysisCreateRequest(MaintenanceCostAnalysisCreateRequest):
+    """Backward-compatible request type for the first Action slice."""
+
+    action_code: Literal["TOOL_REPLACEMENT"] = "TOOL_REPLACEMENT"
+    scenarios: tuple[ToolReplacementScenarioInput, ...] = Field(
+        min_length=4,
+        max_length=4,
+    )
 
 
 class RecommendationDecisionCreateRequest(StrictCommand):
@@ -147,6 +162,7 @@ __all__ = [
     "InspectionWorkOrderCreateRequest",
     "MaintenanceActionCompleteRequest",
     "MaintenanceActionStartRequest",
+    "MaintenanceCostAnalysisCreateRequest",
     "MaintenanceReplayRequest",
     "MaintenanceWorkOrderApproveRequest",
     "OperationsManualRecommendationCreateRequest",

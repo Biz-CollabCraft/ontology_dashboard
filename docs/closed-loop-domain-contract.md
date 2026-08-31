@@ -97,7 +97,9 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 변경하거나 재해석하지 않고 별도 `recommendation_origin=operations_manual` 객체로
 생성한다.
 
-- MVP action은 `TOOL_REPLACEMENT`만 허용한다.
+- MVP Maintenance action vocabulary는 `TOOL_REPLACEMENT`와
+  `COOLING_SYSTEM_RESTORE`로 제한한다. 두 Action 모두 구조화된 Inspection Result에서
+  각각의 후보 조건을 만족한 경우에만 선택할 수 있다.
 - `source_product_result_id`, `source_evidence_id`, `event_id`, Equipment scope를 유지해
   최초 위험 판단까지 역추적할 수 있어야 한다.
 - `source_inspection_work_order_id`와 opaque `source_inspection_reference`를 함께 보존한다.
@@ -110,8 +112,8 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 - 수동 추천 자체는 정비 승인이 아니다. 별도
   `RecommendationDecision(disposition=accept)` 이후에만 maintenance Work Order를 만든다.
 - `product_result_projection` 추천은 점검 판단의 근거이며 직접 maintenance Work Order를
-  만들 수 없다. 정비 Work Order 생성 경로는 승인된 `operations_manual`의
-  `TOOL_REPLACEMENT`로 제한한다.
+  만들 수 없다. 정비 Work Order 생성 경로는 승인된 `operations_manual`의 공식
+  Maintenance action으로 제한한다.
 - Inspection Result는 Maintenance가 소유하는 불변 운영 사실이며 checklist, measurements,
   findings, outcome, note, 작성자/시각과 원본 inspection WorkOrder lineage를 보존한다. Diagnosis는
   Maintenance DB를 직접 조회하지 않으며, MVP의 Operations manual recommendation은 공식

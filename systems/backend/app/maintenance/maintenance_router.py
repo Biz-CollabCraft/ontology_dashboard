@@ -15,11 +15,11 @@ from .api_schema import (
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
     MaintenanceActionStartRequest,
+    MaintenanceCostAnalysisCreateRequest,
     MaintenanceReplayRequest,
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
-    ToolReplacementCostAnalysisCreateRequest,
 )
 from .maintenance_domain import IdempotencyConflict, InvalidTransition
 from .maintenance_schema import WorkOrderStatus
@@ -250,12 +250,36 @@ def create_maintenance_router(
             )
         )
 
-    @router.post("/inspection-results/{inspection_result_id}/cost-analyses")
-    def calculate_tool_replacement_cost(
+    @router.get("/inspection-results/{inspection_result_id}/action-candidates")
+    def list_action_candidates(
         project_id: str,
         workspace_id: str,
         inspection_result_id: str,
-        payload: ToolReplacementCostAnalysisCreateRequest,
+        principal: Any = Depends(events_read),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        return _execute(
+            lambda: service.list_action_candidates(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                inspection_result_id=inspection_result_id,
+            )
+        )
+
+    @router.post("/inspection-results/{inspection_result_id}/cost-analyses")
+    def calculate_maintenance_cost(
+        project_id: str,
+        workspace_id: str,
+        inspection_result_id: str,
+        payload: MaintenanceCostAnalysisCreateRequest,
         idempotency_key: str = Header(
             alias="Idempotency-Key", min_length=8, max_length=200
         ),
@@ -272,7 +296,7 @@ def create_maintenance_router(
         )
         _require_product_role(principal, project_id, "process_manager")
         return _execute(
-            lambda: service.calculate_tool_replacement_cost(
+            lambda: service.calculate_maintenance_cost(
                 organization_id=principal.organization_id,
                 project_id=project_id,
                 workspace_id=workspace_id,

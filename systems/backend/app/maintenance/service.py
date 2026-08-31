@@ -18,6 +18,7 @@ from .api_schema import (
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
     MaintenanceActionStartRequest,
+    MaintenanceCostAnalysisCreateRequest,
     MaintenanceReplayRequest,
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
@@ -31,10 +32,11 @@ from .cost_analysis_schema import (
     MaintenanceActionCode,
 )
 from .cost_calculator import (
-    ToolReplacementCostAnalysisInput,
-    calculate_tool_replacement_cost_scenarios,
+    MaintenanceCostAnalysisInput,
+    calculate_maintenance_cost_scenarios,
 )
 from .integration import (
+    CoolingSystemRestoreStatePatch,
     MaintenanceCause,
     MaintenanceCompletedEvent,
     MaintenanceReplayRequestedEvent,
@@ -46,6 +48,7 @@ from .maintenance_domain import (
     create_inspection_work_order,
     create_operations_manual_recommendation,
     create_work_order_for_recommendation,
+    derive_cooling_system_restore_action_candidate,
     derive_tool_replacement_action_candidate,
     plan_maintenance_action,
     transition_work_order,
@@ -516,6 +519,8 @@ class MaintenanceLoopService:
             raise ValueError(
                 "operations manual recommendation requires maintenance_recommended inspection outcome"
             )
+        action_code = MaintenanceActionCode(payload.action_code)
+        self._derive_action_candidate(inspection_result, action_code)
         inspection_work_order = self.repository.get_work_order(
             workspace_id=workspace_id,
             work_order_id=inspection_result.work_order_id,
@@ -544,6 +549,7 @@ class MaintenanceLoopService:
                 f"inspection_result:{inspection_result.inspection_result_id}",
                 *payload.basis,
             ),
+            action_code=action_code,
             source_cost_analysis_id=source_cost_analysis_id,
             source_cost_option_id=source_cost_option_id,
             source_action_candidate_id=source_action_candidate_id,
@@ -613,9 +619,6 @@ class MaintenanceLoopService:
             raise ValueError(
                 "reinspect_after and no_action_baseline cannot create a maintenance recommendation"
             )
-        if selected.action_code is not MaintenanceActionCode.TOOL_REPLACEMENT:
-            raise ValueError("only TOOL_REPLACEMENT recommendation is implemented")
-
         return self.create_manual_recommendation(
             organization_id=organization_id,
             project_id=project_id,
@@ -639,14 +642,68 @@ class MaintenanceLoopService:
             source_action_candidate_id=selected.action_candidate_id,
         )
 
-    def calculate_tool_replacement_cost(
+    @staticmethod
+    def _derive_action_candidate(
+        inspection_result: InspectionResult,
+        action_code: MaintenanceActionCode,
+    ):
+        if action_code is MaintenanceActionCode.TOOL_REPLACEMENT:
+            return derive_tool_replacement_action_candidate(inspection_result)
+        if action_code is MaintenanceActionCode.COOLING_SYSTEM_RESTORE:
+            return derive_cooling_system_restore_action_candidate(inspection_result)
+        raise ValueError(f"unsupported maintenance action candidate: {action_code.value}")
+
+    @staticmethod
+    def _state_patch_for_action(
+        action_code: MaintenanceActionCode,
+        payload: Mapping[str, Any] | None = None,
+    ) -> ToolReplacementStatePatch | CoolingSystemRestoreStatePatch:
+        patch_type = {
+            MaintenanceActionCode.TOOL_REPLACEMENT: ToolReplacementStatePatch,
+            MaintenanceActionCode.COOLING_SYSTEM_RESTORE: CoolingSystemRestoreStatePatch,
+        }[action_code]
+        return patch_type() if payload is None else patch_type.model_validate(payload)
+
+    def list_action_candidates(
         self,
         *,
         organization_id: str,
         project_id: str,
         workspace_id: str,
         inspection_result_id: str,
-        payload: ToolReplacementCostAnalysisCreateRequest,
+    ) -> dict[str, Any]:
+        inspection_result = self.repository.get_inspection_result(
+            workspace_id=workspace_id,
+            inspection_result_id=inspection_result_id,
+        )
+        if inspection_result is None:
+            raise KeyError(inspection_result_id)
+        self._require_scope(
+            inspection_result,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        if inspection_result.outcome is not InspectionOutcome.MAINTENANCE_RECOMMENDED:
+            return {"inspection_result_id": inspection_result_id, "items": []}
+
+        candidates = []
+        for action_code in MaintenanceActionCode:
+            try:
+                candidate = self._derive_action_candidate(inspection_result, action_code)
+            except ValueError:
+                continue
+            candidates.append(candidate.model_dump(mode="json"))
+        return {"inspection_result_id": inspection_result_id, "items": candidates}
+
+    def calculate_maintenance_cost(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        inspection_result_id: str,
+        payload: MaintenanceCostAnalysisCreateRequest,
         actor_id: str,
         idempotency_key: str,
         calculated_at: datetime | None = None,
@@ -700,7 +757,8 @@ class MaintenanceLoopService:
                 "cost analysis requires Product Result/Evidence inspection lineage"
             )
 
-        action_candidate = derive_tool_replacement_action_candidate(inspection_result)
+        action_code = MaintenanceActionCode(payload.action_code)
+        action_candidate = self._derive_action_candidate(inspection_result, action_code)
         action_candidate_id = action_candidate.action_candidate_id
         analysis_id = self._stable_id(
             "COST-ANALYSIS",
@@ -711,8 +769,8 @@ class MaintenanceLoopService:
             action_candidate_id,
             idempotency_key,
         )
-        result = calculate_tool_replacement_cost_scenarios(
-            ToolReplacementCostAnalysisInput(
+        result = calculate_maintenance_cost_scenarios(
+            MaintenanceCostAnalysisInput(
                 analysis_id=analysis_id,
                 organization_id=organization_id,
                 project_id=project_id,
@@ -729,7 +787,7 @@ class MaintenanceLoopService:
                     sop_version=payload.sop_version,
                 ),
                 action_candidate_id=action_candidate_id,
-                action_code=MaintenanceActionCode.TOOL_REPLACEMENT,
+                action_code=action_code,
                 currency=payload.currency,
                 currency_minor_unit=payload.currency_minor_unit,
                 scenarios=payload.scenarios,
@@ -752,6 +810,31 @@ class MaintenanceLoopService:
                     "actor_id": actor_id,
                 },
             ),
+        )
+
+    def calculate_tool_replacement_cost(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        inspection_result_id: str,
+        payload: ToolReplacementCostAnalysisCreateRequest,
+        actor_id: str,
+        idempotency_key: str,
+        calculated_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Compatibility entrypoint retained for existing TOOL_REPLACEMENT callers."""
+
+        return self.calculate_maintenance_cost(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            inspection_result_id=inspection_result_id,
+            payload=payload,
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+            calculated_at=calculated_at,
         )
 
     def get_cost_analysis(
@@ -948,6 +1031,16 @@ class MaintenanceLoopService:
         # and handles an identical Idempotency-Key replay before transition
         # validation.
         approved = work_order.model_copy(update={"status": WorkOrderStatus.APPROVED})
+        recommendation_id = work_order.authorization.recommendation_id
+        if recommendation_id is None:
+            raise ValueError("maintenance work order has no recommendation authorization")
+        recommendation = self.repository.get_recommendation(
+            workspace_id=workspace_id,
+            recommendation_id=recommendation_id,
+        )
+        if recommendation is None or recommendation.action_code is None:
+            raise ValueError("authorized maintenance recommendation is unavailable")
+        action_code = MaintenanceActionCode(recommendation.action_code)
         action = plan_maintenance_action(
             work_order=approved,
             maintenance_action_id=self._stable_id(
@@ -975,6 +1068,7 @@ class MaintenanceLoopService:
                     "actor_id": actor_id,
                 },
             ),
+            action_code=action_code.value,
         )
 
     def start_maintenance(
@@ -1060,6 +1154,7 @@ class MaintenanceLoopService:
             workspace_id=workspace_id,
         )
         timestamp = completed_at or datetime.now(timezone.utc)
+        action_code = MaintenanceActionCode(self._required_text(action, "action_code"))
         event = MaintenanceCompletedEvent(
             event_id=self._stable_event_id(
                 "MAINTENANCE-INTEGRATION-EVENT", maintenance_action_id, "completed"
@@ -1080,8 +1175,8 @@ class MaintenanceLoopService:
             equipment_id=self._required_text(action, "equipment_id"),
             maintenance_started_at=self._stored_datetime(action, "started_at"),
             maintenance_completed_at=timestamp,
-            action_code=self._required_text(action, "action_code"),
-            state_patch=ToolReplacementStatePatch(),
+            action_code=action_code.value,
+            state_patch=self._state_patch_for_action(action_code),
             caused_by=self._maintenance_cause(action),
         )
         return self.repository.complete_maintenance(
@@ -1125,6 +1220,9 @@ class MaintenanceLoopService:
             project_id=project_id,
             workspace_id=workspace_id,
         )
+        action_code = MaintenanceActionCode(
+            self._required_text(maintenance, "action_code")
+        )
         event = MaintenanceReplayRequestedEvent(
             event_id=self._stable_event_id(
                 "MAINTENANCE-INTEGRATION-EVENT",
@@ -1150,9 +1248,9 @@ class MaintenanceLoopService:
                 maintenance, "completed_at"
             ),
             restart_at=payload.restart_at,
-            action_code=self._required_text(maintenance, "action_code"),
-            state_patch=ToolReplacementStatePatch.model_validate(
-                maintenance["state_patch"]
+            action_code=action_code.value,
+            state_patch=self._state_patch_for_action(
+                action_code, maintenance["state_patch"]
             ),
             caused_by=self._maintenance_cause(maintenance),
         )

@@ -406,6 +406,20 @@ export type MaintenanceExecutionTiming =
   | "reinspect_after"
   | "no_action_baseline";
 
+export type MaintenanceActionCode =
+  | "TOOL_REPLACEMENT"
+  | "COOLING_SYSTEM_RESTORE";
+
+export interface MaintenanceActionCandidateReadModel {
+  action_candidate_id: string;
+  inspection_result_id: string;
+  event_id: string;
+  asset_id: string;
+  equipment_id: string;
+  action_code: MaintenanceActionCode;
+  basis_codes: string[];
+}
+
 export interface MaintenanceInspectionResultReadModel {
   inspection_result_id: string;
   work_order_id: string;
@@ -431,7 +445,7 @@ export interface MaintenanceDurationBand {
 export interface MaintenanceCostOptionReadModel {
   option_id: string;
   action_candidate_id: string;
-  action_code: "TOOL_REPLACEMENT" | "COOLING_SYSTEM_RESTORE";
+  action_code: MaintenanceActionCode;
   execution_timing: MaintenanceExecutionTiming;
   calculation_status: "calculated" | "insufficient";
   total_expected_cost: MaintenanceCostBand | null;
@@ -507,7 +521,8 @@ interface RateRangeInput {
   high_minor_per_minute: number;
 }
 
-export interface ToolReplacementCostAnalysisRequest {
+export interface MaintenanceCostAnalysisRequest {
+  action_code: MaintenanceActionCode;
   sop_id: string;
   sop_version: string;
   currency: string;
@@ -534,6 +549,8 @@ export interface ToolReplacementCostAnalysisRequest {
   calculation_policy_version: string;
 }
 
+export type ToolReplacementCostAnalysisRequest = MaintenanceCostAnalysisRequest;
+
 function maintenanceBase(projectId: string, workspaceId: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/maintenance`;
 }
@@ -550,11 +567,26 @@ export function getMaintenanceEventLineage(
   );
 }
 
-export function calculateToolReplacementCost(
+export function getMaintenanceActionCandidates(
   projectId: string,
   workspaceId: string,
   inspectionResultId: string,
-  payload: ToolReplacementCostAnalysisRequest,
+  signal?: AbortSignal,
+): Promise<{
+  inspection_result_id: string;
+  items: MaintenanceActionCandidateReadModel[];
+}> {
+  return request(
+    `${maintenanceBase(projectId, workspaceId)}/inspection-results/${encodeURIComponent(inspectionResultId)}/action-candidates`,
+    { signal },
+  );
+}
+
+export function calculateMaintenanceCost(
+  projectId: string,
+  workspaceId: string,
+  inspectionResultId: string,
+  payload: MaintenanceCostAnalysisRequest,
   idempotencyKey: string,
 ): Promise<{
   analysis_id: string;
@@ -571,6 +603,8 @@ export function calculateToolReplacementCost(
     },
   );
 }
+
+export const calculateToolReplacementCost = calculateMaintenanceCost;
 
 export function createRecommendationFromCostOption(
   projectId: string,

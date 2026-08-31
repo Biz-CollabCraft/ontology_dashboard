@@ -579,9 +579,11 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
 4. `process_engineer`가 inspection WorkOrder를 시작하고 checklist, measurements, findings,
    outcome, note를 포함한 불변 Inspection Result를 기록한다. 이 완료는 MaintenanceEvent나
    정비 승인이 아니다.
-5. 점검 결과가 `maintenance_recommended`이면 `process_manager`가
-   `origin=operations_manual`, `action_code=TOOL_REPLACEMENT` 추천을 생성한다. 동일 inspection
-   result/action은 stable ID와 idempotency/dedupe 규칙으로 한 번만 생성한다.
+5. 점검 결과가 `maintenance_recommended`이면 Maintenance가 구조화된 checklist와
+   measurements에서 `TOOL_REPLACEMENT` 또는 `COOLING_SYSTEM_RESTORE` Action 후보를
+   산출한다. `process_manager`는 필요할 때 후보별 비용을 분석하고 실행 가능한 timing을
+   선택한 뒤에만 `origin=operations_manual` 추천을 생성한다. 동일 inspection result/action은
+   stable ID와 idempotency/dedupe 규칙으로 한 번만 생성한다.
 6. `process_manager`가 Evidence와 엔지니어 결과를 확인하고 Operations recommendation을
    승인·거절·보류한다.
 7. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.
