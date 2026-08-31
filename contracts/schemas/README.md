@@ -14,6 +14,7 @@
 - `dataset-manifest.schema.json`: Project별 dataset source, checksum, schema alias와 quality rule 계약
 - `runtime-overlay-observation.schema.json`, `runtime-overlay-observations-available.schema.json`: 정비 후 Observation과 availability 이벤트 계약. 경로 identity와 Unicode checksum의 canonical 예시는 `contracts/test-vectors/runtime-overlay-output-v1/`을 따른다.
 - `prediction-result.schema.json`: Prediction Module과 Dashboard 사이의 Evidence·Model·Action 포함 결과 계약
+- `prediction-result-batch.schema.json`: Generator가 Backend inbox로 전달하는 batch 계약. `selected_threshold: null`은 Model Artifact가 threshold를 제공하지 않은 결측 상태만 뜻하며, Backend는 Product Result 승격 시 결측 evidence gap을 보존하고 정책 fallback threshold를 적용한다.
 - `product-result-artifact.schema.json`: Diagnosis Product Result와 추천 미생성(null/empty) 정합성 계약
 - `event-evidence-projection.schema.json`: Product Result에서 파생한 Event Evidence와 별도 운영 Decision field 계약
 - `asset-detail-view-model.schema.json`: 설비 상세 화면용 Backend composition ViewModel 후보 계약. current/history, asset criticality, 운영/정비 context, review priority, evidence gap owner를 포함한다.

@@ -167,7 +167,7 @@ def _migrate_sqlite(path: Path) -> list[str]:
                 )
                 for table in operational_tables:
                     ensure_scope_columns(connection, table=table)
-            if version == "0035_agent_review_summary_runtime":
+            if version == "0037_agent_review_summary_runtime":
                 summary_table = connection.execute(
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
                     ("agent_review_summaries",),

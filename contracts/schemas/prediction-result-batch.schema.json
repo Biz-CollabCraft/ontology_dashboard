@@ -253,7 +253,7 @@
                 "type": ["number", "null"],
                 "minimum": 0.0,
                 "maximum": 1.0,
-                "description": "Model Artifact training_config.selected_threshold captured at batch execution time."
+                "description": "Model Artifact training_config.selected_threshold captured at batch execution time. Null is allowed only when the source artifact omitted the threshold; Backend must preserve the missing-value evidence gap and apply its policy fallback threshold during Product Result promotion."
               }
             },
             "additionalProperties": false

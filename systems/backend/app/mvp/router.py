@@ -9,6 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
+from app.common.rate_limit import RateLimitRule, RateLimiter
 from app.equipment.equipment_router import register_equipment_routes
 
 from .contracts import DecisionRequest, FollowUpRequest, LayoutRequest, NoteRequest, ReportRequest
@@ -16,7 +17,9 @@ from app.dependencies import (
     MANUFACTURING_WORKSPACE,
     get_identity_service,
     get_ontology_service,
+    get_rate_limiter,
     get_service,
+    rate_limit_subject,
     require_csrf,
     require_manufacturing_scope,
     require_permission,
@@ -28,6 +31,7 @@ from app.ontology.ontology_service import OntologyService
 from .service import ManufacturingPredictiveMaintenanceService
 
 router = APIRouter(prefix="/api", tags=["manufacturing-domain-pack"])
+AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE = RateLimitRule(limit=12, window_seconds=60)
 register_equipment_routes(
     router,
     service_dependency=get_service,
@@ -126,6 +130,8 @@ def _authorize_agent_review_summary(
         raise AuthError(403, "project_scope_denied", "허용된 Object 범위를 벗어난 Agent Review Summary입니다.")
     if principal.active_project_id != project_id:
         raise AuthError(409, "active_project_mismatch", "먼저 Object가 속한 Project를 활성화해야 합니다.")
+    if not principal.is_admin and MANUFACTURING_WORKSPACE not in principal.workspace_scopes:
+        raise AuthError(403, "workspace_scope_denied", "허용된 Workspace 범위를 벗어난 Agent Review Summary입니다.")
 
 
 @router.get("/objects/{asset_id}/agent-review-summary")
@@ -141,6 +147,8 @@ def get_agent_review_summary(
     summary, trace = service.cached_agent_review_summary(
         asset_id,
         project_id,
+        organization_id=principal.organization_id,
+        workspace_id=MANUFACTURING_WORKSPACE,
         dataset_version_id=dataset_version_id,
         history_window=history_window,
     )
@@ -160,13 +168,28 @@ def create_agent_review_summary(
     trigger: Literal["manual_materialization", "ui_manual_regeneration"] = Query(
         default="manual_materialization"
     ),
-    principal: Principal = Depends(require_permission("events.read")),
+    principal: Principal = Depends(require_permission("agent.review.materialize")),
+    _: None = Depends(require_csrf),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
+    limiter: RateLimiter = Depends(get_rate_limiter),
 ):
     _authorize_agent_review_summary(principal=principal, project_id=project_id)
+    limiter.check(
+        bucket="agent-review-summary.materialize",
+        subject=rate_limit_subject(
+            principal.user_id,
+            project_id,
+            asset_id,
+            history_window,
+            trigger,
+        ),
+        rule=AGENT_REVIEW_SUMMARY_MATERIALIZE_RATE,
+    )
     summary, trace = service.agent_review_summary(
         asset_id,
         project_id,
+        organization_id=principal.organization_id,
+        workspace_id=MANUFACTURING_WORKSPACE,
         dataset_version_id=dataset_version_id,
         history_window=history_window,
         trigger=trigger,
@@ -187,6 +210,8 @@ def list_agent_review_workflow_runs(
     _authorize_agent_review_summary(principal=principal, project_id=project_id)
     return service.agent_review_workflow_runs(
         project_id,
+        organization_id=principal.organization_id,
+        workspace_id=MANUFACTURING_WORKSPACE,
         asset_id=asset_id,
         event_id=event_id,
         dataset_version_id=dataset_version_id,

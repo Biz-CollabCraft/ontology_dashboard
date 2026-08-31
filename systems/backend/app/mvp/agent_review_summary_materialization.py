@@ -34,14 +34,18 @@ class AgentReviewSummaryMaterializer:
         self,
         *,
         packet: dict[str, Any],
+        organization_id: str,
         project_id: str,
+        workspace_id: str,
         history_window: str,
         workflow_run_id: str | None = None,
         force: bool = False,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         key_payload = summary_key_payload(
             packet=packet,
+            organization_id=organization_id,
             project_id=project_id,
+            workspace_id=workspace_id,
             history_window=history_window,
             provider=self.provider,
         )
@@ -59,9 +63,9 @@ class AgentReviewSummaryMaterializer:
         record = self.repository.save_agent_review_summary(
             summary_key=materialization_key,
             workflow_run_id=workflow_run_id,
-            organization_id="org-ontology-demo",
+            organization_id=organization_id,
             project_id=project_id,
-            workspace_id="manufacturing-demo",
+            workspace_id=workspace_id,
             asset_id=packet.get("asset_id"),
             event_id=(packet.get("snapshot_basis") or {}).get("event_id"),
             dataset_version_id=(packet.get("snapshot_basis") or {}).get(
@@ -89,14 +93,18 @@ class AgentReviewSummaryMaterializer:
         self,
         *,
         packet: dict[str, Any],
+        organization_id: str,
         project_id: str,
+        workspace_id: str,
         history_window: str,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         """Return a stored summary only; never generate an LLM/fallback candidate."""
 
         key_payload = summary_key_payload(
             packet=packet,
+            organization_id=organization_id,
             project_id=project_id,
+            workspace_id=workspace_id,
             history_window=history_window,
             provider=self.provider,
         )
@@ -167,7 +175,9 @@ class AgentReviewSummaryMaterializer:
 def summary_key_payload(
     *,
     packet: dict[str, Any],
+    organization_id: str = "org-ontology-demo",
     project_id: str,
+    workspace_id: str = "manufacturing-demo",
     history_window: str,
     provider: AgentReviewSummaryProvider | None,
 ) -> dict[str, Any]:
@@ -175,7 +185,9 @@ def summary_key_payload(
     source_sha256 = str(basis.get("source_sha256") or _sha256_json(basis))
     return {
         "materialization_version": SUMMARY_MATERIALIZATION_VERSION,
+        "organization_id": organization_id,
         "project_id": project_id,
+        "workspace_id": workspace_id,
         "asset_id": str(packet.get("asset_id") or ""),
         "event_id": str(basis.get("event_id") or ""),
         "dataset_version": str(basis.get("dataset_version") or ""),

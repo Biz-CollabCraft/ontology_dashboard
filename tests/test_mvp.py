@@ -11,7 +11,12 @@ from pydantic import ValidationError
 from app.diagnosis.evidence import FixtureContextProvider
 from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.mvp.contracts import LayoutRequest, ReportRequest, UIBlock, UILayout
-from app.identity import CSRF_COOKIE, IdentityService
+from app.identity import (
+    CSRF_COOKIE,
+    PUBLIC_COMPARISON_EMAIL,
+    PUBLIC_COMPARISON_PASSWORD,
+    IdentityService,
+)
 from app.infra.llm import OpenAICompatibleProvider, VertexAIProvider, configured_provider
 from app.main import app
 from app.dependencies import build_manufacturing_service, get_identity_service, get_service
@@ -570,7 +575,10 @@ def test_api_contract_and_state_changes(client: TestClient, service: FactorySign
         "history_review_items"
     ]
     service.agent_review_summary_provider = None
-    summary_response = client.post("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    summary_response = client.post(
+        "/api/objects/CNC-S04-L04-01/agent-review-summary",
+        headers=csrf_headers(client),
+    )
     assert summary_response.status_code == 200
     summary_payload = summary_response.json()
     summary = summary_payload["summary"]
@@ -674,7 +682,8 @@ def test_agent_review_summary_reuses_materialized_snapshot(
     service.agent_review_summary_provider = provider
 
     first = client.post(
-        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=ui_manual_regeneration"
+        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=ui_manual_regeneration",
+        headers=csrf_headers(client),
     )
     second = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
 
@@ -796,6 +805,31 @@ def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
     )
 
 
+def test_agent_review_summary_materialization_requires_dedicated_permission(
+    client: TestClient,
+    service: FactorySignalService,
+) -> None:
+    provider = FakeAgentReviewSummaryProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+        }
+    )
+    service.agent_review_summary_provider = provider
+    login_as(client, PUBLIC_COMPARISON_EMAIL, PUBLIC_COMPARISON_PASSWORD)
+
+    read_response = client.get("/api/objects/CNC-S04-L04-01/agent-review-summary")
+    write_response = client.post(
+        "/api/objects/CNC-S04-L04-01/agent-review-summary",
+        headers=csrf_headers(client),
+    )
+
+    assert read_response.status_code == 202
+    assert write_response.status_code == 403
+    assert write_response.json()["error"]["code"] == "permission_denied"
+    assert provider.calls == 0
+
+
 def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
     client: TestClient,
     service: FactorySignalService,
@@ -809,13 +843,16 @@ def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
     service.agent_review_summary_provider = provider
 
     first = client.post(
-        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=manual_materialization"
+        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=manual_materialization",
+        headers=csrf_headers(client),
     )
     second = client.post(
-        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=ui_manual_regeneration"
+        "/api/objects/CNC-S04-L04-01/agent-review-summary?trigger=ui_manual_regeneration",
+        headers=csrf_headers(client),
     )
     other = client.post(
-        "/api/objects/CNC-S04-L02-03/agent-review-summary?trigger=manual_materialization"
+        "/api/objects/CNC-S04-L02-03/agent-review-summary?trigger=manual_materialization",
+        headers=csrf_headers(client),
     )
     response = client.get(
         "/api/projects/manufacturing-demo-project/agent-review-workflow-runs"
@@ -884,19 +921,25 @@ def test_agent_review_summary_materialization_key_changes_with_context_diff(
 
     base_payload = summary_key_payload(
         packet=packet,
+        organization_id="org-ontology-demo",
         project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
         history_window="24h",
         provider=None,
     )
     model_payload = summary_key_payload(
         packet=changed_model_context,
+        organization_id="org-ontology-demo",
         project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
         history_window="24h",
         provider=None,
     )
     history_payload = summary_key_payload(
         packet=changed_history_context,
+        organization_id="org-ontology-demo",
         project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
         history_window="24h",
         provider=None,
     )
@@ -916,6 +959,47 @@ def test_agent_review_summary_materialization_key_changes_with_context_diff(
     model_key = summary_key(model_payload)
     history_key = summary_key(history_payload)
     assert len({base_key, model_key, history_key}) == 3
+
+
+def test_agent_review_summary_materialization_key_changes_with_tenant_scope(
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+
+    base_payload = summary_key_payload(
+        packet=packet,
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        history_window="24h",
+        provider=None,
+    )
+    other_org_payload = summary_key_payload(
+        packet=packet,
+        organization_id="org-other-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        history_window="24h",
+        provider=None,
+    )
+    other_workspace_payload = summary_key_payload(
+        packet=packet,
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo-copy",
+        history_window="24h",
+        provider=None,
+    )
+
+    assert base_payload["organization_id"] == "org-ontology-demo"
+    assert base_payload["workspace_id"] == "manufacturing-demo"
+    assert len(
+        {
+            summary_key(base_payload),
+            summary_key(other_org_payload),
+            summary_key(other_workspace_payload),
+        }
+    ) == 3
 
 
 def test_agent_review_summary_watcher_materializes_and_reuses_project_snapshots(
@@ -1084,14 +1168,19 @@ def test_agent_review_summary_does_not_mutate_closed_loop_or_expose_actions(
     action_ids = set(packet["closed_loop_boundary"]["available_action_ids"])
     activity_before = client.get("/api/events/EVT-GS-004/activity").json()
 
-    response = client.post("/api/objects/CNC-S04-L02-03/agent-review-summary")
+    response = client.post(
+        "/api/objects/CNC-S04-L02-03/agent-review-summary",
+        headers=csrf_headers(client),
+    )
 
     assert response.status_code == 200
     payload = response.json()
     serialized = json.dumps(payload["summary"], ensure_ascii=False)
     expected_key_payload = summary_key_payload(
         packet=packet,
+        organization_id="org-ontology-demo",
         project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
         history_window="24h",
         provider=service.agent_review_summary_provider,
     )

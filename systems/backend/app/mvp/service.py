@@ -278,6 +278,8 @@ class ManufacturingPredictiveMaintenanceService:
         asset_id: str,
         project_id: str = "manufacturing-demo-project",
         *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
         dataset_version_id: str | None = None,
         history_window: str = "24h",
         trigger: str = "manual_materialization",
@@ -298,14 +300,18 @@ class ManufacturingPredictiveMaintenanceService:
         force = trigger == "ui_manual_regeneration"
         key_payload = summary_key_payload(
             packet=packet,
+            organization_id=organization_id,
             project_id=project_id,
+            workspace_id=workspace_id,
             history_window=history_window,
             provider=self.agent_review_summary_provider,
         )
         if not force:
             cached_summary, cached_trace = materializer.lookup(
                 packet=packet,
+                organization_id=organization_id,
                 project_id=project_id,
+                workspace_id=workspace_id,
                 history_window=history_window,
             )
             if cached_summary is not None:
@@ -315,9 +321,9 @@ class ManufacturingPredictiveMaintenanceService:
             trigger=trigger,
             engine=engine,
             status="running",
-            organization_id="org-ontology-demo",
+            organization_id=organization_id,
             project_id=project_id,
-            workspace_id="manufacturing-demo",
+            workspace_id=workspace_id,
             asset_id=packet.get("asset_id"),
             event_id=key_payload["event_id"],
             dataset_version_id=key_payload["dataset_version"],
@@ -333,7 +339,9 @@ class ManufacturingPredictiveMaintenanceService:
         try:
             summary, trace = materializer.materialize(
                 packet=packet,
+                organization_id=organization_id,
                 project_id=project_id,
+                workspace_id=workspace_id,
                 history_window=history_window,
                 workflow_run_id=run["workflow_run_id"],
                 force=force,
@@ -372,6 +380,8 @@ class ManufacturingPredictiveMaintenanceService:
         asset_id: str,
         project_id: str = "manufacturing-demo-project",
         *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
         dataset_version_id: str | None = None,
         history_window: str = "24h",
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
@@ -388,7 +398,9 @@ class ManufacturingPredictiveMaintenanceService:
             self.agent_review_summary_provider,
         ).lookup(
             packet=packet,
+            organization_id=organization_id,
             project_id=project_id,
+            workspace_id=workspace_id,
             history_window=history_window,
         )
         workflow_run_id = (trace.get("materialization") or {}).get("workflow_run_id")
@@ -402,15 +414,17 @@ class ManufacturingPredictiveMaintenanceService:
         self,
         project_id: str = "manufacturing-demo-project",
         *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
         asset_id: str | None = None,
         event_id: str | None = None,
         dataset_version_id: str | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
         runs = self.repository.list_agent_review_workflow_runs(
-            organization_id="org-ontology-demo",
+            organization_id=organization_id,
             project_id=project_id,
-            workspace_id="manufacturing-demo",
+            workspace_id=workspace_id,
             asset_id=asset_id,
             event_id=event_id,
             dataset_version_id=dataset_version_id,
@@ -418,7 +432,7 @@ class ManufacturingPredictiveMaintenanceService:
         )
         return {
             "project_id": project_id,
-            "workspace_id": "manufacturing-demo",
+            "workspace_id": workspace_id,
             "items": [_workflow_run_trace(run) for run in runs],
         }
 
@@ -426,6 +440,8 @@ class ManufacturingPredictiveMaintenanceService:
         self,
         project_id: str = "manufacturing-demo-project",
         *,
+        organization_id: str = "org-ontology-demo",
+        workspace_id: str = "manufacturing-demo",
         history_window: str = "24h",
         limit: int | None = None,
     ) -> dict[str, Any]:
@@ -451,6 +467,8 @@ class ManufacturingPredictiveMaintenanceService:
             summary, trace = self.agent_review_summary(
                 asset_id,
                 project_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
                 dataset_version_id=fixture.get("dataset_version"),
                 history_window=history_window,
                 trigger="polling_watcher",
