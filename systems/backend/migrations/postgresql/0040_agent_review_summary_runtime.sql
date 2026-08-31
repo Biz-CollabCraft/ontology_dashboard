@@ -31,6 +31,12 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_workflow_runs_lookup
     organization_id, project_id, workspace_id, asset_id, event_id, dataset_version_id, updated_at DESC
   );
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_review_workflow_runs_running_summary
+  ON agent_review_workflow_runs (
+    organization_id, project_id, workspace_id, summary_key
+  )
+  WHERE status = 'running';
+
 ALTER TABLE agent_review_summaries
   ADD COLUMN IF NOT EXISTS workflow_run_id text;
 

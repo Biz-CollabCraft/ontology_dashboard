@@ -7,6 +7,7 @@ const CLASSIC_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=classic`;
 const WORKFLOW_FIELD_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L02-03&event_id=EVT-GS-004`;
 const WORKFLOW_PROCESS_OVERVIEW_PATH = `${MVP_PATH}?view=overview&dashboard=workflow&role=process_manager&workspace_id=manufacturing-demo&asset_id=CNC-S04-L02-03&event_id=EVT-GS-004`;
 const ACCOUNTS = {
+  admin: ["admin@ontology.local", "OntologyAdmin!2026"],
   manager: ["manager@ontology.local", "Manager!2026"],
   engineer: ["engineer@ontology.local", "Engineer!2026"],
 } as const;
@@ -71,6 +72,9 @@ test("shows normal assets in the current-state overview", async ({ page }) => {
   const lineStatuses = page.locator(".mvp-line-risk-list footer");
   await expect(lineStatuses.first()).toBeVisible();
   await expect(lineStatuses.first()).toContainText(/정상 \d+/);
+  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
 });
 
 test("keeps workflow role dashboards ordered around each role's first task", async ({ page }) => {
@@ -91,8 +95,8 @@ test("keeps workflow role dashboards ordered around each role's first task", asy
   expect(processMap?.y ?? 0).toBeLessThan(processQueue?.y ?? 0);
 });
 
-test("shows the SOP grounded AI review summary without mutating work state", async ({ page }) => {
-  await login(page, `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`, "engineer");
+test("lets a permitted manager explicitly regenerate the AI review summary", async ({ page }) => {
+  await login(page, `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`, "manager");
   await materializeAgentSummary(page, "CNC-S04-L04-01");
   await expect(page.getByTestId("mvp-overview")).toBeVisible();
   await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
@@ -100,33 +104,37 @@ test("shows the SOP grounded AI review summary without mutating work state", asy
   await expect(preview).toBeVisible();
   const agentReview = preview.getByRole("region", { name: "AI 검토 요약" });
   await expect(agentReview).toContainText("저장 요약");
-  await expect(agentReview).toContainText("상태 변경");
-  await expect(agentReview).toContainText("불가");
-  await expect(agentReview).toContainText("이력 조회 요약");
   await expect(agentReview).toContainText("최근 정비 이력");
   await expect(agentReview).toContainText("현장 담당자");
-  await expect(agentReview).toContainText("공정 관리자");
+  await expect(agentReview).not.toContainText("공정 관리자");
   await expect(agentReview).toContainText("이 초안은 담당자 검토를 돕기 위한 read-only 문서");
   await expect(agentReview).toContainText("자동 승인을 수행하지 않습니다");
+  await expect(agentReview.getByRole("button", { name: "AI 요약 재생성" })).toBeEnabled();
   await agentReview.getByRole("button", { name: "AI 요약 재생성" }).click();
   await expect(agentReview).toContainText("수동 갱신");
   await expect(agentReview).toContainText("완료");
-  await preview.getByRole("tab", { name: "운영 로그", exact: true }).click();
-  const runtimeLog = preview.getByRole("region", { name: "AI 운영 로그" });
-  await expect(runtimeLog).toContainText("화면 수동 갱신");
-  await expect(runtimeLog).toContainText("완료");
-  await expect(runtimeLog).toContainText("조회 전용");
-  await expect(runtimeLog.getByText("작업요청 생성", { exact: true })).toHaveCount(0);
-  await runtimeLog.getByRole("button", { name: "상세 보기" }).first().click();
-  const runtimeDetail = page.getByRole("dialog", { name: "AI 운영 로그 상세" });
-  await expect(runtimeDetail).toBeVisible();
-  await expect(runtimeDetail).toContainText("summary key");
-  await expect(runtimeDetail).toContainText("source hash");
-  await expect(runtimeDetail).toContainText("context hash");
-  await expect(runtimeDetail.getByText("작업요청 생성", { exact: true })).toHaveCount(0);
-  await runtimeDetail.getByRole("button", { name: "닫기" }).click();
+});
+
+test("shows stored AI review summaries to engineers as read-only", async ({ page }) => {
+  const returnTo = `${MVP_PATH}?view=overview&dashboard=workflow&role=field_operator&workspace_id=manufacturing-demo&asset_id=CNC-S04-L04-01&event_id=EVT-GS-002`;
+  await login(page, returnTo, "engineer");
+  await expect(page.getByTestId("mvp-overview")).toBeVisible();
+  await page.getByRole("button", { name: /공구\/금형 마모 의심 제안 #02/ }).click();
+  const preview = page.getByRole("dialog", { name: "선택 설비 상세" });
+  await expect(preview).toBeVisible();
+  const agentReview = preview.getByRole("region", { name: "AI 검토 요약" });
+  await expect(agentReview).toContainText("저장 요약");
+  await expect(agentReview).toContainText("최근 정비 이력");
+  await expect(agentReview).toContainText("현재 역할은 저장된 AI 요약만 조회할 수 있습니다.");
+  await expect(agentReview.getByRole("button", { name: "AI 요약 재생성" })).toBeDisabled();
   await preview.getByRole("tab", { name: "처리", exact: true }).click();
   await expect(preview.getByText("점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.")).toBeVisible();
+});
+
+test("keeps system administrator logs behind the admin persona", async ({ page }) => {
+  await login(page, `${MVP_PATH}?view=system&dashboard=workflow`, "admin");
+  await expect(page.locator(".mvp-page-heading").getByRole("heading", { name: "AI 요약 처리 로그", exact: true })).toBeVisible();
+  await expect(page.locator(".mvp-navigation nav").getByRole("button", { name: /시스템 관리자/ })).toBeVisible();
 });
 
 test("completes Overview to Objects to Operations to Reports Executive Brief without Analysis", async ({ page }) => {
@@ -329,12 +337,4 @@ test("redirects a legacy project surface to the official Week 2 MVP", async ({ p
   await page.goto(`/app/projects/${PROJECT}/blueprint-v2`);
   await expect(page).toHaveURL(new RegExp(`${MVP_PATH}$`));
   await expect(page.getByTestId("mvp-overview")).toBeVisible({ timeout: 15_000 });
-});
-
-test("logs out from the official MVP shell", async ({ page }) => {
-  await login(page, CLASSIC_OVERVIEW_PATH);
-  await expect(page.getByTestId("mvp-overview")).toBeVisible();
-  await page.getByRole("button", { name: "로그아웃", exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole("button", { name: "로그인", exact: true })).toBeVisible();
 });

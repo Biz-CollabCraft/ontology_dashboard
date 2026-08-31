@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -861,6 +862,43 @@ def test_agent_review_summary_concurrent_non_force_requests_share_runtime_run(
     assert runs[0]["status"] == "completed"
 
 
+def test_agent_review_workflow_run_running_guard_is_repository_atomic(
+    service: FactorySignalService,
+) -> None:
+    record = {
+        "trigger": "polling_watcher",
+        "engine": "simple",
+        "status": "running",
+        "organization_id": "org-ontology-demo",
+        "project_id": "manufacturing-demo-project",
+        "workspace_id": "manufacturing-demo",
+        "asset_id": "CNC-S04-L04-01",
+        "event_id": "EVT-GS-002",
+        "dataset_version_id": "fixture-compatibility",
+        "history_window": "24h",
+        "summary_key": "agent-review-summary:test-running-guard",
+        "source_sha256": "a" * 64,
+        "context_sha256": "b" * 64,
+        "packet_schema_version": "agent-review-packet-v1.0",
+        "prompt_version": "agent-review-summary-prompt-v1.0",
+        "model_version": "deterministic-agent-review-summary-v1.0",
+        "trace": {"stage": "started"},
+    }
+
+    first = service.repository.create_agent_review_workflow_run(**record)
+    with pytest.raises(sqlite3.IntegrityError):
+        service.repository.create_agent_review_workflow_run(**record)
+
+    service.repository.finish_agent_review_workflow_run(
+        first["workflow_run_id"],
+        status="completed",
+        trace={"stage": "finished"},
+    )
+    second = service.repository.create_agent_review_workflow_run(**record)
+
+    assert second["workflow_run_id"] != first["workflow_run_id"]
+
+
 def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
     client: TestClient,
     service: FactorySignalService,
@@ -938,6 +976,11 @@ def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
         "/api/objects/CNC-S04-L02-03/agent-review-summary?trigger=manual_materialization",
         headers=csrf_headers(client),
     )
+    forbidden_response = client.get(
+        "/api/projects/manufacturing-demo-project/agent-review-workflow-runs"
+        "?asset_id=CNC-S04-L04-01&limit=10"
+    )
+    login_as(client, "admin@ontology.local", "OntologyAdmin!2026")
     response = client.get(
         "/api/projects/manufacturing-demo-project/agent-review-workflow-runs"
         "?asset_id=CNC-S04-L04-01&limit=10"
@@ -950,6 +993,7 @@ def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
     assert first.status_code == 200
     assert second.status_code == 200
     assert other.status_code == 200
+    assert forbidden_response.status_code == 403
     assert response.status_code == 200
     assert completed_response.status_code == 200
     payload = response.json()

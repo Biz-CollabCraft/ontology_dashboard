@@ -58,6 +58,7 @@ export function MvpShell({
   onRefresh,
   refreshing,
   refreshIntervalSeconds,
+  canReadSystemLogs,
   onLogout,
   children,
 }: {
@@ -70,11 +71,15 @@ export function MvpShell({
   onRefresh: () => void;
   refreshing: boolean;
   refreshIntervalSeconds: number;
+  canReadSystemLogs: boolean;
   onLogout: () => void | Promise<void>;
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const workflowMode = dashboard === "workflow";
+  const navItems = canReadSystemLogs
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => item.id !== "system");
   const roleMeta = ROLE_LABELS[role];
   const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
   const headingDetail = workflowMode && activeView === "overview"
@@ -141,7 +146,7 @@ export function MvpShell({
             <p>{workflowMode ? "역할별 화면 안에서 Overview, Assets, 작업요청 흐름을 한 번에 처리합니다." : "Analysis 없이 운영 판단부터 점검 보고까지 연결합니다."}</p>
           </div>
           <nav>
-            {(workflowMode ? ROLE_SCREENS : NAV_ITEMS).map((item) => {
+            {(workflowMode ? ROLE_SCREENS : navItems).map((item) => {
               const Icon = item.icon;
               const activeItem = workflowMode ? activeView === "overview" && role === item.id : activeView === item.id;
               return (
@@ -164,7 +169,7 @@ export function MvpShell({
                 </button>
               );
             })}
-            {workflowMode ? (
+            {workflowMode && canReadSystemLogs ? (
               <button
                 type="button"
                 className={activeView === "system" ? "is-active" : ""}

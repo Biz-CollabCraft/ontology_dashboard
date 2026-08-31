@@ -26,7 +26,10 @@ import { MvpOverviewPage } from "./overview/MvpOverviewPage";
 import { MvpReportsPage } from "./report/MvpReportsPage";
 import { MvpShell } from "./shell/MvpShell";
 import { MvpSystemAdminPage } from "./system/MvpSystemAdminPage";
-import { canMaterializeAgentReviewSummary } from "./permissions";
+import {
+  canMaterializeAgentReviewSummary,
+  canReadMvpSystemLogs,
+} from "./permissions";
 import "./mvp.css";
 
 const MVP_REFRESH_INTERVAL_SECONDS = 10;
@@ -236,6 +239,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   const canDecide = Boolean(user?.permissions.includes("events.decision"));
   const canNote = Boolean(user?.permissions.includes("events.note"));
   const canMaterializeAgentSummary = canMaterializeAgentReviewSummary(user?.permissions);
+  const canReadSystemLogs = canReadMvpSystemLogs(user?.permissions);
   const selectedAssetId = selection.assetId;
 
   let content;
@@ -246,7 +250,9 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
   } else if (selection.view === "system") {
-    content = <MvpSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />;
+    content = canReadSystemLogs
+      ? <MvpSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />
+      : <MvpState kind="error" title="시스템 관리자 권한 필요" detail="AI 요약 처리 로그는 관리자 감사 권한이 있는 사용자만 조회할 수 있습니다." />;
   } else {
     content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
@@ -262,6 +268,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       onRefresh={refresh}
       refreshing={loading}
       refreshIntervalSeconds={MVP_REFRESH_INTERVAL_SECONDS}
+      canReadSystemLogs={canReadSystemLogs}
       onLogout={signOut}
     >
       {error ? <div className="mvp-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}

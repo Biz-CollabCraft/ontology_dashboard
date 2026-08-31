@@ -205,7 +205,7 @@ def list_agent_review_workflow_runs(
     dataset_version_id: str | None = Query(default=None, max_length=160),
     status: Literal["running", "completed", "partial", "failed"] | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
-    principal: Principal = Depends(require_permission("events.read")),
+    principal: Principal = Depends(require_permission("admin.audit.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
 ):
     _authorize_agent_review_summary(principal=principal, project_id=project_id)

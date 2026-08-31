@@ -117,6 +117,11 @@ class AuditRepository:
                     ON agent_review_workflow_runs (
                         organization_id, project_id, workspace_id, asset_id, event_id, dataset_version_id, updated_at
                     );
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_review_workflow_runs_running_summary
+                    ON agent_review_workflow_runs (
+                        organization_id, project_id, workspace_id, summary_key
+                    )
+                    WHERE status = 'running';
             """
             )
             self._ensure_column(

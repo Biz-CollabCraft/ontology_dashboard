@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -325,25 +326,42 @@ class ManufacturingPredictiveMaintenanceService:
                 ):
                     return cached_summary, cached_trace
 
-            run = self.repository.create_agent_review_workflow_run(
-                trigger=trigger,
-                engine=engine,
-                status="running",
-                organization_id=organization_id,
-                project_id=project_id,
-                workspace_id=workspace_id,
-                asset_id=packet.get("asset_id"),
-                event_id=key_payload["event_id"],
-                dataset_version_id=key_payload["dataset_version"],
-                history_window=history_window,
-                summary_key=materialization_key,
-                source_sha256=key_payload["source_sha256"],
-                context_sha256=key_payload["context_sha256"],
-                packet_schema_version=key_payload["packet_schema_version"],
-                prompt_version=key_payload["prompt_version"],
-                model_version=key_payload["model_version"],
-                trace={"stage": "started"},
-            )
+            try:
+                run = self.repository.create_agent_review_workflow_run(
+                    trigger=trigger,
+                    engine=engine,
+                    status="running",
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    asset_id=packet.get("asset_id"),
+                    event_id=key_payload["event_id"],
+                    dataset_version_id=key_payload["dataset_version"],
+                    history_window=history_window,
+                    summary_key=materialization_key,
+                    source_sha256=key_payload["source_sha256"],
+                    context_sha256=key_payload["context_sha256"],
+                    packet_schema_version=key_payload["packet_schema_version"],
+                    prompt_version=key_payload["prompt_version"],
+                    model_version=key_payload["model_version"],
+                    trace={"stage": "started"},
+                )
+            except Exception as exc:
+                if _is_agent_review_running_conflict(exc):
+                    waited = _wait_for_agent_review_summary(
+                        materializer,
+                        packet=packet,
+                        organization_id=organization_id,
+                        project_id=project_id,
+                        workspace_id=workspace_id,
+                        history_window=history_window,
+                    )
+                    if waited is not None:
+                        return waited
+                    raise RuntimeError(
+                        f"agent_review_summary_materialization_in_progress:{materialization_key}"
+                    ) from exc
+                raise
             try:
                 summary, trace = materializer.materialize(
                     packet=packet,
@@ -844,6 +862,39 @@ def _agent_review_summary_lock(summary_key_value: str) -> Lock:
             lock = Lock()
             _AGENT_REVIEW_SUMMARY_LOCKS[summary_key_value] = lock
         return lock
+
+
+def _is_agent_review_running_conflict(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}:{exc}"
+    return (
+        "uq_agent_review_workflow_runs_running_summary" in text
+        or "UNIQUE constraint failed: agent_review_workflow_runs.organization_id" in text
+    )
+
+
+def _wait_for_agent_review_summary(
+    materializer: AgentReviewSummaryMaterializer,
+    *,
+    packet: dict[str, Any],
+    organization_id: str,
+    project_id: str,
+    workspace_id: str,
+    history_window: str,
+    timeout_seconds: float = 3.0,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        summary, trace = materializer.lookup(
+            packet=packet,
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            history_window=history_window,
+        )
+        if summary is not None:
+            return summary, trace
+        time.sleep(0.05)
+    return None
 
 
 def _workflow_run_trace(run: dict[str, Any]) -> dict[str, Any]:
