@@ -296,6 +296,24 @@ class InspectionResult(ScopedRecord):
         return self
 
 
+class MaintenanceActionCandidate(ScopedRecord):
+    """Maintenance-owned projection derived from an immutable inspection result."""
+
+    action_candidate_id: str = Field(min_length=1, max_length=240)
+    inspection_result_id: str = Field(min_length=1, max_length=240)
+    event_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    equipment_id: str = Field(min_length=1, max_length=240)
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"]
+    basis_codes: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_candidate_identity(self) -> MaintenanceActionCandidate:
+        if self.asset_id != self.equipment_id:
+            raise ValueError("MVP action candidate requires equipment_id = asset_id")
+        return self
+
+
 class MaintenanceAction(ScopedRecord):
     maintenance_action_id: str = Field(min_length=1, max_length=240)
     work_order_id: str = Field(min_length=1, max_length=240)

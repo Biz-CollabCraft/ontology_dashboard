@@ -47,6 +47,24 @@ class Service:
         self.calls.append(("manual", values))
         return {"recommendation_id": "REC-1"}
 
+    def calculate_tool_replacement_cost(self, **values):
+        self.calls.append(("cost_calculate", values))
+        return {
+            "analysis_id": "COST-ANALYSIS-1",
+            "calculation_status": "calculated",
+        }
+
+    def get_cost_analysis(self, **values):
+        self.calls.append(("cost_get", values))
+        return {"analysis_id": values["analysis_id"]}
+
+    def list_cost_analyses(self, **values):
+        self.calls.append(("cost_list", values))
+        return {
+            "inspection_result_id": values["inspection_result_id"],
+            "items": [],
+        }
+
     def decide_manual_recommendation(self, **values):
         self.calls.append(("decision", values))
         return {"decision_id": "DECISION-1", "work_order_id": "MAINTENANCE-WO-1"}
@@ -141,6 +159,71 @@ RESULT = {
     "findings": ["tool worn"],
     "note": "replacement candidate",
 }
+
+
+def cost_request() -> dict:
+    scenarios = []
+    for timing in (
+        "immediate",
+        "planned_window",
+        "reinspect_after",
+        "no_action_baseline",
+    ):
+        scenarios.append(
+            {
+                "execution_timing": timing,
+                "parts_cost": {"low_minor": 1, "base_minor": 2, "high_minor": 3},
+                "labor_duration": {
+                    "low_minutes": 1,
+                    "base_minutes": 2,
+                    "high_minutes": 3,
+                },
+                "labor_rate_per_minute": {
+                    "low_minor_per_minute": 1,
+                    "base_minor_per_minute": 2,
+                    "high_minor_per_minute": 3,
+                },
+                "external_service_cost": {
+                    "low_minor": 0,
+                    "base_minor": 0,
+                    "high_minor": 0,
+                },
+                "expected_downtime": {
+                    "low_minutes": 1,
+                    "base_minutes": 2,
+                    "high_minutes": 3,
+                },
+                "production_loss_rate_per_minute": {
+                    "low_minor_per_minute": 1,
+                    "base_minor_per_minute": 2,
+                    "high_minor_per_minute": 3,
+                },
+                "expected_failure_loss": {
+                    "low_minor": 1,
+                    "base_minor": 2,
+                    "high_minor": 3,
+                },
+                "confidence": "medium",
+            }
+        )
+    return {
+        "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        "sop_version": "demo-2026-08-28",
+        "currency": "KRW",
+        "currency_minor_unit": 0,
+        "scenarios": scenarios,
+        "assumptions": [],
+        "input_sources": [
+            {
+                "input_name": "quote",
+                "source_kind": "quoted",
+                "source_reference": "quote/tool/1",
+                "confidence": "medium",
+            }
+        ],
+        "price_version": "maintenance-price-2026-08",
+        "calculation_policy_version": "maintenance-cost-policy-v1",
+    }
 
 
 def test_manager_can_request_and_decide_but_idempotency_header_is_required() -> None:
@@ -290,3 +373,57 @@ def test_maintenance_commands_reject_caller_supplied_canonical_lineage() -> None
 
     assert forged.status_code == 422
     assert service.calls == []
+
+
+def test_manager_requests_cost_analysis_and_readers_can_query_results() -> None:
+    manager_client, manager_service = client_for("process_manager")
+    created = manager_client.post(
+        f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
+        json=cost_request(),
+        headers={"Idempotency-Key": "cost-analysis-request-001"},
+    )
+    loaded = manager_client.get(f"{BASE}/cost-analyses/COST-ANALYSIS-1")
+    listed = manager_client.get(
+        f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses"
+    )
+
+    assert created.status_code == 200
+    assert loaded.status_code == 200
+    assert listed.status_code == 200
+    assert [name for name, _ in manager_service.calls] == [
+        "cost_calculate",
+        "cost_get",
+        "cost_list",
+    ]
+    assert manager_service.calls[0][1]["actor_id"] == "user-process_manager"
+    assert "asset_id" not in created.request.content.decode("utf-8")
+
+
+def test_cost_analysis_request_rejects_forged_lineage_and_wrong_role() -> None:
+    manager_client, manager_service = client_for("process_manager")
+    forged = manager_client.post(
+        f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
+        json={
+            **cost_request(),
+            "asset_id": "FORGED-ASSET",
+            "equipment_id": "FORGED-EQUIPMENT",
+            "action_candidate_id": "FORGED-CANDIDATE",
+        },
+        headers={"Idempotency-Key": "cost-analysis-request-001"},
+    )
+    missing_key = manager_client.post(
+        f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
+        json=cost_request(),
+    )
+    engineer_client, engineer_service = client_for("process_engineer")
+    denied = engineer_client.post(
+        f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
+        json=cost_request(),
+        headers={"Idempotency-Key": "cost-analysis-request-001"},
+    )
+
+    assert forged.status_code == 422
+    assert missing_key.status_code == 422
+    assert denied.status_code == 403
+    assert manager_service.calls == []
+    assert engineer_service.calls == []

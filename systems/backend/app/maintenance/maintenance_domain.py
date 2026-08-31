@@ -16,7 +16,10 @@ from .maintenance_schema import (
     IdempotencyOutcome,
     IdempotencyRecord,
     IdempotencyState,
+    InspectionOutcome,
+    InspectionResult,
     MaintenanceAction,
+    MaintenanceActionCandidate,
     MaintenanceActionStatus,
     MaintenanceEvent,
     MaterializationStrategy,
@@ -97,6 +100,67 @@ MAINTENANCE_ACTION_TRANSITIONS = {
     MaintenanceActionStatus.FAILED: set(),
     MaintenanceActionStatus.CANCELLED: set(),
 }
+
+TOOL_WEAR_CHECKLIST_ITEM_ID = "tool-wear"
+TOOL_WEAR_MEASUREMENT_NAME = "tool_wear_min"
+
+
+def derive_tool_replacement_action_candidate(
+    inspection_result: InspectionResult,
+) -> MaintenanceActionCandidate:
+    """Project the authoritative tool-replacement candidate or fail closed.
+
+    Cost analysis must not infer an action from a generic
+    ``maintenance_recommended`` outcome.  Maintenance owns this deterministic
+    projection and requires structured tool-wear evidence from the immutable
+    inspection result.
+    """
+
+    if inspection_result.outcome is not InspectionOutcome.MAINTENANCE_RECOMMENDED:
+        raise ValueError(
+            "TOOL_REPLACEMENT candidate requires maintenance_recommended inspection outcome"
+        )
+    has_failed_tool_wear_check = any(
+        item.item_id == TOOL_WEAR_CHECKLIST_ITEM_ID and item.status == "fail"
+        for item in inspection_result.checklist
+    )
+    has_tool_wear_measurement = any(
+        measurement.name == TOOL_WEAR_MEASUREMENT_NAME
+        and isinstance(measurement.value, (int, float))
+        and not isinstance(measurement.value, bool)
+        for measurement in inspection_result.measurements
+    )
+    if not has_failed_tool_wear_check or not has_tool_wear_measurement:
+        raise ValueError(
+            "TOOL_REPLACEMENT candidate requires failed tool-wear checklist "
+            "and numeric tool_wear_min measurement"
+        )
+
+    action_code = "TOOL_REPLACEMENT"
+    source = ":".join(
+        (
+            inspection_result.organization_id,
+            inspection_result.project_id,
+            inspection_result.workspace_id,
+            inspection_result.inspection_result_id,
+            action_code,
+        )
+    )
+    return MaintenanceActionCandidate(
+        organization_id=inspection_result.organization_id,
+        project_id=inspection_result.project_id,
+        workspace_id=inspection_result.workspace_id,
+        action_candidate_id=f"ACTION-CANDIDATE-{uuid.uuid5(uuid.NAMESPACE_URL, source)}",
+        inspection_result_id=inspection_result.inspection_result_id,
+        event_id=inspection_result.event_id,
+        asset_id=inspection_result.asset_id,
+        equipment_id=inspection_result.equipment_id,
+        action_code=action_code,
+        basis_codes=(
+            "inspection.checklist:tool-wear:fail",
+            "inspection.measurement:tool_wear_min",
+        ),
+    )
 
 OPERATIONS_MANUAL_POLICY_VERSION = "operations-manual-recommendation-v1"
 
