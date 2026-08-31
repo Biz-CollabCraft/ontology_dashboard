@@ -513,7 +513,8 @@
 @keyframes mvp-spin {
   to { transform: rotate(360deg); }
 }
-.mvp-drawer-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; padding: 4px; border: 1px solid rgba(181,196,214,.12); border-radius: 7px; background: rgba(255,255,255,.025); }
+.mvp-drawer-tabs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; padding: 4px; border: 1px solid rgba(181,196,214,.12); border-radius: 7px; background: rgba(255,255,255,.025); }
+.mvp-drawer-tabs:has(button:nth-child(3)) { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .mvp-drawer-tabs button { min-width: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--mvp-muted); font-weight: 900; cursor: pointer; }
 .mvp-drawer-tabs button { min-height: 34px; font-size: 12px; }
 .mvp-drawer-tabs button:hover,
