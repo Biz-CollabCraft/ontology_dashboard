@@ -1,6 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT_DIR}"
+
+load_team_env_file() {
+  local line key value
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" || "${line}" =~ ^[[:space:]]*# ]] && continue
+    case "${line}" in
+      export\ ONTOLOGY_DASHBOARD_TEAM_*=*) line="${line#export }" ;;
+      ONTOLOGY_DASHBOARD_TEAM_*=*) ;;
+      *) continue ;;
+    esac
+    key="${line%%=*}"
+    value="${line#*=}"
+    case "${key}" in
+      ONTOLOGY_DASHBOARD_TEAM_DB_HOST) : "${ONTOLOGY_DASHBOARD_TEAM_DB_HOST:=${value}}" ;;
+      ONTOLOGY_DASHBOARD_TEAM_DB_PORT) : "${ONTOLOGY_DASHBOARD_TEAM_DB_PORT:=${value}}" ;;
+      ONTOLOGY_DASHBOARD_TEAM_DB_NAME) : "${ONTOLOGY_DASHBOARD_TEAM_DB_NAME:=${value}}" ;;
+      ONTOLOGY_DASHBOARD_TEAM_DB_USER) : "${ONTOLOGY_DASHBOARD_TEAM_DB_USER:=${value}}" ;;
+      ONTOLOGY_DASHBOARD_TEAM_DB_PASSWORD) : "${ONTOLOGY_DASHBOARD_TEAM_DB_PASSWORD:=${value}}" ;;
+      ONTOLOGY_DASHBOARD_TEAM_ORGANIZATION_ID) : "${ONTOLOGY_DASHBOARD_TEAM_ORGANIZATION_ID:=${value}}" ;;
+      ONTOLOGY_DASHBOARD_TEAM_PROJECT_ID) : "${ONTOLOGY_DASHBOARD_TEAM_PROJECT_ID:=${value}}" ;;
+      ONTOLOGY_DASHBOARD_TEAM_WORKSPACE_ID) : "${ONTOLOGY_DASHBOARD_TEAM_WORKSPACE_ID:=${value}}" ;;
+    esac
+  done < .env
+}
+
+if [[ -f .env ]]; then
+  load_team_env_file
+fi
+
 DB_HOST="${ONTOLOGY_DASHBOARD_TEAM_DB_HOST:-gabriels-m1-mac-mini.tailb988c5.ts.net}"
 DB_PORT="${ONTOLOGY_DASHBOARD_TEAM_DB_PORT:-15432}"
 DB_NAME="${ONTOLOGY_DASHBOARD_TEAM_DB_NAME:-ontology_dashboard}"
