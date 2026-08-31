@@ -14,6 +14,7 @@ from systems.generator.app.extraction.checkpoint_repository import (
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionCheckpointInvalidError,
     ExtractionCheckpointMappingMigrationRequiredError,
+    ExtractionCheckpointWriteFailedError,
     ExtractionFragmentConflictError,
     ExtractionMappingRebuildNotImplementedError,
     ExtractionSourceLockedError,
@@ -585,3 +586,92 @@ def test_checkpoint_and_dataset_state_preserved_on_mapping_mismatch_failure(tmp_
     assert chk_after.last_committed_line == chk_before.last_committed_line
     assert chk_after.mapping_version == "v1.0"
     assert chk_after.status == "idle"
+
+
+def test_checkpoint_atomic_replace_failure_preserves_existing_checkpoint(tmp_path, monkeypatch):
+    """When os.replace fails during checkpoint update, raises ExtractionCheckpointWriteFailedError and preserves existing checkpoint."""
+    import os
+
+    repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")
+
+    chk1 = GenDataExtractionCheckpoint(
+        source_identity="e" * 64,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        site_id="S01",
+        cell_id="L01",
+        last_committed_offset=100,
+        last_committed_line=5,
+        verified_prefix_length=0,
+        verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        last_committed_batch_id="b" * 64,
+        committed_at="2026-08-28T13:00:00Z",
+        status="idle",
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        created_at="2026-08-28T13:00:00Z",
+        updated_at="2026-08-28T13:00:00Z",
+    )
+
+    # 1. First save succeeds
+    target_path = repo.save_checkpoint_atomic(chk1)
+    orig_bytes = target_path.read_bytes()
+
+    # 2. Mock os.replace to simulate OS failure during next save
+    def mock_replace(src, dst):
+        raise OSError("Simulated disk error during atomic replace")
+
+    monkeypatch.setattr(os, "replace", mock_replace)
+
+    chk2 = chk1.model_copy(update={"last_committed_offset": 200, "last_committed_line": 10})
+
+    with pytest.raises(ExtractionCheckpointWriteFailedError):
+        repo.save_checkpoint_atomic(chk2)
+
+    # Invariant: Existing checkpoint file is 100% intact and unchanged
+    assert target_path.is_file()
+    assert target_path.read_bytes() == orig_bytes
+
+    # Invariant: No orphan temporary files remain
+    tmp_files = list((tmp_path / "checkpoints").glob(".tmp_*"))
+    assert len(tmp_files) == 0
+
+
+def test_checkpoint_atomic_replace_failure_on_new_checkpoint(tmp_path, monkeypatch):
+    """When os.replace fails during new checkpoint creation, raises ExtractionCheckpointWriteFailedError without creating target or leaving temp."""
+    import os
+
+    repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")
+
+    chk = GenDataExtractionCheckpoint(
+        source_identity="d" * 64,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        site_id="S01",
+        cell_id="L01",
+        last_committed_offset=50,
+        last_committed_line=2,
+        verified_prefix_length=0,
+        verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        last_committed_batch_id="b" * 64,
+        committed_at="2026-08-28T13:00:00Z",
+        status="idle",
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        created_at="2026-08-28T13:00:00Z",
+        updated_at="2026-08-28T13:00:00Z",
+    )
+
+    def mock_replace(src, dst):
+        raise OSError("Simulated atomic replace failure")
+
+    monkeypatch.setattr(os, "replace", mock_replace)
+
+    with pytest.raises(ExtractionCheckpointWriteFailedError):
+        repo.save_checkpoint_atomic(chk)
+
+    target_file = (tmp_path / "checkpoints") / f"{chk.source_identity}.json"
+    assert not target_file.exists()
+
+    tmp_files = list((tmp_path / "checkpoints").glob(".tmp_*"))
+    assert len(tmp_files) == 0

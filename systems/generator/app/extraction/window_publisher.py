@@ -138,70 +138,165 @@ class ExtractionWindowPublisher:
         target_parent.mkdir(parents=True, exist_ok=True)
         final_dataset_dir = target_parent / window.dataset_version
 
-        # 1. Idempotency Check: if final_dataset_dir exists, verify checksums
-        if final_dataset_dir.is_dir():
-            manifest_file = final_dataset_dir / "dataset_manifest.json"
-            if manifest_file.is_file():
-                try:
-                    manifest_data = json.loads(manifest_file.read_text(encoding="utf-8"))
-                    self.validate_manifest(manifest_data)
-                    manifest_sha = hashlib.sha256(manifest_file.read_bytes()).hexdigest()
+    def _resolve_existing_dataset(
+        self,
+        final_dataset_dir: Path,
+        window: AssembledExtractionWindow,
+    ) -> PublishedObservationDataset:
+        """Resolve existing dataset directory.
 
-                    # Verify files inside existing directory
-                    obs_file = final_dataset_dir / "observations.jsonl"
-                    prov_file = final_dataset_dir / "provenance.jsonl"
-                    rej_file = final_dataset_dir / "rejected.jsonl"
+        Invariant:
+        - If existing dataset is valid and matches all logical fields, schema, files, and payload SHA-256:
+          return PublishedObservationDataset (idempotent reuse).
+        - If existing dataset is missing files, corrupted, or has conflicting contents:
+          raise ExtractionDatasetConflictError.
+        - NEVER deletes, overwrites, or modifies final_dataset_dir.
+        """
+        if not final_dataset_dir.is_dir():
+            raise ExtractionDatasetConflictError(
+                f"Existing dataset path '{final_dataset_dir}' is not a directory."
+            )
 
-                    if not (obs_file.is_file() and prov_file.is_file() and rej_file.is_file()):
-                        raise ExtractionDatasetConflictError(
-                            f"Dataset directory '{final_dataset_dir}' exists with missing files."
-                        )
+        manifest_file = final_dataset_dir / "dataset_manifest.json"
+        if not manifest_file.is_file():
+            raise ExtractionDatasetConflictError(
+                f"Dataset directory '{final_dataset_dir}' exists without dataset_manifest.json."
+            )
 
-                    obs_sha = hashlib.sha256(obs_file.read_bytes()).hexdigest()
-                    prov_sha = hashlib.sha256(prov_file.read_bytes()).hexdigest()
-                    rej_sha = hashlib.sha256(rej_file.read_bytes()).hexdigest()
+        try:
+            m_bytes = manifest_file.read_bytes()
+            existing_manifest = json.loads(m_bytes.decode("utf-8"))
+            self.validate_manifest(existing_manifest)
+        except Exception as exc:
+            raise ExtractionDatasetConflictError(
+                f"Existing dataset at '{final_dataset_dir}' has invalid/corrupted manifest: {exc}"
+            ) from exc
 
-                    # Check match against newly computed records
-                    new_obs_bytes = "".join(
-                        json.dumps(o, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
-                        for o in window.observations
-                    ).encode("utf-8")
-                    new_obs_sha = hashlib.sha256(new_obs_bytes).hexdigest()
+        manifest_sha = hashlib.sha256(m_bytes).hexdigest()
 
-                    if obs_sha == new_obs_sha:
-                        logger.info(f"[WindowPublisher] Reusing existing identical dataset '{final_dataset_dir}'")
-                        self._ensure_publication_receipt(window, final_dataset_dir, manifest_sha)
-                        return PublishedObservationDataset(
-                            dataset_id=window.dataset_id,
-                            dataset_version=window.dataset_version,
-                            dataset_dir=str(final_dataset_dir),
-                            manifest_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/dataset_manifest.json",
-                            manifest_sha256=manifest_sha,
-                            observations_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/observations.jsonl",
-                            observations_sha256=obs_sha,
-                            provenance_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/provenance.jsonl",
-                            provenance_sha256=prov_sha,
-                            rejected_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/rejected.jsonl",
-                            rejected_sha256=rej_sha,
-                            observation_count=len(window.observations),
-                            rejected_count=len(window.rejected_records),
-                            window_start=window.window_start,
-                            window_end=window.window_end,
-                        )
-                    else:
-                        raise ExtractionDatasetConflictError(
-                            f"Dataset '{final_dataset_dir}' exists with conflicting payload content."
-                        )
-                except ExtractionDatasetConflictError:
-                    raise
-                except Exception as exc:
-                    raise ExtractionDatasetConflictError(
-                        f"Dataset '{final_dataset_dir}' exists but is corrupt: {exc}"
-                    ) from exc
-            else:
-                raise ExtractionDatasetConflictError(
-                    f"Dataset directory '{final_dataset_dir}' exists without manifest."
-                )
+        # 1. Validate dataset identifiers
+        if (
+            existing_manifest.get("dataset_id") != window.dataset_id
+            or existing_manifest.get("dataset_version") != window.dataset_version
+        ):
+            raise ExtractionDatasetConflictError(
+                f"Dataset '{final_dataset_dir}' identity conflict: "
+                f"existing=({existing_manifest.get('dataset_id')}, {existing_manifest.get('dataset_version')}) vs "
+                f"expected=({window.dataset_id}, {window.dataset_version})"
+            )
+
+        # 2. Validate extraction_context and mapping identity
+        ex_ctx = existing_manifest.get("extraction_context", {})
+        if (
+            ex_ctx.get("mapping_id") != window.mapping_id
+            or ex_ctx.get("mapping_version") != window.mapping_version
+            or ex_ctx.get("mapping_sha256") != window.mapping_sha256
+            or ex_ctx.get("source_uri") != window.source_uri
+            or ex_ctx.get("source_identity") != window.source_identity
+            or ex_ctx.get("window_start") != window.window_start
+            or ex_ctx.get("window_end") != window.window_end
+        ):
+            raise ExtractionDatasetConflictError(
+                f"Dataset '{final_dataset_dir}' extraction_context mismatch."
+            )
+
+        # 3. Compute expected file payloads and SHA-256 from current window
+        exp_obs_bytes = "".join(
+            json.dumps(o, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+            for o in window.observations
+        ).encode("utf-8")
+        exp_obs_sha = hashlib.sha256(exp_obs_bytes).hexdigest()
+
+        exp_prov_bytes = "".join(
+            json.dumps(p, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+            for p in window.provenance_records
+        ).encode("utf-8")
+        exp_prov_sha = hashlib.sha256(exp_prov_bytes).hexdigest()
+
+        exp_rej_bytes = "".join(
+            json.dumps(r, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+            for r in window.rejected_records
+        ).encode("utf-8")
+        exp_rej_sha = hashlib.sha256(exp_rej_bytes).hexdigest()
+
+        # 4. Check all declared files on disk
+        obs_file = final_dataset_dir / "observations.jsonl"
+        prov_file = final_dataset_dir / "provenance.jsonl"
+        rej_file = final_dataset_dir / "rejected.jsonl"
+
+        if not (obs_file.is_file() and prov_file.is_file() and rej_file.is_file()):
+            raise ExtractionDatasetConflictError(
+                f"Dataset directory '{final_dataset_dir}' is missing required data files."
+            )
+
+        obs_bytes = obs_file.read_bytes()
+        prov_bytes = prov_file.read_bytes()
+        rej_bytes = rej_file.read_bytes()
+
+        obs_sha = hashlib.sha256(obs_bytes).hexdigest()
+        prov_sha = hashlib.sha256(prov_bytes).hexdigest()
+        rej_sha = hashlib.sha256(rej_bytes).hexdigest()
+
+        # 5. Verify payload hashes match both manifest declarations and expected hashes
+        if obs_sha != exp_obs_sha or prov_sha != exp_prov_sha or rej_sha != exp_rej_sha:
+            raise ExtractionDatasetConflictError(
+                f"Dataset '{final_dataset_dir}' exists with conflicting payload content."
+            )
+
+        declared_files = {f["role"]: f for f in existing_manifest.get("files", [])}
+        declared_aux = {f["role"]: f for f in existing_manifest.get("auxiliary_files", [])}
+
+        if (
+            declared_files.get("observations", {}).get("sha256") != obs_sha
+            or declared_files.get("observations", {}).get("size_bytes") != len(obs_bytes)
+            or declared_aux.get("provenance", {}).get("sha256") != prov_sha
+            or declared_aux.get("provenance", {}).get("size_bytes") != len(prov_bytes)
+            or declared_aux.get("rejected", {}).get("sha256") != rej_sha
+            or declared_aux.get("rejected", {}).get("size_bytes") != len(rej_bytes)
+        ):
+            raise ExtractionDatasetConflictError(
+                f"Dataset '{final_dataset_dir}' declared file metadata conflicts with file contents."
+            )
+
+        logger.info(f"[WindowPublisher] Reusing existing identical immutable dataset '{final_dataset_dir}'")
+        self._ensure_publication_receipt(window, final_dataset_dir, manifest_sha)
+
+        return PublishedObservationDataset(
+            dataset_id=window.dataset_id,
+            dataset_version=window.dataset_version,
+            dataset_dir=str(final_dataset_dir),
+            manifest_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/dataset_manifest.json",
+            manifest_sha256=manifest_sha,
+            observations_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/observations.jsonl",
+            observations_sha256=obs_sha,
+            provenance_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/provenance.jsonl",
+            provenance_sha256=prov_sha,
+            rejected_uri=f"data/observations/{window.dataset_id}/{window.dataset_version}/rejected.jsonl",
+            rejected_sha256=rej_sha,
+            observation_count=len(window.observations),
+            rejected_count=len(window.rejected_records),
+            window_start=window.window_start,
+            window_end=window.window_end,
+        )
+
+    def publish_window_dataset(
+        self,
+        window: AssembledExtractionWindow,
+        run_id: str,
+    ) -> PublishedObservationDataset:
+        """Atomically publish an assembled extraction window as a verified immutable Dataset bundle."""
+        if not window.observations:
+            raise ExtractionNoValidObservationsError(
+                f"Cannot publish dataset '{window.dataset_id}/{window.dataset_version}' with 0 valid observations."
+            )
+
+        target_parent = self.data_root / window.dataset_id
+        target_parent.mkdir(parents=True, exist_ok=True)
+        final_dataset_dir = target_parent / window.dataset_version
+
+        # 1. Idempotency Pre-Check: if final_dataset_dir exists, resolve it immediately
+        if final_dataset_dir.exists():
+            return self._resolve_existing_dataset(final_dataset_dir, window)
 
         # 2. Stage new Dataset bundle in temporary directory
         temp_dir = target_parent / f".tmp_{window.dataset_version}_{run_id}_{uuid4().hex}"
@@ -301,13 +396,15 @@ class ExtractionWindowPublisher:
             manifest_file.write_bytes(manifest_bytes)
             manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
 
-            # 3. Atomic directory rename
+            # 3. Atomic directory rename with race resolution (NEVER delete final_dataset_dir)
             try:
                 os.replace(temp_dir, final_dataset_dir)
             except OSError:
                 if final_dataset_dir.exists():
-                    shutil.rmtree(final_dataset_dir)
-                shutil.move(str(temp_dir), str(final_dataset_dir))
+                    return self._resolve_existing_dataset(final_dataset_dir, window)
+                raise ExtractionPublishFailedError(
+                    f"Failed to atomically rename temporary dataset '{temp_dir}' to '{final_dataset_dir}'"
+                )
 
             # 4. Final verification in place
             self._verify_dataset_dir(final_dataset_dir, manifest_sha)
@@ -333,17 +430,12 @@ class ExtractionWindowPublisher:
                 window_end=window.window_end,
             )
 
-        except Exception as exc:
+        finally:
             if temp_dir.exists():
                 try:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
-            if isinstance(exc, (ExtractionDatasetConflictError, ExtractionDatasetIntegrityError, ExtractionNoValidObservationsError)):
-                raise
-            raise ExtractionPublishFailedError(
-                f"Failed to publish dataset '{window.dataset_version}': {exc}"
-            ) from exc
 
     def _verify_dataset_dir(self, dataset_dir: Path, expected_manifest_sha: str) -> None:
         """Verify entire directory, manifest, and file checksums."""

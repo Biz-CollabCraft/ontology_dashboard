@@ -25,26 +25,29 @@ def _atomic_write_json(file_path: Path, data: dict[str, Any]) -> None:
     file_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = file_path.with_name(f".tmp_{file_path.name}_{os.getpid()}_{time.time_ns()}")
     content = json.dumps(data, indent=2, ensure_ascii=False)
-    with open(temp_path, "w", encoding="utf-8") as f:
-        f.write(content)
-        f.flush()
-        try:
-            os.fsync(f.fileno())
-        except OSError:
-            pass
-    for attempt in range(5):
-        try:
-            os.replace(str(temp_path), str(file_path))
-            return
-        except (PermissionError, OSError):
-            if attempt < 4:
-                time.sleep(0.01)
-    file_path.write_text(content, encoding="utf-8")
-    if temp_path.exists():
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                pass
+        for attempt in range(5):
+            try:
+                os.replace(str(temp_path), str(file_path))
+                return
+            except (PermissionError, OSError):
+                if attempt < 4:
+                    time.sleep(0.01)
+                else:
+                    raise
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 class CheckpointRepository:
@@ -370,10 +373,10 @@ class GenDataExtractionCheckpointRepository:
 
             try:
                 os.replace(str(temp_file), str(target_file))
-            except OSError:
-                if target_file.exists():
-                    target_file.unlink()
-                shutil.move(str(temp_file), str(target_file))
+            except OSError as exc:
+                raise ExtractionCheckpointWriteFailedError(
+                    f"Failed to atomically persist checkpoint '{target_file}': {exc}"
+                ) from exc
 
             # Read-back verification
             read_back_bytes = target_file.read_bytes()

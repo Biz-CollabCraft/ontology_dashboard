@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -157,3 +158,99 @@ def test_published_dataset_compatible_with_feature_input_resolver(tmp_path, samp
     assert resolved.dataset_version == sample_assembled_window.dataset_version
     assert resolved.payload_path.is_file()
     assert resolved.manifest_path.is_file()
+
+
+def test_concurrent_identical_dataset_publish_race_idempotent_reuse(tmp_path, sample_assembled_window, monkeypatch):
+    """When concurrent workers publish identical datasets and rename encounters existing destination, it reuses existing."""
+    data_root = tmp_path / "data" / "observations"
+    pubs_root = tmp_path / "extraction_state" / "publications"
+    publisher = ExtractionWindowPublisher(data_root=data_root, publications_root=pubs_root)
+
+    # 1. Worker A publishes successfully
+    p1 = publisher.publish_window_dataset(sample_assembled_window, run_id="run-worker-a")
+    orig_manifest_bytes = (Path(p1.dataset_dir) / "dataset_manifest.json").read_bytes()
+
+    # 2. Worker B attempts to publish identical window, but simulates os.replace failing due to existing destination
+    real_replace = os.replace
+
+    def mock_replace(src, dst):
+        if Path(dst) == Path(p1.dataset_dir):
+            raise OSError("Destination already exists")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", mock_replace)
+
+    p2 = publisher.publish_window_dataset(sample_assembled_window, run_id="run-worker-b")
+
+    # Worker B safely reused existing dataset
+    assert p2.manifest_sha256 == p1.manifest_sha256
+    assert p2.observations_sha256 == p1.observations_sha256
+    # Invariant: final directory was never deleted or corrupted
+    assert (Path(p1.dataset_dir) / "dataset_manifest.json").read_bytes() == orig_manifest_bytes
+
+
+def test_concurrent_different_dataset_publish_race_raises_conflict(tmp_path, sample_assembled_window, monkeypatch):
+    """When concurrent worker publishes conflicting payload with same version, first is preserved and second gets ExtractionDatasetConflictError."""
+    data_root = tmp_path / "data" / "observations"
+    pubs_root = tmp_path / "extraction_state" / "publications"
+    publisher = ExtractionWindowPublisher(data_root=data_root, publications_root=pubs_root)
+
+    # 1. Worker A publishes dataset A
+    p1 = publisher.publish_window_dataset(sample_assembled_window, run_id="run-worker-a")
+    orig_obs_bytes = (Path(p1.dataset_dir) / "observations.jsonl").read_bytes()
+
+    # 2. Worker B has conflicting window with same dataset_version
+    conflict_win = copy.deepcopy(sample_assembled_window)
+    conflict_win.observations[0]["torque_nm"] = 888.88
+
+    # When Worker B publishes (either pre-check or rename race), it detects conflict
+    with pytest.raises(ExtractionDatasetConflictError):
+        publisher.publish_window_dataset(conflict_win, run_id="run-worker-b")
+
+    # Invariant: Worker A's final directory remains intact and untouched
+    assert (Path(p1.dataset_dir) / "observations.jsonl").read_bytes() == orig_obs_bytes
+
+
+def test_publish_atomic_rename_failure_cleans_temp_and_preserves_state(tmp_path, sample_assembled_window, monkeypatch):
+    """When atomic rename fails and destination does not exist, raises ExtractionPublishFailedError and cleans temp."""
+    from systems.generator.app.extraction.extraction_exception import ExtractionPublishFailedError
+
+    data_root = tmp_path / "data" / "observations"
+    pubs_root = tmp_path / "extraction_state" / "publications"
+    publisher = ExtractionWindowPublisher(data_root=data_root, publications_root=pubs_root)
+
+    def mock_replace_fail(src, dst):
+        raise OSError("Permission denied or disk full")
+
+    monkeypatch.setattr(os, "replace", mock_replace_fail)
+
+    final_dir = data_root / sample_assembled_window.dataset_id / sample_assembled_window.dataset_version
+
+    with pytest.raises(ExtractionPublishFailedError):
+        publisher.publish_window_dataset(sample_assembled_window, run_id="run-fail")
+
+    # Final destination was not created
+    assert not final_dir.exists()
+    # Staging parent directory has no leftover temp dirs
+    target_parent = data_root / sample_assembled_window.dataset_id
+    temp_dirs = [d for d in target_parent.iterdir() if d.name.startswith(".tmp_")]
+    assert len(temp_dirs) == 0
+
+
+def test_existing_corrupted_dataset_raises_conflict_without_deletion(tmp_path, sample_assembled_window):
+    """When existing dataset directory on disk is corrupted, publisher raises ExtractionDatasetConflictError and never deletes it."""
+    data_root = tmp_path / "data" / "observations"
+    pubs_root = tmp_path / "extraction_state" / "publications"
+    publisher = ExtractionWindowPublisher(data_root=data_root, publications_root=pubs_root)
+
+    final_dir = data_root / sample_assembled_window.dataset_id / sample_assembled_window.dataset_version
+    final_dir.mkdir(parents=True, exist_ok=True)
+    # Write a corrupt/empty manifest
+    (final_dir / "dataset_manifest.json").write_text("{corrupt json", encoding="utf-8")
+
+    with pytest.raises(ExtractionDatasetConflictError):
+        publisher.publish_window_dataset(sample_assembled_window, run_id="run-corrupt")
+
+    # Invariant: final_dir is NOT deleted or auto-recovered
+    assert final_dir.exists()
+    assert (final_dir / "dataset_manifest.json").read_text(encoding="utf-8") == "{corrupt json"
