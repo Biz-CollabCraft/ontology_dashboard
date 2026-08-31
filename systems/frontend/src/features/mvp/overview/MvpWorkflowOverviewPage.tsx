@@ -1039,6 +1039,7 @@ export function MvpWorkflowOverviewPage({
   detailLoading,
   detailError,
   sensorWindow,
+  canMaterializeAgentSummary,
   onSensorWindowChange,
   onPreviewAsset,
   onRefresh,
@@ -1050,6 +1051,7 @@ export function MvpWorkflowOverviewPage({
   detailLoading: boolean;
   detailError: string | null;
   sensorWindow: MvpSensorWindowId;
+  canMaterializeAgentSummary: boolean;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onRefresh: () => void;
@@ -1376,7 +1378,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1621,6 +1623,7 @@ function AssetPreviewPanel({
   workActionHelper,
   workActionDisabled,
   assignee,
+  canMaterializeAgentSummary,
   onTabChange,
   onSensorWindowChange,
   onPreviewAsset,
@@ -1645,6 +1648,7 @@ function AssetPreviewPanel({
   workActionHelper: string;
   workActionDisabled: boolean;
   assignee: string;
+  canMaterializeAgentSummary: boolean;
   onTabChange: (tab: DrawerTab) => void;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
@@ -1687,6 +1691,11 @@ function AssetPreviewPanel({
     setAgentSummary(null);
     setAgentSummaryTrace(null);
     setAgentSummaryRequestKey(agentSummaryKey);
+    if (materialize && !canMaterializeAgentSummary) {
+      setAgentSummaryMaterializing(false);
+      setAgentSummaryError("AI 요약 재생성 권한이 없습니다. 저장된 요약은 계속 조회할 수 있습니다.");
+      return;
+    }
     try {
       const request = {
         assetId: asset.assetId,
@@ -1699,7 +1708,6 @@ function AssetPreviewPanel({
       setAgentSummary(summaryResponse.summary);
       setAgentSummaryTrace(summaryResponse.trace);
     } catch (reason: unknown) {
-      setAgentSummaryRequestKey("");
       const fallbackMessage = materialize
         ? "AI 검토 요약을 생성하지 못했습니다."
         : "AI 검토 요약을 불러오지 못했습니다.";
@@ -1918,14 +1926,15 @@ function AssetPreviewPanel({
                     type="button"
                     className="mvp-agent-review-refresh"
                     onClick={() => void loadAgentSummary(true)}
-                    disabled={agentSummaryLoading || agentSummaryMaterializing}
+                    disabled={!canMaterializeAgentSummary || agentSummaryLoading || agentSummaryMaterializing}
                     aria-label="AI 요약 재생성"
-                    title="AI 요약 재생성"
+                    title={canMaterializeAgentSummary ? "AI 요약 재생성" : "AI 요약 재생성 권한 없음"}
                   >
                     <RefreshCw className={agentSummaryMaterializing ? "mvp-action-spinner" : ""} size={13} />
-                    <span>{agentSummaryMaterializing ? "생성 중" : "요약 재생성"}</span>
+                    <span>{agentSummaryMaterializing ? "생성 중" : canMaterializeAgentSummary ? "요약 재생성" : "재생성 권한 없음"}</span>
                   </button>
                 </header>
+                {!canMaterializeAgentSummary ? <p>현재 역할은 저장된 AI 요약만 조회할 수 있습니다.</p> : null}
                 {agentSummaryLoading ? <p>저장된 AI 요약을 조회하는 중입니다.</p> : null}
                 {agentSummaryMaterializing ? <p>현재 snapshot 기준 AI 요약을 다시 생성하는 중입니다.</p> : null}
                 {!agentSummaryLoading ? (

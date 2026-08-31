@@ -40,6 +40,7 @@ class AgentReviewSummaryMaterializer:
         history_window: str,
         workflow_run_id: str | None = None,
         force: bool = False,
+        refresh_fallback: bool = False,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         key_payload = summary_key_payload(
             packet=packet,
@@ -51,7 +52,8 @@ class AgentReviewSummaryMaterializer:
         )
         materialization_key = summary_key(key_payload)
         cached = self.repository.get_agent_review_summary(materialization_key)
-        if cached is not None and not force:
+        should_refresh_fallback = refresh_fallback and cached is not None and cached.get("status") == "fallback"
+        if cached is not None and not force and not should_refresh_fallback:
             return cached["summary"], {
                 **cached["trace"],
                 "materialization": _materialization_trace(cached, reused=True),

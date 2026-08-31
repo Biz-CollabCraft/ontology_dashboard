@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Lock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -750,6 +753,44 @@ def test_agent_review_summary_regeneration_bypasses_cached_fallback(
     assert second_trace["workflow_run"]["status"] == "completed"
 
 
+def test_agent_review_summary_watcher_refreshes_cached_fallback(
+    service: FactorySignalService,
+) -> None:
+    class TransientProvider(FakeAgentReviewSummaryProvider):
+        def generate(self, packet: dict) -> dict:
+            self.calls += 1
+            if self.calls == 1:
+                raise ConnectionError("temporary provider outage")
+            return self.payload_factory(packet)
+
+    provider = TransientProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+            "title": "자동 감시 복구 요약",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    first_summary, first_trace = service.agent_review_summary(
+        "CNC-S04-L04-01",
+        trigger="polling_watcher",
+    )
+    second_summary, second_trace = service.agent_review_summary(
+        "CNC-S04-L04-01",
+        trigger="polling_watcher",
+    )
+
+    assert provider.calls == 2
+    assert first_summary["mode"] == "deterministic_fallback"
+    assert first_trace["materialization"]["status"] == "fallback"
+    assert second_summary["mode"] == "llm"
+    assert second_summary["title"] == "자동 감시 복구 요약"
+    assert second_trace["materialization"]["status"] == "ready"
+    assert second_trace["materialization"]["reused"] is False
+    assert second_trace["workflow_run"]["status"] == "completed"
+
+
 def test_agent_review_summary_cache_hit_does_not_create_runtime_run(
     service: FactorySignalService,
 ) -> None:
@@ -775,6 +816,49 @@ def test_agent_review_summary_cache_hit_does_not_create_runtime_run(
     assert provider.calls == 1
     assert len(runs) == 1
     assert runs[0]["workflow_run_id"] == first_trace["workflow_run"]["workflow_run_id"]
+
+
+def test_agent_review_summary_concurrent_non_force_requests_share_runtime_run(
+    service: FactorySignalService,
+) -> None:
+    calls_lock = Lock()
+
+    class SlowProvider(FakeAgentReviewSummaryProvider):
+        def generate(self, packet: dict) -> dict:
+            with calls_lock:
+                self.calls += 1
+            time.sleep(0.05)
+            return self.payload_factory(packet)
+
+    provider = SlowProvider(
+        lambda packet: {
+            **compose_deterministic_agent_review_summary(packet),
+            "mode": "llm",
+            "title": "동시 요청 공유 요약",
+        }
+    )
+    service.agent_review_summary_provider = provider
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(
+            executor.map(
+                lambda _: service.agent_review_summary("CNC-S04-L04-01"),
+                range(2),
+            )
+        )
+
+    summaries = [summary for summary, _trace in results]
+    traces = [trace for _summary, trace in results]
+    runs = service.agent_review_workflow_runs(
+        asset_id="CNC-S04-L04-01",
+        limit=10,
+    )["items"]
+
+    assert provider.calls == 1
+    assert summaries[0] == summaries[1]
+    assert sorted(trace["materialization"]["reused"] for trace in traces) == [False, True]
+    assert len(runs) == 1
+    assert runs[0]["status"] == "completed"
 
 
 def test_agent_review_summary_get_does_not_trigger_lazy_materialization(
@@ -858,12 +942,18 @@ def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
         "/api/projects/manufacturing-demo-project/agent-review-workflow-runs"
         "?asset_id=CNC-S04-L04-01&limit=10"
     )
+    completed_response = client.get(
+        "/api/projects/manufacturing-demo-project/agent-review-workflow-runs"
+        "?asset_id=CNC-S04-L04-01&status=completed&limit=10"
+    )
 
     assert first.status_code == 200
     assert second.status_code == 200
     assert other.status_code == 200
     assert response.status_code == 200
+    assert completed_response.status_code == 200
     payload = response.json()
+    completed_payload = completed_response.json()
     assert payload["project_id"] == "manufacturing-demo-project"
     assert payload["workspace_id"] == "manufacturing-demo"
     assert [item["trigger"] for item in payload["items"]] == [
@@ -876,6 +966,9 @@ def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
     assert all(item["history_window"] == "24h" for item in payload["items"])
     assert all(item["error_message"] is None for item in payload["items"])
     assert all(item["trace"]["stage"] == "finished" for item in payload["items"])
+    assert [item["workflow_run_id"] for item in completed_payload["items"]] == [
+        item["workflow_run_id"] for item in payload["items"]
+    ]
     assert provider.calls == 3
 
 

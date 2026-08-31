@@ -22,6 +22,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+pytest.importorskip("lightgbm")
+
 # Ensure systems/backend is resolvable for backend imports
 _BACKEND_ROOT = str(Path(__file__).resolve().parents[1] / "systems" / "backend")
 if _BACKEND_ROOT not in sys.path:

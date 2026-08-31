@@ -75,7 +75,7 @@ class AuditRepository:
                     prompt_version TEXT NOT NULL,
                     model_version TEXT NOT NULL,
                     source_sha256 TEXT NOT NULL,
-                    status TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('ready','fallback','failed','stale')),
                     fallback_reason TEXT,
                     snapshot_basis_json TEXT NOT NULL,
                     summary_json TEXT NOT NULL,
@@ -332,7 +332,7 @@ class AuditRepository:
             str(filters["project_id"]),
             str(filters.get("workspace_id") or "manufacturing-demo"),
         ]
-        for column in ("asset_id", "event_id", "dataset_version_id"):
+        for column in ("asset_id", "event_id", "dataset_version_id", "status"):
             value = filters.get(column)
             if value:
                 clauses.append(f"{column}=?")

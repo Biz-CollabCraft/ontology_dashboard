@@ -203,6 +203,7 @@ def list_agent_review_workflow_runs(
     asset_id: str | None = Query(default=None, max_length=160),
     event_id: str | None = Query(default=None, max_length=160),
     dataset_version_id: str | None = Query(default=None, max_length=160),
+    status: Literal["running", "completed", "partial", "failed"] | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     principal: Principal = Depends(require_permission("events.read")),
     service: ManufacturingPredictiveMaintenanceService = Depends(get_service),
@@ -215,6 +216,7 @@ def list_agent_review_workflow_runs(
         asset_id=asset_id,
         event_id=event_id,
         dataset_version_id=dataset_version_id,
+        status=status,
         limit=limit,
     )
 

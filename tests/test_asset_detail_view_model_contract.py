@@ -180,6 +180,7 @@ def test_schema_accepts_nullable_criticality_and_extended_owner_domains() -> Non
     )
     assert set(gap_owner_domain) == {
         "diagnosis",
+        "generator",
         "dataset",
         "equipment",
         "project",

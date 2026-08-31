@@ -6,6 +6,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from app.diagnosis.contracts import derive_features, load_fixture
@@ -46,6 +47,8 @@ from app.planner.contracts import IntentRouter, deterministic_answer
 from .ports import AuditRepositoryPort, LayoutPlannerPort, ReportAgentPort
 
 RISK_PRIORITY = {"critical": 0, "warning": 1, "attention": 2, "data_quality_hold": 3, "normal": 4}
+_AGENT_REVIEW_SUMMARY_LOCKS: dict[str, Lock] = {}
+_AGENT_REVIEW_SUMMARY_LOCKS_GUARD = Lock()
 
 
 class EventNotFound(KeyError):
@@ -306,74 +309,80 @@ class ManufacturingPredictiveMaintenanceService:
             history_window=history_window,
             provider=self.agent_review_summary_provider,
         )
-        if not force:
-            cached_summary, cached_trace = materializer.lookup(
-                packet=packet,
-                organization_id=organization_id,
-                project_id=project_id,
-                workspace_id=workspace_id,
-                history_window=history_window,
-            )
-            if cached_summary is not None:
-                return cached_summary, cached_trace
+        materialization_key = summary_key(key_payload)
+        with _agent_review_summary_lock(materialization_key):
+            if not force:
+                cached_summary, cached_trace = materializer.lookup(
+                    packet=packet,
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                )
+                cached_status = (cached_trace.get("materialization") or {}).get("status")
+                if cached_summary is not None and (
+                    cached_status != "fallback" or self.agent_review_summary_provider is None
+                ):
+                    return cached_summary, cached_trace
 
-        run = self.repository.create_agent_review_workflow_run(
-            trigger=trigger,
-            engine=engine,
-            status="running",
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            asset_id=packet.get("asset_id"),
-            event_id=key_payload["event_id"],
-            dataset_version_id=key_payload["dataset_version"],
-            history_window=history_window,
-            summary_key=summary_key(key_payload),
-            source_sha256=key_payload["source_sha256"],
-            context_sha256=key_payload["context_sha256"],
-            packet_schema_version=key_payload["packet_schema_version"],
-            prompt_version=key_payload["prompt_version"],
-            model_version=key_payload["model_version"],
-            trace={"stage": "started"},
-        )
-        try:
-            summary, trace = materializer.materialize(
-                packet=packet,
+            run = self.repository.create_agent_review_workflow_run(
+                trigger=trigger,
+                engine=engine,
+                status="running",
                 organization_id=organization_id,
                 project_id=project_id,
                 workspace_id=workspace_id,
+                asset_id=packet.get("asset_id"),
+                event_id=key_payload["event_id"],
+                dataset_version_id=key_payload["dataset_version"],
                 history_window=history_window,
-                workflow_run_id=run["workflow_run_id"],
-                force=force,
+                summary_key=materialization_key,
+                source_sha256=key_payload["source_sha256"],
+                context_sha256=key_payload["context_sha256"],
+                packet_schema_version=key_payload["packet_schema_version"],
+                prompt_version=key_payload["prompt_version"],
+                model_version=key_payload["model_version"],
+                trace={"stage": "started"},
             )
-            status = _workflow_run_status(trace)
-            finished = self.repository.finish_agent_review_workflow_run(
-                run["workflow_run_id"],
-                status=status,
-                trace={
-                    "stage": "finished",
-                    "materialization": trace.get("materialization") or {},
-                    "provider": trace.get("provider"),
-                    "fallback": trace.get("fallback"),
-                    "reason": trace.get("reason"),
-                    "validation_errors": trace.get("validation_errors") or [],
-                },
-            )
-            return summary, {
-                **trace,
-                "workflow_run": _workflow_run_trace(finished),
-            }
-        except Exception as exc:
-            finished = self.repository.finish_agent_review_workflow_run(
-                run["workflow_run_id"],
-                status="failed",
-                error_type=type(exc).__name__,
-                error_message=str(exc),
-                trace={"stage": "failed", "error_type": type(exc).__name__},
-            )
-            raise RuntimeError(
-                f"agent_review_summary_workflow_failed:{finished['workflow_run_id']}"
-            ) from exc
+            try:
+                summary, trace = materializer.materialize(
+                    packet=packet,
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    history_window=history_window,
+                    workflow_run_id=run["workflow_run_id"],
+                    force=force,
+                    refresh_fallback=self.agent_review_summary_provider is not None,
+                )
+                status = _workflow_run_status(trace)
+                finished = self.repository.finish_agent_review_workflow_run(
+                    run["workflow_run_id"],
+                    status=status,
+                    trace={
+                        "stage": "finished",
+                        "materialization": trace.get("materialization") or {},
+                        "provider": trace.get("provider"),
+                        "fallback": trace.get("fallback"),
+                        "reason": trace.get("reason"),
+                        "validation_errors": trace.get("validation_errors") or [],
+                    },
+                )
+                return summary, {
+                    **trace,
+                    "workflow_run": _workflow_run_trace(finished),
+                }
+            except Exception as exc:
+                finished = self.repository.finish_agent_review_workflow_run(
+                    run["workflow_run_id"],
+                    status="failed",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    trace={"stage": "failed", "error_type": type(exc).__name__},
+                )
+                raise RuntimeError(
+                    f"agent_review_summary_workflow_failed:{finished['workflow_run_id']}"
+                ) from exc
 
     def cached_agent_review_summary(
         self,
@@ -419,6 +428,7 @@ class ManufacturingPredictiveMaintenanceService:
         asset_id: str | None = None,
         event_id: str | None = None,
         dataset_version_id: str | None = None,
+        status: str | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
         runs = self.repository.list_agent_review_workflow_runs(
@@ -428,6 +438,7 @@ class ManufacturingPredictiveMaintenanceService:
             asset_id=asset_id,
             event_id=event_id,
             dataset_version_id=dataset_version_id,
+            status=status,
             limit=limit,
         )
         return {
@@ -824,6 +835,15 @@ def _workflow_run_status(trace: dict[str, Any]) -> str:
     if status == "failed":
         return "failed"
     return "completed"
+
+
+def _agent_review_summary_lock(summary_key_value: str) -> Lock:
+    with _AGENT_REVIEW_SUMMARY_LOCKS_GUARD:
+        lock = _AGENT_REVIEW_SUMMARY_LOCKS.get(summary_key_value)
+        if lock is None:
+            lock = Lock()
+            _AGENT_REVIEW_SUMMARY_LOCKS[summary_key_value] = lock
+        return lock
 
 
 def _workflow_run_trace(run: dict[str, Any]) -> dict[str, Any]:

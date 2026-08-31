@@ -38,8 +38,8 @@ def resolve_database(root: Path, value: str | None) -> str:
 
 def run_once(
     *,
-    root: Path,
     database: str,
+    service,
     project_id: str,
     history_window: str,
     limit: int | None,
@@ -49,11 +49,8 @@ def run_once(
     max_iterations: int | None,
     stale_policy: str,
 ) -> dict:
-    configure_imports(root)
-    from app.dependencies import build_manufacturing_service
     from app.mvp.agent_review_summary_workflow import AgentReviewSummaryWorkflow
 
-    service = build_manufacturing_service(database, root=root)
     result = AgentReviewSummaryWorkflow(service).run(
         project_id,
         history_window=history_window,
@@ -119,13 +116,17 @@ def main() -> None:
         parser.error("--max-iterations must be positive when provided")
 
     root = project_root()
+    configure_imports(root)
+    from app.dependencies import build_manufacturing_service
+
     database = resolve_database(root, args.database)
+    service = build_manufacturing_service(database, root=root)
     iteration = 0
     while True:
         iteration += 1
         result = run_once(
-            root=root,
             database=database,
+            service=service,
             project_id=args.project_id,
             history_window=args.history_window,
             limit=args.limit,

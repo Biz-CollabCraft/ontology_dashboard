@@ -674,6 +674,7 @@ export function getMvpAgentReviewWorkflowRuns(input: {
   assetId?: string | null;
   eventId?: string | null;
   datasetVersionId?: string | null;
+  status?: "running" | "completed" | "partial" | "failed" | null;
   limit?: number;
 }): Promise<MvpAgentReviewWorkflowRunsResponse> {
   const projectId = input.projectId ?? "manufacturing-demo-project";
@@ -683,6 +684,7 @@ export function getMvpAgentReviewWorkflowRuns(input: {
   if (input.assetId) params.set("asset_id", input.assetId);
   if (input.eventId) params.set("event_id", input.eventId);
   if (input.datasetVersionId) params.set("dataset_version_id", input.datasetVersionId);
+  if (input.status) params.set("status", input.status);
   return request<MvpAgentReviewWorkflowRunsResponse>(
     `/api/projects/${encodeURIComponent(projectId)}/agent-review-workflow-runs?${params.toString()}`,
   );

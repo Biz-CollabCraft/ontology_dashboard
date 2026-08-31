@@ -80,7 +80,7 @@ def _merge_llm_editable_fields(
     candidate_quotes = {
         str(item.get("role")): item.get("quote")
         for item in candidate.get("role_summaries") or []
-        if isinstance(item, dict)
+        if isinstance(item, dict) and isinstance(item.get("quote"), str)
     }
     summary["role_summaries"] = [
         {

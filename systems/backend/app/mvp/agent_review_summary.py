@@ -859,8 +859,9 @@ def _walk_forbidden_fields(value: Any) -> set[str]:
 def _walk_forbidden_claims(value: Any) -> set[str]:
     found: set[str] = set()
     if isinstance(value, str):
+        normalized_value = _normalize_claim_text(value)
         for claim in FORBIDDEN_SUMMARY_CLAIMS:
-            if claim in value:
+            if _normalize_claim_text(claim) in normalized_value:
                 found.add(claim)
     elif isinstance(value, dict):
         for child in value.values():

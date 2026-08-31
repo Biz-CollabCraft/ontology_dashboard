@@ -126,6 +126,7 @@ export function MvpSystemAdminPage({
     try {
       const response = await getMvpAgentReviewWorkflowRuns({
         projectId: model.context.projectId,
+        status: statusFilter === "all" ? null : statusFilter,
         limit: 100,
       });
       setRuns(response.items);
@@ -134,16 +135,13 @@ export function MvpSystemAdminPage({
     } finally {
       setLoading(false);
     }
-  }, [model.context.projectId]);
+  }, [model.context.projectId, statusFilter]);
 
   useEffect(() => {
     void loadRuns();
   }, [loadRuns]);
 
-  const filteredRuns = useMemo(
-    () => runs.filter((run) => statusFilter === "all" || run.status === statusFilter),
-    [runs, statusFilter],
-  );
+  const filteredRuns = runs;
   const assetLabels = useMemo(
     () => new Map(model.assets.map((asset) => [asset.assetId, asset.displayName])),
     [model.assets],

@@ -26,6 +26,7 @@ import { MvpOverviewPage } from "./overview/MvpOverviewPage";
 import { MvpReportsPage } from "./report/MvpReportsPage";
 import { MvpShell } from "./shell/MvpShell";
 import { MvpSystemAdminPage } from "./system/MvpSystemAdminPage";
+import { canMaterializeAgentReviewSummary } from "./permissions";
 import "./mvp.css";
 
 const MVP_REFRESH_INTERVAL_SECONDS = 10;
@@ -234,6 +235,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
 
   const canDecide = Boolean(user?.permissions.includes("events.decision"));
   const canNote = Boolean(user?.permissions.includes("events.note"));
+  const canMaterializeAgentSummary = canMaterializeAgentReviewSummary(user?.permissions);
   const selectedAssetId = selection.assetId;
 
   let content;
@@ -246,7 +248,7 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
   } else if (selection.view === "system") {
     content = <MvpSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />;
   } else {
-    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
+    content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} canMaterializeAgentSummary={canMaterializeAgentSummary} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }
 
   return (

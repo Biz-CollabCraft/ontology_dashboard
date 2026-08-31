@@ -38,14 +38,16 @@ function idempotencyPart(value: string | null | undefined): string {
   return String(value ?? "none").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80);
 }
 
-function inspectionRequestIdempotencyKey(input: {
+export function inspectionRequestIdempotencyKey(input: {
   eventId: string;
   userId: string;
+  decision: MvpDecision;
   snapshotBasis: MvpEvidenceSnapshotBasis;
 }): string {
   return [
     "mvp-inspection",
     idempotencyPart(input.eventId),
+    idempotencyPart(input.decision),
     idempotencyPart(input.userId),
     idempotencyPart(input.snapshotBasis.artifactId ?? input.snapshotBasis.observedAt),
   ].join(":").slice(0, 200);
@@ -325,11 +327,11 @@ export async function submitMvpDecision(input: {
       },
       idempotencyKey: inspectionRequestIdempotencyKey({
         eventId: input.eventId,
+        decision: input.decision,
         userId: input.userId,
         snapshotBasis: input.snapshotBasis,
       }),
     });
-    return;
   }
   await recordDecision(input.eventId, input.actor, input.decision, input.note);
 }
