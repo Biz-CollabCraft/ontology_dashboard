@@ -988,3 +988,114 @@ def test_existing_state_preserved_on_fragment_write_failure(tmp_path, monkeypatc
     assert (frag_dir_1 / "fragment_manifest.json").read_bytes() == manifest_bytes_1
     # 3. Second fragment was not created
     assert not (tmp_path / "runs" / "run-2" / "fragments" / ("b" * 64)).exists()
+
+
+def test_empty_new_source_returns_no_data(tmp_path, base_mapping_fixture):
+    """When a new source file has 0 bytes and no checkpoint exists, returns no_data and creates no checkpoint or fragment."""
+    stream_file = tmp_path / "sensor_stream.jsonl"
+    stream_file.write_bytes(b"")
+
+    source = GenDataSensorStreamSource(
+        site_id="S01",
+        cell_id="L01",
+        facility_dir_name="facS01",
+        line_dir_name="lineL01",
+        source_path=stream_file,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    service = _create_service(tmp_path)
+
+    res = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-empty-001",
+    )
+
+    assert res.status == "no_data"
+    assert res.start_offset == 0
+    assert res.committed_offset == 0
+    assert res.records_read == 0
+
+    # Invariant: No checkpoint created
+    chk_files = list((tmp_path / "checkpoints").glob("*.json"))
+    assert len(chk_files) == 0
+
+    # Invariant: No fragment created
+    frag_files = list((tmp_path / "extraction_runs").glob("*"))
+    assert len(frag_files) == 0
+
+
+def test_processed_source_truncated_to_zero_bytes_raises_error(tmp_path, base_mapping_fixture):
+    """When an already processed source is truncated to 0 bytes, raises ExtractionSourceTruncatedError (not no_data)."""
+    records = [
+        {"ts": "2026-08-28T13:00:00Z", "asset_id": "CNC-01", "torque_nm": 45.0, "rotational_speed_rpm": 1500.0},
+        {"ts": "2026-08-28T13:01:00Z", "asset_id": "CNC-01", "torque_nm": 46.0, "rotational_speed_rpm": 1510.0},
+    ]
+    stream_file, source = _create_stream_source(tmp_path, records)
+    service = _create_service(tmp_path)
+
+    # 1. Process records initially
+    res1 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-init-001",
+    )
+    assert res1.status == "fragment_committed"
+    assert res1.committed_offset > 0
+
+    # 2. Truncate stream file to 0 bytes
+    stream_file.write_bytes(b"")
+    assert stream_file.stat().st_size == 0
+
+    # 3. Subsequent extraction attempt must raise ExtractionSourceTruncatedError, NOT return no_data
+    with pytest.raises(ExtractionSourceTruncatedError) as exc_info:
+        service.process_available_records(
+            source=source,
+            mapping_data=base_mapping_fixture,
+            run_id="run-trunc-002",
+        )
+
+    assert exc_info.value.code == "EXTRACTION_SOURCE_TRUNCATED"
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.retryable is False
+
+
+def test_truncated_to_zero_bytes_preserves_existing_checkpoint_and_dataset(tmp_path, base_mapping_fixture):
+    """When 0-byte truncation failure occurs, existing checkpoint, fragment, and dataset states are 100% preserved."""
+    records = [
+        {"ts": "2026-08-28T13:00:00Z", "asset_id": "CNC-01", "torque_nm": 45.0, "rotational_speed_rpm": 1500.0},
+        {"ts": "2026-08-28T13:01:00Z", "asset_id": "CNC-01", "torque_nm": 46.0, "rotational_speed_rpm": 1510.0},
+    ]
+    stream_file, source = _create_stream_source(tmp_path, records)
+    service = _create_service(tmp_path)
+
+    # 1. Initial processing
+    res1 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-init-001",
+    )
+    assert res1.status == "fragment_committed"
+
+    chk_file = (tmp_path / "checkpoints") / f"{res1.source_identity}.json"
+    assert chk_file.is_file()
+    orig_chk_bytes = chk_file.read_bytes()
+
+    frag_manifest = (tmp_path / "extraction_runs" / "run-init-001" / "fragments" / res1.batch_id / "fragment_manifest.json")
+    assert frag_manifest.is_file()
+    orig_frag_manifest_bytes = frag_manifest.read_bytes()
+
+    # 2. Truncate to 0 bytes
+    stream_file.write_bytes(b"")
+
+    # 3. Call process_available_records expecting error
+    with pytest.raises(ExtractionSourceTruncatedError):
+        service.process_available_records(
+            source=source,
+            mapping_data=base_mapping_fixture,
+            run_id="run-trunc-002",
+        )
+
+    # 4. Verify invariants: Checkpoint and Fragment remain 100% byte-for-byte identical
+    assert chk_file.read_bytes() == orig_chk_bytes
+    assert frag_manifest.read_bytes() == orig_frag_manifest_bytes

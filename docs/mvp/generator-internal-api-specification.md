@@ -454,6 +454,38 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 
 - **부분 성공 격리**: 전체 모델 학습(`POST /train`) 시 특정 모델의 실패는 `partially_succeeded`로 격리되어 정상 모델의 성공 아티팩트 발행을 취소하지 않습니다.
 
+### 5.8 Extraction 및 Canonical Observation 발행 계약 (`POST /extraction` — Current)
+
+`POST /extraction`은 최초 승인 Mapping(`generator-static-mapping-table`)을 기준으로 동일 Source의 append-only 증분 추출을 수행합니다.
+
+- **Mapping 변경 요청 Fail-Closed**: 동일 Source가 기존 Checkpoint와 다른 `mapping_id`, `mapping_version` 또는 `mapping_sha256`으로 요청되면 과거 데이터를 자동 replay하거나 새 Dataset을 생성하지 않고 `409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED`로 fail-closed 차단합니다.
+- **구형 Checkpoint Migration**: Mapping identity가 기록되지 않은 구형 Checkpoint는 현재 Mapping에 임의 귀속하지 않고 `422 EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED`로 실패하며, 명시적인 상태 이전 또는 보관 후 재생성이 필요합니다.
+- **0바이트 Truncate 및 손상 감지**: 기존 처리된 Source가 0바이트로 축소되거나 committed offset보다 작아진 경우 `422 EXTRACTION_SOURCE_TRUNCATED`로 fail-closed 처리합니다.
+
+#### Extraction 오류 코드 표
+
+| HTTP | 오류 코드 | 조건 | 재시도 |
+|---:|---|---|---|
+| 409 | `EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED` | 동일 Source가 기존 checkpoint와 다른 Mapping으로 요청됨 | 불가 |
+| 422 | `EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED` | 기존 checkpoint에 Mapping identity가 없음 | 자동 재시도 불가 |
+| 422 | `EXTRACTION_SOURCE_TRUNCATED` | 기존 checkpoint offset보다 Source 크기가 작거나 0바이트로 축소됨 | 불가 |
+| 409 | `EXTRACTION_SOURCE_LOCKED` | 동일 Source에 대해 다른 추출 프로세스가 락을 보유 중 | 가능 |
+| 500 | `EXTRACTION_FRAGMENT_WRITE_FAILED` | Fragment 파일 open/write/flush 또는 rename I/O 실패 | 가능 |
+| 409 | `EXTRACTION_FRAGMENT_CONFLICT` | 동일 batch_id 대상 상이/손상된 Fragment 존재 | 불가 |
+
+#### Extraction 기능 지원 현황 (Current vs Target)
+
+| 기능 | 현재 상태 | 설명 |
+|---|:---:|---|
+| 최초 승인 Mapping 기반 추출 | **Current** | 승인된 정적 매핑 테이블 기반 canonical observation 변환 |
+| 동일 Mapping append-only 증분 처리 | **Current** | Source offset checkpoint 기반 안전한 증분 추출 |
+| Mapping identity 불일치 감지 | **Current** | Checkpoint에 mapping_id/version/sha256 보존 및 비교 |
+| Mapping 변경 요청 fail-closed | **Current** | 409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED 반환 |
+| 0바이트 Truncate 및 손상 감지 | **Current** | 422 EXTRACTION_SOURCE_TRUNCATED 반환 |
+| Mapping 변경 과거 Source replay | **Target** | offset 0부터 결정론적 replay (Issue #146) |
+| Mapping별 Checkpoint·Dataset 재구성 | **Target** | Multi-mapping Checkpoint 분리 및 Dataset Version 재발행 (Issue #146) |
+| Mapping 활성화·rollback | **Target** | 런타임 활성 Mapping 전환 및 rollback (Issue #146) |
+| Mapping 관리 UI | **Target** | Mapping 조회/편집/승인 웹 UI (Issue #146) |
 
 ---
 

@@ -113,7 +113,20 @@ class GenDataIncrementalExtractionService:
         7. Checkpoint advances through 'processing' -> 'fragment_staged' -> 'idle'.
         """
         source_path = Path(source.source_path).resolve()
-        if not source_path.is_file() or source_path.stat().st_size == 0:
+        if not source_path.is_file():
+            raise ExtractionSourceNotFoundError(f"Source stream file does not exist at '{source_path}'")
+
+        if source_path.stat().st_size == 0:
+            existing_chk = self.checkpoint_repo.find_checkpoint_by_source(source)
+            if existing_chk is not None and existing_chk.last_committed_offset > 0:
+                logger.error(
+                    f"[IncrementalService] Source '{source.source_uri}' has 0 bytes but existing checkpoint offset is {existing_chk.last_committed_offset}"
+                )
+                raise ExtractionSourceTruncatedError(
+                    f"Source file '{source.source_uri}' has been truncated to 0 bytes (last committed offset was {existing_chk.last_committed_offset})."
+                )
+
+            logger.info(f"[IncrementalService] Source '{source.source_uri}' is empty new source (EMPTY_NEW_SOURCE)")
             return IncrementalExtractionResult(
                 source_identity="",
                 source_uri=source.source_uri,
@@ -138,6 +151,18 @@ class GenDataIncrementalExtractionService:
         first_peek = self.parser.read_completed_records(source_path, start_offset=0, max_records=1)
         if len(first_peek.records) == 0 and len(first_peek.rejected_records) == 0:
             # File has bytes but no completed newline yet
+            existing_chk = self.checkpoint_repo.find_checkpoint_by_source(source)
+            if existing_chk is not None and existing_chk.last_committed_offset > source_path.stat().st_size:
+                logger.error(
+                    f"[IncrementalService] Source '{source.source_uri}' size ({source_path.stat().st_size}) is less than last committed offset ({existing_chk.last_committed_offset})"
+                )
+                raise ExtractionSourceTruncatedError(
+                    f"Source file '{source.source_uri}' size ({source_path.stat().st_size} bytes) is less than last committed offset ({existing_chk.last_committed_offset} bytes)."
+                )
+
+            logger.info(
+                f"[IncrementalService] Source '{source.source_uri}' has {source_path.stat().st_size} bytes but incomplete first record (INCOMPLETE_FIRST_RECORD)"
+            )
             return IncrementalExtractionResult(
                 source_identity="",
                 source_uri=source.source_uri,
@@ -203,6 +228,12 @@ class GenDataIncrementalExtractionService:
                         last_committed_offset=chk.last_committed_offset,
                     )
 
+                if source_path.stat().st_size < chk.last_committed_offset:
+                    raise ExtractionSourceTruncatedError(
+                        f"Source file '{source_path}' size ({source_path.stat().st_size} bytes) is less than "
+                        f"last committed offset ({chk.last_committed_offset} bytes)."
+                    )
+
                 # Crash Recovery: Check if recovering from fragment_staged
                 if chk.status == "fragment_staged" and chk.pending_batch is not None:
                     pb = chk.pending_batch
@@ -246,6 +277,9 @@ class GenDataIncrementalExtractionService:
             # Check if there is new data beyond committed offset (ONLY after mapping check!)
             file_size = source_path.stat().st_size
             if start_offset >= file_size:
+                logger.info(
+                    f"[IncrementalService] Source '{source.source_uri}' (identity={source_identity}) is at EOF with no new appended data (NO_NEW_APPENDED_DATA)"
+                )
                 return IncrementalExtractionResult(
                     source_identity=source_identity,
                     source_uri=source.source_uri,

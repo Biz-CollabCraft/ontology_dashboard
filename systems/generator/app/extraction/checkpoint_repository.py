@@ -339,6 +339,37 @@ class GenDataExtractionCheckpointRepository:
                 f"Failed to read checkpoint for source '{source_identity}': {exc}"
             ) from exc
 
+    def find_checkpoint_by_source(
+        self,
+        source: Any,
+    ) -> Optional[GenDataExtractionCheckpoint]:
+        """Find checkpoint matching source_uri and scope (used when source_identity cannot be derived)."""
+        if not self.checkpoints_root.is_dir():
+            return None
+
+        source_uri = getattr(source, "source_uri", None)
+        site_id = getattr(source, "site_id", None)
+        cell_id = getattr(source, "cell_id", None)
+
+        if not source_uri:
+            return None
+
+        for chk_file in self.checkpoints_root.glob("*.json"):
+            if chk_file.name.startswith(".tmp_"):
+                continue
+            try:
+                raw_bytes = chk_file.read_bytes()
+                raw_data = json.loads(raw_bytes.decode("utf-8"))
+                if (
+                    raw_data.get("source_uri") == source_uri
+                    and (site_id is None or raw_data.get("site_id") == site_id)
+                    and (cell_id is None or raw_data.get("cell_id") == cell_id)
+                ):
+                    return self.load_checkpoint(chk_file.stem)
+            except Exception:
+                continue
+        return None
+
     def save_checkpoint_atomic(
         self,
         checkpoint: GenDataExtractionCheckpoint,

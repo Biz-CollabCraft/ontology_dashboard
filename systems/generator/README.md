@@ -351,20 +351,28 @@ gen_data (sensor_stream.jsonl append)
 
 ## 8. Mapping 정책 및 미구현 범위 분리 (Mapping Policy & Unimplemented Scope)
 
-### 8.1 Mapping 지원 및 미지원 범위
-- **Current (현재 구현 범위)**:
-  - 최초 승인 Mapping(`generator-static-mapping-table`)을 이용한 gen_data 추출.
-  - 동일 Mapping을 이용한 append-only 증분 처리 및 Checkpoint mapping identity 보존.
-  - Mapping 불일치 감지 및 409 `EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED` fail-closed 처리.
-  - Mapping identity 누락 구형 Checkpoint 로드 시 `EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED` 차단.
-- **Not Implemented (고도화 분리 범위)**:
-  - Mapping 변경에 따른 원본 Source replay (offset 0부터 replay).
-  - Source와 Mapping 조합별 Checkpoint 분리.
-  - 과거 Dataset 재구성 및 새 Mapping 기반 Dataset version 불변 발행.
-  - Mapping 버전 관리 UI, 복사 후 신규 버전 생성.
-  - `publish → rebuild → validate → activate` 상태 전환, 실패 재시도 및 rollback.
+### 8.1 Extraction 고정 Mapping MVP 계약
+`POST /extraction`은 최초 승인 Mapping(`generator-static-mapping-table`)을 기준으로 동일 Source의 append-only 증분 추출을 수행합니다.
 
-### 8.2 기타 미구현 범위
+- **Mapping 변경 요청 Fail-Closed**: 동일 Source가 기존 Checkpoint와 다른 `mapping_id`, `mapping_version` 또는 `mapping_sha256`으로 요청되면 과거 데이터를 자동 replay하거나 새 Dataset을 생성하지 않고 `409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED`로 fail-closed 차단합니다.
+- **구형 Checkpoint Migration**: Mapping identity가 기록되지 않은 구형 Checkpoint는 현재 Mapping에 임의 귀속하지 않고 `422 EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED`로 실패하며, 명시적인 상태 이전 또는 보관 후 재생성이 필요합니다.
+- **0바이트 Truncate 및 손상 감지**: 기존 처리된 Source가 0바이트로 축소되거나 committed offset보다 작아진 경우 `422 EXTRACTION_SOURCE_TRUNCATED`로 fail-closed 처리합니다.
+
+### 8.2 기능 지원 현황 (Current vs Target)
+
+| 기능 | 현재 상태 | 설명 |
+|---|:---:|---|
+| 최초 승인 Mapping 기반 추출 | **Current** | 승인된 정적 매핑 테이블 기반 canonical observation 변환 |
+| 동일 Mapping append-only 증분 처리 | **Current** | Source offset checkpoint 기반 안전한 증분 추출 |
+| Mapping identity 불일치 감지 | **Current** | Checkpoint에 mapping_id/version/sha256 보존 및 비교 |
+| Mapping 변경 요청 fail-closed | **Current** | 409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED 반환 |
+| 0바이트 Truncate 및 손상 감지 | **Current** | 422 EXTRACTION_SOURCE_TRUNCATED 반환 |
+| Mapping 변경 과거 Source replay | **Target** | offset 0부터 결정론적 replay (Issue #146) |
+| Mapping별 Checkpoint·Dataset 재구성 | **Target** | Multi-mapping Checkpoint 분리 및 Dataset Version 재발행 (Issue #146) |
+| Mapping 활성화·rollback | **Target** | 런타임 활성 Mapping 전환 및 rollback (Issue #146) |
+| Mapping 관리 UI | **Target** | Mapping 조회/편집/승인 웹 UI (Issue #146) |
+
+### 8.3 기타 미구현 범위
 - **LLM Mapping 자동 생성**: 현재는 승인된 정적 매핑 테이블(`generator-static-mapping-table`)만 지원합니다.
 - **비표준 Protocol 자동 추론**: 정의되지 않은 프로토콜 형식의 자동 감지는 지원하지 않으며 Fail-Closed 처리됩니다.
 - **결측치 자동 보정 (Imputation)**: 임의 결측치 대체 없이 `ffill` 및 엄격한 null 검증 정책을 유지합니다.
