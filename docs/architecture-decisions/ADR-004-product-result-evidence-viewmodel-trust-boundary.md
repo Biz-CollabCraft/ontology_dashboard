@@ -94,6 +94,20 @@ Generator raw 산출
      `summary_id`는 사용자가 본 설명의 감사 참조로만 연결하고, 실제 mutation guard는 동일
      `snapshot_basis` 비교로 수행한다.
 
+7. **Agent Review Packet은 도메인별로 섹션화하되 public ViewModel은 아직 물리 분리하지 않는다**
+   - 현재 AI 요약에 필요한 도메인은 위험 판단, 운영 영향, 정비/Closed-loop 이력, 점검 위치, SOP,
+     ontology 관계, read-only 권한 경계다.
+   - 이 도메인들은 하나의 `Agent Review Packet` 안에서 `domain_sections` lineage로 구분한다. 각 섹션은
+     `owner_domain`, `source`, `packet_paths`, `mutation_allowed=false`를 가진다.
+   - 별도 `OperationReviewViewModel`, `MaintenanceReviewViewModel`, `SopReviewViewModel` API를 지금 만들지
+     않는다. 현재 소비자는 같은 snapshot의 조합 결과를 한 번에 읽는 UI/Report/AI summary이며, 물리 분리는
+     API 호출 수, cache invalidation, snapshot mismatch, 테스트 fixture 폭발을 먼저 키운다.
+   - 도메인별 데이터가 독립 저장소, 독립 권한, 독립 freshness, 독립 retry 정책을 갖기 전까지는
+     `ContextProvider`/adapter가 도메인 사실을 모으고, packet composer가 LLM 노출면을 정규화한다.
+   - 물리 분리 승격 기준은 명확히 둔다. SOP가 PDF/RAG source로 독립 조회되거나, MES/CMMS/ERP 같은 운영
+     도메인이 별도 DB/source freshness를 갖거나, Closed-loop mutation guard가 특정 도메인 snapshot을
+     독립 비교해야 하거나, tool trajectory eval에서 도메인 툴 선택/재시도가 release gate가 되는 경우다.
+
 ---
 
 ## 3. 명명 계약 (Naming Contract)
@@ -110,6 +124,7 @@ Generator raw 산출
 | `AssetDetailViewModel` | UI가 소비하는 화면용 read model composer 결과. 저장된 product result 자체가 아니다. | MVP API, frontend | materialized product result |
 | `Recommendation Input` | Closed-loop 정책/상태 전이 후보가 소비하는 decision용 projection. ViewModel 표시값이 아니라 Product Result/Evidence lineage에서 파생한다. | Closed-loop service | UI state, Agent Review Summary |
 | `Agent Review Packet` | AI 요약이 읽는 read-only 패킷. Product Result/Evidence/ViewModel/SOP/context를 조합하지만 mutation 권한은 없다. | AI summary provider, eval fixtures | agent decision, approval request |
+| `Domain Section` | Agent Review Packet 안에서 도메인별 출처, packet path, read-only 경계를 설명하는 lineage 항목. 물리 API 분리가 아니라 조립 경계 표시다. | Agent Review Packet, tool/eval traces | separate ViewModel, domain source of truth |
 | `Agent Review Summary` | Agent Review Packet을 근거로 만든 역할별 설명 문장. 사용자 판단 보조용이며 Closed-loop 명령이 아니다. | UI, summary API | recommendation decision, approval |
 | `Agent Review Summary Materialization` | watcher가 snapshot diff를 감지해 생성/검증/저장한 Summary 산출물. 같은 근거와 버전에서는 재사용된다. | Backend watcher, summary repository, UI/Report read API | UI click-triggered LLM call |
 
@@ -123,6 +138,8 @@ Generator raw 산출
 6. `Materialization`은 저장/조회 가능한 산출물 생성에만 사용한다. 현재 composer-only 경로에는 붙이지 않는다.
 7. `Agent Review Summary Materialization`은 Product Result/Evidence snapshot 변화 또는 prompt/schema/model
    version 변화에 의해 갱신된다. UI 탭 진입이나 사이드뷰 클릭은 조회 이벤트일 뿐 생성 이벤트가 아니다.
+8. `Domain Section`은 packet 내부 lineage 용어다. 도메인 데이터가 독립 저장소/API로 승격되기 전에는
+   public ViewModel 분리를 의미하지 않는다.
 
 ---
 

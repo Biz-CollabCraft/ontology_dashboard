@@ -34,6 +34,11 @@
     "asset_label": {"type": "string"},
     "generated_at": {"type": "string"},
     "snapshot_basis": {"$ref": "#/$defs/evidenceSnapshotBasis"},
+    "domain_sections": {
+      "type": "array",
+      "description": "Read-only lineage map for domain sections assembled into this packet. This keeps domain boundaries explicit without splitting the public ViewModel/API shape prematurely.",
+      "items": {"$ref": "#/$defs/domainSection"}
+    },
     "risk_summary": {
       "type": "object",
       "required": ["status_grade", "failure_probability", "prediction_horizon_hours"],
@@ -430,6 +435,20 @@
         "recorded_at": {"type": "string"},
         "summary": {"type": "string"},
         "source_ref": {"type": "string"}
+      }
+    },
+    "domainSection": {
+      "type": "object",
+      "required": ["section_id", "owner_domain", "source", "packet_paths", "mutation_allowed", "materialization"],
+      "additionalProperties": false,
+      "properties": {
+        "section_id": {"type": "string"},
+        "owner_domain": {"type": "string"},
+        "source": {"type": "string"},
+        "packet_paths": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "mutation_allowed": {"const": false},
+        "materialization": {"enum": ["inline_packet_section", "stored_summary_input", "future_external_adapter"]},
+        "notes": {"type": "array", "items": {"type": "string"}}
       }
     }
   }

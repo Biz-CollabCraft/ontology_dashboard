@@ -217,6 +217,14 @@ def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> Non
         assert current["evidence_gaps"] == gold["evidence_gaps"]
         assert current["source_refs"] == gold["source_refs"]
         assert current["closed_loop_boundary"] == gold["closed_loop_boundary"]
+        sections = {section["section_id"]: section for section in current["domain_sections"]}
+        assert {"risk", "operation", "inspection", "sop", "ontology"}.issubset(
+            sections
+        )
+        assert all(section["mutation_allowed"] is False for section in sections.values())
+        assert "model_expression_context" in sections["risk"]["packet_paths"]
+        assert sections["operation"]["owner_domain"] == "operations"
+        assert sections["closed_loop_boundary"]["owner_domain"] == "closed_loop"
 
 
 def test_agent_review_packet_uses_same_snapshot_basis_as_view_model(tmp_path: Path) -> None:
@@ -308,6 +316,12 @@ def test_agent_review_packet_accepts_adapter_supplied_context(tmp_path: Path) ->
     )
     assert packet["maintenance_history_summary"]["mutation_allowed"] is False
     assert "stub-maintenance://work-orders/WO-STUB-001" in packet["source_refs"]
+    sections = {section["section_id"]: section for section in packet["domain_sections"]}
+    assert sections["operation"]["source"] == (
+        "AgentReviewContextProvider operation adapter"
+    )
+    assert sections["operation"]["packet_paths"] == ["operation_context_summary"]
+    assert sections["maintenance_history"]["mutation_allowed"] is False
     assert "role_summaries" not in packet
 
 

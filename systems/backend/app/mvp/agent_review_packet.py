@@ -138,6 +138,14 @@ def compose_agent_review_packet(
         ),
         "generated_at": str((view_model.get("asset") or {}).get("observed_at") or ""),
         "snapshot_basis": view_model.get("snapshot_basis") or {},
+        "domain_sections": _domain_sections(
+            has_operation_context=agent_context.operation_context_summary is not None,
+            has_sop_guidance=bool(sop_guidance),
+            has_ontology_context=bool(
+                ontology_context and ontology_context.get("traversals")
+            ),
+            has_maintenance_history=bool(maintenance_history_summary),
+        ),
         "risk_summary": {
             "status_grade": (view_model.get("risk") or {}).get("status_grade"),
             "failure_probability": (view_model.get("risk") or {}).get("current"),
@@ -173,6 +181,133 @@ def compose_agent_review_packet(
         },
         "limitations": list(dict.fromkeys(limitations)),
     }
+
+
+def _domain_sections(
+    *,
+    has_operation_context: bool,
+    has_sop_guidance: bool,
+    has_ontology_context: bool,
+    has_maintenance_history: bool,
+) -> list[dict[str, Any]]:
+    sections = [
+        {
+            "section_id": "risk",
+            "owner_domain": "diagnosis",
+            "source": "Product Result Artifact promoted through AssetDetailViewModel",
+            "packet_paths": [
+                "risk_summary",
+                "review_priority",
+                "model_expression_context",
+            ],
+            "mutation_allowed": False,
+            "materialization": "inline_packet_section",
+            "notes": [
+                "Carries product-facing risk facts; does not expose raw Generator payloads."
+            ],
+        },
+        {
+            "section_id": "inspection",
+            "owner_domain": "maintenance",
+            "source": "AssetDetailViewModel inspection target projection",
+            "packet_paths": ["inspection_targets"],
+            "mutation_allowed": False,
+            "materialization": "inline_packet_section",
+            "notes": [
+                "Groups model factors into field inspection targets without creating work orders."
+            ],
+        },
+        {
+            "section_id": "closed_loop_boundary",
+            "owner_domain": "closed_loop",
+            "source": "AssetDetailViewModel closed-loop projection",
+            "packet_paths": ["closed_loop_boundary"],
+            "mutation_allowed": False,
+            "materialization": "inline_packet_section",
+            "notes": [
+                "Documents available action context and explicitly forbids execution authority."
+            ],
+        },
+    ]
+
+    if has_operation_context:
+        sections.append(
+            {
+                "section_id": "operation",
+                "owner_domain": "operations",
+                "source": "AgentReviewContextProvider operation adapter",
+                "packet_paths": ["operation_context_summary"],
+                "mutation_allowed": False,
+                "materialization": "inline_packet_section",
+                "notes": [
+                    "Supports role-specific production impact wording without becoming MES truth."
+                ],
+            }
+        )
+    else:
+        sections.append(
+            {
+                "section_id": "operation",
+                "owner_domain": "operations",
+                "source": "future operation adapter",
+                "packet_paths": ["operation_context_summary"],
+                "mutation_allowed": False,
+                "materialization": "future_external_adapter",
+                "notes": ["No operation context was available for this packet."],
+            }
+        )
+
+    if has_maintenance_history:
+        sections.append(
+            {
+                "section_id": "maintenance_history",
+                "owner_domain": "closed_loop",
+                "source": "AssetDetailViewModel closed-loop and ontology history projection",
+                "packet_paths": ["maintenance_history_summary", "history_review_items"],
+                "mutation_allowed": False,
+                "materialization": "inline_packet_section",
+                "notes": [
+                    "May summarize existing records but cannot create maintenance events."
+                ],
+            }
+        )
+
+    sections.append(
+        {
+            "section_id": "sop",
+            "owner_domain": "procedure",
+            "source": "SOP metadata retrieval adapter",
+            "packet_paths": ["sop_retrieval", "sop_guidance"],
+            "mutation_allowed": False,
+            "materialization": (
+                "inline_packet_section"
+                if has_sop_guidance
+                else "future_external_adapter"
+            ),
+            "notes": [
+                "Structured SOP metadata is used before RAG; missing guidance stays a gap."
+            ],
+        }
+    )
+    sections.append(
+        {
+            "section_id": "ontology",
+            "owner_domain": "ontology",
+            "source": "Ontology traversal adapter",
+            "packet_paths": ["ontology_context"],
+            "mutation_allowed": False,
+            "materialization": (
+                "inline_packet_section"
+                if has_ontology_context
+                else "future_external_adapter"
+            ),
+            "notes": [
+                "Normalizes component, factor, location, SOP, spare-part, and similar-event relations."
+            ],
+        }
+    )
+
+    return sections
 
 
 def _model_expression_context(view_model: dict[str, Any]) -> dict[str, Any]:

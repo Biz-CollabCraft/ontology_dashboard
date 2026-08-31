@@ -1422,6 +1422,12 @@ def test_agent_review_packet_consumes_domain_adapter_outputs(
     assert packet["ontology_context"]["mutation_allowed"] is False
     assert packet["ontology_context"]["traversals"][0]["sop_ids"] == ["stub-sop"]
     assert "stub-sop://procedure#stub-sop" in packet["source_refs"]
+    sections = {section["section_id"]: section for section in packet["domain_sections"]}
+    assert sections["operation"]["owner_domain"] == "operations"
+    assert sections["operation"]["packet_paths"] == ["operation_context_summary"]
+    assert sections["sop"]["packet_paths"] == ["sop_retrieval", "sop_guidance"]
+    assert sections["ontology"]["packet_paths"] == ["ontology_context"]
+    assert sections["closed_loop_boundary"]["mutation_allowed"] is False
 
 
 def test_asset_detail_view_model_keeps_current_observation_out_of_history_points(
