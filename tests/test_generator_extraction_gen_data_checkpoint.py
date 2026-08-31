@@ -3,6 +3,7 @@
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1402,6 +1403,48 @@ def test_find_checkpoint_duplicate_scope_raises_conflict(tmp_path):
     assert exc_info.value.code == "EXTRACTION_CHECKPOINT_SCOPE_CONFLICT"
     assert exc_info.value.status_code == 409
     assert exc_info.value.retryable is False
+
+
+def test_find_checkpoint_unrelated_corrupt_file_fails_repository_wide(tmp_path):
+    """A corrupt checkpoint blocks lookup repository-wide under the current fail-closed policy."""
+    chk_repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")
+
+    valid_checkpoint = GenDataExtractionCheckpoint(
+        source_identity="1" * 64,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        site_id="S01",
+        cell_id="L01",
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        last_committed_offset=0,
+        last_committed_line=0,
+        verified_prefix_length=0,
+        verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        created_at=now_utc_iso(),
+        updated_at=now_utc_iso(),
+    )
+    valid_path = chk_repo.save_checkpoint_atomic(valid_checkpoint)
+    valid_bytes = valid_path.read_bytes()
+
+    unrelated_corrupt_path = chk_repo.checkpoints_root / ("2" * 64 + ".json")
+    unrelated_corrupt_path.write_text("{not-valid-json", encoding="utf-8")
+
+    source = GenDataSensorStreamSource(
+        site_id="S01",
+        cell_id="L01",
+        facility_dir_name="facS01",
+        line_dir_name="lineL01",
+        source_path=tmp_path / "sensor_stream.jsonl",
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+
+    with pytest.raises(ExtractionCheckpointInvalidError) as exc_info:
+        chk_repo.find_checkpoint_by_source(source)
+
+    assert exc_info.value.code == "EXTRACTION_CHECKPOINT_INVALID"
+    assert exc_info.value.retryable is False
+    assert valid_path.read_bytes() == valid_bytes
 
 
 def test_first_record_changed_raises_prefix_mismatch(tmp_path, base_mapping_fixture):
