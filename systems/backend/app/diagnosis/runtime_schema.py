@@ -197,6 +197,7 @@ class PredictionResultBatchModelSetItem(StrictModel):
     model_version: str = Field(min_length=1, max_length=240)
     required: bool = True
     model_artifact_manifest_sha256: str = Field(pattern=SHA256_PATTERN)
+    selected_threshold: float | None = Field(default=None, ge=0, le=1)
 
     @field_validator("model_artifact_manifest_sha256")
     @classmethod
@@ -422,8 +423,34 @@ class PredictionInboxReceipt(StrictModel):
     conflict_results: int = Field(ge=0)
     rejected_results: int = Field(ge=0)
     item_receipts: list[PredictionInboxItemReceipt] = Field(default_factory=list)
-    promotion_status: Literal["not_promoted"] = "not_promoted"
-    product_result_created: Literal[False] = False
+    promotion_status: Literal["promoted", "already_promoted", "partially_promoted", "not_promoted"] = "not_promoted"
+    product_result_created: bool = False
+    promoted_results: int = Field(default=0, ge=0)
+    already_promoted_results: int = Field(default=0, ge=0)
+    skipped_results: int = Field(default=0, ge=0)
+    product_result_ids: list[str] = Field(default_factory=list)
+    artifact_ids: list[str] = Field(default_factory=list)
+
+
+class PredictionBatchPromotionItemReceipt(StrictModel):
+    event_id: str
+    promotion_status: Literal["promoted", "already_promoted", "skipped"]
+    product_result_id: str | None = None
+    artifact_id: str | None = None
+    reason: str | None = None
+
+
+class PredictionBatchPromotionReceipt(StrictModel):
+    batch_id: str
+    promotion_status: Literal["promoted", "already_promoted", "partially_promoted", "not_promoted"]
+    product_result_created: bool
+    received_results: int = Field(ge=0)
+    promoted_results: int = Field(ge=0)
+    already_promoted_results: int = Field(ge=0)
+    skipped_results: int = Field(ge=0)
+    product_result_ids: list[str] = Field(default_factory=list)
+    artifact_ids: list[str] = Field(default_factory=list)
+    item_receipts: list[PredictionBatchPromotionItemReceipt] = Field(default_factory=list)
 
 
 class DashboardDataSource(StrictModel):
@@ -531,6 +558,53 @@ class PolicyRecommendation(StrictModel):
     creates_work_order_automatically: Literal[False] = False
 
 
+class ProductEvidenceGapSummary(StrictModel):
+    gap_id: str
+    field: str
+    owner_domain: str
+    display_policy: str
+    reason: str | None = None
+    required_source: str | None = None
+
+
+class ProductEvidenceSourceFieldSummary(StrictModel):
+    field_id: str
+    label: str
+    source_path: str
+    description: str | None = None
+
+
+class ProductEvidenceActionSummary(StrictModel):
+    action_id: str
+    label: str
+    kind: str
+    requires_human_approval: bool = True
+    basis: list[str] = Field(default_factory=list)
+
+
+class ProductResultBatchLineageSummary(StrictModel):
+    batch_id: str | None = None
+    event_id: str | None = None
+    emitted_at: datetime | None = None
+    generated_at: datetime | None = None
+    source_kind: str | None = None
+    producer_id: str | None = None
+    model_id: str | None = None
+    source_reference: str | None = None
+
+
+class ProductResultEvidenceSummary(StrictModel):
+    available: bool
+    batch_lineage: ProductResultBatchLineageSummary | None = None
+    evidence_payload_reference: dict[str, Any] | None = None
+    sensor_window_rows: int = Field(default=0, ge=0)
+    sensor_window: dict[str, Any] = Field(default_factory=dict)
+    component_hypotheses: list[dict[str, Any]] = Field(default_factory=list)
+    recommended_actions: list[ProductEvidenceActionSummary] = Field(default_factory=list)
+    source_fields: list[ProductEvidenceSourceFieldSummary] = Field(default_factory=list)
+    evidence_gaps: list[ProductEvidenceGapSummary] = Field(default_factory=list)
+
+
 class ProductResultProvenance(StrictModel):
     dataset_id: str
     dataset_version_id: str
@@ -565,6 +639,7 @@ class GovernedProductResult(StrictModel):
     confidence: float = Field(ge=0, le=1)
     top_factors: list[ProductFactor] = Field(default_factory=list, max_length=3)
     recommended_action: PolicyRecommendation | None = None
+    evidence_summary: ProductResultEvidenceSummary | None = None
     provenance: ProductResultProvenance
     governance: GovernanceProvenance
     graph: GraphReadiness

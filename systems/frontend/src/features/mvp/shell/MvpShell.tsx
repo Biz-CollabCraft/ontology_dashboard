@@ -47,6 +47,7 @@ export function MvpShell({
   onRoleChange,
   onRefresh,
   refreshing,
+  refreshIntervalSeconds,
   onLogout,
   children,
 }: {
@@ -58,6 +59,7 @@ export function MvpShell({
   onRoleChange: (role: MvpRoleLens) => void;
   onRefresh: () => void;
   refreshing: boolean;
+  refreshIntervalSeconds: number;
   onLogout: () => void | Promise<void>;
   children: ReactNode;
 }) {
@@ -106,7 +108,10 @@ export function MvpShell({
 
       <div className="mvp-context-line">
         <div><span className={`mvp-source-mode source-${context.sourceMode}`}>{context.sourceMode === "canonical-runtime" ? "운영 데이터 연결" : "보조 데이터 표시"}</span><strong>{context.sourceStatus}</strong></div>
-        <MvpFreshness observedAt={context.observedAt} stale={context.stale} />
+        <div className="mvp-refresh-status" aria-label="데이터 갱신 상태">
+          <span className="mvp-refresh-cadence"><RefreshCw size={13} className={refreshing ? "is-spinning" : ""} />자동 확인 · {refreshIntervalSeconds}초마다 갱신</span>
+          <MvpFreshness observedAt={context.observedAt} stale={context.stale} />
+        </div>
       </div>
 
       {context.warnings.length ? (

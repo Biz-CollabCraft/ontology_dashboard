@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   controlPredictiveMaintenanceReplay,
   getPredictiveMaintenanceLatestResults,
@@ -28,11 +28,12 @@ interface PredictiveMaintenanceReplayPanelProps {
 }
 
 type StatusGrade = GovernedProductResultSummary["status_grade"];
-type Translate = (key: MessageKey, values?: Record<string, string | number>) => string;
+export type Translate = (key: MessageKey, values?: Record<string, string | number>) => string;
 
 const STATUS_ORDER: StatusGrade[] = ["critical", "warning", "attention", "normal"];
 export const AI4I_V3_1_DATASET_NAME = "UCI AI4I 2020 Manufacturing Predictive Maintenance — Physics & Maintenance Canonical V3.1";
 const AI4I_V2_DATASET_NAME = "UCI AI4I 2020 Manufacturing Predictive Maintenance — Canonical V2 compatibility snapshot";
+const LATEST_RESULTS_POLL_SECONDS = 10;
 
 export function replayTimestamp(value: string): string | undefined {
   if (!value) return undefined;
@@ -140,6 +141,25 @@ function measureLabel(measure: string, t: Translate): string {
   return key ? t(key) : measure.replaceAll("_", " ");
 }
 
+export function productResultContractLabel(
+  result: GovernedProductResultSummary | null,
+  t: Translate,
+): string {
+  if (!result) return t("pm.notAvailableValue");
+  if (result.source_contract !== "result_artifact") return t("pm.snapshotCompatibility");
+  return result.evidence_summary?.available ? t("pm.promotedResultArtifact") : t("pm.evidenceUnavailable");
+}
+
+export function productResultEvidencePreview(result: GovernedProductResultSummary | null): {
+  inspectionReasons: NonNullable<GovernedProductResultSummary["evidence_summary"]>["source_fields"];
+  evidenceGaps: NonNullable<GovernedProductResultSummary["evidence_summary"]>["evidence_gaps"];
+} {
+  return {
+    inspectionReasons: result?.evidence_summary?.source_fields.slice(0, 4) ?? [],
+    evidenceGaps: result?.evidence_summary?.evidence_gaps.slice(0, 3) ?? [],
+  };
+}
+
 function statusLabel(status: StatusGrade, t: Translate): string {
   return t(`pm.status.${status}` as MessageKey);
 }
@@ -172,6 +192,8 @@ export function PredictiveMaintenanceReplayPanel({
   const [replay, setReplay] = useState<ReplaySessionSnapshot | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshingResults, setRefreshingResults] = useState(false);
+  const [lastResultsRefreshedAt, setLastResultsRefreshedAt] = useState("");
   const [error, setError] = useState("");
   const [speed, setSpeed] = useState(60);
   const [seekTime, setSeekTime] = useState("");
@@ -218,6 +240,7 @@ export function PredictiveMaintenanceReplayPanel({
       .then(([nextContext, nextResults]) => {
         setContext(nextContext);
         setResults(nextResults);
+        setLastResultsRefreshedAt(new Date().toISOString());
         setSelectedAssetId((current) => (
           current && nextResults.items.some((item) => item.asset_id === current)
             ? current
@@ -232,6 +255,40 @@ export function PredictiveMaintenanceReplayPanel({
       });
     return () => controller.abort();
   }, [projectId, selectedVersionId, t, workspaceId]);
+
+  const refreshLatestResults = useCallback(async () => {
+    if (!projectId || !workspaceId || !selectedVersionId) return;
+    const controller = new AbortController();
+    setRefreshingResults(true);
+    try {
+      const nextResults = await getPredictiveMaintenanceLatestResults(
+        projectId,
+        workspaceId,
+        100,
+        controller.signal,
+        selectedVersionId,
+      );
+      setResults(nextResults);
+      setLastResultsRefreshedAt(new Date().toISOString());
+      setSelectedAssetId((current) => (
+        current && nextResults.items.some((item) => item.asset_id === current)
+          ? current
+          : nextResults.items[0]?.asset_id ?? ""
+      ));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("pm.error.runtime"));
+    } finally {
+      setRefreshingResults(false);
+    }
+  }, [projectId, selectedVersionId, t, workspaceId]);
+
+  useEffect(() => {
+    if (!selectedVersionId) return undefined;
+    const timer = window.setInterval(() => {
+      void refreshLatestResults();
+    }, LATEST_RESULTS_POLL_SECONDS * 1000);
+    return () => window.clearInterval(timer);
+  }, [refreshLatestResults, selectedVersionId]);
 
   const selectedResult = useMemo(
     () => results?.items.find((item) => item.asset_id === selectedAssetId) ?? null,
@@ -285,6 +342,12 @@ export function PredictiveMaintenanceReplayPanel({
     [results],
   );
   const latestObservation = observations?.observations.at(-1) ?? null;
+  const selectedEvidence = selectedResult?.evidence_summary ?? null;
+  const selectedBatchLineage = selectedEvidence?.batch_lineage ?? null;
+  const { inspectionReasons, evidenceGaps } = useMemo(
+    () => productResultEvidencePreview(selectedResult),
+    [selectedResult],
+  );
 
   async function startReplay() {
     setBusy(true);
@@ -428,6 +491,20 @@ export function PredictiveMaintenanceReplayPanel({
               {runtimeMode === "engineer" ? (
                 <>
                   <header><strong>{t("pm.sensorFactorEvidence", { asset: selectedResult?.asset_id ?? t("pm.selectEquipment") })}</strong><small>{t("pm.sensorFactorDetail")}</small></header>
+                  <dl className="pm-contract-list pm-evidence-contract">
+                    <div><dt>{t("pm.productContract")}</dt><dd>{productResultContractLabel(selectedResult, t)}</dd></div>
+                    <div><dt>{t("pm.evidenceRef")}</dt><dd>{String(selectedEvidence?.evidence_payload_reference?.reference ?? "—")}</dd></div>
+                    <div><dt>{t("pm.latestBatch")}</dt><dd>{String(selectedBatchLineage?.batch_id ?? "—")}</dd></div>
+                    <div><dt>{t("pm.batchEvent")}</dt><dd>{String(selectedBatchLineage?.event_id ?? "—")}</dd></div>
+                    <div><dt>{t("pm.batchSource")}</dt><dd>{String(selectedBatchLineage?.source_kind ?? "—")}</dd></div>
+                    <div><dt>{t("pm.batchPolling")}</dt><dd>{t("pm.batchPollingEvery", { seconds: LATEST_RESULTS_POLL_SECONDS })}</dd></div>
+                    <div><dt>{t("pm.lastResultRefresh")}</dt><dd>{timeLabel(lastResultsRefreshedAt, locale)}</dd></div>
+                    <div><dt>{t("pm.sensorWindowRows")}</dt><dd>{(selectedEvidence?.sensor_window_rows ?? 0).toLocaleString(locale)}</dd></div>
+                    <div><dt>{t("pm.closedLoopBoundary")}</dt><dd>{t("pm.humanApprovalRequired")}</dd></div>
+                  </dl>
+                  <button className="secondary pm-refresh-button" type="button" onClick={() => void refreshLatestResults()} disabled={refreshingResults}>
+                    {refreshingResults ? t("pm.refreshingBatches") : t("pm.refreshBatches")}
+                  </button>
                   <div className="pm-factor-list">
                     {selectedResult?.top_factors.map((factor) => (
                       <span key={`${selectedResult.asset_id}:${factor.rank}`}>
@@ -435,6 +512,26 @@ export function PredictiveMaintenanceReplayPanel({
                         <small>{t(`pm.direction.${factor.direction}` as MessageKey)} · {t("pm.contribution")} {factor.signed_contribution.toFixed(4)}</small>
                       </span>
                     ))}
+                  </div>
+                  <div className="pm-evidence-list" aria-label={t("pm.inspectionReasons")}>
+                    <strong>{t("pm.inspectionReasons")}</strong>
+                    {inspectionReasons.map((field) => (
+                      <span key={field.field_id}>
+                        <small>{field.field_id}</small>
+                        <b>{field.label}</b>
+                      </span>
+                    ))}
+                    {!inspectionReasons.length ? <p className="pm-empty-state">{t("pm.noEvidenceSources")}</p> : null}
+                  </div>
+                  <div className="pm-evidence-list pm-evidence-gaps" aria-label={t("pm.evidenceLimitations")}>
+                    <strong>{t("pm.evidenceLimitations")}</strong>
+                    {evidenceGaps.map((gap) => (
+                      <span key={gap.gap_id}>
+                        <small>{gap.owner_domain} · {gap.display_policy}</small>
+                        <b>{gap.required_source ?? gap.field}</b>
+                      </span>
+                    ))}
+                    {!evidenceGaps.length ? <p className="pm-empty-state">{t("pm.noEvidenceGaps")}</p> : null}
                   </div>
                   <div className="pm-derived-grid">
                     {Object.entries(latestObservation?.derived_measures ?? {}).map(([key, value]) => (

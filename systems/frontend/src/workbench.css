@@ -154,7 +154,8 @@
 
 .pm-action-summary,
 .pm-factor-list,
-.pm-derived-grid {
+.pm-derived-grid,
+.pm-evidence-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
@@ -162,13 +163,46 @@
 
 .pm-action-summary > span,
 .pm-factor-list > span,
-.pm-derived-grid > span {
+.pm-derived-grid > span,
+.pm-evidence-list > span {
   display: grid;
   gap: 3px;
   padding: 8px;
   border: 1px solid var(--od-border, #d8dee9);
   border-radius: 5px;
   background: var(--od-surface, #fff);
+}
+
+.pm-evidence-contract {
+  margin-bottom: 2px;
+}
+
+.pm-refresh-button {
+  justify-self: start;
+  min-height: 32px;
+  margin-top: 2px;
+  margin-bottom: 4px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pm-evidence-list {
+  margin-top: 2px;
+}
+
+.pm-evidence-list > strong {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
+.pm-evidence-list b {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.pm-evidence-gaps > span {
+  border-left: 3px solid var(--od-warning, #d1970c);
 }
 
 .pm-contract-list {
@@ -271,6 +305,7 @@
   .pm-action-summary,
   .pm-factor-list,
   .pm-derived-grid,
+  .pm-evidence-list,
   .pm-contract-list {
     grid-template-columns: 1fr;
   }

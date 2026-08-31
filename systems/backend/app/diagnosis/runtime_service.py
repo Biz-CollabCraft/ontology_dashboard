@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Literal
@@ -25,6 +26,7 @@ from .evidence_projection import (
     event_evidence_projection_to_legacy_evidence,
     product_result_artifact_to_event_evidence_projection,
 )
+from .recommendation_policy import resolve_status_criticality_action
 from .runtime_schema import (
     DashboardDataSource,
     DashboardEquipment,
@@ -38,6 +40,13 @@ from .runtime_schema import (
     GraphReadiness,
     ObservationQueryResponse,
     PolicyRecommendation,
+    ProductEvidenceActionSummary,
+    ProductEvidenceGapSummary,
+    ProductEvidenceSourceFieldSummary,
+    ProductResultBatchLineageSummary,
+    ProductResultEvidenceSummary,
+    PredictionBatchPromotionItemReceipt,
+    PredictionBatchPromotionReceipt,
     PredictiveMaintenanceDashboardResponse,
     PredictionInboxItemReceipt,
     PredictionInboxReceipt,
@@ -192,6 +201,17 @@ def _list(value: Any) -> list[Any]:
     return []
 
 
+def _datetime_or_none(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 @lru_cache(maxsize=1)
 def _prediction_result_batch_json_schema_validator() -> Draft202012Validator:
     schema_path = (
@@ -256,6 +276,56 @@ class PredictiveMaintenanceRuntimeService:
         path = "/".join(str(part) for part in first.absolute_path) or "<root>"
         raise ValueError(f"{path}: {first.message}")
 
+    @staticmethod
+    def _model_identity(model: Any) -> tuple[str, str]:
+        return (str(model.model_id), str(model.model_version))
+
+    @classmethod
+    def _model_snapshot_index(
+        cls,
+        batch: PredictionResultBatch,
+    ) -> tuple[dict[tuple[str, str], Any], set[tuple[str, str]]]:
+        snapshots: dict[tuple[str, str], Any] = {}
+        duplicates: set[tuple[str, str]] = set()
+        for model in batch.model_set.models:
+            identity = cls._model_identity(model)
+            if identity in snapshots:
+                duplicates.add(identity)
+                continue
+            snapshots[identity] = model
+        return snapshots, duplicates
+
+    @classmethod
+    def _model_lineage_rejection_reason(
+        cls,
+        *,
+        item: Any,
+        snapshots: dict[tuple[str, str], Any],
+        duplicate_identities: set[tuple[str, str]],
+    ) -> str | None:
+        if item.output_status != "predicted":
+            return None
+        identity = (str(item.model_id), str(item.model_version))
+        if identity in duplicate_identities:
+            return (
+                "model_set_duplicate_identity: "
+                f"model_id={item.model_id}, model_version={item.model_version}"
+            )
+        snapshot = snapshots.get(identity)
+        if snapshot is None:
+            return (
+                "model_set_snapshot_missing: "
+                f"model_id={item.model_id}, model_version={item.model_version}"
+            )
+        expected = str(snapshot.model_artifact_manifest_sha256)
+        actual = str(item.model_artifact_manifest_sha256)
+        if actual != expected:
+            return (
+                "model_artifact_manifest_sha256_mismatch: "
+                f"expected {expected}, got {actual}"
+            )
+        return None
+
     def receive_prediction_result_batch(
         self,
         *,
@@ -306,10 +376,16 @@ class PredictiveMaintenanceRuntimeService:
         missing_assets = sorted(asset_ids - set(scoped_assets))
         if missing_assets:
             invalid_reasons.append(f"scope_invalid: unknown assets {missing_assets}")
+        model_snapshots, duplicate_model_identities = self._model_snapshot_index(batch)
 
-        for item in batch_payload["results"]:
+        for parsed_item, item in zip(batch.results, batch_payload["results"], strict=True):
             expected = self._prediction_item_sha256(item)
             actual = str(item["payload_sha256"])
+            lineage_reason = self._model_lineage_rejection_reason(
+                item=parsed_item,
+                snapshots=model_snapshots,
+                duplicate_identities=duplicate_model_identities,
+            )
             if expected != actual:
                 item_receipts.append(
                     {
@@ -332,6 +408,16 @@ class PredictiveMaintenanceRuntimeService:
                         "rejection_reason": "scope_invalid: asset is not in workspace",
                     }
                 )
+            elif lineage_reason:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "rejected",
+                        "rejection_reason": lineage_reason,
+                    }
+                )
+                invalid_reasons.append(f"{lineage_reason}:{item['event_id']}")
             else:
                 item_receipts.append(
                     {
@@ -380,6 +466,568 @@ class PredictiveMaintenanceRuntimeService:
             conflict_results=counts["conflict"],
             rejected_results=counts["rejected"],
             item_receipts=item_receipts,
+        )
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _threshold_policy() -> dict[str, Any]:
+        path = project_root() / "systems" / "backend" / "app" / "diagnosis" / "threshold_policy.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    @classmethod
+    def _generator_model_snapshot(cls, batch: PredictionResultBatch, item: Any) -> Any | None:
+        for model in batch.model_set.models:
+            if (
+                model.model_id == item.model_id
+                and model.model_version == item.model_version
+                and model.model_artifact_manifest_sha256
+                == item.model_artifact_manifest_sha256
+            ):
+                return model
+        return None
+
+    @classmethod
+    def _generator_policy_decision(
+        cls,
+        *,
+        score: float,
+        selected_threshold: float | None,
+        criticality: str | None,
+    ) -> dict[str, float | str | None]:
+        policy = cls._threshold_policy()
+        fallback_threshold = float(policy["decision_threshold"])
+        threshold = float(selected_threshold if selected_threshold is not None else fallback_threshold)
+        adjustments = policy.get("criticality_adjustments", {})
+        adjustment = float(adjustments.get(str(criticality), 0.0)) if criticality else 0.0
+        rules = policy["severity_rules"]
+        attention = min(float(rules["attention"]) + adjustment, threshold)
+        warning = float(rules["warning"]) + adjustment
+        critical = float(rules["critical"])
+        if score >= critical:
+            status = "critical"
+        elif score >= warning:
+            status = "warning"
+        elif score >= attention:
+            status = "attention"
+        else:
+            status = "normal"
+        return {
+            "status": status,
+            "selected_threshold": threshold,
+            "attention_threshold": attention,
+            "warning_threshold": warning,
+            "critical_threshold": critical,
+            "criticality_adjustment": adjustment,
+        }
+
+    @classmethod
+    def _promotion_action(cls, status: str, criticality: str | None) -> dict[str, str]:
+        resolved = resolve_status_criticality_action(status, criticality)
+        if resolved is not None:
+            action_key, label, kind = resolved
+        else:
+            action_key = str(cls._threshold_policy()["decision_mapping"][status])
+            label = action_key
+            kind = "backend_threshold_policy"
+        priority = {
+            "critical": "urgent",
+            "warning": "high",
+            "attention": "medium",
+            "normal": "normal",
+        }[status]
+        return {"action": action_key, "label": label, "kind": kind, "priority": priority}
+
+    @staticmethod
+    def _confidence_for_generator_score(score: float, threshold: float) -> float:
+        return round(max(0.01, min(0.99, abs(score - threshold) * 2.0)), 6)
+
+    @staticmethod
+    def _record_sha256(record: dict[str, Any]) -> str:
+        rendered = json.dumps(
+            record,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+        return hashlib.sha256(rendered).hexdigest()
+
+    @classmethod
+    def _product_artifact_from_prediction_item(
+        cls,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        dataset_version_id: str,
+        asset: dict[str, Any],
+        batch: PredictionResultBatch,
+        item: Any,
+    ) -> dict[str, Any]:
+        score = float(item.score)
+        model_snapshot = cls._generator_model_snapshot(batch, item)
+        selected_threshold = (
+            float(model_snapshot.selected_threshold)
+            if model_snapshot is not None and model_snapshot.selected_threshold is not None
+            else None
+        )
+        criticality = (
+            str(asset.get("criticality"))
+            if asset.get("criticality") in {"low", "medium", "high"}
+            else None
+        )
+        policy_decision = cls._generator_policy_decision(
+            score=score,
+            selected_threshold=selected_threshold,
+            criticality=criticality,
+        )
+        threshold = float(policy_decision["selected_threshold"])
+        status = str(policy_decision["status"])
+        predicted_type = "failure_risk" if score >= threshold else "none"
+        prediction_id = f"GEN-{uuid.uuid5(uuid.NAMESPACE_URL, f'{batch.batch_id}:{item.event_id}')}"
+        artifact_id = f"RESULT#{prediction_id}"
+        action = cls._promotion_action(status, criticality)
+        confidence = cls._confidence_for_generator_score(score, threshold)
+        source_reference = (
+            f"prediction-result-batch:{batch.batch_id}:event:{item.event_id}:"
+            f"sha256:{item.payload_sha256}"
+        )
+        top_factors = [
+            {
+                "rank": 1,
+                "feature": "generator_failure_score",
+                "feature_value": score,
+                "signed_contribution": round(score - threshold, 6),
+                "direction": "risk_up" if score >= threshold else "risk_down",
+                "explanation_method": "generator_prediction_score",
+            },
+            {
+                "rank": 2,
+                "feature": "model_selected_threshold",
+                "feature_value": threshold,
+                "signed_contribution": 0.0,
+                "direction": "risk_down",
+                "explanation_method": "model_artifact_training_config",
+            },
+            {
+                "rank": 3,
+                "feature": "asset_criticality_adjustment",
+                "feature_value": policy_decision["criticality_adjustment"],
+                "signed_contribution": policy_decision["criticality_adjustment"],
+                "direction": "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
+                "explanation_method": "backend_threshold_policy",
+            },
+            {
+                "rank": 4,
+                "feature": "generator_model_artifact_manifest",
+                "feature_value": 1.0,
+                "signed_contribution": 0.0,
+                "direction": "risk_up",
+                "explanation_method": "lineage_presence_check",
+            },
+        ]
+        ranked_factor_evidence = [
+            {
+                "evidence_field_id": f"prediction_batch.{name}",
+                "feature": name,
+                "display_name": label,
+                "value": value,
+                "unit": unit,
+                "normal_range": normal_range,
+                "direction": direction,
+                "contribution": contribution,
+                "source_type": "generator_prediction_result_batch",
+            }
+            for name, label, value, unit, normal_range, direction, contribution in (
+                (
+                    "generator_failure_score",
+                    "Generator failure score",
+                    score,
+                    "probability",
+                    f"< {threshold}",
+                    "risk_up" if score >= threshold else "risk_down",
+                    abs(score - threshold),
+                ),
+                (
+                    "model_selected_threshold",
+                    "Model selected threshold",
+                    threshold,
+                    "probability",
+                    "model artifact value",
+                    "risk_down",
+                    0.0,
+                ),
+                (
+                    "asset_criticality_adjustment",
+                    "Asset criticality adjustment",
+                    policy_decision["criticality_adjustment"],
+                    "probability",
+                    "policy value",
+                    "risk_up" if float(policy_decision["criticality_adjustment"]) < 0 else "risk_down",
+                    abs(float(policy_decision["criticality_adjustment"])),
+                ),
+                (
+                    "generator_model_artifact_manifest",
+                    "Generator model artifact manifest",
+                    1.0,
+                    "present",
+                    "required",
+                    "risk_up",
+                    0.0,
+                ),
+            )
+        ]
+        source_fields = [
+            {
+                "field_id": "prediction_batch.score",
+                "source_path": f"results[event_id={item.event_id}].score",
+                "label": "Generator failure score",
+                "description": "Raw prediction score emitted by Generator and consumed by Backend policy.",
+            },
+            {
+                "field_id": "prediction_batch.payload_sha256",
+                "source_path": f"results[event_id={item.event_id}].payload_sha256",
+                "label": "Prediction payload checksum",
+                "description": "Canonical checksum of the raw Generator prediction item.",
+            },
+            {
+                "field_id": "prediction_batch.model_artifact_manifest_sha256",
+                "source_path": f"results[event_id={item.event_id}].model_artifact_manifest_sha256",
+                "label": "Model artifact manifest checksum",
+                "description": "Generator model artifact lineage checksum used for this prediction.",
+            },
+            {
+                "field_id": "model_artifact.selected_threshold",
+                "source_path": f"model_set.models[model_id={item.model_id},model_version={item.model_version}].selected_threshold",
+                "label": "Model selected threshold",
+                "description": "Model Artifact training_config.selected_threshold captured in the Generator batch snapshot.",
+            },
+            {
+                "field_id": "asset.criticality",
+                "source_path": f"pm_assets[asset_id={item.asset_id}].criticality",
+                "label": "Asset criticality",
+                "description": "Asset criticality used for Backend severity-boundary adjustment when available.",
+            },
+            {
+                "field_id": "backend_policy.severity_rules",
+                "source_path": "systems/backend/app/diagnosis/threshold_policy.json",
+                "label": "Backend severity policy",
+                "description": "Backend-owned severity and criticality adjustment policy applied during Product Result promotion.",
+            },
+        ]
+        evidence_gaps = [
+            {
+                "gap_id": "generator-batch-sensor-window-unavailable",
+                "field": "evidence_payload.sensor_evidence",
+                "reason": "missing_source",
+                "required_source": "observation window and feature attribution payload",
+                "owner_domain": "diagnosis",
+                "display_policy": "show_limitation",
+            },
+            {
+                "gap_id": "generator-batch-component-hypotheses-unavailable",
+                "field": "evidence_payload.component_hypotheses",
+                "reason": "insufficient_context",
+                "required_source": "component attribution or inspection-target mapping",
+                "owner_domain": "diagnosis",
+                "display_policy": "show_limitation",
+            },
+            {
+                "gap_id": "generator-batch-maintenance-context-unavailable",
+                "field": "evidence_payload.maintenance_context",
+                "reason": "missing_source",
+                "required_source": "maintenance context provider",
+                "owner_domain": "maintenance",
+                "display_policy": "show_limitation",
+            },
+        ]
+        if selected_threshold is None:
+            evidence_gaps.append(
+                {
+                    "gap_id": "generator-batch-selected-threshold-unavailable",
+                    "field": "model_artifact.selected_threshold",
+                    "reason": "missing_source",
+                    "required_source": "Model Artifact training_config.selected_threshold in model_set snapshot",
+                    "owner_domain": "generator",
+                    "display_policy": "show_limitation",
+                }
+            )
+        if criticality is None:
+            evidence_gaps.append(
+                {
+                    "gap_id": "generator-batch-asset-criticality-unavailable",
+                    "field": "asset.criticality",
+                    "reason": "missing_source",
+                    "required_source": "asset criticality from Backend asset context",
+                    "owner_domain": "operations",
+                    "display_policy": "show_limitation",
+                }
+            )
+        evidence_payload = {
+            "sensor_evidence": {"window_rows": 0, "sensors": {}},
+            "component_hypotheses": [],
+            "status_flags": {
+                "multiple_risk_factors": False,
+                "insufficient_data": False,
+            },
+            "recommended_actions": [
+                {
+                    "action_id": action["action"],
+                    "label": action["label"],
+                    "kind": action["kind"],
+                    "requires_human_approval": True,
+                    "basis": [
+                        "prediction_batch.score",
+                        "model_artifact.selected_threshold",
+                        "asset.criticality",
+                        "backend_policy.severity_rules",
+                    ],
+                }
+            ],
+            "source_fields": source_fields,
+            "evidence_gaps": evidence_gaps,
+        }
+        artifact = {
+            "artifact_id": artifact_id,
+            "artifact_type": "predictive_maintenance_result",
+            "schema_version": V3_1_RESULT_SCHEMA,
+            "asset_id": item.asset_id,
+            "asset_type": str(asset["asset_type"]),
+            "observed_at": item.observed_at.isoformat(),
+            "generated_at": batch.emitted_at.isoformat(),
+            "threshold": threshold,
+            "prediction_horizon_hours": 24,
+            "prediction_task": PREDICTION_TASK,
+            "failure_probability": score,
+            "predicted_failure_type": predicted_type,
+            "status_grade": status,
+            "confidence": confidence,
+            "confidence_label": (
+                "high" if confidence >= 0.7 else "medium" if confidence >= 0.4 else "low"
+            ),
+            "top_factors": top_factors,
+            "ranked_factor_evidence": ranked_factor_evidence,
+            "recommended_action": action,
+            "data_quality_warnings": [],
+            "observation": {},
+            "history": [],
+            "detected_interval": {
+                "start": item.observed_at.isoformat(),
+                "end": item.observed_at.isoformat(),
+            },
+            "policy_version": str(cls._threshold_policy()["policy_version"]),
+            "model_mode": "generator_prediction_batch",
+            "lineage": {
+                "batch_id": batch.batch_id,
+                "event_id": item.event_id,
+                "source_context": batch.source_context.model_dump(mode="json"),
+                "item_lineage": item.lineage.model_dump(mode="json"),
+            },
+            "evidence_payload": evidence_payload,
+            "provenance": {
+                "dataset_version": batch.source_context.dataset_version,
+                "model_version": item.model_version,
+                "prediction_id": prediction_id,
+                "source_type": "product_runtime_inference",
+                "canonical_source_mutated": False,
+                "model_artifact": {
+                    "model_id": item.model_id,
+                    "model_version": item.model_version,
+                    "model_artifact_manifest_sha256": item.model_artifact_manifest_sha256,
+                    "selected_threshold": selected_threshold,
+                    "feature_schema_version": item.feature_schema_version,
+                    "history_requirement_version": item.history_requirement_version,
+                    "label_schema_version": item.label_schema_version,
+                    "feature_schema_sha256": item.feature_schema_sha256,
+                    "history_requirement_sha256": item.history_requirement_sha256,
+                    "label_schema_sha256": item.label_schema_sha256,
+                },
+                "evidence_payload_reference": {
+                    "source": "product_result_artifact",
+                    "reference": artifact_id,
+                    "generated_by": "systems.backend.diagnosis.generator_batch_promotion",
+                },
+                "source_reference": source_reference,
+            },
+        }
+        validate_product_result_artifact(artifact)
+        return artifact
+
+    def promote_prediction_result_batch(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        batch_id: str,
+    ) -> PredictionBatchPromotionReceipt:
+        context = self.repository.prediction_batch_promotion_context(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+        )
+        if context is None:
+            raise KeyError(batch_id)
+        batch = PredictionResultBatch.model_validate(context["raw_payload"])
+        assets = context.get("assets", {})
+        promotions: list[dict[str, Any]] = []
+        item_receipts: list[PredictionBatchPromotionItemReceipt] = []
+        for item in batch.results:
+            if item.output_status != "predicted":
+                item_receipts.append(
+                    PredictionBatchPromotionItemReceipt(
+                        event_id=item.event_id,
+                        promotion_status="skipped",
+                        reason=f"output_status={item.output_status}",
+                    )
+                )
+                continue
+            asset = assets.get(item.asset_id)
+            if not asset:
+                item_receipts.append(
+                    PredictionBatchPromotionItemReceipt(
+                        event_id=item.event_id,
+                        promotion_status="skipped",
+                        reason="asset_not_found_in_dataset_version",
+                    )
+                )
+                continue
+            artifact = self._product_artifact_from_prediction_item(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                dataset_version_id=str(context["dataset_version_id"]),
+                asset=asset,
+                batch=batch,
+                item=item,
+            )
+            prediction_result = PredictionResult(
+                prediction_id=artifact["provenance"]["prediction_id"],
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                source_run_id=artifact["artifact_id"],
+                subject=PredictionSubject(
+                    object_type="equipment",
+                    object_id=item.asset_id,
+                    observed_at=item.observed_at,
+                ),
+                prediction=PredictionValue(
+                    task="classification",
+                    status=artifact["status_grade"],
+                    label=artifact["predicted_failure_type"],
+                    score=artifact["failure_probability"],
+                    confidence=artifact["confidence"],
+                    horizon="24h",
+                    value=artifact["predicted_failure_type"],
+                ),
+                evidence=[
+                    PredictionEvidence(
+                        evidence_id=f"artifact:{artifact['artifact_id']}",
+                        kind="artifact",
+                        label="Generator Prediction Result Batch",
+                        value={
+                            "source_contract": "prediction-result-batch-v1",
+                            "batch_id": batch.batch_id,
+                            "event_id": item.event_id,
+                            "backend_policy_version": artifact["policy_version"],
+                        },
+                        source=EvidenceSource(
+                            system="systems.generator",
+                            reference=artifact["provenance"]["source_reference"],
+                            checksum=item.payload_sha256,
+                        ),
+                    )
+                ],
+                recommended_actions=[
+                    RecommendedAction(
+                        action_type=artifact["recommended_action"]["action"],
+                        label=artifact["recommended_action"]["action"],
+                        reason="Backend threshold policy applied to Generator prediction score; approval and execution have not occurred.",
+                        requires_approval=True,
+                        parameters={
+                            "priority": artifact["recommended_action"]["priority"],
+                            "semantic_type": "policy_recommendation",
+                            "execution_state": "not_executed",
+                            "creates_work_order_automatically": False,
+                        },
+                    )
+                ],
+                model=PredictionModel(
+                    provider="systems.generator",
+                    model_name=item.model_id,
+                    model_version=item.model_version,
+                    dataset_version=batch.source_context.dataset_version,
+                    policy_version=artifact["policy_version"],
+                ),
+                data_quality=DataQuality(status="pass", issues=[]),
+                created_at=batch.emitted_at,
+            )
+            promotions.append(
+                {
+                    "event_id": item.event_id,
+                    "artifact": artifact,
+                    "prediction_result": prediction_result.model_dump(mode="json"),
+                    "prediction_result_id": artifact["provenance"]["prediction_id"],
+                    "source_sha256": self._record_sha256(artifact),
+                }
+            )
+            item_receipts.append(
+                PredictionBatchPromotionItemReceipt(
+                    event_id=item.event_id,
+                    promotion_status="promoted",
+                    product_result_id=artifact["provenance"]["prediction_id"],
+                    artifact_id=artifact["artifact_id"],
+                )
+            )
+        stored = self.repository.save_prediction_batch_promotions(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            batch_id=batch_id,
+            dataset_version_id=str(context["dataset_version_id"]),
+            promotions=promotions,
+        )
+        by_event = {item.event_id: item for item in item_receipts}
+        stored_receipts = []
+        for item in stored.get("item_receipts", []):
+            original = by_event.get(str(item["event_id"]))
+            stored_receipts.append(
+                PredictionBatchPromotionItemReceipt(
+                    event_id=str(item["event_id"]),
+                    promotion_status=str(item["promotion_status"]),
+                    product_result_id=item.get("product_result_id"),
+                    artifact_id=item.get("artifact_id"),
+                    reason=item.get("reason") or (original.reason if original else None),
+                )
+            )
+        skipped = [item for item in item_receipts if item.promotion_status == "skipped"]
+        final_receipts = stored_receipts + skipped
+        promoted = sum(1 for item in final_receipts if item.promotion_status == "promoted")
+        already = sum(1 for item in final_receipts if item.promotion_status == "already_promoted")
+        skipped_count = sum(1 for item in final_receipts if item.promotion_status == "skipped")
+        if promoted:
+            status_value = "promoted" if not skipped_count else "partially_promoted"
+        elif already and not skipped_count:
+            status_value = "already_promoted"
+        elif already:
+            status_value = "partially_promoted"
+        else:
+            status_value = "not_promoted"
+        return PredictionBatchPromotionReceipt(
+            batch_id=batch_id,
+            promotion_status=status_value,
+            product_result_created=promoted > 0,
+            received_results=len(batch.results),
+            promoted_results=promoted,
+            already_promoted_results=already,
+            skipped_results=skipped_count,
+            product_result_ids=[
+                item.product_result_id for item in final_receipts if item.product_result_id
+            ],
+            artifact_ids=[item.artifact_id for item in final_receipts if item.artifact_id],
+            item_receipts=final_receipts,
         )
 
     @staticmethod
@@ -950,6 +1598,107 @@ class PredictiveMaintenanceRuntimeService:
             raise ValueError("stored Product Result Artifact prediction_id does not match runtime index")
         return artifact
 
+    @staticmethod
+    def _product_result_evidence_summary(
+        producer_artifact: dict[str, Any] | None,
+    ) -> ProductResultEvidenceSummary | None:
+        if producer_artifact is None:
+            return None
+        payload = _dict(producer_artifact.get("evidence_payload"))
+        provenance = _dict(producer_artifact.get("provenance"))
+        lineage = _dict(producer_artifact.get("lineage"))
+        source_context = _dict(lineage.get("source_context"))
+        model_artifact = _dict(provenance.get("model_artifact"))
+        sensor_evidence = _dict(payload.get("sensor_evidence"))
+        sensor_window = _dict(sensor_evidence.get("window"))
+        return ProductResultEvidenceSummary(
+            available=True,
+            batch_lineage=ProductResultBatchLineageSummary(
+                batch_id=(
+                    None if lineage.get("batch_id") is None else str(lineage.get("batch_id"))
+                ),
+                event_id=(
+                    None if lineage.get("event_id") is None else str(lineage.get("event_id"))
+                ),
+                emitted_at=_datetime_or_none(producer_artifact.get("generated_at")),
+                generated_at=_datetime_or_none(producer_artifact.get("generated_at")),
+                source_kind=(
+                    None
+                    if source_context.get("source_kind") is None
+                    else str(source_context.get("source_kind"))
+                ),
+                producer_id=(
+                    None
+                    if source_context.get("producer_run_id") is None
+                    else str(source_context.get("producer_run_id"))
+                ),
+                model_id=(
+                    None if model_artifact.get("model_id") is None else str(model_artifact.get("model_id"))
+                ),
+                source_reference=(
+                    None
+                    if provenance.get("source_reference") is None
+                    else str(provenance.get("source_reference"))
+                ),
+            ),
+            evidence_payload_reference=_dict(
+                provenance.get("evidence_payload_reference")
+            )
+            or None,
+            sensor_window_rows=int(sensor_evidence.get("window_rows") or 0),
+            sensor_window=sensor_window,
+            component_hypotheses=[
+                _dict(item)
+                for item in payload.get("component_hypotheses") or []
+                if isinstance(item, dict)
+            ],
+            recommended_actions=[
+                ProductEvidenceActionSummary(
+                    action_id=str(item.get("action_id") or ""),
+                    label=str(item.get("label") or item.get("action_id") or ""),
+                    kind=str(item.get("kind") or ""),
+                    requires_human_approval=bool(
+                        item.get("requires_human_approval", True)
+                    ),
+                    basis=[str(ref) for ref in item.get("basis") or []],
+                )
+                for item in payload.get("recommended_actions") or []
+                if isinstance(item, dict)
+            ],
+            source_fields=[
+                ProductEvidenceSourceFieldSummary(
+                    field_id=str(item.get("field_id") or ""),
+                    label=str(item.get("label") or item.get("field_id") or ""),
+                    source_path=str(item.get("source_path") or ""),
+                    description=(
+                        None
+                        if item.get("description") is None
+                        else str(item.get("description"))
+                    ),
+                )
+                for item in payload.get("source_fields") or []
+                if isinstance(item, dict)
+            ],
+            evidence_gaps=[
+                ProductEvidenceGapSummary(
+                    gap_id=str(item.get("gap_id") or ""),
+                    field=str(item.get("field") or ""),
+                    owner_domain=str(item.get("owner_domain") or ""),
+                    display_policy=str(item.get("display_policy") or ""),
+                    reason=(
+                        None if item.get("reason") is None else str(item.get("reason"))
+                    ),
+                    required_source=(
+                        None
+                        if item.get("required_source") is None
+                        else str(item.get("required_source"))
+                    ),
+                )
+                for item in payload.get("evidence_gaps") or []
+                if isinstance(item, dict)
+            ],
+        )
+
     def _product_result(
         self,
         *,
@@ -1043,6 +1792,7 @@ class PredictiveMaintenanceRuntimeService:
             confidence=float(row["confidence"]),
             top_factors=factors,
             recommended_action=recommendation,
+            evidence_summary=self._product_result_evidence_summary(producer_artifact),
             provenance=ProductResultProvenance(
                 dataset_id=context.dataset_id,
                 dataset_version_id=context.dataset_version_id,

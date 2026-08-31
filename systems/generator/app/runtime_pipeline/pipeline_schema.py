@@ -90,6 +90,12 @@ class ActiveModelSnapshotItem(BaseModel):
     model_version: str = Field(..., min_length=1, description="Model version string")
     required: bool = Field(True, description="Whether this model is required")
     model_artifact_manifest_sha256: str = Field(..., pattern=SHA256_PATTERN, description="Model artifact manifest SHA-256")
+    selected_threshold: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Model Artifact training_config.selected_threshold used for positive-class decisions",
+    )
 
     @field_validator("model_artifact_manifest_sha256")
     @classmethod
@@ -394,6 +400,7 @@ def compute_model_set_payload_sha256(
                     "model_version": item.model_version,
                     "required": item.required,
                     "manifest_sha256": item.model_artifact_manifest_sha256,
+                    "selected_threshold": item.selected_threshold,
                 })
             else:
                 canonical_models.append({
@@ -401,6 +408,7 @@ def compute_model_set_payload_sha256(
                     "model_version": item["model_version"],
                     "required": item.get("required", True),
                     "manifest_sha256": item.get("manifest_sha256") or item.get("model_artifact_manifest_sha256", ""),
+                    "selected_threshold": item.get("selected_threshold"),
                 })
     elif isinstance(models, dict):
         for mid in sorted(models.keys()):
@@ -418,6 +426,13 @@ def compute_model_set_payload_sha256(
                 "model_version": mver,
                 "required": req,
                 "manifest_sha256": msha,
+                "selected_threshold": (
+                    getattr(val, "selected_threshold", None)
+                    if hasattr(val, "selected_threshold")
+                    else val.get("selected_threshold")
+                    if isinstance(val, dict)
+                    else None
+                ),
             })
 
     canonical_payload = {

@@ -248,6 +248,12 @@
               "model_artifact_manifest_sha256": {
                 "type": "string",
                 "pattern": "^(?!0000000000000000000000000000000000000000000000000000000000000000$)[a-f0-9]{64}$"
+              },
+              "selected_threshold": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "description": "Model Artifact training_config.selected_threshold captured at batch execution time."
               }
             },
             "additionalProperties": false

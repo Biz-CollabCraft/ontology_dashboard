@@ -33,7 +33,8 @@
         "model_id": "pdm-lightgbm",
         "model_version": "1.0.0",
         "required": true,
-        "model_artifact_manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+        "model_artifact_manifest_sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        "selected_threshold": 0.55
       }
     ]
   },

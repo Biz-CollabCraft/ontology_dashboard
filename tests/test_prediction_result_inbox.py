@@ -37,11 +37,20 @@ class FakeIdentity:
 
 
 class FakeInboxRepository:
-    def __init__(self, *, assets: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        assets: set[str] | None = None,
+        asset_metadata: dict[str, dict[str, Any]] | None = None,
+        fail_promotions_once: bool = False,
+    ) -> None:
         self.assets = assets or {"CNC-001"}
+        self.asset_metadata = asset_metadata or {}
+        self.fail_promotions_once = fail_promotions_once
         self.batches: dict[str, str] = {}
         self.items: dict[str, str] = {}
         self.saved: list[dict[str, Any]] = []
+        self.promotions: list[dict[str, Any]] = []
 
     @staticmethod
     def clock_now() -> datetime:
@@ -108,6 +117,76 @@ class FakeInboxRepository:
         self.saved.append(row)
         return row
 
+    def prediction_batch_promotion_context(self, **kwargs: Any) -> dict[str, Any] | None:
+        batch_id = kwargs["batch_id"]
+        row = next(
+            (
+                item
+                for item in reversed(self.saved)
+                if item["batch_id"] == batch_id and item["validation_status"] == "accepted"
+            ),
+            None,
+        )
+        if row is None:
+            return None
+        payload = row["raw_payload"]
+        asset_rows = {
+            asset_id: {
+                "asset_id": asset_id,
+                "asset_type": "cnc",
+                "site_id": "site-1",
+                "cell_id": "cell-1",
+                **self.asset_metadata.get(asset_id, {}),
+            }
+            for asset_id in self.assets
+        }
+        return {
+            "dataset_version_id": "dataset-version-test",
+            "dataset_name": "Dataset Test",
+            "bundle_checksum_sha256": "f" * 64,
+            "record_count": 1,
+            "dataset_status": "ready",
+            "raw_payload": payload,
+            "assets": asset_rows,
+        }
+
+    def save_prediction_batch_promotions(self, **kwargs: Any) -> dict[str, Any]:
+        if self.fail_promotions_once:
+            self.fail_promotions_once = False
+            raise RuntimeError("simulated promotion outage")
+        receipts = []
+        for promotion in kwargs["promotions"]:
+            existing = next(
+                (
+                    item
+                    for item in self.promotions
+                    if item["artifact"]["artifact_id"] == promotion["artifact"]["artifact_id"]
+                ),
+                None,
+            )
+            if existing is None:
+                self.promotions.append(promotion)
+                receipts.append(
+                    {
+                        "event_id": promotion["event_id"],
+                        "promotion_status": "promoted",
+                        "product_result_id": promotion["prediction_result_id"],
+                        "artifact_id": promotion["artifact"]["artifact_id"],
+                        "reason": None,
+                    }
+                )
+            else:
+                receipts.append(
+                    {
+                        "event_id": promotion["event_id"],
+                        "promotion_status": "already_promoted",
+                        "product_result_id": existing["prediction_result_id"],
+                        "artifact_id": existing["artifact"]["artifact_id"],
+                        "reason": None,
+                    }
+                )
+        return {"item_receipts": receipts}
+
 
 def principal() -> Principal:
     return Principal(
@@ -170,6 +249,141 @@ def test_prediction_inbox_accepts_valid_batch_without_product_result() -> None:
     assert receipt.product_result_created is False
 
 
+def test_prediction_batch_promotion_creates_product_result_artifact() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    assert receive(service, payload).validation_status == "accepted"
+
+    receipt = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert receipt.promotion_status == "promoted"
+    assert receipt.product_result_created is True
+    assert receipt.promoted_results == 1
+    assert receipt.product_result_ids == [repository.promotions[0]["prediction_result_id"]]
+    artifact = repository.promotions[0]["artifact"]
+    assert artifact["schema_version"] == "result-artifact-v1.0"
+    assert artifact["provenance"]["source_type"] == "product_runtime_inference"
+    assert artifact["provenance"]["canonical_source_mutated"] is False
+    assert artifact["evidence_payload"]["recommended_actions"][0]["action_id"] == (
+        "request_inspection"
+    )
+    assert artifact["evidence_payload"]["evidence_gaps"]
+    summary = service._product_result_evidence_summary(artifact)
+    assert summary is not None
+    assert summary.available is True
+    assert summary.evidence_payload_reference == {
+        "source": "product_result_artifact",
+        "reference": artifact["artifact_id"],
+        "generated_by": "systems.backend.diagnosis.generator_batch_promotion",
+    }
+    assert summary.batch_lineage is not None
+    assert summary.batch_lineage.batch_id == payload["batch_id"]
+    assert summary.batch_lineage.event_id == payload["results"][0]["event_id"]
+    assert summary.batch_lineage.source_kind == payload["source_context"]["source_kind"]
+    assert summary.batch_lineage.source_reference.startswith(
+        f"prediction-result-batch:{payload['batch_id']}:event:"
+    )
+    assert [field.field_id for field in summary.source_fields] == [
+        "prediction_batch.score",
+        "prediction_batch.payload_sha256",
+        "prediction_batch.model_artifact_manifest_sha256",
+        "model_artifact.selected_threshold",
+        "asset.criticality",
+        "backend_policy.severity_rules",
+    ]
+    assert summary.recommended_actions[0].requires_human_approval is True
+    assert summary.evidence_gaps[0].display_policy == "show_limitation"
+
+
+def test_prediction_batch_promotion_uses_model_selected_threshold_for_positive_score() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    payload["results"][0]["score"] = 0.22
+    payload["model_set"]["models"][0]["selected_threshold"] = 0.2
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+    assert receive(service, payload).validation_status == "accepted"
+
+    receipt = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert receipt.promotion_status == "promoted"
+    artifact = repository.promotions[0]["artifact"]
+    assert artifact["threshold"] == 0.2
+    assert artifact["status_grade"] == "attention"
+    assert artifact["predicted_failure_type"] == "failure_risk"
+    assert artifact["recommended_action"]["action"] == "request_inspection"
+    assert artifact["provenance"]["model_artifact"]["selected_threshold"] == 0.2
+
+
+def test_prediction_batch_promotion_applies_high_criticality_warning_adjustment() -> None:
+    repository = FakeInboxRepository(
+        asset_metadata={"CNC-001": {"criticality": "high"}},
+    )
+    service = make_service(repository)
+    payload = load_payload()
+    payload["results"][0]["score"] = 0.53
+    payload["model_set"]["models"][0]["selected_threshold"] = 0.8
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+    assert receive(service, payload).validation_status == "accepted"
+
+    receipt = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert receipt.promotion_status == "promoted"
+    artifact = repository.promotions[0]["artifact"]
+    assert artifact["status_grade"] == "warning"
+    assert artifact["predicted_failure_type"] == "none"
+    assert artifact["recommended_action"]["action"] == "request_inspection"
+    assert artifact["evidence_payload"]["recommended_actions"][0]["kind"] == (
+        "request_inspection"
+    )
+    gap_ids = {gap["gap_id"] for gap in artifact["evidence_payload"]["evidence_gaps"]}
+    assert "generator-batch-asset-criticality-unavailable" not in gap_ids
+
+
+def test_prediction_batch_promotion_is_idempotent() -> None:
+    repository = FakeInboxRepository()
+    service = make_service(repository)
+    payload = load_payload()
+    assert receive(service, payload).validation_status == "accepted"
+
+    first = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+    second = service.promote_prediction_result_batch(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        batch_id=payload["batch_id"],
+    )
+
+    assert first.promotion_status == "promoted"
+    assert second.promotion_status == "already_promoted"
+    assert second.already_promoted_results == 1
+
+
 def test_prediction_inbox_duplicate_reuses_existing_event() -> None:
     service = make_service()
     payload = load_payload()
@@ -208,6 +422,33 @@ def test_prediction_inbox_rejects_payload_sha256_mismatch() -> None:
     assert receipt.validation_status == "rejected"
     assert receipt.rejected_results == 1
     assert "payload_sha256_mismatch" in (receipt.rejection_reason or "")
+
+
+def test_prediction_inbox_rejects_model_artifact_manifest_checksum_mismatch() -> None:
+    payload = load_payload()
+    payload["results"][0]["model_artifact_manifest_sha256"] = "e" * 64
+    payload["results"][0]["payload_sha256"] = (
+        PredictiveMaintenanceRuntimeService._prediction_item_sha256(payload["results"][0])
+    )
+
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "rejected"
+    assert receipt.rejected_results == 1
+    assert "model_artifact_manifest_sha256_mismatch" in (
+        receipt.rejection_reason or ""
+    )
+
+
+def test_prediction_inbox_rejects_duplicate_model_set_identity() -> None:
+    payload = load_payload()
+    payload["model_set"]["models"].append(copy.deepcopy(payload["model_set"]["models"][0]))
+
+    receipt = receive(make_service(), payload)
+
+    assert receipt.validation_status == "rejected"
+    assert receipt.rejected_results == 1
+    assert "model_set_duplicate_identity" in (receipt.rejection_reason or "")
 
 
 def test_prediction_inbox_rejects_official_schema_violation_before_pydantic() -> None:
@@ -330,6 +571,12 @@ def test_prediction_inbox_routes_return_receipt(monkeypatch) -> None:
             json=load_payload(),
             headers={"X-CSRF-Token": "test"},
         )
+        promotion = client.post(
+            "/api/projects/manufacturing-demo-project/workspaces/manufacturing-demo/"
+            "predictive-maintenance/prediction-result-batches/"
+            "batch-20260827-cnc-001/promote",
+            headers={"X-CSRF-Token": "test"},
+        )
         internal = client.post(
             "/internal/prediction-results?project_id=manufacturing-demo-project"
             "&workspace_id=manufacturing-demo",
@@ -339,8 +586,74 @@ def test_prediction_inbox_routes_return_receipt(monkeypatch) -> None:
 
     assert public.status_code == 202, public.text
     assert public.json()["product_result_created"] is False
+    assert promotion.status_code == 200, promotion.text
+    assert promotion.json()["product_result_created"] is True
+    assert promotion.json()["promoted_results"] == 1
     assert internal.status_code == 200, internal.text
     assert internal.json()["validation_status"] == "duplicate"
+
+
+def test_internal_prediction_inbox_promotes_accepted_batch(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    service = make_service(FakeInboxRepository())
+    app = FastAPI()
+    app.include_router(internal_router)
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=load_payload(),
+            headers={"Authorization": "Bearer receiver-secret"},
+        )
+
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["validation_status"] == "accepted"
+    assert body["promotion_status"] == "promoted"
+    assert body["product_result_created"] is True
+    assert body["promoted_results"] == 1
+    assert body["artifact_ids"]
+
+
+def test_internal_prediction_inbox_duplicate_retries_unfinished_promotion(monkeypatch) -> None:
+    monkeypatch.setenv("PREDICTION_RESULT_INGEST_TOKEN", "receiver-secret")
+    repository = FakeInboxRepository(fail_promotions_once=True)
+    service = make_service(repository)
+    app = FastAPI()
+    app.include_router(internal_router)
+    app.dependency_overrides[get_identity_service] = lambda: FakeIdentity()
+    from app.diagnosis.runtime_router import get_predictive_maintenance_runtime_service
+
+    app.dependency_overrides[get_predictive_maintenance_runtime_service] = lambda: service
+    payload = load_payload()
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        failed = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=payload,
+            headers={"Authorization": "Bearer receiver-secret"},
+        )
+        retried = client.post(
+            "/internal/prediction-results?project_id=manufacturing-demo-project"
+            "&workspace_id=manufacturing-demo",
+            json=payload,
+            headers={"Authorization": "Bearer receiver-secret"},
+        )
+
+    assert failed.status_code == 500
+    assert retried.status_code == 200, retried.text
+    body = retried.json()
+    assert body["validation_status"] == "duplicate"
+    assert body["promotion_status"] == "promoted"
+    assert body["product_result_created"] is True
+    assert body["promoted_results"] == 1
+    assert repository.promotions
 
 
 def test_prediction_inbox_internal_route_requires_configured_service_token(monkeypatch) -> None:
