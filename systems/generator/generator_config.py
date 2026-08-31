@@ -78,6 +78,15 @@ class GeneratorPaths:
             Path(ontology_env).resolve() if ontology_env else (PROJECT_ROOT / "ontology").resolve()
         )
 
+        # 1-1. gen_data 출력 루트 경로 (.env GEN_DATA_OUTPUT_DIR 우선, 미설정 시 None)
+        gen_data_env = os.getenv("GEN_DATA_OUTPUT_DIR")
+        self.gen_data_output_dir: Optional[Path] = (
+            Path(gen_data_env).resolve() if gen_data_env and gen_data_env.strip() else None
+        )
+        self.gen_data_sensor_root: Optional[Path] = (
+            (self.gen_data_output_dir / "sensor").resolve() if self.gen_data_output_dir else None
+        )
+
         # 2. 핵심 영속 파일 전용 경로
         self.extraction_plan_cache: Path = self.data_preprocessed / "extraction_plan_cache.json"
         self.source_family_registry: Path = self.data_preprocessed / "source_family_registry.json"
@@ -136,6 +145,149 @@ class GeneratorPaths:
         pred_enabled_env = os.getenv("GENERATOR_RUNTIME_PREDICTION_ENABLED", "false").strip().lower()
         self.runtime_prediction_enabled: bool = pred_enabled_env in ("true", "1", "yes")
 
+        # 4. Extraction Pipeline 전용 경로 및 환경 변수 설정
+        obs_env = os.getenv("GENERATOR_OBSERVATIONS_ROOT")
+        self.observations_root: Path = Path(obs_env).resolve() if obs_env else (self.data_dir / "observations").resolve()
+
+        runs_env = os.getenv("GENERATOR_EXTRACTION_RUNS_ROOT")
+        self.extraction_runs_root: Path = Path(runs_env).resolve() if runs_env else (self.data_preprocessed / "extraction_runs").resolve()
+
+        state_env = os.getenv("GENERATOR_EXTRACTION_STATE_ROOT")
+        self.extraction_state_root: Path = Path(state_env).resolve() if state_env else (self.data_preprocessed / "extraction_state").resolve()
+
+        mapping_env = os.getenv("GENERATOR_MAPPING_ROOT")
+        self.mapping_root: Path = Path(mapping_env).resolve() if mapping_env else (self.ontology / "mappings").resolve()
+
+        batch_size_env = os.getenv("GENERATOR_EXTRACTION_BATCH_SIZE")
+        self.extraction_batch_size: int = int(batch_size_env) if batch_size_env else 1000
+
+        lease_env = os.getenv("GENERATOR_EXTRACTION_LOCK_LEASE_SECONDS")
+        self.extraction_lock_lease_seconds: float = float(lease_env) if lease_env else 300.0
+
+        extract_roots_env = os.getenv("GENERATOR_EXTRACTION_INPUT_ROOTS")
+        if extract_roots_env:
+            self.extraction_input_roots: list[Path] = [
+                Path(p.strip()).resolve() for p in extract_roots_env.split(",") if p.strip()
+            ]
+        else:
+            self.extraction_input_roots = [
+                self.data_dir,
+                self.data_preprocessed,
+                (PROJECT_ROOT / "contracts").resolve(),
+                (PROJECT_ROOT / "output").resolve(),
+            ]
+
+        # 4-1. Extraction Polling Worker and API Configuration
+        ext_enabled_env = os.getenv("GENERATOR_EXTRACTION_ENABLED", "false").strip().lower()
+        self.extraction_enabled: bool = ext_enabled_env in ("true", "1", "yes")
+
+        ext_poll_env = os.getenv("GENERATOR_EXTRACTION_POLL_INTERVAL_SECONDS")
+        self.extraction_poll_interval_seconds: float = float(ext_poll_env) if ext_poll_env else 5.0
+
+        ext_win_env = os.getenv("GENERATOR_EXTRACTION_WINDOW_MINUTES")
+        self.extraction_window_minutes: int = int(ext_win_env) if ext_win_env else 60
+
+        ext_max_rec_env = os.getenv("GENERATOR_EXTRACTION_MAX_RECORDS")
+        self.extraction_max_records: int = int(ext_max_rec_env) if ext_max_rec_env else 10000
+
+        ext_max_att_env = os.getenv("GENERATOR_EXTRACTION_MAX_ATTEMPTS")
+        self.extraction_max_attempts: int = int(ext_max_att_env) if ext_max_att_env else 5
+
+        ext_backoff_env = os.getenv("GENERATOR_EXTRACTION_RETRY_BACKOFF_SECONDS")
+        self.extraction_retry_backoff_seconds: float = float(ext_backoff_env) if ext_backoff_env else 1.0
+
+        ext_conc_env = os.getenv("GENERATOR_EXTRACTION_MAX_CONCURRENCY")
+        self.extraction_max_concurrency: int = int(ext_conc_env) if ext_conc_env else 4
+
+        self.extraction_mapping_id: str = os.getenv(
+            "GENERATOR_EXTRACTION_MAPPING_ID", "gen-data-sensor-stream-canonical"
+        ).strip()
+        self.extraction_mapping_version: str = os.getenv(
+            "GENERATOR_EXTRACTION_MAPPING_VERSION", "v1"
+        ).strip()
+        mapping_sha_env = os.getenv("GENERATOR_EXTRACTION_MAPPING_SHA256")
+        self.extraction_mapping_sha256: Optional[str] = (
+            mapping_sha_env.strip() if mapping_sha_env and mapping_sha_env.strip() else None
+        )
+
+        # 4-2. Extraction Runtime Handoff Configuration
+        handoff_root_env = os.getenv("GENERATOR_EXTRACTION_HANDOFFS_ROOT")
+        self.extraction_handoffs_root: Path = (
+            Path(handoff_root_env).resolve()
+            if handoff_root_env
+            else (self.data_preprocessed / "extraction_handoffs").resolve()
+        )
+
+        handoff_enabled_env = os.getenv("GENERATOR_EXTRACTION_RUNTIME_HANDOFF_ENABLED", "false").strip().lower()
+        self.extraction_runtime_handoff_enabled: bool = handoff_enabled_env in ("true", "1", "yes")
+
+        handoff_poll_env = os.getenv("GENERATOR_EXTRACTION_HANDOFF_POLL_INTERVAL_SECONDS")
+        self.extraction_handoff_poll_interval_seconds: float = float(handoff_poll_env) if handoff_poll_env else 5.0
+
+        handoff_retries_env = os.getenv("GENERATOR_EXTRACTION_HANDOFF_MAX_RETRIES")
+        self.extraction_handoff_max_retries: int = int(handoff_retries_env) if handoff_retries_env else 5
+
+        handoff_conc_env = os.getenv("GENERATOR_EXTRACTION_HANDOFF_MAX_CONCURRENCY")
+        self.extraction_handoff_max_concurrency: int = int(handoff_conc_env) if handoff_conc_env else 1
+
+    def validate_extraction_config(self) -> None:
+        """Validate extraction environment configuration."""
+        from systems.generator.app.extraction.extraction_exception import (
+            ExtractionConfigurationInvalidError,
+            ExtractionMappingConfigurationMissingError,
+        )
+
+        if self.extraction_poll_interval_seconds <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_POLL_INTERVAL_SECONDS must be > 0, got {self.extraction_poll_interval_seconds}"
+            )
+        if self.extraction_window_minutes <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_WINDOW_MINUTES must be > 0, got {self.extraction_window_minutes}"
+            )
+        if self.extraction_max_records <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_MAX_RECORDS must be > 0, got {self.extraction_max_records}"
+            )
+        if self.extraction_max_attempts < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_MAX_ATTEMPTS must be >= 1, got {self.extraction_max_attempts}"
+            )
+        if self.extraction_retry_backoff_seconds < 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_RETRY_BACKOFF_SECONDS must be >= 0, got {self.extraction_retry_backoff_seconds}"
+            )
+        if self.extraction_max_concurrency < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_MAX_CONCURRENCY must be >= 1, got {self.extraction_max_concurrency}"
+            )
+        if self.extraction_handoff_poll_interval_seconds <= 0:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_HANDOFF_POLL_INTERVAL_SECONDS must be > 0, got {self.extraction_handoff_poll_interval_seconds}"
+            )
+        if self.extraction_handoff_max_retries < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_HANDOFF_MAX_RETRIES must be >= 1, got {self.extraction_handoff_max_retries}"
+            )
+        if self.extraction_handoff_max_concurrency < 1:
+            raise ExtractionConfigurationInvalidError(
+                f"GENERATOR_EXTRACTION_HANDOFF_MAX_CONCURRENCY must be >= 1, got {self.extraction_handoff_max_concurrency}"
+            )
+        if not self.extraction_mapping_id or not self.extraction_mapping_version:
+            raise ExtractionConfigurationInvalidError(
+                "GENERATOR_EXTRACTION_MAPPING_ID and GENERATOR_EXTRACTION_MAPPING_VERSION must not be empty"
+            )
+
+        if self.extraction_enabled:
+            if not self.gen_data_output_dir or not self.gen_data_output_dir.exists():
+                raise ExtractionConfigurationInvalidError(
+                    f"Background extraction enabled but GEN_DATA_OUTPUT_DIR is missing or invalid: {self.gen_data_output_dir}"
+                )
+            if not self.extraction_mapping_sha256 or len(self.extraction_mapping_sha256) != 64:
+                raise ExtractionMappingConfigurationMissingError(
+                    "Background extraction enabled but GENERATOR_EXTRACTION_MAPPING_SHA256 is missing or invalid 64-char hex string."
+                )
+
     def ensure_directories(self) -> None:
         """필요 디렉토리가 존재하는지 검사하고 자동 생성한다."""
         for path in (
@@ -147,6 +299,9 @@ class GeneratorPaths:
             self.pipeline_state_root,
             self.runtime_feature_root,
             self.notification_outbox_root,
+            self.observations_root,
+            self.extraction_runs_root,
+            self.extraction_state_root,
         ):
             path.mkdir(parents=True, exist_ok=True)
 

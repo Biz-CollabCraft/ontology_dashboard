@@ -14,6 +14,18 @@ Generator는 `systems/generator/app/main.py`를 정본 FastAPI 애플리케이�
 systems/generator/
 ├─ app/                       # FastAPI Application 및 도메인 계층
 │  ├─ main.py                 # 정본 FastAPI Application Factory (create_app)
+│  ├─ extraction/             # [1단계 Current] gen_data Protocol Extraction 및 Canonical Observation 발행
+│  │  ├─ extraction_schema.py
+│  │  ├─ extraction_service.py
+│  │  ├─ extraction_repository.py
+│  │  ├─ mapping_validator.py
+│  │  ├─ mapping_repository.py
+│  │  ├─ dedup_repository.py
+│  │  ├─ checkpoint_repository.py
+│  │  ├─ extraction_exception.py
+│  │  ├─ extraction_router.py
+│  │  └─ parsers/
+│  │     └─ sensor_record_parser.py
 │  ├─ preprocessing/          # [2단계 Current] Observation Dataset 분석 및 Preprocessing Plan 수립·발행
 │  │  ├─ preprocessing_schema.py
 │  │  ├─ preprocessing_service.py
@@ -71,7 +83,7 @@ systems/generator/
 >
 > **Python 실행 환경 계약 (Execution Environment Contract)**:
 > - Generator 시스템은 저장소 루트(Repository Root)를 표준 `PYTHONPATH`로 사용하는 패키지 구조를 가집니다.
-> - 저장소 루트 실행: `python -c "import systems.generator.app.preprocessing; import systems.generator.app.feature; import systems.generator.app.training; import systems.generator.app.runtime_pipeline"`
+> - 저장소 루트 실행: `python -c "import systems.generator.app.extraction; import systems.generator.app.preprocessing; import systems.generator.app.feature; import systems.generator.app.training; import systems.generator.app.runtime_pipeline"`
 > - `systems/generator` 작업 디렉터리 실행: `PYTHONPATH=<repository-root>` 환경변수를 제공하여 legacy facade 및 모듈을 실행합니다.
 
 ---
@@ -85,6 +97,10 @@ systems/generator/
 | Method | Path | 현재 의미 | 상태 |
 |---|---|---|---|
 | GET | `/health` | Generator 데몬 상태 및 시스템 식별자 확인 | Current (구현 완료) |
+| POST | `/extraction` | gen_data sensor_stream.jsonl 또는 프로토콜 로그에 승인된 정적 매핑을 적용하여 불변 Versioned Canonical Observation Dataset 발행 (단일/전체 Source 처리, 단일 작성자 Lock 및 멱등성 보장) | Current (구현 완료) |
+| GET | `/extraction/status` | Extraction Manager, Background Polling Worker 및 Runtime Handoff 큐 상태, Source별 체크포인트 offset 및 최근 오류 조회 | Current (구현 완료) |
+| GET | `/extraction/handoffs/{handoff_id}` | 특정 Extraction -> Runtime Prediction Handoff 기록 상세 조회 | Current (구현 완료) |
+| POST | `/extraction/handoffs/{handoff_id}/retry` | 실패 또는 대기 중인 Handoff 항목을 Runtime Prediction 큐에 명시적 재등록 | Current (구현 완료) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |
@@ -105,20 +121,14 @@ Queue, retry, RunState, Checkpoint와 외부 Prediction Result Batch까지 변�
 발행하는 실행 환경은 provenance용 `GENERATOR_RUNTIME_VERSION`도 반드시 설정해야 한다.
 
 
-### 2.2 Target API (후속 목표 설계)
+### 2.2 Target API (후속 목표 및 고도화 설계)
 
-후속 구조 개편(4대 파이프라인 책임 분리)을 통해 도입될 목표 API 목록입니다 (`/ingestion`, `/observations` 같은 파일 수신 엔드포인트는 도입하지 않으며 파일 handoff 방식을 유지함).
+향후 모델 수동 관리 및 고도화를 위해 고려 중인 Target API 목록입니다.
 
-| Method | Path | Target 의미 및 4대 파이프라인 단계 | 상태 |
+| Method | Path | Target 의미 및 고도화 단계 | 상태 |
 |---|---|---|---|
-| GET | `/health` | Generator 데몬 상태 확인 | Current (유지) |
-| POST | `/extraction` | gen_data protocol data에 지정·승인된 Mapping을 적용하여 Versioned Canonical Observation Dataset을 발행하고, 별도 Authorized Truth Source로 Failure Dataset을 발행 (관련 후속 작업: Issue #108) | Target — 미병합 |
-| POST | `/preprocessing` | Observation Dataset을 분석하여 불변 Preprocessing Plan 수립 및 발행 (신규 2단계) | Current — 구현 완료 |
-| POST | `/feature` | Observation Dataset, Failure Dataset, Preprocessing Plan, Feature Schema 및 Label Schema를 소비하여 Feature/Label Dataset Bundle 발행 (신규 3단계) | Current — 구현 완료 |
-| POST | `/train` | Feature Dataset Bundle을 소비하여 전체 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
-| POST | `/train/{base_model}` | Feature Dataset Bundle을 소비하여 특정 머신러닝 모델 학습 및 Model Artifact 발행 (신규 4단계) | Current — 구현 완료 |
-| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target — 미병합 |
-| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target — 미병합 |
+| POST | `/models/{base_model}/activate/{model_version}` | 기존 발행된 불변 Model Artifact 패키지 수동 활성화 | Target (후속 고도화) |
+| GET | `/models/{base_model}/active` | 현재 활성화된 Model Artifact 정보 조회 | Target (후속 고도화) |
 
 ### 2.3 파이프라인 흐름
 
@@ -261,3 +271,166 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
 | 500 | `MODEL_LATEST_UPDATE_FAILED` | 포인터 파일 준비·작성·교체 I/O 실패 |
 | 500 | `MODEL_LATEST_VERIFY_FAILED` | 포인터 교체 후 read-back 불일치 |
 - **동기 실행**: `/train` 및 `/train/{base_model}` 엔드포인트는 동기 함수로 구성되어 FastAPI threadpool에서 안전하게 실행됩니다.
+
+---
+
+## 6. 전체 확정 파이프라인 흐름 및 런타임 연계 (End-to-End Pipeline)
+
+Generator는 `gen_data` 센서 로그에서부터 Backend Inbox까지의 7단계 연속 흐름을 지원합니다.
+
+```text
+gen_data (sensor_stream.jsonl append)
+  │
+  ▼
+[Stage 1: Incremental Extraction] (ExtractionWorker & Manager)
+  │  - 정적 승인 Mapping (`gen-data-sensor-stream-canonical` v1) 적용
+  │  - 단일 작성자 Lock 및 체크포인트 영속화
+  ▼
+[Stage 2: Canonical Observation Dataset] (dataset_manifest.json + observations.jsonl)
+  │  - 불변 Window Dataset 발행
+  │  - ExtractionRuntimeHandoffService를 통한 멱등 Handoff 생성
+  ▼
+[Stage 3: Runtime Handoff & FIFO Queue] (PipelineQueue SQLite)
+  │  - RuntimeInputIdentity 생성 및 큐 등록
+  │  - 15대 핵심 식별자 및 RuntimeSourceContext 보존
+  ▼
+[Stage 4: Runtime Feature & Prediction] (PipelineWorker & PredictionService)
+  │  - 모델 Feature Schema 기반 변환 및 이력 요건(`minimum_history_rows`) 검증
+  │  - LightGBM / XGBoost 등 모델 추론 및 raw score 산출
+  ▼
+[Stage 5: Prediction Result Batch] (PredictionDeliveryService Outbox)
+  │  - 공식 `prediction-result-batch-v1` 스키마 직렬화 및 SHA-256 페이로드 서명
+  ▼
+[Stage 6: HTTP Dispatch] (PredictionDeliveryWorker)
+  │  - POST /internal/prediction-results 비동기 전송 및 지수 백오프 재시도
+  ▼
+[Stage 7: Backend Prediction Inbox] (PredictiveMaintenanceRuntimeService)
+     - 수신, 권한/Scope 검증, 중복 수신 시 `duplicate` 멱등 처리
+```
+
+### 6.1 파이프라인 검증 범위 및 Model Artifact 정책
+
+- **현재 검증된 범위 (In-Process Integration)**:
+  - `gen_data` Extraction $\rightarrow$ Runtime Handoff $\rightarrow$ Runtime Prediction $\rightarrow$ Prediction Result Batch $\rightarrow$ Backend Router/Service 경계까지의 계약 및 멱등 처리 in-process 통합 검증이 완료되었습니다.
+  - E2E 검증(`tests/test_generator_extraction_e2e.py`)은 테스트 실행 중 생성되는 임시 Model Artifact를 사용합니다.
+- **후속 배포/운영 분리 범위**:
+  - 실제 배포 환경은 사전에 검증된 Model Artifact와 Active Model Set(`latest.json`)을 별도로 주입해야 합니다.
+  - 실제 SQLite/PostgreSQL Inbox persistence, Generator·Backend 다중 컨테이너 Docker Compose HTTP 통신, 실제 배포 환경 인증·네트워크 검증은 별도 후속 배포 작업으로 분리하여 관리합니다.
+
+---
+
+## 7. 시스템 간 책임 경계 (Responsibility Boundaries)
+
+각 도메인 시스템은 아래의 명확한 단일 책임을 유지하며, 상호 영역을 침범하지 않습니다.
+
+### 1. gen_data
+- 프로토콜 로그 생성 (PLC / CNC / Compressor 센서 스트림)
+- `sensor_stream.jsonl` 원본 파일 append 유지
+- 원본 로그 파일의 영구 소유권 보유
+
+### 2. Generator Extraction
+- 원본 로그 탐색 및 증분 파싱 (`SensorRecordParser`)
+- 승인된 정적 매핑(`generator-static-mapping-table`) 적용
+- 불변 `Canonical Observation Dataset` 발행 및 체크포인트 관리
+- `Runtime Handoff` 레코드 생성 및 Pipeline Queue 연동
+
+### 3. Generator Runtime
+- `RuntimeSourceContext` 보존 및 FIFO 큐 실행
+- Runtime Feature 계산 및 이력 조건 fail-closed 검증
+- Model Artifact 로드 및 다중 머신러닝 모델 inference
+- raw score 및 `Prediction Result Batch` (`prediction-result-batch-v1`) 생성
+- Backend Inbox로의 Outbox 영속화 및 HTTP 전송
+
+### 4. Backend
+- Prediction Result Batch 수신 및 인증/Scope 검증
+- Backend Prediction Inbox 멱등 저장
+- Threshold 정책 및 의사결정(decision policy) 적용
+- Product Result Artifact 및 Evidence 후속 승격 전담
+
+---
+
+## 8. Mapping 정책 및 미구현 범위 분리 (Mapping Policy & Unimplemented Scope)
+
+### 8.1 Mapping 지원 및 미지원 범위
+- **Current (현재 구현 범위)**:
+  - 최초 승인 Mapping(`generator-static-mapping-table`)을 이용한 gen_data 추출.
+  - 동일 Mapping을 이용한 append-only 증분 처리 및 Checkpoint mapping identity 보존.
+  - Mapping 불일치 감지 및 409 `EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED` fail-closed 처리.
+  - Mapping identity 누락 구형 Checkpoint 로드 시 `EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED` 차단.
+- **Not Implemented (고도화 분리 범위)**:
+  - Mapping 변경에 따른 원본 Source replay (offset 0부터 replay).
+  - Source와 Mapping 조합별 Checkpoint 분리.
+  - 과거 Dataset 재구성 및 새 Mapping 기반 Dataset version 불변 발행.
+  - Mapping 버전 관리 UI, 복사 후 신규 버전 생성.
+  - `publish → rebuild → validate → activate` 상태 전환, 실패 재시도 및 rollback.
+
+### 8.2 기타 미구현 범위
+- **LLM Mapping 자동 생성**: 현재는 승인된 정적 매핑 테이블(`generator-static-mapping-table`)만 지원합니다.
+- **비표준 Protocol 자동 추론**: 정의되지 않은 프로토콜 형식의 자동 감지는 지원하지 않으며 Fail-Closed 처리됩니다.
+- **결측치 자동 보정 (Imputation)**: 임의 결측치 대체 없이 `ffill` 및 엄격한 null 검증 정책을 유지합니다.
+- **사용자 Model Version 선택**: 런타임은 활성 Model Set 포인터(`latest.json`)를 단일 정본으로 소비합니다.
+- **Product Result / Evidence 신규 생성**: Generator는 raw score가 포함된 `Prediction Result Batch`만 발행하며, 최종 제품 리포트/Evidence는 Backend가 전담합니다.
+- **Dashboard 알림 UI**: 실시간 이상 알림 UI 구성은 프론트엔드/대시보드 도메인에서 처리합니다.
+- **Closed-loop 재지시 (PLC 제어)**: 설비 제어기 직접 피드백 루프는 본 파이프라인의 범위가 아닙니다.
+
+### 8.3 Legacy와 gen_data 중복 방지 계약 구분 (Dedup Architecture Distinction)
+- **Legacy ExtractionService**:
+  - `DedupRepository` 기반 영속 record dedup
+  - Target Dataset lease 및 갱신 방식
+- **GenDataExtractionRequest 운영 경로**:
+  - Source 단위 배타적 OS 파일 Lock (`GenDataSourceLock`)
+  - Source byte-offset 기반 증분 Checkpoint (`GenDataExtractionCheckpoint`)
+  - Source identity + offset 범위 + Mapping identity 기반 결정적 `batch_id`
+  - Polling cycle 간 Cross-run Fragment 멱등 재사용 (`find_fragment_by_batch_id`)
+  - Fragment consumption record 기반 수명주기 및 Fully-consumed 추적
+  - 불변 `Canonical Observation Dataset` 발행 및 SHA-256 conflict fail-closed 검증
+
+---
+
+## 9. 산출물 수명주기 및 보존 정책 (Artifact Lifecycle)
+
+파이프라인 운영 중 생성되는 각 산출물의 수명주기 및 관리 원칙은 다음과 같습니다.
+
+1. **`gen_data` 원본 파일**:
+   - Generator가 절대 삭제하거나 수정하지 않음 (Producer 소유권 보존).
+2. **`Extraction Fragment` (중간 청크)**:
+   - Window Dataset 발행 및 검증이 완료된 후 안전하게 자동 정리.
+3. **`Canonical Observation Dataset`**:
+   - 재현성과 학습 재구성을 위해 불변 Artifact(`dataset_manifest.json` + `observations.jsonl`)로 영구 보존.
+4. **`Runtime Handoff` 레코드**:
+   - 감사(Audit), 추적성 및 장애 재시도를 위해 영구 유지.
+5. **`Runtime Checkpoint`**:
+   - 파이프라인 작업 정상 완료 및 설정된 보존 기간에 따라 주기적 정리.
+6. **`Prediction Outbox`**:
+   - Backend 전달 완료(`delivered`) 후 보존 정책에 따라 보관 및 정리.
+7. **`Dead-letter` (실패 격리 레코드)**:
+   - 운영자의 원인 분석 및 수동 확인 전까지 자동 삭제 금지.
+
+---
+
+## 10. Docker 실행 가이드
+
+### 1. Docker 이미지 빌드
+```bash
+docker build --file systems/generator/Dockerfile --tag ontology-generator:latest .
+```
+
+### 2. 컨테이너 실행
+```bash
+docker run --rm -d \
+  --name ontology-generator \
+  -p 8000:8000 \
+  -v "$(pwd)/data:/data/source" \
+  -v "$(pwd)/data_preprocessed:/data/preprocessed" \
+  -v "$(pwd)/models_store:/data/models" \
+  -v "$(pwd)/artifacts:/artifacts" \
+  --env-file systems/generator/.env \
+  ontology-generator:latest
+```
+
+### 3. 상태 확인
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/extraction/status
+curl http://localhost:8000/runtime-pipeline/status
+```
