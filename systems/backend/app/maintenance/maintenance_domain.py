@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.diagnosis.recommendation_schema import ProducerRecommendation
 
+from .cost_analysis_schema import MaintenanceActionCode
 from .maintenance_schema import (
     EquipmentIdentity,
     IdempotencyOutcome,
@@ -103,6 +104,8 @@ MAINTENANCE_ACTION_TRANSITIONS = {
 
 TOOL_WEAR_CHECKLIST_ITEM_ID = "tool-wear"
 TOOL_WEAR_MEASUREMENT_NAME = "tool_wear_min"
+COOLING_PATH_CHECKLIST_ITEM_ID = "cooling-path"
+COOLANT_TEMPERATURE_MEASUREMENT_NAME = "coolant_temperature_c"
 
 
 def derive_tool_replacement_action_candidate(
@@ -159,6 +162,59 @@ def derive_tool_replacement_action_candidate(
         basis_codes=(
             "inspection.checklist:tool-wear:fail",
             "inspection.measurement:tool_wear_min",
+        ),
+    )
+
+
+def derive_cooling_system_restore_action_candidate(
+    inspection_result: InspectionResult,
+) -> MaintenanceActionCandidate:
+    """Project a cooling-system restoration candidate from typed inspection evidence."""
+
+    if inspection_result.outcome is not InspectionOutcome.MAINTENANCE_RECOMMENDED:
+        raise ValueError(
+            "COOLING_SYSTEM_RESTORE candidate requires maintenance_recommended "
+            "inspection outcome"
+        )
+    has_failed_cooling_path_check = any(
+        item.item_id == COOLING_PATH_CHECKLIST_ITEM_ID and item.status == "fail"
+        for item in inspection_result.checklist
+    )
+    has_coolant_temperature_measurement = any(
+        measurement.name == COOLANT_TEMPERATURE_MEASUREMENT_NAME
+        and isinstance(measurement.value, (int, float))
+        and not isinstance(measurement.value, bool)
+        for measurement in inspection_result.measurements
+    )
+    if not has_failed_cooling_path_check or not has_coolant_temperature_measurement:
+        raise ValueError(
+            "COOLING_SYSTEM_RESTORE candidate requires failed cooling-path checklist "
+            "and numeric coolant_temperature_c measurement"
+        )
+
+    action_code = MaintenanceActionCode.COOLING_SYSTEM_RESTORE.value
+    source = ":".join(
+        (
+            inspection_result.organization_id,
+            inspection_result.project_id,
+            inspection_result.workspace_id,
+            inspection_result.inspection_result_id,
+            action_code,
+        )
+    )
+    return MaintenanceActionCandidate(
+        organization_id=inspection_result.organization_id,
+        project_id=inspection_result.project_id,
+        workspace_id=inspection_result.workspace_id,
+        action_candidate_id=f"ACTION-CANDIDATE-{uuid.uuid5(uuid.NAMESPACE_URL, source)}",
+        inspection_result_id=inspection_result.inspection_result_id,
+        event_id=inspection_result.event_id,
+        asset_id=inspection_result.asset_id,
+        equipment_id=inspection_result.equipment_id,
+        action_code=action_code,
+        basis_codes=(
+            "inspection.checklist:cooling-path:fail",
+            "inspection.measurement:coolant_temperature_c",
         ),
     )
 
@@ -290,6 +346,7 @@ def create_operations_manual_recommendation(
     authored_by: str,
     authored_at: datetime,
     basis: tuple[str, ...],
+    action_code: MaintenanceActionCode = MaintenanceActionCode.TOOL_REPLACEMENT,
     source_cost_analysis_id: str | None = None,
     source_cost_option_id: str | None = None,
     source_action_candidate_id: str | None = None,
@@ -304,9 +361,10 @@ def create_operations_manual_recommendation(
     recommendation.
     """
 
+    action_value = action_code.value
     materialization_key = (
         f"{source_inspection_work_order_id}:"
-        f"{source_inspection_reference}:TOOL_REPLACEMENT"
+        f"{source_inspection_reference}:{action_value}"
     )
     if materialization_key in existing_materialization_keys:
         raise ValueError(
@@ -345,9 +403,12 @@ def create_operations_manual_recommendation(
         source_evidence_id=source_evidence_id,
         source_schema_version=source_schema_version,
         source_policy_version=OPERATIONS_MANUAL_POLICY_VERSION,
-        label="공구 교체",
-        kind="TOOL_REPLACEMENT",
-        action_code="TOOL_REPLACEMENT",
+        label={
+            MaintenanceActionCode.TOOL_REPLACEMENT: "공구 교체",
+            MaintenanceActionCode.COOLING_SYSTEM_RESTORE: "냉각 시스템 복구",
+        }[action_code],
+        kind=action_value,
+        action_code=action_value,
         requires_human_approval=True,
         basis=basis,
         source_inspection_work_order_id=source_inspection_work_order_id,
@@ -475,9 +536,12 @@ def authorize_maintenance_work_order(
         raise ValueError(
             "maintenance work order requires an operations_manual recommendation"
         )
-    if recommendation.action_code != "TOOL_REPLACEMENT":
+    if recommendation.action_code not in {
+        MaintenanceActionCode.TOOL_REPLACEMENT.value,
+        MaintenanceActionCode.COOLING_SYSTEM_RESTORE.value,
+    }:
         raise ValueError(
-            "maintenance work order requires an approved TOOL_REPLACEMENT action"
+            "maintenance work order requires an approved Maintenance action"
         )
     if decision.recommendation_id != recommendation.recommendation_id:
         raise ValueError("decision does not belong to the recommendation")
