@@ -103,6 +103,11 @@ class GenDataFragmentLifecycleManager:
             logger.warning(f"Failed to load consumption record for batch '{batch_id}': {exc}")
             return None
 
+    def is_fully_consumed(self, batch_id: str) -> bool:
+        """Check if batch fragment has been fully consumed by all referenced windows."""
+        record = self.load_consumption(batch_id)
+        return record is not None and record.status == "fully_consumed"
+
     def record_window_publication(
         self,
         *,
@@ -158,10 +163,10 @@ class GenDataFragmentLifecycleManager:
 
             try:
                 os.replace(str(temp_file), str(rec_file))
-            except OSError:
-                if rec_file.exists():
-                    rec_file.unlink()
-                shutil.move(str(temp_file), str(rec_file))
+            except OSError as exc:
+                raise ExtractionRequestInvalidError(
+                    f"Failed to atomically persist consumption record for batch '{batch_id}': {exc}"
+                ) from exc
 
             return record
         except Exception as exc:
@@ -170,6 +175,8 @@ class GenDataFragmentLifecycleManager:
                     temp_file.unlink()
                 except OSError:
                     pass
+            if isinstance(exc, ExtractionRequestInvalidError):
+                raise
             raise ExtractionRequestInvalidError(
                 f"Failed to persist consumption record for batch '{batch_id}': {exc}"
             ) from exc

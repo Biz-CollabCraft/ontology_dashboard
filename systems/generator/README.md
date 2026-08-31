@@ -373,6 +373,18 @@ gen_data (sensor_stream.jsonl append)
 - **Dashboard 알림 UI**: 실시간 이상 알림 UI 구성은 프론트엔드/대시보드 도메인에서 처리합니다.
 - **Closed-loop 재지시 (PLC 제어)**: 설비 제어기 직접 피드백 루프는 본 파이프라인의 범위가 아닙니다.
 
+### 8.3 Legacy와 gen_data 중복 방지 계약 구분 (Dedup Architecture Distinction)
+- **Legacy ExtractionService**:
+  - `DedupRepository` 기반 영속 record dedup
+  - Target Dataset lease 및 갱신 방식
+- **GenDataExtractionRequest 운영 경로**:
+  - Source 단위 배타적 OS 파일 Lock (`GenDataSourceLock`)
+  - Source byte-offset 기반 증분 Checkpoint (`GenDataExtractionCheckpoint`)
+  - Source identity + offset 범위 + Mapping identity 기반 결정적 `batch_id`
+  - Polling cycle 간 Cross-run Fragment 멱등 재사용 (`find_fragment_by_batch_id`)
+  - Fragment consumption record 기반 수명주기 및 Fully-consumed 추적
+  - 불변 `Canonical Observation Dataset` 발행 및 SHA-256 conflict fail-closed 검증
+
 ---
 
 ## 9. 산출물 수명주기 및 보존 정책 (Artifact Lifecycle)

@@ -103,6 +103,69 @@ class GenDataFragmentRepository:
                 details=[{"path": list(exc.path), "error": exc.message}],
             ) from exc
 
+    def find_fragment_by_batch_id(
+        self,
+        *,
+        batch_id: str,
+        source_identity: str,
+        source_start_offset: int,
+        source_end_offset: int,
+        mapping_id: str,
+        mapping_version: str,
+        mapping_sha256: str,
+    ) -> Optional[tuple[Path, ExtractionFragmentManifest, str]]:
+        """Search all run directories for an existing valid fragment matching the deterministic batch_id.
+
+        Returns:
+            tuple[Path, ExtractionFragmentManifest, str]: (fragment_dir, manifest, manifest_sha256) if exactly one valid match exists.
+            None: If no candidate fragment exists.
+
+        Raises:
+            ExtractionFragmentConflictError: If multiple candidate directories exist, or if metadata/content conflicts.
+            ExtractionFragmentVerifyFailedError: If a candidate directory exists but is corrupted or invalid.
+        """
+        if not self.base_runs_dir.is_dir():
+            return None
+
+        candidates: list[tuple[Path, ExtractionFragmentManifest, str]] = []
+
+        for manifest_file in self.base_runs_dir.glob(f"*/fragments/{batch_id}/fragment_manifest.json"):
+            frag_dir = manifest_file.parent
+            if not frag_dir.is_dir():
+                continue
+
+            manifest_bytes = manifest_file.read_bytes()
+            manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+
+            # Verify manifest and files
+            manifest = self.verify_fragment(frag_dir, expected_manifest_sha256=manifest_sha256)
+
+            # Strict identity and scope check
+            if (
+                manifest.batch_id != batch_id
+                or manifest.source_identity != source_identity
+                or manifest.source_start_offset != source_start_offset
+                or manifest.source_end_offset != source_end_offset
+                or manifest.mapping_id != mapping_id
+                or manifest.mapping_version != mapping_version
+                or manifest.mapping_sha256 != mapping_sha256
+            ):
+                raise ExtractionFragmentConflictError(
+                    f"Candidate fragment at '{frag_dir}' has conflicting identity or scope for batch_id '{batch_id}'."
+                )
+
+            candidates.append((frag_dir, manifest, manifest_sha256))
+
+        if len(candidates) == 0:
+            return None
+        elif len(candidates) == 1:
+            return candidates[0]
+        else:
+            raise ExtractionFragmentConflictError(
+                f"Multiple duplicate fragments for batch_id '{batch_id}' found in runs: "
+                f"{[str(c[0]) for c in candidates]}"
+            )
+
     def save_fragment_atomic(
         self,
         *,
@@ -145,6 +208,7 @@ class GenDataFragmentRepository:
                         and existing_manifest.source_identity == source_identity
                         and existing_manifest.source_start_offset == source_start_offset
                         and existing_manifest.source_end_offset == source_end_offset
+                        and existing_manifest.mapping_sha256 == mapping_sha256
                     ):
                         logger.info(f"[FragmentRepo] Reusing existing identical fragment '{batch_id}'")
                         return final_batch_dir, existing_manifest, manifest_sha
@@ -273,13 +337,36 @@ class GenDataFragmentRepository:
             if failure_injector:
                 failure_injector("after_fragment_manifest_written")
 
-            # 6. Atomic directory move / rename
+            # 6. Atomic directory move / rename (NEVER delete final_batch_dir)
             try:
                 os.replace(temp_dir, final_batch_dir)
             except OSError:
                 if final_batch_dir.exists():
-                    shutil.rmtree(final_batch_dir)
-                shutil.move(str(temp_dir), str(final_batch_dir))
+                    manifest_file = final_batch_dir / "fragment_manifest.json"
+                    if manifest_file.is_file():
+                        try:
+                            m_bytes = manifest_file.read_bytes()
+                            m_sha = hashlib.sha256(m_bytes).hexdigest()
+                            existing_manifest = self.verify_fragment(final_batch_dir, expected_manifest_sha256=m_sha)
+                            if (
+                                existing_manifest.batch_id == batch_id
+                                and existing_manifest.source_identity == source_identity
+                                and existing_manifest.source_start_offset == source_start_offset
+                                and existing_manifest.source_end_offset == source_end_offset
+                                and existing_manifest.mapping_sha256 == mapping_sha256
+                            ):
+                                logger.info(f"[FragmentRepo] Atomic rename encountered identical existing fragment '{batch_id}'; reusing.")
+                                return final_batch_dir, existing_manifest, m_sha
+                        except Exception as exc:
+                            raise ExtractionFragmentConflictError(
+                                f"Fragment directory '{final_batch_dir}' exists but is corrupt: {exc}"
+                            ) from exc
+                    raise ExtractionFragmentConflictError(
+                        f"Fragment directory '{final_batch_dir}' exists with conflicting content."
+                    )
+                raise ExtractionFragmentWriteFailedError(
+                    f"Failed to atomically rename temporary fragment directory '{temp_dir}' to '{final_batch_dir}'"
+                )
 
             if failure_injector:
                 failure_injector("after_fragment_renamed")
@@ -289,17 +376,12 @@ class GenDataFragmentRepository:
 
             return final_batch_dir, manifest, manifest_sha256
 
-        except Exception as exc:
+        finally:
             if temp_dir.exists():
                 try:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
-            if isinstance(exc, (ExtractionFragmentConflictError, ExtractionFragmentVerifyFailedError)):
-                raise
-            raise ExtractionFragmentWriteFailedError(
-                f"Failed to write fragment batch '{batch_id}' to '{final_batch_dir}': {exc}"
-            ) from exc
 
     def verify_fragment(self, fragment_dir: Path, expected_manifest_sha256: Optional[str] = None) -> ExtractionFragmentManifest:
         """Read and strictly verify manifest and all file checksums in a fragment directory."""

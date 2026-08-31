@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionDuplicateObservationNotSupportedError,
+    ExtractionFragmentConflictError,
     ExtractionFragmentInvalidError,
     ExtractionFragmentVerifyFailedError,
     ExtractionLateRecordNotSupportedError,
@@ -94,14 +95,22 @@ class ExtractionWindowAssembler:
 
         # 1. Pre-verify all fragments and load records
         verified_manifests: list[tuple[Path, ExtractionFragmentManifest, str]] = []
+        seen_batch_ids: dict[str, Path] = {}
         for f_dir in sorted(fragment_dirs):
             manifest = self.fragment_repo.verify_fragment(f_dir)
             if manifest.source_identity != source_identity:
                 raise ExtractionFragmentInvalidError(
                     f"Fragment at '{f_dir}' has mismatched source_identity: expected '{source_identity}', got '{manifest.source_identity}'"
                 )
+            if manifest.batch_id in seen_batch_ids:
+                raise ExtractionFragmentConflictError(
+                    f"Duplicate fragment batch_id '{manifest.batch_id}' found in multiple paths: "
+                    f"'{seen_batch_ids[manifest.batch_id]}' and '{f_dir}'"
+                )
+            seen_batch_ids[manifest.batch_id] = f_dir
+
             manifest_file = f_dir / "fragment_manifest.json"
-            manifest_sha = self.fragment_repo._get_schema()  # warm cache
+            self.fragment_repo._get_schema()  # warm cache
             import hashlib
             m_sha = hashlib.sha256(manifest_file.read_bytes()).hexdigest()
             verified_manifests.append((f_dir, manifest, m_sha))

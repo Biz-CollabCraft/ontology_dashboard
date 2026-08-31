@@ -319,23 +319,42 @@ class GenDataIncrementalExtractionService:
                 mapping_sha256=mapping_sha256,
             )
 
-            # 8. Save Fragment atomically
-            frag_dir, manifest, manifest_sha256 = self.fragment_repo.save_fragment_atomic(
-                run_id=run_id,
+            # 8. Check for existing cross-run fragment with identical batch_id or save new
+            existing_fragment = self.fragment_repo.find_fragment_by_batch_id(
                 batch_id=batch_id,
                 source_identity=source_identity,
-                source_uri=source.source_uri,
                 source_start_offset=start_offset,
                 source_end_offset=end_offset,
-                source_start_line=start_line + 1,
-                source_end_line=end_line,
                 mapping_id=mapping_id,
                 mapping_version=mapping_version,
                 mapping_sha256=mapping_sha256,
-                observations=observations,
-                rejected_records=rejected_records,
-                failure_injector=self.failure_injector,
             )
+
+            if existing_fragment is not None:
+                frag_dir, manifest, manifest_sha256 = existing_fragment
+                effective_run_id = manifest.run_id
+                logger.info(
+                    f"[IncrementalService] Reusing existing cross-run fragment '{batch_id}' "
+                    f"from run '{effective_run_id}'"
+                )
+            else:
+                frag_dir, manifest, manifest_sha256 = self.fragment_repo.save_fragment_atomic(
+                    run_id=run_id,
+                    batch_id=batch_id,
+                    source_identity=source_identity,
+                    source_uri=source.source_uri,
+                    source_start_offset=start_offset,
+                    source_end_offset=end_offset,
+                    source_start_line=start_line + 1,
+                    source_end_line=end_line,
+                    mapping_id=mapping_id,
+                    mapping_version=mapping_version,
+                    mapping_sha256=mapping_sha256,
+                    observations=observations,
+                    rejected_records=rejected_records,
+                    failure_injector=self.failure_injector,
+                )
+                effective_run_id = run_id
 
             # 9. If brand new source, compute prefix checksum
             if chk.verified_prefix_length == 0:
@@ -348,7 +367,7 @@ class GenDataIncrementalExtractionService:
             chk.status = "fragment_staged"
             chk.pending_batch = PendingExtractionBatch(
                 batch_id=batch_id,
-                run_id=run_id,
+                run_id=effective_run_id,
                 source_start_offset=start_offset,
                 source_end_offset=end_offset,
                 source_start_line=start_line + 1,
@@ -359,7 +378,7 @@ class GenDataIncrementalExtractionService:
                 mapping_id=mapping_id,
                 mapping_version=mapping_version,
                 mapping_sha256=mapping_sha256,
-                fragment_manifest_uri=f"data_preprocessed/extraction_runs/{run_id}/fragments/{batch_id}/fragment_manifest.json",
+                fragment_manifest_uri=f"data_preprocessed/extraction_runs/{effective_run_id}/fragments/{batch_id}/fragment_manifest.json",
                 fragment_manifest_sha256=manifest_sha256,
                 staged_at=staged_now,
             )
@@ -388,7 +407,7 @@ class GenDataIncrementalExtractionService:
                 records_read=total_read,
                 observations_staged=len(observations),
                 rejected_staged=len(rejected_records),
-                fragment_manifest_uri=f"data_preprocessed/extraction_runs/{run_id}/fragments/{batch_id}/fragment_manifest.json",
+                fragment_manifest_uri=f"data_preprocessed/extraction_runs/{effective_run_id}/fragments/{batch_id}/fragment_manifest.json",
                 fragment_manifest_sha256=manifest_sha256,
                 status="fragment_committed",
             )

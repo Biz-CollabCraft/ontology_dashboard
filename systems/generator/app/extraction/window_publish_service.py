@@ -65,7 +65,7 @@ class ExtractionWindowPublishService:
         ).resolve()
 
     def discover_fragments_for_source(self, source_identity: str) -> list[Path]:
-        """Find all available fragment directories belonging to source_identity."""
+        """Find all available fragment directories belonging to source_identity that are not fully consumed."""
         matched: list[Path] = []
         if not self.runs_root.is_dir():
             return matched
@@ -75,6 +75,8 @@ class ExtractionWindowPublishService:
             try:
                 manifest = self.fragment_repo.verify_fragment(frag_dir)
                 if manifest.source_identity == source_identity:
+                    if self.lifecycle_mgr.is_fully_consumed(manifest.batch_id):
+                        continue
                     matched.append(frag_dir)
             except Exception as exc:
                 logger.warning(f"[PublishService] Skipping invalid fragment '{frag_dir}': {exc}")
