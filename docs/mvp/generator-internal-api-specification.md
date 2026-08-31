@@ -478,7 +478,8 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 - **Pending Fragment Recovery 안전성**:
   - `fragment_staged` 상태의 pending batch 복구 시, 현재 파일 크기가 pending batch의 `source_end_offset` 이상이고 Mapping Identity가 일치하는 경우에만 commit을 확정합니다.
 - **불변성 보존**:
-  - 검증 및 추출 실패 시 기존 Checkpoint, Fragment 및 Dataset 파일은 일절 수정되거나 삭제되지 않고 100% 보존됩니다.
+  - Mapping/scope/source 무결성 검증 실패는 기존 상태를 변경하지 않음
+  - processing 진입 이후 실패는 committed offset과 기존 fragment/dataset을 보존하되 recovery를 위해 checkpoint status가 변경될 수 있음
 
 #### Extraction 오류 코드 표
 
