@@ -16,6 +16,8 @@ from systems.generator.app.extraction.extraction_exception import (
     ExtractionCheckpointMappingMigrationRequiredError,
     ExtractionCheckpointWriteFailedError,
     ExtractionFragmentConflictError,
+    ExtractionFragmentVerifyFailedError,
+    ExtractionFragmentWriteFailedError,
     ExtractionMappingRebuildNotImplementedError,
     ExtractionSourceLockedError,
     ExtractionSourcePrefixMismatchError,
@@ -675,3 +677,242 @@ def test_checkpoint_atomic_replace_failure_on_new_checkpoint(tmp_path, monkeypat
 
     tmp_files = list((tmp_path / "checkpoints").glob(".tmp_*"))
     assert len(tmp_files) == 0
+
+
+@pytest.mark.parametrize(
+    "failed_filename",
+    [
+        "observations.jsonl",
+        "provenance.jsonl",
+        "rejected.jsonl",
+        "fragment_manifest.json",
+    ],
+)
+def test_fragment_write_os_error_is_retryable(tmp_path, monkeypatch, failed_filename):
+    """When writing any fragment file encounters an OSError, save_fragment_atomic raises ExtractionFragmentWriteFailedError with retryable=True and cleans temp."""
+    frag_repo = GenDataFragmentRepository(base_runs_dir=tmp_path / "runs")
+
+    now_iso = "2026-08-28T13:00:00Z"
+    obs = [
+        CanonicalObservationCandidate(
+            source_uri="sensor/stream.jsonl",
+            source_byte_start=0,
+            source_byte_end=50,
+            source_line_number=1,
+            source_row_sha256="a" * 64,
+            asset_id="CNC-01",
+            site_id="S01",
+            cell_id="L01",
+            observed_at=now_iso,
+            measurements={"torque_nm": 45.0},
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+            ignored_source_fields=(),
+        )
+    ]
+
+    orig_write_bytes = Path.write_bytes
+
+    def selective_write_bytes(self_path: Path, data: bytes):
+        if self_path.name == failed_filename:
+            raise OSError(f"Simulated disk full while writing {failed_filename}")
+        return orig_write_bytes(self_path, data)
+
+    monkeypatch.setattr(Path, "write_bytes", selective_write_bytes)
+
+    batch_id = "b" * 64
+    source_id = "d" * 64
+
+    with pytest.raises(ExtractionFragmentWriteFailedError) as exc_info:
+        frag_repo.save_fragment_atomic(
+            run_id="run-1",
+            batch_id=batch_id,
+            source_identity=source_id,
+            source_uri="sensor/stream.jsonl",
+            source_start_offset=0,
+            source_end_offset=50,
+            source_start_line=1,
+            source_end_line=1,
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+            observations=obs,
+            rejected_records=[],
+        )
+
+    assert exc_info.value.code == "EXTRACTION_FRAGMENT_WRITE_FAILED"
+    assert exc_info.value.retryable is True
+    assert exc_info.value.status_code == 500
+
+    # Invariant: final_batch_dir does not exist
+    final_batch_dir = tmp_path / "runs" / "run-1" / "fragments" / batch_id
+    assert not final_batch_dir.exists()
+
+    # Invariant: No orphan temp directories remain
+    fragments_root = tmp_path / "runs" / "run-1" / "fragments"
+    if fragments_root.exists():
+        temp_dirs = list(fragments_root.glob(".tmp_*"))
+        assert len(temp_dirs) == 0
+
+
+def test_fragment_atomic_rename_os_error_handling_when_no_destination(tmp_path, monkeypatch):
+    """When os.replace fails and final_batch_dir does not exist, raises ExtractionFragmentWriteFailedError with retryable=True."""
+    import os
+
+    frag_repo = GenDataFragmentRepository(base_runs_dir=tmp_path / "runs")
+
+    now_iso = "2026-08-28T13:00:00Z"
+    obs = [
+        CanonicalObservationCandidate(
+            source_uri="sensor/stream.jsonl",
+            source_byte_start=0,
+            source_byte_end=50,
+            source_line_number=1,
+            source_row_sha256="a" * 64,
+            asset_id="CNC-01",
+            site_id="S01",
+            cell_id="L01",
+            observed_at=now_iso,
+            measurements={"torque_nm": 45.0},
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+            ignored_source_fields=(),
+        )
+    ]
+
+    def mock_replace(src, dst):
+        raise OSError("Simulated atomic rename failure")
+
+    monkeypatch.setattr(os, "replace", mock_replace)
+
+    batch_id = "b" * 64
+    source_id = "d" * 64
+
+    with pytest.raises(ExtractionFragmentWriteFailedError) as exc_info:
+        frag_repo.save_fragment_atomic(
+            run_id="run-1",
+            batch_id=batch_id,
+            source_identity=source_id,
+            source_uri="sensor/stream.jsonl",
+            source_start_offset=0,
+            source_end_offset=50,
+            source_start_line=1,
+            source_end_line=1,
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+            observations=obs,
+            rejected_records=[],
+        )
+
+    assert exc_info.value.code == "EXTRACTION_FRAGMENT_WRITE_FAILED"
+    assert exc_info.value.retryable is True
+
+    # Invariant: No orphan temp directories remain
+    fragments_root = tmp_path / "runs" / "run-1" / "fragments"
+    if fragments_root.exists():
+        temp_dirs = list(fragments_root.glob(".tmp_*"))
+        assert len(temp_dirs) == 0
+
+
+def test_existing_state_preserved_on_fragment_write_failure(tmp_path, monkeypatch):
+    """When a fragment write fails with OSError, existing checkpoint and existing fragments remain completely unchanged."""
+    chk_repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")
+    frag_repo = GenDataFragmentRepository(base_runs_dir=tmp_path / "runs")
+
+    # 1. Existing initial checkpoint
+    source_id = "d" * 64
+    chk = GenDataExtractionCheckpoint(
+        source_identity=source_id,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        site_id="S01",
+        cell_id="L01",
+        last_committed_offset=100,
+        last_committed_line=5,
+        verified_prefix_length=0,
+        verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        last_committed_batch_id="a" * 64,
+        committed_at="2026-08-28T13:00:00Z",
+        status="idle",
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        created_at="2026-08-28T13:00:00Z",
+        updated_at="2026-08-28T13:00:00Z",
+    )
+    chk_path = chk_repo.save_checkpoint_atomic(chk)
+    orig_chk_bytes = chk_path.read_bytes()
+
+    # 2. Existing initial fragment
+    now_iso = "2026-08-28T13:00:00Z"
+    obs1 = [
+        CanonicalObservationCandidate(
+            source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+            source_byte_start=0,
+            source_byte_end=100,
+            source_line_number=1,
+            source_row_sha256="a" * 64,
+            asset_id="CNC-01",
+            site_id="S01",
+            cell_id="L01",
+            observed_at=now_iso,
+            measurements={"torque_nm": 45.0},
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+            ignored_source_fields=(),
+        )
+    ]
+    frag_dir_1, _, _ = frag_repo.save_fragment_atomic(
+        run_id="run-1",
+        batch_id="a" * 64,
+        source_identity=source_id,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        source_start_offset=0,
+        source_end_offset=100,
+        source_start_line=1,
+        source_end_line=5,
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        observations=obs1,
+        rejected_records=[],
+    )
+    manifest_bytes_1 = (frag_dir_1 / "fragment_manifest.json").read_bytes()
+
+    # 3. Simulate failure when saving second fragment
+    orig_write_bytes = Path.write_bytes
+
+    def fail_manifest(self_path: Path, data: bytes):
+        if self_path.name == "fragment_manifest.json" and "run-2" in str(self_path):
+            raise OSError("Simulated disk error during second fragment manifest write")
+        return orig_write_bytes(self_path, data)
+
+    monkeypatch.setattr(Path, "write_bytes", fail_manifest)
+
+    with pytest.raises(ExtractionFragmentWriteFailedError):
+        frag_repo.save_fragment_atomic(
+            run_id="run-2",
+            batch_id="b" * 64,
+            source_identity=source_id,
+            source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+            source_start_offset=100,
+            source_end_offset=200,
+            source_start_line=6,
+            source_end_line=10,
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1.0",
+            mapping_sha256="a" * 64,
+            observations=obs1,
+            rejected_records=[],
+        )
+
+    # Invariants:
+    # 1. Existing checkpoint file is 100% byte-for-byte identical
+    assert chk_path.read_bytes() == orig_chk_bytes
+    # 2. Existing fragment 1 is 100% intact and unchanged
+    assert (frag_dir_1 / "fragment_manifest.json").read_bytes() == manifest_bytes_1
+    # 3. Second fragment was not created
+    assert not (tmp_path / "runs" / "run-2" / "fragments" / ("b" * 64)).exists()

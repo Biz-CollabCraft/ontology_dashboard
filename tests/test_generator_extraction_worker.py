@@ -10,8 +10,13 @@ import pytest
 
 from systems.generator.generator_config import PATHS
 from systems.generator.app.extraction.extraction_exception import (
+    ExtractionCheckpointInvalidError,
     ExtractionConfigurationInvalidError,
+    ExtractionFragmentConflictError,
+    ExtractionFragmentVerifyFailedError,
+    ExtractionFragmentWriteFailedError,
     ExtractionMappingConfigurationMissingError,
+    ExtractionMappingRebuildNotImplementedError,
 )
 from systems.generator.app.extraction.extraction_manager import (
     ExtractionManager,
@@ -114,6 +119,7 @@ def test_worker_polling_single_cycle(tmp_path, monkeypatch, sample_mapping):
         stream_file.write_bytes(raw_bytes)
 
         monkeypatch.setattr(PATHS, "data_dir", tmp_path / "data")
+        monkeypatch.setattr(PATHS, "observations_root", tmp_path / "data" / "observations")
         monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
         monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
         monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
@@ -188,6 +194,7 @@ def test_worker_isolation_one_failure_does_not_stop_others(tmp_path, monkeypatch
         s2_file.write_bytes(b"".join(json.dumps(r).encode("utf-8") + b"\n" for r in s2_records))
 
         monkeypatch.setattr(PATHS, "data_dir", tmp_path / "data")
+        monkeypatch.setattr(PATHS, "observations_root", tmp_path / "data" / "observations")
         monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
         monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
         monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
@@ -203,5 +210,166 @@ def test_worker_isolation_one_failure_does_not_stop_others(tmp_path, monkeypatch
         assert s2_key in manager._source_states
         assert manager._source_states[s2_key].status == "waiting"
         assert manager._source_states[s2_key].last_committed_offset > 0
+
+    asyncio.run(_test())
+
+
+def test_manager_transient_fragment_write_failure_queued_and_retryable(tmp_path, monkeypatch, sample_mapping):
+    """When incremental service raises ExtractionFragmentWriteFailedError, source state transitions to queued with incremented attempt."""
+    async def _test():
+        sensor_root = tmp_path / "gen_data" / "sensor"
+        stream_file = sensor_root / "facS01" / "lineL01" / "sensor_stream.jsonl"
+        stream_file.parent.mkdir(parents=True, exist_ok=True)
+        stream_file.write_bytes(b'{"asset_id":"CNC-01","observed_at":"2026-08-28T13:00:00Z","torque_nm":45.0}\n')
+
+        source = GenDataSensorStreamSource(
+            site_id="S01",
+            cell_id="L01",
+            facility_dir_name="facS01",
+            line_dir_name="lineL01",
+            source_path=stream_file,
+            source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        )
+
+        monkeypatch.setattr(PATHS, "data_dir", tmp_path / "data")
+        monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
+        monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
+        monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
+        monkeypatch.setattr(PATHS, "extraction_max_attempts", 3)
+
+        manager = ExtractionManager()
+        monkeypatch.setattr(manager, "_resolve_mapping_data", lambda *args, **kwargs: sample_mapping)
+
+        def mock_process_records(*args, **kwargs):
+            raise ExtractionFragmentWriteFailedError("simulated transient fragment storage failure")
+
+        monkeypatch.setattr(manager.incremental_service, "process_available_records", mock_process_records)
+
+        # 1. First execution
+        res = await manager.process_source_once(
+            source=source,
+            mapping_id="gen-data-sensor-stream-canonical",
+            mapping_version="v1",
+            mapping_sha256=sample_mapping["mapping_sha256"],
+            raise_on_error=False,
+        )
+
+        source_key = source.source_uri
+        state = manager._source_states[source_key]
+
+        assert state.error_code == "EXTRACTION_FRAGMENT_WRITE_FAILED"
+        assert state.retryable is True
+        assert state.status == "queued"
+        assert state.attempt == 1
+        assert state.status != "blocked"
+        assert res.status == "failed"
+
+    asyncio.run(_test())
+
+
+def test_manager_transient_failure_exhausts_max_attempts_transitions_to_failed(tmp_path, monkeypatch, sample_mapping):
+    """When transient failure repeats up to max_attempts, source transitions to failed (EXTRACTION_RETRY_EXHAUSTED)."""
+    async def _test():
+        sensor_root = tmp_path / "gen_data" / "sensor"
+        stream_file = sensor_root / "facS01" / "lineL01" / "sensor_stream.jsonl"
+        stream_file.parent.mkdir(parents=True, exist_ok=True)
+        stream_file.write_bytes(b'{"asset_id":"CNC-01","observed_at":"2026-08-28T13:00:00Z","torque_nm":45.0}\n')
+
+        source = GenDataSensorStreamSource(
+            site_id="S01",
+            cell_id="L01",
+            facility_dir_name="facS01",
+            line_dir_name="lineL01",
+            source_path=stream_file,
+            source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        )
+
+        monkeypatch.setattr(PATHS, "data_dir", tmp_path / "data")
+        monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
+        monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
+        monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
+        monkeypatch.setattr(PATHS, "extraction_max_attempts", 3)
+
+        manager = ExtractionManager()
+        monkeypatch.setattr(manager, "_resolve_mapping_data", lambda *args, **kwargs: sample_mapping)
+
+        def mock_process_records(*args, **kwargs):
+            raise ExtractionFragmentWriteFailedError("simulated transient fragment storage failure")
+
+        monkeypatch.setattr(manager.incremental_service, "process_available_records", mock_process_records)
+
+        source_key = source.source_uri
+
+        # Attempt 1
+        await manager.process_source_once(source=source, raise_on_error=False)
+        assert manager._source_states[source_key].status == "queued"
+        assert manager._source_states[source_key].attempt == 1
+
+        # Attempt 2
+        await manager.process_source_once(source=source, raise_on_error=False)
+        assert manager._source_states[source_key].status == "queued"
+        assert manager._source_states[source_key].attempt == 2
+
+        # Attempt 3 (reaches max_attempts)
+        await manager.process_source_once(source=source, raise_on_error=False)
+        assert manager._source_states[source_key].status == "failed"
+        assert manager._source_states[source_key].error_code == "EXTRACTION_RETRY_EXHAUSTED"
+        assert manager._source_states[source_key].attempt == 3
+
+    asyncio.run(_test())
+
+
+@pytest.mark.parametrize(
+    "exception_cls, expected_error_code",
+    [
+        (ExtractionFragmentConflictError, "EXTRACTION_FRAGMENT_CONFLICT"),
+        (ExtractionFragmentVerifyFailedError, "EXTRACTION_FRAGMENT_VERIFY_FAILED"),
+        (ExtractionMappingRebuildNotImplementedError, "EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED"),
+        (ExtractionCheckpointInvalidError, "EXTRACTION_CHECKPOINT_INVALID"),
+    ],
+)
+def test_manager_non_retryable_failure_transitions_to_blocked(
+    tmp_path, monkeypatch, sample_mapping, exception_cls, expected_error_code
+):
+    """When a non-retryable domain error occurs, retryable is False and state immediately transitions to blocked."""
+    async def _test():
+        sensor_root = tmp_path / "gen_data" / "sensor"
+        stream_file = sensor_root / "facS01" / "lineL01" / "sensor_stream.jsonl"
+        stream_file.parent.mkdir(parents=True, exist_ok=True)
+        stream_file.write_bytes(b'{"asset_id":"CNC-01","observed_at":"2026-08-28T13:00:00Z","torque_nm":45.0}\n')
+
+        source = GenDataSensorStreamSource(
+            site_id="S01",
+            cell_id="L01",
+            facility_dir_name="facS01",
+            line_dir_name="lineL01",
+            source_path=stream_file,
+            source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        )
+
+        monkeypatch.setattr(PATHS, "data_dir", tmp_path / "data")
+        monkeypatch.setattr(PATHS, "data_preprocessed", tmp_path / "preprocessed")
+        monkeypatch.setattr(PATHS, "gen_data_output_dir", tmp_path / "gen_data")
+        monkeypatch.setattr(PATHS, "gen_data_sensor_root", sensor_root)
+
+        manager = ExtractionManager()
+        monkeypatch.setattr(manager, "_resolve_mapping_data", lambda *args, **kwargs: sample_mapping)
+
+        exc_instance = exception_cls("simulated non-retryable contract error")
+        assert exc_instance.retryable is False
+
+        def mock_process_records(*args, **kwargs):
+            raise exc_instance
+
+        monkeypatch.setattr(manager.incremental_service, "process_available_records", mock_process_records)
+
+        source_key = source.source_uri
+        res = await manager.process_source_once(source=source, raise_on_error=False)
+
+        state = manager._source_states[source_key]
+        assert state.retryable is False
+        assert state.status == "blocked"
+        assert state.error_code == expected_error_code
+        assert res.status == "blocked"
 
     asyncio.run(_test())

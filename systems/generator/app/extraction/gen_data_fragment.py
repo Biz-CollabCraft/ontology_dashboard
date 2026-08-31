@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from systems.generator.generator_config import PROJECT_ROOT
 from systems.generator.app.extraction.extraction_exception import (
+    ExtractionError,
     ExtractionFragmentConflictError,
     ExtractionFragmentVerifyFailedError,
     ExtractionFragmentWriteFailedError,
@@ -376,12 +377,26 @@ class GenDataFragmentRepository:
 
             return final_batch_dir, manifest, manifest_sha256
 
+        except ExtractionError:
+            raise
+        except OSError as exc:
+            raise ExtractionFragmentWriteFailedError(
+                f"Failed to write extraction fragment '{batch_id}': {exc}"
+            ) from exc
+        except Exception as exc:
+            raise ExtractionFragmentWriteFailedError(
+                f"Unexpected fragment publication failure for '{batch_id}': {exc}"
+            ) from exc
         finally:
             if temp_dir.exists():
                 try:
                     shutil.rmtree(temp_dir)
-                except Exception:
-                    pass
+                except OSError:
+                    logger.warning(
+                        "[FragmentRepo] Failed to clean temporary fragment directory '%s'",
+                        temp_dir,
+                        exc_info=True,
+                    )
 
     def verify_fragment(self, fragment_dir: Path, expected_manifest_sha256: Optional[str] = None) -> ExtractionFragmentManifest:
         """Read and strictly verify manifest and all file checksums in a fragment directory."""
