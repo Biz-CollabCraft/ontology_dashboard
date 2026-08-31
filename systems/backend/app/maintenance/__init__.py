@@ -2,6 +2,12 @@
 
 from app.diagnosis.recommendation_schema import ProducerRecommendation
 
+from .cost_calculator import (
+    SensitivityRatePerMinute,
+    ToolReplacementCostAnalysisInput,
+    ToolReplacementScenarioInput,
+    calculate_tool_replacement_cost_scenarios,
+)
 from .cost_analysis_schema import (
     CalculationStatus,
     ConfidenceLevel,
@@ -101,6 +107,9 @@ __all__ = [
     "RiskEventStatus",
     "SensitivityDuration",
     "SensitivityMoney",
+    "SensitivityRatePerMinute",
+    "ToolReplacementCostAnalysisInput",
+    "ToolReplacementScenarioInput",
     "WorkOrder",
     "WorkOrderAuthorization",
     "WorkOrderStatus",
@@ -108,6 +117,7 @@ __all__ = [
     "apply_recommendation_decision",
     "authorize_inspection_work_order",
     "authorize_maintenance_work_order",
+    "calculate_tool_replacement_cost_scenarios",
     "create_inspection_work_order",
     "create_operations_manual_recommendation",
     "create_work_order_for_recommendation",
