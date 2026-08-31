@@ -20,7 +20,7 @@ interface MvpSelectionContextValue {
 const MvpSelectionContext = createContext<MvpSelectionContextValue | null>(null);
 
 function validView(value: string | null): MvpView {
-  if (value === "objects" || value === "operations" || value === "reports") return value;
+  if (value === "objects" || value === "operations" || value === "reports" || value === "system") return value;
   if (value === "executive-report" || value === "inspection-report") return "reports";
   return "overview";
 }

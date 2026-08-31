@@ -25,6 +25,7 @@ import { MvpOperationsPage } from "./operations/MvpOperationsPage";
 import { MvpOverviewPage } from "./overview/MvpOverviewPage";
 import { MvpReportsPage } from "./report/MvpReportsPage";
 import { MvpShell } from "./shell/MvpShell";
+import { MvpSystemAdminPage } from "./system/MvpSystemAdminPage";
 import "./mvp.css";
 
 const MVP_REFRESH_INTERVAL_SECONDS = 10;
@@ -242,6 +243,8 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
     content = <MvpOperationsPage model={model} selectedEventId={selection.eventId} detail={detail} detailLoading={detailLoading} detailError={detailError} canDecide={canDecide} canNote={canNote} onSelectEvent={selectEvent} onOpenAsset={openEventAsset} onOpenReport={openEventReport} onDecision={submitDecision} onNote={submitNote} onRetryDetail={retryDetail} />;
   } else if (selection.view === "reports") {
     content = <MvpReportsPage activeTab={selection.reportTab} model={model} selectedEvent={selectedEvent} detail={detail} detailLoading={detailLoading} detailError={detailError} onSelectTab={selectReportTab} onSelectEvent={selectEvent} onBackToOverview={() => openView("overview")} onOpenOperations={(event) => openEvent(event.eventId, event.assetId)} onRetryDetail={retryDetail} />;
+  } else if (selection.view === "system") {
+    content = <MvpSystemAdminPage model={model} refreshing={loading} onRefresh={refresh} />;
   } else {
     content = <MvpOverviewPage model={model} role={selection.role} dashboard={selection.dashboard} selectedAssetId={selection.assetId} detail={detail} detailLoading={detailLoading} detailError={detailError} sensorWindow={sensorWindow} onSensorWindowChange={setSensorWindow} onOpenAsset={openAsset} onPreviewAsset={previewAsset} onOpenEvent={openEvent} onOpenReport={openReport} onRefresh={refresh} />;
   }

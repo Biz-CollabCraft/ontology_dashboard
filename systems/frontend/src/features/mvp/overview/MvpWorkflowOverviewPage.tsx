@@ -14,11 +14,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { createMvpAgentReviewSummary, getMvpAgentReviewSummary, getMvpAgentReviewWorkflowRuns } from "../../../api";
+import { createMvpAgentReviewSummary, getMvpAgentReviewSummary } from "../../../api";
 import type {
   MvpAgentReviewSummary,
   MvpAgentReviewSummaryResponse,
-  MvpAgentReviewWorkflowRun,
   MvpAsset,
   MvpBootstrapModel,
   MvpClosedLoopSummary,
@@ -71,7 +70,7 @@ interface LineImpactSummary {
   attention: number;
 }
 
-type DrawerTab = "status" | "action" | "runtime";
+type DrawerTab = "status" | "action";
 type FactorySlotKind = "cnc" | "compressor";
 type WorkStatus =
   | "candidate_recommended"
@@ -351,22 +350,6 @@ function renderHighlightedAgentQuote(quote: string) {
       ? <strong key={`${part}-${index}`}>{agentQuoteStatusLabel(part)}</strong>
       : <span key={`${part}-${index}`}>{part}</span>;
   });
-}
-
-function agentWorkflowRunLabel(run: Pick<MvpAgentReviewWorkflowRun, "trigger" | "status">): string {
-  const triggerLabel = run.trigger === "polling_watcher"
-    ? "watcher 요약 준비"
-    : run.trigger === "ui_manual_regeneration"
-      ? "화면 수동 갱신"
-      : "수동 생성";
-  const statusLabel = run.status === "completed"
-    ? "완료"
-    : run.status === "partial"
-      ? "부분 완료"
-      : run.status === "failed"
-        ? "실패"
-        : "진행 중";
-  return `${triggerLabel} · ${statusLabel}`;
 }
 
 function displayFactorySite(site: string): string {
@@ -1675,11 +1658,6 @@ function AssetPreviewPanel({
   const [agentSummaryMaterializing, setAgentSummaryMaterializing] = useState(false);
   const [agentSummaryError, setAgentSummaryError] = useState("");
   const [agentSummaryRequestKey, setAgentSummaryRequestKey] = useState("");
-  const [agentRuntimeRuns, setAgentRuntimeRuns] = useState<MvpAgentReviewWorkflowRun[]>([]);
-  const [agentRuntimeLoading, setAgentRuntimeLoading] = useState(false);
-  const [agentRuntimeError, setAgentRuntimeError] = useState("");
-  const [agentRuntimeRequestKey, setAgentRuntimeRequestKey] = useState("");
-  const [selectedRuntimeRun, setSelectedRuntimeRun] = useState<MvpAgentReviewWorkflowRun | null>(null);
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
@@ -1727,8 +1705,6 @@ function AssetPreviewPanel({
       }
       setAgentSummary(summaryResponse.summary);
       setAgentSummaryTrace(summaryResponse.trace);
-      if (materialize || generatedMissingSummary) setAgentRuntimeRequestKey("");
-      if (materialize || generatedMissingSummary) setSelectedRuntimeRun(null);
     } catch (reason: unknown) {
       setAgentSummaryRequestKey("");
       const fallbackMessage = materialize
@@ -1740,33 +1716,11 @@ function AssetPreviewPanel({
       if (!materialize) setAgentSummaryLoading(false);
     }
   };
-  const loadAgentRuntimeRuns = async () => {
-    if (!asset) return;
-    setAgentRuntimeLoading(true);
-    setAgentRuntimeError("");
-    setAgentRuntimeRequestKey(agentSummaryKey);
-    try {
-      const response = await getMvpAgentReviewWorkflowRuns({
-        assetId: asset.assetId,
-        limit: 8,
-      });
-      setAgentRuntimeRuns(response.items);
-    } catch (reason: unknown) {
-      setAgentRuntimeError(reason instanceof Error ? reason.message : "AI 운영 로그를 불러오지 못했습니다.");
-    } finally {
-      setAgentRuntimeLoading(false);
-    }
-  };
   useEffect(() => {
     if (role !== "field_operator" || activeTab !== "status" || !asset || !agentSummaryKey) return;
     if (agentSummaryLoading || agentSummaryRequestKey === agentSummaryKey) return;
     void loadAgentSummary();
   }, [activeTab, agentSummaryKey, agentSummaryLoading, agentSummaryRequestKey, asset, role]);
-  useEffect(() => {
-    if (activeTab !== "runtime" || !asset || !agentSummaryKey) return;
-    if (agentRuntimeLoading || agentRuntimeRequestKey === agentSummaryKey) return;
-    void loadAgentRuntimeRuns();
-  }, [activeTab, agentRuntimeLoading, agentRuntimeRequestKey, agentSummaryKey, asset]);
   useEffect(() => {
     if (!printReportTab) return;
     document.body.classList.add("mvp-workflow-print-mode");
@@ -1813,7 +1767,6 @@ function AssetPreviewPanel({
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
-            <button type="button" role="tab" aria-selected={activeTab === "runtime"} className={activeTab === "runtime" ? "is-active" : ""} onClick={() => onTabChange("runtime")}>운영 로그</button>
           </div>
           <WorkStatusTimeline status={workStatus} />
           {activeTab === "status" ? (
@@ -1862,12 +1815,7 @@ function AssetPreviewPanel({
                 위험 이벤트와 작업요청이 연결되지 않은 설비는 자동 조치하지 않습니다.
               </p>
             </section>
-          ) : (
-            <section className="mvp-agent-runtime-log" aria-label="AI 운영 로그">
-              <header><DatabaseZap size={14} /><strong>AI 운영 로그</strong><span>조회 전용</span></header>
-              <p>위험 이벤트가 연결된 설비에서 watcher와 수동 갱신 이력이 표시됩니다.</p>
-            </section>
-          )}
+          ) : null}
         </div>
       </div>
     );
@@ -1887,7 +1835,6 @@ function AssetPreviewPanel({
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
-            <button type="button" role="tab" aria-selected={activeTab === "runtime"} className={activeTab === "runtime" ? "is-active" : ""} onClick={() => onTabChange("runtime")}>운영 로그</button>
           </div>
           <WorkStatusTimeline status={workStatus} />
           {role === "process_manager" && activeTab === "status" ? (
@@ -2141,71 +2088,6 @@ function AssetPreviewPanel({
                 <DerivedMetricSlots sensors={featureSnapshots} windowId={sensorWindow} />
               </section>
             </>
-          ) : null}
-
-          {activeTab === "runtime" ? (
-            <section className="mvp-agent-runtime-log" aria-label="AI 운영 로그">
-              <header><DatabaseZap size={14} /><strong>AI 운영 로그</strong><span>조회 전용</span></header>
-              <dl>
-                <div><dt>설비</dt><dd>{assetDisplayName}</dd></div>
-                <div><dt>위험 감지 건</dt><dd>{candidate?.event.eventId ?? "이벤트 미연결"}</dd></div>
-                <div><dt>근거 버전</dt><dd>{detail?.snapshotBasis?.sourceSha256 ? detail.snapshotBasis.sourceSha256.slice(0, 12) : "조회 전"}</dd></div>
-                <div><dt>상태 변경</dt><dd>불가</dd></div>
-              </dl>
-              {agentRuntimeLoading ? <p>AI 운영 로그를 조회하는 중입니다.</p> : null}
-              {agentRuntimeError ? <p>{agentRuntimeError}</p> : null}
-              {!agentRuntimeLoading && !agentRuntimeError && agentRuntimeRuns.length ? (
-                <div className="mvp-agent-runtime-list">
-                  {agentRuntimeRuns.map((run) => (
-                    <article key={run.workflow_run_id}>
-                      <span className={`mvp-runtime-status is-${run.status}`}>{run.status}</span>
-                      <div>
-                        <strong>{agentWorkflowRunLabel(run)}</strong>
-                        <small>{formatTimestamp(run.updated_at)} · {run.engine}</small>
-                        {run.error_message ? <p>{run.error_type ?? "error"}: {run.error_message}</p> : null}
-                      </div>
-                      <button type="button" onClick={() => setSelectedRuntimeRun(run)}>상세 보기</button>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-              {!agentRuntimeLoading && !agentRuntimeError && !agentRuntimeRuns.length ? (
-                <p>아직 이 설비 기준 AI 요약 실행 이력이 없습니다.</p>
-              ) : null}
-              <small>이 탭은 watcher, 수동 갱신, fallback 상태를 확인하는 로그 화면이며 작업 요청이나 승인 상태를 변경하지 않습니다.</small>
-              {selectedRuntimeRun ? (
-                <div className="mvp-runtime-detail-layer">
-                  <button type="button" className="mvp-runtime-detail-scrim" onClick={() => setSelectedRuntimeRun(null)} aria-label="상세 닫기" />
-                  <section className="mvp-runtime-detail-dialog" role="dialog" aria-modal="true" aria-label="AI 운영 로그 상세">
-                    <header>
-                      <DatabaseZap size={14} />
-                      <strong>AI 운영 로그 상세</strong>
-                      <button type="button" onClick={() => setSelectedRuntimeRun(null)}>닫기</button>
-                    </header>
-                    <dl>
-                      <div><dt>실행</dt><dd>{agentWorkflowRunLabel(selectedRuntimeRun)}</dd></div>
-                      <div><dt>엔진</dt><dd>{selectedRuntimeRun.engine}</dd></div>
-                      <div><dt>시작</dt><dd>{formatTimestamp(selectedRuntimeRun.started_at)}</dd></div>
-                      <div><dt>완료</dt><dd>{selectedRuntimeRun.completed_at ? formatTimestamp(selectedRuntimeRun.completed_at) : "진행 중"}</dd></div>
-                      <div><dt>상태</dt><dd>{selectedRuntimeRun.status}</dd></div>
-                      <div><dt>단계</dt><dd>{selectedRuntimeRun.trace.stage ?? "기록 없음"}</dd></div>
-                      <div className="is-wide"><dt>summary key</dt><dd>{selectedRuntimeRun.summary_key}</dd></div>
-                      <div><dt>source hash</dt><dd>{selectedRuntimeRun.source_sha256.slice(0, 12)}</dd></div>
-                      <div><dt>context hash</dt><dd>{selectedRuntimeRun.context_sha256.slice(0, 12)}</dd></div>
-                      <div className="is-wide"><dt>오류</dt><dd>{selectedRuntimeRun.error_message ? `${selectedRuntimeRun.error_type ?? "error"}: ${selectedRuntimeRun.error_message}` : "없음"}</dd></div>
-                    </dl>
-                    {selectedRuntimeRun.trace.validation_errors?.length ? (
-                      <ul>
-                        {selectedRuntimeRun.trace.validation_errors.map((item) => (
-                          <li key={`${selectedRuntimeRun.workflow_run_id}-${item}`}>{item}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    <small>상세 정보는 실행 상태와 검증 흔적만 보여주며 승인, 작업요청, 재시도 실행을 제공하지 않습니다.</small>
-                  </section>
-                </div>
-              ) : null}
-            </section>
           ) : null}
 
           {role === "field_operator" && activeTab === "action" ? (

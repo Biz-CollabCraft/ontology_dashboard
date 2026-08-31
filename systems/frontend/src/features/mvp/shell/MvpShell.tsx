@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   RefreshCw,
+  TerminalSquare,
   Wrench,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const VIEW_LABELS: Record<MvpView, { label: string; description: string }> = {
   objects: { label: "Assets", description: "설비 상태와 근거" },
   operations: { label: "작업요청", description: "처리할 작업" },
   reports: { label: "Reports", description: "보고서 출력" },
+  system: { label: "System Admin", description: "AI 런타임 로그" },
 };
 
 const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: typeof LayoutDashboard }> = [
@@ -26,6 +28,7 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
   { id: "objects", label: "Assets", description: "설비 상태와 근거", icon: Boxes },
   { id: "operations", label: "작업요청", description: "처리할 작업", icon: ClipboardCheck },
   { id: "reports", label: "Reports", description: "보고서 출력", icon: FileText },
+  { id: "system", label: "System Admin", description: "AI 런타임 로그", icon: TerminalSquare },
 ];
 
 const ROLE_LABELS: Record<MvpRoleLens, { label: string; description: string; icon: typeof LayoutDashboard }> = {
@@ -37,6 +40,13 @@ const ROLE_SCREENS: Array<{ id: MvpRoleLens; label: string; description: string;
   { id: "field_operator", label: "현장 관리자", description: "점검 요청 · 의심 부품 · 처리 작업", icon: Wrench },
   { id: "process_manager", label: "생산 관리자", description: "공정 리스크 · 계획 영향 · 진행 현황", icon: Factory },
 ];
+
+const WORKFLOW_SYSTEM_ITEM = {
+  id: "system" as const,
+  label: "System Admin",
+  description: "AI 런타임 로그",
+  icon: TerminalSquare,
+};
 
 export function MvpShell({
   context,
@@ -69,6 +79,8 @@ export function MvpShell({
   const active = workflowMode && activeView === "overview" ? roleMeta : VIEW_LABELS[activeView];
   const headingDetail = workflowMode && activeView === "overview"
     ? "하나의 업무판에서 상황, 설비 근거, 작업요청을 역할별로 바로 이어갑니다."
+    : activeView === "system"
+    ? "watcher, 수동 생성, fallback, 검증 상태를 한 화면에서 조회하는 시스템 관리자 로그입니다."
     : activeView === "reports"
     ? "map-report UI prototype의 보고서 화면과 선택 Event 브리핑을 하나의 사이드탭에서 전환합니다."
     : activeView !== "overview"
@@ -152,6 +164,20 @@ export function MvpShell({
                 </button>
               );
             })}
+            {workflowMode ? (
+              <button
+                type="button"
+                className={activeView === "system" ? "is-active" : ""}
+                aria-current={activeView === "system" ? "page" : undefined}
+                onClick={() => {
+                  onNavigate(WORKFLOW_SYSTEM_ITEM.id);
+                  setMobileOpen(false);
+                }}
+              >
+                <WORKFLOW_SYSTEM_ITEM.icon size={17} />
+                <div><strong>{WORKFLOW_SYSTEM_ITEM.label}</strong><span>{WORKFLOW_SYSTEM_ITEM.description}</span></div>
+              </button>
+            ) : null}
           </nav>
           <div className="mvp-nav-footnote"><strong>{workflowMode ? "업무 흐름" : "Analysis 제외"}</strong><span>{workflowMode ? "역할별 업무판은 하나의 화면에서 설비, 근거, 작업요청을 연결합니다." : "모델 탐색·Canvas·관리자 Surface는 이번 MVP 범위가 아닙니다."}</span></div>
         </aside>

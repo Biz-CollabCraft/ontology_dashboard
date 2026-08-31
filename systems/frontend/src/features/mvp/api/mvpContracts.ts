@@ -1,4 +1,4 @@
-export type MvpView = "overview" | "objects" | "operations" | "reports";
+export type MvpView = "overview" | "objects" | "operations" | "reports" | "system";
 export type MvpDashboardMode = "workflow" | "classic";
 export type MvpReportTab = "status-map" | "inspection-request" | "summary-report" | "executive-brief";
 export type MvpRoleLens = "process_manager" | "field_operator";

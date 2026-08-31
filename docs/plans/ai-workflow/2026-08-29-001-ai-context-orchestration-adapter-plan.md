@@ -198,6 +198,7 @@ The important boundary is that adapters gather domain facts, while the packet de
 - **Domain Loading Decision:** Do not add loading/ingestion logic for the newly expanded demo domains yet. The current source path is intentionally `fixture JSON -> DomainReviewContextAdapter -> AgentReviewPacket -> AI summary/KG eval`. Adding RDB ingestion before source contracts exist would make the fixture look more authoritative than it is and would blur the Product Evidence/Closed-loop trust boundary.
 - **Domain Section Decision:** The packet is domain-sectioned before it is physically split. `domain_sections` is the near-term contract for testing ownership and source boundaries. Physical split into separate domain ViewModels or APIs is deferred until a domain needs independent storage/freshness/retry semantics, or until tool trajectory eval proves that runtime tool selection needs domain-specific contracts outside one packet.
 - **RDB Migration Timing:** Do not move the spare-part, similar-event, inspection-location, operation-context, or structured SOP demo fixtures into RDB yet. JSON fixture plus adapter is the right current shape because the goal is AI/KG workflow evidence, not operational storage. Move them into an RDB read model when at least one of these becomes true: UI, AI summary, Report, and Closed-loop need to share the same auxiliary context; snapshot consistency must prove that UI and Closed-loop consumed the same context version; watcher diff triggers need `source_updated_at`, `snapshot_hash`, or `materialized_at`; local/live demo needs stored summaries that survive side-view reopens; or a real RDB-vs-KG query comparison requires a relational baseline table. Until then, keep RDB as the current production-style packet baseline and keep demo fixtures as adapter-owned source context.
+- **Fixture-to-DB Promotion Evidence Required:** Before moving a fixture domain into DB, add one contract test that proves the domain has a local update trigger and one API/read-model test that proves `source_updated_at` or equivalent version metadata reaches the packet. Static reference domains may remain fixture-backed if their only change path is repository deploy. Dynamic domains should move first in this order: Agent Review Summary store, similar-event history from completed local outcomes, SOP revision candidates, operation-context versions, spare-part candidate versions, and inspection-location reference versions.
 - **Current-Domain Update Paths:** Limit near-term update logic to domains already present in this repository: Product Result/Evidence snapshots, Agent Review Summary materialization, Closed-loop recommendations/decisions/work orders/inspection results/maintenance actions/equipment state, structured SOP fixture metadata, inspection-location references, operation-context fixtures, spare-part candidate fixtures, and similar-event fixtures. Do not introduce external CMMS/ERP/MES/SOP repository ingestion as part of this slice.
 - **Current-Domain Promotion Criteria:** A current domain can move from fixture-only context to a DB read model only when it has an update trigger already represented in local data. Valid local triggers are: a new Product Result/Evidence snapshot, a changed packet `snapshot_hash`, a Closed-loop inspection result, a completed maintenance event, an equipment-state patch, a similar-event fixture addition, an operation-context fixture version change, a spare-part fixture version change, or an SOP fixture version/hash change.
 - **Current-Domain Update Candidates:** The near-term DB-backed update candidates are: persisted AI summary refresh/reuse on packet hash changes; similar-event history appended from completed inspection/maintenance outcomes; SOP revision candidates derived from local inspection results, maintenance events, equipment-state patches, and similar events; spare-part candidate context versioning from fixture updates; operation-context snapshot versioning from fixture updates; and inspection-location reference versioning from fixture updates. These are update candidates for read models or review candidates, not proof of live enterprise integrations.
@@ -261,35 +262,39 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Critical CNC drive-power case: model evidence, maintenance history, production impact, field location, ontology neighbors, spare-part candidate, and similar-event history.
   - Warning tooling case: model evidence, maintenance history, field location, structured procedure guidance, ontology neighbors, spare-part candidate, and similar-event history.
   - Data-quality hold case: only data-quality context; no SOP, location, spare-part, similar-event, or Closed-loop mutation tools.
-- **Verification:** The trajectory gold set checks expected and forbidden tools per scenario. The pipeline tests verify read-only execution, source-ref subset boundaries, distinct situation-specific tool plans, data-quality fanout suppression, retry success after transient failure, partial completion when an optional context tool exhausts retry, hard failure when a required tool has a non-retryable error, and parity between the simple and experimental LangGraph path.
+- **Verification:** The trajectory gold set checks expected and forbidden tools per scenario. The pipeline tests verify read-only execution, source-ref subset boundaries, distinct situation-specific tool plans, data-quality fanout suppression, retry success after transient failure, partial completion when an optional context tool exhausts retry, hard failure when a required tool has a non-retryable error, and parity between the simple and experimental LangGraph path. The 2026-08-31 evidence artifact is `tests/eval/results/agent_tool_trajectory_eval_2026-08-31.json`.
 
-### U9. Dashboard Operator Runtime Log Side Tab
+### U9. System Admin Runtime Log Side Tab
 
-- **Status:** Implemented as a read-only MVP side tab. This is a UI/observability slice, not an automation or mutation slice.
-- **Goal:** Let a dashboard operator understand whether AI summaries are current, reused, manually regenerated, watcher-generated, partially completed, or failed.
+- **Status:** Implemented as a read-only MVP `System Admin` side tab. This is a UI/observability slice, not an automation or mutation slice.
+- **Goal:** Let a system administrator understand whether AI summaries are current, reused, manually regenerated, watcher-generated, partially completed, or failed across the project.
 - **Files:**
   - `systems/backend/app/mvp/router.py`
   - `systems/backend/app/mvp/service.py`
   - `systems/backend/app/infra/db/mvp_audit_repository.py`
+  - `systems/frontend/src/features/mvp/system/MvpSystemAdminPage.tsx`
+  - `systems/frontend/src/features/mvp/shell/MvpShell.tsx`
+  - `systems/frontend/src/features/mvp/context/MvpSelectionContext.tsx`
   - `systems/frontend/src/features/mvp/overview/MvpWorkflowOverviewPage.tsx`
   - `systems/frontend/src/features/mvp/mvp.css`
   - `tests/test_mvp.py`
   - `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
-- **Approach:** Add an operator-facing `운영 로그` side tab next to the existing status/action surfaces. The tab reads stored `agent_review_workflow_runs` metadata through a project-scoped read API and shows one row per run with trigger, status, updated time, engine, and failure message when present. `상세 보기` opens a read-only dialog with run stage, summary key, source/context hashes, timing, and validation errors. It is read-only.
+- **Approach:** Keep `운영 로그` out of the asset side-view. Add a project-level `System Admin` side tab that reads stored `agent_review_workflow_runs` metadata through a project-scoped read API and renders every run as a terminal-like log line with trigger, status, updated time, engine, asset/event hints, and stage. `상세 보기` opens a read-only dialog with run stage, summary key, source/context hashes, timing, and validation errors. It is read-only.
 - **UI Behavior:**
   - `watcher · 완료`: summary was prepared before side-view interaction.
   - `수동 갱신 · 완료`: operator clicked the explicit regeneration control.
   - `부분 완료`: fallback summary was stored after LLM/provider/validation failure.
   - `실패`: no consumer-ready summary was produced; show error type/message only in details.
-  - `상세 보기`: opens a small detail panel with trace stage, checksums, validation errors, and failure reason when present.
+  - Status filters let the administrator scan all runs, completed runs, partial fallback runs, failed runs, or active runs.
+  - Clicking a terminal row opens a small detail panel with trace stage, checksums, validation errors, and failure reason when present.
   - No `승인`, `작업요청 생성`, `되돌리기`, `재시도 실행`, or Closed-loop mutation buttons in this tab.
 - **Test Scenarios:**
   - Cached side-view open does not create a new run.
-  - Manual regeneration creates a `ui_manual_regeneration` run and the log tab shows it.
-  - Watcher materialization creates `polling_watcher` runs and the log tab shows trigger source.
+  - Manual regeneration creates a `ui_manual_regeneration` run and the `System Admin` tab shows it.
+  - Watcher materialization creates `polling_watcher` runs and the `System Admin` tab shows trigger source.
   - Failed or fallback runs render status and reason without exposing mutation controls.
   - Operator log rows link back to existing summary/run ids without raw prompt or hidden domain DB reads.
-- **Verification:** Backend tests prove the read-only workflow-run listing returns same-asset runs without triggering a new summary. Frontend type checking passed. Existing packet/eval tests passed. Browser e2e verifies stored summary reuse, manual regeneration, runtime-log tab rendering, read-only detail disclosure, and absence of Closed-loop mutation controls in the AI runtime log.
+- **Verification:** Backend tests prove the read-only workflow-run listing returns runs without triggering a new summary. Frontend type checking passed. Existing packet/eval tests passed. Browser e2e should verify stored summary reuse, manual regeneration, System Admin terminal rendering, read-only detail disclosure, and absence of Closed-loop mutation controls in the AI runtime log.
 
 #### LangGraph Implementation Plan
 
@@ -445,9 +450,9 @@ The next implementation order is:
 1. **Watcher operating mode.** Stabilize polling interval, target scope, limit behavior, stale detection, retry count, fallback/failure status, and local start/stop expectations. This turns the current runnable watcher into a predictable local/runtime service contract.
 2. **Adapter responsibility split.** Refactor the current manufacturing fixture adapter into clearer domain adapter seams such as operation context, standard procedure metadata, maintenance/similar-event history, inspection-location reference, spare-part candidate context, and ontology traversal. Keep the packet schema stable while making replacement points explicit.
 3. **LangGraph experiment behind the existing boundary.** Keep `AgentReviewSummaryWorkflow` as the public boundary and `simple` as production default. Add or extend the optional LangGraph path only when it executes the same read-only tool trajectory contract and preserves existing retry/boundary traces.
-4. **Final demo scenario.** Lock the field-operator and process-manager walkthrough: watcher prepares a summary, side-view reuses it, manual regeneration creates a visible run, the operator log side tab shows run history, and Closed-loop mutation remains outside the AI panel.
+4. **Final demo scenario.** Lock the field-operator and process-manager walkthrough: watcher prepares a summary, side-view reuses it, manual regeneration creates a visible run, the System Admin side tab shows project-level run history, and Closed-loop mutation remains outside the AI panel.
 
-The dashboard operator runtime log side tab from U9 should be implemented as part of the watcher operating-mode and final-demo slices. It is valuable because it makes the runtime visible, but it should not reorder the core architecture work or become a control panel.
+The System Admin runtime log side tab from U9 should be implemented as part of the watcher operating-mode and final-demo slices. It is valuable because it makes the runtime visible, but it should not reorder the core architecture work or become a control panel.
 
 ## RDB vs KG Test Framing
 
@@ -488,6 +493,7 @@ Useful but deferred metrics:
 
 - Retrieval context precision/recall for SOP RAG.
 - Tool trajectory accuracy for LangGraph-style agents beyond the current eval-only experiment.
+- Natural-language validation evidence for Korean repair/approval/priority/production-loss claims is recorded in `tests/eval/results/agent_summary_validation_eval_2026-08-31.json`.
 - Human edit distance and accept-with-edit ratio.
 - Summary freshness and stale materialization rate.
 - Cost and latency per materialized summary.

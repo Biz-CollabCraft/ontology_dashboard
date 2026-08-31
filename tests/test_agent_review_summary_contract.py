@@ -307,7 +307,7 @@ def test_agent_review_summary_validator_rejects_unknown_lost_units() -> None:
 
     errors = validate_agent_review_summary_contract(summary, packet=PACKET)
 
-    assert "prose_lost_units_mismatch:1,200개 생산 손실이 예상" in errors
+    assert "prose_lost_units_mismatch:약 1,200개 생산 손실" in errors
 
 
 def test_agent_review_summary_validator_rejects_korean_priority_mismatch() -> None:
