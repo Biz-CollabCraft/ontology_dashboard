@@ -1592,6 +1592,7 @@ function AssetPreviewPanel({
   const [agentRuntimeLoading, setAgentRuntimeLoading] = useState(false);
   const [agentRuntimeError, setAgentRuntimeError] = useState("");
   const [agentRuntimeRequestKey, setAgentRuntimeRequestKey] = useState("");
+  const [selectedRuntimeRun, setSelectedRuntimeRun] = useState<MvpAgentReviewWorkflowRun | null>(null);
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
@@ -1634,6 +1635,7 @@ function AssetPreviewPanel({
       setAgentSummary(summaryResponse.summary);
       setAgentSummaryTrace(summaryResponse.trace);
       if (materialize) setAgentRuntimeRequestKey("");
+      if (materialize) setSelectedRuntimeRun(null);
     } catch (reason: unknown) {
       const fallbackMessage = materialize
         ? "AI 검토 요약을 생성하지 못했습니다."
@@ -1652,8 +1654,6 @@ function AssetPreviewPanel({
     try {
       const response = await getMvpAgentReviewWorkflowRuns({
         assetId: asset.assetId,
-        eventId: candidate?.event.eventId ?? null,
-        datasetVersionId: candidate?.event.datasetVersionId ?? null,
         limit: 8,
       });
       setAgentRuntimeRuns(response.items);
@@ -2048,7 +2048,7 @@ function AssetPreviewPanel({
                         <small>{formatTimestamp(run.updated_at)} · {run.engine}</small>
                         {run.error_message ? <p>{run.error_type ?? "error"}: {run.error_message}</p> : null}
                       </div>
-                      <button type="button" disabled>상세 보기</button>
+                      <button type="button" onClick={() => setSelectedRuntimeRun(run)}>상세 보기</button>
                     </article>
                   ))}
                 </div>
@@ -2057,6 +2057,38 @@ function AssetPreviewPanel({
                 <p>아직 이 설비 기준 AI 요약 실행 이력이 없습니다.</p>
               ) : null}
               <small>이 탭은 watcher, 수동 갱신, fallback 상태를 확인하는 로그 화면이며 작업 요청이나 승인 상태를 변경하지 않습니다.</small>
+              {selectedRuntimeRun ? (
+                <div className="mvp-runtime-detail-layer">
+                  <button type="button" className="mvp-runtime-detail-scrim" onClick={() => setSelectedRuntimeRun(null)} aria-label="상세 닫기" />
+                  <section className="mvp-runtime-detail-dialog" role="dialog" aria-modal="true" aria-label="AI 운영 로그 상세">
+                    <header>
+                      <DatabaseZap size={14} />
+                      <strong>AI 운영 로그 상세</strong>
+                      <button type="button" onClick={() => setSelectedRuntimeRun(null)}>닫기</button>
+                    </header>
+                    <dl>
+                      <div><dt>실행</dt><dd>{agentWorkflowRunLabel(selectedRuntimeRun)}</dd></div>
+                      <div><dt>엔진</dt><dd>{selectedRuntimeRun.engine}</dd></div>
+                      <div><dt>시작</dt><dd>{formatTimestamp(selectedRuntimeRun.started_at)}</dd></div>
+                      <div><dt>완료</dt><dd>{selectedRuntimeRun.completed_at ? formatTimestamp(selectedRuntimeRun.completed_at) : "진행 중"}</dd></div>
+                      <div><dt>상태</dt><dd>{selectedRuntimeRun.status}</dd></div>
+                      <div><dt>단계</dt><dd>{selectedRuntimeRun.trace.stage ?? "기록 없음"}</dd></div>
+                      <div className="is-wide"><dt>summary key</dt><dd>{selectedRuntimeRun.summary_key}</dd></div>
+                      <div><dt>source hash</dt><dd>{selectedRuntimeRun.source_sha256.slice(0, 12)}</dd></div>
+                      <div><dt>context hash</dt><dd>{selectedRuntimeRun.context_sha256.slice(0, 12)}</dd></div>
+                      <div className="is-wide"><dt>오류</dt><dd>{selectedRuntimeRun.error_message ? `${selectedRuntimeRun.error_type ?? "error"}: ${selectedRuntimeRun.error_message}` : "없음"}</dd></div>
+                    </dl>
+                    {selectedRuntimeRun.trace.validation_errors?.length ? (
+                      <ul>
+                        {selectedRuntimeRun.trace.validation_errors.map((item) => (
+                          <li key={`${selectedRuntimeRun.workflow_run_id}-${item}`}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <small>상세 정보는 실행 상태와 검증 흔적만 보여주며 승인, 작업요청, 재시도 실행을 제공하지 않습니다.</small>
+                  </section>
+                </div>
+              ) : null}
             </section>
           ) : null}
 

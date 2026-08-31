@@ -648,6 +648,14 @@ export interface MvpAgentReviewWorkflowRun {
   context_sha256: string;
   error_type: string | null;
   error_message: string | null;
+  trace: {
+    stage?: string;
+    materialization?: Record<string, unknown>;
+    provider?: string | null;
+    fallback?: boolean | null;
+    reason?: string | null;
+    validation_errors?: string[];
+  };
 }
 
 export interface MvpAgentReviewWorkflowRunsResponse {

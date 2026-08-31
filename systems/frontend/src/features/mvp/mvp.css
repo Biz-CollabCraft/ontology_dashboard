@@ -775,6 +775,16 @@
 .mvp-runtime-status.is-partial { border-color: rgba(246,189,112,.38); color: #f6bd70; background: rgba(246,189,112,.08); }
 .mvp-runtime-status.is-failed { border-color: rgba(236,91,98,.42); color: #ff9ca2; background: rgba(236,91,98,.08); }
 .mvp-runtime-status.is-running { border-color: rgba(76,144,240,.42); color: #9cc5fa; background: rgba(76,144,240,.08); }
+.mvp-runtime-detail-layer { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 18px; }
+.mvp-runtime-detail-scrim { position: absolute; inset: 0; border: 0; background: rgba(5,10,19,.62); cursor: pointer; }
+.mvp-runtime-detail-dialog { position: relative; z-index: 1; display: grid; gap: 10px; width: min(560px, calc(100vw - 36px)); max-height: calc(100vh - 36px); overflow: auto; border: 1px solid rgba(181,196,214,.18); border-radius: 8px; padding: 13px; background: var(--mvp-surface); box-shadow: 0 24px 70px rgba(0,0,0,.5); }
+.mvp-runtime-detail-dialog header { display: flex; align-items: center; gap: 7px; color: var(--mvp-muted); }
+.mvp-runtime-detail-dialog header strong { color: var(--mvp-text); font-size: 12px; }
+.mvp-runtime-detail-dialog header button { margin-left: auto; min-height: 28px; border: 1px solid rgba(181,196,214,.16); border-radius: 5px; padding: 0 9px; color: var(--mvp-muted); background: rgba(255,255,255,.025); font-size: 10px; font-weight: 900; cursor: pointer; }
+.mvp-runtime-detail-dialog dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; }
+.mvp-runtime-detail-dialog dl .is-wide { grid-column: 1 / -1; }
+.mvp-runtime-detail-dialog dd { word-break: break-word; }
+.mvp-runtime-detail-dialog ul { display: grid; gap: 4px; margin: 0; padding-left: 16px; }
 .mvp-agent-role-quotes { display: grid; gap: 6px; }
 .mvp-agent-role-quotes figure { display: grid; gap: 3px; margin: 0; padding: 7px 8px; border: 1px solid rgba(181,196,214,.14); border-radius: 7px; background: rgba(255,255,255,.018); }
 .mvp-agent-role-quotes figcaption { color: #cfe1f7; font-size: 9px; font-weight: 900; }

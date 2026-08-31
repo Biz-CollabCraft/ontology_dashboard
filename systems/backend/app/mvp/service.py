@@ -811,6 +811,7 @@ def _workflow_run_trace(run: dict[str, Any]) -> dict[str, Any]:
         "context_sha256": run["context_sha256"],
         "error_type": run.get("error_type"),
         "error_message": run.get("error_message"),
+        "trace": run.get("trace") or {},
     }
 
 

@@ -272,13 +272,13 @@ The important boundary is that adapters gather domain facts, while the packet de
   - `systems/frontend/src/features/mvp/mvp.css`
   - `tests/test_mvp.py`
   - `systems/frontend/e2e/mvp-frontend-convergence.spec.ts`
-- **Approach:** Add an operator-facing `운영 로그` side tab next to the existing status/action surfaces. The tab reads stored `agent_review_workflow_runs` metadata through a project-scoped read API and shows one row per run with trigger, status, updated time, engine, and failure message when present. It is read-only.
+- **Approach:** Add an operator-facing `운영 로그` side tab next to the existing status/action surfaces. The tab reads stored `agent_review_workflow_runs` metadata through a project-scoped read API and shows one row per run with trigger, status, updated time, engine, and failure message when present. `상세 보기` opens a read-only dialog with run stage, summary key, source/context hashes, timing, and validation errors. It is read-only.
 - **UI Behavior:**
   - `watcher · 완료`: summary was prepared before side-view interaction.
   - `수동 갱신 · 완료`: operator clicked the explicit regeneration control.
   - `부분 완료`: fallback summary was stored after LLM/provider/validation failure.
   - `실패`: no consumer-ready summary was produced; show error type/message only in details.
-  - `상세 보기`: present as a disabled placeholder until trace detail disclosure is implemented.
+  - `상세 보기`: opens a small detail panel with trace stage, checksums, validation errors, and failure reason when present.
   - No `승인`, `작업요청 생성`, `되돌리기`, `재시도 실행`, or Closed-loop mutation buttons in this tab.
 - **Test Scenarios:**
   - Cached side-view open does not create a new run.
@@ -286,7 +286,7 @@ The important boundary is that adapters gather domain facts, while the packet de
   - Watcher materialization creates `polling_watcher` runs and the log tab shows trigger source.
   - Failed or fallback runs render status and reason without exposing mutation controls.
   - Operator log rows link back to existing summary/run ids without raw prompt or hidden domain DB reads.
-- **Verification:** Backend tests prove the read-only workflow-run listing returns same-asset runs without triggering a new summary. Frontend type checking passed. Existing packet/eval tests passed. Browser e2e for the new tab remains the next verification slice.
+- **Verification:** Backend tests prove the read-only workflow-run listing returns same-asset runs without triggering a new summary. Frontend type checking passed. Existing packet/eval tests passed. Browser e2e verifies stored summary reuse, manual regeneration, runtime-log tab rendering, read-only detail disclosure, and absence of Closed-loop mutation controls in the AI runtime log.
 
 #### LangGraph Implementation Plan
 

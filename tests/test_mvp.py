@@ -769,6 +769,7 @@ def test_agent_review_workflow_runs_api_lists_readonly_runtime_log(
     ]
     assert all(item["status"] == "completed" for item in payload["items"])
     assert all(item["error_message"] is None for item in payload["items"])
+    assert all(item["trace"]["stage"] == "finished" for item in payload["items"])
     assert provider.calls == 2
 
 
