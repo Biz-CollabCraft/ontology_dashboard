@@ -14,11 +14,14 @@ from systems.generator.app.extraction.checkpoint_repository import (
 from systems.generator.app.extraction.extraction_exception import (
     ExtractionCheckpointInvalidError,
     ExtractionCheckpointMappingMigrationRequiredError,
+    ExtractionCheckpointReadFailedError,
+    ExtractionCheckpointScopeConflictError,
     ExtractionCheckpointWriteFailedError,
     ExtractionFragmentConflictError,
     ExtractionFragmentVerifyFailedError,
     ExtractionFragmentWriteFailedError,
     ExtractionMappingRebuildNotImplementedError,
+    ExtractionRequestInvalidError,
     ExtractionSourceLockedError,
     ExtractionSourcePrefixMismatchError,
     ExtractionSourceTruncatedError,
@@ -1099,3 +1102,298 @@ def test_truncated_to_zero_bytes_preserves_existing_checkpoint_and_dataset(tmp_p
     # 4. Verify invariants: Checkpoint and Fragment remain 100% byte-for-byte identical
     assert chk_file.read_bytes() == orig_chk_bytes
     assert frag_manifest.read_bytes() == orig_frag_manifest_bytes
+
+
+def test_empty_new_source_with_invalid_mapping_raises_contract_error(tmp_path):
+    """When a new 0-byte source is processed with an invalid mapping table, it fails mapping validation and does not return no_data."""
+    stream_file = tmp_path / "sensor_stream.jsonl"
+    stream_file.write_bytes(b"")
+
+    source = GenDataSensorStreamSource(
+        site_id="S01",
+        cell_id="L01",
+        facility_dir_name="facS01",
+        line_dir_name="lineL01",
+        source_path=stream_file,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    service = _create_service(tmp_path)
+
+    invalid_mapping = {
+        "mapping_id": "",  # invalid: missing required fields or empty
+        "mapping_version": "",
+    }
+
+    with pytest.raises(ExtractionRequestInvalidError):
+        service.process_available_records(
+            source=source,
+            mapping_data=invalid_mapping,
+            run_id="run-invalid-map-001",
+        )
+
+
+def test_zero_byte_source_with_mapping_mismatch_raises_409_before_truncate(tmp_path, base_mapping_fixture):
+    """When an already processed source is truncated to 0 bytes and requested with a DIFFERENT mapping, 409 mapping mismatch is raised before 422 truncate."""
+    records = [
+        {"ts": "2026-08-28T13:00:00Z", "asset_id": "CNC-01", "torque_nm": 45.0, "rotational_speed_rpm": 1500.0},
+    ]
+    stream_file, source = _create_stream_source(tmp_path, records)
+    service = _create_service(tmp_path)
+
+    # 1. Initial processing with base mapping v1
+    res1 = service.process_available_records(
+        source=source,
+        mapping_data=base_mapping_fixture,
+        run_id="run-init-001",
+    )
+    assert res1.status == "fragment_committed"
+
+    chk_file = (tmp_path / "checkpoints") / f"{res1.source_identity}.json"
+    orig_chk_bytes = chk_file.read_bytes()
+    frag_manifest = (tmp_path / "extraction_runs" / "run-init-001" / "fragments" / res1.batch_id / "fragment_manifest.json")
+    orig_frag_manifest_bytes = frag_manifest.read_bytes()
+
+    # 2. Truncate stream file to 0 bytes
+    stream_file.write_bytes(b"")
+
+    # 3. Create different mapping version v2.0
+    mapping_v2 = dict(base_mapping_fixture)
+    mapping_v2["mapping_version"] = "v2.0"
+    mapping_v2["mapping_sha256"] = compute_mapping_canonical_sha256(mapping_v2)
+
+    # 4. Request with mapping v2 must raise 409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED (not 422 truncate)
+    with pytest.raises(ExtractionMappingRebuildNotImplementedError) as exc_info:
+        service.process_available_records(
+            source=source,
+            mapping_data=mapping_v2,
+            run_id="run-diff-map-002",
+        )
+
+    assert exc_info.value.code == "EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED"
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.retryable is False
+
+    # 5. Invariant: Checkpoint and Fragment remain 100% byte-for-byte identical
+    assert chk_file.read_bytes() == orig_chk_bytes
+    assert frag_manifest.read_bytes() == orig_frag_manifest_bytes
+
+
+def test_find_checkpoint_legacy_missing_mapping_raises_migration_required(tmp_path, base_mapping_fixture):
+    """When a 0-byte source matches a legacy checkpoint missing mapping identity, it raises ExtractionCheckpointMappingMigrationRequiredError."""
+    stream_file = tmp_path / "sensor_stream.jsonl"
+    stream_file.write_bytes(b"")
+
+    source = GenDataSensorStreamSource(
+        site_id="S01",
+        cell_id="L01",
+        facility_dir_name="facS01",
+        line_dir_name="lineL01",
+        source_path=stream_file,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    chk_dir = tmp_path / "checkpoints"
+    chk_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save legacy checkpoint lacking mapping fields
+    legacy_payload = {
+        "checkpoint_schema_version": "generator-gen-data-extraction-checkpoint-v1",
+        "source_identity": "src-legacy-01",
+        "source_uri": "sensor/facS01/lineL01/sensor_stream.jsonl",
+        "source_format": "gen_data_sensor_stream",
+        "site_id": "S01",
+        "cell_id": "L01",
+        "last_committed_offset": 100,
+        "last_committed_line": 5,
+        "verified_prefix_length": 0,
+        "verified_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "created_at": "2026-08-28T13:00:00Z",
+        "updated_at": "2026-08-28T13:00:00Z",
+        "status": "idle",
+    }
+    (chk_dir / "src-legacy-01.json").write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+    service = _create_service(tmp_path)
+
+    with pytest.raises(ExtractionCheckpointMappingMigrationRequiredError) as exc_info:
+        service.process_available_records(
+            source=source,
+            mapping_data=base_mapping_fixture,
+            run_id="run-legacy-001",
+        )
+
+    assert exc_info.value.code == "EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED"
+    assert exc_info.value.status_code == 422
+
+
+def test_find_checkpoint_corrupt_json_raises_invalid(tmp_path, base_mapping_fixture):
+    """When a 0-byte source matches a corrupted checkpoint file, it raises ExtractionCheckpointInvalidError and does not return no_data."""
+    stream_file = tmp_path / "sensor_stream.jsonl"
+    stream_file.write_bytes(b"")
+
+    source = GenDataSensorStreamSource(
+        site_id="S01",
+        cell_id="L01",
+        facility_dir_name="facS01",
+        line_dir_name="lineL01",
+        source_path=stream_file,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    chk_dir = tmp_path / "checkpoints"
+    chk_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save corrupt JSON file
+    (chk_dir / "src-corrupt-01.json").write_text("{\"source_uri\": \"sensor/facS01/lineL01/sensor_stream.jsonl\", corrupt", encoding="utf-8")
+
+    service = _create_service(tmp_path)
+
+    with pytest.raises(ExtractionCheckpointInvalidError) as exc_info:
+        service.process_available_records(
+            source=source,
+            mapping_data=base_mapping_fixture,
+            run_id="run-corrupt-001",
+        )
+
+    assert exc_info.value.code == "EXTRACTION_CHECKPOINT_INVALID"
+    assert exc_info.value.status_code == 422
+
+
+def test_find_checkpoint_read_os_error_raises_retryable(tmp_path, monkeypatch, base_mapping_fixture):
+    """When an OSError occurs while reading checkpoint files, it raises ExtractionCheckpointReadFailedError (500, retryable=True)."""
+    stream_file = tmp_path / "sensor_stream.jsonl"
+    stream_file.write_bytes(b"")
+
+    source = GenDataSensorStreamSource(
+        site_id="S01",
+        cell_id="L01",
+        facility_dir_name="facS01",
+        line_dir_name="lineL01",
+        source_path=stream_file,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    chk_dir = tmp_path / "checkpoints"
+    chk_dir.mkdir(parents=True, exist_ok=True)
+    target_chk = chk_dir / "src-chk-01.json"
+    target_chk.write_text("{}", encoding="utf-8")
+
+    orig_read_bytes = Path.read_bytes
+
+    def fail_chk_read(self_path: Path):
+        if self_path == target_chk:
+            raise OSError("Simulated disk I/O failure on checkpoint")
+        return orig_read_bytes(self_path)
+
+    monkeypatch.setattr(Path, "read_bytes", fail_chk_read)
+
+    service = _create_service(tmp_path)
+
+    with pytest.raises(ExtractionCheckpointReadFailedError) as exc_info:
+        service.process_available_records(
+            source=source,
+            mapping_data=base_mapping_fixture,
+            run_id="run-io-fail-001",
+        )
+
+    assert exc_info.value.code == "EXTRACTION_CHECKPOINT_READ_FAILED"
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.retryable is True
+
+
+def test_find_checkpoint_scope_exact_matching(tmp_path):
+    """find_checkpoint_by_source enforces exact match on source_uri, site_id, and cell_id without wildcards."""
+    chk_repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")
+
+    chk = GenDataExtractionCheckpoint(
+        source_identity="1" * 64,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        site_id="S01",
+        cell_id="L01",
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        last_committed_offset=50,
+        last_committed_line=2,
+        verified_prefix_length=0,
+        verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        status="idle",
+        created_at="2026-08-28T13:00:00Z",
+        updated_at="2026-08-28T13:00:00Z",
+    )
+    chk_repo.save_checkpoint_atomic(chk)
+
+    # 1. Exact match succeeds
+    src_match = GenDataSensorStreamSource(
+        site_id="S01", cell_id="L01",
+        facility_dir_name="facS01", line_dir_name="lineL01",
+        source_path=tmp_path / "dummy", source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    assert chk_repo.find_checkpoint_by_source(src_match) is not None
+
+    # 2. Different site_id fails
+    src_diff_site = GenDataSensorStreamSource(
+        site_id="S02", cell_id="L01",
+        facility_dir_name="facS02", line_dir_name="lineL01",
+        source_path=tmp_path / "dummy", source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    assert chk_repo.find_checkpoint_by_source(src_diff_site) is None
+
+    # 3. Different cell_id fails
+    src_diff_cell = GenDataSensorStreamSource(
+        site_id="S01", cell_id="L02",
+        facility_dir_name="facS01", line_dir_name="lineL02",
+        source_path=tmp_path / "dummy", source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+    assert chk_repo.find_checkpoint_by_source(src_diff_cell) is None
+
+
+def test_find_checkpoint_duplicate_scope_raises_conflict(tmp_path):
+    """When multiple checkpoints exist for the exact same source scope, find_checkpoint_by_source raises ExtractionCheckpointScopeConflictError."""
+    chk_repo = GenDataExtractionCheckpointRepository(checkpoints_root=tmp_path / "checkpoints")
+
+    chk1 = GenDataExtractionCheckpoint(
+        source_identity="1" * 64,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        site_id="S01",
+        cell_id="L01",
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        last_committed_offset=50,
+        last_committed_line=2,
+        verified_prefix_length=0,
+        verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        status="idle",
+        created_at="2026-08-28T13:00:00Z",
+        updated_at="2026-08-28T13:00:00Z",
+    )
+    chk2 = GenDataExtractionCheckpoint(
+        source_identity="2" * 64,
+        source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+        site_id="S01",
+        cell_id="L01",
+        mapping_id="gen-data-sensor-stream-canonical",
+        mapping_version="v1.0",
+        mapping_sha256="a" * 64,
+        last_committed_offset=100,
+        last_committed_line=4,
+        verified_prefix_length=0,
+        verified_prefix_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        status="idle",
+        created_at="2026-08-28T13:00:00Z",
+        updated_at="2026-08-28T13:00:00Z",
+    )
+    chk_repo.save_checkpoint_atomic(chk1)
+    chk_repo.save_checkpoint_atomic(chk2)
+
+    src = GenDataSensorStreamSource(
+        site_id="S01", cell_id="L01",
+        facility_dir_name="facS01", line_dir_name="lineL01",
+        source_path=tmp_path / "dummy", source_uri="sensor/facS01/lineL01/sensor_stream.jsonl",
+    )
+
+    with pytest.raises(ExtractionCheckpointScopeConflictError) as exc_info:
+        chk_repo.find_checkpoint_by_source(src)
+
+
+    assert exc_info.value.code == "EXTRACTION_CHECKPOINT_SCOPE_CONFLICT"
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.retryable is False

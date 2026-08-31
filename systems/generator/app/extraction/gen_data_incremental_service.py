@@ -116,30 +116,7 @@ class GenDataIncrementalExtractionService:
         if not source_path.is_file():
             raise ExtractionSourceNotFoundError(f"Source stream file does not exist at '{source_path}'")
 
-        if source_path.stat().st_size == 0:
-            existing_chk = self.checkpoint_repo.find_checkpoint_by_source(source)
-            if existing_chk is not None and existing_chk.last_committed_offset > 0:
-                logger.error(
-                    f"[IncrementalService] Source '{source.source_uri}' has 0 bytes but existing checkpoint offset is {existing_chk.last_committed_offset}"
-                )
-                raise ExtractionSourceTruncatedError(
-                    f"Source file '{source.source_uri}' has been truncated to 0 bytes (last committed offset was {existing_chk.last_committed_offset})."
-                )
-
-            logger.info(f"[IncrementalService] Source '{source.source_uri}' is empty new source (EMPTY_NEW_SOURCE)")
-            return IncrementalExtractionResult(
-                source_identity="",
-                source_uri=source.source_uri,
-                run_id=run_id,
-                start_offset=0,
-                committed_offset=0,
-                records_read=0,
-                observations_staged=0,
-                rejected_staged=0,
-                status="no_data",
-            )
-
-        # 1. Validate requested mapping table contract first
+        # 1. Validate requested mapping table contract FIRST (before checking file size or EOF)
         self.converter.mapping_validator.validate_mapping(
             mapping_data, expected_source_format="gen_data_sensor_stream"
         )
@@ -147,34 +124,105 @@ class GenDataIncrementalExtractionService:
         req_mapping_version = str(mapping_data.get("mapping_version", "")).strip()
         req_mapping_sha256 = str(mapping_data.get("mapping_sha256", "")).strip().lower()
 
-        # 2. Peek first line for source identity computation
-        first_peek = self.parser.read_completed_records(source_path, start_offset=0, max_records=1)
-        if len(first_peek.records) == 0 and len(first_peek.rejected_records) == 0:
-            # File has bytes but no completed newline yet
+        # 2. Inspect source file size and completed first record
+        st_size = source_path.stat().st_size
+        first_peek = None
+        if st_size > 0:
+            first_peek = self.parser.read_completed_records(source_path, start_offset=0, max_records=1)
+
+        has_completed_first_record = (
+            first_peek is not None
+            and (len(first_peek.records) > 0 or len(first_peek.rejected_records) > 0)
+        )
+
+        # 3. If source identity cannot be computed from content (0 bytes or incomplete first record):
+        if not has_completed_first_record:
             existing_chk = self.checkpoint_repo.find_checkpoint_by_source(source)
-            if existing_chk is not None and existing_chk.last_committed_offset > source_path.stat().st_size:
-                logger.error(
-                    f"[IncrementalService] Source '{source.source_uri}' size ({source_path.stat().st_size}) is less than last committed offset ({existing_chk.last_committed_offset})"
-                )
-                raise ExtractionSourceTruncatedError(
-                    f"Source file '{source.source_uri}' size ({source_path.stat().st_size} bytes) is less than last committed offset ({existing_chk.last_committed_offset} bytes)."
+            if existing_chk is not None:
+                # Rule: Check mapping identity match FIRST before checking truncate or no_data!
+                if (
+                    existing_chk.mapping_id != req_mapping_id
+                    or existing_chk.mapping_version != req_mapping_version
+                    or existing_chk.mapping_sha256 != req_mapping_sha256
+                ):
+                    logger.warning(
+                        f"[IncrementalService] Mapping mismatch for source '{source.source_uri}': "
+                        f"checkpoint=({existing_chk.mapping_id}, {existing_chk.mapping_version}, {existing_chk.mapping_sha256[:8]}...) vs "
+                        f"requested=({req_mapping_id}, {req_mapping_version}, {req_mapping_sha256[:8]}...)"
+                    )
+                    raise ExtractionMappingRebuildNotImplementedError(
+                        "The source was previously processed with a different mapping. Mapping-version replay is not supported in the current release.",
+                        context={
+                            "source_identity": existing_chk.source_identity,
+                            "checkpoint_mapping_id": existing_chk.mapping_id,
+                            "checkpoint_mapping_version": existing_chk.mapping_version,
+                            "requested_mapping_id": req_mapping_id,
+                            "requested_mapping_version": req_mapping_version,
+                        },
+                    )
+
+                # Mapping matches! Now check if source was truncated below committed offset
+                if st_size < existing_chk.last_committed_offset:
+                    logger.error(
+                        f"[IncrementalService] Source '{source.source_uri}' size ({st_size}) is less than last committed offset ({existing_chk.last_committed_offset})"
+                    )
+                    raise ExtractionSourceTruncatedError(
+                        f"Source file '{source.source_uri}' size ({st_size} bytes) is less than last committed offset ({existing_chk.last_committed_offset} bytes)."
+                    )
+
+                if st_size == 0 and existing_chk.last_committed_offset > 0:
+                    logger.error(
+                        f"[IncrementalService] Source '{source.source_uri}' has 0 bytes but existing checkpoint offset is {existing_chk.last_committed_offset}"
+                    )
+                    raise ExtractionSourceTruncatedError(
+                        f"Source file '{source.source_uri}' has been truncated to 0 bytes (last committed offset was {existing_chk.last_committed_offset})."
+                    )
+
+                reason = "EMPTY_NEW_SOURCE" if st_size == 0 else "INCOMPLETE_FIRST_RECORD"
+                logger.info(f"[IncrementalService] Source '{source.source_uri}' has no new data ({reason})")
+                return IncrementalExtractionResult(
+                    source_identity=existing_chk.source_identity,
+                    source_uri=source.source_uri,
+                    run_id=run_id,
+                    start_offset=existing_chk.last_committed_offset,
+                    committed_offset=existing_chk.last_committed_offset,
+                    records_read=0,
+                    observations_staged=0,
+                    rejected_staged=0,
+                    status="no_data",
                 )
 
-            logger.info(
-                f"[IncrementalService] Source '{source.source_uri}' has {source_path.stat().st_size} bytes but incomplete first record (INCOMPLETE_FIRST_RECORD)"
-            )
-            return IncrementalExtractionResult(
-                source_identity="",
-                source_uri=source.source_uri,
-                run_id=run_id,
-                start_offset=0,
-                committed_offset=0,
-                records_read=0,
-                observations_staged=0,
-                rejected_staged=0,
-                status="no_data",
-            )
+            # No existing checkpoint found: genuine new empty or incomplete source
+            if st_size == 0:
+                logger.info(f"[IncrementalService] Source '{source.source_uri}' is empty new source (EMPTY_NEW_SOURCE)")
+                return IncrementalExtractionResult(
+                    source_identity="",
+                    source_uri=source.source_uri,
+                    run_id=run_id,
+                    start_offset=0,
+                    committed_offset=0,
+                    records_read=0,
+                    observations_staged=0,
+                    rejected_staged=0,
+                    status="no_data",
+                )
+            else:
+                logger.info(
+                    f"[IncrementalService] Source '{source.source_uri}' has {st_size} bytes but incomplete first record (INCOMPLETE_FIRST_RECORD)"
+                )
+                return IncrementalExtractionResult(
+                    source_identity="",
+                    source_uri=source.source_uri,
+                    run_id=run_id,
+                    start_offset=0,
+                    committed_offset=0,
+                    records_read=0,
+                    observations_staged=0,
+                    rejected_staged=0,
+                    status="no_data",
+                )
 
+        assert first_peek is not None
         first_rec = first_peek.records[0] if first_peek.records else first_peek.rejected_records[0]
         source_identity = compute_gen_data_source_identity(
             source_uri=source.source_uri,
@@ -183,7 +231,7 @@ class GenDataIncrementalExtractionService:
             first_record_sha256=first_rec.raw_sha256,
         )
 
-        # 3. Acquire exclusive OS file lock
+        # 4. Acquire exclusive OS file lock
         lock = GenDataSourceLock(self.lock_dir, source_identity=source_identity)
         with lock:
             if self.failure_injector:
@@ -192,7 +240,7 @@ class GenDataIncrementalExtractionService:
             # Clean up older temporary checkpoint files
             self.checkpoint_repo.cleanup_orphan_tmp_files()
 
-            # 4. Load or initialize checkpoint
+            # 5. Load and re-verify canonical checkpoint inside lock
             chk = self.checkpoint_repo.load_checkpoint(source_identity)
             if chk is not None:
                 self.checkpoint_repo.validate_checkpoint_source(chk, source)
@@ -233,6 +281,7 @@ class GenDataIncrementalExtractionService:
                         f"Source file '{source_path}' size ({source_path.stat().st_size} bytes) is less than "
                         f"last committed offset ({chk.last_committed_offset} bytes)."
                     )
+
 
                 # Crash Recovery: Check if recovering from fragment_staged
                 if chk.status == "fragment_staged" and chk.pending_batch is not None:

@@ -354,9 +354,18 @@ gen_data (sensor_stream.jsonl append)
 ### 8.1 Extraction 고정 Mapping MVP 계약
 `POST /extraction`은 최초 승인 Mapping(`generator-static-mapping-table`)을 기준으로 동일 Source의 append-only 증분 추출을 수행합니다.
 
-- **Mapping 변경 요청 Fail-Closed**: 동일 Source가 기존 Checkpoint와 다른 `mapping_id`, `mapping_version` 또는 `mapping_sha256`으로 요청되면 과거 데이터를 자동 replay하거나 새 Dataset을 생성하지 않고 `409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED`로 fail-closed 차단합니다.
-- **구형 Checkpoint Migration**: Mapping identity가 기록되지 않은 구형 Checkpoint는 현재 Mapping에 임의 귀속하지 않고 `422 EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED`로 실패하며, 명시적인 상태 이전 또는 보관 후 재생성이 필요합니다.
-- **0바이트 Truncate 및 손상 감지**: 기존 처리된 Source가 0바이트로 축소되거나 committed offset보다 작아진 경우 `422 EXTRACTION_SOURCE_TRUNCATED`로 fail-closed 처리합니다.
+- **오류 판정 우선순위 (Error Priority Hierarchy)**:
+  1. `요청 Mapping 계약 검증`: 요청 본문의 Mapping 스키마/규격 오류 시 즉시 거부
+  2. `기존 Checkpoint 상태 검증`: Checkpoint I/O 실패(`500 EXTRACTION_CHECKPOINT_READ_FAILED`), 손상(`422 EXTRACTION_CHECKPOINT_INVALID`), Scope 중복(`409 EXTRACTION_CHECKPOINT_SCOPE_CONFLICT`), 구형 Migration(`422 EXTRACTION_CHECKPOINT_MAPPING_MIGRATION_REQUIRED`) 검증
+  3. `Mapping Identity 불일치 감지`: 요청 Mapping과 기존 Checkpoint Mapping 불일치 시 `409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED` (Source 0바이트/EOF보다 우선 판정)
+  4. `Source Truncate 검증`: committed offset 대비 파일 크기 축소 시 `422 EXTRACTION_SOURCE_TRUNCATED`
+  5. `신규 빈 Source`: Checkpoint가 없는 신규 0바이트 Source에 한해 `status="no_data"` 반환
+  6. `정상 증분 처리`: Source Lock 획득 후 Checkpoint 재검증 및 증분 추출 진행
+
+- **Silent Ignore 금지 원칙**:
+  - 동일 Source scope(`source_uri`, `site_id`, `cell_id`)에 해당하는 구형 또는 손상 Checkpoint는 절대 "없는 Checkpoint"로 무시하지 않으며, 명시적인 Migration 또는 무결성 오류로 즉시 Fail-Closed 처리합니다.
+- **불변성 보존**:
+  - 검증 및 추출 실패 시 기존 Checkpoint, Fragment 및 Dataset 파일은 일절 수정되거나 삭제되지 않고 100% 보존됩니다.
 
 ### 8.2 기능 지원 현황 (Current vs Target)
 
@@ -367,6 +376,7 @@ gen_data (sensor_stream.jsonl append)
 | Mapping identity 불일치 감지 | **Current** | Checkpoint에 mapping_id/version/sha256 보존 및 비교 |
 | Mapping 변경 요청 fail-closed | **Current** | 409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED 반환 |
 | 0바이트 Truncate 및 손상 감지 | **Current** | 422 EXTRACTION_SOURCE_TRUNCATED 반환 |
+| Checkpoint I/O 및 손상 감지 | **Current** | 500 READ_FAILED / 409 SCOPE_CONFLICT / 422 INVALID 반환 |
 | Mapping 변경 과거 Source replay | **Target** | offset 0부터 결정론적 replay (Issue #146) |
 | Mapping별 Checkpoint·Dataset 재구성 | **Target** | Multi-mapping Checkpoint 분리 및 Dataset Version 재발행 (Issue #146) |
 | Mapping 활성화·rollback | **Target** | 런타임 활성 Mapping 전환 및 rollback (Issue #146) |
@@ -381,7 +391,7 @@ gen_data (sensor_stream.jsonl append)
 - **Dashboard 알림 UI**: 실시간 이상 알림 UI 구성은 프론트엔드/대시보드 도메인에서 처리합니다.
 - **Closed-loop 재지시 (PLC 제어)**: 설비 제어기 직접 피드백 루프는 본 파이프라인의 범위가 아닙니다.
 
-### 8.3 Legacy와 gen_data 중복 방지 계약 구분 (Dedup Architecture Distinction)
+### 8.4 Legacy와 gen_data 중복 방지 계약 구분 (Dedup Architecture Distinction)
 - **Legacy ExtractionService**:
   - `DedupRepository` 기반 영속 record dedup
   - Target Dataset lease 및 갱신 방식
@@ -392,6 +402,7 @@ gen_data (sensor_stream.jsonl append)
   - Polling cycle 간 Cross-run Fragment 멱등 재사용 (`find_fragment_by_batch_id`)
   - Fragment consumption record 기반 수명주기 및 Fully-consumed 추적
   - 불변 `Canonical Observation Dataset` 발행 및 SHA-256 conflict fail-closed 검증
+
 
 ---
 
