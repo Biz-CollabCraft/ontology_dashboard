@@ -369,7 +369,11 @@ def test_postgresql_prediction_batch_promotion_materializes_product_result(
     assert artifact["item_promotion_result_id"] == artifact["prediction_result_id"]
     assert artifact["status_grade"] == "warning"
     assert float(artifact["failure_probability"]) == 0.82
-    assert artifact["payload_json"]["evidence_payload"]["evidence_gaps"]
+    gap_ids = {
+        gap["gap_id"]
+        for gap in artifact["payload_json"]["evidence_payload"]["evidence_gaps"]
+    }
+    assert "generator-batch-asset-criticality-unavailable" in gap_ids
 
 
 def test_postgresql_prediction_inbox_tables_are_rls_scoped(

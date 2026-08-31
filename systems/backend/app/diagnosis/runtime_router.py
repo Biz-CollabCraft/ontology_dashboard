@@ -751,13 +751,18 @@ def receive_internal_prediction_results(
         workspace_id=workspace_id,
         payload=payload,
     )
-    if receipt.validation_status == "accepted":
-        promotion = service.promote_prediction_result_batch(
-            organization_id=principal.organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            batch_id=receipt.batch_id,
-        )
+    if receipt.validation_status in {"accepted", "duplicate"}:
+        try:
+            promotion = service.promote_prediction_result_batch(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                batch_id=receipt.batch_id,
+            )
+        except KeyError:
+            if receipt.validation_status == "duplicate":
+                return _prediction_inbox_response(receipt)
+            raise
         receipt = receipt.model_copy(
             update={
                 "promotion_status": promotion.promotion_status,

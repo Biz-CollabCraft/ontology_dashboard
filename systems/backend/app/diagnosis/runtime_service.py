@@ -276,6 +276,56 @@ class PredictiveMaintenanceRuntimeService:
         path = "/".join(str(part) for part in first.absolute_path) or "<root>"
         raise ValueError(f"{path}: {first.message}")
 
+    @staticmethod
+    def _model_identity(model: Any) -> tuple[str, str]:
+        return (str(model.model_id), str(model.model_version))
+
+    @classmethod
+    def _model_snapshot_index(
+        cls,
+        batch: PredictionResultBatch,
+    ) -> tuple[dict[tuple[str, str], Any], set[tuple[str, str]]]:
+        snapshots: dict[tuple[str, str], Any] = {}
+        duplicates: set[tuple[str, str]] = set()
+        for model in batch.model_set.models:
+            identity = cls._model_identity(model)
+            if identity in snapshots:
+                duplicates.add(identity)
+                continue
+            snapshots[identity] = model
+        return snapshots, duplicates
+
+    @classmethod
+    def _model_lineage_rejection_reason(
+        cls,
+        *,
+        item: Any,
+        snapshots: dict[tuple[str, str], Any],
+        duplicate_identities: set[tuple[str, str]],
+    ) -> str | None:
+        if item.output_status != "predicted":
+            return None
+        identity = (str(item.model_id), str(item.model_version))
+        if identity in duplicate_identities:
+            return (
+                "model_set_duplicate_identity: "
+                f"model_id={item.model_id}, model_version={item.model_version}"
+            )
+        snapshot = snapshots.get(identity)
+        if snapshot is None:
+            return (
+                "model_set_snapshot_missing: "
+                f"model_id={item.model_id}, model_version={item.model_version}"
+            )
+        expected = str(snapshot.model_artifact_manifest_sha256)
+        actual = str(item.model_artifact_manifest_sha256)
+        if actual != expected:
+            return (
+                "model_artifact_manifest_sha256_mismatch: "
+                f"expected {expected}, got {actual}"
+            )
+        return None
+
     def receive_prediction_result_batch(
         self,
         *,
@@ -326,10 +376,16 @@ class PredictiveMaintenanceRuntimeService:
         missing_assets = sorted(asset_ids - set(scoped_assets))
         if missing_assets:
             invalid_reasons.append(f"scope_invalid: unknown assets {missing_assets}")
+        model_snapshots, duplicate_model_identities = self._model_snapshot_index(batch)
 
-        for item in batch_payload["results"]:
+        for parsed_item, item in zip(batch.results, batch_payload["results"], strict=True):
             expected = self._prediction_item_sha256(item)
             actual = str(item["payload_sha256"])
+            lineage_reason = self._model_lineage_rejection_reason(
+                item=parsed_item,
+                snapshots=model_snapshots,
+                duplicate_identities=duplicate_model_identities,
+            )
             if expected != actual:
                 item_receipts.append(
                     {
@@ -352,6 +408,16 @@ class PredictiveMaintenanceRuntimeService:
                         "rejection_reason": "scope_invalid: asset is not in workspace",
                     }
                 )
+            elif lineage_reason:
+                item_receipts.append(
+                    {
+                        "event_id": item["event_id"],
+                        "payload_sha256": actual,
+                        "validation_status": "rejected",
+                        "rejection_reason": lineage_reason,
+                    }
+                )
+                invalid_reasons.append(f"{lineage_reason}:{item['event_id']}")
             else:
                 item_receipts.append(
                     {
@@ -411,7 +477,12 @@ class PredictiveMaintenanceRuntimeService:
     @classmethod
     def _generator_model_snapshot(cls, batch: PredictionResultBatch, item: Any) -> Any | None:
         for model in batch.model_set.models:
-            if model.model_id == item.model_id and model.model_version == item.model_version:
+            if (
+                model.model_id == item.model_id
+                and model.model_version == item.model_version
+                and model.model_artifact_manifest_sha256
+                == item.model_artifact_manifest_sha256
+            ):
                 return model
         return None
 
