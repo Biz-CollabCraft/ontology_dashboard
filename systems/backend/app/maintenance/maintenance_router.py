@@ -18,6 +18,7 @@ from .api_schema import (
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
+    ToolReplacementCostAnalysisCreateRequest,
 )
 from .maintenance_domain import IdempotencyConflict, InvalidTransition
 from .maintenance_schema import WorkOrderStatus
@@ -245,6 +246,87 @@ def create_maintenance_router(
                 actor_id=principal.user_id,
                 actor_display_name=principal.display_name,
                 idempotency_key=idempotency_key,
+            )
+        )
+
+    @router.post("/inspection-results/{inspection_result_id}/cost-analyses")
+    def calculate_tool_replacement_cost(
+        project_id: str,
+        workspace_id: str,
+        inspection_result_id: str,
+        payload: ToolReplacementCostAnalysisCreateRequest,
+        idempotency_key: str = Header(
+            alias="Idempotency-Key", min_length=8, max_length=200
+        ),
+        principal: Any = Depends(manager_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        _require_product_role(principal, project_id, "process_manager")
+        return _execute(
+            lambda: service.calculate_tool_replacement_cost(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                inspection_result_id=inspection_result_id,
+                payload=payload,
+                actor_id=principal.user_id,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    @router.get("/cost-analyses/{analysis_id}")
+    def get_cost_analysis(
+        project_id: str,
+        workspace_id: str,
+        analysis_id: str,
+        principal: Any = Depends(events_read),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        return _execute(
+            lambda: service.get_cost_analysis(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                analysis_id=analysis_id,
+            )
+        )
+
+    @router.get("/inspection-results/{inspection_result_id}/cost-analyses")
+    def list_cost_analyses(
+        project_id: str,
+        workspace_id: str,
+        inspection_result_id: str,
+        principal: Any = Depends(events_read),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        return _execute(
+            lambda: service.list_cost_analyses(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                inspection_result_id=inspection_result_id,
             )
         )
 

@@ -16,7 +16,9 @@ from app.maintenance.api_schema import (
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
+    ToolReplacementCostAnalysisCreateRequest,
 )
+from app.maintenance.cost_analysis_schema import ExecutionTiming
 from app.maintenance.maintenance_domain import IdempotencyConflict
 from app.maintenance.maintenance_schema import RecommendationDisposition, WorkOrderStatus
 from app.maintenance.service import MaintenanceLoopService
@@ -136,7 +138,77 @@ def inspection_result(outcome: str = "maintenance_recommended") -> InspectionRes
     )
 
 
-def run_completed_inspection(loop: MaintenanceLoopService) -> tuple[str, str]:
+def cost_analysis_request(
+    *, missing_parts_cost: bool = False
+) -> ToolReplacementCostAnalysisCreateRequest:
+    scenarios = []
+    for timing in ExecutionTiming:
+        scenarios.append(
+            {
+                "execution_timing": timing,
+                "parts_cost": (
+                    None
+                    if missing_parts_cost
+                    else {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000}
+                ),
+                "labor_duration": {
+                    "low_minutes": 20,
+                    "base_minutes": 30,
+                    "high_minutes": 40,
+                },
+                "labor_rate_per_minute": {
+                    "low_minor_per_minute": 800,
+                    "base_minor_per_minute": 1000,
+                    "high_minor_per_minute": 1200,
+                },
+                "external_service_cost": {
+                    "low_minor": 0,
+                    "base_minor": 0,
+                    "high_minor": 0,
+                },
+                "expected_downtime": {
+                    "low_minutes": 30,
+                    "base_minutes": 45,
+                    "high_minutes": 60,
+                },
+                "production_loss_rate_per_minute": {
+                    "low_minor_per_minute": 900,
+                    "base_minor_per_minute": 1100,
+                    "high_minor_per_minute": 1300,
+                },
+                "expected_failure_loss": {
+                    "low_minor": 10000,
+                    "base_minor": 25000,
+                    "high_minor": 50000,
+                },
+                "confidence": "medium",
+            }
+        )
+    return ToolReplacementCostAnalysisCreateRequest(
+        sop_id="SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        sop_version="demo-2026-08-28",
+        currency="KRW",
+        currency_minor_unit=0,
+        scenarios=tuple(scenarios),
+        assumptions=("Failure loss is a sensitivity input.",),
+        input_sources=(
+            {
+                "input_name": "tool_replacement_quote",
+                "source_kind": "quoted",
+                "source_reference": "quote/tool-replacement/2026-08",
+                "confidence": "medium",
+            },
+        ),
+        price_version="maintenance-price-2026-08",
+        calculation_policy_version="maintenance-cost-policy-v1",
+    )
+
+
+def run_completed_inspection(
+    loop: MaintenanceLoopService,
+    *,
+    outcome: str = "maintenance_recommended",
+) -> tuple[str, str]:
     requested = loop.request_inspection(
         organization_id="org-1",
         project_id="project-1",
@@ -172,7 +244,7 @@ def run_completed_inspection(loop: MaintenanceLoopService) -> tuple[str, str]:
         project_id="project-1",
         workspace_id="workspace-1",
         work_order_id=work_order_id,
-        payload=inspection_result(),
+        payload=inspection_result(outcome),
         actor_id="engineer-1",
         actor_display_name="Engineer One",
         idempotency_key="inspection-complete-001",
@@ -726,3 +798,159 @@ def test_asset_type_is_preserved_from_projection_through_inspection(tmp_path) ->
             "event_id": "EVT-RESULT-001",
         }
     ]
+
+
+def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path) -> None:
+    loop = service(tmp_path)
+    inspection_work_order_id, inspection_result_id = run_completed_inspection(loop)
+    calculated_at = datetime(2026, 8, 31, 1, 0, tzinfo=timezone.utc)
+
+    created = loop.calculate_tool_replacement_cost(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=cost_analysis_request(),
+        actor_id="manager-1",
+        idempotency_key="cost-analysis-request-001",
+        calculated_at=calculated_at,
+    )
+
+    result = created["cost_analysis"]
+    assert created["calculation_status"] == "calculated"
+    assert created["replayed"] is False
+    assert result["asset_id"] == result["equipment_id"] == "CNC-001"
+    assert result["based_on"] == {
+        "product_result_id": "RESULT-001",
+        "evidence_id": "EVD-EVT-RESULT-001",
+        "inspection_work_order_id": inspection_work_order_id,
+        "inspection_result_id": inspection_result_id,
+        "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        "sop_version": "demo-2026-08-28",
+    }
+    assert {
+        option["action_candidate_id"] for option in result["options"]
+    } == {
+        loop._stable_id(
+            "ACTION-CANDIDATE",
+            "org-1",
+            "project-1",
+            "workspace-1",
+            inspection_result_id,
+            "TOOL_REPLACEMENT",
+        )
+    }
+
+    loaded = loop.get_cost_analysis(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        analysis_id=created["analysis_id"],
+    )
+    listed = loop.list_cost_analyses(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    )
+    assert loaded == result
+    assert listed == {
+        "inspection_result_id": inspection_result_id,
+        "items": [result],
+    }
+    side_effects = loop.repository.operational_side_effect_counts()
+    assert side_effects["recommendations"] == 0
+    assert side_effects["decisions"] == 0
+    assert side_effects["maintenance_actions"] == 0
+    assert side_effects["maintenance_events"] == 0
+
+
+def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+    payload = cost_analysis_request()
+    command = {
+        "organization_id": "org-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "inspection_result_id": inspection_result_id,
+        "payload": payload,
+        "actor_id": "manager-1",
+        "idempotency_key": "cost-analysis-request-001",
+        "calculated_at": datetime(2026, 8, 31, 1, 0, tzinfo=timezone.utc),
+    }
+
+    first = loop.calculate_tool_replacement_cost(**command)
+    replay = loop.calculate_tool_replacement_cost(**command)
+    second_snapshot = loop.calculate_tool_replacement_cost(
+        **{
+            **command,
+            "idempotency_key": "cost-analysis-request-002",
+            "calculated_at": datetime(2026, 8, 31, 1, 5, tzinfo=timezone.utc),
+        }
+    )
+
+    assert replay == {**first, "replayed": True}
+    assert second_snapshot["analysis_id"] != first["analysis_id"]
+    assert len(
+        loop.repository.list_cost_analyses(
+            workspace_id="workspace-1",
+            inspection_result_id=inspection_result_id,
+        )
+    ) == 2
+
+    with pytest.raises(IdempotencyConflict, match="idempotency_key_conflict"):
+        loop.calculate_tool_replacement_cost(
+            **{
+                **command,
+                "payload": payload.model_copy(
+                    update={"price_version": "maintenance-price-2026-09"}
+                ),
+            }
+        )
+
+
+def test_insufficient_cost_analysis_is_preserved_without_operational_effects(
+    tmp_path,
+) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(loop)
+
+    created = loop.calculate_tool_replacement_cost(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+        payload=cost_analysis_request(missing_parts_cost=True),
+        actor_id="manager-1",
+        idempotency_key="cost-analysis-insufficient-001",
+    )
+
+    assert created["calculation_status"] == "insufficient"
+    assert created["cost_analysis"]["lowest_calculated_cost_option_id"] is None
+    assert created["cost_analysis"]["missing_inputs"] == ["parts_cost"]
+    assert loop.repository.operational_side_effect_counts()["recommendations"] == 0
+
+
+def test_cost_analysis_rejects_no_action_inspection_without_persisting(tmp_path) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(
+        loop,
+        outcome="no_action_required",
+    )
+
+    with pytest.raises(ValueError, match="maintenance_recommended"):
+        loop.calculate_tool_replacement_cost(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            inspection_result_id=inspection_result_id,
+            payload=cost_analysis_request(),
+            actor_id="manager-1",
+            idempotency_key="cost-analysis-request-001",
+        )
+
+    assert loop.repository.list_cost_analyses(
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    ) == ()
