@@ -947,6 +947,13 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
         "inspection_result_id": inspection_result_id,
         "items": [result],
     }
+    lineage = loop.event_lineage(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+    assert lineage["cost_analyses"] == [result]
     side_effects = loop.repository.operational_side_effect_counts()
     assert side_effects["recommendations"] == 0
     assert side_effects["decisions"] == 0

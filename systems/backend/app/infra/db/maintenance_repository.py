@@ -2047,6 +2047,14 @@ class MaintenanceRepository:
                 """,
                 parameters,
             ).fetchall()
+            cost_analyses = connection.execute(
+                """
+                SELECT result_json FROM closed_loop_maintenance_cost_analyses
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY calculated_at,analysis_id
+                """,
+                parameters,
+            ).fetchall()
         return {
             "event_id": event_id,
             "recommendations": [
@@ -2069,6 +2077,12 @@ class MaintenanceRepository:
                     "state_patch": self._decoded(row["state_patch_json"]),
                 }
                 for row in maintenance_events
+            ],
+            "cost_analyses": [
+                MaintenanceCostScenarioResult.model_validate(
+                    self._decoded(row["result_json"])
+                ).model_dump(mode="json")
+                for row in cost_analyses
             ],
             "activities": self.list_event_activity(
                 workspace_id=workspace_id,

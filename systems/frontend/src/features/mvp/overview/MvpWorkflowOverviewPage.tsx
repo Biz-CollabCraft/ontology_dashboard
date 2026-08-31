@@ -52,6 +52,7 @@ import {
   fieldFactorSymptom,
   fieldFailureLabel,
 } from "../displayLabels";
+import { MaintenanceCostDecisionPanel } from "../maintenance/MaintenanceCostDecisionPanel";
 
 interface WorkOrderCandidate {
   event: MvpEvent;
@@ -1378,7 +1379,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} projectId={model.context.projectId} workspaceId={model.context.workspaceId} eventId={drawerEvent?.eventId ?? null} onChanged={onRefresh} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1624,6 +1625,10 @@ function AssetPreviewPanel({
   workActionDisabled,
   assignee,
   canMaterializeAgentSummary,
+  projectId,
+  workspaceId,
+  eventId,
+  onChanged,
   onTabChange,
   onSensorWindowChange,
   onPreviewAsset,
@@ -1649,6 +1654,10 @@ function AssetPreviewPanel({
   workActionDisabled: boolean;
   assignee: string;
   canMaterializeAgentSummary: boolean;
+  projectId: string;
+  workspaceId: string;
+  eventId: string | null;
+  onChanged: () => void;
   onTabChange: (tab: DrawerTab) => void;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
@@ -1912,6 +1921,15 @@ function AssetPreviewPanel({
                   승인, 보류, 반려, 메모 저장은 자동 실행하지 않고 작업요청의 승인 절차에서 처리합니다.
                 </p>
               </section>
+              {eventId ? (
+                <MaintenanceCostDecisionPanel
+                  projectId={projectId}
+                  workspaceId={workspaceId}
+                  eventId={eventId}
+                  guidance={inspectionTargets.find((item) => item.target?.inspectionGuidance)?.target?.inspectionGuidance ?? null}
+                  onChanged={onChanged}
+                />
+              ) : null}
             </>
           ) : null}
 
