@@ -65,6 +65,10 @@ class Service:
             "items": [],
         }
 
+    def create_recommendation_from_cost_option(self, **values):
+        self.calls.append(("cost_select", values))
+        return {"recommendation_id": "REC-COST-1", "recommendation_status": "proposed"}
+
     def decide_manual_recommendation(self, **values):
         self.calls.append(("decision", values))
         return {"decision_id": "DECISION-1", "work_order_id": "MAINTENANCE-WO-1"}
@@ -424,6 +428,48 @@ def test_cost_analysis_request_rejects_forged_lineage_and_wrong_role() -> None:
 
     assert forged.status_code == 422
     assert missing_key.status_code == 422
+    assert denied.status_code == 403
+    assert manager_service.calls == []
+    assert engineer_service.calls == []
+
+
+def test_manager_selects_cost_option_without_submitting_canonical_lineage() -> None:
+    manager_client, manager_service = client_for("process_manager")
+    selected = manager_client.post(
+        f"{BASE}/cost-analyses/COST-ANALYSIS-1/options/COST-OPTION-1/recommendations",
+        json={"basis": ["manager selected this calculated option"]},
+        headers={"Idempotency-Key": "cost-option-recommendation-001"},
+    )
+
+    assert selected.status_code == 200
+    assert selected.json()["recommendation_status"] == "proposed"
+    assert [name for name, _ in manager_service.calls] == ["cost_select"]
+    call = manager_service.calls[0][1]
+    assert call["analysis_id"] == "COST-ANALYSIS-1"
+    assert call["option_id"] == "COST-OPTION-1"
+    assert call["actor_id"] == "user-process_manager"
+
+
+def test_cost_option_selection_rejects_forged_lineage_and_wrong_role() -> None:
+    manager_client, manager_service = client_for("process_manager")
+    forged = manager_client.post(
+        f"{BASE}/cost-analyses/COST-ANALYSIS-1/options/COST-OPTION-1/recommendations",
+        json={
+            "basis": ["select"],
+            "asset_id": "FORGED-ASSET",
+            "action_candidate_id": "FORGED-CANDIDATE",
+            "source_product_result_id": "FORGED-RESULT",
+        },
+        headers={"Idempotency-Key": "cost-option-recommendation-001"},
+    )
+    engineer_client, engineer_service = client_for("process_engineer")
+    denied = engineer_client.post(
+        f"{BASE}/cost-analyses/COST-ANALYSIS-1/options/COST-OPTION-1/recommendations",
+        json={"basis": ["select"]},
+        headers={"Idempotency-Key": "cost-option-recommendation-001"},
+    )
+
+    assert forged.status_code == 422
     assert denied.status_code == 403
     assert manager_service.calls == []
     assert engineer_service.calls == []

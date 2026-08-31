@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 
 import pytest
@@ -145,6 +146,55 @@ def test_operations_manual_requires_complete_inspection_and_author_lineage() -> 
     payload["requires_human_approval"] = False
     with pytest.raises(ValidationError, match="requires human approval"):
         OperationalRecommendedAction.model_validate(payload)
+
+
+def test_cost_selected_recommendation_requires_complete_cost_lineage() -> None:
+    selected = _manual_recommendation(
+        source_cost_analysis_id="cost-analysis-001",
+        source_cost_option_id="cost-option-001",
+        source_action_candidate_id="action-candidate-001",
+    )
+    assert selected.source_cost_analysis_id == "cost-analysis-001"
+    assert selected.source_cost_option_id == "cost-option-001"
+    assert selected.source_action_candidate_id == "action-candidate-001"
+
+    payload = selected.model_dump()
+    payload["source_cost_option_id"] = None
+    with pytest.raises(ValidationError, match="complete cost lineage"):
+        OperationalRecommendedAction.model_validate(payload)
+
+
+def test_cost_selected_recommendation_must_use_validating_command_path(tmp_path) -> None:
+    repository = MaintenanceRepository(
+        tmp_path / "maintenance.db", project_context=_Resolver()
+    )
+    selected = _manual_recommendation(
+        source_cost_analysis_id="cost-analysis-001",
+        source_cost_option_id="cost-option-001",
+        source_action_candidate_id="action-candidate-001",
+    )
+
+    with pytest.raises(ValueError, match="create_manual_recommendation"):
+        repository.save_recommendation(selected)
+
+
+def test_sqlite_rejects_partial_cost_selection_lineage(tmp_path) -> None:
+    repository = MaintenanceRepository(
+        tmp_path / "maintenance.db", project_context=_Resolver()
+    )
+    recommendation = _manual_recommendation()
+    repository.save_recommendation(recommendation)
+
+    with sqlite3.connect(repository.path) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="invalid recommendation"):
+            connection.execute(
+                """
+                UPDATE closed_loop_recommendations
+                SET source_cost_option_id='cost-option-only'
+                WHERE recommendation_id=?
+                """,
+                (recommendation.recommendation_id,),
+            )
 
 
 def test_product_projection_cannot_smuggle_operations_manual_fields() -> None:
