@@ -825,6 +825,7 @@
 .mvp-cost-error { color: #ff8d8d; }
 .mvp-cost-success { color: #83d9a5; }
 .mvp-cost-inputs { display: grid; gap: 9px; }
+.mvp-cost-sop-reference { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 7px; }
 .mvp-cost-inputs fieldset { min-width: 0; margin: 0; padding: 9px; border: 1px solid rgba(181, 196, 214, .13); border-radius: 6px; }
 .mvp-cost-inputs legend { padding: 0 5px; color: #b7d4ff; font-size: 10px; font-weight: 900; }
 .mvp-cost-inputs fieldset > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }

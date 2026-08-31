@@ -108,7 +108,7 @@ export function latestEligibleInspection(
 
 export function buildCostRequest(
   form: ScenarioForm,
-  guidance: MvpInspectionGuidance,
+  guidance: Pick<MvpInspectionGuidance, "sopId" | "version">,
   eventId: string,
 ): ToolReplacementCostAnalysisRequest {
   return {
@@ -176,6 +176,8 @@ export function MaintenanceCostDecisionPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [basis, setBasis] = useState("");
+  const [sopId, setSopId] = useState(guidance?.sopId ?? "");
+  const [sopVersion, setSopVersion] = useState(guidance?.version ?? "");
   const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
 
   const load = async (signal?: AbortSignal) => {
@@ -202,6 +204,11 @@ export function MaintenanceCostDecisionPanel({
     return () => controller.abort();
   }, [projectId, workspaceId, eventId]);
 
+  useEffect(() => {
+    if (guidance?.sopId) setSopId(guidance.sopId);
+    if (guidance?.version) setSopVersion(guidance.version);
+  }, [guidance?.sopId, guidance?.version]);
+
   const inspection = useMemo(() => latestEligibleInspection(lineage), [lineage]);
   const analyses = useMemo(() => [...(lineage?.cost_analyses ?? [])]
     .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at)), [lineage]);
@@ -220,7 +227,11 @@ export function MaintenanceCostDecisionPanel({
   };
 
   const calculate = async () => {
-    if (!inspection || !guidance) return;
+    if (!inspection) return;
+    if (!sopId.trim() || !sopVersion.trim()) {
+      setError("점검에 참고한 SOP ID와 버전을 입력해 주세요.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setSelectedMessage(null);
@@ -229,7 +240,11 @@ export function MaintenanceCostDecisionPanel({
         projectId,
         workspaceId,
         inspection.inspection_result_id,
-        buildCostRequest(form, guidance, eventId),
+        buildCostRequest(
+          form,
+          { sopId: sopId.trim(), version: sopVersion.trim() },
+          eventId,
+        ),
         requestKey("cost-analysis"),
       );
       setFormOpen(false);
@@ -272,9 +287,7 @@ export function MaintenanceCostDecisionPanel({
 
   const blocker = !inspection
     ? "완료된 점검 결과에서 정비 필요가 확인된 뒤 사용할 수 있습니다."
-    : !guidance
-      ? "점검에 사용한 SOP 식별자와 버전이 없어 비용 분석을 시작할 수 없습니다."
-      : null;
+    : null;
 
   return (
     <section className="mvp-maintenance-cost-panel" aria-label="정비 비용 분석">
@@ -297,6 +310,16 @@ export function MaintenanceCostDecisionPanel({
       ) : (
         <div className="mvp-cost-inputs">
           <p>금액은 원, 시간은 분 단위입니다. 빈 값은 임의 추정하지 않고 insufficient로 처리됩니다.</p>
+          <div className="mvp-cost-sop-reference">
+            <label>
+              <span>참고한 SOP ID</span>
+              <input value={sopId} onChange={(event) => setSopId(event.target.value)} />
+            </label>
+            <label>
+              <span>SOP 버전</span>
+              <input value={sopVersion} onChange={(event) => setSopVersion(event.target.value)} />
+            </label>
+          </div>
           {TIMINGS.map((timing) => (
             <fieldset key={timing}>
               <legend>{TIMING_LABEL[timing]}</legend>
