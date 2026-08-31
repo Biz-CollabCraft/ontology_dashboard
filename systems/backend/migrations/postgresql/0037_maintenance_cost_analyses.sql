@@ -42,13 +42,39 @@ ALTER TABLE closed_loop_maintenance_cost_analyses ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS closed_loop_maintenance_cost_analyses_scope
   ON closed_loop_maintenance_cost_analyses;
-CREATE POLICY closed_loop_maintenance_cost_analyses_scope
+DROP POLICY IF EXISTS closed_loop_maintenance_cost_analyses_scope_select
+  ON closed_loop_maintenance_cost_analyses;
+DROP POLICY IF EXISTS closed_loop_maintenance_cost_analyses_scope_insert
+  ON closed_loop_maintenance_cost_analyses;
+
+CREATE POLICY closed_loop_maintenance_cost_analyses_scope_select
   ON closed_loop_maintenance_cost_analyses
+  FOR SELECT
   USING (
     organization_id = nullif(current_setting('app.organization_id', true), '')
     AND project_id = nullif(current_setting('app.project_id', true), '')
-  )
+  );
+
+CREATE POLICY closed_loop_maintenance_cost_analyses_scope_insert
+  ON closed_loop_maintenance_cost_analyses
+  FOR INSERT
   WITH CHECK (
     organization_id = nullif(current_setting('app.organization_id', true), '')
     AND project_id = nullif(current_setting('app.project_id', true), '')
   );
+
+CREATE OR REPLACE FUNCTION reject_maintenance_cost_analysis_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'maintenance cost analysis snapshots are append-only';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS closed_loop_maintenance_cost_analyses_reject_mutation
+  ON closed_loop_maintenance_cost_analyses;
+CREATE TRIGGER closed_loop_maintenance_cost_analyses_reject_mutation
+BEFORE UPDATE OR DELETE ON closed_loop_maintenance_cost_analyses
+FOR EACH ROW
+EXECUTE FUNCTION reject_maintenance_cost_analysis_mutation();

@@ -39,6 +39,7 @@ from .maintenance_domain import (
     create_inspection_work_order,
     create_operations_manual_recommendation,
     create_work_order_for_recommendation,
+    derive_tool_replacement_action_candidate,
     plan_maintenance_action,
     transition_work_order,
 )
@@ -553,14 +554,8 @@ class MaintenanceLoopService:
                 "cost analysis requires Product Result/Evidence inspection lineage"
             )
 
-        action_candidate_id = self._stable_id(
-            "ACTION-CANDIDATE",
-            organization_id,
-            project_id,
-            workspace_id,
-            inspection_result_id,
-            MaintenanceActionCode.TOOL_REPLACEMENT.value,
-        )
+        action_candidate = derive_tool_replacement_action_candidate(inspection_result)
+        action_candidate_id = action_candidate.action_candidate_id
         analysis_id = self._stable_id(
             "COST-ANALYSIS",
             organization_id,

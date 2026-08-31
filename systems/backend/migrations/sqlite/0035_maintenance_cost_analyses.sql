@@ -39,3 +39,15 @@ CREATE INDEX idx_closed_loop_cost_analyses_event
   ON closed_loop_maintenance_cost_analyses(
     organization_id,project_id,workspace_id,event_id,calculated_at
   );
+
+CREATE TRIGGER closed_loop_maintenance_cost_analyses_reject_update
+BEFORE UPDATE ON closed_loop_maintenance_cost_analyses
+BEGIN
+  SELECT RAISE(ABORT, 'maintenance cost analysis snapshots are append-only');
+END;
+
+CREATE TRIGGER closed_loop_maintenance_cost_analyses_reject_delete
+BEFORE DELETE ON closed_loop_maintenance_cost_analyses
+BEGIN
+  SELECT RAISE(ABORT, 'maintenance cost analysis snapshots are append-only');
+END;

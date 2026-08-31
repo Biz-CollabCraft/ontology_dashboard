@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -208,6 +209,7 @@ def run_completed_inspection(
     loop: MaintenanceLoopService,
     *,
     outcome: str = "maintenance_recommended",
+    result_payload: InspectionResultCreateRequest | None = None,
 ) -> tuple[str, str]:
     requested = loop.request_inspection(
         organization_id="org-1",
@@ -244,7 +246,7 @@ def run_completed_inspection(
         project_id="project-1",
         workspace_id="workspace-1",
         work_order_id=work_order_id,
-        payload=inspection_result(outcome),
+        payload=result_payload or inspection_result(outcome),
         actor_id="engineer-1",
         actor_display_name="Engineer One",
         idempotency_key="inspection-complete-001",
@@ -864,6 +866,26 @@ def test_cost_analysis_resolves_lineage_and_persists_read_only_snapshot(tmp_path
     assert side_effects["maintenance_actions"] == 0
     assert side_effects["maintenance_events"] == 0
 
+    with sqlite3.connect(loop.repository.database) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            connection.execute(
+                "UPDATE closed_loop_maintenance_cost_analyses "
+                "SET result_json='{}' WHERE analysis_id=?",
+                (created["analysis_id"],),
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            connection.execute(
+                "DELETE FROM closed_loop_maintenance_cost_analyses WHERE analysis_id=?",
+                (created["analysis_id"],),
+            )
+
+    assert loop.get_cost_analysis(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        analysis_id=created["analysis_id"],
+    ) == result
+
 
 def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) -> None:
     loop = service(tmp_path)
@@ -940,6 +962,46 @@ def test_cost_analysis_rejects_no_action_inspection_without_persisting(tmp_path)
     )
 
     with pytest.raises(ValueError, match="maintenance_recommended"):
+        loop.calculate_tool_replacement_cost(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            inspection_result_id=inspection_result_id,
+            payload=cost_analysis_request(),
+            actor_id="manager-1",
+            idempotency_key="cost-analysis-request-001",
+        )
+
+    assert loop.repository.list_cost_analyses(
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    ) == ()
+
+
+def test_cost_analysis_rejects_unrelated_maintenance_candidate_without_persisting(
+    tmp_path,
+) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(
+        loop,
+        result_payload=InspectionResultCreateRequest(
+            outcome="maintenance_recommended",
+            checklist=(
+                {
+                    "item_id": "cooling-path",
+                    "status": "fail",
+                    "note": "coolant flow is restricted",
+                },
+            ),
+            measurements=(
+                {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
+            ),
+            findings=("cooling path requires maintenance",),
+            note="tool wear was not confirmed",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="TOOL_REPLACEMENT candidate requires"):
         loop.calculate_tool_replacement_cost(
             organization_id="org-1",
             project_id="project-1",
