@@ -160,6 +160,18 @@ def build_manufacturing_service(
         if is_postgresql(target)
         else AuditRepository(target)
     )
+    maintenance_lineage_query = (
+        PostgreSQLMaintenanceRepository(
+            target,
+            project_context=PostgreSQLProjectContextResolver(target),
+            connection_factory=postgres_repository_connection,
+        )
+        if is_postgresql(target)
+        else MaintenanceRepository(
+            target,
+            project_context=RuntimeProjectContextResolver(target),
+        )
+    )
     provider = configured_provider()
     equipment_service = EquipmentService(
         FixtureEquipmentRepository(_mvp_fixture_masters(root))
@@ -174,6 +186,8 @@ def build_manufacturing_service(
         agent_review_summary_provider=AgentReviewSummaryProvider(provider),
         agent_review_context_registry=default_agent_review_context_registry(),
         domain_review_context_adapter=ManufacturingFixtureReviewContextAdapter(root),
+        maintenance_lineage_query=maintenance_lineage_query,
+        workspace_id=MANUFACTURING_WORKSPACE,
     )
 
 

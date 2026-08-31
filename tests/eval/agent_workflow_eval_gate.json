@@ -9,6 +9,7 @@
     "workflow_stages",
     "summary_reuse",
     "fallback_retry",
+    "domain_context_grounding",
     "closed_loop_boundary"
   ],
   "minimum_release_gates": {
@@ -38,6 +39,11 @@
       "invalid_llm_output_falls_back_to_deterministic_summary",
       "fallback_reason_is_observable"
     ],
+    "domain_context_grounding": [
+      "db_backed_maintenance_history_reaches_role_summary",
+      "future_inventory_mes_schedule_claims_are_blocked_until_source_contract",
+      "adapter_source_refs_remain_inside_packet_scope"
+    ],
     "closed_loop_boundary": [
       "ai_summary_is_read_only",
       "closed_loop_recommendation_input_is_derived_from_same_packet_snapshot",
@@ -58,6 +64,7 @@
   ],
   "current_context_facets": [
     "operation_context",
+    "maintenance_history_context",
     "inspection_location",
     "sop_retrieval",
     "spare_part_context",
