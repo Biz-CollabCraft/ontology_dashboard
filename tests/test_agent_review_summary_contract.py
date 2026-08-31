@@ -212,6 +212,21 @@ def test_agent_review_summary_validator_rejects_invented_history_summary() -> No
     assert "history_summary_mismatch" in errors
 
 
+def test_agent_review_summary_validator_rejects_uncontracted_domain_claims() -> None:
+    summary = _valid_summary()
+    summary["role_summaries"] = [
+        {
+            **summary["role_summaries"][0],
+            "quote": "재고 확보 상태라 현재 교대 내 교체 가능하며 납기 보장됩니다.",
+        },
+        summary["role_summaries"][1],
+    ]
+
+    errors = validate_agent_review_summary(summary, packet=PACKET)
+
+    assert any(error.startswith("forbidden_prose_claims:") for error in errors)
+
+
 def test_deterministic_summary_allows_packet_history_completion_language() -> None:
     packet = {
         **PACKET,
