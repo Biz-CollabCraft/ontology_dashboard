@@ -719,8 +719,8 @@ def _inspection_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
         "reference_location_label": str(guidance.get("reference_location_label") or ""),
         "suggested_check_method": str(guidance.get("suggested_check_method") or ""),
         "checklist_draft": [str(item) for item in guidance.get("checklist_draft") or []],
-        "replacement_review_guidance": _replacement_review_guidance(
-            guidance.get("replacement_review_guidance") or {}
+        "maintenance_review_prerequisites": _maintenance_review_prerequisites(
+            guidance.get("maintenance_review_prerequisites") or {}
         ),
         "safety_level": safety_level,
         "requires_human_approval": bool(guidance.get("requires_human_approval")),
@@ -729,10 +729,12 @@ def _inspection_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _replacement_review_guidance(guidance: dict[str, Any]) -> dict[str, Any]:
+def _maintenance_review_prerequisites(guidance: dict[str, Any]) -> dict[str, Any]:
     return {
-        "review_label": str(guidance.get("review_label") or ""),
-        "review_triggers": [str(item) for item in guidance.get("review_triggers") or []],
+        "label": str(guidance.get("label") or ""),
+        "review_conditions": [
+            str(item) for item in guidance.get("review_conditions") or []
+        ],
         "required_measurements": [
             str(item) for item in guidance.get("required_measurements") or []
         ],

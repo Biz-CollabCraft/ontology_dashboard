@@ -45,6 +45,10 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 
 | 계약 | 현재 상태 | 설명 |
 |---|---|---|
+| Generator Protocol Record Schema | **Current** | `contracts/schemas/generator-protocol-record.schema.json` (SensorRecord v2 계약 정본) |
+| Generator Static Mapping Table Schema | **Current** | `contracts/schemas/generator-static-mapping-table.schema.json` (승인된 정적 매핑 계약 정본) |
+| Generator Extraction Runtime Handoff Schema | **Current** | `contracts/schemas/generator-extraction-runtime-handoff.schema.json` (Extraction -> Runtime Prediction 전달 및 큐 연동 계약 정본) |
+| Generator Protocol Extraction Golden Vector | **Current** | `contracts/test-vectors/generator-protocol-extraction-v1/` (SensorRecord v2 -> Canonical Observation 변환 및 무결성 검증) |
 | Generator Dataset Input Manifest | **Current** | `contracts/schemas/generator-dataset-input-manifest.schema.json` (자동 검증 및 예제/테스트 벡터 존재) |
 | Generator Feature Input Golden Vector | **Current** | `contracts/test-vectors/generator-feature-input-v1/` (Multi-asset 라벨링 및 활성 고장 제외 자동 검증) |
 | Generator Training Config Schema | **Current** | `contracts/schemas/generator-training-config.schema.json` (설정 버전, 파라미터, 분할 비율 검증) |
@@ -57,13 +61,7 @@ Generator 구조 개편 및 파일 가공 파이프라인(Observation/Feature Se
 | Prediction Result Batch Schema | **Current** | `contracts/schemas/prediction-result-batch.schema.json` (`prediction-result-batch-v1` 외부 Backend Inbox 전달 정본 배열 계약) |
 | Internal Generator Runtime Prediction Stage Schema | **Internal** | `contracts/schemas/generator-runtime-prediction-stage.schema.json` (Generator 내부 staging 및 checkpoint 재개 전용 계약) |
 | Generator Runtime Prediction Golden Vector | **Current** | `contracts/test-vectors/generator-runtime-prediction-v1/` (다중 설비 런타임 예측 수치 및 결과 묶음 배치 검증) |
-| Protocol-to-Observation Golden Vector | **Target — 미작성** | 선행조건: gen_data 입력 계약 확정 |
-| Generator Observation Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
-| Generator Failure Event Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
-| Generator Extraction Result Schema | **Target — 미작성** | Extraction 구현 단계에서 작성 예정 |
-| Generator Preprocessing Plan Schema | **Target — 기존 Extraction Plan 검토 후 이전** | 기존 Extraction Plan 스키마 검토 후 migration 예정 |
-| Generator Feature Series Schema | **Target — 미작성** | Feature 후속 확장 단계에서 작성 예정 |
-| Feature Dataset Bundle | **Target — 기존 Schema 재사용·확장 여부 검토 필요** | 기존 `dataset-bundle-manifest.schema.json`의 재사용 가능성을 우선 검토 |
+| Generator Pipeline E2E Golden Vector | **Current** | `contracts/test-vectors/generator-pipeline-e2e-v1/` (Protocol -> Extraction -> Dataset -> Handoff -> Runtime Prediction -> Batch 전체 파이프라인 무결성 및 13개 결정적 식별자 불변성 검증) |
 
 
 ### Prediction 관련 내부/외부 계약 경계 원칙

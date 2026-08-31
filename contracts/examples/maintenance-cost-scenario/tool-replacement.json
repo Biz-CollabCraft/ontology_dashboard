@@ -1,0 +1,126 @@
+{
+  "schema_version": "maintenance-cost-scenario-v1.0",
+  "analysis_id": "cost-analysis-cnc-001",
+  "organization_id": "org-ontology-demo",
+  "project_id": "manufacturing-demo-project",
+  "workspace_id": "manufacturing-demo",
+  "asset_id": "CNC-S01-L01-04",
+  "equipment_id": "CNC-S01-L01-04",
+  "calculated_at": "2026-08-29T06:00:00Z",
+  "based_on": {
+    "product_result_id": "product-result-cnc-001",
+    "evidence_id": "evidence-cnc-001",
+    "inspection_work_order_id": "inspection-wo-cnc-001",
+    "inspection_result_id": "inspection-result-cnc-001",
+    "sop_id": "sop-cnc-tool-inspection",
+    "sop_version": "1.1"
+  },
+  "currency": "KRW",
+  "currency_minor_unit": 0,
+  "options": [
+    {
+      "option_id": "option-tool-immediate",
+      "action_candidate_id": "candidate-tool-replacement-001",
+      "action_code": "TOOL_REPLACEMENT",
+      "execution_timing": "immediate",
+      "calculation_status": "calculated",
+      "parts_cost": {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000},
+      "labor_cost": {"low_minor": 25000, "base_minor": 30000, "high_minor": 40000},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "production_loss": {"low_minor": 50000, "base_minor": 60000, "high_minor": 80000},
+      "expected_failure_loss": {"low_minor": 10000, "base_minor": 20000, "high_minor": 40000},
+      "total_expected_cost": {"low_minor": 130000, "base_minor": 160000, "high_minor": 220000},
+      "expected_downtime": {"low_minutes": 40, "base_minutes": 50, "high_minutes": 70},
+      "confidence": "medium",
+      "missing_inputs": []
+    },
+    {
+      "option_id": "option-tool-planned",
+      "action_candidate_id": "candidate-tool-replacement-001",
+      "action_code": "TOOL_REPLACEMENT",
+      "execution_timing": "planned_window",
+      "calculation_status": "calculated",
+      "parts_cost": {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000},
+      "labor_cost": {"low_minor": 20000, "base_minor": 25000, "high_minor": 35000},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "production_loss": {"low_minor": 20000, "base_minor": 30000, "high_minor": 50000},
+      "expected_failure_loss": {"low_minor": 20000, "base_minor": 40000, "high_minor": 80000},
+      "total_expected_cost": {"low_minor": 105000, "base_minor": 145000, "high_minor": 225000},
+      "expected_downtime": {"low_minutes": 35, "base_minutes": 45, "high_minutes": 60},
+      "confidence": "medium",
+      "missing_inputs": []
+    },
+    {
+      "option_id": "option-tool-reinspect",
+      "action_candidate_id": "candidate-tool-replacement-001",
+      "action_code": "TOOL_REPLACEMENT",
+      "execution_timing": "reinspect_after",
+      "calculation_status": "calculated",
+      "parts_cost": {"low_minor": 5000, "base_minor": 10000, "high_minor": 15000},
+      "labor_cost": {"low_minor": 10000, "base_minor": 15000, "high_minor": 20000},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "production_loss": {"low_minor": 10000, "base_minor": 20000, "high_minor": 30000},
+      "expected_failure_loss": {"low_minor": 70000, "base_minor": 130000, "high_minor": 220000},
+      "total_expected_cost": {"low_minor": 95000, "base_minor": 175000, "high_minor": 285000},
+      "expected_downtime": {"low_minutes": 15, "base_minutes": 25, "high_minutes": 40},
+      "confidence": "low",
+      "missing_inputs": []
+    },
+    {
+      "option_id": "option-tool-no-action",
+      "action_candidate_id": "candidate-tool-replacement-001",
+      "action_code": "TOOL_REPLACEMENT",
+      "execution_timing": "no_action_baseline",
+      "calculation_status": "calculated",
+      "parts_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "labor_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "production_loss": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+      "expected_failure_loss": {"low_minor": 100000, "base_minor": 250000, "high_minor": 500000},
+      "total_expected_cost": {"low_minor": 100000, "base_minor": 250000, "high_minor": 500000},
+      "expected_downtime": {"low_minutes": 0, "base_minutes": 0, "high_minutes": 0},
+      "confidence": "low",
+      "missing_inputs": []
+    }
+  ],
+  "lowest_calculated_cost_option_id": "option-tool-planned",
+  "assumptions": [
+    "Failure loss is a sensitivity input and is not an authoritative future probability."
+  ],
+  "input_sources": [
+    {
+      "input_name": "tool_replacement_quote",
+      "source_kind": "quoted",
+      "source_reference": "quote/tool-replacement/2026-08",
+      "confidence": "medium"
+    },
+    {
+      "input_name": "external_service_policy",
+      "source_kind": "policy",
+      "source_reference": "internal-maintenance-policy-v1",
+      "confidence": "high"
+    },
+    {
+      "input_name": "production_loss_policy",
+      "source_kind": "policy",
+      "source_reference": "production-loss-policy-v1",
+      "confidence": "medium"
+    },
+    {
+      "input_name": "failure_loss_sensitivity",
+      "source_kind": "assumption",
+      "source_reference": "maintenance-cost-policy-v1#failure-loss-sensitivity",
+      "confidence": "low"
+    }
+  ],
+  "missing_inputs": [],
+  "price_version": "maintenance-price-2026-08",
+  "calculation_policy_version": "maintenance-cost-policy-v1",
+  "limitations": [
+    "DECISION_SUPPORT_ONLY",
+    "NOT_RECOMMENDATION",
+    "NOT_APPROVAL",
+    "NOT_EXECUTION_COMMAND",
+    "COST_ESTIMATE_NOT_GUARANTEE"
+  ]
+}

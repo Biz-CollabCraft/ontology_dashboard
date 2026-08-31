@@ -386,6 +386,12 @@ data/sensor/*
 !data/sensor/.gitkeep
 data/result/*
 !data/result/.gitkeep
+data/observations/*
+!data/observations/.gitkeep
+data/failures/*
+!data/failures/.gitkeep
+data/gen_data/*
+!data/gen_data/.gitkeep
 front/.next/
 front/node_modules/
 

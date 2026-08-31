@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from app.infra.live_predictive_maintenance_runtime import _read_overlay_event_rows
+from app.infra.live_predictive_maintenance_runtime import (
+    _assert_overlay_event_lineage,
+    _read_overlay_event_rows,
+    _read_overlay_history_rows,
+)
 from app.infra.runtime_overlay_contract import (
     expected_storage_reference,
     resolve_storage_reference,
@@ -222,3 +226,57 @@ def test_backend_reads_only_rows_matching_the_official_available_event(tmp_path:
     storage.write_text(json.dumps(mismatched) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="history_segment_id differs"):
         _read_overlay_event_rows(tmp_path, event)
+
+
+def test_backend_rejects_branch_reuse_with_different_maintenance_lineage() -> None:
+    event = available_event()
+    stored = {
+        "simulation_session_id": event["simulation_session_id"],
+        "overlay_branch_id": event["overlay_branch_id"],
+        "history_segment_id": event["history_segment_id"],
+        "maintenance_action_id": event["maintenance_action_id"],
+        "maintenance_event_id": "MAINT-OTHER",
+        "asset_id": event["equipment_id"],
+        "state_version": event["state_version"],
+    }
+
+    with pytest.raises(ValueError, match="branch lineage conflict"):
+        _assert_overlay_event_lineage(event, stored, label="stored_event")
+
+
+def test_backend_deduplicates_same_observation_identity_and_checksum(
+    tmp_path: Path,
+) -> None:
+    payload = observation()
+    event = available_event(batch_rows=1, generated_rows=1)
+    storage = resolve_storage_reference(tmp_path, event)
+    storage.parent.mkdir(parents=True)
+    storage.write_text(
+        json.dumps(payload) + "\n" + json.dumps(payload) + "\n",
+        encoding="utf-8",
+    )
+
+    assert _read_overlay_event_rows(tmp_path, event) == [payload]
+    assert _read_overlay_history_rows(tmp_path, event) == [payload]
+
+
+def test_backend_rejects_same_observation_identity_with_different_payload(
+    tmp_path: Path,
+) -> None:
+    first = observation()
+    conflicting = copy.deepcopy(first)
+    conflicting["measurements"]["tool_wear_min"] = 1.0
+    conflicting["tool_wear_min"] = 1.0
+    conflicting["observation_sha256"] = semantic_observation_sha256(conflicting)
+    event = available_event(batch_rows=1, generated_rows=1)
+    storage = resolve_storage_reference(tmp_path, event)
+    storage.parent.mkdir(parents=True)
+    storage.write_text(
+        json.dumps(first) + "\n" + json.dumps(conflicting) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="observation identity conflict"):
+        _read_overlay_event_rows(tmp_path, event)
+    with pytest.raises(ValueError, match="observation identity conflict"):
+        _read_overlay_history_rows(tmp_path, event)

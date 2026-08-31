@@ -139,6 +139,15 @@ class OperationalRecommendedAction(ScopedRecord):
     source_inspection_reference: str | None = Field(
         default=None, min_length=1, max_length=240
     )
+    source_cost_analysis_id: str | None = Field(
+        default=None, min_length=1, max_length=240
+    )
+    source_cost_option_id: str | None = Field(
+        default=None, min_length=1, max_length=240
+    )
+    source_action_candidate_id: str | None = Field(
+        default=None, min_length=1, max_length=240
+    )
     action_code: Literal["TOOL_REPLACEMENT"] | None = None
     authored_by: str | None = Field(default=None, min_length=1, max_length=240)
     authored_at: datetime | None = None
@@ -147,22 +156,36 @@ class OperationalRecommendedAction(ScopedRecord):
     def require_mvp_identity(self) -> OperationalRecommendedAction:
         if self.asset_id != self.equipment_id:
             raise ValueError("MVP recommendation requires equipment_id = asset_id")
-        manual_fields = (
+        manual_required_fields = (
             self.source_inspection_work_order_id,
             self.source_inspection_reference,
             self.action_code,
             self.authored_by,
             self.authored_at,
         )
+        cost_selection_fields = (
+            self.source_cost_analysis_id,
+            self.source_cost_option_id,
+            self.source_action_candidate_id,
+        )
         if self.recommendation_origin == "product_result_projection":
-            if any(value is not None for value in manual_fields):
+            if any(
+                value is not None
+                for value in (*manual_required_fields, *cost_selection_fields)
+            ):
                 raise ValueError(
                     "product_result_projection cannot contain operations_manual lineage"
                 )
             return self
-        if any(value is None for value in manual_fields):
+        if any(value is None for value in manual_required_fields):
             raise ValueError(
                 "operations_manual requires inspection, action, and author lineage"
+            )
+        if any(value is not None for value in cost_selection_fields) and any(
+            value is None for value in cost_selection_fields
+        ):
+            raise ValueError(
+                "cost-selected operations_manual requires complete cost lineage"
             )
         if self.kind != self.action_code:
             raise ValueError("operations_manual kind must match action_code")
@@ -293,6 +316,24 @@ class InspectionResult(ScopedRecord):
     def require_inspection_identity(self) -> InspectionResult:
         if self.asset_id != self.equipment_id:
             raise ValueError("MVP inspection result requires equipment_id = asset_id")
+        return self
+
+
+class MaintenanceActionCandidate(ScopedRecord):
+    """Maintenance-owned projection derived from an immutable inspection result."""
+
+    action_candidate_id: str = Field(min_length=1, max_length=240)
+    inspection_result_id: str = Field(min_length=1, max_length=240)
+    event_id: str = Field(min_length=1, max_length=240)
+    asset_id: str = Field(min_length=1, max_length=240)
+    equipment_id: str = Field(min_length=1, max_length=240)
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"]
+    basis_codes: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_candidate_identity(self) -> MaintenanceActionCandidate:
+        if self.asset_id != self.equipment_id:
+            raise ValueError("MVP action candidate requires equipment_id = asset_id")
         return self
 
 

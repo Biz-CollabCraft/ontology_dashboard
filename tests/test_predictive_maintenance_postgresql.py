@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import shutil
+import copy
+import json
 import os
+import shutil
 import subprocess
 import threading
 import uuid
@@ -21,12 +23,96 @@ from app.infra.db.diagnosis_runtime_repository import (
 from app.infra.db.migrations import migrate
 from app.infra.db.postgresql_bundle_ingestion import PostgreSQLPredictiveMaintenanceBundleIngestor
 from app.infra.db.pool import close_pools
-from app.infra.live_predictive_maintenance_runtime import _persist_overlay_product_result
+from app.infra.live_predictive_maintenance_runtime import (
+    _consume_overlay_event,
+    _persist_overlay_product_result,
+)
+from app.infra.runtime_overlay_contract import (
+    expected_storage_reference,
+    resolve_storage_reference,
+    semantic_observation_sha256,
+)
 from tests.test_predictive_maintenance_bundle_adapter import (
     build_manifest,
     create_small_package,
 )
 from tests.test_prediction_result_inbox import load_payload
+from tests.test_runtime_overlay_output_contract import (
+    available_event as runtime_overlay_available_event,
+    observation as runtime_overlay_observation,
+)
+
+
+class _RecordingGeneratorRuntimeClient:
+    def enqueue(self, payload: dict[str, object]) -> dict[str, object]:
+        return {"job_id": payload["job_id"], "status": "queued"}
+
+
+def _runtime_overlay_input(
+    *,
+    observed_at: str = "2026-08-18T01:40:00+00:00",
+    maintenance_action_id: str = "ACTION-001",
+    maintenance_event_id: str = "MAINT-001",
+    overlay_branch_id: str = "MAINT-001:post",
+    history_segment_id: str = "MAINT-001:post",
+    state_version: int = 3,
+    event_suffix: str = "1",
+) -> tuple[dict[str, object], dict[str, object]]:
+    row = copy.deepcopy(runtime_overlay_observation())
+    row.update(
+        {
+            "run_id": f"SESSION-001:overlay:{maintenance_event_id}",
+            "asset_id": "CNC-001",
+            "equipment_id": "CNC-001",
+            "observed_at": observed_at,
+            "simulation_session_id": "SESSION-001",
+            "overlay_branch_id": overlay_branch_id,
+            "maintenance_event_id": maintenance_event_id,
+            "maintenance_action_id": maintenance_action_id,
+            "state_version": state_version,
+            "history_segment_id": history_segment_id,
+        }
+    )
+    row["overlay"] = {
+        "overlay_id": overlay_branch_id,
+        "parent_branch": "canonical",
+        "maintenance_event_id": maintenance_event_id,
+        "state_patch_reference": maintenance_action_id,
+        "simulation_session_id": "SESSION-001",
+        "history_segment_id": history_segment_id,
+        "state_version": state_version,
+    }
+    row["observation_sha256"] = semantic_observation_sha256(row)
+
+    event = copy.deepcopy(runtime_overlay_available_event())
+    event.update(
+        {
+            "event_id": f"OVERLAY-AVAILABLE:{overlay_branch_id}:{event_suffix}",
+            "simulation_session_id": "SESSION-001",
+            "equipment_id": "CNC-001",
+            "maintenance_action_id": maintenance_action_id,
+            "maintenance_event_id": maintenance_event_id,
+            "overlay_branch_id": overlay_branch_id,
+            "history_segment_id": history_segment_id,
+            "state_version": state_version,
+            "batch_rows": 1,
+            "generated_rows": 1,
+            "observed_from": observed_at,
+            "observed_to": observed_at,
+        }
+    )
+    event["storage_reference"] = expected_storage_reference(event)
+    return event, row
+
+
+def _write_runtime_overlay_input(
+    stream_root: Path,
+    event: dict[str, object],
+    row: dict[str, object],
+) -> None:
+    path = resolve_storage_reference(stream_root, event)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _postgres_tools_available() -> bool:
@@ -106,17 +192,24 @@ def postgresql_database():
             connection.execute(
                 """
                 INSERT INTO organizations(id,slug,name) VALUES
-                    ('org-test','org-test','Org Test');
+                    ('org-test','org-test','Org Test'),
+                    ('org-ontology-demo','org-ontology-demo','Ontology Demo');
                 INSERT INTO projects(
                     id,organization_id,slug,display_name,domain_pack_code
                 ) VALUES
                     ('project-test','org-test','project-test','Project Test','predictive-maintenance'),
-                    ('project-other','org-test','project-other','Project Other','predictive-maintenance');
+                    ('project-other','org-test','project-other','Project Other','predictive-maintenance'),
+                    ('manufacturing-demo-project','org-ontology-demo',
+                     'manufacturing-demo-project','Manufacturing Demo',
+                     'predictive-maintenance');
                 INSERT INTO workspaces(
                     id,organization_id,project_id,slug,display_name,domain_pack
                 ) VALUES
                     ('workspace-test','org-test','project-test','workspace-test','Workspace Test','predictive-maintenance'),
-                    ('workspace-other','org-test','project-other','workspace-other','Workspace Other','predictive-maintenance');
+                    ('workspace-other','org-test','project-other','workspace-other','Workspace Other','predictive-maintenance'),
+                    ('manufacturing-demo','org-ontology-demo',
+                     'manufacturing-demo-project','manufacturing-demo',
+                     'Manufacturing Demo','predictive-maintenance');
                 INSERT INTO users(id,organization_id,email,display_name,status) VALUES
                     ('runtime-user','org-test','runtime@example.com','Runtime User','active'),
                     ('runtime-user-other','org-test','runtime-other@example.com','Runtime Other','active');
@@ -130,6 +223,126 @@ def postgresql_database():
             check=False,
             env=_postgres_cli_env(),
         )
+
+
+def test_postgresql_runtime_overlay_rejects_identity_and_lineage_conflicts(
+    tmp_path: Path,
+    postgresql_database: str,
+) -> None:
+    package_root = create_small_package(tmp_path)
+    manifest = build_manifest(package_root)
+    validation = BundleFileAdapter(allowed_roots=[package_root]).validate(manifest)
+    ingestor = PostgreSQLPredictiveMaintenanceBundleIngestor(postgresql_database)
+    ingestion = ingestor.ingest_validated_bundle(manifest=manifest, validation=validation)
+    stream_root = tmp_path / "runtime-output"
+    snapshot_root = tmp_path / "runtime-input"
+    client = _RecordingGeneratorRuntimeClient()
+
+    event, row = _runtime_overlay_input()
+    _write_runtime_overlay_input(stream_root, event, row)
+    first = _consume_overlay_event(
+        postgresql_database,
+        ingestion.dataset_version_id,
+        stream_root,
+        event,
+        dataset_id=ingestion.dataset_id,
+        snapshot_root=snapshot_root,
+        enqueue_client=client,
+    )
+    repeated = _consume_overlay_event(
+        postgresql_database,
+        ingestion.dataset_version_id,
+        stream_root,
+        event,
+        dataset_id=ingestion.dataset_id,
+        snapshot_root=snapshot_root,
+        enqueue_client=client,
+    )
+    assert first["reused"] is False
+    assert repeated["reused"] is True
+
+    conflicting_row = copy.deepcopy(row)
+    conflicting_row["measurements"]["tool_wear_min"] = 1.0
+    conflicting_row["tool_wear_min"] = 1.0
+    conflicting_row["observation_sha256"] = semantic_observation_sha256(conflicting_row)
+    _write_runtime_overlay_input(stream_root, event, conflicting_row)
+    with pytest.raises(ValueError, match="observation identity conflict"):
+        _consume_overlay_event(
+            postgresql_database,
+            ingestion.dataset_version_id,
+            stream_root,
+            event,
+            dataset_id=ingestion.dataset_id,
+            snapshot_root=snapshot_root,
+            enqueue_client=client,
+        )
+
+    conflicting_event = {**event, "event_id": "OVERLAY-AVAILABLE:MAINT-001:conflict"}
+    _write_runtime_overlay_input(stream_root, conflicting_event, conflicting_row)
+    with pytest.raises(ValueError, match="observation identity conflict"):
+        _consume_overlay_event(
+            postgresql_database,
+            ingestion.dataset_version_id,
+            stream_root,
+            conflicting_event,
+            dataset_id=ingestion.dataset_id,
+            snapshot_root=snapshot_root,
+            enqueue_client=client,
+        )
+
+    reused_branch_event, reused_branch_row = _runtime_overlay_input(
+        observed_at="2026-08-18T01:50:00+00:00",
+        maintenance_action_id="ACTION-002",
+        maintenance_event_id="MAINT-002",
+        overlay_branch_id=str(event["overlay_branch_id"]),
+        history_segment_id="MAINT-002:post",
+        state_version=4,
+        event_suffix="2",
+    )
+    _write_runtime_overlay_input(stream_root, reused_branch_event, reused_branch_row)
+    with pytest.raises(ValueError, match="branch lineage conflict"):
+        _consume_overlay_event(
+            postgresql_database,
+            ingestion.dataset_version_id,
+            stream_root,
+            reused_branch_event,
+            dataset_id=ingestion.dataset_id,
+            snapshot_root=snapshot_root,
+            enqueue_client=client,
+        )
+
+
+def test_postgresql_runtime_overlay_serializes_same_event_retries(
+    tmp_path: Path,
+    postgresql_database: str,
+) -> None:
+    package_root = create_small_package(tmp_path)
+    manifest = build_manifest(package_root)
+    validation = BundleFileAdapter(allowed_roots=[package_root]).validate(manifest)
+    ingestor = PostgreSQLPredictiveMaintenanceBundleIngestor(postgresql_database)
+    ingestion = ingestor.ingest_validated_bundle(manifest=manifest, validation=validation)
+    stream_root = tmp_path / "runtime-output"
+    event, row = _runtime_overlay_input()
+    _write_runtime_overlay_input(stream_root, event, row)
+
+    start = threading.Barrier(2)
+
+    def consume(index: int) -> dict[str, object]:
+        start.wait()
+        return _consume_overlay_event(
+            postgresql_database,
+            ingestion.dataset_version_id,
+            stream_root,
+            event,
+            dataset_id=ingestion.dataset_id,
+            snapshot_root=tmp_path / f"runtime-input-{index}",
+            enqueue_client=_RecordingGeneratorRuntimeClient(),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(consume, range(2)))
+
+    assert sorted(result["reused"] for result in results) == [False, True]
 
 
 def test_postgresql_prediction_inbox_repository_idempotency_and_conflicts(

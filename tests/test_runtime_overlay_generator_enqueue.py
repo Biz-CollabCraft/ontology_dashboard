@@ -156,6 +156,8 @@ def test_generator_snapshot_uses_cumulative_history_not_only_latest_delta(
     }
     second["observation_sha256"] = semantic_observation_sha256(second)
     event = {
+        "contract_version": "runtime-overlay-observations-available-v1",
+        "event_type": "runtime_overlay.observations.available",
         "event_id": "OVERLAY-AVAILABLE:MAINT-1:post:2",
         "simulation_session_id": first["simulation_session_id"],
         "equipment_id": first["equipment_id"],
@@ -163,6 +165,7 @@ def test_generator_snapshot_uses_cumulative_history_not_only_latest_delta(
         "maintenance_event_id": first["maintenance_event_id"],
         "overlay_branch_id": first["overlay_branch_id"],
         "history_segment_id": first["history_segment_id"],
+        "source_kind": "maintenance_replay_overlay",
         "state_version": first["state_version"],
         "batch_rows": 1,
         "generated_rows": 2,
