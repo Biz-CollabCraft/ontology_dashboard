@@ -290,6 +290,9 @@ def create_operations_manual_recommendation(
     authored_by: str,
     authored_at: datetime,
     basis: tuple[str, ...],
+    source_cost_analysis_id: str | None = None,
+    source_cost_option_id: str | None = None,
+    source_action_candidate_id: str | None = None,
     recommendation_id: str | None = None,
     existing_materialization_keys: Collection[str] = (),
 ) -> OperationalRecommendedAction:
@@ -349,6 +352,9 @@ def create_operations_manual_recommendation(
         basis=basis,
         source_inspection_work_order_id=source_inspection_work_order_id,
         source_inspection_reference=source_inspection_reference,
+        source_cost_analysis_id=source_cost_analysis_id,
+        source_cost_option_id=source_cost_option_id,
+        source_action_candidate_id=source_action_candidate_id,
         authored_by=authored_by,
         authored_at=authored_at,
     )

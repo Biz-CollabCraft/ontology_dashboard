@@ -17,6 +17,8 @@ from app.maintenance.maintenance_domain import (
     transition_work_order,
 )
 from app.maintenance.cost_analysis_schema import (
+    CalculationStatus,
+    ExecutionTiming,
     MaintenanceActionCode,
     MaintenanceCostScenarioResult,
 )
@@ -108,6 +110,10 @@ class MaintenanceRepository:
         actor_user_id: str = "systems/backend",
         actor_display_name: str = "Closed-loop Backend",
     ) -> OperationalRecommendedAction:
+        if recommendation.source_cost_analysis_id is not None:
+            raise ValueError(
+                "cost-selected recommendation must use create_manual_recommendation"
+            )
         now = (recorded_at or datetime.now(timezone.utc)).isoformat()
         with self._connect() as connection:
             scope = self._scope(connection, recommendation)
@@ -246,6 +252,74 @@ class MaintenanceRepository:
             if replay is not None:
                 return replay
 
+            if recommendation.source_cost_analysis_id is not None:
+                cost_row = connection.execute(
+                    """
+                    SELECT event_id,asset_id,equipment_id,inspection_work_order_id,
+                           inspection_result_id,result_json
+                    FROM closed_loop_maintenance_cost_analyses
+                    WHERE organization_id=? AND project_id=? AND workspace_id=?
+                      AND analysis_id=?
+                    """,
+                    (
+                        recommendation.organization_id,
+                        recommendation.project_id,
+                        recommendation.workspace_id,
+                        recommendation.source_cost_analysis_id,
+                    ),
+                ).fetchone()
+                if cost_row is None:
+                    raise ValueError(
+                        "cost-selected recommendation requires a persisted cost analysis"
+                    )
+                cost_result = MaintenanceCostScenarioResult.model_validate(
+                    self._decoded(cost_row["result_json"])
+                )
+                selected = next(
+                    (
+                        option
+                        for option in cost_result.options
+                        if option.option_id == recommendation.source_cost_option_id
+                    ),
+                    None,
+                )
+                if selected is None:
+                    raise ValueError(
+                        "selected cost option does not belong to the persisted analysis"
+                    )
+                if selected.calculation_status is not CalculationStatus.CALCULATED:
+                    raise ValueError(
+                        "insufficient cost option cannot create a recommendation"
+                    )
+                if selected.execution_timing not in {
+                    ExecutionTiming.IMMEDIATE,
+                    ExecutionTiming.PLANNED_WINDOW,
+                }:
+                    raise ValueError(
+                        "selected cost option is not an executable maintenance timing"
+                    )
+                expected = {
+                    "event_id": recommendation.event_id,
+                    "asset_id": recommendation.asset_id,
+                    "equipment_id": recommendation.equipment_id,
+                    "inspection_work_order_id": (
+                        recommendation.source_inspection_work_order_id
+                    ),
+                    "inspection_result_id": recommendation.source_inspection_reference,
+                }
+                if any(cost_row[field] != value for field, value in expected.items()):
+                    raise ValueError("cost analysis Recommendation lineage mismatch")
+                if (
+                    cost_result.based_on.product_result_id
+                    != recommendation.source_product_result_id
+                    or cost_result.based_on.evidence_id
+                    != recommendation.source_evidence_id
+                    or selected.action_candidate_id
+                    != recommendation.source_action_candidate_id
+                    or selected.action_code.value != recommendation.action_code
+                ):
+                    raise ValueError("cost option Recommendation lineage mismatch")
+
             inserted = connection.execute(
                 """
                 INSERT OR IGNORE INTO closed_loop_recommendations (
@@ -254,9 +328,11 @@ class MaintenanceRepository:
                     source_action_id,source_product_result_id,source_evidence_id,
                     source_schema_version,source_policy_version,label,kind,
                     requires_human_approval,basis_json,source_inspection_work_order_id,
-                    source_inspection_reference,action_code,authored_by,authored_at,
+                    source_inspection_reference,source_cost_analysis_id,
+                    source_cost_option_id,source_action_candidate_id,
+                    action_code,authored_by,authored_at,
                     created_at,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     recommendation.recommendation_id,
@@ -281,6 +357,9 @@ class MaintenanceRepository:
                     self._json(list(recommendation.basis)),
                     recommendation.source_inspection_work_order_id,
                     recommendation.source_inspection_reference,
+                    recommendation.source_cost_analysis_id,
+                    recommendation.source_cost_option_id,
+                    recommendation.source_action_candidate_id,
                     recommendation.action_code,
                     recommendation.authored_by,
                     recommendation.authored_at.isoformat(),
@@ -307,6 +386,10 @@ class MaintenanceRepository:
                         "source_inspection_reference": (
                             recommendation.source_inspection_reference
                         ),
+                        "source_cost_analysis_id": (
+                            recommendation.source_cost_analysis_id
+                        ),
+                        "source_cost_option_id": recommendation.source_cost_option_id,
                     },
                     created_at=recommendation.authored_at.isoformat(),
                 )
@@ -350,6 +433,9 @@ class MaintenanceRepository:
                 "basis",
                 "source_inspection_work_order_id",
                 "source_inspection_reference",
+                "source_cost_analysis_id",
+                "source_cost_option_id",
+                "source_action_candidate_id",
                 "action_code",
                 "authored_by",
             )
@@ -2056,6 +2142,9 @@ class MaintenanceRepository:
             basis=tuple(cls._decoded(row["basis_json"])),
             source_inspection_work_order_id=row["source_inspection_work_order_id"],
             source_inspection_reference=row["source_inspection_reference"],
+            source_cost_analysis_id=row["source_cost_analysis_id"],
+            source_cost_option_id=row["source_cost_option_id"],
+            source_action_candidate_id=row["source_action_candidate_id"],
             action_code=row["action_code"],
             authored_by=row["authored_by"],
             authored_at=row["authored_at"],

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.identity import AuthError
 
 from .api_schema import (
+    CostOptionRecommendationCreateRequest,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
@@ -327,6 +328,44 @@ def create_maintenance_router(
                 project_id=project_id,
                 workspace_id=workspace_id,
                 inspection_result_id=inspection_result_id,
+            )
+        )
+
+    @router.post(
+        "/cost-analyses/{analysis_id}/options/{option_id}/recommendations"
+    )
+    def create_recommendation_from_cost_option(
+        project_id: str,
+        workspace_id: str,
+        analysis_id: str,
+        option_id: str,
+        payload: CostOptionRecommendationCreateRequest,
+        idempotency_key: str = Header(
+            alias="Idempotency-Key", min_length=8, max_length=200
+        ),
+        principal: Any = Depends(manager_command),
+        _: None = Depends(require_csrf),
+        identity: Any = Depends(get_identity_service),
+        service: MaintenanceLoopService = Depends(get_maintenance_service),
+    ):
+        _require_scope(
+            principal=principal,
+            identity=identity,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+        _require_product_role(principal, project_id, "process_manager")
+        return _execute(
+            lambda: service.create_recommendation_from_cost_option(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                analysis_id=analysis_id,
+                option_id=option_id,
+                payload=payload,
+                actor_id=principal.user_id,
+                actor_display_name=principal.display_name,
+                idempotency_key=idempotency_key,
             )
         )
 
