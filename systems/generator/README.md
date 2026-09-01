@@ -257,7 +257,7 @@ Generator의 4대 파이프라인 단계별 책임과 데이터 흐름입니다.
   6. `metrics.json`: 계산된 validation 지표, 클래스 분포, primary metric
 - **2단계 발행(Two-Phase Publication) 및 불변성 정책**:
   - **Phase A (불변 아티팩트 원자적 발행)**: 임시 디렉터리(`.tmp_{uuid}`)에서 6개 파일 생성 및 manifest 전수 검증 완료 후 atomic rename으로 커밋합니다.
-  - **Phase B (최신 포인터 갱신)**: non-blocking OS advisory lock(`artifacts/{model_id}/.latest.lock`) 하에서 `latest.json`을 원자적으로 갱신합니다.
+  - **Phase B (최신 포인터 갱신)**: 기본 정책 또는 `activate_on_success`에서는 non-blocking OS advisory lock(`artifacts/{model_id}/.latest.lock`) 하에서 `latest.json`을 원자적으로 갱신합니다. Control Plane의 `publish_only` 요청은 검증된 불변 Artifact만 발행하고 기존 `latest.json`을 유지합니다.
   - **상태 분리 및 부분 실패 보존**: Phase B 실패 시 이미 커밋된 불변 아티팩트를 삭제하거나 rollback하지 않고 보존하며, API 응답/details에 `published=True`, `model_artifact_uri=...`, `latest_updated=False`, `latest_error_code=...`를 투명하게 기록합니다.
   - **동일 아티팩트 멱등 복구**: 동일 입력 계약으로 재요청 시 디렉터리와 checksum이 온전히 존재하면 아티팩트 재작성을 건너뛰고 `latest.json` 갱신만 안전하게 재시도합니다. 이미 최신 포인터로 활성화된 상태라면 `409 MODEL_ARTIFACT_CONFLICT`를 반환합니다.
 - **오류 체계 및 장애 격리 정책**:

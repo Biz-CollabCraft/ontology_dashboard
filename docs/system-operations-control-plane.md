@@ -6,14 +6,14 @@
 
 | 항목 | 상태 | 설명 |
 |---|---|---|
-| **문서 상태** | **Current + Target Architecture** | Phase 1~3 현행 구현과 후속 운영 기능의 목표 설계 기준 |
+| **문서 상태** | **Current + Target Architecture** | Phase 1~6 현행 구현과 후속 운영 기능의 목표 설계 기준 |
 | **기준 브랜치/커밋** | `main` (`94ba34d7c3ca5f4f99c445bb32d2783487b52502`) | 최신 `origin/main` 기준선 |
 | **역할 경계** | 제안 확정 대상 | 시스템 관리자 책임과 비운영(사용자 관리 등) 책임 엄격 분리 |
 | **Backend API** | SQLite Current / PostgreSQL Target | `systems/backend/app/system_operations/` 읽기·동기화 API 구현 |
-| **Frontend UI** | Current (조회 전용) | `systems/frontend/src/features/systemOperations/` 운영 자산 목록·상세 화면 |
+| **Frontend UI** | Current | 운영 자산, Mapping Draft, Job 및 downstream 영향 분석 화면 |
 | **운영 자산 Registry** | SQLite Current / PostgreSQL Target | 파일 기반 자산 탐색·Registry 동기화·drift 추적 구현 |
 | **Mapping 편집·발행** | Current | Backend Draft revision·Diff·검증과 Generator 불변 발행 구현 및 회귀 검증 완료 |
-| **Pipeline Job Control** | 일부 기존 개별 기능 존재, 통합 미구현 | 공통 Job 추적 인터페이스 Target 정의 |
+| **Pipeline Job Control** | Current (SQLite) | Mapping Replay와 선택적 downstream rebuild의 단계별 실행·추적 |
 | **Generator·Backend 로그 통합** | 미구현 (Target) | E2E Timeline 통합 추적 설계 |
 | **Model Artifact 자동 `latest.json`** | **현재 구현됨 (Current)** | Generator Training 성공 시 `latest.json` 자동 갱신 |
 | **운영 선택 `selected.json`** | 미구현 (Target) | 시스템 관리자 명시적 선택 포인터 (Phase 8 검토 대상) |
@@ -486,7 +486,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Phase 3** | 자산 조회 UI | **Current** — 자산별 버전, Checksum, 목록형 의존성, 런타임 사용 상태 조회 UI | Phase 2 |
 | **Phase 4** | Mapping 버전 관리 | **Current** — Static Mapping 신규 버전 Draft, Diff, 실제 Generator 검증 및 불변 발행 | Phase 3 |
 | **Phase 5** | Rebuild/Replay Job | **Current (SQLite)** — Mapping checksum별 Replay checkpoint, Extraction 재처리, 영속 Job worker 및 성공 후 원자적 활성화 | Phase 4 |
-| **Phase 6** | 하위 영향 분석 | Mapping 변경 시 Preprocessing → Feature → Training 하위 데이터셋 영향 분석 및 선택적 재학습 | Phase 5 |
+| **Phase 6** | 하위 영향 분석 | **Current (SQLite)** — Mapping Rebuild 결과 snapshot, 실행 가능/차단 작업 분리, 선택적 Preprocessing → Feature → Training Job 및 `publish_only` 학습 | Phase 5 |
 | **Phase 7** | 계약/설정 확장 | Preprocessing Plan, Feature Schema, Training Config 관리 기능 확장 | Phase 6 |
 | **Phase 8** | 모델 운영 선택 | Model Artifact 및 Active Model Set 감독, `selected.json` 포인터 및 롤백 제어 | Phase 7 |
 | **Phase 9** | 감사 & 로그 고도화 | 운영 감사 로그(Audit Trail) 정밀 추적, 오류 복구 가이드, 안전한 로그 Export | Phase 8 |
@@ -505,7 +505,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **운영 자산 조회 UI** | 목록·상세·버전·목록형 의존성 조회 구현 | 대규모 관계 그래프 및 운영 제어 확장 | Phase 3 |
 | **Mapping 버전 편집** | Current | 버전 기반 초안 생성, 검증, 불변 발행 | Phase 4 |
 | **Mapping Rebuild** | Current (SQLite Job Registry) | PostgreSQL adapter 및 고급 승인·취소 정책 확장 | Phase 5 |
-| **하위 영향 분석** | 없음 | Dataset → Feature → Model 전파 추적 | Phase 6 |
+| **하위 영향 분석** | Current (명시적 snapshot 및 단계 목록) | 대규모 관계 그래프와 자동 입력 해석 확장 | Phase 6 |
 | **Model 운영 선택** | `latest.json` 자동 갱신만 지원 | `selected.json` 명시적 선택 및 롤백 | Phase 8 |
 | **통합 운영 감사** | 개별 로그 기록 | 자산·Job·조작 전수 감사(Audit Trail) | Phase 9 |
 

@@ -368,7 +368,7 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 
 검증된 Feature Dataset Bundle을 소비하여 설비·시간 기준 분할(`asset_time_split`), 모델별 학습 및 평가를 수행하고 불변 Model Artifact 패키지(6개 파일)를 원자적으로 발행하며 `latest.json` 포인터를 자동 갱신합니다.
 
-> **현재 계약 원칙**: `latest.json`은 검증된 Model Artifact가 정상 발행될 때마다 Generator가 자동으로 갱신하는 시스템 관리 포인터입니다. 현재 API는 사용자에 의한 버전 선택 또는 포인터 변경을 지원하지 않습니다.
+> **현재 계약 원칙**: 기본 학습 및 `activate_on_success`는 정상 발행 후 `latest.json`을 자동 갱신합니다. 운영 Control Plane이 downstream 재구축을 수행할 때 사용하는 `publish_only`는 불변 Artifact만 발행하고 현재 포인터를 보존합니다. 이는 특정 버전을 활성화하는 사용자 선택 API가 아닙니다.
 
 ```json
 // 요청 예시
