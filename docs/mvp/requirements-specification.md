@@ -248,6 +248,11 @@ Canonical 파일에 임의의 금액을 역기입하지 않고 버전된 Economi
 Action별 공식 미래 확률이 없는 시점은 임의 보간하지 않고 `insufficient`로 표시한다.
 상세 기준과 제한은 `docs/mvp/maintenance-cost-basis.md`를 따른다.
 
+`COOLING_SYSTEM_RESTORE`는 냉각 전용 미래 위험 데이터가 없는 현재 MVP에서 Product
+UI에 `즉시 복구 예상 비용`만 표시한다. 계획·재점검·미조치 option은 Backend의 공유
+결과 snapshot에 보존하지만 최적 시점 비교처럼 노출하지 않는다. 향후 냉각 전용
+Prediction과 실제 정비·미조치 이력이 확보되면 계획·미조치 비교를 확장한다.
+
 | ID | 요구사항 | 완료 기준 |
 |---|---|---|
 | ECO-01 | 기존 ID와 경제 데이터를 참조 무결성이 있는 키로 연결한다. | 모든 `asset_id`, `part_id`, `action_code`, `labor_role`, `product_type` 참조가 유효하다. |

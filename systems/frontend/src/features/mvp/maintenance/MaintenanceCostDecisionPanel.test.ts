@@ -7,6 +7,7 @@ import type {
 import type { MvpInspectionGuidance } from "../api/mvpContracts";
 import {
   buildCostRequest,
+  costOptionsForDisplay,
   latestCostAnalysisForInspection,
   latestEligibleInspection,
 } from "./MaintenanceCostDecisionPanel";
@@ -167,5 +168,40 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
       sop_id: "SOP-CNC-TOOL-001",
       sop_version: "v1",
     });
+  });
+
+  it("shows only the immediate option for cooling while preserving tool comparison", () => {
+    const analysis = costAnalysis(
+      "ANALYSIS-COOLING",
+      "RESULT-DONE",
+      "WO-DONE",
+      "2026-09-01T01:00:00Z",
+    );
+    analysis.options = [
+      "immediate",
+      "planned_window",
+      "reinspect_after",
+      "no_action_baseline",
+    ].map((executionTiming, index) => ({
+      option_id: `OPTION-${index}`,
+      action_candidate_id: "ACTION-CANDIDATE-COOLING",
+      action_code: "COOLING_SYSTEM_RESTORE",
+      execution_timing: executionTiming as typeof analysis.options[number]["execution_timing"],
+      calculation_status: executionTiming === "immediate" ? "calculated" : "insufficient",
+      total_expected_cost: executionTiming === "immediate"
+        ? { low_minor: 46830, base_minor: 76620, high_minor: 131730 }
+        : null,
+      expected_downtime: executionTiming === "immediate"
+        ? { low_minutes: 45, base_minutes: 60, high_minutes: 90 }
+        : null,
+      confidence: executionTiming === "immediate" ? "low" : "insufficient",
+      missing_inputs: executionTiming === "immediate" ? [] : ["expected_failure_loss"],
+    }));
+
+    expect(
+      costOptionsForDisplay(analysis, "COOLING_SYSTEM_RESTORE")
+        .map((option) => option.execution_timing),
+    ).toEqual(["immediate"]);
+    expect(costOptionsForDisplay(analysis, "TOOL_REPLACEMENT")).toHaveLength(4);
   });
 });

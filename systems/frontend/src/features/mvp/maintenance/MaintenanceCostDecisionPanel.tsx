@@ -62,6 +62,16 @@ export function latestCostAnalysisForInspection(
     .sort((left, right) => right.calculated_at.localeCompare(left.calculated_at))[0] ?? null;
 }
 
+export function costOptionsForDisplay(
+  analysis: MaintenanceCostAnalysisReadModel,
+  actionCode: MaintenanceActionCode | null,
+): MaintenanceCostAnalysisReadModel["options"] {
+  if (actionCode === "COOLING_SYSTEM_RESTORE") {
+    return analysis.options.filter((option) => option.execution_timing === "immediate");
+  }
+  return analysis.options;
+}
+
 export function buildCostRequest(
   guidance: Pick<MvpInspectionGuidance, "sopId" | "version">,
   actionCode: MaintenanceActionCode = "TOOL_REPLACEMENT",
@@ -164,6 +174,13 @@ export function MaintenanceCostDecisionPanel({
     () => latestCostAnalysisForInspection(analyses, inspection, selectedActionCode),
     [analyses, inspection, selectedActionCode],
   );
+  const visibleOptions = useMemo(
+    () => current ? costOptionsForDisplay(current, selectedActionCode) : [],
+    [current, selectedActionCode],
+  );
+  const isImmediateCooling = selectedActionCode === "COOLING_SYSTEM_RESTORE";
+  const visibleCalculationComplete = visibleOptions.length > 0
+    && visibleOptions.every((option) => option.calculation_status === "calculated");
   const selectedRecommendationsByAction = useMemo(() => new Map(
     (lineage?.recommendations ?? [])
       .filter((item) => (
@@ -243,12 +260,16 @@ export function MaintenanceCostDecisionPanel({
     <section className="mvp-maintenance-cost-panel" aria-label="정비 비용 분석">
       <header>
         <Calculator size={14} />
-        <strong>정비 비용 분석</strong>
+        <strong>{isImmediateCooling ? "즉시 복구 예상 비용" : "정비 비용 분석"}</strong>
         <button type="button" className="mvp-icon-button" onClick={() => void load()} disabled={loading} aria-label="비용 분석 새로고침">
           <RefreshCw size={13} />
         </button>
       </header>
-      <p>점검 결과에서 확인된 정비 Action 후보의 비용만 비교합니다. 버튼을 누르기 전에는 분석하지 않습니다.</p>
+      <p>
+        {isImmediateCooling
+          ? "현재 데이터로 근거를 확인할 수 있는 즉시 냉각 복구 비용만 제공합니다. 버튼을 누르기 전에는 계산하지 않습니다."
+          : "점검 결과에서 확인된 정비 Action 후보의 비용만 비교합니다. 버튼을 누르기 전에는 분석하지 않습니다."}
+      </p>
       {loading ? <small>점검·비용 lineage를 불러오는 중입니다.</small> : null}
       {blocker ? <small className="mvp-cost-warning">{blocker}</small> : null}
       {error ? <small className="mvp-cost-error">{error}</small> : null}
@@ -279,11 +300,13 @@ export function MaintenanceCostDecisionPanel({
             {selectedActionCode === "TOOL_REPLACEMENT"
               ? "인서트 1개 비용과 노무 기준은 Backend의 버전 관리 기준정보를 사용합니다."
               : "사내 냉각 경로 세척·막힘 해소·동작 확인 범위의 비용 기준은 Backend가 관리합니다. 부품 교체가 필요하면 이 기준을 사용할 수 없습니다."}
-            {" "}즉시·12시간 후 실행 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다.
+            {" "}{isImmediateCooling
+              ? "현재 서버 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다."
+              : "즉시·12시간 후 실행 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다."}
           </p>
           <small>참고 SOP: {sopId || "-"} · {sopVersion || "-"}</small>
           <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => void calculate()}>
-            비용 분석 요청
+            {isImmediateCooling ? "즉시 복구 비용 확인" : "비용 분석 요청"}
           </button>
         </div>
       ) : null}
@@ -291,19 +314,28 @@ export function MaintenanceCostDecisionPanel({
       {current ? (
         <div className="mvp-cost-result">
           <header>
-            <strong>최근 분석 · {selectedActionCode ? ACTION_LABEL[selectedActionCode] : "정비 Action"}</strong>
-            <span>{current.missing_inputs.length ? "입력 부족" : "계산 완료"}</span>
+            <strong>
+              {isImmediateCooling
+                ? "즉시 냉각 복구 예상 비용"
+                : `최근 분석 · ${selectedActionCode ? ACTION_LABEL[selectedActionCode] : "정비 Action"}`}
+            </strong>
+            <span>{visibleCalculationComplete ? "계산 완료" : "입력 부족"}</span>
           </header>
           <small>{new Date(current.calculated_at).toLocaleString()} · {current.price_version}</small>
           <label>
             <span>선택 근거</span>
-            <textarea value={basis} onChange={(event) => setBasis(event.target.value)} placeholder="사용자가 이 시점을 선택한 이유" />
+            <textarea
+              value={basis}
+              onChange={(event) => setBasis(event.target.value)}
+              placeholder={isImmediateCooling ? "즉시 복구를 선택한 이유" : "사용자가 이 시점을 선택한 이유"}
+            />
           </label>
           <div className="mvp-cost-options">
-            {current.options.map((option) => {
+            {visibleOptions.map((option) => {
               const executable = option.calculation_status === "calculated"
                 && (option.execution_timing === "immediate" || option.execution_timing === "planned_window");
-              const isLowest = option.option_id === current.lowest_calculated_cost_option_id;
+              const isLowest = !isImmediateCooling
+                && option.option_id === current.lowest_calculated_cost_option_id;
               const selectedRecommendation = selectedRecommendationsByAction.get(option.action_code);
               const alreadySelected = selectedRecommendation?.source_cost_option_id === option.option_id;
               const actionAlreadySelected = Boolean(selectedRecommendation);
@@ -333,13 +365,19 @@ export function MaintenanceCostDecisionPanel({
                       ? "제안 생성됨"
                       : executable && actionAlreadySelected
                         ? "이미 정비안 선택됨"
-                        : "이 시점 선택"}
+                        : isImmediateCooling
+                          ? "즉시 복구안 선택"
+                          : "이 시점 선택"}
                   </button>
                 </article>
               );
             })}
           </div>
-          <p>최저비용 표시는 계산 결과일 뿐 자동 추천이 아닙니다. 선택 시에도 제안만 생성되며 승인·WorkOrder·정비 실행은 별도입니다.</p>
+          <p>
+            {isImmediateCooling
+              ? "냉각 전용 미래 위험 데이터가 없어 계획·미조치 비용은 표시하지 않습니다. 예상 비용을 선택해도 제안만 생성되며 승인·WorkOrder·정비 실행은 별도입니다."
+              : "최저비용 표시는 계산 결과일 뿐 자동 추천이 아닙니다. 선택 시에도 제안만 생성되며 승인·WorkOrder·정비 실행은 별도입니다."}
+          </p>
         </div>
       ) : null}
       {selectedMessage ? <small className="mvp-cost-success">{selectedMessage}</small> : null}
