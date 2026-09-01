@@ -7,8 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .cost_analysis_schema import CostInputSource, ExecutionTiming
-from .cost_calculator import MaintenanceScenarioInput, ToolReplacementScenarioInput
 from .maintenance_schema import (
     EquipmentIdentity,
     InspectionChecklistItem,
@@ -101,21 +99,11 @@ class OperationsManualRecommendationCreateRequest(StrictCommand):
     basis: tuple[str, ...] = Field(min_length=1)
 
 
-class CostOptionRecommendationCreateRequest(StrictCommand):
-    """Human-authored basis for selecting one persisted cost option.
-
-    Analysis, option, Action candidate, equipment, and Diagnosis lineage are
-    resolved from the route IDs and canonical persisted snapshots.
-    """
-
-    basis: tuple[str, ...] = Field(min_length=1)
-
-
 class MaintenanceCostAnalysisCreateRequest(StrictCommand):
-    """Economic inputs plus consulted-SOP audit context.
+    """Action plus consulted-SOP audit context.
 
-    The SOP reference is not an authorization input.  Canonical Maintenance,
-    Diagnosis, equipment, and Action candidate lineage is resolved server-side.
+    Economic inputs for every supported Action are owned by versioned Backend
+    providers and must not be supplied by a product client.
     """
 
     action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] = (
@@ -131,37 +119,12 @@ class MaintenanceCostAnalysisCreateRequest(StrictCommand):
         max_length=160,
         description="Version of the consulted SOP audit reference.",
     )
-    currency: str = Field(pattern=r"^[A-Z]{3}$")
-    currency_minor_unit: Literal[0, 2, 3]
-    scenarios: tuple[MaintenanceScenarioInput, ...] = Field(
-        min_length=4,
-        max_length=4,
-    )
-    assumptions: tuple[str, ...] = ()
-    input_sources: tuple[CostInputSource, ...] = Field(min_length=1)
-    price_version: str = Field(min_length=1, max_length=160)
-    calculation_policy_version: str = Field(min_length=1, max_length=160)
-
-    @model_validator(mode="after")
-    def require_complete_timing_set(
-        self,
-    ) -> MaintenanceCostAnalysisCreateRequest:
-        timings = [scenario.execution_timing for scenario in self.scenarios]
-        if len(set(timings)) != len(timings) or set(timings) != set(ExecutionTiming):
-            raise ValueError(
-                "Maintenance cost request requires all four timing scenarios"
-            )
-        return self
 
 
 class ToolReplacementCostAnalysisCreateRequest(MaintenanceCostAnalysisCreateRequest):
-    """Backward-compatible request type for the first Action slice."""
+    """Server-calculated one-insert cost request."""
 
     action_code: Literal["TOOL_REPLACEMENT"] = "TOOL_REPLACEMENT"
-    scenarios: tuple[ToolReplacementScenarioInput, ...] = Field(
-        min_length=4,
-        max_length=4,
-    )
 
 
 class RecommendationDecisionCreateRequest(StrictCommand):
@@ -195,7 +158,6 @@ class MaintenanceReplayRequest(StrictCommand):
 
 
 __all__ = [
-    "CostOptionRecommendationCreateRequest",
     "EvidenceSnapshotBasis",
     "InspectionResultCreateRequest",
     "InspectionWorkOrderCreateRequest",

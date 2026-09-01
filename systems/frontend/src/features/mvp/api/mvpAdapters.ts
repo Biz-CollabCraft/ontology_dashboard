@@ -228,6 +228,33 @@ function closedLoopFromAssetDetailViewModel(viewModel: AssetDetailViewModel): Mv
       label: item.label,
       disabledReason: item.disabled_reason ?? null,
     })),
+    lifecycleSummary: closedLoop.lifecycle_summary ? {
+      currentStep: closedLoop.lifecycle_summary.current_step,
+      currentStepLabel: closedLoop.lifecycle_summary.current_step_label,
+      completedSteps: closedLoop.lifecycle_summary.completed_steps,
+      nextStep: closedLoop.lifecycle_summary.next_step ?? null,
+      source: closedLoop.lifecycle_summary.source,
+    } : null,
+    primaryAction: closedLoop.primary_action ? {
+      actionId: closedLoop.primary_action.action_id,
+      targetType: closedLoop.primary_action.target_type,
+      targetId: closedLoop.primary_action.target_id ?? null,
+      label: closedLoop.primary_action.label,
+      disabledReason: closedLoop.primary_action.disabled_reason ?? null,
+      ownerRole: closedLoop.primary_action.owner_role,
+      ownerLabel: closedLoop.primary_action.owner_label,
+      requiresInput: closedLoop.primary_action.requires_input,
+    } : null,
+    timeline: (closedLoop.timeline ?? []).map((item) => ({
+      timelineId: item.timeline_id,
+      eventType: item.event_type,
+      label: item.label,
+      status: item.status,
+      actorDisplayName: item.actor_display_name ?? null,
+      occurredAt: item.occurred_at ?? null,
+      targetType: item.target_type ?? null,
+      targetId: item.target_id ?? null,
+    })),
     runtimeStatus: closedLoop.runtime_status ?? null,
   };
 }

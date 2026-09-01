@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from app.diagnosis.recommendation_schema import ProducerRecommendation
 
 from .cost_analysis_schema import MaintenanceActionCode
+from .cost_basis import CostBasisResolutionContext
 from .maintenance_schema import (
     EquipmentIdentity,
     IdempotencyOutcome,
@@ -106,6 +107,47 @@ TOOL_WEAR_CHECKLIST_ITEM_ID = "tool-wear"
 TOOL_WEAR_MEASUREMENT_NAME = "tool_wear_min"
 COOLING_PATH_CHECKLIST_ITEM_ID = "cooling-path"
 COOLANT_TEMPERATURE_MEASUREMENT_NAME = "coolant_temperature_c"
+COST_BASIS_IN_HOUSE_CHECKLIST_ITEM_ID = "cost-basis-in-house"
+COST_BASIS_SPARE_PART_CHECKLIST_ITEM_ID = "cost-basis-spare-part-available"
+COST_BASIS_VENDOR_DISPATCH_CHECKLIST_ITEM_ID = "cost-basis-vendor-dispatch-required"
+COST_BASIS_COMPONENT_REPLACEMENT_CHECKLIST_ITEM_ID = (
+    "cost-basis-component-replacement-required"
+)
+
+
+def derive_cost_basis_resolution_context(
+    inspection_result: InspectionResult,
+) -> CostBasisResolutionContext:
+    """Project explicit cost-basis applicability facts from inspection data.
+
+    A missing or ``not_checked`` item remains unknown.  The cost path therefore
+    fails closed instead of silently assuming an in-house job, spare-part
+    availability, or the absence of vendor/component work.
+    """
+
+    statuses = {
+        item.item_id: item.status
+        for item in inspection_result.checklist
+        if item.status != "not_checked"
+    }
+
+    def condition(item_id: str) -> bool | None:
+        status = statuses.get(item_id)
+        if status is None:
+            return None
+        return status == "pass"
+
+    in_house = condition(COST_BASIS_IN_HOUSE_CHECKLIST_ITEM_ID)
+    return CostBasisResolutionContext(
+        execution_mode=(
+            "in_house" if in_house is True else "external" if in_house is False else None
+        ),
+        spare_part_available=condition(COST_BASIS_SPARE_PART_CHECKLIST_ITEM_ID),
+        vendor_dispatch_required=condition(COST_BASIS_VENDOR_DISPATCH_CHECKLIST_ITEM_ID),
+        component_replacement_required=condition(
+            COST_BASIS_COMPONENT_REPLACEMENT_CHECKLIST_ITEM_ID
+        ),
+    )
 
 
 def derive_tool_replacement_action_candidate(
