@@ -51,14 +51,18 @@ def test_mock_120_run_harness_aggregates_all_gold_packets(monkeypatch) -> None:
     assert aggregate["fallback_summaries"] == 0
     assert aggregate["acceptance_rate"] == 1.0
     assert aggregate["grounding"]["grounding_rate"] == 1.0
-    assert aggregate["quality_scores"]["accuracy_candidate"] is not None
+    assert aggregate["quality_scores"]["coverage_candidate"] is not None
     assert aggregate["quality_scores"]["usefulness_candidate"] is not None
     assert aggregate["quality_scores"]["korean_quality_candidate"] is not None
     assert aggregate["quality_scores"]["overall_candidate"] is not None
+    assert aggregate["gold_accuracy"]["accuracy_goldset_score"] is not None
+    assert aggregate["gold_accuracy"]["missing_required_points"] == 0
+    assert aggregate["gold_accuracy"]["must_not_claim_violations"] == 0
     assert aggregate["cost"]["status"] == "estimated"
     assert aggregate["cost"]["estimated_total_cost"] > 0
     assert all(row["editable_output"] for row in rows)
-    assert all(row["quality_scores"]["checks"]["accuracy"] for row in rows)
+    assert all(row["quality_scores"]["checks"]["coverage"] for row in rows)
+    assert all(row["gold_accuracy"]["accuracy_goldset_score"] == 1.0 for row in rows)
 
 
 def test_quality_scores_detect_internal_language_and_missing_role_focus() -> None:
@@ -73,10 +77,28 @@ def test_quality_scores_detect_internal_language_and_missing_role_focus() -> Non
 
     scores = harness._quality_scores(candidate, packet=packet)
 
-    assert scores["accuracy_candidate"] < 1.0
+    assert scores["coverage_candidate"] < 1.0
     assert scores["usefulness_candidate"] < 1.0
     assert scores["korean_quality_candidate"] < 1.0
     assert scores["checks"]["korean_quality"]["avoids_internal_terms"] is False
+
+
+def test_gold_accuracy_scores_reference_answer_misses_and_forbidden_claims() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-004.json")
+    candidate = harness.compose_deterministic_agent_review_summary(packet)
+    candidate["summary"] = "critical 상태지만 수리 완료되었습니다."
+    candidate["role_summaries"] = [
+        {"role": "field_operator", "quote": "주축 모터 확인"},
+        {"role": "process_manager", "quote": "생산 영향 확인"},
+    ]
+
+    score = harness._gold_accuracy(candidate, packet=packet)
+
+    assert score["accuracy_goldset_score"] < 1.0
+    assert "수리 완료" in score["must_not_claim_violations"]
+    assert score["unsupported_claim_count"] == 1
+    assert score["missing_required_points"]
 
 
 def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
@@ -116,8 +138,12 @@ def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
     assert artifact["ready_for_live_120_run"] is True
     assert artifact["aggregate"]["contract_error_rows"] == 0
     assert artifact["aggregate"]["quality_scores"]["overall_candidate"] is not None
+    assert artifact["aggregate"]["gold_accuracy"]["accuracy_goldset_score"] == 1.0
     assert artifact["rows"][0]["editable_output"]["role_summaries"]
     assert artifact["rows"][0]["quality_scores"]["limits"]
+    assert artifact["rows"][0]["gold_accuracy"]["answer_set_id"] == (
+        "agent-review-summary-gold-answers-v1"
+    )
 
 
 def test_mock_harness_records_concurrency_metrics(tmp_path: Path) -> None:

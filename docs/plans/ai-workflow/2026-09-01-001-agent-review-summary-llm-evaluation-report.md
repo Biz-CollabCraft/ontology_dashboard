@@ -78,16 +78,37 @@ The current harness estimates tokens from serialized payload size and configured
 `gpt-4o-mini` price inputs. It is a configured-rate estimate, not provider
 billing reconciliation.
 
-Candidate semantic metrics:
+Gold-set accuracy:
 
 ```text
-accuracy_candidate = passed required-fact checks / required-fact checks
-usefulness_candidate = passed role-usefulness checks / role-usefulness checks
-korean_quality_candidate = passed Korean-field-language checks / Korean checks
-overall_candidate = average(accuracy_candidate, usefulness_candidate, korean_quality_candidate)
+accuracy_goldset_score = average(required_fact_score, role_accuracy_score, boundary_accuracy_score)
+required_fact_score = matched required answer points / required answer points
+role_accuracy_score = matched role answer points / role answer points
+boundary_accuracy_score = 1.0 when no must-not claim appears, otherwise 0.0
 ```
 
-Accuracy candidate checks:
+The reference answers live in:
+
+```text
+tests/fixtures/agent_review_packets/gold_answers.json
+```
+
+The answer key is intentionally small for the current project size. It does not
+try to match a full natural-language answer. Each case records only required
+operational facts, role-specific expected points, visible limitations, and
+must-not claims such as repair completion, approval completion, automatic
+execution, or unsupported failure certainty.
+
+Candidate semantic signals:
+
+```text
+coverage_candidate = passed packet-anchor checks / packet-anchor checks
+usefulness_candidate = passed role-usefulness checks / role-usefulness checks
+korean_quality_candidate = passed Korean-field-language checks / Korean checks
+overall_candidate = average(coverage_candidate, usefulness_candidate, korean_quality_candidate)
+```
+
+Coverage candidate checks:
 
 - `status_grade_present`: accepted prose contains the packet risk status grade.
 - `primary_component_present`: accepted prose contains the primary inspection
@@ -121,12 +142,11 @@ Korean field-language checks:
 - `concise_for_side_panel`: summary and role quotes stay within the side-panel
   copy budget.
 
-These semantic metrics are candidate scores, not release gates yet. The hard
-gates remain contract shape, grounded source references, forbidden action
-claims, forbidden Closed-loop authority, and fallback behavior. Candidate scores
-are used for triage and model comparison; release gating still requires a
-human-reviewed acceptance sample until the rubric is calibrated against human
-labels.
+Gold-set accuracy is the metric to cite when claiming correctness. Candidate
+semantic signals are triage columns only. The hard gates remain contract shape,
+grounded source references, forbidden action claims, forbidden Closed-loop
+authority, and fallback behavior. Usefulness and Korean quality still need a
+small human-reviewed acceptance sample before they become release gates.
 
 ## Results
 
@@ -168,7 +188,8 @@ Result:
 - accepted candidates: 120
 - fallback summaries: 0
 - contract-error rows: 0
-- `accuracy_candidate`: 1.0
+- `accuracy_goldset_score`: 1.0
+- `coverage_candidate`: 1.0
 - `usefulness_candidate`: 1.0
 - `korean_quality_candidate`: 1.0
 - `overall_candidate`: 1.0
@@ -176,13 +197,13 @@ Result:
 
 Interpretation:
 
-This result proves that the semantic scoring fields are recorded and aggregated
-for every accepted row. It is a controlled baseline against the deterministic
-summary, not live model quality. Existing live result artifacts recorded
-contract, grounding, latency, and cost metrics, but did not store the accepted
-candidate text. Therefore accuracy, usefulness, and Korean quality should be
-measured from the next live rerun using the updated harness rather than
-backfilled from the old live artifacts.
+This result proves that reference-answer accuracy and candidate semantic signals
+are recorded and aggregated for every accepted row. It is a controlled baseline
+against the deterministic summary, not live model quality. Existing live result
+artifacts recorded contract, grounding, latency, and cost metrics, but did not
+store the accepted candidate text. Therefore gold-set accuracy, usefulness, and
+Korean quality should be measured from the next live rerun using the updated
+harness rather than backfilled from the old live artifacts.
 
 ### Live Smoke Run
 
@@ -426,6 +447,47 @@ ms, but p95 remained comparable. This makes concurrency 8 a viable pressure-test
 result for the compact prompt profile, not yet a production default without
 rate-limit telemetry, retry accounting, and checkpointed recovery.
 
+### Live 120-Run with Compact Payload, Concurrency 8, and Gold Accuracy
+
+Artifact:
+
+```text
+tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt4o_mini_gold_2026-09-01.json
+```
+
+Result:
+
+- sample size: 120
+- model: `gpt-4o-mini`
+- prompt payload profile: `compact-editable-v1`
+- concurrency: 8
+- batch wall-clock duration: 61,554.427 ms
+- throughput: 116.969654 requests/minute
+- accepted candidates: 120
+- fallback summaries: 0
+- contract-error rows: 0
+- grounding rate: 1.0
+- `accuracy_goldset_score`: 1.0
+- missing required points: 0
+- must-not claim violations: 0
+- `coverage_candidate`: 1.0
+- `usefulness_candidate`: 1.0
+- `korean_quality_candidate`: 1.0
+- p50 request latency: 3,928.758 ms
+- p95 request latency: 5,585.374 ms
+- estimated total cost: USD 0.04092975
+- operating gate: passed
+
+Interpretation:
+
+This is the first live artifact that stores accepted candidate text and scores
+it against the explicit 8-case answer key. It upgrades the `gpt-4o-mini`
+evidence from "contract and grounding passed" to "contract, grounding, gold-set
+accuracy, Korean-field signal, latency, and configured-rate cost all passed for
+the MVP 8x15 evaluation." It does not remove the need for a small human
+acceptance sample before promoting usefulness or Korean quality to hard release
+gates.
+
 ## Current Judgment
 
 The Agent Review Summary LLM path is ready to remain enabled behind
@@ -439,6 +501,8 @@ Use the current result as:
 
 - positive evidence for contract stability
 - positive evidence for grounded summary acceptance
+- positive evidence for gold-set answer-key accuracy on the live compact
+  `gpt-4o-mini` 120-run
 - positive evidence for rough `gpt-4o-mini` cost scale
 - positive evidence that compact payload reduction addresses the timeout-heavy
   concurrency-4 failure mode
@@ -461,8 +525,8 @@ same validator, and same concurrency:
 Evaluation axes:
 
 1. Quality and accuracy.
-   Use hard contract metrics plus candidate accuracy review columns: required
-   evidence coverage, role usefulness, Korean field-language quality, priority
+   Use hard contract metrics plus `accuracy_goldset_score`, required evidence
+   coverage, role usefulness, Korean field-language quality, priority
    correctness, concision, and human accept-without-edit ratio.
 2. Operating reliability.
    Compare accepted rate, fallback rate, `ReadTimeout`, rate-limit events, p50
@@ -490,6 +554,7 @@ changes again, rerun all three models under the same new profile.
 Recorded artifacts:
 
 - `tests/eval/results/agent_summary_llm_eval_live_compact_c8_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt4o_mini_gold_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt56_luna_smoke_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt56_luna_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt5_mini_smoke_2026-09-01.json`
@@ -499,13 +564,25 @@ The model comparison used the same compact payload profile and concurrency 8.
 The OpenAI-compatible provider had to omit `temperature=0` for GPT-5-family
 models because those endpoints rejected non-default temperature values.
 
-| Model | Scope | Accepted | Fallback | Contract errors | Grounding | p95 latency | Wall-clock | Estimated cost | Judgment |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `gpt-4o-mini` | 120-run | 120/120 | 0 | 0 | 1.0 | 5,018.95 ms | 63,890.402 ms | USD 0.04092975 | Best current default. |
-| `gpt-5.6-luna` | smoke | 8/8 | 0 | 0 | 1.0 | 10,187.532 ms | 10,190.517 ms | USD 0.0045186 | Compatible after temperature fix. |
-| `gpt-5.6-luna` | 120-run | 119/120 | 1 | 1 | 0.991667 | 12,910.35 ms | 145,302.416 ms | USD 0.0675846 | Viable but weaker than baseline. |
-| `gpt-5-mini` | smoke, 20s timeout | 0/8 | 8 | 0 | 1.0 | 20,866.351 ms | 20,869.504 ms | USD 0.00590275 | Fails operating smoke by timeout. |
-| `gpt-5-mini` | smoke, 60s timeout | 5/8 | 3 | 3 | 0.625 | 32,522.984 ms | 32,526.047 ms | USD 0.00790875 | Not promoted to 120-run. |
+| Model | Scope | Accepted | Fallback | Contract errors | Grounding | Gold accuracy | p95 latency | Wall-clock | Estimated cost | Judgment |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `gpt-4o-mini` | 120-run, gold-scored | 120/120 | 0 | 0 | 1.0 | 1.0 | 5,585.374 ms | 61,554.427 ms | USD 0.04092975 | Best current default. |
+| `gpt-5.6-luna` | smoke | 8/8 | 0 | 0 | 1.0 | not measured | 10,187.532 ms | 10,190.517 ms | USD 0.0045186 | Compatible after temperature fix. |
+| `gpt-5.6-luna` | 120-run | 119/120 | 1 | 1 | 0.991667 | not measured | 12,910.35 ms | 145,302.416 ms | USD 0.0675846 | Viable but weaker than baseline. |
+| `gpt-5-mini` | smoke, 20s timeout | 0/8 | 8 | 0 | 1.0 | not measured | 20,866.351 ms | 20,869.504 ms | USD 0.00590275 | Fails operating smoke by timeout. |
+| `gpt-5-mini` | smoke, 60s timeout | 5/8 | 3 | 3 | 0.625 | not measured | 32,522.984 ms | 32,526.047 ms | USD 0.00790875 | Not promoted to 120-run. |
+
+Quality leaderboard policy:
+
+| Metric | Current evidence state | Use in decision |
+| --- | --- | --- |
+| Contract and boundary pass | Available in existing live artifacts | Hard gate |
+| Grounding rate | Available in existing live artifacts | Hard gate |
+| `accuracy_goldset_score` | Available for `gpt-4o-mini` gold-scored live 120-run | Correctness comparison |
+| `coverage_candidate` | Available for `gpt-4o-mini` gold-scored live 120-run | Triage signal |
+| `usefulness_candidate` | Available for `gpt-4o-mini` gold-scored live 120-run; requires human calibration before release gating | Triage signal |
+| `korean_quality_candidate` | Available for `gpt-4o-mini` gold-scored live 120-run; requires human calibration before release gating | Triage signal |
+| p95 latency and cost | Available in existing live artifacts | Operating and cost comparison |
 
 `gpt-5.6-luna` failed one accepted-candidate validation row because the output
 contained the forbidden Korean phrase `수리 완료`. That is an accuracy/boundary
@@ -524,39 +601,40 @@ Current model choice:
 - Do not use `gpt-5-mini` for this compact summary path without a different
   prompt contract or model-specific timeout strategy.
 
+The strongest product evidence now reads as follows: model selection is not
+based on cost alone. The selected model passes contract and grounding gates,
+matches the 8-case manufacturing answer key, avoids Closed-loop authority
+leakage, stays acceptable in Korean field-copy signals, and keeps latency and
+cost within the MVP workflow budget.
+
 ## Next Measurement
 
-The next live measurement should not multiply the sample size. It should keep
-the same 120 requests and execute them with compact payload plus runtime
-recovery instrumentation:
+The next measurement should not multiply the sample size for `gpt-4o-mini`.
+That model already has a gold-scored 8x15 live result. The next step is either
+human calibration or same-harness model comparison:
 
 ```text
-8 gold cases x 15 iterations = 120 total requests
-concurrency = 4
-retry exhausted rows must be measured separately
+human calibration = 8 representative accepted outputs, one per gold case
+same-harness model comparison = 8 gold cases x 15 iterations, concurrency 8
 ```
 
-Record:
+For human calibration, record:
 
-- request latency
-- queue wait
-- attempt count
-- retry outcome
-- fallback reason
-- batch wall-clock duration
-- rate-limit events
-- accepted-after-retry rate
+- whether each accepted output is usable without edit
+- any incorrect required fact
+- any awkward Korean field-language phrase
+- any role-mismatch issue between field operator and process manager copy
+- whether automatic `usefulness_candidate` and `korean_quality_candidate` agree
+  with human judgment
 
-Recommended sequence:
+For same-harness model comparison, rerun only candidates still worth promoting:
 
-1. Reuse the existing sequential 120-run as concurrency `1` baseline.
-2. Keep `compact-editable-v1` as the provider payload profile.
-3. Add retry and checkpoint support to the harness.
-4. Re-run the same 120 requests at concurrency `4` and `8`.
-5. Compare retry-exhausted rows, rate-limit events, p95 request latency, queue
-   wait, and batch wall-clock duration before selecting a runtime default.
+- `gpt-5.6-luna`: rerun with the gold-scored harness only if a Korean wording or
+  reasoning-quality advantage is expected to offset its slower latency and
+  previous boundary failure.
+- `gpt-5-mini`: do not rerun at 120 until the timeout and priority-mismatch
+  smoke failures are addressed.
 
-The concurrency `4` run should be considered successful when contract-error
-rows remain 0, grounding rate remains 1.0, retry-exhausted timeout rows are 0 or
-at most 1/120, and batch wall-clock time decreases materially from the
-sequential baseline.
+Runtime recovery instrumentation is still useful before production operation:
+record retry attempts, retry outcome, rate-limit events, and
+accepted-after-retry rate separately from model quality.

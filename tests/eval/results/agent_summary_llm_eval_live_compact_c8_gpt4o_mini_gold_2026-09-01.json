@@ -1,10 +1,10 @@
 {
-  "result_id": "agent-summary-llm-eval-mock-c8-2026-09-01",
-  "recorded_at": "2026-09-01T08:04:57.650804+00:00",
-  "scope": "8x15 mock Agent Review Summary LLM evaluation",
+  "result_id": "agent-summary-llm-eval-live-c8-2026-09-01",
+  "recorded_at": "2026-09-01T08:07:34.194110+00:00",
+  "scope": "8x15 live Agent Review Summary LLM evaluation",
   "eval_set_id": "agent-review-packet-gold-v1",
-  "mode": "mock",
-  "provider": "mock-openai-compatible",
+  "mode": "live",
+  "provider": "openai-compatible",
   "model": "gpt-4o-mini",
   "prompt_version": "agent-review-summary-prompt-v1.1-compact",
   "prompt_payload_profile": "compact-editable-v1",
@@ -12,7 +12,7 @@
   "sample_size": 120,
   "case_count": 8,
   "iterations_per_case": 15,
-  "batch_wall_clock_ms": 216.201,
+  "batch_wall_clock_ms": 61554.427,
   "pre_harness_gate": {
     "ready_for_120_run": true,
     "source": "tests/eval/results/agent_workflow_pre_harness_gate_2026-09-01.json",
@@ -43,18 +43,18 @@
       "grounding_rate": 1.0
     },
     "latency_ms": {
-      "p50": 1.712,
-      "p95": 50.552,
-      "average": 13.875
+      "p50": 3928.758,
+      "p95": 5585.374,
+      "average": 4024.619
     },
     "queue_wait_ms": {
-      "p50": 101.191,
-      "p95": 196.455,
-      "average": 101.413
+      "p50": 30222.918,
+      "p95": 55518.594,
+      "average": 29445.85
     },
     "batch": {
-      "wall_clock_ms": 216.201,
-      "throughput_per_minute": 33302.343652
+      "wall_clock_ms": 61554.427,
+      "throughput_per_minute": 116.969654
     },
     "tokens": {
       "average_total_tokens": 1765.75,
@@ -75,8 +75,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -175,8 +175,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 11.123,
-        "queue_wait_ms": 0.614,
+        "duration_ms": 5974.754,
+        "queue_wait_ms": 0.15,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -198,8 +198,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -298,8 +298,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 162.432,
-        "queue_wait_ms": 0.837,
+        "duration_ms": 5630.849,
+        "queue_wait_ms": 0.559,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -321,8 +321,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -421,8 +421,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 35.904,
-        "queue_wait_ms": 0.951,
+        "duration_ms": 5585.374,
+        "queue_wait_ms": 0.843,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -444,8 +444,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -544,8 +544,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 174.188,
-        "queue_wait_ms": 1.057,
+        "duration_ms": 5391.524,
+        "queue_wait_ms": 1.089,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -567,8 +567,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -667,8 +667,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 16.913,
-        "queue_wait_ms": 1.151,
+        "duration_ms": 5598.13,
+        "queue_wait_ms": 1.366,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -690,8 +690,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -790,8 +790,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 113.442,
-        "queue_wait_ms": 1.542,
+        "duration_ms": 5981.206,
+        "queue_wait_ms": 1.582,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -813,8 +813,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -913,8 +913,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 43.391,
-        "queue_wait_ms": 5.976,
+        "duration_ms": 5651.511,
+        "queue_wait_ms": 1.88,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -936,8 +936,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1036,8 +1036,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 206.087,
-        "queue_wait_ms": 7.77,
+        "duration_ms": 6217.07,
+        "queue_wait_ms": 2.152,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1059,8 +1059,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1159,8 +1159,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 2.003,
-        "queue_wait_ms": 11.827,
+        "duration_ms": 3996.753,
+        "queue_wait_ms": 5393.444,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1182,8 +1182,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1282,8 +1282,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.666,
-        "queue_wait_ms": 13.923,
+        "duration_ms": 3944.24,
+        "queue_wait_ms": 5586.606,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1305,8 +1305,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1405,8 +1405,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.786,
-        "queue_wait_ms": 15.654,
+        "duration_ms": 3838.374,
+        "queue_wait_ms": 5599.793,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1428,8 +1428,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1528,8 +1528,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 8.066,
-        "queue_wait_ms": 17.511,
+        "duration_ms": 3813.157,
+        "queue_wait_ms": 5631.536,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1551,8 +1551,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1651,8 +1651,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.818,
-        "queue_wait_ms": 18.142,
+        "duration_ms": 4063.786,
+        "queue_wait_ms": 5653.492,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1674,8 +1674,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1774,8 +1774,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.7,
-        "queue_wait_ms": 20.024,
+        "duration_ms": 4814.438,
+        "queue_wait_ms": 5975.102,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1797,8 +1797,8 @@
       "asset_id": "CNC-S01-L01-01",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -1897,8 +1897,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.659,
-        "queue_wait_ms": 21.786,
+        "duration_ms": 3863.634,
+        "queue_wait_ms": 5982.929,
         "usage": {
           "prompt_tokens": 1617,
           "completion_tokens": 173,
@@ -1920,8 +1920,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2020,8 +2020,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 33.194,
-        "queue_wait_ms": 23.504,
+        "duration_ms": 4562.416,
+        "queue_wait_ms": 6219.428,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2043,8 +2043,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2143,8 +2143,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.713,
-        "queue_wait_ms": 25.639,
+        "duration_ms": 4076.104,
+        "queue_wait_ms": 9390.324,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2166,8 +2166,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2266,8 +2266,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.921,
-        "queue_wait_ms": 27.42,
+        "duration_ms": 4274.734,
+        "queue_wait_ms": 9438.345,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2289,8 +2289,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2389,8 +2389,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.879,
-        "queue_wait_ms": 29.438,
+        "duration_ms": 3990.222,
+        "queue_wait_ms": 9444.851,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2412,8 +2412,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2512,8 +2512,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.726,
-        "queue_wait_ms": 31.396,
+        "duration_ms": 3931.425,
+        "queue_wait_ms": 9530.96,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2535,8 +2535,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2635,8 +2635,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.671,
-        "queue_wait_ms": 33.182,
+        "duration_ms": 4666.076,
+        "queue_wait_ms": 9717.417,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2658,8 +2658,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2758,8 +2758,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.694,
-        "queue_wait_ms": 34.913,
+        "duration_ms": 3856.108,
+        "queue_wait_ms": 9846.68,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2781,8 +2781,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -2881,8 +2881,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 7.989,
-        "queue_wait_ms": 36.666,
+        "duration_ms": 4394.718,
+        "queue_wait_ms": 10787.953,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -2904,8 +2904,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3004,8 +3004,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.748,
-        "queue_wait_ms": 36.932,
+        "duration_ms": 4149.89,
+        "queue_wait_ms": 10789.828,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -3027,8 +3027,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3127,8 +3127,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.71,
-        "queue_wait_ms": 38.744,
+        "duration_ms": 3636.582,
+        "queue_wait_ms": 13436.206,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -3150,8 +3150,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3250,8 +3250,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.772,
-        "queue_wait_ms": 40.519,
+        "duration_ms": 3687.561,
+        "queue_wait_ms": 13462.563,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -3273,8 +3273,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3373,8 +3373,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 20.697,
-        "queue_wait_ms": 42.353,
+        "duration_ms": 3771.179,
+        "queue_wait_ms": 13466.554,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -3396,8 +3396,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3496,8 +3496,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.846,
-        "queue_wait_ms": 44.714,
+        "duration_ms": 3710.54,
+        "queue_wait_ms": 13703.194,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -3519,8 +3519,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3619,8 +3619,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.684,
-        "queue_wait_ms": 46.639,
+        "duration_ms": 4256.449,
+        "queue_wait_ms": 13713.381,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -3642,8 +3642,8 @@
       "asset_id": "CNC-S04-L04-01",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3742,8 +3742,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 21.834,
-        "queue_wait_ms": 48.388,
+        "duration_ms": 4045.38,
+        "queue_wait_ms": 14383.659,
         "usage": {
           "prompt_tokens": 1731,
           "completion_tokens": 173,
@@ -3765,8 +3765,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3865,8 +3865,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.658,
-        "queue_wait_ms": 49.459,
+        "duration_ms": 3971.936,
+        "queue_wait_ms": 14940.105,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -3888,8 +3888,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -3988,8 +3988,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.671,
-        "queue_wait_ms": 51.176,
+        "duration_ms": 3928.758,
+        "queue_wait_ms": 15182.862,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4011,8 +4011,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4111,8 +4111,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.695,
-        "queue_wait_ms": 52.907,
+        "duration_ms": 3721.571,
+        "queue_wait_ms": 17073.058,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4134,8 +4134,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4234,8 +4234,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 28.084,
-        "queue_wait_ms": 54.661,
+        "duration_ms": 3611.45,
+        "queue_wait_ms": 17150.289,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4257,8 +4257,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4357,8 +4357,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.685,
-        "queue_wait_ms": 56.758,
+        "duration_ms": 5352.457,
+        "queue_wait_ms": 17237.907,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4380,8 +4380,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4480,8 +4480,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.729,
-        "queue_wait_ms": 58.502,
+        "duration_ms": 3760.316,
+        "queue_wait_ms": 17413.859,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4503,8 +4503,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4603,8 +4603,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 34.307,
-        "queue_wait_ms": 60.29,
+        "duration_ms": 3757.489,
+        "queue_wait_ms": 17970.017,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4626,8 +4626,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4726,8 +4726,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.707,
-        "queue_wait_ms": 63.129,
+        "duration_ms": 3770.961,
+        "queue_wait_ms": 18429.184,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4749,8 +4749,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4849,8 +4849,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.661,
-        "queue_wait_ms": 64.898,
+        "duration_ms": 3775.888,
+        "queue_wait_ms": 18912.173,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4872,8 +4872,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -4972,8 +4972,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.677,
-        "queue_wait_ms": 66.62,
+        "duration_ms": 3980.832,
+        "queue_wait_ms": 19111.739,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -4995,8 +4995,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5095,8 +5095,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 39.238,
-        "queue_wait_ms": 68.356,
+        "duration_ms": 3939.247,
+        "queue_wait_ms": 20762.044,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -5118,8 +5118,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5218,8 +5218,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.655,
-        "queue_wait_ms": 70.285,
+        "duration_ms": 3907.242,
+        "queue_wait_ms": 20795.059,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -5241,8 +5241,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5341,8 +5341,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.647,
-        "queue_wait_ms": 71.999,
+        "duration_ms": 3780.032,
+        "queue_wait_ms": 21174.334,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -5364,8 +5364,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5464,8 +5464,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.719,
-        "queue_wait_ms": 73.704,
+        "duration_ms": 3971.202,
+        "queue_wait_ms": 21727.687,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -5487,8 +5487,8 @@
       "asset_id": "CNC-S01-L04-03",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5587,8 +5587,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.766,
-        "queue_wait_ms": 75.482,
+        "duration_ms": 4147.522,
+        "queue_wait_ms": 22200.283,
         "usage": {
           "prompt_tokens": 1740,
           "completion_tokens": 175,
@@ -5610,8 +5610,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5710,8 +5710,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.531,
-        "queue_wait_ms": 77.32,
+        "duration_ms": 4108.202,
+        "queue_wait_ms": 22590.545,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -5733,8 +5733,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5833,8 +5833,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.632,
-        "queue_wait_ms": 78.918,
+        "duration_ms": 4027.194,
+        "queue_wait_ms": 22688.211,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -5856,8 +5856,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -5956,8 +5956,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 7.808,
-        "queue_wait_ms": 80.626,
+        "duration_ms": 3783.387,
+        "queue_wait_ms": 23092.734,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -5979,8 +5979,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6079,8 +6079,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.506,
-        "queue_wait_ms": 82.802,
+        "duration_ms": 3732.926,
+        "queue_wait_ms": 24701.566,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6102,8 +6102,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6202,8 +6202,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.525,
-        "queue_wait_ms": 84.36,
+        "duration_ms": 3757.086,
+        "queue_wait_ms": 24702.557,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6225,8 +6225,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6325,8 +6325,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.553,
-        "queue_wait_ms": 85.937,
+        "duration_ms": 3706.411,
+        "queue_wait_ms": 24954.648,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6348,8 +6348,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6448,8 +6448,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 98.551,
-        "queue_wait_ms": 87.542,
+        "duration_ms": 3912.091,
+        "queue_wait_ms": 25699.165,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6471,8 +6471,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6571,8 +6571,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.512,
-        "queue_wait_ms": 88.49,
+        "duration_ms": 3874.625,
+        "queue_wait_ms": 26347.938,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6594,8 +6594,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6694,8 +6694,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.487,
-        "queue_wait_ms": 90.055,
+        "duration_ms": 3531.046,
+        "queue_wait_ms": 26698.891,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6717,8 +6717,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6817,8 +6817,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.526,
-        "queue_wait_ms": 91.592,
+        "duration_ms": 3519.802,
+        "queue_wait_ms": 26715.51,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6840,8 +6840,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -6940,8 +6940,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 7.955,
-        "queue_wait_ms": 93.172,
+        "duration_ms": 3592.691,
+        "queue_wait_ms": 26876.407,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -6963,8 +6963,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7063,8 +7063,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.64,
-        "queue_wait_ms": 94.654,
+        "duration_ms": 3594.393,
+        "queue_wait_ms": 28434.78,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -7086,8 +7086,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7186,8 +7186,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.544,
-        "queue_wait_ms": 96.347,
+        "duration_ms": 3501.604,
+        "queue_wait_ms": 28459.852,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -7209,8 +7209,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7309,8 +7309,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.589,
-        "queue_wait_ms": 97.943,
+        "duration_ms": 3484.272,
+        "queue_wait_ms": 28661.264,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -7332,8 +7332,8 @@
       "asset_id": "CNC-S04-L02-03",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7432,8 +7432,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 19.393,
-        "queue_wait_ms": 99.586,
+        "duration_ms": 4607.322,
+        "queue_wait_ms": 29611.385,
         "usage": {
           "prompt_tokens": 1391,
           "completion_tokens": 163,
@@ -7455,8 +7455,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7555,8 +7555,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.693,
-        "queue_wait_ms": 101.191,
+        "duration_ms": 4249.066,
+        "queue_wait_ms": 30222.918,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -7578,8 +7578,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7678,8 +7678,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.64,
-        "queue_wait_ms": 102.948,
+        "duration_ms": 4220.303,
+        "queue_wait_ms": 30230.168,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -7701,8 +7701,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7801,8 +7801,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.632,
-        "queue_wait_ms": 104.648,
+        "duration_ms": 3991.335,
+        "queue_wait_ms": 30235.481,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -7824,8 +7824,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -7924,8 +7924,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 32.109,
-        "queue_wait_ms": 106.338,
+        "duration_ms": 3907.964,
+        "queue_wait_ms": 30469.405,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -7947,8 +7947,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8047,8 +8047,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.653,
-        "queue_wait_ms": 107.649,
+        "duration_ms": 4508.22,
+        "queue_wait_ms": 31961.787,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8070,8 +8070,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8170,8 +8170,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.669,
-        "queue_wait_ms": 109.361,
+        "duration_ms": 4401.702,
+        "queue_wait_ms": 32029.34,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8193,8 +8193,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8293,8 +8293,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.804,
-        "queue_wait_ms": 111.089,
+        "duration_ms": 4395.98,
+        "queue_wait_ms": 32145.723,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8316,8 +8316,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8416,8 +8416,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 13.317,
-        "queue_wait_ms": 112.954,
+        "duration_ms": 4299.734,
+        "queue_wait_ms": 34219.068,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8439,8 +8439,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8539,8 +8539,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.659,
-        "queue_wait_ms": 115.042,
+        "duration_ms": 4522.889,
+        "queue_wait_ms": 34227.059,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8562,8 +8562,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8662,8 +8662,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.679,
-        "queue_wait_ms": 116.761,
+        "duration_ms": 4393.395,
+        "queue_wait_ms": 34377.545,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8685,8 +8685,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8785,8 +8785,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.658,
-        "queue_wait_ms": 119.036,
+        "duration_ms": 4119.486,
+        "queue_wait_ms": 34450.604,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8808,8 +8808,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -8908,8 +8908,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.694,
-        "queue_wait_ms": 120.751,
+        "duration_ms": 4193.375,
+        "queue_wait_ms": 34472.064,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -8931,8 +8931,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9031,8 +9031,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.712,
-        "queue_wait_ms": 122.503,
+        "duration_ms": 4607.95,
+        "queue_wait_ms": 36431.24,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -9054,8 +9054,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9154,8 +9154,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 89.461,
-        "queue_wait_ms": 124.272,
+        "duration_ms": 4575.002,
+        "queue_wait_ms": 36470.13,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -9177,8 +9177,8 @@
       "asset_id": "CNC-S03-L01-03",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9277,8 +9277,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.657,
-        "queue_wait_ms": 126.337,
+        "duration_ms": 4508.626,
+        "queue_wait_ms": 36541.804,
         "usage": {
           "prompt_tokens": 1730,
           "completion_tokens": 175,
@@ -9300,8 +9300,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9400,8 +9400,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.837,
-        "queue_wait_ms": 128.055,
+        "duration_ms": 3718.799,
+        "queue_wait_ms": 38519.193,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -9423,8 +9423,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9523,8 +9523,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 13.492,
-        "queue_wait_ms": 129.958,
+        "duration_ms": 3894.274,
+        "queue_wait_ms": 38570.304,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -9546,8 +9546,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9646,8 +9646,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.7,
-        "queue_wait_ms": 131.061,
+        "duration_ms": 3660.049,
+        "queue_wait_ms": 38665.636,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -9669,8 +9669,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9769,8 +9769,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.627,
-        "queue_wait_ms": 132.817,
+        "duration_ms": 4292.215,
+        "queue_wait_ms": 38750.109,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -9792,8 +9792,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -9892,8 +9892,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.756,
-        "queue_wait_ms": 134.5,
+        "duration_ms": 3738.809,
+        "queue_wait_ms": 38771.104,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -9915,8 +9915,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10015,8 +10015,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 13.418,
-        "queue_wait_ms": 136.312,
+        "duration_ms": 3624.724,
+        "queue_wait_ms": 41050.937,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10038,8 +10038,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10138,8 +10138,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.766,
-        "queue_wait_ms": 138.517,
+        "duration_ms": 3623.935,
+        "queue_wait_ms": 41045.4,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10161,8 +10161,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10261,8 +10261,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.75,
-        "queue_wait_ms": 140.347,
+        "duration_ms": 3623.762,
+        "queue_wait_ms": 41050.608,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10284,8 +10284,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10384,8 +10384,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 50.552,
-        "queue_wait_ms": 142.157,
+        "duration_ms": 4264.857,
+        "queue_wait_ms": 42238.263,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10407,8 +10407,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10507,8 +10507,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 2.045,
-        "queue_wait_ms": 143.517,
+        "duration_ms": 3359.732,
+        "queue_wait_ms": 42325.976,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10530,8 +10530,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10630,8 +10630,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.725,
-        "queue_wait_ms": 145.838,
+        "duration_ms": 3288.221,
+        "queue_wait_ms": 42464.796,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10653,8 +10653,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10753,8 +10753,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 7.934,
-        "queue_wait_ms": 147.64,
+        "duration_ms": 3255.242,
+        "queue_wait_ms": 42510.072,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10776,8 +10776,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10876,8 +10876,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.672,
-        "queue_wait_ms": 149.8,
+        "duration_ms": 3983.675,
+        "queue_wait_ms": 43043.19,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -10899,8 +10899,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -10999,8 +10999,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.681,
-        "queue_wait_ms": 151.533,
+        "duration_ms": 3622.172,
+        "queue_wait_ms": 44674.587,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -11022,8 +11022,8 @@
       "asset_id": "CNC-S02-L02-02",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11122,8 +11122,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.683,
-        "queue_wait_ms": 153.272,
+        "duration_ms": 3676.927,
+        "queue_wait_ms": 44675.844,
         "usage": {
           "prompt_tokens": 1615,
           "completion_tokens": 174,
@@ -11145,8 +11145,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11245,8 +11245,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 25.536,
-        "queue_wait_ms": 155.011,
+        "duration_ms": 3360.366,
+        "queue_wait_ms": 44676.649,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -11268,8 +11268,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11368,8 +11368,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.635,
-        "queue_wait_ms": 155.63,
+        "duration_ms": 2943.493,
+        "queue_wait_ms": 45686.134,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -11391,8 +11391,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11491,8 +11491,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.668,
-        "queue_wait_ms": 157.316,
+        "duration_ms": 4231.748,
+        "queue_wait_ms": 45753.208,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -11514,8 +11514,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11614,8 +11614,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.63,
-        "queue_wait_ms": 159.034,
+        "duration_ms": 3845.822,
+        "queue_wait_ms": 45765.449,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -11637,8 +11637,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11737,8 +11737,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 49.977,
-        "queue_wait_ms": 160.712,
+        "duration_ms": 2931.296,
+        "queue_wait_ms": 46503.414,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -11760,8 +11760,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11860,8 +11860,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.612,
-        "queue_wait_ms": 163.322,
+        "duration_ms": 3402.038,
+        "queue_wait_ms": 47027.146,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -11883,8 +11883,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -11983,8 +11983,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.581,
-        "queue_wait_ms": 164.983,
+        "duration_ms": 3015.582,
+        "queue_wait_ms": 48037.454,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12006,8 +12006,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12106,8 +12106,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.648,
-        "queue_wait_ms": 166.612,
+        "duration_ms": 3276.607,
+        "queue_wait_ms": 48297.109,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12129,8 +12129,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12229,8 +12229,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.593,
-        "queue_wait_ms": 168.309,
+        "duration_ms": 3335.787,
+        "queue_wait_ms": 48352.893,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12252,8 +12252,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12352,8 +12352,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.607,
-        "queue_wait_ms": 169.949,
+        "duration_ms": 3154.802,
+        "queue_wait_ms": 48629.772,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12375,8 +12375,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12475,8 +12475,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.612,
-        "queue_wait_ms": 171.604,
+        "duration_ms": 3525.045,
+        "queue_wait_ms": 49435.074,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12498,8 +12498,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12598,8 +12598,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 32.13,
-        "queue_wait_ms": 173.263,
+        "duration_ms": 3342.119,
+        "queue_wait_ms": 49611.575,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12621,8 +12621,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12721,8 +12721,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.644,
-        "queue_wait_ms": 175.292,
+        "duration_ms": 3632.405,
+        "queue_wait_ms": 49985.121,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12744,8 +12744,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12844,8 +12844,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.633,
-        "queue_wait_ms": 176.988,
+        "duration_ms": 3445.316,
+        "queue_wait_ms": 50429.486,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12867,8 +12867,8 @@
       "asset_id": "CNC-S04-L05-01",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -12967,8 +12967,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 20.742,
-        "queue_wait_ms": 178.67,
+        "duration_ms": 3448.959,
+        "queue_wait_ms": 51053.377,
         "usage": {
           "prompt_tokens": 1218,
           "completion_tokens": 149,
@@ -12990,8 +12990,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 1,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13090,8 +13090,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.718,
-        "queue_wait_ms": 180.599,
+        "duration_ms": 3944.239,
+        "queue_wait_ms": 51573.962,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13113,8 +13113,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 2,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13213,8 +13213,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.702,
-        "queue_wait_ms": 182.381,
+        "duration_ms": 3886.011,
+        "queue_wait_ms": 51688.902,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13236,8 +13236,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 3,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13336,8 +13336,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 27.356,
-        "queue_wait_ms": 184.143,
+        "duration_ms": 3838.92,
+        "queue_wait_ms": 51784.712,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13359,8 +13359,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 4,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13459,8 +13459,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.727,
-        "queue_wait_ms": 186.142,
+        "duration_ms": 4333.201,
+        "queue_wait_ms": 52954.045,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13482,8 +13482,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 5,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13582,8 +13582,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.707,
-        "queue_wait_ms": 187.931,
+        "duration_ms": 4586.046,
+        "queue_wait_ms": 52960.346,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13605,8 +13605,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 6,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13705,8 +13705,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 21.955,
-        "queue_wait_ms": 189.698,
+        "duration_ms": 3984.943,
+        "queue_wait_ms": 53617.655,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13728,8 +13728,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 7,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13828,8 +13828,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.706,
-        "queue_wait_ms": 192.766,
+        "duration_ms": 3950.32,
+        "queue_wait_ms": 53875.069,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13851,8 +13851,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 8,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -13951,8 +13951,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.856,
-        "queue_wait_ms": 194.533,
+        "duration_ms": 4286.352,
+        "queue_wait_ms": 54502.679,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -13974,8 +13974,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 9,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -14074,8 +14074,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 15.857,
-        "queue_wait_ms": 196.455,
+        "duration_ms": 4198.325,
+        "queue_wait_ms": 55518.594,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -14097,8 +14097,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 10,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -14197,8 +14197,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.711,
-        "queue_wait_ms": 199.465,
+        "duration_ms": 4153.979,
+        "queue_wait_ms": 55575.09,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -14220,8 +14220,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 11,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -14320,8 +14320,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.694,
-        "queue_wait_ms": 201.242,
+        "duration_ms": 4099.716,
+        "queue_wait_ms": 55623.784,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -14343,8 +14343,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 12,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -14443,8 +14443,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 12.811,
-        "queue_wait_ms": 203.009,
+        "duration_ms": 3414.366,
+        "queue_wait_ms": 57287.713,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -14466,8 +14466,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 13,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -14566,8 +14566,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.683,
-        "queue_wait_ms": 205.443,
+        "duration_ms": 3937.823,
+        "queue_wait_ms": 57546.757,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -14589,8 +14589,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 14,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -14689,8 +14689,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 1.659,
-        "queue_wait_ms": 207.188,
+        "duration_ms": 3715.471,
+        "queue_wait_ms": 57602.727,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -14712,8 +14712,8 @@
       "asset_id": "CNC-S04-L04-02",
       "iteration": 15,
       "attempt": 1,
-      "mode": "mock",
-      "provider": "mock-openai-compatible",
+      "mode": "live",
+      "provider": "openai-compatible",
       "model": "gpt-4o-mini",
       "status": "accepted_llm_candidate",
       "accepted": true,
@@ -14812,8 +14812,8 @@
         ]
       },
       "llm": {
-        "duration_ms": 6.033,
-        "queue_wait_ms": 208.907,
+        "duration_ms": 3726.618,
+        "queue_wait_ms": 57825.821,
         "usage": {
           "prompt_tokens": 1729,
           "completion_tokens": 173,
@@ -14831,8 +14831,9 @@
     }
   ],
   "limits": [
-    "This run validates the 120-run harness and validator aggregation with controlled mock candidates.",
-    "This run does not call a live LLM provider and must not be reported as live model quality.",
+    "This run calls the configured live LLM provider and measures end-to-end provider call duration plus local validation time.",
+    "Latency includes client-side request/response time and model response time, but not a separate provider-side network breakdown.",
+    "This run uses bounded client-side concurrency 8; queue wait is measured before provider call start.",
     "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation.",
     "Token counts are heuristic because the current provider port returns parsed JSON without provider usage metadata."
   ],

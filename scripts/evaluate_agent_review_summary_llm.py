@@ -21,6 +21,7 @@ from app.mvp.agent_review_summary_provider import build_agent_review_summary_pro
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLD_ROOT = ROOT / "tests" / "fixtures" / "agent_review_packets"
+GOLD_ANSWERS_PATH = GOLD_ROOT / "gold_answers.json"
 DEFAULT_MODEL = "gpt-4o-mini"
 
 
@@ -126,6 +127,10 @@ def main() -> None:
         "batch_wall_clock_ms": artifact["batch_wall_clock_ms"],
         "accepted_llm_candidates": artifact["aggregate"]["accepted_llm_candidates"],
         "fallback_summaries": artifact["aggregate"]["fallback_summaries"],
+        "accuracy_goldset_score": artifact["aggregate"]["gold_accuracy"]["accuracy_goldset_score"],
+        "coverage_candidate": artifact["aggregate"]["quality_scores"]["coverage_candidate"],
+        "usefulness_candidate": artifact["aggregate"]["quality_scores"]["usefulness_candidate"],
+        "korean_quality_candidate": artifact["aggregate"]["quality_scores"]["korean_quality_candidate"],
         "estimated_total_cost": artifact["aggregate"]["cost"]["estimated_total_cost"],
         "ready_for_live_120_run": artifact["ready_for_live_120_run"],
     }, ensure_ascii=False, indent=2))
@@ -207,6 +212,7 @@ def _run_candidate(
         provider_error = exc.__class__.__name__
     errors = validate_agent_review_summary_contract(candidate, packet=packet)
     quality_scores = _quality_scores(candidate, packet=packet)
+    gold_accuracy = _gold_accuracy(candidate, packet=packet)
     duration_ms = round((time.perf_counter() - started) * 1000, 3)
     prompt_payload = build_agent_review_summary_prompt_payload(
         packet=packet,
@@ -236,6 +242,7 @@ def _run_candidate(
         "fallback_reason": None if accepted else provider_error or "validation_failed",
         "validation_errors": errors,
         "quality_scores": quality_scores,
+        "gold_accuracy": gold_accuracy,
         "grounded_source_refs": _grounded_source_ref_count(candidate, packet),
         "source_ref_status": "grounded" if not errors else "validation_failed",
         "editable_output": _editable_candidate_payload(candidate) if accepted else None,
@@ -284,7 +291,7 @@ def _aggregate(
     ]
     accepted = [row for row in rows if row["accepted"]]
     score_keys = (
-        "accuracy_candidate",
+        "coverage_candidate",
         "usefulness_candidate",
         "korean_quality_candidate",
         "overall_candidate",
@@ -305,6 +312,30 @@ def _aggregate(
                 ]
             )
             for key in score_keys
+        },
+        "gold_accuracy": {
+            key: _average(
+                [
+                    row.get("gold_accuracy", {}).get(key)
+                    for row in accepted
+                    if row.get("gold_accuracy", {}).get(key) is not None
+                ]
+            )
+            for key in (
+                "accuracy_goldset_score",
+                "role_accuracy_score",
+                "boundary_accuracy_score",
+            )
+        }
+        | {
+            "missing_required_points": sum(
+                len(row.get("gold_accuracy", {}).get("missing_required_points") or [])
+                for row in accepted
+            ),
+            "must_not_claim_violations": sum(
+                len(row.get("gold_accuracy", {}).get("must_not_claim_violations") or [])
+                for row in accepted
+            ),
         },
         "grounding": {
             "rows_with_grounded_source_refs": sum(
@@ -415,7 +446,7 @@ def _quality_scores(summary: dict[str, Any], *, packet: dict[str, Any]) -> dict[
     location_labels = [
         target.get("location_label") for target in targets if isinstance(target, dict)
     ]
-    accuracy_checks = {
+    coverage_checks = {
         "status_grade_present": _contains_if_present(prose, risk.get("status_grade")),
         "primary_component_present": _contains_required_any(prose, primary_component_labels),
         "inspection_location_present": _contains_required_any(field_quote, location_labels),
@@ -465,24 +496,112 @@ def _quality_scores(summary: dict[str, Any], *, packet: dict[str, Any]) -> dict[
             ]
         ),
     }
-    accuracy = _check_ratio(accuracy_checks)
+    coverage = _check_ratio(coverage_checks)
     usefulness = _check_ratio(usefulness_checks)
     korean = _check_ratio(korean_checks)
     return {
-        "accuracy_candidate": accuracy,
+        "coverage_candidate": coverage,
         "usefulness_candidate": usefulness,
         "korean_quality_candidate": korean,
-        "overall_candidate": round((accuracy + usefulness + korean) / 3, 6),
+        "overall_candidate": round((coverage + usefulness + korean) / 3, 6),
         "checks": {
-            "accuracy": accuracy_checks,
+            "coverage": coverage_checks,
             "usefulness": usefulness_checks,
             "korean_quality": korean_checks,
         },
         "limits": [
-            "Candidate scores are deterministic heuristics for triage, not human acceptance.",
-            "Human review is still required before promoting usefulness or Korean quality to release gates.",
+            "Coverage, usefulness, and Korean scores are deterministic heuristics for triage, not human acceptance.",
+            "Use gold_accuracy for reference-answer accuracy and keep human review before release gating usefulness or Korean quality.",
         ],
     }
+
+
+def _gold_accuracy(summary: dict[str, Any], *, packet: dict[str, Any]) -> dict[str, Any] | None:
+    answer = _gold_answer_for(packet)
+    if answer is None:
+        return None
+    prose = _summary_prose(summary)
+    required_points = [
+        *answer.get("must_mention", []),
+        *answer.get("visible_limitations", []),
+    ]
+    matched_required = [point for point in required_points if _contains_point(prose, point)]
+    missing_required = [point for point in required_points if point not in matched_required]
+    role_scores: dict[str, Any] = {}
+    matched_role_points = 0
+    total_role_points = 0
+    for role, points in (answer.get("role_points") or {}).items():
+        quote = _role_quote(summary, str(role))
+        matched = [point for point in points if _contains_point(quote, point)]
+        missing = [point for point in points if point not in matched]
+        matched_role_points += len(matched)
+        total_role_points += len(points)
+        role_scores[str(role)] = {
+            "score": _ratio(len(matched), len(points)) if points else 1.0,
+            "matched_points": matched,
+            "missing_points": missing,
+        }
+    forbidden_points = _gold_forbidden_points(answer)
+    violations = [point for point in forbidden_points if _contains_point(prose, point)]
+    required_score = _ratio(len(matched_required), len(required_points)) if required_points else 1.0
+    role_score = _ratio(matched_role_points, total_role_points) if total_role_points else 1.0
+    boundary_score = 0.0 if violations else 1.0
+    return {
+        "answer_set_id": _gold_answers().get("gold_answer_set_id"),
+        "accuracy_goldset_score": round(
+            ((required_score or 0.0) + (role_score or 0.0) + boundary_score) / 3,
+            6,
+        ),
+        "required_fact_score": required_score,
+        "role_accuracy_score": role_score,
+        "boundary_accuracy_score": boundary_score,
+        "matched_required_points": matched_required,
+        "missing_required_points": missing_required,
+        "must_not_claim_violations": violations,
+        "unsupported_claim_count": len(violations),
+        "role_scores": role_scores,
+        "limits": [
+            "Gold accuracy is a lightweight reference-answer score over required facts and forbidden claims.",
+            "It is not exhaustive free-form claim extraction.",
+        ],
+    }
+
+
+def _gold_answer_for(packet: dict[str, Any]) -> dict[str, Any] | None:
+    scenario_id = packet["snapshot_basis"]["event_id"].replace("EVT-", "")
+    return (_gold_answers().get("cases") or {}).get(scenario_id)
+
+
+_GOLD_ANSWERS_CACHE: dict[str, Any] | None = None
+
+
+def _gold_answers() -> dict[str, Any]:
+    global _GOLD_ANSWERS_CACHE
+    if _GOLD_ANSWERS_CACHE is None:
+        if not GOLD_ANSWERS_PATH.exists():
+            _GOLD_ANSWERS_CACHE = {}
+        else:
+            _GOLD_ANSWERS_CACHE = _load_json(GOLD_ANSWERS_PATH)
+    return _GOLD_ANSWERS_CACHE
+
+
+def _gold_forbidden_points(answer: dict[str, Any]) -> list[str]:
+    seen: set[str] = set()
+    forbidden: list[str] = []
+    for point in [
+        *_gold_answers().get("global_must_not_claim", []),
+        *answer.get("must_not_claim", []),
+    ]:
+        if point and point not in seen:
+            seen.add(str(point))
+            forbidden.append(str(point))
+    return forbidden
+
+
+def _contains_point(text: str, point: Any) -> bool:
+    if point in (None, ""):
+        return True
+    return str(point) in text
 
 
 def _summary_prose(summary: dict[str, Any]) -> str:
