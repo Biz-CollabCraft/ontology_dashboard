@@ -470,6 +470,41 @@ RDB-style lookup may answer this through joins or precomposed ViewModel fields. 
 
 ## Evaluation
 
+Recorded 2026-09-01 evaluation artifacts:
+
+- `tests/eval/results/agent_summary_llm_eval_mock_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_smoke_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_2026-09-01.json`
+
+The 8-case Agent Review Packet gold set now covers `GS-001` through `GS-008`.
+The controlled mock run executed 8 cases x 15 iterations = 120 rows and produced
+120/120 accepted candidates, 0 fallback summaries, 0 contract-error rows, and
+1.0 source-ref grounding rate. That result validates the harness, schema checks,
+grounding checks, and cost aggregation path; it is not live model quality.
+
+The live `gpt-4o-mini` smoke run executed 8/8 accepted candidates with 0
+fallback summaries and 0 contract-error rows. The full live run executed 8 cases
+x 15 iterations = 120 rows and produced 118/120 accepted candidates, 2/120
+fallback summaries, 0 contract-error rows, and 1.0 source-ref grounding rate.
+Both fallback rows were `ReadTimeout`, so the observed failure mode is provider
+runtime/timeout handling rather than schema drift or unsupported claims.
+
+Live latency is end-to-end provider-call duration plus local validation time,
+not a pure network-latency breakdown. The full 120-run live result recorded p50
+latency 16,528.991 ms, p95 latency 19,858.608 ms, average latency 16,642.154 ms,
+and configured-rate estimated cost USD 0.1689318 for 120 attempts. The provider
+port does not yet return provider usage metadata, so token and cost values remain
+heuristic estimates from serialized payload size and configured `gpt-4o-mini`
+pricing inputs.
+
+Current quality judgment: the gold-set contract and grounding gates pass, but
+the live operating gate remains partial until retry policy, progress reporting,
+and checkpointed batch execution are added. The next measurement should run
+the same 8x15 set with batch concurrency 4 before trying concurrency 8. It must
+record request latency, queue wait, attempt count, retry outcome, fallback
+reason, batch wall-clock duration, rate-limit events, and accepted-after-retry
+rate separately.
+
 Minimum release gates:
 
 - Groundedness: no packet/source-ref unsupported fact.
