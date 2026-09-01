@@ -1208,7 +1208,7 @@ export function MvpWorkflowOverviewPage({
   const selectedEvent = selectedAsset?.eventId
     ? model.events.find((event) => event.eventId === selectedAsset.eventId) ?? null
     : null;
-  const selectedFactors = detail?.event.assetId === selectedAsset?.assetId && detail.topFactors.length
+  const selectedFactors = selectedAsset && detail?.event.assetId === selectedAsset.assetId && Array.isArray(detail.topFactors) && detail.topFactors.length
     ? detail.topFactors
     : selectedAsset?.topFactors ?? [];
   const needsPartCheck = anomalyEvents.filter((event) => displayPartLabel(event.sparePartAvailable) !== "확보").length;
@@ -1247,7 +1247,7 @@ export function MvpWorkflowOverviewPage({
   const drawerLineSummary = drawerAsset
     ? lineImpactSummaries.find((summary) => summary.line === (drawerAsset.line || drawerAsset.cell || "라인 근거 없음")) ?? null
     : null;
-  const drawerFactors = drawerAsset && detail?.event.assetId === drawerAsset.assetId && detail.topFactors.length
+  const drawerFactors = drawerAsset && detail?.event.assetId === drawerAsset.assetId && Array.isArray(detail.topFactors) && detail.topFactors.length
     ? detail.topFactors
     : drawerAsset?.topFactors ?? [];
   const drawerRiskPercent = drawerAsset?.failureProbability === null || drawerAsset?.failureProbability === undefined
