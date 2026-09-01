@@ -29,6 +29,7 @@ API 계약과 팀 공유 문서를 관리한다.
 
 ## 개인 기여 문서
 
+- [Backend Runtime / Evidence Delivery Contribution](./contributions/hb-backend-runtime-evidence.md)
 - [AI Review / Evidence Boundary Contribution](./contributions/hb-ai-review-evidence.md)
 
 ## 공유 계약 (Shared Contracts)
