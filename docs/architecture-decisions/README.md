@@ -10,3 +10,8 @@
 | [ADR-002](./ADR-002-training-runtime-prediction-ownership.md) | Training과 Runtime Prediction 소유권 분리 및 Feature History Execution | Proposed (제안) |
 | [ADR-003](./ADR-003-generator-runtime-prediction-result-and-backend-decision-ownership.md) | Generator Runtime Prediction Result 및 Backend Decision 소유권 결정 | Accepted (확정) |
 | [ADR-004](./ADR-004-product-result-evidence-viewmodel-trust-boundary.md) | Product Result / Evidence / ViewModel 신뢰 경계 | Proposed (제안) |
+
+## 관련 팀 문서
+
+- [Backend Runtime / Evidence / Agent Review 경계](../mvp/backend-runtime-evidence-agent-review-boundary.md):
+  ADR-003/ADR-004를 MVP Workflow, Agent Review, Closed-loop 입력 보호 기준으로 요약한다.
