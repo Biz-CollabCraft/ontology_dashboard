@@ -424,6 +424,45 @@ models = gpt-4o-mini, gpt-5.6-luna, gpt-5-mini
 Do not mix model comparison with prompt/schema changes. If the prompt payload
 changes again, rerun all three models under the same new profile.
 
+## Model Comparison Results
+
+Recorded artifacts:
+
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt56_luna_smoke_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt56_luna_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt5_mini_smoke_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_gpt5_mini_smoke_timeout60_2026-09-01.json`
+
+The model comparison used the same compact payload profile and concurrency 8.
+The OpenAI-compatible provider had to omit `temperature=0` for GPT-5-family
+models because those endpoints rejected non-default temperature values.
+
+| Model | Scope | Accepted | Fallback | Contract errors | Grounding | p95 latency | Wall-clock | Estimated cost | Judgment |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `gpt-4o-mini` | 120-run | 120/120 | 0 | 0 | 1.0 | 5,018.95 ms | 63,890.402 ms | USD 0.04092975 | Best current default. |
+| `gpt-5.6-luna` | smoke | 8/8 | 0 | 0 | 1.0 | 10,187.532 ms | 10,190.517 ms | USD 0.0045186 | Compatible after temperature fix. |
+| `gpt-5.6-luna` | 120-run | 119/120 | 1 | 1 | 0.991667 | 12,910.35 ms | 145,302.416 ms | USD 0.0675846 | Viable but weaker than baseline. |
+| `gpt-5-mini` | smoke, 20s timeout | 0/8 | 8 | 0 | 1.0 | 20,866.351 ms | 20,869.504 ms | USD 0.00590275 | Fails operating smoke by timeout. |
+| `gpt-5-mini` | smoke, 60s timeout | 5/8 | 3 | 3 | 0.625 | 32,522.984 ms | 32,526.047 ms | USD 0.00790875 | Not promoted to 120-run. |
+
+`gpt-5.6-luna` failed one accepted-candidate validation row because the output
+contained the forbidden Korean phrase `수리 완료`. That is an accuracy/boundary
+issue caught by the deterministic validator, not a timeout issue.
+
+`gpt-5-mini` was not promoted to a 120-run comparison because it failed both
+smoke gates: with the default 20-second timeout every row timed out, and with a
+60-second timeout only 5/8 rows were accepted while three rows failed priority
+claim validation.
+
+Current model choice:
+
+- Use `gpt-4o-mini` as the default for the current Agent Review Summary path.
+- Keep `gpt-5.6-luna` as an experimental candidate only if Korean wording or
+  reasoning quality is later shown to beat `gpt-4o-mini` under human review.
+- Do not use `gpt-5-mini` for this compact summary path without a different
+  prompt contract or model-specific timeout strategy.
+
 ## Next Measurement
 
 The next live measurement should not multiply the sample size. It should keep

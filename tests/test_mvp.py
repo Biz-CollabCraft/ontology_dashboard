@@ -340,6 +340,37 @@ def test_openai_provider_retries_json_object_when_json_schema_is_rejected(
     assert requests[1]["response_format"] == {"type": "json_object"}
 
 
+def test_openai_provider_omits_temperature_for_gpt5_family(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posted: dict = {}
+
+    class Response:
+        status_code = 200
+        text = "{\"choices\": [{\"message\": {\"content\": \"{\\\"ok\\\": true}\"}}]}"
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": "{\"ok\": true}"}}]}
+
+    def fake_post(url: str, **kwargs) -> Response:
+        posted.update(kwargs)
+        return Response()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "gpt-5.6-luna")
+    monkeypatch.setattr("app.infra.llm.provider.httpx.post", fake_post)
+
+    provider = OpenAICompatibleProvider()
+    result = provider.generate_json("Return JSON.", {"input": "value"})
+
+    assert result == {"ok": True}
+    assert posted["json"]["model"] == "gpt-5.6-luna"
+    assert "temperature" not in posted["json"]
+
+
 def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
     service: FactorySignalService,
 ) -> None:

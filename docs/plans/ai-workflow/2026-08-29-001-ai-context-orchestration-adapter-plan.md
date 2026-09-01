@@ -515,6 +515,9 @@ Model selection should be compared separately across `gpt-4o-mini`,
 `gpt-5.6-luna`, and `gpt-5-mini` using the same compact payload, same 8x15
 gold set, and the quality/reliability/cost axes defined in the LLM evaluation
 report.
+The current comparison keeps `gpt-4o-mini` as the default: it passed compact
+concurrency 8 with 120/120 accepted, while `gpt-5.6-luna` had one validator
+rejection and `gpt-5-mini` failed smoke reliability.
 
 Minimum release gates:
 
