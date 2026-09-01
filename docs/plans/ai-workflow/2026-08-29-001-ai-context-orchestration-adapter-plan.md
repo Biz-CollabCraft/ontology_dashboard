@@ -476,6 +476,7 @@ Recorded 2026-09-01 evaluation artifacts:
 - `tests/eval/results/agent_summary_llm_eval_mock_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_smoke_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_c4_2026-09-01.json`
 
 The separate LLM evaluation report records the metric definitions, gold-set
 coverage, mock 120-run result, live smoke result, live 120-run result, latency
@@ -484,14 +485,18 @@ The headline live result is 118/120 accepted candidates, 2/120 `ReadTimeout`
 fallbacks, 0 contract-error rows, 1.0 source-ref grounding rate, p50 latency
 16,528.991 ms, p95 latency 19,858.608 ms, and configured-rate estimated cost
 USD 0.1689318.
+The concurrency 4 live result reduced batch wall-clock duration to 593,433.237
+ms, but degraded acceptance to 100/120 because all 20 fallback rows were
+`ReadTimeout`; this keeps the live operating gate partial until retry,
+timeout tuning, and checkpointed recovery are implemented.
 
 Current quality judgment: the gold-set contract and grounding gates pass, but
 the live operating gate remains partial until retry policy, progress reporting,
 and checkpointed batch execution are added. The next measurement should run
-the same 8x15 set with batch concurrency 4 before trying concurrency 8. It must
-record request latency, queue wait, attempt count, retry outcome, fallback
-reason, batch wall-clock duration, rate-limit events, and accepted-after-retry
-rate separately.
+the same 8x15 set with batch concurrency 4 plus retry before trying concurrency
+8. It must record request latency, queue wait, attempt count, retry outcome,
+fallback reason, batch wall-clock duration, rate-limit events, and
+accepted-after-retry rate separately.
 
 Minimum release gates:
 

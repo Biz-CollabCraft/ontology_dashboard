@@ -91,3 +91,44 @@ def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
     assert artifact["pre_harness_gate"]["ready_for_120_run"] is True
     assert artifact["ready_for_live_120_run"] is True
     assert artifact["aggregate"]["contract_error_rows"] == 0
+
+
+def test_mock_harness_records_concurrency_metrics(tmp_path: Path) -> None:
+    output = tmp_path / "agent-summary-llm-eval-c4.json"
+    env = {
+        **os.environ,
+        "PYTHONPATH": "systems/backend",
+        "LLM_INPUT_PRICE_PER_1M_TOKENS": "0.15",
+        "LLM_OUTPUT_PRICE_PER_1M_TOKENS": "0.60",
+        "LLM_PRICE_CURRENCY": "USD",
+        "LLM_PRICING_VERSION": "configured-gpt-4o-mini-2026-09-01",
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--iterations",
+            "1",
+            "--concurrency",
+            "4",
+            "--output",
+            str(output),
+        ],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    summary = json.loads(result.stdout)
+    artifact = json.loads(output.read_text(encoding="utf-8"))
+
+    assert summary["sample_size"] == 8
+    assert summary["concurrency"] == 4
+    assert summary["batch_wall_clock_ms"] > 0
+    assert artifact["concurrency"] == 4
+    assert artifact["aggregate"]["batch"]["wall_clock_ms"] > 0
+    assert artifact["aggregate"]["batch"]["throughput_per_minute"] > 0
+    assert artifact["aggregate"]["queue_wait_ms"]["p95"] is not None
+    assert all(row["attempt"] == 1 for row in artifact["rows"])
+    assert all(row["llm"]["queue_wait_ms"] is not None for row in artifact["rows"])

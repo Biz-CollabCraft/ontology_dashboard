@@ -161,6 +161,44 @@ contract-shape issue. Production use should add retry policy, checkpointed
 execution, and progress reporting before treating live 120-run execution as a
 release gate.
 
+### Live 120-Run with Concurrency 4
+
+Artifact:
+
+```text
+tests/eval/results/agent_summary_llm_eval_live_c4_2026-09-01.json
+```
+
+Result:
+
+- sample size: 120
+- concurrency: 4
+- batch wall-clock duration: 593,433.237 ms
+- throughput: 12.132789 requests/minute
+- accepted candidates: 100
+- acceptance rate: 0.833333
+- fallback summaries: 20
+- fallback rate: 0.166667
+- fallback reason: `ReadTimeout` for all fallback rows
+- contract-error rows: 0
+- grounding rate: 1.0
+- p50 request latency: 19,635.85 ms
+- p95 request latency: 22,375.92 ms
+- average request latency: 19,703.355 ms
+- p50 queue wait: 294,252.155 ms
+- p95 queue wait: 551,242.319 ms
+- estimated total cost: USD 0.1690266
+- operating gate: partial, 20 observed fallback rows against 2 allowed rows
+
+Interpretation:
+
+Concurrency 4 reduced the total wall-clock duration compared with sequential
+execution, but it materially worsened live provider reliability. The failure
+mode stayed operational: every fallback row was `ReadTimeout`, while contract
+errors and source-ref grounding failures remained 0. This means concurrency 4
+should not be promoted as the current default without retry, timeout tuning, and
+checkpointed recovery.
+
 ## Current Judgment
 
 The Agent Review Summary LLM path is ready to remain enabled behind deterministic
@@ -175,15 +213,17 @@ Use the current result as:
 - partial evidence for live provider reliability
 - negative evidence that the current sequential harness is sufficient for
   operational throughput measurement
+- negative evidence that concurrency 4 is safe without retry/timeout tuning
 
 ## Next Measurement
 
 The next live measurement should not multiply the sample size. It should keep
-the same 120 requests and execute them with bounded parallelism:
+the same 120 requests and execute them with bounded parallelism plus retry:
 
 ```text
 8 gold cases x 15 iterations = 120 total requests
 concurrency = 4
+retry exhausted rows must be measured separately
 ```
 
 Record:
@@ -200,9 +240,10 @@ Record:
 Recommended sequence:
 
 1. Reuse the existing sequential 120-run as concurrency `1` baseline.
-2. Run the same 120 requests at concurrency `4`.
-3. Only if concurrency `4` is stable, run the same 120 requests at concurrency
-   `8` as a pressure test.
+2. Add retry and checkpoint support to the harness.
+3. Re-run the same 120 requests at concurrency `4`.
+4. Only if concurrency `4` is stable after retry, run the same 120 requests at
+   concurrency `8` as a pressure test.
 
 The concurrency `4` run should be considered successful when contract-error
 rows remain 0, grounding rate remains 1.0, retry-exhausted timeout rows are 0 or
