@@ -807,6 +807,8 @@ class ContractVectorVerifier:
                 self._verify_system_mapping_management_vector(vname, vdir, result)
             elif vname.startswith("system-rebuild-job"):
                 self._verify_system_rebuild_job_vector(vname, vdir, result)
+            elif vname.startswith("system-impact-analysis"):
+                self._verify_system_impact_analysis_vector(vname, vdir, result)
 
 
             else:
@@ -883,6 +885,22 @@ class ContractVectorVerifier:
                     context=f"{vector_name}/{filename}",
                     message=f"System Rebuild Job vector validation failed: {exc}",
                 ))
+
+    def _verify_system_impact_analysis_vector(
+        self, vector_name: str, vector_dir: Path, result: VerificationResult,
+    ) -> None:
+        try:
+            request = json.loads((vector_dir / "request.json").read_text(encoding="utf-8"))
+            expected = json.loads((vector_dir / "expected.json").read_text(encoding="utf-8"))
+            schema = json.loads((self.schemas_dir / "system-impact-analysis-request.schema.json").read_text(encoding="utf-8"))
+            validator_for(schema)(schema, format_checker=jsonschema.FormatChecker()).validate(request)
+            if expected.get("recommended_stage") not in request.get("include_stages", []):
+                raise ValueError("recommended stage is absent from requested stages")
+        except Exception as exc:
+            result.errors.append(VerificationError(
+                context=vector_name,
+                message=f"System Impact Analysis vector validation failed: {exc}",
+            ))
 
     def _verify_runtime_overlay_output_vector(
         self,

@@ -11,6 +11,9 @@ def test_system_operator_has_only_operational_asset_read_permission():
         "system.jobs.read",
         "system.jobs.create",
         "system.jobs.cancel",
+        "system.impact.read",
+        "system.impact.create",
+        "system.rebuild.execute",
     }
 
 
@@ -24,4 +27,7 @@ def test_tenant_admin_does_not_inherit_system_operations_permission():
         "system.jobs.read",
         "system.jobs.create",
         "system.jobs.cancel",
+        "system.impact.read",
+        "system.impact.create",
+        "system.rebuild.execute",
     } & ROLE_PERMISSIONS["tenant_admin"]

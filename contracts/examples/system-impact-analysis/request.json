@@ -1,0 +1,1 @@
+{"$schema":"https://ontology-dashboard.local/schemas/system-impact-analysis-request.schema.json","mapping_id":"mapping-a","mapping_version":"v2","mapping_sha256":"1111111111111111111111111111111111111111111111111111111111111111","rebuild_job_id":"0782bb0e-52dc-46d4-9562-d40bfaa9fb11","include_stages":["preprocessing","feature","training"]}

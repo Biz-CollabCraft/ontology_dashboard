@@ -77,6 +77,9 @@ PERMISSION_DEFINITIONS: dict[str, str] = {
     "system.jobs.read": "System Operations Pipeline Job 조회",
     "system.jobs.create": "Mapping Rebuild/Replay Job 생성",
     "system.jobs.cancel": "실행 대기·실행 중 Pipeline Job 취소 요청",
+    "system.impact.read": "Mapping 하위 영향 분석 조회",
+    "system.impact.create": "Mapping 하위 영향 분석 Snapshot 생성",
+    "system.rebuild.execute": "선택한 하위 Pipeline 재구축 실행",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -84,11 +87,13 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "system.assets.read", "system.assets.create_version", "system.assets.validate",
         "system.assets.publish", "system.assets.activate", "system.jobs.read",
         "system.jobs.create", "system.jobs.cancel",
+        "system.impact.read", "system.impact.create", "system.rebuild.execute",
     },
     "system_operator": {
         "system.assets.read", "system.assets.create_version", "system.assets.validate",
         "system.assets.publish", "system.assets.activate", "system.jobs.read",
         "system.jobs.create", "system.jobs.cancel",
+        "system.impact.read", "system.impact.create", "system.rebuild.execute",
     },
     "executive_viewer": {"app.access", "events.read", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "executive.overview.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_manager": {"app.access", "events.read", "events.decision", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "datasets.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
