@@ -302,6 +302,21 @@ export type MvpClosedLoopWorkType = "inspection" | "maintenance";
 export type MvpClosedLoopWorkOrderStatus = "requested" | "approved" | "in_progress" | "completed" | "blocked" | "failed" | "cancelled";
 export type MvpClosedLoopMaintenanceActionStatus = "planned" | "in_progress" | "completed" | "failed" | "cancelled";
 export type MvpClosedLoopRuntimeStatus = "equipment_under_maintenance" | "warming_up" | "history_insufficient" | "ready" | "predicted" | null;
+export type MvpClosedLoopLifecycleStep =
+  | "prediction"
+  | "evidence"
+  | "decision"
+  | "inspection_requested"
+  | "inspection_approved"
+  | "inspection_in_progress"
+  | "inspection_completed"
+  | "recommendation_proposed"
+  | "maintenance_requested"
+  | "maintenance_approved"
+  | "maintenance_in_progress"
+  | "maintenance_completed"
+  | "post_maintenance_observation_pending"
+  | "ready_for_reprediction";
 
 export interface MvpClosedLoopAvailableAction {
   actionId: string;
@@ -351,12 +366,41 @@ export interface MvpClosedLoopActivity {
   maintenanceEventId?: string | null;
 }
 
+export interface MvpClosedLoopLifecycleSummary {
+  currentStep: MvpClosedLoopLifecycleStep;
+  currentStepLabel: string;
+  completedSteps: MvpClosedLoopLifecycleStep[];
+  nextStep: MvpClosedLoopLifecycleStep | null;
+  source: "backend_closed_loop_policy";
+}
+
+export interface MvpClosedLoopPrimaryAction extends MvpClosedLoopAvailableAction {
+  label: string;
+  ownerRole: "process_manager" | "process_engineer" | "maintenance_technician" | "unassigned";
+  ownerLabel: string;
+  requiresInput: boolean;
+}
+
+export interface MvpClosedLoopTimelineItem {
+  timelineId: string;
+  eventType: string;
+  label: string;
+  status: "completed" | "pending" | "blocked" | "failed";
+  actorDisplayName?: string | null;
+  occurredAt?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+}
+
 export interface MvpClosedLoopSummary {
   workOrders: MvpClosedLoopWorkOrder[];
   maintenanceActions: MvpClosedLoopMaintenanceAction[];
   maintenanceEvents: MvpClosedLoopMaintenanceEvent[];
   activities: MvpClosedLoopActivity[];
   availableActions: MvpClosedLoopAvailableAction[];
+  lifecycleSummary: MvpClosedLoopLifecycleSummary | null;
+  primaryAction: MvpClosedLoopPrimaryAction | null;
+  timeline: MvpClosedLoopTimelineItem[];
   runtimeStatus: MvpClosedLoopRuntimeStatus;
 }
 
@@ -897,12 +941,40 @@ export interface AssetDetailViewModel {
       maintenance_action_id?: string | null;
       maintenance_event_id?: string | null;
     }>;
+    inspection_results?: Array<Record<string, unknown>>;
     available_actions?: Array<{
       action_id: string;
       target_type: "recommendation" | "work_order" | "maintenance_action" | "inspection_result" | "event";
       target_id?: string | null;
       label?: string;
       disabled_reason?: string | null;
+    }>;
+    lifecycle_summary?: {
+      current_step: MvpClosedLoopLifecycleStep;
+      current_step_label: string;
+      completed_steps: MvpClosedLoopLifecycleStep[];
+      next_step?: MvpClosedLoopLifecycleStep | null;
+      source: "backend_closed_loop_policy";
+    } | null;
+    primary_action?: {
+      action_id: string;
+      target_type: "recommendation" | "work_order" | "maintenance_action" | "inspection_result" | "event";
+      target_id?: string | null;
+      label: string;
+      owner_role: "process_manager" | "process_engineer" | "maintenance_technician" | "unassigned";
+      owner_label: string;
+      disabled_reason?: string | null;
+      requires_input: boolean;
+    } | null;
+    timeline?: Array<{
+      timeline_id: string;
+      event_type: string;
+      label: string;
+      status: "completed" | "pending" | "blocked" | "failed";
+      actor_display_name?: string | null;
+      occurred_at?: string | null;
+      target_type?: string | null;
+      target_id?: string | null;
     }>;
     runtime_status?: MvpClosedLoopRuntimeStatus;
   } | null;

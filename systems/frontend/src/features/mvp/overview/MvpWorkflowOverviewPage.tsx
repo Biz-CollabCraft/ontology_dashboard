@@ -20,7 +20,12 @@ import type {
   MvpAgentReviewSummaryResponse,
   MvpAsset,
   MvpBootstrapModel,
+  MvpClosedLoopAvailableAction,
+  MvpClosedLoopLifecycleStep,
+  MvpClosedLoopLifecycleSummary,
+  MvpClosedLoopPrimaryAction,
   MvpClosedLoopSummary,
+  MvpClosedLoopTimelineItem,
   MvpEvent,
   MvpEventDetailModel,
   MvpFeatureHistoryWindow,
@@ -204,6 +209,23 @@ const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean 
   maintenance_completed: { label: "정비 후 관측 대기", disabled: true },
   observation_pending: { label: "관측 데이터 대기", disabled: true },
   ready_for_reprediction: { label: "재예측 보기", disabled: false },
+};
+
+const CLOSED_LOOP_LIFECYCLE_LABEL: Record<MvpClosedLoopLifecycleStep, string> = {
+  prediction: "예측",
+  evidence: "근거 확인",
+  decision: "판단",
+  inspection_requested: "점검 요청",
+  inspection_approved: "점검 승인",
+  inspection_in_progress: "점검 중",
+  inspection_completed: "점검 완료",
+  recommendation_proposed: "정비안 제안",
+  maintenance_requested: "정비 요청",
+  maintenance_approved: "정비 승인",
+  maintenance_in_progress: "정비 중",
+  maintenance_completed: "정비 완료",
+  post_maintenance_observation_pending: "정비 후 관측 대기",
+  ready_for_reprediction: "재예측 가능",
 };
 
 const REPORT_OUTPUT_OPTIONS: Array<{ id: MvpReportTab; label: string; detail: string }> = [
@@ -682,7 +704,37 @@ function latestClosedLoopMaintenanceEvent(closedLoop: MvpClosedLoopSummary | nul
   return [...(closedLoop?.maintenanceEvents ?? [])].sort((left, right) => String(right.completedAt ?? "").localeCompare(String(left.completedAt ?? "")))[0] ?? null;
 }
 
+function workStatusFromLifecycleSummary(summary: MvpClosedLoopLifecycleSummary | null | undefined): WorkStatus | null {
+  switch (summary?.currentStep) {
+    case "prediction":
+    case "evidence":
+    case "decision":
+      return "candidate_recommended";
+    case "inspection_requested":
+      return "work_requested";
+    case "inspection_approved":
+    case "inspection_completed":
+    case "recommendation_proposed":
+    case "maintenance_requested":
+    case "maintenance_approved":
+      return "assigned";
+    case "inspection_in_progress":
+    case "maintenance_in_progress":
+      return "inspection_started";
+    case "maintenance_completed":
+      return "maintenance_completed";
+    case "post_maintenance_observation_pending":
+      return "observation_pending";
+    case "ready_for_reprediction":
+      return "ready_for_reprediction";
+    default:
+      return null;
+  }
+}
+
 function workStatusFromClosedLoop(closedLoop: MvpClosedLoopSummary | null | undefined): WorkStatus | null {
+  const lifecycleStatus = workStatusFromLifecycleSummary(closedLoop?.lifecycleSummary);
+  if (lifecycleStatus) return lifecycleStatus;
   const runtimeStatus = closedLoop?.runtimeStatus;
   if (runtimeStatus === "predicted" || runtimeStatus === "ready") return "ready_for_reprediction";
   if (runtimeStatus === "warming_up" || runtimeStatus === "history_insufficient") return "observation_pending";
@@ -711,6 +763,14 @@ function closedLoopActionForStatus(closedLoop: MvpClosedLoopSummary | null | und
   };
   const actionIds = actionIdsByStatus[status];
   return (closedLoop?.availableActions ?? []).find((action) => actionIds.includes(action.actionId)) ?? null;
+}
+
+function primaryClosedLoopAction(
+  closedLoop: MvpClosedLoopSummary | null | undefined,
+  status: WorkStatus | null,
+): MvpClosedLoopPrimaryAction | MvpClosedLoopAvailableAction | null {
+  if (closedLoop?.primaryAction) return closedLoop.primaryAction;
+  return status ? closedLoopActionForStatus(closedLoop, status) : null;
 }
 
 function closedLoopAssignee(closedLoop: MvpClosedLoopSummary | null | undefined): string | null {
@@ -802,7 +862,39 @@ function WorkStatusPrimaryAction({
   );
 }
 
-function WorkStatusTimeline({ status }: { status: WorkStatus }) {
+function lifecycleTimelineItems(summary: MvpClosedLoopLifecycleSummary | null | undefined): Array<{
+  id: string;
+  label: string;
+  state: "is-done" | "is-active" | "";
+}> | null {
+  if (!summary) return null;
+  const completed = summary.completedSteps.map((step) => ({
+    id: step,
+    label: CLOSED_LOOP_LIFECYCLE_LABEL[step] ?? step,
+    state: "is-done" as const,
+  }));
+  const active = {
+    id: summary.currentStep,
+    label: summary.currentStepLabel || CLOSED_LOOP_LIFECYCLE_LABEL[summary.currentStep],
+    state: "is-active" as const,
+  };
+  const next = summary.nextStep
+    ? [{
+      id: summary.nextStep,
+      label: CLOSED_LOOP_LIFECYCLE_LABEL[summary.nextStep] ?? summary.nextStep,
+      state: "" as const,
+    }]
+    : [];
+  return [...completed, active, ...next].slice(-7);
+}
+
+function WorkStatusTimeline({
+  status,
+  lifecycleSummary,
+}: {
+  status: WorkStatus;
+  lifecycleSummary?: MvpClosedLoopLifecycleSummary | null;
+}) {
   const order: WorkStatus[] = [
     "candidate_recommended",
     "work_requested",
@@ -813,12 +905,42 @@ function WorkStatusTimeline({ status }: { status: WorkStatus }) {
     "ready_for_reprediction",
   ];
   const activeIndex = order.indexOf(status);
+  const lifecycleItems = lifecycleTimelineItems(lifecycleSummary);
+  if (lifecycleItems) {
+    return (
+      <ol className="mvp-work-status-timeline" aria-label="작업 상태 타임라인">
+        {lifecycleItems.map((item) => (
+          <li key={item.id} className={item.state}>
+            <i aria-hidden="true" />
+            <span>{item.label}</span>
+          </li>
+        ))}
+      </ol>
+    );
+  }
   return (
     <ol className="mvp-work-status-timeline" aria-label="작업 상태 타임라인">
       {order.map((item, index) => (
         <li key={item} className={index < activeIndex ? "is-done" : index === activeIndex ? "is-active" : ""}>
           <i aria-hidden="true" />
           <span>{WORK_STATUS_LABEL[item]}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function ClosedLoopActivityTimeline({ timeline }: { timeline: MvpClosedLoopTimelineItem[] }) {
+  if (!timeline.length) return null;
+  return (
+    <ol className="mvp-closed-loop-activity-timeline" aria-label="Closed-loop 작업 이력">
+      {timeline.slice(0, 4).map((item) => (
+        <li key={item.timelineId}>
+          <i aria-hidden="true" />
+          <div>
+            <strong>{item.label}</strong>
+            <small>{[item.actorDisplayName, item.occurredAt ? formatTimestamp(item.occurredAt) : null].filter(Boolean).join(" · ")}</small>
+          </div>
         </li>
       ))}
     </ol>
@@ -1092,7 +1214,8 @@ export function MvpWorkflowOverviewPage({
   const maxPlanningImpact = planningImpactFromOperationContext(selectedDetail);
   const selectedClosedLoopStatus = workStatusFromClosedLoop(selectedDetail?.closedLoop);
   const selectedClosedLoopWorkId = closedLoopWorkIdLabel(selectedDetail?.closedLoop);
-  const selectedWorkStatusLabel = selectedClosedLoopStatus ? WORK_STATUS_LABEL[selectedClosedLoopStatus] : "미생성";
+  const selectedLifecycleSummary = selectedDetail?.closedLoop?.lifecycleSummary ?? null;
+  const selectedWorkStatusLabel = selectedLifecycleSummary?.currentStepLabel ?? (selectedClosedLoopStatus ? WORK_STATUS_LABEL[selectedClosedLoopStatus] : "미생성");
   const selectedWorkStatusDetail = selectedClosedLoopStatus
     ? `${selectedClosedLoopWorkId} · 담당 ${closedLoopAssignee(selectedDetail?.closedLoop) ?? selectedEvent?.assignedEngineer ?? "미배정"}`
     : "작업요청 ID 미생성 · 점검 후보";
@@ -1121,9 +1244,8 @@ export function MvpWorkflowOverviewPage({
   const drawerDetail = drawerAsset && detail?.event.assetId === drawerAsset.assetId ? detail : null;
   const drawerClosedLoop = drawerDetail?.closedLoop ?? null;
   const drawerClosedLoopStatus = workStatusFromClosedLoop(drawerClosedLoop);
-  const drawerClosedLoopAction = drawerClosedLoopStatus
-    ? closedLoopActionForStatus(drawerClosedLoop, drawerClosedLoopStatus)
-    : null;
+  const drawerLifecycleSummary = drawerClosedLoop?.lifecycleSummary ?? null;
+  const drawerClosedLoopAction = primaryClosedLoopAction(drawerClosedLoop, drawerClosedLoopStatus);
   const drawerPlanningImpact = planningImpactFromOperationContext(drawerDetail);
   const drawerWorkStatus = drawerAsset
     ? drawerClosedLoopStatus ?? workStatusForAsset(drawerAsset, drawerEvent)
@@ -1135,7 +1257,7 @@ export function MvpWorkflowOverviewPage({
   const drawerActionLabel = drawerClosedLoopAction?.label ?? null;
   const drawerWorkActionDisabled = true;
   const drawerActionHelper = drawerClosedLoop
-    ? drawerClosedLoopAction?.disabledReason ?? "Closed-loop read model 기준으로 표시합니다. 실제 실행은 API mutation 연결 후 처리합니다."
+    ? drawerClosedLoopAction?.disabledReason ?? (drawerClosedLoop.primaryAction ? `담당: ${drawerClosedLoop.primaryAction.ownerLabel} · Closed-loop read model 기준으로 표시합니다.` : "Closed-loop read model 기준으로 표시합니다. 실제 실행은 API mutation 연결 후 처리합니다.")
     : "Closed-loop API 미연결 상태입니다. 현재 화면에서는 상태를 변경하지 않습니다.";
   const fieldSummaryPart = selectedCandidate?.suspectedPart
     ?? (selectedFactors[0] ? fieldFactorItem(selectedFactors[0]) : "의심 부품 확인 필요");
@@ -1379,7 +1501,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} projectId={model.context.projectId} workspaceId={model.context.workspaceId} eventId={drawerEvent?.eventId ?? null} onChanged={onRefresh} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "ViewModel" : drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} projectId={model.context.projectId} workspaceId={model.context.workspaceId} eventId={drawerEvent?.eventId ?? null} onChanged={onRefresh} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1623,6 +1745,8 @@ function AssetPreviewPanel({
   workActionLabel,
   workActionHelper,
   workActionDisabled,
+  lifecycleSummary,
+  activityTimeline,
   assignee,
   canMaterializeAgentSummary,
   projectId,
@@ -1652,6 +1776,8 @@ function AssetPreviewPanel({
   workActionLabel: string | null;
   workActionHelper: string;
   workActionDisabled: boolean;
+  lifecycleSummary: MvpClosedLoopLifecycleSummary | null;
+  activityTimeline: MvpClosedLoopTimelineItem[];
   assignee: string;
   canMaterializeAgentSummary: boolean;
   projectId: string;
@@ -1778,7 +1904,8 @@ function AssetPreviewPanel({
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
           </div>
-          <WorkStatusTimeline status={workStatus} />
+          <WorkStatusTimeline status={workStatus} lifecycleSummary={lifecycleSummary} />
+          <ClosedLoopActivityTimeline timeline={activityTimeline} />
           {activeTab === "status" ? (
             <>
               <dl>
@@ -1846,7 +1973,8 @@ function AssetPreviewPanel({
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
           </div>
-          <WorkStatusTimeline status={workStatus} />
+          <WorkStatusTimeline status={workStatus} lifecycleSummary={lifecycleSummary} />
+          <ClosedLoopActivityTimeline timeline={activityTimeline} />
           {role === "process_manager" && activeTab === "status" ? (
             <>
               <dl>
