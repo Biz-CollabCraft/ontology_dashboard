@@ -18,6 +18,12 @@ class PipelineJobService:
         active = self.repository.find_active(body.source_uri, body.mapping_sha256)
         if active:
             raise SystemOperationError(409, "SYSTEM_JOB_ALREADY_RUNNING", "동일 source와 Mapping의 Rebuild Job이 이미 실행 중입니다.")
+        try:
+            published = self.generator.read_mapping(body.mapping_id, body.mapping_version)
+        except Exception as exc:
+            raise SystemOperationError(422, "SYSTEM_MAPPING_NOT_PUBLISHED", "발행된 Mapping 버전을 확인할 수 없습니다.") from exc
+        if published.get("mapping_sha256") != body.mapping_sha256:
+            raise SystemOperationError(422, "SYSTEM_MAPPING_INTEGRITY_ERROR", "발행 Mapping checksum이 Job 요청과 일치하지 않습니다.")
         now = datetime.now(timezone.utc).isoformat()
         return self.repository.create_or_get({
             "job_id": str(uuid.uuid4()), "job_type": body.job_type, "request_id": request_id,

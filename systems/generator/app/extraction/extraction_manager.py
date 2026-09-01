@@ -225,8 +225,29 @@ class ExtractionManager:
     ) -> dict[str, Any]:
         """Resolve and validate approved static mapping table."""
         m_id = mapping_id or PATHS.extraction_mapping_id
-        m_ver = mapping_version or PATHS.extraction_mapping_version
-        m_sha = mapping_sha256 or PATHS.extraction_mapping_sha256
+        m_ver = mapping_version
+        m_sha = mapping_sha256
+        if mapping_id is None and mapping_version is None and mapping_sha256 is None:
+            active_pointer = (PATHS.mapping_root / m_id / "active.json").resolve()
+            if active_pointer.is_file():
+                try:
+                    import json
+
+                    pointer = json.loads(active_pointer.read_text(encoding="utf-8"))
+                    if pointer.get("mapping_id") != m_id:
+                        raise ValueError("active mapping id mismatch")
+                    m_ver = str(pointer["mapping_version"])
+                    m_sha = str(pointer["mapping_sha256"])
+                except Exception as exc:
+                    raise ExtractionConfigurationInvalidError(
+                        f"Active Mapping pointer is invalid: {active_pointer}"
+                    ) from exc
+            else:
+                m_ver = PATHS.extraction_mapping_version
+                m_sha = PATHS.extraction_mapping_sha256
+        else:
+            m_ver = mapping_version or PATHS.extraction_mapping_version
+            m_sha = mapping_sha256 or PATHS.extraction_mapping_sha256
 
         # Try loading from mapping repository
         try:

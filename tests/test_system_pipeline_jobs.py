@@ -7,6 +7,9 @@ from app.system_operations.pipeline_job_service import PipelineJobService
 
 
 class FakeGenerator:
+    def read_mapping(self, mapping_id, mapping_version):
+        return {"mapping_id": mapping_id, "mapping_version": mapping_version, "mapping_sha256": "1" * 64}
+
     def rebuild(self, payload):
         return {"status": "succeeded", "run_id": payload["run_id"], "published_datasets": ["dataset-v2"]}
 

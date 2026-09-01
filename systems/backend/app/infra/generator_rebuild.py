@@ -33,5 +33,18 @@ class GeneratorRebuildClient:
     def rebuild(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request(f"{self.rebuild_url}/extraction", payload)
 
+    def read_mapping(self, mapping_id: str, mapping_version: str) -> dict[str, Any]:
+        token = os.getenv("SYSTEM_OPERATIONS_SERVICE_TOKEN", "").strip()
+        url = f"{self.mapping_url}/{mapping_id}/versions/{mapping_version}"
+        if not self.mapping_url or not token:
+            raise GeneratorRebuildUnavailable("Generator Mapping management is not configured")
+        try:
+            response = self.client.get(url, headers={"X-System-Operations-Token": token}) if self.client else httpx.get(url, headers={"X-System-Operations-Token": token}, timeout=15.0)
+        except httpx.HTTPError as exc:
+            raise GeneratorRebuildUnavailable(str(exc)) from exc
+        if response.is_error or not isinstance(response.json(), dict):
+            raise GeneratorRebuildUnavailable(f"Generator Mapping API returned HTTP {response.status_code}")
+        return response.json()
+
     def activate(self, mapping_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request(f"{self.mapping_url}/{mapping_id}/activate", payload)
