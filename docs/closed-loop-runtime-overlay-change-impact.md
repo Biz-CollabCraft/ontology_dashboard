@@ -13,8 +13,8 @@
 - 기존 Closed-loop Domain 객체와 상태 머신을 다시 만들지 않는다.
 - PR #42의 Domain 계약과 PR #44의 Product/API/UI 소비 계약을 유지한다.
 - Canonical V3.1과 정비 전 Product Result/Evidence는 immutable하다.
-- `systems/generator`는 Feature/Label, training과 Model Artifact publish까지 소유한다.
-- Backend Diagnosis가 Runtime Prediction과 Product Result/Evidence를 생성한다.
+- `systems/generator`는 Feature/Label, training, Model Artifact publish, Runtime Prediction score 및 Prediction Result Batch 송신까지 소유한다.
+- Backend Diagnosis가 Prediction Result Batch를 검증·판정·승격해 Product Result/Evidence를 생성한다.
 - 정비 완료만으로 정상 판정을 만들지 않는다.
 - What-if와 비용 최적화는 핵심 MVP 범위에 포함하지 않는다.
 
@@ -23,7 +23,7 @@
 | 기존 계획 표현 | 보강된 구현 기준 |
 |---|---|
 | 정비 후 새 Observation 생성 | 대상 설비만 `maintenance_replay_overlay` branch에서 생성 |
-| 정비 후 재예측 | Backend가 `history_requirement`을 충족했다고 판정한 첫 inference-ready Observation에서 실행 |
+| 정비 후 재예측 | Generator가 `history_requirement`을 충족한 첫 inference-ready Observation에서 Prediction Result Batch를 송신하고 Backend가 이를 판정·승격 |
 | 이력 확보 방식 미정 | 대상 설비 Overlay branch clock만 Fast-forward하고 Observation을 지속 생성 |
 | Replay는 새 센서값을 만들지 않음 | Canonical Replay는 계속 read-only, Overlay는 별도 opt-in 경로 |
 | 완료 시각 `completed_at` | 내부 Domain은 유지, 시스템 간 이벤트는 `maintenance_completed_at` |
@@ -52,7 +52,7 @@
 - Generator Overlay 구현
 - Simulation Clock 실행
 - Feature history 계산
-- Runtime Prediction 또는 Result/Evidence 생성
+- Product Result/Evidence 생성
 
 ### 성민 — `gen_data` Generator/Replay 후속 작업
 
@@ -68,13 +68,10 @@
 
 ### 호범 — Backend Diagnosis 후속 작업
 
-- Overlay Observation을 기존 Runtime Diagnosis 입력으로 소비
-- `restart_at` 이후 새 history segment 적용
-- Model Artifact의 `history_requirement`에서 최소 이력을 계산하는 유일한 readiness owner
-- 이력 부족 시 Prediction하지 않고 이후 available Observation을 기다림
-- stream 종료·실패 등 유효 이력 확보 불가가 확정될 때만 `history_insufficient` 처리
-- `warming_up`과 `history_insufficient` 처리
-- 첫 inference-ready Observation에서 신규 Product Result/Evidence 생성
+- Generator가 송신한 정비 후 Prediction Result Batch를 기존 Diagnosis Inbox로 소비
+- `restart_at` 이후 새 history/source lineage를 Product Result provenance로 보존
+- Batch가 `warming_up`/`history_insufficient` 등 fail-closed 상태를 담으면 정상값으로 보정하지 않고 gap/status로 노출
+- 첫 accepted Prediction Result Batch에서 신규 Product Result/Evidence 생성
 - 정비 전 Result/Evidence는 수정하지 않음
 - Canonical Observation과 분리된 Runtime Overlay 저장소/port를 통해 history 조회
 - 대상 설비의 정비 후 Canonical 미래 행을 Overlay history에 다시 섞지 않음

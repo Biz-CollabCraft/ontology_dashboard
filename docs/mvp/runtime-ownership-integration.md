@@ -3,6 +3,7 @@
 - 대상: PR #9 `feat/week2-mvp-implementation-import`
 - 상위 계약: PR #8 저장소 책임, PR #10 시스템 아키텍처, `gen_data` PR #2 source/reference fixture 분류
 - 목적: 개인 프로토타입에서 이관한 실행 코드를 팀의 장기 책임 경계에 맞추되 현재 MVP 화면과 API 호환성을 유지한다.
+- 현재 규범 기준: ADR-003 이후 Runtime Prediction score/Batch는 `systems/generator`, Threshold/Decision 및 Product Result/Evidence 승격은 `systems/backend/app/diagnosis`가 소유한다. 이 문서의 과거 Backend runtime inference 표현은 compatibility/history 문맥으로만 해석한다.
 
 ## 적용한 책임 경계
 
@@ -18,10 +19,11 @@ Extraction (protocol parsing + approved Mapping application)
 → Feature Dataset Bundle
 → Training/Evaluation
 → versioned Model Artifact publish
-        ↓ MODEL_ARTIFACT_URI
+→ Runtime Prediction score
+→ Prediction Result Batch
+        ↓ Prediction Result Batch Contract
 systems/backend/app/diagnosis
-current observation + Model Artifact
-→ runtime inference
+batch validation + threshold policy
 → Product Result Artifact / Evidence
         ↓
 기존 FastAPI API → React/Report consumer
@@ -35,11 +37,12 @@ Closed-loop Maintenance Integration event
 gen_data 대상 설비 Runtime Overlay
 Snapshot effect + branch-local Simulation Clock Fast-forward
         ↓ continuous maintenance_replay_overlay Observation availability
-systems/backend/app/diagnosis
+systems/generator Runtime Pipeline
 history_requirement/readiness validation
         ├─ insufficient: wait for subsequent Observation
-        └─ ready: runtime inference
+        └─ ready: runtime prediction score / Batch
         ↓
+systems/backend/app/diagnosis
 새 Product Result Artifact / Evidence
 ```
 
@@ -64,12 +67,13 @@ Canonical 이전 구간과 Overlay 이후 구간을 선택하며 둘의 미래 �
 - Observation Dataset 구조 분석 및 불변 Preprocessing Plan 발행 (Ontology Mapping 미생성/미소비)
 - Feature Schema allowlist/recipe 및 Label Schema 실행 기반 Feature Dataset Bundle 발행
 - model training/evaluation 및 immutable versioned Model Artifact publish (latest.json pointer 관리)
+- Runtime Pipeline에서 관측 데이터를 전처리하고 Model Artifact별 raw score를 산출해 Prediction Result Batch를 송신
 - **책임 경계**:
   - protocol Mapping은 Extraction이 Canonical Observation을 생성할 때 적용한다.
   - Preprocessing은 Mapping을 생성하거나 소비하지 않는다.
   - Feature는 Mapping을 조회하지 않고 Feature Schema/Recipe를 실행한다.
-  - Backend Diagnosis는 Feature 생성이나 모델 학습을 수행하지 않는다.
-  - Generator는 runtime inference, Product Result Artifact 및 Evidence를 생성하지 않는다.
+  - Backend Diagnosis는 Feature 생성, 모델 학습, 모델별 raw score 추론을 수행하지 않는다.
+  - Generator는 threshold 적용, 최종 이상 판정, Product Result Artifact 및 Evidence를 생성하지 않는다.
 
 기존 확장 ML Validator/workbench가 `systems/backend/ontology_dashboard/modeling` 아래에서 직접 수행하던 semantic mapping, feature materialization, sklearn experiment/training 구현도 각각 `systems/generator/ontology_mapping`, `systems/generator/feature`, `systems/generator/model`로 이동했다. API에는 기존 화면·계약을 깨지 않기 위한 lazy compatibility port만 남겼다.
 
@@ -77,18 +81,17 @@ Model Artifact는 `model-artifact-v1.0` manifest로 publish하며 artifact type/
 
 ### `systems/backend/app/diagnosis`
 
-- `MODEL_ARTIFACT_URI`로 주입된 Model Artifact의 manifest/checksum/compatibility 검증
-- current observation runtime inference
+- Prediction Result Batch schema/scope/checksum/lineage 검증
+- Generator가 제공한 model_id/model_version/raw score와 source lineage 보존
+- Threshold Policy 적용 및 최종 이상 판정
 - `result-artifact-v1.0` 의미와 호환되는 Product Result Artifact 생성
 - 제품 Evidence 생성
-- 정비 후 Overlay Observation의 새 history segment 로드
-- Model Artifact의 `history_requirement`을 읽는 유일한 readiness owner
-- 이력 부족 시 다음 Observation을 기다리며 `warming_up`/`history_insufficient` 처리
-- 첫 inference-ready Observation의 신규 Product Result/Evidence 생성
+- 정비 후 Prediction Result Batch의 Product Result/Evidence 승격
+- 이력 부족, warming-up, unavailable 상태를 정상값으로 보정하지 않고 product-facing gap/status로 노출
 
-기존 `systems/backend/ontology_dashboard/modeling/registry.py`가 수행하던 active model load/scoring/explanation 구현도 `systems/backend/app/diagnosis/model_registry.py`로 이동했고 API 경로에는 compatibility adapter만 남겼다.
+기존 Backend 직접 model load/scoring/explanation 구현은 compatibility 또는 migration 문맥으로만 유지한다. 공식 Target runtime은 Generator Prediction Result Batch를 Backend가 검증·판정·승격하는 구조다.
 
-Backend는 generator Python 구현이나 sibling `model_store` 경로를 import/탐색하지 않는다. MVP 로컬 데모에서 Artifact가 주입되지 않은 경우에만 기존 deterministic heuristic을 명시적 compatibility fallback으로 유지한다.
+Backend는 generator Python 구현이나 sibling `model_store` 경로를 import/탐색하지 않는다. MVP 로컬 데모에서 Artifact 또는 Batch 경로가 주입되지 않은 경우에만 기존 deterministic heuristic을 명시적 compatibility fallback으로 유지한다.
 
 ML authoring compatibility port는 generator-capable 개발/통합 배포에서만 실제 generator 구현을 지연 로드한다. 일반 Backend startup과 diagnosis runtime은 generator package 없이도 import 가능하도록 유지한다.
 
@@ -98,35 +101,39 @@ PR #11에서 기존 root `api/`와 `web/` 실행 host를 각각 `systems/backend
 
 ## Generator internal daemon의 허용/금지 범위
 
-`systems/generator`의 책임 끝점은 versioned Model Artifact publish까지다. 이 경계를
+`systems/generator`의 책임 끝점은 ADR-003 기준으로 versioned Model Artifact publish와 Runtime Prediction score/Batch 송신까지다. 이 경계를
 구체적으로 판정하기 위해 Generator internal daemon(학습 daemon)의 허용/금지 범위를
-명문화한다. 상세 아키텍처 결정과 책임 분리 근거는 `docs/architecture-decisions/ADR-002-training-runtime-prediction-ownership.md`를 따른다.
+명문화한다. 상세 아키텍처 결정과 책임 분리 근거는 `docs/architecture-decisions/ADR-003-generator-runtime-prediction-result-and-backend-decision-ownership.md`를 따른다.
 
 **허용**
 
 - `GET /health`
 - `POST /internal/train`
 - `POST /internal/retrain`
+- `POST /internal/runtime-pipeline/enqueue`
+- `POST /internal/runtime-pipeline/retry-failed/{job_id}`
+- `GET /runtime-pipeline/status`
 - 학습 job 상태 또는 Model Artifact publish 상태 조회
+- Runtime Prediction pipeline 상태 조회 및 재시도
 
 **금지**
 
-- 사용자 요청 기반 runtime predict (예: `/internal/predict`, `/internal/predict/file`)
-- `PredictionOutput` 등 runtime 응답 형식의 외부 노출
+- 사용자 요청 기반 직접 predict API (예: `/internal/predict`, `/internal/predict/file`)
+- `PredictionOutput` 등 legacy runtime 응답 형식의 외부 노출
 - current telemetry를 운영 목적으로 자동 선택하는 기능
 - Product prediction 파일 저장 (예: `data_preprocessed/predictions/*.json`을 제품 저장소로 사용)
-- Product Result Artifact/Evidence 생성
+- Threshold 적용, 최종 이상 판정, Product Result Artifact/Evidence 생성
 
 또한 다음 용어를 명확히 분리한다.
 
 ```text
-offline model evaluation           ≠ operational runtime inference
-학습 후 검증/스코어링 목적           사용자 요청에 대한 실시간 응답 목적
-Generator 책임                      Backend diagnosis 책임
+offline model evaluation           ≠ operational runtime prediction batch
+학습 후 검증/스코어링 목적           제품 런타임 raw score/Batch 산출 목적
+Generator 책임                      Generator 책임, Backend는 검증/판정/승격
 ```
 
 이 두 개념을 같은 함수/엔드포인트에서 처리하지 않는다. `offline evaluation`의 결과를
-`operational runtime inference`의 응답 형식(`PredictionOutput` 등)으로 감싸는 것도 이 분리를
+legacy 직접 inference 응답 형식(`PredictionOutput` 등)으로 감싸는 것도 이 분리를
 어기는 것으로 간주한다.
 
 ## 기존 `ml/` 처리

@@ -29,7 +29,7 @@
 - 원천 CSV 필드명과 Result Artifact JSON key는 변경하지 않는다.
 - 한국어 이름과 설명은 별도 표시 계층에서 관리한다.
 - API 결합·계산 필드를 Canonical 또는 Result Artifact 원문으로 표현하지 않는다.
-- Observation 및 Feature Series의 목표 생산자는 `systems/generator`이며, Backend Diagnosis는 이를 소비하여 runtime inference 및 Result Artifact/Evidence를 생성한다. Backend Report와 프론트엔드는 공식 read boundary를 통해서만 ViewModel을 구성하며 `gen_data` 원본 로그를 직접 파싱하지 않는다.
+- Observation 및 Feature Series와 Runtime Prediction score/Batch의 목표 생산자는 `systems/generator`이며, Backend Diagnosis는 Batch를 검증·판정·승격하여 Result Artifact/Evidence를 생성한다. Backend Report와 프론트엔드는 공식 read boundary를 통해서만 ViewModel을 구성하며 `gen_data` 원본 로그를 직접 파싱하지 않는다.
 - 고장 진실(failure truth)은 Observation 및 일반 Feature 입력에서 엄격히 분리하여 별도 Failure 데이터셋으로 관리한다.
 - null을 정상값, 0 또는 고장 확정으로 변환하지 않는다.
 - evaluation truth는 제품 스키마와 일반 조회 API에서 제외한다.
@@ -418,7 +418,7 @@ canonical/overlay branch-aware Observation read contract에서 읽고, 파생 Fe
 versioned Feature Schema/transform contract를 적용한 Backend Feature Executor 결과로 제공한다.
 `systems/generator`는 Feature/Label 의미, History Requirement, transform contract, Model Artifact
 publish를 소유하지만 제품 runtime series를 Product API source로 publish하지 않는다. 반면
-`risk_series`는 제품 runtime inference 결과의 누적이어야 하며, Backend Diagnosis Runtime
+`risk_series`는 제품 Runtime Prediction Batch를 Backend가 승격한 결과의 누적이어야 하며, Backend Diagnosis Runtime
 Prediction History Query Contract에서 파생하는 후속 target이다. 현재 canonical source는 Backend
 Diagnosis가 생성한 `pm_result_artifacts`의 asset별 append-only Product Result history이며, 상세
 payload가 실제로 필요한 경우에만 `prediction_result_id`로 `prediction_results`를 조회한다. Product
@@ -524,7 +524,7 @@ threshold, data quality warning, activity, report, provenance)는 이 계약의 
 |---|---|---|---|
 | SCH-DEC-01 | 팀원1 | 내부 enum과 분리한 MVP 한국어 상태 문구 | 2026-08 Week 2 결정 |
 | SCH-DEC-02 | 팀원1·3 | 현행 `offset`/`limit`/`total`과 검색·라인·상태·담당자 필터 | 결정 완료; `page`/`size`는 V2 |
-| SCH-DEC-03 | 팀원3 | 위험등급은 runtime inference의 Result Artifact가 제공 | 결정 완료 |
+| SCH-DEC-03 | 팀원3 | 위험등급은 Backend가 Prediction Result Batch에 Threshold Policy를 적용해 생성한 Result Artifact가 제공 | 결정 완료 |
 | SCH-DEC-04 | 팀원1·3 | 최신 `observed_at` 기준 프론트 24시간 stale MVP 정책 | 결정 완료 |
 | SCH-DEC-05 | 팀원3 | 로컬 compatibility fallback 표시, 비로컬 Model Artifact 누락은 fail-closed | 결정 완료 |
 | SCH-DEC-06 | 팀원3 | 현행 Evidence 호환 provenance 유지; JSON Pointer 전환 | V2 검토 |
