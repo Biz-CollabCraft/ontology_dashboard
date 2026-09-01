@@ -774,34 +774,16 @@ class MaintenanceLoopService:
             idempotency_key,
         )
         timestamp = calculated_at or datetime.now(timezone.utc)
+        if self.cost_basis_provider is None:
+            raise ValueError("Maintenance cost-basis provider is unavailable")
         if action_code is MaintenanceActionCode.TOOL_REPLACEMENT:
-            if self.cost_basis_provider is None:
-                raise ValueError("Maintenance cost-basis provider is unavailable")
             cost_basis = self.cost_basis_provider.tool_replacement_basis(
                 calculated_at=timestamp
             )
-            currency = cost_basis.currency
-            currency_minor_unit = cost_basis.currency_minor_unit
-            scenarios = cost_basis.scenarios
-            assumptions = cost_basis.assumptions
-            input_sources = cost_basis.input_sources
-            price_version = cost_basis.price_version
-            calculation_policy_version = cost_basis.calculation_policy_version
         else:
-            assert payload.currency is not None
-            assert payload.currency_minor_unit is not None
-            assert payload.scenarios is not None
-            assert payload.assumptions is not None
-            assert payload.input_sources is not None
-            assert payload.price_version is not None
-            assert payload.calculation_policy_version is not None
-            currency = payload.currency
-            currency_minor_unit = payload.currency_minor_unit
-            scenarios = payload.scenarios
-            assumptions = payload.assumptions
-            input_sources = payload.input_sources
-            price_version = payload.price_version
-            calculation_policy_version = payload.calculation_policy_version
+            cost_basis = self.cost_basis_provider.cooling_system_restore_basis(
+                calculated_at=timestamp
+            )
         result = calculate_maintenance_cost_scenarios(
             MaintenanceCostAnalysisInput(
                 analysis_id=analysis_id,
@@ -821,13 +803,13 @@ class MaintenanceLoopService:
                 ),
                 action_candidate_id=action_candidate_id,
                 action_code=action_code,
-                currency=currency,
-                currency_minor_unit=currency_minor_unit,
-                scenarios=scenarios,
-                assumptions=assumptions,
-                input_sources=input_sources,
-                price_version=price_version,
-                calculation_policy_version=calculation_policy_version,
+                currency=cost_basis.currency,
+                currency_minor_unit=cost_basis.currency_minor_unit,
+                scenarios=cost_basis.scenarios,
+                assumptions=cost_basis.assumptions,
+                input_sources=cost_basis.input_sources,
+                price_version=cost_basis.price_version,
+                calculation_policy_version=cost_basis.calculation_policy_version,
             )
         )
         return self.repository.create_cost_analysis(

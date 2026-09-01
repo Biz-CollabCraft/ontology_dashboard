@@ -5,10 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .cost_analysis_schema import CostInputSource, ExecutionTiming
-from .cost_calculator import MaintenanceScenarioInput
 from .maintenance_schema import (
     InspectionChecklistItem,
     InspectionMeasurement,
@@ -75,10 +73,8 @@ class CostOptionRecommendationCreateRequest(StrictCommand):
 class MaintenanceCostAnalysisCreateRequest(StrictCommand):
     """Action plus consulted-SOP audit context.
 
-    TOOL_REPLACEMENT economics are owned by the versioned Backend provider and
-    must not be supplied by a product client.  The already-merged
-    COOLING_SYSTEM_RESTORE slice temporarily retains its explicit scenario
-    inputs until a governed cooling cost basis is introduced.
+    Economic inputs for every supported Action are owned by versioned Backend
+    providers and must not be supplied by a product client.
     """
 
     action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] = (
@@ -94,53 +90,6 @@ class MaintenanceCostAnalysisCreateRequest(StrictCommand):
         max_length=160,
         description="Version of the consulted SOP audit reference.",
     )
-    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
-    currency_minor_unit: Literal[0, 2, 3] | None = None
-    scenarios: tuple[MaintenanceScenarioInput, ...] | None = Field(
-        default=None,
-        min_length=4,
-        max_length=4,
-    )
-    assumptions: tuple[str, ...] | None = None
-    input_sources: tuple[CostInputSource, ...] | None = Field(
-        default=None, min_length=1
-    )
-    price_version: str | None = Field(default=None, min_length=1, max_length=160)
-    calculation_policy_version: str | None = Field(
-        default=None, min_length=1, max_length=160
-    )
-
-    @model_validator(mode="after")
-    def require_action_owned_economic_inputs(
-        self,
-    ) -> MaintenanceCostAnalysisCreateRequest:
-        economic_values = (
-            self.currency,
-            self.currency_minor_unit,
-            self.scenarios,
-            self.assumptions,
-            self.input_sources,
-            self.price_version,
-            self.calculation_policy_version,
-        )
-        if self.action_code == "TOOL_REPLACEMENT":
-            if any(value is not None for value in economic_values):
-                raise ValueError(
-                    "TOOL_REPLACEMENT economic inputs are resolved server-side"
-                )
-            return self
-
-        if any(value is None for value in economic_values):
-            raise ValueError(
-                "COOLING_SYSTEM_RESTORE requires all four economic scenarios"
-            )
-        assert self.scenarios is not None
-        timings = [scenario.execution_timing for scenario in self.scenarios]
-        if len(set(timings)) != len(timings) or set(timings) != set(ExecutionTiming):
-            raise ValueError(
-                "Maintenance cost request requires all four timing scenarios"
-            )
-        return self
 
 
 class ToolReplacementCostAnalysisCreateRequest(MaintenanceCostAnalysisCreateRequest):

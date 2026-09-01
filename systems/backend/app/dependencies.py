@@ -451,7 +451,12 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
             / "data"
             / "fixtures"
             / "maintenance_cost"
-            / "tool-insert-cost-basis-v1.json"
+            / "tool-insert-cost-basis-v1.json",
+            ROOT
+            / "data"
+            / "fixtures"
+            / "maintenance_cost"
+            / "cooling-system-restore-cost-basis-v1.json",
         ),
     )
 

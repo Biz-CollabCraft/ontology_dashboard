@@ -238,13 +238,15 @@ Canonical 파일에 임의의 금액을 역기입하지 않고 버전된 Economi
 모든 금액은 `currency`, 유효기간, `source_type`, `source_reference`, 가격·가정 버전을
 가진다. 공개 대리값이나 합성값을 실제 사업장 금액으로 표현하지 않는다.
 
-`TOOL_REPLACEMENT` 비용 분석 요청은 사용자가 경제 기준값을 직접 제출하는 입력창이
-아니다. 사용자는 Action과 점검에서 참고한 SOP 식별자·버전만 보내고, Backend Maintenance가
-버전 관리 비용 기준 provider에서 인서트 1개 가격·노무·데모 정책 입력을 조회한다. 즉시와
-12시간 후 실행 시각은 서버 `calculated_at`에서 파생하고 `Asia/Seoul` 22:00~06:00에는
-단일 50% 야간 가산 데모 요율을 적용한다. 이는 실제 통상임금이나 중복 가산을 계산하는
-급여 엔진이 아니다. 공식 미래 확률이 없는 계획정비·재점검은 임의 보간하지 않고
-`insufficient`로 표시한다. 상세 기준과 제한은 `docs/mvp/maintenance-cost-basis.md`를 따른다.
+`TOOL_REPLACEMENT`와 `COOLING_SYSTEM_RESTORE` 비용 분석 요청은 사용자가 경제 기준값을
+직접 제출하는 입력창이 아니다. 사용자는 Action과 점검에서 참고한 SOP 식별자·버전만
+보내고, Backend Maintenance가 Action별 버전 관리 비용 기준 provider에서 입력을 조회한다.
+냉각 복구 기준은 사내 냉각 경로 세척·막힘 해소·동작 확인으로 제한하며 부품 교체가
+확인되면 별도의 견적/Action basis를 요구한다. 즉시와 12시간 후 실행 시각은 서버
+`calculated_at`에서 파생하고 `Asia/Seoul` 22:00~06:00에는 단일 50% 야간 가산 데모
+요율을 적용한다. 이는 실제 통상임금이나 중복 가산을 계산하는 급여 엔진이 아니다.
+Action별 공식 미래 확률이 없는 시점은 임의 보간하지 않고 `insufficient`로 표시한다.
+상세 기준과 제한은 `docs/mvp/maintenance-cost-basis.md`를 따른다.
 
 | ID | 요구사항 | 완료 기준 |
 |---|---|---|

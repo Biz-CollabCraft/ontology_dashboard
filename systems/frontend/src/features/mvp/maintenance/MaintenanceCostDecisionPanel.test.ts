@@ -152,46 +152,7 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
   });
 
   it("sends only Action and consulted SOP for server-owned tool cost inputs", () => {
-    const form = {
-      immediate: {
-        partsCost: "1000",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-      planned_window: {
-        partsCost: "",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-      reinspect_after: {
-        partsCost: "",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-      no_action_baseline: {
-        partsCost: "",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-    };
-
-    const request = buildCostRequest(form, guidance, "EVT-1");
+    const request = buildCostRequest(guidance);
 
     expect(request).toEqual({
       action_code: "TOOL_REPLACEMENT",
@@ -200,37 +161,11 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
     });
   });
 
-  it("preserves the selected cooling Action in the cost request", () => {
-    const form = {
-      immediate: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-      planned_window: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-      reinspect_after: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-      no_action_baseline: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-    };
-
-    expect(
-      buildCostRequest(
-        form,
-        guidance,
-        "EVT-1",
-        "COOLING_SYSTEM_RESTORE",
-      ).action_code,
-    ).toBe("COOLING_SYSTEM_RESTORE");
+  it("sends only Action and consulted SOP for server-owned cooling cost inputs", () => {
+    expect(buildCostRequest(guidance, "COOLING_SYSTEM_RESTORE")).toEqual({
+      action_code: "COOLING_SYSTEM_RESTORE",
+      sop_id: "SOP-CNC-TOOL-001",
+      sop_version: "v1",
+    });
   });
 });

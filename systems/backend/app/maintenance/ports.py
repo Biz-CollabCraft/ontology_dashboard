@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Protocol, Sequence
 
 from .cost_analysis_schema import MaintenanceCostScenarioResult
-from .cost_basis import ToolReplacementCostBasis
+from .cost_basis import CoolingSystemRestoreCostBasis, ToolReplacementCostBasis
 from .integration import MaintenanceStatePatch
 from .maintenance_schema import (
     InspectionResult,
@@ -96,6 +96,10 @@ class MaintenanceCostBasisProvider(Protocol):
     def tool_replacement_basis(
         self, *, calculated_at: datetime
     ) -> ToolReplacementCostBasis: ...
+
+    def cooling_system_restore_basis(
+        self, *, calculated_at: datetime
+    ) -> CoolingSystemRestoreCostBasis: ...
 
 
 class LiveMaintenanceOverlayPort(Protocol):

@@ -15,13 +15,6 @@ import {
 } from "../../../api";
 import type { MvpInspectionGuidance } from "../api/mvpContracts";
 
-const TIMINGS: MaintenanceExecutionTiming[] = [
-  "immediate",
-  "planned_window",
-  "reinspect_after",
-  "no_action_baseline",
-];
-
 const TIMING_LABEL: Record<MaintenanceExecutionTiming, string> = {
   immediate: "즉시 정비",
   planned_window: "계획 정비 창",
@@ -33,69 +26,6 @@ const ACTION_LABEL: Record<MaintenanceActionCode, string> = {
   TOOL_REPLACEMENT: "공구 교체",
   COOLING_SYSTEM_RESTORE: "냉각 시스템 복구",
 };
-
-const COST_FIELDS = [
-  ["partsCost", "부품비"],
-  ["laborDuration", "작업시간(분)"],
-  ["laborRate", "분당 인건비"],
-  ["externalCost", "외주비"],
-  ["downtime", "정지시간(분)"],
-  ["productionLossRate", "분당 생산손실"],
-  ["failureLoss", "예상 고장손실"],
-] as const;
-
-type CostField = (typeof COST_FIELDS)[number][0];
-type ScenarioValues = Record<CostField, string>;
-type ScenarioForm = Record<MaintenanceExecutionTiming, ScenarioValues>;
-
-function emptyScenario(): ScenarioValues {
-  return {
-    partsCost: "",
-    laborDuration: "",
-    laborRate: "",
-    externalCost: "",
-    downtime: "",
-    productionLossRate: "",
-    failureLoss: "",
-  };
-}
-
-function emptyForm(): ScenarioForm {
-  return Object.fromEntries(
-    TIMINGS.map((timing) => [timing, emptyScenario()]),
-  ) as ScenarioForm;
-}
-
-function numericValue(value: string): number | null {
-  if (value.trim() === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null;
-}
-
-function money(value: string) {
-  const parsed = numericValue(value);
-  return parsed === null
-    ? null
-    : { low_minor: parsed, base_minor: parsed, high_minor: parsed };
-}
-
-function duration(value: string) {
-  const parsed = numericValue(value);
-  return parsed === null
-    ? null
-    : { low_minutes: parsed, base_minutes: parsed, high_minutes: parsed };
-}
-
-function rate(value: string) {
-  const parsed = numericValue(value);
-  return parsed === null
-    ? null
-    : {
-      low_minor_per_minute: parsed,
-      base_minor_per_minute: parsed,
-      high_minor_per_minute: parsed,
-    };
-}
 
 export function latestEligibleInspection(
   lineage: MaintenanceEventLineageReadModel | null,
@@ -133,51 +63,13 @@ export function latestCostAnalysisForInspection(
 }
 
 export function buildCostRequest(
-  form: ScenarioForm,
   guidance: Pick<MvpInspectionGuidance, "sopId" | "version">,
-  eventId: string,
   actionCode: MaintenanceActionCode = "TOOL_REPLACEMENT",
 ): MaintenanceCostAnalysisRequest {
-  if (actionCode === "TOOL_REPLACEMENT") {
-    return {
-      action_code: actionCode,
-      sop_id: guidance.sopId,
-      sop_version: guidance.version,
-    };
-  }
   return {
     action_code: actionCode,
     sop_id: guidance.sopId,
     sop_version: guidance.version,
-    currency: "KRW",
-    currency_minor_unit: 0,
-    scenarios: TIMINGS.map((execution_timing) => {
-      const values = form[execution_timing];
-      return {
-        execution_timing,
-        parts_cost: money(values.partsCost),
-        labor_duration: duration(values.laborDuration),
-        labor_rate_per_minute: rate(values.laborRate),
-        external_service_cost: money(values.externalCost),
-        expected_downtime: duration(values.downtime),
-        production_loss_rate_per_minute: rate(values.productionLossRate),
-        expected_failure_loss: money(values.failureLoss),
-        confidence: "medium" as const,
-      };
-    }),
-    assumptions: [
-      "사용자가 입력한 기준값을 민감도 low/base/high의 동일값으로 사용",
-      "빈 입력은 임의 추정하지 않고 insufficient로 처리",
-      "비용 분석은 의사결정 참고값이며 추천·승인·실행 명령이 아님",
-    ],
-    input_sources: [{
-      input_name: "product_ui_cost_inputs",
-      source_kind: "assumption",
-      source_reference: `maintenance-product-ui:event:${eventId}`,
-      confidence: "medium",
-    }],
-    price_version: `user-input-${new Date().toISOString().slice(0, 10)}`,
-    calculation_policy_version: "maintenance-cost-policy-v1",
   };
 }
 
@@ -207,8 +99,6 @@ export function MaintenanceCostDecisionPanel({
   const [lineage, setLineage] = useState<MaintenanceEventLineageReadModel | null>(null);
   const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
   const [selectedActionCode, setSelectedActionCode] = useState<MaintenanceActionCode | null>(null);
-  const [form, setForm] = useState<ScenarioForm>(() => emptyForm());
-  const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,13 +175,6 @@ export function MaintenanceCostDecisionPanel({
       .map((item) => [item.action_code as string, item]),
   ), [inspection, lineage]);
 
-  const update = (timing: MaintenanceExecutionTiming, field: CostField, value: string) => {
-    setForm((currentForm) => ({
-      ...currentForm,
-      [timing]: { ...currentForm[timing], [field]: value },
-    }));
-  };
-
   const calculate = async () => {
     if (!inspection || !selectedActionCode) return;
     if (!sopId.trim() || !sopVersion.trim()) {
@@ -307,14 +190,11 @@ export function MaintenanceCostDecisionPanel({
         workspaceId,
         inspection.inspection_result_id,
         buildCostRequest(
-          form,
           { sopId: sopId.trim(), version: sopVersion.trim() },
-          eventId,
           selectedActionCode,
         ),
         requestKey("cost-analysis"),
       );
-      setFormOpen(false);
       await load();
       onChanged?.();
     } catch (caught) {
@@ -359,8 +239,6 @@ export function MaintenanceCostDecisionPanel({
     : !sopId.trim() || !sopVersion.trim()
       ? "점검에 참고한 SOP 기준정보가 필요합니다."
     : null;
-  const usesServerCostBasis = selectedActionCode === "TOOL_REPLACEMENT";
-
   return (
     <section className="mvp-maintenance-cost-panel" aria-label="정비 비용 분석">
       <header>
@@ -385,7 +263,6 @@ export function MaintenanceCostDecisionPanel({
               className={selectedActionCode === candidate.action_code ? "mvp-button" : "mvp-button ghost"}
               onClick={() => {
                 setSelectedActionCode(candidate.action_code);
-                setFormOpen(false);
                 setSelectedMessage(null);
               }}
               disabled={submitting}
@@ -396,56 +273,20 @@ export function MaintenanceCostDecisionPanel({
         </div>
       ) : null}
 
-      {usesServerCostBasis ? (
+      {selectedActionCode ? (
         <div className="mvp-cost-inputs">
-          <p>인서트 1개 비용과 노무 기준은 Backend의 버전 관리 기준정보를 사용합니다. 즉시·12시간 후 실행 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다.</p>
+          <p>
+            {selectedActionCode === "TOOL_REPLACEMENT"
+              ? "인서트 1개 비용과 노무 기준은 Backend의 버전 관리 기준정보를 사용합니다."
+              : "사내 냉각 경로 세척·막힘 해소·동작 확인 범위의 비용 기준은 Backend가 관리합니다. 부품 교체가 필요하면 이 기준을 사용할 수 없습니다."}
+            {" "}즉시·12시간 후 실행 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다.
+          </p>
           <small>참고 SOP: {sopId || "-"} · {sopVersion || "-"}</small>
           <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => void calculate()}>
             비용 분석 요청
           </button>
         </div>
-      ) : !formOpen ? (
-        <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => setFormOpen(true)}>
-          냉각계통 비용 분석 입력
-        </button>
-      ) : (
-        <div className="mvp-cost-inputs">
-          <p>금액은 원, 시간은 분 단위입니다. 빈 값은 임의 추정하지 않고 insufficient로 처리됩니다.</p>
-          <div className="mvp-cost-sop-reference">
-            <label>
-              <span>참고한 SOP ID</span>
-              <input value={sopId} onChange={(event) => setSopId(event.target.value)} />
-            </label>
-            <label>
-              <span>SOP 버전</span>
-              <input value={sopVersion} onChange={(event) => setSopVersion(event.target.value)} />
-            </label>
-          </div>
-          {TIMINGS.map((timing) => (
-            <fieldset key={timing}>
-              <legend>{TIMING_LABEL[timing]}</legend>
-              <div>
-                {COST_FIELDS.map(([field, label]) => (
-                  <label key={`${timing}-${field}`}>
-                    <span>{label}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={form[timing][field]}
-                      onChange={(event) => update(timing, field, event.target.value)}
-                    />
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ))}
-          <div className="mvp-cost-controls">
-            <button type="button" className="mvp-button ghost" onClick={() => setFormOpen(false)} disabled={submitting}>취소</button>
-            <button type="button" className="mvp-button" onClick={() => void calculate()} disabled={submitting}>비용 계산</button>
-          </div>
-        </div>
-      )}
+      ) : null}
 
       {current ? (
         <div className="mvp-cost-result">

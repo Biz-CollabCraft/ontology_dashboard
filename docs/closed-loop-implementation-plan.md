@@ -585,6 +585,8 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
    선택한 뒤에만 `origin=operations_manual` 추천을 생성한다. 동일 inspection result/action은
    stable ID와 idempotency/dedupe 규칙으로 한 번만 생성한다.
    이때 `TOOL_REPLACEMENT`는 마모된 카바이드 절삭 인서트 1개 교체를 의미한다.
+   비용 분석에서 `COOLING_SYSTEM_RESTORE`는 사내 냉각 경로 세척·막힘 해소·동작
+   확인으로 한정하고, 부품 교체가 확인되면 별도 견적/Action basis를 사용한다.
 6. `process_manager`가 Evidence와 엔지니어 결과를 확인하고 Operations recommendation을
    승인·거절·보류한다.
 7. 정비가 필요한 경우 WorkOrder를 승인하고, API가 반환한 persisted ID를 다음 단계에 전달한다.

@@ -506,50 +506,10 @@ export interface MaintenanceEventLineageReadModel {
   }>;
 }
 
-interface CostRangeInput {
-  low_minor: number;
-  base_minor: number;
-  high_minor: number;
-}
-
-interface DurationRangeInput {
-  low_minutes: number;
-  base_minutes: number;
-  high_minutes: number;
-}
-
-interface RateRangeInput {
-  low_minor_per_minute: number;
-  base_minor_per_minute: number;
-  high_minor_per_minute: number;
-}
-
 export interface MaintenanceCostAnalysisRequest {
   action_code: MaintenanceActionCode;
   sop_id: string;
   sop_version: string;
-  currency?: string;
-  currency_minor_unit?: 0 | 2 | 3;
-  scenarios?: Array<{
-    execution_timing: MaintenanceExecutionTiming;
-    parts_cost: CostRangeInput | null;
-    labor_duration: DurationRangeInput | null;
-    labor_rate_per_minute: RateRangeInput | null;
-    external_service_cost: CostRangeInput | null;
-    expected_downtime: DurationRangeInput | null;
-    production_loss_rate_per_minute: RateRangeInput | null;
-    expected_failure_loss: CostRangeInput | null;
-    confidence: "high" | "medium" | "low";
-  }>;
-  assumptions?: string[];
-  input_sources?: Array<{
-    input_name: string;
-    source_kind: "observed" | "quoted" | "public_reference" | "policy" | "assumption";
-    source_reference: string;
-    confidence: "high" | "medium" | "low";
-  }>;
-  price_version?: string;
-  calculation_policy_version?: string;
 }
 
 export type ToolReplacementCostAnalysisRequest = MaintenanceCostAnalysisRequest;

@@ -10,7 +10,10 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.maintenance.cost_analysis_schema import ExecutionTiming
-from app.maintenance.cost_basis import ToolReplacementCostBasis
+from app.maintenance.cost_basis import (
+    CoolingSystemRestoreCostBasis,
+    ToolReplacementCostBasis,
+)
 
 
 def _money(value: int | None) -> dict[str, int] | None:
@@ -89,26 +92,61 @@ def _expected_loss(
 
 
 class JsonMaintenanceCostBasisProvider:
-    """Load one immutable cost-basis document and map it to calculator inputs."""
+    """Load immutable Action-specific cost documents into calculator inputs."""
 
-    def __init__(self, path: str | Path) -> None:
-        self.path = Path(path)
+    def __init__(
+        self,
+        tool_replacement_path: str | Path,
+        cooling_system_restore_path: str | Path | None = None,
+    ) -> None:
+        self.tool_replacement_path = Path(tool_replacement_path)
+        self.cooling_system_restore_path = (
+            Path(cooling_system_restore_path)
+            if cooling_system_restore_path is not None
+            else None
+        )
+
+    @staticmethod
+    def _read_document(path: Path, *, action_code: str) -> dict[str, Any]:
+        document: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        if document.get("action_code") != action_code:
+            raise ValueError(f"cost basis action_code must be {action_code}")
+        return document
+
+    @staticmethod
+    def _execution_rate(
+        *,
+        execution_at: datetime,
+        execution_policy: dict[str, Any],
+        normal_labor_rate: int,
+        night_labor_rate: int,
+    ) -> tuple[str, int]:
+        execution_timezone = ZoneInfo(execution_policy["timezone"])
+        night_start_hour = int(execution_policy["night_window"]["start_hour"])
+        night_end_hour = int(execution_policy["night_window"]["end_hour"])
+        local_hour = execution_at.astimezone(execution_timezone).hour
+        is_night = local_hour >= night_start_hour or local_hour < night_end_hour
+        return (
+            ("night", night_labor_rate)
+            if is_night
+            else ("normal", normal_labor_rate)
+        )
 
     def tool_replacement_basis(
         self, *, calculated_at: datetime
     ) -> ToolReplacementCostBasis:
         if calculated_at.tzinfo is None or calculated_at.utcoffset() is None:
             raise ValueError("calculated_at must include a timezone offset")
-        document: dict[str, Any] = json.loads(self.path.read_text(encoding="utf-8"))
-        if document.get("action_code") != "TOOL_REPLACEMENT":
-            raise ValueError("cost basis action_code must be TOOL_REPLACEMENT")
+        document = self._read_document(
+            self.tool_replacement_path,
+            action_code="TOOL_REPLACEMENT",
+        )
         scope = document.get("replacement_scope", {})
         if scope.get("quantity") != 1 or scope.get("unit") != "piece":
             raise ValueError("TOOL_REPLACEMENT cost basis must describe exactly one insert")
 
         policy = document["demo_policy_inputs"]
         execution_policy = document["execution_time_policy"]
-        execution_timezone = ZoneInfo(execution_policy["timezone"])
         planned_delay = timedelta(
             hours=int(execution_policy["planned_window_delay_hours"])
         )
@@ -120,8 +158,6 @@ class JsonMaintenanceCostBasisProvider:
             raise ValueError("execution policy normal rate must match labor basis")
         if int(execution_policy["night_rate_minor_per_minute"]) != night_labor_rate:
             raise ValueError("execution policy night rate must match labor basis")
-        night_start_hour = int(execution_policy["night_window"]["start_hour"])
-        night_end_hour = int(execution_policy["night_window"]["end_hour"])
         labor_duration = policy["labor_duration_minutes"]["sensitivity"]
         external_service_cost = policy["external_service_cost_minor"]["sensitivity"]
         expected_downtime = policy["expected_downtime_minutes"]["sensitivity"]
@@ -148,12 +184,12 @@ class JsonMaintenanceCostBasisProvider:
             elif timing is ExecutionTiming.PLANNED_WINDOW:
                 execution_at = calculated_at + planned_delay
             if execution_at is not None:
-                local_hour = execution_at.astimezone(execution_timezone).hour
-                is_night = (
-                    local_hour >= night_start_hour or local_hour < night_end_hour
+                labor_rate_type, labor_rate = self._execution_rate(
+                    execution_at=execution_at,
+                    execution_policy=execution_policy,
+                    normal_labor_rate=normal_labor_rate,
+                    night_labor_rate=night_labor_rate,
                 )
-                labor_rate_type = "night" if is_night else "normal"
-                labor_rate = night_labor_rate if is_night else normal_labor_rate
             scenarios.append(
                 {
                     "execution_timing": timing,
@@ -246,6 +282,172 @@ class JsonMaintenanceCostBasisProvider:
                 },
                 {
                     "input_name": "synthetic_failure_consequence_and_probability",
+                    "source_kind": "assumption",
+                    "source_reference": f"{reference}#demo_policy_inputs/expected_failure_loss_minor",
+                    "confidence": "low",
+                },
+            ),
+            price_version=document["basis_id"],
+            calculation_policy_version="maintenance-cost-policy-v2",
+        )
+
+    def cooling_system_restore_basis(
+        self, *, calculated_at: datetime
+    ) -> CoolingSystemRestoreCostBasis:
+        if calculated_at.tzinfo is None or calculated_at.utcoffset() is None:
+            raise ValueError("calculated_at must include a timezone offset")
+        if self.cooling_system_restore_path is None:
+            raise ValueError("COOLING_SYSTEM_RESTORE cost-basis path is unavailable")
+        document = self._read_document(
+            self.cooling_system_restore_path,
+            action_code="COOLING_SYSTEM_RESTORE",
+        )
+        scope = document.get("restoration_scope", {})
+        if scope.get("component_replacement_included") is not False:
+            raise ValueError(
+                "COOLING_SYSTEM_RESTORE basis must exclude component replacement"
+            )
+
+        policy = document["demo_policy_inputs"]
+        parts_reference = int(document["parts_cost"]["reference_minor"])
+        external_service_reference = int(
+            document["external_service_cost"]["reference_minor"]
+        )
+        if parts_reference != 0 or external_service_reference != 0:
+            raise ValueError(
+                "bounded cooling restoration basis requires zero parts and external cost"
+            )
+        execution_policy = document["execution_time_policy"]
+        planned_delay = timedelta(
+            hours=int(execution_policy["planned_window_delay_hours"])
+        )
+        labor_rates = document["labor_rate_per_minute"]
+        normal_labor_rate = int(labor_rates["normal_minor"])
+        night_labor_rate = int(labor_rates["night_minor"])
+        if int(execution_policy["normal_rate_minor_per_minute"]) != normal_labor_rate:
+            raise ValueError("execution policy normal rate must match labor basis")
+        if int(execution_policy["night_rate_minor_per_minute"]) != night_labor_rate:
+            raise ValueError("execution policy night rate must match labor basis")
+
+        labor_duration = policy["labor_duration_minutes"]["sensitivity"]
+        expected_downtime = policy["expected_downtime_minutes"]["sensitivity"]
+        production_loss_rate = policy["production_loss_rate_minor_per_minute"][
+            "sensitivity"
+        ]
+        expected_failure_loss = policy["expected_failure_loss_minor"][
+            "scenario_values"
+        ]
+        scenarios = []
+        for timing in ExecutionTiming:
+            performs_restore = timing in {
+                ExecutionTiming.IMMEDIATE,
+                ExecutionTiming.PLANNED_WINDOW,
+            }
+            execution_at = None
+            labor_rate_type = "not_applicable"
+            labor_rate = 0
+            if timing is ExecutionTiming.IMMEDIATE:
+                execution_at = calculated_at
+            elif timing is ExecutionTiming.PLANNED_WINDOW:
+                execution_at = calculated_at + planned_delay
+            if execution_at is not None:
+                labor_rate_type, labor_rate = self._execution_rate(
+                    execution_at=execution_at,
+                    execution_policy=execution_policy,
+                    normal_labor_rate=normal_labor_rate,
+                    night_labor_rate=night_labor_rate,
+                )
+            scenarios.append(
+                {
+                    "execution_timing": timing,
+                    "execution_at": execution_at,
+                    "labor_rate_type": labor_rate_type,
+                    "parts_cost": _money(parts_reference),
+                    "labor_duration": (
+                        _duration_band(labor_duration)
+                        if performs_restore
+                        else _duration(0)
+                    ),
+                    "labor_rate_per_minute": _rate(labor_rate),
+                    "external_service_cost": _money(external_service_reference),
+                    "expected_downtime": (
+                        _duration_band(expected_downtime)
+                        if performs_restore
+                        else _duration(0)
+                    ),
+                    "production_loss_rate_per_minute": (
+                        _rate_band(production_loss_rate)
+                        if performs_restore
+                        else _rate(0)
+                    ),
+                    "expected_failure_loss": _money_band(
+                        expected_failure_loss[timing.value]
+                    ),
+                    "confidence": "low",
+                }
+            )
+
+        reference = (
+            "data/fixtures/maintenance_cost/"
+            "cooling-system-restore-cost-basis-v1.json"
+        )
+        return CoolingSystemRestoreCostBasis(
+            currency=document["currency"],
+            currency_minor_unit=document["currency_minor_unit"],
+            scenarios=tuple(scenarios),
+            assumptions=(
+                "복구 범위는 냉각 경로 세척·막힘 해소·동작 확인이며 팬·펌프·칠러 등 부품 교체를 포함하지 않는다.",
+                "부품비와 외주비 0원은 예비부품 교체와 외부 출동이 없는 사내 복구 범위에서만 유효하다.",
+                "즉시·12시간 후 실행 시각은 서버 시각에서 계산하고 Asia/Seoul 22:00~06:00에는 단일 50% 야간 가산 데모 요율을 적용한다.",
+                "작업시간, 정지시간과 생산손실률은 출처를 연결한 합성 데모 민감도 값이다.",
+                "냉각 이상 전용 미래 위험확률이 없으므로 계획정비·재점검·미조치는 임의 추정하지 않고 insufficient로 처리한다.",
+                "비용 분석은 의사결정 참고값이며 추천·승인·실행 명령이 아니다.",
+            ),
+            input_sources=(
+                {
+                    "input_name": "cooling_restore_no_component_replacement_scope",
+                    "source_kind": "policy",
+                    "source_reference": f"{reference}#parts_cost",
+                    "confidence": "medium",
+                },
+                {
+                    "input_name": "cooling_restore_in_house_service_scope",
+                    "source_kind": "policy",
+                    "source_reference": f"{reference}#external_service_cost",
+                    "confidence": "medium",
+                },
+                {
+                    "input_name": "mechanical_maintenance_public_wage_reference",
+                    "source_kind": "public_reference",
+                    "source_reference": f"{reference}#labor_rate_per_minute",
+                    "confidence": "medium",
+                },
+                {
+                    "input_name": "night_labor_premium_policy",
+                    "source_kind": "public_reference",
+                    "source_reference": f"{reference}#execution_time_policy",
+                    "confidence": "medium",
+                },
+                {
+                    "input_name": "cooling_restore_duration_demo_policy",
+                    "source_kind": "assumption",
+                    "source_reference": f"{reference}#demo_policy_inputs/labor_duration_minutes",
+                    "confidence": "low",
+                },
+                {
+                    "input_name": "cooling_restore_downtime_demo_policy",
+                    "source_kind": "assumption",
+                    "source_reference": f"{reference}#demo_policy_inputs/expected_downtime_minutes",
+                    "confidence": "low",
+                },
+                {
+                    "input_name": "synthetic_production_loss_rate",
+                    "source_kind": "assumption",
+                    "source_reference": f"{reference}#demo_policy_inputs/production_loss_rate_minor_per_minute",
+                    "confidence": "low",
+                },
+                {
+                    "input_name": "cooling_failure_probability_unavailable",
                     "source_kind": "assumption",
                     "source_reference": f"{reference}#demo_policy_inputs/expected_failure_loss_minor",
                     "confidence": "low",

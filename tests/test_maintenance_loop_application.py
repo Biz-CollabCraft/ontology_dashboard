@@ -22,7 +22,10 @@ from app.maintenance.api_schema import (
     ToolReplacementCostAnalysisCreateRequest,
 )
 from app.maintenance.cost_analysis_schema import ExecutionTiming
-from app.maintenance.cost_basis import ToolReplacementCostBasis
+from app.maintenance.cost_basis import (
+    CoolingSystemRestoreCostBasis,
+    ToolReplacementCostBasis,
+)
 from app.maintenance.maintenance_domain import IdempotencyConflict
 from app.maintenance.maintenance_schema import RecommendationDisposition, WorkOrderStatus
 from app.maintenance.service import MaintenanceLoopService
@@ -148,6 +151,12 @@ class StaticCostBasisProvider:
         del calculated_at
         return self.basis
 
+    def cooling_system_restore_basis(
+        self, *, calculated_at: datetime
+    ) -> CoolingSystemRestoreCostBasis:
+        del calculated_at
+        return CoolingSystemRestoreCostBasis.model_validate(self.basis.model_dump())
+
 
 def tool_replacement_cost_basis(
     *, missing_parts_cost: bool = False
@@ -242,25 +251,10 @@ def cost_analysis_request() -> ToolReplacementCostAnalysisCreateRequest:
 
 
 def cooling_cost_analysis_request() -> MaintenanceCostAnalysisCreateRequest:
-    basis = tool_replacement_cost_basis()
     return MaintenanceCostAnalysisCreateRequest(
         action_code="COOLING_SYSTEM_RESTORE",
         sop_id="SOP-DEMO-COOLING-SYSTEM-001",
         sop_version="demo-2026-08-31",
-        currency=basis.currency,
-        currency_minor_unit=basis.currency_minor_unit,
-        scenarios=basis.scenarios,
-        assumptions=basis.assumptions,
-        input_sources=(
-            {
-                "input_name": "cooling_system_restore_quote",
-                "source_kind": "quoted",
-                "source_reference": "quote/cooling-system-restore/2026-08",
-                "confidence": "medium",
-            },
-        ),
-        price_version=basis.price_version,
-        calculation_policy_version=basis.calculation_policy_version,
     )
 
 
@@ -1051,7 +1045,7 @@ def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) 
             **{
                 **command,
                 "payload": payload.model_copy(
-                    update={"price_version": "maintenance-price-2026-09"}
+                    update={"sop_version": "demo-2026-09-01"}
                 ),
             }
         )

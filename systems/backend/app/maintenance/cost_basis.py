@@ -10,8 +10,8 @@ from .cost_analysis_schema import CostInputSource, ExecutionTiming, FrozenModel
 from .cost_calculator import ToolReplacementScenarioInput
 
 
-class ToolReplacementCostBasis(FrozenModel):
-    """Server-owned economic inputs for one TOOL_REPLACEMENT analysis."""
+class MaintenanceActionCostBasis(FrozenModel):
+    """Server-owned economic inputs for one Maintenance Action analysis."""
 
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     currency_minor_unit: Literal[0, 2, 3]
@@ -24,7 +24,7 @@ class ToolReplacementCostBasis(FrozenModel):
     calculation_policy_version: str = Field(min_length=1, max_length=160)
 
     @model_validator(mode="after")
-    def require_complete_timing_set(self) -> ToolReplacementCostBasis:
+    def require_complete_timing_set(self) -> MaintenanceActionCostBasis:
         timings = [scenario.execution_timing for scenario in self.scenarios]
         if len(set(timings)) != len(timings) or set(timings) != set(ExecutionTiming):
             raise ValueError(
@@ -33,4 +33,16 @@ class ToolReplacementCostBasis(FrozenModel):
         return self
 
 
-__all__ = ["ToolReplacementCostBasis"]
+class ToolReplacementCostBasis(MaintenanceActionCostBasis):
+    """Server-owned economic inputs for one TOOL_REPLACEMENT analysis."""
+
+
+class CoolingSystemRestoreCostBasis(MaintenanceActionCostBasis):
+    """Server-owned economic inputs for one COOLING_SYSTEM_RESTORE analysis."""
+
+
+__all__ = [
+    "CoolingSystemRestoreCostBasis",
+    "MaintenanceActionCostBasis",
+    "ToolReplacementCostBasis",
+]
