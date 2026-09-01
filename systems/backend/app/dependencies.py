@@ -71,6 +71,7 @@ from app.infra.db.mapping_draft_repository import MappingDraftRepository
 from app.infra.db.pipeline_job_repository import PipelineJobRepository
 from app.infra.db.impact_analysis_repository import ImpactAnalysisRepository
 from app.infra.generator_rebuild import GeneratorRebuildClient
+from app.infra.generator_downstream import GeneratorDownstreamClient
 from app.system_operations import SystemOperationService
 from app.system_operations.mapping_draft_service import MappingDraftService
 from app.system_operations.pipeline_job_service import PipelineJobService
@@ -476,7 +477,12 @@ def get_pipeline_job_service() -> PipelineJobService:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="System Pipeline Job PostgreSQL adapter is not configured.",
         )
-    return PipelineJobService(PipelineJobRepository(target), GeneratorRebuildClient())
+    return PipelineJobService(
+        PipelineJobRepository(target),
+        GeneratorRebuildClient(),
+        ImpactAnalysisRepository(target),
+        GeneratorDownstreamClient(),
+    )
 
 
 @lru_cache(maxsize=1)

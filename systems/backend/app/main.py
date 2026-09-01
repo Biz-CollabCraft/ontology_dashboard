@@ -217,7 +217,12 @@ pipeline_job_router = build_pipeline_job_router(
     require_permission=require_permission,
     require_csrf=require_csrf,
 )
-impact_analysis_router=build_impact_analysis_router(get_service=get_impact_analysis_service,require_permission=require_permission,require_csrf=require_csrf)
+impact_analysis_router = build_impact_analysis_router(
+    get_service=get_impact_analysis_service,
+    get_job_service=get_pipeline_job_service,
+    require_permission=require_permission,
+    require_csrf=require_csrf,
+)
 
 for router in (
     health_router,

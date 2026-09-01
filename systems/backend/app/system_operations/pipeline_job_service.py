@@ -7,9 +7,11 @@ from .system_operation_exception import SystemOperationError
 
 
 class PipelineJobService:
-    def __init__(self, repository, generator) -> None:
+    def __init__(self, repository, generator, impact_repository=None, downstream_generator=None) -> None:
         self.repository = repository
         self.generator = generator
+        self.impact_repository = impact_repository
+        self.downstream_generator = downstream_generator
 
     def create(self, body, actor: str, request_id: str) -> tuple[dict, bool]:
         existing = self.repository.get_by_idempotency_key(body.idempotency_key)
@@ -37,7 +39,49 @@ class PipelineJobService:
         job = self.repository.get(job_id)
         if job is None:
             raise SystemOperationError(404, "SYSTEM_JOB_NOT_FOUND", "Pipeline Job을 찾을 수 없습니다.")
+        if job["job_type"] == "downstream_rebuild":
+            job["steps"] = self.repository.list_steps(job_id)
         return job
+
+    def create_downstream(self, analysis_id: str, body, actor: str, request_id: str) -> dict:
+        if self.impact_repository is None:
+            raise SystemOperationError(503, "SYSTEM_IMPACT_EXECUTOR_UNAVAILABLE", "영향 분석 실행기가 구성되지 않았습니다.")
+        analysis = self.impact_repository.get(analysis_id)
+        if analysis is None:
+            raise SystemOperationError(404, "SYSTEM_IMPACT_ANALYSIS_NOT_FOUND", "영향 분석을 찾을 수 없습니다.")
+        if body.expected_snapshot_sha256 != analysis["snapshot_sha256"]:
+            raise SystemOperationError(409, "SYSTEM_IMPACT_SNAPSHOT_STALE", "영향 분석 snapshot이 변경되었습니다. 다시 분석해 주세요.")
+        actions = {action["action_id"]: action for action in analysis["recommended_actions"]}
+        missing = [action_id for action_id in body.selected_action_ids if action_id not in actions]
+        if missing:
+            raise SystemOperationError(422, "SYSTEM_IMPACT_ACTION_NOT_EXECUTABLE", "차단되었거나 존재하지 않는 작업은 실행할 수 없습니다.")
+        selected = [actions[action_id] for action_id in body.selected_action_ids]
+        selected.sort(key=lambda action: {"preprocessing": 0, "feature": 1, "training": 2}[action["stage"]])
+        selected_ids = {action["action_id"] for action in selected}
+        for action in selected:
+            unmet = [dependency for dependency in action.get("depends_on_action_ids", []) if dependency not in selected_ids]
+            if unmet:
+                raise SystemOperationError(422, "SYSTEM_IMPACT_DEPENDENCY_MISSING", "선택 작업의 선행 단계가 누락되었습니다.")
+        now = datetime.now(timezone.utc).isoformat()
+        job_id = str(uuid.uuid4())
+        steps = [
+            {
+                "step_id": str(uuid.uuid4()), "action_id": action["action_id"],
+                "stage": action["stage"], "sequence": index,
+                "input": dict(action.get("required_parameters") or {}),
+            }
+            for index, action in enumerate(selected)
+        ]
+        return self.repository.create_downstream(
+            {
+                "job_id": job_id, "request_id": request_id, "idempotency_key": f"impact:{analysis_id}:{body.expected_snapshot_sha256}:{','.join(body.selected_action_ids)}",
+                "run_id": str(uuid.uuid4()), "analysis_id": analysis_id,
+                "mapping_id": analysis["mapping_id"], "mapping_version": analysis["mapping_version"],
+                "mapping_sha256": analysis["mapping_sha256"], "source_uri": f"system-impact-analyses/{analysis_id}",
+                "created_by": actor, "created_at": now,
+            },
+            steps,
+        )
 
     def list(self, status: str | None = None) -> list[dict]:
         return self.repository.list(status)
@@ -52,6 +96,8 @@ class PipelineJobService:
         claimed = self.repository.claim(job_id, worker_id)
         if claimed is None:
             return self.get(job_id)
+        if claimed["job_type"] == "downstream_rebuild":
+            return self._execute_downstream(claimed)
         try:
             result = self.generator.rebuild({
                 "job_id": claimed["job_id"], "run_id": claimed["run_id"],
@@ -68,3 +114,27 @@ class PipelineJobService:
             return self.repository.finish(job_id, {"rebuild": result, "activation": activation})
         except Exception as exc:
             return self.repository.fail(job_id, type(exc).__name__, str(exc))
+
+    def _execute_downstream(self, claimed: dict) -> dict:
+        if self.downstream_generator is None:
+            return self.repository.fail(
+                claimed["job_id"], "SYSTEM_DOWNSTREAM_GENERATOR_UNAVAILABLE",
+                "Generator downstream client is not configured",
+            )
+        outputs: list[dict] = []
+        for step in self.repository.list_steps(claimed["job_id"]):
+            current = self.get(claimed["job_id"])
+            if current["cancel_requested"]:
+                self.repository.block_remaining_steps(claimed["job_id"], step["sequence"] - 1)
+                return self.repository.fail(claimed["job_id"], "SYSTEM_JOB_CANCELLED", "Job cancellation was requested")
+            self.repository.start_step(step["step_id"])
+            try:
+                output = self.downstream_generator.execute(step["stage"], step["input"])
+                self.repository.finish_step(step["step_id"], output)
+                outputs.append({"action_id": step["action_id"], "stage": step["stage"], "output": output})
+            except Exception as exc:
+                self.repository.fail_step(step["step_id"], type(exc).__name__, str(exc))
+                self.repository.block_remaining_steps(claimed["job_id"], step["sequence"])
+                return self.repository.fail(claimed["job_id"], type(exc).__name__, str(exc))
+        self.repository.finish(claimed["job_id"], {"steps": outputs})
+        return self.get(claimed["job_id"])

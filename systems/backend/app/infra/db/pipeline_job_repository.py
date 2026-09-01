@@ -58,6 +58,86 @@ class PipelineJobRepository:
             raise RuntimeError("failed to persist pipeline job")
         return existing, created
 
+    def create_downstream(self, item: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO system_pipeline_jobs(
+                job_id,job_type,status,request_id,idempotency_key,run_id,mapping_id,mapping_version,
+                mapping_sha256,source_uri,source_identity,replay_scope,activate_on_success,progress_json,
+                checkpoint_json,result_json,error_code,error_message,retry_count,cancel_requested,
+                created_by,created_at,started_at,heartbeat_at,completed_at,lease_owner,lease_expires_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    item["job_id"], "downstream_rebuild", "queued", item["request_id"],
+                    item["idempotency_key"], item["run_id"], item["mapping_id"],
+                    item["mapping_version"], item["mapping_sha256"], item["source_uri"],
+                    item["analysis_id"], "impact_snapshot", 0,
+                    json.dumps({"analysis_id": item["analysis_id"]}), None, None, None, None,
+                    0, 0, item["created_by"], item["created_at"], None, None, None, None, None,
+                ),
+            )
+            for step in steps:
+                connection.execute(
+                    """INSERT INTO system_pipeline_job_steps(
+                    step_id,job_id,action_id,stage,sequence,status,input_json,output_json,
+                    error_code,error_message,started_at,completed_at)
+                    VALUES(?,?,?,?,?,'pending',?,NULL,NULL,NULL,NULL,NULL)""",
+                    (
+                        step["step_id"], item["job_id"], step["action_id"], step["stage"],
+                        step["sequence"], json.dumps(step["input"], ensure_ascii=False),
+                    ),
+                )
+        return self.get(item["job_id"])
+
+    def list_steps(self, job_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM system_pipeline_job_steps WHERE job_id=? ORDER BY sequence",
+                (job_id,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["input"] = json.loads(item.pop("input_json"))
+            raw_output = item.pop("output_json")
+            item["output"] = json.loads(raw_output) if raw_output else None
+            item["error"] = (
+                {"code": item.pop("error_code"), "message": item.pop("error_message")}
+                if item.get("error_code") else None
+            )
+            result.append(item)
+        return result
+
+    def start_step(self, step_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE system_pipeline_job_steps SET status='running',started_at=? WHERE step_id=?",
+                (self._now(), step_id),
+            )
+
+    def finish_step(self, step_id: str, output: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE system_pipeline_job_steps SET status='succeeded',output_json=?,completed_at=? WHERE step_id=?",
+                (json.dumps(output, ensure_ascii=False), self._now(), step_id),
+            )
+
+    def fail_step(self, step_id: str, code: str, message: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE system_pipeline_job_steps SET status='failed',error_code=?,error_message=?,completed_at=? WHERE step_id=?",
+                (code, message, self._now(), step_id),
+            )
+
+    def block_remaining_steps(self, job_id: str, after_sequence: int) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """UPDATE system_pipeline_job_steps SET status='blocked',
+                error_code='SYSTEM_STEP_DEPENDENCY_FAILED',error_message='A prerequisite step failed',completed_at=?
+                WHERE job_id=? AND sequence>? AND status='pending'""",
+                (self._now(), job_id, after_sequence),
+            )
+
     def get(self, job_id: str) -> dict[str, Any] | None:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM system_pipeline_jobs WHERE job_id=?", (job_id,)).fetchone()
