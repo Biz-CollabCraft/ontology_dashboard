@@ -15,3 +15,24 @@ def test_impact_analysis_recommends_preprocessing_and_blocks_missing_inputs(tmp_
     assert [a["stage"] for a in result["recommended_actions"]]==["preprocessing"]
     assert [a["stage"] for a in result["blocked_actions"]]==["feature","training"]
     assert result["snapshot_sha256"] != "0"*64
+
+
+def test_managed_asset_impact_analysis_is_fail_closed_without_runtime_inputs(tmp_path: Path):
+    db = tmp_path / "managed-impact.db"
+    migrate(str(db))
+    service = ImpactAnalysisService(ImpactAnalysisRepository(db), Jobs())
+    result = service.create(
+        ImpactAnalysisCreate(
+            source_asset_type="training_config",
+            source_asset_id="pdm-training",
+            source_version="training-config-v2",
+            source_sha256="2" * 64,
+            include_stages=["training"],
+        ),
+        "operator",
+    )
+    assert result["source_asset_type"] == "training_config"
+    assert result["recommended_actions"] == []
+    assert result["blocked_actions"][0]["missing_parameters"] == [
+        "dataset_id", "dataset_version", "feature_dataset_version", "base_models"
+    ]

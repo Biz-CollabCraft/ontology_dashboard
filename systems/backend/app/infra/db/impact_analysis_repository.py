@@ -19,8 +19,8 @@ class ImpactAnalysisRepository:
         return item
     def create(self, item):
         with self._connect() as c:
-            c.execute("""INSERT INTO system_impact_analyses(analysis_id,status,mapping_id,mapping_version,mapping_sha256,rebuild_job_id,include_stages_json,source_json,nodes_json,edges_json,actions_json,snapshot_sha256,created_by,created_at,completed_at,error_code,error_message) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
-                item["analysis_id"],item["status"],item["mapping_id"],item["mapping_version"],item["mapping_sha256"],item["rebuild_job_id"],json.dumps(item["include_stages"]),json.dumps(item["source"]),json.dumps(item["nodes"]),json.dumps(item["edges"]),json.dumps(item["actions"]),item["snapshot_sha256"],item["created_by"],item["created_at"],item["created_at"],None,None))
+            c.execute("""INSERT INTO system_impact_analyses(analysis_id,status,mapping_id,mapping_version,mapping_sha256,rebuild_job_id,include_stages_json,source_json,nodes_json,edges_json,actions_json,snapshot_sha256,created_by,created_at,completed_at,error_code,error_message,source_asset_type,source_asset_id,source_version,source_sha256,source_job_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+                item["analysis_id"],item["status"],item["mapping_id"],item["mapping_version"],item["mapping_sha256"],item["rebuild_job_id"],json.dumps(item["include_stages"]),json.dumps(item["source"]),json.dumps(item["nodes"]),json.dumps(item["edges"]),json.dumps(item["actions"]),item["snapshot_sha256"],item["created_by"],item["created_at"],item["created_at"],None,None,item.get("source_asset_type"),item.get("source_asset_id"),item.get("source_version"),item.get("source_sha256"),item.get("source_job_id")))
         return self.get(item["analysis_id"])
     def get(self, analysis_id):
         with self._connect() as c: row=c.execute("SELECT * FROM system_impact_analyses WHERE analysis_id=?",(analysis_id,)).fetchone()

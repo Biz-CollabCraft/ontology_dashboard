@@ -13,6 +13,8 @@ class ImpactAnalysisService:
         return value
     def list(self): return self.repository.list()
     def create(self,body,actor):
+        if body.source_asset_type:
+            return self._create_managed_asset_analysis(body, actor)
         job=self.jobs.get(body.rebuild_job_id)
         if job["status"]!="succeeded": raise SystemOperationError(409,"SYSTEM_IMPACT_SOURCE_JOB_INCOMPLETE","성공한 Mapping Rebuild Job만 분석할 수 있습니다.")
         if (job["mapping_id"],job["mapping_version"],job["mapping_sha256"])!=(body.mapping_id,body.mapping_version,body.mapping_sha256):
@@ -37,4 +39,65 @@ class ImpactAnalysisService:
         source={"mapping_id":body.mapping_id,"mapping_version":body.mapping_version,"mapping_sha256":body.mapping_sha256,"rebuild_job_id":body.rebuild_job_id}
         canonical={"source":source,"nodes":nodes,"edges":edges,"actions":actions}
         now=datetime.now(timezone.utc).isoformat()
-        return self.repository.create({"analysis_id":str(uuid.uuid4()),"status":"completed","mapping_id":body.mapping_id,"mapping_version":body.mapping_version,"mapping_sha256":body.mapping_sha256,"rebuild_job_id":body.rebuild_job_id,"include_stages":body.include_stages,"source":source,"nodes":nodes,"edges":edges,"actions":actions,"snapshot_sha256":_sha(canonical),"created_by":actor,"created_at":now})
+        return self.repository.create({"analysis_id":str(uuid.uuid4()),"status":"completed","mapping_id":body.mapping_id,"mapping_version":body.mapping_version,"mapping_sha256":body.mapping_sha256,"rebuild_job_id":body.rebuild_job_id,"include_stages":body.include_stages,"source":source,"nodes":nodes,"edges":edges,"actions":actions,"snapshot_sha256":_sha(canonical),"created_by":actor,"created_at":now,"source_asset_type":"static_mapping","source_asset_id":body.mapping_id,"source_version":body.mapping_version,"source_sha256":body.mapping_sha256,"source_job_id":body.rebuild_job_id})
+
+    def _create_managed_asset_analysis(self, body, actor):
+        source = {
+            "source_asset_type": body.source_asset_type,
+            "source_asset_id": body.source_asset_id,
+            "source_version": body.source_version,
+            "source_sha256": body.source_sha256,
+            "source_job_id": body.source_job_id,
+        }
+        node_id = f"{body.source_asset_type}:{body.source_asset_id}:{body.source_version}"
+        nodes = [{
+            "node_id": node_id, "asset_type": body.source_asset_type,
+            "asset_key": body.source_asset_id, "version": body.source_version,
+            "logical_uri": None, "change_status": "created",
+            "rebuild_eligibility": "requires_inputs", "blocked_reasons": [],
+        }]
+        requirements = {
+            "preprocessing_plan": {
+                "feature": ["dataset_id", "dataset_version", "failure_source", "feature_schema_version", "label_schema_version"],
+                "training": ["feature_dataset_version", "training_config_version", "base_models"],
+            },
+            "feature_schema": {
+                "feature": ["dataset_id", "dataset_version", "failure_source", "preprocessing_plan_id", "label_schema_version"],
+                "training": ["feature_dataset_version", "training_config_version", "base_models"],
+            },
+            "label_schema": {
+                "feature": ["dataset_id", "dataset_version", "failure_source", "preprocessing_plan_id", "feature_schema_version"],
+                "training": ["feature_dataset_version", "training_config_version", "base_models"],
+            },
+            "history_requirement": {
+                "training": ["feature_dataset_version", "training_config_version", "base_models"],
+            },
+            "training_config": {
+                "training": ["dataset_id", "dataset_version", "feature_dataset_version", "base_models"],
+            },
+        }
+        actions = []
+        for stage, missing in requirements[body.source_asset_type].items():
+            if stage in body.include_stages:
+                actions.append({
+                    "action_id": f"{stage}:{body.source_asset_id}:{body.source_version}",
+                    "stage": stage, "status": "blocked", "input_node_ids": [node_id],
+                    "required_parameters": {}, "missing_parameters": missing,
+                    "depends_on_action_ids": [],
+                })
+        canonical = {"source": source, "nodes": nodes, "edges": [], "actions": actions}
+        now = datetime.now(timezone.utc).isoformat()
+        # Legacy NOT NULL columns mirror the generic identity until the storage
+        # compatibility columns can become the sole source in a later migration.
+        legacy_job = body.source_job_id or f"managed-asset:{body.source_asset_type}"
+        return self.repository.create({
+            "analysis_id": str(uuid.uuid4()), "status": "completed",
+            "mapping_id": body.source_asset_id, "mapping_version": body.source_version,
+            "mapping_sha256": body.source_sha256, "rebuild_job_id": legacy_job,
+            "include_stages": body.include_stages, "source": source, "nodes": nodes,
+            "edges": [], "actions": actions, "snapshot_sha256": _sha(canonical),
+            "created_by": actor, "created_at": now,
+            "source_asset_type": body.source_asset_type,
+            "source_asset_id": body.source_asset_id, "source_version": body.source_version,
+            "source_sha256": body.source_sha256, "source_job_id": body.source_job_id,
+        })
