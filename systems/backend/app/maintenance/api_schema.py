@@ -33,6 +33,19 @@ class EvidenceSnapshotBasis(StrictCommand):
     dataset_version: str | None = Field(default=None, max_length=240)
     source_sha256: str | None = Field(default=None, max_length=64)
 
+    @model_validator(mode="after")
+    def require_identity_fields(self) -> "EvidenceSnapshotBasis":
+        missing = [
+            field
+            for field in ("artifact_id", "evidence_payload_reference", "asset_id", "event_id")
+            if not isinstance(getattr(self, field), str) or not getattr(self, field)
+        ]
+        if missing:
+            raise ValueError(
+                f"snapshot_basis requires identity fields: {', '.join(missing)}"
+            )
+        return self
+
 
 class InspectionWorkOrderCreateRequest(StrictCommand):
     """Request an inspection for an existing canonical Diagnosis event.
@@ -40,13 +53,13 @@ class InspectionWorkOrderCreateRequest(StrictCommand):
     Every authorization and equipment-lineage field is resolved server-side
     from the Diagnosis-owned Event Evidence Projection.  Accepting those
     fields from a caller would let the caller forge the authorization basis.
-    The optional snapshot_basis is only a stale-view guard: if supplied, its
-    non-empty fields must match the server-resolved projection before a work
-    order can be requested.
+    The snapshot_basis is a required stale-view guard: its identity fields and
+    any supplied provenance fields must match the server-resolved projection
+    before a work order can be requested.
     """
 
     event_id: str = Field(min_length=1, max_length=240)
-    snapshot_basis: EvidenceSnapshotBasis | None = None
+    snapshot_basis: EvidenceSnapshotBasis
 
 
 class RecommendationInputSource(StrictCommand):

@@ -70,5 +70,6 @@
 ## 6. 현재 기준점
 
 PR #156은 `RecommendationInput` snapshot guard와 Workflow/Closed-loop DB diagram을 추가한 상태다.
-PR #157 문서 정리는 그 구현을 바꾸지 않고, 팀원이 관련 문서의 위치와 책임 경계를 찾을 수 있게 하는
-follow-up으로 제한한다.
+PR #157은 PR #156 계열의 구현·계약 기준을 포함한 branch 위에서 문서 구조와 읽는 순서를 정렬한다.
+따라서 #157을 설명할 때는 문서 정리뿐 아니라 포함된 `RecommendationInput`/snapshot guard 계약이
+아직 open PR 범위라는 점을 함께 표시한다.

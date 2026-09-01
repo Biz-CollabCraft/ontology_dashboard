@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from app.infra.db.maintenance_repository import MaintenanceRepository
 from app.maintenance.api_schema import (
@@ -173,9 +174,13 @@ def recommendation_input_schema() -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def inspection_request() -> InspectionWorkOrderCreateRequest:
+def inspection_request(
+    projection: dict | None = None,
+) -> InspectionWorkOrderCreateRequest:
+    projection = projection or canonical_projection()
     return InspectionWorkOrderCreateRequest(
         event_id="EVT-RESULT-001",
+        snapshot_basis=snapshot_basis(projection),
     )
 
 
@@ -909,6 +914,19 @@ def test_inspection_request_rejects_stale_client_snapshot_basis(tmp_path) -> Non
     ]
 
 
+def test_inspection_request_requires_snapshot_basis_precondition() -> None:
+    with pytest.raises(ValidationError, match="snapshot_basis"):
+        InspectionWorkOrderCreateRequest(event_id="EVT-RESULT-001")
+
+
+def test_inspection_request_rejects_empty_snapshot_basis_identity() -> None:
+    with pytest.raises(ValidationError, match="snapshot_basis requires identity fields"):
+        InspectionWorkOrderCreateRequest(
+            event_id="EVT-RESULT-001",
+            snapshot_basis={},
+        )
+
+
 def test_inspection_request_retries_once_for_transient_stale_projection(tmp_path) -> None:
     current = canonical_projection(artifact_id="RESULT-CURRENT")
     stale = canonical_projection(artifact_id="RESULT-STALE")
@@ -982,9 +1000,8 @@ def test_inspection_request_rejects_non_authorizing_canonical_decision(tmp_path)
 
 
 def test_asset_type_is_preserved_from_projection_through_inspection(tmp_path) -> None:
-    query = ProjectionQuery(
-        canonical_projection(asset_id="CMP-001", asset_type="compressor")
-    )
+    projection = canonical_projection(asset_id="CMP-001", asset_type="compressor")
+    query = ProjectionQuery(projection)
     loop = service(
         tmp_path,
         query=query,
@@ -993,7 +1010,7 @@ def test_asset_type_is_preserved_from_projection_through_inspection(tmp_path) ->
         organization_id="org-1",
         project_id="project-1",
         workspace_id="workspace-1",
-        payload=inspection_request(),
+        payload=inspection_request(projection),
         actor_id="manager-1",
         actor_display_name="Manager One",
         idempotency_key="inspection-request-001",
