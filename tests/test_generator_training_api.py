@@ -457,7 +457,7 @@ def test_train_conflict_existing_model_version_always_returns_409(test_setup):
 
 
 def test_train_activation_policy_publish_only(test_setup):
-    """Test that deprecated activation_policy='publish_only' still automatically updates latest.json upon publish."""
+    """publish_only publishes an artifact without changing latest.json."""
     client = test_setup["client"]
     dataset_id = test_setup["dataset_id"]
     dataset_ver = test_setup["dataset_version"]
@@ -479,9 +479,9 @@ def test_train_activation_policy_publish_only(test_setup):
     assert resp.status_code == 200
     res = resp.json()["results"][0]
     assert res["published"] is True
-    assert res["latest_updated"] is True
-    assert pointer_file.exists()
-    assert json.loads(pointer_file.read_text(encoding="utf-8"))["model_version"] == "publish-only-v1"
+    assert res["latest_updated"] is False
+    assert res["status"] == "succeeded"
+    assert not pointer_file.exists()
 
 
 
@@ -866,9 +866,11 @@ def test_auto_latest_pointer_created_on_publish(test_setup):
 
 
 def test_cannot_skip_latest_pointer_update_with_publish_only(test_setup):
-    """Test that passing activation_policy='publish_only' still auto-updates latest.json (user cannot skip)."""
+    """Explicit publish_only preserves the current runtime pointer."""
     client = test_setup["client"]
     models_store = getattr(PATHS, "models_store", Path("models_store"))
+    latest_file = models_store / "artifacts" / "pdm-lightgbm" / "latest.json"
+    pointer_before = latest_file.read_bytes() if latest_file.is_file() else None
 
     resp = client.post("/train/lightgbm", json={
         "dataset_id": test_setup["dataset_id"],
@@ -880,12 +882,11 @@ def test_cannot_skip_latest_pointer_update_with_publish_only(test_setup):
     assert resp.status_code == 200
     data = resp.json()
     assert data["results"][0]["published"] is True
-    assert data["results"][0]["latest_updated"] is True
+    assert data["results"][0]["latest_updated"] is False
+    assert data["results"][0]["status"] == "succeeded"
 
-    latest_file = models_store / "artifacts" / "pdm-lightgbm" / "latest.json"
-    assert latest_file.is_file()
-    pointer_data = json.loads(latest_file.read_text(encoding="utf-8"))
-    assert pointer_data["model_version"] == "auto-latest-v2"
+    pointer_after = latest_file.read_bytes() if latest_file.is_file() else None
+    assert pointer_after == pointer_before
 
 
 def test_parallel_locks_on_different_models_do_not_block_each_other(test_setup):

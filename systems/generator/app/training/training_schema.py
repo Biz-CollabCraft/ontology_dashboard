@@ -27,7 +27,10 @@ class TrainingRequest(BaseModel):
     )
     activation_policy: Literal["activate_on_success", "publish_only"] | None = Field(
         default=None,
-        description="Deprecated: Model Artifact publication always automatically updates latest.json upon success.",
+        description=(
+            "Artifact activation policy. Omitted or activate_on_success updates latest.json; "
+            "publish_only publishes the immutable artifact without changing the active pointer."
+        ),
     )
 
     @field_validator(

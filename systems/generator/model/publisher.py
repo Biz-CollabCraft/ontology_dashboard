@@ -687,7 +687,8 @@ class ModelArtifactPublisher:
         provenance: dict[str, Any],
         activation_policy: str | None = None,
     ) -> ModelArtifactPublicationResult:
-        """Atomically stage, validate, and publish an immutable Model Artifact package, then update latest pointer."""
+        """Publish an immutable artifact and optionally update ``latest.json``."""
+        publish_only = activation_policy == "publish_only"
         with _artifact_lock:
             dest_dir = self.get_artifact_dir(model_id, model_version)
             model_root = dest_dir.parent
@@ -748,6 +749,15 @@ class ModelArtifactPublisher:
                     raise ModelArtifactConflictError(
                         f"Model Artifact '{model_id}/{model_version}'가 이미 정상 발행되어 최신 포인터로 활성화되어 있습니다. "
                         "불변 아티팩트 정책에 따라 동일 버전 재발행 및 덮어쓰기는 금지됩니다."
+                    )
+
+                if publish_only:
+                    return ModelArtifactPublicationResult(
+                        model_id=model_id,
+                        model_version=model_version,
+                        published=True,
+                        artifact_uri=self.get_logical_uri(dest_dir),
+                        latest_updated=False,
                     )
 
                 # Inputs match and not yet in latest.json -> Retry pointer update!
@@ -910,7 +920,17 @@ class ModelArtifactPublisher:
                     }],
                 ) from exc
 
-            # Phase B: Latest pointer update
+            # Phase B: Latest pointer update. Control-plane rebuilds may publish
+            # a candidate artifact while preserving the runtime-active pointer.
+            if publish_only:
+                return ModelArtifactPublicationResult(
+                    model_id=model_id,
+                    model_version=model_version,
+                    published=True,
+                    artifact_uri=self.get_logical_uri(dest_dir),
+                    latest_updated=False,
+                )
+
             try:
                 self.update_active_pointer(model_id, model_version)
                 return ModelArtifactPublicationResult(

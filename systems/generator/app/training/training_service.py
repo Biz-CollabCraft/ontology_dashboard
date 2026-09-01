@@ -353,6 +353,34 @@ class TrainingService:
                         )
                     )
                     logger.info(f"[TrainingService] Model {base_model} succeeded: f1={trained.metrics.get('f1', 0.0):.4f}")
+                elif (
+                    pub_result.published
+                    and not pub_result.latest_updated
+                    and req.activation_policy == "publish_only"
+                    and pub_result.latest_error_code is None
+                ):
+                    results.append(
+                        ModelTrainingResult(
+                            base_model=base_model,
+                            model_id=model_id,
+                            model_version=model_ver,
+                            status="succeeded",
+                            published=True,
+                            latest_updated=False,
+                            model_artifact_uri=pub_result.artifact_uri,
+                            artifact_uri=pub_result.artifact_uri,
+                            metrics_summary=trained.metrics,
+                            latest_error_code=None,
+                            latest_error_message=None,
+                            activated=False,
+                            activation_error_code=None,
+                            error_code=None,
+                        )
+                    )
+                    logger.info(
+                        "[TrainingService] Model %s published without latest pointer update",
+                        base_model,
+                    )
                 elif pub_result.published and not pub_result.latest_updated:
                     logger.warning(
                         f"[TrainingService] Model {base_model} artifact published at {pub_result.artifact_uri} but pointer update failed: {pub_result.latest_error_code}"
