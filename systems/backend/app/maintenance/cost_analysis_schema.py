@@ -108,7 +108,7 @@ class MaintenanceCostOption(FrozenModel):
     action_candidate_id: str = Field(min_length=1, max_length=240)
     action_code: MaintenanceActionCode
     execution_timing: ExecutionTiming
-    execution_at: datetime | None = None
+    assumed_execution_at: datetime | None = None
     labor_rate_type: Literal["normal", "night", "not_applicable"] | None = None
     labor_rate_base_minor_per_minute: int | None = Field(default=None, ge=0)
     calculation_status: CalculationStatus

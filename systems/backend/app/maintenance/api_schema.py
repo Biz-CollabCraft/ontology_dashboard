@@ -60,16 +60,6 @@ class OperationsManualRecommendationCreateRequest(StrictCommand):
     basis: tuple[str, ...] = Field(min_length=1)
 
 
-class CostOptionRecommendationCreateRequest(StrictCommand):
-    """Human-authored basis for selecting one persisted cost option.
-
-    Analysis, option, Action candidate, equipment, and Diagnosis lineage are
-    resolved from the route IDs and canonical persisted snapshots.
-    """
-
-    basis: tuple[str, ...] = Field(min_length=1)
-
-
 class MaintenanceCostAnalysisCreateRequest(StrictCommand):
     """Action plus consulted-SOP audit context.
 
@@ -129,7 +119,6 @@ class MaintenanceReplayRequest(StrictCommand):
 
 
 __all__ = [
-    "CostOptionRecommendationCreateRequest",
     "EvidenceSnapshotBasis",
     "InspectionResultCreateRequest",
     "InspectionWorkOrderCreateRequest",

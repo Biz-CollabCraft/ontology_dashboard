@@ -189,7 +189,7 @@ def test_backend_provider_calculates_only_governed_probability_scenarios() -> No
     assert immediate.labor_rate_per_minute is not None
     assert immediate.labor_rate_per_minute.base_minor_per_minute == 292
     assert immediate.labor_rate_type == "normal"
-    assert immediate.execution_at == calculated_at
+    assert immediate.assumed_execution_at == calculated_at
     assert immediate.labor_duration is not None
     assert immediate.labor_duration.model_dump() == {
         "low_minutes": 5,
@@ -228,7 +228,7 @@ def test_backend_provider_calculates_only_governed_probability_scenarios() -> No
     assert planned.labor_rate_type == "night"
     assert planned.labor_rate_per_minute is not None
     assert planned.labor_rate_per_minute.base_minor_per_minute == 438
-    assert planned.execution_at == datetime(2026, 9, 1, 13, 0, tzinfo=UTC)
+    assert planned.assumed_execution_at == datetime(2026, 9, 1, 13, 0, tzinfo=UTC)
     assert reinspect.labor_duration is None
     assert reinspect.expected_downtime is None
     assert reinspect.expected_failure_loss is None

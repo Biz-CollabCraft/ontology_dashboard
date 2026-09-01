@@ -79,7 +79,7 @@ def test_cooling_provider_uses_server_time_and_keeps_future_risk_unknown() -> No
         for item in basis.scenarios
         if item.execution_timing.value == "planned_window"
     )
-    assert immediate.execution_at == calculated_at
+    assert immediate.assumed_execution_at == calculated_at
     assert immediate.labor_rate_type == "normal"
     assert immediate.labor_rate_per_minute is not None
     assert immediate.labor_rate_per_minute.base_minor_per_minute == 292
@@ -93,7 +93,7 @@ def test_cooling_provider_uses_server_time_and_keeps_future_risk_unknown() -> No
     assert immediate.expected_downtime.base_minutes == 60
     assert immediate.expected_failure_loss is not None
     assert immediate.expected_failure_loss.base_minor == 0
-    assert planned.execution_at == datetime(2026, 9, 1, 13, 0, tzinfo=UTC)
+    assert planned.assumed_execution_at == datetime(2026, 9, 1, 13, 0, tzinfo=UTC)
     assert planned.labor_rate_type == "night"
     assert planned.labor_rate_per_minute is not None
     assert planned.labor_rate_per_minute.base_minor_per_minute == 438

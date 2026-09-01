@@ -44,7 +44,7 @@ class SensitivityRatePerMinute(FrozenModel):
 
 class MaintenanceScenarioInput(FrozenModel):
     execution_timing: ExecutionTiming
-    execution_at: datetime | None = None
+    assumed_execution_at: datetime | None = None
     labor_rate_type: Literal["normal", "night", "not_applicable"] | None = None
     parts_cost: SensitivityMoney | None
     labor_duration: SensitivityDuration | None
@@ -177,7 +177,7 @@ def _calculate_option(
         action_candidate_id=source.action_candidate_id,
         action_code=source.action_code,
         execution_timing=scenario.execution_timing,
-        execution_at=scenario.execution_at,
+        assumed_execution_at=scenario.assumed_execution_at,
         labor_rate_type=scenario.labor_rate_type,
         labor_rate_base_minor_per_minute=(
             scenario.labor_rate_per_minute.base_minor_per_minute

@@ -9,7 +9,6 @@ import pytest
 
 from app.infra.db.maintenance_repository import MaintenanceRepository
 from app.maintenance.api_schema import (
-    CostOptionRecommendationCreateRequest,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
@@ -1260,19 +1259,16 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
         actor_id="manager-1",
         idempotency_key="cooling-vertical-cost-001",
     )["cost_analysis"]
-    selected = next(
-        option
-        for option in analysis["options"]
-        if option["execution_timing"] == "immediate"
-    )
-    recommendation = loop.create_recommendation_from_cost_option(
+    assert analysis["options"]
+    assert loop.repository.operational_side_effect_counts()["recommendations"] == 0
+    recommendation = loop.create_manual_recommendation(
         organization_id="org-1",
         project_id="project-1",
         workspace_id="workspace-1",
-        analysis_id=analysis["analysis_id"],
-        option_id=selected["option_id"],
-        payload=CostOptionRecommendationCreateRequest(
-            basis=("manager selected cooling restoration",)
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            action_code="COOLING_SYSTEM_RESTORE",
+            basis=("inspection result requires cooling restoration",),
         ),
         actor_id="manager-1",
         actor_display_name="Manager One",
@@ -1390,171 +1386,3 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
     assert payloads["maintenance.replay_requested"]["state_patch"] == (
         payloads["maintenance.completed"]["state_patch"]
     )
-
-
-def test_human_selected_cost_option_creates_only_proposed_recommendation(tmp_path) -> None:
-    loop = service(tmp_path)
-    _work_order_id, inspection_result_id = run_completed_inspection(loop)
-    analysis = loop.calculate_tool_replacement_cost(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(),
-        actor_id="manager-1",
-        idempotency_key="cost-analysis-request-001",
-    )["cost_analysis"]
-    selected = next(
-        option
-        for option in analysis["options"]
-        if option["execution_timing"] == "immediate"
-    )
-
-    created = loop.create_recommendation_from_cost_option(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        analysis_id=analysis["analysis_id"],
-        option_id=selected["option_id"],
-        payload=CostOptionRecommendationCreateRequest(
-            basis=("manager selected immediate tool replacement",)
-        ),
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="cost-option-recommendation-001",
-    )
-    replay = loop.create_recommendation_from_cost_option(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        analysis_id=analysis["analysis_id"],
-        option_id=selected["option_id"],
-        payload=CostOptionRecommendationCreateRequest(
-            basis=("manager selected immediate tool replacement",)
-        ),
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="cost-option-recommendation-001",
-    )
-
-    recommendation = created["recommendation"]
-    assert replay == {**created, "replayed": True}
-    assert recommendation["status"] == "proposed"
-    assert recommendation["source_inspection_reference"] == inspection_result_id
-    assert recommendation["source_cost_analysis_id"] == analysis["analysis_id"]
-    assert recommendation["source_cost_option_id"] == selected["option_id"]
-    assert (
-        recommendation["source_action_candidate_id"]
-        == selected["action_candidate_id"]
-    )
-    assert recommendation["action_code"] == "TOOL_REPLACEMENT"
-    assert "execution_timing:immediate" in recommendation["basis"]
-    side_effects = loop.repository.operational_side_effect_counts()
-    assert side_effects == {
-        "recommendations": 1,
-        "decisions": 0,
-        "work_orders": 1,
-        "maintenance_actions": 0,
-        "maintenance_events": 0,
-    }
-
-    planned = next(
-        option
-        for option in analysis["options"]
-        if option["execution_timing"] == "planned_window"
-    )
-    with pytest.raises(IdempotencyConflict, match="idempotency_key_conflict"):
-        loop.create_recommendation_from_cost_option(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            analysis_id=analysis["analysis_id"],
-            option_id=planned["option_id"],
-            payload=CostOptionRecommendationCreateRequest(
-                basis=("manager selected planned tool replacement",)
-            ),
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="cost-option-recommendation-001",
-        )
-
-
-def test_non_executable_or_insufficient_cost_option_cannot_create_recommendation(
-    tmp_path,
-) -> None:
-    loop = service(tmp_path)
-    _work_order_id, inspection_result_id = run_completed_inspection(loop)
-    analysis = loop.calculate_tool_replacement_cost(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(),
-        actor_id="manager-1",
-        idempotency_key="cost-analysis-request-001",
-    )["cost_analysis"]
-    request = CostOptionRecommendationCreateRequest(basis=("human selection",))
-
-    for timing in ("reinspect_after", "no_action_baseline"):
-        selected = next(
-            option
-            for option in analysis["options"]
-            if option["execution_timing"] == timing
-        )
-        with pytest.raises(ValueError, match="cannot create a maintenance recommendation"):
-            loop.create_recommendation_from_cost_option(
-                organization_id="org-1",
-                project_id="project-1",
-                workspace_id="workspace-1",
-                analysis_id=analysis["analysis_id"],
-                option_id=selected["option_id"],
-                payload=request,
-                actor_id="manager-1",
-                actor_display_name="Manager One",
-                idempotency_key=f"cost-option-{timing}",
-            )
-
-    with pytest.raises(ValueError, match="does not belong"):
-        loop.create_recommendation_from_cost_option(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            analysis_id=analysis["analysis_id"],
-            option_id="FORGED-OPTION",
-            payload=request,
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="cost-option-forged",
-        )
-
-    loop.cost_basis_provider = StaticCostBasisProvider(
-        tool_replacement_cost_basis(missing_parts_cost=True)
-    )
-    insufficient = loop.calculate_tool_replacement_cost(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(),
-        actor_id="manager-1",
-        idempotency_key="cost-analysis-insufficient-001",
-    )["cost_analysis"]
-    insufficient_option = next(
-        option
-        for option in insufficient["options"]
-        if option["execution_timing"] == "immediate"
-    )
-    with pytest.raises(ValueError, match="insufficient cost option"):
-        loop.create_recommendation_from_cost_option(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            analysis_id=insufficient["analysis_id"],
-            option_id=insufficient_option["option_id"],
-            payload=request,
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="cost-option-insufficient",
-        )
-
-    assert loop.repository.operational_side_effect_counts()["recommendations"] == 0

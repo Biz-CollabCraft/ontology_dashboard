@@ -12,7 +12,6 @@ from typing import Any
 from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 
 from .api_schema import (
-    CostOptionRecommendationCreateRequest,
     EvidenceSnapshotBasis,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
@@ -26,9 +25,7 @@ from .api_schema import (
     ToolReplacementCostAnalysisCreateRequest,
 )
 from .cost_analysis_schema import (
-    CalculationStatus,
     CostAnalysisBasis,
-    ExecutionTiming,
     MaintenanceActionCode,
 )
 from .cost_calculator import (
@@ -572,77 +569,6 @@ class MaintenanceLoopService:
                     "source_action_candidate_id": source_action_candidate_id,
                 },
             ),
-        )
-
-    def create_recommendation_from_cost_option(
-        self,
-        *,
-        organization_id: str,
-        project_id: str,
-        workspace_id: str,
-        analysis_id: str,
-        option_id: str,
-        payload: CostOptionRecommendationCreateRequest,
-        actor_id: str,
-        actor_display_name: str,
-        idempotency_key: str,
-        authored_at: datetime | None = None,
-    ) -> dict[str, Any]:
-        """Materialize a human-selected executable cost option as proposed.
-
-        Selecting an option creates only a proposed Operations recommendation.
-        Recommendation acceptance and Work Order creation remain separate
-        commands with their existing human-approval boundary.
-        """
-
-        result = self.repository.get_cost_analysis(
-            workspace_id=workspace_id,
-            analysis_id=analysis_id,
-        )
-        if result is None:
-            raise KeyError(analysis_id)
-        self._require_scope(
-            result,
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-        )
-        selected = next(
-            (option for option in result.options if option.option_id == option_id),
-            None,
-        )
-        if selected is None:
-            raise ValueError("selected cost option does not belong to the analysis")
-        if selected.calculation_status is not CalculationStatus.CALCULATED:
-            raise ValueError("insufficient cost option cannot create a recommendation")
-        if selected.execution_timing not in {
-            ExecutionTiming.IMMEDIATE,
-            ExecutionTiming.PLANNED_WINDOW,
-        }:
-            raise ValueError(
-                "reinspect_after and no_action_baseline cannot create a maintenance recommendation"
-            )
-        return self.create_manual_recommendation(
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            inspection_result_id=result.based_on.inspection_result_id,
-            payload=OperationsManualRecommendationCreateRequest(
-                action_code=selected.action_code.value,
-                basis=(
-                    f"cost_analysis:{analysis_id}",
-                    f"cost_option:{option_id}",
-                    f"execution_timing:{selected.execution_timing.value}",
-                    *payload.basis,
-                ),
-            ),
-            actor_id=actor_id,
-            actor_display_name=actor_display_name,
-            idempotency_key=idempotency_key,
-            authored_at=authored_at,
-            source_cost_analysis_id=analysis_id,
-            source_cost_option_id=option_id,
-            source_action_candidate_id=selected.action_candidate_id,
         )
 
     @staticmethod

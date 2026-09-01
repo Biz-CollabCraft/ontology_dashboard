@@ -2,7 +2,6 @@ import { Calculator, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   calculateMaintenanceCost,
-  createRecommendationFromCostOption,
   getMaintenanceActionCandidates,
   getMaintenanceEventLineage,
   type MaintenanceActionCandidateReadModel,
@@ -26,6 +25,13 @@ const ACTION_LABEL: Record<MaintenanceActionCode, string> = {
   TOOL_REPLACEMENT: "공구 교체",
   COOLING_SYSTEM_RESTORE: "냉각 시스템 복구",
 };
+
+const CONFIDENCE_LABEL = {
+  high: "높음",
+  medium: "보통",
+  low: "낮음",
+  insufficient: "근거 부족",
+} as const;
 
 export function latestEligibleInspection(
   lineage: MaintenanceEventLineageReadModel | null,
@@ -112,10 +118,8 @@ export function MaintenanceCostDecisionPanel({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [basis, setBasis] = useState("");
   const [sopId, setSopId] = useState(guidance?.sopId ?? "");
   const [sopVersion, setSopVersion] = useState(guidance?.version ?? "");
-  const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
 
   const load = async (signal?: AbortSignal) => {
     setLoading(true);
@@ -181,17 +185,6 @@ export function MaintenanceCostDecisionPanel({
   const isImmediateCooling = selectedActionCode === "COOLING_SYSTEM_RESTORE";
   const visibleCalculationComplete = visibleOptions.length > 0
     && visibleOptions.every((option) => option.calculation_status === "calculated");
-  const selectedRecommendationsByAction = useMemo(() => new Map(
-    (lineage?.recommendations ?? [])
-      .filter((item) => (
-        inspection
-        && item.source_inspection_work_order_id === inspection.work_order_id
-        && item.source_inspection_reference === inspection.inspection_result_id
-        && Boolean(item.action_code)
-      ))
-      .map((item) => [item.action_code as string, item]),
-  ), [inspection, lineage]);
-
   const calculate = async () => {
     if (!inspection || !selectedActionCode) return;
     if (!sopId.trim() || !sopVersion.trim()) {
@@ -200,7 +193,6 @@ export function MaintenanceCostDecisionPanel({
     }
     setSubmitting(true);
     setError(null);
-    setSelectedMessage(null);
     try {
       await calculateMaintenanceCost(
         projectId,
@@ -216,34 +208,6 @@ export function MaintenanceCostDecisionPanel({
       onChanged?.();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "비용 분석을 실행하지 못했습니다.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const selectOption = async (analysisId: string, optionId: string) => {
-    if (!basis.trim()) {
-      setError("선택 근거를 입력해 주세요.");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const created = await createRecommendationFromCostOption(
-        projectId,
-        workspaceId,
-        analysisId,
-        optionId,
-        [basis.trim()],
-        requestKey("cost-option-selection"),
-      );
-      setSelectedMessage(
-        `${created.recommendation_id}가 제안 상태로 생성되었습니다. 별도 승인 전에는 WorkOrder가 생성되지 않습니다.`,
-      );
-      await load();
-      onChanged?.();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "비용 옵션을 선택하지 못했습니다.");
     } finally {
       setSubmitting(false);
     }
@@ -284,7 +248,6 @@ export function MaintenanceCostDecisionPanel({
               className={selectedActionCode === candidate.action_code ? "mvp-button" : "mvp-button ghost"}
               onClick={() => {
                 setSelectedActionCode(candidate.action_code);
-                setSelectedMessage(null);
               }}
               disabled={submitting}
             >
@@ -302,7 +265,7 @@ export function MaintenanceCostDecisionPanel({
               : "사내 냉각 경로 세척·막힘 해소·동작 확인 범위의 비용 기준은 Backend가 관리합니다. 부품 교체가 필요하면 이 기준을 사용할 수 없습니다."}
             {" "}{isImmediateCooling
               ? "현재 서버 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다."
-              : "즉시·12시간 후 실행 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다."}
+              : "즉시·12시간 후 비용 산정 가정 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다."}
           </p>
           <small>참고 SOP: {sopId || "-"} · {sopVersion || "-"}</small>
           <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => void calculate()}>
@@ -319,26 +282,14 @@ export function MaintenanceCostDecisionPanel({
                 ? "즉시 냉각 복구 예상 비용"
                 : `최근 분석 · ${selectedActionCode ? ACTION_LABEL[selectedActionCode] : "정비 Action"}`}
             </strong>
-            <span>{visibleCalculationComplete ? "계산 완료" : "입력 부족"}</span>
+            <span>{visibleCalculationComplete ? "참고 계산 완료" : "입력 부족"}</span>
           </header>
           <small>{new Date(current.calculated_at).toLocaleString()} · {current.price_version}</small>
-          <label>
-            <span>선택 근거</span>
-            <textarea
-              value={basis}
-              onChange={(event) => setBasis(event.target.value)}
-              placeholder={isImmediateCooling ? "즉시 복구를 선택한 이유" : "사용자가 이 시점을 선택한 이유"}
-            />
-          </label>
+          <small>데모 참고값 · 실제 사업장 견적·ERP·MES·급여 실적이 아닙니다.</small>
           <div className="mvp-cost-options">
             {visibleOptions.map((option) => {
-              const executable = option.calculation_status === "calculated"
-                && (option.execution_timing === "immediate" || option.execution_timing === "planned_window");
               const isLowest = !isImmediateCooling
                 && option.option_id === current.lowest_calculated_cost_option_id;
-              const selectedRecommendation = selectedRecommendationsByAction.get(option.action_code);
-              const alreadySelected = selectedRecommendation?.source_cost_option_id === option.option_id;
-              const actionAlreadySelected = Boolean(selectedRecommendation);
               return (
                 <article key={option.option_id}>
                   <div>
@@ -346,41 +297,27 @@ export function MaintenanceCostDecisionPanel({
                     {isLowest ? <b>계산상 최저비용</b> : null}
                   </div>
                   <span>{formatWon(option.total_expected_cost?.base_minor)}</span>
-                  {option.execution_at ? (
+                  {option.assumed_execution_at ? (
                     <small>
-                      실행 {new Date(option.execution_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+                      비용 산정 가정 {new Date(option.assumed_execution_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
                       {option.labor_rate_base_minor_per_minute !== null && option.labor_rate_base_minor_per_minute !== undefined
                         ? ` · ${option.labor_rate_type === "night" ? "야간" : "주간"} ${option.labor_rate_base_minor_per_minute.toLocaleString()}원/분`
                         : ""}
                     </small>
                   ) : null}
                   <small>{option.expected_downtime ? `예상 정지 ${option.expected_downtime.base_minutes}분` : `부족: ${option.missing_inputs.join(", ")}`}</small>
-                  <button
-                    type="button"
-                    className="mvp-button ghost"
-                    disabled={!executable || actionAlreadySelected || submitting}
-                    onClick={() => void selectOption(current.analysis_id, option.option_id)}
-                  >
-                    {alreadySelected
-                      ? "제안 생성됨"
-                      : executable && actionAlreadySelected
-                        ? "이미 정비안 선택됨"
-                        : isImmediateCooling
-                          ? "즉시 복구안 선택"
-                          : "이 시점 선택"}
-                  </button>
+                  <small>신뢰도: {CONFIDENCE_LABEL[option.confidence]}</small>
                 </article>
               );
             })}
           </div>
           <p>
             {isImmediateCooling
-              ? "냉각 전용 미래 위험 데이터가 없어 계획·미조치 비용은 표시하지 않습니다. 예상 비용을 선택해도 제안만 생성되며 승인·WorkOrder·정비 실행은 별도입니다."
-              : "최저비용 표시는 계산 결과일 뿐 자동 추천이 아닙니다. 선택 시에도 제안만 생성되며 승인·WorkOrder·정비 실행은 별도입니다."}
+              ? "냉각 전용 미래 위험 데이터가 없어 계획·미조치 비용은 표시하지 않습니다. 이 예상 비용은 정비 추천·승인·WorkOrder·실행을 생성하지 않는 참고 정보입니다."
+              : "최저비용 표시는 현재 가정의 계산 참고값일 뿐입니다. 비용 분석은 정비 추천·승인·WorkOrder·실행을 생성하지 않습니다."}
           </p>
         </div>
       ) : null}
-      {selectedMessage ? <small className="mvp-cost-success">{selectedMessage}</small> : null}
     </section>
   );
 }

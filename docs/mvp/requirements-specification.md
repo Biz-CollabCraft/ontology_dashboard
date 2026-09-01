@@ -242,9 +242,10 @@ Canonical 파일에 임의의 금액을 역기입하지 않고 버전된 Economi
 직접 제출하는 입력창이 아니다. 사용자는 Action과 점검에서 참고한 SOP 식별자·버전만
 보내고, Backend Maintenance가 Action별 버전 관리 비용 기준 provider에서 입력을 조회한다.
 냉각 복구 기준은 사내 냉각 경로 세척·막힘 해소·동작 확인으로 제한하며 부품 교체가
-확인되면 별도의 견적/Action basis를 요구한다. 즉시와 12시간 후 실행 시각은 서버
-`calculated_at`에서 파생하고 `Asia/Seoul` 22:00~06:00에는 단일 50% 야간 가산 데모
-요율을 적용한다. 이는 실제 통상임금이나 중복 가산을 계산하는 급여 엔진이 아니다.
+확인되면 별도의 견적/Action basis를 요구한다. 즉시와 12시간 후 비용 산정 가정 시각은
+서버 `calculated_at`에서 파생하고 `Asia/Seoul` 22:00~06:00에는 단일 50% 야간 가산
+데모 요율을 적용한다. `assumed_execution_at`은 실제 WorkOrder 일정이나 정비 실행 시각이
+아니며, 실제 통상임금이나 중복 가산을 계산하는 급여 엔진도 아니다.
 Action별 공식 미래 확률이 없는 시점은 임의 보간하지 않고 `insufficient`로 표시한다.
 상세 기준과 제한은 `docs/mvp/maintenance-cost-basis.md`를 따른다.
 
@@ -252,6 +253,11 @@ Action별 공식 미래 확률이 없는 시점은 임의 보간하지 않고 `i
 UI에 `즉시 복구 예상 비용`만 표시한다. 계획·재점검·미조치 option은 Backend의 공유
 결과 snapshot에 보존하지만 최적 시점 비교처럼 노출하지 않는다. 향후 냉각 전용
 Prediction과 실제 정비·미조치 이력이 확보되면 계획·미조치 비교를 확장한다.
+
+Cost What-if는 읽기 전용 의사결정 참고 기능이다. 비용 option과
+`lowest_calculated_cost_option_id`는 Operations manual Recommendation, 승인, WorkOrder,
+MaintenanceAction을 생성하지 않는다. 사용자의 실제 정비 판단은 Inspection Result와
+Action 후보를 근거로 기존 Maintenance command에서 별도로 수행한다.
 
 | ID | 요구사항 | 완료 기준 |
 |---|---|---|

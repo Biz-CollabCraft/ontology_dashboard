@@ -427,8 +427,9 @@ Report grounding 의미를 광우 PR에서 임의로 추가·변경하지 않는
 ### 선택 PR. 비용 기반 정비 대안 분석
 
 핵심 PR 1~4와 공개 E2E가 모두 완료된 경우에만 별도로 시작한다. 즉시 교체, 계획
-정비, 지연 후 재평가의 비용을 실제값·추정값·정책 기본값으로 나누어 비교하며,
-생산 운영 의사결정자 승인 없이 실행 Action을 생성하지 않는다.
+정비, 지연 후 재평가의 비용을 실제값·추정값·정책 기본값으로 나누어 보여주는 읽기
+전용 참고 기능이다. 비용 결과나 최저비용 option은 Recommendation, 승인, WorkOrder 또는
+실행 Action을 생성하지 않는다.
 
 ## 8. 파일 소유와 변경 충돌 방지
 
@@ -581,9 +582,11 @@ recommendation provenance, 조회 방식과 근거 의미 중 하나라도 미�
    정비 승인이 아니다.
 5. 점검 결과가 `maintenance_recommended`이면 Maintenance가 구조화된 checklist와
    measurements에서 `TOOL_REPLACEMENT` 또는 `COOLING_SYSTEM_RESTORE` Action 후보를
-   산출한다. `process_manager`는 필요할 때 후보별 비용을 분석하고 실행 가능한 timing을
-   선택한 뒤에만 `origin=operations_manual` 추천을 생성한다. 동일 inspection result/action은
-   stable ID와 idempotency/dedupe 규칙으로 한 번만 생성한다.
+   산출한다. `process_manager`는 필요할 때 후보별 비용을 읽기 전용 참고정보로 확인할 수
+   있지만 비용 option을 선택하거나 그 결과로 추천을 생성하지 않는다. 정비 판단을 내린
+   경우에는 Inspection Result와 Action 후보를 근거로 별도 `origin=operations_manual`
+   추천을 작성한다. 동일 inspection result/action은 stable ID와 idempotency/dedupe 규칙으로
+   한 번만 생성한다.
    이때 `TOOL_REPLACEMENT`는 마모된 카바이드 절삭 인서트 1개 교체를 의미한다.
    비용 분석에서 `COOLING_SYSTEM_RESTORE`는 사내 냉각 경로 세척·막힘 해소·동작
    확인으로 한정하고, 부품 교체가 확인되면 별도 견적/Action basis를 사용한다.

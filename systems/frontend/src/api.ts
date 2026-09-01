@@ -447,7 +447,7 @@ export interface MaintenanceCostOptionReadModel {
   action_candidate_id: string;
   action_code: MaintenanceActionCode;
   execution_timing: MaintenanceExecutionTiming;
-  execution_at?: string | null;
+  assumed_execution_at?: string | null;
   labor_rate_type?: "normal" | "night" | "not_applicable" | null;
   labor_rate_base_minor_per_minute?: number | null;
   calculation_status: "calculated" | "insufficient";
@@ -568,27 +568,6 @@ export function calculateMaintenanceCost(
 }
 
 export const calculateToolReplacementCost = calculateMaintenanceCost;
-
-export function createRecommendationFromCostOption(
-  projectId: string,
-  workspaceId: string,
-  analysisId: string,
-  optionId: string,
-  basis: string[],
-  idempotencyKey: string,
-): Promise<{
-  recommendation_id: string;
-  recommendation_status: "proposed";
-}> {
-  return request(
-    `${maintenanceBase(projectId, workspaceId)}/cost-analyses/${encodeURIComponent(analysisId)}/options/${encodeURIComponent(optionId)}/recommendations`,
-    {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ basis }),
-    },
-  );
-}
 
 export function getPredictiveMaintenanceRuntimeContext(
   projectId: string,

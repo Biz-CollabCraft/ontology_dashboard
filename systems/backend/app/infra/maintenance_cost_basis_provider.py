@@ -116,7 +116,7 @@ class JsonMaintenanceCostBasisProvider:
     @staticmethod
     def _execution_rate(
         *,
-        execution_at: datetime,
+        assumed_execution_at: datetime,
         execution_policy: dict[str, Any],
         normal_labor_rate: int,
         night_labor_rate: int,
@@ -124,7 +124,7 @@ class JsonMaintenanceCostBasisProvider:
         execution_timezone = ZoneInfo(execution_policy["timezone"])
         night_start_hour = int(execution_policy["night_window"]["start_hour"])
         night_end_hour = int(execution_policy["night_window"]["end_hour"])
-        local_hour = execution_at.astimezone(execution_timezone).hour
+        local_hour = assumed_execution_at.astimezone(execution_timezone).hour
         is_night = local_hour >= night_start_hour or local_hour < night_end_hour
         return (
             ("night", night_labor_rate)
@@ -176,16 +176,16 @@ class JsonMaintenanceCostBasisProvider:
             }
             is_reinspection = timing is ExecutionTiming.REINSPECT_AFTER
             is_no_action = timing is ExecutionTiming.NO_ACTION_BASELINE
-            execution_at = None
+            assumed_execution_at = None
             labor_rate_type = "not_applicable"
             labor_rate = 0
             if timing is ExecutionTiming.IMMEDIATE:
-                execution_at = calculated_at
+                assumed_execution_at = calculated_at
             elif timing is ExecutionTiming.PLANNED_WINDOW:
-                execution_at = calculated_at + planned_delay
-            if execution_at is not None:
+                assumed_execution_at = calculated_at + planned_delay
+            if assumed_execution_at is not None:
                 labor_rate_type, labor_rate = self._execution_rate(
-                    execution_at=execution_at,
+                    assumed_execution_at=assumed_execution_at,
                     execution_policy=execution_policy,
                     normal_labor_rate=normal_labor_rate,
                     night_labor_rate=night_labor_rate,
@@ -193,7 +193,7 @@ class JsonMaintenanceCostBasisProvider:
             scenarios.append(
                 {
                     "execution_timing": timing,
-                    "execution_at": execution_at,
+                    "assumed_execution_at": assumed_execution_at,
                     "labor_rate_type": labor_rate_type,
                     "parts_cost": _money(parts_reference if incurs_replacement else 0),
                     "labor_duration": (
@@ -230,7 +230,7 @@ class JsonMaintenanceCostBasisProvider:
             scenarios=tuple(scenarios),
             assumptions=(
                 "부품비와 노무단가는 공개 참고자료이며 실제 사업장 견적·급여가 아니다.",
-                "즉시·12시간 후 실행 시각은 서버 시각에서 계산하고 Asia/Seoul 22:00~06:00에는 단일 50% 야간 가산 데모 요율을 적용한다.",
+                "즉시·12시간 후 비용 산정 가정 시각은 서버 시각에서 계산하고 Asia/Seoul 22:00~06:00에는 단일 50% 야간 가산 데모 요율을 적용한다. 실제 WorkOrder 일정이 아니다.",
                 "438원/분은 공개 조사노임에 단일 야간 가산을 적용한 데모 참고값이며 실제 통상임금·연장/휴일 중복 가산을 계산하지 않는다.",
                 "작업시간, 정지시간, 생산손실률과 고장 결과비용은 출처를 연결한 합성 데모 민감도 값이다.",
                 "외주비 0원은 사내 작업, 예비 인서트 보유, 외부 출동 없음 조건에서만 유효하다.",
@@ -343,16 +343,16 @@ class JsonMaintenanceCostBasisProvider:
                 ExecutionTiming.IMMEDIATE,
                 ExecutionTiming.PLANNED_WINDOW,
             }
-            execution_at = None
+            assumed_execution_at = None
             labor_rate_type = "not_applicable"
             labor_rate = 0
             if timing is ExecutionTiming.IMMEDIATE:
-                execution_at = calculated_at
+                assumed_execution_at = calculated_at
             elif timing is ExecutionTiming.PLANNED_WINDOW:
-                execution_at = calculated_at + planned_delay
-            if execution_at is not None:
+                assumed_execution_at = calculated_at + planned_delay
+            if assumed_execution_at is not None:
                 labor_rate_type, labor_rate = self._execution_rate(
-                    execution_at=execution_at,
+                    assumed_execution_at=assumed_execution_at,
                     execution_policy=execution_policy,
                     normal_labor_rate=normal_labor_rate,
                     night_labor_rate=night_labor_rate,
@@ -360,7 +360,7 @@ class JsonMaintenanceCostBasisProvider:
             scenarios.append(
                 {
                     "execution_timing": timing,
-                    "execution_at": execution_at,
+                    "assumed_execution_at": assumed_execution_at,
                     "labor_rate_type": labor_rate_type,
                     "parts_cost": _money(parts_reference),
                     "labor_duration": (
@@ -398,7 +398,7 @@ class JsonMaintenanceCostBasisProvider:
             assumptions=(
                 "복구 범위는 냉각 경로 세척·막힘 해소·동작 확인이며 팬·펌프·칠러 등 부품 교체를 포함하지 않는다.",
                 "부품비와 외주비 0원은 예비부품 교체와 외부 출동이 없는 사내 복구 범위에서만 유효하다.",
-                "즉시·12시간 후 실행 시각은 서버 시각에서 계산하고 Asia/Seoul 22:00~06:00에는 단일 50% 야간 가산 데모 요율을 적용한다.",
+                "즉시·12시간 후 비용 산정 가정 시각은 서버 시각에서 계산하고 Asia/Seoul 22:00~06:00에는 단일 50% 야간 가산 데모 요율을 적용한다. 실제 WorkOrder 일정이 아니다.",
                 "작업시간, 정지시간과 생산손실률은 출처를 연결한 합성 데모 민감도 값이다.",
                 "냉각 이상 전용 미래 위험확률이 없으므로 계획정비·재점검·미조치는 임의 추정하지 않고 insufficient로 처리한다.",
                 "비용 분석은 의사결정 참고값이며 추천·승인·실행 명령이 아니다.",

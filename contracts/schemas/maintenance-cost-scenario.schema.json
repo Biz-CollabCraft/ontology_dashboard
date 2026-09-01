@@ -53,8 +53,8 @@
             "no_action_baseline"
           ]
         },
-        "execution_at": {
-          "description": "Server-derived execution instant used to select the labor-rate band when the timing denotes an executable maintenance option.",
+        "assumed_execution_at": {
+          "description": "Server-derived cost-calculation assumption used to select the labor-rate band. It is not an approved Work Order schedule or an actual maintenance execution instant.",
           "anyOf": [
             {"type": "string", "format": "date-time"},
             {"type": "null"}

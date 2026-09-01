@@ -64,7 +64,7 @@
     },
     "normal_rate_minor_per_minute": 292,
     "night_rate_minor_per_minute": 438,
-    "reasoning": "The Backend owns calculated_at. Immediate restoration uses that instant and the demo planned window uses calculated_at + 12 hours. Both are converted to Asia/Seoul before the 22:00-06:00 night-work band is selected.",
+    "reasoning": "The Backend owns calculated_at. Immediate restoration uses that instant and the demo planned window uses calculated_at + 12 hours as cost-calculation assumptions, not approved Work Order schedules. Both are converted to Asia/Seoul before the 22:00-06:00 night-work band is selected.",
     "source_ids": ["korean-labor-standards-act-article-56"],
     "limitations": "This is a deterministic demo policy, not a payroll engine. It does not infer overtime from a shift calendar or stack overtime, holiday, and night premiums."
   },

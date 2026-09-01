@@ -13,11 +13,9 @@ async function login(page: Page) {
   await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}`));
 }
 
-test("runs cost analysis only on request and keeps option selection proposed", async ({ page }) => {
+test("runs cost analysis only on request and keeps the result read-only", async ({ page }) => {
   let analysisCreated = false;
-  let recommendationCreated = false;
   let calculationRequests = 0;
-  let selectionRequests = 0;
 
   const analysis = {
     schema_version: "maintenance-cost-scenario-v1.0",
@@ -90,16 +88,7 @@ test("runs cost analysis only on request and keeps option selection proposed", a
           recorded_at: "2026-08-31T02:00:00Z",
         }],
         cost_analyses: analysisCreated ? [analysis] : [],
-        recommendations: recommendationCreated ? [{
-          recommendation_id: "REC-COST-E2E",
-          status: "proposed",
-          source_inspection_work_order_id: "INSPECTION-WO-E2E",
-          source_inspection_reference: "INSPECTION-RESULT-E2E",
-          source_cost_analysis_id: analysis.analysis_id,
-          source_cost_option_id: "OPTION-IMMEDIATE",
-          source_action_candidate_id: "ACTION-CANDIDATE-E2E",
-          action_code: "TOOL_REPLACEMENT",
-        }] : [],
+        recommendations: [],
       }),
     });
   });
@@ -125,22 +114,6 @@ test("runs cost analysis only on request and keeps option selection proposed", a
     });
   });
 
-  await page.route("**/api/projects/*/workspaces/*/maintenance/cost-analyses/*/options/*/recommendations", async (route) => {
-    selectionRequests += 1;
-    expect(route.request().postDataJSON()).toEqual({
-      basis: ["다음 교대 전 즉시 교체가 운영상 적절함"],
-    });
-    recommendationCreated = true;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        recommendation_id: "REC-COST-E2E",
-        recommendation_status: "proposed",
-      }),
-    });
-  });
-
   await login(page);
   await page.locator(".mvp-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
@@ -152,17 +125,10 @@ test("runs cost analysis only on request and keeps option selection proposed", a
 
   await expect.poll(() => calculationRequests).toBe(1);
   await expect(panel.getByText("계산상 최저비용", { exact: true })).toBeVisible();
-  await panel.getByPlaceholder("사용자가 이 시점을 선택한 이유").fill("다음 교대 전 즉시 교체가 운영상 적절함");
-  await panel.getByRole("button", { name: "이 시점 선택", exact: true }).first().click();
-
-  await expect.poll(() => selectionRequests).toBe(1);
-  await expect(panel.getByText(/제안 상태로 생성되었습니다/)).toBeVisible();
-  await expect(panel.getByText(/별도 승인 전에는 WorkOrder가 생성되지 않습니다/)).toBeVisible();
-  await expect(panel.getByRole("button", { name: "제안 생성됨", exact: true })).toBeDisabled();
-  const blockedOption = panel.getByRole("button", { name: "이미 정비안 선택됨", exact: true });
-  await expect(blockedOption).toBeDisabled();
-  await blockedOption.evaluate((button: HTMLButtonElement) => button.click());
-  expect(selectionRequests).toBe(1);
+  await expect(panel.getByText(/데모 참고값/)).toBeVisible();
+  await expect(panel.getByText(/정비 추천·승인·WorkOrder·실행을 생성하지 않습니다/)).toBeVisible();
+  await expect(panel.getByRole("button", { name: "이 시점 선택", exact: true })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "즉시 복구안 선택", exact: true })).toHaveCount(0);
 });
 
 test("does not expose a previous inspection's cost analysis for a newer inspection", async ({ page }) => {
