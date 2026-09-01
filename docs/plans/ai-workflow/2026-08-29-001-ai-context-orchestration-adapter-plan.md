@@ -477,6 +477,8 @@ Recorded 2026-09-01 evaluation artifacts:
 - `tests/eval/results/agent_summary_llm_eval_live_smoke_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_c4_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c4_smoke_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c4_2026-09-01.json`
 
 The separate LLM evaluation report records the metric definitions, gold-set
 coverage, mock 120-run result, live smoke result, live 120-run result, latency
@@ -489,14 +491,19 @@ The concurrency 4 live result reduced batch wall-clock duration to 593,433.237
 ms, but degraded acceptance to 100/120 because all 20 fallback rows were
 `ReadTimeout`; this keeps the live operating gate partial until retry,
 timeout tuning, and checkpointed recovery are implemented.
+The compact-payload concurrency 4 result then passed the same 120-request gate:
+120/120 accepted candidates, 0 fallbacks, 0 contract-error rows, p95 latency
+5,359.453 ms, batch wall-clock duration 114,542.742 ms, and configured-rate
+estimated cost USD 0.04092975. This supports payload reduction over lowering
+concurrency as the first corrective action.
 
-Current quality judgment: the gold-set contract and grounding gates pass, but
-the live operating gate remains partial until retry policy, progress reporting,
-and checkpointed batch execution are added. The next measurement should run
-the same 8x15 set with batch concurrency 4 plus retry before trying concurrency
-8. It must record request latency, queue wait, attempt count, retry outcome,
-fallback reason, batch wall-clock duration, rate-limit events, and
-accepted-after-retry rate separately.
+Current quality judgment: the gold-set contract, grounding gate, and compact
+concurrency-4 operating gate pass for the 8x15 MVP eval set. Production runtime
+still needs retry policy, progress reporting, and checkpointed batch execution
+before treating this as an unattended release gate. The next measurement should
+preserve compact payloads and record request latency, queue wait, attempt count,
+retry outcome, fallback reason, batch wall-clock duration, rate-limit events,
+and accepted-after-retry rate separately.
 
 Minimum release gates:
 

@@ -1,0 +1,345 @@
+{
+  "result_id": "agent-summary-llm-eval-live-c4-2026-09-01",
+  "recorded_at": "2026-09-01T06:27:33.232356+00:00",
+  "scope": "8x15 live Agent Review Summary LLM evaluation",
+  "eval_set_id": "agent-review-packet-gold-v1",
+  "mode": "live",
+  "provider": "openai-compatible",
+  "model": "gpt-4o-mini",
+  "prompt_version": "agent-review-summary-prompt-v1.1-compact",
+  "prompt_payload_profile": "compact-editable-v1",
+  "concurrency": 4,
+  "sample_size": 8,
+  "case_count": 8,
+  "iterations_per_case": 1,
+  "batch_wall_clock_ms": 8048.079,
+  "pre_harness_gate": {
+    "ready_for_120_run": true,
+    "source": "tests/eval/results/agent_workflow_pre_harness_gate_2026-09-01.json",
+    "pr_154_cost_basis_main_recheck": "completed"
+  },
+  "aggregate": {
+    "sample_size": 8,
+    "accepted_llm_candidates": 8,
+    "acceptance_rate": 1.0,
+    "fallback_summaries": 0,
+    "fallback_rate": 0.0,
+    "contract_error_rows": 0,
+    "grounding": {
+      "rows_with_grounded_source_refs": 8,
+      "grounding_rate": 1.0
+    },
+    "latency_ms": {
+      "p50": 3731.703,
+      "p95": 4315.279,
+      "average": 3729.025
+    },
+    "queue_wait_ms": {
+      "p50": 3724.947,
+      "p95": 4316.059,
+      "average": 1980.957
+    },
+    "batch": {
+      "wall_clock_ms": 8048.079,
+      "throughput_per_minute": 59.641562
+    },
+    "tokens": {
+      "average_total_tokens": 1765.75,
+      "total_tokens": 14126
+    },
+    "cost": {
+      "status": "estimated",
+      "estimated_total_cost": 0.00272865,
+      "estimated_average_cost_per_summary": 0.00034108,
+      "currency": "USD",
+      "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+    }
+  },
+  "rows": [
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 3906.292,
+        "queue_wait_ms": 0.182,
+        "usage": {
+          "prompt_tokens": 1617,
+          "completion_tokens": 173,
+          "total_tokens": 1790
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00034635,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 4315.279,
+        "queue_wait_ms": 0.669,
+        "usage": {
+          "prompt_tokens": 1731,
+          "completion_tokens": 173,
+          "total_tokens": 1904
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00036345,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 3895.75,
+        "queue_wait_ms": 1.018,
+        "usage": {
+          "prompt_tokens": 1740,
+          "completion_tokens": 175,
+          "total_tokens": 1915
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.000366,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 3723.534,
+        "queue_wait_ms": 1.299,
+        "usage": {
+          "prompt_tokens": 1391,
+          "completion_tokens": 163,
+          "total_tokens": 1554
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00030645,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 3492.261,
+        "queue_wait_ms": 3724.947,
+        "usage": {
+          "prompt_tokens": 1730,
+          "completion_tokens": 175,
+          "total_tokens": 1905
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0003645,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 3716.774,
+        "queue_wait_ms": 3896.891,
+        "usage": {
+          "prompt_tokens": 1615,
+          "completion_tokens": 174,
+          "total_tokens": 1789
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00034665,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 3050.608,
+        "queue_wait_ms": 3906.587,
+        "usage": {
+          "prompt_tokens": 1218,
+          "completion_tokens": 149,
+          "total_tokens": 1367
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0002721,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 1,
+      "attempt": 1,
+      "mode": "live",
+      "provider": "openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 3731.703,
+        "queue_wait_ms": 4316.059,
+        "usage": {
+          "prompt_tokens": 1729,
+          "completion_tokens": 173,
+          "total_tokens": 1902
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00036315,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    }
+  ],
+  "limits": [
+    "This run calls the configured live LLM provider and measures end-to-end provider call duration plus local validation time.",
+    "Latency includes client-side request/response time and model response time, but not a separate provider-side network breakdown.",
+    "This run uses bounded client-side concurrency 4; queue wait is measured before provider call start.",
+    "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation.",
+    "Token counts are heuristic because the current provider port returns parsed JSON without provider usage metadata."
+  ],
+  "ready_for_live_120_run": false,
+  "operating_gate": {
+    "status": "partial",
+    "allowed_fallback_rows": 0,
+    "observed_fallback_rows": 0
+  }
+}

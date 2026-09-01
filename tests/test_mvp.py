@@ -40,6 +40,7 @@ from app.mvp.agent_review_summary_materialization import summary_key, summary_ke
 from app.planner import LayoutPlanner
 from app.mvp.agent_review_summary import compose_deterministic_agent_review_summary
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.mvp.agent_review_summary_provider import build_agent_review_summary_prompt_payload
 from app.mvp.service import (
     AGENT_REVIEW_RUNNING_LEASE_SECONDS,
     ManufacturingPredictiveMaintenanceService as FactorySignalService,
@@ -351,7 +352,17 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
             captured["system_prompt"] = system_prompt
             captured["payload"] = payload
             captured["kwargs"] = kwargs
-            return {**payload["baseline_summary"], "mode": "llm", "title": "AI 검토 요약 후보"}
+            return {
+                "title": "AI 검토 요약 후보",
+                "summary": payload["baseline_editable_fields"]["summary"],
+                "role_summaries": [
+                    {
+                        "role": item["role"],
+                        "quote": item["quote"],
+                    }
+                    for item in payload["baseline_editable_fields"]["role_summaries"]
+                ],
+            }
 
     packet = service.agent_review_packet("CNC-S04-L04-01")
     provider = AgentReviewSummaryProvider(CapturingLLMProvider())
@@ -359,13 +370,51 @@ def test_agent_review_summary_provider_constrains_payload_to_summary_schema(
     summary = provider.generate(packet)
 
     assert summary["mode"] == "llm"
-    assert "baseline_summary" in captured["payload"]
-    assert captured["payload"]["allowed_output_fields"] == list(
-        captured["payload"]["baseline_summary"].keys()
-    )
-    assert captured["kwargs"]["response_schema_name"] == "agent_review_summary"
+    assert "agent_review_packet" not in captured["payload"]
+    assert "baseline_summary" not in captured["payload"]
+    assert "summary_context" in captured["payload"]
+    assert "closed_loop_boundary" not in captured["payload"]["summary_context"]
+    assert captured["payload"]["allowed_output_fields"] == [
+        "title",
+        "summary",
+        "role_summaries",
+    ]
+    assert captured["kwargs"]["response_schema_name"] == "agent_review_summary_editable"
     assert captured["kwargs"]["response_schema"]["additionalProperties"] is False
-    assert "closed_loop_boundary" not in captured["payload"]["allowed_output_fields"]
+    assert set(captured["kwargs"]["response_schema"]["properties"]) == {
+        "title",
+        "summary",
+        "role_summaries",
+    }
+
+
+def test_agent_review_summary_provider_uses_compact_prompt_payload(
+    service: FactorySignalService,
+) -> None:
+    packet = service.agent_review_packet("CNC-S04-L02-03")
+    baseline = compose_deterministic_agent_review_summary(packet)
+    previous_payload = {
+        "agent_review_packet": packet,
+        "baseline_summary": baseline,
+        "allowed_output_fields": list(baseline.keys()),
+    }
+
+    compact_payload = build_agent_review_summary_prompt_payload(
+        packet=packet,
+        baseline_summary=baseline,
+    )
+
+    previous_bytes = len(
+        json.dumps(previous_payload, ensure_ascii=False, sort_keys=True).encode()
+    )
+    compact_bytes = len(
+        json.dumps(compact_payload, ensure_ascii=False, sort_keys=True).encode()
+    )
+
+    assert "agent_review_packet" not in compact_payload
+    assert "baseline_summary" not in compact_payload
+    assert "closed_loop_boundary" not in compact_payload["summary_context"]
+    assert compact_bytes < previous_bytes * 0.5
 
 
 def test_agent_review_summary_provider_preserves_grounding_when_llm_omits_refs(
@@ -375,18 +424,15 @@ def test_agent_review_summary_provider_preserves_grounding_when_llm_omits_refs(
         name = "ref-omitting-llm"
 
         def generate_json(self, system_prompt: str, payload: dict, **kwargs) -> dict:
-            baseline = payload["baseline_summary"]
             return {
-                **baseline,
                 "title": "LLM 문장 개선",
                 "summary": "LLM이 요약 문장만 다듬었습니다.",
                 "role_summaries": [
                     {
                         "role": item["role"],
-                        "label": item["label"],
                         "quote": f"{item['label']}용 LLM 문장",
                     }
-                    for item in baseline["role_summaries"]
+                    for item in payload["baseline_editable_fields"]["role_summaries"]
                 ],
             }
 

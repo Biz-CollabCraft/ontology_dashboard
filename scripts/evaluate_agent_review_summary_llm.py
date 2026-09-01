@@ -14,6 +14,9 @@ from app.mvp.agent_review_summary import (
     validate_agent_review_summary_contract,
 )
 from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
+from app.mvp.agent_review_summary_provider import AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE
+from app.mvp.agent_review_summary_provider import AGENT_REVIEW_SUMMARY_PROMPT_VERSION
+from app.mvp.agent_review_summary_provider import build_agent_review_summary_prompt_payload
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +88,8 @@ def main() -> None:
         "mode": args.mode,
         "provider": provider_name,
         "model": args.model,
+        "prompt_version": AGENT_REVIEW_SUMMARY_PROMPT_VERSION,
+        "prompt_payload_profile": AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE,
         "concurrency": args.concurrency,
         "sample_size": len(rows),
         "case_count": len(packets),
@@ -186,6 +191,7 @@ def _run_candidate(
     queued_at: float | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
+    baseline_summary = compose_deterministic_agent_review_summary(packet)
     queue_wait_ms = round((started - queued_at) * 1000, 3) if queued_at is not None else None
     try:
         if mode == "live":
@@ -193,16 +199,20 @@ def _run_candidate(
                 raise RuntimeError("live_provider_unavailable")
             candidate = live_provider.generate(packet)
         else:
-            candidate = compose_deterministic_agent_review_summary(packet)
+            candidate = dict(baseline_summary)
             candidate["mode"] = "llm"
         provider_error = None
     except Exception as exc:  # provider, timeout, parsing, and schema failures fall back closed
-        candidate = compose_deterministic_agent_review_summary(packet)
+        candidate = dict(baseline_summary)
         provider_error = exc.__class__.__name__
     errors = validate_agent_review_summary_contract(candidate, packet=packet)
     duration_ms = round((time.perf_counter() - started) * 1000, 3)
-    prompt_tokens = _estimate_tokens(packet)
-    completion_tokens = _estimate_tokens(candidate)
+    prompt_payload = build_agent_review_summary_prompt_payload(
+        packet=packet,
+        baseline_summary=baseline_summary,
+    )
+    prompt_tokens = _estimate_tokens(prompt_payload)
+    completion_tokens = _estimate_tokens(_editable_candidate_payload(candidate))
     usage = {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
@@ -358,6 +368,22 @@ def _estimated_cost(usage: dict[str, int]) -> dict[str, Any]:
         "currency": os.getenv("LLM_PRICE_CURRENCY") or "USD",
         "pricing_version": os.getenv("LLM_PRICING_VERSION"),
     }
+
+
+def _editable_candidate_payload(candidate: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "title": candidate.get("title"),
+        "summary": candidate.get("summary"),
+        "role_summaries": [
+            _pick(item, "role", "quote")
+            for item in candidate.get("role_summaries") or []
+            if isinstance(item, dict)
+        ],
+    }
+
+
+def _pick(source: dict[str, Any], *keys: str) -> dict[str, Any]:
+    return {key: source[key] for key in keys if key in source}
 
 
 def _allowed_fallback_rows(sample_size: int) -> int:
