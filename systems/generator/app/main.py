@@ -28,6 +28,7 @@ from systems.generator.app.extraction.extraction_manager import ExtractionManage
 from systems.generator.app.runtime_pipeline.pipeline_router import router as runtime_pipeline_router
 from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineBaseError
 from systems.generator.app.runtime_pipeline.pipeline_manager import PipelineManager
+from systems.generator.app.operational_assets import router as operational_assets_router
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +171,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             })
         logger.warning(f"[GeneratorAPI] Request validation error: {details}")
         # Return ErrorEnvelope for domain routes, standard detail for training compat if needed
-        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
+        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline", "/internal/operational-assets")):
             return _build_error_response(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 code="REQUEST_VALIDATION_ERROR",
@@ -188,7 +189,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.info(f"[GeneratorAPI] HTTP Exception {exc.status_code} on {request.url.path}: {exc.detail}")
-        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
+        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline", "/internal/operational-assets")):
             return _build_error_response(
                 status_code=exc.status_code,
                 code=f"HTTP_{exc.status_code}",
@@ -205,7 +206,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         req_id = getattr(request.state, "request_id", f"req-{uuid.uuid4().hex[:12]}")
         logger.exception(f"[GeneratorAPI] Unhandled error on {request.url.path}: {exc}")
-        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline")):
+        if request.url.path.startswith(("/extraction", "/preprocessing", "/feature", "/train", "/runtime-pipeline", "/internal/runtime-pipeline", "/internal/operational-assets")):
             return _build_error_response(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 code="INTERNAL_SERVER_ERROR",
@@ -230,6 +231,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(feature_router)
     app.include_router(training_router)
     app.include_router(runtime_pipeline_router)
+    app.include_router(operational_assets_router)
     app.include_router(training_compat_router)
 
 

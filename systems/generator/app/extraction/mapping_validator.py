@@ -111,6 +111,7 @@ class MappingValidator:
         expected_mapping_sha256: Optional[str] = None,
         expected_source_schema_fingerprint: Optional[str] = None,
         expected_source_format: Optional[str] = None,
+        require_approved: bool = True,
     ) -> None:
         """Strictly validate mapping against JSON schema, approved status, checksums, format, collisions, and transforms."""
         # 1. JSON Schema validation
@@ -138,7 +139,7 @@ class MappingValidator:
 
         # 3. Status must be 'approved'
         status = mapping_data.get("status")
-        if status != "approved":
+        if require_approved and status != "approved":
             raise ExtractionMappingNotApprovedError(
                 f"승인되지 않은 매핑 테이블입니다: status='{status}' (요구: 'approved')",
                 details=[{"mapping_id": mapping_data.get("mapping_id"), "status": status}],

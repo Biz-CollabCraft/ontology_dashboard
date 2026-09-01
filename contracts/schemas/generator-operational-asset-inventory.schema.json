@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "generator-operational-asset-inventory.schema.json",
+  "title": "Generator Operational Asset Inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "source_system", "generated_at", "generator_runtime_version", "assets"],
+  "properties": {
+    "contract_version": {"const": "generator-operational-asset-inventory-v1"},
+    "source_system": {"const": "systems/generator"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "generator_runtime_version": {"type": "string", "minLength": 1},
+    "assets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/asset"}
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^(?!0{64}$)[0-9a-f]{64}$"},
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_type", "asset_key", "version", "registry_status", "logical_uri", "sha256", "content_type", "size_bytes", "active", "dependencies", "validation"],
+      "properties": {
+        "asset_type": {"enum": ["static_mapping", "preprocessing_plan", "feature_schema", "label_schema", "history_requirement", "training_config", "feature_dataset_bundle", "model_artifact", "active_model_set", "protocol_contract", "dataset_contract"]},
+        "asset_key": {"type": "string", "minLength": 1, "not": {"pattern": "(\\.\\.|/|\\\\)"}},
+        "version": {"type": "string", "minLength": 1, "not": {"pattern": "(\\.\\.|/|\\\\)"}},
+        "registry_status": {"enum": ["discovered", "verified", "invalid", "conflicted"]},
+        "lifecycle_status": {"type": ["string", "null"]},
+        "logical_uri": {"type": "string", "minLength": 1, "not": {"pattern": "^(?:[A-Za-z]:|/|.*(?:^|/)\\.\\.(?:/|$))"}},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "schema_id": {"type": ["string", "null"]},
+        "schema_version": {"type": ["string", "null"]},
+        "content_type": {"type": "string", "minLength": 1},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "active": {"type": "boolean"},
+        "pointer_ref": {"type": ["string", "null"]},
+        "dependencies": {"type": "array", "items": {"type": "object", "additionalProperties": {"type": "string"}}},
+        "validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "checked_at", "errors"],
+          "properties": {
+            "status": {"enum": ["valid", "invalid", "not_validated"]},
+            "checked_at": {"type": "string", "format": "date-time"},
+            "errors": {"type": "array", "items": {"type": "string"}}
+          },
+          "allOf": [
+            {"if": {"properties": {"status": {"const": "invalid"}}}, "then": {"properties": {"errors": {"minItems": 1}}}}
+          ]
+        }
+      }
+    }
+  }
+}

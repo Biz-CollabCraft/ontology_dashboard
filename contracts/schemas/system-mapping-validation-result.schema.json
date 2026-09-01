@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-mapping-validation-result.schema.json",
+  "title": "System Mapping Validation Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["draft_id", "revision", "status", "mapping_sha256", "errors"],
+  "properties": {
+    "draft_id": {"type": "string", "format": "uuid"},
+    "revision": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["valid", "invalid"]},
+    "mapping_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "errors": {"type": "array", "items": {"type": "object"}}
+  }
+}

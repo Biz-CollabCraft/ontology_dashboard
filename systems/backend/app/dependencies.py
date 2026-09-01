@@ -64,6 +64,12 @@ from app.infra.db.postgresql_compat import (
     postgres_repository_connection,
 )
 from app.infra.db.prediction_result_repository import PredictionResultRepository
+from app.infra.db.operational_asset_repository import OperationalAssetRepository
+from app.infra.generator_operational_assets import GeneratorOperationalAssetInventoryClient
+from app.infra.generator_mapping_management import GeneratorMappingManagementClient
+from app.infra.db.mapping_draft_repository import MappingDraftRepository
+from app.system_operations import SystemOperationService
+from app.system_operations.mapping_draft_service import MappingDraftService
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
     SQLiteProjectContextResolver,
@@ -423,6 +429,37 @@ def get_governance_service(
     workflows: RoleWorkflowService = Depends(get_role_workflow_service),
 ) -> GovernanceService:
     return GovernanceService(datasets=get_dataset_catalog_service().repository, approvals=workflows.repository)
+
+
+@lru_cache(maxsize=1)
+def get_system_operation_service() -> SystemOperationService:
+    target = database_target()
+    ensure_database_migrations()
+    if is_postgresql(target):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Operational Asset Registry PostgreSQL adapter is not configured.",
+        )
+    return SystemOperationService(
+        OperationalAssetRepository(target),
+        GeneratorOperationalAssetInventoryClient(),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_mapping_draft_service() -> MappingDraftService:
+    target = database_target()
+    ensure_database_migrations()
+    if is_postgresql(target):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System Mapping Draft PostgreSQL adapter is not configured.",
+        )
+    return MappingDraftService(
+        MappingDraftRepository(target),
+        GeneratorMappingManagementClient(),
+        get_system_operation_service(),
+    )
 
 
 @lru_cache(maxsize=1)

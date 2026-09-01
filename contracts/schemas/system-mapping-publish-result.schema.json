@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-mapping-publish-result.schema.json",
+  "title": "System Mapping Publish Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["draft_id", "mapping_id", "mapping_version", "mapping_sha256", "logical_uri", "published_at", "idempotent"],
+  "properties": {
+    "draft_id": {"type": "string", "format": "uuid"},
+    "mapping_id": {"type": "string", "minLength": 1},
+    "mapping_version": {"type": "string", "minLength": 1},
+    "mapping_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "logical_uri": {"type": "string", "pattern": "^ontology/mappings/"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "idempotent": {"type": "boolean"}
+  }
+}

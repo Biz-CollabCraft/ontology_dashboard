@@ -1,0 +1,29 @@
+{
+  "contract_version": "generator-operational-asset-inventory-v1",
+  "source_system": "systems/generator",
+  "generated_at": "2026-09-01T00:00:00Z",
+  "generator_runtime_version": "generator-runtime-v1",
+  "assets": [
+    {
+      "asset_type": "static_mapping",
+      "asset_key": "gen-data-sensor-stream-canonical",
+      "version": "v1",
+      "registry_status": "verified",
+      "lifecycle_status": "published",
+      "logical_uri": "ontology/mappings/gen-data-sensor-stream-canonical/v1/mapping.json",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "schema_id": "generator-static-mapping-table",
+      "schema_version": null,
+      "content_type": "application/json",
+      "size_bytes": 1024,
+      "active": true,
+      "pointer_ref": null,
+      "dependencies": [],
+      "validation": {
+        "status": "valid",
+        "checked_at": "2026-09-01T00:00:00Z",
+        "errors": []
+      }
+    }
+  ]
+}

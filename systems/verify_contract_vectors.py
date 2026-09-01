@@ -801,6 +801,10 @@ class ContractVectorVerifier:
                 self._verify_extraction_runtime_handoff_vector(vname, vdir, result)
             elif vname.startswith("generator-pipeline-e2e"):
                 self._verify_pipeline_e2e_vector(vname, vdir, result)
+            elif vname.startswith("generator-operational-asset-inventory"):
+                self._verify_operational_asset_inventory_vector(vname, vdir, result)
+            elif vname.startswith("system-mapping-management"):
+                self._verify_system_mapping_management_vector(vname, vdir, result)
 
 
             else:
@@ -813,6 +817,52 @@ class ContractVectorVerifier:
 
             if len(result.errors) == error_count_before:
                 result.verified_vectors.append(vname)
+
+    def _verify_operational_asset_inventory_vector(
+        self,
+        vector_name: str,
+        vector_dir: Path,
+        result: VerificationResult,
+    ) -> None:
+        inventory_path = vector_dir / "inventory.json"
+        expected_path = vector_dir / "expected.json"
+        schema_path = self.schemas_dir / "generator-operational-asset-inventory.schema.json"
+        try:
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+            expected = json.loads(expected_path.read_text(encoding="utf-8"))
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            validator_for(schema)(schema).validate(inventory)
+        except Exception as exc:
+            result.errors.append(VerificationError(context=vector_name, message=f"Operational Asset Inventory vector validation failed: {exc}"))
+            return
+        identities = [
+            (item["asset_type"], item["asset_key"], item["version"])
+            for item in inventory.get("assets", [])
+        ]
+        if len(identities) != len(set(identities)):
+            result.errors.append(VerificationError(context=vector_name, message="Operational Asset Inventory contains duplicate identities"))
+        expected_count = expected.get("asset_count")
+        if expected_count != len(inventory.get("assets", [])):
+            result.errors.append(VerificationError(context=vector_name, message="Operational Asset Inventory asset_count mismatch", expected=expected_count, actual=len(inventory.get("assets", []))))
+
+    def _verify_system_mapping_management_vector(
+        self, vector_name: str, vector_dir: Path, result: VerificationResult,
+    ) -> None:
+        pairs = (
+            ("draft.json", "system-mapping-draft.schema.json"),
+            ("validation-result.json", "system-mapping-validation-result.schema.json"),
+            ("publish-result.json", "system-mapping-publish-result.schema.json"),
+        )
+        for filename, schema_name in pairs:
+            try:
+                data = json.loads((vector_dir / filename).read_text(encoding="utf-8"))
+                schema = json.loads((self.schemas_dir / schema_name).read_text(encoding="utf-8"))
+                validator_for(schema)(schema, format_checker=jsonschema.FormatChecker()).validate(data)
+            except Exception as exc:
+                result.errors.append(VerificationError(
+                    context=f"{vector_name}/{filename}",
+                    message=f"System Mapping vector validation failed: {exc}",
+                ))
 
     def _verify_runtime_overlay_output_vector(
         self,

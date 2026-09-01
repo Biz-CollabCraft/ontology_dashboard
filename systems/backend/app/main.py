@@ -25,6 +25,8 @@ from app.dependencies import (
     get_rate_limiter,
     get_role_workflow_service,
     get_service,
+    get_system_operation_service,
+    get_mapping_draft_service,
     rate_limit_subject,
     require_csrf,
     require_permission,
@@ -49,6 +51,8 @@ from app.diagnosis.runtime_router import (
     router as predictive_maintenance_runtime_router,
 )
 from app.mvp.service import EventNotFound
+from app.system_operations import build_mapping_draft_router, build_system_operation_internal_router, build_system_operation_router
+from app.system_operations.system_operation_exception import SystemOperationError
 
 
 app = create_app()
@@ -128,6 +132,14 @@ async def event_not_found_handler(_: Request, exc: EventNotFound) -> JSONRespons
     )
 
 
+@app.exception_handler(SystemOperationError)
+async def system_operation_error_handler(_: Request, exc: SystemOperationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+    )
+
+
 identity_router = build_identity_router(
     get_identity_service=get_identity_service,
     get_rate_limiter=get_rate_limiter,
@@ -186,6 +198,18 @@ maintenance_router = create_maintenance_router(
     get_maintenance_service=get_maintenance_loop_service,
     require_csrf=require_csrf,
 )
+system_operation_router = build_system_operation_router(
+    get_service=get_system_operation_service,
+    require_permission=require_permission,
+)
+system_operation_internal_router = build_system_operation_internal_router(
+    get_service=get_system_operation_service,
+)
+mapping_draft_router = build_mapping_draft_router(
+    get_service=get_mapping_draft_service,
+    require_permission=require_permission,
+    require_csrf=require_csrf,
+)
 
 for router in (
     health_router,
@@ -202,6 +226,9 @@ for router in (
     governance_router,
     planner_router,
     maintenance_router,
+    system_operation_router,
+    system_operation_internal_router,
+    mapping_draft_router,
 ):
     app.include_router(router)
 

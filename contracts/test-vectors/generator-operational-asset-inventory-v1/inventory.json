@@ -1,0 +1,7 @@
+{
+  "contract_version": "generator-operational-asset-inventory-v1",
+  "source_system": "systems/generator",
+  "generated_at": "2026-09-01T00:00:00Z",
+  "generator_runtime_version": "generator-runtime-v1",
+  "assets": []
+}
