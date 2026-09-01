@@ -6,7 +6,7 @@
 
 | 항목 | 상태 | 설명 |
 |---|---|---|
-| **문서 상태** | **Current + Target Architecture** | Phase 1~6 현행 구현과 후속 운영 기능의 목표 설계 기준 |
+| **문서 상태** | **Current + Target Architecture** | Phase 1~7 현행 구현과 후속 운영 기능의 목표 설계 기준 |
 | **기준 브랜치/커밋** | `main` (`94ba34d7c3ca5f4f99c445bb32d2783487b52502`) | 최신 `origin/main` 기준선 |
 | **역할 경계** | 제안 확정 대상 | 시스템 관리자 책임과 비운영(사용자 관리 등) 책임 엄격 분리 |
 | **Backend API** | SQLite Current / PostgreSQL Target | `systems/backend/app/system_operations/` 읽기·동기화 API 구현 |
@@ -394,6 +394,13 @@ systems/backend/app/system_operations/
 | Current | `GET` | `/api/system/jobs` | Pipeline Job 목록 및 상태 조회 |
 | Current | `GET` | `/api/system/jobs/{job_id}` | Job 진행·checkpoint·결과·오류 조회 |
 | Current | `POST` | `/api/system/jobs/{job_id}/cancel` | queued Job 취소 또는 running Job 취소 요청 |
+| Current | `GET`, `POST` | `/api/system/contracts/drafts` | 관리 계약·설정 자산 Draft 목록 및 신규 버전 생성 |
+| Current | `GET`, `PUT` | `/api/system/contracts/drafts/{draft_id}` | revision 기반 Draft 조회·수정 |
+| Current | `GET` | `/api/system/contracts/drafts/{draft_id}/diff` | 기준 버전과 JSON path 기반 Diff 조회 |
+| Current | `POST` | `/api/system/contracts/drafts/{draft_id}/validate` | 자산 유형별 identity·의미 계약 검증 |
+| Current | `POST` | `/api/system/contracts/drafts/{draft_id}/publish` | 검증된 revision의 Generator 불변 발행 |
+| Current | `GET`, `POST` | `/api/system/impact-analyses` | Mapping 및 관리 계약 자산 downstream 영향 snapshot 조회·생성 |
+| Current | `POST` | `/api/system/impact-analyses/{analysis_id}/execute` | 실행 가능한 선택 단계만 downstream Job으로 실행 |
 | Target | `GET` | `/api/system/access` | 현재 세션의 시스템 관리자 권한 확인 |
 | Target | `GET` | `/api/system/overview` | 시스템 전체 운영 지표 요약 |
 | Target | `GET` | `/api/system/health` | Generator 및 Backend 세부 서비스 헬스체크 |
@@ -403,7 +410,7 @@ systems/backend/app/system_operations/
 | Target | `GET` | `/api/system/logs` | Generator·Backend 통합 다차원 로그 조회 |
 | Target | `GET` | `/api/system/audit` | 시스템 운영 감사 로그 조회 |
 
-> **주의**: Static Mapping의 Draft 편집·검증·불변 발행과 Extraction rebuild/replay Job은 Current다. Mapping 변경에 따른 Preprocessing·Feature·Training 자동 재구축, 일반 자산 편집 및 모델 선택은 후속 Target이다.
+> **주의**: 관리 계약 자산의 신규 버전 Draft·검증·불변 발행과 명시적 downstream 실행은 Current다. 입력이 부족한 Feature·Training 단계는 자동 추측하지 않고 blocked로 유지한다. 모델 운영 선택과 PostgreSQL Adapter는 후속 Target이다.
 
 ---
 
@@ -431,6 +438,9 @@ systems/frontend/src/features/systemOperations/
 - Current: `/system/operations/assets` — 운영 자산 목록 및 필터
 - Current: `/system/operations/assets/:assetId` — 자산 상세, 버전 및 목록형 의존성
 - Current: `/system/operations/mappings/drafts` — Static Mapping Draft·검증·불변 발행
+- Current: `/system/operations/contracts` — Preprocessing Plan, Feature/Label Schema, History Requirement, Training Config 신규 버전 관리
+- Current: `/system/operations/contracts/drafts/:draftId` — 구조화 편집·검증·Diff·불변 발행
+- Current: `/system/operations/impact` — Mapping 및 관리 계약 자산 영향 분석·선택 실행
 - Current: `/system/operations/jobs` — Mapping Rebuild/Replay Job 생성·조회
 - Current: `/system/operations/jobs/:jobId` — 진행 상태·checkpoint·결과·오류 및 취소 요청
 - Target: `/system/operations` — 시스템 종합 개요
@@ -487,7 +497,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Phase 4** | Mapping 버전 관리 | **Current** — Static Mapping 신규 버전 Draft, Diff, 실제 Generator 검증 및 불변 발행 | Phase 3 |
 | **Phase 5** | Rebuild/Replay Job | **Current (SQLite)** — Mapping checksum별 Replay checkpoint, Extraction 재처리, 영속 Job worker 및 성공 후 원자적 활성화 | Phase 4 |
 | **Phase 6** | 하위 영향 분석 | **Current (SQLite)** — Mapping Rebuild 결과 snapshot, 실행 가능/차단 작업 분리, 선택적 Preprocessing → Feature → Training Job 및 `publish_only` 학습 | Phase 5 |
-| **Phase 7** | 계약/설정 확장 | Preprocessing Plan, Feature Schema, Training Config 관리 기능 확장 | Phase 6 |
+| **Phase 7** | 계약/설정 확장 | **Current (SQLite)** — Preprocessing Plan, Feature/Label Schema, History Requirement, Training Config Draft·검증·Diff·불변 발행 및 영향 분석 | Phase 6 |
 | **Phase 8** | 모델 운영 선택 | Model Artifact 및 Active Model Set 감독, `selected.json` 포인터 및 롤백 제어 | Phase 7 |
 | **Phase 9** | 감사 & 로그 고도화 | 운영 감사 로그(Audit Trail) 정밀 추적, 오류 복구 가이드, 안전한 로그 Export | Phase 8 |
 | **Phase 10** | E2E 통합 전환 | Sensor Source부터 Dashboard Alert까지 E2E Timeline 완성 및 정식 운영 전환 | Phase 9 |

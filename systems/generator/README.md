@@ -401,6 +401,14 @@ gen_data (sensor_stream.jsonl append)
 - **비표준 Protocol 자동 추론**: 정의되지 않은 프로토콜 형식의 자동 감지는 지원하지 않으며 Fail-Closed 처리됩니다.
 - **결측치 자동 보정 (Imputation)**: 임의 결측치 대체 없이 `ffill` 및 엄격한 null 검증 정책을 유지합니다.
 - **사용자 Model Version 선택**: 런타임은 활성 Model Set 포인터(`latest.json`)를 단일 정본으로 소비합니다.
+
+### System Operations 관리 계약 발행
+
+- 내부 전용 경계: `GET /internal/operational-contracts/{asset_type}/{asset_id}/versions/{version}`, `POST /internal/operational-contracts/{asset_type}/{asset_id}/publish`
+- 지원 자산: Preprocessing Plan, Feature Schema, Label Schema, History Requirement, Training Config
+- 저장 위치는 기존 Generator 소비 경로를 그대로 사용하며 별도 평행 저장소를 만들지 않습니다.
+- 신규 버전은 canonical JSON bytes로 작성하고 SHA-256 재검증 후 불변 발행합니다. 동일 버전 덮어쓰기와 삭제는 허용하지 않습니다.
+- 관리 계약 발행 자체는 Model Artifact `latest.json`이나 Active Model Set을 변경하지 않습니다.
 - **Product Result / Evidence 신규 생성**: Generator는 raw score가 포함된 `Prediction Result Batch`만 발행하며, 최종 제품 리포트/Evidence는 Backend가 전담합니다.
 - **Dashboard 알림 UI**: 실시간 이상 알림 UI 구성은 프론트엔드/대시보드 도메인에서 처리합니다.
 - **Closed-loop 재지시 (PLC 제어)**: 설비 제어기 직접 피드백 루프는 본 파이프라인의 범위가 아닙니다.

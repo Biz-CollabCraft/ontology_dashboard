@@ -519,6 +519,17 @@ Observation Dataset, Failure Dataset(또는 내장 Failure indicator), Preproces
 
 > **주의**: 특정 버전 조회·실행·운영 전환·rollback은 Issue #117에서 단계적으로 구현합니다. 해당 기능이 도입되기 전까지 모든 Runtime 소비자는 유효한 `latest.json`을 기본 포인터로 사용합니다.
 
+### 운영 계약·설정 자산 관리 API (Current)
+
+System Operations 전용 서비스 토큰으로 Preprocessing Plan, Feature Schema, Label Schema, History Requirement, Training Config의 기존 버전을 조회하고 신규 불변 버전을 발행할 수 있습니다.
+
+```text
+GET  /internal/operational-contracts/{asset_type}/{asset_id}/versions/{version}
+POST /internal/operational-contracts/{asset_type}/{asset_id}/publish
+```
+
+발행 파일은 기존 Generator Provider가 탐색하는 정본 디렉터리에 저장됩니다. 동일 버전 재발행·덮어쓰기·삭제는 금지되며, 요청 checksum과 발행 파일 checksum이 일치해야 성공합니다. 이 API는 활성 Model Artifact 선택 또는 `latest.json` 변경 API가 아닙니다.
+
 ### 6.1 Issue #117 단계적 고도화 로드맵
 - **Phase 1 (현재 완료)**: Model Artifact 정상 발행 시 `latest.json` 자동 갱신 및 파일 락, 원자적 교체, 부분 실패 보존.
 - **Phase 2 (후속)**: 모델별 발행 버전 목록 및 최신 포인터 조회 전용 API (`GET /models`, `GET /models/{model_id}/versions`, `GET /models/{model_id}/latest`).
