@@ -9,11 +9,11 @@
   "parts": [
     {
       "component_id": "tooling",
-      "part_id": "SP-CNC-TOOL-HOLDER-SET",
-      "part_label": "공구 홀더 세트",
-      "replacement_scope": "공구 홀더 및 체결부 교체 검토",
+      "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+      "part_label": "카바이드 절삭 인서트 1개",
+      "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
       "lead_time_days": 1,
-      "replacement_window_minutes": 60
+      "replacement_window_minutes": null
     },
     {
       "component_id": "drive_power",

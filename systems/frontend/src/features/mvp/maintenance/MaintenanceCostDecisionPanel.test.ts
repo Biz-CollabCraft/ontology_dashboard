@@ -7,6 +7,7 @@ import type {
 import type { MvpInspectionGuidance } from "../api/mvpContracts";
 import {
   buildCostRequest,
+  costOptionsForDisplay,
   latestCostAnalysisForInspection,
   latestEligibleInspection,
 } from "./MaintenanceCostDecisionPanel";
@@ -151,91 +152,56 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
     ).toBe("ANALYSIS-B");
   });
 
-  it("does not invent missing cost values and records the consulted SOP", () => {
-    const form = {
-      immediate: {
-        partsCost: "1000",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-      planned_window: {
-        partsCost: "",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-      reinspect_after: {
-        partsCost: "",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-      no_action_baseline: {
-        partsCost: "",
-        laborDuration: "",
-        laborRate: "",
-        externalCost: "",
-        downtime: "",
-        productionLossRate: "",
-        failureLoss: "",
-      },
-    };
+  it("sends only Action and consulted SOP for server-owned tool cost inputs", () => {
+    const request = buildCostRequest(guidance);
 
-    const request = buildCostRequest(form, guidance, "EVT-1");
-
-    expect(request.action_code).toBe("TOOL_REPLACEMENT");
-    expect(request.sop_id).toBe("SOP-CNC-TOOL-001");
-    expect(request.scenarios).toHaveLength(4);
-    expect(request.scenarios[0].parts_cost).toEqual({
-      low_minor: 1000,
-      base_minor: 1000,
-      high_minor: 1000,
+    expect(request).toEqual({
+      action_code: "TOOL_REPLACEMENT",
+      sop_id: "SOP-CNC-TOOL-001",
+      sop_version: "v1",
     });
-    expect(request.scenarios[0].labor_duration).toBeNull();
-    expect(request.assumptions.join(" ")).toContain("임의 추정");
   });
 
-  it("preserves the selected cooling Action in the cost request", () => {
-    const form = {
-      immediate: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-      planned_window: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-      reinspect_after: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-      no_action_baseline: {
-        partsCost: "1000", laborDuration: "10", laborRate: "100",
-        externalCost: "0", downtime: "20", productionLossRate: "50",
-        failureLoss: "5000",
-      },
-    };
+  it("sends only Action and consulted SOP for server-owned cooling cost inputs", () => {
+    expect(buildCostRequest(guidance, "COOLING_SYSTEM_RESTORE")).toEqual({
+      action_code: "COOLING_SYSTEM_RESTORE",
+      sop_id: "SOP-CNC-TOOL-001",
+      sop_version: "v1",
+    });
+  });
+
+  it("shows only the immediate option for cooling while preserving tool comparison", () => {
+    const analysis = costAnalysis(
+      "ANALYSIS-COOLING",
+      "RESULT-DONE",
+      "WO-DONE",
+      "2026-09-01T01:00:00Z",
+    );
+    analysis.options = [
+      "immediate",
+      "planned_window",
+      "reinspect_after",
+      "no_action_baseline",
+    ].map((executionTiming, index) => ({
+      option_id: `OPTION-${index}`,
+      action_candidate_id: "ACTION-CANDIDATE-COOLING",
+      action_code: "COOLING_SYSTEM_RESTORE",
+      execution_timing: executionTiming as typeof analysis.options[number]["execution_timing"],
+      calculation_status: executionTiming === "immediate" ? "calculated" : "insufficient",
+      total_expected_cost: executionTiming === "immediate"
+        ? { low_minor: 46830, base_minor: 76620, high_minor: 131730 }
+        : null,
+      expected_downtime: executionTiming === "immediate"
+        ? { low_minutes: 45, base_minutes: 60, high_minutes: 90 }
+        : null,
+      confidence: executionTiming === "immediate" ? "low" : "insufficient",
+      missing_inputs: executionTiming === "immediate" ? [] : ["expected_failure_loss"],
+    }));
 
     expect(
-      buildCostRequest(
-        form,
-        guidance,
-        "EVT-1",
-        "COOLING_SYSTEM_RESTORE",
-      ).action_code,
-    ).toBe("COOLING_SYSTEM_RESTORE");
+      costOptionsForDisplay(analysis, "COOLING_SYSTEM_RESTORE")
+        .map((option) => option.execution_timing),
+    ).toEqual(["immediate"]);
+    expect(costOptionsForDisplay(analysis, "TOOL_REPLACEMENT")).toHaveLength(4);
   });
 });

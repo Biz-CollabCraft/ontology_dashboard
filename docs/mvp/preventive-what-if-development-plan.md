@@ -268,6 +268,8 @@ Evaluation truth에서 변환할 경우 `occurred_at`이 지난 이벤트만 운
 - 실제·견적·합성 가격 구분
 
 실제 가격이 없으면 임의의 `0`이 아니라 `null`과 `source_type=missing`을 사용한다.
+이 기준정보는 Backend의 versioned cost-basis provider가 공급한다. Product UI는 비용값을
+작성하는 주체가 아니라 분석 요청과 결과·누락 사유를 표시하는 consumer이다.
 
 ### 7.4 금액 출처 등급과 사용 규칙
 
@@ -375,7 +377,7 @@ Baseline 표준편차 기준 이동량과
 
 | 상태 | `action_code` | 내용 | 대상 |
 |---|---|---|---|
-| 현재 구현 | `TOOL_REPLACEMENT` | Tool wear 초기화와 이후 마모 재계산 | TWF·OSF |
+| 현재 구현 | `TOOL_REPLACEMENT` | 카바이드 절삭 인서트 1개 교체, Tool wear 초기화와 이후 마모 재계산 | TWF·OSF |
 | 후속 vertical slice | `COOLING_SYSTEM_RESTORE` | 공정·공기 온도 차 정상화 | HDF |
 
 `CUTTING_LOAD_REDUCTION`은 실제 정비보다 운전 조건을 변경하는 OperationalAction에

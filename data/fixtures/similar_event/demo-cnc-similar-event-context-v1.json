@@ -13,7 +13,7 @@
       "factor_keys": ["tool_wear_min"],
       "asset_label": "4구역 · 4셀 · CNC 가공기 2",
       "observed_at": "2026-07-18T09:20:00+09:00",
-      "action_taken": "공구 홀더 체결 상태 점검 후 마모 공구 교체",
+      "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
       "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
       "post_action_observation_window_hours": 24
     },

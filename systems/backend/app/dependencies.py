@@ -72,6 +72,7 @@ from app.infra.db.report_repository import ReportRepository
 from app.infra.db.settings import database_location
 from app.infra.context import Project3HttpContextProvider, ResilientContextProvider
 from app.infra.llm import configured_provider
+from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisProvider
 from app.infra.rate_limit import InMemoryRateLimiter, RedisRateLimiter
 from app.maintenance.live_service import LivePredictiveMaintenanceService
 from app.maintenance.service import MaintenanceLoopService
@@ -445,6 +446,18 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
         repository,
         event_evidence_query=diagnosis_runtime,
         replay_session_query=diagnosis_runtime,
+        cost_basis_provider=JsonMaintenanceCostBasisProvider(
+            ROOT
+            / "data"
+            / "fixtures"
+            / "maintenance_cost"
+            / "tool-insert-cost-basis-v1.json",
+            ROOT
+            / "data"
+            / "fixtures"
+            / "maintenance_cost"
+            / "cooling-system-restore-cost-basis-v1.json",
+        ),
     )
 
 

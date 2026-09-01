@@ -311,14 +311,14 @@
         ],
         "spare_parts": [
           {
-            "part_id": "SP-CNC-TOOL-HOLDER-SET",
-            "part_label": "공구 홀더 세트",
-            "replacement_scope": "공구 홀더 및 체결부 교체 검토",
+            "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
+            "part_label": "카바이드 절삭 인서트 1개",
+            "replacement_scope": "마모된 카바이드 절삭 인서트 1개 교체 및 체결 상태 확인",
             "availability": "available_from_fixture",
             "lead_time_days": 1,
-            "replacement_window_minutes": 60,
+            "replacement_window_minutes": null,
             "assumption_level": "demo_planning_assumption",
-            "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET"
+            "source_ref": "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE"
           }
         ],
         "similar_events": [
@@ -329,7 +329,7 @@
             "matched_factor_keys": [
               "tool_wear_min"
             ],
-            "action_taken": "공구 홀더 체결 상태 점검 후 마모 공구 교체",
+            "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
             "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
             "post_action_observation_window_hours": 24,
             "assumption_level": "demo_history_assumption",
@@ -339,7 +339,7 @@
         "source_refs": [
           "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
           "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
-          "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
+          "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
           "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
         ]
       },
@@ -391,7 +391,7 @@
     "source_refs": [
       "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#tooling",
       "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
-      "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
+      "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
       "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18",
       "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
       "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
@@ -414,7 +414,7 @@
         "similar_event_id": "SIM-EVT-CNC-TOOLING-2026-07-18",
         "asset_label": "4구역 · 4셀 · CNC 가공기 2",
         "observed_at": "2026-07-18T09:20:00+09:00",
-        "action_taken": "공구 홀더 체결 상태 점검 후 마모 공구 교체",
+        "action_taken": "공구 체결 상태 점검 후 마모된 카바이드 절삭 인서트 1개 교체",
         "outcome": "교체 후 공구 사용 시간 상승 추세가 안정화됨",
         "source_ref": "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18"
       },
@@ -470,7 +470,7 @@
     "data/fixtures/inspection_sop/demo-cnc-inspection-guidance-v1-1.json#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
     "RESULT#CNC-S04-L04-01#2026-08-01T00:00:00+09:00#component_hypotheses[1]",
     "data/fixtures/inspection_location/demo-cnc-inspection-location-reference-v1.json#drive_power",
-    "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-TOOL-HOLDER-SET",
+    "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-CARBIDE-INSERT-ONE",
     "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-TOOLING-2026-07-18",
     "data/fixtures/spare_part/demo-cnc-spare-part-context-v1.json#SP-CNC-DRIVE-COUPLING-KIT",
     "data/fixtures/similar_event/demo-cnc-similar-event-context-v1.json#SIM-EVT-CNC-DRIVE-2026-07-22",

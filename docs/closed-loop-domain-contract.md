@@ -100,6 +100,11 @@ MaintenanceEvent는 동일 scope와 lineage를 가진 Work Order와 MaintenanceA
 - MVP Maintenance action vocabulary는 `TOOL_REPLACEMENT`와
   `COOLING_SYSTEM_RESTORE`로 제한한다. 두 Action 모두 구조화된 Inspection Result에서
   각각의 후보 조건을 만족한 경우에만 선택할 수 있다.
+- `TOOL_REPLACEMENT`의 교체 단위는 공구 홀더나 공구 세트가 아니라 **마모된 카바이드
+  절삭 인서트 1개**이다.
+- 비용 분석에서 `COOLING_SYSTEM_RESTORE`는 **사내 냉각 경로 세척·막힘 해소·동작
+  확인**으로 제한한다. 팬·펌프·칠러 등 부품 교체가 확인되면 이 Action의 비용 기준을
+  재사용하지 않고 별도의 견적/Action basis를 요구한다.
 - `source_product_result_id`, `source_evidence_id`, `event_id`, Equipment scope를 유지해
   최초 위험 판단까지 역추적할 수 있어야 한다.
 - `source_inspection_work_order_id`와 opaque `source_inspection_reference`를 함께 보존한다.

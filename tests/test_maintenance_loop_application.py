@@ -9,7 +9,6 @@ import pytest
 
 from app.infra.db.maintenance_repository import MaintenanceRepository
 from app.maintenance.api_schema import (
-    CostOptionRecommendationCreateRequest,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
     MaintenanceActionCompleteRequest,
@@ -22,6 +21,11 @@ from app.maintenance.api_schema import (
     ToolReplacementCostAnalysisCreateRequest,
 )
 from app.maintenance.cost_analysis_schema import ExecutionTiming
+from app.maintenance.cost_basis import (
+    CoolingSystemRestoreCostBasis,
+    CostBasisResolutionContext,
+    ToolReplacementCostBasis,
+)
 from app.maintenance.maintenance_domain import IdempotencyConflict
 from app.maintenance.maintenance_schema import RecommendationDisposition, WorkOrderStatus
 from app.maintenance.service import MaintenanceLoopService
@@ -139,38 +143,32 @@ def snapshot_basis(projection: dict) -> dict:
     }
 
 
-def service(tmp_path, *, query: ProjectionQuery | None = None) -> MaintenanceLoopService:
-    provider = query or ProjectionQuery()
-    return MaintenanceLoopService(
-        MaintenanceRepository(tmp_path / "maintenance.db", project_context=Resolver()),
-        event_evidence_query=provider,
-        replay_session_query=provider,
-    )
+class StaticCostBasisProvider:
+    def __init__(self, basis: ToolReplacementCostBasis) -> None:
+        self.basis = basis
+
+    def tool_replacement_basis(
+        self,
+        *,
+        calculated_at: datetime,
+        context: CostBasisResolutionContext,
+    ) -> ToolReplacementCostBasis:
+        del calculated_at, context
+        return self.basis
+
+    def cooling_system_restore_basis(
+        self,
+        *,
+        calculated_at: datetime,
+        context: CostBasisResolutionContext,
+    ) -> CoolingSystemRestoreCostBasis:
+        del calculated_at, context
+        return CoolingSystemRestoreCostBasis.model_validate(self.basis.model_dump())
 
 
-def inspection_request() -> InspectionWorkOrderCreateRequest:
-    return InspectionWorkOrderCreateRequest(
-        event_id="EVT-RESULT-001",
-    )
-
-
-def inspection_result(outcome: str = "maintenance_recommended") -> InspectionResultCreateRequest:
-    return InspectionResultCreateRequest(
-        outcome=outcome,
-        checklist=(
-            {"item_id": "tool-wear", "status": "fail", "note": "limit exceeded"},
-        ),
-        measurements=(
-            {"name": "tool_wear_min", "value": 221, "unit": "min"},
-        ),
-        findings=("tool wear limit exceeded",),
-        note="tool replacement should be reviewed",
-    )
-
-
-def cost_analysis_request(
+def tool_replacement_cost_basis(
     *, missing_parts_cost: bool = False
-) -> ToolReplacementCostAnalysisCreateRequest:
+) -> ToolReplacementCostBasis:
     scenarios = []
     for timing in ExecutionTiming:
         scenarios.append(
@@ -181,42 +179,24 @@ def cost_analysis_request(
                     if missing_parts_cost
                     else {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000}
                 ),
-                "labor_duration": {
-                    "low_minutes": 20,
-                    "base_minutes": 30,
-                    "high_minutes": 40,
-                },
+                "labor_duration": {"low_minutes": 20, "base_minutes": 30, "high_minutes": 40},
                 "labor_rate_per_minute": {
                     "low_minor_per_minute": 800,
                     "base_minor_per_minute": 1000,
                     "high_minor_per_minute": 1200,
                 },
-                "external_service_cost": {
-                    "low_minor": 0,
-                    "base_minor": 0,
-                    "high_minor": 0,
-                },
-                "expected_downtime": {
-                    "low_minutes": 30,
-                    "base_minutes": 45,
-                    "high_minutes": 60,
-                },
+                "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+                "expected_downtime": {"low_minutes": 30, "base_minutes": 45, "high_minutes": 60},
                 "production_loss_rate_per_minute": {
                     "low_minor_per_minute": 900,
                     "base_minor_per_minute": 1100,
                     "high_minor_per_minute": 1300,
                 },
-                "expected_failure_loss": {
-                    "low_minor": 10000,
-                    "base_minor": 25000,
-                    "high_minor": 50000,
-                },
+                "expected_failure_loss": {"low_minor": 10000, "base_minor": 25000, "high_minor": 50000},
                 "confidence": "medium",
             }
         )
-    return ToolReplacementCostAnalysisCreateRequest(
-        sop_id="SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
-        sop_version="demo-2026-08-28",
+    return ToolReplacementCostBasis(
         currency="KRW",
         currency_minor_unit=0,
         scenarios=tuple(scenarios),
@@ -234,18 +214,83 @@ def cost_analysis_request(
     )
 
 
+def service(
+    tmp_path,
+    *,
+    query: ProjectionQuery | None = None,
+    cost_basis: ToolReplacementCostBasis | None = None,
+) -> MaintenanceLoopService:
+    provider = query or ProjectionQuery()
+    return MaintenanceLoopService(
+        MaintenanceRepository(tmp_path / "maintenance.db", project_context=Resolver()),
+        event_evidence_query=provider,
+        replay_session_query=provider,
+        cost_basis_provider=StaticCostBasisProvider(
+            cost_basis or tool_replacement_cost_basis()
+        ),
+    )
+
+
+def inspection_request() -> InspectionWorkOrderCreateRequest:
+    return InspectionWorkOrderCreateRequest(
+        event_id="EVT-RESULT-001",
+    )
+
+
+def inspection_result(outcome: str = "maintenance_recommended") -> InspectionResultCreateRequest:
+    return InspectionResultCreateRequest(
+        outcome=outcome,
+        checklist=(
+            {"item_id": "tool-wear", "status": "fail", "note": "limit exceeded"},
+            {"item_id": "cost-basis-in-house", "status": "pass", "note": ""},
+            {
+                "item_id": "cost-basis-spare-part-available",
+                "status": "pass",
+                "note": "",
+            },
+            {
+                "item_id": "cost-basis-vendor-dispatch-required",
+                "status": "fail",
+                "note": "",
+            },
+        ),
+        measurements=(
+            {"name": "tool_wear_min", "value": 221, "unit": "min"},
+        ),
+        findings=("tool wear limit exceeded",),
+        note="tool replacement should be reviewed",
+    )
+
+
+def cost_analysis_request() -> ToolReplacementCostAnalysisCreateRequest:
+    return ToolReplacementCostAnalysisCreateRequest(
+        sop_id="SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+        sop_version="demo-2026-08-28",
+    )
+
+
 def cooling_cost_analysis_request() -> MaintenanceCostAnalysisCreateRequest:
-    payload = cost_analysis_request().model_dump(mode="json")
-    payload["action_code"] = "COOLING_SYSTEM_RESTORE"
-    payload["input_sources"] = [
+    return MaintenanceCostAnalysisCreateRequest(
+        action_code="COOLING_SYSTEM_RESTORE",
+        sop_id="SOP-DEMO-COOLING-SYSTEM-001",
+        sop_version="demo-2026-08-31",
+    )
+
+
+def cooling_cost_applicability_checklist() -> tuple[dict[str, str], ...]:
+    return (
+        {"item_id": "cost-basis-in-house", "status": "pass", "note": ""},
         {
-            "input_name": "cooling_system_restore_quote",
-            "source_kind": "quoted",
-            "source_reference": "quote/cooling-system-restore/2026-08",
-            "confidence": "medium",
-        }
-    ]
-    return MaintenanceCostAnalysisCreateRequest.model_validate(payload)
+            "item_id": "cost-basis-vendor-dispatch-required",
+            "status": "fail",
+            "note": "",
+        },
+        {
+            "item_id": "cost-basis-component-replacement-required",
+            "status": "fail",
+            "note": "",
+        },
+    )
 
 
 def run_completed_inspection(
@@ -1035,7 +1080,7 @@ def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) 
             **{
                 **command,
                 "payload": payload.model_copy(
-                    update={"price_version": "maintenance-price-2026-09"}
+                    update={"sop_version": "demo-2026-09-01"}
                 ),
             }
         )
@@ -1044,7 +1089,10 @@ def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) 
 def test_insufficient_cost_analysis_is_preserved_without_operational_effects(
     tmp_path,
 ) -> None:
-    loop = service(tmp_path)
+    loop = service(
+        tmp_path,
+        cost_basis=tool_replacement_cost_basis(missing_parts_cost=True),
+    )
     _work_order_id, inspection_result_id = run_completed_inspection(loop)
 
     created = loop.calculate_tool_replacement_cost(
@@ -1052,7 +1100,7 @@ def test_insufficient_cost_analysis_is_preserved_without_operational_effects(
         project_id="project-1",
         workspace_id="workspace-1",
         inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(missing_parts_cost=True),
+        payload=cost_analysis_request(),
         actor_id="manager-1",
         idempotency_key="cost-analysis-insufficient-001",
     )
@@ -1087,6 +1135,46 @@ def test_cost_analysis_rejects_no_action_inspection_without_persisting(tmp_path)
     ) == ()
 
 
+def test_cost_analysis_fails_closed_when_applicability_facts_are_missing(
+    tmp_path,
+) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(
+        loop,
+        result_payload=InspectionResultCreateRequest(
+            outcome="maintenance_recommended",
+            checklist=(
+                {
+                    "item_id": "tool-wear",
+                    "status": "fail",
+                    "note": "limit exceeded",
+                },
+            ),
+            measurements=(
+                {"name": "tool_wear_min", "value": 221, "unit": "min"},
+            ),
+            findings=("tool wear limit exceeded",),
+            note="cost-basis applicability was not established",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="explicit applicability facts"):
+        loop.calculate_tool_replacement_cost(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            inspection_result_id=inspection_result_id,
+            payload=cost_analysis_request(),
+            actor_id="manager-1",
+            idempotency_key="cost-analysis-missing-applicability-001",
+        )
+
+    assert loop.repository.list_cost_analyses(
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    ) == ()
+
+
 def test_cost_analysis_rejects_unrelated_maintenance_candidate_without_persisting(
     tmp_path,
 ) -> None:
@@ -1101,6 +1189,7 @@ def test_cost_analysis_rejects_unrelated_maintenance_candidate_without_persistin
                     "status": "fail",
                     "note": "coolant flow is restricted",
                 },
+                *cooling_cost_applicability_checklist(),
             ),
             measurements=(
                 {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
@@ -1141,6 +1230,7 @@ def test_cooling_action_candidate_and_cost_analysis_are_canonical_and_append_onl
                     "status": "fail",
                     "note": "coolant flow is restricted",
                 },
+                *cooling_cost_applicability_checklist(),
             ),
             measurements=(
                 {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
@@ -1230,6 +1320,7 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
                     "status": "fail",
                     "note": "coolant flow is restricted",
                 },
+                *cooling_cost_applicability_checklist(),
             ),
             measurements=(
                 {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
@@ -1247,19 +1338,16 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
         actor_id="manager-1",
         idempotency_key="cooling-vertical-cost-001",
     )["cost_analysis"]
-    selected = next(
-        option
-        for option in analysis["options"]
-        if option["execution_timing"] == "immediate"
-    )
-    recommendation = loop.create_recommendation_from_cost_option(
+    assert analysis["options"]
+    assert loop.repository.operational_side_effect_counts()["recommendations"] == 0
+    recommendation = loop.create_manual_recommendation(
         organization_id="org-1",
         project_id="project-1",
         workspace_id="workspace-1",
-        analysis_id=analysis["analysis_id"],
-        option_id=selected["option_id"],
-        payload=CostOptionRecommendationCreateRequest(
-            basis=("manager selected cooling restoration",)
+        inspection_result_id=inspection_result_id,
+        payload=OperationsManualRecommendationCreateRequest(
+            action_code="COOLING_SYSTEM_RESTORE",
+            basis=("inspection result requires cooling restoration",),
         ),
         actor_id="manager-1",
         actor_display_name="Manager One",
@@ -1377,168 +1465,3 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
     assert payloads["maintenance.replay_requested"]["state_patch"] == (
         payloads["maintenance.completed"]["state_patch"]
     )
-
-
-def test_human_selected_cost_option_creates_only_proposed_recommendation(tmp_path) -> None:
-    loop = service(tmp_path)
-    _work_order_id, inspection_result_id = run_completed_inspection(loop)
-    analysis = loop.calculate_tool_replacement_cost(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(),
-        actor_id="manager-1",
-        idempotency_key="cost-analysis-request-001",
-    )["cost_analysis"]
-    selected = next(
-        option
-        for option in analysis["options"]
-        if option["execution_timing"] == "immediate"
-    )
-
-    created = loop.create_recommendation_from_cost_option(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        analysis_id=analysis["analysis_id"],
-        option_id=selected["option_id"],
-        payload=CostOptionRecommendationCreateRequest(
-            basis=("manager selected immediate tool replacement",)
-        ),
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="cost-option-recommendation-001",
-    )
-    replay = loop.create_recommendation_from_cost_option(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        analysis_id=analysis["analysis_id"],
-        option_id=selected["option_id"],
-        payload=CostOptionRecommendationCreateRequest(
-            basis=("manager selected immediate tool replacement",)
-        ),
-        actor_id="manager-1",
-        actor_display_name="Manager One",
-        idempotency_key="cost-option-recommendation-001",
-    )
-
-    recommendation = created["recommendation"]
-    assert replay == {**created, "replayed": True}
-    assert recommendation["status"] == "proposed"
-    assert recommendation["source_inspection_reference"] == inspection_result_id
-    assert recommendation["source_cost_analysis_id"] == analysis["analysis_id"]
-    assert recommendation["source_cost_option_id"] == selected["option_id"]
-    assert (
-        recommendation["source_action_candidate_id"]
-        == selected["action_candidate_id"]
-    )
-    assert recommendation["action_code"] == "TOOL_REPLACEMENT"
-    assert "execution_timing:immediate" in recommendation["basis"]
-    side_effects = loop.repository.operational_side_effect_counts()
-    assert side_effects == {
-        "recommendations": 1,
-        "decisions": 0,
-        "work_orders": 1,
-        "maintenance_actions": 0,
-        "maintenance_events": 0,
-    }
-
-    planned = next(
-        option
-        for option in analysis["options"]
-        if option["execution_timing"] == "planned_window"
-    )
-    with pytest.raises(IdempotencyConflict, match="idempotency_key_conflict"):
-        loop.create_recommendation_from_cost_option(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            analysis_id=analysis["analysis_id"],
-            option_id=planned["option_id"],
-            payload=CostOptionRecommendationCreateRequest(
-                basis=("manager selected planned tool replacement",)
-            ),
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="cost-option-recommendation-001",
-        )
-
-
-def test_non_executable_or_insufficient_cost_option_cannot_create_recommendation(
-    tmp_path,
-) -> None:
-    loop = service(tmp_path)
-    _work_order_id, inspection_result_id = run_completed_inspection(loop)
-    analysis = loop.calculate_tool_replacement_cost(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(),
-        actor_id="manager-1",
-        idempotency_key="cost-analysis-request-001",
-    )["cost_analysis"]
-    request = CostOptionRecommendationCreateRequest(basis=("human selection",))
-
-    for timing in ("reinspect_after", "no_action_baseline"):
-        selected = next(
-            option
-            for option in analysis["options"]
-            if option["execution_timing"] == timing
-        )
-        with pytest.raises(ValueError, match="cannot create a maintenance recommendation"):
-            loop.create_recommendation_from_cost_option(
-                organization_id="org-1",
-                project_id="project-1",
-                workspace_id="workspace-1",
-                analysis_id=analysis["analysis_id"],
-                option_id=selected["option_id"],
-                payload=request,
-                actor_id="manager-1",
-                actor_display_name="Manager One",
-                idempotency_key=f"cost-option-{timing}",
-            )
-
-    with pytest.raises(ValueError, match="does not belong"):
-        loop.create_recommendation_from_cost_option(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            analysis_id=analysis["analysis_id"],
-            option_id="FORGED-OPTION",
-            payload=request,
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="cost-option-forged",
-        )
-
-    insufficient = loop.calculate_tool_replacement_cost(
-        organization_id="org-1",
-        project_id="project-1",
-        workspace_id="workspace-1",
-        inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(missing_parts_cost=True),
-        actor_id="manager-1",
-        idempotency_key="cost-analysis-insufficient-001",
-    )["cost_analysis"]
-    insufficient_option = next(
-        option
-        for option in insufficient["options"]
-        if option["execution_timing"] == "immediate"
-    )
-    with pytest.raises(ValueError, match="insufficient cost option"):
-        loop.create_recommendation_from_cost_option(
-            organization_id="org-1",
-            project_id="project-1",
-            workspace_id="workspace-1",
-            analysis_id=insufficient["analysis_id"],
-            option_id=insufficient_option["option_id"],
-            payload=request,
-            actor_id="manager-1",
-            actor_display_name="Manager One",
-            idempotency_key="cost-option-insufficient",
-        )
-
-    assert loop.repository.operational_side_effect_counts()["recommendations"] == 0

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, Sequence
 
 from .cost_analysis_schema import MaintenanceCostScenarioResult
+from .cost_basis import (
+    CoolingSystemRestoreCostBasis,
+    CostBasisResolutionContext,
+    ToolReplacementCostBasis,
+)
 from .integration import MaintenanceStatePatch
 from .maintenance_schema import (
     InspectionResult,
@@ -88,6 +94,18 @@ class MaintenanceReplaySessionValidationPort(Protocol):
     ) -> dict[str, Any]: ...
 
 
+class MaintenanceCostBasisProvider(Protocol):
+    """Versioned economic inputs owned behind the Backend boundary."""
+
+    def tool_replacement_basis(
+        self, *, calculated_at: datetime, context: CostBasisResolutionContext
+    ) -> ToolReplacementCostBasis: ...
+
+    def cooling_system_restore_basis(
+        self, *, calculated_at: datetime, context: CostBasisResolutionContext
+    ) -> CoolingSystemRestoreCostBasis: ...
+
+
 class LiveMaintenanceOverlayPort(Protocol):
     def active_asset_ids(self, *, stream_root: str | Path) -> set[str]: ...
     def process_available(self, batch: dict[str, Any]) -> list[dict[str, Any]]: ...
@@ -99,5 +117,6 @@ __all__ = [
     "MaintenanceReadPort",
     "MaintenanceCommandRepositoryPort",
     "MaintenanceReplaySessionValidationPort",
+    "MaintenanceCostBasisProvider",
     "LiveMaintenanceOverlayPort",
 ]

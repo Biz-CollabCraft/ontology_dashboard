@@ -447,6 +447,9 @@ export interface MaintenanceCostOptionReadModel {
   action_candidate_id: string;
   action_code: MaintenanceActionCode;
   execution_timing: MaintenanceExecutionTiming;
+  assumed_execution_at?: string | null;
+  labor_rate_type?: "normal" | "night" | "not_applicable" | null;
+  labor_rate_base_minor_per_minute?: number | null;
   calculation_status: "calculated" | "insufficient";
   total_expected_cost: MaintenanceCostBand | null;
   expected_downtime: MaintenanceDurationBand | null;
@@ -503,50 +506,10 @@ export interface MaintenanceEventLineageReadModel {
   }>;
 }
 
-interface CostRangeInput {
-  low_minor: number;
-  base_minor: number;
-  high_minor: number;
-}
-
-interface DurationRangeInput {
-  low_minutes: number;
-  base_minutes: number;
-  high_minutes: number;
-}
-
-interface RateRangeInput {
-  low_minor_per_minute: number;
-  base_minor_per_minute: number;
-  high_minor_per_minute: number;
-}
-
 export interface MaintenanceCostAnalysisRequest {
   action_code: MaintenanceActionCode;
   sop_id: string;
   sop_version: string;
-  currency: string;
-  currency_minor_unit: 0 | 2 | 3;
-  scenarios: Array<{
-    execution_timing: MaintenanceExecutionTiming;
-    parts_cost: CostRangeInput | null;
-    labor_duration: DurationRangeInput | null;
-    labor_rate_per_minute: RateRangeInput | null;
-    external_service_cost: CostRangeInput | null;
-    expected_downtime: DurationRangeInput | null;
-    production_loss_rate_per_minute: RateRangeInput | null;
-    expected_failure_loss: CostRangeInput | null;
-    confidence: "high" | "medium" | "low";
-  }>;
-  assumptions: string[];
-  input_sources: Array<{
-    input_name: string;
-    source_kind: "observed" | "quoted" | "policy" | "assumption";
-    source_reference: string;
-    confidence: "high" | "medium" | "low";
-  }>;
-  price_version: string;
-  calculation_policy_version: string;
 }
 
 export type ToolReplacementCostAnalysisRequest = MaintenanceCostAnalysisRequest;
@@ -605,27 +568,6 @@ export function calculateMaintenanceCost(
 }
 
 export const calculateToolReplacementCost = calculateMaintenanceCost;
-
-export function createRecommendationFromCostOption(
-  projectId: string,
-  workspaceId: string,
-  analysisId: string,
-  optionId: string,
-  basis: string[],
-  idempotencyKey: string,
-): Promise<{
-  recommendation_id: string;
-  recommendation_status: "proposed";
-}> {
-  return request(
-    `${maintenanceBase(projectId, workspaceId)}/cost-analyses/${encodeURIComponent(analysisId)}/options/${encodeURIComponent(optionId)}/recommendations`,
-    {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ basis }),
-    },
-  );
-}
 
 export function getPredictiveMaintenanceRuntimeContext(
   projectId: string,

@@ -12,7 +12,6 @@ from typing import Any
 from app.diagnosis.ports import EventEvidenceProjectionQueryPort
 
 from .api_schema import (
-    CostOptionRecommendationCreateRequest,
     EvidenceSnapshotBasis,
     InspectionResultCreateRequest,
     InspectionWorkOrderCreateRequest,
@@ -26,9 +25,7 @@ from .api_schema import (
     ToolReplacementCostAnalysisCreateRequest,
 )
 from .cost_analysis_schema import (
-    CalculationStatus,
     CostAnalysisBasis,
-    ExecutionTiming,
     MaintenanceActionCode,
 )
 from .cost_calculator import (
@@ -48,6 +45,7 @@ from .maintenance_domain import (
     create_inspection_work_order,
     create_operations_manual_recommendation,
     create_work_order_for_recommendation,
+    derive_cost_basis_resolution_context,
     derive_cooling_system_restore_action_candidate,
     derive_tool_replacement_action_candidate,
     plan_maintenance_action,
@@ -64,6 +62,7 @@ from .maintenance_schema import (
     WorkOrderType,
 )
 from .ports import (
+    MaintenanceCostBasisProvider,
     MaintenanceCommandRepositoryPort,
     MaintenanceReplaySessionValidationPort,
 )
@@ -76,10 +75,12 @@ class MaintenanceLoopService:
         *,
         event_evidence_query: EventEvidenceProjectionQueryPort,
         replay_session_query: MaintenanceReplaySessionValidationPort | None = None,
+        cost_basis_provider: MaintenanceCostBasisProvider | None = None,
     ) -> None:
         self.repository = repository
         self.event_evidence_query = event_evidence_query
         self.replay_session_query = replay_session_query
+        self.cost_basis_provider = cost_basis_provider
 
     @staticmethod
     def _stable_id(prefix: str, *parts: str) -> str:
@@ -571,77 +572,6 @@ class MaintenanceLoopService:
             ),
         )
 
-    def create_recommendation_from_cost_option(
-        self,
-        *,
-        organization_id: str,
-        project_id: str,
-        workspace_id: str,
-        analysis_id: str,
-        option_id: str,
-        payload: CostOptionRecommendationCreateRequest,
-        actor_id: str,
-        actor_display_name: str,
-        idempotency_key: str,
-        authored_at: datetime | None = None,
-    ) -> dict[str, Any]:
-        """Materialize a human-selected executable cost option as proposed.
-
-        Selecting an option creates only a proposed Operations recommendation.
-        Recommendation acceptance and Work Order creation remain separate
-        commands with their existing human-approval boundary.
-        """
-
-        result = self.repository.get_cost_analysis(
-            workspace_id=workspace_id,
-            analysis_id=analysis_id,
-        )
-        if result is None:
-            raise KeyError(analysis_id)
-        self._require_scope(
-            result,
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-        )
-        selected = next(
-            (option for option in result.options if option.option_id == option_id),
-            None,
-        )
-        if selected is None:
-            raise ValueError("selected cost option does not belong to the analysis")
-        if selected.calculation_status is not CalculationStatus.CALCULATED:
-            raise ValueError("insufficient cost option cannot create a recommendation")
-        if selected.execution_timing not in {
-            ExecutionTiming.IMMEDIATE,
-            ExecutionTiming.PLANNED_WINDOW,
-        }:
-            raise ValueError(
-                "reinspect_after and no_action_baseline cannot create a maintenance recommendation"
-            )
-        return self.create_manual_recommendation(
-            organization_id=organization_id,
-            project_id=project_id,
-            workspace_id=workspace_id,
-            inspection_result_id=result.based_on.inspection_result_id,
-            payload=OperationsManualRecommendationCreateRequest(
-                action_code=selected.action_code.value,
-                basis=(
-                    f"cost_analysis:{analysis_id}",
-                    f"cost_option:{option_id}",
-                    f"execution_timing:{selected.execution_timing.value}",
-                    *payload.basis,
-                ),
-            ),
-            actor_id=actor_id,
-            actor_display_name=actor_display_name,
-            idempotency_key=idempotency_key,
-            authored_at=authored_at,
-            source_cost_analysis_id=analysis_id,
-            source_cost_option_id=option_id,
-            source_action_candidate_id=selected.action_candidate_id,
-        )
-
     @staticmethod
     def _derive_action_candidate(
         inspection_result: InspectionResult,
@@ -711,8 +641,9 @@ class MaintenanceLoopService:
         """Calculate and append one decision-support snapshot.
 
         Scope, equipment, Diagnosis lineage, and Action candidate identity are
-        resolved from canonical Maintenance records.  The caller supplies only
-        economic inputs and the SOP reference it consulted.
+        resolved from canonical Maintenance records. TOOL_REPLACEMENT economic
+        inputs come from the versioned Backend provider; the caller supplies
+        only the Action and the SOP reference it consulted.
         """
 
         inspection_result = self.repository.get_inspection_result(
@@ -769,6 +700,21 @@ class MaintenanceLoopService:
             action_candidate_id,
             idempotency_key,
         )
+        timestamp = calculated_at or datetime.now(timezone.utc)
+        if self.cost_basis_provider is None:
+            raise ValueError("Maintenance cost-basis provider is unavailable")
+        resolution_context = derive_cost_basis_resolution_context(inspection_result)
+        resolution_context.require_complete_for(action_code.value)
+        if action_code is MaintenanceActionCode.TOOL_REPLACEMENT:
+            cost_basis = self.cost_basis_provider.tool_replacement_basis(
+                calculated_at=timestamp,
+                context=resolution_context,
+            )
+        else:
+            cost_basis = self.cost_basis_provider.cooling_system_restore_basis(
+                calculated_at=timestamp,
+                context=resolution_context,
+            )
         result = calculate_maintenance_cost_scenarios(
             MaintenanceCostAnalysisInput(
                 analysis_id=analysis_id,
@@ -777,7 +723,7 @@ class MaintenanceLoopService:
                 workspace_id=workspace_id,
                 asset_id=inspection_result.asset_id,
                 equipment_id=inspection_result.asset_id,
-                calculated_at=calculated_at or datetime.now(timezone.utc),
+                calculated_at=timestamp,
                 based_on=CostAnalysisBasis(
                     product_result_id=source_product_result_id,
                     evidence_id=source_evidence_id,
@@ -788,13 +734,13 @@ class MaintenanceLoopService:
                 ),
                 action_candidate_id=action_candidate_id,
                 action_code=action_code,
-                currency=payload.currency,
-                currency_minor_unit=payload.currency_minor_unit,
-                scenarios=payload.scenarios,
-                assumptions=payload.assumptions,
-                input_sources=payload.input_sources,
-                price_version=payload.price_version,
-                calculation_policy_version=payload.calculation_policy_version,
+                currency=cost_basis.currency,
+                currency_minor_unit=cost_basis.currency_minor_unit,
+                scenarios=cost_basis.scenarios,
+                assumptions=cost_basis.assumptions,
+                input_sources=cost_basis.input_sources,
+                price_version=cost_basis.price_version,
+                calculation_policy_version=cost_basis.calculation_policy_version,
             )
         )
         return self.repository.create_cost_analysis(
