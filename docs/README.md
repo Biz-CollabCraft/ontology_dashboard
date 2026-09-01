@@ -14,7 +14,6 @@ API 계약과 팀 공유 문서를 관리한다.
 - [아키텍처](./architecture.md)
 - [CI 개발 피드백 시간 단축 제안](./ci-development-feedback-optimization-proposal.md)
 - [Backend Domain-First Migration Map](./backend-migration-map.md)
-- [Project Operation Notes](./project-operation-notes.md)
 - [Architecture Decision Records](./architecture-decisions/README.md)
 - [MVP / Product documentation](./mvp/README.md)
   - [요구사항 명세](./mvp/requirements-specification.md)
@@ -27,6 +26,10 @@ API 계약과 팀 공유 문서를 관리한다.
   - [추적성 매트릭스](./mvp/traceability-matrix.md)
   - [2026-08 Week 2 history](./mvp/history/2026-08-week2/)
 - [AI 코드 리뷰 컨텍스트](./ai-code-review-context.md)
+
+## 개인 기여 문서
+
+- [AI Review / Evidence Boundary Contribution](./contributions/hb-ai-review-evidence.md)
 
 ## 공유 계약 (Shared Contracts)
 
