@@ -28,9 +28,13 @@ import { DisplayPreferencesProvider } from "./ui/foundry/displayPreferences";
 import { I18nProvider } from "./ui/i18n/I18nProvider";
 import { WorkbenchState } from "./ui/foundry/WorkbenchState";
 import { featureFlags } from "./featureFlags";
+import { canReadSystemOperationalAssets } from "./features/systemOperations/permissions";
 
 const AdminApp = lazy(() =>
   import("./features/admin/AdminApp").then((module) => ({ default: module.AdminApp })),
+);
+const SystemOperationsApp = lazy(() =>
+  import("./features/systemOperations").then((module) => ({ default: module.SystemOperationsApp })),
 );
 const ManufacturingApp = lazy(() =>
   import("./features/manufacturing/ManufacturingApp").then((module) => ({ default: module.ManufacturingApp })),
@@ -204,8 +208,8 @@ function ForbiddenPage() {
     <main className="forbidden-page">
       <div className="forbidden-card">
         <span className="eyebrow">403 · PERMISSION DENIED</span>
-        <h1>관리자 권한이 없습니다</h1>
-        <p>FDE와 일반 사용자 역할은 tenant administrator control plane에 접근할 수 없습니다.</p>
+        <h1>접근 권한이 없습니다</h1>
+        <p>현재 계정에는 요청한 운영 화면을 조회할 권한이 없습니다.</p>
         <div className="button-row">
           <button className="primary" onClick={() => navigate("/app")}>사용자 앱으로</button>
           <button className="secondary" onClick={signOut}>로그아웃</button>
@@ -239,7 +243,11 @@ function AppRouter() {
   }
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
-
+  if (pathname.startsWith("/system/operations/assets") || pathname.startsWith("/system/operations/mappings")) {
+    return canReadSystemOperationalAssets(user.permissions)
+      ? <SystemOperationsApp />
+      : <ForbiddenPage />;
+  }
   const mvpProjectRoute = matchMvpProjectPath(pathname);
   if (mvpProjectRoute) {
     return (
