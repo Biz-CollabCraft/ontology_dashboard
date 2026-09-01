@@ -199,12 +199,14 @@ errors and source-ref grounding failures remained 0. This means concurrency 4
 should not be promoted as the current default without retry, timeout tuning, and
 checkpointed recovery.
 
-### Compact Payload Evidence
+### Compact Input and Output Evidence
 
 Before changing the live prompt payload, the provider sent the full
 `agent_review_packet`, the full `baseline_summary`, and all allowed output
-fields. The compact provider keeps the same public summary contract but sends
-only grounded summary context plus editable baseline fields.
+fields, and asked the LLM to return the full public summary shape. The compact
+provider keeps the same public summary contract but sends only grounded summary
+context plus editable baseline fields, and asks the LLM to return only prose
+edits for `title`, `summary`, and `role_summaries[*].quote`.
 
 Measured against the 8 gold packets, the serialized request payload changed as
 follows:
@@ -219,10 +221,30 @@ follows:
 - `GS-008`: 29,094 bytes -> 8,089 bytes, 72.20% reduction
 - average reduction: 67.47%
 
-This supports payload reduction as the first corrective action. Lowering
+The expected serialized output payload also changed from full
+`agent-review-summary-v1.0` examples to editable-only examples:
+
+- `GS-001`: 6,876 bytes -> 1,344 bytes, 80.45% reduction
+- `GS-002`: 7,114 bytes -> 1,347 bytes, 81.07% reduction
+- `GS-003`: 7,126 bytes -> 1,356 bytes, 80.97% reduction
+- `GS-004`: 6,123 bytes -> 1,259 bytes, 79.44% reduction
+- `GS-005`: 7,109 bytes -> 1,361 bytes, 80.86% reduction
+- `GS-006`: 6,879 bytes -> 1,346 bytes, 80.43% reduction
+- `GS-007`: 6,069 bytes -> 1,184 bytes, 80.49% reduction
+- `GS-008`: 7,114 bytes -> 1,347 bytes, 81.07% reduction
+- average reduction: 80.60%
+
+The response schema itself changed from the full public summary schema to the
+editable-only schema:
+
+- full summary schema: 2,830 bytes
+- editable schema: 514 bytes
+- schema reduction: 81.84%
+
+This supports input/output reduction as the first corrective action. Lowering
 concurrency only finds the current operating limit; it does not address the
-heavy prompt and response shape that pushed live calls close to the 20-second
-timeout boundary.
+heavy prompt, heavy response shape, and larger strict schema that pushed live
+calls close to the 20-second timeout boundary.
 
 ### Live 120-Run with Compact Payload and Concurrency 4
 
