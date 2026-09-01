@@ -479,6 +479,7 @@ Recorded 2026-09-01 evaluation artifacts:
 - `tests/eval/results/agent_summary_llm_eval_live_c4_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_compact_c4_smoke_2026-09-01.json`
 - `tests/eval/results/agent_summary_llm_eval_live_compact_c4_2026-09-01.json`
+- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_2026-09-01.json`
 
 The separate LLM evaluation report records the metric definitions, gold-set
 coverage, mock 120-run result, live smoke result, live 120-run result, latency
@@ -498,14 +499,18 @@ estimated cost USD 0.04092975. The separate report records 67.47% average input
 payload reduction, 80.60% average editable-output reduction, and 81.84% response
 schema reduction. This supports input/output reduction over lowering concurrency
 as the first corrective action.
+The compact input/output concurrency 8 pressure test also passed: 120/120
+accepted candidates, 0 fallbacks, p95 latency 5,018.95 ms, batch wall-clock
+duration 63,890.402 ms, and throughput 112.692983 requests/minute.
 
 Current quality judgment: the gold-set contract, grounding gate, and compact
-concurrency-4 operating gate pass for the 8x15 MVP eval set. Production runtime
-still needs retry policy, progress reporting, and checkpointed batch execution
-before treating this as an unattended release gate. The next measurement should
-preserve compact payloads and record request latency, queue wait, attempt count,
-retry outcome, fallback reason, batch wall-clock duration, rate-limit events,
-and accepted-after-retry rate separately.
+concurrency-4/concurrency-8 operating gates pass for the 8x15 MVP eval set.
+Production runtime still needs retry policy, progress reporting, rate-limit
+telemetry, and checkpointed batch execution before treating this as an
+unattended release gate. The next measurement should preserve compact payloads
+and record request latency, queue wait, attempt count, retry outcome, fallback
+reason, batch wall-clock duration, rate-limit events, and accepted-after-retry
+rate separately.
 
 Minimum release gates:
 

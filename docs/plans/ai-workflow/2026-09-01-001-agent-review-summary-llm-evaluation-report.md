@@ -303,13 +303,55 @@ rows dropped from 20 to 0, p95 request latency dropped from 22,375.92 ms to
 114,542.742 ms, and estimated configured-rate cost dropped from USD 0.1690266
 to USD 0.04092975.
 
+### Live 120-Run with Compact Payload and Concurrency 8
+
+Artifact:
+
+```text
+tests/eval/results/agent_summary_llm_eval_live_compact_c8_2026-09-01.json
+```
+
+Result:
+
+- sample size: 120
+- prompt payload profile: `compact-editable-v1`
+- concurrency: 8
+- batch wall-clock duration: 63,890.402 ms
+- throughput: 112.692983 requests/minute
+- accepted candidates: 120
+- acceptance rate: 1.0
+- fallback summaries: 0
+- fallback rate: 0.0
+- contract-error rows: 0
+- grounding rate: 1.0
+- p50 request latency: 3,952.738 ms
+- p95 request latency: 5,018.95 ms
+- average request latency: 4,109.452 ms
+- p50 queue wait: 28,061.77 ms
+- p95 queue wait: 55,631.332 ms
+- estimated total cost: USD 0.04092975
+- estimated average cost per accepted summary: USD 0.00034108
+- operating gate: passed
+
+Interpretation:
+
+Compact payload with concurrency 8 passed the same 120-request gate. Compared
+with compact concurrency 4, it reduced batch wall-clock duration from
+114,542.742 ms to 63,890.402 ms and increased throughput from 62.858631 to
+112.692983 requests/minute while keeping fallback rows at 0 and grounding rate
+at 1.0. Request p50 latency increased slightly, from 3,675.527 ms to 3,952.738
+ms, but p95 remained comparable. This makes concurrency 8 a viable pressure-test
+result for the compact prompt profile, not yet a production default without
+rate-limit telemetry, retry accounting, and checkpointed recovery.
+
 ## Current Judgment
 
 The Agent Review Summary LLM path is ready to remain enabled behind
 deterministic validation and fallback with the compact payload profile. It is
-also a viable concurrency-4 batch candidate for the current 8x15 MVP eval set.
-Production runtime still needs checkpoint support and retry telemetry before
-being treated as an unattended release gate.
+also a viable concurrency-4 and concurrency-8 batch candidate for the current
+8x15 MVP eval set. Production runtime still needs checkpoint support, retry
+telemetry, and rate-limit accounting before being treated as an unattended
+release gate.
 
 Use the current result as:
 
@@ -320,6 +362,8 @@ Use the current result as:
   concurrency-4 failure mode
 - negative evidence that full-payload concurrency 4 is safe without prompt
   compaction
+- positive pressure-test evidence that compact-payload concurrency 8 can
+  complete the same 120-request gate with 0 fallbacks
 
 ## Next Measurement
 
@@ -349,9 +393,9 @@ Recommended sequence:
 1. Reuse the existing sequential 120-run as concurrency `1` baseline.
 2. Keep `compact-editable-v1` as the provider payload profile.
 3. Add retry and checkpoint support to the harness.
-4. Re-run the same 120 requests at concurrency `4`.
-5. Only if concurrency `4` is stable after retry, run the same 120 requests at
-   concurrency `8` as a pressure test.
+4. Re-run the same 120 requests at concurrency `4` and `8`.
+5. Compare retry-exhausted rows, rate-limit events, p95 request latency, queue
+   wait, and batch wall-clock duration before selecting a runtime default.
 
 The concurrency `4` run should be considered successful when contract-error
 rows remain 0, grounding rate remains 1.0, retry-exhausted timeout rows are 0 or
