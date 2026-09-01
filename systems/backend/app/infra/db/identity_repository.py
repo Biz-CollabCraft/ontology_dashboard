@@ -1034,7 +1034,11 @@ class IdentityRepository:
             active_project_id=resolved_active_project_id,
             active_project_roles=active_project_roles,
             is_admin="tenant_admin" in active_project_roles,
-            default_path="/admin" if "tenant_admin" in active_project_roles else "/app",
+            default_path=(
+                "/admin" if "tenant_admin" in active_project_roles
+                else "/system/operations/assets" if "system_operator" in active_project_roles
+                else "/app"
+            ),
             landing_key=primary_role,
         )
 

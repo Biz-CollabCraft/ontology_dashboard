@@ -19,6 +19,7 @@ PUBLIC_COMPARISON_PROJECT_ID = "manufacturing-demo-project"
 PUBLIC_COMPARISON_WORKSPACE_ID = "manufacturing-demo"
 
 ROLE_DEFINITIONS: dict[str, tuple[str, str]] = {
+    "system_operator": ("시스템 관리자", "Generator 운영 자산과 시스템 처리 상태를 감독합니다."),
     "tenant_admin": ("조직 관리자", "사용자, 역할, workspace scope와 관리자 감사를 관리합니다."),
     "executive_viewer": ("임원 Viewer", "조직 위험, 영향, 추세와 대응 상태를 확인합니다."),
     "process_manager": ("운영 매니저", "우선순위, 배정, 기한과 에스컬레이션을 관리합니다."),
@@ -68,10 +69,15 @@ PERMISSION_DEFINITIONS: dict[str, str] = {
     "admin.users.read": "사용자와 역할 조회",
     "admin.users.manage": "가입 승인, 비활성화, 역할 및 scope 변경",
     "admin.audit.read": "관리자 변경 감사 조회",
+    "system.assets.read": "Generator 운영 자산 Registry 조회",
+    "system.assets.create_version": "Static Mapping 신규 버전 초안 생성 및 편집",
+    "system.assets.validate": "Static Mapping 초안 계약 검증",
+    "system.assets.publish": "검증된 Static Mapping 불변 발행",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "tenant_admin": set(PERMISSION_DEFINITIONS),
+    "tenant_admin": set(PERMISSION_DEFINITIONS) - {"system.assets.read", "system.assets.create_version", "system.assets.validate", "system.assets.publish"},
+    "system_operator": {"system.assets.read", "system.assets.create_version", "system.assets.validate", "system.assets.publish"},
     "executive_viewer": {"app.access", "events.read", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "executive.overview.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_manager": {"app.access", "events.read", "events.decision", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "datasets.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_engineer": {"app.access", "events.read", "events.note", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "field.tasks.read", "field.tasks.update", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
