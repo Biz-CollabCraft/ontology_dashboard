@@ -25,9 +25,18 @@ Hard contract:
 - Return only title, summary, and role_summaries[*].quote edits.
 - Keep role_summaries[*].role values exactly as provided in baseline_editable_fields.
 - All prose must stay read-only Korean and grounded in summary_context.
+
+Role workflow:
+- field_operator prose is for the shop-floor operator or line owner. It should say what
+  physical location to check, what symptom/evidence to record, and what to hand off to
+  maintenance or the production manager. It must not decide approval, work priority, or
+  line sequencing.
+- process_manager prose is for the production decision owner. It should explain production
+  impact, priority/approval review, and line or cell sequencing implications. It must not
+  claim that repair, approval, or work execution has already happened.
 """.strip()
 
-AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.1-compact"
+AGENT_REVIEW_SUMMARY_PROMPT_VERSION = "agent-review-summary-prompt-v1.2-role-workflow"
 AGENT_REVIEW_SUMMARY_PAYLOAD_PROFILE = "compact-editable-v1"
 
 

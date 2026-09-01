@@ -460,6 +460,10 @@ def _quality_scores(summary: dict[str, Any], *, packet: dict[str, Any]) -> dict[
             field_quote,
             ["확인", "점검", "먼저", "위치"],
         ),
+        "field_operator_has_record_handoff_focus": _contains_any(
+            field_quote,
+            ["기록", "전달", "사진", "알람", "관측값"],
+        ),
         "manager_has_decision_context": _contains_any(
             manager_quote,
             ["생산", "영향", "승인", "우선", "손실"],

@@ -126,6 +126,9 @@ Usefulness candidate checks:
 
 - `field_operator_has_action_focus`: field-operator copy tells the operator to
   inspect/check/confirm a concrete target or location.
+- `field_operator_has_record_handoff_focus`: field-operator copy asks the
+  operator to record symptoms, alarms, photos, or observations and hand them off
+  to maintenance or production management.
 - `manager_has_decision_context`: process-manager copy gives production,
   approval, priority, impact, or loss context.
 - `roles_are_distinct`: field and manager role quotes are not identical.
@@ -459,10 +462,11 @@ Result:
 
 - sample size: 120
 - model: `gpt-4o-mini`
+- prompt version: `agent-review-summary-prompt-v1.2-role-workflow`
 - prompt payload profile: `compact-editable-v1`
 - concurrency: 8
-- batch wall-clock duration: 61,554.427 ms
-- throughput: 116.969654 requests/minute
+- batch wall-clock duration: 59,973.108 ms
+- throughput: 120.053808 requests/minute
 - accepted candidates: 120
 - fallback summaries: 0
 - contract-error rows: 0
@@ -473,9 +477,9 @@ Result:
 - `coverage_candidate`: 1.0
 - `usefulness_candidate`: 1.0
 - `korean_quality_candidate`: 1.0
-- p50 request latency: 3,928.758 ms
-- p95 request latency: 5,585.374 ms
-- estimated total cost: USD 0.04092975
+- p50 request latency: 3,658.122 ms
+- p95 request latency: 5,476.296 ms
+- estimated total cost: USD 0.0412605
 - operating gate: passed
 
 Interpretation:
@@ -487,6 +491,12 @@ accuracy, Korean-field signal, latency, and configured-rate cost all passed for
 the MVP 8x15 evaluation." It does not remove the need for a small human
 acceptance sample before promoting usefulness or Korean quality to hard release
 gates.
+
+The `v1.2-role-workflow` prompt keeps the expansion minimal: it does not add
+MES, ERP, CMMS, WMS, quality-lot, customer-order, or air-compressor dependency
+domains. It only tightens role wording so `field_operator` handles
+shop-floor inspection, symptom recording, and handoff, while `process_manager`
+keeps production impact, priority, approval review, and line/cell sequencing.
 
 ## Current Judgment
 
@@ -566,7 +576,7 @@ models because those endpoints rejected non-default temperature values.
 
 | Model | Scope | Accepted | Fallback | Contract errors | Grounding | Gold accuracy | p95 latency | Wall-clock | Estimated cost | Judgment |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `gpt-4o-mini` | 120-run, gold-scored | 120/120 | 0 | 0 | 1.0 | 1.0 | 5,585.374 ms | 61,554.427 ms | USD 0.04092975 | Best current default. |
+| `gpt-4o-mini` | 120-run, gold-scored | 120/120 | 0 | 0 | 1.0 | 1.0 | 5,476.296 ms | 59,973.108 ms | USD 0.0412605 | Best current default. |
 | `gpt-5.6-luna` | smoke | 8/8 | 0 | 0 | 1.0 | not measured | 10,187.532 ms | 10,190.517 ms | USD 0.0045186 | Compatible after temperature fix. |
 | `gpt-5.6-luna` | 120-run | 119/120 | 1 | 1 | 0.991667 | not measured | 12,910.35 ms | 145,302.416 ms | USD 0.0675846 | Viable but weaker than baseline. |
 | `gpt-5-mini` | smoke, 20s timeout | 0/8 | 8 | 0 | 1.0 | not measured | 20,866.351 ms | 20,869.504 ms | USD 0.00590275 | Fails operating smoke by timeout. |
@@ -606,6 +616,17 @@ based on cost alone. The selected model passes contract and grounding gates,
 matches the 8-case manufacturing answer key, avoids Closed-loop authority
 leakage, stays acceptable in Korean field-copy signals, and keeps latency and
 cost within the MVP workflow budget.
+
+## Deferred Factory Operating Context
+
+Customer persona, CNC/air-compressor dependency, synthetic MES/ERP/CMMS/WMS
+fixtures, spare inventory, and quality-lot impact remain future adoption
+candidates. They should be introduced only when role-specific outputs repeatedly
+need those facts or when the demo scope explicitly moves from Agent Review
+Summary evaluation to a broader factory operating workflow. Until then, the
+current slice uses existing packet facts plus the role-flow prompt and answer
+key rather than inventing customer-order, inventory, lot, or actual integration
+claims.
 
 ## Next Measurement
 

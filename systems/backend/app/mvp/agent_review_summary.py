@@ -269,9 +269,10 @@ def _role_summaries(
 
     quotes = {
         "field_operator": (
-            f"{asset_label}은 {status} 알림이며 {component_text}{_object_particle(component_text)} "
-            f"{location_text}에서 먼저 확인할 대상으로 잡습니다. "
-            f"근거 지표는 {factor_text}이고, {work_request_text} {part_text}"
+            f"{asset_label}: {status} 알림. {location_text}에서 "
+            f"{component_text}{_object_particle(component_text)} 확인합니다. "
+            f"{factor_text}와 알람, 사진, 관측값을 기록해 정비/생산 관리자에게 전달합니다. "
+            f"{work_request_text} {part_text}"
         ),
         "process_manager": (
             f"{asset_label} 위험 감지 건은 현재 생산 영향이 {production_impact}이며, "
