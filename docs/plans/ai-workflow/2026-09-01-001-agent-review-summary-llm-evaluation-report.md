@@ -78,6 +78,27 @@ The current harness estimates tokens from serialized payload size and configured
 `gpt-4o-mini` price inputs. It is a configured-rate estimate, not provider
 billing reconciliation.
 
+Candidate accuracy metrics:
+
+- Required evidence coverage: whether each case's expected operational facts are
+  present in `summary` or role quotes.
+- Role usefulness: whether `field_operator` copy answers what to inspect and
+  where, while `process_manager` copy answers risk, production context, and
+  approval-review context.
+- Korean field-language quality: whether the summary avoids internal-only terms,
+  awkward literal translation, and excessive caveats.
+- Priority correctness: whether risk, confidence, data-quality hold, SOP
+  availability, and production-impact wording match packet facts.
+- Concision: whether accepted summaries stay short enough for the workflow side
+  panel.
+- Human accept-without-edit ratio: manual review result for whether the summary
+  could ship as-is.
+
+These candidate accuracy metrics are not hard gates yet. The current hard gates
+remain contract shape, grounding, and boundary compliance. A model comparison can
+use the candidate metrics as review columns before they become deterministic
+release gates.
+
 ## Results
 
 ### Controlled Mock 120-Run
@@ -364,6 +385,44 @@ Use the current result as:
   compaction
 - positive pressure-test evidence that compact-payload concurrency 8 can
   complete the same 120-request gate with 0 fallbacks
+
+## Model Comparison Plan
+
+Compare three models with the same compact payload profile, same 8x15 gold set,
+same validator, and same concurrency:
+
+| Model | Role in comparison | Input price / 1M | Output price / 1M | Why include it |
+| --- | --- | ---: | ---: | --- |
+| `gpt-4o-mini` | Current measured baseline | USD 0.15 | USD 0.60 | Already measured; lowest current cost baseline for this path. |
+| `gpt-5.6-luna` | Cost-sensitive high-volume candidate | USD 0.20 | USD 1.20 | Similar cost tier, newer model family, suitable for high-volume structured summary generation. |
+| `gpt-5-mini` | Quality/robustness comparison candidate | USD 0.25 | USD 2.00 | More expensive than Luna/4o-mini, useful as a higher-quality reference point. |
+
+Evaluation axes:
+
+1. Quality and accuracy.
+   Use hard contract metrics plus candidate accuracy review columns: required
+   evidence coverage, role usefulness, Korean field-language quality, priority
+   correctness, concision, and human accept-without-edit ratio.
+2. Operating reliability.
+   Compare accepted rate, fallback rate, `ReadTimeout`, rate-limit events, p50
+   and p95 request latency, queue wait, throughput, and batch wall-clock
+   duration at the same concurrency.
+3. Cost efficiency.
+   Compare estimated total cost per 120-run, estimated cost per accepted
+   summary, prompt tokens, completion tokens, and quality-adjusted cost once the
+   candidate accuracy review exists.
+
+Initial model-comparison run:
+
+```text
+8 gold cases x 15 iterations = 120 total requests per model
+prompt payload profile = compact-editable-v1
+concurrency = 8
+models = gpt-4o-mini, gpt-5.6-luna, gpt-5-mini
+```
+
+Do not mix model comparison with prompt/schema changes. If the prompt payload
+changes again, rerun all three models under the same new profile.
 
 ## Next Measurement
 

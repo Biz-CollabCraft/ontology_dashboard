@@ -511,6 +511,10 @@ unattended release gate. The next measurement should preserve compact payloads
 and record request latency, queue wait, attempt count, retry outcome, fallback
 reason, batch wall-clock duration, rate-limit events, and accepted-after-retry
 rate separately.
+Model selection should be compared separately across `gpt-4o-mini`,
+`gpt-5.6-luna`, and `gpt-5-mini` using the same compact payload, same 8x15
+gold set, and the quality/reliability/cost axes defined in the LLM evaluation
+report.
 
 Minimum release gates:
 
