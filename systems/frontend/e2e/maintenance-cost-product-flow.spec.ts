@@ -107,8 +107,11 @@ test("runs cost analysis only on request and keeps option selection proposed", a
   await page.route("**/api/projects/*/workspaces/*/maintenance/inspection-results/*/cost-analyses", async (route) => {
     calculationRequests += 1;
     const request = route.request().postDataJSON();
-    expect(request.scenarios).toHaveLength(4);
-    expect(request.asset_id).toBeUndefined();
+    expect(request).toEqual({
+      action_code: "TOOL_REPLACEMENT",
+      sop_id: "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+      sop_version: "demo-2026-08-28",
+    });
     analysisCreated = true;
     await route.fulfill({
       status: 200,
@@ -145,13 +148,7 @@ test("runs cost analysis only on request and keeps option selection proposed", a
   await expect(panel).toBeVisible();
   expect(calculationRequests).toBe(0);
 
-  await panel.getByRole("button", { name: "비용 분석 입력", exact: true }).click();
-  await panel.getByLabel("참고한 SOP ID").fill("SOP-DEMO-CNC-ROTATING-ASSEMBLY-001");
-  await panel.getByLabel("SOP 버전").fill("demo-2026-08-28");
-  const inputs = panel.locator(".mvp-cost-inputs fieldset input");
-  await expect(inputs).toHaveCount(28);
-  for (let index = 0; index < 28; index += 1) await inputs.nth(index).fill("10");
-  await panel.getByRole("button", { name: "비용 계산", exact: true }).click();
+  await panel.getByRole("button", { name: "비용 분석 요청", exact: true }).click();
 
   await expect.poll(() => calculationRequests).toBe(1);
   await expect(panel.getByText("계산상 최저비용", { exact: true })).toBeVisible();
@@ -238,7 +235,7 @@ test("does not expose a previous inspection's cost analysis for a newer inspecti
   const panel = page.getByRole("region", { name: "정비 비용 분석" });
 
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("button", { name: "비용 분석 입력", exact: true })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "비용 분석 요청", exact: true })).toBeVisible();
   await expect(panel.getByText("최근 분석", { exact: true })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "이 시점 선택", exact: true })).toHaveCount(0);
 });

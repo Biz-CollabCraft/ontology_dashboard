@@ -138,6 +138,13 @@ export function buildCostRequest(
   eventId: string,
   actionCode: MaintenanceActionCode = "TOOL_REPLACEMENT",
 ): MaintenanceCostAnalysisRequest {
+  if (actionCode === "TOOL_REPLACEMENT") {
+    return {
+      action_code: actionCode,
+      sop_id: guidance.sopId,
+      sop_version: guidance.version,
+    };
+  }
   return {
     action_code: actionCode,
     sop_id: guidance.sopId,
@@ -349,7 +356,10 @@ export function MaintenanceCostDecisionPanel({
     ? "완료된 점검 결과에서 정비 필요가 확인된 뒤 사용할 수 있습니다."
     : actionCandidates.length === 0
       ? "점검 결과에서 실행 가능한 정비 Action 후보가 확인되지 않았습니다."
+    : !sopId.trim() || !sopVersion.trim()
+      ? "점검에 참고한 SOP 기준정보가 필요합니다."
     : null;
+  const usesServerCostBasis = selectedActionCode === "TOOL_REPLACEMENT";
 
   return (
     <section className="mvp-maintenance-cost-panel" aria-label="정비 비용 분석">
@@ -386,9 +396,17 @@ export function MaintenanceCostDecisionPanel({
         </div>
       ) : null}
 
-      {!formOpen ? (
+      {usesServerCostBasis ? (
+        <div className="mvp-cost-inputs">
+          <p>인서트 1개 비용과 노무 기준은 Backend의 버전 관리 기준정보를 사용합니다. 즉시·12시간 후 실행 시각에 따라 주간 또는 야간 요율이 자동 선택됩니다.</p>
+          <small>참고 SOP: {sopId || "-"} · {sopVersion || "-"}</small>
+          <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => void calculate()}>
+            비용 분석 요청
+          </button>
+        </div>
+      ) : !formOpen ? (
         <button type="button" className="mvp-button" disabled={Boolean(blocker) || loading || submitting} onClick={() => setFormOpen(true)}>
-          비용 분석 입력
+          냉각계통 비용 분석 입력
         </button>
       ) : (
         <div className="mvp-cost-inputs">
@@ -455,6 +473,14 @@ export function MaintenanceCostDecisionPanel({
                     {isLowest ? <b>계산상 최저비용</b> : null}
                   </div>
                   <span>{formatWon(option.total_expected_cost?.base_minor)}</span>
+                  {option.execution_at ? (
+                    <small>
+                      실행 {new Date(option.execution_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+                      {option.labor_rate_base_minor_per_minute !== null && option.labor_rate_base_minor_per_minute !== undefined
+                        ? ` · ${option.labor_rate_type === "night" ? "야간" : "주간"} ${option.labor_rate_base_minor_per_minute.toLocaleString()}원/분`
+                        : ""}
+                    </small>
+                  ) : null}
                   <small>{option.expected_downtime ? `예상 정지 ${option.expected_downtime.base_minutes}분` : `부족: ${option.missing_inputs.join(", ")}`}</small>
                   <button
                     type="button"

@@ -151,7 +151,7 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
     ).toBe("ANALYSIS-B");
   });
 
-  it("does not invent missing cost values and records the consulted SOP", () => {
+  it("sends only Action and consulted SOP for server-owned tool cost inputs", () => {
     const form = {
       immediate: {
         partsCost: "1000",
@@ -193,16 +193,11 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
 
     const request = buildCostRequest(form, guidance, "EVT-1");
 
-    expect(request.action_code).toBe("TOOL_REPLACEMENT");
-    expect(request.sop_id).toBe("SOP-CNC-TOOL-001");
-    expect(request.scenarios).toHaveLength(4);
-    expect(request.scenarios[0].parts_cost).toEqual({
-      low_minor: 1000,
-      base_minor: 1000,
-      high_minor: 1000,
+    expect(request).toEqual({
+      action_code: "TOOL_REPLACEMENT",
+      sop_id: "SOP-CNC-TOOL-001",
+      sop_version: "v1",
     });
-    expect(request.scenarios[0].labor_duration).toBeNull();
-    expect(request.assumptions.join(" ")).toContain("임의 추정");
   });
 
   it("preserves the selected cooling Action in the cost request", () => {

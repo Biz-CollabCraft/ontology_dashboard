@@ -64,6 +64,7 @@ from .maintenance_schema import (
     WorkOrderType,
 )
 from .ports import (
+    MaintenanceCostBasisProvider,
     MaintenanceCommandRepositoryPort,
     MaintenanceReplaySessionValidationPort,
 )
@@ -76,10 +77,12 @@ class MaintenanceLoopService:
         *,
         event_evidence_query: EventEvidenceProjectionQueryPort,
         replay_session_query: MaintenanceReplaySessionValidationPort | None = None,
+        cost_basis_provider: MaintenanceCostBasisProvider | None = None,
     ) -> None:
         self.repository = repository
         self.event_evidence_query = event_evidence_query
         self.replay_session_query = replay_session_query
+        self.cost_basis_provider = cost_basis_provider
 
     @staticmethod
     def _stable_id(prefix: str, *parts: str) -> str:
@@ -711,8 +714,9 @@ class MaintenanceLoopService:
         """Calculate and append one decision-support snapshot.
 
         Scope, equipment, Diagnosis lineage, and Action candidate identity are
-        resolved from canonical Maintenance records.  The caller supplies only
-        economic inputs and the SOP reference it consulted.
+        resolved from canonical Maintenance records. TOOL_REPLACEMENT economic
+        inputs come from the versioned Backend provider; the caller supplies
+        only the Action and the SOP reference it consulted.
         """
 
         inspection_result = self.repository.get_inspection_result(
@@ -769,6 +773,35 @@ class MaintenanceLoopService:
             action_candidate_id,
             idempotency_key,
         )
+        timestamp = calculated_at or datetime.now(timezone.utc)
+        if action_code is MaintenanceActionCode.TOOL_REPLACEMENT:
+            if self.cost_basis_provider is None:
+                raise ValueError("Maintenance cost-basis provider is unavailable")
+            cost_basis = self.cost_basis_provider.tool_replacement_basis(
+                calculated_at=timestamp
+            )
+            currency = cost_basis.currency
+            currency_minor_unit = cost_basis.currency_minor_unit
+            scenarios = cost_basis.scenarios
+            assumptions = cost_basis.assumptions
+            input_sources = cost_basis.input_sources
+            price_version = cost_basis.price_version
+            calculation_policy_version = cost_basis.calculation_policy_version
+        else:
+            assert payload.currency is not None
+            assert payload.currency_minor_unit is not None
+            assert payload.scenarios is not None
+            assert payload.assumptions is not None
+            assert payload.input_sources is not None
+            assert payload.price_version is not None
+            assert payload.calculation_policy_version is not None
+            currency = payload.currency
+            currency_minor_unit = payload.currency_minor_unit
+            scenarios = payload.scenarios
+            assumptions = payload.assumptions
+            input_sources = payload.input_sources
+            price_version = payload.price_version
+            calculation_policy_version = payload.calculation_policy_version
         result = calculate_maintenance_cost_scenarios(
             MaintenanceCostAnalysisInput(
                 analysis_id=analysis_id,
@@ -777,7 +810,7 @@ class MaintenanceLoopService:
                 workspace_id=workspace_id,
                 asset_id=inspection_result.asset_id,
                 equipment_id=inspection_result.asset_id,
-                calculated_at=calculated_at or datetime.now(timezone.utc),
+                calculated_at=timestamp,
                 based_on=CostAnalysisBasis(
                     product_result_id=source_product_result_id,
                     evidence_id=source_evidence_id,
@@ -788,13 +821,13 @@ class MaintenanceLoopService:
                 ),
                 action_candidate_id=action_candidate_id,
                 action_code=action_code,
-                currency=payload.currency,
-                currency_minor_unit=payload.currency_minor_unit,
-                scenarios=payload.scenarios,
-                assumptions=payload.assumptions,
-                input_sources=payload.input_sources,
-                price_version=payload.price_version,
-                calculation_policy_version=payload.calculation_policy_version,
+                currency=currency,
+                currency_minor_unit=currency_minor_unit,
+                scenarios=scenarios,
+                assumptions=assumptions,
+                input_sources=input_sources,
+                price_version=price_version,
+                calculation_policy_version=calculation_policy_version,
             )
         )
         return self.repository.create_cost_analysis(

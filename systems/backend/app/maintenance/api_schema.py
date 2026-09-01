@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .cost_analysis_schema import CostInputSource, ExecutionTiming
-from .cost_calculator import MaintenanceScenarioInput, ToolReplacementScenarioInput
+from .cost_calculator import MaintenanceScenarioInput
 from .maintenance_schema import (
     InspectionChecklistItem,
     InspectionMeasurement,
@@ -73,10 +73,12 @@ class CostOptionRecommendationCreateRequest(StrictCommand):
 
 
 class MaintenanceCostAnalysisCreateRequest(StrictCommand):
-    """Economic inputs plus consulted-SOP audit context.
+    """Action plus consulted-SOP audit context.
 
-    The SOP reference is not an authorization input.  Canonical Maintenance,
-    Diagnosis, equipment, and Action candidate lineage is resolved server-side.
+    TOOL_REPLACEMENT economics are owned by the versioned Backend provider and
+    must not be supplied by a product client.  The already-merged
+    COOLING_SYSTEM_RESTORE slice temporarily retains its explicit scenario
+    inputs until a governed cooling cost basis is introduced.
     """
 
     action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] = (
@@ -92,21 +94,47 @@ class MaintenanceCostAnalysisCreateRequest(StrictCommand):
         max_length=160,
         description="Version of the consulted SOP audit reference.",
     )
-    currency: str = Field(pattern=r"^[A-Z]{3}$")
-    currency_minor_unit: Literal[0, 2, 3]
-    scenarios: tuple[MaintenanceScenarioInput, ...] = Field(
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    currency_minor_unit: Literal[0, 2, 3] | None = None
+    scenarios: tuple[MaintenanceScenarioInput, ...] | None = Field(
+        default=None,
         min_length=4,
         max_length=4,
     )
-    assumptions: tuple[str, ...] = ()
-    input_sources: tuple[CostInputSource, ...] = Field(min_length=1)
-    price_version: str = Field(min_length=1, max_length=160)
-    calculation_policy_version: str = Field(min_length=1, max_length=160)
+    assumptions: tuple[str, ...] | None = None
+    input_sources: tuple[CostInputSource, ...] | None = Field(
+        default=None, min_length=1
+    )
+    price_version: str | None = Field(default=None, min_length=1, max_length=160)
+    calculation_policy_version: str | None = Field(
+        default=None, min_length=1, max_length=160
+    )
 
     @model_validator(mode="after")
-    def require_complete_timing_set(
+    def require_action_owned_economic_inputs(
         self,
     ) -> MaintenanceCostAnalysisCreateRequest:
+        economic_values = (
+            self.currency,
+            self.currency_minor_unit,
+            self.scenarios,
+            self.assumptions,
+            self.input_sources,
+            self.price_version,
+            self.calculation_policy_version,
+        )
+        if self.action_code == "TOOL_REPLACEMENT":
+            if any(value is not None for value in economic_values):
+                raise ValueError(
+                    "TOOL_REPLACEMENT economic inputs are resolved server-side"
+                )
+            return self
+
+        if any(value is None for value in economic_values):
+            raise ValueError(
+                "COOLING_SYSTEM_RESTORE requires all four economic scenarios"
+            )
+        assert self.scenarios is not None
         timings = [scenario.execution_timing for scenario in self.scenarios]
         if len(set(timings)) != len(timings) or set(timings) != set(ExecutionTiming):
             raise ValueError(
@@ -116,13 +144,9 @@ class MaintenanceCostAnalysisCreateRequest(StrictCommand):
 
 
 class ToolReplacementCostAnalysisCreateRequest(MaintenanceCostAnalysisCreateRequest):
-    """Backward-compatible request type for the first Action slice."""
+    """Server-calculated one-insert cost request."""
 
     action_code: Literal["TOOL_REPLACEMENT"] = "TOOL_REPLACEMENT"
-    scenarios: tuple[ToolReplacementScenarioInput, ...] = Field(
-        min_length=4,
-        max_length=4,
-    )
 
 
 class RecommendationDecisionCreateRequest(StrictCommand):

@@ -41,6 +41,7 @@
         "option_id": {"$ref": "#/$defs/nonEmptyId"},
         "action_candidate_id": {"$ref": "#/$defs/nonEmptyId"},
         "action_code": {
+          "description": "MVP TOOL_REPLACEMENT means replacing exactly one worn carbide cutting insert, not a tool holder or tool set.",
           "enum": ["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"]
         },
         "execution_timing": {
@@ -50,6 +51,25 @@
             "planned_window",
             "reinspect_after",
             "no_action_baseline"
+          ]
+        },
+        "execution_at": {
+          "description": "Server-derived execution instant used to select the labor-rate band when the timing denotes an executable maintenance option.",
+          "anyOf": [
+            {"type": "string", "format": "date-time"},
+            {"type": "null"}
+          ]
+        },
+        "labor_rate_type": {
+          "anyOf": [
+            {"enum": ["normal", "night", "not_applicable"]},
+            {"type": "null"}
+          ]
+        },
+        "labor_rate_base_minor_per_minute": {
+          "anyOf": [
+            {"type": "integer", "minimum": 0},
+            {"type": "null"}
           ]
         },
         "calculation_status": {"enum": ["calculated", "insufficient"]},
@@ -189,7 +209,7 @@
         "additionalProperties": false,
         "properties": {
           "input_name": {"type": "string", "minLength": 1, "maxLength": 160},
-          "source_kind": {"enum": ["observed", "quoted", "policy", "assumption"]},
+          "source_kind": {"enum": ["observed", "quoted", "public_reference", "policy", "assumption"]},
           "source_reference": {"type": "string", "minLength": 1, "maxLength": 500},
           "confidence": {"enum": ["high", "medium", "low"]}
         },

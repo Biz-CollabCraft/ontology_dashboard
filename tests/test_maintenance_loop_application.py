@@ -22,6 +22,7 @@ from app.maintenance.api_schema import (
     ToolReplacementCostAnalysisCreateRequest,
 )
 from app.maintenance.cost_analysis_schema import ExecutionTiming
+from app.maintenance.cost_basis import ToolReplacementCostBasis
 from app.maintenance.maintenance_domain import IdempotencyConflict
 from app.maintenance.maintenance_schema import RecommendationDisposition, WorkOrderStatus
 from app.maintenance.service import MaintenanceLoopService
@@ -139,12 +140,77 @@ def snapshot_basis(projection: dict) -> dict:
     }
 
 
-def service(tmp_path, *, query: ProjectionQuery | None = None) -> MaintenanceLoopService:
+class StaticCostBasisProvider:
+    def __init__(self, basis: ToolReplacementCostBasis) -> None:
+        self.basis = basis
+
+    def tool_replacement_basis(self, *, calculated_at: datetime) -> ToolReplacementCostBasis:
+        del calculated_at
+        return self.basis
+
+
+def tool_replacement_cost_basis(
+    *, missing_parts_cost: bool = False
+) -> ToolReplacementCostBasis:
+    scenarios = []
+    for timing in ExecutionTiming:
+        scenarios.append(
+            {
+                "execution_timing": timing,
+                "parts_cost": (
+                    None
+                    if missing_parts_cost
+                    else {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000}
+                ),
+                "labor_duration": {"low_minutes": 20, "base_minutes": 30, "high_minutes": 40},
+                "labor_rate_per_minute": {
+                    "low_minor_per_minute": 800,
+                    "base_minor_per_minute": 1000,
+                    "high_minor_per_minute": 1200,
+                },
+                "external_service_cost": {"low_minor": 0, "base_minor": 0, "high_minor": 0},
+                "expected_downtime": {"low_minutes": 30, "base_minutes": 45, "high_minutes": 60},
+                "production_loss_rate_per_minute": {
+                    "low_minor_per_minute": 900,
+                    "base_minor_per_minute": 1100,
+                    "high_minor_per_minute": 1300,
+                },
+                "expected_failure_loss": {"low_minor": 10000, "base_minor": 25000, "high_minor": 50000},
+                "confidence": "medium",
+            }
+        )
+    return ToolReplacementCostBasis(
+        currency="KRW",
+        currency_minor_unit=0,
+        scenarios=tuple(scenarios),
+        assumptions=("Failure loss is a sensitivity input.",),
+        input_sources=(
+            {
+                "input_name": "tool_replacement_quote",
+                "source_kind": "quoted",
+                "source_reference": "quote/tool-replacement/2026-08",
+                "confidence": "medium",
+            },
+        ),
+        price_version="maintenance-price-2026-08",
+        calculation_policy_version="maintenance-cost-policy-v1",
+    )
+
+
+def service(
+    tmp_path,
+    *,
+    query: ProjectionQuery | None = None,
+    cost_basis: ToolReplacementCostBasis | None = None,
+) -> MaintenanceLoopService:
     provider = query or ProjectionQuery()
     return MaintenanceLoopService(
         MaintenanceRepository(tmp_path / "maintenance.db", project_context=Resolver()),
         event_evidence_query=provider,
         replay_session_query=provider,
+        cost_basis_provider=StaticCostBasisProvider(
+            cost_basis or tool_replacement_cost_basis()
+        ),
     )
 
 
@@ -168,84 +234,34 @@ def inspection_result(outcome: str = "maintenance_recommended") -> InspectionRes
     )
 
 
-def cost_analysis_request(
-    *, missing_parts_cost: bool = False
-) -> ToolReplacementCostAnalysisCreateRequest:
-    scenarios = []
-    for timing in ExecutionTiming:
-        scenarios.append(
-            {
-                "execution_timing": timing,
-                "parts_cost": (
-                    None
-                    if missing_parts_cost
-                    else {"low_minor": 45000, "base_minor": 50000, "high_minor": 60000}
-                ),
-                "labor_duration": {
-                    "low_minutes": 20,
-                    "base_minutes": 30,
-                    "high_minutes": 40,
-                },
-                "labor_rate_per_minute": {
-                    "low_minor_per_minute": 800,
-                    "base_minor_per_minute": 1000,
-                    "high_minor_per_minute": 1200,
-                },
-                "external_service_cost": {
-                    "low_minor": 0,
-                    "base_minor": 0,
-                    "high_minor": 0,
-                },
-                "expected_downtime": {
-                    "low_minutes": 30,
-                    "base_minutes": 45,
-                    "high_minutes": 60,
-                },
-                "production_loss_rate_per_minute": {
-                    "low_minor_per_minute": 900,
-                    "base_minor_per_minute": 1100,
-                    "high_minor_per_minute": 1300,
-                },
-                "expected_failure_loss": {
-                    "low_minor": 10000,
-                    "base_minor": 25000,
-                    "high_minor": 50000,
-                },
-                "confidence": "medium",
-            }
-        )
+def cost_analysis_request() -> ToolReplacementCostAnalysisCreateRequest:
     return ToolReplacementCostAnalysisCreateRequest(
         sop_id="SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
         sop_version="demo-2026-08-28",
-        currency="KRW",
-        currency_minor_unit=0,
-        scenarios=tuple(scenarios),
-        assumptions=("Failure loss is a sensitivity input.",),
-        input_sources=(
-            {
-                "input_name": "tool_replacement_quote",
-                "source_kind": "quoted",
-                "source_reference": "quote/tool-replacement/2026-08",
-                "confidence": "medium",
-            },
-        ),
-        price_version="maintenance-price-2026-08",
-        calculation_policy_version="maintenance-cost-policy-v1",
     )
 
 
 def cooling_cost_analysis_request() -> MaintenanceCostAnalysisCreateRequest:
-    payload = cost_analysis_request().model_dump(mode="json")
-    payload["action_code"] = "COOLING_SYSTEM_RESTORE"
-    payload["input_sources"] = [
-        {
-            "input_name": "cooling_system_restore_quote",
-            "source_kind": "quoted",
-            "source_reference": "quote/cooling-system-restore/2026-08",
-            "confidence": "medium",
-        }
-    ]
-    return MaintenanceCostAnalysisCreateRequest.model_validate(payload)
+    basis = tool_replacement_cost_basis()
+    return MaintenanceCostAnalysisCreateRequest(
+        action_code="COOLING_SYSTEM_RESTORE",
+        sop_id="SOP-DEMO-COOLING-SYSTEM-001",
+        sop_version="demo-2026-08-31",
+        currency=basis.currency,
+        currency_minor_unit=basis.currency_minor_unit,
+        scenarios=basis.scenarios,
+        assumptions=basis.assumptions,
+        input_sources=(
+            {
+                "input_name": "cooling_system_restore_quote",
+                "source_kind": "quoted",
+                "source_reference": "quote/cooling-system-restore/2026-08",
+                "confidence": "medium",
+            },
+        ),
+        price_version=basis.price_version,
+        calculation_policy_version=basis.calculation_policy_version,
+    )
 
 
 def run_completed_inspection(
@@ -1044,7 +1060,10 @@ def test_cost_analysis_is_idempotent_but_new_request_appends_snapshot(tmp_path) 
 def test_insufficient_cost_analysis_is_preserved_without_operational_effects(
     tmp_path,
 ) -> None:
-    loop = service(tmp_path)
+    loop = service(
+        tmp_path,
+        cost_basis=tool_replacement_cost_basis(missing_parts_cost=True),
+    )
     _work_order_id, inspection_result_id = run_completed_inspection(loop)
 
     created = loop.calculate_tool_replacement_cost(
@@ -1052,7 +1071,7 @@ def test_insufficient_cost_analysis_is_preserved_without_operational_effects(
         project_id="project-1",
         workspace_id="workspace-1",
         inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(missing_parts_cost=True),
+        payload=cost_analysis_request(),
         actor_id="manager-1",
         idempotency_key="cost-analysis-insufficient-001",
     )
@@ -1514,12 +1533,15 @@ def test_non_executable_or_insufficient_cost_option_cannot_create_recommendation
             idempotency_key="cost-option-forged",
         )
 
+    loop.cost_basis_provider = StaticCostBasisProvider(
+        tool_replacement_cost_basis(missing_parts_cost=True)
+    )
     insufficient = loop.calculate_tool_replacement_cost(
         organization_id="org-1",
         project_id="project-1",
         workspace_id="workspace-1",
         inspection_result_id=inspection_result_id,
-        payload=cost_analysis_request(missing_parts_cost=True),
+        payload=cost_analysis_request(),
         actor_id="manager-1",
         idempotency_key="cost-analysis-insufficient-001",
     )["cost_analysis"]

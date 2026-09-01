@@ -176,7 +176,13 @@ RESULT = {
 }
 
 
-def cost_request() -> dict:
+def cost_request(action_code: str = "TOOL_REPLACEMENT") -> dict:
+    if action_code == "TOOL_REPLACEMENT":
+        return {
+            "action_code": action_code,
+            "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
+            "sop_version": "demo-2026-08-28",
+        }
     scenarios = []
     for timing in (
         "immediate",
@@ -222,6 +228,7 @@ def cost_request() -> dict:
             }
         )
     return {
+        "action_code": action_code,
         "sop_id": "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001",
         "sop_version": "demo-2026-08-28",
         "currency": "KRW",
@@ -419,7 +426,7 @@ def test_reader_lists_candidates_and_manager_can_request_cooling_cost() -> None:
     candidates = manager_client.get(
         f"{BASE}/inspection-results/INSPECTION-RESULT-1/action-candidates"
     )
-    payload = {**cost_request(), "action_code": "COOLING_SYSTEM_RESTORE"}
+    payload = cost_request("COOLING_SYSTEM_RESTORE")
     created = manager_client.post(
         f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
         json=payload,

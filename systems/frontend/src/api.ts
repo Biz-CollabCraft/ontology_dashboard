@@ -447,6 +447,9 @@ export interface MaintenanceCostOptionReadModel {
   action_candidate_id: string;
   action_code: MaintenanceActionCode;
   execution_timing: MaintenanceExecutionTiming;
+  execution_at?: string | null;
+  labor_rate_type?: "normal" | "night" | "not_applicable" | null;
+  labor_rate_base_minor_per_minute?: number | null;
   calculation_status: "calculated" | "insufficient";
   total_expected_cost: MaintenanceCostBand | null;
   expected_downtime: MaintenanceDurationBand | null;
@@ -525,9 +528,9 @@ export interface MaintenanceCostAnalysisRequest {
   action_code: MaintenanceActionCode;
   sop_id: string;
   sop_version: string;
-  currency: string;
-  currency_minor_unit: 0 | 2 | 3;
-  scenarios: Array<{
+  currency?: string;
+  currency_minor_unit?: 0 | 2 | 3;
+  scenarios?: Array<{
     execution_timing: MaintenanceExecutionTiming;
     parts_cost: CostRangeInput | null;
     labor_duration: DurationRangeInput | null;
@@ -538,15 +541,15 @@ export interface MaintenanceCostAnalysisRequest {
     expected_failure_loss: CostRangeInput | null;
     confidence: "high" | "medium" | "low";
   }>;
-  assumptions: string[];
-  input_sources: Array<{
+  assumptions?: string[];
+  input_sources?: Array<{
     input_name: string;
-    source_kind: "observed" | "quoted" | "policy" | "assumption";
+    source_kind: "observed" | "quoted" | "public_reference" | "policy" | "assumption";
     source_reference: string;
     confidence: "high" | "medium" | "low";
   }>;
-  price_version: string;
-  calculation_policy_version: string;
+  price_version?: string;
+  calculation_policy_version?: string;
 }
 
 export type ToolReplacementCostAnalysisRequest = MaintenanceCostAnalysisRequest;
