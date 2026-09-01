@@ -28,17 +28,55 @@ def _load_gold(scenario: str) -> dict:
     return json.loads((GOLD_ROOT / f"{scenario}.json").read_text(encoding="utf-8"))
 
 
+def _load_manifest() -> dict:
+    return json.loads((GOLD_ROOT / "manifest.json").read_text(encoding="utf-8"))
+
+
+def _manifest_cases() -> list[dict]:
+    return _load_manifest()["cases"]
+
+
 def test_agent_review_packet_gold_fixtures_match_schema() -> None:
     validator = Draft202012Validator(PACKET_SCHEMA)
 
-    for scenario in ("GS-002", "GS-004", "GS-007"):
-        payload = _load_gold(scenario)
+    manifest = _load_manifest()
+    assert manifest["case_selection_policy"]["minimum_cases"] == 8
+    assert len(_manifest_cases()) == 8
+
+    for case in _manifest_cases():
+        payload = _load_gold(case["scenario_id"])
         assert list(validator.iter_errors(payload)) == []
+        assert payload["asset_id"] == case["asset_id"]
         assert payload["closed_loop_boundary"]["mutation_allowed"] is False
         assert payload["sop_retrieval"]["mutation_allowed"] is False
         assert "auto_approve" in payload["closed_loop_boundary"]["forbidden_actions"]
         assert payload["source_refs"]
         assert "human_questions" not in payload
+
+
+def test_agent_review_packet_gold_manifest_covers_core_set() -> None:
+    manifest = _load_manifest()
+    cases = _manifest_cases()
+
+    assert [case["scenario_id"] for case in cases] == [
+        "GS-001",
+        "GS-002",
+        "GS-003",
+        "GS-004",
+        "GS-005",
+        "GS-006",
+        "GS-007",
+        "GS-008",
+    ]
+    covered = {item for case in cases for item in case["covers"]}
+    assert set(manifest["required_coverage"]).issubset(covered)
+    assert {
+        "normal_stable",
+        "low_confidence_attention",
+        "data_quality_hold",
+        "llm_offline_fixture",
+        "closed_loop_boundary_readonly",
+    }.issubset(covered)
 
 
 def test_gs002_gold_carries_tooling_sop_location_and_history_review() -> None:
@@ -198,13 +236,10 @@ def test_gs007_gold_fails_closed_for_data_quality_hold() -> None:
 
 def test_current_service_packets_keep_gold_contract_shape(tmp_path: Path) -> None:
     service = build_manufacturing_service(tmp_path / "agent-review-gold.db", root=ROOT)
-    cases = {
-        "GS-002": "CNC-S04-L04-01",
-        "GS-004": "CNC-S04-L02-03",
-        "GS-007": "CNC-S04-L05-01",
-    }
 
-    for scenario, asset_id in cases.items():
+    for case in _manifest_cases():
+        scenario = case["scenario_id"]
+        asset_id = case["asset_id"]
         current = service.agent_review_packet(asset_id, "manufacturing-demo-project")
         gold = _load_gold(scenario)
         assert current["schema_version"] == gold["schema_version"]

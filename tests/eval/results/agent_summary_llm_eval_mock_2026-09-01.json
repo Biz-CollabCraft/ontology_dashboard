@@ -1,0 +1,3773 @@
+{
+  "result_id": "agent-summary-llm-eval-mock-2026-09-01",
+  "recorded_at": "2026-09-01T03:53:34.256023+00:00",
+  "scope": "8x15 controlled mock Agent Review Summary LLM evaluation",
+  "eval_set_id": "agent-review-packet-gold-v1",
+  "mode": "mock",
+  "provider": "mock-openai-compatible",
+  "model": "gpt-4o-mini",
+  "sample_size": 120,
+  "case_count": 8,
+  "iterations_per_case": 15,
+  "pre_harness_gate": {
+    "ready_for_120_run": true,
+    "source": "tests/eval/results/agent_workflow_pre_harness_gate_2026-09-01.json",
+    "pr_154_cost_basis_main_recheck": "completed"
+  },
+  "aggregate": {
+    "sample_size": 120,
+    "accepted_llm_candidates": 120,
+    "acceptance_rate": 1.0,
+    "fallback_summaries": 0,
+    "fallback_rate": 0.0,
+    "contract_error_rows": 0,
+    "grounding": {
+      "rows_with_grounded_source_refs": 120,
+      "grounding_rate": 1.0
+    },
+    "latency_ms": {
+      "p50": 1.662,
+      "p95": 1.811,
+      "average": 1.67
+    },
+    "tokens": {
+      "average_total_tokens": 5158.875,
+      "total_tokens": 619065
+    },
+    "cost": {
+      "status": "estimated",
+      "estimated_total_cost": 0.169101,
+      "estimated_average_cost_per_summary": 0.00140917,
+      "currency": "USD",
+      "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+    }
+  },
+  "rows": [
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 2.844,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.69,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.676,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.677,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.656,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.63,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.62,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.622,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.827,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.678,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.639,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.624,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.667,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.62,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-001",
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.614,
+        "usage": {
+          "prompt_tokens": 3772,
+          "completion_tokens": 1431,
+          "total_tokens": 5203
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0014244,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.665,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.664,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.782,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.696,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.688,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.662,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.693,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.662,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.66,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.664,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.669,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.715,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.796,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.737,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-002",
+      "scenario_id": "GS-002",
+      "asset_id": "CNC-S04-L04-01",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.771,
+        "usage": {
+          "prompt_tokens": 4138,
+          "completion_tokens": 1477,
+          "total_tokens": 5615
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015069,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.777,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.769,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.808,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.738,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.737,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.868,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.707,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.657,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.655,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.649,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.647,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.654,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.643,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.665,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-003",
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.75,
+        "usage": {
+          "prompt_tokens": 4747,
+          "completion_tokens": 1478,
+          "total_tokens": 6225
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159885,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.53,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.508,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.503,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.505,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.499,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.493,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.493,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.496,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.51,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.492,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.687,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.558,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.525,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.516,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-004",
+      "scenario_id": "GS-004",
+      "asset_id": "CNC-S04-L02-03",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 12,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.513,
+        "usage": {
+          "prompt_tokens": 2574,
+          "completion_tokens": 1272,
+          "total_tokens": 3846
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0011493,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.679,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.663,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.66,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.658,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.679,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.736,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.663,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.654,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.659,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.659,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.657,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.656,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.67,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.643,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-005",
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.883,
+        "usage": {
+          "prompt_tokens": 4736,
+          "completion_tokens": 1473,
+          "total_tokens": 6209
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.0015942,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.876,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.709,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.669,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.649,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.668,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.642,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.642,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 2.061,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.714,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.641,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.665,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.644,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.638,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.652,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-006",
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 14,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.642,
+        "usage": {
+          "prompt_tokens": 3765,
+          "completion_tokens": 1433,
+          "total_tokens": 5198
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00142455,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.625,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.611,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.783,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.61,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.575,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.581,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.584,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.571,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.592,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.571,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.564,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.811,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.602,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.609,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-007",
+      "scenario_id": "GS-007",
+      "asset_id": "CNC-S04-L05-01",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 3,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.582,
+        "usage": {
+          "prompt_tokens": 1517,
+          "completion_tokens": 1254,
+          "total_tokens": 2771
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00097995,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 1,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.691,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 2,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.694,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 3,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.681,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 4,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.674,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 5,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.677,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 6,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.693,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 7,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.691,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 8,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.724,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 9,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.686,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 10,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.681,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 11,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.68,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 12,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.663,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 13,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.677,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 14,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.672,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    },
+    {
+      "case_id": "EVT-GS-008",
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "iteration": 15,
+      "provider": "mock-openai-compatible",
+      "model": "gpt-4o-mini",
+      "status": "accepted_llm_candidate",
+      "accepted": true,
+      "fallback": false,
+      "fallback_reason": null,
+      "validation_errors": [],
+      "grounded_source_refs": 15,
+      "source_ref_status": "grounded",
+      "llm": {
+        "duration_ms": 1.659,
+        "usage": {
+          "prompt_tokens": 4727,
+          "completion_tokens": 1477,
+          "total_tokens": 6204
+        },
+        "cost": {
+          "status": "estimated",
+          "estimated_total_cost": 0.00159525,
+          "input_price_per_1m_tokens": 0.15,
+          "output_price_per_1m_tokens": 0.6,
+          "currency": "USD",
+          "pricing_version": "configured-gpt-4o-mini-2026-09-01"
+        }
+      }
+    }
+  ],
+  "limits": [
+    "This run validates the 120-run harness and validator aggregation with controlled mock candidates.",
+    "This run does not call a live LLM provider and must not be reported as live model quality.",
+    "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation."
+  ],
+  "ready_for_live_120_run": true
+}

@@ -1,42 +1,67 @@
 {
   "eval_set_id": "agent-review-packet-gold-v1",
   "purpose": "pre_llm_release_gate",
-  "description": "Minimal gold fixtures for the read-only Agent Review Packet before live LLM summarization. The set proves SOP grounding presence, SOP absence with field location, data-quality fail-closed behavior, citation availability, and closed-loop mutation boundaries.",
+  "description": "Eight gold fixtures for the read-only Agent Review Packet before 8x15 LLM summarization. The set covers normal, warning, critical, low-confidence, data-quality hold, SOP present/absent, source-ref grounding, and closed-loop mutation boundaries.",
   "owner_domain": "product_evidence",
   "packet_schema_version": "agent-review-packet-v1.0",
   "summary_schema_version": "agent-review-summary-v1.0",
   "case_selection_policy": {
-    "minimum_cases": 3,
+    "minimum_cases": 8,
     "selection_basis": [
-      "one case with displayable SOP guidance and field inspection location",
-      "one critical case with no displayable SOP but with a location-backed inspection target",
-      "one data-quality hold case that must fail closed without inventing risk or actions"
+      "all GS-001..GS-008 core manufacturing fixtures are represented as Agent Review Packet gold files",
+      "normal, attention, warning, critical, and data-quality hold states are included",
+      "SOP-present and SOP-absent paths are both included",
+      "closed-loop available actions remain read-only context, not executable AI authority",
+      "one provider-offline fixture separates LLM availability/fallback from product evidence gaps"
     ],
     "non_goals": [
       "large-scale model benchmarking",
       "LLM-as-judge scoring",
-      "RAG retrieval metric scoring",
-      "agent tool-call trajectory evaluation"
+      "production RAG retrieval metric scoring",
+      "production LangGraph watcher migration"
     ]
   },
   "required_coverage": [
-    "sop_guidance_present",
-    "sop_guidance_absent",
-    "field_location_present",
-    "history_review_items_present",
-    "factor_bundle_to_single_inspection_target",
-    "data_quality_hold",
-    "data_quality_hold_review_draft",
-    "summary_structured_grounding",
-    "summary_natural_language_grounding",
-    "evidence_gap_completeness",
-    "inspection_focus_completeness",
-    "target_source_refs_grounded",
     "closed_loop_available_action_readonly",
     "closed_loop_boundary_readonly",
-    "no_inspection_target"
+    "continue_monitoring",
+    "data_quality_hold",
+    "data_quality_hold_review_draft",
+    "evidence_gap_completeness",
+    "factor_bundle_to_single_inspection_target",
+    "field_location_present",
+    "heat_dissipation_warning",
+    "history_review_items_present",
+    "inspection_focus_completeness",
+    "llm_offline_fixture",
+    "low_confidence_attention",
+    "multi_factor_warning",
+    "multiple_inspection_targets",
+    "no_inspection_target",
+    "normal_stable",
+    "sop_guidance_absent",
+    "sop_guidance_present",
+    "summary_natural_language_grounding",
+    "summary_structured_grounding",
+    "target_source_refs_grounded"
   ],
   "cases": [
+    {
+      "scenario_id": "GS-001",
+      "asset_id": "CNC-S01-L01-01",
+      "fixture_path": "tests/fixtures/agent_review_packets/GS-001.json",
+      "description": "Normal/stable case that should stay low-priority and continue monitoring while preserving model-expression source refs.",
+      "covers": [
+        "normal_stable",
+        "continue_monitoring",
+        "sop_guidance_absent",
+        "field_location_present",
+        "summary_structured_grounding",
+        "evidence_gap_completeness",
+        "target_source_refs_grounded",
+        "closed_loop_boundary_readonly"
+      ]
+    },
     {
       "scenario_id": "GS-002",
       "asset_id": "CNC-S04-L04-01",
@@ -48,6 +73,22 @@
         "history_review_items_present",
         "summary_structured_grounding",
         "summary_natural_language_grounding",
+        "evidence_gap_completeness",
+        "inspection_focus_completeness",
+        "target_source_refs_grounded",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "GS-003",
+      "asset_id": "CNC-S01-L04-03",
+      "fixture_path": "tests/fixtures/agent_review_packets/GS-003.json",
+      "description": "Heat dissipation warning with SOP guidance and medium production impact context.",
+      "covers": [
+        "heat_dissipation_warning",
+        "sop_guidance_present",
+        "field_location_present",
+        "summary_structured_grounding",
         "evidence_gap_completeness",
         "inspection_focus_completeness",
         "target_source_refs_grounded",
@@ -73,6 +114,39 @@
       ]
     },
     {
+      "scenario_id": "GS-005",
+      "asset_id": "CNC-S03-L01-03",
+      "fixture_path": "tests/fixtures/agent_review_packets/GS-005.json",
+      "description": "Multi-factor warning with tooling and drive-power inspection targets plus SOP guidance.",
+      "covers": [
+        "multi_factor_warning",
+        "sop_guidance_present",
+        "field_location_present",
+        "multiple_inspection_targets",
+        "summary_structured_grounding",
+        "evidence_gap_completeness",
+        "inspection_focus_completeness",
+        "target_source_refs_grounded",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "GS-006",
+      "asset_id": "CNC-S02-L02-02",
+      "fixture_path": "tests/fixtures/agent_review_packets/GS-006.json",
+      "description": "Low-confidence attention case that should remain bounded and report context limits without escalation claims.",
+      "covers": [
+        "low_confidence_attention",
+        "sop_guidance_absent",
+        "field_location_present",
+        "summary_structured_grounding",
+        "evidence_gap_completeness",
+        "inspection_focus_completeness",
+        "target_source_refs_grounded",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
       "scenario_id": "GS-007",
       "asset_id": "CNC-S04-L05-01",
       "fixture_path": "tests/fixtures/agent_review_packets/GS-007.json",
@@ -86,6 +160,22 @@
         "inspection_focus_completeness",
         "sop_guidance_absent",
         "no_inspection_target",
+        "closed_loop_boundary_readonly"
+      ]
+    },
+    {
+      "scenario_id": "GS-008",
+      "asset_id": "CNC-S04-L04-02",
+      "fixture_path": "tests/fixtures/agent_review_packets/GS-008.json",
+      "description": "Provider-offline style warning case with SOP guidance; useful for fallback and LLM availability separation.",
+      "covers": [
+        "llm_offline_fixture",
+        "sop_guidance_present",
+        "field_location_present",
+        "summary_structured_grounding",
+        "evidence_gap_completeness",
+        "inspection_focus_completeness",
+        "target_source_refs_grounded",
         "closed_loop_boundary_readonly"
       ]
     }
