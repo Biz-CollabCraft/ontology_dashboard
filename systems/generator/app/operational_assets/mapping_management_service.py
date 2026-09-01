@@ -100,3 +100,52 @@ class MappingManagementService:
             "published_at": datetime.now(timezone.utc).isoformat(),
             "idempotent": idempotent,
         }
+
+    def read_active(self, mapping_id: str) -> dict[str, Any]:
+        pointer = (self.root / mapping_id / "active.json").resolve()
+        if self.root not in pointer.parents or not pointer.is_file():
+            raise MappingManagementError(404, "MAPPING_ACTIVE_VERSION_NOT_FOUND", "활성 Mapping 버전이 없습니다.")
+        try:
+            payload = json.loads(pointer.read_text(encoding="utf-8"))
+            mapping = self.read(mapping_id, str(payload["mapping_version"]))
+            checksum = compute_mapping_canonical_sha256(mapping)
+            if checksum != payload.get("mapping_sha256"):
+                raise ValueError("active pointer checksum mismatch")
+            return payload
+        except MappingManagementError:
+            raise
+        except Exception as exc:
+            raise MappingManagementError(422, "MAPPING_ACTIVE_POINTER_INVALID", "활성 Mapping 포인터가 손상되었습니다.") from exc
+
+    def activate(self, mapping_id: str, mapping_version: str, mapping_sha256: str, job_id: str) -> dict[str, Any]:
+        mapping = self.read(mapping_id, mapping_version)
+        actual = compute_mapping_canonical_sha256(mapping)
+        if actual != mapping_sha256:
+            raise MappingManagementError(422, "MAPPING_ACTIVATION_CHECKSUM_MISMATCH", "발행 Mapping checksum이 활성화 요청과 일치하지 않습니다.")
+        mapping_dir = (self.root / mapping_id).resolve()
+        mapping_dir.mkdir(parents=True, exist_ok=True)
+        pointer = mapping_dir / "active.json"
+        if pointer.is_file():
+            current = self.read_active(mapping_id)
+            if current.get("mapping_version") == mapping_version and current.get("mapping_sha256") == actual:
+                return {**current, "idempotent": True}
+        payload = {
+            "mapping_id": mapping_id,
+            "mapping_version": mapping_version,
+            "mapping_sha256": actual,
+            "activated_by_job_id": job_id,
+            "activated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        temp = mapping_dir / f".active.tmp-{uuid.uuid4().hex}"
+        try:
+            with temp.open("w", encoding="utf-8") as stream:
+                stream.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp, pointer)
+            verified = self.read_active(mapping_id)
+            return {**verified, "idempotent": False}
+        except Exception as exc:
+            raise MappingManagementError(500, "MAPPING_ACTIVATION_FAILED", "Mapping 활성 포인터를 원자적으로 갱신하지 못했습니다.") from exc
+        finally:
+            temp.unlink(missing_ok=True)

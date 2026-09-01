@@ -264,6 +264,7 @@ class ExtractionManager:
         max_records: Optional[int] = None,
         mapping_data_override: Optional[dict[str, Any]] = None,
         raise_on_error: bool = False,
+        emit_runtime_handoff: bool = True,
     ) -> SourceProcessingResult:
         """Process a single gen_data source incrementally with single-writer concurrency guarantee."""
         source_key = source.source_uri
@@ -360,7 +361,7 @@ class ExtractionManager:
                     ]
 
                     # 4. Create Handoff Record and optionally deliver to Runtime Prediction Queue
-                    for ds in pub_res.published_datasets:
+                    for ds in pub_res.published_datasets if emit_runtime_handoff else []:
                         try:
                             manifest_path = Path(ds.manifest_uri)
                             if not manifest_path.is_file():

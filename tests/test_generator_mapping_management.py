@@ -37,3 +37,32 @@ def test_mapping_publish_rejects_different_content_for_same_version(monkeypatch,
     with pytest.raises(MappingManagementError) as error:
         service.publish("mapping-a", "v2", changed, changed_sha)
     assert error.value.code == "MAPPING_PUBLISH_CONFLICT"
+
+
+def test_mapping_activation_is_atomic_and_idempotent(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(PATHS, "mapping_root", tmp_path / "mappings")
+    service = MappingManagementService()
+    normalized, checksum = service.validate("mapping-a", "v2", _mapping())
+    service.publish("mapping-a", "v2", normalized, checksum)
+
+    first = service.activate("mapping-a", "v2", checksum, "job-1")
+    second = service.activate("mapping-a", "v2", checksum, "job-2")
+
+    assert first["idempotent"] is False
+    assert second["idempotent"] is True
+    assert second["activated_by_job_id"] == "job-1"
+    assert service.read_active("mapping-a")["mapping_sha256"] == checksum
+
+
+def test_mapping_activation_keeps_existing_pointer_on_checksum_failure(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(PATHS, "mapping_root", tmp_path / "mappings")
+    service = MappingManagementService()
+    normalized, checksum = service.validate("mapping-a", "v2", _mapping())
+    service.publish("mapping-a", "v2", normalized, checksum)
+    service.activate("mapping-a", "v2", checksum, "job-1")
+
+    with pytest.raises(MappingManagementError) as error:
+        service.activate("mapping-a", "v2", "f" * 64, "job-2")
+
+    assert error.value.code == "MAPPING_ACTIVATION_CHECKSUM_MISMATCH"
+    assert service.read_active("mapping-a")["activated_by_job_id"] == "job-1"

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from .operational_asset_schema import OperationalAssetInventory
 from .operational_asset_service import OperationalAssetInventoryService
-from .mapping_management_schema import MappingPublishRequest, MappingPublishResponse, MappingValidationRequest, MappingValidationResponse
+from .mapping_management_schema import MappingActivationRequest, MappingActivationResponse, MappingPublishRequest, MappingPublishResponse, MappingValidationRequest, MappingValidationResponse
 from .mapping_management_service import MappingManagementError, MappingManagementService
 from systems.generator.app.extraction.mapping_validator import compute_mapping_canonical_sha256
 
@@ -51,5 +51,21 @@ def validate_mapping(request: MappingValidationRequest):
 def publish_mapping(request: MappingPublishRequest):
     try:
         return MappingManagementService().publish(request.mapping_id, request.mapping_version, request.mapping, request.expected_sha256)
+    except MappingManagementError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+
+
+@router.get("/mappings/{mapping_id}/active", response_model=MappingActivationResponse, dependencies=[Depends(require_inventory_token)])
+def read_active_mapping(mapping_id: str):
+    try:
+        return {**MappingManagementService().read_active(mapping_id), "idempotent": True}
+    except MappingManagementError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+
+
+@router.post("/mappings/{mapping_id}/activate", response_model=MappingActivationResponse, dependencies=[Depends(require_inventory_token)])
+def activate_mapping(mapping_id: str, request: MappingActivationRequest):
+    try:
+        return MappingManagementService().activate(mapping_id, request.mapping_version, request.mapping_sha256, request.activated_by_job_id)
     except MappingManagementError as exc:
         raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc

@@ -29,6 +29,7 @@ from systems.generator.app.runtime_pipeline.pipeline_router import router as run
 from systems.generator.app.runtime_pipeline.pipeline_exception import PipelineBaseError
 from systems.generator.app.runtime_pipeline.pipeline_manager import PipelineManager
 from systems.generator.app.operational_assets import router as operational_assets_router
+from systems.generator.app.rebuild import router as rebuild_router
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +233,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(training_router)
     app.include_router(runtime_pipeline_router)
     app.include_router(operational_assets_router)
+    app.include_router(rebuild_router)
     app.include_router(training_compat_router)
 
 
