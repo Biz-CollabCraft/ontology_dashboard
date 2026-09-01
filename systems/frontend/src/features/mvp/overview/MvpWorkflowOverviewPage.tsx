@@ -363,8 +363,8 @@ function agentQuoteStatusLabel(value: string): string {
   return value;
 }
 
-const AGENT_QUOTE_KEYWORD_PATTERN = /(critical|warning|생산 영향이 [^,이며.]+|약 [0-9,]+건 손실 가능성|[0-9]+분 기준|공구\/마모 계통|동력 전달 계통|공구 매거진 및 스핀들 공구 체결부|주축 모터, 커플링, 동력 전달 하우징|기계 동력|공구 마모|과부하 지표|토크|점검 요청|요청됨 상태|참고 부품 후보는 [^.]+|최근 유사 이력은 [^.]+|셀 작업 순서 조정)/g;
-const AGENT_QUOTE_KEYWORD_EXACT_PATTERN = /^(critical|warning|생산 영향이 [^,이며.]+|약 [0-9,]+건 손실 가능성|[0-9]+분 기준|공구\/마모 계통|동력 전달 계통|공구 매거진 및 스핀들 공구 체결부|주축 모터, 커플링, 동력 전달 하우징|기계 동력|공구 마모|과부하 지표|토크|점검 요청|요청됨 상태|참고 부품 후보는 [^.]+|최근 유사 이력은 [^.]+|셀 작업 순서 조정)$/;
+const AGENT_QUOTE_KEYWORD_PATTERN = /(critical|warning|생산 영향이 [^,이며.]+|약 [0-9,]+건 손실 가능성|[0-9]+분 기준|공구\/마모 계통|동력 전달 계통|공구 매거진 및 스핀들 공구 체결부|주축 모터, 커플링, 동력 전달 하우징|기계 동력|공구 마모|과부하 지표|토크|알람|사진|관측값|기록|전달|정비\/생산 관리자|점검 요청|요청됨 상태|참고 부품 후보는 [^.]+|최근 유사 이력은 [^.]+|승인|우선순위|셀 작업 순서 조정)/g;
+const AGENT_QUOTE_KEYWORD_EXACT_PATTERN = /^(critical|warning|생산 영향이 [^,이며.]+|약 [0-9,]+건 손실 가능성|[0-9]+분 기준|공구\/마모 계통|동력 전달 계통|공구 매거진 및 스핀들 공구 체결부|주축 모터, 커플링, 동력 전달 하우징|기계 동력|공구 마모|과부하 지표|토크|알람|사진|관측값|기록|전달|정비\/생산 관리자|점검 요청|요청됨 상태|참고 부품 후보는 [^.]+|최근 유사 이력은 [^.]+|승인|우선순위|셀 작업 순서 조정)$/;
 
 function renderHighlightedAgentQuote(quote: string) {
   return quote.split(AGENT_QUOTE_KEYWORD_PATTERN).map((part, index) => {
@@ -373,6 +373,18 @@ function renderHighlightedAgentQuote(quote: string) {
       ? <strong key={`${part}-${index}`}>{agentQuoteStatusLabel(part)}</strong>
       : <span key={`${part}-${index}`}>{part}</span>;
   });
+}
+
+function agentRoleSummaryCaption(role: MvpRoleLens, label: string): string {
+  return role === "field_operator"
+    ? `${label} · 확인/기록/전달`
+    : `${label} · 영향/승인/순서`;
+}
+
+function agentRoleSummaryHint(role: MvpRoleLens): string {
+  return role === "field_operator"
+    ? "현장 위치에서 이상 근거를 기록하고 정비/생산 관리자에게 넘기는 범위입니다."
+    : "생산 영향, 승인 판단, 셀 작업 순서를 검토하는 범위입니다.";
 }
 
 function displayFactorySite(site: string): string {
@@ -1264,7 +1276,7 @@ export function MvpWorkflowOverviewPage({
   const fieldSummaryPartStatus = selectedEvent ? displayPartLabel(selectedEvent.sparePartAvailable) : "확인 필요";
   const fieldSummaryQuality = selectedAsset?.status === "data_quality_hold" ? "데이터 품질 확인이 먼저 필요합니다" : "관측 데이터로 바로 확인할 수 있습니다";
   const fieldSummary = selectedAsset
-    ? `${fieldSummaryPart}을 먼저 확인하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업요청 ID는 아직 없고, ${fieldSummaryQuality}.`
+    ? `${fieldSummaryPart}을 위치에서 확인하고 알람·사진·관측값을 기록해 전달하세요. 부품 상태는 ${fieldSummaryPartStatus}, 작업요청 ID는 아직 없고, ${fieldSummaryQuality}.`
     : "선택된 설비가 없어 점검 후보를 만들 수 없습니다.";
 
   useEffect(() => {
@@ -1304,7 +1316,7 @@ export function MvpWorkflowOverviewPage({
           <strong>
             {selectedAsset
               ? role === "field_operator"
-                ? `${displayAssetName(selectedAsset)} 기준으로 점검 후보를 먼저 봅니다`
+                ? `${displayAssetName(selectedAsset)} 기준으로 확인·기록·전달 항목을 봅니다`
                 : `생산 리스크 요약 · ${displayFactoryAssetName(selectedAsset.assetId) ?? displayAssetName(selectedAsset)} 우선 관리`
               : "선택된 설비가 없습니다"}
           </strong>
@@ -2111,7 +2123,10 @@ function AssetPreviewPanel({
                             <div className="mvp-agent-role-quotes" aria-label="현재 역할 AI 요약">
                               {currentRoleAgentSummaries.map((item) => (
                                 <figure key={`${agentSummary.asset_id}-role-${item.role}`}>
-                                  <figcaption>{item.label}</figcaption>
+                                  <figcaption>
+                                    <span>{agentRoleSummaryCaption(item.role, item.label)}</span>
+                                    <small>{agentRoleSummaryHint(item.role)}</small>
+                                  </figcaption>
                                   <blockquote>{renderHighlightedAgentQuote(item.quote)}</blockquote>
                                 </figure>
                               ))}
@@ -2265,7 +2280,7 @@ function AssetPreviewPanel({
               </div>
               <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} />
               <p className="mvp-action-note">
-                점검 요청 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
+                현장 확인, 이상 기록, 담당자 전달 범위의 점검 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
               </p>
             </section>
           ) : null}

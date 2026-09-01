@@ -32,13 +32,13 @@ const NAV_ITEMS: Array<{ id: MvpView; label: string; description: string; icon: 
 ];
 
 const ROLE_LABELS: Record<MvpRoleLens, { label: string; description: string; icon: typeof LayoutDashboard }> = {
-  field_operator: { label: "현장 관리자", description: "점검 요청 · 의심 부품 · 처리 작업", icon: Wrench },
-  process_manager: { label: "생산 관리자", description: "공정 리스크 · 계획 영향 · 진행 현황", icon: Factory },
+  field_operator: { label: "현장 관리자", description: "점검 위치 · 이상 기록 · 전달", icon: Wrench },
+  process_manager: { label: "생산 관리자", description: "생산 영향 · 승인 판단 · 순서 조정", icon: Factory },
 };
 
 const ROLE_SCREENS: Array<{ id: MvpRoleLens; label: string; description: string; icon: typeof LayoutDashboard }> = [
-  { id: "field_operator", label: "현장 관리자", description: "점검 요청 · 의심 부품 · 처리 작업", icon: Wrench },
-  { id: "process_manager", label: "생산 관리자", description: "공정 리스크 · 계획 영향 · 진행 현황", icon: Factory },
+  { id: "field_operator", label: "현장 관리자", description: "점검 위치 · 이상 기록 · 전달", icon: Wrench },
+  { id: "process_manager", label: "생산 관리자", description: "생산 영향 · 승인 판단 · 순서 조정", icon: Factory },
 ];
 
 const WORKFLOW_SYSTEM_ITEM = {
@@ -92,11 +92,11 @@ export function MvpShell({
     ? "map-report UI prototype의 보고서 화면과 선택 Event 브리핑을 하나의 사이드탭에서 전환합니다."
     : activeView !== "overview"
       ? role === "process_manager"
-        ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
-        : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다."
+        ? "생산 관리자가 생산 영향, 승인 판단, 라인 순서를 검토하는 관점입니다."
+        : "현장 담당자가 위치에서 이상을 확인하고 알람·사진·관측값을 기록해 전달하는 관점입니다."
     : role === "process_manager"
-      ? "생산 관리자가 위험·영향·대응을 빠르게 판단하는 관점입니다."
-      : "현장 담당자가 설비 근거와 수행 업무를 확인하는 관점입니다.";
+      ? "생산 관리자가 생산 영향, 승인 판단, 라인 순서를 검토하는 관점입니다."
+      : "현장 담당자가 위치에서 이상을 확인하고 알람·사진·관측값을 기록해 전달하는 관점입니다.";
   return (
     <main className="mvp-app">
       <header className="mvp-global-header">

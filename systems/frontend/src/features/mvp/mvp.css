@@ -813,7 +813,8 @@
 .mvp-system-log-line.is-running > span { color: #9cc5fa; }
 .mvp-agent-role-quotes { display: grid; gap: 6px; }
 .mvp-agent-role-quotes figure { display: grid; gap: 3px; margin: 0; padding: 7px 8px; border: 1px solid rgba(181,196,214,.14); border-radius: 7px; background: rgba(255,255,255,.018); }
-.mvp-agent-role-quotes figcaption { color: #cfe1f7; font-size: 11px; font-weight: 900; }
+.mvp-agent-role-quotes figcaption { display: grid; gap: 2px; color: #cfe1f7; font-size: 11px; font-weight: 900; }
+.mvp-agent-role-quotes figcaption small { color: var(--mvp-dim); font-size: 10px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
 .mvp-agent-role-quotes blockquote { margin: 0; color: var(--mvp-muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .mvp-agent-role-quotes blockquote strong { color: #edf5ff; font-weight: 950; }
 .mvp-agent-footnotes { display: grid; gap: 3px; margin: 0; padding-left: 0; list-style: none; border-top: 1px solid rgba(181,196,214,.1); padding-top: 6px; }
