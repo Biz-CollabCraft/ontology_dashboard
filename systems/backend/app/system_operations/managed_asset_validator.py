@@ -5,16 +5,18 @@ from typing import Any
 
 IDENTITY_FIELDS = {
     "preprocessing_plan": ("preprocessing_plan_id", "preprocessing_plan_version"),
-    "feature_schema": ("feature_schema_id", "feature_schema_version"),
-    "label_schema": ("label_schema_id", "label_schema_version"),
-    "history_requirement": ("history_requirement_id", "history_requirement_version"),
-    "training_config": ("training_config_id", "training_config_version"),
+    "feature_schema": (None, "feature_schema_version"),
+    "label_schema": (None, "label_schema_version"),
+    "history_requirement": (None, "history_requirement_version"),
+    "training_config": (None, "training_config_version"),
 }
 
 
 def create_template(asset_type: str, asset_id: str, version: str) -> dict[str, Any]:
     id_field, version_field = IDENTITY_FIELDS[asset_type]
-    payload: dict[str, Any] = {id_field: asset_id, version_field: version}
+    payload: dict[str, Any] = {version_field: version}
+    if id_field:
+        payload[id_field] = asset_id
     if asset_type == "preprocessing_plan":
         payload.update({"dataset_id": "", "dataset_version": "", "id_column": "asset_id", "time_column": "time", "column_rules": [], "duplicate_policy": "error", "missing_value_policy": "error"})
     elif asset_type == "feature_schema":
@@ -24,7 +26,7 @@ def create_template(asset_type: str, asset_id: str, version: str) -> dict[str, A
     elif asset_type == "history_requirement":
         payload.update({"minimum_history_rows": 1, "maximum_lookback_hours": 24, "sampling_interval_seconds": 3600, "sufficiency_policy": "both_required", "missing_history_policy": "fail"})
     elif asset_type == "training_config":
-        payload.update({"base_models": ["random_forest"], "random_seed": 42, "split_strategy": "asset_time_split", "split_ratio": {"train": 0.7, "validation": 0.15, "test": 0.15}, "primary_metric": "f1", "metrics": ["f1"], "target_name": "label", "hyperparameters": {}})
+        payload.update({"random_seed": 42, "split_strategy": "asset_time_split", "split_ratio": {"train": 0.7, "validation": 0.15, "test": 0.15}, "primary_metric": "f1", "metrics": ["f1"], "hyperparameters": {}})
     return payload
 
 
@@ -32,7 +34,7 @@ def validate_payload(asset_type: str, asset_id: str, version: str, payload: dict
     errors: list[dict] = []
     warnings: list[dict] = []
     id_field, version_field = IDENTITY_FIELDS[asset_type]
-    if payload.get(id_field) != asset_id or payload.get(version_field) != version:
+    if (id_field and payload.get(id_field) != asset_id) or payload.get(version_field) != version:
         errors.append({"code": "SYSTEM_CONTRACT_IDENTITY_INVALID", "path": "/", "message": "Asset identity fields cannot be changed"})
     if asset_type == "preprocessing_plan":
         if not payload.get("dataset_id") or not payload.get("dataset_version"):
@@ -48,7 +50,7 @@ def validate_payload(asset_type: str, asset_id: str, version: str, payload: dict
         if not isinstance(features, list):
             errors.append({"code": "SYSTEM_CONTRACT_FEATURES_INVALID", "path": "/features", "message": "features must be an array"})
         else:
-            names = [item.get("name") for item in features if isinstance(item, dict)]
+            names = [item if isinstance(item, str) else item.get("feature_name") for item in features if isinstance(item, (str, dict))]
             if None in names or len(names) != len(set(names)):
                 errors.append({"code": "SYSTEM_CONTRACT_FEATURE_NAME_DUPLICATE", "path": "/features", "message": "Feature names must be present and unique"})
     elif asset_type == "label_schema":
@@ -62,6 +64,10 @@ def validate_payload(asset_type: str, asset_id: str, version: str, payload: dict
         if not isinstance(payload.get("sampling_interval_seconds"), int) or payload.get("sampling_interval_seconds", 0) <= 0:
             errors.append({"code": "SYSTEM_CONTRACT_HISTORY_SAMPLING_MISSING", "path": "/sampling_interval_seconds", "message": "A positive sampling interval is required"})
     elif asset_type == "training_config":
+        allowed = {"training_config_version", "description", "split_strategy", "split_ratio", "random_seed", "hyperparameters", "metrics", "primary_metric"}
+        extra = sorted(set(payload) - allowed)
+        if extra:
+            errors.append({"code": "SYSTEM_CONTRACT_EXTRA_FIELD", "path": "/", "message": f"Unsupported Training Config fields: {extra}"})
         ratio = payload.get("split_ratio", {})
         if not isinstance(ratio, dict) or abs(sum(value for value in ratio.values() if isinstance(value, (int, float))) - 1.0) > 1e-9:
             errors.append({"code": "SYSTEM_CONTRACT_SPLIT_INVALID", "path": "/split_ratio", "message": "Split ratios must total 1"})

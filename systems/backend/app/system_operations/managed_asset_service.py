@@ -43,7 +43,8 @@ class ManagedAssetService:
             payload = json.loads(json.dumps(payload))
             from .managed_asset_validator import IDENTITY_FIELDS
             id_field, version_field = IDENTITY_FIELDS[body.asset_type]
-            payload[id_field] = body.asset_id
+            if id_field:
+                payload[id_field] = body.asset_id
             payload[version_field] = body.target_version
         else:
             payload = create_template(body.asset_type, body.asset_id, body.target_version)

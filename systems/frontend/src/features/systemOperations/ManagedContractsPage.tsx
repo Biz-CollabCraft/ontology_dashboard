@@ -13,7 +13,7 @@ function StructuredFields({ draft, payload, setPayload }: { draft: ManagedContra
   if (draft.asset_type === "feature_schema") return <div className="ops-form-grid">{field("feature_executor_version", "Feature executor version")}<label>Feature 수<input readOnly value={Array.isArray(payload.features) ? payload.features.length : 0} /></label></div>;
   if (draft.asset_type === "label_schema") return <div className="ops-form-grid">{field("prediction_task", "Prediction task")}{field("prediction_horizon_hours", "Horizon hours", "number")}{field("positive_interval", "Positive interval")}{field("active_failure_policy", "Active failure policy")}</div>;
   if (draft.asset_type === "history_requirement") return <div className="ops-form-grid">{field("minimum_history_rows", "Minimum rows", "number")}{field("maximum_lookback_hours", "Maximum lookback hours", "number")}{field("sampling_interval_seconds", "Sampling interval seconds", "number")}{field("sufficiency_policy", "Sufficiency policy")}{field("missing_history_policy", "Missing-history policy")}</div>;
-  return <div className="ops-form-grid">{field("split_strategy", "Split strategy")}{field("primary_metric", "Primary metric")}{field("target_name", "Target name")}{field("random_seed", "Random seed", "number")}</div>;
+  return <div className="ops-form-grid">{field("split_strategy", "Split strategy")}{field("primary_metric", "Primary metric")}{field("random_seed", "Random seed", "number")}</div>;
 }
 
 function DraftDetail({ id }: { id: string }) {

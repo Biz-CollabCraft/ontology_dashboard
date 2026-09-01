@@ -13,10 +13,10 @@ from systems.generator.generator_config import PATHS
 ASSET_TYPES = {"preprocessing_plan", "feature_schema", "label_schema", "history_requirement", "training_config"}
 IDENTITY_FIELDS = {
     "preprocessing_plan": ("preprocessing_plan_id", "preprocessing_plan_version"),
-    "feature_schema": ("feature_schema_id", "feature_schema_version"),
-    "label_schema": ("label_schema_id", "label_schema_version"),
-    "history_requirement": ("history_requirement_id", "history_requirement_version"),
-    "training_config": ("training_config_id", "training_config_version"),
+    "feature_schema": (None, "feature_schema_version"),
+    "label_schema": (None, "label_schema_version"),
+    "history_requirement": (None, "history_requirement_version"),
+    "training_config": (None, "training_config_version"),
 }
 
 
@@ -70,7 +70,7 @@ class ManagedContractService:
         if asset_type not in IDENTITY_FIELDS:
             raise ManagedContractError("SYSTEM_CONTRACT_ASSET_TYPE_UNSUPPORTED", "Unsupported managed asset type")
         id_field, version_field = IDENTITY_FIELDS[asset_type]
-        if payload.get(id_field) != asset_id or payload.get(version_field) != version:
+        if (id_field and payload.get(id_field) != asset_id) or payload.get(version_field) != version:
             raise ManagedContractError("SYSTEM_CONTRACT_IDENTITY_INVALID", "Payload identity does not match request")
         if asset_type == "preprocessing_plan" and (not payload.get("dataset_id") or not payload.get("dataset_version")):
             raise ManagedContractError("SYSTEM_CONTRACT_DATASET_IDENTITY_MISSING", "Preprocessing Plan requires dataset identity")
