@@ -268,7 +268,6 @@ function MvpApplicationController({ projectId }: { projectId: string }) {
       onRefresh={refresh}
       refreshing={loading}
       refreshIntervalSeconds={MVP_REFRESH_INTERVAL_SECONDS}
-      canReadSystemLogs={canReadSystemLogs}
       onLogout={signOut}
     >
       {error ? <div className="mvp-inline-warning" role="alert"><strong>새로고침 실패</strong><span>{error}</span></div> : null}
