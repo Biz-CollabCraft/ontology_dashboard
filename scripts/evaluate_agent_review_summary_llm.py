@@ -12,6 +12,7 @@ from app.mvp.agent_review_summary import (
     compose_deterministic_agent_review_summary,
     validate_agent_review_summary_contract,
 )
+from app.mvp.agent_review_summary_provider import AgentReviewSummaryProvider
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,14 +21,26 @@ DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def main() -> None:
+    _load_dotenv(ROOT / ".env")
     parser = argparse.ArgumentParser(
         description="Run the controlled Agent Review Summary LLM evaluation harness."
     )
+    parser.add_argument("--mode", choices=("mock", "live"), default="mock")
     parser.add_argument("--iterations", type=int, default=15)
     parser.add_argument("--provider", default="mock-openai-compatible")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.mode == "live":
+        os.environ.setdefault("LLM_PROVIDER", "openai-compatible")
+        os.environ["LLM_MODEL"] = args.model
+        from app.infra.llm import configured_provider
+
+        live_provider = AgentReviewSummaryProvider(configured_provider())
+        provider_name = live_provider.name
+    else:
+        live_provider = None
+        provider_name = args.provider
 
     manifest = _load_json(GOLD_ROOT / "manifest.json")
     packets = [
@@ -38,21 +51,23 @@ def main() -> None:
     for packet in packets:
         for iteration in range(1, args.iterations + 1):
             rows.append(
-                _run_mock_candidate(
+                _run_candidate(
                     packet=packet,
                     iteration=iteration,
-                    provider=args.provider,
+                    provider=provider_name,
                     model=args.model,
+                    mode=args.mode,
+                    live_provider=live_provider,
                 )
             )
 
     artifact = {
-        "result_id": f"agent-summary-llm-eval-mock-{_today_id()}",
+        "result_id": f"agent-summary-llm-eval-{args.mode}-{_today_id()}",
         "recorded_at": datetime.now(UTC).isoformat(),
-        "scope": "8x15 controlled mock Agent Review Summary LLM evaluation",
+        "scope": f"8x15 {args.mode} Agent Review Summary LLM evaluation",
         "eval_set_id": manifest["eval_set_id"],
-        "mode": "mock",
-        "provider": args.provider,
+        "mode": args.mode,
+        "provider": provider_name,
         "model": args.model,
         "sample_size": len(rows),
         "case_count": len(packets),
@@ -60,11 +75,7 @@ def main() -> None:
         "pre_harness_gate": _pre_harness_gate(),
         "aggregate": _aggregate(rows),
         "rows": rows,
-        "limits": [
-            "This run validates the 120-run harness and validator aggregation with controlled mock candidates.",
-            "This run does not call a live LLM provider and must not be reported as live model quality.",
-            "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation.",
-        ],
+        "limits": _limits(args.mode),
     }
     artifact["ready_for_live_120_run"] = (
         artifact["pre_harness_gate"]["ready_for_120_run"] is True
@@ -73,7 +84,7 @@ def main() -> None:
     )
 
     output = args.output or (
-        ROOT / "tests" / "eval" / "results" / f"agent_summary_llm_eval_mock_{_today_id()}.json"
+        ROOT / "tests" / "eval" / "results" / f"agent_summary_llm_eval_{args.mode}_{_today_id()}.json"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -87,16 +98,28 @@ def main() -> None:
     }, ensure_ascii=False, indent=2))
 
 
-def _run_mock_candidate(
+def _run_candidate(
     *,
     packet: dict[str, Any],
     iteration: int,
     provider: str,
     model: str,
+    mode: str,
+    live_provider: AgentReviewSummaryProvider | None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
-    candidate = compose_deterministic_agent_review_summary(packet)
-    candidate["mode"] = "llm"
+    try:
+        if mode == "live":
+            if live_provider is None:
+                raise RuntimeError("live_provider_unavailable")
+            candidate = live_provider.generate(packet)
+        else:
+            candidate = compose_deterministic_agent_review_summary(packet)
+            candidate["mode"] = "llm"
+        provider_error = None
+    except Exception as exc:  # provider, timeout, parsing, and schema failures fall back closed
+        candidate = compose_deterministic_agent_review_summary(packet)
+        provider_error = exc.__class__.__name__
     errors = validate_agent_review_summary_contract(candidate, packet=packet)
     duration_ms = round((time.perf_counter() - started) * 1000, 3)
     prompt_tokens = _estimate_tokens(packet)
@@ -107,18 +130,19 @@ def _run_mock_candidate(
         "total_tokens": prompt_tokens + completion_tokens,
     }
     cost = _estimated_cost(usage)
-    accepted = not errors
+    accepted = provider_error is None and not errors
     return {
         "case_id": packet["snapshot_basis"]["event_id"],
         "scenario_id": packet["snapshot_basis"]["event_id"].replace("EVT-", ""),
         "asset_id": packet["asset_id"],
         "iteration": iteration,
+        "mode": mode,
         "provider": provider,
         "model": model,
         "status": "accepted_llm_candidate" if accepted else "fallback_summary",
         "accepted": accepted,
         "fallback": not accepted,
-        "fallback_reason": None if accepted else "validation_failed",
+        "fallback_reason": None if accepted else provider_error or "validation_failed",
         "validation_errors": errors,
         "grounded_source_refs": _grounded_source_ref_count(candidate, packet),
         "source_ref_status": "grounded" if not errors else "validation_failed",
@@ -128,6 +152,23 @@ def _run_mock_candidate(
             "cost": cost,
         },
     }
+
+
+def _run_mock_candidate(
+    *,
+    packet: dict[str, Any],
+    iteration: int,
+    provider: str,
+    model: str,
+) -> dict[str, Any]:
+    return _run_candidate(
+        packet=packet,
+        iteration=iteration,
+        provider=provider,
+        model=model,
+        mode="mock",
+        live_provider=None,
+    )
 
 
 def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -235,6 +276,37 @@ def _ratio(numerator: int, denominator: int) -> float | None:
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key and key not in os.environ:
+            os.environ[key] = value.strip().strip('"').strip("'")
+
+
+def _limits(mode: str) -> list[str]:
+    common = [
+        "Configured-rate cost is an estimate from environment variables, not provider billing reconciliation.",
+        "Token counts are heuristic because the current provider port returns parsed JSON without provider usage metadata.",
+    ]
+    if mode == "live":
+        return [
+            "This run calls the configured live LLM provider and measures end-to-end provider call duration plus local validation time.",
+            "Latency includes client-side request/response time and model response time, but not a separate provider-side network breakdown.",
+            *common,
+        ]
+    return [
+        "This run validates the 120-run harness and validator aggregation with controlled mock candidates.",
+        "This run does not call a live LLM provider and must not be reported as live model quality.",
+        *common,
+    ]
 
 
 def _display_path(path: Path) -> str:
