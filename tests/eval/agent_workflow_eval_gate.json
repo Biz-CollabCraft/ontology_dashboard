@@ -70,11 +70,48 @@
     "spare_part_context",
     "similar_event_context"
   ],
+  "adoption_gate_policy": {
+    "meaning": "LangGraph, GraphRAG, Vector DB, and LlamaIndex remain eligible for production adoption when their release gates pass; they are deferred by current evidence, not rejected.",
+    "current_production_default": {
+      "workflow_engine": "simple",
+      "retrieval_source": "structured_adapter_context_inside_agent_review_packet",
+      "authority_model": "ai_read_only_closed_loop_mutation_forbidden"
+    },
+    "current_limitations": [
+      "langgraph_gate_measures_tool_trajectory_not_final_summary_quality",
+      "rag_gate_does_not_yet_measure_context_precision_recall_or_source_freshness",
+      "runtime_rag_not_bound_to_packet_snapshot_yet",
+      "pr_154_cost_basis_main_recheck_pending"
+    ]
+  },
   "independent_runtime_tool_definition": {
     "meaning": "a domain source called as a separately authorized and observable runtime tool or service, not a method on the same fixture adapter",
     "requires_separate_failure_boundary": true,
     "requires_separate_retry_policy": true,
     "requires_tool_trajectory_eval": true
+  },
+  "retrieval_runtime_decision_gate": {
+    "current_decision": "defer_production_graphrag_vector_db_llamaindex",
+    "current_runtime_source": "structured_adapter_context_inside_agent_review_packet",
+    "defer_when_all": [
+      "sop_context_is_structured_fixture_metadata",
+      "ontology_context_is_projected_as_packet_source_refs",
+      "context_precision_recall_not_yet_measured",
+      "retrieval_freshness_contract_not_yet_release_gated",
+      "packet_snapshot_alignment_is_the_primary_current_gate"
+    ],
+    "adopt_when_all": [
+      "unstructured_or_multi_version_sop_documents_enter_runtime",
+      "retrieval_context_precision_recall_becomes_release_gate",
+      "retrieved_chunks_have_source_sha256_and_freshness_metadata",
+      "retrieval_results_are_bound_to_agent_review_packet_snapshot",
+      "llm_summary_validation_rejects_uncited_retrieval_claims"
+    ],
+    "candidate_stack": [
+      "GraphRAG",
+      "Vector DB",
+      "LlamaIndex"
+    ]
   },
   "forbidden_runtime_shortcuts": [
     "direct_llm_domain_database_reads",

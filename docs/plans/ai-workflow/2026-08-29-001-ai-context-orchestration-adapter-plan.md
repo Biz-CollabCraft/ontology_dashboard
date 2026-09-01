@@ -393,16 +393,17 @@ The packet must preserve all displayable expressions that Backend can trust afte
 
 Current state:
 
-- Fixture-built Product Result artifacts already preserve `top_factors`, `ranked_factor_evidence`, observation/history windows, sensor evidence, component hypotheses, recommended actions, source fields, evidence gaps, and provenance.
-- Generator batch promotion currently preserves score, selected threshold, model/schema checksums, lineage, asset criticality, and Backend policy output, but it synthesizes generic factors such as `generator_failure_score`, `model_selected_threshold`, `asset_criticality_adjustment`, and `generator_model_artifact_manifest`.
-- Therefore the live Generator path is a safe minimum promotion path, not yet a full expression-preserving path.
+- Fixture-built Product Result artifacts preserve `top_factors`, `ranked_factor_evidence`, observation/history windows, sensor evidence, component hypotheses, recommended actions, source fields, evidence gaps, and provenance.
+- Generator batch promotion now accepts the optional `results[].explanation` contract from `prediction-result-batch.schema.json`, including `top_factors[]`, `confidence_label`, `explanation_method`, `feature_snapshot_ref`, `sensor_window_ref`, `display_labels`, and checksum-backed factor `source_ref` values.
+- Backend materialization absorbs trusted Generator explanation into Product Result `top_factors`, `ranked_factor_evidence`, and `evidence_payload.source_fields` after batch validation. The Backend still owns `status_grade`, policy mapping, and `recommended_action`.
+- If Generator explanation is absent, promotion falls back to generic but explicit factors such as `generator_failure_score`, `model_selected_threshold`, `asset_criticality_adjustment`, and `generator_model_artifact_manifest`; this is a safe minimum path, not a synthesized normal explanation.
+- Agent Review Packet exposes trusted model expressions through `model_expression_context`, while keeping untrusted raw Generator payloads out of the LLM prompt.
 
-Required next contract work:
+Remaining contract gate before 120-run evaluation:
 
-- Add optional Generator batch expression fields, for example `explanation.top_factors[]`, `feature_values` or `feature_snapshot_ref`, `sensor_window_ref`, `display_labels`, `confidence_label`, `explanation_method`, and checksum-backed `source_refs`.
-- Backend materialization may absorb these only after source/checksum validation. The Backend still owns `status_grade`, policy mapping, and `recommended_action`.
-- Expressions that are present but not promotable should be recorded as `unpromoted_expression_refs` or a similar diagnostic field, not silently lost and not shown as trusted facts.
-- Agent Review Packet should expose trusted model expressions through `model_expression_context`, while keeping untrusted raw Generator payloads out of the LLM prompt.
+- Ensure the 8-case Agent Review Packet gold set includes at least one Generator batch explanation case so `model_expression_context.top_factors[].source_ref` and display labels are covered by the LLM eval input set.
+- Keep absent expression data as a visible evidence gap or safe generic fallback; do not silently turn it into normal field evidence.
+- If future Generator payloads include expression blocks that fail source/checksum validation, record them as unpromoted expression diagnostics before they are eligible for trusted packet exposure.
 
 Closed-loop history should be handled the same way: use existing work-order, inspection-result, maintenance-action, maintenance-event, equipment-state, and activity tables as source records, then project a read-only `maintenance_history_summary` for AI. Do not let AI create or mutate those records.
 
@@ -498,9 +499,26 @@ Useful but deferred metrics:
 - Summary freshness and stale materialization rate.
 - Cost and latency per materialized summary.
 
+## Adoption Gates for LangGraph and RAG Runtime
+
+LangGraph, GraphRAG, Vector DB, and LlamaIndex are not rejected technologies in this workflow. They remain open adoption gates: if their trigger conditions are met, the system can promote them behind the existing packet, workflow, and validation boundaries without changing the AI authority model.
+
+The current production default stays conservative: structured adapter context enters the `AgentReviewPacket`, `AgentReviewSummaryWorkflow` runs as the simple engine, and the validator rejects unsupported or authority-leaking output. This is enough while domain context is resolved inside one service boundary and SOP/ontology context is structured metadata rather than live unstructured retrieval.
+
+LangGraph becomes a production candidate when the workflow needs graph-owned orchestration, not merely because multiple context facets exist. Adoption is justified when independently authorized runtime tools need ordered calls, node-specific retry/resume state, durable human pause/resume, or branching graph state that no longer fits a service method. The current experiment proves the candidate path can preserve the same read-only tool trajectory as the simple engine; it does not yet prove that switching the production watcher/runtime would reduce complexity or risk.
+
+GraphRAG, Vector DB, or LlamaIndex become production candidates when SOP and ontology evidence stop being reliably represented by structured adapter metadata. Adoption is justified when site SOPs arrive as free-form PDFs or overlapping versions, retrieval context precision/recall becomes a release gate, retrieved chunks carry source checksum and freshness metadata, and every retrieval result is bound back to the packet snapshot consumed by UI, Report, AI, and Closed-loop. Until those metrics exist, runtime RAG would add moving evidence without proving better groundedness.
+
+Current limitations:
+
+- The LangGraph gate currently measures tool trajectory parity and boundary behavior, not final Korean summary quality or production watcher reliability.
+- The RAG-family gate currently records adoption criteria, but does not yet measure retrieval precision, retrieval recall, source freshness, or chunk-level citation coverage.
+- The 120-run LLM evaluation should report that the runtime source is structured adapter context unless a separate retrieval eval passes first.
+- PR #154 cost-basis must be merged into `main` and rechecked before final 120-run claims that compare AI summary evidence and Closed-loop recommendation input on the same trusted snapshot.
+
 ## Scope Boundaries
 
-Deferred:
+Conditionally deferred until adoption gates pass:
 
 - Production GraphRAG store.
 - Vector DB or LlamaIndex runtime retrieval.
