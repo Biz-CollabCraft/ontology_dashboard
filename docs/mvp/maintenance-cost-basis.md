@@ -13,6 +13,37 @@
 않는다. 공개자료는 참고값이고, 공개자료로 확정할 수 없는 값은
 `synthetic_scenario_estimate` 또는 명시적 데모 정책으로 구분한다.
 
+### 1.1 Runtime 적용 조건
+
+비용 기준의 `applicability`는 설명용 문구가 아니라 Backend 실행 조건이다. 점검
+결과의 구조화된 checklist에서 아래 사실이 모두 확인된 경우에만 해당 basis를
+사용한다. 항목이 없거나 `not_checked`이면 알 수 없는 값으로 처리하고 비용 snapshot을
+생성하지 않는다.
+
+| checklist item | `pass` 의미 | `fail` 의미 |
+|---|---|---|
+| `cost-basis-in-house` | 사내 작업 가능 | 외부 작업 필요 |
+| `cost-basis-spare-part-available` | 필요한 예비부품 확보 | 예비부품 미확보 |
+| `cost-basis-vendor-dispatch-required` | 외부 업체 출동 필요 | 외부 출동 불필요 |
+| `cost-basis-component-replacement-required` | 부품 교체 필요 | 부품 교체 불필요 |
+
+Action별 필수 조건은 다음과 같다.
+
+```text
+TOOL_REPLACEMENT
+  execution_mode = in_house
+  spare_part_available = true
+  vendor_dispatch_required = false
+
+COOLING_SYSTEM_RESTORE
+  execution_mode = in_house
+  vendor_dispatch_required = false
+  component_replacement_required = false
+```
+
+조건이 누락되거나 일치하지 않으면 고정된 부품비·외주비 0원을 적용하지 않고
+fail-closed한다. 이 경우 별도 견적 또는 별도 Action/basis가 필요하다.
+
 ## 2. TOOL_REPLACEMENT 기준값 요약
 
 | 항목 | Low | Base | High | 분류 |

@@ -23,6 +23,7 @@ from app.maintenance.api_schema import (
 from app.maintenance.cost_analysis_schema import ExecutionTiming
 from app.maintenance.cost_basis import (
     CoolingSystemRestoreCostBasis,
+    CostBasisResolutionContext,
     ToolReplacementCostBasis,
 )
 from app.maintenance.maintenance_domain import IdempotencyConflict
@@ -146,14 +147,22 @@ class StaticCostBasisProvider:
     def __init__(self, basis: ToolReplacementCostBasis) -> None:
         self.basis = basis
 
-    def tool_replacement_basis(self, *, calculated_at: datetime) -> ToolReplacementCostBasis:
-        del calculated_at
+    def tool_replacement_basis(
+        self,
+        *,
+        calculated_at: datetime,
+        context: CostBasisResolutionContext,
+    ) -> ToolReplacementCostBasis:
+        del calculated_at, context
         return self.basis
 
     def cooling_system_restore_basis(
-        self, *, calculated_at: datetime
+        self,
+        *,
+        calculated_at: datetime,
+        context: CostBasisResolutionContext,
     ) -> CoolingSystemRestoreCostBasis:
-        del calculated_at
+        del calculated_at, context
         return CoolingSystemRestoreCostBasis.model_validate(self.basis.model_dump())
 
 
@@ -233,6 +242,17 @@ def inspection_result(outcome: str = "maintenance_recommended") -> InspectionRes
         outcome=outcome,
         checklist=(
             {"item_id": "tool-wear", "status": "fail", "note": "limit exceeded"},
+            {"item_id": "cost-basis-in-house", "status": "pass", "note": ""},
+            {
+                "item_id": "cost-basis-spare-part-available",
+                "status": "pass",
+                "note": "",
+            },
+            {
+                "item_id": "cost-basis-vendor-dispatch-required",
+                "status": "fail",
+                "note": "",
+            },
         ),
         measurements=(
             {"name": "tool_wear_min", "value": 221, "unit": "min"},
@@ -254,6 +274,22 @@ def cooling_cost_analysis_request() -> MaintenanceCostAnalysisCreateRequest:
         action_code="COOLING_SYSTEM_RESTORE",
         sop_id="SOP-DEMO-COOLING-SYSTEM-001",
         sop_version="demo-2026-08-31",
+    )
+
+
+def cooling_cost_applicability_checklist() -> tuple[dict[str, str], ...]:
+    return (
+        {"item_id": "cost-basis-in-house", "status": "pass", "note": ""},
+        {
+            "item_id": "cost-basis-vendor-dispatch-required",
+            "status": "fail",
+            "note": "",
+        },
+        {
+            "item_id": "cost-basis-component-replacement-required",
+            "status": "fail",
+            "note": "",
+        },
     )
 
 
@@ -1099,6 +1135,46 @@ def test_cost_analysis_rejects_no_action_inspection_without_persisting(tmp_path)
     ) == ()
 
 
+def test_cost_analysis_fails_closed_when_applicability_facts_are_missing(
+    tmp_path,
+) -> None:
+    loop = service(tmp_path)
+    _work_order_id, inspection_result_id = run_completed_inspection(
+        loop,
+        result_payload=InspectionResultCreateRequest(
+            outcome="maintenance_recommended",
+            checklist=(
+                {
+                    "item_id": "tool-wear",
+                    "status": "fail",
+                    "note": "limit exceeded",
+                },
+            ),
+            measurements=(
+                {"name": "tool_wear_min", "value": 221, "unit": "min"},
+            ),
+            findings=("tool wear limit exceeded",),
+            note="cost-basis applicability was not established",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="explicit applicability facts"):
+        loop.calculate_tool_replacement_cost(
+            organization_id="org-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            inspection_result_id=inspection_result_id,
+            payload=cost_analysis_request(),
+            actor_id="manager-1",
+            idempotency_key="cost-analysis-missing-applicability-001",
+        )
+
+    assert loop.repository.list_cost_analyses(
+        workspace_id="workspace-1",
+        inspection_result_id=inspection_result_id,
+    ) == ()
+
+
 def test_cost_analysis_rejects_unrelated_maintenance_candidate_without_persisting(
     tmp_path,
 ) -> None:
@@ -1113,6 +1189,7 @@ def test_cost_analysis_rejects_unrelated_maintenance_candidate_without_persistin
                     "status": "fail",
                     "note": "coolant flow is restricted",
                 },
+                *cooling_cost_applicability_checklist(),
             ),
             measurements=(
                 {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
@@ -1153,6 +1230,7 @@ def test_cooling_action_candidate_and_cost_analysis_are_canonical_and_append_onl
                     "status": "fail",
                     "note": "coolant flow is restricted",
                 },
+                *cooling_cost_applicability_checklist(),
             ),
             measurements=(
                 {"name": "coolant_temperature_c", "value": 92, "unit": "C"},
@@ -1242,6 +1320,7 @@ def test_cooling_vertical_slice_preserves_action_and_typed_overlay_patch(tmp_pat
                     "status": "fail",
                     "note": "coolant flow is restricted",
                 },
+                *cooling_cost_applicability_checklist(),
             ),
             measurements=(
                 {"name": "coolant_temperature_c", "value": 92, "unit": "C"},

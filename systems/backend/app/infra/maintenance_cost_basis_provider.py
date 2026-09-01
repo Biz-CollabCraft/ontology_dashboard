@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from app.maintenance.cost_analysis_schema import ExecutionTiming
 from app.maintenance.cost_basis import (
     CoolingSystemRestoreCostBasis,
+    CostBasisResolutionContext,
     ToolReplacementCostBasis,
 )
 
@@ -114,6 +115,31 @@ class JsonMaintenanceCostBasisProvider:
         return document
 
     @staticmethod
+    def _require_applicable(
+        *,
+        document: dict[str, Any],
+        context: CostBasisResolutionContext,
+    ) -> None:
+        requirements = document.get("applicability")
+        if not isinstance(requirements, dict) or not requirements:
+            raise ValueError("cost basis must declare typed applicability requirements")
+        actual = context.model_dump()
+        reasons = [
+            (
+                f"missing_{name}"
+                if actual.get(name) is None
+                else f"{name}_mismatch"
+            )
+            for name, expected in requirements.items()
+            if actual.get(name) != expected
+        ]
+        if reasons:
+            raise ValueError(
+                f"{document.get('action_code')} cost basis is not applicable: "
+                + ", ".join(reasons)
+            )
+
+    @staticmethod
     def _execution_rate(
         *,
         assumed_execution_at: datetime,
@@ -133,7 +159,10 @@ class JsonMaintenanceCostBasisProvider:
         )
 
     def tool_replacement_basis(
-        self, *, calculated_at: datetime
+        self,
+        *,
+        calculated_at: datetime,
+        context: CostBasisResolutionContext,
     ) -> ToolReplacementCostBasis:
         if calculated_at.tzinfo is None or calculated_at.utcoffset() is None:
             raise ValueError("calculated_at must include a timezone offset")
@@ -141,6 +170,7 @@ class JsonMaintenanceCostBasisProvider:
             self.tool_replacement_path,
             action_code="TOOL_REPLACEMENT",
         )
+        self._require_applicable(document=document, context=context)
         scope = document.get("replacement_scope", {})
         if scope.get("quantity") != 1 or scope.get("unit") != "piece":
             raise ValueError("TOOL_REPLACEMENT cost basis must describe exactly one insert")
@@ -292,7 +322,10 @@ class JsonMaintenanceCostBasisProvider:
         )
 
     def cooling_system_restore_basis(
-        self, *, calculated_at: datetime
+        self,
+        *,
+        calculated_at: datetime,
+        context: CostBasisResolutionContext,
     ) -> CoolingSystemRestoreCostBasis:
         if calculated_at.tzinfo is None or calculated_at.utcoffset() is None:
             raise ValueError("calculated_at must include a timezone offset")
@@ -302,6 +335,7 @@ class JsonMaintenanceCostBasisProvider:
             self.cooling_system_restore_path,
             action_code="COOLING_SYSTEM_RESTORE",
         )
+        self._require_applicable(document=document, context=context)
         scope = document.get("restoration_scope", {})
         if scope.get("component_replacement_included") is not False:
             raise ValueError(

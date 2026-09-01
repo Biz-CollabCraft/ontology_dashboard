@@ -45,6 +45,7 @@ from .maintenance_domain import (
     create_inspection_work_order,
     create_operations_manual_recommendation,
     create_work_order_for_recommendation,
+    derive_cost_basis_resolution_context,
     derive_cooling_system_restore_action_candidate,
     derive_tool_replacement_action_candidate,
     plan_maintenance_action,
@@ -702,13 +703,17 @@ class MaintenanceLoopService:
         timestamp = calculated_at or datetime.now(timezone.utc)
         if self.cost_basis_provider is None:
             raise ValueError("Maintenance cost-basis provider is unavailable")
+        resolution_context = derive_cost_basis_resolution_context(inspection_result)
+        resolution_context.require_complete_for(action_code.value)
         if action_code is MaintenanceActionCode.TOOL_REPLACEMENT:
             cost_basis = self.cost_basis_provider.tool_replacement_basis(
-                calculated_at=timestamp
+                calculated_at=timestamp,
+                context=resolution_context,
             )
         else:
             cost_basis = self.cost_basis_provider.cooling_system_restore_basis(
-                calculated_at=timestamp
+                calculated_at=timestamp,
+                context=resolution_context,
             )
         result = calculate_maintenance_cost_scenarios(
             MaintenanceCostAnalysisInput(

@@ -2,6 +2,11 @@
   "schema_version": "maintenance-cost-input-basis-v1.0",
   "basis_id": "cooling-restore-demo-economic-basis-2026-09",
   "action_code": "COOLING_SYSTEM_RESTORE",
+  "applicability": {
+    "execution_mode": "in_house",
+    "vendor_dispatch_required": false,
+    "component_replacement_required": false
+  },
   "description": "Demo economic inputs for an in-house cooling-path restoration. The scope is cleaning, clearing restrictions, and functional verification without replacing a fan, pump, chiller, or other component. Public references and explicit synthetic assumptions are not an actual site quotation, payroll record, MES result, or guaranteed maintenance cost.",
   "restoration_scope": {
     "component_id": "cooling_system",

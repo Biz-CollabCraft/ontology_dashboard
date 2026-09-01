@@ -2,6 +2,11 @@
   "schema_version": "maintenance-cost-input-basis-v1.0",
   "basis_id": "tool-insert-demo-economic-basis-2026-09",
   "action_code": "TOOL_REPLACEMENT",
+  "applicability": {
+    "execution_mode": "in_house",
+    "spare_part_available": true,
+    "vendor_dispatch_required": false
+  },
   "description": "Demo economic inputs for replacing exactly one carbide cutting insert. Public references, internal contract fixtures, and explicit synthetic policy assumptions are recorded separately; none of the values are an actual site quotation, payroll record, MES result, or guaranteed maintenance cost.",
   "replacement_scope": {
     "component_id": "tooling",

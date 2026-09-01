@@ -8,6 +8,7 @@ import pytest
 
 from app.infra.maintenance_cost_basis_provider import JsonMaintenanceCostBasisProvider
 from app.maintenance import CostAnalysisBasis, calculate_maintenance_cost_scenarios
+from app.maintenance.cost_basis import CostBasisResolutionContext
 from app.maintenance.cost_calculator import MaintenanceCostAnalysisInput
 
 
@@ -36,10 +37,23 @@ def load_basis() -> dict:
     return json.loads(COOLING_BASIS_PATH.read_text(encoding="utf-8"))
 
 
+def applicable_context() -> CostBasisResolutionContext:
+    return CostBasisResolutionContext(
+        execution_mode="in_house",
+        vendor_dispatch_required=False,
+        component_replacement_required=False,
+    )
+
+
 def test_cooling_basis_has_a_bounded_no_replacement_scope() -> None:
     basis = load_basis()
 
     assert basis["action_code"] == "COOLING_SYSTEM_RESTORE"
+    assert basis["applicability"] == {
+        "execution_mode": "in_house",
+        "vendor_dispatch_required": False,
+        "component_replacement_required": False,
+    }
     assert basis["restoration_scope"]["operation"] == "clean_clear_and_verify"
     assert basis["restoration_scope"]["component_replacement_included"] is False
     assert "fan replacement" in basis["restoration_scope"]["excluded_operations"]
@@ -67,7 +81,10 @@ def test_cooling_basis_marks_site_unknowns_as_demo_assumptions() -> None:
 
 def test_cooling_provider_uses_server_time_and_keeps_future_risk_unknown() -> None:
     calculated_at = datetime(2026, 9, 1, 1, 0, tzinfo=UTC)
-    basis = provider().cooling_system_restore_basis(calculated_at=calculated_at)
+    basis = provider().cooling_system_restore_basis(
+        calculated_at=calculated_at,
+        context=applicable_context(),
+    )
 
     assert basis.price_version == "cooling-restore-demo-economic-basis-2026-09"
     assert basis.calculation_policy_version == "maintenance-cost-policy-v2"
@@ -114,7 +131,10 @@ def test_cooling_server_time_selects_korean_night_rate_boundaries(
     expected_type: str,
     expected_rate: int,
 ) -> None:
-    basis = provider().cooling_system_restore_basis(calculated_at=calculated_at)
+    basis = provider().cooling_system_restore_basis(
+        calculated_at=calculated_at,
+        context=applicable_context(),
+    )
     immediate = next(
         item for item in basis.scenarios if item.execution_timing.value == "immediate"
     )
@@ -127,13 +147,47 @@ def test_cooling_server_time_selects_korean_night_rate_boundaries(
 def test_cooling_cost_basis_rejects_timezone_naive_server_time() -> None:
     with pytest.raises(ValueError, match="timezone offset"):
         provider().cooling_system_restore_basis(
-            calculated_at=datetime(2026, 9, 1, 10, 0)
+            calculated_at=datetime(2026, 9, 1, 10, 0),
+            context=applicable_context(),
+        )
+
+
+@pytest.mark.parametrize(
+    "context",
+    (
+        CostBasisResolutionContext(
+            execution_mode="external",
+            vendor_dispatch_required=False,
+            component_replacement_required=False,
+        ),
+        CostBasisResolutionContext(
+            execution_mode="in_house",
+            vendor_dispatch_required=True,
+            component_replacement_required=False,
+        ),
+        CostBasisResolutionContext(
+            execution_mode="in_house",
+            vendor_dispatch_required=False,
+            component_replacement_required=True,
+        ),
+    ),
+)
+def test_cooling_cost_basis_rejects_inapplicable_operational_context(
+    context: CostBasisResolutionContext,
+) -> None:
+    with pytest.raises(ValueError, match="cost basis is not applicable"):
+        provider().cooling_system_restore_basis(
+            calculated_at=datetime(2026, 9, 1, 1, 0, tzinfo=UTC),
+            context=context,
         )
 
 
 def test_cooling_basis_calculates_immediate_only_and_fails_closed_elsewhere() -> None:
     calculated_at = datetime(2026, 9, 1, 1, 0, tzinfo=UTC)
-    basis = provider().cooling_system_restore_basis(calculated_at=calculated_at)
+    basis = provider().cooling_system_restore_basis(
+        calculated_at=calculated_at,
+        context=applicable_context(),
+    )
     result = calculate_maintenance_cost_scenarios(
         MaintenanceCostAnalysisInput(
             analysis_id="cost-analysis-cooling-basis",

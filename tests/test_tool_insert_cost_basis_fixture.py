@@ -12,6 +12,7 @@ from app.maintenance import (
     ToolReplacementCostAnalysisInput,
     calculate_tool_replacement_cost_scenarios,
 )
+from app.maintenance.cost_basis import CostBasisResolutionContext
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,10 +29,23 @@ def load_basis() -> dict:
     return json.loads(BASIS_PATH.read_text(encoding="utf-8"))
 
 
+def applicable_context() -> CostBasisResolutionContext:
+    return CostBasisResolutionContext(
+        execution_mode="in_house",
+        spare_part_available=True,
+        vendor_dispatch_required=False,
+    )
+
+
 def test_tool_replacement_is_exactly_one_carbide_insert() -> None:
     basis = load_basis()
 
     assert basis["action_code"] == "TOOL_REPLACEMENT"
+    assert basis["applicability"] == {
+        "execution_mode": "in_house",
+        "spare_part_available": True,
+        "vendor_dispatch_required": False,
+    }
     assert basis["replacement_scope"] == {
         "component_id": "tooling",
         "part_id": "SP-CNC-CARBIDE-INSERT-ONE",
@@ -173,7 +187,8 @@ def test_every_policy_source_id_resolves_and_internal_sources_exist() -> None:
 def test_backend_provider_calculates_only_governed_probability_scenarios() -> None:
     calculated_at = datetime(2026, 9, 1, 1, 0, tzinfo=UTC)
     basis = JsonMaintenanceCostBasisProvider(BASIS_PATH).tool_replacement_basis(
-        calculated_at=calculated_at
+        calculated_at=calculated_at,
+        context=applicable_context(),
     )
 
     assert basis.price_version == "tool-insert-demo-economic-basis-2026-09"
@@ -257,7 +272,8 @@ def test_server_time_selects_korean_night_rate_boundaries(
     expected_rate: int,
 ) -> None:
     basis = JsonMaintenanceCostBasisProvider(BASIS_PATH).tool_replacement_basis(
-        calculated_at=calculated_at
+        calculated_at=calculated_at,
+        context=applicable_context(),
     )
     immediate = next(
         scenario
@@ -273,14 +289,46 @@ def test_server_time_selects_korean_night_rate_boundaries(
 def test_cost_basis_rejects_timezone_naive_server_time() -> None:
     with pytest.raises(ValueError, match="timezone offset"):
         JsonMaintenanceCostBasisProvider(BASIS_PATH).tool_replacement_basis(
-            calculated_at=datetime(2026, 9, 1, 10, 0)
+            calculated_at=datetime(2026, 9, 1, 10, 0),
+            context=applicable_context(),
+        )
+
+
+@pytest.mark.parametrize(
+    "context",
+    (
+        CostBasisResolutionContext(
+            execution_mode="external",
+            spare_part_available=True,
+            vendor_dispatch_required=False,
+        ),
+        CostBasisResolutionContext(
+            execution_mode="in_house",
+            spare_part_available=False,
+            vendor_dispatch_required=False,
+        ),
+        CostBasisResolutionContext(
+            execution_mode="in_house",
+            spare_part_available=True,
+            vendor_dispatch_required=True,
+        ),
+    ),
+)
+def test_tool_cost_basis_rejects_inapplicable_operational_context(
+    context: CostBasisResolutionContext,
+) -> None:
+    with pytest.raises(ValueError, match="cost basis is not applicable"):
+        JsonMaintenanceCostBasisProvider(BASIS_PATH).tool_replacement_basis(
+            calculated_at=datetime(2026, 9, 1, 1, 0, tzinfo=UTC),
+            context=context,
         )
 
 
 def test_versioned_basis_produces_partial_fail_closed_cost_comparison() -> None:
     calculated_at = datetime(2026, 8, 31, tzinfo=UTC)
     basis = JsonMaintenanceCostBasisProvider(BASIS_PATH).tool_replacement_basis(
-        calculated_at=calculated_at
+        calculated_at=calculated_at,
+        context=applicable_context(),
     )
     result = calculate_tool_replacement_cost_scenarios(
         ToolReplacementCostAnalysisInput(

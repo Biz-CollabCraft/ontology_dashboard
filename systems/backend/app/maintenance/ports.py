@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Any, Protocol, Sequence
 
 from .cost_analysis_schema import MaintenanceCostScenarioResult
-from .cost_basis import CoolingSystemRestoreCostBasis, ToolReplacementCostBasis
+from .cost_basis import (
+    CoolingSystemRestoreCostBasis,
+    CostBasisResolutionContext,
+    ToolReplacementCostBasis,
+)
 from .integration import MaintenanceStatePatch
 from .maintenance_schema import (
     InspectionResult,
@@ -94,11 +98,11 @@ class MaintenanceCostBasisProvider(Protocol):
     """Versioned economic inputs owned behind the Backend boundary."""
 
     def tool_replacement_basis(
-        self, *, calculated_at: datetime
+        self, *, calculated_at: datetime, context: CostBasisResolutionContext
     ) -> ToolReplacementCostBasis: ...
 
     def cooling_system_restore_basis(
-        self, *, calculated_at: datetime
+        self, *, calculated_at: datetime, context: CostBasisResolutionContext
     ) -> CoolingSystemRestoreCostBasis: ...
 
 
