@@ -68,8 +68,11 @@ from app.infra.db.operational_asset_repository import OperationalAssetRepository
 from app.infra.generator_operational_assets import GeneratorOperationalAssetInventoryClient
 from app.infra.generator_mapping_management import GeneratorMappingManagementClient
 from app.infra.db.mapping_draft_repository import MappingDraftRepository
+from app.infra.db.pipeline_job_repository import PipelineJobRepository
+from app.infra.generator_rebuild import GeneratorRebuildClient
 from app.system_operations import SystemOperationService
 from app.system_operations.mapping_draft_service import MappingDraftService
+from app.system_operations.pipeline_job_service import PipelineJobService
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
     SQLiteProjectContextResolver,
@@ -460,6 +463,18 @@ def get_mapping_draft_service() -> MappingDraftService:
         GeneratorMappingManagementClient(),
         get_system_operation_service(),
     )
+
+
+@lru_cache(maxsize=1)
+def get_pipeline_job_service() -> PipelineJobService:
+    target = database_target()
+    ensure_database_migrations()
+    if is_postgresql(target):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="System Pipeline Job PostgreSQL adapter is not configured.",
+        )
+    return PipelineJobService(PipelineJobRepository(target), GeneratorRebuildClient())
 
 
 @lru_cache(maxsize=1)

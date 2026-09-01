@@ -19,9 +19,18 @@ ROOT = project_root()
 
 @asynccontextmanager
 async def application_lifespan(_: FastAPI):
+    worker = None
     try:
+        if os.getenv("SYSTEM_PIPELINE_JOB_WORKER_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}:
+            from app.dependencies import get_pipeline_job_service
+            from app.system_operations.pipeline_job_worker import PipelineJobWorker
+
+            worker = PipelineJobWorker(get_pipeline_job_service())
+            worker.start()
         yield
     finally:
+        if worker is not None:
+            worker.stop()
         close_pools()
 
 
