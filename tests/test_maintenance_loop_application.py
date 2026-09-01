@@ -4,8 +4,10 @@ import json
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from app.infra.db.maintenance_repository import MaintenanceRepository
 from app.maintenance.api_schema import (
@@ -18,6 +20,7 @@ from app.maintenance.api_schema import (
     MaintenanceReplayRequest,
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
+    RecommendationInput,
     RecommendationDecisionCreateRequest,
     ToolReplacementCostAnalysisCreateRequest,
 )
@@ -80,6 +83,18 @@ class ProjectionQuery:
             "workspace_id": values["workspace_id"],
             "equipment_id": values["equipment_id"],
         }
+
+
+class SequencedProjectionQuery(ProjectionQuery):
+    def __init__(self, projections: list[dict | None]) -> None:
+        super().__init__(projections[0] if projections else None)
+        self.projections = list(projections)
+
+    def event_evidence_projection(self, **scope):
+        self.calls.append(scope)
+        if len(self.calls) <= len(self.projections):
+            return self.projections[len(self.calls) - 1]
+        return self.projections[-1] if self.projections else None
 
 
 def canonical_projection(
@@ -146,6 +161,16 @@ def service(tmp_path, *, query: ProjectionQuery | None = None) -> MaintenanceLoo
         event_evidence_query=provider,
         replay_session_query=provider,
     )
+
+
+def recommendation_input_schema() -> dict:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "contracts"
+        / "schemas"
+        / "recommendation-input.schema.json"
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def inspection_request() -> InspectionWorkOrderCreateRequest:
@@ -795,6 +820,56 @@ def test_inspection_request_fails_closed_for_unknown_or_mismatched_projection(tm
         )
 
 
+def test_recommendation_input_is_projected_from_event_evidence_only(tmp_path) -> None:
+    projection = canonical_projection(
+        event_id="EVT-RESULT-001",
+        asset_id="CNC-RECOMMENDATION-001",
+        asset_type="cnc",
+        artifact_id="RESULT-RECOMMENDATION-001",
+        source_sha256="a" * 64,
+        decision="request_inspection",
+    )
+    query = ProjectionQuery(projection)
+    loop = service(tmp_path, query=query)
+
+    recommendation_input = loop.recommendation_input(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        event_id="EVT-RESULT-001",
+    )
+
+    assert RecommendationInput.model_validate(recommendation_input)
+    assert (
+        list(
+            Draft202012Validator(recommendation_input_schema()).iter_errors(
+                recommendation_input
+            )
+        )
+        == []
+    )
+    assert recommendation_input["snapshot_basis"] == snapshot_basis(projection)
+    assert recommendation_input["equipment"] == {
+        "organization_id": "org-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "asset_id": "CNC-RECOMMENDATION-001",
+        "equipment_id": "CNC-RECOMMENDATION-001",
+        "asset_type": "cnc",
+    }
+    assert recommendation_input["operational_decision_kind"] == "request_inspection"
+    assert recommendation_input["source_context"] == {
+        "source_product_result_id": "RESULT-RECOMMENDATION-001",
+        "source_evidence_id": "EVD-EVT-RESULT-001",
+        "source_action_id": "request_inspection",
+        "source_schema_version": "result-artifact-v1.0",
+        "source_policy_version": "recommendation-policy-v1",
+    }
+    assert "risk" not in recommendation_input
+    assert "review_draft" not in recommendation_input
+    assert "maintenance_history_summary" not in recommendation_input
+
+
 def test_inspection_request_rejects_stale_client_snapshot_basis(tmp_path) -> None:
     query = ProjectionQuery(
         canonical_projection(artifact_id="RESULT-OLD")
@@ -824,8 +899,43 @@ def test_inspection_request_rejects_stale_client_snapshot_basis(tmp_path) -> Non
             "project_id": "project-1",
             "workspace_id": "workspace-1",
             "event_id": "EVT-RESULT-001",
+        },
+        {
+            "organization_id": "org-1",
+            "project_id": "project-1",
+            "workspace_id": "workspace-1",
+            "event_id": "EVT-RESULT-001",
         }
     ]
+
+
+def test_inspection_request_retries_once_for_transient_stale_projection(tmp_path) -> None:
+    current = canonical_projection(artifact_id="RESULT-CURRENT")
+    stale = canonical_projection(artifact_id="RESULT-STALE")
+    query = SequencedProjectionQuery([stale, current])
+    loop = service(tmp_path, query=query)
+
+    requested = loop.request_inspection(
+        organization_id="org-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        payload=InspectionWorkOrderCreateRequest(
+            event_id="EVT-RESULT-001",
+            snapshot_basis=snapshot_basis(current),
+        ),
+        actor_id="manager-1",
+        actor_display_name="Manager One",
+        idempotency_key="inspection-request-001",
+    )
+
+    work_order = loop.repository.get_work_order(
+        workspace_id="workspace-1",
+        work_order_id=requested["work_order_id"],
+    )
+    assert work_order is not None
+    assert work_order.authorization.source_product_result_id == "RESULT-CURRENT"
+    assert loop.repository.operational_side_effect_counts()["work_orders"] == 1
+    assert len(query.calls) == 2
 
 
 def test_inspection_request_accepts_matching_client_snapshot_basis(tmp_path) -> None:

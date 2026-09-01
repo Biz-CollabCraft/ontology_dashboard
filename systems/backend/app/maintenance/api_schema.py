@@ -10,9 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .cost_analysis_schema import CostInputSource, ExecutionTiming
 from .cost_calculator import MaintenanceScenarioInput, ToolReplacementScenarioInput
 from .maintenance_schema import (
+    EquipmentIdentity,
     InspectionChecklistItem,
     InspectionMeasurement,
     InspectionOutcome,
+    OperationalDecisionKind,
     RecommendationDisposition,
 )
 
@@ -45,6 +47,30 @@ class InspectionWorkOrderCreateRequest(StrictCommand):
 
     event_id: str = Field(min_length=1, max_length=240)
     snapshot_basis: EvidenceSnapshotBasis | None = None
+
+
+class RecommendationInputSource(StrictCommand):
+    source_product_result_id: str = Field(min_length=1, max_length=240)
+    source_evidence_id: str = Field(min_length=1, max_length=240)
+    source_action_id: str = Field(min_length=1, max_length=240)
+    source_schema_version: str = Field(min_length=1, max_length=120)
+    source_policy_version: str = Field(min_length=1, max_length=120)
+
+
+class RecommendationInput(StrictCommand):
+    """Closed-loop policy input derived from Product Result/Evidence only.
+
+    UI ViewModels and Agent Review summaries may display or explain the same
+    evidence basis, but they are not accepted as authorization sources for
+    mutations.
+    """
+
+    schema_version: Literal["recommendation-input-v1"] = "recommendation-input-v1"
+    event_id: str = Field(min_length=1, max_length=240)
+    snapshot_basis: EvidenceSnapshotBasis
+    equipment: EquipmentIdentity
+    operational_decision_kind: OperationalDecisionKind
+    source_context: RecommendationInputSource
 
 
 class InspectionResultCreateRequest(StrictCommand):
@@ -166,6 +192,8 @@ __all__ = [
     "MaintenanceReplayRequest",
     "MaintenanceWorkOrderApproveRequest",
     "OperationsManualRecommendationCreateRequest",
+    "RecommendationInput",
+    "RecommendationInputSource",
     "RecommendationDecisionCreateRequest",
     "ToolReplacementCostAnalysisCreateRequest",
 ]
