@@ -69,10 +69,12 @@ from app.infra.generator_operational_assets import GeneratorOperationalAssetInve
 from app.infra.generator_mapping_management import GeneratorMappingManagementClient
 from app.infra.db.mapping_draft_repository import MappingDraftRepository
 from app.infra.db.pipeline_job_repository import PipelineJobRepository
+from app.infra.db.impact_analysis_repository import ImpactAnalysisRepository
 from app.infra.generator_rebuild import GeneratorRebuildClient
 from app.system_operations import SystemOperationService
 from app.system_operations.mapping_draft_service import MappingDraftService
 from app.system_operations.pipeline_job_service import PipelineJobService
+from app.system_operations.impact_analysis_service import ImpactAnalysisService
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
     SQLiteProjectContextResolver,
@@ -475,6 +477,14 @@ def get_pipeline_job_service() -> PipelineJobService:
             detail="System Pipeline Job PostgreSQL adapter is not configured.",
         )
     return PipelineJobService(PipelineJobRepository(target), GeneratorRebuildClient())
+
+
+@lru_cache(maxsize=1)
+def get_impact_analysis_service() -> ImpactAnalysisService:
+    target=database_target(); ensure_database_migrations()
+    if is_postgresql(target):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail="System Impact Analysis PostgreSQL adapter is not configured.")
+    return ImpactAnalysisService(ImpactAnalysisRepository(target),get_pipeline_job_service())
 
 
 @lru_cache(maxsize=1)
