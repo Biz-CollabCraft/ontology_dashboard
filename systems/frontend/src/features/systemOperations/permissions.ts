@@ -5,6 +5,8 @@ export const SYSTEM_ASSETS_PUBLISH_PERMISSION = "system.assets.publish";
 export const SYSTEM_JOBS_READ_PERMISSION = "system.jobs.read";
 export const SYSTEM_JOBS_CREATE_PERMISSION = "system.jobs.create";
 export const SYSTEM_JOBS_CANCEL_PERMISSION = "system.jobs.cancel";
+export const SYSTEM_IMPACT_CREATE_PERMISSION = "system.impact.create";
+export const SYSTEM_REBUILD_EXECUTE_PERMISSION = "system.rebuild.execute";
 
 export function canReadSystemOperationalAssets(permissions: readonly string[] | null | undefined) {
   return Boolean(permissions?.includes(SYSTEM_ASSETS_READ_PERMISSION));
@@ -32,4 +34,12 @@ export function canCreateSystemJob(permissions: readonly string[] | null | undef
 
 export function canCancelSystemJob(permissions: readonly string[] | null | undefined) {
   return Boolean(permissions?.includes(SYSTEM_JOBS_CANCEL_PERMISSION));
+}
+
+export function canCreateImpactAnalysis(permissions: readonly string[] | null | undefined) {
+  return Boolean(permissions?.includes(SYSTEM_IMPACT_CREATE_PERMISSION));
+}
+
+export function canExecuteSystemRebuild(permissions: readonly string[] | null | undefined) {
+  return Boolean(permissions?.includes(SYSTEM_REBUILD_EXECUTE_PERMISSION));
 }

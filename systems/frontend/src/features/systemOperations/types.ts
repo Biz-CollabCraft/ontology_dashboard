@@ -110,8 +110,8 @@ export interface MappingDraftDiff {
 
 export interface SystemPipelineJob {
   job_id: string;
-  job_type: "mapping_rebuild";
-  status: "queued" | "running" | "checkpointed" | "cancel_requested" | "succeeded" | "failed" | "cancelled";
+  job_type: "mapping_rebuild" | "downstream_rebuild";
+  status: "queued" | "running" | "checkpointed" | "cancel_requested" | "succeeded" | "partially_succeeded" | "failed" | "cancelled";
   mapping_id: string;
   mapping_version: string;
   mapping_sha256: string;
@@ -126,4 +126,38 @@ export interface SystemPipelineJob {
   created_at: string;
   started_at?: string | null;
   completed_at?: string | null;
+  steps?: SystemPipelineJobStep[];
+}
+
+export interface SystemPipelineJobStep {
+  step_id: string;
+  action_id: string;
+  stage: "preprocessing" | "feature" | "training";
+  sequence: number;
+  status: "pending" | "ready" | "running" | "succeeded" | "failed" | "blocked" | "skipped" | "cancelled";
+  input: Record<string, unknown>;
+  output?: Record<string, unknown> | null;
+  error?: { code: string; message: string } | null;
+}
+
+export interface SystemImpactAction {
+  action_id: string;
+  stage: "preprocessing" | "feature" | "training";
+  status: "recommended" | "blocked";
+  required_parameters: Record<string, unknown>;
+  missing_parameters: string[];
+  depends_on_action_ids: string[];
+}
+
+export interface SystemImpactAnalysis {
+  analysis_id: string;
+  status: string;
+  mapping_id: string;
+  mapping_version: string;
+  mapping_sha256: string;
+  rebuild_job_id: string;
+  snapshot_sha256: string;
+  recommended_actions: SystemImpactAction[];
+  blocked_actions: SystemImpactAction[];
+  created_at: string;
 }

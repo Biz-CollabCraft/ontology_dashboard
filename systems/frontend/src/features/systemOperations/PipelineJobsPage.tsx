@@ -19,6 +19,7 @@ function JobDetail({ jobId }: { jobId: string }) {
     <section className="ops-summary-grid"><article><span>상태</span><strong>{job.status}</strong></article><article><span>활성화</span><strong>{job.activate_on_success ? "성공 후" : "안 함"}</strong></article><article><span>시작</span><strong>{job.started_at ? new Date(job.started_at).toLocaleString() : "대기"}</strong></article><article><span>완료</span><strong>{job.completed_at ? new Date(job.completed_at).toLocaleString() : "—"}</strong></article></section>
     {cancellable && canCancelSystemJob(user?.permissions) && <button onClick={() => void cancelPipelineJob(jobId).then(setJob)}>취소 요청</button>}
     {job.error && <section className="ops-panel"><h2>오류</h2><p>{job.error.code} · {job.error.message}</p></section>}
+    {job.steps && <section className="ops-panel"><h2>단계별 실행</h2>{job.steps.map(step => <article key={step.step_id}><strong>{step.sequence + 1}. {step.stage}</strong> · {step.status}{step.error && <p>{step.error.code} · {step.error.message}</p>}</article>)}</section>}
     <section className="ops-panel"><h2>진행 및 결과</h2><pre>{JSON.stringify({ progress: job.progress, checkpoint: job.checkpoint, result: job.result }, null, 2)}</pre></section>
   </main>;
 }

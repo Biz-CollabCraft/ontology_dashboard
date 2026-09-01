@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canCancelSystemJob, canCreateSystemAssetVersion, canCreateSystemJob, canPublishSystemAsset, canReadSystemJobs, canReadSystemOperationalAssets, canValidateSystemAsset } from "./permissions";
+import { canCancelSystemJob, canCreateImpactAnalysis, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canPublishSystemAsset, canReadSystemJobs, canReadSystemOperationalAssets, canValidateSystemAsset } from "./permissions";
 
 describe("system operations permissions", () => {
   it("allows only the dedicated operational asset permission", () => {
@@ -17,5 +17,10 @@ describe("system operations permissions", () => {
     expect(canCreateSystemJob(["system.jobs.read"])).toBe(false);
     expect(canCreateSystemJob(["system.jobs.create"])).toBe(true);
     expect(canCancelSystemJob(["system.jobs.cancel"])).toBe(true);
+  });
+  it("separates impact analysis from downstream execution", () => {
+    expect(canCreateImpactAnalysis(["system.impact.create"])).toBe(true);
+    expect(canExecuteSystemRebuild(["system.impact.create"])).toBe(false);
+    expect(canExecuteSystemRebuild(["system.rebuild.execute"])).toBe(true);
   });
 });
