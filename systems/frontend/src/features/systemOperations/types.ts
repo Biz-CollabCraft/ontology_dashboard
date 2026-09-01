@@ -107,3 +107,23 @@ export interface MappingDraftDiff {
   summary: { added: number; removed: number; changed: number };
   changes: Array<Record<string, unknown>>;
 }
+
+export interface SystemPipelineJob {
+  job_id: string;
+  job_type: "mapping_rebuild";
+  status: "queued" | "running" | "checkpointed" | "cancel_requested" | "succeeded" | "failed" | "cancelled";
+  mapping_id: string;
+  mapping_version: string;
+  mapping_sha256: string;
+  source_uri: string;
+  activate_on_success: boolean;
+  progress: Record<string, unknown>;
+  checkpoint?: Record<string, unknown> | null;
+  result?: Record<string, unknown> | null;
+  error?: { code: string; message: string } | null;
+  cancel_requested: boolean;
+  created_by: string;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}

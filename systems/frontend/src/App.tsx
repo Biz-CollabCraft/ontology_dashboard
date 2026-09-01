@@ -243,7 +243,7 @@ function AppRouter() {
   }
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
-  if (pathname.startsWith("/system/operations/assets") || pathname.startsWith("/system/operations/mappings")) {
+  if (pathname.startsWith("/system/operations/assets") || pathname.startsWith("/system/operations/mappings") || pathname.startsWith("/system/operations/jobs")) {
     return canReadSystemOperationalAssets(user.permissions)
       ? <SystemOperationsApp />
       : <ForbiddenPage />;
