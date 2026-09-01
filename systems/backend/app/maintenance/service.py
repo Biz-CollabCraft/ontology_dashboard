@@ -22,6 +22,8 @@ from .api_schema import (
     MaintenanceWorkOrderApproveRequest,
     OperationsManualRecommendationCreateRequest,
     RecommendationDecisionCreateRequest,
+    RecommendationInput,
+    RecommendationInputSource,
     ToolReplacementCostAnalysisCreateRequest,
 )
 from .cost_analysis_schema import (
@@ -151,14 +153,14 @@ class MaintenanceLoopService:
         }
 
     @classmethod
-    def _require_snapshot_basis_match(
+    def _snapshot_basis_mismatches(
         cls,
         *,
         expected: EvidenceSnapshotBasis | None,
         projection: Mapping[str, Any],
-    ) -> None:
+    ) -> list[str]:
         if expected is None:
-            return
+            return []
         current = cls._projection_snapshot_basis(projection)
         mismatched = []
         for field, expected_value in expected.model_dump(mode="json").items():
@@ -166,9 +168,22 @@ class MaintenanceLoopService:
                 continue
             if current.get(field) != expected_value:
                 mismatched.append(field)
+        return sorted(mismatched)
+
+    @classmethod
+    def _require_snapshot_basis_match(
+        cls,
+        *,
+        expected: EvidenceSnapshotBasis | None,
+        projection: Mapping[str, Any],
+    ) -> None:
+        mismatched = cls._snapshot_basis_mismatches(
+            expected=expected,
+            projection=projection,
+        )
         if mismatched:
             raise ValueError(
-                f"snapshot_basis mismatch: {', '.join(sorted(mismatched))}"
+                f"snapshot_basis mismatch: {', '.join(mismatched)}"
             )
 
     @classmethod
@@ -210,7 +225,7 @@ class MaintenanceLoopService:
             decision_id=cls._required_text(record, "recommendation_decision_id"),
         )
 
-    def _inspection_source(
+    def _event_evidence_projection(
         self,
         *,
         organization_id: str,
@@ -218,7 +233,7 @@ class MaintenanceLoopService:
         workspace_id: str,
         event_id: str,
         snapshot_basis: EvidenceSnapshotBasis | None = None,
-    ) -> tuple[EquipmentIdentity, OperationalDecisionKind, dict[str, str]]:
+    ) -> Mapping[str, Any]:
         projection = self.event_evidence_query.event_evidence_projection(
             organization_id=organization_id,
             project_id=project_id,
@@ -234,6 +249,45 @@ class MaintenanceLoopService:
         if self._required_text(projection, "event_id") != event_id:
             raise ValueError("Event Evidence Projection event_id mismatch")
 
+        if snapshot_basis is not None:
+            mismatched = self._snapshot_basis_mismatches(
+                expected=snapshot_basis,
+                projection=projection,
+            )
+            if mismatched:
+                projection = self.event_evidence_query.event_evidence_projection(
+                    organization_id=organization_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                    event_id=event_id,
+                )
+                if projection is None:
+                    raise KeyError(event_id)
+                if projection.get("contract_type") != "event_evidence_projection":
+                    raise ValueError(
+                        "Diagnosis query returned a non-canonical evidence contract"
+                    )
+                if projection.get("schema_version") != "event-evidence-projection-v1":
+                    raise ValueError(
+                        "unsupported Event Evidence Projection schema version"
+                    )
+                if self._required_text(projection, "event_id") != event_id:
+                    raise ValueError("Event Evidence Projection event_id mismatch")
+                self._require_snapshot_basis_match(
+                    expected=snapshot_basis,
+                    projection=projection,
+                )
+        return projection
+
+    def _recommendation_input_from_projection(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+        projection: Mapping[str, Any],
+    ) -> RecommendationInput:
         subject = projection.get("subject")
         artifact = projection.get("artifact_reference")
         assessment = projection.get("assessment")
@@ -288,25 +342,12 @@ class MaintenanceLoopService:
         lineage = provenance.get("lineage")
         if not isinstance(lineage, Mapping):
             raise ValueError("Event Evidence Projection provenance.lineage is required")
-        self._require_snapshot_basis_match(
-            expected=snapshot_basis,
-            projection={
-                **projection,
-                "artifact_reference": artifact,
-                "provenance": provenance,
-            },
-        )
-        source = {
-            "source_product_result_id": self._required_text(artifact, "artifact_id"),
-            "source_evidence_id": self._required_text(projection, "evidence_id"),
-            "source_action_id": source_action_id,
-            "source_schema_version": self._required_text(
-                artifact, "artifact_schema_version"
+        return RecommendationInput(
+            event_id=event_id,
+            snapshot_basis=EvidenceSnapshotBasis.model_validate(
+                self._projection_snapshot_basis(projection)
             ),
-            "source_policy_version": self._required_text(lineage, "policy_version"),
-        }
-        return (
-            EquipmentIdentity(
+            equipment=EquipmentIdentity(
                 organization_id=organization_id,
                 project_id=project_id,
                 workspace_id=workspace_id,
@@ -314,8 +355,64 @@ class MaintenanceLoopService:
                 equipment_id=equipment_id,
                 asset_type=asset_type,
             ),
-            decision,
-            source,
+            operational_decision_kind=decision,
+            source_context=RecommendationInputSource(
+                source_product_result_id=self._required_text(artifact, "artifact_id"),
+                source_evidence_id=self._required_text(projection, "evidence_id"),
+                source_action_id=source_action_id,
+                source_schema_version=self._required_text(
+                    artifact, "artifact_schema_version"
+                ),
+                source_policy_version=self._required_text(lineage, "policy_version"),
+            ),
+        )
+
+    def recommendation_input(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+        snapshot_basis: EvidenceSnapshotBasis | None = None,
+    ) -> dict[str, Any]:
+        projection = self._event_evidence_projection(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_id=event_id,
+            snapshot_basis=snapshot_basis,
+        )
+        return self._recommendation_input_from_projection(
+            organization_id=organization_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_id=event_id,
+            projection=projection,
+        ).model_dump(mode="json")
+
+    def _inspection_source(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        event_id: str,
+        snapshot_basis: EvidenceSnapshotBasis | None = None,
+    ) -> tuple[EquipmentIdentity, OperationalDecisionKind, dict[str, str]]:
+        recommendation_input = RecommendationInput.model_validate(
+            self.recommendation_input(
+                organization_id=organization_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                event_id=event_id,
+                snapshot_basis=snapshot_basis,
+            )
+        )
+        return (
+            recommendation_input.equipment,
+            recommendation_input.operational_decision_kind,
+            recommendation_input.source_context.model_dump(mode="json"),
         )
 
     def request_inspection(

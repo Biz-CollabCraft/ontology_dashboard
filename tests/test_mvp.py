@@ -32,7 +32,7 @@ from app.dependencies import (
 )
 from app.infra.db.maintenance_repository import MaintenanceRepository
 from app.infra.db.project_repository import SQLiteProjectContextResolver
-from app.maintenance.api_schema import InspectionWorkOrderCreateRequest
+from app.maintenance.api_schema import InspectionWorkOrderCreateRequest, RecommendationInput
 from app.maintenance.service import MaintenanceLoopService
 from app.mvp.domain_context_adapters import ManufacturingFixtureReviewContextAdapter
 from app.mvp.agent_review_summary_workflow import AGENT_REVIEW_SUMMARY_FLOW_VERSION, AgentReviewSummaryWorkflow
@@ -1464,6 +1464,20 @@ def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
     before = client.get(f"/api/objects/{asset_id}/detail-view")
     assert before.status_code == 200
     assert before.json().get("closed_loop", {}).get("work_orders") in (None, [])
+    recommendation_input = maintenance_service.recommendation_input(
+        organization_id="org-ontology-demo",
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        event_id=event_id,
+        snapshot_basis=InspectionWorkOrderCreateRequest(
+            event_id=event_id,
+            snapshot_basis=before.json()["snapshot_basis"],
+        ).snapshot_basis,
+    )
+    assert RecommendationInput.model_validate(recommendation_input)
+    assert recommendation_input["snapshot_basis"] == before.json()["snapshot_basis"]
+    assert recommendation_input["equipment"]["asset_id"] == asset_id
+    assert recommendation_input["operational_decision_kind"] == "request_inspection"
 
     work_order = client.post(
         (
@@ -1491,8 +1505,12 @@ def test_inspection_request_decision_and_activity_reach_detail_and_agent_packet(
     activity = client.get(f"/api/events/{event_id}/activity").json()
     detail = client.get(f"/api/objects/{asset_id}/detail-view").json()
     packet = client.get(f"/api/objects/{asset_id}/agent-review-packet").json()
+    report, _ = service.report(event_id, ReportRequest(role="manager", use_llm=False))
 
     assert activity["decisions"][0]["decision"] == "request_inspection"
+    assert detail["snapshot_basis"] == recommendation_input["snapshot_basis"]
+    assert packet["snapshot_basis"] == recommendation_input["snapshot_basis"]
+    assert report.recommended_decision == recommendation_input["operational_decision_kind"]
     assert detail["closed_loop"]["work_orders"][0]["work_order_id"] == work_order.json()[
         "work_order_id"
     ]
