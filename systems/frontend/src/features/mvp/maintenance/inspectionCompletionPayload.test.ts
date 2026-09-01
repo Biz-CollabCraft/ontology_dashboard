@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInspectionCompletionPayload,
+  buildOperationsManualRecommendationPayload,
   type InspectionCompletionFacts,
 } from "../../../api";
 
@@ -89,5 +90,22 @@ describe("inspection completion payload", () => {
       "cost-basis-component-replacement-required",
     ]);
     expect(payload).not.toHaveProperty("action_code");
+  });
+});
+
+describe("operations manual recommendation payload", () => {
+  it("keeps cost results out of the recommendation command", () => {
+    const payload = buildOperationsManualRecommendationPayload(
+      "inspection-result-001",
+      "TOOL_REPLACEMENT",
+    );
+
+    expect(payload).toEqual({
+      action_code: "TOOL_REPLACEMENT",
+      basis: ["inspection_result:inspection-result-001"],
+    });
+    expect(payload).not.toHaveProperty("cost_analysis_id");
+    expect(payload).not.toHaveProperty("cost_option_id");
+    expect(payload).not.toHaveProperty("action_candidate_id");
   });
 });

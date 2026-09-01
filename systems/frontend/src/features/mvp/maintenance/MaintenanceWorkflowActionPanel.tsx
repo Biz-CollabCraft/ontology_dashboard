@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ApiError,
   approveInspectionWorkOrder,
   approveMaintenanceWorkOrder,
   completeInspectionWorkOrder,
   completeMaintenanceAction,
   createOperationsManualRecommendation,
   decideOperationsManualRecommendation,
+  getMaintenanceActionCandidates,
   getMaintenanceEventLineage,
   getPostMaintenanceProductResults,
   requestInspectionWorkOrder,
@@ -15,6 +17,7 @@ import {
   type InspectionChecklistStatus,
   type InspectionCompletionFacts,
   type InspectionOutcome,
+  type MaintenanceActionCandidateReadModel,
   type MaintenanceEventLineageReadModel,
 } from "../../../api";
 import type { MvpEvidenceSnapshotBasis, MvpRoleLens } from "../api/mvpContracts";
@@ -31,6 +34,32 @@ function optionalNumber(value: string): number | null {
   if (!value.trim()) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+const ACTION_LABEL = {
+  TOOL_REPLACEMENT: "공구 교체",
+  COOLING_SYSTEM_RESTORE: "냉각 시스템 복구",
+} as const;
+
+export function postMaintenancePollingFailure(
+  reason: unknown,
+  consecutiveFailures: number,
+): { message: string | null; stop: boolean } {
+  const rendered = reason instanceof Error
+    ? reason.message
+    : "정비 후 예측 결과 조회에 실패했습니다.";
+  if (reason instanceof ApiError && reason.status >= 400 && reason.status < 500) {
+    return {
+      message: `정비 후 결과 조회가 거부되었습니다: ${rendered}`,
+      stop: true,
+    };
+  }
+  return {
+    message: consecutiveFailures >= 3
+      ? `정비 후 결과 조회가 ${consecutiveFailures}회 연속 실패했습니다: ${rendered}`
+      : null,
+    stop: false,
+  };
 }
 
 export type MaintenanceWorkflowDisplayStatus =
@@ -108,7 +137,10 @@ export function MaintenanceWorkflowActionPanel({
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [pollingError, setPollingError] = useState<string | null>(null);
   const [postMaintenancePrediction, setPostMaintenancePrediction] = useState<PostMaintenancePredictionSummary | null>(null);
+  const [actionCandidates, setActionCandidates] = useState<MaintenanceActionCandidateReadModel[]>([]);
+  const [selectedActionCandidateId, setSelectedActionCandidateId] = useState("");
   const [inspectionOutcome, setInspectionOutcome] = useState<InspectionOutcome>("maintenance_recommended");
   const [toolWearStatus, setToolWearStatus] = useState<InspectionChecklistStatus>("not_checked");
   const [toolWearMin, setToolWearMin] = useState("");
@@ -145,16 +177,19 @@ export function MaintenanceWorkflowActionPanel({
     const recommendation = latest(lineage?.recommendations ?? []);
     const action = latest(lineage?.maintenance_actions ?? []);
     const maintenanceEvent = latest(lineage?.maintenance_events ?? []);
+    const selectedActionCandidate = actionCandidates.find(
+      (item) => item.action_candidate_id === selectedActionCandidateId,
+    ) ?? null;
+    const inspectionCostAnalyses = (lineage?.cost_analyses ?? []).filter(
+      (item) => item.based_on.inspection_result_id === inspectionResult?.inspection_result_id,
+    );
     const costAnalysis = latest(
-      (lineage?.cost_analyses ?? []).filter(
-        (item) => item.based_on.inspection_result_id === inspectionResult?.inspection_result_id,
+      inspectionCostAnalyses.filter(
+        (item) => item.options.some(
+          (option) => option.action_candidate_id === selectedActionCandidate?.action_candidate_id,
+        ),
       ),
     );
-    const selectedCostOption = costAnalysis
-      ? costAnalysis.options.find((item) => item.option_id === costAnalysis.lowest_calculated_cost_option_id)
-        ?? costAnalysis.options.find((item) => item.calculation_status === "calculated")
-        ?? null
-      : null;
     return {
       inspectionWorkOrder,
       maintenanceWorkOrder,
@@ -163,9 +198,44 @@ export function MaintenanceWorkflowActionPanel({
       action,
       maintenanceEvent,
       costAnalysis,
-      selectedCostOption,
+      hasReviewedCostAnalysis: inspectionCostAnalyses.length > 0,
+      selectedActionCandidate,
     };
-  }, [lineage]);
+  }, [actionCandidates, lineage, selectedActionCandidateId]);
+
+  useEffect(() => {
+    const inspectionResultId = state.inspectionResult?.inspection_result_id;
+    if (
+      role !== "process_manager"
+      || !inspectionResultId
+      || state.inspectionResult?.outcome !== "maintenance_recommended"
+    ) {
+      setActionCandidates([]);
+      setSelectedActionCandidateId("");
+      return;
+    }
+    const controller = new AbortController();
+    void getMaintenanceActionCandidates(
+      projectId,
+      workspaceId,
+      inspectionResultId,
+      controller.signal,
+    ).then((response) => {
+      setActionCandidates(response.items);
+      setSelectedActionCandidateId((current) => (
+        response.items.some((item) => item.action_candidate_id === current) ? current : ""
+      ));
+    }).catch((reason) => {
+      if (controller.signal.aborted) return;
+      setActionCandidates([]);
+      setSelectedActionCandidateId("");
+      setMessage({
+        tone: "error",
+        text: reason instanceof Error ? reason.message : "정비 Action 후보를 불러오지 못했습니다.",
+      });
+    });
+    return () => controller.abort();
+  }, [projectId, role, state.inspectionResult?.inspection_result_id, state.inspectionResult?.outcome, workspaceId]);
 
   useEffect(() => {
     setInspectionOutcome("maintenance_recommended");
@@ -187,6 +257,8 @@ export function MaintenanceWorkflowActionPanel({
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let stopped = false;
+    let consecutiveFailures = 0;
+    setPollingError(null);
 
     const poll = async () => {
       try {
@@ -197,6 +269,8 @@ export function MaintenanceWorkflowActionPanel({
           maintenanceEventId,
           controller.signal,
         );
+        consecutiveFailures = 0;
+        setPollingError(null);
         if (result) {
           const prediction: PostMaintenancePredictionSummary = {
             failureProbability: result.failure_probability,
@@ -209,10 +283,19 @@ export function MaintenanceWorkflowActionPanel({
           setMessage({ tone: "success", text: "정비 후 관측과 예측 처리가 완료됐습니다." });
           return;
         }
-      } catch {
+      } catch (reason) {
         if (controller.signal.aborted) return;
+        consecutiveFailures += 1;
+        const failure = postMaintenancePollingFailure(reason, consecutiveFailures);
+        if (failure.message) setPollingError(failure.message);
+        if (failure.stop) return;
       }
-      if (!stopped) timer = setTimeout(() => void poll(), 1_500);
+      if (!stopped) {
+        const retryDelay = consecutiveFailures > 0
+          ? Math.min(1_500 * (2 ** consecutiveFailures), 10_000)
+          : 1_500;
+        timer = setTimeout(() => void poll(), retryDelay);
+      }
     };
 
     onStatusChanged?.("observation_pending");
@@ -323,19 +406,24 @@ export function MaintenanceWorkflowActionPanel({
       helper = "점검 결과만으로 정비 판단을 내리지 않고 추가 데이터 확인 상태로 유지합니다.";
     } else if (state.inspectionResult && !state.recommendation) {
       label = "정비안 생성";
-      helper = state.costAnalysis && state.selectedCostOption
-        ? "검토한 비용 분석을 근거로 Operations 수동 정비안을 생성합니다."
-        : "먼저 아래 비용 분석을 실행해 참고 결과를 확인하세요.";
-      enabled = canManage && Boolean(state.costAnalysis && state.selectedCostOption);
-      command = state.costAnalysis && state.selectedCostOption ? () => createOperationsManualRecommendation({
+      helper = !state.hasReviewedCostAnalysis
+        ? "먼저 아래 비용 분석을 실행해 참고 결과를 확인하세요."
+        : !state.selectedActionCandidate
+          ? "비용 분석을 참고한 뒤 Backend가 산출한 정비 Action 후보를 직접 선택하세요."
+          : state.costAnalysis
+            ? "비용은 참고값입니다. 선택한 Action 후보를 근거로 Operations 수동 정비안을 생성합니다."
+            : "선택한 Action 후보의 비용 분석을 먼저 실행해 참고 결과를 확인하세요.";
+      enabled = canManage && Boolean(state.costAnalysis && state.selectedActionCandidate);
+      command = state.costAnalysis && state.selectedActionCandidate ? () => createOperationsManualRecommendation({
         projectId,
         workspaceId,
         inspectionResultId: state.inspectionResult!.inspection_result_id,
-        actionCode: state.selectedCostOption!.action_code,
-        costAnalysisId: state.costAnalysis!.analysis_id,
-        costOptionId: state.selectedCostOption!.option_id,
-        actionCandidateId: state.selectedCostOption!.action_candidate_id,
-        idempotencyKey: commandKey(eventId, "recommendation-create", state.costAnalysis!.analysis_id),
+        actionCode: state.selectedActionCandidate!.action_code,
+        idempotencyKey: commandKey(
+          eventId,
+          "recommendation-create",
+          state.selectedActionCandidate!.action_candidate_id,
+        ),
       }) : null;
     } else if (state.recommendation && !state.maintenanceWorkOrder) {
       label = "정비안 승인";
@@ -436,6 +524,27 @@ export function MaintenanceWorkflowActionPanel({
     <section className="mvp-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행">
       <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "생산 관리자 작업" : "현장 관리자 작업"}</strong></div><button type="button" className="mvp-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
       <p>{loading ? "작업 상태를 확인하고 있습니다." : helper}</p>
+      {role === "process_manager"
+        && state.inspectionResult?.outcome === "maintenance_recommended"
+        && state.hasReviewedCostAnalysis
+        && !state.recommendation ? (
+        <label className="mvp-field">
+          <span>정비 Action 판단</span>
+          <select
+            value={selectedActionCandidateId}
+            onChange={(event) => setSelectedActionCandidateId(event.target.value)}
+            disabled={!canManage || running}
+          >
+            <option value="">Action 후보 선택</option>
+            {actionCandidates.map((candidate) => (
+              <option key={candidate.action_candidate_id} value={candidate.action_candidate_id}>
+                {ACTION_LABEL[candidate.action_code]}
+              </option>
+            ))}
+          </select>
+          <small>최저비용 option은 자동 선택되지 않으며, Action 판단은 생산 관리자가 명시적으로 수행합니다.</small>
+        </label>
+      ) : null}
       {role === "field_operator" && supportsCncMaintenance && state.inspectionWorkOrder?.status === "in_progress" ? (
         <fieldset className="mvp-inspection-form" disabled={!canFieldExecute || running}>
           <legend>현장 점검 사실</legend>
@@ -524,6 +633,7 @@ export function MaintenanceWorkflowActionPanel({
         {running ? "처리 중" : label}
       </button>
       {message ? <small className={message.tone === "error" ? "mvp-cost-error" : "mvp-workflow-success"}>{message.text}</small> : null}
+      {pollingError ? <small className="mvp-cost-error">{pollingError}</small> : null}
     </section>
   );
 }

@@ -16,6 +16,7 @@ async function login(page: Page) {
 test("runs cost analysis only on request and keeps the result read-only", async ({ page }) => {
   let analysisCreated = false;
   let calculationRequests = 0;
+  let recommendationRequests = 0;
 
   const analysis = {
     schema_version: "maintenance-cost-scenario-v1.0",
@@ -127,12 +128,26 @@ test("runs cost analysis only on request and keeps the result read-only", async 
       }),
     });
   });
+  await page.route("**/api/projects/*/workspaces/*/maintenance/inspection-results/*/recommendations", async (route) => {
+    recommendationRequests += 1;
+    expect(route.request().postDataJSON()).toEqual({
+      action_code: "TOOL_REPLACEMENT",
+      basis: ["inspection_result:INSPECTION-RESULT-E2E"],
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ recommendation_id: "REC-E2E" }),
+    });
+  });
 
   await login(page);
   await page.locator(".mvp-factory-asset-node.is-selected").click();
   await page.getByRole("tab", { name: "처리", exact: true }).click();
   const panel = page.getByRole("region", { name: "정비 비용 분석" });
+  const workflow = page.getByRole("region", { name: "Closed-loop 작업 실행" });
   await expect(panel).toBeVisible();
+  await expect(workflow.getByLabel("정비 Action 판단")).toHaveCount(0);
   expect(calculationRequests).toBe(0);
 
   await panel.getByRole("button", { name: "비용 분석 요청", exact: true }).click();
@@ -145,6 +160,12 @@ test("runs cost analysis only on request and keeps the result read-only", async 
   await expect(panel.getByText(/정비 추천·승인·WorkOrder·실행을 생성하지 않습니다/)).toBeVisible();
   await expect(panel.getByRole("button", { name: "이 시점 선택", exact: true })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "즉시 복구안 선택", exact: true })).toHaveCount(0);
+
+  await expect(workflow.getByLabel("정비 Action 판단")).toBeVisible();
+  await expect(workflow.getByRole("button", { name: "정비안 생성", exact: true })).toBeDisabled();
+  await workflow.getByLabel("정비 Action 판단").selectOption("ACTION-CANDIDATE-E2E");
+  await workflow.getByRole("button", { name: "정비안 생성", exact: true }).click();
+  await expect.poll(() => recommendationRequests).toBe(1);
 });
 
 test("does not show cost analysis before an eligible inspection is completed", async ({ page }) => {

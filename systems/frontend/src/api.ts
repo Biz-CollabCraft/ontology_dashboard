@@ -1321,26 +1321,26 @@ export function createOperationsManualRecommendation(input: {
   workspaceId: string;
   inspectionResultId: string;
   actionCode: MaintenanceActionCode;
-  costAnalysisId: string;
-  costOptionId: string;
-  actionCandidateId: string;
   idempotencyKey: string;
 }) {
   return maintenanceCommand(
     `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-results/${encodeURIComponent(input.inspectionResultId)}/recommendations`,
-    {
-      action_code: input.actionCode,
-      cost_analysis_id: input.costAnalysisId,
-      cost_option_id: input.costOptionId,
-      action_candidate_id: input.actionCandidateId,
-      basis: [
-        `inspection_result:${input.inspectionResultId}`,
-        `cost_analysis:${input.costAnalysisId}`,
-        `cost_option:${input.costOptionId}`,
-      ],
-    },
+    buildOperationsManualRecommendationPayload(
+      input.inspectionResultId,
+      input.actionCode,
+    ),
     input.idempotencyKey,
   );
+}
+
+export function buildOperationsManualRecommendationPayload(
+  inspectionResultId: string,
+  actionCode: MaintenanceActionCode,
+) {
+  return {
+    action_code: actionCode,
+    basis: [`inspection_result:${inspectionResultId}`],
+  };
 }
 
 export function decideOperationsManualRecommendation(input: {
