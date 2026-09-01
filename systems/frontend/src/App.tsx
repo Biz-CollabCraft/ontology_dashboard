@@ -243,7 +243,7 @@ function AppRouter() {
   }
 
   if (pathname === "/admin") return user.is_admin ? <AdminApp /> : <ForbiddenPage />;
-  if (pathname.startsWith("/system/operations/assets") || pathname.startsWith("/system/operations/mappings") || pathname.startsWith("/system/operations/jobs") || pathname.startsWith("/system/operations/impact")) {
+  if (pathname.startsWith("/system/operations/assets") || pathname.startsWith("/system/operations/mappings") || pathname.startsWith("/system/operations/contracts") || pathname.startsWith("/system/operations/jobs") || pathname.startsWith("/system/operations/impact")) {
     return canReadSystemOperationalAssets(user.permissions)
       ? <SystemOperationsApp />
       : <ForbiddenPage />;

@@ -7,6 +7,9 @@ export const SYSTEM_JOBS_CREATE_PERMISSION = "system.jobs.create";
 export const SYSTEM_JOBS_CANCEL_PERMISSION = "system.jobs.cancel";
 export const SYSTEM_IMPACT_CREATE_PERMISSION = "system.impact.create";
 export const SYSTEM_REBUILD_EXECUTE_PERMISSION = "system.rebuild.execute";
+export const SYSTEM_CONTRACTS_CREATE_PERMISSION = "system.contracts.create_version";
+export const SYSTEM_CONTRACTS_VALIDATE_PERMISSION = "system.contracts.validate";
+export const SYSTEM_CONTRACTS_PUBLISH_PERMISSION = "system.contracts.publish";
 
 export function canReadSystemOperationalAssets(permissions: readonly string[] | null | undefined) {
   return Boolean(permissions?.includes(SYSTEM_ASSETS_READ_PERMISSION));
@@ -43,3 +46,7 @@ export function canCreateImpactAnalysis(permissions: readonly string[] | null | 
 export function canExecuteSystemRebuild(permissions: readonly string[] | null | undefined) {
   return Boolean(permissions?.includes(SYSTEM_REBUILD_EXECUTE_PERMISSION));
 }
+
+export function canCreateManagedContract(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_CONTRACTS_CREATE_PERMISSION)); }
+export function canValidateManagedContract(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_CONTRACTS_VALIDATE_PERMISSION)); }
+export function canPublishManagedContract(permissions: readonly string[] | null | undefined) { return Boolean(permissions?.includes(SYSTEM_CONTRACTS_PUBLISH_PERMISSION)); }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canCancelSystemJob, canCreateImpactAnalysis, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canPublishSystemAsset, canReadSystemJobs, canReadSystemOperationalAssets, canValidateSystemAsset } from "./permissions";
+import { canCancelSystemJob, canCreateImpactAnalysis, canCreateManagedContract, canCreateSystemAssetVersion, canCreateSystemJob, canExecuteSystemRebuild, canPublishManagedContract, canPublishSystemAsset, canReadSystemJobs, canReadSystemOperationalAssets, canValidateManagedContract, canValidateSystemAsset } from "./permissions";
 
 describe("system operations permissions", () => {
   it("allows only the dedicated operational asset permission", () => {
@@ -22,5 +22,12 @@ describe("system operations permissions", () => {
     expect(canCreateImpactAnalysis(["system.impact.create"])).toBe(true);
     expect(canExecuteSystemRebuild(["system.impact.create"])).toBe(false);
     expect(canExecuteSystemRebuild(["system.rebuild.execute"])).toBe(true);
+  });
+  it("separates managed contract editing, validation, and publication", () => {
+    expect(canCreateManagedContract(["system.contracts.create_version"])).toBe(true);
+    expect(canValidateManagedContract(["system.contracts.create_version"])).toBe(false);
+    expect(canValidateManagedContract(["system.contracts.validate"])).toBe(true);
+    expect(canPublishManagedContract(["system.contracts.validate"])).toBe(false);
+    expect(canPublishManagedContract(["system.contracts.publish"])).toBe(true);
   });
 });

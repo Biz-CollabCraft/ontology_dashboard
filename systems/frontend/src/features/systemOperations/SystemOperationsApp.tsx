@@ -9,6 +9,7 @@ import { useAuth } from "../auth/AuthContext";
 import { canCreateSystemAssetVersion } from "./permissions";
 import { PipelineJobsPage } from "./PipelineJobsPage";
 import { ImpactAnalysesPage } from "./ImpactAnalysesPage";
+import { ManagedContractsPage } from "./ManagedContractsPage";
 
 const ASSET_TYPES = ["static_mapping", "preprocessing_plan", "feature_schema", "label_schema", "history_requirement", "training_config", "feature_dataset_bundle", "model_artifact", "active_model_set", "protocol_contract", "dataset_contract"];
 const REGISTRY_STATUSES = ["verified", "discovered", "invalid", "conflicted", "drifted", "unavailable"];
@@ -46,6 +47,8 @@ export function SystemOperationsApp() {
   const pathname = usePathname();
   return pathname.startsWith("/system/operations/mappings/drafts")
     ? <MappingDraftsPage />
+    : pathname.startsWith("/system/operations/contracts")
+    ? <ManagedContractsPage />
     : pathname.startsWith("/system/operations/impact")
     ? <ImpactAnalysesPage />
     : pathname.startsWith("/system/operations/jobs")
@@ -77,7 +80,7 @@ function OperationalAssetsApp() {
   }, [assetType, status, search, activeOnly, Boolean(detailMatch)]);
   if (detailMatch) return <Detail assetId={decodeURIComponent(detailMatch[1])} />;
   return <main className="ops-page">
-    <header><p className="ops-eyebrow">SYSTEM OPERATIONS</p><h1>운영 자산</h1><p>Generator가 실제 사용하는 Mapping, Schema, Dataset Bundle과 Model Artifact의 검증 상태를 감독합니다.</p>{canCreateSystemAssetVersion(user?.permissions) && <button onClick={() => navigate("/system/operations/mappings/drafts")}>Mapping 새 버전 관리</button>}<button onClick={() => navigate("/system/operations/jobs")}>Rebuild Job</button><button onClick={() => navigate("/system/operations/impact")}>Downstream 영향 분석</button></header>
+    <header><p className="ops-eyebrow">SYSTEM OPERATIONS</p><h1>운영 자산</h1><p>Generator가 실제 사용하는 Mapping, Schema, Dataset Bundle과 Model Artifact의 검증 상태를 감독합니다.</p>{canCreateSystemAssetVersion(user?.permissions) && <button onClick={() => navigate("/system/operations/mappings/drafts")}>Mapping 새 버전 관리</button>}<button onClick={() => navigate("/system/operations/contracts")}>계약·설정 자산 관리</button><button onClick={() => navigate("/system/operations/jobs")}>Rebuild Job</button><button onClick={() => navigate("/system/operations/impact")}>Downstream 영향 분석</button></header>
     <section className="ops-summary-grid"><article><span>등록 자산</span><strong>{total}</strong></article><article><span>최근 동기화</span><strong>{when(reconciliation?.completed_at)}</strong></article><article><span>검증됨</span><strong>{reconciliation?.verified_count ?? "—"}</strong></article><article><span>문제 발견</span><strong>{reconciliation ? reconciliation.invalid_count + reconciliation.conflicted_count : "—"}</strong></article></section>
     <section className="ops-panel"><div className="ops-filters"><input aria-label="자산 검색" placeholder="자산 이름 또는 버전 검색" value={search} onChange={(event) => setSearch(event.target.value)} /><select aria-label="자산 유형" value={assetType} onChange={(event) => setAssetType(event.target.value)}><option value="">모든 유형</option>{ASSET_TYPES.map((value) => <option key={value}>{value}</option>)}</select><select aria-label="Registry 상태" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">모든 상태</option>{REGISTRY_STATUSES.map((value) => <option key={value}>{value}</option>)}</select><label><input type="checkbox" checked={activeOnly} onChange={(event) => setActiveOnly(event.target.checked)} /> 활성 자산만</label></div>
       {loading ? <div className="ops-state">Registry를 불러오는 중입니다.</div> : error ? <div className="ops-state ops-state--error">{error}</div> : items.length === 0 ? <div className="ops-state">조건에 맞는 운영 자산이 없습니다.</div> : <div className="ops-table-wrap"><table><thead><tr><th>유형</th><th>자산</th><th>버전</th><th>Registry</th><th>검증</th><th>활성</th><th>Checksum</th><th>마지막 확인</th></tr></thead><tbody>{items.map((item) => <tr className="ops-row" key={item.id} onClick={() => navigate(`/system/operations/assets/${encodeURIComponent(item.id)}`)}><td>{item.asset_type}</td><td><strong>{item.asset_key}</strong></td><td>{item.current_version ?? "—"}</td><td><Status value={item.registry_status} /></td><td><Status value={item.validation_status} /></td><td>{item.active ? "ACTIVE" : "—"}</td><td><code title={item.sha256}>{shortHash(item.sha256)}</code></td><td>{when(item.last_seen_at)}</td></tr>)}</tbody></table></div>}

@@ -161,3 +161,23 @@ export interface SystemImpactAnalysis {
   blocked_actions: SystemImpactAction[];
   created_at: string;
 }
+
+export type ManagedContractAssetType = "preprocessing_plan" | "feature_schema" | "label_schema" | "history_requirement" | "training_config";
+export interface ManagedContractDraft {
+  draft_id: string; asset_type: ManagedContractAssetType; asset_id: string;
+  target_version: string; base_version?: string | null; revision: number;
+  status: string; payload: Record<string, unknown>; payload_sha256: string;
+  validation_status: string; validation_errors: Array<Record<string, unknown>>;
+  validation_warnings: Array<Record<string, unknown>>; validated_revision?: number | null;
+  created_by: string; updated_by: string; created_at: string; updated_at: string;
+  published_at?: string | null; published_sha256?: string | null;
+}
+export interface ManagedContractValidation {
+  draft_id: string; validation_status: "valid" | "invalid"; validated_revision: number;
+  payload_sha256: string; errors: Array<Record<string, unknown>>; warnings: Array<Record<string, unknown>>;
+}
+export interface ManagedContractDiff {
+  draft_id: string; base_version?: string | null; target_version: string;
+  summary: { added: number; removed: number; changed: number };
+  changes: Array<{ path: string; change_type: string; before: unknown; after: unknown }>;
+}
