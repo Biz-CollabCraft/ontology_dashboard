@@ -193,6 +193,7 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
 
     const request = buildCostRequest(form, guidance, "EVT-1");
 
+    expect(request.action_code).toBe("TOOL_REPLACEMENT");
     expect(request.sop_id).toBe("SOP-CNC-TOOL-001");
     expect(request.scenarios).toHaveLength(4);
     expect(request.scenarios[0].parts_cost).toEqual({
@@ -202,5 +203,39 @@ describe("MaintenanceCostDecisionPanel helpers", () => {
     });
     expect(request.scenarios[0].labor_duration).toBeNull();
     expect(request.assumptions.join(" ")).toContain("임의 추정");
+  });
+
+  it("preserves the selected cooling Action in the cost request", () => {
+    const form = {
+      immediate: {
+        partsCost: "1000", laborDuration: "10", laborRate: "100",
+        externalCost: "0", downtime: "20", productionLossRate: "50",
+        failureLoss: "5000",
+      },
+      planned_window: {
+        partsCost: "1000", laborDuration: "10", laborRate: "100",
+        externalCost: "0", downtime: "20", productionLossRate: "50",
+        failureLoss: "5000",
+      },
+      reinspect_after: {
+        partsCost: "1000", laborDuration: "10", laborRate: "100",
+        externalCost: "0", downtime: "20", productionLossRate: "50",
+        failureLoss: "5000",
+      },
+      no_action_baseline: {
+        partsCost: "1000", laborDuration: "10", laborRate: "100",
+        externalCost: "0", downtime: "20", productionLossRate: "50",
+        failureLoss: "5000",
+      },
+    };
+
+    expect(
+      buildCostRequest(
+        form,
+        guidance,
+        "EVT-1",
+        "COOLING_SYSTEM_RESTORE",
+      ).action_code,
+    ).toBe("COOLING_SYSTEM_RESTORE");
   });
 });

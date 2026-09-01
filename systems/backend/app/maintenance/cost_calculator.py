@@ -1,4 +1,4 @@
-"""Deterministic TOOL_REPLACEMENT cost scenario calculation."""
+"""Deterministic cost scenario calculation for typed Maintenance Actions."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class SensitivityRatePerMinute(FrozenModel):
         return self
 
 
-class ToolReplacementScenarioInput(FrozenModel):
+class MaintenanceScenarioInput(FrozenModel):
     execution_timing: ExecutionTiming
     parts_cost: SensitivityMoney | None
     labor_duration: SensitivityDuration | None
@@ -58,7 +58,7 @@ class ToolReplacementScenarioInput(FrozenModel):
     ]
 
 
-class ToolReplacementCostAnalysisInput(FrozenModel):
+class MaintenanceCostAnalysisInput(FrozenModel):
     analysis_id: str = Field(min_length=1, max_length=240)
     organization_id: str = Field(min_length=1, max_length=160)
     project_id: str = Field(min_length=1, max_length=160)
@@ -68,22 +68,22 @@ class ToolReplacementCostAnalysisInput(FrozenModel):
     calculated_at: datetime
     based_on: CostAnalysisBasis
     action_candidate_id: str = Field(min_length=1, max_length=240)
-    action_code: Literal[MaintenanceActionCode.TOOL_REPLACEMENT]
+    action_code: MaintenanceActionCode
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     currency_minor_unit: Literal[0, 2, 3]
-    scenarios: tuple[ToolReplacementScenarioInput, ...] = Field(min_length=4, max_length=4)
+    scenarios: tuple[MaintenanceScenarioInput, ...] = Field(min_length=4, max_length=4)
     assumptions: tuple[str, ...]
     input_sources: tuple[CostInputSource, ...] = Field(min_length=1)
     price_version: str = Field(min_length=1, max_length=160)
     calculation_policy_version: str = Field(min_length=1, max_length=160)
 
     @model_validator(mode="after")
-    def require_complete_scenario_set(self) -> ToolReplacementCostAnalysisInput:
+    def require_complete_scenario_set(self) -> MaintenanceCostAnalysisInput:
         if self.asset_id != self.equipment_id:
             raise ValueError("MVP cost analysis requires equipment_id = asset_id")
         timings = [scenario.execution_timing for scenario in self.scenarios]
         if len(set(timings)) != len(timings) or set(timings) != set(ExecutionTiming):
-            raise ValueError("TOOL_REPLACEMENT requires exactly four unique timing scenarios")
+            raise ValueError("Maintenance cost analysis requires four unique timing scenarios")
         return self
 
 
@@ -116,8 +116,8 @@ def _option_id(
 
 
 def _calculate_option(
-    source: ToolReplacementCostAnalysisInput,
-    scenario: ToolReplacementScenarioInput,
+    source: MaintenanceCostAnalysisInput,
+    scenario: MaintenanceScenarioInput,
 ) -> MaintenanceCostOption:
     missing_inputs: list[str] = []
     if scenario.parts_cost is None:
@@ -194,8 +194,8 @@ def _calculate_option(
     )
 
 
-def calculate_tool_replacement_cost_scenarios(
-    source: ToolReplacementCostAnalysisInput,
+def calculate_maintenance_cost_scenarios(
+    source: MaintenanceCostAnalysisInput,
 ) -> MaintenanceCostScenarioResult:
     """Calculate cost-only scenarios without creating a recommendation or command."""
 
@@ -245,3 +245,25 @@ def calculate_tool_replacement_cost_scenarios(
         calculation_policy_version=source.calculation_policy_version,
         limitations=tuple(LimitationCode),
     )
+
+
+class ToolReplacementScenarioInput(MaintenanceScenarioInput):
+    """Backward-compatible request type for the first Action slice."""
+
+
+class ToolReplacementCostAnalysisInput(MaintenanceCostAnalysisInput):
+    """Keep the existing TOOL_REPLACEMENT input contract strict and named."""
+
+    action_code: Literal[MaintenanceActionCode.TOOL_REPLACEMENT]
+    scenarios: tuple[ToolReplacementScenarioInput, ...] = Field(
+        min_length=4,
+        max_length=4,
+    )
+
+
+def calculate_tool_replacement_cost_scenarios(
+    source: ToolReplacementCostAnalysisInput,
+) -> MaintenanceCostScenarioResult:
+    if source.action_code is not MaintenanceActionCode.TOOL_REPLACEMENT:
+        raise ValueError("tool replacement calculator requires TOOL_REPLACEMENT")
+    return calculate_maintenance_cost_scenarios(source)

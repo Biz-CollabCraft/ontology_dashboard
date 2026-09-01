@@ -148,7 +148,7 @@ class OperationalRecommendedAction(ScopedRecord):
     source_action_candidate_id: str | None = Field(
         default=None, min_length=1, max_length=240
     )
-    action_code: Literal["TOOL_REPLACEMENT"] | None = None
+    action_code: Literal["TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"] | None = None
     authored_by: str | None = Field(default=None, min_length=1, max_length=240)
     authored_at: datetime | None = None
 
