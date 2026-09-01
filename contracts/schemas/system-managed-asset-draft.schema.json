@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-managed-asset-draft.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["draft_id", "asset_type", "asset_id", "target_version", "base_version", "revision", "status", "payload", "payload_sha256", "validation_status", "validation_errors", "created_by", "updated_by", "created_at", "updated_at"],
+  "properties": {
+    "draft_id": {"type": "string", "format": "uuid"},
+    "asset_type": {"enum": ["preprocessing_plan", "feature_schema", "label_schema", "history_requirement", "training_config"]},
+    "asset_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+    "target_version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+    "base_version": {"type": ["string", "null"]},
+    "revision": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["draft", "validated", "validation_failed", "publishing", "published", "publish_failed"]},
+    "payload": {"type": "object"},
+    "payload_sha256": {"type": "string", "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "validation_status": {"enum": ["not_validated", "valid", "invalid"]},
+    "validation_errors": {"type": "array", "items": {"type": "object"}},
+    "validated_revision": {"type": ["integer", "null"], "minimum": 1},
+    "created_by": {"type": "string", "minLength": 1},
+    "updated_by": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "published_at": {"type": ["string", "null"], "format": "date-time"},
+    "published_sha256": {"type": ["string", "null"], "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "publish_error": {"type": ["object", "null"]}
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-managed-asset-diff.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["draft_id", "base_version", "target_version", "summary", "changes"],
+  "properties": {
+    "draft_id": {"type": "string", "format": "uuid"},
+    "base_version": {"type": ["string", "null"]},
+    "target_version": {"type": "string", "minLength": 1},
+    "summary": {"type": "object", "additionalProperties": false, "required": ["added", "removed", "changed"], "properties": {"added": {"type": "integer", "minimum": 0}, "removed": {"type": "integer", "minimum": 0}, "changed": {"type": "integer", "minimum": 0}}},
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "change_type", "before", "after"],
+        "properties": {
+          "path": {"type": "string"},
+          "change_type": {"enum": ["added", "removed", "changed"]},
+          "before": {},
+          "after": {}
+        }
+      }
+    }
+  }
+}

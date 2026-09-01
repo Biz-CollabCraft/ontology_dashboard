@@ -80,6 +80,10 @@ PERMISSION_DEFINITIONS: dict[str, str] = {
     "system.impact.read": "Mapping 하위 영향 분석 조회",
     "system.impact.create": "Mapping 하위 영향 분석 Snapshot 생성",
     "system.rebuild.execute": "선택한 하위 Pipeline 재구축 실행",
+    "system.contracts.read": "Generator 계약·설정 자산과 Draft 조회",
+    "system.contracts.create_version": "Generator 계약·설정 자산 신규 버전 Draft 생성 및 편집",
+    "system.contracts.validate": "Generator 계약·설정 자산 Draft 검증 및 Diff 조회",
+    "system.contracts.publish": "검증된 Generator 계약·설정 자산 불변 발행",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -88,12 +92,16 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "system.assets.publish", "system.assets.activate", "system.jobs.read",
         "system.jobs.create", "system.jobs.cancel",
         "system.impact.read", "system.impact.create", "system.rebuild.execute",
+        "system.contracts.read", "system.contracts.create_version",
+        "system.contracts.validate", "system.contracts.publish",
     },
     "system_operator": {
         "system.assets.read", "system.assets.create_version", "system.assets.validate",
         "system.assets.publish", "system.assets.activate", "system.jobs.read",
         "system.jobs.create", "system.jobs.cancel",
         "system.impact.read", "system.impact.create", "system.rebuild.execute",
+        "system.contracts.read", "system.contracts.create_version",
+        "system.contracts.validate", "system.contracts.publish",
     },
     "executive_viewer": {"app.access", "events.read", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "executive.overview.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_manager": {"app.access", "events.read", "events.decision", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "datasets.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},

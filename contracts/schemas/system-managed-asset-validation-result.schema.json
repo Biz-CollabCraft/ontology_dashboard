@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-managed-asset-validation-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["draft_id", "validation_status", "validated_revision", "payload_sha256", "errors", "warnings"],
+  "properties": {
+    "draft_id": {"type": "string", "format": "uuid"},
+    "validation_status": {"enum": ["valid", "invalid"]},
+    "validated_revision": {"type": "integer", "minimum": 1},
+    "payload_sha256": {"type": "string", "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "errors": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "object"}}
+  }
+}

@@ -809,6 +809,8 @@ class ContractVectorVerifier:
                 self._verify_system_rebuild_job_vector(vname, vdir, result)
             elif vname.startswith("system-impact-analysis"):
                 self._verify_system_impact_analysis_vector(vname, vdir, result)
+            elif vname.startswith("system-managed-asset"):
+                self._verify_system_managed_asset_vector(vname, vdir, result)
 
 
             else:
@@ -900,6 +902,22 @@ class ContractVectorVerifier:
             result.errors.append(VerificationError(
                 context=vector_name,
                 message=f"System Impact Analysis vector validation failed: {exc}",
+            ))
+
+    def _verify_system_managed_asset_vector(
+        self, vector_name: str, vector_dir: Path, result: VerificationResult,
+    ) -> None:
+        try:
+            request = json.loads((vector_dir / "request.json").read_text(encoding="utf-8"))
+            expected = json.loads((vector_dir / "expected.json").read_text(encoding="utf-8"))
+            schema = json.loads((self.schemas_dir / "system-managed-asset-draft-request.schema.json").read_text(encoding="utf-8"))
+            validator_for(schema)(schema, format_checker=jsonschema.FormatChecker()).validate(request)
+            if expected.get("canonical_asset_type") != request.get("asset_type"):
+                raise ValueError("canonical asset type mismatch")
+        except Exception as exc:
+            result.errors.append(VerificationError(
+                context=vector_name,
+                message=f"System Managed Asset vector validation failed: {exc}",
             ))
 
     def _verify_runtime_overlay_output_vector(

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-managed-asset-draft-request.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asset_type", "asset_id", "target_version"],
+  "properties": {
+    "asset_type": {"enum": ["preprocessing_plan", "feature_schema", "label_schema", "history_requirement", "training_config"]},
+    "asset_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+    "target_version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+    "base_version": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"}
+  }
+}
