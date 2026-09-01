@@ -121,6 +121,14 @@ Generator는 threshold 적용, 최종 이상 판정, Product Result Artifact, Ev
     이유만으로 자동 이관하지 않으며, Phase 14 전에는 미배정·`UNDECIDED`·`DEFER`를 0건으로 해소한다.
 36. 도메인 전용 예외는 각 도메인의 `{domain}_exception.py`에 정의하고, 범도메인 공통 예외는 `common/exceptions.py`로 정의하며, 도메인 레이어에서 `FastAPI`의 `HTTPException`을 직접 import/발생시키지 않는다.
 37. `systems/backend/ontology_dashboard/modeling`과 `ml/src/factory_signal_ml`은 compatibility port/adapter일 수 있으나 semantic mapping, feature build, model training 또는 runtime inference의 canonical owner가 되면 안 된다.
+38. 시스템 운영 Control Plane을 일반 사용자 관리 Admin UI로 구현하면 안 된다.
+39. 발행된 운영 자산을 직접 수정·삭제하면 안 된다.
+40. 운영 자산 변경은 새 버전 생성·검증·발행·활성화 절차를 거쳐야 한다.
+41. 미구현 Target 기능을 Current로 설명하면 안 된다.
+42. 시스템 운영 UI는 Generator 파일과 Backend 로그를 직접 무제한 노출하면 안 된다.
+43. Static Mapping Draft와 revision은 Backend가 관리하되, 운영 Mapping 파일의 최종 검증과 불변 발행은 Generator가 소유한다. Backend와 Frontend는 Generator Mapping 경로에 직접 쓰면 안 된다.
+44. 발행된 `mapping_id + mapping_version`은 덮어쓰거나 삭제하지 않는다. 동일 내용은 멱등 재사용하고 다른 내용은 충돌로 실패해야 한다.
+45. Mapping Publish는 활성화 및 Extraction rebuild/replay와 분리한다. Phase 4의 Publish 성공만으로 현재 Extraction Mapping이나 기존 Dataset을 변경하면 안 된다.
 
 15~19번은 `docs/mvp/generator-feature-label-contract.md`를 근거로 한다.
 
@@ -138,6 +146,7 @@ Closed-loop Domain/API/UI를 변경하는 PR에서 적용한다.
 
 30~36번은 `docs/architecture.md` §5 Backend Domain-First 구조 계약, §9 Architecture CI 목표 및 [`backend-migration-map.md`](./backend-migration-map.md)를 근거로 한다.
 
+38~42번은 [`docs/system-operations-control-plane.md`](./system-operations-control-plane.md)를 근거로 하며 시스템 운영 Control Plane, 운영 자산 관리, Job 및 로그 감독을 구현하거나 변경하는 PR에서 적용한다.
 37번은 §4 Model Artifact/Result Artifact 구분과 §5 Backend ownership 계약을 근거로 한다.
 
 

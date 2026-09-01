@@ -481,3 +481,13 @@ PR #9의 대규모 실행 코드는 이 PR에서 이동하지 않는다. 이후 
 - 사용자 화면 및 report rendering → Frontend/Report consumer
 
 재배치 과정에서도 `gen_data`의 Source Data Producer 책임과 본 문서의 Model Artifact / Result Artifact 경계를 변경하지 않는다.
+
+---
+
+## 11. 시스템 운영 Control Plane (Target Architecture)
+
+- 시스템 운영 Control Plane은 Generator 운영 자산, Pipeline Job, Generator·Backend 로그 및 시스템 상태를 감독한다.
+- Static Mapping 신규 버전은 Backend가 Draft와 revision을 관리하고 Generator가 공식 계약 검증과 불변 파일 발행을 소유한다. Mapping 발행은 활성화 및 Extraction rebuild와 분리한다.
+- 일반 사용자·조직·역할 관리 기능은 책임 범위에 포함하지 않는다.
+- 운영 자산 Lifecycle, 시스템 관리자 화면, 단계별 구현 계획의 상세 기준은 [`docs/system-operations-control-plane.md`](./system-operations-control-plane.md)를 따른다.
+- 본 기능은 목표 아키텍처(Target Architecture)이며, 아직 구현되지 않은 기능은 `Current`로 표현하지 않는다.
