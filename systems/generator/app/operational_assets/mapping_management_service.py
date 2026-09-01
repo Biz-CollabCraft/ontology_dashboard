@@ -137,7 +137,9 @@ class MappingManagementService:
             "activated_at": datetime.now(timezone.utc).isoformat(),
         }
         temp = mapping_dir / f".active.tmp-{uuid.uuid4().hex}"
+        promoted: list[tuple[Path, Path | None]] = []
         try:
+            promoted = self._promote_replay_checkpoints(actual)
             with temp.open("w", encoding="utf-8") as stream:
                 stream.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
                 stream.flush()
@@ -146,6 +148,48 @@ class MappingManagementService:
             verified = self.read_active(mapping_id)
             return {**verified, "idempotent": False}
         except Exception as exc:
+            for target, backup in reversed(promoted):
+                target.unlink(missing_ok=True)
+                if backup is not None and backup.exists():
+                    shutil.copy2(backup, target)
             raise MappingManagementError(500, "MAPPING_ACTIVATION_FAILED", "Mapping 활성 포인터를 원자적으로 갱신하지 못했습니다.") from exc
         finally:
             temp.unlink(missing_ok=True)
+
+    def _promote_replay_checkpoints(self, mapping_sha256: str) -> list[tuple[Path, Path | None]]:
+        replay_root = (PATHS.data_preprocessed / "extraction_replays" / mapping_sha256 / "checkpoints").resolve()
+        if not replay_root.is_dir():
+            raise MappingManagementError(422, "MAPPING_ACTIVATION_REPLAY_REQUIRED", "활성화할 Mapping의 Replay checkpoint가 없습니다.")
+        candidates = sorted(path for path in replay_root.glob("*.json") if not path.name.startswith(".tmp_"))
+        if not candidates:
+            raise MappingManagementError(422, "MAPPING_ACTIVATION_REPLAY_REQUIRED", "활성화할 Mapping의 Replay checkpoint가 없습니다.")
+        active_root = (PATHS.data_preprocessed / "extraction_state" / "gen_data" / "checkpoints").resolve()
+        archive_root = (PATHS.data_preprocessed / "extraction_state" / "gen_data" / "checkpoint_archive").resolve()
+        active_root.mkdir(parents=True, exist_ok=True)
+        promoted: list[tuple[Path, Path | None]] = []
+        try:
+            for source in candidates:
+                replay_payload = json.loads(source.read_text(encoding="utf-8"))
+                if replay_payload.get("mapping_sha256") != mapping_sha256:
+                    raise ValueError(f"Replay checkpoint mapping mismatch: {source.name}")
+                target = active_root / source.name
+                backup = None
+                if target.is_file():
+                    old_payload = json.loads(target.read_text(encoding="utf-8"))
+                    old_sha = str(old_payload.get("mapping_sha256") or "unknown")
+                    backup_dir = archive_root / old_sha
+                    backup_dir.mkdir(parents=True, exist_ok=True)
+                    backup = backup_dir / source.name
+                    if not backup.exists():
+                        shutil.copy2(target, backup)
+                staged = active_root / f".tmp-activate-{uuid.uuid4().hex}-{source.name}"
+                shutil.copy2(source, staged)
+                os.replace(staged, target)
+                promoted.append((target, backup))
+            return promoted
+        except Exception:
+            for target, backup in reversed(promoted):
+                target.unlink(missing_ok=True)
+                if backup is not None and backup.exists():
+                    shutil.copy2(backup, target)
+            raise

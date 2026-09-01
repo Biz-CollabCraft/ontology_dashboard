@@ -101,6 +101,9 @@ systems/generator/
 | GET | `/extraction/status` | Extraction Manager, Background Polling Worker 및 Runtime Handoff 큐 상태, Source별 체크포인트 offset 및 최근 오류 조회 | Current (구현 완료) |
 | GET | `/extraction/handoffs/{handoff_id}` | 특정 Extraction -> Runtime Prediction Handoff 기록 상세 조회 | Current (구현 완료) |
 | POST | `/extraction/handoffs/{handoff_id}/retry` | 실패 또는 대기 중인 Handoff 항목을 Runtime Prediction 큐에 명시적 재등록 | Current (구현 완료) |
+| POST | `/internal/rebuild/extraction` | 발행 Mapping checksum별 전용 checkpoint를 사용해 gen_data source 전체를 Replay하고 새 Canonical Observation Dataset 발행 | Current (System Operations Phase 5) |
+| GET | `/internal/operational-assets/mappings/{mapping_id}/active` | 현재 활성 Static Mapping 포인터 조회 및 checksum 재검증 | Current (System Operations Phase 5) |
+| POST | `/internal/operational-assets/mappings/{mapping_id}/activate` | Replay 성공 Mapping checkpoint를 승격하고 `active.json`을 원자적으로 교체 | Current (System Operations Phase 5) |
 | POST | `/preprocessing` | Observation Dataset 분석, 역할 판정 및 불변 Preprocessing Plan 수립·발행 (동기 방식) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/feature` | Observation/Failure Dataset, Preprocessing Plan, Feature/Label Schema를 소비하여 Feature Dataset Bundle 발행 (동기 방식, local file adapter) | Current — 구현 및 정본 Generator App 등록 완료 |
 | POST | `/train` | Feature Dataset Bundle을 소비하여 등록된 전체 머신러닝 모델 학습 및 불변 Model Artifact 패키지 발행 (동기 방식, 부분 성공 격리 지원) | Current — 구현 및 정본 Generator App 등록 완료 |
@@ -385,7 +388,7 @@ gen_data (sensor_stream.jsonl append)
 | Logical Scope Single-Writer Lock | **Current** | source_uri/site_id/cell_id 기준 상호 배제 Lock |
 | Mapping identity 불일치 감지 | **Current** | Checkpoint에 mapping_id/version/sha256 보존 및 비교 |
 | Source 교체/Prefix 불일치 감지 | **Current** | 422 EXTRACTION_SOURCE_PREFIX_MISMATCH 반환 |
-| Mapping 변경 요청 fail-closed | **Current** | 409 EXTRACTION_MAPPING_REBUILD_NOT_IMPLEMENTED 반환 |
+| Mapping 변경 Replay | **Current** | Mapping checksum별 checkpoint에서 전체 source를 재처리하고 기존 Dataset·checkpoint를 보존 |
 | 0바이트 Truncate 및 손상 감지 | **Current** | 422 EXTRACTION_SOURCE_TRUNCATED 반환 |
 | Checkpoint I/O 및 손상 감지 | **Current** | 500 READ_FAILED / 409 SCOPE_CONFLICT / 422 INVALID 반환 |
 | Mapping 변경 과거 Source replay | **Target** | offset 0부터 결정론적 replay (Issue #146) |

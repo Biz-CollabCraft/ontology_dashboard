@@ -12,7 +12,7 @@ API 계약과 팀 공유 문서를 관리한다.
 - [Closed-loop Runtime Overlay 통합 계약](./closed-loop-runtime-overlay-contract.md)
 - [Runtime Overlay 기존 계획 변경 영향 안내](./closed-loop-runtime-overlay-change-impact.md)
 - [아키텍처](./architecture.md)
-- [System Operations Control Plane](./system-operations-control-plane.md): 시스템 운영 계정의 Generator 운영 자산 Registry·조회 UI 현행 구현과 Pipeline Job·로그 감독의 단계별 Target Architecture.
+- [System Operations Control Plane](./system-operations-control-plane.md): 운영 자산 Registry·Mapping 버전 관리·Extraction Rebuild/Replay Job의 Current 구현과 후속 영향 분석·로그 감독 Target Architecture.
 - [CI 개발 피드백 시간 단축 제안](./ci-development-feedback-optimization-proposal.md)
 - [Backend Domain-First Migration Map](./backend-migration-map.md)
 - [Architecture Decision Records](./architecture-decisions/README.md)

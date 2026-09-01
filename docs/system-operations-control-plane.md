@@ -390,6 +390,10 @@ systems/backend/app/system_operations/
 | Current | `GET` | `/api/system/mapping-drafts/{draft_id}/diff` | 기준 버전과 Draft 간 차이 조회 |
 | Current | `POST` | `/api/system/mapping-drafts/{draft_id}/validate` | Generator의 실제 Mapping 계약 검증 수행 |
 | Current | `POST` | `/api/system/mapping-drafts/{draft_id}/publish` | 검증된 동일 revision을 새 불변 버전으로 발행 |
+| Current | `POST` | `/api/system/jobs/rebuild` | 발행 Mapping 기반 전체 source Replay Job 생성 |
+| Current | `GET` | `/api/system/jobs` | Pipeline Job 목록 및 상태 조회 |
+| Current | `GET` | `/api/system/jobs/{job_id}` | Job 진행·checkpoint·결과·오류 조회 |
+| Current | `POST` | `/api/system/jobs/{job_id}/cancel` | queued Job 취소 또는 running Job 취소 요청 |
 | Target | `GET` | `/api/system/access` | 현재 세션의 시스템 관리자 권한 확인 |
 | Target | `GET` | `/api/system/overview` | 시스템 전체 운영 지표 요약 |
 | Target | `GET` | `/api/system/health` | Generator 및 Backend 세부 서비스 헬스체크 |
@@ -399,7 +403,7 @@ systems/backend/app/system_operations/
 | Target | `GET` | `/api/system/logs` | Generator·Backend 통합 다차원 로그 조회 |
 | Target | `GET` | `/api/system/audit` | 시스템 운영 감사 로그 조회 |
 
-> **주의**: Phase 4에서는 Static Mapping의 Draft 편집·검증·불변 발행만 Current이다. 발행 버전의 활성화, Extraction rebuild/replay, 일반 자산 편집 및 Job 실행은 후속 Target이며, Current로 표시하지 않은 경로는 아직 구현 계약이 아니다.
+> **주의**: Phase 5에서는 Static Mapping의 Draft 편집·검증·불변 발행과 Extraction rebuild/replay Job까지 Current이다. Mapping 변경에 따른 Preprocessing·Feature·Training 자동 재구축, 일반 자산 편집 및 모델 선택은 후속 Target이며, Current로 표시하지 않은 경로는 아직 구현 계약이 아니다.
 
 ---
 
@@ -426,6 +430,9 @@ systems/frontend/src/features/systemOperations/
 ### 12.2 라우팅 경로
 - Current: `/system/operations/assets` — 운영 자산 목록 및 필터
 - Current: `/system/operations/assets/:assetId` — 자산 상세, 버전 및 목록형 의존성
+- Current: `/system/operations/mappings/drafts` — Static Mapping Draft·검증·불변 발행
+- Current: `/system/operations/jobs` — Mapping Rebuild/Replay Job 생성·조회
+- Current: `/system/operations/jobs/:jobId` — 진행 상태·checkpoint·결과·오류 및 취소 요청
 - Target: `/system/operations` — 시스템 종합 개요
 - Target: `/system/operations/jobs` — Pipeline Job 실행 상태
 - Target: `/system/operations/logs` — 통합 시스템 로그
@@ -478,7 +485,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **Phase 2** | 자산 Registry 기반 | **Current (SQLite)** — 운영 자산 Metadata Registry, 파일 기반 탐색·등록, 읽기 전용 API. PostgreSQL adapter는 후속 필요 | Phase 1 |
 | **Phase 3** | 자산 조회 UI | **Current** — 자산별 버전, Checksum, 목록형 의존성, 런타임 사용 상태 조회 UI | Phase 2 |
 | **Phase 4** | Mapping 버전 관리 | **Current** — Static Mapping 신규 버전 Draft, Diff, 실제 Generator 검증 및 불변 발행 | Phase 3 |
-| **Phase 5** | Rebuild/Replay Job | Mapping 활성화에 따른 Extraction 재처리 및 Replay 비동기 Job 오케스트레이션 | Phase 4 |
+| **Phase 5** | Rebuild/Replay Job | **Current (SQLite)** — Mapping checksum별 Replay checkpoint, Extraction 재처리, 영속 Job worker 및 성공 후 원자적 활성화 | Phase 4 |
 | **Phase 6** | 하위 영향 분석 | Mapping 변경 시 Preprocessing → Feature → Training 하위 데이터셋 영향 분석 및 선택적 재학습 | Phase 5 |
 | **Phase 7** | 계약/설정 확장 | Preprocessing Plan, Feature Schema, Training Config 관리 기능 확장 | Phase 6 |
 | **Phase 8** | 모델 운영 선택 | Model Artifact 및 Active Model Set 감독, `selected.json` 포인터 및 롤백 제어 | Phase 7 |
@@ -497,7 +504,7 @@ Control Plane은 시스템의 신뢰성과 무결성을 보호하기 위해 다�
 | **운영 자산 Registry** | SQLite 기반 구현 | PostgreSQL을 포함한 중앙화된 메타데이터 레지스트리 | Phase 2 |
 | **운영 자산 조회 UI** | 목록·상세·버전·목록형 의존성 조회 구현 | 대규모 관계 그래프 및 운영 제어 확장 | Phase 3 |
 | **Mapping 버전 편집** | Current | 버전 기반 초안 생성, 검증, 불변 발행 | Phase 4 |
-| **Mapping Rebuild** | 제한적/수동 스크립트 | 멱등 비동기 Job 기반 자동 재처리 | Phase 5 |
+| **Mapping Rebuild** | Current (SQLite Job Registry) | PostgreSQL adapter 및 고급 승인·취소 정책 확장 | Phase 5 |
 | **하위 영향 분석** | 없음 | Dataset → Feature → Model 전파 추적 | Phase 6 |
 | **Model 운영 선택** | `latest.json` 자동 갱신만 지원 | `selected.json` 명시적 선택 및 롤백 | Phase 8 |
 | **통합 운영 감사** | 개별 로그 기록 | 자산·Job·조작 전수 감사(Audit Trail) | Phase 9 |
