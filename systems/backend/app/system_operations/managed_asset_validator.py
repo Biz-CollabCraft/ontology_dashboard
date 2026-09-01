@@ -16,7 +16,7 @@ def create_template(asset_type: str, asset_id: str, version: str) -> dict[str, A
     id_field, version_field = IDENTITY_FIELDS[asset_type]
     payload: dict[str, Any] = {id_field: asset_id, version_field: version}
     if asset_type == "preprocessing_plan":
-        payload.update({"id_column": "asset_id", "time_column": "time", "column_rules": [], "duplicate_policy": "error", "missing_value_policy": "error"})
+        payload.update({"dataset_id": "", "dataset_version": "", "id_column": "asset_id", "time_column": "time", "column_rules": [], "duplicate_policy": "error", "missing_value_policy": "error"})
     elif asset_type == "feature_schema":
         payload.update({"feature_executor_version": "pdm-feature-executor-v1", "features": []})
     elif asset_type == "label_schema":
@@ -35,6 +35,8 @@ def validate_payload(asset_type: str, asset_id: str, version: str, payload: dict
     if payload.get(id_field) != asset_id or payload.get(version_field) != version:
         errors.append({"code": "SYSTEM_CONTRACT_IDENTITY_INVALID", "path": "/", "message": "Asset identity fields cannot be changed"})
     if asset_type == "preprocessing_plan":
+        if not payload.get("dataset_id") or not payload.get("dataset_version"):
+            errors.append({"code": "SYSTEM_CONTRACT_DATASET_IDENTITY_MISSING", "path": "/", "message": "dataset_id and dataset_version are required"})
         if not payload.get("id_column") or not payload.get("time_column"):
             errors.append({"code": "SYSTEM_CONTRACT_COLUMN_ROLE_MISSING", "path": "/", "message": "id_column and time_column are required"})
         if payload.get("duplicate_policy") not in {"error", "aggregate"}:
