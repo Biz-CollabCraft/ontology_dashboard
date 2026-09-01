@@ -72,10 +72,13 @@ from app.infra.db.pipeline_job_repository import PipelineJobRepository
 from app.infra.db.impact_analysis_repository import ImpactAnalysisRepository
 from app.infra.generator_rebuild import GeneratorRebuildClient
 from app.infra.generator_downstream import GeneratorDownstreamClient
+from app.infra.generator_managed_assets import GeneratorManagedAssetClient
+from app.infra.db.managed_asset_draft_repository import ManagedAssetDraftRepository
 from app.system_operations import SystemOperationService
 from app.system_operations.mapping_draft_service import MappingDraftService
 from app.system_operations.pipeline_job_service import PipelineJobService
 from app.system_operations.impact_analysis_service import ImpactAnalysisService
+from app.system_operations.managed_asset_service import ManagedAssetService
 from app.infra.db.project_repository import (
     ProjectRepository as SQLiteProjectRepository,
     SQLiteProjectContextResolver,
@@ -491,6 +494,19 @@ def get_impact_analysis_service() -> ImpactAnalysisService:
     if is_postgresql(target):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail="System Impact Analysis PostgreSQL adapter is not configured.")
     return ImpactAnalysisService(ImpactAnalysisRepository(target),get_pipeline_job_service())
+
+
+@lru_cache(maxsize=1)
+def get_managed_asset_service() -> ManagedAssetService:
+    target = database_target()
+    ensure_database_migrations()
+    if is_postgresql(target):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="System Managed Asset PostgreSQL adapter is not configured.")
+    return ManagedAssetService(
+        ManagedAssetDraftRepository(target),
+        GeneratorManagedAssetClient(),
+        get_system_operation_service(),
+    )
 
 
 @lru_cache(maxsize=1)
