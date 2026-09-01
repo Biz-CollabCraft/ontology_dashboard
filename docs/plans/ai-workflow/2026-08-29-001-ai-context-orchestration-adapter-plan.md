@@ -470,55 +470,6 @@ RDB-style lookup may answer this through joins or precomposed ViewModel fields. 
 
 ## Evaluation
 
-Recorded 2026-09-01 evaluation artifacts:
-
-- `docs/plans/ai-workflow/2026-09-01-001-agent-review-summary-llm-evaluation-report.md`
-- `tests/eval/results/agent_summary_llm_eval_mock_2026-09-01.json`
-- `tests/eval/results/agent_summary_llm_eval_live_smoke_2026-09-01.json`
-- `tests/eval/results/agent_summary_llm_eval_live_2026-09-01.json`
-- `tests/eval/results/agent_summary_llm_eval_live_c4_2026-09-01.json`
-- `tests/eval/results/agent_summary_llm_eval_live_compact_c4_smoke_2026-09-01.json`
-- `tests/eval/results/agent_summary_llm_eval_live_compact_c4_2026-09-01.json`
-- `tests/eval/results/agent_summary_llm_eval_live_compact_c8_2026-09-01.json`
-
-The separate LLM evaluation report records the metric definitions, gold-set
-coverage, mock 120-run result, live smoke result, live 120-run result, latency
-interpretation, cost-estimation caveat, and next batch-concurrency measurement.
-The headline live result is 118/120 accepted candidates, 2/120 `ReadTimeout`
-fallbacks, 0 contract-error rows, 1.0 source-ref grounding rate, p50 latency
-16,528.991 ms, p95 latency 19,858.608 ms, and configured-rate estimated cost
-USD 0.1689318.
-The concurrency 4 live result reduced batch wall-clock duration to 593,433.237
-ms, but degraded acceptance to 100/120 because all 20 fallback rows were
-`ReadTimeout`; this keeps the live operating gate partial until retry,
-timeout tuning, and checkpointed recovery are implemented.
-The compact input/output concurrency 4 result then passed the same 120-request gate:
-120/120 accepted candidates, 0 fallbacks, 0 contract-error rows, p95 latency
-5,359.453 ms, batch wall-clock duration 114,542.742 ms, and configured-rate
-estimated cost USD 0.04092975. The separate report records 67.47% average input
-payload reduction, 80.60% average editable-output reduction, and 81.84% response
-schema reduction. This supports input/output reduction over lowering concurrency
-as the first corrective action.
-The compact input/output concurrency 8 pressure test also passed: 120/120
-accepted candidates, 0 fallbacks, p95 latency 5,018.95 ms, batch wall-clock
-duration 63,890.402 ms, and throughput 112.692983 requests/minute.
-
-Current quality judgment: the gold-set contract, grounding gate, and compact
-concurrency-4/concurrency-8 operating gates pass for the 8x15 MVP eval set.
-Production runtime still needs retry policy, progress reporting, rate-limit
-telemetry, and checkpointed batch execution before treating this as an
-unattended release gate. The next measurement should preserve compact payloads
-and record request latency, queue wait, attempt count, retry outcome, fallback
-reason, batch wall-clock duration, rate-limit events, and accepted-after-retry
-rate separately.
-Model selection should be compared separately across `gpt-4o-mini`,
-`gpt-5.6-luna`, and `gpt-5-mini` using the same compact payload, same 8x15
-gold set, and the quality/reliability/cost axes defined in the LLM evaluation
-report.
-The current comparison keeps `gpt-4o-mini` as the default: it passed compact
-concurrency 8 with 120/120 accepted, while `gpt-5.6-luna` had one validator
-rejection and `gpt-5-mini` failed smoke reliability.
-
 Minimum release gates:
 
 - Groundedness: no packet/source-ref unsupported fact.

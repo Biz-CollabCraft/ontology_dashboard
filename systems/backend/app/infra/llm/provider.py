@@ -100,14 +100,13 @@ class OpenAICompatibleProvider:
             response_format = {"type": "json_object"}
         request_body = {
             "model": self.model,
+            "temperature": 0,
             "response_format": response_format,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
         }
-        if not self._uses_default_temperature_only():
-            request_body["temperature"] = 0
         response = self._post_chat_completion(request_body)
         if response_schema and response.status_code == 400:
             request_body["response_format"] = {"type": "json_object"}
@@ -131,9 +130,6 @@ class OpenAICompatibleProvider:
                 return response
             response.raise_for_status()
         return response
-
-    def _uses_default_temperature_only(self) -> bool:
-        return self.model.startswith("gpt-5")
 
 
 def configured_provider() -> LLMProvider:

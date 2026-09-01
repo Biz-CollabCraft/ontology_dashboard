@@ -7,7 +7,7 @@
     "head_branch": "codex/pr140-agent-review-packet",
     "worktree_branch": "codex/pr156-ai-workflow-preharness"
   },
-  "ready_for_120_run": true,
+  "ready_for_120_run": false,
   "pre_harness_gate": {
     "generator_batch_expression_contract": {
       "status": "completed",
@@ -46,22 +46,22 @@
       "production_switch_allowed": false
     },
     "pr_154_cost_basis_main_recheck": {
-      "status": "completed",
+      "status": "blocked_by_pr_154",
       "pr_number": 154,
-      "pr_state": "MERGED",
+      "pr_state": "OPEN",
       "head_branch": "feat/tool-insert-cost-basis",
-      "head_sha": "a28187ca67c134a23d55c7ace809f4cca38c163f",
-      "merged_at": "2026-09-01T03:29:28Z",
-      "recheck_evidence": [
-        "PR #156 was rebased onto origin/main after PR #154 merged",
-        "cost-basis and RecommendationInput snapshot guard regression tests passed",
-        "Agent Review Packet and Agent Review Summary contract tests passed"
+      "head_sha": "a63569393a1ced539ab794832b5fb879878feb2b",
+      "merged_at": null,
+      "required_after_merge": [
+        "merge or rebase main into codex/pr156-ai-workflow-preharness",
+        "verify cost-basis and RecommendationInput snapshot guard use the same trusted Product Result/Evidence basis",
+        "rerun maintenance loop, Agent Review Packet, and Agent Review Summary regression tests"
       ]
     }
   },
   "limits": [
     "This artifact opens LangGraph and RAG-family decision gates; it does not claim production GraphRAG, Vector DB, LlamaIndex, or LangGraph watcher adoption.",
-    "The 120-run LLM evaluation can proceed after the PR #154 main recheck, but live provider execution still requires explicit opt-in and pricing configuration.",
+    "The 120-run LLM evaluation should remain blocked until PR #154 is merged into main and rechecked, or the report explicitly marks the dependency as blocked_by_pr_154.",
     "Generator expression coverage is implementation-supported but still needs explicit inclusion in the 8-case gold set before live 120-run claims."
   ]
 }
