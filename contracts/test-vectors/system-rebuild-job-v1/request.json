@@ -1,0 +1,1 @@
+{"job_type":"mapping_rebuild","mapping_id":"sensor-protocol-mapping","mapping_version":"2.0.0","mapping_sha256":"1111111111111111111111111111111111111111111111111111111111111111","source_uri":"gen_data/site-a/cell-01/sensor.log","replay_scope":"full_source","activate_on_success":true,"idempotency_key":"mapping-rebuild-site-a-v2","reason":"Replay published mapping"}

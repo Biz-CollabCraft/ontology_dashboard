@@ -7,6 +7,10 @@ def test_system_operator_has_only_operational_asset_read_permission():
         "system.assets.create_version",
         "system.assets.validate",
         "system.assets.publish",
+        "system.assets.activate",
+        "system.jobs.read",
+        "system.jobs.create",
+        "system.jobs.cancel",
     }
 
 
@@ -16,4 +20,8 @@ def test_tenant_admin_does_not_inherit_system_operations_permission():
         "system.assets.create_version",
         "system.assets.validate",
         "system.assets.publish",
+        "system.assets.activate",
+        "system.jobs.read",
+        "system.jobs.create",
+        "system.jobs.cancel",
     } & ROLE_PERMISSIONS["tenant_admin"]

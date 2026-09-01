@@ -73,11 +73,23 @@ PERMISSION_DEFINITIONS: dict[str, str] = {
     "system.assets.create_version": "Static Mapping 신규 버전 초안 생성 및 편집",
     "system.assets.validate": "Static Mapping 초안 계약 검증",
     "system.assets.publish": "검증된 Static Mapping 불변 발행",
+    "system.assets.activate": "검증·재처리 완료된 Static Mapping 활성화",
+    "system.jobs.read": "System Operations Pipeline Job 조회",
+    "system.jobs.create": "Mapping Rebuild/Replay Job 생성",
+    "system.jobs.cancel": "실행 대기·실행 중 Pipeline Job 취소 요청",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "tenant_admin": set(PERMISSION_DEFINITIONS) - {"system.assets.read", "system.assets.create_version", "system.assets.validate", "system.assets.publish"},
-    "system_operator": {"system.assets.read", "system.assets.create_version", "system.assets.validate", "system.assets.publish"},
+    "tenant_admin": set(PERMISSION_DEFINITIONS) - {
+        "system.assets.read", "system.assets.create_version", "system.assets.validate",
+        "system.assets.publish", "system.assets.activate", "system.jobs.read",
+        "system.jobs.create", "system.jobs.cancel",
+    },
+    "system_operator": {
+        "system.assets.read", "system.assets.create_version", "system.assets.validate",
+        "system.assets.publish", "system.assets.activate", "system.jobs.read",
+        "system.jobs.create", "system.jobs.cancel",
+    },
     "executive_viewer": {"app.access", "events.read", "ontology.registry.read", "ontology.objects.read", "dashboards.read", "dashboards.personalize", "dashboards.share", "executive.overview.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_manager": {"app.access", "events.read", "events.decision", "agent.review.materialize", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "datasets.read", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},
     "process_engineer": {"app.access", "events.read", "events.note", "ontology.registry.read", "ontology.objects.read", "ontology.actions.execute", "dashboards.read", "dashboards.personalize", "dashboards.share", "field.tasks.read", "field.tasks.update", "planner.object_query", "planner.board_recommend", "planner.narrative", "exports.create", "exports.read_own"},

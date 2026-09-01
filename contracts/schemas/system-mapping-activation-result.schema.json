@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-mapping-activation-result.schema.json",
+  "title": "System Mapping Activation Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mapping_id", "mapping_version", "mapping_sha256", "activated_by_job_id", "activated_at", "idempotent"],
+  "properties": {
+    "mapping_id": {"type": "string", "minLength": 1},
+    "mapping_version": {"type": "string", "minLength": 1},
+    "mapping_sha256": {"type": "string", "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "activated_by_job_id": {"type": "string", "format": "uuid"},
+    "activated_at": {"type": "string", "format": "date-time"},
+    "idempotent": {"type": "boolean"}
+  }
+}

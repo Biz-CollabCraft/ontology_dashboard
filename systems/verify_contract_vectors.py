@@ -805,6 +805,8 @@ class ContractVectorVerifier:
                 self._verify_operational_asset_inventory_vector(vname, vdir, result)
             elif vname.startswith("system-mapping-management"):
                 self._verify_system_mapping_management_vector(vname, vdir, result)
+            elif vname.startswith("system-rebuild-job"):
+                self._verify_system_rebuild_job_vector(vname, vdir, result)
 
 
             else:
@@ -862,6 +864,24 @@ class ContractVectorVerifier:
                 result.errors.append(VerificationError(
                     context=f"{vector_name}/{filename}",
                     message=f"System Mapping vector validation failed: {exc}",
+                ))
+
+    def _verify_system_rebuild_job_vector(
+        self, vector_name: str, vector_dir: Path, result: VerificationResult,
+    ) -> None:
+        pairs = (
+            ("request.json", "system-rebuild-job-request.schema.json"),
+            ("job.json", "system-pipeline-job.schema.json"),
+        )
+        for filename, schema_name in pairs:
+            try:
+                data = json.loads((vector_dir / filename).read_text(encoding="utf-8"))
+                schema = json.loads((self.schemas_dir / schema_name).read_text(encoding="utf-8"))
+                validator_for(schema)(schema, format_checker=jsonschema.FormatChecker()).validate(data)
+            except Exception as exc:
+                result.errors.append(VerificationError(
+                    context=f"{vector_name}/{filename}",
+                    message=f"System Rebuild Job vector validation failed: {exc}",
                 ))
 
     def _verify_runtime_overlay_output_vector(

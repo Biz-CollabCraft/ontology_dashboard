@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ontology-dashboard.local/schemas/system-rebuild-job-request.schema.json",
+  "title": "System Mapping Rebuild Job Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job_type", "mapping_id", "mapping_version", "mapping_sha256", "source_uri", "replay_scope", "activate_on_success", "idempotency_key", "reason"],
+  "properties": {
+    "job_type": {"const": "mapping_rebuild"},
+    "mapping_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+    "mapping_version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$"},
+    "mapping_sha256": {"type": "string", "pattern": "^(?!0{64}$)[a-f0-9]{64}$"},
+    "source_uri": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"},
+    "replay_scope": {"const": "full_source"},
+    "flush_before": {"type": ["string", "null"], "format": "date-time"},
+    "max_records": {"type": ["integer", "null"], "minimum": 1},
+    "activate_on_success": {"type": "boolean"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 255},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 1000}
+  }
+}
