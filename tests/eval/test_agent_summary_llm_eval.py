@@ -51,8 +51,32 @@ def test_mock_120_run_harness_aggregates_all_gold_packets(monkeypatch) -> None:
     assert aggregate["fallback_summaries"] == 0
     assert aggregate["acceptance_rate"] == 1.0
     assert aggregate["grounding"]["grounding_rate"] == 1.0
+    assert aggregate["quality_scores"]["accuracy_candidate"] is not None
+    assert aggregate["quality_scores"]["usefulness_candidate"] is not None
+    assert aggregate["quality_scores"]["korean_quality_candidate"] is not None
+    assert aggregate["quality_scores"]["overall_candidate"] is not None
     assert aggregate["cost"]["status"] == "estimated"
     assert aggregate["cost"]["estimated_total_cost"] > 0
+    assert all(row["editable_output"] for row in rows)
+    assert all(row["quality_scores"]["checks"]["accuracy"] for row in rows)
+
+
+def test_quality_scores_detect_internal_language_and_missing_role_focus() -> None:
+    harness = _load_harness()
+    packet = harness._load_json(harness.ROOT / "tests/fixtures/agent_review_packets/GS-004.json")
+    candidate = harness.compose_deterministic_agent_review_summary(packet)
+    candidate["summary"] = "packet source_ref only"
+    candidate["role_summaries"] = [
+        {"role": "field_operator", "quote": "대상 설명 없음"},
+        {"role": "process_manager", "quote": "대상 설명 없음"},
+    ]
+
+    scores = harness._quality_scores(candidate, packet=packet)
+
+    assert scores["accuracy_candidate"] < 1.0
+    assert scores["usefulness_candidate"] < 1.0
+    assert scores["korean_quality_candidate"] < 1.0
+    assert scores["checks"]["korean_quality"]["avoids_internal_terms"] is False
 
 
 def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
@@ -91,6 +115,9 @@ def test_mock_120_run_harness_writes_result_artifact(tmp_path: Path) -> None:
     assert artifact["pre_harness_gate"]["ready_for_120_run"] is True
     assert artifact["ready_for_live_120_run"] is True
     assert artifact["aggregate"]["contract_error_rows"] == 0
+    assert artifact["aggregate"]["quality_scores"]["overall_candidate"] is not None
+    assert artifact["rows"][0]["editable_output"]["role_summaries"]
+    assert artifact["rows"][0]["quality_scores"]["limits"]
 
 
 def test_mock_harness_records_concurrency_metrics(tmp_path: Path) -> None:

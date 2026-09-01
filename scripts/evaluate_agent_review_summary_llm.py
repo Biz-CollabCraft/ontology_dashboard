@@ -206,6 +206,7 @@ def _run_candidate(
         candidate = dict(baseline_summary)
         provider_error = exc.__class__.__name__
     errors = validate_agent_review_summary_contract(candidate, packet=packet)
+    quality_scores = _quality_scores(candidate, packet=packet)
     duration_ms = round((time.perf_counter() - started) * 1000, 3)
     prompt_payload = build_agent_review_summary_prompt_payload(
         packet=packet,
@@ -234,8 +235,10 @@ def _run_candidate(
         "fallback": not accepted,
         "fallback_reason": None if accepted else provider_error or "validation_failed",
         "validation_errors": errors,
+        "quality_scores": quality_scores,
         "grounded_source_refs": _grounded_source_ref_count(candidate, packet),
         "source_ref_status": "grounded" if not errors else "validation_failed",
+        "editable_output": _editable_candidate_payload(candidate) if accepted else None,
         "llm": {
             "duration_ms": duration_ms,
             "queue_wait_ms": queue_wait_ms,
@@ -280,6 +283,12 @@ def _aggregate(
         if row["llm"]["cost"]["status"] == "estimated"
     ]
     accepted = [row for row in rows if row["accepted"]]
+    score_keys = (
+        "accuracy_candidate",
+        "usefulness_candidate",
+        "korean_quality_candidate",
+        "overall_candidate",
+    )
     return {
         "sample_size": len(rows),
         "accepted_llm_candidates": len(accepted),
@@ -287,6 +296,16 @@ def _aggregate(
         "fallback_summaries": len(rows) - len(accepted),
         "fallback_rate": _ratio(len(rows) - len(accepted), len(rows)),
         "contract_error_rows": sum(1 for row in rows if row["validation_errors"]),
+        "quality_scores": {
+            key: _average(
+                [
+                    row.get("quality_scores", {}).get(key)
+                    for row in accepted
+                    if row.get("quality_scores", {}).get(key) is not None
+                ]
+            )
+            for key in score_keys
+        },
         "grounding": {
             "rows_with_grounded_source_refs": sum(
                 1 for row in rows if row["source_ref_status"] == "grounded"
@@ -380,6 +399,156 @@ def _editable_candidate_payload(candidate: dict[str, Any]) -> dict[str, Any]:
             if isinstance(item, dict)
         ],
     }
+
+
+def _quality_scores(summary: dict[str, Any], *, packet: dict[str, Any]) -> dict[str, Any]:
+    prose = _summary_prose(summary)
+    field_quote = _role_quote(summary, "field_operator")
+    manager_quote = _role_quote(summary, "process_manager")
+    targets = packet.get("inspection_targets") or []
+    risk = packet.get("risk_summary") or {}
+    operation = packet.get("operation_context_summary") or {}
+    history = packet.get("maintenance_history_summary") or {}
+    primary_component_labels = [
+        target.get("component_label") for target in targets[:1] if isinstance(target, dict)
+    ]
+    location_labels = [
+        target.get("location_label") for target in targets if isinstance(target, dict)
+    ]
+    accuracy_checks = {
+        "status_grade_present": _contains_if_present(prose, risk.get("status_grade")),
+        "primary_component_present": _contains_required_any(prose, primary_component_labels),
+        "inspection_location_present": _contains_required_any(field_quote, location_labels),
+        "production_context_present": _operation_context_present(manager_quote, operation),
+        "history_context_present": _history_context_present(prose, history),
+        "data_gap_present_when_needed": not _requires_visible_data_gap(packet)
+        or _contains_any(prose, ["보류", "공백", "미제공", "부족"]),
+    }
+    usefulness_checks = {
+        "field_operator_has_action_focus": _contains_any(
+            field_quote,
+            ["확인", "점검", "먼저", "위치"],
+        ),
+        "manager_has_decision_context": _contains_any(
+            manager_quote,
+            ["생산", "영향", "승인", "우선", "손실"],
+        ),
+        "roles_are_distinct": bool(field_quote and manager_quote and field_quote != manager_quote),
+        "summary_is_not_generic": _contains_any(
+            prose,
+            [
+                packet.get("asset_label"),
+                packet.get("asset_id"),
+                *(target.get("component_label") for target in targets if isinstance(target, dict)),
+            ],
+        ),
+    }
+    korean_checks = {
+        "contains_korean": any("가" <= char <= "힣" for char in prose),
+        "avoids_internal_terms": not _contains_any(
+            prose,
+            ["source_ref", "event_id", "asset_id", "packet", "schema", "closed_loop"],
+        ),
+        "uses_field_language": _contains_any(
+            prose,
+            ["설비", "현장", "점검", "생산", "작업 처리", "표준"],
+        ),
+        "concise_for_side_panel": all(
+            len(value) <= 260
+            for value in [
+                str(summary.get("summary") or ""),
+                *[
+                    str(item.get("quote") or "")
+                    for item in summary.get("role_summaries") or []
+                    if isinstance(item, dict)
+                ],
+            ]
+        ),
+    }
+    accuracy = _check_ratio(accuracy_checks)
+    usefulness = _check_ratio(usefulness_checks)
+    korean = _check_ratio(korean_checks)
+    return {
+        "accuracy_candidate": accuracy,
+        "usefulness_candidate": usefulness,
+        "korean_quality_candidate": korean,
+        "overall_candidate": round((accuracy + usefulness + korean) / 3, 6),
+        "checks": {
+            "accuracy": accuracy_checks,
+            "usefulness": usefulness_checks,
+            "korean_quality": korean_checks,
+        },
+        "limits": [
+            "Candidate scores are deterministic heuristics for triage, not human acceptance.",
+            "Human review is still required before promoting usefulness or Korean quality to release gates.",
+        ],
+    }
+
+
+def _summary_prose(summary: dict[str, Any]) -> str:
+    values = [str(summary.get("title") or ""), str(summary.get("summary") or "")]
+    values.extend(
+        str(item.get("quote") or "")
+        for item in summary.get("role_summaries") or []
+        if isinstance(item, dict)
+    )
+    return " ".join(values)
+
+
+def _role_quote(summary: dict[str, Any], role: str) -> str:
+    for item in summary.get("role_summaries") or []:
+        if isinstance(item, dict) and item.get("role") == role:
+            return str(item.get("quote") or "")
+    return ""
+
+
+def _contains_if_present(text: str, value: Any) -> bool:
+    if value in (None, ""):
+        return True
+    return str(value) in text
+
+
+def _contains_any(text: str, values: list[Any]) -> bool:
+    return any(str(value) in text for value in values if value not in (None, ""))
+
+
+def _contains_required_any(text: str, values: list[Any]) -> bool:
+    required_values = [value for value in values if value not in (None, "")]
+    if not required_values:
+        return True
+    return _contains_any(text, required_values)
+
+
+def _requires_visible_data_gap(packet: dict[str, Any]) -> bool:
+    return any(
+        "display_policy=show_limitation" in str(gap.get("reason") or "")
+        for gap in packet.get("evidence_gaps") or []
+        if isinstance(gap, dict)
+    )
+
+
+def _operation_context_present(text: str, operation: dict[str, Any]) -> bool:
+    if not operation:
+        return True
+    if operation.get("production_impact") in (None, "", "none"):
+        return True
+    return _contains_any(text, ["생산", "영향", "손실", "정지"])
+
+
+def _history_context_present(text: str, history: dict[str, Any]) -> bool:
+    if not history:
+        return True
+    if history.get("work_orders") or history.get("similar_events"):
+        return _contains_any(text, ["이력", "작업", "요청", "승인"])
+    return True
+
+
+def _check_ratio(checks: dict[str, bool]) -> float:
+    return _ratio(sum(1 for passed in checks.values() if passed), len(checks)) or 0.0
+
+
+def _average(values: list[float]) -> float | None:
+    return round(sum(values) / len(values), 6) if values else None
 
 
 def _pick(source: dict[str, Any], *keys: str) -> dict[str, Any]:

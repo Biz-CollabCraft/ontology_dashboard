@@ -78,26 +78,55 @@ The current harness estimates tokens from serialized payload size and configured
 `gpt-4o-mini` price inputs. It is a configured-rate estimate, not provider
 billing reconciliation.
 
-Candidate accuracy metrics:
+Candidate semantic metrics:
 
-- Required evidence coverage: whether each case's expected operational facts are
-  present in `summary` or role quotes.
-- Role usefulness: whether `field_operator` copy answers what to inspect and
-  where, while `process_manager` copy answers risk, production context, and
-  approval-review context.
-- Korean field-language quality: whether the summary avoids internal-only terms,
-  awkward literal translation, and excessive caveats.
-- Priority correctness: whether risk, confidence, data-quality hold, SOP
-  availability, and production-impact wording match packet facts.
-- Concision: whether accepted summaries stay short enough for the workflow side
-  panel.
-- Human accept-without-edit ratio: manual review result for whether the summary
-  could ship as-is.
+```text
+accuracy_candidate = passed required-fact checks / required-fact checks
+usefulness_candidate = passed role-usefulness checks / role-usefulness checks
+korean_quality_candidate = passed Korean-field-language checks / Korean checks
+overall_candidate = average(accuracy_candidate, usefulness_candidate, korean_quality_candidate)
+```
 
-These candidate accuracy metrics are not hard gates yet. The current hard gates
-remain contract shape, grounding, and boundary compliance. A model comparison can
-use the candidate metrics as review columns before they become deterministic
-release gates.
+Accuracy candidate checks:
+
+- `status_grade_present`: accepted prose contains the packet risk status grade.
+- `primary_component_present`: accepted prose contains the primary inspection
+  component when a component is present in the packet.
+- `inspection_location_present`: field-operator copy contains the inspection
+  location when a location is present in the packet.
+- `production_context_present`: process-manager copy reflects production impact
+  when the packet carries production-impact context.
+- `history_context_present`: accepted prose mentions maintenance/request/history
+  context when work orders or similar events are present.
+- `data_gap_present_when_needed`: accepted prose mentions a limitation only when
+  the packet has a visible `display_policy=show_limitation` evidence gap.
+
+Usefulness candidate checks:
+
+- `field_operator_has_action_focus`: field-operator copy tells the operator to
+  inspect/check/confirm a concrete target or location.
+- `manager_has_decision_context`: process-manager copy gives production,
+  approval, priority, impact, or loss context.
+- `roles_are_distinct`: field and manager role quotes are not identical.
+- `summary_is_not_generic`: accepted prose mentions the asset, asset label, or
+  inspection component from the packet.
+
+Korean field-language checks:
+
+- `contains_korean`: accepted prose contains Korean text.
+- `avoids_internal_terms`: accepted prose does not expose internal terms such as
+  `source_ref`, `event_id`, `asset_id`, `packet`, `schema`, or `closed_loop`.
+- `uses_field_language`: accepted prose uses field-facing terms such as 설비,
+  현장, 점검, 생산, 작업 처리, or 표준.
+- `concise_for_side_panel`: summary and role quotes stay within the side-panel
+  copy budget.
+
+These semantic metrics are candidate scores, not release gates yet. The hard
+gates remain contract shape, grounded source references, forbidden action
+claims, forbidden Closed-loop authority, and fallback behavior. Candidate scores
+are used for triage and model comparison; release gating still requires a
+human-reviewed acceptance sample until the rubric is calibrated against human
+labels.
 
 ## Results
 
@@ -122,6 +151,38 @@ Interpretation:
 
 The mock result validates the harness, schema checks, grounding checks, and cost
 aggregation path. It must not be reported as live model quality.
+
+### Controlled Mock 120-Run with Semantic Scores
+
+Artifact:
+
+```text
+tests/eval/results/agent_summary_llm_eval_mock_quality_2026-09-01.json
+```
+
+Result:
+
+- sample size: 120
+- prompt payload profile: `compact-editable-v1`
+- concurrency: 8
+- accepted candidates: 120
+- fallback summaries: 0
+- contract-error rows: 0
+- `accuracy_candidate`: 1.0
+- `usefulness_candidate`: 1.0
+- `korean_quality_candidate`: 1.0
+- `overall_candidate`: 1.0
+- estimated total cost: USD 0.04092975
+
+Interpretation:
+
+This result proves that the semantic scoring fields are recorded and aggregated
+for every accepted row. It is a controlled baseline against the deterministic
+summary, not live model quality. Existing live result artifacts recorded
+contract, grounding, latency, and cost metrics, but did not store the accepted
+candidate text. Therefore accuracy, usefulness, and Korean quality should be
+measured from the next live rerun using the updated harness rather than
+backfilled from the old live artifacts.
 
 ### Live Smoke Run
 
