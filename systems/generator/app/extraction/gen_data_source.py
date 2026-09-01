@@ -28,6 +28,7 @@ class GenDataSensorStreamSource:
     line_dir_name: str
     source_path: Path
     source_uri: str
+    source_format: str = "gen_data_sensor_stream"
 
 
 def discover_gen_data_sensor_streams(

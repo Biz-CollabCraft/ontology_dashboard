@@ -47,7 +47,14 @@ class Service:
         self.calls.append(("manual", values))
         return {"recommendation_id": "REC-1"}
 
-    def calculate_tool_replacement_cost(self, **values):
+    def list_action_candidates(self, **values):
+        self.calls.append(("action_candidates", values))
+        return {
+            "inspection_result_id": values["inspection_result_id"],
+            "items": [],
+        }
+
+    def calculate_maintenance_cost(self, **values):
         self.calls.append(("cost_calculate", values))
         return {
             "analysis_id": "COST-ANALYSIS-1",
@@ -91,7 +98,11 @@ class Service:
 
     def event_lineage(self, **values):
         self.calls.append(("lineage", values))
-        return {"event_id": values["event_id"], "activities": []}
+        return {
+            "event_id": values["event_id"],
+            "cost_analyses": [],
+            "activities": [],
+        }
 
 
 def principal(role: str) -> Principal:
@@ -401,6 +412,29 @@ def test_manager_requests_cost_analysis_and_readers_can_query_results() -> None:
     ]
     assert manager_service.calls[0][1]["actor_id"] == "user-process_manager"
     assert "asset_id" not in created.request.content.decode("utf-8")
+
+
+def test_reader_lists_candidates_and_manager_can_request_cooling_cost() -> None:
+    manager_client, manager_service = client_for("process_manager")
+    candidates = manager_client.get(
+        f"{BASE}/inspection-results/INSPECTION-RESULT-1/action-candidates"
+    )
+    payload = {**cost_request(), "action_code": "COOLING_SYSTEM_RESTORE"}
+    created = manager_client.post(
+        f"{BASE}/inspection-results/INSPECTION-RESULT-1/cost-analyses",
+        json=payload,
+        headers={"Idempotency-Key": "cooling-cost-analysis-request-001"},
+    )
+
+    assert candidates.status_code == 200
+    assert created.status_code == 200
+    assert [name for name, _ in manager_service.calls] == [
+        "action_candidates",
+        "cost_calculate",
+    ]
+    assert manager_service.calls[1][1]["payload"].action_code == (
+        "COOLING_SYSTEM_RESTORE"
+    )
 
 
 def test_cost_analysis_request_rejects_forged_lineage_and_wrong_role() -> None:

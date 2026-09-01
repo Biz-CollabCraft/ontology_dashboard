@@ -88,6 +88,46 @@ def test_owned_maintenance_events_pass_the_machine_contract() -> None:
         assert list(validator.iter_errors(payload)) == []
 
 
+def test_cooling_completion_uses_its_own_typed_state_patch() -> None:
+    event = MaintenanceCompletedEvent(
+        event_id="INTEGRATION-COOLING-002",
+        idempotency_key="ACTION-COOLING-001:2",
+        state_version=2,
+        simulation_session_id="DEMO-001",
+        maintenance_event_id="MAINT-COOLING-001",
+        maintenance_action_id="ACTION-COOLING-001",
+        equipment_id="CNC-S02-L04-03",
+        maintenance_completed_at=datetime(
+            2026, 8, 18, 1, 20, tzinfo=timezone.utc
+        ),
+        action_code="COOLING_SYSTEM_RESTORE",
+        state_patch={
+            "cooling_system_state": {
+                "operation": "restore",
+                "value": "nominal",
+                "unit": "state",
+            }
+        },
+        caused_by=cause(),
+    )
+
+    event.as_payload()
+
+    with pytest.raises(ValidationError, match="requires cooling_system_state"):
+        MaintenanceCompletedEvent(
+            **{
+                **event.model_dump(mode="json"),
+                "state_patch": {
+                    "tool_wear_min": {
+                        "operation": "reset",
+                        "value": 0,
+                        "unit": "min",
+                    }
+                },
+            }
+        )
+
+
 def test_started_event_cannot_claim_a_completed_maintenance_event() -> None:
     payload = MaintenanceStartedEvent(
         event_id="INTEGRATION-001",

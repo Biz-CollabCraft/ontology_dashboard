@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Protocol, Sequence
 
 from .cost_analysis_schema import MaintenanceCostScenarioResult
-from .integration import ToolReplacementStatePatch
+from .integration import MaintenanceStatePatch
 from .maintenance_schema import (
     InspectionResult,
     MaintenanceEvent,
@@ -28,7 +28,7 @@ class EquipmentStatePatchPort(Protocol):
         *,
         equipment_id: str,
         expected_state_version: int,
-        patch: ToolReplacementStatePatch,
+        patch: MaintenanceStatePatch,
         **scope: Any,
     ) -> int: ...
 

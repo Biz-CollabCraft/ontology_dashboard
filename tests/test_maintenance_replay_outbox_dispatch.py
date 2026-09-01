@@ -18,6 +18,7 @@ from app.infra.messaging.outbox import (
     ProjectOutboxWorker,
 )
 from app.maintenance.integration import (
+    CoolingSystemRestoreStatePatch,
     MaintenanceCause,
     MaintenanceCompletedEvent,
     MaintenanceReplayRequestedEvent,
@@ -138,6 +139,24 @@ def replay_events() -> list[dict[str, object]]:
     ]
 
 
+def cooling_replay_event() -> dict[str, object]:
+    completed_at = datetime(2026, 8, 24, 10, 0, tzinfo=timezone.utc)
+    return MaintenanceReplayRequestedEvent(
+        event_id=str(uuid.uuid5(uuid.NAMESPACE_URL, "cooling-maintenance-replay")),
+        idempotency_key="COOLING-ACTION-001:3",
+        state_version=3,
+        simulation_session_id=SESSION_ID,
+        maintenance_event_id="COOLING-MAINTENANCE-EVENT-001",
+        maintenance_action_id="COOLING-ACTION-001",
+        equipment_id=EQUIPMENT_ID,
+        maintenance_completed_at=completed_at,
+        restart_at=completed_at + timedelta(minutes=5),
+        action_code="COOLING_SYSTEM_RESTORE",
+        state_patch=CoolingSystemRestoreStatePatch(),
+        caused_by=cause(),
+    ).as_payload()
+
+
 def insert_outbox(
     database: Path,
     payload: dict[str, object],
@@ -222,6 +241,17 @@ def test_worker_delivers_validated_maintenance_events_in_state_order(tmp_path: P
     assert states == [("processed", 1), ("processed", 1), ("processed", 1)]
     assert {row[0] for row in deliveries} == set(MAINTENANCE_REPLAY_EVENT_TYPES)
     assert {row[1] for row in deliveries} == {"maintenance-replay-jsonl-v1"}
+
+
+def test_jsonl_dispatch_preserves_cooling_action_and_typed_patch(tmp_path: Path) -> None:
+    database = setup_database(tmp_path)
+    event = cooling_replay_event()
+    insert_outbox(database, event)
+    event_file = tmp_path / "gen-data-inbox" / "maintenance-events.jsonl"
+
+    assert worker(database, event_file).drain() == 1
+
+    assert read_jsonl(event_file) == [event]
 
 
 def test_jsonl_handler_tolerates_same_event_redelivery_and_rejects_conflict(

@@ -3,9 +3,12 @@
 from app.diagnosis.recommendation_schema import ProducerRecommendation
 
 from .cost_calculator import (
+    MaintenanceCostAnalysisInput,
+    MaintenanceScenarioInput,
     SensitivityRatePerMinute,
     ToolReplacementCostAnalysisInput,
     ToolReplacementScenarioInput,
+    calculate_maintenance_cost_scenarios,
     calculate_tool_replacement_cost_scenarios,
 )
 from .cost_analysis_schema import (
@@ -34,6 +37,7 @@ from .maintenance_domain import (
     create_inspection_work_order,
     create_operations_manual_recommendation,
     create_work_order_for_recommendation,
+    derive_cooling_system_restore_action_candidate,
     derive_tool_replacement_action_candidate,
     deterministic_recommendation_id,
     imported_result_detail_view,
@@ -97,7 +101,9 @@ __all__ = [
     "MaintenanceActionCode",
     "MaintenanceActionStatus",
     "MaintenanceCostOption",
+    "MaintenanceCostAnalysisInput",
     "MaintenanceCostScenarioResult",
+    "MaintenanceScenarioInput",
     "MaintenanceEvent",
     "MaterializationStrategy",
     "OperationalDecisionKind",
@@ -120,10 +126,12 @@ __all__ = [
     "apply_recommendation_decision",
     "authorize_inspection_work_order",
     "authorize_maintenance_work_order",
+    "calculate_maintenance_cost_scenarios",
     "calculate_tool_replacement_cost_scenarios",
     "create_inspection_work_order",
     "create_operations_manual_recommendation",
     "create_work_order_for_recommendation",
+    "derive_cooling_system_restore_action_candidate",
     "derive_tool_replacement_action_candidate",
     "deterministic_recommendation_id",
     "imported_result_detail_view",

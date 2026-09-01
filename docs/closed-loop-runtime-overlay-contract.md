@@ -208,7 +208,7 @@ Overlay Observation과 `runtime_overlay.observations.available`은 각각
 
 ## 8. 정비 효과 계약
 
-MVP의 `TOOL_REPLACEMENT`는 다음 typed patch를 사용한다.
+MVP의 두 Maintenance Action은 Action별 typed patch를 사용한다.
 
 ```json
 {
@@ -223,13 +223,30 @@ MVP의 `TOOL_REPLACEMENT`는 다음 typed patch를 사용한다.
 }
 ```
 
+```json
+{
+  "action_code": "COOLING_SYSTEM_RESTORE",
+  "state_patch": {
+    "cooling_system_state": {
+      "operation": "restore",
+      "value": "nominal",
+      "unit": "state"
+    }
+  }
+}
+```
+
 - `action_code`별 허용 field, operation, value, unit을 whitelist한다.
 - `TOOL_REPLACEMENT`는 승인된 공구 마모 상태만 변경한다.
+- `COOLING_SYSTEM_RESTORE`는 냉각계통을 정상 상태로 복구하라는 명령만 표현한다.
+  실제 post-maintenance 온도 Observation은 Generator가 같은 Simulation Session의
+  Overlay 규칙으로 생성하며 Maintenance가 임의의 센서값을 작성하지 않는다.
 - 허용되지 않은 필드나 단위는 fail-fast한다.
 - patch는 Canonical이 아니라 해당 Simulation Session의 Overlay Snapshot에만 적용한다.
 - Closed-loop의 immutable `MaintenanceEvent`에는 위 typed patch 명령을 그대로 보존하고,
   운영 `Equipment state`에는 명령 객체가 아니라 적용된 현재값
-  (`tool_wear_min: {value: 0, unit: "min"}`)을 저장한다.
+  (`tool_wear_min: {value: 0, unit: "min"}` 또는
+  `cooling_system_state: {value: "nominal", unit: "state"}`)을 저장한다.
 - 향후 범용화할 때는 versioned `maintenance_effect` 계약으로 확장할 수 있다.
 
 ## 9. 이벤트 최소 필드

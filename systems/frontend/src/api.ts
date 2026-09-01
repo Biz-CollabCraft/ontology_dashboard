@@ -400,6 +400,233 @@ function predictiveMaintenanceBase(projectId: string, workspaceId: string): stri
   return `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/predictive-maintenance`;
 }
 
+export type MaintenanceExecutionTiming =
+  | "immediate"
+  | "planned_window"
+  | "reinspect_after"
+  | "no_action_baseline";
+
+export type MaintenanceActionCode =
+  | "TOOL_REPLACEMENT"
+  | "COOLING_SYSTEM_RESTORE";
+
+export interface MaintenanceActionCandidateReadModel {
+  action_candidate_id: string;
+  inspection_result_id: string;
+  event_id: string;
+  asset_id: string;
+  equipment_id: string;
+  action_code: MaintenanceActionCode;
+  basis_codes: string[];
+}
+
+export interface MaintenanceInspectionResultReadModel {
+  inspection_result_id: string;
+  work_order_id: string;
+  event_id: string;
+  asset_id: string;
+  equipment_id: string;
+  outcome: "no_action_required" | "maintenance_recommended" | "data_check_required";
+  recorded_at: string;
+}
+
+export interface MaintenanceCostBand {
+  low_minor: number;
+  base_minor: number;
+  high_minor: number;
+}
+
+export interface MaintenanceDurationBand {
+  low_minutes: number;
+  base_minutes: number;
+  high_minutes: number;
+}
+
+export interface MaintenanceCostOptionReadModel {
+  option_id: string;
+  action_candidate_id: string;
+  action_code: MaintenanceActionCode;
+  execution_timing: MaintenanceExecutionTiming;
+  calculation_status: "calculated" | "insufficient";
+  total_expected_cost: MaintenanceCostBand | null;
+  expected_downtime: MaintenanceDurationBand | null;
+  confidence: "high" | "medium" | "low" | "insufficient";
+  missing_inputs: string[];
+}
+
+export interface MaintenanceCostAnalysisReadModel {
+  schema_version: "maintenance-cost-scenario-v1.0";
+  analysis_id: string;
+  organization_id: string;
+  project_id: string;
+  workspace_id: string;
+  asset_id: string;
+  equipment_id: string;
+  calculated_at: string;
+  based_on: {
+    product_result_id: string;
+    evidence_id: string;
+    inspection_work_order_id: string;
+    inspection_result_id: string;
+    sop_id: string;
+    sop_version: string;
+  };
+  currency: string;
+  currency_minor_unit: 0 | 2 | 3;
+  options: MaintenanceCostOptionReadModel[];
+  lowest_calculated_cost_option_id: string | null;
+  assumptions: string[];
+  missing_inputs: string[];
+  price_version: string;
+  calculation_policy_version: string;
+  limitations: string[];
+}
+
+export interface MaintenanceEventLineageReadModel {
+  event_id: string;
+  work_orders: Array<{
+    work_order_id: string;
+    work_type: "inspection" | "maintenance";
+    status: string;
+  }>;
+  inspection_results: MaintenanceInspectionResultReadModel[];
+  cost_analyses: MaintenanceCostAnalysisReadModel[];
+  recommendations: Array<{
+    recommendation_id: string;
+    status: string;
+    source_inspection_work_order_id?: string | null;
+    source_inspection_reference?: string | null;
+    source_cost_analysis_id?: string | null;
+    source_cost_option_id?: string | null;
+    source_action_candidate_id?: string | null;
+    action_code?: string | null;
+  }>;
+}
+
+interface CostRangeInput {
+  low_minor: number;
+  base_minor: number;
+  high_minor: number;
+}
+
+interface DurationRangeInput {
+  low_minutes: number;
+  base_minutes: number;
+  high_minutes: number;
+}
+
+interface RateRangeInput {
+  low_minor_per_minute: number;
+  base_minor_per_minute: number;
+  high_minor_per_minute: number;
+}
+
+export interface MaintenanceCostAnalysisRequest {
+  action_code: MaintenanceActionCode;
+  sop_id: string;
+  sop_version: string;
+  currency: string;
+  currency_minor_unit: 0 | 2 | 3;
+  scenarios: Array<{
+    execution_timing: MaintenanceExecutionTiming;
+    parts_cost: CostRangeInput | null;
+    labor_duration: DurationRangeInput | null;
+    labor_rate_per_minute: RateRangeInput | null;
+    external_service_cost: CostRangeInput | null;
+    expected_downtime: DurationRangeInput | null;
+    production_loss_rate_per_minute: RateRangeInput | null;
+    expected_failure_loss: CostRangeInput | null;
+    confidence: "high" | "medium" | "low";
+  }>;
+  assumptions: string[];
+  input_sources: Array<{
+    input_name: string;
+    source_kind: "observed" | "quoted" | "policy" | "assumption";
+    source_reference: string;
+    confidence: "high" | "medium" | "low";
+  }>;
+  price_version: string;
+  calculation_policy_version: string;
+}
+
+export type ToolReplacementCostAnalysisRequest = MaintenanceCostAnalysisRequest;
+
+function maintenanceBase(projectId: string, workspaceId: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/workspaces/${encodeURIComponent(workspaceId)}/maintenance`;
+}
+
+export function getMaintenanceEventLineage(
+  projectId: string,
+  workspaceId: string,
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<MaintenanceEventLineageReadModel> {
+  return request<MaintenanceEventLineageReadModel>(
+    `${maintenanceBase(projectId, workspaceId)}/events/${encodeURIComponent(eventId)}/lineage`,
+    { signal },
+  );
+}
+
+export function getMaintenanceActionCandidates(
+  projectId: string,
+  workspaceId: string,
+  inspectionResultId: string,
+  signal?: AbortSignal,
+): Promise<{
+  inspection_result_id: string;
+  items: MaintenanceActionCandidateReadModel[];
+}> {
+  return request(
+    `${maintenanceBase(projectId, workspaceId)}/inspection-results/${encodeURIComponent(inspectionResultId)}/action-candidates`,
+    { signal },
+  );
+}
+
+export function calculateMaintenanceCost(
+  projectId: string,
+  workspaceId: string,
+  inspectionResultId: string,
+  payload: MaintenanceCostAnalysisRequest,
+  idempotencyKey: string,
+): Promise<{
+  analysis_id: string;
+  calculation_status: "calculated" | "insufficient";
+  cost_analysis: MaintenanceCostAnalysisReadModel;
+  replayed: boolean;
+}> {
+  return request(
+    `${maintenanceBase(projectId, workspaceId)}/inspection-results/${encodeURIComponent(inspectionResultId)}/cost-analyses`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export const calculateToolReplacementCost = calculateMaintenanceCost;
+
+export function createRecommendationFromCostOption(
+  projectId: string,
+  workspaceId: string,
+  analysisId: string,
+  optionId: string,
+  basis: string[],
+  idempotencyKey: string,
+): Promise<{
+  recommendation_id: string;
+  recommendation_status: "proposed";
+}> {
+  return request(
+    `${maintenanceBase(projectId, workspaceId)}/cost-analyses/${encodeURIComponent(analysisId)}/options/${encodeURIComponent(optionId)}/recommendations`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ basis }),
+    },
+  );
+}
+
 export function getPredictiveMaintenanceRuntimeContext(
   projectId: string,
   workspaceId: string,

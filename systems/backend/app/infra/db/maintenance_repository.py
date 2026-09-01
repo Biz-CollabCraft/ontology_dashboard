@@ -962,7 +962,7 @@ class MaintenanceRepository:
         action_code: str = "TOOL_REPLACEMENT",
         actor_display_name: str | None = None,
     ) -> dict[str, Any]:
-        if action_code != "TOOL_REPLACEMENT":
+        if action_code not in {"TOOL_REPLACEMENT", "COOLING_SYSTEM_RESTORE"}:
             raise ValueError("unsupported maintenance action_code")
         now = self._now()
         with self._connect() as connection:
@@ -1823,8 +1823,11 @@ class MaintenanceRepository:
         if len(candidate_keys) != 1:
             raise ValueError("MVP cost analysis requires exactly one Action candidate")
         action_candidate_id, action_code = next(iter(candidate_keys))
-        if action_code is not MaintenanceActionCode.TOOL_REPLACEMENT:
-            raise ValueError("only TOOL_REPLACEMENT cost analysis is implemented")
+        if action_code not in {
+            MaintenanceActionCode.TOOL_REPLACEMENT,
+            MaintenanceActionCode.COOLING_SYSTEM_RESTORE,
+        }:
+            raise ValueError("unsupported Maintenance cost analysis Action")
 
         now = self._now()
         with self._connect() as connection:
@@ -2047,6 +2050,14 @@ class MaintenanceRepository:
                 """,
                 parameters,
             ).fetchall()
+            cost_analyses = connection.execute(
+                """
+                SELECT result_json FROM closed_loop_maintenance_cost_analyses
+                WHERE organization_id=? AND project_id=? AND workspace_id=?
+                  AND event_id=? ORDER BY calculated_at,analysis_id
+                """,
+                parameters,
+            ).fetchall()
         return {
             "event_id": event_id,
             "recommendations": [
@@ -2069,6 +2080,12 @@ class MaintenanceRepository:
                     "state_patch": self._decoded(row["state_patch_json"]),
                 }
                 for row in maintenance_events
+            ],
+            "cost_analyses": [
+                MaintenanceCostScenarioResult.model_validate(
+                    self._decoded(row["result_json"])
+                ).model_dump(mode="json")
+                for row in cost_analyses
             ],
             "activities": self.list_event_activity(
                 workspace_id=workspace_id,
@@ -2378,13 +2395,23 @@ class MaintenanceRepository:
 
         updated = dict(current_state)
         tool_wear = state_patch.get("tool_wear_min")
-        if not isinstance(tool_wear, Mapping) or tool_wear.get("operation") != "reset":
-            raise ValueError("unsupported equipment state patch")
-        updated["tool_wear_min"] = {
-            "value": tool_wear.get("value"),
-            "unit": tool_wear.get("unit"),
-        }
-        return updated
+        if isinstance(tool_wear, Mapping) and tool_wear.get("operation") == "reset":
+            updated["tool_wear_min"] = {
+                "value": tool_wear.get("value"),
+                "unit": tool_wear.get("unit"),
+            }
+            return updated
+        cooling_state = state_patch.get("cooling_system_state")
+        if (
+            isinstance(cooling_state, Mapping)
+            and cooling_state.get("operation") == "restore"
+        ):
+            updated["cooling_system_state"] = {
+                "value": cooling_state.get("value"),
+                "unit": cooling_state.get("unit"),
+            }
+            return updated
+        raise ValueError("unsupported equipment state patch")
 
     def _persist_equipment_state(
         self,
