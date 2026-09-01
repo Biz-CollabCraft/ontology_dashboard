@@ -12,7 +12,9 @@ import {
   requestMaintenanceReplay,
   startInspectionWorkOrder,
   startMaintenanceAction,
-  type MaintenanceActionCode,
+  type InspectionChecklistStatus,
+  type InspectionCompletionFacts,
+  type InspectionOutcome,
   type MaintenanceEventLineageReadModel,
 } from "../../../api";
 import type { MvpEvidenceSnapshotBasis, MvpRoleLens } from "../api/mvpContracts";
@@ -23,6 +25,12 @@ function commandKey(eventId: string, action: string, target: string): string {
 
 function latest<T>(items: T[]): T | null {
   return items.length ? items[items.length - 1] : null;
+}
+
+function optionalNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export type MaintenanceWorkflowDisplayStatus =
@@ -101,6 +109,18 @@ export function MaintenanceWorkflowActionPanel({
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [postMaintenancePrediction, setPostMaintenancePrediction] = useState<PostMaintenancePredictionSummary | null>(null);
+  const [inspectionOutcome, setInspectionOutcome] = useState<InspectionOutcome>("maintenance_recommended");
+  const [toolWearStatus, setToolWearStatus] = useState<InspectionChecklistStatus>("not_checked");
+  const [toolWearMin, setToolWearMin] = useState("");
+  const [coolingPathStatus, setCoolingPathStatus] = useState<InspectionChecklistStatus>("not_checked");
+  const [coolantTemperatureC, setCoolantTemperatureC] = useState("");
+  const [inHouseStatus, setInHouseStatus] = useState<"pass" | "fail" | "">("");
+  const [sparePartAvailableStatus, setSparePartAvailableStatus] = useState<"pass" | "fail" | "">("");
+  const [vendorDispatchRequiredStatus, setVendorDispatchRequiredStatus] = useState<"pass" | "fail" | "">("");
+  const [componentReplacementRequiredStatus, setComponentReplacementRequiredStatus] = useState<"pass" | "fail" | "">("");
+  const [inspectionFindings, setInspectionFindings] = useState("");
+  const [inspectionNote, setInspectionNote] = useState("");
+  const supportsCncMaintenance = assetType.toLowerCase().includes("cnc");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -146,6 +166,20 @@ export function MaintenanceWorkflowActionPanel({
       selectedCostOption,
     };
   }, [lineage]);
+
+  useEffect(() => {
+    setInspectionOutcome("maintenance_recommended");
+    setToolWearStatus("not_checked");
+    setToolWearMin("");
+    setCoolingPathStatus("not_checked");
+    setCoolantTemperatureC("");
+    setInHouseStatus("");
+    setSparePartAvailableStatus("");
+    setVendorDispatchRequiredStatus("");
+    setComponentReplacementRequiredStatus("");
+    setInspectionFindings("");
+    setInspectionNote("");
+  }, [state.inspectionWorkOrder?.work_order_id]);
 
   useEffect(() => {
     const maintenanceEventId = state.maintenanceEvent?.maintenance_event_id;
@@ -214,6 +248,39 @@ export function MaintenanceWorkflowActionPanel({
     }
   };
 
+  const inspectionFacts: InspectionCompletionFacts = {
+    outcome: inspectionOutcome,
+    toolWearStatus,
+    toolWearMin: optionalNumber(toolWearMin),
+    coolingPathStatus,
+    coolantTemperatureC: optionalNumber(coolantTemperatureC),
+    inHouseStatus,
+    sparePartAvailableStatus,
+    vendorDispatchRequiredStatus,
+    componentReplacementRequiredStatus,
+    findings: inspectionFindings,
+    note: inspectionNote,
+  };
+  const hasToolEvidence = toolWearStatus === "fail"
+    && inspectionFacts.toolWearMin !== null
+    && inspectionFacts.toolWearMin >= 0;
+  const hasCoolingEvidence = coolingPathStatus === "fail"
+    && inspectionFacts.coolantTemperatureC !== null
+    && inspectionFacts.coolantTemperatureC >= 0;
+  const sharedCostBasisReady = Boolean(inHouseStatus && vendorDispatchRequiredStatus);
+  const candidateCostBasisReady = sharedCostBasisReady
+    && (!hasToolEvidence || Boolean(sparePartAvailableStatus))
+    && (!hasCoolingEvidence || Boolean(componentReplacementRequiredStatus));
+  const inspectionReady = Boolean(inspectionFindings.trim()) && (
+    inspectionOutcome === "data_check_required"
+    || (inspectionOutcome === "no_action_required"
+      && toolWearStatus === "pass"
+      && coolingPathStatus === "pass")
+    || (inspectionOutcome === "maintenance_recommended"
+      && (hasToolEvidence || hasCoolingEvidence)
+      && candidateCostBasisReady)
+  );
+
   let label = "다음 작업 대기";
   let helper = "현재 역할에서 실행할 수 있는 다음 단계가 없습니다.";
   let enabled = false;
@@ -248,6 +315,12 @@ export function MaintenanceWorkflowActionPanel({
         projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id,
         idempotencyKey: commandKey(eventId, "inspection-approve", state.inspectionWorkOrder!.work_order_id),
       });
+    } else if (state.inspectionResult?.outcome === "no_action_required") {
+      label = "점검 완료 · 정비 불필요";
+      helper = "현장 점검 결과 추가 정비가 필요하지 않은 것으로 기록됐습니다.";
+    } else if (state.inspectionResult?.outcome === "data_check_required") {
+      label = "추가 데이터 확인 필요";
+      helper = "점검 결과만으로 정비 판단을 내리지 않고 추가 데이터 확인 상태로 유지합니다.";
     } else if (state.inspectionResult && !state.recommendation) {
       label = "정비안 생성";
       helper = state.costAnalysis && state.selectedCostOption
@@ -297,16 +370,20 @@ export function MaintenanceWorkflowActionPanel({
         idempotencyKey: commandKey(eventId, "inspection-start", state.inspectionWorkOrder!.work_order_id),
       });
     } else if (state.inspectionWorkOrder?.status === "in_progress") {
-      const actionCode: MaintenanceActionCode = assetType.toLowerCase() === "compressor"
-        ? "COOLING_SYSTEM_RESTORE"
-        : "TOOL_REPLACEMENT";
       label = "점검 결과 기록·완료";
-      helper = "현재 데모 점검값을 기록하고 정비 필요 결과를 제출합니다.";
-      enabled = canFieldExecute;
-      command = () => completeInspectionWorkOrder({
-        projectId, workspaceId, workOrderId: state.inspectionWorkOrder!.work_order_id, actionCode,
+      helper = !supportsCncMaintenance
+        ? "현재 MVP 정비·Overlay 실행은 CNC 설비만 지원합니다. 이 설비의 점검 완료는 후속 계약이 필요합니다."
+        : inspectionReady
+          ? "입력한 점검 사실을 기록합니다. 정비 Action 후보는 Backend가 이 결과에서 산출합니다."
+          : "점검 판정, 체크리스트, 측정값과 발견 내용을 입력하세요.";
+      enabled = canFieldExecute && supportsCncMaintenance && inspectionReady;
+      command = supportsCncMaintenance && inspectionReady ? () => completeInspectionWorkOrder({
+        projectId,
+        workspaceId,
+        workOrderId: state.inspectionWorkOrder!.work_order_id,
+        facts: inspectionFacts,
         idempotencyKey: commandKey(eventId, "inspection-complete", state.inspectionWorkOrder!.work_order_id),
-      });
+      }) : null;
     } else if (state.action?.status === "planned") {
       label = "정비 시작";
       helper = "승인된 Maintenance Action을 시작합니다.";
@@ -359,6 +436,85 @@ export function MaintenanceWorkflowActionPanel({
     <section className="mvp-maintenance-workflow-panel" aria-label="Closed-loop 작업 실행">
       <header><div><span>Closed-loop</span><strong>{role === "process_manager" ? "생산 관리자 작업" : "현장 관리자 작업"}</strong></div><button type="button" className="mvp-icon-button" onClick={() => void refresh()} aria-label="작업 상태 새로고침">↻</button></header>
       <p>{loading ? "작업 상태를 확인하고 있습니다." : helper}</p>
+      {role === "field_operator" && supportsCncMaintenance && state.inspectionWorkOrder?.status === "in_progress" ? (
+        <fieldset className="mvp-inspection-form" disabled={!canFieldExecute || running}>
+          <legend>현장 점검 사실</legend>
+          <label className="mvp-field">
+            <span>점검 판정</span>
+            <select value={inspectionOutcome} onChange={(event) => setInspectionOutcome(event.target.value as InspectionOutcome)}>
+              <option value="maintenance_recommended">정비 검토 필요</option>
+              <option value="no_action_required">추가 정비 불필요</option>
+              <option value="data_check_required">추가 데이터 확인 필요</option>
+            </select>
+          </label>
+          <div className="mvp-inspection-grid">
+            <label className="mvp-field">
+              <span>공구 마모 점검</span>
+              <select value={toolWearStatus} onChange={(event) => setToolWearStatus(event.target.value as InspectionChecklistStatus)}>
+                <option value="not_checked">미확인</option>
+                <option value="pass">정상</option>
+                <option value="fail">이상</option>
+              </select>
+            </label>
+            <label className="mvp-field">
+              <span>공구 누적 사용시간 (분)</span>
+              <input type="number" min="0" step="1" value={toolWearMin} onChange={(event) => setToolWearMin(event.target.value)} placeholder="예: 220" />
+            </label>
+            <label className="mvp-field">
+              <span>냉각 경로 점검</span>
+              <select value={coolingPathStatus} onChange={(event) => setCoolingPathStatus(event.target.value as InspectionChecklistStatus)}>
+                <option value="not_checked">미확인</option>
+                <option value="pass">정상</option>
+                <option value="fail">이상</option>
+              </select>
+            </label>
+            <label className="mvp-field">
+              <span>냉각수 온도 (°C)</span>
+              <input type="number" min="0" step="0.1" value={coolantTemperatureC} onChange={(event) => setCoolantTemperatureC(event.target.value)} placeholder="예: 92" />
+            </label>
+          </div>
+          {inspectionOutcome === "maintenance_recommended" ? (
+            <>
+              <strong className="mvp-inspection-subtitle">비용 산정 기준 확인</strong>
+              <div className="mvp-inspection-grid">
+                <label className="mvp-field">
+                  <span>사내 정비 가능</span>
+                  <select value={inHouseStatus} onChange={(event) => setInHouseStatus(event.target.value as "pass" | "fail" | "")}>
+                    <option value="">선택</option><option value="pass">예</option><option value="fail">아니오</option>
+                  </select>
+                </label>
+                <label className="mvp-field">
+                  <span>교체용 인서트 확보</span>
+                  <select value={sparePartAvailableStatus} onChange={(event) => setSparePartAvailableStatus(event.target.value as "pass" | "fail" | "")}>
+                    <option value="">선택</option><option value="pass">예</option><option value="fail">아니오</option>
+                  </select>
+                </label>
+                <label className="mvp-field">
+                  <span>외부 업체 출동 필요</span>
+                  <select value={vendorDispatchRequiredStatus} onChange={(event) => setVendorDispatchRequiredStatus(event.target.value as "pass" | "fail" | "")}>
+                    <option value="">선택</option><option value="pass">예</option><option value="fail">아니오</option>
+                  </select>
+                </label>
+                <label className="mvp-field">
+                  <span>냉각 계통 부품 교체 필요</span>
+                  <select value={componentReplacementRequiredStatus} onChange={(event) => setComponentReplacementRequiredStatus(event.target.value as "pass" | "fail" | "")}>
+                    <option value="">선택</option><option value="pass">예</option><option value="fail">아니오</option>
+                  </select>
+                </label>
+              </div>
+            </>
+          ) : null}
+          <label className="mvp-field">
+            <span>발견 내용</span>
+            <textarea value={inspectionFindings} onChange={(event) => setInspectionFindings(event.target.value)} placeholder="현장에서 확인한 상태를 기록하세요." />
+          </label>
+          <label className="mvp-field">
+            <span>추가 메모</span>
+            <textarea value={inspectionNote} onChange={(event) => setInspectionNote(event.target.value)} placeholder="필요할 때만 추가 근거를 남기세요." />
+          </label>
+          <small>현장에서는 사실만 기록합니다. 정비 Action 후보는 Backend가 체크리스트와 측정값에서 산출합니다.</small>
+        </fieldset>
+      ) : null}
       <button
         type="button"
         className="mvp-button primary"

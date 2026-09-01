@@ -411,6 +411,103 @@ export type MaintenanceActionCode =
   | "TOOL_REPLACEMENT"
   | "COOLING_SYSTEM_RESTORE";
 
+export type InspectionOutcome =
+  | "no_action_required"
+  | "maintenance_recommended"
+  | "data_check_required";
+
+export type InspectionChecklistStatus = "pass" | "fail" | "not_checked";
+
+export interface InspectionCompletionPayload extends Record<string, unknown> {
+  outcome: InspectionOutcome;
+  checklist: Array<{
+    item_id: string;
+    status: InspectionChecklistStatus;
+    note: string;
+  }>;
+  measurements: Array<{
+    name: string;
+    value: number;
+    unit: string;
+  }>;
+  findings: string[];
+  note: string;
+}
+
+export interface InspectionCompletionFacts {
+  outcome: InspectionOutcome;
+  toolWearStatus: InspectionChecklistStatus;
+  toolWearMin: number | null;
+  coolingPathStatus: InspectionChecklistStatus;
+  coolantTemperatureC: number | null;
+  inHouseStatus: "pass" | "fail" | "";
+  sparePartAvailableStatus: "pass" | "fail" | "";
+  vendorDispatchRequiredStatus: "pass" | "fail" | "";
+  componentReplacementRequiredStatus: "pass" | "fail" | "";
+  findings: string;
+  note: string;
+}
+
+export function buildInspectionCompletionPayload(
+  facts: InspectionCompletionFacts,
+): InspectionCompletionPayload {
+  const checklist: InspectionCompletionPayload["checklist"] = [
+    {
+      item_id: "tool-wear",
+      status: facts.toolWearStatus,
+      note: "현장 공구 마모 점검 결과",
+    },
+    {
+      item_id: "cooling-path",
+      status: facts.coolingPathStatus,
+      note: "현장 냉각 경로 점검 결과",
+    },
+  ];
+  const appendCostBasis = (
+    itemId: string,
+    status: "pass" | "fail" | "",
+    note: string,
+  ) => {
+    if (status) checklist.push({ item_id: itemId, status, note });
+  };
+  appendCostBasis("cost-basis-in-house", facts.inHouseStatus, "사내 정비 수행 가능 여부");
+  appendCostBasis(
+    "cost-basis-spare-part-available",
+    facts.sparePartAvailableStatus,
+    "교체용 인서트 확보 여부",
+  );
+  appendCostBasis(
+    "cost-basis-vendor-dispatch-required",
+    facts.vendorDispatchRequiredStatus,
+    "외부 업체 출동 필요 여부",
+  );
+  appendCostBasis(
+    "cost-basis-component-replacement-required",
+    facts.componentReplacementRequiredStatus,
+    "냉각 계통 부품 교체 필요 여부",
+  );
+
+  const measurements: InspectionCompletionPayload["measurements"] = [];
+  if (facts.toolWearMin !== null) {
+    measurements.push({ name: "tool_wear_min", value: facts.toolWearMin, unit: "min" });
+  }
+  if (facts.coolantTemperatureC !== null) {
+    measurements.push({
+      name: "coolant_temperature_c",
+      value: facts.coolantTemperatureC,
+      unit: "C",
+    });
+  }
+
+  return {
+    outcome: facts.outcome,
+    checklist,
+    measurements,
+    findings: [facts.findings.trim()],
+    note: facts.note.trim(),
+  };
+}
+
 export interface MaintenanceActionCandidateReadModel {
   action_candidate_id: string;
   inspection_result_id: string;
@@ -1209,30 +1306,12 @@ export function completeInspectionWorkOrder(input: {
   projectId: string;
   workspaceId: string;
   workOrderId: string;
-  actionCode: MaintenanceActionCode;
+  facts: InspectionCompletionFacts;
   idempotencyKey: string;
 }) {
-  const cooling = input.actionCode === "COOLING_SYSTEM_RESTORE";
   return maintenanceCommand(
     `${maintenanceBase(input.projectId, input.workspaceId)}/inspection-work-orders/${encodeURIComponent(input.workOrderId)}/complete`,
-    {
-      outcome: "maintenance_recommended",
-      checklist: [
-        {
-          item_id: cooling ? "cooling-system-condition" : "tool-wear",
-          status: "fail",
-          note: cooling ? "냉각 계통 복구 필요 확인" : "공구 마모 한계 초과 확인",
-        },
-        { item_id: "cost-basis-in-house", status: "pass", note: "사내 정비 수행" },
-        { item_id: "cost-basis-spare-part-available", status: "pass", note: "필요 부품 확보" },
-        { item_id: "cost-basis-vendor-dispatch-required", status: "fail", note: "외부 출동 불필요" },
-      ],
-      measurements: cooling
-        ? [{ name: "process_temperature_k", value: 315, unit: "K" }]
-        : [{ name: "tool_wear_min", value: 220, unit: "min" }],
-      findings: [cooling ? "cooling_system_restore_required" : "tool_wear_limit_exceeded"],
-      note: cooling ? "냉각 계통 복구 검토가 필요합니다." : "공구 인서트 교체 검토가 필요합니다.",
-    },
+    buildInspectionCompletionPayload(input.facts),
     input.idempotencyKey,
   );
 }
