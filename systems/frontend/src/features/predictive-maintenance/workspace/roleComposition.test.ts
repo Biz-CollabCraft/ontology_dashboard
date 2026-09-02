@@ -56,4 +56,20 @@ describe("role composed reliability workspace", () => {
     });
     expect(operations[0]).toBe("decision-queue");
   });
+
+  it("keeps engineering maintenance effect focused on technical before-after evidence", () => {
+    const engineering = resolveReliabilityComposition("engineering", "objects", {
+      hasCriticalRisk: false,
+      hasDataQualityHold: false,
+      hasOpenWorkflow: false,
+      hasMaterialConstraint: false,
+      hasDecisionBacklog: false,
+      hasHighProductionExposure: false,
+      hasMaintenanceOutcome: false,
+    }, "maintenance-effect");
+    expect(engineering.slice(0, 4)).toEqual([
+      "maintenance-effect", "feature-trend", "sensor-signals", "maintenance-history",
+    ]);
+    expect(engineering).not.toContain("business-kpis");
+  });
 });

@@ -1,4 +1,7 @@
 .rw-composed-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.rw-composition-reason { grid-column: 1 / -1; display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:34px; padding:7px 10px; border:1px solid rgba(96,165,250,.22); border-radius:8px; background:rgba(59,130,246,.055); }
+.rw-composition-reason strong { font-size:10px; }
+.rw-composition-reason span { color:var(--rw-muted,#8ea0b3); font-size:9px; }
 .rw-composed-block { grid-column: span 6; min-width: 0; overflow: hidden; border: 1px solid var(--rw-border, rgba(148,163,184,.2)); border-radius: 10px; background: var(--rw-surface, rgba(15,23,42,.54)); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
 .rw-composed-block.span-12 { grid-column: span 12; }
 .rw-composed-block > header { display: flex; min-height: 42px; align-items: center; gap: 9px; border-bottom: 1px solid var(--rw-border, rgba(148,163,184,.16)); padding: 8px 11px; }
@@ -201,6 +204,7 @@
 }
 
 @media (max-width: 640px) {
+  .rw-composition-reason { align-items:flex-start; flex-direction:column; }
   .rw-composed-kv, .rw-composed-cards, .rw-composed-report-sections { grid-template-columns: 1fr; }
   .rw-composed-metrics { grid-template-columns: 1fr 1fr; }
   .rw-feature-trends { grid-template-columns: 1fr; }

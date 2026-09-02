@@ -109,7 +109,10 @@ export function resolveReliabilityComposition(
 ): ReliabilityBlockId[] {
   if (view === "system") return [];
   const surfaceBlocks = surfaceId ? SURFACE_COMPOSITIONS[surfaceId as ReliabilitySurfaceId] : null;
-  let blocks = [...(surfaceBlocks ?? COMPOSITIONS[kind][view])];
+  const roleSpecificSurfaceBlocks = kind === "engineering" && surfaceId === "maintenance-effect"
+    ? ["maintenance-effect", "feature-trend", "sensor-signals", "maintenance-history", "evidence-factors", "context-evidence"] satisfies ReliabilityBlockId[]
+    : null;
+  let blocks = [...(roleSpecificSurfaceBlocks ?? surfaceBlocks ?? COMPOSITIONS[kind][view])];
   if (signals.hasDataQualityHold) {
     blocks = ["data-quality", ...blocks.filter((item) => item !== "data-quality")];
   }

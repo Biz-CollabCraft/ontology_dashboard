@@ -12,6 +12,14 @@ async function login(page: Page) {
   await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}/operations`), { timeout: 10_000 });
 }
 
+async function loginAs(page: Page, email: string, password: string, returnTo = PATH) {
+  await page.goto(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  await page.getByLabel(/이메일|Email/).fill(email);
+  await page.getByLabel(/비밀번호|Password/).fill(password);
+  await page.getByRole("button", { name: /로그인|Sign in/, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/projects/${PROJECT}/operations`), { timeout: 10_000 });
+}
+
 test("uses a light Korean placeholder before the reliability workspace is ready", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("ontology-dashboard-theme", "dark");
@@ -99,9 +107,17 @@ test("keeps navigation expanded on laptop widths and wraps Korean copy by word b
   await expect(firstNavCopy).toBeVisible();
   expect((await rail.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(220);
 
+  await shell.getByRole("button", { name: "환경설정" }).click();
+  await shell.getByRole("button", { name: "발표/프로젝터", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "comfortable");
+  await shell.locator(".rw-preview-page-heading").click({ position: { x: 12, y: 12 } });
   await shell.getByRole("button", { name: "Collapse navigation" }).click();
   await expect(firstNavCopy).toBeHidden();
   expect((await rail.boundingBox())?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(60);
+  await shell.getByRole("button", { name: "Open navigation" }).click();
+  await shell.getByRole("button", { name: "환경설정" }).click();
+  await shell.getByRole("button", { name: "데스크톱", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "standard");
 });
 
 test("keeps login and reliability workspace inside a phone viewport", async ({ page }) => {
@@ -307,4 +323,84 @@ test("keeps factory status focused and avoids repeating the full map on operatio
   await expect(composed).toBeVisible();
   await expect(composed).not.toHaveAttribute("data-composition", /factory-map/);
   await expect(composed.locator(".rw-factory-map")).toHaveCount(0);
+});
+
+test("uses grouped manager IA, exception-first factory map, persistent case anchor, and adaptive lifecycle", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await login(page);
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+
+  const rail = shell.locator(".rw-preview-left");
+  for (const group of ["OBSERVE · 감지", "DECIDE · 판단", "FOLLOW-UP · 후속"]) {
+    await expect(rail.getByText(group, { exact: true })).toBeVisible();
+  }
+  await expect(rail.locator("nav")).not.toContainText("01");
+  await expect(rail.locator(".rw-preview-nav-group").filter({ hasText: "FOLLOW-UP · 후속" })).toContainText("보고");
+  await expect(rail.locator(".rw-preview-nav-group").filter({ hasText: "FOLLOW-UP · 후속" })).toContainText("Archive");
+
+  const lifecycle = shell.locator(".lifecycle-instrument");
+  await expect(shell.locator(".rw-preview-selection-anchor")).toHaveCount(0);
+  await expect(lifecycle).toHaveClass(/is-idle/);
+
+  const factoryMap = shell.locator(".operations-factory-map-panel");
+  await expect(factoryMap.getByRole("button", { name: "이상만 강조", exact: true })).toHaveClass(/is-active/);
+  expect(await factoryMap.locator(".operations-factory-asset-node.normal.is-deemphasized").count()).toBeGreaterThan(0);
+  await factoryMap.getByRole("button", { name: "전체 설비", exact: true }).click();
+  await expect(factoryMap.locator(".operations-factory-map")).toHaveClass(/focus-all/);
+  await factoryMap.getByRole("button", { name: "이상만 강조", exact: true }).click();
+
+  const abnormal = factoryMap.locator(".operations-factory-asset-node:not(.normal):not(.slot)").first();
+  await abnormal.click();
+  await expect(shell.getByRole("dialog", { name: "선택 설비 상세" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  const anchor = shell.locator(".rw-preview-selection-anchor");
+  await expect(anchor).toBeVisible();
+  await expect(anchor).toContainText("선택 Case");
+  await expect(anchor).toContainText("위험");
+  await expect(lifecycle).toHaveClass(/is-compact/);
+
+  await rail.locator("nav button").filter({ hasText: "Decision Case" }).click();
+  await expect(shell).toHaveAttribute("data-active-surface", "decision-case");
+  await expect(anchor).toBeVisible();
+  await expect(lifecycle).toHaveClass(/is-full/);
+  await expect(shell.getByRole("button", { name: "보고 초안 이어보기", exact: true })).toBeVisible();
+
+  await rail.locator("nav button").filter({ hasText: "운영 현황" }).click();
+  await expect(shell.locator(".rw-composition-reason")).toContainText(/우선순위 상승/);
+  await expect(shell.locator(".rw-composition-reason")).toContainText(/현재 운영 상태에 따라 중요한 블록/);
+});
+
+test("separates executive primary decisions from evidence and detail", async ({ page }) => {
+  await loginAs(page, "executive@ontology.local", "Executive!2026");
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  const groups = shell.locator(".rw-preview-nav-group");
+  const primary = groups.filter({ hasText: "PRIMARY · 경영 판단" });
+  const evidence = groups.filter({ hasText: "EVIDENCE · 근거/상세" });
+  await expect(primary).toBeVisible();
+  await expect(evidence).toBeVisible();
+  await expect(primary.locator("button")).toHaveCount(5);
+  await expect(evidence.locator("button")).toHaveCount(3);
+  for (const label of ["Executive Brief", "운영 리스크", "운영 KPI", "의사결정 병목", "보고 산출물"]) {
+    await expect(primary).toContainText(label);
+  }
+  for (const label of ["정비 효과", "개선 과제", "설비 상태 근거"]) {
+    await expect(evidence).toContainText(label);
+  }
+});
+
+test("organizes engineering navigation by work intent instead of duplicated data types", async ({ page }) => {
+  await loginAs(page, "engineer@ontology.local", "Engineer!2026");
+  const shell = page.locator(".rw-preview-shell:not(.rw-preview-loading-placeholder)");
+  await expect(shell).toBeVisible({ timeout: 15_000 });
+  const rail = shell.locator(".rw-preview-left");
+  for (const label of ["설비 현황", "모니터링", "원인 분석", "점검", "정비 효과", "정비 이력", "현장 기록"]) {
+    await expect(rail.locator("nav button").filter({ hasText: label })).toHaveCount(1);
+  }
+  await expect(rail.locator("nav button").filter({ hasText: "센서 피쳐" })).toHaveCount(0);
+  await expect(rail.locator("nav button").filter({ hasText: "점검 · 정비 이력" })).toHaveCount(0);
+  for (const group of ["OBSERVE · 감지", "DIAGNOSE · 진단", "LEARN · 이력"]) {
+    await expect(rail.getByText(group, { exact: true })).toBeVisible();
+  }
 });

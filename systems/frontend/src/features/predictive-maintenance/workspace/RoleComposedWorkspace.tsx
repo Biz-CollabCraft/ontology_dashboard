@@ -372,7 +372,7 @@ function CaseLineageBlock({ props }: { props: RoleComposedWorkspaceProps }) {
   ];
   return <Block title="Event → Outcome lineage" eyebrow="CASE LINEAGE" icon={<GitBranch size={15} />} className="span-12">
     <div className="rw-case-lineage">{steps.map((step) => <article key={step.id} className={`is-${step.state}`}><i>{step.label}</i><strong>{step.headline}</strong><small>{step.detail}</small></article>)}</div>
-    {event ? <div className="rw-case-lineage-actions"><button type="button" onClick={() => props.onOpenAsset(event.assetId, event.eventId)}>설비 근거 열기</button><button type="button" onClick={() => props.onOpenReport(event.eventId, event.assetId, "executive-brief")}>보고 산출물 보기</button></div> : null}
+    {event ? <div className="rw-case-lineage-actions"><button type="button" onClick={() => props.onOpenAsset(event.assetId, event.eventId)}>설비 근거 열기</button><button type="button" onClick={() => props.onOpenReport(event.eventId, event.assetId, props.experienceKind === "executive" ? "executive-brief" : "summary-report")}>{props.experienceKind === "operations" ? "보고 초안 이어보기" : "보고 산출물 보기"}</button></div> : null}
   </Block>;
 }
 
@@ -577,7 +577,7 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
     props.detail?.closedLoop?.maintenanceEvents.length
     || props.detail?.closedLoop?.maintenanceActions.some((item) => item.status === "completed"),
   );
-  const blocks = resolveReliabilityComposition(props.experienceKind, props.view, {
+  const signals = {
     hasCriticalRisk: props.model.metrics.critical > 0,
     hasDataQualityHold: props.model.metrics.dataQualityHold > 0 || Boolean(props.detail?.dataQualityWarnings.length),
     hasOpenWorkflow: Boolean(props.detail?.closedLoop?.workOrders.length || props.detail?.closedLoop?.maintenanceActions.length),
@@ -585,7 +585,21 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
     hasDecisionBacklog: props.model.metrics.pendingDecisions >= 3,
     hasHighProductionExposure: typeof exposureValue.revenueExposure === "number" && exposureValue.revenueExposure >= 10_000_000,
     hasMaintenanceOutcome,
-  }, props.surfaceId);
+  };
+  const blocks = resolveReliabilityComposition(props.experienceKind, props.view, signals, props.surfaceId);
+  const promotionReason = signals.hasDataQualityHold
+    ? `우선순위 상승 · 데이터 품질 확인 ${props.model.metrics.dataQualityHold.toLocaleString("ko-KR")}건`
+    : props.experienceKind === "operations" && signals.hasDecisionBacklog
+      ? `우선순위 상승 · 판단 대기 ${props.model.metrics.pendingDecisions.toLocaleString("ko-KR")}건`
+      : props.experienceKind === "engineering" && signals.hasCriticalRisk
+        ? `우선순위 상승 · 긴급 설비 ${props.model.metrics.critical.toLocaleString("ko-KR")}대`
+        : props.experienceKind === "executive" && signals.hasHighProductionExposure
+          ? `우선순위 상승 · 선택 Case의 생산·재무 노출이 기준치를 초과했습니다`
+          : signals.hasMaterialConstraint
+            ? "우선순위 상승 · 선택 Case의 자재 제약을 먼저 확인합니다"
+            : signals.hasMaintenanceOutcome
+              ? "우선순위 상승 · 정비 완료 후 효과 확인이 필요합니다"
+              : null;
 
   return <div
     className={`rw-composed-grid composition-${props.experienceKind}`}
@@ -593,6 +607,7 @@ export function RoleComposedWorkspace(props: RoleComposedWorkspaceProps) {
     data-surface={props.surfaceId ?? "default"}
     data-composition={blocks.join(",")}
   >
+    {promotionReason ? <div className="rw-composition-reason" role="status"><strong>{promotionReason}</strong><span>현재 운영 상태에 따라 중요한 블록을 위로 배치했습니다.</span></div> : null}
     {blocks.map((id) => renderBlock(id, props))}
   </div>;
 }

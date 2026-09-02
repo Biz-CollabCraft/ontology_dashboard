@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { navigate } from "../../routing";
 import type {
@@ -37,6 +37,7 @@ import { resolveReliabilityRoleExperience } from "../predictive-maintenance/work
 import { RoleComposedWorkspace } from "../predictive-maintenance/workspace/RoleComposedWorkspace";
 import type { ReliabilitySearchEntity } from "../predictive-maintenance/workspace/ReliabilityCommandPalette";
 import {
+  adaptiveReliabilityLandingSurface,
   defaultReliabilitySurface,
   reliabilitySurfaceForView,
   reliabilitySurfaces,
@@ -93,6 +94,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
   const [sensorWindow, setSensorWindow] = useState<OperationsSensorWindowId>("24h");
   const [companyContext, setCompanyContext] = useState<OperationsCompanyContext | null>(null);
   const [companyContextError, setCompanyContextError] = useState<string | null>(null);
+  const adaptiveLandingResolvedRef = useRef(false);
   const experienceKind = user
     ? resolveReliabilityRoleExperience(user).kind
     : selection.role === "field_operator"
@@ -141,7 +143,7 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
         }
         if (!selection.eventId && selectedAsset?.eventId) patch.eventId = selectedAsset.eventId;
         if (!selection.assetId && selectedEvent) patch.assetId = selectedEvent.assetId;
-        if (!selection.assetId && !selection.eventId && payload.events[0]) {
+        if (!selection.assetId && !selection.eventId && payload.events[0] && (selection.view === "operations" || selection.view === "reports")) {
           patch.eventId = payload.events[0].eventId;
           patch.assetId = payload.events[0].assetId;
         }
@@ -159,6 +161,17 @@ function OperationsApplicationController({ projectId, backupMode }: { projectId:
     () => model?.events.find((item) => item.eventId === selection.eventId) ?? null,
     [model, selection.eventId],
   );
+
+  useEffect(() => {
+    if (!model || adaptiveLandingResolvedRef.current || backupMode) return;
+    adaptiveLandingResolvedRef.current = true;
+    const defaultSurface = defaultReliabilitySurface(experienceKind, backupMode);
+    if (selection.surface !== defaultSurface.id || selection.eventId || selection.assetId) return;
+    const adaptiveSurface = adaptiveReliabilityLandingSurface(experienceKind, model.metrics, backupMode);
+    if (adaptiveSurface.id !== selection.surface) {
+      updateSelection({ surface: adaptiveSurface.id, view: adaptiveSurface.view }, { replace: true });
+    }
+  }, [backupMode, experienceKind, model, selection.assetId, selection.eventId, selection.surface, updateSelection]);
 
   useEffect(() => {
     const workspaceId = model?.context.workspaceId;

@@ -1236,12 +1236,16 @@ function FactoryMonitoringMapPanel({
   selectedAsset,
   postMaintenancePredictions,
   planningBasis,
+  focusMode,
+  onFocusModeChange,
   onPreviewAssetSlot,
 }: {
   factoryCells: FactoryCellLayout[];
   selectedAsset: OperationsAsset | null;
   postMaintenancePredictions: Record<string, PostMaintenancePredictionSummary>;
   planningBasis: { value: string; fallback: boolean };
+  focusMode: "all" | "exceptions";
+  onFocusModeChange: (mode: "all" | "exceptions") => void;
   onPreviewAssetSlot: (asset: OperationsAsset, slot: FactoryCellSlot, cell: FactoryCellLayout) => void;
 }) {
   return (
@@ -1250,9 +1254,15 @@ function FactoryMonitoringMapPanel({
         {FACTORY_LAYOUT_NOTICE} · {planningBasis.fallback ? "생산 영향 데이터 미연결" : "생산계획 연계"} · {planningBasis.value}
       </div>
       {factoryCells.length ? (
-        <div className="operations-factory-map">
-          <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
-            <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">미연결</i>
+        <div className={`operations-factory-map focus-${focusMode}`}>
+          <div className="operations-factory-map-toolbar">
+            <div className="operations-factory-map-mode" role="group" aria-label="설비 상태맵 강조 방식">
+              <button type="button" className={focusMode === "all" ? "is-active" : ""} onClick={() => onFocusModeChange("all")}>전체 설비</button>
+              <button type="button" className={focusMode === "exceptions" ? "is-active" : ""} onClick={() => onFocusModeChange("exceptions")}>이상만 강조</button>
+            </div>
+            <div className="operations-factory-map-legend" aria-label="설비 상태 범례">
+              <i className="normal">정상</i><i className="attention">주의</i><i className="critical">긴급</i><i className="warning">점검 중</i><i className="hold">완료 확인 필요</i><i className="slot">미연결</i>
+            </div>
           </div>
           <div className="operations-factory-line-map">
             {FACTORY_SITE_IDS.map((site) => {
@@ -1275,7 +1285,7 @@ function FactoryMonitoringMapPanel({
                       <strong>{displayFactorySite(site)}</strong>
                       <small>{siteCells.length}개 라인 · 연결 설비 {siteAssets.length}대 · 새 알림 {siteBadgeCount}건</small>
                     </div>
-                    {siteBadgeCount ? <b className="operations-live-notification-badge" aria-label={`${siteBadgeCount}개 알림`}>{siteBadgeCount}</b> : <span className="operations-live-ok-pill">정상</span>}
+                    {siteBadgeCount ? <b className="operations-live-notification-badge is-zone-summary" aria-label={`${siteBadgeCount}개 알림`}>알림 {siteBadgeCount}</b> : <span className="operations-live-ok-pill">정상</span>}
                   </header>
                   <div className="operations-factory-cell-grid" aria-label={`${site} 셀별 설비 상태`}>
                     {siteCells.map((cell) => (
@@ -1297,7 +1307,7 @@ function FactoryMonitoringMapPanel({
                               <button
                                 key={slot.id}
                                 type="button"
-                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""}`}
+                                className={`operations-factory-asset-node ${tone} ${slot.kind} ${selected ? "is-selected" : ""} ${focusMode === "exceptions" && tone === "normal" && !selected ? "is-deemphasized" : ""}`}
                                 aria-pressed={selected}
                                 onClick={() => onPreviewAssetSlot(asset, slot, cell)}
                                 title={title}
@@ -1359,7 +1369,6 @@ export function OperationsWorkflowOverviewPage({
   onRefresh: () => void;
 }) {
   const { metrics } = model;
-  const topAssets = model.assets.slice(0, 6);
   const anomalyEvents = model.events
     .filter((item) => item.recommendedDecision !== "continue_monitoring")
     .slice(0, 8);
@@ -1370,7 +1379,6 @@ export function OperationsWorkflowOverviewPage({
   const lineImpactSummaries = buildLineImpactSummaries(model.assets);
   const factoryCells = buildFactoryCellLayout(model.assets, lineImpactSummaries);
   const selectedAsset = model.assets.find((asset) => asset.assetId === selectedAssetId)
-    ?? topAssets[0]
     ?? null;
   const selectedEvent = selectedAsset?.eventId
     ? model.events.find((event) => event.eventId === selectedAsset.eventId) ?? null
@@ -1409,6 +1417,7 @@ export function OperationsWorkflowOverviewPage({
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
+  const [factoryFocusMode, setFactoryFocusMode] = useState<"all" | "exceptions">("exceptions");
   const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
   const handlePostMaintenancePrediction = useCallback((assetId: string, prediction: PostMaintenancePredictionSummary) => {
     setPostMaintenancePredictions((current) => {
@@ -1549,6 +1558,8 @@ export function OperationsWorkflowOverviewPage({
         selectedAsset={selectedAsset}
         postMaintenancePredictions={postMaintenancePredictions}
         planningBasis={planningBasis}
+        focusMode={factoryFocusMode}
+        onFocusModeChange={setFactoryFocusMode}
         onPreviewAssetSlot={previewFactoryAssetSlot}
       />
 

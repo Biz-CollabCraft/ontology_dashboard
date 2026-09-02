@@ -40,6 +40,12 @@ export interface ReliabilitySurface {
   page: ReliabilityPageCopy;
 }
 
+export interface ReliabilitySurfaceGroup {
+  id: string;
+  label: ReliabilityLocalizedCopy;
+  surfaces: ReliabilitySurface[];
+}
+
 function copy(ko: string, en: string): ReliabilityLocalizedCopy { return { ko, en }; }
 function page(eyebrow: string, title: string, detail: string, eyebrowEn: string, titleEn: string, detailEn: string): ReliabilityPageCopy {
   return { eyebrow: copy(eyebrow, eyebrowEn), title: copy(title, titleEn), detail: copy(detail, detailEn) };
@@ -56,13 +62,13 @@ export const RELIABILITY_SURFACES: Record<ReliabilityExperienceKind, Reliability
     { id: "pending-decisions", view: "operations", label: copy("판단 대기", "Pending decisions"), detail: copy("우선순위 · SLA", "Priority · SLA"), page: page("판단 대기", "지금 판단해야 할 항목", "생산 영향이 큰 항목부터 다음 운영 판단과 Owner를 확인합니다.", "PENDING DECISIONS", "Decisions required now", "Prioritize high-impact cases and review the next operational decision and owner." ) },
     { id: "operations-status", view: "overview", label: copy("운영 현황", "Operations status"), detail: copy("실시간 KPI · 상태맵", "Live KPI · factory map"), page: page("운영 현황", "생산 리스크와 조치 현황", "실시간 공장 상태와 판단 대기 항목을 함께 확인합니다.", "OPERATIONS STATUS", "Production risk and response", "Review live factory status together with work requiring decisions." ) },
     { id: "production-impact", view: "objects", label: copy("생산 영향", "Production impact"), detail: copy("수량 · 비용 · 제품", "Units · cost · product"), page: page("생산 영향", "설비 위험의 운영 영향", "예상 정지, 계획 손실 수량, 제품 경제성과 자재 제약을 연결합니다.", "PRODUCTION IMPACT", "Operational impact of asset risk", "Connect downtime, planned unit loss, product economics, and material constraints." ) },
-    { id: "report-draft", view: "reports", label: copy("보고 초안", "Report draft"), detail: copy("Decision Packet · 경영 전환", "Decision packet · executive handoff"), page: page("보고 초안", "운영 판단 보고", "같은 Case의 근거와 판단을 경영진이 사용할 수 있는 보고 언어로 전환합니다.", "REPORT DRAFT", "Operational decision report", "Transform the same case evidence and decisions into executive-ready reporting language." ) },
+    { id: "report-draft", view: "reports", label: copy("보고", "Reports"), detail: copy("초안 · 검토 대기 · Archive", "Drafts · review queue · archive"), page: page("보고", "Case에서 이어지는 보고 산출물", "Decision Case에서 생성된 보고 초안과 검토 대기, 완료된 snapshot 산출물을 한곳에서 확인합니다.", "REPORTS", "Reporting artifacts from Decision Cases", "Review report drafts, review queues, and completed snapshot artifacts produced from Decision Cases." ) },
   ],
   engineering: [
     { id: "monitoring", view: "overview", label: copy("모니터링", "Monitoring"), detail: copy("상태맵 · 위험 알림", "Factory map · risk alerts"), page: page("모니터링", "조사가 필요한 설비", "실시간 상태맵과 이상 신호에서 조사 우선순위를 좁혀갑니다.", "MONITORING", "Assets requiring investigation", "Narrow investigation priority from live factory state and abnormal signals." ) },
-    { id: "assets", view: "objects", label: copy("설비 · 센서 피쳐", "Assets · sensor features"), detail: copy("실시간 피쳐 · 이상 센서", "Live features · abnormal sensors"), page: page("설비 진단", "설비 신호와 원인 근거", "선택 설비의 센서 추세, 모델 기여와 정비 이력을 함께 분석합니다.", "ASSET ANALYSIS", "Equipment signals and causal evidence", "Analyze sensor trends, model contribution, and maintenance history for the selected asset." ) },
-    { id: "inspection", view: "operations", label: copy("점검 · 정비 이력", "Inspection · maintenance"), detail: copy("점검 실행 · 과거 조치", "Inspection · past actions"), page: page("점검 기록", "점검 대상과 정비 이력", "근거에 연결된 점검 위치와 checklist, 과거 정비 기록을 함께 확인합니다.", "INSPECTION RECORD", "Inspection targets and maintenance history", "Review grounded inspection targets and checklists together with past maintenance records." ) },
-    { id: "field-notes", view: "reports", label: copy("현장 메모 · 분석 보고", "Field notes · analysis report"), detail: copy("근거 정리 · 공유", "Evidence summary · sharing"), page: page("분석 보고", "근거 기반 현장 기록", "현장 관측, 남은 불확실성과 handoff 내용을 Evidence와 연결해 정리합니다.", "ANALYSIS REPORT", "Evidence-based field record", "Connect field observations, uncertainty, and handoff notes to evidence." ) },
+    { id: "assets", view: "objects", label: copy("원인 분석", "Root-cause analysis"), detail: copy("센서 추세 · 기여도 · 이력", "Signals · contribution · history"), page: page("원인 분석", "설비 신호와 원인 근거", "선택 설비의 센서 추세, 모델 기여와 정비 이력을 함께 분석해 원인 후보를 좁힙니다.", "ROOT-CAUSE ANALYSIS", "Equipment signals and causal evidence", "Analyze sensor trends, model contribution, and maintenance history to narrow causal candidates." ) },
+    { id: "inspection", view: "operations", label: copy("점검", "Inspection"), detail: copy("점검 대상 · Checklist · 실행", "Targets · checklist · execution"), page: page("점검", "근거 기반 점검 실행", "근거에 연결된 점검 위치와 checklist를 확인하고 현장 실행 단계로 이어갑니다.", "INSPECTION", "Evidence-based inspection", "Review grounded inspection targets and checklists, then continue into field execution." ) },
+    { id: "field-notes", view: "reports", label: copy("현장 기록", "Field records"), detail: copy("관측 · 불확실성 · Handoff", "Observation · uncertainty · handoff"), page: page("현장 기록", "근거 기반 현장 기록", "현장 관측, 남은 불확실성과 handoff 내용을 Evidence와 연결해 정리합니다.", "FIELD RECORDS", "Evidence-based field record", "Connect field observations, uncertainty, and handoff notes to evidence." ) },
   ],
   maintenance: [
     { id: "my-work", view: "operations", label: copy("내 작업", "My work"), detail: copy("승인 작업 · 진행 상태", "Approved work · progress"), page: page("내 작업", "승인된 현장 작업", "어디에서 무엇을 해야 하는지와 현재 작업 순서를 먼저 확인합니다.", "MY WORK", "Approved field work", "Start with where to go, what to do, and the current work sequence." ) },
@@ -130,6 +136,7 @@ const ROLE_DETAIL_SURFACES: Partial<Record<ReliabilityExperienceKind, Reliabilit
   ],
   engineering: [
     { id: "sensor-features", view: "objects", label: copy("센서 피쳐", "Sensor features"), detail: copy("추세 · 기여도 · 이상 구간", "Trend · contribution · anomaly"), page: page("센서 피쳐", "이상 신호를 시계열로 분석", "선택 설비의 실제 관측 추세와 모델 기여 근거를 함께 비교합니다.", "SENSOR FEATURES", "Analyze abnormal signals over time", "Compare live observation trends and model contribution evidence for the selected asset.") },
+    { id: "maintenance-effect", view: "objects", label: copy("정비 효과", "Maintenance effect"), detail: copy("Before/After · 재발 여부", "Before/after · recurrence"), page: page("정비 효과", "정비 전후 신호와 위험 변화", "정비 전후 위험과 핵심 센서 변화를 비교해 조치 효과와 재발 가능성을 확인합니다.", "MAINTENANCE EFFECT", "Risk and signal change after maintenance", "Compare risk and key signals before and after maintenance to assess effect and recurrence.") },
     { id: "maintenance-history", view: "objects", label: copy("정비 이력", "Maintenance history"), detail: copy("과거 조치 · Before/After", "Past work · before/after"), page: page("정비 이력", "과거 조치와 현재 이상을 연결", "같은 설비의 과거 정비와 현재 위험, 정비 전후 관측을 연결해 재발 여부를 확인합니다.", "MAINTENANCE HISTORY", "Connect past work to current risk", "Connect maintenance records, current risk, and before/after observations to review recurrence.") },
   ],
 };
@@ -142,7 +149,7 @@ export function reliabilitySurfaces(kind: ReliabilityExperienceKind, backupMode 
   if (kind === "executive") {
     const [brief, bottleneck, operationalRisk, maintenanceEffect] = baseline;
     const [kpi, reports, roadmap] = extras;
-    return [brief, bottleneck, operationalRisk, kpi, reports, maintenanceEffect, roadmap, factoryStatus].filter(Boolean);
+    return [brief, operationalRisk, kpi, bottleneck, reports, maintenanceEffect, roadmap, factoryStatus].filter(Boolean);
   }
   if (kind === "operations") {
     const [pending, status, production, report] = baseline;
@@ -150,8 +157,51 @@ export function reliabilitySurfaces(kind: ReliabilityExperienceKind, backupMode 
     return [factoryStatus, status, pending, decisionCase, production, maintenanceApproval, backlog, report].filter(Boolean);
   }
   const [monitoring, assets, inspection, fieldNotes] = baseline;
-  const [sensorFeatures, maintenanceHistory] = extras;
-  return [factoryStatus, monitoring, assets, sensorFeatures, inspection, maintenanceHistory, fieldNotes].filter(Boolean);
+  const [, maintenanceEffect, maintenanceHistory] = extras;
+  return [factoryStatus, monitoring, assets, inspection, maintenanceEffect, maintenanceHistory, fieldNotes].filter(Boolean);
+}
+
+export function reliabilitySurfaceGroups(kind: ReliabilityExperienceKind, backupMode = false): ReliabilitySurfaceGroup[] {
+  const surfaces = reliabilitySurfaces(kind, backupMode);
+  if (backupMode) return [{ id: "workspace", label: copy("WORKSPACE", "WORKSPACE"), surfaces }];
+  const group = (id: string, ko: string, en: string, ids: ReliabilitySurfaceId[]) => ({
+    id,
+    label: copy(ko, en),
+    surfaces: ids.map((surfaceId) => surfaces.find((item) => item.id === surfaceId)).filter((item): item is ReliabilitySurface => Boolean(item)),
+  });
+  if (kind === "operations") return [
+    group("observe", "OBSERVE · 감지", "OBSERVE", ["factory-status", "operations-status"]),
+    group("decide", "DECIDE · 판단", "DECIDE", ["pending-decisions", "decision-case", "production-impact", "maintenance-approval"]),
+    group("follow-up", "FOLLOW-UP · 후속", "FOLLOW-UP", ["backlog", "report-draft"]),
+  ];
+  if (kind === "executive") return [
+    group("executive-primary", "PRIMARY · 경영 판단", "PRIMARY", ["executive-brief", "operational-risk", "executive-kpi", "decision-bottleneck", "executive-reports"]),
+    group("executive-evidence", "EVIDENCE · 근거/상세", "EVIDENCE & DETAIL", ["maintenance-effect", "roadmap", "factory-status"]),
+  ];
+  if (kind === "engineering") return [
+    group("observe", "OBSERVE · 감지", "OBSERVE", ["factory-status", "monitoring"]),
+    group("diagnose", "DIAGNOSE · 진단", "DIAGNOSE", ["assets", "inspection", "maintenance-effect"]),
+    group("learn", "LEARN · 이력", "LEARN", ["maintenance-history", "field-notes"]),
+  ];
+  return [
+    group("execute", "EXECUTE · 현장", "EXECUTE", ["my-work", "work-targets", "field-status"]),
+    group("history", "HISTORY · 이력", "HISTORY", ["work-history"]),
+  ];
+}
+
+export function adaptiveReliabilityLandingSurface(
+  kind: ReliabilityExperienceKind,
+  metrics: { critical: number; pendingDecisions: number },
+  backupMode = false,
+): ReliabilitySurface {
+  const surfaces = reliabilitySurfaces(kind, backupMode);
+  if (backupMode || kind !== "operations") return defaultReliabilitySurface(kind, backupMode);
+  const preferredId = metrics.critical > 0
+    ? "factory-status"
+    : metrics.pendingDecisions >= 3
+      ? "pending-decisions"
+      : "operations-status";
+  return surfaces.find((item) => item.id === preferredId) ?? surfaces[0];
 }
 
 export function defaultReliabilitySurface(kind: ReliabilityExperienceKind, backupMode = false): ReliabilitySurface {

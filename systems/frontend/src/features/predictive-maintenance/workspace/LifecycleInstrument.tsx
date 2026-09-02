@@ -28,6 +28,7 @@ export interface LifecycleInstrumentProps {
   expanded?: boolean;
   defaultExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
+  mode?: "idle" | "compact" | "full";
 }
 
 type CompactStageKind = "completed" | "current" | "next" | "empty";
@@ -65,6 +66,7 @@ export function LifecycleInstrument({
   expanded,
   defaultExpanded = false,
   onExpandedChange,
+  mode = "full",
 }: LifecycleInstrumentProps) {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
   const detailsId = useId();
@@ -83,8 +85,20 @@ export function LifecycleInstrument({
     ? (english ? `Previous · ${completedSteps.length} completed` : `이전 완료 · ${completedSteps.length}단계`)
     : (english ? "Previous completed" : "이전 완료 단계");
 
+  if (mode === "idle") {
+    return (
+      <section className="lifecycle-instrument is-idle" aria-label={title ?? (english ? "No case selected" : "Case 미선택")}>
+        <div className="lifecycle-idle-strip">
+          <span><Circle aria-hidden="true" size={11} /></span>
+          <strong>{english ? "No case selected" : "Case 미선택"}</strong>
+          <small>{english ? "Select an asset or event to follow its closed-loop workflow." : "설비나 Event를 선택하면 closed-loop 진행 상태를 표시합니다."}</small>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="lifecycle-instrument" aria-label={title ?? (english ? "Reliability lifecycle" : "Reliability lifecycle")}>
+    <section className={`lifecycle-instrument is-${mode}`} aria-label={title ?? (english ? "Reliability lifecycle" : "Reliability lifecycle")}>
       <div className="lifecycle-instrument-bar">
         <div className="lifecycle-instrument-title">
           <span>{english ? "CLOSED-LOOP" : "CLOSED-LOOP"}</span>
@@ -92,13 +106,13 @@ export function LifecycleInstrument({
         </div>
 
         <div className="lifecycle-instrument-track">
-          <article className={`lifecycle-stage is-completed ${previous ? "has-value" : "is-empty"}`}>
+          {mode === "full" ? <article className={`lifecycle-stage is-completed ${previous ? "has-value" : "is-empty"}`}>
             <div className="lifecycle-stage-dot"><CompactStageIcon kind={previous ? "completed" : "empty"} /></div>
             <div>
               <span>{previousEyebrow}</span>
               <strong>{previous?.label ?? (english ? "No completed step" : "완료된 단계 없음")}</strong>
             </div>
-          </article>
+          </article> : null}
 
           <article className={`lifecycle-stage is-current is-${currentState} ${current ? "has-value" : "is-empty"}`}>
             <div className="lifecycle-stage-dot"><CompactStageIcon kind="current" state={currentState} /></div>

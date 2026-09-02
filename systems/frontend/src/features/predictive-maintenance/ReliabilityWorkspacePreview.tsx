@@ -44,7 +44,7 @@ import {
   type ReliabilityAssistantMessage,
 } from "./workspace/assistantContext";
 import { resolveReliabilityRoleExperience } from "./workspace/roleExperience";
-import { reliabilitySurfaces, resolveReliabilitySurface } from "./workspace/roleSurfaces";
+import { reliabilitySurfaceGroups, reliabilitySurfaces, resolveReliabilitySurface } from "./workspace/roleSurfaces";
 
 const RELIABILITY_LOCALE_STORAGE_KEY = "ontology-dashboard:reliability-locale";
 
@@ -290,6 +290,7 @@ export function ReliabilityWorkspacePreview({
   const english = locale === "en-US";
   const experience = useMemo(() => resolveReliabilityRoleExperience(user), [user]);
   const navigation = useMemo(() => reliabilitySurfaces(experience.kind, backupMode), [backupMode, experience.kind]);
+  const navigationGroups = useMemo(() => reliabilitySurfaceGroups(experience.kind, backupMode), [backupMode, experience.kind]);
   const preset = displayPreset(preferences);
   const activeNav = resolveReliabilitySurface(experience.kind, activeSurface, backupMode);
   const activePageCopy = activeNav.page;
@@ -482,7 +483,7 @@ export function ReliabilityWorkspacePreview({
   const assistantActions = experience.kind === "engineering"
     ? [
       { id: "evidence", label: english ? "Open asset evidence" : "설비 근거 열기", detail: english ? "Sensors · factors · history" : "센서 · 기여도 · 이력", onClick: () => onNavigate("assets", "objects") },
-      { id: "sensor", label: english ? "Inspect sensor features" : "센서 피쳐 보기", detail: english ? "Trend and anomaly window" : "추세와 이상 구간", onClick: () => onNavigate("sensor-features", "objects") },
+      { id: "sensor", label: english ? "Analyze root cause" : "원인 분석 열기", detail: english ? "Signals · contribution · anomaly" : "센서 · 기여도 · 이상 구간", onClick: () => onNavigate("assets", "objects") },
       { id: "inspection", label: english ? "Open inspection case" : "점검 Case 열기", detail: english ? "Targets · workflow" : "점검 대상 · workflow", onClick: () => onNavigate("inspection", "operations") },
       { id: "history", label: english ? "Review maintenance history" : "정비 이력 보기", detail: english ? "Past work · before/after" : "과거 조치 · before/after", onClick: () => onNavigate("maintenance-history", "objects") },
     ]
@@ -525,6 +526,14 @@ export function ReliabilityWorkspacePreview({
     "maintenance-history",
     "work-targets",
   ]).has(activeNav.id);
+  const lifecycleMode = activeNav.id === "decision-case" ? "full" : selectedEvent ? "compact" : "idle";
+  const selectionTarget = experience.kind === "operations"
+    ? { id: "decision-case", view: "operations" as const, label: english ? "Open Decision Case" : "Decision Case 열기" }
+    : experience.kind === "engineering"
+      ? { id: "assets", view: "objects" as const, label: english ? "Open root-cause analysis" : "원인 분석 열기" }
+      : experience.kind === "executive"
+        ? { id: "factory-status", view: "overview" as const, label: english ? "Open factory evidence" : "설비 상태 근거 열기" }
+        : { id: "work-targets", view: "objects" as const, label: english ? "Open work target" : "작업 대상 열기" };
 
   async function ask(question: string) {
     const trimmed = question.trim();
@@ -607,12 +616,19 @@ export function ReliabilityWorkspacePreview({
       <div className="rw-preview-body">
         <aside className="rw-preview-left">
           <div className="rw-preview-left-heading"><span>{english ? experience.label.en : experience.label.ko}</span><strong>{english ? "Workspace" : "업무 공간"}</strong></div>
-          <nav>
-            {navigation.map((item, index) => (
-              <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => { setSettingsOpen(false); onNavigate(item.id, item.view); }} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>
-              </button>
+          <nav aria-label={english ? "Role workflow navigation" : "역할별 업무 단계 탐색"}>
+            {navigationGroups.map((group) => (
+              <section className="rw-preview-nav-group" key={group.id}>
+                <header>{english ? group.label.en : group.label.ko}</header>
+                <div>
+                  {group.surfaces.map((item) => (
+                    <button type="button" key={item.id} className={activeNav.id === item.id ? "is-active" : ""} onClick={() => { setSettingsOpen(false); onNavigate(item.id, item.view); }} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
+                      <span aria-hidden="true">•</span>
+                      <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>
+                    </button>
+                  ))}
+                </div>
+              </section>
             ))}
           </nav>
           <section className="rw-preview-scope"><span>{english ? "SCOPE" : "현재 범위"}</span><strong>{context.workspaceName}</strong><small>{context.sourceStatus}</small></section>
@@ -635,6 +651,18 @@ export function ReliabilityWorkspacePreview({
         <section className="rw-preview-main">
           {context.warnings.length ? <details className="rw-preview-warning"><summary>{english ? `${context.warnings.length} data notice(s)` : `데이터 참고사항 ${context.warnings.length}건`}</summary><ul>{context.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></details> : null}
           <header className="rw-preview-page-heading"><span>{eyebrow}</span><h1>{title}</h1><p>{detailCopy}</p></header>
+          {selectedEvent ? <section className={`rw-preview-selection-anchor tone-${riskTone(selectedEvent.status)}`} aria-label={english ? "Selected case context" : "현재 선택 Case 문맥"}>
+            <div className="rw-preview-selection-anchor__path">
+              <span>{english ? "SELECTED CASE" : "선택 Case"}</span>
+              <strong>{displayLineLabel(selectedEvent.line)} <i>›</i> {displayAssetName({ assetId: selectedEvent.assetId, displayName: selectedEvent.assetName })}</strong>
+            </div>
+            <div className="rw-preview-selection-anchor__facts">
+              <span>{selectedEvent.eventId}</span>
+              <b>{english ? "Risk" : "위험"} {probability(selectedEvent.failureProbability)}</b>
+              <em>{riskStatusLabel(selectedEvent.status, english)}</em>
+            </div>
+            <button type="button" onClick={() => onNavigate(selectionTarget.id, selectionTarget.view)}>{selectionTarget.label}</button>
+          </section> : null}
           {showOperationalFocus ? <div className="rw-preview-operational-focus">
             <OperationalFocus
               asset={{
@@ -702,12 +730,13 @@ export function ReliabilityWorkspacePreview({
 
       <footer className="rw-preview-bottom">
         <LifecycleInstrument
-          title={selectedEvent?.assetName ?? (english ? "Lifecycle" : "Lifecycle")}
+          title={selectedEvent?.assetName ?? (english ? "No case selected" : "Case 미선택")}
           completedSteps={lifecycleCompletedSteps}
           current={lifecycleCurrent}
           next={lifecycleNext}
           timeline={lifecycleTimeline}
           locale={locale}
+          mode={lifecycleMode}
         />
       </footer>
     </main>
