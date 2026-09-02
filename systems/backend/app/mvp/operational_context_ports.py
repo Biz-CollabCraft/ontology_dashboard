@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from app.mvp.operational_domain_schema import ProductionDecisionContext
 from app.mvp.operational_context_contract import (
     FreshnessMetadata,
     FreshnessState,
@@ -162,6 +163,157 @@ class FixtureProductionContextReadPort:
             or identity.project_id != fixture_project_id
         ):
             raise ValueError("production context configured scope mismatch")
+
+
+@dataclass(frozen=True)
+class FixtureProductionDecisionContextReadPort:
+    """Read a typed synthetic order/WIP/alternative-capacity snapshot."""
+
+    context: dict[str, Any]
+    source_ref: str
+    freshness_policy_version: str = "production-decision-fixture-freshness-v1"
+    max_age_seconds: int = 172_800
+    owner_domain: str = "production"
+
+    def lookup(
+        self,
+        *,
+        identity: OperationalRequestIdentity,
+        retrieved_at: datetime,
+    ) -> OperationalContextEnvelope:
+        scope = self.context.get("scope") or {}
+        expected_scope = (
+            str(scope.get("organization_id") or ""),
+            str(scope.get("project_id") or ""),
+            str(scope.get("workspace_id") or ""),
+        )
+        actual_scope = (
+            identity.organization_id,
+            identity.project_id,
+            identity.workspace_id,
+        )
+        if expected_scope != actual_scope:
+            raise ValueError("production decision context configured scope mismatch")
+
+        temporal = self.context.get("temporal_scope") or {}
+        generated_at = _parse_required_datetime(
+            temporal.get("generated_at"), "temporal_scope.generated_at"
+        )
+        valid_from = _parse_required_datetime(
+            temporal.get("valid_from"), "temporal_scope.valid_from"
+        )
+        valid_to = _parse_required_datetime(
+            temporal.get("valid_to"), "temporal_scope.valid_to"
+        )
+        if valid_from >= valid_to:
+            raise ValueError("production decision valid_from must be before valid_to")
+
+        parsed = ProductionDecisionContext.model_validate(
+            {
+                "source_classification": self.context.get(
+                    "source_classification"
+                ),
+                "production_orders": self.context.get("production_orders") or [],
+                "wip": self.context.get("wip") or [],
+                "alternative_resources": self.context.get(
+                    "alternative_resources"
+                )
+                or [],
+                "limitations": self.context.get("limitations") or [],
+            }
+        )
+        selected_orders = tuple(
+            order
+            for order in parsed.production_orders
+            if order.assigned_asset_id == identity.asset_id
+        )
+        order_ids = {order.order_id for order in selected_orders}
+        selected_wip = tuple(
+            item
+            for item in parsed.wip
+            if item.order_id in order_ids and item.asset_id == identity.asset_id
+        )
+        operation_ids = {order.operation_id for order in selected_orders}
+        product_ids = {order.product_id for order in selected_orders}
+        selected_alternatives = tuple(
+            resource
+            for resource in parsed.alternative_resources
+            if set(resource.operation_ids).intersection(operation_ids)
+            and set(resource.compatible_product_ids).intersection(product_ids)
+        )
+
+        freshness_state = classify_freshness(
+            source_updated_at=generated_at,
+            retrieved_at=retrieved_at,
+            max_age_seconds=self.max_age_seconds,
+        )
+        in_window = valid_from <= identity.decision_as_of < valid_to
+        status = (
+            OperationalContextStatus.AVAILABLE
+            if in_window and freshness_state is FreshnessState.FRESH
+            else OperationalContextStatus.STALE
+        )
+        effective_freshness = (
+            FreshnessState.FRESH
+            if status is OperationalContextStatus.AVAILABLE
+            else FreshnessState.STALE
+        )
+        limitations = parsed.limitations
+        data: dict[str, Any] = {}
+        if status is OperationalContextStatus.AVAILABLE:
+            data = {
+                "source_classification": parsed.source_classification,
+                "production_orders": [
+                    item.model_dump(mode="json") for item in selected_orders
+                ],
+                "wip": [item.model_dump(mode="json") for item in selected_wip],
+                "alternative_resources": [
+                    item.model_dump(mode="json")
+                    for item in selected_alternatives
+                ],
+            }
+            if not selected_orders:
+                limitations = (
+                    *limitations,
+                    "No production order is assigned to the requested asset.",
+                )
+        elif not in_window:
+            limitations = (
+                *limitations,
+                "Requested decision_as_of is outside the decision context window.",
+            )
+        else:
+            limitations = (
+                *limitations,
+                "Production decision context exceeded its freshness policy.",
+            )
+
+        source_version = str(temporal.get("snapshot_id") or "")
+        if not source_version:
+            raise ValueError("production decision context requires snapshot_id")
+
+        return OperationalContextEnvelope(
+            owner_domain=self.owner_domain,
+            scope=OperationalScope(
+                organization_id=identity.organization_id,
+                project_id=identity.project_id,
+                workspace_id=identity.workspace_id,
+                asset_id=identity.asset_id,
+            ),
+            status=status,
+            source_version=source_version,
+            source_updated_at=generated_at,
+            retrieved_at=retrieved_at,
+            as_of=identity.decision_as_of,
+            freshness=FreshnessMetadata(
+                policy_version=self.freshness_policy_version,
+                max_age_seconds=self.max_age_seconds,
+                state=effective_freshness,
+            ),
+            source_refs=(self.source_ref,),
+            data=data,
+            limitations=limitations,
+        )
 
 
 def _parse_required_datetime(value: Any, field_name: str) -> datetime:

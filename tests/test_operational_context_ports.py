@@ -9,10 +9,22 @@ from app.mvp.operational_context_contract import (
     OperationalRequestIdentity,
     require_matching_scope,
 )
-from app.mvp.operational_context_ports import FixtureProductionContextReadPort
+from app.mvp.operational_context_ports import (
+    FixtureProductionContextReadPort,
+    FixtureProductionDecisionContextReadPort,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DECISION_FIXTURE = json.loads(
+    (
+        ROOT
+        / "data"
+        / "fixtures"
+        / "operation_context"
+        / "operational-decision-context-v1.json"
+    ).read_text(encoding="utf-8")
+)
 FIXTURE = json.loads(
     (
         ROOT
@@ -114,6 +126,74 @@ def test_missing_asset_impact_remains_explicit_without_fake_zero() -> None:
     assert result.status is OperationalContextStatus.AVAILABLE
     assert result.data["event_impact"] is None
     assert any("No event impact" in item for item in result.limitations)
+
+
+def decision_port() -> FixtureProductionDecisionContextReadPort:
+    return FixtureProductionDecisionContextReadPort(
+        context=DECISION_FIXTURE,
+        source_ref=(
+            "data/fixtures/operation_context/"
+            "operational-decision-context-v1.json"
+        ),
+    )
+
+
+def test_decision_port_links_order_wip_and_alternative_capacity() -> None:
+    requested = identity(
+        as_of=datetime(2026, 9, 2, 1, tzinfo=timezone.utc)
+    )
+    result = decision_port().lookup(
+        identity=requested,
+        retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
+    )
+
+    require_matching_scope(requested, result)
+    assert result.status is OperationalContextStatus.AVAILABLE
+    assert result.source_version == "OPS-DECISION-SNAPSHOT-2026-09-02-01"
+    assert result.data["source_classification"] == "synthetic_demo_context"
+    assert result.data["production_orders"][0]["order_id"] == "DEMO-PO-001"
+    assert result.data["wip"][0]["quantity"] == 200
+    assert result.data["wip"][0]["lot_ids"] == [
+        "DEMO-LOT-014",
+        "DEMO-LOT-015",
+    ]
+    assert (
+        result.data["alternative_resources"][0]["net_transferable_units"]
+        == 50
+    )
+
+
+def test_decision_port_filters_context_by_requested_asset() -> None:
+    requested = identity(
+        asset_id="CNC-UNKNOWN",
+        as_of=datetime(2026, 9, 2, 1, tzinfo=timezone.utc),
+    )
+    result = decision_port().lookup(
+        identity=requested,
+        retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
+    )
+
+    assert result.data["production_orders"] == []
+    assert result.data["wip"] == []
+    assert result.data["alternative_resources"] == []
+    assert any("No production order" in item for item in result.limitations)
+
+
+def test_decision_port_rejects_broken_wip_relationship() -> None:
+    broken = json.loads(json.dumps(DECISION_FIXTURE))
+    broken["wip"][0]["order_id"] = "UNKNOWN"
+    adapter = FixtureProductionDecisionContextReadPort(
+        context=broken,
+        source_ref="broken",
+    )
+
+    with pytest.raises(ValueError, match="references unknown order"):
+        adapter.lookup(
+            identity=identity(
+                as_of=datetime(2026, 9, 2, 1, tzinfo=timezone.utc)
+            ),
+            retrieved_at=datetime(2026, 9, 2, 2, tzinfo=timezone.utc),
+        )
 
 
 def test_configured_scope_mismatch_fails_closed() -> None:
