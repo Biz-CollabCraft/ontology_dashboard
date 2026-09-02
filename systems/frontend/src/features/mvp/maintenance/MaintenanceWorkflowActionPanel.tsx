@@ -36,6 +36,12 @@ export type MaintenanceWorkflowDisplayStatus =
   | "observation_pending"
   | "ready_for_reprediction";
 
+export interface PostMaintenancePredictionSummary {
+  failureProbability: number;
+  statusGrade: "normal" | "attention" | "warning" | "critical";
+  observedAt: string;
+}
+
 function displayStatus(
   lineage: MaintenanceEventLineageReadModel,
   postMaintenancePredictionAvailable = false,
@@ -74,6 +80,7 @@ export function MaintenanceWorkflowActionPanel({
   canFieldExecute,
   onChanged,
   onStatusChanged,
+  onPostMaintenancePrediction,
 }: {
   projectId: string;
   workspaceId: string;
@@ -87,16 +94,13 @@ export function MaintenanceWorkflowActionPanel({
   canFieldExecute: boolean;
   onChanged?: () => void;
   onStatusChanged?: (status: MaintenanceWorkflowDisplayStatus) => void;
+  onPostMaintenancePrediction?: (prediction: PostMaintenancePredictionSummary) => void;
 }) {
   const [lineage, setLineage] = useState<MaintenanceEventLineageReadModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const [postMaintenancePrediction, setPostMaintenancePrediction] = useState<{
-    failureProbability: number;
-    statusGrade: "normal" | "attention" | "warning" | "critical";
-    observedAt: string;
-  } | null>(null);
+  const [postMaintenancePrediction, setPostMaintenancePrediction] = useState<PostMaintenancePredictionSummary | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -160,11 +164,13 @@ export function MaintenanceWorkflowActionPanel({
           controller.signal,
         );
         if (result) {
-          setPostMaintenancePrediction({
+          const prediction: PostMaintenancePredictionSummary = {
             failureProbability: result.failure_probability,
             statusGrade: result.status_grade,
             observedAt: result.observed_at,
-          });
+          };
+          setPostMaintenancePrediction(prediction);
+          onPostMaintenancePrediction?.(prediction);
           onStatusChanged?.("ready_for_reprediction");
           setMessage({ tone: "success", text: "정비 후 관측과 예측 처리가 완료됐습니다." });
           return;
@@ -184,6 +190,7 @@ export function MaintenanceWorkflowActionPanel({
     };
   }, [
     assetId,
+    onPostMaintenancePrediction,
     onStatusChanged,
     postMaintenancePrediction,
     projectId,

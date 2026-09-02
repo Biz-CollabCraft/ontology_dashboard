@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createMvpAgentReviewSummary, getMvpAgentReviewSummary } from "../../../api";
 import type {
   MvpAgentReviewSummary,
@@ -61,6 +61,7 @@ import { MaintenanceCostDecisionPanel } from "../maintenance/MaintenanceCostDeci
 import {
   MaintenanceWorkflowActionPanel,
   type MaintenanceWorkflowDisplayStatus,
+  type PostMaintenancePredictionSummary,
 } from "../maintenance/MaintenanceWorkflowActionPanel";
 
 interface WorkOrderCandidate {
@@ -1247,7 +1248,28 @@ export function MvpWorkflowOverviewPage({
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
-  const drawerAsset = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
+  const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
+  const handlePostMaintenancePrediction = useCallback((assetId: string, prediction: PostMaintenancePredictionSummary) => {
+    setPostMaintenancePredictions((current) => {
+      const previous = current[assetId];
+      if (
+        previous?.failureProbability === prediction.failureProbability
+        && previous.statusGrade === prediction.statusGrade
+        && previous.observedAt === prediction.observedAt
+      ) return current;
+      return { ...current, [assetId]: prediction };
+    });
+  }, []);
+  const drawerAssetSource = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
+  const drawerPrediction = drawerAssetSource ? postMaintenancePredictions[drawerAssetSource.assetId] : null;
+  const drawerAsset = drawerAssetSource && drawerPrediction
+    ? {
+      ...drawerAssetSource,
+      status: drawerPrediction.statusGrade,
+      failureProbability: drawerPrediction.failureProbability,
+      observedAt: drawerPrediction.observedAt,
+    }
+    : drawerAssetSource;
   const drawerEvent = drawerAsset?.eventId
     ? model.events.find((event) => event.eventId === drawerAsset.eventId) ?? null
     : null;
@@ -1477,12 +1499,13 @@ export function MvpWorkflowOverviewPage({
                               <div className="mvp-factory-cell-slots">
                                 {cell.slots.map((slot) => {
                                   const asset = slot.asset;
+                                  const currentPrediction = asset ? postMaintenancePredictions[asset.assetId] : null;
                                   const selected = asset
                                     ? selectedAsset?.assetId === asset.assetId
                                     : factorySlotPreview?.slot.id === slot.id;
-                                  const tone = asset ? mapTone(asset.status) : "slot";
+                                  const tone = asset ? mapTone(currentPrediction?.statusGrade ?? asset.status) : "slot";
                                   const title = asset
-                                    ? `${displayFactorySlotName(slot, cell)} · ${formatProbability(asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
+                                    ? `${displayFactorySlotName(slot, cell)} · ${formatProbability(currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
                                     : `${cell.label} · ${slot.label} · 상태 미연결`;
                                   return (
                                     <button
@@ -1528,7 +1551,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "ViewModel" : drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "ViewModel" : drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1783,6 +1806,7 @@ function AssetPreviewPanel({
   datasetVersionId,
   eventId,
   onChanged,
+  onPostMaintenancePrediction,
   onTabChange,
   onSensorWindowChange,
   onPreviewAsset,
@@ -1817,6 +1841,7 @@ function AssetPreviewPanel({
   datasetVersionId: string;
   eventId: string | null;
   onChanged: () => void;
+  onPostMaintenancePrediction: (assetId: string, prediction: PostMaintenancePredictionSummary) => void;
   onTabChange: (tab: DrawerTab) => void;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
@@ -1832,6 +1857,10 @@ function AssetPreviewPanel({
   const [costReviewEventId, setCostReviewEventId] = useState<string | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState<MaintenanceWorkflowDisplayStatus | null>(null);
   const [workflowRevision, setWorkflowRevision] = useState(0);
+  const assetId = asset?.assetId ?? null;
+  const reportPostMaintenancePrediction = useCallback((prediction: PostMaintenancePredictionSummary) => {
+    if (assetId) onPostMaintenancePrediction(assetId, prediction);
+  }, [assetId, onPostMaintenancePrediction]);
   const refreshWorkflow = () => {
     setWorkflowRevision((value) => value + 1);
     onChanged();
@@ -2056,13 +2085,16 @@ function AssetPreviewPanel({
                 <section className="mvp-line-asset-list" aria-label="라인 위험 설비 목록">
                   <header><ClipboardList size={14} /><strong>{lineSummary.line} 위험 설비</strong><span>{lineSummary.assets.length}대</span></header>
                   <div>
-                    {lineSummary.assets.map((lineAsset) => (
-                      <button type="button" key={lineAsset.assetId} className={lineAsset.assetId === asset.assetId ? "is-selected" : ""} onClick={() => onPreviewAsset(lineAsset.assetId, lineAsset.eventId)}>
-                        <MvpStatusBadge status={lineAsset.status} />
-                        <strong>{displayFactoryAssetName(lineAsset.assetId) ?? displayAssetName(lineAsset)}</strong>
-                        <span>{formatProbability(lineAsset.failureProbability)} · {displayPartLabel(lineAsset.sparePartAvailable)}</span>
-                      </button>
-                    ))}
+                    {lineSummary.assets.map((lineAsset) => {
+                      const currentLineAsset = lineAsset.assetId === asset.assetId ? asset : lineAsset;
+                      return (
+                        <button type="button" key={lineAsset.assetId} className={lineAsset.assetId === asset.assetId ? "is-selected" : ""} onClick={() => onPreviewAsset(lineAsset.assetId, lineAsset.eventId)}>
+                          <MvpStatusBadge status={currentLineAsset.status} />
+                          <strong>{displayFactoryAssetName(lineAsset.assetId) ?? displayAssetName(lineAsset)}</strong>
+                          <span>{formatProbability(currentLineAsset.failureProbability)} · {displayPartLabel(lineAsset.sparePartAvailable)}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </section>
               ) : null}
@@ -2107,6 +2139,7 @@ function AssetPreviewPanel({
                   canFieldExecute={canExecuteFieldWorkflow}
                   onChanged={refreshWorkflow}
                   onStatusChanged={setWorkflowStatus}
+                  onPostMaintenancePrediction={reportPostMaintenancePrediction}
                 />
               ) : null}
               {eventId ? (
@@ -2338,6 +2371,7 @@ function AssetPreviewPanel({
                 canFieldExecute={canExecuteFieldWorkflow}
                 onChanged={refreshWorkflow}
                 onStatusChanged={setWorkflowStatus}
+                onPostMaintenancePrediction={reportPostMaintenancePrediction}
               />
             ) : null}
             </>
