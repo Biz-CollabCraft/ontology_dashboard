@@ -44,7 +44,7 @@ import {
   type ReliabilityAssistantContext,
   type ReliabilityAssistantMessage,
 } from "./workspace/assistantContext";
-import { reliabilityPageCopy, resolveReliabilityRoleExperience } from "./workspace/roleExperience";
+import { reliabilityNavigation, reliabilityPageCopy, resolveReliabilityRoleExperience } from "./workspace/roleExperience";
 
 const RELIABILITY_THEME_STORAGE_KEY = "ontology-dashboard:reliability-theme";
 const RELIABILITY_LOCALE_STORAGE_KEY = "ontology-dashboard:reliability-locale";
@@ -288,8 +288,9 @@ export function ReliabilityWorkspacePreview({
   const [locale, setReliabilityLocaleState] = useState<"ko-KR" | "en-US">(initialReliabilityLocale);
   const english = locale === "en-US";
   const experience = useMemo(() => resolveReliabilityRoleExperience(user), [user]);
+  const navigation = useMemo(() => reliabilityNavigation(experience), [experience]);
   const preset = displayPreset(preferences);
-  const activeNav = experience.navigation.find((item) => item.view === activeView) ?? experience.navigation[0];
+  const activeNav = navigation.find((item) => item.view === activeView) ?? navigation[0];
   const activePageCopy = reliabilityPageCopy(experience, activeView);
   const eyebrow = english ? activePageCopy.eyebrow.en : activePageCopy.eyebrow.ko;
   const title = english ? activePageCopy.title.en : activePageCopy.title.ko;
@@ -522,7 +523,7 @@ export function ReliabilityWorkspacePreview({
   }
 
   return (
-    <main className={`rw-preview-shell ${leftOpen ? "left-open" : "left-collapsed"} ${assistantOpen ? "assistant-open" : "assistant-closed"}`}>
+    <main className={`rw-preview-shell role-${experience.kind} ${leftOpen ? "left-open" : "left-collapsed"} ${assistantOpen ? "assistant-open" : "assistant-closed"}`} data-primary-surface={experience.primarySurface}>
       <header className="rw-preview-topbar">
         <div className="rw-preview-topbar-left">
           <button type="button" className="rw-preview-icon-button" onClick={() => setLeftOpen((value) => !value)} aria-label={leftOpen ? "Collapse navigation" : "Open navigation"}>{leftOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}</button>
@@ -540,7 +541,7 @@ export function ReliabilityWorkspacePreview({
         <aside className="rw-preview-left">
           <div className="rw-preview-left-heading"><span>{english ? experience.label.en : experience.label.ko}</span><strong>{english ? "Workspace" : "업무 공간"}</strong></div>
           <nav>
-            {experience.navigation.map((item, index) => (
+            {navigation.map((item, index) => (
               <button type="button" key={item.view} className={activeView === item.view ? "is-active" : ""} onClick={() => onNavigate(item.view)} title={!leftOpen ? (english ? item.label.en : item.label.ko) : undefined}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div><strong>{english ? item.label.en : item.label.ko}</strong><small>{english ? item.detail.en : item.detail.ko}</small></div>

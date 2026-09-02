@@ -495,6 +495,114 @@ def test_live_asset_detail_route_uses_selected_event_scope(client: TestClient) -
     }
 
 
+def test_exact_runtime_event_api_connects_sop_targets_and_agent_rag(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RuntimeService:
+        def __init__(self) -> None:
+            self.result = type("RuntimeResult", (), {})()
+            result = self.result
+            result.artifact_id = "RESULT#CNC-S01-L04-03#api"
+            result.asset_id = "CNC-S01-L04-03"
+            result.asset_type = "cnc"
+            result.site_id = "S01"
+            result.cell_id = "S01-L04"
+            result.observed_at = datetime(2026, 9, 2, 7, 50, tzinfo=timezone.utc)
+            result.status_grade = "warning"
+            result.predicted_failure_type = "failure_risk"
+            result.prediction_horizon_hours = 24
+            result.failure_probability = 0.72
+            result.confidence = 0.91
+            result.source_contract = "result_artifact"
+            result.producer_artifact = None
+            result.recommended_action = type("Action", (), {"action": "request_inspection"})()
+            result.provenance = type(
+                "Provenance",
+                (),
+                {
+                    "model_version": "independent-logreg-v3.1",
+                    "schema_version": "result-artifact-v1.0",
+                    "prediction_task": "binary_failure_within_horizon",
+                    "prediction_id": result.artifact_id,
+                    "prediction_result_id": "prediction-result-api",
+                },
+            )()
+            result.top_factors = [
+                type("Factor", (), {"rank": 1, "feature": "rotation_raw", "feature_value": 488.0, "signed_contribution": 0.31, "direction": "risk_up", "explanation_method": "linear_contribution"})(),
+                type("Factor", (), {"rank": 2, "feature": "vibration_raw", "feature_value": 58.0, "signed_contribution": 0.24, "direction": "risk_up", "explanation_method": "linear_contribution"})(),
+            ]
+
+        def latest_results(self, **_kwargs):
+            return type(
+                "Page",
+                (),
+                {
+                    "items": [self.result],
+                    "context": type("Context", (), {"dataset_id": "manufacturing-canonical", "dataset_version_id": "dsv-canonical-v3-1"})(),
+                },
+            )()
+
+        def observations(self, **_kwargs):
+            return type("Observations", (), {"observations": []})()
+
+        def timeline(self, **_kwargs):
+            return {"items": []}
+
+    runtime = RuntimeService()
+    monkeypatch.setattr(
+        "app.operations.router.get_predictive_maintenance_runtime_service",
+        lambda: runtime,
+    )
+    params = {
+        "project_id": "manufacturing-demo-project",
+        "dataset_version_id": "dsv-canonical-v3-1",
+        "event_id": runtime.result.artifact_id,
+        "history_window": "24h",
+    }
+
+    packet_response = client.get(
+        f"/api/objects/{runtime.result.asset_id}/agent-review-packet",
+        params=params,
+    )
+    assert packet_response.status_code == 200, packet_response.text
+    packet = packet_response.json()
+    assert packet["snapshot_basis"]["event_id"] == runtime.result.artifact_id
+    assert packet["sop_retrieval"]["returned_count"] >= 1
+    assert len(packet["inspection_targets"]) >= 1
+
+    detail_response = client.get(
+        f"/api/objects/{runtime.result.asset_id}/detail-view",
+        params={**params, "workspace_id": "manufacturing-demo"},
+    )
+    assert detail_response.status_code == 200, detail_response.text
+    detail = detail_response.json()
+    assert detail["snapshot_basis"]["event_id"] == runtime.result.artifact_id
+    assert len(detail["inspection_targets"]) >= 1
+
+    query_response = client.post(
+        "/api/agent/query",
+        headers=csrf_headers(client),
+        json={
+            "project_id": "manufacturing-demo-project",
+            "workspace_id": "manufacturing-demo",
+            "question": "이 설비의 SOP 점검 근거를 알려줘",
+            "route": "auto",
+            "audience": "engineering",
+            "object_type": "equipment",
+            "object_id": runtime.result.asset_id,
+            "event_id": runtime.result.artifact_id,
+            "top_k": 8,
+        },
+    )
+    assert query_response.status_code == 200, query_response.text
+    query = query_response.json()
+    assert query["state"]["status"] == "succeeded"
+    rag_evidence = [item for item in query["state"]["evidence"] if item["store"] == "project3_rag"]
+    assert len(rag_evidence) >= 1
+    assert any(item["reference"].endswith("#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001") for item in rag_evidence)
+
+
 def test_asset_detail_route_rejects_out_of_scope_workspace(client: TestClient) -> None:
     response = client.get(
         "/api/objects/CNC-LIVE-01/detail-view",

@@ -1,10 +1,14 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from app.identity import Principal
 from app.operations.contracts import AgentQueryRequest
 from app.operations.router import (
     _answer_from_packet,
     _merge_runtime_detail_supplemental,
+    _packet_evidence,
+    _runtime_agent_review_packet,
+    _runtime_asset_detail_view_model,
     _runtime_demo_operation_context,
     _runtime_sop_context,
     _summary_text,
@@ -13,16 +17,68 @@ from app.operations.router import (
 
 def _runtime_result():
     return SimpleNamespace(
+        artifact_id="RESULT#CNC-S01-L04-03#1",
         asset_id="CNC-S01-L04-03",
         asset_type="cnc",
+        site_id="S01",
+        cell_id="S01-L04",
         observed_at=datetime(2026, 9, 2, 7, 50, tzinfo=timezone.utc),
         status_grade="warning",
         predicted_failure_type="failure_risk",
+        prediction_horizon_hours=24,
+        failure_probability=0.72,
+        confidence=0.91,
+        source_contract="result_artifact",
+        producer_artifact=None,
+        recommended_action=SimpleNamespace(action="request_inspection"),
+        provenance=SimpleNamespace(
+            model_version="independent-logreg-v3.1",
+            schema_version="result-artifact-v1.0",
+            prediction_task="binary_failure_within_horizon",
+            prediction_id="RESULT#CNC-S01-L04-03#1",
+            prediction_result_id="prediction-result-1",
+        ),
         top_factors=[
-            SimpleNamespace(feature="rotation_raw"),
-            SimpleNamespace(feature="vibration_raw"),
+            SimpleNamespace(rank=1, feature="rotation_raw", feature_value=488.0, signed_contribution=0.31, direction="risk_up", explanation_method="linear_contribution"),
+            SimpleNamespace(rank=2, feature="vibration_raw", feature_value=58.0, signed_contribution=0.24, direction="risk_up", explanation_method="linear_contribution"),
         ],
     )
+
+
+def _principal() -> Principal:
+    return Principal(
+        user_id="engineer-1",
+        organization_id="org-1",
+        email="engineer@ontology.local",
+        display_name="Engineer",
+        status="active",
+        roles=["process_engineer"],
+        permissions=["events.read"],
+        workspace_scopes=["manufacturing-demo"],
+        project_scopes=["manufacturing-demo-project"],
+        active_project_id="manufacturing-demo-project",
+        active_project_roles=["process_engineer"],
+        is_admin=False,
+        default_path="/app",
+        landing_key="process_engineer",
+    )
+
+
+class _RuntimeService:
+    def __init__(self, result):
+        self.result = result
+
+    def latest_results(self, **_kwargs):
+        return SimpleNamespace(
+            items=[self.result],
+            context=SimpleNamespace(dataset_id="manufacturing-canonical", dataset_version_id="dsv-canonical-v3-1"),
+        )
+
+    def observations(self, **_kwargs):
+        return SimpleNamespace(observations=[])
+
+    def timeline(self, **_kwargs):
+        return {"items": []}
 
 
 def test_runtime_demo_operation_context_is_explicit_and_actionable():
@@ -51,6 +107,48 @@ def test_runtime_sop_retrieval_returns_grounded_source_for_cnc_result():
     assert guidance[0]["sop_id"] == "SOP-DEMO-CNC-ROTATING-ASSEMBLY-001"
     assert guidance[0]["source_ref"].endswith("#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001")
     assert "factor_keys" in guidance[0]["matched_fields"]
+
+
+def test_exact_runtime_event_connects_sop_inspection_target_and_assistant_evidence():
+    result = _runtime_result()
+    service = _RuntimeService(result)
+    event_id = result.artifact_id
+
+    packet = _runtime_agent_review_packet(
+        asset_id=result.asset_id,
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        dataset_version_id="dsv-canonical-v3-1",
+        selected_event_id=event_id,
+        principal=_principal(),
+        runtime_service=service,
+    )
+    detail = _runtime_asset_detail_view_model(
+        asset_id=result.asset_id,
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        dataset_version_id="dsv-canonical-v3-1",
+        selected_event_id=event_id,
+        history_window="24h",
+        principal=_principal(),
+        runtime_service=service,
+    )
+    evidence = _packet_evidence(
+        packet,
+        project_id="manufacturing-demo-project",
+        workspace_id="manufacturing-demo",
+        top_k=8,
+    )
+
+    assert packet["snapshot_basis"]["event_id"] == event_id
+    assert packet["sop_retrieval"]["returned_count"] >= 1
+    assert len(packet["inspection_targets"]) >= 1
+    assert len(detail["inspection_targets"]) >= 1
+    assert any(item["store"] == "project3_rag" for item in evidence)
+    assert any(
+        item["reference"].endswith("#SOP-DEMO-CNC-ROTATING-ASSEMBLY-001")
+        for item in evidence
+    )
 
 
 def test_agent_query_audience_selects_distinct_role_summary():

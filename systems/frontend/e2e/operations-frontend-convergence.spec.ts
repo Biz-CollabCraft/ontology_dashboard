@@ -122,6 +122,11 @@ test("role-aware entry keeps manager, engineer, and executive experiences distin
   await signIn(...ACCOUNTS.manager);
   await expect(page).toHaveURL(/view=operations/);
   await expect(page.getByTestId("operations-operations")).toBeVisible();
+  const managerNav = page.locator(".rw-preview-left nav button");
+  await expect(managerNav.nth(0)).toContainText("판단 대기");
+  await expect(managerNav.nth(1)).toContainText("운영 현황");
+  await expect(managerNav.nth(2)).toContainText("생산 영향");
+  await expect(managerNav.nth(3)).toContainText("보고 초안");
   await expect(page.getByText("생산 영향과 판단 기준", { exact: true }).or(page.locator('[aria-label="생산 영향과 판단 기준"]'))).toBeVisible();
   await page.getByRole("button", { name: "생산 영향 설비 · 비용 근거" }).click();
   await expect(page).toHaveURL(/view=objects/);
@@ -132,11 +137,21 @@ test("role-aware entry keeps manager, engineer, and executive experiences distin
   await expect(page).toHaveURL(/report=executive-brief/);
   await expect(page.getByTestId("operations-executive-report")).toBeVisible();
   await expect(page.getByTestId("executive-brief-snapshot-status")).toBeVisible();
+  const executiveNav = page.locator(".rw-preview-left nav button");
+  await expect(executiveNav.nth(0)).toContainText("Executive Brief");
+  await expect(executiveNav.nth(1)).toContainText("의사결정 병목");
+  await expect(executiveNav.nth(2)).toContainText("운영 리스크");
+  await expect(executiveNav.nth(3)).toContainText("정비 효과");
   await expect(page.getByText("공장 설비 상태맵", { exact: true })).toHaveCount(0);
 
   await switchAccount();
   await signIn(...ACCOUNTS.engineer);
   await expect(page).toHaveURL(/view=overview/);
+  const engineerNav = page.locator(".rw-preview-left nav button");
+  await expect(engineerNav.nth(0)).toContainText("모니터링");
+  await expect(engineerNav.nth(1)).toContainText("설비 · 센서 피쳐");
+  await expect(engineerNav.nth(2)).toContainText("점검 · 정비 이력");
+  await expect(engineerNav.nth(3)).toContainText("현장 메모 · 분석 보고");
   await expect(page.getByText("공장 설비 상태맵", { exact: true })).toBeVisible();
   await expect(page).not.toHaveURL(/view=objects/);
 

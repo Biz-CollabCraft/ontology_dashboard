@@ -207,6 +207,29 @@ def _runtime_sop_context(result: Any, operation_context: dict[str, Any]) -> tupl
     return retrieval, guidance
 
 
+def _runtime_inspection_targets(sop_guidance: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose retrieved SOP components as read-only inspection targets."""
+
+    targets: list[dict[str, Any]] = []
+    for guidance in sop_guidance:
+        source_ref = str(guidance.get("source_ref") or guidance.get("sop_id") or "")
+        component_ids = [str(value) for value in guidance.get("component_ids") or [] if value]
+        for component_id in component_ids:
+            targets.append({
+                "target_id": f"runtime-sop:{component_id}",
+                "component_id": component_id,
+                "component_label": component_id.replace("_", " "),
+                "association": "sop_retrieved_inspection_candidate",
+                "location_label": guidance.get("reference_location_label"),
+                "inspection_method": guidance.get("suggested_check_method"),
+                "location_source_ref": source_ref or None,
+                "basis_refs": [source_ref] if source_ref else [],
+                "source_ref": source_ref or f"runtime-sop:{component_id}",
+                "unavailable_reason": None,
+            })
+    return targets
+
+
 def _packet_title(packet: dict[str, Any]) -> str:
     identity = packet.get("asset_identity") or {}
     return str(
@@ -525,6 +548,7 @@ def _runtime_agent_review_packet(
     source_refs.extend(item["source_ref"] for item in factors)
     operation_context = _runtime_demo_operation_context(result, event_id)
     sop_retrieval, sop_guidance = _runtime_sop_context(result, operation_context)
+    inspection_targets = _runtime_inspection_targets(sop_guidance)
     source_refs.extend(
         str(item.get("source_ref"))
         for item in sop_guidance
@@ -636,7 +660,7 @@ def _runtime_agent_review_packet(
             "source_refs": source_refs,
         },
         "sop_retrieval": sop_retrieval,
-        "inspection_targets": [],
+        "inspection_targets": inspection_targets,
         "sop_guidance": sop_guidance,
         "operation_context_summary": {
             "production_impact": operation_context["production_impact"],
@@ -1040,6 +1064,20 @@ def get_asset_detail_view(
                 return canonical
         except KeyError as exc:
             raise EventNotFound(event_id) from exc
+    if event_id:
+        try:
+            return _runtime_asset_detail_view_model(
+                asset_id=asset_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                dataset_version_id=dataset_version_id,
+                selected_event_id=event_id,
+                history_window=history_window,
+                principal=principal,
+                runtime_service=get_predictive_maintenance_runtime_service(),
+            )
+        except EventNotFound:
+            pass
     try:
         return service.asset_detail_view_model(
             asset_id,

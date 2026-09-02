@@ -4,6 +4,7 @@ import type { OperationsView } from "../../operations/api/operationsContracts";
 export type ReliabilityExperienceKind = "executive" | "operations" | "engineering" | "maintenance";
 
 export type ReliabilityFocusIntent = "continuity" | "decision" | "investigation" | "execution";
+export type ReliabilityPrimarySurface = "executive_brief" | "decision_workspace" | "monitoring_workspace" | "maintenance_workspace";
 
 export interface ReliabilityLocalizedCopy {
   ko: string;
@@ -27,6 +28,7 @@ export interface ReliabilityRoleExperience {
   kind: ReliabilityExperienceKind;
   label: ReliabilityLocalizedCopy;
   defaultView: OperationsView;
+  primarySurface: ReliabilityPrimarySurface;
   primaryQuestion: ReliabilityLocalizedCopy;
   focusIntent: ReliabilityFocusIntent;
   firstScreenIntent: ReliabilityLocalizedCopy;
@@ -58,6 +60,7 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
     kind: "executive",
     label: copy("경영진", "Executive"),
     defaultView: "reports",
+    primarySurface: "executive_brief",
     primaryQuestion: copy(
       "현재 전체 운영 위험과 생산 영향은 무엇인가?",
       "What are the current operational risks and production impacts?",
@@ -74,8 +77,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
     navigation: [
       {
         view: "overview",
-        label: copy("Executive Brief", "Executive Brief"),
-        detail: copy("운영 리스크 · KPI", "Operational risk · KPI"),
+        label: copy("운영 리스크", "Operational risk"),
+        detail: copy("KPI · 생산 연속성", "KPI · production continuity"),
         page: page(
           "브리핑",
           "BRIEFING",
@@ -100,8 +103,8 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
       },
       {
         view: "reports",
-        label: copy("보고서", "Reports"),
-        detail: copy("요약 생성 · 출력/공유", "Brief generation · export/share"),
+        label: copy("Executive Brief", "Executive Brief"),
+        detail: copy("AS-OF · 경영 보고", "AS-OF · executive reporting"),
         page: page(
           "보고서",
           "REPORTS",
@@ -130,6 +133,7 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
     kind: "operations",
     label: copy("생산 운영", "Production operations"),
     defaultView: "operations",
+    primarySurface: "decision_workspace",
     primaryQuestion: copy(
       "지금 내가 판단하거나 승인해야 하는 건 무엇인가?",
       "What do I need to decide or approve now?",
@@ -202,6 +206,7 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
     kind: "engineering",
     label: copy("신뢰성 분석", "Reliability analysis"),
     defaultView: "overview",
+    primarySurface: "monitoring_workspace",
     primaryQuestion: copy(
       "어떤 설비를 조사해야 하고 근거는 무엇인가?",
       "Which equipment should I investigate, and what evidence supports it?",
@@ -274,6 +279,7 @@ export const RELIABILITY_ROLE_EXPERIENCES: Record<ReliabilityExperienceKind, Rel
     kind: "maintenance",
     label: copy("정비 실행", "Maintenance execution"),
     defaultView: "operations",
+    primarySurface: "maintenance_workspace",
     primaryQuestion: copy(
       "지금 수행해야 할 승인된 작업은 무엇인가?",
       "What approved work do I need to perform now?",
@@ -348,8 +354,21 @@ export function resolveReliabilityRoleExperience(user: AuthUser): ReliabilityRol
   const roles = user.active_project_roles.length ? user.active_project_roles : user.roles;
   if (roles.includes("executive_viewer")) return RELIABILITY_ROLE_EXPERIENCES.executive;
   if (roles.includes("process_manager") || user.is_admin) return RELIABILITY_ROLE_EXPERIENCES.operations;
-  if (roles.includes("maintenance_technician")) return RELIABILITY_ROLE_EXPERIENCES.engineering;
+  if (roles.includes("maintenance_technician")) return RELIABILITY_ROLE_EXPERIENCES.maintenance;
   return RELIABILITY_ROLE_EXPERIENCES.engineering;
+}
+
+export function reliabilityNavigation(experience: ReliabilityRoleExperience): ReliabilityNavigationItem[] {
+  const order: Record<ReliabilityExperienceKind, OperationsView[]> = {
+    executive: ["reports", "operations", "overview", "objects"],
+    operations: ["operations", "overview", "objects", "reports"],
+    engineering: ["overview", "objects", "operations", "reports"],
+    maintenance: ["operations", "objects", "overview", "reports"],
+  };
+  const items = new Map(experience.navigation.map((item) => [item.view, item]));
+  return order[experience.kind]
+    .map((view) => items.get(view))
+    .filter((item): item is ReliabilityNavigationItem => Boolean(item));
 }
 
 export function reliabilityPageCopy(
