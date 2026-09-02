@@ -319,7 +319,11 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
       displayName: related?.assetName ?? result.asset_id,
       assetType: result.asset_type,
       site: result.site_id,
-      line: related?.line ?? result.site_id,
+      // A live Result can exist before an operational Event is materialized.
+      // In that case cell_id is the canonical factory-map grouping key; using
+      // site_id collapses every cell in a site and leaves the real slots with
+      // an empty summary even though their assets are connected.
+      line: related?.line ?? result.cell_id ?? result.site_id,
       cell: result.cell_id,
       status,
       failureProbability: result.failure_probability,
@@ -337,7 +341,7 @@ export function mergeAssets(results: GovernedProductResultSummary[], events: Mvp
       provenance: {
         datasetId: result.provenance.dataset_id,
         datasetVersionId: result.provenance.dataset_version_id,
-        datasetLabel: "Canonical V3.1",
+        datasetLabel: result.provenance.source_version,
         sourceVersion: result.provenance.source_version,
         modelVersion: result.provenance.model_version,
         policyVersion: null,

@@ -107,7 +107,7 @@ export function MvpShell({
         <div className="mvp-header-context" aria-label="현재 운영 문맥">
           <div><span>Project</span><strong>{context.projectName}</strong></div>
           <div><span>Workspace</span><strong>{context.workspaceName}</strong></div>
-          <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>Canonical V3.1 · {context.datasetVersionId}</strong></div>
+          <div className="is-dataset"><span>Dataset</span><strong title={context.datasetLabel}>{context.sourceVersion ?? "Dataset"} · {context.datasetVersionId}</strong></div>
         </div>
         <div className="mvp-header-actions">
           {!workflowMode ? (

@@ -103,7 +103,10 @@ function staleFrom(observedAt: string | null): boolean {
   const value = Date.parse(observedAt);
   if (!Number.isFinite(value)) return false;
   const now = Date.now();
-  return now - value > 24 * 60 * 60 * 1000 || value - now > 15 * 60 * 1000;
+  // "stale" means that no recent Observation has arrived. An accelerated
+  // Simulation Clock may legitimately be ahead of wall time, so a future
+  // timestamp must not be presented as an observation delay.
+  return now - value > 24 * 60 * 60 * 1000;
 }
 
 function warningMessage(reason: unknown, fallback: string): string {

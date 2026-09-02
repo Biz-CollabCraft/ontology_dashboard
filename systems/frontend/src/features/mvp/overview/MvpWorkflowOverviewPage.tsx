@@ -532,7 +532,11 @@ function replacementReviewBoundaryLabel(target: MvpInspectionTarget): string {
 function buildLineImpactSummaries(assets: MvpAsset[]): LineImpactSummary[] {
   const groups = new Map<string, MvpAsset[]>();
   assets.forEach((asset) => {
-    const key = asset.line || asset.cell || canonicalCellKeyFromAsset(asset) || "라인 근거 없음";
+    // Factory layout identity comes from the canonical equipment id. Event
+    // projections can carry a site-level or display-oriented `line`, which is
+    // useful in reports but must not override the Sxx-Lxx cell identity used
+    // to color the live equipment map.
+    const key = canonicalCellKeyFromAsset(asset) ?? asset.line ?? asset.cell ?? "라인 근거 없음";
     groups.set(key, [...(groups.get(key) ?? []), asset]);
   });
   return Array.from(groups.entries()).map(([line, group]) => {

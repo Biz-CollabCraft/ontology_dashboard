@@ -105,6 +105,8 @@ describe("MVP adapter contract", () => {
 
     expect(assets[0].status).toBe("critical");
     expect(assets[0].criticality).toBeNull();
+    expect(assets[0].line).toBe("CELL-1");
+    expect(assets[0].provenance.datasetLabel).toBe("Canonical V3.1");
   });
 
   it("does not synthesize downtime impact when operational context is missing", () => {

@@ -273,16 +273,27 @@ def build_live_predictive_maintenance_service(
     from app.infra.generator_runtime_pipeline import GeneratorRuntimePipelineClient
 
     target = database_url or database_target()
+    enqueue_client = GeneratorRuntimePipelineClient()
     shared = {
         "predictor_factory": configured_predictor,
         "artifact_builder": build_product_result_artifact,
     }
     return LivePredictiveMaintenanceService(
-        dataset=LiveDatasetIngestionAdapter(target, **shared),
-        diagnosis=LiveDiagnosisApplicationAdapter(**shared),
+        dataset=LiveDatasetIngestionAdapter(
+            target,
+            **shared,
+            allow_accelerated_simulation=os.getenv(
+                "ONTOLOGY_DASHBOARD_ALLOW_ACCELERATED_SIMULATION", "0"
+            ).lower()
+            in {"1", "true", "yes"},
+        ),
+        diagnosis=LiveDiagnosisApplicationAdapter(
+            snapshot_root=runtime_pipeline_input_root,
+            enqueue_client=enqueue_client,
+        ),
         maintenance=LiveMaintenanceOverlayAdapter(
             snapshot_root=runtime_pipeline_input_root,
-            enqueue_client=GeneratorRuntimePipelineClient(),
+            enqueue_client=enqueue_client,
         ),
         ontology=LiveOntologyProjectionAdapter(),
     )
