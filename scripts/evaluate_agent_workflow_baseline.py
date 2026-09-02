@@ -128,6 +128,22 @@ def raw_input_payload(packet: dict[str, Any], baseline: dict[str, Any]) -> dict[
     }
 
 
+def evidence_input_payload(packet: dict[str, Any]) -> dict[str, Any]:
+    """Build Evidence Packet context while withholding deterministic answer prose."""
+    empty_shape = {
+        "title": "",
+        "summary": "",
+        "role_summaries": [
+            {"role": "field_operator", "label": "", "quote": "", "source_refs": []},
+            {"role": "process_manager", "label": "", "quote": "", "source_refs": []},
+        ],
+    }
+    return build_agent_review_summary_prompt_payload(
+        packet=packet,
+        baseline_summary=empty_shape,
+    )
+
+
 def _summary_key(packet: dict[str, Any]) -> str:
     basis = {
         "snapshot_basis": packet.get("snapshot_basis"),
@@ -217,11 +233,7 @@ def run_arm(
             trace=trace,
         )
 
-    payload = (
-        raw_input_payload(packet, baseline)
-        if arm == "B1"
-        else build_agent_review_summary_prompt_payload(packet=packet, baseline_summary=baseline)
-    )
+    payload = raw_input_payload(packet, baseline) if arm == "B1" else evidence_input_payload(packet)
     injected = FaultInjectingProvider(provider, fault)
     attempts = MAX_ATTEMPTS if arm == "B3" else 1
     candidate: dict[str, Any] | None = None

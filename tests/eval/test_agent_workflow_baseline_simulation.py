@@ -178,9 +178,7 @@ def test_b1_uses_raw_projection_and_b2_uses_evidence_payload() -> None:
     packet = _packet(module)
     baseline = module.compose_deterministic_agent_review_summary(packet)
     raw = module.raw_input_payload(packet, baseline)
-    evidence = module.build_agent_review_summary_prompt_payload(
-        packet=packet, baseline_summary=baseline
-    )
+    evidence = module.evidence_input_payload(packet)
     assert "raw_input" in raw
     assert "summary_context" not in raw
     assert "source_refs" not in raw["raw_input"]
@@ -200,3 +198,11 @@ def test_b1_uses_raw_projection_and_b2_uses_evidence_payload() -> None:
     )
     assert "summary_context" in evidence
     assert evidence["summary_context"]["source_refs"]
+    assert evidence["baseline_editable_fields"]["title"] == ""
+    assert evidence["baseline_editable_fields"]["summary"] == ""
+    assert all(item["quote"] == "" for item in evidence["baseline_editable_fields"]["role_summaries"])
+    assert baseline["summary"] not in json.dumps(evidence["baseline_editable_fields"], ensure_ascii=False)
+    assert all(
+        item["quote"] not in json.dumps(evidence["baseline_editable_fields"], ensure_ascii=False)
+        for item in baseline["role_summaries"]
+    )
