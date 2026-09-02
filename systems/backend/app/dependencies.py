@@ -35,7 +35,11 @@ from app.dashboard.visualizations import (
     validate_override_channel_mapping,
 )
 from app.dataset import DatasetCatalogService
-from app.diagnosis.evidence import FixtureContextProvider, build_product_result_artifact
+from app.diagnosis.evidence import (
+    FixtureContextProvider,
+    build_product_result_artifact,
+    validate_product_result_artifact,
+)
 from app.diagnosis.predictor import configured_predictor
 from app.diagnosis.runtime_service import (
     PredictiveMaintenanceRuntimeService,
@@ -459,7 +463,10 @@ def get_runtime_asset_detail_service() -> AssetDetailViewModelService | None:
     from app.infra.db.asset_detail_read_adapter import PostgreSQLAssetDetailReadAdapter
 
     return AssetDetailViewModelService(
-        PostgreSQLAssetDetailReadAdapter(PredictiveMaintenanceRuntimeRepository(target))
+        PostgreSQLAssetDetailReadAdapter(
+            PredictiveMaintenanceRuntimeRepository(target),
+            validate_artifact=validate_product_result_artifact,
+        )
     )
 
 

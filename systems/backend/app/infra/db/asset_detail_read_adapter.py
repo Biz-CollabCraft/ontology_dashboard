@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
-from app.diagnosis.evidence import validate_product_result_artifact
 from app.infra.db.diagnosis_runtime_repository import (
     PredictiveMaintenanceRuntimeRepository,
 )
@@ -14,8 +13,14 @@ from app.infra.db.diagnosis_runtime_repository import (
 class PostgreSQLAssetDetailReadAdapter:
     """Read only governed runtime facts; never fall back to demo fixtures."""
 
-    def __init__(self, repository: PredictiveMaintenanceRuntimeRepository) -> None:
+    def __init__(
+        self,
+        repository: PredictiveMaintenanceRuntimeRepository,
+        *,
+        validate_artifact: Callable[[dict[str, Any]], None],
+    ) -> None:
         self.repository = repository
+        self.validate_artifact = validate_artifact
 
     def _latest_row(
         self,
@@ -94,7 +99,7 @@ class PostgreSQLAssetDetailReadAdapter:
         payload = row.get("prediction_result_payload")
         if not isinstance(payload, dict):
             return None
-        validate_product_result_artifact(payload)
+        self.validate_artifact(payload)
         for field in ("artifact_id", "asset_id", "asset_type", "schema_version"):
             if str(payload.get(field)) != str(row[field]):
                 raise ValueError(
