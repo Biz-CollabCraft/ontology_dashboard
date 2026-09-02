@@ -17,6 +17,10 @@ from app.mvp.operational_context_contract import (
     context_version_set_hash,
 )
 from app.mvp.operational_context_ports import OperationalContextReadPort
+from app.mvp.operational_relation_resolver import (
+    RelationResolutionResult,
+    resolve_operational_relations,
+)
 from app.mvp.operational_impact_simulation import (
     ImpactCalculationState,
     ImpactSimulationAssumptions,
@@ -83,6 +87,7 @@ class OperationalDecisionAgentResult(FrozenModel):
     contexts: dict[str, OperationalContextEnvelope]
     context_version_set: dict[str, str]
     context_version_hash: str
+    relation_context: RelationResolutionResult | None
     impact_simulation: ImpactSimulationResult | None
     facts: tuple[dict[str, Any], ...]
     gaps: tuple[dict[str, Any], ...]
@@ -224,8 +229,45 @@ class BoundedOperationalDecisionAgent:
                 )
             )
 
-        simulation: ImpactSimulationResult | None = None
+        relation_context: RelationResolutionResult | None = None
         if len(trajectory) < self.policy.max_steps:
+            relation_context = resolve_operational_relations(
+                identity=request.identity,
+                contexts=contexts,
+            )
+            trajectory.append(
+                AgentTrajectoryStep(
+                    step=len(trajectory) + 1,
+                    selected_tool="relation.resolve",
+                    selection_reason_code="RESOLVE_SOURCE_BACKED_RELATIONSHIPS",
+                    input_scope_hash=scope_hash,
+                    input_context_versions=context_version_set(contexts),
+                    attempt_count=1,
+                    status=(
+                        "completed"
+                        if not relation_context.conflicts
+                        else "conflicting"
+                    ),
+                    output_ref=relation_context.schema_version,
+                    source_refs=tuple(
+                        reference
+                        for relation in relation_context.relationships
+                        for reference in relation.source_refs
+                    ),
+                    next_action=(
+                        "compare_operational_options"
+                        if not relation_context.conflicts
+                        else "record_conflict_and_withhold"
+                    ),
+                )
+            )
+
+        simulation: ImpactSimulationResult | None = None
+        if (
+            len(trajectory) < self.policy.max_steps
+            and relation_context is not None
+            and not relation_context.conflicts
+        ):
             simulation = simulate_operational_impact(
                 identity=request.identity,
                 risk_status=request.risk_status,
@@ -298,6 +340,7 @@ class BoundedOperationalDecisionAgent:
             contexts=contexts,
             context_version_set=versions,
             context_version_hash=context_version_set_hash(versions),
+            relation_context=relation_context,
             impact_simulation=simulation,
             facts=facts,
             gaps=gaps,

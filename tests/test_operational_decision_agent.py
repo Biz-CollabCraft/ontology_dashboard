@@ -109,9 +109,16 @@ def test_agent_collects_context_simulates_and_revalidates() -> None:
         "production.lookup",
         "maintenance_readiness.lookup",
         "quality_delivery.lookup",
+        "relation.resolve",
         "impact.simulate",
         "temporal.validate",
     ]
+    assert result.relation_context is not None
+    assert result.relation_context.conflicts == ()
+    assert any(
+        relation.relationship_type == "action_requires_part"
+        for relation in result.relation_context.relationships
+    )
     assert result.mutation_attempted is False
     assert all(
         token not in step.selected_tool
