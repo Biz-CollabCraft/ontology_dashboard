@@ -267,6 +267,11 @@ class PipelineRepository:
             (self.base_dir / "pipeline_datasets").resolve(),
             (self.base_dir / "predictions").resolve(),
             (getattr(PATHS, "models_store", Path("models_store")) / "cache").resolve(),
+            getattr(
+                PATHS,
+                "runtime_feature_root",
+                Path("models_store") / "cache" / "runtime_features",
+            ).resolve(),
         ]
 
         forbidden_names = {

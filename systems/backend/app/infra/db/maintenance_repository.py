@@ -270,34 +270,11 @@ class MaintenanceRepository:
                 ).fetchone()
                 if cost_row is None:
                     raise ValueError(
-                        "cost-selected recommendation requires a persisted cost analysis"
+                        "cost-referenced recommendation requires a persisted cost analysis"
                     )
                 cost_result = MaintenanceCostScenarioResult.model_validate(
                     self._decoded(cost_row["result_json"])
                 )
-                selected = next(
-                    (
-                        option
-                        for option in cost_result.options
-                        if option.option_id == recommendation.source_cost_option_id
-                    ),
-                    None,
-                )
-                if selected is None:
-                    raise ValueError(
-                        "selected cost option does not belong to the persisted analysis"
-                    )
-                if selected.calculation_status is not CalculationStatus.CALCULATED:
-                    raise ValueError(
-                        "insufficient cost option cannot create a recommendation"
-                    )
-                if selected.execution_timing not in {
-                    ExecutionTiming.IMMEDIATE,
-                    ExecutionTiming.PLANNED_WINDOW,
-                }:
-                    raise ValueError(
-                        "selected cost option is not an executable maintenance timing"
-                    )
                 expected = {
                     "event_id": recommendation.event_id,
                     "asset_id": recommendation.asset_id,
@@ -314,11 +291,41 @@ class MaintenanceRepository:
                     != recommendation.source_product_result_id
                     or cost_result.based_on.evidence_id
                     != recommendation.source_evidence_id
-                    or selected.action_candidate_id
-                    != recommendation.source_action_candidate_id
-                    or selected.action_code.value != recommendation.action_code
                 ):
-                    raise ValueError("cost option Recommendation lineage mismatch")
+                    raise ValueError("cost analysis Recommendation lineage mismatch")
+                matching_options = tuple(
+                    option
+                    for option in cost_result.options
+                    if option.action_candidate_id
+                    == recommendation.source_action_candidate_id
+                    and option.action_code.value == recommendation.action_code
+                )
+                if not matching_options:
+                    raise ValueError("cost analysis Recommendation action mismatch")
+                if recommendation.source_cost_option_id is not None:
+                    selected = next(
+                        (
+                            option
+                            for option in matching_options
+                            if option.option_id == recommendation.source_cost_option_id
+                        ),
+                        None,
+                    )
+                    if selected is None:
+                        raise ValueError(
+                            "selected cost option does not belong to the persisted analysis"
+                        )
+                    if selected.calculation_status is not CalculationStatus.CALCULATED:
+                        raise ValueError(
+                            "insufficient cost option cannot create a recommendation"
+                        )
+                    if selected.execution_timing not in {
+                        ExecutionTiming.IMMEDIATE,
+                        ExecutionTiming.PLANNED_WINDOW,
+                    }:
+                        raise ValueError(
+                            "selected cost option is not an executable maintenance timing"
+                        )
 
             inserted = connection.execute(
                 """

@@ -185,7 +185,7 @@ class PipelineManager:
         return {
             "enabled": True,
             "worker_active": self._is_running,
-            "delivery_worker_active": getattr(self.prediction_delivery_worker, "_is_running", False),
+            "delivery_worker_active": self.prediction_delivery_worker.is_running,
             "mode": "active",
             "queued_count": len(queued_items),
             "running_count": len(running_items),

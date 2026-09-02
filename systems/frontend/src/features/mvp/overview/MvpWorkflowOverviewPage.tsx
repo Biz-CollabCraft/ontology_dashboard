@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createMvpAgentReviewSummary, getMvpAgentReviewSummary } from "../../../api";
 import type {
   MvpAgentReviewSummary,
@@ -58,6 +58,11 @@ import {
   fieldFailureLabel,
 } from "../displayLabels";
 import { MaintenanceCostDecisionPanel } from "../maintenance/MaintenanceCostDecisionPanel";
+import {
+  MaintenanceWorkflowActionPanel,
+  type MaintenanceWorkflowDisplayStatus,
+  type PostMaintenancePredictionSummary,
+} from "../maintenance/MaintenanceWorkflowActionPanel";
 
 interface WorkOrderCandidate {
   event: MvpEvent;
@@ -83,6 +88,8 @@ type WorkStatus =
   | "work_requested"
   | "assigned"
   | "inspection_started"
+  | "inspection_completed"
+  | "maintenance_started"
   | "maintenance_completed"
   | "observation_pending"
   | "ready_for_reprediction";
@@ -196,19 +203,23 @@ const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
   work_requested: "작업 요청됨",
   assigned: "담당자 배정됨",
   inspection_started: "점검 중",
+  inspection_completed: "점검 완료·정비 검토",
+  maintenance_started: "정비 중",
   maintenance_completed: "정비 완료",
   observation_pending: "정비 후 관측 대기",
-  ready_for_reprediction: "재예측 가능",
+  ready_for_reprediction: "정비 후 예측 완료",
 };
 
 const WORK_STATUS_ACTION: Record<WorkStatus, { label: string; disabled: boolean }> = {
   candidate_recommended: { label: "작업 요청", disabled: false },
   work_requested: { label: "점검 시작", disabled: false },
   assigned: { label: "점검 시작", disabled: false },
-  inspection_started: { label: "정비 완료", disabled: false },
+  inspection_started: { label: "점검 결과 기록", disabled: false },
+  inspection_completed: { label: "비용 확인·정비 판단", disabled: true },
+  maintenance_started: { label: "정비 완료", disabled: false },
   maintenance_completed: { label: "정비 후 관측 대기", disabled: true },
   observation_pending: { label: "관측 데이터 대기", disabled: true },
-  ready_for_reprediction: { label: "재예측 보기", disabled: false },
+  ready_for_reprediction: { label: "정비 효과 확인", disabled: false },
 };
 
 const CLOSED_LOOP_LIFECYCLE_LABEL: Record<MvpClosedLoopLifecycleStep, string> = {
@@ -753,11 +764,15 @@ function workStatusFromClosedLoop(closedLoop: MvpClosedLoopSummary | null | unde
   if (latestClosedLoopMaintenanceEvent(closedLoop)) return "maintenance_completed";
   const action = latestClosedLoopMaintenanceAction(closedLoop);
   if (action?.status === "completed") return "maintenance_completed";
-  if (action?.status === "in_progress") return "inspection_started";
+  if (action?.status === "in_progress") return "maintenance_started";
   if (action?.status === "planned") return "assigned";
   const workOrder = latestClosedLoopWorkOrder(closedLoop);
-  if (workOrder?.status === "completed") return "maintenance_completed";
-  if (workOrder?.status === "in_progress") return "inspection_started";
+  if (workOrder?.status === "completed") {
+    return workOrder.workType === "inspection" ? "inspection_completed" : "maintenance_completed";
+  }
+  if (workOrder?.status === "in_progress") {
+    return workOrder.workType === "inspection" ? "inspection_started" : "maintenance_started";
+  }
   if (workOrder?.status === "approved") return "assigned";
   if (workOrder?.status === "requested") return "work_requested";
   return null;
@@ -769,6 +784,8 @@ function closedLoopActionForStatus(closedLoop: MvpClosedLoopSummary | null | und
     work_requested: ["approve_inspection_work_order", "start_inspection_work_order", "start_inspection"],
     assigned: ["start_inspection_work_order", "start_inspection"],
     inspection_started: ["complete_inspection_work_order", "complete_inspection", "complete_work_order"],
+    inspection_completed: [],
+    maintenance_started: ["complete_maintenance_work_order", "complete_maintenance", "complete_work_order"],
     maintenance_completed: [],
     observation_pending: [],
     ready_for_reprediction: ["view_reprediction", "request_reprediction"],
@@ -805,7 +822,7 @@ function workStatusForAsset(_asset: MvpAsset | null, _event: MvpEvent | null): W
 function workQueueColumn(status: WorkStatus): WorkQueueColumnId {
   if (status === "candidate_recommended") return "candidate";
   if (status === "work_requested" || status === "assigned") return "requested";
-  if (status === "inspection_started") return "inspection";
+  if (status === "inspection_started" || status === "inspection_completed" || status === "maintenance_started") return "inspection";
   if (status === "maintenance_completed" || status === "observation_pending") return "observe";
   return "repredict";
 }
@@ -912,6 +929,8 @@ function WorkStatusTimeline({
     "work_requested",
     "assigned",
     "inspection_started",
+    "inspection_completed",
+    "maintenance_started",
     "maintenance_completed",
     "observation_pending",
     "ready_for_reprediction",
@@ -1175,6 +1194,8 @@ export function MvpWorkflowOverviewPage({
   detailError,
   sensorWindow,
   canMaterializeAgentSummary,
+  canManageWorkflow,
+  canExecuteFieldWorkflow,
   onSensorWindowChange,
   onPreviewAsset,
   onRefresh,
@@ -1187,6 +1208,8 @@ export function MvpWorkflowOverviewPage({
   detailError: string | null;
   sensorWindow: MvpSensorWindowId;
   canMaterializeAgentSummary: boolean;
+  canManageWorkflow: boolean;
+  canExecuteFieldWorkflow: boolean;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
   onRefresh: () => void;
@@ -1237,7 +1260,28 @@ export function MvpWorkflowOverviewPage({
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
   const [detailDrawerTab, setDetailDrawerTab] = useState<DrawerTab>("status");
   const [factorySlotPreview, setFactorySlotPreview] = useState<FactorySlotPreview | null>(null);
-  const drawerAsset = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
+  const [postMaintenancePredictions, setPostMaintenancePredictions] = useState<Record<string, PostMaintenancePredictionSummary>>({});
+  const handlePostMaintenancePrediction = useCallback((assetId: string, prediction: PostMaintenancePredictionSummary) => {
+    setPostMaintenancePredictions((current) => {
+      const previous = current[assetId];
+      if (
+        previous?.failureProbability === prediction.failureProbability
+        && previous.statusGrade === prediction.statusGrade
+        && previous.observedAt === prediction.observedAt
+      ) return current;
+      return { ...current, [assetId]: prediction };
+    });
+  }, []);
+  const drawerAssetSource = factorySlotPreview?.slot.asset ?? (factorySlotPreview ? null : selectedAsset);
+  const drawerPrediction = drawerAssetSource ? postMaintenancePredictions[drawerAssetSource.assetId] : null;
+  const drawerAsset = drawerAssetSource && drawerPrediction
+    ? {
+      ...drawerAssetSource,
+      status: drawerPrediction.statusGrade,
+      failureProbability: drawerPrediction.failureProbability,
+      observedAt: drawerPrediction.observedAt,
+    }
+    : drawerAssetSource;
   const drawerEvent = drawerAsset?.eventId
     ? model.events.find((event) => event.eventId === drawerAsset.eventId) ?? null
     : null;
@@ -1254,6 +1298,11 @@ export function MvpWorkflowOverviewPage({
     ? null
     : Math.round(drawerAsset.failureProbability * 100);
   const drawerDetail = drawerAsset && detail?.event.assetId === drawerAsset.assetId ? detail : null;
+  const drawerEventId = drawerDetail?.snapshotBasis?.eventId
+    ?? drawerDetail?.event.eventId
+    ?? drawerEvent?.eventId
+    ?? drawerAsset?.eventId
+    ?? null;
   const drawerClosedLoop = drawerDetail?.closedLoop ?? null;
   const drawerClosedLoopStatus = workStatusFromClosedLoop(drawerClosedLoop);
   const drawerLifecycleSummary = drawerClosedLoop?.lifecycleSummary ?? null;
@@ -1462,12 +1511,13 @@ export function MvpWorkflowOverviewPage({
                               <div className="mvp-factory-cell-slots">
                                 {cell.slots.map((slot) => {
                                   const asset = slot.asset;
+                                  const currentPrediction = asset ? postMaintenancePredictions[asset.assetId] : null;
                                   const selected = asset
                                     ? selectedAsset?.assetId === asset.assetId
                                     : factorySlotPreview?.slot.id === slot.id;
-                                  const tone = asset ? mapTone(asset.status) : "slot";
+                                  const tone = asset ? mapTone(currentPrediction?.statusGrade ?? asset.status) : "slot";
                                   const title = asset
-                                    ? `${displayFactorySlotName(slot, cell)} · ${formatProbability(asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
+                                    ? `${displayFactorySlotName(slot, cell)} · ${formatProbability(currentPrediction?.failureProbability ?? asset.failureProbability)} · ${displayPartLabel(asset.sparePartAvailable)}`
                                     : `${cell.label} · ${slot.label} · 상태 미연결`;
                                   return (
                                     <button
@@ -1513,7 +1563,7 @@ export function MvpWorkflowOverviewPage({
             onClick={() => setDetailDrawerOpen(false)}
           />
           <aside className="mvp-detail-drawer" role="dialog" aria-modal="true" aria-label="선택 설비 상세">
-            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "ViewModel" : drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} projectId={model.context.projectId} workspaceId={model.context.workspaceId} eventId={drawerEvent?.eventId ?? null} onChanged={onRefresh} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
+            <AssetPreviewPanel asset={drawerAsset} factorySlotPreview={factorySlotPreview} candidate={drawerCandidate} lineSummary={drawerLineSummary} factors={drawerFactors} riskPercent={drawerRiskPercent} planningImpact={drawerPlanningImpact} detail={drawerDetail} detailLoading={factorySlotPreview && !drawerAsset ? false : detailLoading} detailError={factorySlotPreview && !drawerAsset ? null : detailError} sensorWindow={sensorWindow} role={role} activeTab={detailDrawerTab} workStatus={drawerWorkStatus} workStatusSource={drawerLifecycleSummary ? "ViewModel" : drawerClosedLoop ? "API" : "화면"} workId={drawerWorkId} workActionLabel={drawerActionLabel} workActionHelper={drawerActionHelper} workActionDisabled={drawerWorkActionDisabled} lifecycleSummary={drawerLifecycleSummary} activityTimeline={drawerClosedLoop?.timeline ?? []} assignee={drawerAssignee} canMaterializeAgentSummary={canMaterializeAgentSummary} canManageWorkflow={canManageWorkflow} canExecuteFieldWorkflow={canExecuteFieldWorkflow} projectId={model.context.projectId} workspaceId={model.context.workspaceId} datasetVersionId={model.context.datasetVersionId} eventId={drawerEventId} onChanged={onRefresh} onPostMaintenancePrediction={handlePostMaintenancePrediction} onTabChange={setDetailDrawerTab} onSensorWindowChange={onSensorWindowChange} onPreviewAsset={onPreviewAsset} />
           </aside>
         </div>
       ) : null}
@@ -1761,10 +1811,14 @@ function AssetPreviewPanel({
   activityTimeline,
   assignee,
   canMaterializeAgentSummary,
+  canManageWorkflow,
+  canExecuteFieldWorkflow,
   projectId,
   workspaceId,
+  datasetVersionId,
   eventId,
   onChanged,
+  onPostMaintenancePrediction,
   onTabChange,
   onSensorWindowChange,
   onPreviewAsset,
@@ -1792,10 +1846,14 @@ function AssetPreviewPanel({
   activityTimeline: MvpClosedLoopTimelineItem[];
   assignee: string;
   canMaterializeAgentSummary: boolean;
+  canManageWorkflow: boolean;
+  canExecuteFieldWorkflow: boolean;
   projectId: string;
   workspaceId: string;
+  datasetVersionId: string;
   eventId: string | null;
   onChanged: () => void;
+  onPostMaintenancePrediction: (assetId: string, prediction: PostMaintenancePredictionSummary) => void;
   onTabChange: (tab: DrawerTab) => void;
   onSensorWindowChange: (windowId: MvpSensorWindowId) => void;
   onPreviewAsset: (assetId: string, eventId: string | null) => void;
@@ -1808,6 +1866,28 @@ function AssetPreviewPanel({
   const [agentSummaryMaterializing, setAgentSummaryMaterializing] = useState(false);
   const [agentSummaryError, setAgentSummaryError] = useState("");
   const [agentSummaryRequestKey, setAgentSummaryRequestKey] = useState("");
+  const [costReviewEventId, setCostReviewEventId] = useState<string | null>(null);
+  const [workflowStatus, setWorkflowStatus] = useState<MaintenanceWorkflowDisplayStatus | null>(null);
+  const [workflowRevision, setWorkflowRevision] = useState(0);
+  const assetId = asset?.assetId ?? null;
+  const reportPostMaintenancePrediction = useCallback((prediction: PostMaintenancePredictionSummary) => {
+    if (assetId) onPostMaintenancePrediction(assetId, prediction);
+  }, [assetId, onPostMaintenancePrediction]);
+  const refreshWorkflow = () => {
+    setWorkflowRevision((value) => value + 1);
+    onChanged();
+  };
+  const costReviewEligible = Boolean(eventId && costReviewEventId === eventId);
+  const effectiveWorkStatus: WorkStatus = workflowStatus
+    ?? (costReviewEligible
+      && ["candidate_recommended", "work_requested", "assigned", "inspection_started"].includes(workStatus)
+      ? "inspection_completed"
+      : workStatus);
+  const effectiveWorkActionLabel = workflowStatus || costReviewEligible ? null : workActionLabel;
+  const effectiveWorkActionHelper = costReviewEligible
+    ? "비용 분석은 참고 정보이며 정비 추천·승인·실행을 자동 생성하지 않습니다."
+    : workActionHelper;
+  const effectiveWorkActionDisabled = costReviewEligible || workActionDisabled;
   const featureSnapshots = sensorSeries(detail, asset);
   const directFeatureSnapshots = featureSnapshots.filter((sensor) => !DERIVED_FEATURE_KEYS.has(sensor.id));
   const inspectionTargets: InspectionTargetView[] = detail?.inspectionTargets.length
@@ -1911,12 +1991,12 @@ function AssetPreviewPanel({
             <span className="mvp-slot-status">상태 미연결</span>
             <div><strong>{displayFactorySlotName(slot, cell)}</strong><small>{slot.assetId} · 고장 확정 아님</small></div>
           </header>
-          <WorkStatusFixedBar status={workStatus} actionLabel={workActionLabel} statusSource={workStatusSource} disabled />
+          <WorkStatusFixedBar status={effectiveWorkStatus} actionLabel={effectiveWorkActionLabel} statusSource={workStatusSource} disabled />
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
           </div>
-          <WorkStatusTimeline status={workStatus} lifecycleSummary={lifecycleSummary} />
+          <WorkStatusTimeline status={effectiveWorkStatus} lifecycleSummary={lifecycleSummary} />
           <ClosedLoopActivityTimeline timeline={activityTimeline} />
           {activeTab === "status" ? (
             <>
@@ -1959,7 +2039,7 @@ function AssetPreviewPanel({
                 <label><span>요청 메모</span><textarea disabled placeholder="요청 화면 연결 후 입력" /></label>
                 <label><span>담당자</span><input disabled placeholder="미배정" /></label>
               </div>
-              <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled />
+              <WorkStatusPrimaryAction status={effectiveWorkStatus} actionLabel={effectiveWorkActionLabel} helperText={effectiveWorkActionHelper} disabled />
               <p className="mvp-action-note">
                 위험 이벤트와 작업요청이 연결되지 않은 설비는 자동 조치하지 않습니다.
               </p>
@@ -1980,12 +2060,12 @@ function AssetPreviewPanel({
               <Printer size={15} />
             </button>
           </header>
-          <WorkStatusFixedBar status={workStatus} actionLabel={workActionLabel} statusSource={workStatusSource} disabled={workActionDisabled} />
+          <WorkStatusFixedBar status={effectiveWorkStatus} actionLabel={effectiveWorkActionLabel} statusSource={workStatusSource} disabled={effectiveWorkActionDisabled} />
           <div className="mvp-drawer-tabs" role="tablist" aria-label="사이드뷰 탭">
             <button type="button" role="tab" aria-selected={activeTab === "status"} className={activeTab === "status" ? "is-active" : ""} onClick={() => onTabChange("status")}>상태</button>
             <button type="button" role="tab" aria-selected={activeTab === "action"} className={activeTab === "action" ? "is-active" : ""} onClick={() => onTabChange("action")}>처리</button>
           </div>
-          <WorkStatusTimeline status={workStatus} lifecycleSummary={lifecycleSummary} />
+          <WorkStatusTimeline status={effectiveWorkStatus} lifecycleSummary={lifecycleSummary} />
           <ClosedLoopActivityTimeline timeline={activityTimeline} />
           {role === "process_manager" && activeTab === "status" ? (
             <>
@@ -2017,13 +2097,16 @@ function AssetPreviewPanel({
                 <section className="mvp-line-asset-list" aria-label="라인 위험 설비 목록">
                   <header><ClipboardList size={14} /><strong>{lineSummary.line} 위험 설비</strong><span>{lineSummary.assets.length}대</span></header>
                   <div>
-                    {lineSummary.assets.map((lineAsset) => (
-                      <button type="button" key={lineAsset.assetId} className={lineAsset.assetId === asset.assetId ? "is-selected" : ""} onClick={() => onPreviewAsset(lineAsset.assetId, lineAsset.eventId)}>
-                        <MvpStatusBadge status={lineAsset.status} />
-                        <strong>{displayFactoryAssetName(lineAsset.assetId) ?? displayAssetName(lineAsset)}</strong>
-                        <span>{formatProbability(lineAsset.failureProbability)} · {displayPartLabel(lineAsset.sparePartAvailable)}</span>
-                      </button>
-                    ))}
+                    {lineSummary.assets.map((lineAsset) => {
+                      const currentLineAsset = lineAsset.assetId === asset.assetId ? asset : lineAsset;
+                      return (
+                        <button type="button" key={lineAsset.assetId} className={lineAsset.assetId === asset.assetId ? "is-selected" : ""} onClick={() => onPreviewAsset(lineAsset.assetId, lineAsset.eventId)}>
+                          <MvpStatusBadge status={currentLineAsset.status} />
+                          <strong>{displayFactoryAssetName(lineAsset.assetId) ?? displayAssetName(lineAsset)}</strong>
+                          <span>{formatProbability(currentLineAsset.failureProbability)} · {displayPartLabel(lineAsset.sparePartAvailable)}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </section>
               ) : null}
@@ -2046,28 +2129,39 @@ function AssetPreviewPanel({
                   <div><dt>계획 영향</dt><dd>{productionLossLabel(planningImpact?.estimatedLossUnits ?? null)}</dd></div>
                   <div><dt>담당</dt><dd>{assignee}</dd></div>
                   <div><dt>부품</dt><dd>{displayPartLabel(asset.sparePartAvailable)}</dd></div>
-                  <div><dt>처리 상태</dt><dd>{WORK_STATUS_LABEL[workStatus]}</dd></div>
-                  <div><dt>권한 액션</dt><dd>{workActionLabel ?? "API 연결 전 화면 액션"}</dd></div>
+                  <div><dt>처리 상태</dt><dd>{WORK_STATUS_LABEL[effectiveWorkStatus]}</dd></div>
+                  <div><dt>권한 액션</dt><dd>{effectiveWorkActionLabel ?? WORK_STATUS_ACTION[effectiveWorkStatus].label}</dd></div>
                 </dl>
-                <div className="mvp-action-placeholder-grid" aria-label="작업요청 입력 자리">
-                  <label><span>요청 유형</span><input disabled value="작업요청 API 연결 후 선택" readOnly /></label>
-                  <label><span>요청 메모</span><textarea disabled value="작업요청 API 연결 후 입력" readOnly /></label>
-                  <label><span>담당자</span><input disabled placeholder={assignee} /></label>
-                  <label><span>완료 메모</span><textarea disabled value="정비 완료 API 연결 후 입력" readOnly /></label>
-                  <label><span>교체 부품</span><input disabled value="교체부품 기록 필드 없음" readOnly /></label>
-                </div>
-                <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} />
                 <p className="mvp-action-note">
-                  승인, 보류, 반려, 메모 저장은 자동 실행하지 않고 작업요청의 승인 절차에서 처리합니다.
+                  아래 Closed-loop 버튼은 현재 단계와 로그인 권한을 확인한 뒤 한 단계만 실행합니다.
                 </p>
               </section>
+              {eventId ? (
+                <MaintenanceWorkflowActionPanel
+                  key={`${eventId}:${workflowRevision}:manager`}
+                  projectId={projectId}
+                  workspaceId={workspaceId}
+                  datasetVersionId={datasetVersionId}
+                  eventId={eventId}
+                  assetId={asset.assetId}
+                  assetType={asset.assetType}
+                  role={role}
+                  snapshotBasis={detail?.snapshotBasis ?? null}
+                  canManage={canManageWorkflow}
+                  canFieldExecute={canExecuteFieldWorkflow}
+                  onChanged={refreshWorkflow}
+                  onStatusChanged={setWorkflowStatus}
+                  onPostMaintenancePrediction={reportPostMaintenancePrediction}
+                />
+              ) : null}
               {eventId ? (
                 <MaintenanceCostDecisionPanel
                   projectId={projectId}
                   workspaceId={workspaceId}
                   eventId={eventId}
                   guidance={inspectionTargets.find((item) => item.target?.inspectionGuidance)?.target?.inspectionGuidance ?? null}
-                  onChanged={onChanged}
+                  onChanged={refreshWorkflow}
+                  onEligibilityChanged={(eligible) => setCostReviewEventId(eligible ? eventId : null)}
                 />
               ) : null}
             </>
@@ -2254,6 +2348,7 @@ function AssetPreviewPanel({
           ) : null}
 
           {role === "field_operator" && activeTab === "action" ? (
+            <>
             <section className="mvp-overview-action-panel" aria-label="현장 관리자 처리">
               <header><Wrench size={14} /><strong>현장 처리</strong><span>점검 후보</span></header>
               <div className="mvp-action-summary-card">
@@ -2272,17 +2367,29 @@ function AssetPreviewPanel({
                 <div><dt>작업 ID</dt><dd>{workId}</dd></div>
                 <div><dt>다음 액션</dt><dd>{workActionLabel ?? planningImpact?.nextAction ?? "현장 점검 요청"}</dd></div>
               </dl>
-              <div className="mvp-action-placeholder-grid" aria-label="현장 처리 입력 자리">
-                <label><span>요청 유형</span><input disabled value="작업요청 API 연결 후 선택" readOnly /></label>
-                <label><span>요청 메모</span><textarea disabled value="작업요청 API 연결 후 입력" readOnly /></label>
-                <label><span>담당자</span><input disabled placeholder={assignee} /></label>
-                <label><span>완료 메모</span><textarea disabled value="정비 완료 API 연결 후 입력" readOnly /></label>
-              </div>
-              <WorkStatusPrimaryAction status={workStatus} actionLabel={workActionLabel} helperText={workActionHelper} disabled={workActionDisabled} />
               <p className="mvp-action-note">
-                현장 확인, 이상 기록, 담당자 전달 범위의 점검 후보이며 작업요청이나 정비 조치는 실제 생성하지 않습니다.
+                현장 관리자는 승인된 점검과 정비 Action만 실행할 수 있습니다.
               </p>
             </section>
+            {eventId ? (
+              <MaintenanceWorkflowActionPanel
+                key={`${eventId}:${workflowRevision}:field`}
+                projectId={projectId}
+                workspaceId={workspaceId}
+                datasetVersionId={datasetVersionId}
+                eventId={eventId}
+                assetId={asset.assetId}
+                assetType={asset.assetType}
+                role={role}
+                snapshotBasis={detail?.snapshotBasis ?? null}
+                canManage={canManageWorkflow}
+                canFieldExecute={canExecuteFieldWorkflow}
+                onChanged={refreshWorkflow}
+                onStatusChanged={setWorkflowStatus}
+                onPostMaintenancePrediction={reportPostMaintenancePrediction}
+              />
+            ) : null}
+            </>
           ) : null}
           {reportOutputOpen ? (
             <ReportOutputDialog

@@ -546,6 +546,27 @@ class ModelActivationLock:
 def build_history_requirement_from_feature_schema(feature_schema: dict[str, Any]) -> dict[str, Any]:
     """Deterministically derive history requirements from verified Feature Schema recipe."""
     feature_schema_ver = feature_schema.get("feature_schema_version") or feature_schema.get("schema_version", "unknown")
+    engineering = feature_schema.get("feature_engineering") or {}
+    if engineering.get("kind") == "cnc-temporal-v1":
+        runtime_context = engineering.get("runtime_context") or {}
+        prior_rows = int(runtime_context.get("recent_history_rows_required", 35))
+        required_columns = list(engineering.get("base_sensors") or [])
+        return {
+            "history_requirement_version": f"hist-req-{feature_schema_ver}",
+            "feature_executor_version": "cnc-temporal-v1",
+            "minimum_history_rows": prior_rows + 1,
+            "prior_observations_required": prior_rows,
+            "current_observation_required": True,
+            "required_columns": required_columns,
+            "missing_history_policy": "fail_closed",
+            "expected_cadence_minutes": float(engineering.get("expected_cadence_minutes", 10.0)),
+            "ordering": runtime_context.get(
+                "history_order", "strictly_ascending_before_current_observation"
+            ),
+            "new_asset_policy": runtime_context.get(
+                "new_asset_policy", "calibrate_baseline_before_inference"
+            ),
+        }
     features_list = feature_schema.get("features", [])
 
     raw_fields: list[str] = []

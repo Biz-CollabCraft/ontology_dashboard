@@ -355,6 +355,34 @@ def latest_product_results(
     ).model_dump(mode="json")
 
 
+@router.get("/results/post-maintenance")
+def post_maintenance_product_result(
+    project_id: str,
+    workspace_id: str,
+    asset_id: str = Query(min_length=1, max_length=160),
+    maintenance_event_id: str = Query(min_length=1, max_length=240),
+    principal: Principal = Depends(require_permission("events.read")),
+    identity: IdentityService = Depends(get_identity_service),
+    service: PredictiveMaintenanceRuntimeService = Depends(
+        get_predictive_maintenance_runtime_service
+    ),
+):
+    require_scope(
+        principal=principal,
+        identity=identity,
+        project_id=project_id,
+        workspace_id=workspace_id,
+    )
+    result = service.post_maintenance_result(
+        organization_id=principal.organization_id,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        asset_id=asset_id,
+        maintenance_event_id=maintenance_event_id,
+    )
+    return None if result is None else result.model_dump(mode="json")
+
+
 @router.get("/snapshots/{prediction_id}")
 def snapshot_drilldown(
     project_id: str,

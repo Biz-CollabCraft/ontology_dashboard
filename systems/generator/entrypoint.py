@@ -303,57 +303,35 @@ def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
     if not artifact_uri:
         raise RuntimeError("MODEL_ARTIFACT_URI is required for Generator publication")
 
-    sources = load_all_sources(str(PATHS.data_dir), force_reanalyze=force_reanalyze)
-    registry = load_family_registry()
-    candidate = next(
-        (
-            key
-            for key, frame in sources.items()
-            if all(
-                feature in frame.columns
-                for feature in (
-                    "observed_at",
-                    "asset_id",
-                    "site_id",
-                    "operating_state",
-                    "air_temperature_k",
-                    "process_temperature_k",
-                    "rotational_speed_rpm",
-                    "torque_nm",
-                    "tool_wear_min",
-                )
-            )
-            and _metadata_for(key, registry).get("role") == "telemetry_sensor"
-            and "cnc" in key.lower()
-        ),
-        None,
-    )
-    if candidate is None:
-        raise ValueError("no CNC telemetry source matches the Backend runtime feature contract")
-    telemetry_meta = _metadata_for(candidate, registry)
-    telemetry_ids = set(telemetry_meta.get("id_columns") or [])
-    failure_key = next(
-        (
-            key
-            for key in sources
-            if _metadata_for(key, registry).get("role") in {"failure_event", "evaluation_truth"}
-            and telemetry_ids.intersection(_metadata_for(key, registry).get("id_columns") or [])
-            and "cnc" in key.lower()
-        ),
-        None,
-    )
-    if failure_key is None:
-        raise ValueError("no CNC failure truth source matches CNC telemetry")
+    observation_path = Path(
+        os.getenv("CNC_OBSERVATION_URI", str(PATHS.data_dir / "cnc_sensor_observation.csv"))
+    ).expanduser().resolve()
+    configured_truth = os.getenv("CNC_FAILURE_TRUTH_URI", "").strip()
+    truth_candidates = [
+        Path(configured_truth).expanduser().resolve() if configured_truth else None,
+        (PATHS.data_dir / "cnc_failure_truth.csv").resolve(),
+        (PATHS.data_dir.parent / "evaluation_truth" / "cnc_failure_truth.csv").resolve(),
+    ]
+    failure_path = next((path for path in truth_candidates if path and path.is_file()), None)
+    if not observation_path.is_file():
+        raise ValueError(f"CNC observation source does not exist: {observation_path}")
+    if failure_path is None:
+        raise ValueError(
+            "CNC failure truth source does not exist; set CNC_FAILURE_TRUTH_URI or provide "
+            "../evaluation_truth/cnc_failure_truth.csv relative to DATA_DIR"
+        )
+
+    observations = pd.read_csv(observation_path)
+    failures = pd.read_csv(failure_path)
 
     training = train_cnc_model(
-        sources[candidate],
-        sources[failure_key],
+        observations,
+        failures,
         n_jobs=_training_n_jobs(),
         horizon_hours=24,
         minimum_recall=0.50,
     )
-    source_file = PATHS.data_dir / f"{candidate}.csv"
-    source_sha = _sha256(source_file)
+    source_sha = _sha256(observation_path)
     dataset_version = f"gen-data-v3.1-sha256-{source_sha[:12]}"
     algorithm_slug = training.selected_model.replace("_", "-")
     model_version = f"cnc-{algorithm_slug}-v3-{source_sha[:12]}"
@@ -375,56 +353,44 @@ def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
             json.dumps(training.threshold_curve, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        label_schema_file = Path(work) / "label_schema.json"
-        label_schema_file.write_text(
-            json.dumps(
-                {
-                    "schema_version": "cnc-failure-within-horizon-v1",
-                    "target": "failure_within_24h",
-                    "horizon_hours": 24,
-                    "positive_semantics": "next failure strictly after observation and within 24 hours",
-                    "post_failure_rows_positive": False,
-                    "right_censoring": "exclude final 24h of each asset observation horizon",
-                    "maintenance_rows_excluded": True,
-                    "truth_usage": "label creation and offline evaluation only",
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        label_schema = {
+            "label_schema_version": "cnc-failure-within-horizon-v1",
+            "target": "failure_within_24h",
+            "prediction_task": "binary_failure_within_horizon",
+            "prediction_horizon_hours": 24,
+            "positive_semantics": "next failure strictly after observation and within 24 hours",
+            "post_failure_rows_positive": False,
+            "right_censoring": "exclude final 24h of each asset observation horizon",
+            "maintenance_rows_excluded": True,
+            "truth_usage": "label creation and offline evaluation only",
+        }
         runtime_context = dict(
             (training.feature_schema.get("feature_engineering") or {}).get("runtime_context") or {}
         )
-        history_requirement_file = Path(work) / "history_requirement.json"
-        history_requirement_file.write_text(
-            json.dumps(
-                {
-                    "schema_version": "cnc-history-requirement-v1",
-                    "observation_family": "cnc",
-                    "current_observation_required": True,
-                    "prior_observations_required": int(
-                        runtime_context.get("recent_history_rows_required", 35)
-                    ),
-                    "expected_cadence_minutes": float(
-                        (training.feature_schema.get("feature_engineering") or {}).get(
-                            "expected_cadence_minutes", 10.0
-                        )
-                    ),
-                    "ordering": runtime_context.get(
-                        "history_order", "strictly_ascending_before_current_observation"
-                    ),
-                    "new_asset_policy": runtime_context.get(
-                        "new_asset_policy", "calibrate_baseline_before_inference"
-                    ),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        prior_observations = int(runtime_context.get("recent_history_rows_required", 35))
+        history_requirement = {
+            "history_requirement_version": "cnc-history-requirement-v1",
+            "feature_executor_version": CNC_FEATURE_SCHEMA_VERSION,
+            "observation_family": "cnc",
+            "current_observation_required": True,
+            "prior_observations_required": prior_observations,
+            "minimum_history_rows": prior_observations + 1,
+            "required_columns": list(
+                (training.feature_schema.get("feature_engineering") or {}).get("base_sensors") or []
+            ),
+            "missing_history_policy": "fail_closed",
+            "expected_cadence_minutes": float(
+                (training.feature_schema.get("feature_engineering") or {}).get(
+                    "expected_cadence_minutes", 10.0
+                )
+            ),
+            "ordering": runtime_context.get(
+                "history_order", "strictly_ascending_before_current_observation"
+            ),
+            "new_asset_policy": runtime_context.get(
+                "new_asset_policy", "calibrate_baseline_before_inference"
+            ),
+        }
         return publish_model_artifact(
             artifact_uri=artifact_uri,
             model_id="cnc-failure-risk",
@@ -438,9 +404,10 @@ def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
             provenance={
                 "source_repository": "Biz-CollabCraft/gen_data",
                 "source_contract": "Canonical V3.1 file/artifact",
-                "source_file": f"{candidate}.csv",
+                "source_file": observation_path.name,
                 "source_file_sha256": source_sha,
-                "failure_truth_file": f"{failure_key}.csv",
+                "failure_truth_file": failure_path.name,
+                "failure_truth_file_sha256": _sha256(failure_path),
                 "producer": "ontology_dashboard/systems/generator",
                 "training_implementation": CNC_TRAINING_VERSION,
             },
@@ -450,11 +417,9 @@ def publish_cnc_training_artifact(*, force_reanalyze: bool = False) -> Path:
                 "observation_family": "cnc",
                 "python": ">=3.11",
             },
-            extra_files={
-                "threshold_curve": threshold_curve_file,
-                "label_schema": label_schema_file,
-                "history_requirement": history_requirement_file,
-            },
+            label_schema=label_schema,
+            history_requirement=history_requirement,
+            extra_files={"threshold_curve": threshold_curve_file},
         )
 
 

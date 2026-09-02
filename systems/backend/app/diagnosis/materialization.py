@@ -268,7 +268,9 @@ class ProductResultMaterializationService:
         )
         threshold = float(policy_decision["selected_threshold"])
         status = str(policy_decision["status"])
-        predicted_type = "failure_risk" if score >= threshold else "none"
+        predicted_type = (
+            "failure_risk" if score >= threshold else "no_significant_risk"
+        )
         prediction_id = f"GEN-{uuid.uuid5(uuid.NAMESPACE_URL, f'{batch.batch_id}:{item.event_id}')}"
         artifact_id = f"RESULT#{prediction_id}"
         action = cls._promotion_action(status, criticality)

@@ -18,7 +18,7 @@ from argon2 import PasswordHasher
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from app.common.rate_limit import RateLimiter
-from app.common.runtime_settings import project_root, trust_proxy_headers, trusted_proxy_networks
+from app.common.runtime_settings import app_environment, project_root, trust_proxy_headers, trusted_proxy_networks
 from app.dashboard import DashboardService
 from app.dashboard.dashboard_schema import DashboardBoard, DashboardTab, DashboardTemplatePublishRequest
 from app.dashboard.visualizations import (
@@ -437,6 +437,42 @@ def get_predictive_maintenance_runtime_service() -> PredictiveMaintenanceRuntime
     return PredictiveMaintenanceRuntimeService(PredictiveMaintenanceRuntimeRepository(target))
 
 
+class _RuntimeThenDemoEvidenceProjection:
+    """Resolve production runtime evidence first and local MVP fixtures second.
+
+    The fallback is deliberately restricted to the local demonstration scope.
+    It lets the two-role MVP exercise the real Maintenance command boundary
+    without teaching Maintenance how fixture Product Results are built.
+    """
+
+    def __init__(
+        self,
+        runtime: PredictiveMaintenanceRuntimeService,
+        demo: ManufacturingPredictiveMaintenanceService,
+    ) -> None:
+        self.runtime = runtime
+        self.demo = demo
+
+    def event_evidence_projection(self, **scope: Any) -> dict[str, Any] | None:
+        projection = self.runtime.event_evidence_projection(**scope)
+        if projection is not None:
+            return projection
+        if app_environment() not in {"development", "demo", "test"}:
+            return None
+        if (
+            scope.get("project_id") != "manufacturing-demo-project"
+            or scope.get("workspace_id") != MANUFACTURING_WORKSPACE
+        ):
+            return None
+        event_id = str(scope.get("event_id") or "")
+        try:
+            if self.demo.project_id_for_event(event_id) != scope.get("project_id"):
+                return None
+            return self.demo.event_evidence_projection(event_id)
+        except KeyError:
+            return None
+
+
 @lru_cache(maxsize=1)
 def get_maintenance_loop_service() -> MaintenanceLoopService:
     """Compose the canonical Maintenance command/read boundary."""
@@ -458,7 +494,10 @@ def get_maintenance_loop_service() -> MaintenanceLoopService:
     diagnosis_runtime = get_predictive_maintenance_runtime_service()
     return MaintenanceLoopService(
         repository,
-        event_evidence_query=diagnosis_runtime,
+        event_evidence_query=_RuntimeThenDemoEvidenceProjection(
+            diagnosis_runtime,
+            get_service(),
+        ),
         replay_session_query=diagnosis_runtime,
         cost_basis_provider=JsonMaintenanceCostBasisProvider(
             ROOT

@@ -433,6 +433,55 @@ class PredictiveMaintenanceRuntimeRepository:
             ).fetchall()
         return "prediction_snapshot_compatibility", total, [dict(row) for row in rows]
 
+    def post_maintenance_result_row(
+        self,
+        *,
+        organization_id: str,
+        project_id: str,
+        workspace_id: str,
+        asset_id: str,
+        maintenance_event_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the newest Product Result correlated to one maintenance event.
+
+        A post-maintenance result normally belongs to the live replay dataset,
+        while the user's selected dashboard context can still point at the
+        immutable Canonical dataset.  The maintenance lineage is therefore the
+        canonical correlation key for this cross-dataset lookup.
+        """
+
+        with self._connection(organization_id, project_id) as connection:
+            row = connection.execute(
+                """
+                SELECT r.*,a.site_id,a.cell_id,
+                       p.payload_json AS prediction_result_payload,
+                       p.created_at AS prediction_result_created_at
+                FROM pm_result_artifacts r
+                JOIN pm_assets a
+                  ON a.dataset_version_id=r.dataset_version_id
+                 AND a.asset_id=r.asset_id
+                JOIN prediction_results p
+                  ON p.prediction_id=r.prediction_result_id
+                WHERE r.organization_id=%s AND r.project_id=%s
+                  AND r.workspace_id=%s AND r.asset_id=%s
+                  AND (
+                    r.provenance->>'maintenance_event_id'=%s
+                    OR p.payload_json#>>'{lineage,source_context,lineage,maintenance_event_id}'=%s
+                  )
+                ORDER BY r.observed_at DESC,r.created_at DESC,r.artifact_id DESC
+                LIMIT 1
+                """,
+                (
+                    organization_id,
+                    project_id,
+                    workspace_id,
+                    asset_id,
+                    maintenance_event_id,
+                    maintenance_event_id,
+                ),
+            ).fetchone()
+        return None if row is None else dict(row)
+
     def result_artifact_row(
         self,
         *,
